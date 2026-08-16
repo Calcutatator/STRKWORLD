@@ -28,6 +28,12 @@ export interface PrivateBalance {
   spendable: bigint;
   /** Arriving once the maturity window elapses. */
   maturing: bigint;
+  /**
+   * False when the wallet exposes only one aggregate balance. In that case
+   * `spendable` and `maturing` are conservative zeroes; do not derive MAX from
+   * them. The wallet remains authoritative at proof time.
+   */
+  maturityKnown: boolean;
 }
 
 /**

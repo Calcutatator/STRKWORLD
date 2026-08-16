@@ -658,3 +658,38 @@ someone's funds would be its own kind of wrong.
 The nudge must persist. A player who bridges and closes the tab still has public
 STRK, and should find the prompt waiting rather than discovering months later
 that their funds never made it in.
+
+---
+
+## D-022 — One prepared batch produces one submission; wallet maturity is unknown
+
+**2026-08-16 · Accepted · amends D-015**
+
+**Context.** The production Wallet API adapter exposed two mismatches in the
+provisional financial seam. First, `PreparedBatch.confirm()` returns one
+transaction hash, while the interface prose claimed a shield-plus-spend batch
+would be split into two submissions. That would either discard a receipt or lie
+about atomicity. Second, `wallet_strk20Balances` returns only `{ token,
+balance }`; it does not expose which notes are mature. Pretending the aggregate
+is spendable creates an unsafe MAX button.
+
+**Decision.** A prepared batch maps to exactly one submission route. Mixing a
+public shield with a private spend is rejected; the shell prepares the shield
+and later prepares the spend as separate, explicit operations. Homogeneous
+pool-native actions may still batch atomically.
+
+`PrivateBalance` retains the aggregate as `total` and gains
+`maturityKnown`. The Wallet API implementation sets it false and reports
+conservative zeroes for `spendable` and `maturing`; the deterministic fake sets
+it true because it owns the simulated note ages. The shell must not derive MAX
+when maturity is unknown.
+
+Ready 5.33.8 source creates one wallet transaction action for a complete STRK20
+action array, including deposit approvals, so the offline adapter models one
+prompt per accepted batch. That is a source-derived expectation, not a claim
+that the funded rendered UI has been observed.
+
+**Consequences.** Shell lane heads-up: treat mixed shield/spend input as a
+sequencing error, handle `maturityKnown: false`, and keep exact prompt copy
+provisional until the funded UI run. No caller receives a fabricated maturity
+split or loses one of two transaction receipts.

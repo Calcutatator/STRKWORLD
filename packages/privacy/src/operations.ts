@@ -88,7 +88,7 @@ export interface PreparedBatch {
   readonly totalCost: bigint;
   /** Surface all of these before confirming. */
   readonly warnings: readonly BatchWarning[];
-  /** How many times the wallet will prompt. Often more than one. */
+  /** Expected prompts from shipped wallet source; funded UI verification is still pending. */
   readonly promptCount: number;
 
   /**
@@ -143,8 +143,8 @@ export interface PrivacyOperations {
    *
    * It will **not** batch a shield with the transfer it funds: a deposit
    * carries a public leg naming the depositor, and bundling publishes exactly
-   * the link the pool exists to break. Such a batch is split, and reported via
-   * a `multiple-prompts` warning.
+   * the link the pool exists to break. Such a batch is rejected; the shell
+   * prepares and confirms the shield first, then creates a later private batch.
    */
   prepare(intents: Intent[], signal?: AbortSignal): Promise<PreparedBatch>;
 }

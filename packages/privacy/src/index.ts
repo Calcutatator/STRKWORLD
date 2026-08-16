@@ -30,5 +30,17 @@ export type {
 // Test double. Safe to import from any lane — no network, no wallet, no chain.
 export { FakePrivacyOperations, type FakeConfig, type Fault } from './testing/fake.js';
 
-// The real implementation lands in Phase 2. See docs/WORKPLAN.md.
-// export { WalletApiPrivacyOperations } from './wallet-api/index.js'
+export {
+  WalletApiPrivacyOperations,
+  createSupportedVersionsReader,
+  createWalletDiscovery,
+  mapWalletError,
+  type PoolNativeRoute,
+  type PoolReadClient,
+  type PrivateSubmissionGateway,
+  type RelayFeeQuote,
+  type SupportedVersionsReader,
+  type WalletApiPrivacyOperationsOptions,
+  type WalletRoutePolicy,
+  type WalletStrk20Account,
+} from './wallet-api/index.js';

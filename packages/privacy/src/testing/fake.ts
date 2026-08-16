@@ -157,7 +157,7 @@ export class FakePrivacyOperations implements PrivacyOperations {
       const maturing = this.maturing
         .filter((n) => sameAddress(n.token, token))
         .reduce((sum, n) => sum + n.amount, 0n);
-      return { token, spendable, maturing, total: spendable + maturing };
+      return { token, spendable, maturing, total: spendable + maturing, maturityKnown: true };
     });
   }
 
@@ -179,15 +179,13 @@ export class FakePrivacyOperations implements PrivacyOperations {
     // public leg names the depositor, so bundling publishes the link.
     const hasShield = intents.some((i) => i.kind === 'shield');
     const hasSpend = intents.some((i) => i.kind !== 'shield');
-    const promptCount = hasShield ? (hasSpend ? 3 : 2) : 1;
     if (hasShield && hasSpend) {
-      warnings.push({
-        kind: 'public-leg',
-        detail:
-          'A shield is submitted separately from the actions it funds — bundling would publish the link between them.',
-      });
+      throw new PrivacyError(
+        'privacy-leak',
+        'Shielding and private spending must be prepared as separate operations.',
+      );
     }
-    if (promptCount > 1) warnings.push({ kind: 'multiple-prompts', count: promptCount });
+    const promptCount = 1;
 
     for (const intent of intents) {
       if (intent.kind === 'shield') {

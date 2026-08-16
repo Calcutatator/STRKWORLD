@@ -74,22 +74,18 @@ describe('shielded funds are not immediately spendable', () => {
 });
 
 describe('a shield is never bundled with what it funds', () => {
-  it('reports extra prompts and a public-leg warning', async () => {
+  it('rejects the mixed batch so the shell sequences two explicit operations', async () => {
     const ops = fresh();
-    const batch = await ops.prepare([
+    await expect(ops.prepare([
       { kind: 'shield', token: STRK, amount: 10n * 10n ** 18n },
       { kind: 'transfer', token: STRK, amount: 10n ** 18n, recipient: BOB },
-    ]);
-    // approve + deposit + the spend
-    expect(batch.promptCount).toBe(3);
-    expect(has(batch.warnings, 'multiple-prompts')).toBe(true);
-    expect(has(batch.warnings, 'public-leg')).toBe(true);
+    ])).rejects.toMatchObject({ kind: 'privacy-leak' });
   });
 
-  it('needs two prompts for a shield alone (approve, then deposit)', async () => {
+  it('models the shipped wallet source as one batched shield action', async () => {
     const ops = fresh();
     const batch = await ops.prepare([{ kind: 'shield', token: STRK, amount: 10n ** 18n }]);
-    expect(batch.promptCount).toBe(2);
+    expect(batch.promptCount).toBe(1);
   });
 
   it('needs one prompt for a batch of private-side actions', async () => {

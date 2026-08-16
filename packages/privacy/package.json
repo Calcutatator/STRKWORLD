@@ -6,8 +6,8 @@
   "main": "./src/index.ts",
   "types": "./src/index.ts",
   "scripts": {
-    "typecheck": "tsc --noEmit",
-    "test": "vitest run"
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "test": "vitest run --root ../.. packages/privacy/src"
   },
   "comment": "EXACT pins, all four together — the combination the official STRK20 integration skill tested. Never float one and pin the others; see AGENTS.md findings 2026-08-16.",
   "dependencies": {

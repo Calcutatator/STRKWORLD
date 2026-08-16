@@ -254,6 +254,20 @@ submitted. Full evidence and remaining manual steps:
 
 ---
 
+### 2026-08-16 — Wallet API balances cannot expose note maturity
+
+`wallet_strk20Balances` returns only `[{ token, balance }]`. The stable 0.10.3
+surface has no field or companion method for spendable-versus-maturing notes.
+STRKWORLD must not translate that aggregate into a spendable MAX value. The real
+adapter marks the split unknown; only the deterministic fake can report it.
+
+*Verified:* inspected `STRK20_BALANCE_ENTRY` in the installed
+`@starknet-io/starknet-types-0103` declarations reached by
+`starknet@10.4.0`, then typechecked the production adapter against that exact
+shape on 2026-08-16. No balance was requested from a wallet.
+
+---
+
 ### 2026-08-16 — A prepared Wallet API proof can be queued and relayed without the account signer
 
 `wallet_strk20PrepareInvoke` returns the pool `apply_actions` call plus its

@@ -66,6 +66,12 @@ batches, fee validation before proving, cancellation, or backend-delayed
 submission. A post-spike change needs a decision entry and a heads-up to the
 Shell lane.
 
+The shipped Wallet API types expose one aggregate balance per token, not the
+spendable/maturing split used by the low-level SDK. Real wallet results therefore
+set `maturityKnown: false` and keep both subfields at conservative zero. The
+shell may display `total`, but must not offer MAX from an invented maturity
+split; proof-time wallet validation is authoritative.
+
 ### Prepare, then submit through the correct route
 
 `prepare()` translates typed intents into an allowlisted `STRK20_ACTION[]` and
@@ -81,6 +87,11 @@ on the route:
 - A shield starts with a public ERC-20 approval and cannot be funded from the
   pool. It is not the private queued path, and it is never bundled with the
   action it later funds.
+
+Mixed shield/private input is rejected rather than silently split. One
+`PreparedBatch.confirm()` returns one transaction hash, so claiming to split it
+would lose one receipt and blur the public/private boundary. The shell must run
+the two explicit operations in sequence.
 
 `strk20PrepareInvoke(actions, true)` is simulation only. It skips proof
 generation and returns an empty, non-submittable proof; use it for previews,
@@ -139,6 +150,10 @@ do not move.
 
 Use `WalletAccountV6` instance methods. The standalone `strk20*` functions
 are not exported from the package root.
+
+`@avnu/avnu-sdk` is pinned exactly at `4.2.0`. Its manifest requires Node 22,
+so the Exchange lane is not a supported Node 20 build even though the root
+manifest still lists Node 20; see the findings log.
 
 ---
 
