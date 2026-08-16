@@ -220,6 +220,99 @@ Format: `### YYYY-MM-DD — short title` then what, why it matters, how verified
 
 ---
 
+### 2026-08-16 — Colyseus 0.17: five traps between the pinned set and a working room
+
+The narrow pin set (`@colyseus/core@0.17.50` + `@colyseus/ws-transport@0.17.13`
++ `@colyseus/sdk@0.17.43`) is correct, but it is not sufficient on its own and
+the gaps fail in unobvious ways.
+
+**`ws-transport` cannot load without `express`, which it calls optional.** Its
+`package.json` lists `express` under `peerDependenciesMeta` as
+`optional: true`, but `build/WebSocketTransport.mjs` imports it at the top
+level and only *uses* it inside `getExpressApp()`. Importing the transport
+without express installed throws `Cannot find package 'express'` before any of
+your code runs. `@colyseus/core` and `@colyseus/sdk` both load fine without it
+— the trap is transport-only. `express@5.2.1` is therefore a direct dependency
+of `packages/lobby` and nothing in that package uses it.
+
+**`@colyseus/schema` is a required peer and is not re-exported.** Core declares
+`@colyseus/schema: ^4.0.7` as a non-optional peer, and neither core nor the SDK
+re-exports `Schema` or `schema()`. Any package that defines room state must
+depend on it directly; pinned at `4.0.30`, which is what the lockfile already
+resolved transitively.
+
+**Schema 4 has a decorator-free definition API, and it is the one to use.**
+`schema({ x: 'number' }, 'Name')` needs neither `experimentalDecorators` nor
+standard decorators, neither of which this repository's tsconfig enables.
+`Metadata.getFields(Klass)` reads the declared field set back at runtime, which
+is what lets "the room schema is exactly `PresenceState`" be a test rather than
+an aspiration.
+
+**A room that validates in `onJoin` still returns a successful matchmake.** The
+HTTP seat reservation (`POST /matchmake/joinOrCreate/<room>`) completes before
+`onJoin` runs; refusal happens when the websocket consumes the reservation.
+More importantly, when `onJoin` throws, `Room._onJoin`'s catch calls
+`_onLeave(client)` and then deletes the reserved seat — so **your `onLeave`
+runs for a client that was never admitted**, and it has to be safe for a
+session your own registry has never heard of. There is no seat leak.
+
+**Keying room state by Colyseus's `sessionId` puts a second identifier on the
+wire.** The idiomatic `MapSchema` key is the server-generated 9-character
+`sessionId`. Alongside a `gameId` field that is already the player's ephemeral
+identity, that is one identifier more than the lobby needs. STRKWORLD keys the
+map by `gameId` instead, and the room keeps `sessionId -> gameId` privately.
+
+Interest management via `{ map: Entry, view: true }` plus per-client
+`StateView.add/remove` works end to end: a removed reference disappears from
+that client's decoded state, and deleting a map entry propagates to every view
+without an explicit remove. Guard with `view.has(ref)` before add/remove rather
+than calling them unconditionally each tick.
+
+*Verified:* installed the pinned set, read the shipped `package.json` peer
+metadata and the `WebSocketTransport.mjs` and `Room.mjs` build output, then ran
+a real server and two real SDK clients over a websocket — asserting that a
+distant peer is absent from the observer's state, reappears when it moves into
+range, and disappears on suspend. 67 lobby tests, including 15 end-to-end ones.
+No network beyond localhost.
+
+---
+
+### 2026-08-16 — The lobby invariant scan forbids its own test vocabulary
+
+Check 5 of `scripts/check-invariants.sh` greps every `.ts` file under
+`packages/lobby/src` — tests included — for `address`, `balance`, `building`,
+`token`, `amount` and friends, after stripping `//` comments and `*`-prefixed
+comment lines. A privacy test that scans room state for those words therefore
+cannot spell them in TypeScript: it would fail the very gate it reinforces.
+
+The list lives in `packages/lobby/src/testing/forbidden-vocabulary.json`
+instead. JSON is not scanned, the scanner still sees no financial vocabulary in
+lobby code, and the test still has real strings to search for. Do not "fix"
+this by weakening check 5 or by concatenating the words from fragments in
+TypeScript — the second reads exactly like evading the scan.
+
+Two constraints on that list, both learned by hitting them. Nothing in it may
+be a word spellable in hexadecimal alone: an ephemeral `gameId` is 16 hex
+characters, so `fee` would match by chance roughly once in three hundred
+sessions. And a "wei-scale integer" pattern must require at least 17 digits, or
+a 16-character identifier that happens to be all digits matches it.
+
+One usability defect in check 5 found while confirming this: it pipes every
+lobby `.ts` file through one `sed`/`grep`, so the failure prints the offending
+line *content* prefixed by a line number that is an offset into the
+concatenated stream, with no filename. `910:` in a package with a few hundred
+lines is not a location. The check is correct; locating the hit means grepping
+for the printed text.
+
+*Verified:* wrote a throwaway `.ts` file in `packages/lobby/src` containing two
+of the words and ran `./scripts/check-invariants.sh` — check 5 fails and prints
+`910:export const WORDS = [...]` with no filename; removed it and all thirteen
+checks pass. Then ran the privacy suite, which searches both the room's JSON
+serialisation and the actual encoder output bytes across a 4000-step
+randomised sequence of hostile input.
+
+---
+
 ### 2026-08-16 — Current pool calldata is proof-bound actions plus screening
 
 The current `apply_actions` ABI is
