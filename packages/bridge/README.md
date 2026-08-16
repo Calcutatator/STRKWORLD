@@ -77,7 +77,9 @@ afterwards pays its own fee from shielded notes.
 
 - The NEAR Intents 1Click integration — quote, deposit submission, execution
   status polling
-- The source-asset registry and per-chain address validation
+- A live source-asset registry, with curated fallback IDs and per-chain address
+  validation. Symbols, names, prices and route availability are never trusted
+  from the old ShieldUp list alone
 - The resumable pipeline: a bridge takes minutes and must survive a page
   reload, a tab close and a crash
 - Receipts
@@ -98,7 +100,18 @@ off to a centralised exchange withdrawal screen while we poll for arrival.
 
 **That is the normal path for someone funding from an exchange, so build for it
 first.** It shapes the whole room: the player leaves, comes back minutes later,
-possibly on a different device, and must find their deposit still in progress.
+and must find their deposit still in progress.
+
+Browser-local persistence covers reloads, tab closes and crashes on the same
+device. It does **not** become cross-device persistence by assertion. Before
+claiming cross-device resume, add an exportable resume record or a separately
+reviewed encrypted sync design; the backend must not quietly acquire a durable
+database of deposit addresses, recipients and timing.
+
+Persist the complete signed 1Click quote, not only the display fields. The
+current SDK marks the response signature, timestamp, original request and
+quote as dispute evidence that must be retained. The deposit address and memo
+remain the status lookup key, but they are not the whole receipt.
 
 ---
 
@@ -109,8 +122,8 @@ Mostly a port. `apps/shield20-app/src/bridge/`:
 | Module | Take it? |
 |---|---|
 | `one-click.ts` (521) | **Yes**, minus the OUT paths — typed wrapper over `OneClickService` |
-| `persistence.ts` (140) | **Yes** — resumable pipeline state. The piece that makes a multi-minute flow survivable |
-| `source-tokens.ts` (328) | **Yes**, simplified — only source assets matter now; the destination is fixed |
+| `persistence.ts` (140) | **Adapt** — preserve resume behaviour, but retain the complete signed quote and version the record |
+| `source-tokens.ts` (328) | **Adapt** — keep verified fallback IDs and validators; merge live registry metadata because the old labels already drifted |
 | `address-validation.ts` (88) | **Yes** — cheap, and catches a class of unrecoverable mistakes |
 | `receipts.ts`, `balances.ts`, `submit-state.ts` | **Yes** — small and self-contained |
 | `execute.ts` (1,181) | **Adapt, roughly half** — the OUT orchestration and the AVNU leg both go |

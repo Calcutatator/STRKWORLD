@@ -9,7 +9,7 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest run"
   },
-  "comment": "EXACT pins, all four together — the combination the official STRK20 integration skill tested. Never float one and pin the others; see AGENTS.md findings 2026-08-16.",
+  "comment": "EXACT pins, all four together \u2014 the combination the official STRK20 integration skill tested. Never float one and pin the others; see AGENTS.md findings 2026-08-16.",
   "dependencies": {
     "@strkworld/shared": "*",
     "starknet": "10.4.0",
@@ -19,6 +19,6 @@
   },
   "devDependencies": {
     "@starknetfoundation/starknet-start-react": "2.0.1",
-    "vitest": "^2.1.0"
+    "vitest": "^4.1.10"
   }
 }

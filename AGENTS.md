@@ -171,6 +171,12 @@ their content hashes.
 | `strk20-privacy-sdk` | The low-level route. **Not ours** — read only to understand what we are not doing |
 | `strk20-privacy-integration` | The official ask/plan/execute planner |
 
+**Phaser ships its own docs.** `node_modules/phaser/skills/` holds 28
+engine-versioned `SKILL.md` files — `tilemaps`, `scenes`,
+`input-keyboard-mouse-touch`, `events-system`, `scale-and-responsive` and more.
+They cannot drift from the installed version, so prefer them over anything
+found online for Phaser questions.
+
 Route work deliberately: use `strk20-privacy` for the trust boundary and
 hidden/visible claims, `strk20-wallet-api` for `packages/privacy` and browser
 flows, and `strk20-anonymizer-contracts` only when a helper contract is in
@@ -248,7 +254,10 @@ by the registry as `GRAM`.
 Port the curated asset IDs and address-safety rules as fallbacks, but merge and
 display live registry metadata. Never infer current route availability or
 symbol/name from the old list alone. Dry quotes are previews only; production
-quotes still require explicit deposit-address lifecycle and resume tests.
+quotes still require explicit deposit-address lifecycle and resume tests. The
+current `QuoteResponse` also says its signature and whole signed quote must be
+saved for dispute resolution; ShieldUp's trimmed `BridgeQuote` drops that
+evidence, so port the resume behaviour but not that lossy response shape.
 
 *Verified:* installed `@defuse-protocol/one-click-sdk-typescript@0.1.25` in
 the repository dependency tree, called `OneClickService.getTokens()` and
@@ -275,6 +284,113 @@ requiring the Phase 0 wallet tests—not as a harmless install refresh.
 *Verified:* inspected the installed package manifests and complete `npm ls`
 tree after a clean repository sync on 2026-08-16. The direct versions remain
 the approved pins; this finding records their actual transitive closure.
+
+---
+
+### 2026-08-16 — Phaser's official React template is broken under React 19 StrictMode
+
+Do not copy `phaserjs/template-react-ts`'s `PhaserGame.tsx`. Verified in a real
+browser on Phaser 4.2.1 + React 19.2: it produces **two `Phaser.Game`
+instances, two WebGL contexts, two canvases, and runs `Scene.create()` twice**.
+
+`Game.destroy()` only sets `pendingDestroy` and defers teardown to the next
+`step()`, which needs requestAnimationFrame. StrictMode re-runs the effect
+synchronously in the same tick, so the second `new Game()` happens first.
+
+It self-heals on frame 1 in a **foreground** tab and **never heals in a hidden
+tab** — rAF does not fire, so the orphaned game and its canvas sit there
+indefinitely. For a PWA that backgrounds on mobile, that is a stuck WebGL
+context.
+
+**The fix:** a ref-counted singleton with `setTimeout(..., 0)` deferred
+teardown, living in `packages/world/src/runtime.ts` rather than in a React
+component, so React never owns the game. StrictMode re-runs effects but does
+not recreate the DOM node, so the remount cancels the pending teardown.
+Acceptance test: under `<StrictMode>`, `document.querySelectorAll('canvas').length === 1`
+and `create()` logs exactly once.
+
+Never pass `destroy(true, true)` — that destroys the global plugin cache and no
+further Game can be created on the page.
+
+*Verified:* browser run, plus Phaser v4.2.1 source.
+
+---
+
+### 2026-08-16 — Phaser steals keystrokes from focused React inputs
+
+**Typing an amount into a building panel is impossible without an explicit fix.**
+
+Phaser's KeyboardManager binds `keydown`/`keyup` to `window` with **no
+`document.activeElement` check**, and `addKeys`/`createCursorKeys` default to
+`enableCapture = true`. A real keydown dispatched from a focused `<input>`
+produced both failure modes at once: `defaultPrevented === true` (the character
+never reaches the input) **and** `Key.isDown === true` (the player walks).
+
+Three traps in the obvious fixes:
+
+- **`game.input.enabled = false` does NOT stop the keyboard.**
+  `KeyboardPlugin.isActive()` ignores `manager.enabled`, while
+  `InputPlugin.isActive()` honours it. It disables the mouse only.
+- **`scene.pause()` is queued by the SceneManager**, not immediate. Read back in
+  the same tick and the scene is still RUNNING with the key still down.
+- **`Key.isDown` is sticky.** Disable the plugin while W is held and the key
+  stays down forever — the player walks off screen when you re-enable.
+
+**The fix:** `suspendInput()` / `resumeInput()` in `packages/world` doing
+`disableGlobalCapture()` → `enabled = false` → `resetKeys()`, and the reverse.
+Wire to `building:entered` / `building:exited`. Escape belongs to React — once
+the plugin is correctly disabled, a scene-level ESC never fires and the panel
+becomes unclosable by keyboard.
+
+*Verified:* synthetic keydown from a focused input, plus Phaser v4.2.1 source.
+
+---
+
+### 2026-08-16 — Phaser 4 does not tree-shake; lazy-load it
+
+`dist/phaser.esm.js` is a single pre-bundled webpack artifact with no
+`sideEffects` field. Importing one class ships the whole engine: measured
+**353 kB gzip** (1.38 MB raw). A custom arcade-only build saves ~9.5% for real
+toolchain cost — not worth it.
+
+A single *value* import of anything from `'phaser'` in the eager graph collapses
+the lazy split and puts all of it in the entry chunk. With
+`verbatimModuleSyntax: true` this is easy to do by accident — use
+`import type * as Phaser` in type positions.
+
+Also: `roundPixels` now defaults to **false** in Phaser 4 (it was true in v3).
+On a tilemap with a following camera this reads as shimmering seams and gets
+misdiagnosed as tileset spacing. `pixelArt: true` fixes it.
+
+*Verified:* measured the published dist.
+
+---
+
+### 2026-08-16 — Tiled: the embed constraint is a warning, not an error
+
+Phaser's rejection of external tilesets is a `console.warn`, so **a map with an
+unembedded tileset loads "successfully" with blank tiles.** Author discipline is
+not enough — add a build-time assertion that greps exported JSON for any
+tileset entry carrying a `source` key.
+
+Two related constraints found the same way:
+
+- The check is `if (set.source)` — generic to any external pointer, not
+  `.tsx`-specific. Exporting the tileset as `.tsj` JSON does **not** sidestep it.
+- **"Collection of Images" tilesets are unsupported.** Every tile in a tileset
+  must come from one image. Check this before adopting an asset pack, alongside
+  the licence audit.
+
+Tiled's own CLI can do the embedding as a build step —
+`tiled --export-map json --embed-tilesets` — so districts can be authored
+against one shared external tileset and flattened at build time. That keeps
+authoring mergeable without risking the silent-failure mode.
+
+Also: object-layer custom properties arrive as a raw
+`[{name,type,value}]` array, **not** flattened into `object.properties.building`
+the way tileset tile-properties are. The two code paths differ.
+
+*Verified:* phaser@4.2.1 source, `ParseTilesets.js` and `ParseObject.js`.
 
 ---
 

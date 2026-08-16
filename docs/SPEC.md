@@ -344,7 +344,7 @@ defeat session-level correlation while the pool is small (D-015).
 
 ## 7. What the game builds
 
-- **The game itself** — Phaser 4 canvas, Tiled maps with external tilesets, React overlay, PWA shell. STRK20 provides zero game primitives.
+- **The game itself** — Phaser 4 canvas, Tiled maps with **embedded** tilesets (Phaser rejects external — see AGENTS.md), React overlay, PWA shell. STRK20 provides zero game primitives.
 - **Colyseus lobby** — presence and position only. Never sees an address.
 - **Starknet RPC** for public reads — receipts, adapter contract reads. Not `publicProvider()` in production.
 - **Backend** — paymaster key custody, privacy-safe RPC reads, route validation

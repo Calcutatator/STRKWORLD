@@ -45,12 +45,11 @@ and action-limit validation. See `docs/DECISIONS.md` D-018.
 
 ```ts
 interface PrivacyOperations {
-  balances(tokens?: string[]): Promise<PrivateBalance[]>
-  shield(token: string, amount: bigint): Promise<TxResult>
-  unshield(token: string, amount: bigint): Promise<TxResult>
-  recipientStatus(address: string): Promise<RecipientStatus>
-  transfer(token: string, amount: bigint, recipient: string): Promise<TxResult>
-  privateSwap(input: PrivateSwapInput): Promise<TxResult>
+  capability(signal?: AbortSignal): Promise<WalletCapability>
+  poolConfig(signal?: AbortSignal): Promise<PoolConfig>
+  balances(tokens?: string[], signal?: AbortSignal): Promise<PrivateBalance[]>
+  recipientStatus(address: string, signal?: AbortSignal): Promise<RecipientStatus>
+  prepare(intents: Intent[], signal?: AbortSignal): Promise<PreparedBatch>
 }
 ```
 
@@ -60,6 +59,32 @@ that:
 1. the whole financial layer can be driven by a mock in tests,
 2. a second implementation can be added without touching callers,
 3. the forward-compatibility test can prove a non-extension wallet works.
+
+The seam is **provisional until the Phase 0 wallet spike closes**. D-015
+replaced the earlier one-shot methods because they could not express atomic
+batches, fee validation before proving, cancellation, or backend-delayed
+submission. A post-spike change needs a decision entry and a heads-up to the
+Shell lane.
+
+### Prepare, then submit through the correct route
+
+`prepare()` translates typed intents into an allowlisted `STRK20_ACTION[]` and
+returns costs, warnings and a confirmation handle. The submission path depends
+on the route:
+
+- A private pool action is proven with
+  `wallet_strk20PrepareInvoke(actions, false)`. The resulting call and proof can
+  be validated, queued within the live proof-validity window, and relayed by
+  AVNU's paymaster without the user's account signer.
+- A quote-bound AVNU swap uses the same wallet proof artifact but skips timing
+  delay; delaying it risks submitting an expired quote.
+- A shield starts with a public ERC-20 approval and cannot be funded from the
+  pool. It is not the private queued path, and it is never bundled with the
+  action it later funds.
+
+`strk20PrepareInvoke(actions, true)` is simulation only. It skips proof
+generation and returns an empty, non-submittable proof; use it for previews,
+never for the submission queue.
 
 ---
 
@@ -91,9 +116,24 @@ game and money; this package just executes what it is handed.
 
 ## Version pins that matter
 
-`starknet` must be pinned to **10.7.0**. npm `latest` is 10.0.2 and contains
-none of the STRK20 surface — every symbol is `undefined` at runtime with no
-useful error.
+Pin the tested connection stack together and exactly:
+
+```text
+starknet                                      10.4.0
+@starknet-io/types-js                         0.10.3
+@starknet-io/get-starknet-discovery           6.0.3
+@starknet-io/get-starknet-wallet-standard     6.0.3
+```
+
+npm `latest` for `starknet` is not a safe instruction: the published tags do
+not advance monotonically, and a version without the v6 STRK20 surface can
+otherwise fail as `undefined` at runtime. Upgrade all four together and rerun
+the real-wallet Phase 0 checks.
+
+The committed lockfile is part of that pin. The discovery package has caret
+transitives and beta `types-js` dependencies, so regenerating the lock can
+change the effective wallet-standard tree even when these four direct versions
+do not move.
 
 Use `WalletAccountV6` instance methods. The standalone `strk20*` functions
 are not exported from the package root.

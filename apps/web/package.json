@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "comment": "The shell sees ONLY @strkworld/* packages. No starknet, no wallet library — those live behind PrivacyOperations in @strkworld/privacy. See docs/ARCHITECTURE.md.",
+  "comment": "The shell sees ONLY @strkworld/* packages. No starknet, no wallet library \u2014 those live behind PrivacyOperations in @strkworld/privacy. See docs/ARCHITECTURE.md.",
   "scripts": {
     "dev": "vite",
     "build": "vite build",
@@ -20,7 +20,10 @@
     "react-dom": "^19.0.0"
   },
   "devDependencies": {
-    "vite": "^6.0.0",
-    "vitest": "^2.1.0"
+    "vite": "^8.2.1",
+    "@vitejs/plugin-react": "^5.2.0",
+    "vitest": "^4.1.10",
+    "@types/react": "^19.0.0",
+    "@types/react-dom": "^19.0.0"
   }
 }
