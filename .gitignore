@@ -1,0 +1,26 @@
+# dependencies
+node_modules/
+
+# builds
+dist/
+build/
+.vite/
+*.tsbuildinfo
+
+# environment — never commit real values
+.env
+.env.local
+.env.*.local
+
+# editors / OS
+.DS_Store
+.idea/
+.vscode/*
+!.vscode/extensions.json
+
+# logs
+*.log
+npm-debug.log*
+
+# test output
+coverage/

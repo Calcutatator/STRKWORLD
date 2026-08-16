@@ -1,0 +1,23 @@
+{
+  "name": "@strkworld/web",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@strkworld/privacy": "*",
+    "@strkworld/world": "*",
+    "@strkworld/lobby": "*",
+    "@strkworld/shared": "*",
+    "@starknetfoundation/starknet-start-react": "2.0.1",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0"
+  },
+  "devDependencies": {
+    "vite": "^6.0.0"
+  }
+}
