@@ -262,6 +262,14 @@ wire.** The idiomatic `MapSchema` key is the server-generated 9-character
 identity, that is one identifier more than the lobby needs. STRKWORLD keys the
 map by `gameId` instead, and the room keeps `sessionId -> gameId` privately.
 
+**`@colyseus/core@0.17.50` independently declares `node: ">= 22.x"`.** That is
+a second package requiring Node 22, after the AVNU SDK, so D-025's floor is now
+held up by two lanes rather than one. It also means CI's
+`.github/workflows/ci.yml` `node-version: 20` is building against a package
+that says it is unsupported. npm does not enforce `engines` without
+`engine-strict`, so this passes today rather than failing — which is exactly
+the failure mode D-025 warns about.
+
 Interest management via `{ map: Entry, view: true }` plus per-client
 `StateView.add/remove` works end to end: a removed reference disappears from
 that client's decoded state, and deleting a map entry propagates to every view
