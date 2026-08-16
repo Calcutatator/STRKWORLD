@@ -56,6 +56,21 @@ arrival is not.
 The building's copy must land that distinction. A player who deposits and
 believes they have become invisible has been misled by us.
 
+### Leave a gas reserve
+
+Step 2 costs gas, and that gas must be **public** STRK — a pool deposit cannot
+be paid for out of the pool balance it is about to create (D-013).
+
+So the deposit flow must never shield the full delivered amount. Size the
+reserve from a live fee estimate, not a constant, and shield the remainder. A
+player who shields everything is stranded one transaction short of doing
+anything at all, and it reads as the app having taken their money. `shieldup`
+shipped this as a known open UX defect — do not inherit it.
+
+The happy consequence: this building is the *only* place a player needs public
+STRK, and it is also the place that produces it. Every private-side action
+afterwards pays its own fee from shielded notes.
+
 ---
 
 ## What this owns

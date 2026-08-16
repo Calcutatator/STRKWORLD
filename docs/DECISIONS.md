@@ -297,3 +297,64 @@ implying the player has become invisible by depositing.
 **Sequencing ownership.** The shell orchestrates bridge → shield, because
 `packages/bridge` must not import `packages/privacy` (D-009) and the shell
 already owns cross-package sequencing.
+
+---
+
+## D-013 — Shielded STRK is the money and the gas
+
+**2026-08-16 · Accepted**
+
+**Context.** The game needs one asset to reason about. Multiple tokens, each
+with its own balance, fee behaviour and maturity state, is a lot of surface for
+a player standing in a pixel bank.
+
+**Decision.** **Pool STRK is the medium of exchange and the fee token for
+everything.** Prices are in it, gas is paid in it, and it is what a player's
+balance means.
+
+**This is supported, and verified rather than assumed.** AVNU's private
+paymaster returns its fee as a `withdraw` action drawn from the pool:
+
+```ts
+type PrivatePaymasterFeeAction = { type: "withdraw"; recipient; token; amount }
+```
+
+The fee is a leg of the same private transaction, paid out of shielded notes.
+`shieldup` ran this on mainnet for unshield, shielded send and shielded swap;
+the SDK exposes it as the `sponsored_private` fee mode.
+
+**The one exception: shielding itself needs public STRK.** A deposit is a
+direct `approve → deposit` and its gas cannot come from a pool balance that
+does not exist yet. You cannot pay for the transaction that creates your
+shielded balance out of your shielded balance.
+
+**Consequences.**
+
+*Every private-side action is self-funding.* Once a player has a pool balance,
+they never need public STRK again. No "top up for gas" step, no second asset to
+explain.
+
+*The Bridge resolves the exception by construction.* The solver delivers public
+STRK; the player spends a little on gas for the shield and pools the rest. The
+one flow needing a public reserve is the flow that just created one.
+
+*Therefore: never shield the full public balance.* Leave a gas reserve, sized
+from a live fee estimate rather than a constant. `shieldup` shipped this as a
+known open UX defect — a player who shields everything is stranded one
+transaction short of being able to do anything, and it reads as the app having
+taken their money.
+
+*Balances are two numbers, not one.* Public STRK (a gas reserve, transient) and
+pool STRK (the actual balance). The HUD shows the second; the first appears only
+when it is low enough to block an action.
+
+*Fee ceilings are mandatory.* The paymaster names its own fee. Validate the
+returned `fee_action` — token, recipient and amount — against a ceiling before
+signing. `shieldup`'s `private-paymaster.ts` does exactly this and it is
+directly portable.
+
+*Server-side split is required, not optional.* The AVNU SDK warns that
+`sponsored_private` needs an API key and "calling it from a browser leaks the
+key". Fee build and submission go behind our own endpoints; proving stays
+client-side in the player's wallet. This is the backend from D-009 and the
+Shell lane owns it.
