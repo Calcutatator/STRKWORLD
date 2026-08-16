@@ -11,5 +11,10 @@
   "dependencies": {
     "@strkworld/shared": "*",
     "phaser": "4.2.1"
+  },
+  "exports": {
+    ".": "./src/index.ts",
+    "./runtime": "./src/runtime.ts",
+    "./host": "./src/host.ts"
   }
 }

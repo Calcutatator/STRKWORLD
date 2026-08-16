@@ -410,12 +410,25 @@ tab** — rAF does not fire, so the orphaned game and its canvas sit there
 indefinitely. For a PWA that backgrounds on mobile, that is a stuck WebGL
 context.
 
-**The fix:** a ref-counted singleton with `setTimeout(..., 0)` deferred
-teardown, living in `packages/world/src/runtime.ts` rather than in a React
-component, so React never owns the game. StrictMode re-runs effects but does
-not recreate the DOM node, so the remount cancels the pending teardown.
-Acceptance test: under `<StrictMode>`, `document.querySelectorAll('canvas').length === 1`
-and `create()` logs exactly once.
+**The fix, now implemented and guarded.** A ref-counted host with deferred
+teardown in `packages/world/src/host.ts`, with the Phaser wiring in
+`runtime.ts` and a ~15-line React component that only acquires and releases.
+React never owns the game lifecycle.
+
+The ref-counting logic is deliberately Phaser-free so the part that actually
+breaks is unit-tested in CI without a browser: `host.test.ts` has 9 tests
+covering the StrictMode acquire→release→acquire sequence, interleaved teardown
+and acquire, unbalanced releases, and rapid same-tick churn. One test
+demonstrates the naive implementation producing two instances, so the reason
+this module exists survives someone deciding it looks over-engineered.
+
+*Verified:* 9 passing tests asserting exactly one instance across a StrictMode
+double-mount, plus zero teardowns when a remount cancels a queued one. The
+browser-level assertion (one canvas, one `create()`) still wants a manual check
+once a scene exists.
+
+Never pass `destroy(true, true)` — `noReturn` tears down the global plugin
+cache and no further Game can be created on the page.
 
 Never pass `destroy(true, true)` — that destroys the global plugin cache and no
 further Game can be created on the page.
