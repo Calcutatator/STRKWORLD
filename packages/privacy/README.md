@@ -88,8 +88,29 @@ are not exported from the package root.
 
 ## Testing
 
-Parity tests against `shieldup`'s known-good mainnet behaviour are the
-highest-value tests here — there is a working implementation to diff against,
-so parity beats exploration.
+**`FakePrivacyOperations` is the point of the interface.** A deterministic,
+in-memory implementation with fault injection — no network, no wallet, no
+chain, no 6 STRK per action. Import it from any lane:
+
+```ts
+import { FakePrivacyOperations } from '@strkworld/privacy'
+
+const ops = new FakePrivacyOperations({
+  balances: { [STRK]: 100n * 10n ** 18n },
+  registered: [bob],
+})
+
+ops.injectFault({ kind: 'not-registered', on: 'prepare' })
+ops.advanceBlocks(10)        // mature pending notes
+ops.setPoolFee(20n * 10n**18n) // governance moved the fee mid-flight
+```
+
+It models the sharp edges rather than the happy path, because the happy path is
+not what breaks: notes are unspendable until they mature, the fee comes out of
+the balance being spent, a shield is never batched with what it funds, and
+deposits are always to self.
+
+Parity tests against `shieldup`'s known-good mainnet behaviour come next —
+there is a working implementation to diff against, so parity beats exploration.
 
 Never put real key material or a real RPC key in a fixture.

@@ -11,7 +11,6 @@ export type {
   OperationStage,
   PrivacyErrorKind,
   PrivateBalance,
-  PrivateSwapInput,
   ProgressCallback,
   RecipientStatus,
   TxResult,
@@ -20,10 +19,16 @@ export type {
 export { PrivacyError } from './types.js';
 
 export type {
+  BatchWarning,
+  Intent,
   PoolConfig,
+  PreparedBatch,
   PrivacyOperations,
   WalletCapability,
 } from './operations.js';
 
-// Implementation lands in Phase 2. See docs/SPEC.md §8.
+// Test double. Safe to import from any lane — no network, no wallet, no chain.
+export { FakePrivacyOperations, type FakeConfig, type Fault } from './testing/fake.js';
+
+// The real implementation lands in Phase 2. See docs/WORKPLAN.md.
 // export { WalletApiPrivacyOperations } from './wallet-api/index.js'

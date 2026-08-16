@@ -42,14 +42,6 @@ export interface PrivateBalance {
  */
 export type RecipientStatus = 'registered' | 'unregistered' | 'unknown';
 
-export interface PrivateSwapInput {
-  tokenIn: Address;
-  tokenOut: Address;
-  amountIn: bigint;
-  /** Rejected below this. Never default to zero. */
-  minAmountOut: bigint;
-}
-
 /**
  * Progress for a long-running operation.
  *

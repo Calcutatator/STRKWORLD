@@ -443,3 +443,58 @@ was taken the same day without engaging with it.
 especially — start against a provisional interface. That is the correct
 trade: building four things against an interface known to be wrong is more
 expensive than waiting a week for the spike.
+
+---
+
+## D-016 — Interiors are overlays; the avatar never leaves the street
+
+**2026-08-16 · Accepted**
+
+**Context.** An independent review found a leak the privacy design missed.
+`PresenceState` deliberately excludes building entry — position is broadcast,
+entry is not, because entry plus public on-chain timing is a correlation
+attack.
+
+But **position alone broadcasts entry anyway.** If the avatar disappears or
+freezes at the Bank door while the interior scene loads, every other client
+sees it happen, timestamped. The exclusion achieved nothing.
+
+**Decision.** Building interiors render as **overlays over the street scene**.
+The player never leaves it, so the avatar keeps existing, keeps its position,
+and keeps behaving like everyone else's.
+
+The alternative — a ghost or idle continuation while the player is elsewhere —
+was rejected: it means maintaining a fiction that can desync, and a fiction
+that desyncs is worse than no fiction, because now the tell is subtler and
+nobody is looking for it.
+
+**Consequences.** The world stays a single scene; buildings are UI, not
+teleports. That is also a simpler engine architecture and it suits a hub.
+
+Entering a building must remain indistinguishable from standing near it. That
+means no entry animation the lobby can observe, no door state broadcast, and no
+position freeze — a player in the Bank should still drift like an idle player
+outside it.
+
+---
+
+## D-017 — v1 is a hub with working buildings; game design comes later
+
+**2026-08-16 · Accepted**
+
+**Context.** The review flagged that the financial layer is specified
+rigorously and the game barely — a street, four doors, four panels, with
+nothing yet making walking around worth doing.
+
+**Decision.** That is correct and deliberate. v1 is a **hub**: the buildings
+working is the whole target. Game design — what makes the world worth
+inhabiting — is a later pass, owned by the project lead rather than derived
+from a spec.
+
+**Consequences.** The World lane builds a walkable, coherent street and four
+functioning doors, and stops there. No quest system, no economy loop, no
+progression. Resist inventing them; a half-designed game layer would be harder
+to replace than an honestly empty one.
+
+Success for v1 is: a player walks in, uses a real privacy protocol with real
+funds, and understands what was private and what was not.

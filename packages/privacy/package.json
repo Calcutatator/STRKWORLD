@@ -6,14 +6,19 @@
   "main": "./src/index.ts",
   "types": "./src/index.ts",
   "scripts": {
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run"
   },
-  "comment": "EXACT pins, all four together. This is the combination the official STRK20 integration skill tested. Do not float one and pin the others — see AGENTS.md findings, 2026-08-16.",
+  "comment": "EXACT pins, all four together — the combination the official STRK20 integration skill tested. Never float one and pin the others; see AGENTS.md findings 2026-08-16.",
   "dependencies": {
     "@strkworld/shared": "*",
     "starknet": "10.4.0",
     "@starknet-io/types-js": "0.10.3",
     "@starknet-io/get-starknet-discovery": "6.0.3",
     "@starknet-io/get-starknet-wallet-standard": "6.0.3"
+  },
+  "devDependencies": {
+    "@starknetfoundation/starknet-start-react": "2.0.1",
+    "vitest": "^2.1.0"
   }
 }

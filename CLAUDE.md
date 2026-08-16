@@ -27,6 +27,18 @@ service.
 
 Canonical STRK20 docs: `https://strk20-by-example.org/llms-full.txt`
 
+## Required STRK20 skill route
+
+For any privacy claim or implementation, load `strk20-privacy` first. Use
+`strk20-wallet-api` for this product's financial path and
+`strk20-anonymizer-contracts` for helper-contract work; use the official
+`strk20-privacy-integration` skill for planning and execution gates. The
+`strk20-privacy-sdk` route is not part of STRKWORLD and must never be imported
+into the browser or `packages/privacy`.
+
+The corrections in `AGENTS.md` override the vendored snapshot where shipped
+types or verified wallet behavior disagree with it.
+
 ## Where things live
 
 | Need | Go to |

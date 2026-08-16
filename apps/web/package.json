@@ -3,21 +3,24 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
+  "comment": "The shell sees ONLY @strkworld/* packages. No starknet, no wallet library — those live behind PrivacyOperations in @strkworld/privacy. See docs/ARCHITECTURE.md.",
   "scripts": {
     "dev": "vite",
     "build": "vite build",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run"
   },
   "dependencies": {
     "@strkworld/privacy": "*",
+    "@strkworld/bridge": "*",
     "@strkworld/world": "*",
     "@strkworld/lobby": "*",
     "@strkworld/shared": "*",
-    "@starknetfoundation/starknet-start-react": "2.0.1",
     "react": "^19.0.0",
     "react-dom": "^19.0.0"
   },
   "devDependencies": {
-    "vite": "^6.0.0"
+    "vite": "^6.0.0",
+    "vitest": "^2.1.0"
   }
 }

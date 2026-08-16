@@ -99,10 +99,11 @@ curl -s -X POST $RPC -H 'Content-Type: application/json' \
 `.env.example` proves nothing about a service existing. A method name in a
 doc page proves nothing about a wallet implementing it.
 
-**Read the vendored skills first — they are the primary reference.**
-`.agents/skills/` carries five STRK20 skills with official doc pages bundled
-as Markdown, so you do not need the network and cannot be defeated by the SPA
-problem below:
+**Load the vendored skills for every STRK20 task.** `.agents/skills/` carries
+five complementary STRK20 skills with their source pages bundled as Markdown.
+The four knowledge skills from `welttowelt/strk20-skills` are vendored from
+commit `bded2dfc08467b9103ad3dd0c6575a2065fdf425`; `skills-lock.json` records
+their content hashes.
 
 | Skill | Use it for |
 |---|---|
@@ -111,6 +112,28 @@ problem below:
 | `strk20-anonymizer-contracts` | Cairo helpers. Needed for the Vault, post-v1 |
 | `strk20-privacy-sdk` | The low-level route. **Not ours** — read only to understand what we are not doing |
 | `strk20-privacy-integration` | The official ask/plan/execute planner |
+
+Route work deliberately: use `strk20-privacy` for the trust boundary and
+hidden/visible claims, `strk20-wallet-api` for `packages/privacy` and browser
+flows, and `strk20-anonymizer-contracts` only when a helper contract is in
+scope. The integration planner controls planning and approval gates. Direct
+use of `@starkware-libs/starknet-privacy-sdk` in this product is a defect: it
+would move viewing keys, discovery and proving into a trust boundary we have
+explicitly rejected.
+
+**The skills are required working references, not authority over shipped
+code.** Installed package types, live contract state, current wallet behavior,
+and the verified project findings below win when they disagree. In the current
+vendored snapshot:
+
+- `strk20PrepareInvoke(actions, true)` skips proof generation; it does not
+  "build and prove". Its result is for simulation and is not submittable.
+- The approval/deposit sequence is real, but exact wallet prompt count is a
+  live-wallet test result, not a protocol guarantee. Do not hardcode two.
+- Bundled upstream SDK references contain commands that write an auth token
+  directly to `.npmrc`. Never execute those. If the SDK is ever used in a
+  different, approved key-holding project, follow the safer environment
+  placeholder flow in `strk20-privacy-sdk/SKILL.md`.
 
 **Canonical STRK20 docs online:** `https://strk20-by-example.org/llms-full.txt`
 — the whole site as one Markdown file. Note that
@@ -157,18 +180,20 @@ hazard explicitly.
 
 ---
 
-### 2026-08-16 — A shield is TWO wallet prompts, and the second reads as a bug
+### 2026-08-16 — Approval and deposit are separate; prompt count is wallet-dependent
 
-The ERC-20 `approve` must land on-chain before the private deposit, so the
-wallet prompts twice for what the player thinks is one action.
+The ERC-20 approval must be established before a private deposit. That is a
+real sequencing constraint, but neither the Wallet API types nor the action
+shape guarantee exactly two prompts: an existing allowance and wallet UX can
+change what the player sees.
 
-**Label both steps in the UI.** Unlabelled, the second prompt reads as a
-duplicate-transaction bug and players cancel it.
+Design the Bank and Bridge as explicit multi-stage progress flows, but obtain
+the actual prompt count from the Phase 0 Ready/Xverse mainnet spike before
+writing fixed copy.
 
-For our Bridge deposit flow this compounds: bridge deposit, then `approve`,
-then shield. Three prompts for one intent. The room has to narrate that.
-
-*Source:* `.agents/skills/strk20-wallet-api/SKILL.md`.
+*Verified:* `starknet@10.7.0` type definitions and
+[`docs/research/primary-source-verification.md`](docs/research/primary-source-verification.md),
+which correctly retains prompt count as a live-wallet unknown.
 
 ---
 

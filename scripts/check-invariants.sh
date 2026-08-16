@@ -62,6 +62,33 @@ else
   ok "bridge independent of the privacy seam"
 fi
 
+# 4c. STRKWORLD is a Wallet API dapp, not a key-holding SDK integrator. Pulling
+#     in the low-level SDK would move viewing keys, discovery and proving into
+#     this repo and violate the first invariant.
+sdk_hits=$(grep -rnE "@starkware-libs/starknet-privacy(-sdk)?" \
+  --include="*.ts" --include="*.tsx" --include="package.json" \
+  packages apps 2>/dev/null || true)
+if [ -n "$sdk_hits" ]; then
+  printf '%s\n' "$sdk_hits"
+  bad "low-level STRK20 SDK in the app — use the Wallet API route"
+else
+  ok "privacy implementation stays on the Wallet API route"
+fi
+
+# 4d. The vendored knowledge layer is part of the project contract. Agents can
+#     use it offline, while skills-lock.json records source and content hashes.
+missing_skills=""
+for skill in strk20-privacy strk20-wallet-api strk20-anonymizer-contracts strk20-privacy-sdk strk20-privacy-integration; do
+  if [ ! -f ".agents/skills/$skill/SKILL.md" ]; then
+    missing_skills="$missing_skills $skill"
+  fi
+done
+if [ -n "$missing_skills" ]; then
+  bad "required STRK20 skill missing:$missing_skills"
+else
+  ok "required STRK20 skills are vendored"
+fi
+
 # 5. The lobby never sees money. Checks code, not comments — docs legitimately
 #    name these terms in order to forbid them.
 #    Matches substrings, not word boundaries: playerAddress, walletAddress and

@@ -11,16 +11,27 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Check project invariants
-        run: ./scripts/check-invariants.sh
+      - run: ./scripts/check-invariants.sh
 
-  typecheck:
-    name: Typecheck
+  verify:
+    name: Typecheck and test
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
           node-version: 20
-      - run: npm install
+          cache: npm
+      # ci, not install — reproducible from the committed lockfile.
+      - run: npm ci
       - run: npm run typecheck
+      - run: npm test
+
+  drift:
+    name: Protocol drift canary
+    runs-on: ubuntu-latest
+    # Read-only mainnet asserts. The pool fee has already moved once (4 -> 6
+    # STRK) and the docs did not follow; this catches the next one.
+    steps:
+      - uses: actions/checkout@v4
+      - run: ./scripts/check-drift.sh
