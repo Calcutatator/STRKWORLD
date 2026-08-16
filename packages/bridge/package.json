@@ -6,11 +6,15 @@
   "main": "./src/index.ts",
   "types": "./src/index.ts",
   "scripts": {
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "test": "vitest run --root ../.. packages/bridge/src"
   },
   "dependencies": {
     "@strkworld/shared": "*",
     "@defuse-protocol/one-click-sdk-typescript": "0.1.25",
     "viem": "^2.51.0"
+  },
+  "devDependencies": {
+    "vitest": "^4.1.10"
   }
 }

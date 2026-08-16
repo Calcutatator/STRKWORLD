@@ -21,14 +21,29 @@
  */
 export type DepositMode = 'signed' | 'manual';
 
+import type { QuoteResponse } from '@defuse-protocol/one-click-sdk-typescript';
+
+export type SourceChain =
+  | 'ethereum'
+  | 'base'
+  | 'arbitrum'
+  | 'polygon'
+  | 'bsc'
+  | 'solana'
+  | 'stellar'
+  | 'ton'
+  | 'tron';
+
 /** An asset a player can deposit from. The destination is always STRK. */
 export interface SourceAsset {
   /** 1Click asset identifier. */
   assetId: string;
   symbol: string;
-  chainName: string;
+  chainName: SourceChain;
   decimals: number;
   depositMode: DepositMode;
+  /** Whether this entry was confirmed in the current registry response. */
+  availability?: 'live' | 'fallback';
 }
 
 export interface BridgeQuote {
@@ -41,6 +56,8 @@ export interface BridgeQuote {
   /** Past this, re-quote rather than submitting. */
   expiresAt: number;
   slippageBps: number;
+  /** Complete signed response retained as dispute evidence. */
+  signedQuote: QuoteResponse;
 }
 
 /**
@@ -77,4 +94,17 @@ export interface BridgeStatus {
    * must not conflate them — one is a wait, the other is a loss.
    */
   pollingStopped: boolean;
+}
+
+/** Versioned, resumable bridge state. Safe for browser-local persistence. */
+export interface BridgeRecord {
+  v: 1;
+  createdAt: number;
+  updatedAt: number;
+  source: SourceAsset;
+  amountIn: bigint;
+  starknetRecipient: string;
+  refundAddress: string;
+  signedQuote: QuoteResponse;
+  status: BridgeStatus;
 }

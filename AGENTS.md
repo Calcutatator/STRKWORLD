@@ -280,6 +280,26 @@ was submitted.
 
 ---
 
+### 2026-08-16 — AVNU SDK 4.2.0 raises the toolchain floor to Node 22
+
+The approved private-swap SDK is now installed exactly at
+`@avnu/avnu-sdk@4.2.0`. Its published manifest declares `node >=22`, while the
+root repository still advertises Node `20.19` as supported. The package can be
+type-inspected and tested on the current Node 24 workspace, but a Node 20 CI or
+developer install is outside the SDK's supported engine range and may warn or
+fail.
+
+Do not paper over this with `engine-strict=false`. The lead should either raise
+the repository floor to Node 22 before the Exchange ships or obtain an upstream
+compatibility commitment. Until then, Node 20 is not a verified build target for
+the privacy package.
+
+*Verified:* installed the exact npm release and inspected
+`node_modules/@avnu/avnu-sdk/package.json` (`engines.node: >=22`) against the
+root `package.json` engine range on 2026-08-16.
+
+---
+
 ### 2026-08-16 — 1Click source metadata is live data, not a static catalogue
 
 The live 1Click registry currently exposes 186 assets across 35 blockchain

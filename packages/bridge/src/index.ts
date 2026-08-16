@@ -13,7 +13,24 @@
 export type {
   BridgeLeg,
   BridgeQuote,
+  BridgeRecord,
   BridgeStatus,
   DepositMode,
   SourceAsset,
+  SourceChain,
 } from './types.js';
+
+export { validateSourceAddress, validateStarknetAddress } from './address-validation.js';
+export { OneClickSdkClient, type OneClickClient } from './client.js';
+export {
+  LocalBridgeStore,
+  MemoryBridgeStore,
+  type BridgeStore,
+} from './persistence.js';
+export { loadSourceAssets, STRK_ON_STARKNET_ASSET_ID } from './source-assets.js';
+export {
+  BridgeService,
+  DEFAULT_SLIPPAGE_BPS,
+  QUOTE_DEADLINE_MS,
+  type CreateManualDepositInput,
+} from './service.js';

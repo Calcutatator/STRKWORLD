@@ -84,6 +84,20 @@ afterwards pays its own fee from shielded notes.
   reload, a tab close and a crash
 - Receipts
 
+## Implemented offline boundary
+
+`BridgeService` now owns the manual inbound quote and resume state machine. It
+constructs only exact-input quotes whose destination is Starknet STRK,
+validates the refund and recipient shapes, verifies the 1Click signature, and
+persists the complete signed response as dispute evidence. `refresh()` maps
+solver states into the small `BridgeStatus` vocabulary without leaking raw
+provider states into the shell.
+
+`OneClickClient` and `BridgeStore` are ports. Production uses the shipped SDK
+and browser storage; tests use deterministic in-memory implementations. The
+remaining funded acceptance test is an issued deposit address that is actually
+funded and reaches `SUCCESS`. No test fixture pretends that has happened.
+
 ## What this must never do
 
 - Import `@strkworld/privacy` — CI enforces this. The shell sequences the two
