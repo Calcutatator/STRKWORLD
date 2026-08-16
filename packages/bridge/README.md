@@ -1,115 +1,140 @@
 # @strkworld/bridge
 
-**Cross-chain value in and out, via NEAR Intents. Public by nature.**
+**One path in. Deposit from another chain and end up shielded.**
 
-The Bridge building is how players get value into STRKWORLD from another chain
-and back out again. It does **not** touch the STRK20 pool — that is the Bank's
-job, and it happens afterwards.
+```
+any asset, any chain  →  STRK on Starknet  →  STRK20 privacy pool
+```
+
+That is the whole building. No direction toggle, no destination token picker,
+no route options. The player clicks **Deposit**, and there is exactly one
+outcome.
 
 ---
 
-## The honesty rule
+## Why it is this narrow
 
-**Bridging is not a privacy feature.** It is a funding feature.
+Every option removed here is a decision the player does not have to make and a
+failure mode we do not have to handle.
 
-A bridge-in lands a public ERC-20 on Starknet with a visible amount and a
-visible recipient. The privacy step is shielding at the Bank, as a separate,
-later transaction. Bundling them would publish exactly the link the pool exists
-to break — see `docs/DECISIONS.md` D-004 and the composition-leak note in the
-STRK20 concepts reference.
+- **No OUT direction.** Exiting is the Bank's job (`unshield`), and mixing
+  "get money in" with "get money out" in one building doubles its surface for
+  no gain.
+- **Destination is always STRK.** NEAR Intents 1Click delivers STRK on Starknet
+  natively, so fixing the output **removes the AVNU swap leg entirely** — no
+  second slippage, no second quote, no second thing that can fail halfway.
+- **Always ends shielded.** The player's intent is "put money in this world",
+  and in this world money lives in the pool.
 
-The building's copy must say this plainly. A player who bridges in and assumes
-they are now private has been misled by us, and the fix is wording, not
-cryptography.
+`shieldup`'s bridge was bidirectional with an arbitrary destination token and
+an AVNU leg downstream. Roughly half of that complexity does not come across.
+
+---
+
+## The two-transaction truth
+
+**"Directly into the pool" is one intent and two transactions.** Say so in the
+copy; do not imply atomicity.
+
+`STRK20_DEPOSIT_ACTION` has no recipient field — pool deposits are always to
+self and must be signed by the account making them. The bridge therefore cannot
+shield on the player's behalf. The sequence is:
+
+1. **Solver delivers STRK to the player's Starknet address.** Public. The
+   amount and the recipient are visible on-chain.
+2. **The player signs a shield.** Also a public leg — every pool deposit names
+   its depositor.
+
+So an observer sees "this address received STRK from a bridge, then put it in
+the pool". That linkage is unavoidable and delay does not meaningfully hide it,
+because the deposit leg is public either way.
+
+**What privacy actually begins here:** everything the player does *after* the
+funds are in the pool. Their transfers, swaps and balances are private. Their
+arrival is not.
+
+The building's copy must land that distinction. A player who deposits and
+believes they have become invisible has been misled by us.
 
 ---
 
 ## What this owns
 
-- The NEAR Intents 1Click integration — quotes, deposit submission, execution
+- The NEAR Intents 1Click integration — quote, deposit submission, execution
   status polling
-- Source and destination token registries, and address validation per chain
-- The resumable multi-leg pipeline: a bridge takes minutes and must survive a
-  page reload, a tab close and a crash
+- The source-asset registry and per-chain address validation
+- The resumable pipeline: a bridge takes minutes and must survive a page
+  reload, a tab close and a crash
 - Receipts
 
 ## What this must never do
 
-- Import from `@strkworld/privacy`, `world` or `lobby`
-- Imply that bridging provides privacy
-- Hold key material for any chain
+- Import `@strkworld/privacy` — CI enforces this. The shell sequences the two
+  steps; this package does not reach into the pool
+- Offer an OUT direction, a destination token choice, or a route picker
+- Imply that arriving is private
 
 ---
 
-## Direction matters
+## Manual mode is the common case
 
-The two directions are genuinely different flows, not mirror images.
+Some chains support a wallet-signed deposit. Many do not, and the player goes
+off to a centralised exchange withdrawal screen while we poll for arrival.
 
-**IN** — origin is an asset on some other chain, destination is STRK on
-Starknet. Reaching the player's actually-chosen Starknet token then needs an
-AVNU swap leg downstream. Some chains support a wallet-signed deposit; others
-are **MANUAL mode**, where the player goes off to an exchange withdrawal screen
-and we poll for arrival. Manual mode is the common case for a player funding
-from a centralised exchange, so it is not an edge case — design for it first.
-
-**OUT** — origin is a Starknet registry asset, destination is any registry
-asset. The deposit is a plain Starknet ERC-20 transfer to a quoted address and
-the solver delivers directly. No AVNU leg.
+**That is the normal path for someone funding from an exchange, so build for it
+first.** It shapes the whole room: the player leaves, comes back minutes later,
+possibly on a different device, and must find their deposit still in progress.
 
 ---
 
 ## Reuse from shieldup
 
-This lane is mostly a port, not an invention. `apps/shield20-app/src/bridge/`
-has ~1,200 lines of proven orchestration worth carrying across:
+Mostly a port. `apps/shield20-app/src/bridge/`:
 
 | Module | Take it? |
 |---|---|
-| `one-click.ts` (521) | **Yes** — typed wrapper over `OneClickService`, with the string-union enums replaced by typed constants |
-| `execute.ts` (1,181) | **Adapt** — the leg orchestration is sound; strip the shieldup-specific UI coupling |
-| `persistence.ts` (140) | **Yes** — resumable pipeline state. This is the piece that makes a multi-minute flow survivable |
-| `source-tokens.ts` (328) | **Yes** — registry and deposit-mode mapping |
-| `address-validation.ts` (88) | **Yes** — per-chain, cheap, and catches a class of unrecoverable mistakes |
+| `one-click.ts` (521) | **Yes**, minus the OUT paths — typed wrapper over `OneClickService` |
+| `persistence.ts` (140) | **Yes** — resumable pipeline state. The piece that makes a multi-minute flow survivable |
+| `source-tokens.ts` (328) | **Yes**, simplified — only source assets matter now; the destination is fixed |
+| `address-validation.ts` (88) | **Yes** — cheap, and catches a class of unrecoverable mistakes |
 | `receipts.ts`, `balances.ts`, `submit-state.ts` | **Yes** — small and self-contained |
-| `BridgeModal.tsx` (1,956) | **No** — rewrite. It is a wallet modal; ours is a room in a building |
+| `execute.ts` (1,181) | **Adapt, roughly half** — the OUT orchestration and the AVNU leg both go |
+| `BridgeModal.tsx` (1,956) | **No** — rewrite. It is a wallet modal; ours is a room |
 
-Port behaviour, not the lockfile — shieldup's dependency tree carries 36
-transitive advisories.
+Port behaviour, not the lockfile — shieldup's tree carries 36 transitive
+advisories.
 
 ---
 
-## Tuning, inherited and worth keeping
-
-These came from production and are not arbitrary:
+## Tuning, inherited from production
 
 - Default slippage **100 bps**
-- Quote deadline **30 minutes** — long enough for a player to walk to an
-  exchange withdrawal screen, short enough that the price does not drift
-- Status polling **every 3s** for signed deposits; slower for manual mode
-- Give up spinning after **10 minutes** and switch to a "still pending" state
-  the player can leave and come back to
+- Quote deadline **30 minutes** — long enough for a player to reach an exchange
+  withdrawal screen, short enough that the price does not drift
+- Status polling **every 3s** for signed deposits, slower for manual mode
+- Stop spinning after **10 minutes** and switch to a "still pending" state the
+  player can leave and return to
 
 ---
 
 ## Dependency note
 
-`@defuse-protocol/one-click-sdk-typescript` — pin explicitly. shieldup ran
-`^0.1.17`; latest is `0.1.25`. It is a 0.x package, so treat minor bumps as
-breaking and re-verify the quote and status shapes when moving.
+`@defuse-protocol/one-click-sdk-typescript` — pin exactly. shieldup ran
+`^0.1.17`; current is `0.1.25`. It is a 0.x package, so treat minor bumps as
+breaking and re-verify quote and status shapes when moving.
 
-The EVM side pulls `viem`. Lazy-load the whole building so that chunk only
-reaches players who actually open the Bridge.
+The EVM side pulls `viem`. Lazy-load the building so that chunk only reaches
+players who open it.
 
 ---
 
 ## An alternative worth tracking
 
 StarkWare's own [privacy-bridge](https://github.com/starkware-libs/privacy-bridge)
-moves USDC between EVM chains and the pool over Circle's CCTP, with its own
-inbound and outbound anonymizer contracts, binding the cross-chain message and
-the private note in a single transaction. That is strictly better privacy than
-bridge-then-shield, because there is no public intermediate leg.
+moves USDC between EVM chains and the pool over Circle's CCTP, binding the
+cross-chain message and the private note in a **single transaction** — no
+public intermediate landing.
 
-It is early (`0.1.x`, GitHub Packages) and USDC-only. Read it before v2 — if it
-matures, the Bridge building gains a genuinely private route and the honesty
-rule above softens for that path. Do not pin it as a dependency yet.
+That is strictly better than what this building can do, and it would collapse
+the two-transaction truth above into one private step. It is `0.1.x` and
+USDC-only today. Read it before v2; do not pin it yet.

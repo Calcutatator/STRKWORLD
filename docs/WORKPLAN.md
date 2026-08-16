@@ -201,35 +201,34 @@ player — with honest in-product copy about what is and is not hidden.
 
 ### Lane: Bridge
 
-**Owns** `packages/bridge`. Cross-chain value in and out via NEAR Intents.
+**Owns** `packages/bridge`. One path in: any chain → STRK → the pool.
 
-**Fully independent** — no dependency on the Phase 0 spike, the STRK20 seam, or
-anything the Chain lane is doing. It can start immediately and run at full
-speed.
+**Fully independent** — no dependency on the Phase 0 spike or the STRK20 seam.
+Can start immediately at full speed.
 
 **First task:** port the 1Click wrapper and the resumable pipeline from
-`shieldup`'s `src/bridge/`. Roughly 1,200 lines of proven orchestration —
-`one-click.ts`, `persistence.ts`, `source-tokens.ts`, `address-validation.ts`.
-Port behaviour, not the lockfile. The 1,956-line modal does not come across;
-ours is a room in a building, not a wallet modal.
+`shieldup`'s `src/bridge/` — `one-click.ts`, `persistence.ts`,
+`source-tokens.ts`, `address-validation.ts`. Drop the OUT paths and the AVNU
+leg; neither survives the narrowed scope (D-012). Port behaviour, not the
+lockfile.
 
-**Then:** both directions. IN is the harder one — it lands as STRK and needs an
-AVNU swap leg to reach the player's chosen token, and **manual deposit mode is
-the common case** (a player funding from a centralised exchange), so build for
-it first rather than treating it as an edge case.
+**Build manual deposit mode first.** A player funding from a centralised
+exchange leaves the tab, goes to a withdrawal screen, and comes back minutes
+later — possibly on another device — expecting to find the deposit still in
+progress. That is the normal path, not an edge case, and it shapes the room.
 
-**Must not:** import `@strkworld/privacy` — CI enforces this. Imply that
-bridging is private.
+**Must not:** import `@strkworld/privacy` (CI enforces it). Offer an OUT
+direction, a token picker or a route choice. Imply that arriving is private.
 
-**The honesty constraint is this lane's defining feature.** A bridge-in lands a
-public ERC-20 with a visible amount and recipient. Shielding happens afterwards
-at the Bank, as a separate transaction, and bundling them would publish exactly
-the link the pool exists to break. Copy must say so plainly.
+**The honesty constraint defines this lane.** The solver delivers STRK publicly
+and the shield that follows has its own public leg. Privacy begins after the
+funds are in the pool. Copy must say so.
 
-**Done when:** a player bridges value in from another chain, sees honest copy
-about what is public, and the flow survives a page reload mid-bridge.
+**Done when:** a player deposits from another chain, ends up with a shielded
+balance, sees honest copy about what was public, and the flow survives a reload
+mid-deposit.
 
-**Reference:** `packages/bridge/README.md` · DECISIONS.md D-009
+**Reference:** `packages/bridge/README.md` · DECISIONS.md D-009, D-012
 
 ---
 

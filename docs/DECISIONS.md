@@ -256,3 +256,44 @@ because entry plus public on-chain timing is a correlation attack.
 
 **Consequences.** Slower to change one file; much faster to build four things
 against it at once.
+
+---
+
+## D-012 — The Bridge is deposit-only, always to STRK, always ending shielded
+
+**2026-08-16 · Accepted · narrows D-009**
+
+**Context.** D-009 carried shieldup's bridge shape across: bidirectional, with
+an arbitrary destination token reached via an AVNU swap leg. That is a lot of
+UX surface — a direction toggle, a token picker, two quotes, two slippage
+settings — for a building whose job is "put money in".
+
+**Decision.** One path only:
+
+```
+any asset, any chain → STRK on Starknet → STRK20 pool
+```
+
+No OUT direction (exiting is the Bank's `unshield`). No destination token
+choice. The player clicks Deposit and there is exactly one outcome.
+
+**Consequences.** Roughly half the ported orchestration disappears, and the
+**AVNU leg goes entirely** — 1Click delivers STRK on Starknet natively, so
+fixing the destination removes a whole quote, a whole slippage setting and a
+whole class of half-completed failures.
+
+**The honest part.** "Directly into the pool" is one intent and *two*
+transactions. `STRK20_DEPOSIT_ACTION` has no recipient field — pool deposits
+are always to self and must be signed by the account making them — so the
+bridge cannot shield on the player's behalf. The solver delivers STRK publicly,
+then the player signs a shield, which also has a public leg.
+
+An observer therefore sees "this address received STRK from a bridge, then put
+it in the pool". That is unavoidable, and a delay does not hide it, because the
+deposit leg is public either way. What is private is everything the player does
+*after* arrival. The building's copy must land that distinction rather than
+implying the player has become invisible by depositing.
+
+**Sequencing ownership.** The shell orchestrates bridge → shield, because
+`packages/bridge` must not import `packages/privacy` (D-009) and the shell
+already owns cross-package sequencing.

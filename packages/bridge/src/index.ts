@@ -1,12 +1,19 @@
 /**
- * @strkworld/bridge — cross-chain value in and out, via NEAR Intents.
+ * @strkworld/bridge — one path in: any chain → STRK → the STRK20 pool.
  *
- * PUBLIC BY NATURE. A bridge-in lands a public ERC-20 on Starknet with a
- * visible amount and recipient; shielding is a separate, later step at the
- * Bank. Never imply this building provides privacy — see README.md.
+ * PUBLIC ARRIVAL. The solver delivers STRK to the player's address with a
+ * visible amount and recipient, and the shield that follows is a separate
+ * signed transaction with its own public leg. Privacy begins after the funds
+ * are in the pool, not on the way in. Never imply otherwise — see README.md.
  *
- * Implementation is largely a port of shieldup's src/bridge/ orchestration.
- * See README.md for the module-by-module reuse table.
+ * The shell sequences bridge → shield. This package never imports
+ * @strkworld/privacy, and CI enforces that.
  */
 
-export type { BridgeDirection, BridgeLeg, BridgeQuote, BridgeStatus, DepositMode } from './types.js';
+export type {
+  BridgeLeg,
+  BridgeQuote,
+  BridgeStatus,
+  DepositMode,
+  SourceAsset,
+} from './types.js';

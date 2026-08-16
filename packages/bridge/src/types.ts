@@ -1,57 +1,63 @@
 /**
  * Public types for the Bridge building.
  *
- * Amounts are `bigint` throughout, as everywhere else that touches value.
- */
-
-/**
- * IN and OUT are different flows, not mirror images.
+ * ONE PATH: any asset on any supported chain → STRK on Starknet → the STRK20
+ * pool. No direction toggle, no destination token choice, no route options.
  *
- * IN  — some chain's asset lands as STRK on Starknet; reaching the player's
- *       chosen token needs an AVNU swap leg afterwards.
- * OUT — a Starknet asset goes out as any registry asset; the solver delivers
- *       directly and there is no swap leg.
+ * Note the pool step is NOT this package's job. The shell sequences it, because
+ * pool deposits are always-to-self and must be signed by the player. See
+ * README.md — "the two-transaction truth".
+ *
+ * Amounts are `bigint`, as everywhere that touches value.
  */
-export type BridgeDirection = 'in' | 'out';
 
 /**
  * How the player funds the origin side.
  *
- * `signed` — the player signs a deposit in a connected wallet.
- * `manual` — the player goes off to an exchange withdrawal screen and we poll
- *            for arrival. This is the common case for funding from a
- *            centralised exchange, so design for it first rather than treating
- *            it as an edge case.
+ * `signed` — the player signs a deposit in a connected wallet on that chain.
+ * `manual` — the player goes to an exchange withdrawal screen and we poll for
+ *            arrival. This is the common case for funding from a centralised
+ *            exchange, so it is the path to design for first, not an edge case.
  */
 export type DepositMode = 'signed' | 'manual';
 
-export interface BridgeQuote {
-  direction: BridgeDirection;
+/** An asset a player can deposit from. The destination is always STRK. */
+export interface SourceAsset {
+  /** 1Click asset identifier. */
+  assetId: string;
+  symbol: string;
+  chainName: string;
+  decimals: number;
   depositMode: DepositMode;
-  originAssetId: string;
-  destinationAssetId: string;
+}
+
+export interface BridgeQuote {
+  source: SourceAsset;
   amountIn: bigint;
-  /** Solver's estimate. Not a guarantee — surface it as an estimate. */
-  amountOutEstimate: bigint;
+  /** STRK the solver expects to deliver. An estimate — present it as one. */
+  strkOutEstimate: bigint;
   /** Where the player sends funds on the origin chain. */
   depositAddress: string;
-  /** Quote expiry. Past this, re-quote rather than submitting. */
+  /** Past this, re-quote rather than submitting. */
   expiresAt: number;
   slippageBps: number;
 }
 
 /**
- * A bridge is multi-leg and takes minutes. Each leg is persisted so the flow
- * survives a reload, a tab close or a crash — a player who loses the tab
- * mid-bridge must be able to come back and find it.
+ * A deposit is multi-leg and takes minutes. Every leg is persisted so the flow
+ * survives a reload, a tab close or a crash — with manual mode the player is
+ * expected to leave, and they must find the deposit still in progress when
+ * they return.
+ *
+ * `settled` means STRK has landed publicly at the player's address. The
+ * shielding step that follows belongs to the shell, not to this package.
  */
 export type BridgeLeg =
   | 'quoted'
   | 'awaiting-deposit'
   | 'deposit-detected'
   | 'solver-settling'
-  | 'swap-leg'
-  | 'complete'
+  | 'settled'
   | 'failed'
   | 'expired';
 
@@ -59,14 +65,16 @@ export interface BridgeStatus {
   leg: BridgeLeg;
   /** Present once the origin-side deposit is on chain. */
   depositTxHash?: string;
-  /** Present once the destination side has settled. */
+  /** Present once STRK has landed on Starknet. */
   settlementTxHash?: string;
-  /** Human-readable, already mapped from solver states. Never surface raw. */
+  /** STRK actually delivered. Known only at `settled`. */
+  strkReceived?: bigint;
+  /** Already mapped from solver states. Never surface a raw solver string. */
   message: string;
   /**
-   * True once we have stopped actively polling. The flow is not necessarily
-   * dead — the player can leave and return. Distinguish this from `failed` in
-   * the UI: one is "still working", the other is "this will not complete".
+   * True once active polling has stopped. Distinct from `failed`: this means
+   * "still working, come back later", not "this will not complete". The UI
+   * must not conflate them — one is a wait, the other is a loss.
    */
   pollingStopped: boolean;
 }

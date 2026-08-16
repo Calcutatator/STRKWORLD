@@ -24,7 +24,7 @@ the way they are.
 | The Bank | STRK20 pool — shield, unshield, private transfer | ✅ | No |
 | The Exchange | AVNU private swaps | ✅ | No |
 | The Post Office | Private address-to-address transfer | ✅ | No |
-| The Bridge | Cross-chain value in/out via NEAR Intents — **public** | ✅ | No |
+| The Bridge | Deposit from any chain → STRK → the pool. Arrival is **public** | ✅ | No |
 | The Vault | Vesu lending | After v1 | Yes |
 
 ---

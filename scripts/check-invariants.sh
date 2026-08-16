@@ -46,7 +46,13 @@ fi
 
 # 4b. The bridge must not reach into the STRK20 seam — it is public rails, and
 #     conflating the two is how a privacy claim gets made by accident.
-if grep -rn "@strkworld/privacy" --include="*.ts" --include="*.tsx" packages/bridge 2>/dev/null; then
+#     Matches real import statements only; docs and comments legitimately name
+#     the package in order to forbid it.
+bridge_hits=$(find packages/bridge/src -name "*.ts" -o -name "*.tsx" 2>/dev/null \
+  | xargs grep -nE "^[[:space:]]*(import|export)[^\"']*['\"]@strkworld/privacy" 2>/dev/null \
+  || true)
+if [ -n "$bridge_hits" ]; then
+  printf '%s\n' "$bridge_hits"
   bad "bridge imports the privacy package — it must not touch the STRK20 seam"
 else
   ok "bridge independent of the privacy seam"
