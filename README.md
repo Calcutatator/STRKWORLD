@@ -73,6 +73,7 @@ packages/
 docs/
   SPEC.md       The technical specification. Start here.
   ARCHITECTURE.md  Boundaries, data flow, and what must never cross them.
+  WORKPLAN.md   Division of labour, sequencing and lane briefs.
   DECISIONS.md  Decision log with reasoning.
   research/     Primary-source audits backing the spec.
 ```
