@@ -701,3 +701,17 @@ backend and Wallet API adapter tests exercise the exact action and decoded
 server-action shapes.
 
 ---
+
+### 2026-08-16 — Never expire signed bridge evidence on a local timer
+
+A 1Click signed quote is both resume state and dispute evidence. Deleting it
+after 24 hours can erase the only complete record while a slow settlement,
+refund or support case is still active. Retain it in browser-local storage
+until the player explicitly discards it. Stop active polling after a bounded
+window without marking the deposit failed, and use explicit sensitive-record
+export/import for cross-device resume rather than a correlating backend table.
+
+*Verified:* bridge persistence, signature revalidation, timeout, expiry and
+export/import tests in `packages/bridge/src/bridge.test.ts`.
+
+---

@@ -13,15 +13,14 @@ interface StorageLike {
 }
 
 const STORAGE_KEY = 'strkworld.bridge.inbound.v1';
-const MAX_AGE_MS = 24 * 60 * 60 * 1_000;
 
-function encode(record: BridgeRecord): string {
+export function serializeBridgeRecord(record: BridgeRecord): string {
   return JSON.stringify(record, (_key, value: unknown) =>
     typeof value === 'bigint' ? { $strkworldBigInt: value.toString() } : value,
   );
 }
 
-function decode(raw: string, now: number): BridgeRecord | null {
+export function deserializeBridgeRecord(raw: string): BridgeRecord | null {
   try {
     const value = JSON.parse(raw, (_key, entry: unknown) => {
       if (
@@ -37,7 +36,7 @@ function decode(raw: string, now: number): BridgeRecord | null {
     if (value.v !== 1 || !value.signedQuote?.signature || !value.signedQuote.quote?.depositAddress) {
       return null;
     }
-    if (!Number.isFinite(value.createdAt) || now - value.createdAt > MAX_AGE_MS) return null;
+    if (!Number.isFinite(value.createdAt) || !Number.isFinite(value.updatedAt)) return null;
     if (typeof value.amountIn !== 'bigint') return null;
     return value;
   } catch {
@@ -46,21 +45,18 @@ function decode(raw: string, now: number): BridgeRecord | null {
 }
 
 export class LocalBridgeStore implements BridgeStore {
-  constructor(
-    private readonly storage: StorageLike,
-    private readonly now: () => number = Date.now,
-  ) {}
+  constructor(private readonly storage: StorageLike) {}
 
   load(): BridgeRecord | null {
     const raw = this.storage.getItem(STORAGE_KEY);
     if (!raw) return null;
-    const record = decode(raw, this.now());
+    const record = deserializeBridgeRecord(raw);
     if (!record) this.clear();
     return record;
   }
 
   save(record: BridgeRecord): void {
-    this.storage.setItem(STORAGE_KEY, encode(record));
+    this.storage.setItem(STORAGE_KEY, serializeBridgeRecord(record));
   }
 
   clear(): void {
@@ -72,11 +68,11 @@ export class MemoryBridgeStore implements BridgeStore {
   private value: string | null = null;
 
   load(): BridgeRecord | null {
-    return this.value ? decode(this.value, Date.now()) : null;
+    return this.value ? deserializeBridgeRecord(this.value) : null;
   }
 
   save(record: BridgeRecord): void {
-    this.value = encode(record);
+    this.value = serializeBridgeRecord(record);
   }
 
   clear(): void {
@@ -84,10 +80,10 @@ export class MemoryBridgeStore implements BridgeStore {
   }
 
   serialize(record: BridgeRecord): string {
-    return encode(record);
+    return serializeBridgeRecord(record);
   }
 
   deserialize(raw: string): BridgeRecord | null {
-    return decode(raw, Date.now());
+    return deserializeBridgeRecord(raw);
   }
 }

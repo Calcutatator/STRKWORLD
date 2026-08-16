@@ -25,12 +25,17 @@ export { OneClickSdkClient, type OneClickClient } from './client.js';
 export {
   LocalBridgeStore,
   MemoryBridgeStore,
+  deserializeBridgeRecord,
+  serializeBridgeRecord,
   type BridgeStore,
 } from './persistence.js';
 export { loadSourceAssets, STRK_ON_STARKNET_ASSET_ID } from './source-assets.js';
 export {
   BridgeService,
   DEFAULT_SLIPPAGE_BPS,
+  MANUAL_POLL_INTERVAL_MS,
+  MAX_ACTIVE_POLLING_MS,
   QUOTE_DEADLINE_MS,
   type CreateManualDepositInput,
+  type WatchDepositOptions,
 } from './service.js';

@@ -22,6 +22,7 @@ const SOURCE = {
   decimals: 6,
   depositMode: 'manual' as const,
 } as const satisfies SourceAsset;
+const NOW = Date.parse('2026-08-16T12:00:00Z');
 
 const request = {
   dry: false,
@@ -101,7 +102,7 @@ describe('BridgeService', () => {
   it('creates only inbound exact-input quotes to Starknet STRK and retains the signed response', async () => {
     const client = new StubClient();
     const store = new MemoryBridgeStore();
-    const service = new BridgeService({ client, store, quoteVerifier: () => true, now: () => Date.parse('2026-08-16T12:00:00Z') });
+    const service = new BridgeService({ client, store, quoteVerifier: () => true, now: () => NOW });
 
     const record = await service.createManualDeposit({
       source: SOURCE,
@@ -127,7 +128,7 @@ describe('BridgeService', () => {
   it('maps solver states without exposing a raw status and keeps timeout distinct from failure', async () => {
     const client = new StubClient();
     const store = new MemoryBridgeStore();
-    const service = new BridgeService({ client, store, quoteVerifier: () => true, now: () => Date.parse('2026-08-16T12:00:00Z') });
+    const service = new BridgeService({ client, store, quoteVerifier: () => true, now: () => NOW });
     await service.createManualDeposit({
       source: SOURCE,
       amountIn: 1_000_000n,
@@ -158,7 +159,7 @@ describe('BridgeService', () => {
     const client = new StubClient();
     const store = new MemoryBridgeStore();
     client.getQuote = async () => ({ ...signedQuote, signature: '', quote: { ...signedQuote.quote, depositAddress: undefined } });
-    const service = new BridgeService({ client, store, quoteVerifier: () => true });
+    const service = new BridgeService({ client, store, quoteVerifier: () => true, now: () => NOW });
     await expect(
       service.createManualDeposit({
         source: SOURCE,
@@ -173,7 +174,7 @@ describe('BridgeService', () => {
   it('fails closed when the SDK cannot verify the signed quote', async () => {
     const client = new StubClient();
     const store = new MemoryBridgeStore();
-    const service = new BridgeService({ client, store, quoteVerifier: () => false });
+    const service = new BridgeService({ client, store, quoteVerifier: () => false, now: () => NOW });
     await expect(
       service.createManualDeposit({
         source: SOURCE,
@@ -183,6 +184,94 @@ describe('BridgeService', () => {
       }),
     ).rejects.toThrow(/signature/i);
     expect(store.load()).toBeNull();
+  });
+
+  it('stops active polling without marking a still-pending manual deposit as failed', async () => {
+    const client = new StubClient();
+    const store = new MemoryBridgeStore();
+    let now = NOW;
+    const service = new BridgeService({
+      client,
+      store,
+      quoteVerifier: () => true,
+      now: () => now,
+      sleep: async (ms) => { now += ms; },
+    });
+    await service.createManualDeposit({
+      source: SOURCE,
+      amountIn: 1_000_000n,
+      starknetRecipient: '0x123',
+      refundAddress: request.refundTo,
+    });
+    client.statuses.push(
+      status('PENDING_DEPOSIT' as never),
+      status('PENDING_DEPOSIT' as never),
+      status('PENDING_DEPOSIT' as never),
+    );
+    const updates: string[] = [];
+    await expect(service.watch({
+      intervalMs: 10,
+      maxActiveMs: 20,
+      onUpdate: (value) => updates.push(value.leg),
+    })).resolves.toMatchObject({
+      leg: 'awaiting-deposit',
+      pollingStopped: true,
+      message: expect.stringMatching(/resume later/i),
+    });
+    expect(updates).toEqual(['awaiting-deposit', 'awaiting-deposit', 'awaiting-deposit']);
+    expect(store.load()?.status).toMatchObject({ leg: 'awaiting-deposit', pollingStopped: true });
+  });
+
+  it('marks an unfunded quote expired only after checking the provider status', async () => {
+    const client = new StubClient();
+    const store = new MemoryBridgeStore();
+    let now = NOW;
+    const service = new BridgeService({ client, store, quoteVerifier: () => true, now: () => now });
+    await service.createManualDeposit({
+      source: SOURCE,
+      amountIn: 1_000_000n,
+      starknetRecipient: '0x123',
+      refundAddress: request.refundTo,
+    });
+    now = Date.parse(request.deadline);
+    client.statuses.push(status('PENDING_DEPOSIT' as never));
+    await expect(service.refresh()).resolves.toMatchObject({
+      leg: 'expired',
+      pollingStopped: true,
+    });
+  });
+
+  it('exports signed resume evidence and safely imports it on another device', async () => {
+    const client = new StubClient();
+    const first = new BridgeService({
+      client,
+      store: new MemoryBridgeStore(),
+      quoteVerifier: (quote) => quote.signature === 'signed-by-one-click',
+      now: () => NOW,
+    });
+    await first.createManualDeposit({
+      source: SOURCE,
+      amountIn: 1_000_000n,
+      starknetRecipient: '0x123',
+      refundAddress: request.refundTo,
+    });
+    const exported = first.exportResumeRecord();
+
+    const secondStore = new MemoryBridgeStore();
+    const second = new BridgeService({
+      client,
+      store: secondStore,
+      quoteVerifier: (quote) => quote.signature === 'signed-by-one-click',
+      now: () => NOW + 1_000,
+    });
+    expect(second.importResumeRecord(exported)).toMatchObject({
+      amountIn: 1_000_000n,
+      status: { leg: 'awaiting-deposit', pollingStopped: true },
+    });
+    expect(second.resume()?.signedQuote).toEqual(signedQuote);
+    expect(() => second.importResumeRecord(
+      exported.replace('signed-by-one-click', 'tampered-signature'),
+    )).toThrow(/signature/i);
   });
 });
 
@@ -218,7 +307,7 @@ describe('bridge persistence', () => {
   it('round-trips bigint fields while retaining the complete signed quote', async () => {
     const client = new StubClient();
     const store = new MemoryBridgeStore();
-    const service = new BridgeService({ client, store, quoteVerifier: () => true });
+    const service = new BridgeService({ client, store, quoteVerifier: () => true, now: () => NOW });
     const created = await service.createManualDeposit({
       source: SOURCE,
       amountIn: 1_000_000n,
@@ -229,5 +318,21 @@ describe('bridge persistence', () => {
     const decoded = store.deserialize(encoded);
     expect(decoded?.amountIn).toBe(1_000_000n);
     expect(decoded?.signedQuote).toEqual(signedQuote);
+  });
+
+  it('does not silently delete old signed dispute evidence', () => {
+    const store = new MemoryBridgeStore();
+    const old = {
+      v: 1 as const,
+      createdAt: 1,
+      updatedAt: 2,
+      source: SOURCE,
+      amountIn: 1_000_000n,
+      starknetRecipient: '0x123',
+      refundAddress: request.refundTo,
+      signedQuote,
+      status: { leg: 'settled' as const, message: 'done', pollingStopped: true },
+    };
+    expect(store.deserialize(store.serialize(old))).toEqual(old);
   });
 });

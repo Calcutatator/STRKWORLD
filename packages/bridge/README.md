@@ -98,6 +98,18 @@ and browser storage; tests use deterministic in-memory implementations. The
 remaining funded acceptance test is an issued deposit address that is actually
 funded and reaches `SUCCESS`. No test fixture pretends that has happened.
 
+`watch()` polls manual deposits on a bounded clock. After ten active minutes it
+persists a resumable "still pending" state instead of calling that timeout a
+failure; terminal solver states stop immediately. An unfunded quote becomes
+`expired` only after checking 1Click still reports `PENDING_DEPOSIT`.
+
+Signed quote evidence is retained until the player explicitly discards it; it
+is not silently deleted after an arbitrary local TTL. `exportResumeRecord()`
+and `importResumeRecord()` provide an explicit cross-device path. The exported
+record contains addresses and timing and must be labelled sensitive; imports
+revalidate the route and quote signature and reset display state until the
+provider is checked again.
+
 ## What this must never do
 
 - Import `@strkworld/privacy` — CI enforces this. The shell sequences the two
@@ -117,10 +129,9 @@ first.** It shapes the whole room: the player leaves, comes back minutes later,
 and must find their deposit still in progress.
 
 Browser-local persistence covers reloads, tab closes and crashes on the same
-device. It does **not** become cross-device persistence by assertion. Before
-claiming cross-device resume, add an exportable resume record or a separately
-reviewed encrypted sync design; the backend must not quietly acquire a durable
-database of deposit addresses, recipients and timing.
+device. Cross-device resume is explicit export/import, not background sync.
+The backend must not quietly acquire a durable database of deposit addresses,
+recipients and timing.
 
 Persist the complete signed 1Click quote, not only the display fields. The
 current SDK marks the response signature, timestamp, original request and

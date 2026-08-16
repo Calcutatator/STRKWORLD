@@ -6,7 +6,11 @@ import type {
 import { verifyQuoteSignature } from '@defuse-protocol/one-click-sdk-typescript';
 import { validateSourceAddress, validateStarknetAddress } from './address-validation.js';
 import type { OneClickClient } from './client.js';
-import type { BridgeStore } from './persistence.js';
+import {
+  deserializeBridgeRecord,
+  serializeBridgeRecord,
+  type BridgeStore,
+} from './persistence.js';
 import { STRK_ON_STARKNET_ASSET_ID } from './source-assets.js';
 import type { BridgeRecord, BridgeStatus, SourceAsset } from './types.js';
 
@@ -26,19 +30,34 @@ interface BridgeServiceOptions {
   store: BridgeStore;
   now?: () => number;
   quoteVerifier?: (quote: QuoteResponse) => boolean;
+  sleep?: (ms: number, signal?: AbortSignal) => Promise<void>;
 }
+
+export interface WatchDepositOptions {
+  signal?: AbortSignal;
+  /** Manual deposits default to a deliberately slower poll than wallet-signed deposits. */
+  intervalMs?: number;
+  /** Stop active polling after this period; the persisted deposit remains resumable. */
+  maxActiveMs?: number;
+  onUpdate?: (status: BridgeStatus) => void;
+}
+
+export const MANUAL_POLL_INTERVAL_MS = 10_000;
+export const MAX_ACTIVE_POLLING_MS = 10 * 60 * 1_000;
 
 export class BridgeService {
   private readonly client: OneClickClient;
   private readonly store: BridgeStore;
   private readonly now: () => number;
   private readonly quoteVerifier: (quote: QuoteResponse) => boolean;
+  private readonly sleep: (ms: number, signal?: AbortSignal) => Promise<void>;
 
   constructor(options: BridgeServiceOptions) {
     this.client = options.client;
     this.store = options.store;
     this.now = options.now ?? Date.now;
     this.quoteVerifier = options.quoteVerifier ?? verifyQuoteSignature;
+    this.sleep = options.sleep ?? abortableSleep;
   }
 
   async createManualDeposit(input: CreateManualDepositInput): Promise<BridgeRecord> {
@@ -61,7 +80,7 @@ export class BridgeService {
     } as QuoteRequest;
 
     const signedQuote = await this.client.getQuote(request);
-    assertSignedQuote(signedQuote, input);
+    assertSignedQuote(signedQuote, input, request);
     if (!this.quoteVerifier(signedQuote)) {
       throw new Error('1Click quote signature verification failed.');
     }
@@ -88,27 +107,128 @@ export class BridgeService {
   }
 
   resume(): BridgeRecord | null {
-    return this.store.load();
+    const record = this.store.load();
+    if (!record) return null;
+    try {
+      this.verifyRecord(record);
+      return record;
+    } catch {
+      return null;
+    }
+  }
+
+  /** Export contains addresses and timing. The shell must label it sensitive. */
+  exportResumeRecord(): string {
+    const record = this.resume();
+    if (!record) throw new Error('No bridge deposit is available to export.');
+    return serializeBridgeRecord(record);
+  }
+
+  /** Import signed evidence, reverify it, and reset display state until refreshed. */
+  importResumeRecord(serialized: string): BridgeRecord {
+    const decoded = deserializeBridgeRecord(serialized);
+    if (!decoded) throw new Error('The bridge resume record is invalid.');
+    this.verifyRecord(decoded);
+    const restored: BridgeRecord = {
+      ...decoded,
+      updatedAt: this.now(),
+      status: {
+        leg: 'awaiting-deposit',
+        message: 'Resume record imported. Checking the signed deposit with 1Click.',
+        pollingStopped: true,
+      },
+    };
+    this.store.save(restored);
+    return restored;
   }
 
   async refresh(): Promise<BridgeStatus> {
-    const record = this.store.load();
+    const record = this.resume();
     if (!record) throw new Error('No bridge deposit is available to resume.');
     const raw = await this.client.getExecutionStatus(
       record.signedQuote.quote.depositAddress!,
       record.signedQuote.quote.depositMemo,
     );
-    const status = mapStatus(raw);
+    let status = mapStatus(raw);
+    if (status.leg === 'awaiting-deposit' && quoteExpired(record, this.now())) {
+      status = {
+        leg: 'expired',
+        message: 'The deposit quote expired before 1Click detected funds. Create a new quote.',
+        pollingStopped: true,
+      };
+    }
     this.store.save({ ...record, status, updatedAt: this.now() });
     return status;
+  }
+
+  /** Poll a resumable deposit without converting a local timeout into a failure. */
+  async watch(options: WatchDepositOptions = {}): Promise<BridgeStatus> {
+    const intervalMs = options.intervalMs ?? MANUAL_POLL_INTERVAL_MS;
+    const maxActiveMs = options.maxActiveMs ?? MAX_ACTIVE_POLLING_MS;
+    if (!Number.isSafeInteger(intervalMs) || intervalMs <= 0) {
+      throw new Error('Bridge polling interval must be a positive integer.');
+    }
+    if (!Number.isSafeInteger(maxActiveMs) || maxActiveMs <= 0) {
+      throw new Error('Bridge active-polling window must be a positive integer.');
+    }
+    const startedAt = this.now();
+    for (;;) {
+      throwIfAborted(options.signal);
+      const status = await this.refresh();
+      options.onUpdate?.(status);
+      if (status.pollingStopped) return status;
+
+      const elapsed = Math.max(0, this.now() - startedAt);
+      if (elapsed >= maxActiveMs) return this.stopActivePolling(status);
+      await this.sleep(Math.min(intervalMs, maxActiveMs - elapsed), options.signal);
+    }
   }
 
   discard(): void {
     this.store.clear();
   }
+
+  private stopActivePolling(status: BridgeStatus): BridgeStatus {
+    const record = this.resume();
+    if (!record) throw new Error('No bridge deposit is available to resume.');
+    const stopped: BridgeStatus = {
+      ...status,
+      pollingStopped: true,
+      message: 'The deposit is still pending. Active polling stopped; you can leave and resume later.',
+    };
+    this.store.save({ ...record, status: stopped, updatedAt: this.now() });
+    return stopped;
+  }
+
+  private verifyRecord(record: BridgeRecord): void {
+    const input: CreateManualDepositInput = {
+      source: record.source,
+      amountIn: record.amountIn,
+      starknetRecipient: record.starknetRecipient,
+      refundAddress: record.refundAddress,
+      slippageBps: record.signedQuote.quoteRequest.slippageTolerance,
+    };
+    validateInput(input);
+    assertSignedQuote(record.signedQuote, input, record.signedQuote.quoteRequest);
+    if (!this.quoteVerifier(record.signedQuote)) {
+      throw new Error('1Click quote signature verification failed.');
+    }
+  }
 }
 
 function validateInput(input: CreateManualDepositInput): void {
+  if (input.source.depositMode !== 'manual') {
+    throw new Error('This bridge service currently supports manual deposits only.');
+  }
+  if (
+    !input.source.assetId ||
+    !input.source.symbol ||
+    !Number.isSafeInteger(input.source.decimals) ||
+    input.source.decimals < 0 ||
+    input.source.decimals > 36
+  ) {
+    throw new Error('The source asset metadata is invalid.');
+  }
   if (input.amountIn <= 0n) throw new Error('Bridge amount must be positive.');
   const slippage = input.slippageBps ?? DEFAULT_SLIPPAGE_BPS;
   if (!Number.isInteger(slippage) || slippage < 1 || slippage > 1_000) {
@@ -120,11 +240,29 @@ function validateInput(input: CreateManualDepositInput): void {
   if (!refund.ok) throw new Error(refund.hint);
 }
 
-function assertSignedQuote(response: QuoteResponse, input: CreateManualDepositInput): void {
+function assertSignedQuote(
+  response: QuoteResponse,
+  input: CreateManualDepositInput,
+  request: QuoteRequest,
+): void {
   if (!response.signature || !response.timestamp || !response.correlationId) {
     throw new Error('1Click returned no signed quote dispute evidence.');
   }
   if (!response.quote.depositAddress) throw new Error('1Click returned no deposit address.');
+  if (
+    !response.quote.deadline ||
+    response.quote.deadline !== request.deadline ||
+    !Number.isFinite(Date.parse(response.quote.deadline))
+  ) {
+    throw new Error('1Click returned an invalid quote deadline.');
+  }
+  if (
+    !Number.isSafeInteger(response.quoteRequest.slippageTolerance) ||
+    response.quoteRequest.slippageTolerance < 1 ||
+    response.quoteRequest.slippageTolerance > 1_000
+  ) {
+    throw new Error('1Click returned invalid quote slippage.');
+  }
   if (response.quoteRequest.destinationAsset !== STRK_ON_STARKNET_ASSET_ID) {
     throw new Error('1Click quote destination was not Starknet STRK.');
   }
@@ -132,10 +270,25 @@ function assertSignedQuote(response: QuoteResponse, input: CreateManualDepositIn
     response.quoteRequest.originAsset !== input.source.assetId ||
     response.quoteRequest.amount !== input.amountIn.toString() ||
     response.quoteRequest.recipient !== input.starknetRecipient ||
-    response.quoteRequest.refundTo !== input.refundAddress
+    response.quoteRequest.refundTo !== input.refundAddress ||
+    response.quoteRequest.deadline !== request.deadline ||
+    response.quoteRequest.swapType !== 'EXACT_INPUT' ||
+    response.quoteRequest.depositType !== 'ORIGIN_CHAIN' ||
+    response.quoteRequest.refundType !== 'ORIGIN_CHAIN' ||
+    response.quoteRequest.recipientType !== 'DESTINATION_CHAIN' ||
+    response.quoteRequest.slippageTolerance !== request.slippageTolerance ||
+    response.quoteRequest.depositMode !== request.depositMode ||
+    response.quoteRequest.dry !== false
   ) {
     throw new Error('1Click signed quote did not match the requested route.');
   }
+}
+
+function quoteExpired(record: BridgeRecord, now: number): boolean {
+  const rawDeadline = record.signedQuote.quote.deadline;
+  if (!rawDeadline) return false;
+  const deadline = Date.parse(rawDeadline);
+  return Number.isFinite(deadline) && now >= deadline;
 }
 
 function mapStatus(raw: GetExecutionStatusResponse): BridgeStatus {
@@ -176,11 +329,31 @@ function mapStatus(raw: GetExecutionStatusResponse): BridgeStatus {
         pollingStopped: true,
       };
     case 'FAILED':
-    default:
       return {
         leg: 'failed',
         message: 'The bridge could not complete. Keep the signed quote for support.',
         pollingStopped: true,
       };
+    default:
+      throw new Error('1Click returned an unknown execution status.');
   }
+}
+
+function throwIfAborted(signal?: AbortSignal): void {
+  if (signal?.aborted) throw signal.reason ?? new DOMException('Aborted', 'AbortError');
+}
+
+function abortableSleep(ms: number, signal?: AbortSignal): Promise<void> {
+  return new Promise((resolve, reject) => {
+    throwIfAborted(signal);
+    const onAbort = () => {
+      clearTimeout(timer);
+      reject(signal?.reason ?? new DOMException('Aborted', 'AbortError'));
+    };
+    const timer = setTimeout(() => {
+      signal?.removeEventListener('abort', onAbort);
+      resolve();
+    }, ms);
+    signal?.addEventListener('abort', onAbort, { once: true });
+  });
 }
