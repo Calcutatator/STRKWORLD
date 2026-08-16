@@ -294,6 +294,28 @@ was submitted.
 
 ---
 
+### 2026-08-16 — Prepared proofs expose a route-enforceable server-action list
+
+The Wallet API artifact is not an opaque blob. The submitted pool call's
+calldata is Cairo serialization of `Span<ServerAction>`, and the proof output is
+`[class_hash, ...serialized_actions]`. The backend can therefore verify that
+`proof.output.slice(1)` equals the submitted calldata and decode enough of the
+stable ABI to enforce route policy before relaying.
+
+STRKWORLD now rejects an external `Invoke` under transfer/unshield routes,
+requires the exact HMAC-authorized relay-fee `TransferTo`, and rejects an extra
+public withdrawal under the transfer route. This prevents a fee authorization
+from becoming a generic sponsored anonymizer call even though every artifact
+targets the same pool entry point.
+
+*Verified:* inspected the pinned ShieldUp privacy SDK's
+`private-transfers.js`, `proof-invocation-factory.js` and full privacy-pool ABI,
+then exercised the decoder with valid, truncated, route-mismatched and
+invoke-smuggling fixtures in `apps/backend` on 2026-08-16. No proof was
+generated or submitted.
+
+---
+
 ### 2026-08-16 — AVNU SDK 4.2.0 raises the toolchain floor to Node 22
 
 The approved private-swap SDK is now installed exactly at

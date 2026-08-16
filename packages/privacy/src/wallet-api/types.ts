@@ -29,6 +29,9 @@ export interface RelayFeeQuote {
   token: Address;
   recipient: Address;
   amount: bigint;
+  /** Stateless server authorization binding this exact fee and route. */
+  authorization: string;
+  expiresAtBlock: number;
 }
 
 export interface PrivateSubmissionGateway {
@@ -41,6 +44,7 @@ export interface PrivateSubmissionGateway {
   submit(input: {
     route: PoolNativeRoute;
     artifact: STRK20_CALL_AND_PROOF;
+    feeAuthorization: string;
     proofValidityBlocks: number;
     signal?: AbortSignal;
   }): Promise<TxResult>;

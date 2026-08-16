@@ -32,6 +32,7 @@ export { FakePrivacyOperations, type FakeConfig, type Fault } from './testing/fa
 
 export {
   WalletApiPrivacyOperations,
+  BackendPrivacyClient,
   createSupportedVersionsReader,
   createWalletDiscovery,
   mapWalletError,

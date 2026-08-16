@@ -1,4 +1,5 @@
 export { createSupportedVersionsReader, createWalletDiscovery } from './discovery.js';
+export { BackendPrivacyClient } from './backend-client.js';
 export { mapWalletError } from './errors.js';
 export {
   WalletApiPrivacyOperations,

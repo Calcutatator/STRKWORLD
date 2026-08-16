@@ -1,6 +1,6 @@
 # @strkworld/backend
 
-**The server-side privacy boundary. Planned; no implementation yet.**
+**The server-side privacy boundary. Core request handling is implemented.**
 
 The browser cannot hold the paymaster key or send privacy-sensitive RPC reads
 directly to a third party. This app owns the smallest server surface needed to
@@ -39,3 +39,28 @@ client keeps the building locked (D-018).
 
 See D-014 for the backend threat model, D-015 for queue placement and D-018
 for the building privacy-admission rule.
+
+## Implemented core
+
+`BackendApi` is a framework-neutral, versioned handler for the exact five
+operations the browser needs: fee build, prepared submission, pool config,
+recipient public key and receipt lookup. Schemas reject unknown fields. The
+submission validator accepts only the configured pool's `apply_actions`,
+bounded calldata and a non-empty bounded proof. It verifies that the proof
+output contains the same serialized server actions as the call, decodes that
+`Span<ServerAction>`, and applies route policy: transfer/unshield cannot hide an
+external `Invoke`, the exact authorized paymaster withdrawal must be present,
+and a transfer cannot smuggle a public withdrawal.
+
+Fee build returns an HMAC authorization binding route, fee token, operation
+token, recipient, amount and block-validity window. The server keeps no quote
+row to correlate with the later proof. Pool-native submissions receive bounded
+jitter and are checked again after the delay; quote-bound swaps never enter the
+delay path. Kill switches, fee caps and a global aggregate rate limit fail
+closed. `AggregateMetrics` contains counts only.
+
+The code deliberately does not choose an HTTP framework or deployment host.
+That adapter must pass only `{method, path, body}` and must disable provider and
+platform request logging for these routes; adding a framework whose default
+access log captures IP, path or latency would violate D-014 even though this
+core itself logs nothing.

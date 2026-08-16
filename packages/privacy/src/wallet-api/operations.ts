@@ -204,6 +204,7 @@ export class WalletApiPrivacyOperations implements PrivacyOperations {
           const result = await owner.submission.submit({
             route,
             artifact,
+            feeAuthorization: relayFee.authorization,
             proofValidityBlocks: current.proofValidityBlocks,
             signal,
           });
@@ -236,6 +237,9 @@ export class WalletApiPrivacyOperations implements PrivacyOperations {
     assertAddress(fee.recipient, 'relay fee recipient');
     if (fee.amount < 0n || fee.amount > this.policy.maxRelayFee) {
       throw new PrivacyError('unknown', 'The relay fee exceeds the route policy.');
+    }
+    if (!fee.authorization || !Number.isSafeInteger(fee.expiresAtBlock) || fee.expiresAtBlock <= 0) {
+      throw new PrivacyError('unknown', 'The relay returned no valid fee authorization.');
     }
     return fee;
   }

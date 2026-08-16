@@ -14,6 +14,7 @@ const TOKEN = '0x123';
 const BOB = '0x456';
 const FEE_RECIPIENT = '0x789';
 const POOL_FEE = 6n * 10n ** 18n;
+const AUTH = { authorization: 'fee-auth', expiresAtBlock: 1_450 };
 
 function fixture() {
   const invoked: STRK20_ACTION[][] = [];
@@ -51,7 +52,7 @@ function fixture() {
     },
   };
   const gateway: PrivateSubmissionGateway = {
-    estimate: vi.fn(async () => ({ token: STRK, recipient: FEE_RECIPIENT, amount: 1n })),
+    estimate: vi.fn(async () => ({ token: STRK, recipient: FEE_RECIPIENT, amount: 1n, ...AUTH })),
     submit: vi.fn(async () => ({ transactionHash: '0xprivate' })),
   };
   const supportedVersions = vi.fn(async () => ['0.9.0', '0.10.3']);
@@ -117,15 +118,20 @@ describe('Wallet API action routes', () => {
       { type: 'withdraw', token: STRK, amount: '0x1', recipient: FEE_RECIPIENT },
     ]]);
     expect(gateway.submit).toHaveBeenCalledWith(
-      expect.objectContaining({ route: 'transfer', artifact, proofValidityBlocks: 450 }),
+      expect.objectContaining({
+        route: 'transfer',
+        artifact,
+        feeAuthorization: AUTH.authorization,
+        proofValidityBlocks: 450,
+      }),
     );
   });
 
   it('rechecks fees and refuses before asking the wallet to prove', async () => {
     const { ops, gateway, prepared } = fixture();
     vi.mocked(gateway.estimate)
-      .mockResolvedValueOnce({ token: STRK, recipient: FEE_RECIPIENT, amount: 1n })
-      .mockResolvedValueOnce({ token: STRK, recipient: FEE_RECIPIENT, amount: 9n });
+      .mockResolvedValueOnce({ token: STRK, recipient: FEE_RECIPIENT, amount: 1n, ...AUTH })
+      .mockResolvedValueOnce({ token: STRK, recipient: FEE_RECIPIENT, amount: 9n, ...AUTH });
     const batch = await ops.prepare([{ kind: 'unshield', token: TOKEN, amount: 20n, recipient: BOB }]);
     await expect(batch.confirm({ feeCeiling: POOL_FEE + 5n })).rejects.toThrow(/ceiling/i);
     expect(prepared).toHaveLength(0);
@@ -145,6 +151,7 @@ describe('Wallet API action routes', () => {
       token: TOKEN,
       recipient: FEE_RECIPIENT,
       amount: 1n,
+      ...AUTH,
     });
     await expect(
       ops.prepare([{ kind: 'transfer', token: TOKEN, amount: 20n, recipient: BOB }]),
