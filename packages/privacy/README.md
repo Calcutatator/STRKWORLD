@@ -15,6 +15,20 @@ Everything the rest of the app knows about money goes through one interface,
 - Recipient registration preflight
 - Runtime pool config reads (fee, proof-validity window)
 
+## The building privacy gate
+
+A building is UI over a typed intent, not a generic transaction composer. An
+active financial building must map to exactly one approved execution route:
+
+- a pool-native Wallet API action (Bank, Post Office),
+- a protocol's first-party STRK20 integration (AVNU Exchange), or
+- a reviewed, audited and allowlisted app-specific anonymizer (Vault).
+
+There is no public fallback. If a route is unavailable, stale or killed, the
+door stays locked. Never expose raw contract targets, selectors or calldata to
+the shell; this package owns their allowlists plus token, quote, slippage, fee
+and action-limit validation. See `docs/DECISIONS.md` D-018.
+
 ## What this must never do
 
 - Import from `@strkworld/world` or `@strkworld/lobby`

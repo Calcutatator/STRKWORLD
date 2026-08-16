@@ -448,7 +448,11 @@ expensive than waiting a week for the spike.
 
 ## D-016 — Interiors are overlays; the avatar never leaves the street
 
-**2026-08-16 · Accepted**
+**2026-08-16 · PARTLY SUPERSEDED BY [D-019](#d-019--entering-a-building-removes-the-avatar-from-lobby-presence)**
+
+> The overlay choice stands. The requirement that the avatar remain on the
+> street and make entry indistinguishable **does not** — D-019 accepts
+> building-presence leakage for v1. Read D-019 before acting on this entry.
 
 **Context.** An independent review found a leak the privacy design missed.
 `PresenceState` deliberately excludes building entry — position is broadcast,
@@ -498,3 +502,78 @@ to replace than an honestly empty one.
 
 Success for v1 is: a player walks in, uses a real privacy protocol with real
 funds, and understands what was private and what was not.
+
+---
+
+## D-018 — Every financial building needs an approved private execution path
+
+**2026-08-16 · Accepted**
+
+**Context.** A building is a themed interface to a wallet or protocol, not a
+separate financial system. That simplicity creates a dangerous ambiguity:
+"integrated" could mean a private pool action, a protocol's private executor,
+or merely unshielding and calling its normal public entrypoint. Only the first
+two preserve the product's purpose.
+
+**Decision.** Shielded STRK is the game's core balance. The shell emits a
+narrow, typed intent, and `packages/privacy` may execute it only through one of
+three approved routes:
+
+1. a pool-native Wallet API action, used by the Bank and Post Office;
+2. a protocol's first-party STRK20 path, used by the Exchange through AVNU;
+3. an app-specific `privacy_invoke` anonymizer, required for a protocol action
+   with no first-party private path, such as the Vault.
+
+An active route allowlists its contracts, selectors, tokens and action limits.
+It validates minimum output or slippage, quote expiry, fee ceilings and the
+route's kill switch. The browser never supplies an arbitrary target, selector
+or calldata blob.
+
+There is **no public fallback**. If an approved private route is absent,
+unverified, disabled or stale, the building stays locked. The game must never
+unshield and call from the player's wallet, or redirect to a normal protocol
+frontend, while presenting the result as private.
+
+The Bridge and the Bank's shield/unshield controls are deliberate public
+boundaries, not fallbacks. They must label their public legs honestly and keep
+shielding separate from the later private action.
+
+For an anonymizer flow, the pool supplies the input to the helper, the helper
+calls the protocol, and the output returns to a pool note atomically. This
+hides the player's wallet address from the protocol action; it does not hide
+the chosen application, action, timing, or necessarily the amount. Open-note
+amounts are public. Production helpers are owned, reviewed, tested, audited,
+deployed and maintained by this project; reference contracts are not
+production approvals.
+
+**Consequences.** Every current and future financial building has a privacy
+admission gate before its door can be enabled. The Bank, Post Office and AVNU
+Exchange can ship without project-owned Cairo. The Vault remains locked until
+its helper and exact deployment pass review and audit. The world is an
+orchestration UI over these capability-bounded routes; it is not a generic
+transaction composer.
+
+---
+
+## D-019 — Entering a building removes the avatar from lobby presence
+
+**2026-08-16 · Accepted · supersedes D-016's presence requirement**
+
+**Context.** D-016 required a player inside a building to remain visibly idle
+on the street so building choice could not be inferred. The project lead has
+explicitly accepted building-presence leakage for v1: when a player enters a
+building, other players may see that their avatar disappeared.
+
+**Decision.** The interior may remain a local overlay, but entering it leaves
+or suspends lobby presence. The avatar disappears for other players and
+rejoins through the ordinary ephemeral presence lifecycle on exit. Lobby
+traffic still never carries a building identifier, wallet address, action or
+financial state.
+
+**Consequences.** A nearby observer may infer the chosen building and visit
+timing from the player's last coordinate and disappearance. That is an
+accepted v1 trade-off, not a privacy claim. It does not relax D-018: the
+financial action must still use an approved private execution path, and
+backend submission remains decoupled where the route permits it. D-016's
+overlay choice may remain, but its requirement that the avatar stay on the
+street and make entry indistinguishable is superseded.

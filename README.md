@@ -4,8 +4,8 @@
 
 Walk around a shared pseudonymous world, step into a building, and use a real
 privacy-preserving protocol with real funds on Starknet mainnet. One balance,
-one world, several protocols — with the rule that the player's privacy is
-preserved throughout.
+one world, several protocols — with the rule that a financial building cannot
+open unless it has an approved private execution path.
 
 Built on [STRK20](https://strk20-by-example.org), Starknet's confidential
 token standard.
@@ -32,19 +32,21 @@ the way they are.
 ## How it works
 
 The game never touches private key material, never runs a prover, and never
-holds a viewing key. It asks the player's wallet to perform a private action,
-and the wallet handles keys, note discovery, proof generation and submission.
+holds a viewing key. Each building turns a player choice into a narrow typed
+intent and passes it through the privacy-route gate.
 
 ```
-Player  →  STRKWORLD  →  wallet_strk20InvokeTransaction  →  Wallet
-                                                              ├─ holds viewing key
-                                                              ├─ discovers notes
-                                                              ├─ generates proof
-                                                              └─ submits to Starknet
+Building UI → typed intent → approved route
+                              ├─ Wallet API pool action
+                              ├─ AVNU first-party private executor
+                              └─ audited app-specific anonymizer
 ```
 
-That is the whole privacy integration: three RPC methods on the connected
-wallet. Everything else is a game.
+The wallet still owns keys, note discovery and proving. STRKWORLD owns the
+allowlists, limits and honest product boundary: no raw calldata and no public
+fallback. A missing or disabled route means a locked building. Anonymizers
+hide the player's address from a protocol action; app activity, timing and
+open-note amounts may remain public.
 
 ---
 
@@ -58,12 +60,15 @@ apps/
   web/          The application shell. Composes everything. Owns routing,
                 layout, and the event bus.
 
+  backend/      Planned paymaster/RPC proxy and bounded submission queue.
+                No per-request financial or network-identity logs.
+
 packages/
   privacy/      The STRK20 seam. Owns the PrivacyOperations interface and
                 its wallet-backed implementation.
 
-  bridge/       Cross-chain value in and out via NEAR Intents. Public rails —
-                does not touch the pool.
+  bridge/       One-way cross-chain funding via NEAR Intents. Public rails —
+                shielding is a separate step.
 
   world/        The game. Phaser scenes, movement, collision, tilemaps,
                 sprites. Knows nothing about wallets or money.
@@ -95,12 +100,13 @@ npm run dev
 
 ### Environment
 
-Create a free key at [alchemy.com](https://www.alchemy.com) and put it in
-`.env.local`. **Never commit it.** `.env.local` is gitignored; `.env.example`
-is the committed template and contains no secrets.
+Put server-side credentials in `.env.local`. **Never commit them.**
+`.env.local` is gitignored; `.env.example` is the committed template and
+contains no secrets. Any browser-exposed `VITE_` RPC key must be domain
+allowlisted; privacy-sensitive reads go through the backend proxy.
 
 ```
-VITE_STARKNET_RPC_URL=https://starknet-mainnet.g.alchemy.com/v2/<YOUR_KEY>
+STARKNET_RPC_URL=https://starknet-mainnet.example/<SERVER_KEY>
 VITE_STARKNET_CHAIN_ID=SN_MAIN
 ```
 
@@ -129,8 +135,10 @@ The short version:
 1. Work inside one package. Cross-boundary changes need a decision entry.
 2. Never put an address, balance, transaction hash or building name into
    lobby traffic.
-3. Verify claims against installed packages, not documentation.
-4. Add what you learn to the findings log.
+3. Never enable a financial building without its approved private route; there
+   is no public fallback.
+4. Verify claims against installed packages, not documentation.
+5. Add what you learn to the findings log.
 
 ---
 

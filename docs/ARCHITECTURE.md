@@ -56,20 +56,34 @@ Phaser never calls Starknet. It receives values it can render.
 ```
 Player enters building
   → Phaser emits `building:entered`
+  → shell suspends lobby presence
   → React opens the building panel
-  → player composes intent (accumulated, not submitted)
-  → player leaves / confirms
-  → batch accumulator produces one STRK20_ACTION[]
-  → submission queue applies randomised delay      ← privacy control
-  → walletV6.strk20InvokeTransaction(actions)
-  → wallet prompts, proves, submits
+  → player confirms a typed, capability-bounded intent
+  → packages/privacy admits one approved route
+      ├─ pool-native Wallet API action         (Bank, Post Office)
+      ├─ first-party private executor         (AVNU Exchange)
+      └─ audited app-specific anonymizer      (Vault)
+  → wallet prompts and proves
+  → route submits; backend queues only eligible prepared calls
   → receipt → React state → HUD
 ```
 
-The submission queue is not an optimisation. Entering a building is a
-publicly observable event; the resulting pool interaction is publicly
-observable on-chain. Linking them in time is a deanonymisation oracle, and
-the delay is what breaks the link.
+The building is an interface, not a transaction composer. The shell never
+accepts a target, selector or calldata blob from the player. `packages/privacy`
+owns exact contract and token allowlists, quote/slippage/expiry checks, action
+limits, fee ceilings and route kill switches. If an approved private route is
+unavailable, the building is locked; there is no unshield-and-call or public
+frontend fallback (D-018).
+
+A custom anonymizer atomically receives pool input, calls the external
+protocol and returns the output to a pool note. It keeps the player's wallet
+address out of the protocol action, but the application, action, timing and
+open-note amount may remain public. AVNU already supplies its own private
+executor, so the Exchange does not need project-owned Cairo.
+
+The backend submission queue can add bounded jitter only when STRKWORLD
+controls the prepare/submit path. It never delays quote-bound AVNU actions, and
+it must not be presented as defeating timing correlation (D-015).
 
 ### Multiplayer presence
 
@@ -81,7 +95,10 @@ Phaser position tick
 ```
 
 `gameId` is ephemeral and per-session. It is generated client-side, never
-derived from an address, and is discarded on disconnect.
+derived from an address, and is discarded on disconnect. Entering a building
+leaves or suspends presence, so other clients see the avatar disappear. The
+lobby receives no building ID or entry event. Building-choice and visit-timing
+inference from that disappearance is an accepted v1 trade-off (D-019).
 
 ---
 
@@ -94,18 +111,18 @@ of the app never depends on how privacy is achieved:
 
 ```ts
 interface PrivacyOperations {
-  balances(tokens?: string[]): Promise<PrivateBalance[]>
-  shield(token: string, amount: bigint): Promise<TxResult>
-  unshield(token: string, amount: bigint): Promise<TxResult>
-  recipientStatus(address: string): Promise<RecipientStatus>
-  transfer(token: string, amount: bigint, recipient: string): Promise<TxResult>
-  privateSwap(input: PrivateSwapInput): Promise<TxResult>
+  capability(signal?: AbortSignal): Promise<WalletCapability>
+  poolConfig(signal?: AbortSignal): Promise<PoolConfig>
+  balances(tokens?: Address[], signal?: AbortSignal): Promise<PrivateBalance[]>
+  recipientStatus(address: Address, signal?: AbortSignal): Promise<RecipientStatus>
+  prepare(intents: Intent[], signal?: AbortSignal): Promise<PreparedBatch>
 }
 ```
 
-`WalletApiPrivacyOperations` is the implementation. The interface exists so a
-second implementation can be added later without touching callers — and so
-the whole financial layer can be driven by a mock in tests.
+`WalletApiPrivacyOperations` is the pool-native implementation and the seam
+also owns first-party and anonymizer-backed route adapters. Callers can request
+only typed intents; they cannot supply arbitrary protocol calls. The interface
+also lets the whole financial layer be driven by a mock in tests.
 
 **Must not:** import from `world` or `lobby`, contain UI, or branch on wallet
 identity.
@@ -127,8 +144,9 @@ Colyseus room broadcasting positions. This package is where a privacy failure
 would be quietest, so it is deliberately the dumbest thing in the repo.
 
 **Must not:** receive, store, log or broadcast an address, balance,
-transaction hash, building name, or any financial action. It may know a
-player is at a coordinate. It may not know who they are.
+transaction hash, building name, building-entry event, or any financial
+action. It may know a street player is at a coordinate. On building entry the
+client removes that player from presence (D-019).
 
 Server state schema is the enforcement point — if a field cannot be added to
 the schema, it cannot leak.
@@ -139,9 +157,18 @@ Types and constants used across boundaries. No logic, no dependencies.
 
 ### `apps/web`
 
-Providers, routing, layout, and the bridge. Owns the batch accumulator and
-the submission queue, because both sit between the game and the money and
-belong to neither.
+Providers, routing, layout, the event bus and typed building panels. Owns the
+batch accumulator. It never constructs raw protocol calls.
+
+### `apps/backend`
+
+Paymaster-key custody, privacy-safe RPC reads and the bounded submission queue
+for eligible prepared Wallet API calls. It never delays quote-bound routes.
+
+**Must not:** log or persist per-request IPs, calls, proofs, timings,
+recipients or transaction hashes. Aggregate operational counters only. It
+validates fee ceilings and route kill switches before submission (D-014,
+D-015, D-018).
 
 ---
 

@@ -75,7 +75,21 @@ else
   ok "privacy implementation stays on the Wallet API route"
 fi
 
-# 4d. The vendored knowledge layer is part of the project contract. Agents can
+# 4d. The browser emits capability-bounded domain intents. Raw STRK20 invoke
+#     actions belong inside packages/privacy, where targets and calldata can be
+#     allowlisted. Exposing them in the shell turns the game into an arbitrary
+#     transaction composer and makes D-018 unenforceable.
+raw_action_hits=$(grep -rnE "STRK20_(INVOKE_)?ACTION|type:[[:space:]]*['\"]invoke['\"]|calldata[[:space:]]*:" \
+  --include="*.ts" --include="*.tsx" apps/web/src 2>/dev/null || true)
+if [ -n "$raw_action_hits" ]; then
+  printf '%s\n' "$raw_action_hits"
+  bad "raw protocol action in the web shell — emit a typed privacy intent instead"
+  note "Targets, selectors and calldata are owned and allowlisted by packages/privacy (D-018)."
+else
+  ok "web shell exposes no raw protocol-action escape hatch"
+fi
+
+# 4e. The vendored knowledge layer is part of the project contract. Agents can
 #     use it offline, while skills-lock.json records source and content hashes.
 missing_skills=""
 for skill in strk20-privacy strk20-wallet-api strk20-anonymizer-contracts strk20-privacy-sdk strk20-privacy-integration; do
@@ -112,6 +126,29 @@ if grep -rnE "g\.alchemy\.com/v2/[A-Za-z0-9_-]{10,}" \
   bad "a live RPC key looks committed — rotate it immediately"
 else
   ok "no committed RPC key"
+fi
+
+# 7. Supersession must be discoverable from BOTH directions. If a decision says
+#    it supersedes D-0NN, then D-0NN's own status line must point forward — an
+#    agent reading the old entry first must not act on it unknowingly.
+sup_fail=""
+for target in $(grep -oE "supersedes D-[0-9]+" docs/DECISIONS.md 2>/dev/null \
+                | grep -oE "D-[0-9]+" | sort -u); do
+  status=$(awk -v d="## $target " '
+    index($0, d)==1 {found=1; next}
+    found && /^\*\*/ {print; exit}
+  ' docs/DECISIONS.md)
+  case "$status" in
+    *SUPERSEDED*|*Superseded*|*superseded*) ;;
+    *) sup_fail="$sup_fail $target" ;;
+  esac
+done
+if [ -n "$sup_fail" ]; then
+  bad "superseded decision(s) with no forward pointer:$sup_fail"
+  note "Edit the old entry's status line to point at the one that replaced it."
+  note "See the supersession convention at the top of docs/DECISIONS.md."
+else
+  ok "supersession is discoverable both ways"
 fi
 
 echo

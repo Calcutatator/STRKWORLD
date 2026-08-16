@@ -40,6 +40,13 @@ state. Ephemeral per-session game IDs only. The lobby knows a player is at
 building and broadcasting a transaction must never be causally linked in
 time. This is a privacy control, not a nicety — see D-004.
 
+**No financial building without an approved private route.** A building may
+use a pool-native Wallet API action, a protocol's first-party STRK20 path, or
+a reviewed and audited app-specific anonymizer. There is no unshield-and-call,
+arbitrary-calldata or normal-frontend fallback: if its route is unavailable,
+the building is locked. The Bridge is an explicitly public funding edge. See
+D-018.
+
 **Never branch on wallet identity in the privacy path.** No `wallet.id ===`,
 no name matching, no allowlist. Capability is determined at runtime. This is
 what keeps web wallets and email login possible later without a rewrite.
@@ -54,7 +61,57 @@ is gitignored; `.env.example` is the template and holds no real values.
 
 ---
 
-## 3. Package boundaries
+## 3. Working agreement
+
+Several agents work in this repository at once. These two rules are what keep
+that from turning into divergence.
+
+### The repository is the source of truth
+
+Not chat. Not a message. Not your own memory of a decision. If a learning, a
+fact or a direction is not in the repo in a structured place, it does not exist
+— the next agent will not have it, and neither will you next session.
+
+| What you have | Where it goes |
+|---|---|
+| A verified fact, a trap, a gotcha | Findings log, §6 below — with how you verified it |
+| A choice with alternatives and reasoning | `docs/DECISIONS.md` |
+| How something is built | `docs/ARCHITECTURE.md` or the package README |
+| Who does what, in what order | `docs/WORKPLAN.md` |
+| A boundary that must not be crossed | The invariants in §2, and `scripts/check-invariants.sh` |
+
+Uncommitted work is not in the repo. Commit and push before you stop, even
+mid-task — an unpushed branch is invisible to every other agent.
+
+### Newest wins, and supersession is explicit
+
+Direction comes from the **most recent** verified learning. An older document
+that was never updated is not authoritative just because it is longer or more
+confident.
+
+When you supersede something, edit both ends: the new entry says what it
+changes, and the old entry's status line points forward. An agent who reads the
+old entry first must not be able to act on it unknowingly. This is the only case
+where editing a past decision is required — edit the status line, never the
+reasoning.
+
+If you find two documents that disagree, that is a defect. Resolve it and record
+which won, rather than picking one silently.
+
+### Sync before you work
+
+```bash
+./scripts/sync.sh
+```
+
+Shows what moved, what is unpushed or uncommitted, which PRs are open, the
+newest decisions and findings, and whether the invariants still pass. Run it at
+the start of every session. If it warns, resolve the warnings before writing
+code.
+
+---
+
+## 4. Package boundaries
 
 Work inside one package. If a change needs to cross a boundary, add a
 decision entry explaining why before writing the code.
@@ -66,6 +123,7 @@ decision entry explaining why before writing the code.
 | `packages/lobby` | Colyseus presence, positions, ephemeral IDs | Touch an address, balance, tx hash, or building name |
 | `packages/shared` | Types and constants crossing boundaries | Contain logic or dependencies |
 | `apps/web` | Composition, routing, layout, the event bus | Contain business logic that belongs in a package |
+| `apps/backend` | Paymaster proxy, privacy-safe RPC reads, bounded submission queue | Log or persist per-request IPs, calls, proofs, timings, recipients or transaction hashes |
 
 The bridge is one-directional: React owns wallet and financial state and
 pushes into Phaser via an event emitter. Phaser never reaches back into
@@ -73,7 +131,7 @@ React state or calls Starknet.
 
 ---
 
-## 4. How to verify a claim
+## 5. How to verify a claim
 
 This project has been bitten repeatedly by confident documentation that was
 wrong, and by agents reporting findings they had not checked.
@@ -142,12 +200,32 @@ empty shell to fetchers, so a 200 there means nothing.
 
 ---
 
-## 5. Findings log
+## 6. Findings log
 
 Append what you learn. Newest first. Include how you verified it — a finding
 without a verification method is a rumour.
 
 Format: `### YYYY-MM-DD — short title` then what, why it matters, how verified.
+
+---
+
+### 2026-08-16 — A private building is an approved execution route, not a facade
+
+The world is a capability-bounded UI over three valid financial paths:
+pool-native Wallet API actions, a protocol's first-party STRK20 executor, or a
+project-owned anonymizer. Bank/Post Office use the first; AVNU Exchange uses
+the second; Vesu Vault needs the third. If none is available, the door stays
+locked — unshield-and-call is not a fallback.
+
+For anonymizer routes, the pool-to-helper-to-protocol-to-note operation is
+atomic and hides the player's wallet address from the protocol action. The
+application, action, timing and open-note amount can remain public, so copy
+must not claim full confidentiality or universal unlinkability.
+
+*Verified:* the required vendored STRK20 privacy, Wallet API and anonymizer
+skills; `check_freshness.py` confirmed Wallet API types `0.10.3`, AVNU SDK
+`4.2.0`, and the public Vesu anonymizer reference path on 2026-08-16. Product
+admission and fallback policy are recorded in D-018.
 
 ---
 

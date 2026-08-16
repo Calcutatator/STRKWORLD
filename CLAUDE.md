@@ -1,10 +1,23 @@
 # CLAUDE.md
 
+## Before you do anything
+
+```bash
+./scripts/sync.sh
+```
+
+Several agents work in this repo at once. This shows what moved, what is
+unpushed, which PRs are open, and which decisions are newest. **The newest
+verified learning wins** over any older document that was not updated to match.
+
+Commit and push before you stop — uncommitted work is invisible to everyone
+else and is not the source of truth.
+
 **→ Read [`AGENTS.md`](AGENTS.md) first.** It is the project contract and the
 shared findings log, and it applies to every contributor. This file exists so
 Claude Code loads the essentials automatically; `AGENTS.md` is canonical.
 
-## The five invariants
+## The six invariants
 
 Breaking one of these is a defect even if everything appears to work.
 
@@ -14,8 +27,11 @@ Breaking one of these is a defect even if everything appears to work.
    building name in lobby traffic or state. Ephemeral game IDs only.
 3. **Submission is decoupled from avatar action.** Never causally link
    entering a building to broadcasting a transaction.
-4. **Never branch on wallet identity** in the privacy path.
-5. **Never set `COOP: same-origin` / `COEP: require-corp`.** They break web
+4. **Every active financial building has an approved private route.** Native
+   Wallet API, a first-party private executor, or a reviewed anonymizer; no
+   public fallback or arbitrary calldata. Otherwise its door stays locked.
+5. **Never branch on wallet identity** in the privacy path.
+6. **Never set `COOP: same-origin` / `COEP: require-corp`.** They break web
    wallets, and we do not need them.
 
 ## Before you claim something is true

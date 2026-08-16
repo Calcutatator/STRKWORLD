@@ -16,6 +16,11 @@ in as plain data by the shell.
 - Building entrances and their trigger zones
 - Semantic events out: `building:entered`, `building:exited`, `player:moved`
 
+On `building:entered`, the shell removes or suspends the player's lobby
+presence while the local interior UI is open. The world emits the semantic
+event only; it never sends the building ID through lobby traffic. Other
+players seeing the avatar disappear is an accepted v1 trade-off (D-019).
+
 ## What this must never do
 
 - Import `starknet`, any wallet package, or `@strkworld/privacy`

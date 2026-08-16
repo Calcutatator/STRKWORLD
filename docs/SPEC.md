@@ -14,7 +14,11 @@
 
 ## Verdict
 
-**Feasible.** The game runs no privacy infrastructure — no prover, no discovery service, no viewing keys, no compliance relationship. The entire privacy surface is three RPC methods on the connected wallet.
+**Feasible.** The game runs no privacy infrastructure — no prover, no
+discovery service, no viewing keys, no compliance relationship. Pool-native
+actions go through the connected wallet, AVNU supplies the Exchange's
+first-party private path, and any future protocol-specific action is admitted
+only through a reviewed app-specific anonymizer.
 
 Every interface in this document was read from packages installed from npm, not from documentation. `starknet@10.7.0` carries all four `strk20*` methods on `WalletAccountV6` and as standalone functions over `WalletWithStarknetFeatures`; `@starknet-io/types-js@0.10.3` defines the four action variants and the error codes; `@starknetfoundation/starknet-start-react@2.0.1` ships the three hooks plus a paymaster set.
 
@@ -33,6 +37,7 @@ The binding constraints are economic and procedural, not architectural: one wall
 | Decision | Choice | Consequence |
 |---|---|---|
 | Privacy integration | STRK20 Wallet API | Wallet handles keys, note discovery, proving, submission, screening |
+| Building execution | Typed, allowlisted routes only | Native Wallet API, first-party private executor, or audited anonymizer; otherwise locked |
 | v1 authentication | Extension connectors only | Extra prompts accepted. Email/social deferred — no web wallet implements the methods yet |
 | Code target | `WalletWithStarknetFeatures` | Not a specific wallet. Web wallets register on the same feature surface, so email/social lights up with no code change when one ships |
 | Network | Mainnet from day one | Real funds. No testnet phase |
@@ -142,6 +147,33 @@ There is no per-action capability flag. Detect with `wallet_supportedWalletApi` 
 ---
 
 ## 4. Buildings — operation sequences
+
+### Privacy admission rule
+
+STRKWORLD is a game-shaped interface over a wallet and a small set of explicit
+protocol capabilities. A building panel emits a typed intent; it never accepts
+an arbitrary contract, selector or calldata blob.
+
+| Building | Approved execution route | v1 state |
+|---|---|---|
+| Bank | Pool-native Wallet API actions | Active; shield and unshield have explicitly public legs |
+| Post Office | Pool-native private `transfer` | Active |
+| Exchange | AVNU's first-party STRK20 executor | Active; no project-owned Cairo |
+| Vault | Project-owned `privacy_invoke` anonymizer | Locked until reviewed, tested, audited, deployed and allowlisted |
+| Bridge | Public funding edge, followed by a separate shield | Active, but never presented as a private app interaction |
+
+Every active financial route allowlists exact contracts, selectors and tokens;
+validates action limits, quote expiry, minimum output/slippage and fee ceilings;
+and has a kill switch. There is no public fallback. If the approved private
+route is unavailable, the building stays locked rather than unshielding and
+calling from the player's wallet or redirecting to a normal app frontend.
+
+For Wallet API concepts and operations, use the
+[STRK20 Wallet API guide](https://strk20-by-example.org/starknet-wallet-api/overview).
+For custom helpers, use the
+[`privacy_invoke` anatomy](https://strk20-by-example.org/helpers/privacy-invoke).
+The Exchange uses the shipped
+[AVNU private-swap path](https://strk20-by-example.org/starknet-wallet-api/avnu-private-swaps).
 
 ### The Bank — STRK20 pool · no Cairo
 
@@ -288,13 +320,25 @@ Sybil resistance matters here because account creation is free and sponsorship i
 
 `STRK20_DEPOSIT_ACTION` has no recipient field. The game **cannot** fund a player's shielded balance: no airdrops into the pool, no starting balance, no gifting a newcomer their first token.
 
-Deposit and withdrawal legs are public with visible addresses and amounts; open-note amounts are plaintext by design. *"Nobody can link this move to you"* is defensible. *"Your balance is hidden"* is not.
+Deposit and withdrawal legs are public with visible addresses and amounts;
+open-note amounts are plaintext by design. Pool-native transfers hide their
+participants and amount, while an approved anonymizer keeps the player's
+wallet address out of the protocol action. The application, action, timing and
+open-note amount may still be public, so the game must never promise universal
+unlinkability or that all activity is confidential.
 
-### The lobby is a timing oracle
+### Building presence is out of privacy scope for v1
 
-Entering a building is a timestamped event observed by every other player and by your server; the resulting pool interaction is public on-chain. Timing correlation is the dominant deanonymisation heuristic in the literature, and a shared street collapses it to milliseconds.
+On entry, the client leaves or suspends lobby presence and the avatar
+disappears for other players. The lobby receives no building ID, address or
+financial action, but a nearby observer may infer the chosen building and visit
+timing from the last position and disappearance. The project lead accepts that
+trade-off for v1 (D-019).
 
-**Design answer:** a submission queue with randomised delay and batching, deliberately breaking the causal link between avatar action and broadcast. First-class subsystem with its own tests. The lobby server must be structurally incapable of seeing an account address — ephemeral session pseudonyms from day one.
+Financial submission remains separate. The backend may add bounded jitter on
+eligible prepared Wallet API calls, within proof validity; it never delays
+quote-bound AVNU actions. This can reduce precise timing linkage but does not
+defeat session-level correlation while the pool is small (D-015).
 
 ---
 
@@ -303,8 +347,10 @@ Entering a building is a timestamped event observed by every other player and by
 - **The game itself** — Phaser 4 canvas, Tiled maps with external tilesets, React overlay, PWA shell. STRK20 provides zero game primitives.
 - **Colyseus lobby** — presence and position only. Never sees an address.
 - **Starknet RPC** for public reads — receipts, adapter contract reads. Not `publicProvider()` in production.
-- **Thin backend** — paymaster key custody. Small, but this is not a pure static PWA.
-- **Submission queue** — the timing-correlation mitigation.
+- **Backend** — paymaster key custody, privacy-safe RPC reads, route validation
+  and the bounded submission queue. No per-request logs.
+- **Privacy-route gate** — only pool-native, first-party private or approved
+  anonymizer-backed intents can enable a financial building.
 - **Batch accumulator** — collects intent per building visit, settles one atomic array.
 
 **Not built:** prover, discovery service, viewing-key storage, compliance relationship.
@@ -350,19 +396,21 @@ Parallel with Phase 0.
 - Phaser 4 + Tiled + React shell, PWA scaffolding
 - One street: roads, grass, four facades, interiors, door triggers
 - Colyseus lobby, ephemeral pseudonyms
+- Leave or suspend lobby presence on building entry; no building event on the wire
 - React↔Phaser bridge: hooks own wallet state, push into Phaser via event emitter
 
 ### Phase 2 — The Bank · 2–3 weeks
 
 - Connector + capability detection + the 118 and unsupported-wallet rooms
 - deposit / withdraw / transfer / balances
-- Batch accumulator and submission queue
+- Batch accumulator plus backend-owned bounded submission queue
 - Maturity-aware balance display
 - In-product disclosure copy
 
 ### Phase 3 — The Exchange · 1–2 weeks
 
-AVNU SDK, plus the backend paymaster proxy.
+AVNU SDK's first-party executor and paymaster path, behind the same typed route
+gate. No project-owned Cairo and no queue delay on an expiring quote.
 
 ### Phase 4 — Hardening and launch · weeks 5–8
 

@@ -79,9 +79,10 @@ export type Facing = 'up' | 'down' | 'left' | 'right';
  * a decision entry.
  *
  * Explicitly excluded, permanently: account address, any balance, transaction
- * hash, token symbol, building occupancy, and any financial action. Note that
- * *entering* a building is a private fact — position is broadcast, entry is
- * not, because entry plus public on-chain timing is a correlation attack.
+ * hash, token symbol, building occupancy, and any financial action. On entry
+ * the client leaves or suspends lobby presence, so other players see the
+ * avatar disappear but the lobby never receives a building event or ID. That
+ * presence leak is accepted for v1 by D-019.
  */
 export interface PresenceState {
   gameId: GameId;

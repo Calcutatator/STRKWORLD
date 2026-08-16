@@ -43,18 +43,18 @@ design. Raise it as a decision entry before writing code.
 
 ---
 
-## Why positions are still sensitive
+## Building presence in v1
 
-Avatar position is not money, but it is a timing signal. An observer watching
-the street learns *when* a player approached a building, and pool activity is
-public on-chain — correlating the two is the deanonymisation path.
+When a player enters a building, the client leaves or suspends lobby presence.
+Other players see the avatar disappear. A nearby observer may therefore infer
+the chosen building and visit timing from the last coordinate; that leak is an
+explicitly accepted v1 trade-off (D-019).
 
-The lobby cannot fix that on its own. The mitigation lives in the submission
-queue (`apps/web`), which decouples transaction broadcast from avatar action.
-See `docs/DECISIONS.md` D-004.
-
-What this package must do is avoid making it worse: never broadcast that a
-player *entered* a building, only where they are. Entry is a private fact.
+The lobby still never receives an entry event or building ID. Financial
+submission remains a separate privacy problem: where the route permits it, the
+backend decouples prepared-action broadcast from the avatar event. That
+mitigation is bounded and must not be described as defeating timing
+correlation (D-015).
 
 ---
 
