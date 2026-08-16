@@ -79,8 +79,24 @@ fi
 #     actions belong inside packages/privacy, where targets and calldata can be
 #     allowlisted. Exposing them in the shell turns the game into an arbitrary
 #     transaction composer and makes D-018 unenforceable.
-raw_action_hits=$(grep -rnE "STRK20_(INVOKE_)?ACTION|type:[[:space:]]*['\"]invoke['\"]|calldata[[:space:]]*:" \
-  --include="*.ts" --include="*.tsx" apps/web/src 2>/dev/null || true)
+#     Checks code, not comments — like check 5 below, and for the same reason:
+#     the shell must be able to explain in a comment why raw calldata is
+#     forbidden without that comment failing the build.
+#
+#     Same comment rules as check 5, but the block-comment lines are BLANKED
+#     rather than deleted. Check 5 pipes every file into one grep and reports
+#     no line numbers, so deleting lines costs it nothing; this check prints
+#     file:line, and deleting would shift every number after a comment and
+#     send the reader to the wrong line. Known limit, shared with check 5:
+#     block-comment prose that does not begin with * is still scanned.
+raw_action_hits=$(
+  find apps/web/src -type f \( -name "*.ts" -o -name "*.tsx" \) 2>/dev/null \
+  | while IFS= read -r f; do
+      sed -E 's://.*$::; s:^[[:space:]]*\*.*$::; s:^[[:space:]]*/\*.*$::' "$f" \
+      | grep -nE "STRK20_(INVOKE_)?ACTION|type:[[:space:]]*['\"]invoke['\"]|calldata[[:space:]]*:" \
+      | sed "s|^|$f:|"
+    done
+)
 if [ -n "$raw_action_hits" ]; then
   printf '%s\n' "$raw_action_hits"
   bad "raw protocol action in the web shell — emit a typed privacy intent instead"
