@@ -557,6 +557,28 @@ becomes unclosable by keyboard.
 
 ---
 
+### 2026-08-16 — Phaser 4 API differences that break a v3-shaped scene
+
+Three found while writing the first scene. All compile-time, none obvious from
+v3 experience:
+
+- **`RenderTexture.drawFrame()` is gone.** In v4 `RenderTexture extends Image`
+  with a different `draw(entries, x, y, alpha, tint)` signature. Drawing a tile
+  grid tile-by-tile into a render texture is a v3 pattern that no longer
+  type-checks. Use a real tilemap layer instead — which is better anyway, since
+  the Tiled import then swaps only the data source.
+- **`Scene` declares `update()` but not `preload()`/`create()`.** With
+  `noImplicitOverride` on, marking `update` as `override` is required and
+  marking the other two is an error. They are optional hooks the SceneManager
+  calls if present, not base members.
+- **`createLayer()` returns `TilemapLayer | TilemapGPULayer`.** The GPU layer
+  is new in v4. A field typed as plain `TilemapLayer` will not accept it.
+
+*Verified:* compiled against `phaser@4.2.1` types; each error reproduced and
+fixed. Read `node_modules/phaser/types/phaser.d.ts` rather than v3-era guides.
+
+---
+
 ### 2026-08-16 — Phaser 4 does not tree-shake; lazy-load it
 
 `dist/phaser.esm.js` is a single pre-bundled webpack artifact with no

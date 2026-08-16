@@ -1,5 +1,6 @@
 import type { WorldEvents, ShellEvents, EventBus } from '@strkworld/shared';
 import { createHost, type Host } from './host.js';
+import { createStreetScene } from './scenes/street-scene.js';
 
 /**
  * Phaser wiring. This is the only module in the package that imports Phaser,
@@ -53,11 +54,10 @@ async function ensureHost(config: WorldConfig): Promise<Host<Game, HTMLElement>>
           autoCenter: Phaser.Scale.CENTER_BOTH,
         },
         physics: { default: 'arcade', arcade: { debug: false } },
-        // Scenes are registered by the caller. Nothing here does network I/O:
-        // under a broken mounting pattern create() runs twice, and a lobby
-        // join in scene lifecycle would produce two presence entries for one
-        // player. Joins are shell-driven and explicit.
-        scene: [],
+        // Nothing in scene lifecycle does network I/O: under a mounting
+        // regression create() runs twice, and a lobby join here would produce
+        // two presence entries for one player. Joins are shell-driven.
+        scene: [createStreetScene({ Phaser })],
         callbacks: {
           postBoot: (game) => {
             game.registry.set('bus', config);
