@@ -156,29 +156,42 @@ fi
 #    Unapproved means a locked door, never a quiet downgrade.
 reg="packages/shared/src/privacy-grades.ts"
 if [ -f "$reg" ]; then
-  unapproved=$(python3 - "$reg" <<'PYEOF'
+  report=$(python3 - "$reg" <<'PYEOF'
 import re, sys
 src = open(sys.argv[1]).read()
 blocks = re.findall(r"\{\s*building:.*?\n  \}", src, re.S)
-bad = []
+unapproved, nocopy = [], []
 for b in blocks:
     route = (re.search(r"route:\s*'([^']+)'", b) or [None, "?"])[1]
     grade = (re.search(r"grade:\s*'([^']+)'", b) or [None, "?"])[1]
     if grade == "private":
         continue
     approved = re.search(r"approvedBy:\s*'[^']+'", b)
-    disclosed = re.search(r"disclosure:\s*\n?\s*'", b) or re.search(r'disclosure:\s*\n?\s*"', b)
-    if not approved or not disclosed:
-        bad.append(f"{route} ({grade})")
-print(" ".join(bad))
+    disclosed = re.search(r"disclosure:\s*\n?\s*['\"]", b)
+    if not approved:
+        unapproved.append(f"{route} ({grade})")
+    elif not disclosed:
+        nocopy.append(route)
+print("UNAPPROVED:" + " ".join(unapproved))
+print("NOCOPY:" + " ".join(nocopy))
 PYEOF
 )
+  unapproved=$(echo "$report" | grep "^UNAPPROVED:" | cut -d: -f2- | xargs)
+  nocopy=$(echo "$report" | grep "^NOCOPY:" | cut -d: -f2- | xargs)
+
   if [ -n "$unapproved" ]; then
-    bad "route(s) below absolute privacy without recorded approval: $unapproved"
-    note "These must render a LOCKED DOOR until approved — never a silent downgrade."
-    note "Run ./scripts/privacy-report.sh and take it to the project lead."
+    bad "privacy deviation(s) with no recorded approval: $unapproved"
+    note "These are decisions for the project lead, not tasks."
+    note "Run ./scripts/privacy-report.sh and take it to them."
   else
-    ok "every privacy deviation is approved and disclosed"
+    ok "every privacy deviation is approved"
+  fi
+
+  if [ -n "$nocopy" ]; then
+    bad "approved deviation(s) still missing player-facing copy: $nocopy"
+    note "Approved but undisclosed is still a silent downgrade. Door stays locked."
+  else
+    ok "every deviation discloses itself to the player"
   fi
 else
   bad "privacy register missing: $reg"

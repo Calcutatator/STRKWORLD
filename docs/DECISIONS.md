@@ -624,3 +624,37 @@ Run `./scripts/privacy-report.sh` for the current state. A new integration
 cannot reach players before its grade is stated and, if it is a deviation,
 approved — which is the point: the decision surfaces at integration time, to a
 person, rather than being inherited by accident.
+
+---
+
+## D-021 — Public value gets funnelled back into the pool
+
+**2026-08-16 · Accepted**
+
+**Context.** Pool STRK is the game's money and its gas (D-013). Several routes
+nevertheless leave value sitting in public: the Bridge delivers public STRK, and
+a swap can land an output the player then holds outside the pool.
+
+A player left holding public value has an unfinished journey and, worse, holds
+something the game largely cannot use — they cannot pay a fee with it, and every
+private action needs a pool balance.
+
+**Decision.** Any route that leaves value in public must **offer the next step
+back into the pool** rather than letting the player walk away. Encoded as
+`returnToPool` on each register entry, so it is a property of the route rather
+than a thing a panel might remember to do.
+
+Currently true for `bridge.deposit` and `exchange.swap`.
+
+**Consequences.** The Bridge is the clearest case: the solver delivers public
+STRK, and the building should carry the player straight into shielding it —
+minus a gas reserve, per D-013, since shielding everything strands them one
+transaction short.
+
+This is a prompt, not an automation. Shielding is always to self and must be
+signed by the player, so it cannot be done for them; and quietly moving
+someone's funds would be its own kind of wrong.
+
+The nudge must persist. A player who bridges and closes the tab still has public
+STRK, and should find the prompt waiting rather than discovering months later
+that their funds never made it in.

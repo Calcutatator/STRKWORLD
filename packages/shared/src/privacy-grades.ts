@@ -68,6 +68,15 @@ export interface RouteGrade {
   approvedOn: string | null;
   /** Why the deviation is acceptable. Required whenever `approvedBy` is set. */
   rationale: string | null;
+  /**
+   * Whether finishing this route should funnel the player back to the pool.
+   *
+   * Pool STRK is the game's money and its gas (D-013), so any route that
+   * leaves value sitting in public is an unfinished journey. The building must
+   * offer the next step rather than letting the player walk away holding
+   * something the game cannot use. See D-021.
+   */
+  returnToPool: boolean;
 }
 
 /**
@@ -88,6 +97,7 @@ export const PRIVACY_REGISTER: readonly RouteGrade[] = [
     approvedBy: null,
     approvedOn: null,
     rationale: null,
+    returnToPool: false,
   },
   {
     building: 'bank',
@@ -95,11 +105,13 @@ export const PRIVACY_REGISTER: readonly RouteGrade[] = [
     grade: 'public-edge',
     observable:
       'The ERC-20 approve and the pool deposit are both public. Your address and the amount are visible on-chain. Deposits are always to self, so the depositor is always named.',
-    disclosure:
-      'Adding funds is public: your address and the amount are visible on-chain. What you do with them afterwards is private.',
-    approvedBy: null,
-    approvedOn: null,
-    rationale: null,
+    // TODO(calc): disclosure copy — route stays locked until written.
+    disclosure: null,
+    approvedBy: 'calc',
+    approvedOn: '2026-08-16',
+    rationale:
+      'Unavoidable: pool deposits are always to self, so the depositor is always named. Rejecting it would mean no way into the pool at all.',
+    returnToPool: false,
   },
   {
     building: 'bank',
@@ -107,11 +119,13 @@ export const PRIVACY_REGISTER: readonly RouteGrade[] = [
     grade: 'public-edge',
     observable:
       'Withdrawal reveals token, amount and recipient. Withdrawing a similar amount to the same address shortly after depositing is publicly linkable by pattern alone.',
-    disclosure:
-      'Taking funds out is public: the amount and the destination are visible on-chain. Sending to an address you have used before links the two.',
-    approvedBy: null,
-    approvedOn: null,
-    rationale: null,
+    // TODO(calc): disclosure copy — route stays locked until written.
+    disclosure: null,
+    approvedBy: 'calc',
+    approvedOn: '2026-08-16',
+    rationale:
+      'Unavoidable: the exit is public by construction. Accepted because a pool with no exit is not a product.',
+    returnToPool: false,
   },
   {
     building: 'exchange',
@@ -119,11 +133,13 @@ export const PRIVACY_REGISTER: readonly RouteGrade[] = [
     grade: 'anonymous',
     observable:
       'Unlinkable but not amount-confidential. The withdraw leg to the executor is a public event with a visible amount, and the swap runs on public AMM liquidity. Who traded is hidden; what and how much is not.',
-    disclosure:
-      'Nobody can link this swap to you. The amount is visible on-chain — that is how the exchange works.',
-    approvedBy: null,
-    approvedOn: null,
-    rationale: null,
+    // TODO(calc): disclosure copy — route stays locked until written.
+    disclosure: null,
+    approvedBy: 'calc',
+    approvedOn: '2026-08-16',
+    rationale:
+      'The AMM leg runs on public liquidity, so amounts cannot be hidden without rebuilding the DEX. Who traded is still hidden, which is the property that matters here.',
+    returnToPool: true,
   },
   {
     building: 'bridge',
@@ -131,11 +147,13 @@ export const PRIVACY_REGISTER: readonly RouteGrade[] = [
     grade: 'public',
     observable:
       'Entirely public. The solver delivers to your address with a visible amount, and the shield that follows has its own public leg. Privacy begins only after the funds are in the pool.',
-    disclosure:
-      'Bringing funds in from another chain is public. Your privacy starts once the funds are in the pool, not on the way in.',
-    approvedBy: null,
-    approvedOn: null,
-    rationale: null,
+    // TODO(calc): disclosure copy — route stays locked until written.
+    disclosure: null,
+    approvedBy: 'calc',
+    approvedOn: '2026-08-16',
+    rationale:
+      'Public rails are the only way in from another chain. Accepted because arrival was never the privacy promise — and the player is funnelled straight into the pool afterwards.',
+    returnToPool: true,
   },
 ];
 
@@ -158,6 +176,22 @@ export function isRoutePlayable(route: RouteGrade): boolean {
   return route.approvedBy !== null && route.disclosure !== null;
 }
 
+/** Deviations nobody has approved. These are decisions, not tasks. */
 export function routesAwaitingApproval(): RouteGrade[] {
-  return PRIVACY_REGISTER.filter((r) => !isRoutePlayable(r));
+  return PRIVACY_REGISTER.filter(
+    (r) => isDeviation(r.grade) && r.approvedBy === null,
+  );
+}
+
+/**
+ * Approved deviations still missing their player-facing copy.
+ *
+ * A different state from unapproved: the call has been made, the words have
+ * not been written. Still locked — an approved deviation the player is not
+ * told about is exactly the silent downgrade this prevents.
+ */
+export function routesAwaitingCopy(): RouteGrade[] {
+  return PRIVACY_REGISTER.filter(
+    (r) => isDeviation(r.grade) && r.approvedBy !== null && r.disclosure === null,
+  );
 }
