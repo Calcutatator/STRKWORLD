@@ -107,10 +107,12 @@ pool's `get_public_key(address)` over ordinary RPC; unregistered returns
 `0x0`. Preflight *and* map error 118 at transaction time — the two must
 agree.
 
-**Batching is the only lever against prompts and fees.** The `actions` array
-executes atomically, so several operations share one prompt, one proof and
-one fee. The batch accumulator lives in `apps/web` because it sits between
-game and money; this package just executes what it is handed.
+**Batching is the only lever against prompts and fees.** Ready 5.33.8 creates
+one wallet action for an entire STRK20 action array and folds deposit approval
+calls into the same transaction action. The funded Phase 0 UI run must still
+confirm the visible prompt sequence before the seam promises an exact count.
+The batch accumulator lives in `apps/web` because it sits between game and
+money; this package just executes what it is handed.
 
 ---
 

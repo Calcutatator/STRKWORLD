@@ -74,8 +74,8 @@ yours, so publish them the day you have them:
 
 Two more the spec missed, from the official skill: does the wallet
 auto-register on first use (which would make our whole `NOT_REGISTERED`
-onboarding room unnecessary), and how does the two-prompt approve-then-deposit
-sequence actually render.
+onboarding room unnecessary), and how does Ready's current batched
+approve-plus-deposit transaction action actually render.
 
 Write the answers into the findings log in `AGENTS.md`, with how you verified
 them, and push.
@@ -154,8 +154,9 @@ carry plaintext), `public-edge` (actor and amount on-chain), `public`.
 - Recipient registration **is** preflightable via the pool's
   `get_public_key(address)` over ordinary RPC, even though the Wallet API has no
   method for it. Unregistered returns `0x0`.
-- A shield is **two wallet prompts** — the ERC-20 approve must land before the
-  deposit. Unlabelled, the second reads as a duplicate-transaction bug.
+- Ready 5.33.8's shipped code puts the ERC-20 approval call(s) and pool privacy
+  call in one wallet transaction action. Do not hardcode a two-prompt shield;
+  record the visible sequence in the funded Phase 0 UI run.
 - Notes mature ~10 blocks before they are spendable. Hardware-independent.
 - Session keys are **architecturally blocked** — the pool requires
   `caller_address.is_zero()`, which `execute_from_outside` can never satisfy.

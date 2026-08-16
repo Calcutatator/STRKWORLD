@@ -192,8 +192,9 @@ vendored snapshot:
 
 - `strk20PrepareInvoke(actions, true)` skips proof generation; it does not
   "build and prove". Its result is for simulation and is not submittable.
-- The approval/deposit sequence is real, but exact wallet prompt count is a
-  live-wallet test result, not a protocol guarantee. Do not hardcode two.
+- The approval/deposit sequence is real, but Ready 5.33.8 currently puts its
+  approval call(s) and privacy call in one transaction action. Exact visible
+  prompt count remains a live-wallet result. Do not hardcode two.
 - Bundled upstream SDK references contain commands that write an auth token
   directly to `.npmrc`. Never execute those. If the SDK is ever used in a
   different, approved key-holding project, follow the safer environment
@@ -212,6 +213,44 @@ Append what you learn. Newest first. Include how you verified it — a finding
 without a verification method is a rumour.
 
 Format: `### YYYY-MM-DD — short title` then what, why it matters, how verified.
+
+---
+
+### 2026-08-16 — Ready 5.33.8 prompts for private reads and batches deposit approval
+
+The current shipped Ready extension creates an explicit approval action for
+`wallet_strk20Balances`; its English UI says “Share private balances”. It also
+creates one “Prove transaction” action for an entire
+`wallet_strk20PrepareInvoke` array. These are deliberate wallet interactions,
+so a balance HUD must be user-requested rather than polled and proof preparation
+cannot be presented as a silent preview.
+
+All three STRK20 dapp handlers provision local privacy material and then check
+pool registration. They return `NOT_REGISTERED` when the account is not
+registered; they do not call the wallet's separate registration operation.
+Current Ready therefore does not auto-register through a first dapp balance,
+prepare or invoke request.
+
+For `wallet_strk20InvokeTransaction`, Ready groups deposits by token, prepends
+the required ERC-20 approval calls, appends the pool privacy call, and creates
+**one** wallet `TRANSACTION` action for the resulting call array. This
+supersedes the old assumption that a shield necessarily means exactly two
+wallet prompts. A real mainnet UI run still has to confirm the visible prompt
+sequence and latency before `PrivacyOperations.promptCount` is frozen.
+
+The request schema accepts any valid felt as `invoke.contract`, but the shipped
+paymaster error set includes `TX_PAYMASTER_INVOKE_NOT_ALLOWED`. Client syntax
+therefore does not prove end-to-end arbitrary-target support; that Vault gate
+remains open until a harmless reviewed helper is exercised on mainnet.
+
+*Verified:* downloaded Chrome Web Store extension
+`dlcobpjiigpikoobohmabehhmhfoodbb` through Google's public CRX endpoint,
+confirmed manifest version `5.33.8` and CRX SHA-256
+`2f6014522d1a6d6881bcbb0cdd427d11aa497c6684c35dc3e21947b91bd23fb6`, then
+inspected the shipped background handlers, action screens, validators and
+English locale. No wallet was installed or opened and no transaction was
+submitted. Full evidence and remaining manual steps:
+[`docs/research/ready-wallet-5.33.8-source-audit.md`](docs/research/ready-wallet-5.33.8-source-audit.md).
 
 ---
 
@@ -458,6 +497,11 @@ hazard explicitly.
 ---
 
 ### 2026-08-16 — Approval and deposit are separate; prompt count is wallet-dependent
+
+**Superseded by “Ready 5.33.8 prompts for private reads and batches deposit
+approval” above.** The sequencing concern remains, but current Ready's shipped
+implementation combines the approval call(s) and pool privacy call into one
+wallet transaction action.
 
 The ERC-20 approval must be established before a private deposit. That is a
 real sequencing constraint, but neither the Wallet API types nor the action
