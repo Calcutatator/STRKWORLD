@@ -209,6 +209,75 @@ Format: `### YYYY-MM-DD — short title` then what, why it matters, how verified
 
 ---
 
+### 2026-08-16 — A prepared Wallet API proof can be queued and relayed without the account signer
+
+`wallet_strk20PrepareInvoke` returns the pool `apply_actions` call plus its
+proof. AVNU's private paymaster accepts exactly that artifact through
+`paymaster_executeTransaction` with transaction type `apply_action`; its
+shipped SDK states that no user signature is required at submission. This
+makes D-015's backend queue implementable for non-public, non-quote-bound
+actions: the wallet proves, the backend validates and delays within the live
+proof-validity window, and the paymaster relays.
+
+Fee mode is operationally significant. On mainnet,
+`sponsored_private` currently rejects a build without a valid
+`x-paymaster-api-key`, while `default` succeeds without a key and returns a
+shielded-token `withdraw` fee action. Do not treat those modes as aliases.
+Validate the returned token, recipient and amount against route policy before
+asking the wallet to prove, then revalidate the exact artifact at enqueue and
+submission. Quote-bound AVNU swaps still must not be delayed.
+
+*Verified:* inspected the published `@avnu/avnu-sdk@4.2.0` tarball types and
+implementation (`createStrk20WalletProver`, `submitPrivateSwap`, and the
+`apply_action` JSON-RPC payload), then called the live mainnet AVNU paymaster's
+`paymaster_buildTransaction` on 2026-08-16 with both fee modes. No transaction
+was submitted.
+
+---
+
+### 2026-08-16 — 1Click source metadata is live data, not a static catalogue
+
+The live 1Click registry currently exposes 186 assets across 35 blockchain
+labels and includes STRK on Starknet as
+`nep141:starknet.omft.near`. An unauthenticated dry quote for 10 Arbitrum USDC
+to Starknet STRK succeeded and correctly returned pricing with no deposit
+address. At least one static ShieldUp label has already drifted: asset id
+`nep245:v2_1.omni.hot.tg:1117_`, recorded there as TON, is currently returned
+by the registry as `GRAM`.
+
+Port the curated asset IDs and address-safety rules as fallbacks, but merge and
+display live registry metadata. Never infer current route availability or
+symbol/name from the old list alone. Dry quotes are previews only; production
+quotes still require explicit deposit-address lifecycle and resume tests.
+
+*Verified:* installed `@defuse-protocol/one-click-sdk-typescript@0.1.25` in
+the repository dependency tree, called `OneClickService.getTokens()` and
+`OneClickService.getQuote({ dry: true, ... })` against the live service on
+2026-08-16, and compared the response with ShieldUp commit `290f830`'s
+`source-tokens.ts`. No deposit address was issued and no funds moved.
+
+---
+
+### 2026-08-16 — Exact connection pins still contain mixed transitive API types
+
+The four required direct pins are not a uniform dependency tree by themselves.
+`get-starknet-discovery@6.0.3` declares `types-js@0.10.4-beta.1` and caret
+ranges for its v6 wallet-standard and virtual-wallet dependencies; the current
+lock resolves part of that subtree to virtual-wallet/wallet-standard `6.0.4`
+and `types-js@0.10.4-beta.2`, alongside the direct `types-js@0.10.3` and
+starknet.js's v5 compatibility types.
+
+The committed lockfile is therefore load-bearing. Keep application imports on
+the direct tested surface, use structural wallet-standard types at the
+boundary, and treat any lockfile regeneration as a connection-stack upgrade
+requiring the Phase 0 wallet tests—not as a harmless install refresh.
+
+*Verified:* inspected the installed package manifests and complete `npm ls`
+tree after a clean repository sync on 2026-08-16. The direct versions remain
+the approved pins; this finding records their actual transitive closure.
+
+---
+
 ### 2026-08-16 — No game-development MCPs exist; the tooling here is conventional
 
 Searched the MCP registry for Phaser, Tiled, tilemap, sprite, pixel art, asset
