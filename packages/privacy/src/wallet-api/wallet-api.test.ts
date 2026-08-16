@@ -160,6 +160,84 @@ describe('Wallet API action routes', () => {
       ops.prepare([{ kind: 'swap', tokenIn: TOKEN, tokenOut: STRK, amountIn: 10n, minAmountOut: 1n }]),
     ).rejects.toThrow(/disabled/i);
   });
+
+  it('proves the exact quote-bound AVNU plan and submits it without a second wallet signature', async () => {
+    const { wallet, pool, gateway, supportedVersions, prepared, artifact } = fixture();
+    gateway.prepareSwap = vi.fn(async () => ({
+      quoteId: 'quote-1',
+      buyAmount: 95n,
+      expiresAt: 2_000,
+      chainId: '0x534e5f4d41494e',
+      executorAddress: '0x999',
+      executorCalls: [{ contractAddress: '0x111', entrypoint: 'swap', calldata: ['0xaaa'] }],
+      fee: { token: STRK, recipient: FEE_RECIPIENT, amount: 1n, ...AUTH },
+    }));
+    const ops = new WalletApiPrivacyOperations({
+      wallet,
+      pool,
+      submission: gateway,
+      supportedVersions,
+      now: () => 1_000,
+      policy: {
+        maxIntents: 8,
+        maxRelayFee: 10n,
+        enabledRoutes: ['shield', 'unshield', 'transfer', 'swap'],
+        swap: { expectedChainId: '0x534e5f4d41494e', slippageBps: 100 },
+      },
+    });
+    const batch = await ops.prepare([
+      { kind: 'swap', tokenIn: TOKEN, tokenOut: STRK, amountIn: 20n, minAmountOut: 90n },
+    ]);
+    expect(batch.totalCost).toBe(POOL_FEE + 1n);
+    await expect(batch.confirm({ feeCeiling: POOL_FEE + 1n })).resolves.toEqual({
+      transactionHash: '0xprivate',
+    });
+    expect(prepared[0]).toEqual([
+      { type: 'withdraw', token: TOKEN, amount: '0x14', recipient: '0x999' },
+      { type: 'withdraw', token: STRK, amount: '0x1', recipient: FEE_RECIPIENT },
+      { type: 'transfer', token: STRK, amount: 'OPEN', recipient: wallet.address },
+      expect.objectContaining({
+        type: 'invoke',
+        contract: '0x999',
+        calldata: expect.arrayContaining([STRK, '0x111', '0xaaa', '${openNoteIds[0]}']),
+      }),
+    ]);
+    expect(gateway.submit).toHaveBeenCalledWith(expect.objectContaining({
+      route: 'swap',
+      artifact,
+      feeAuthorization: AUTH.authorization,
+    }));
+  });
+
+  it('rejects a stale or wrong-chain private swap before proving', async () => {
+    const { wallet, pool, gateway, supportedVersions, prepared } = fixture();
+    gateway.prepareSwap = vi.fn(async () => ({
+      quoteId: 'quote-1',
+      buyAmount: 95n,
+      expiresAt: 999,
+      chainId: '0x534e5f5345504f4c4941',
+      executorAddress: '0x999',
+      executorCalls: [{ contractAddress: '0x111', entrypoint: 'swap', calldata: ['0xaaa'] }],
+      fee: { token: STRK, recipient: FEE_RECIPIENT, amount: 1n, ...AUTH },
+    }));
+    const ops = new WalletApiPrivacyOperations({
+      wallet,
+      pool,
+      submission: gateway,
+      supportedVersions,
+      now: () => 1_000,
+      policy: {
+        maxIntents: 8,
+        maxRelayFee: 10n,
+        enabledRoutes: ['swap'],
+        swap: { expectedChainId: '0x534e5f4d41494e', slippageBps: 100 },
+      },
+    });
+    await expect(ops.prepare([
+      { kind: 'swap', tokenIn: TOKEN, tokenOut: STRK, amountIn: 20n, minAmountOut: 90n },
+    ])).rejects.toThrow(/wrong network/i);
+    expect(prepared).toHaveLength(0);
+  });
 });
 
 describe('wallet error mapping', () => {

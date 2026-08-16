@@ -83,7 +83,11 @@ on the route:
   be validated, queued within the live proof-validity window, and relayed by
   AVNU's paymaster without the user's account signer.
 - A quote-bound AVNU swap uses the same wallet proof artifact but skips timing
-  delay; delaying it risks submitting an expired quote.
+  delay; delaying it risks submitting an expired quote. The backend chooses
+  the private quote and executor calls, then the browser passes that bounded
+  plan through AVNU's `buildStrk20Actions()`. The bought asset is created
+  directly as an `OPEN` pool note; there is no public output or second shield
+  step.
 - A shield starts with a public ERC-20 approval and cannot be funded from the
   pool. It is not the private queued path, and it is never bundled with the
   action it later funds.

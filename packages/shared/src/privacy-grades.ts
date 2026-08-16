@@ -139,7 +139,8 @@ export const PRIVACY_REGISTER: readonly RouteGrade[] = [
     approvedOn: '2026-08-16',
     rationale:
       'The AMM leg runs on public liquidity, so amounts cannot be hidden without rebuilding the DEX. Who traded is still hidden, which is the property that matters here.',
-    returnToPool: true,
+    // AVNU's private executor creates the bought asset as an OPEN pool note.
+    returnToPool: false,
   },
   {
     building: 'bridge',

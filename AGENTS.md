@@ -681,3 +681,23 @@ signer are reference implementations for a path we are **not** taking.
 *Verified:* full audit in [`docs/research/shieldup-reuse-audit.md`](docs/research/shieldup-reuse-audit.md).
 
 ---
+
+### 2026-08-16 — AVNU private swap output is already a pool note
+
+`@avnu/avnu-sdk@4.2.0` `buildStrk20Actions()` creates four actions: withdraw
+the sell asset to AVNU's returned executor, withdraw the paymaster fee, create
+an `OPEN` output note for the wallet, and invoke the executor with the
+wallet-resolved note id. Do not offer a post-swap shield step: it would add a
+public boundary after an output that is already private.
+
+The server must bind the dynamic executor and serialized calls returned by
+`quoteToCalls({ private: true })`; the browser must not provide an arbitrary
+target. The proof output exposes the resulting `ServerAction` span, so the
+relay can enforce that binding before submission without learning the wallet's
+notes or viewing key.
+
+*Verified:* inspected the installed SDK 4.2.0 declarations and runtime output;
+backend and Wallet API adapter tests exercise the exact action and decoded
+server-action shapes.
+
+---

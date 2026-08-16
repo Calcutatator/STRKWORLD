@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import { AvnuPaymasterPort } from './avnu-paymaster.js';
+import { AvnuSwapPlanner } from './avnu-swap-planner.js';
 import { StarknetRpcPoolPort } from './starknet-rpc.js';
 import type { PreparedArtifact } from './types.js';
 
@@ -35,6 +36,81 @@ describe('AVNU paymaster adapter', () => {
       }),
       {},
     );
+  });
+});
+
+describe('AVNU private swap planner', () => {
+  it('selects an exact-input mainnet quote and asks AVNU for private executor calls', async () => {
+    const getQuotes = vi.fn(async () => [{
+      quoteId: 'quote-1',
+      sellTokenAddress: '0xabc',
+      buyTokenAddress: '0x4718',
+      sellAmount: 20n,
+      buyAmount: 95n,
+      expiry: 2,
+      chainId: '0x534e5f4d41494e',
+    }]);
+    const quoteToCalls = vi.fn(async () => ({
+      chainId: '0x534e5f4d41494e',
+      executorAddress: '0x999',
+      calls: [{ contractAddress: '0x111', entrypoint: 'swap', calldata: ['0xaaa'] }],
+    }));
+    const toPaymasterCall = vi.fn(() => ({ to: '0x111', selector: '0x555', calldata: ['0xaaa'] }));
+    const planner = new AvnuSwapPlanner({
+      chainId: '0x534e5f4d41494e',
+      now: () => 1_000,
+      functions: {
+        getQuotes: getQuotes as never,
+        quoteToCalls: quoteToCalls as never,
+        toPaymasterCall: toPaymasterCall as never,
+      },
+    });
+    await expect(planner.prepare({
+      sellToken: '0xabc',
+      buyToken: '0x4718',
+      sellAmount: 20n,
+      minAmountOut: 90n,
+      slippageBps: 100,
+    })).resolves.toMatchObject({
+      quoteId: 'quote-1',
+      buyAmount: 95n,
+      expiresAt: 2_000,
+      executorAddress: '0x999',
+      executorCalls: [{ selector: '0x555', calldata: ['0xaaa'] }],
+    });
+    expect(quoteToCalls).toHaveBeenCalledWith(
+      { quoteId: 'quote-1', slippage: 0.01, private: true },
+      undefined,
+    );
+  });
+
+  it('rejects a quote below the requested minimum before call construction', async () => {
+    const quoteToCalls = vi.fn();
+    const planner = new AvnuSwapPlanner({
+      chainId: '0x534e5f4d41494e',
+      now: () => 2_000,
+      functions: {
+        getQuotes: vi.fn(async () => [{
+          quoteId: 'quote-1',
+          sellTokenAddress: '0xabc',
+          buyTokenAddress: '0x4718',
+          sellAmount: 20n,
+          buyAmount: 89n,
+          expiry: 1,
+          chainId: '0x534e5f5345504f4c4941',
+        }]) as never,
+        quoteToCalls: quoteToCalls as never,
+        toPaymasterCall: vi.fn() as never,
+      },
+    });
+    await expect(planner.prepare({
+      sellToken: '0xabc',
+      buyToken: '0x4718',
+      sellAmount: 20n,
+      minAmountOut: 90n,
+      slippageBps: 100,
+    })).rejects.toThrow(/no quote/i);
+    expect(quoteToCalls).not.toHaveBeenCalled();
   });
 });
 

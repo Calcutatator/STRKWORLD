@@ -1,3 +1,4 @@
+import { buildStrk20Actions, type PrivateSwapPlan } from '@avnu/avnu-sdk';
 import type { STRK20_ACTION } from 'starknet';
 import type {
   BatchWarning,
@@ -13,6 +14,7 @@ import type {
   PoolNativeRoute,
   PoolReadClient,
   PrivateSubmissionGateway,
+  PreparedPrivateSwap,
   RelayFeeQuote,
   SupportedVersionsReader,
   WalletRoutePolicy,
@@ -27,6 +29,7 @@ export interface WalletApiPrivacyOperationsOptions {
   submission: PrivateSubmissionGateway;
   supportedVersions: SupportedVersionsReader;
   policy: WalletRoutePolicy;
+  now?: () => number;
 }
 
 export class WalletApiPrivacyOperations implements PrivacyOperations {
@@ -35,6 +38,7 @@ export class WalletApiPrivacyOperations implements PrivacyOperations {
   private readonly submission: PrivateSubmissionGateway;
   private readonly supportedVersions: SupportedVersionsReader;
   private readonly policy: WalletRoutePolicy;
+  private readonly now: () => number;
 
   constructor(options: WalletApiPrivacyOperationsOptions) {
     this.wallet = options.wallet;
@@ -42,6 +46,7 @@ export class WalletApiPrivacyOperations implements PrivacyOperations {
     this.submission = options.submission;
     this.supportedVersions = options.supportedVersions;
     this.policy = options.policy;
+    this.now = options.now ?? Date.now;
   }
 
   async capability(signal?: AbortSignal): Promise<WalletCapability> {
@@ -110,9 +115,6 @@ export class WalletApiPrivacyOperations implements PrivacyOperations {
         'Shielding and private spending must be prepared as separate operations.',
       );
     }
-    if (kinds.has('swap')) {
-      throw new PrivacyError('unknown', 'The swap route is disabled until its private gateway is configured.');
-    }
     if (!hasShield && kinds.size > 1) {
       throw new PrivacyError('unknown', 'A private batch may contain only one approved route type.');
     }
@@ -120,11 +122,122 @@ export class WalletApiPrivacyOperations implements PrivacyOperations {
     const config = await this.poolConfig(signal);
     const warnings = await this.warningsFor(intents, signal);
     if (hasShield) return this.prepareShield(intents, config, warnings);
+    if (kinds.has('swap')) {
+      if (intents.length !== 1 || intents[0]?.kind !== 'swap') {
+        throw new PrivacyError('unknown', 'A private swap must be prepared one at a time.');
+      }
+      return this.prepareSwap(intents[0], config, warnings, signal);
+    }
 
     const route = intents[0]!.kind as PoolNativeRoute;
     const operationToken = tokenFor(intents[0]!);
     const fee = await this.estimateRelay(route, operationToken, config, signal);
     return this.preparePrivate(intents, route, operationToken, config, fee, warnings);
+  }
+
+  private async prepareSwap(
+    intent: Extract<Intent, { kind: 'swap' }>,
+    config: PoolConfig,
+    warnings: BatchWarning[],
+    signal?: AbortSignal,
+  ): Promise<PreparedBatch> {
+    const swapPolicy = this.policy.swap;
+    const prepareSwap = this.submission.prepareSwap?.bind(this.submission);
+    if (!swapPolicy || !prepareSwap) {
+      throw new PrivacyError('unknown', 'The private swap gateway is not configured.');
+    }
+    if (!Number.isSafeInteger(swapPolicy.slippageBps) || swapPolicy.slippageBps <= 0) {
+      throw new PrivacyError('unknown', 'The private swap slippage policy is invalid.');
+    }
+    const plan = await prepareSwap({
+      sellToken: intent.tokenIn,
+      buyToken: intent.tokenOut,
+      sellAmount: intent.amountIn,
+      minAmountOut: intent.minAmountOut,
+      slippageBps: swapPolicy.slippageBps,
+      signal,
+    });
+    this.validateSwapPlan(intent, config, plan, swapPolicy.expectedChainId);
+
+    const owner = this;
+    let discarded = false;
+    return {
+      intents: [intent],
+      poolFee: config.feeAmount,
+      gasEstimate: plan.fee.amount,
+      totalCost: config.feeAmount + plan.fee.amount,
+      warnings,
+      promptCount: 1,
+      async confirm({ feeCeiling, onProgress, signal: confirmSignal }) {
+        if (discarded) throw new PrivacyError('unknown', 'batch already discarded');
+        throwIfAborted(confirmSignal);
+        try {
+          const current = await owner.pool.config(confirmSignal);
+          owner.validateSwapPlan(intent, current, plan, swapPolicy.expectedChainId);
+          assertFeeCeiling(current.feeAmount + plan.fee.amount, feeCeiling);
+          const avnuPlan: PrivateSwapPlan = {
+            sellTokenAddress: intent.tokenIn,
+            sellAmount: intent.amountIn,
+            buyTokenAddress: intent.tokenOut,
+            executorAddress: plan.executorAddress,
+            executorCalls: plan.executorCalls,
+            fee: {
+              token: plan.fee.token,
+              recipient: plan.fee.recipient,
+              amount: plan.fee.amount,
+            },
+            takerAddress: owner.wallet.address,
+          };
+          const actions = buildStrk20Actions(avnuPlan);
+          onProgress?.({ stage: 'awaiting-approval', message: 'Confirm the private swap in your wallet' });
+          onProgress?.({ stage: 'proving', message: 'Your wallet is generating a proof' });
+          const artifact = await owner.wallet.strk20PrepareInvoke(actions, false);
+          throwIfAborted(confirmSignal);
+          onProgress?.({ stage: 'submitting', message: 'Submitting the quote-bound private swap' });
+          const result = await owner.submission.submit({
+            route: 'swap',
+            artifact,
+            feeAuthorization: plan.fee.authorization,
+            proofValidityBlocks: current.proofValidityBlocks,
+            signal: confirmSignal,
+          });
+          onProgress?.({ stage: 'done', message: 'Done' });
+          return result;
+        } catch (error) {
+          onProgress?.({ stage: 'failed', message: 'Private swap failed' });
+          throw mapWalletError(error);
+        }
+      },
+      discard() { discarded = true; },
+    };
+  }
+
+  private validateSwapPlan(
+    intent: Extract<Intent, { kind: 'swap' }>,
+    config: PoolConfig,
+    plan: PreparedPrivateSwap,
+    expectedChainId: string,
+  ): void {
+    if (plan.chainId !== expectedChainId) {
+      throw new PrivacyError('unknown', 'The private swap quote is for the wrong network.');
+    }
+    if (!Number.isSafeInteger(plan.expiresAt) || plan.expiresAt <= this.now()) {
+      throw new PrivacyError('unknown', 'The private swap quote has expired.');
+    }
+    if (plan.buyAmount < intent.minAmountOut) {
+      throw new PrivacyError('unknown', 'The private swap no longer meets the minimum output.');
+    }
+    assertAddress(plan.executorAddress, 'private swap executor');
+    if (plan.executorCalls.length === 0) {
+      throw new PrivacyError('unknown', 'The private swap contains no executor calls.');
+    }
+    for (const call of plan.executorCalls) {
+      assertAddress(call.contractAddress, 'private swap call target');
+      if (!call.entrypoint || call.calldata.some((felt) => !isFelt(felt))) {
+        throw new PrivacyError('unknown', 'The private swap contains malformed executor calls.');
+      }
+    }
+    this.validateRelayFee(plan.fee, config);
   }
 
   private prepareShield(
@@ -231,6 +344,11 @@ export class WalletApiPrivacyOperations implements PrivacyOperations {
       operationToken,
       signal,
     });
+    this.validateRelayFee(fee, config);
+    return fee;
+  }
+
+  private validateRelayFee(fee: RelayFeeQuote, config: PoolConfig): void {
     if (!sameAddress(fee.token, config.feeToken)) {
       throw new PrivacyError('unknown', 'The relay returned an unexpected fee token.');
     }
@@ -241,7 +359,6 @@ export class WalletApiPrivacyOperations implements PrivacyOperations {
     if (!fee.authorization || !Number.isSafeInteger(fee.expiresAtBlock) || fee.expiresAtBlock <= 0) {
       throw new PrivacyError('unknown', 'The relay returned no valid fee authorization.');
     }
-    return fee;
   }
 
   private async warningsFor(intents: Intent[], signal?: AbortSignal): Promise<BatchWarning[]> {
@@ -319,6 +436,10 @@ function assertAddress(address: string, label: string): void {
 
 function sameAddress(a: string, b: string): boolean {
   try { return BigInt(a) === BigInt(b); } catch { return false; }
+}
+
+function isFelt(value: string): boolean {
+  return /^0x[0-9a-fA-F]{1,64}$/.test(value);
 }
 
 function assertFeeCeiling(actual: bigint, ceiling: bigint): void {

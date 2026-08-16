@@ -3,6 +3,7 @@ import type { PoolConfig } from '../operations.js';
 import type {
   PoolReadClient,
   PrivateSubmissionGateway,
+  PreparedPrivateSwap,
   RelayFeeQuote,
 } from './types.js';
 
@@ -58,6 +59,45 @@ export class BackendPrivacyClient implements PoolReadClient, PrivateSubmissionGa
     return { transactionHash: asString(value.transactionHash) };
   }
 
+  async prepareSwap(
+    input: NonNullable<PrivateSubmissionGateway['prepareSwap']> extends (...args: infer A) => unknown
+      ? A[0]
+      : never,
+  ): Promise<PreparedPrivateSwap> {
+    const value = asRecord(await this.post('/v1/private/swaps/prepare', {
+      v: 1,
+      sellToken: input.sellToken,
+      buyToken: input.buyToken,
+      sellAmount: input.sellAmount.toString(),
+      minAmountOut: input.minAmountOut.toString(),
+      slippageBps: input.slippageBps,
+    }, input.signal));
+    const fee = asRecord(value.fee);
+    const rawCalls = asArray(value.executorCalls);
+    return {
+      quoteId: asString(value.quoteId),
+      buyAmount: BigInt(asString(value.buyAmount)),
+      expiresAt: asInteger(value.expiresAt),
+      chainId: asString(value.chainId),
+      executorAddress: asString(value.executorAddress),
+      executorCalls: rawCalls.map((raw) => {
+        const call = asRecord(raw);
+        return {
+          contractAddress: asString(call.contractAddress),
+          entrypoint: asString(call.entrypoint),
+          calldata: asArray(call.calldata).map(asString),
+        };
+      }),
+      fee: {
+        token: asString(fee.token),
+        recipient: asString(fee.recipient),
+        amount: BigInt(asString(fee.amount)),
+        authorization: asString(fee.authorization),
+        expiresAtBlock: asInteger(fee.expiresAtBlock),
+      },
+    };
+  }
+
   private async post(path: string, body: unknown, signal?: AbortSignal): Promise<unknown> {
     let response: Response;
     try {
@@ -97,6 +137,13 @@ function asString(value: unknown): string {
 
 function asInteger(value: unknown): number {
   if (typeof value !== 'number' || !Number.isSafeInteger(value)) {
+    throw new PrivacyError('unknown', 'The private service returned an invalid response.');
+  }
+  return value;
+}
+
+function asArray(value: unknown): unknown[] {
+  if (!Array.isArray(value)) {
     throw new PrivacyError('unknown', 'The private service returned an invalid response.');
   }
   return value;

@@ -1,4 +1,9 @@
-import type { PreparedArtifact, PrivateRoute, RelayFee } from './types.js';
+import type {
+  PreparedArtifact,
+  PrivateRoute,
+  RelayFee,
+  SwapAuthorizationBinding,
+} from './types.js';
 import { ApiFailure, sameAddress } from './validation.js';
 
 type ServerAction =
@@ -55,6 +60,7 @@ export function validateServerActionRoute(
   route: PrivateRoute,
   artifact: PreparedArtifact,
   fee: RelayFee,
+  swap?: SwapAuthorizationBinding,
 ): void {
   const calldata = artifact.call.calldata ?? [];
   const output = artifact.proof.output;
@@ -85,8 +91,29 @@ export function validateServerActionRoute(
   } else if (route === 'unshield') {
     if (invokes.length > 0) throw new ApiFailure(400, 'Unshield route cannot invoke an external contract.');
     if (transfers.length > 2) throw new ApiFailure(400, 'Unshield route contains excess withdrawals.');
-  } else if (invokes.length !== 1) {
-    throw new ApiFailure(400, 'Swap route must contain exactly one private executor call.');
+  } else {
+    if (!swap) throw new ApiFailure(401, 'Swap authorization has no quote binding.');
+    if (invokes.length !== 1) {
+      throw new ApiFailure(400, 'Swap route must contain exactly one private executor call.');
+    }
+    const invoke = invokes[0]!;
+    if (!sameAddress(invoke.contract, swap.executor)) {
+      throw new ApiFailure(400, 'Swap executor does not match the authorized AVNU plan.');
+    }
+    if (
+      invoke.calldata.length !== swap.invokePrefix.length + 1 ||
+      swap.invokePrefix.some((felt, index) => !sameFelt(felt, invoke.calldata[index]!))
+    ) {
+      throw new ApiFailure(400, 'Swap calldata does not match the authorized AVNU plan.');
+    }
+    const sellTransfers = transfers.filter((action) =>
+      sameAddress(action.to, swap.executor) &&
+      sameAddress(action.token, swap.sellToken) &&
+      action.amount === swap.sellAmount,
+    );
+    if (sellTransfers.length !== 1 || transfers.length !== 2) {
+      throw new ApiFailure(400, 'Swap withdrawals do not match the authorized AVNU plan.');
+    }
   }
 }
 

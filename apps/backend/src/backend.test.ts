@@ -7,6 +7,7 @@ import {
   type PaymasterPort,
   type PoolRpcPort,
   type PreparedArtifact,
+  type SwapPlannerPort,
 } from './index.js';
 
 const POOL = '0x123';
@@ -19,18 +20,9 @@ const artifact: PreparedArtifact = {
   proof: { data: 'proof-data', output: ['0xc1', ...transferCalldata], proof_facts: ['0x4'] },
 };
 
-const swapCalldata = [
-  '0x2',
-  '0x3', FEE_RECIPIENT, STRK, '0x7',
-  '0x9', '0x999', '0x1', '0xabc',
-];
-const swapArtifact: PreparedArtifact = {
-  call: { contract_address: POOL, entry_point: 'apply_actions', calldata: swapCalldata },
-  proof: { data: 'proof-data', output: ['0xc1', ...swapCalldata], proof_facts: ['0x4'] },
-};
-
 function fixture(overrides: Partial<BackendConfig> = {}) {
   let block = 1_000;
+  let now = 1_000;
   const delays: number[] = [];
   const submitted: PreparedArtifact[] = [];
   const paymaster: PaymasterPort = {
@@ -66,9 +58,33 @@ function fixture(overrides: Partial<BackendConfig> = {}) {
     routes: {
       transfer: { enabled: true, maxRelayFee: 10n, maxQueueDelayMs: 500, quoteBound: false },
       unshield: { enabled: true, maxRelayFee: 10n, maxQueueDelayMs: 500, quoteBound: false },
-      swap: { enabled: true, maxRelayFee: 10n, maxQueueDelayMs: 0, quoteBound: true },
+      swap: {
+        enabled: true,
+        maxRelayFee: 10n,
+        maxQueueDelayMs: 0,
+        quoteBound: true,
+        allowedTokens: [STRK, '0xabc'],
+        maxSlippageBps: 300,
+      },
     },
     ...overrides,
+  };
+  const swapPlanner: SwapPlannerPort = {
+    async prepare() {
+      return {
+        quoteId: 'quote-1',
+        buyAmount: 100n,
+        expiresAt: 2_000,
+        chainId: '0x534e5f4d41494e',
+        executorAddress: '0x999',
+        executorCalls: [{
+          contractAddress: '0x111',
+          entrypoint: 'swap',
+          selector: '0x555',
+          calldata: ['0xaaa'],
+        }],
+      };
+    },
   };
   const api = new BackendApi({
     config,
@@ -77,7 +93,8 @@ function fixture(overrides: Partial<BackendConfig> = {}) {
     authorizations: new MemoryAuthorizationCodec(),
     randomInt: () => 250,
     sleep: async (ms) => { delays.push(ms); },
-    now: () => 1_000,
+    now: () => now,
+    swapPlanner,
   });
   return {
     api,
@@ -86,6 +103,7 @@ function fixture(overrides: Partial<BackendConfig> = {}) {
     delays,
     submitted,
     setBlock(value: number) { block = value; },
+    setNow(value: number) { now = value; },
   };
 }
 
@@ -150,7 +168,14 @@ describe('strict fee authorization', () => {
       routes: {
         transfer: { enabled: false, maxRelayFee: 10n, maxQueueDelayMs: 500, quoteBound: false },
         unshield: { enabled: true, maxRelayFee: 10n, maxQueueDelayMs: 500, quoteBound: false },
-        swap: { enabled: true, maxRelayFee: 10n, maxQueueDelayMs: 0, quoteBound: true },
+        swap: {
+          enabled: true,
+          maxRelayFee: 10n,
+          maxQueueDelayMs: 0,
+          quoteBound: true,
+          allowedTokens: [STRK, '0xabc'],
+          maxSlippageBps: 300,
+        },
       },
     });
     await expect(disabled.api.handle({
@@ -181,12 +206,82 @@ describe('bounded private submission', () => {
 
   it('never delays a quote-bound route', async () => {
     const { api, delays } = fixture();
-    const quote = await fee(api, 'swap');
-    await api.handle({
-      method: 'POST', path: '/v1/private/submissions',
-      body: { v: 1, route: 'swap', artifact: swapArtifact, feeAuthorization: quote.authorization, proofValidityBlocks: 450 },
+    const prepared = await api.handle({
+      method: 'POST', path: '/v1/private/swaps/prepare',
+      body: {
+        v: 1,
+        sellToken: '0xabc',
+        buyToken: STRK,
+        sellAmount: '20',
+        minAmountOut: '90',
+        slippageBps: 100,
+      },
     });
+    expect(prepared.status).toBe(200);
+    const plan = prepared.body as {
+      fee: { authorization: string };
+    };
+    const invokeCalldata = [
+      STRK,
+      '0x1', '0x111', '0x555', '0x1', '0xaaa',
+      '0x777',
+    ];
+    const swapCalldata = [
+      '0x3',
+      '0x3', '0x999', '0xabc', '0x14',
+      '0x3', FEE_RECIPIENT, STRK, '0x7',
+      '0x9', '0x999', `0x${invokeCalldata.length.toString(16)}`, ...invokeCalldata,
+    ];
+    const swapArtifact: PreparedArtifact = {
+      call: { contract_address: POOL, entry_point: 'apply_actions', calldata: swapCalldata },
+      proof: { data: 'proof-data', output: ['0xc1', ...swapCalldata], proof_facts: ['0x4'] },
+    };
+    const result = await api.handle({
+      method: 'POST', path: '/v1/private/submissions',
+      body: {
+        v: 1,
+        route: 'swap',
+        artifact: swapArtifact,
+        feeAuthorization: plan.fee.authorization,
+        proofValidityBlocks: 450,
+      },
+    });
+    expect(result.status).toBe(200);
     expect(delays).toEqual([]);
+  });
+
+  it('rejects a swap after its AVNU quote expiry even while the block authorization is live', async () => {
+    const { api, setNow, submitted } = fixture();
+    const prepared = await api.handle({
+      method: 'POST', path: '/v1/private/swaps/prepare',
+      body: {
+        v: 1, sellToken: '0xabc', buyToken: STRK,
+        sellAmount: '20', minAmountOut: '90', slippageBps: 100,
+      },
+    });
+    const plan = prepared.body as { fee: { authorization: string } };
+    const invokeCalldata = [STRK, '0x1', '0x111', '0x555', '0x1', '0xaaa', '0x777'];
+    const calldata = [
+      '0x3',
+      '0x3', '0x999', '0xabc', '0x14',
+      '0x3', FEE_RECIPIENT, STRK, '0x7',
+      '0x9', '0x999', `0x${invokeCalldata.length.toString(16)}`, ...invokeCalldata,
+    ];
+    setNow(2_001);
+    await expect(api.handle({
+      method: 'POST', path: '/v1/private/submissions',
+      body: {
+        v: 1,
+        route: 'swap',
+        artifact: {
+          call: { contract_address: POOL, entry_point: 'apply_actions', calldata },
+          proof: { data: 'proof', output: ['0xc1', ...calldata], proof_facts: ['0x1'] },
+        },
+        feeAuthorization: plan.fee.authorization,
+        proofValidityBlocks: 450,
+      },
+    })).resolves.toMatchObject({ status: 409 });
+    expect(submitted).toHaveLength(0);
   });
 
   it('fails closed on arbitrary targets, empty proofs, expired authorizations, and route mismatch', async () => {

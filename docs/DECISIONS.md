@@ -629,7 +629,7 @@ person, rather than being inherited by accident.
 
 ## D-021 — Public value gets funnelled back into the pool
 
-**2026-08-16 · Accepted**
+**2026-08-16 · Accepted · partially superseded by D-023 for `exchange.swap`**
 
 **Context.** Pool STRK is the game's money and its gas (D-013). Several routes
 nevertheless leave value sitting in public: the Bridge delivers public STRK, and
@@ -693,3 +693,39 @@ that the funded rendered UI has been observed.
 sequencing error, handle `maturityKnown: false`, and keep exact prompt copy
 provisional until the funded UI run. No caller receives a fabricated maturity
 split or loses one of two transaction receipts.
+
+---
+
+## D-023 — AVNU swaps are server-planned, wallet-proven and quote-bound
+
+**2026-08-16 · Accepted · amends D-014, D-015 and D-018; partially supersedes D-021**
+
+**Context.** The Exchange needs AVNU's dynamic private executor and paymaster,
+but the browser cannot hold the paymaster key and must never be allowed to turn
+a route into an arbitrary relay. The installed AVNU 4.2.0 SDK also establishes
+an important output invariant: `buildStrk20Actions()` withdraws the sell asset
+to the executor, pays the private fee, creates an `OPEN` output note for the
+wallet, and invokes the executor atomically. The bought asset is already back
+in the pool; D-021's Exchange return-to-pool prompt was therefore wrong.
+
+**Decision.** The backend selects an exact-input AVNU quote, enforces minimum
+output, chain, token allowlist, slippage and expiry, and calls
+`quoteToCalls({ private: true })`. It returns the executor plan plus a stateless
+HMAC authorization binding the route, sell/buy tokens, sell amount, executor,
+serialized call prefix, fee and quote expiry.
+
+The browser passes that plan to AVNU's `buildStrk20Actions()` and asks the
+connected Wallet API account to prove it. On submission, the backend checks
+that the proof output binds the pool call, decodes the resulting
+`Span<ServerAction>`, and requires the exact authorized sell withdrawal, fee
+withdrawal and executor invocation. The wallet-resolved open-note id is the
+only unbound final felt. Swap preparation has its own endpoint; the generic fee
+endpoint cannot authorize swaps. Quote-bound submissions are never delayed.
+
+**Consequences.** The Exchange remains an approved first-party STRK20 route,
+not a generic contract-call surface. A stale quote, wrong chain, unexpected
+token, changed executor/call, excessive fee or disabled route fails closed
+before relay. `exchange.swap.returnToPool` is false because the output is
+already a private note; `bridge.deposit` remains true because bridge delivery
+is public. Funded mainnet evidence is still required before launch to prove
+Wallet API artifact compatibility with AVNU's live paymaster.

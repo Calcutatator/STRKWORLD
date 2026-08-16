@@ -30,4 +30,38 @@ describe('BackendPrivacyClient', () => {
     const client = new BackendPrivacyClient('https://backend.example', async () => response({ message: 'paused' }, 503));
     await expect(client.config()).rejects.toMatchObject({ kind: 'unreachable', message: 'paused' });
   });
+
+  it('parses a quote-bound private swap plan without losing bigint amounts', async () => {
+    const fetcher = vi.fn(async () => response({
+      quoteId: 'quote-1',
+      buyAmount: '900719925474099312345',
+      expiresAt: 2_000,
+      chainId: '0x534e5f4d41494e',
+      executorAddress: '0x999',
+      executorCalls: [{
+        contractAddress: '0x111',
+        entrypoint: 'swap',
+        selector: '0x555',
+        calldata: ['0xaaa'],
+      }],
+      fee: {
+        token: '0x4718', recipient: '0x789', amount: '7', authorization: 'auth', expiresAtBlock: 1450,
+      },
+    }));
+    const client = new BackendPrivacyClient('https://backend.example', fetcher);
+    await expect(client.prepareSwap({
+      sellToken: '0xabc',
+      buyToken: '0x4718',
+      sellAmount: 20n,
+      minAmountOut: 90n,
+      slippageBps: 100,
+    })).resolves.toMatchObject({
+      buyAmount: 900719925474099312345n,
+      fee: { amount: 7n, authorization: 'auth' },
+    });
+    expect(fetcher).toHaveBeenCalledWith(
+      'https://backend.example/v1/private/swaps/prepare',
+      expect.objectContaining({ body: expect.stringContaining('"sellAmount":"20"') }),
+    );
+  });
 });

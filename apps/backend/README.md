@@ -42,15 +42,24 @@ for the building privacy-admission rule.
 
 ## Implemented core
 
-`BackendApi` is a framework-neutral, versioned handler for the exact five
-operations the browser needs: fee build, prepared submission, pool config,
-recipient public key and receipt lookup. Schemas reject unknown fields. The
+`BackendApi` is a framework-neutral, versioned handler for the exact six
+operations the browser needs: pool-native fee build, quote-bound swap prepare,
+prepared submission, pool config, recipient public key and receipt lookup.
+Schemas reject unknown fields. The
 submission validator accepts only the configured pool's `apply_actions`,
 bounded calldata and a non-empty bounded proof. It verifies that the proof
 output contains the same serialized server actions as the call, decodes that
 `Span<ServerAction>`, and applies route policy: transfer/unshield cannot hide an
 external `Invoke`, the exact authorized paymaster withdrawal must be present,
 and a transfer cannot smuggle a public withdrawal.
+
+For AVNU swaps the server selects an exact-input quote and requests
+`quoteToCalls({ private: true })`. Its HMAC authorization additionally binds
+the sell/buy tokens, sell amount, dynamic executor, serialized executor calls
+and quote expiry. At submission the decoded proof must contain exactly that
+sell withdrawal, fee withdrawal and executor invocation; only the final
+wallet-resolved open-note id is variable. Generic fee requests cannot authorize
+the swap route.
 
 Fee build returns an HMAC authorization binding route, fee token, operation
 token, recipient, amount and block-validity window. The server keeps no quote

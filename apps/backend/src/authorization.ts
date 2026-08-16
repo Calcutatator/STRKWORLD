@@ -1,7 +1,13 @@
 import type { AuthorizationCodec, FeeAuthorizationClaims } from './types.js';
 
 function toWire(claims: FeeAuthorizationClaims) {
-  return { ...claims, amount: claims.amount.toString() };
+  return {
+    ...claims,
+    amount: claims.amount.toString(),
+    swap: claims.swap
+      ? { ...claims.swap, sellAmount: claims.swap.sellAmount.toString() }
+      : undefined,
+  };
 }
 
 function fromWire(value: unknown): FeeAuthorizationClaims | null {
@@ -9,7 +15,16 @@ function fromWire(value: unknown): FeeAuthorizationClaims | null {
   const record = value as Record<string, unknown>;
   try {
     if (record.v !== 1 || typeof record.amount !== 'string') return null;
-    return { ...record, amount: BigInt(record.amount) } as unknown as FeeAuthorizationClaims;
+    const swap = record.swap && typeof record.swap === 'object'
+      ? record.swap as Record<string, unknown>
+      : undefined;
+    return {
+      ...record,
+      amount: BigInt(record.amount),
+      swap: swap
+        ? { ...swap, sellAmount: BigInt(String(swap.sellAmount)) }
+        : undefined,
+    } as unknown as FeeAuthorizationClaims;
   } catch {
     return null;
   }

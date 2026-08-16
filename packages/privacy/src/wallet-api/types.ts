@@ -24,6 +24,7 @@ export interface PoolReadClient {
 }
 
 export type PoolNativeRoute = 'unshield' | 'transfer';
+export type PrivateRoute = PoolNativeRoute | 'swap';
 
 export interface RelayFeeQuote {
   token: Address;
@@ -34,6 +35,21 @@ export interface RelayFeeQuote {
   expiresAtBlock: number;
 }
 
+export interface PreparedPrivateSwap {
+  quoteId: string;
+  buyAmount: bigint;
+  /** Unix epoch milliseconds. */
+  expiresAt: number;
+  chainId: string;
+  executorAddress: Address;
+  executorCalls: Array<{
+    contractAddress: Address;
+    entrypoint: string;
+    calldata: string[];
+  }>;
+  fee: RelayFeeQuote;
+}
+
 export interface PrivateSubmissionGateway {
   estimate(input: {
     route: PoolNativeRoute;
@@ -42,18 +58,31 @@ export interface PrivateSubmissionGateway {
     signal?: AbortSignal;
   }): Promise<RelayFeeQuote>;
   submit(input: {
-    route: PoolNativeRoute;
+    route: PrivateRoute;
     artifact: STRK20_CALL_AND_PROOF;
     feeAuthorization: string;
     proofValidityBlocks: number;
     signal?: AbortSignal;
   }): Promise<TxResult>;
+  /** Quote-bound AVNU route. Missing means swaps fail closed. */
+  prepareSwap?(input: {
+    sellToken: Address;
+    buyToken: Address;
+    sellAmount: bigint;
+    minAmountOut: bigint;
+    slippageBps: number;
+    signal?: AbortSignal;
+  }): Promise<PreparedPrivateSwap>;
 }
 
 export interface WalletRoutePolicy {
   maxIntents: number;
   maxRelayFee: bigint;
   enabledRoutes: readonly ('shield' | 'unshield' | 'transfer' | 'swap')[];
+  swap?: {
+    expectedChainId: string;
+    slippageBps: number;
+  };
 }
 
 export type SupportedVersionsReader = (signal?: AbortSignal) => Promise<readonly string[]>;

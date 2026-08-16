@@ -195,7 +195,12 @@ getBalances([])   // empty array = all shielded tokens
 
 ### The Exchange — AVNU · no Cairo
 
-Ride AVNU's deployed executor via `@avnu/avnu-sdk@^4.2.0`. Its `createStrk20WalletProver` calls `strk20PrepareInvoke` and submits through AVNU's paymaster — a working reference for the sponsor-pays pattern.
+Ride AVNU's deployed executor via exact-pinned `@avnu/avnu-sdk@4.2.0`. The
+backend selects a private quote and binds its dynamic executor plan and fee;
+the browser uses `buildStrk20Actions`, and the connected wallet calls
+`strk20PrepareInvoke`. The resulting proof is submitted through AVNU's
+paymaster without exposing its key. The bought asset becomes an `OPEN` pool
+note atomically, so it is already part of the game's private balance.
 
 ### The Vault — Vesu lending · ~150–200 lines Cairo
 

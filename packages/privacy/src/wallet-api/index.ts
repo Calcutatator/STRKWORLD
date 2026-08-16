@@ -7,8 +7,10 @@ export {
 } from './operations.js';
 export type {
   PoolNativeRoute,
+  PrivateRoute,
   PoolReadClient,
   PrivateSubmissionGateway,
+  PreparedPrivateSwap,
   RelayFeeQuote,
   SupportedVersionsReader,
   WalletRoutePolicy,

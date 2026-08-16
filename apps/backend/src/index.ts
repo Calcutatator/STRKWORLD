@@ -1,5 +1,6 @@
 export { BackendApi } from './api.js';
 export { AvnuPaymasterPort, type AvnuPaymasterOptions } from './avnu-paymaster.js';
+export { AvnuSwapPlanner, type AvnuSwapPlannerOptions } from './avnu-swap-planner.js';
 export { HmacAuthorizationCodec, MemoryAuthorizationCodec } from './authorization.js';
 export { AggregateMetrics, AggregateRateLimiter } from './metrics.js';
 export { decodeServerActions, validateServerActionRoute } from './server-actions.js';
@@ -17,4 +18,7 @@ export type {
   PrivateRoute,
   RelayFee,
   RoutePolicy,
+  SwapAuthorizationBinding,
+  SwapPlan,
+  SwapPlannerPort,
 } from './types.js';

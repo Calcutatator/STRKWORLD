@@ -9,6 +9,7 @@ import type {
   PaymasterPort,
   PoolRpcPort,
   PrivateRoute,
+  SwapPlannerPort,
 } from './types.js';
 import {
   ApiFailure,
@@ -29,6 +30,7 @@ interface BackendApiOptions {
   randomInt?: (maxInclusive: number) => number;
   sleep?: (ms: number) => Promise<void>;
   now?: () => number;
+  swapPlanner?: SwapPlannerPort;
 }
 
 export class BackendApi {
@@ -40,6 +42,8 @@ export class BackendApi {
   private readonly authorizations: AuthorizationCodec;
   private readonly randomInt: (maxInclusive: number) => number;
   private readonly sleep: (ms: number) => Promise<void>;
+  private readonly swapPlanner?: SwapPlannerPort;
+  private readonly clockNow: () => number;
 
   constructor(options: BackendApiOptions) {
     this.config = options.config;
@@ -48,7 +52,9 @@ export class BackendApi {
     this.authorizations = options.authorizations;
     this.randomInt = options.randomInt ?? ((max) => Math.floor(Math.random() * (max + 1)));
     this.sleep = options.sleep ?? ((ms) => new Promise((resolve) => setTimeout(resolve, ms)));
+    this.swapPlanner = options.swapPlanner;
     const now = options.now ?? Date.now;
+    this.clockNow = now;
     this.limiter = new AggregateRateLimiter(
       this.config.rateLimit.maxRequests,
       this.config.rateLimit.windowMs,
@@ -73,6 +79,7 @@ export class BackendApi {
       switch (request.path) {
         case '/v1/private/fees': response = await this.fee(request.body); break;
         case '/v1/private/submissions': response = await this.submit(request.body); break;
+        case '/v1/private/swaps/prepare': response = await this.prepareSwap(request.body); break;
         case '/v1/rpc/pool-config': response = await this.poolConfig(request.body); break;
         case '/v1/rpc/public-key': response = await this.publicKey(request.body); break;
         case '/v1/rpc/receipt': response = await this.receipt(request.body); break;
@@ -90,6 +97,9 @@ export class BackendApi {
     requireVersion(value);
     const route = requireRoute(value.route);
     const policy = this.routePolicy(route);
+    if (route === 'swap') {
+      throw new ApiFailure(400, 'Use the quote-bound swap preparation endpoint.');
+    }
     const feeToken = requireFelt(value.feeToken, 'fee token');
     const operationToken = requireFelt(value.operationToken, 'operation token');
     if (!sameAddress(feeToken, this.config.feeToken)) {
@@ -149,11 +159,14 @@ export class BackendApi {
     const claims = await this.authorizations.verify(value.feeAuthorization);
     if (!claims) throw new ApiFailure(401, 'Fee authorization is invalid.');
     this.validateClaims(claims, route, validity, policy.maxRelayFee);
+    if (claims.swap && claims.swap.quoteExpiresAt <= this.clockNow()) {
+      throw new ApiFailure(409, 'The private swap quote has expired.');
+    }
     validateServerActionRoute(route, artifact, {
       token: claims.token,
       recipient: claims.recipient,
       amount: claims.amount,
-    });
+    }, claims.swap);
 
     let block = await this.rpc.getBlockNumber();
     if (block > claims.expiresAtBlock) throw new ApiFailure(409, 'Prepared proof has expired.');
@@ -182,6 +195,114 @@ export class BackendApi {
         feeToken: config.feeToken,
         proofValidityBlocks: config.proofValidityBlocks,
         noteMaturityBlocks: config.noteMaturityBlocks,
+      },
+    };
+  }
+
+  private async prepareSwap(body: unknown): Promise<ApiResponse> {
+    if (!this.swapPlanner) throw new ApiFailure(503, 'The private swap planner is unavailable.');
+    const value = requireRecord(
+      body,
+      ['v', 'sellToken', 'buyToken', 'sellAmount', 'minAmountOut', 'slippageBps'],
+    );
+    requireVersion(value);
+    const policy = this.routePolicy('swap');
+    const sellToken = requireFelt(value.sellToken, 'sell token');
+    const buyToken = requireFelt(value.buyToken, 'buy token');
+    const sellAmount = requireBigintString(value.sellAmount, 'sell amount');
+    const minAmountOut = requireBigintString(value.minAmountOut, 'minimum output');
+    const slippageBps = requirePositiveInteger(value.slippageBps, 'slippage');
+    if (slippageBps > (policy.maxSlippageBps ?? 500)) {
+      throw new ApiFailure(400, 'Swap slippage exceeds route policy.');
+    }
+    const allowlist = policy.allowedTokens ?? [];
+    if (
+      !allowlist.some((token) => sameAddress(token, sellToken)) ||
+      !allowlist.some((token) => sameAddress(token, buyToken))
+    ) {
+      throw new ApiFailure(400, 'Swap token is not allowlisted.');
+    }
+
+    const [plan, block, poolConfig] = await Promise.all([
+      this.swapPlanner.prepare({ sellToken, buyToken, sellAmount, minAmountOut, slippageBps }),
+      this.rpc.getBlockNumber(),
+      this.rpc.getPoolConfig(),
+    ]);
+    if (
+      !plan.quoteId ||
+      !plan.chainId ||
+      !isFelt(plan.executorAddress) ||
+      plan.buyAmount < minAmountOut ||
+      !Number.isSafeInteger(plan.expiresAt) ||
+      plan.expiresAt <= this.clockNow() ||
+      plan.executorCalls.length === 0
+    ) {
+      throw new ApiFailure(409, 'AVNU returned a stale or invalid private quote.');
+    }
+    for (const call of plan.executorCalls) {
+      if (
+        !isFelt(call.contractAddress) ||
+        !isFelt(call.selector) ||
+        !call.entrypoint ||
+        call.calldata.some((felt) => !isFelt(felt))
+      ) {
+        throw new ApiFailure(502, 'AVNU returned malformed private executor calls.');
+      }
+    }
+    const fee = await this.paymaster.buildFee({
+      route: 'swap',
+      poolAddress: this.config.poolAddress,
+      feeToken: this.config.feeToken,
+      operationToken: sellToken,
+    });
+    if (
+      !sameAddress(fee.token, this.config.feeToken) ||
+      fee.amount < 0n ||
+      fee.amount > policy.maxRelayFee
+    ) {
+      throw new ApiFailure(400, 'Paymaster fee exceeds swap policy.');
+    }
+    requireFelt(fee.recipient, 'fee recipient');
+    const invokePrefix = [buyToken, ...serializeCairo1Calls(plan.executorCalls)];
+    // count + two TransferTo actions + Invoke header + buy token/open-note id
+    if (invokePrefix.length + 13 > this.config.maxCalldataItems) {
+      throw new ApiFailure(413, 'AVNU private executor plan is too large.');
+    }
+    const claims: FeeAuthorizationClaims = {
+      v: 1,
+      route: 'swap',
+      feeToken: this.config.feeToken,
+      operationToken: sellToken,
+      token: fee.token,
+      recipient: fee.recipient,
+      amount: fee.amount,
+      issuedAtBlock: block,
+      expiresAtBlock: block + poolConfig.proofValidityBlocks,
+      swap: {
+        executor: plan.executorAddress,
+        sellToken,
+        buyToken,
+        sellAmount,
+        quoteExpiresAt: plan.expiresAt,
+        invokePrefix,
+      },
+    };
+    return {
+      status: 200,
+      body: {
+        quoteId: plan.quoteId,
+        buyAmount: plan.buyAmount.toString(),
+        expiresAt: plan.expiresAt,
+        chainId: plan.chainId,
+        executorAddress: plan.executorAddress,
+        executorCalls: plan.executorCalls,
+        fee: {
+          token: fee.token,
+          recipient: fee.recipient,
+          amount: fee.amount.toString(),
+          authorization: await this.authorizations.issue(claims),
+          expiresAtBlock: claims.expiresAtBlock,
+        },
       },
     };
   }
@@ -230,6 +351,35 @@ export class BackendApi {
     }
     return { status: 502, body: { code: 'UPSTREAM_FAILURE', message: 'A private service dependency failed.' } };
   }
+}
+
+function requireBigintString(value: unknown, label: string): bigint {
+  if (typeof value !== 'string' || !/^[1-9][0-9]*$/.test(value)) {
+    throw new ApiFailure(400, `Invalid ${label}.`);
+  }
+  return BigInt(value);
+}
+
+function serializeCairo1Calls(
+  calls: Array<{ contractAddress: string; selector: string; calldata: string[] }>,
+): string[] {
+  return [
+    toFelt(BigInt(calls.length)),
+    ...calls.flatMap((call) => [
+      call.contractAddress,
+      call.selector,
+      toFelt(BigInt(call.calldata.length)),
+      ...call.calldata,
+    ]),
+  ];
+}
+
+function isFelt(value: string): boolean {
+  return /^0x[0-9a-fA-F]{1,64}$/.test(value);
+}
+
+function toFelt(value: bigint): string {
+  return `0x${value.toString(16)}`;
 }
 
 function clamp(value: number, min: number, max: number): number {

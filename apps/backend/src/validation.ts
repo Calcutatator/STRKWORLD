@@ -61,7 +61,12 @@ export function validateArtifact(value: unknown, config: BackendConfig): Prepare
   if (new TextEncoder().encode(proof.data).byteLength > config.maxProofBytes) {
     throw new ApiFailure(413, 'Prepared proof is too large.');
   }
-  const output = requireFeltArray(proof.output, 'proof output', 64, false);
+  const output = requireFeltArray(
+    proof.output,
+    'proof output',
+    config.maxCalldataItems + 1,
+    false,
+  );
   const proofFacts = requireFeltArray(proof.proof_facts, 'proof facts', 64, false);
   return {
     call: { contract_address: contractAddress, entry_point: 'apply_actions', calldata },
