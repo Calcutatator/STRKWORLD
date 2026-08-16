@@ -577,3 +577,50 @@ financial action must still use an approved private execution path, and
 backend submission remains decoupled where the route permits it. D-016's
 overlay choice may remain, but its requirement that the avatar stay on the
 street and make entry indistinguishable is superseded.
+
+---
+
+## D-020 — Absolute privacy is the default; every deviation needs approval
+
+**2026-08-16 · Accepted · strengthens D-018**
+
+**Context.** D-018 established that every financial building needs an approved
+private execution path. It did not say *how private*, and the routes differ
+sharply: a private transfer hides everything, an anonymizer-mediated swap hides
+who but not how much, a shield names the depositor and the amount, and the
+bridge is public end to end.
+
+Left implicit, those differences get discovered by a player rather than decided
+by us.
+
+**Decision.** Privacy is graded, and **absolute privacy is the default**. Any
+route below it is a deviation requiring two things before it can ship:
+
+1. **Recorded approval from the project lead**, in
+   `packages/shared/src/privacy-grades.ts`, with a rationale.
+2. **Plain-language disclosure to the player**, stored in the same entry so the
+   copy cannot drift from the grade it describes.
+
+Four grades, each mapped to a verified protocol property rather than a
+marketing label:
+
+| Grade | Means |
+|---|---|
+| `private` | Parties and amounts hidden, no public leg. Ships without approval |
+| `anonymous` | Parties hidden, **amounts visible**. Open notes carry plaintext amounts |
+| `public-edge` | The action names the actor and the amount on-chain |
+| `public` | No privacy claim |
+
+**An unapproved deviation renders a locked door, not a downgrade.** Silently
+shipping less privacy than the default is the single failure this exists to
+prevent, and CI check 8 fails the build rather than trusting anyone to remember.
+
+**Consequences.** Four v1 routes are deviations and currently await approval:
+`bank.shield` and `bank.unshield` (`public-edge`), `exchange.swap`
+(`anonymous`), and `bridge.deposit` (`public`). Only `post-office.transfer` is
+`private` and ships unconditionally.
+
+Run `./scripts/privacy-report.sh` for the current state. A new integration
+cannot reach players before its grade is stated and, if it is a deviation,
+approved — which is the point: the decision surfaces at integration time, to a
+person, rather than being inherited by accident.

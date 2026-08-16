@@ -151,6 +151,39 @@ else
   ok "supersession is discoverable both ways"
 fi
 
+# 8. Privacy default is ABSOLUTE. Any route below `private` is a deviation and
+#    needs the project lead's recorded approval plus plain-language disclosure.
+#    Unapproved means a locked door, never a quiet downgrade.
+reg="packages/shared/src/privacy-grades.ts"
+if [ -f "$reg" ]; then
+  unapproved=$(python3 - "$reg" <<'PYEOF'
+import re, sys
+src = open(sys.argv[1]).read()
+blocks = re.findall(r"\{\s*building:.*?\n  \}", src, re.S)
+bad = []
+for b in blocks:
+    route = (re.search(r"route:\s*'([^']+)'", b) or [None, "?"])[1]
+    grade = (re.search(r"grade:\s*'([^']+)'", b) or [None, "?"])[1]
+    if grade == "private":
+        continue
+    approved = re.search(r"approvedBy:\s*'[^']+'", b)
+    disclosed = re.search(r"disclosure:\s*\n?\s*'", b) or re.search(r'disclosure:\s*\n?\s*"', b)
+    if not approved or not disclosed:
+        bad.append(f"{route} ({grade})")
+print(" ".join(bad))
+PYEOF
+)
+  if [ -n "$unapproved" ]; then
+    bad "route(s) below absolute privacy without recorded approval: $unapproved"
+    note "These must render a LOCKED DOOR until approved — never a silent downgrade."
+    note "Run ./scripts/privacy-report.sh and take it to the project lead."
+  else
+    ok "every privacy deviation is approved and disclosed"
+  fi
+else
+  bad "privacy register missing: $reg"
+fi
+
 echo
 if [ "$fail" -eq 0 ]; then
   echo "All invariants hold."
