@@ -182,3 +182,77 @@ build time.
 **Consequences.** Following the earlier advice would have produced maps Phaser
 silently refuses to load. Map authoring guidance lives in
 `packages/world/README.md` so it is next to the work.
+
+---
+
+## D-009 — The Bridge is a fifth building, in its own package, and it is public
+
+**2026-08-16 · Accepted**
+
+**Context.** Players need a way to get value into STRKWORLD from another chain
+and back out. `shieldup` already implements this over NEAR Intents 1Click
+(`@defuse-protocol/one-click-sdk-typescript`), bidirectional, with a resumable
+multi-leg pipeline — roughly 1,200 lines of proven orchestration.
+
+**Decision.** Add a Bridge building in v1, in a **separate package**
+(`packages/bridge`) rather than inside `packages/privacy`.
+
+**Consequences.** The separation is the point: `privacy` is the STRK20 seam,
+and the Bridge does not touch the pool. Folding it in would put public
+cross-chain rails behind an interface named for privacy, which is how a
+privacy claim gets made by accident. A CI check enforces that the bridge never
+imports the privacy package.
+
+The Bridge does need Starknet for the OUT-direction ERC-20 transfer, so the
+"starknet only in `packages/privacy`" invariant widens to "privacy and bridge".
+`world`, `lobby` and `shared` remain chain-free, which is what that invariant
+was actually protecting.
+
+**The honesty rule.** Bridging is a funding feature, not a privacy feature. A
+bridge-in lands a public ERC-20 with a visible amount and recipient; shielding
+happens afterwards at the Bank as a separate transaction. Bundling them would
+publish the link the pool exists to break. The building's copy must say so.
+
+StarkWare's own `privacy-bridge` (USDC over CCTP, with inbound and outbound
+anonymizers binding the cross-chain message to the private note in one
+transaction) is strictly better privacy and worth tracking for v2 — but it is
+`0.1.x` and USDC-only today.
+
+---
+
+## D-010 — The React ↔ Phaser channel is the "event bus", not the "bridge"
+
+**2026-08-16 · Accepted**
+
+**Context.** Earlier documents called the React ↔ Phaser channel "the bridge".
+D-009 introduced a Bridge *building*. Two unrelated things with one name, in a
+repo several agents work in simultaneously.
+
+**Decision.** The internal channel is the **event bus**. "Bridge" refers only
+to the building and `packages/bridge`.
+
+**Consequences.** A rename now costs a few minutes; ambiguity later costs an
+agent building the wrong thing. `WorldEvents` and `ShellEvents` in
+`packages/shared` are the event bus contract.
+
+---
+
+## D-011 — `packages/shared` is a frozen seam
+
+**2026-08-16 · Accepted**
+
+**Context.** Four lanes work in parallel. `packages/shared` carries the event
+bus contract, the lobby schema and the building registry — a change there
+breaks three lanes at once and surfaces at integration, when it is most
+expensive.
+
+**Decision.** `packages/shared` is frozen. Changes require a decision entry.
+
+The lobby schema is deliberately the enforcement point for "the lobby never
+sees money": `PresenceState` is the complete set of fields the lobby may hold,
+so a field that is not there cannot leak. Note that *entering* a building is
+excluded on purpose — position is public within the world, entry is not,
+because entry plus public on-chain timing is a correlation attack.
+
+**Consequences.** Slower to change one file; much faster to build four things
+against it at once.

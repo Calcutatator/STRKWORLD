@@ -11,7 +11,7 @@ what, in what order*.
 
 ## The lanes
 
-Four lanes, one package each. The package boundary **is** the lane boundary —
+Five lanes, one package each. The package boundary **is** the lane boundary —
 that is why the repo is shaped the way it is.
 
 | Lane | Package | Status in v1 |
@@ -19,6 +19,7 @@ that is why the repo is shaped the way it is.
 | **Chain** | `packages/privacy` | Active |
 | **World** | `packages/world` + `packages/lobby` | Active |
 | **Shell** | `apps/web` | Active, starts week 2 |
+| **Bridge** | `packages/bridge` | Active, fully independent |
 | **Art** | `packages/world/assets` | Active, low coupling |
 | ~~Contracts~~ | — | **Dormant until post-v1** |
 
@@ -62,12 +63,13 @@ is most expensive.
 One agent (or the lead) locks these first:
 
 1. **`PrivacyOperations`** — done, in `packages/privacy/src/operations.ts`.
-2. **`WorldEvents` / `ShellEvents`** — the bridge contract, in
-   `packages/shared/src/index.ts`. Currently a first draft; it needs a pass
-   with the building panels in mind before it is frozen.
-3. **The lobby room schema** — what a presence update contains. Not yet
-   written. It is the enforcement point for "the lobby never sees money", so it
-   is worth getting exactly right once.
+2. **`WorldEvents` / `ShellEvents`** — the event bus contract, in
+   `packages/shared/src/index.ts`. **Frozen.**
+3. **`PresenceState`** — the lobby room schema, in the same file. **Frozen.**
+   It is the enforcement point for "the lobby never sees money": a field that
+   is not in the type cannot leak.
+
+All three are now locked (D-011). Lanes may start.
 
 Once frozen, changes to `packages/shared` require a decision entry. Not
 bureaucracy — a change there breaks three lanes at once, so it should be a
@@ -84,14 +86,15 @@ Week 0   ├── FREEZE SEAMS ────────────────
          │                                                   │
 Week 1   ├── Chain: Phase 0 wallet spike  ⚠ GATES DESIGN     │
          ├── World: scenes, movement, collision              │
+         ├── Bridge: port 1Click wrapper + pipeline          │
          └── Art: source packs, licence audit                │
                                                               │
 Week 2-3 ├── Chain: PrivacyOperations implementation          │
          ├── World: tilemaps, buildings, lobby                │
-         ├── Shell: bridge, panels, batch accumulator ◄───────┘
+         ├── Shell: event bus, panels, batch accumulator ◄──────┘
          └── Art: tilesets embedded, first facades
                                                 
-Week 4-5 ├── Shell: Bank + Post Office panels wired
+Week 4-5 ├── Shell: Bank + Post Office + Bridge panels wired
          ├── Chain: AVNU Exchange
          └── World: second district, polish
                                                 
@@ -116,7 +119,7 @@ Each brief is written so an agent can be pointed at it and start.
 
 ### Lane: Chain
 
-**Owns** `packages/privacy`. The only lane that imports `starknet`.
+**Owns** `packages/privacy`. The STRK20 seam.
 
 **First task — the Phase 0 spike.** A scratch page, not production code. Drive
 all three methods against a real extension on mainnet with tiny amounts.
@@ -169,7 +172,7 @@ building fires a clean event with nothing financial anywhere in the lobby.
 **Owns** `apps/web`. Starts week 2, once the seams are frozen and World has
 something to mount.
 
-**First task:** the React ↔ Phaser bridge. React owns wallet and financial
+**First task:** the event bus. React owns wallet and financial
 state; Phaser receives plain data via an event emitter and never reads back.
 
 **Then:** building panels, the connect flow with capability detection, the
@@ -193,6 +196,40 @@ Put a paymaster key in the browser bundle.
 player — with honest in-product copy about what is and is not hidden.
 
 **Reference:** [`SPEC.md`](SPEC.md) §6 · `apps/web/README.md`
+
+---
+
+### Lane: Bridge
+
+**Owns** `packages/bridge`. Cross-chain value in and out via NEAR Intents.
+
+**Fully independent** — no dependency on the Phase 0 spike, the STRK20 seam, or
+anything the Chain lane is doing. It can start immediately and run at full
+speed.
+
+**First task:** port the 1Click wrapper and the resumable pipeline from
+`shieldup`'s `src/bridge/`. Roughly 1,200 lines of proven orchestration —
+`one-click.ts`, `persistence.ts`, `source-tokens.ts`, `address-validation.ts`.
+Port behaviour, not the lockfile. The 1,956-line modal does not come across;
+ours is a room in a building, not a wallet modal.
+
+**Then:** both directions. IN is the harder one — it lands as STRK and needs an
+AVNU swap leg to reach the player's chosen token, and **manual deposit mode is
+the common case** (a player funding from a centralised exchange), so build for
+it first rather than treating it as an edge case.
+
+**Must not:** import `@strkworld/privacy` — CI enforces this. Imply that
+bridging is private.
+
+**The honesty constraint is this lane's defining feature.** A bridge-in lands a
+public ERC-20 with a visible amount and recipient. Shielding happens afterwards
+at the Bank, as a separate transaction, and bundling them would publish exactly
+the link the pool exists to break. Copy must say so plainly.
+
+**Done when:** a player bridges value in from another chain, sees honest copy
+about what is public, and the flow survives a page reload mid-bridge.
+
+**Reference:** `packages/bridge/README.md` · DECISIONS.md D-009
 
 ---
 

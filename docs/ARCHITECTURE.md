@@ -11,7 +11,7 @@ Three concerns that barely talk to each other, composed by a thin shell.
 ```
 ┌──────────────────────────────────────────────────────────┐
 │  apps/web — the shell                                     │
-│  routing · layout · React↔Phaser bridge · providers       │
+│  routing · layout · event bus · providers       │
 └───────┬──────────────────┬───────────────────┬───────────┘
         │                  │                   │
 ┌───────▼────────┐ ┌───────▼────────┐ ┌────────▼────────┐
@@ -145,7 +145,7 @@ belong to neither.
 
 ---
 
-## The React ↔ Phaser bridge
+## The event bus (React ↔ Phaser)
 
 One-directional by design.
 

@@ -24,6 +24,7 @@ the way they are.
 | The Bank | STRK20 pool — shield, unshield, private transfer | ✅ | No |
 | The Exchange | AVNU private swaps | ✅ | No |
 | The Post Office | Private address-to-address transfer | ✅ | No |
+| The Bridge | Cross-chain value in/out via NEAR Intents — **public** | ✅ | No |
 | The Vault | Vesu lending | After v1 | Yes |
 
 ---
@@ -58,9 +59,11 @@ apps/
                 layout, and the React ↔ Phaser bridge.
 
 packages/
-  privacy/      The financial seam. Owns the PrivacyOperations interface and
-                its wallet-backed implementation. The only package that talks
-                to Starknet.
+  privacy/      The STRK20 seam. Owns the PrivacyOperations interface and
+                its wallet-backed implementation.
+
+  bridge/       Cross-chain value in and out via NEAR Intents. Public rails —
+                does not touch the pool.
 
   world/        The game. Phaser scenes, movement, collision, tilemaps,
                 sprites. Knows nothing about wallets or money.

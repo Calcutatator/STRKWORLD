@@ -1,0 +1,16 @@
+{
+  "name": "@strkworld/bridge",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "main": "./src/index.ts",
+  "types": "./src/index.ts",
+  "scripts": {
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@strkworld/shared": "*",
+    "@defuse-protocol/one-click-sdk-typescript": "0.1.25",
+    "viem": "^2.51.0"
+  }
+}

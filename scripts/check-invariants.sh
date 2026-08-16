@@ -35,12 +35,21 @@ else
   ok "no cross-origin isolation headers"
 fi
 
-# 4. Only the privacy package talks to Starknet.
+# 4. Only chain-facing packages talk to Starknet. The bridge needs it for the
+#    OUT-direction ERC-20 transfer; world, lobby and shared never do.
 if grep -rn "from ['\"]starknet\|from ['\"]@starknet-io" \
      --include="*.ts" --include="*.tsx" packages/world packages/lobby packages/shared 2>/dev/null; then
-  bad "starknet imported outside packages/privacy"
+  bad "starknet imported outside the chain-facing packages (privacy, bridge)"
 else
-  ok "starknet confined to packages/privacy"
+  ok "starknet confined to privacy + bridge"
+fi
+
+# 4b. The bridge must not reach into the STRK20 seam — it is public rails, and
+#     conflating the two is how a privacy claim gets made by accident.
+if grep -rn "@strkworld/privacy" --include="*.ts" --include="*.tsx" packages/bridge 2>/dev/null; then
+  bad "bridge imports the privacy package — it must not touch the STRK20 seam"
+else
+  ok "bridge independent of the privacy seam"
 fi
 
 # 5. The lobby never sees money. Checks code, not comments — docs legitimately
