@@ -7,8 +7,12 @@ import type {
 import { ApiFailure, sameAddress } from './validation.js';
 
 type ServerAction =
+  | { kind: 'transfer-from'; from: string; token: string; amount: bigint }
   | { kind: 'transfer-to'; to: string; token: string; amount: bigint }
   | { kind: 'invoke'; contract: string; calldata: string[] }
+  | { kind: 'invoke-with-computation'; contract: string; calldata: string[] }
+  | { kind: 'viewing-key-event'; variant: 4 }
+  | { kind: 'deposit-event'; variant: 6 }
   | { kind: 'other'; variant: number };
 
 /**
@@ -27,26 +31,36 @@ export function decodeServerActions(calldata: readonly string[]): ServerAction[]
         cursor.felt(); cursor.span(); actions.push({ kind: 'other', variant }); break;
       case 1: // Append(recipient, EncChannelInfo[3])
         cursor.take(4); actions.push({ kind: 'other', variant }); break;
-      case 2: // TransferFrom(from, token, amount)
-        cursor.take(3); actions.push({ kind: 'other', variant }); break;
+      case 2: { // TransferFrom(from, token, amount)
+        const [from, token, amount] = cursor.take(3);
+        actions.push({ kind: 'transfer-from', from: from!, token: token!, amount: BigInt(amount!) });
+        break;
+      }
       case 3: { // TransferTo(to, token, amount)
         const [to, token, amount] = cursor.take(3);
         actions.push({ kind: 'transfer-to', to: to!, token: token!, amount: BigInt(amount!) });
         break;
       }
       case 4: // EmitViewingKeySet(user, public_key, EncPrivateKey[3])
-        cursor.take(5); actions.push({ kind: 'other', variant }); break;
+        cursor.take(5); actions.push({ kind: 'viewing-key-event', variant }); break;
       case 5: // EmitWithdrawal(EncUserAddr[3], to, token, amount)
         cursor.take(6); actions.push({ kind: 'other', variant }); break;
       case 6: // EmitDeposit(user, token, amount)
-        cursor.take(3); actions.push({ kind: 'other', variant }); break;
-      case 7: // EmitOpenNoteCreated(EncUserAddr[3], depositor, token, note_id)
-        cursor.take(6); actions.push({ kind: 'other', variant }); break;
-      case 8: // EmitNoteUsed(nullifier)
+        cursor.take(3); actions.push({ kind: 'deposit-event', variant }); break;
+      case 7: // EmitOpenNoteCreated(EncUserAddr[3], token, note_id)
+        cursor.take(5); actions.push({ kind: 'other', variant }); break;
+      case 8: // EmitEncNoteCreated(note_id, packed_value)
+        cursor.take(2); actions.push({ kind: 'other', variant }); break;
+      case 9: // EmitNoteUsed(nullifier)
         cursor.take(1); actions.push({ kind: 'other', variant }); break;
-      case 9: { // Invoke(contract, Span<felt>)
+      case 10: { // Invoke(contract, Span<felt>)
         const contract = cursor.felt();
         actions.push({ kind: 'invoke', contract, calldata: cursor.span() });
+        break;
+      }
+      case 11: { // InvokeWithComputation(contract, Span<felt>)
+        const contract = cursor.felt();
+        actions.push({ kind: 'invoke-with-computation', contract, calldata: cursor.span() });
         break;
       }
       default: throw new ApiFailure(400, 'Unknown privacy-pool server action.');
@@ -65,14 +79,27 @@ export function validateServerActionRoute(
 ): void {
   const calldata = artifact.call.calldata ?? [];
   const output = artifact.proof.output;
+  const serializedActions = output.slice(1);
   if (
-    output.length !== calldata.length + 1 ||
-    calldata.some((felt, index) => !sameAddress(felt, output[index + 1]!))
+    serializedActions.length > calldata.length ||
+    serializedActions.some((felt, index) => !sameAddress(felt, calldata[index]!))
   ) {
     throw new ApiFailure(400, 'Proof output does not bind the submitted pool call.');
   }
+  const screening = validateScreeningSuffix(calldata.slice(serializedActions.length));
 
-  const actions = decodeServerActions(calldata);
+  const actions = decodeServerActions(serializedActions);
+  if (actions.some((action) =>
+    action.kind === 'transfer-from' ||
+    action.kind === 'deposit-event' ||
+    action.kind === 'viewing-key-event' ||
+    action.kind === 'invoke-with-computation'
+  )) {
+    throw new ApiFailure(400, 'Private route contains an unauthorized public or computed action.');
+  }
+  if (screening === 'some') {
+    throw new ApiFailure(400, 'Private route cannot carry a public-deposit screening attestation.');
+  }
   const invokes = actions.filter((action) => action.kind === 'invoke');
   const transfers = actions.filter(
     (action): action is Extract<ServerAction, { kind: 'transfer-to' }> => action.kind === 'transfer-to',
@@ -125,6 +152,17 @@ export function validateServerActionRoute(
       throw new ApiFailure(400, 'Swap withdrawals do not match the authorized AVNU plan.');
     }
   }
+}
+
+function validateScreeningSuffix(suffix: readonly string[]): 'compatibility' | 'none' | 'some' {
+  if (suffix.length === 0) return 'compatibility';
+  const variant = BigInt(suffix[0]!);
+  const isNone = variant === 1n && suffix.length === 1;
+  const isSome = variant === 0n && suffix.length === 4 && BigInt(suffix[1]!) <= (1n << 64n) - 1n;
+  if (!isNone && !isSome) {
+    throw new ApiFailure(400, 'Pool screening attestation calldata is malformed.');
+  }
+  return isNone ? 'none' : 'some';
 }
 
 class Cursor {

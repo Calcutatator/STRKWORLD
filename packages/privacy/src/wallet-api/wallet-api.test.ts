@@ -128,6 +128,21 @@ describe('Wallet API action routes', () => {
     expect(invoked).toEqual([[{ type: 'deposit', token: TOKEN, amount: '0x14' }]]);
   });
 
+  it('reports a returned shield hash even if cancellation races with wallet settlement', async () => {
+    const { ops, wallet } = fixture();
+    const controller = new AbortController();
+    wallet.strk20InvokeTransaction = vi.fn(async () => {
+      controller.abort();
+      return { transaction_hash: '0xalready-submitted' };
+    });
+    const batch = await ops.prepare([{ kind: 'shield', token: TOKEN, amount: 20n }]);
+
+    await expect(batch.confirm({
+      feeCeiling: POOL_FEE,
+      signal: controller.signal,
+    })).resolves.toEqual({ transactionHash: '0xalready-submitted' });
+  });
+
   it('proves a private transfer once, includes the validated relay fee, and submits the artifact', async () => {
     const { ops, prepared, gateway, artifact } = fixture();
     const batch = await ops.prepare([{ kind: 'transfer', token: TOKEN, amount: 20n, recipient: BOB }]);
@@ -350,6 +365,30 @@ describe('Wallet API capability versions', () => {
     await expect(ops.capability()).resolves.toEqual({
       supportsStrk20: false,
       walletApiVersion: '0.10.3-rc.1',
+      registration: 'unknown',
+    });
+  });
+
+  it('rejects empty, zero-padded, and malformed semantic-version identifiers', async () => {
+    const { wallet, pool, gateway } = fixture();
+    const ops = new WalletApiPrivacyOperations({
+      wallet,
+      pool,
+      submission: gateway,
+      supportedVersions: async () => ['00.10.3', '0.10.3-alpha..1', '0.10.3-01'],
+      policy: {
+        maxIntents: 8,
+        maxRelayFee: 10n,
+        enabledRoutes: ['transfer'],
+        allowedTokens: {
+          shield: [STRK, TOKEN], unshield: [STRK, TOKEN], transfer: [STRK, TOKEN], swap: [STRK, TOKEN],
+        },
+      },
+    });
+
+    await expect(ops.capability()).resolves.toEqual({
+      supportsStrk20: false,
+      walletApiVersion: null,
       registration: 'unknown',
     });
   });

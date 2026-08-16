@@ -220,6 +220,34 @@ Format: `### YYYY-MM-DD — short title` then what, why it matters, how verified
 
 ---
 
+### 2026-08-16 — Current pool calldata is proof-bound actions plus screening
+
+The current `apply_actions` ABI is
+`(Span<ServerAction>, Option<ScreeningAttestation>)`. Proof output is
+`[class_hash, ...serialized_actions]`; Ready submits those actions followed by
+the independently serialized screening option. Therefore the correct binding
+check is exact equality with the calldata **prefix**, followed by strict parsing
+of only these suffixes: compatibility-empty, `None = [1]`, or
+`Some = [0, issued_at_u64, signature_r, signature_s]`.
+
+The current `ServerAction` enum has twelve variants. In particular,
+`EmitEncNoteCreated = 8`, `EmitNoteUsed = 9`, `Invoke = 10`, and
+`InvokeWithComputation = 11`. The relay decoder must fail closed on unknown
+variants and currently rejects public deposit/transfer-from/viewing-key actions
+and computed invokes on the admitted private routes.
+
+This **corrects** the older finding “Prepared proofs expose a route-enforceable
+server-action list”: the proof still exposes a route-enforceable list, but it
+does not bind the screening suffix and `Invoke` is not tag 9.
+
+*Verified:* inspected the unpacked, SHA-pinned Ready 5.33.8 bundle, the
+canonical `starknet-privacy` Cairo `ServerAction` and `apply_actions` sources,
+and the current pool class ABI; then ran backend fixtures for tags 10/11,
+screening `None`/`Some`, prefix mismatch, and public/computed-action rejection.
+No proof was generated and no transaction was built or submitted.
+
+---
+
 ### 2026-08-16 — Secret scanning has one exact public-contract false positive
 
 Gitleaks 8.30.1's default `generic-api-key` rule flags
@@ -357,11 +385,16 @@ was submitted.
 
 ### 2026-08-16 — Prepared proofs expose a route-enforceable server-action list
 
+**Corrected by “Current pool calldata is proof-bound actions plus screening”
+above:** the proof-bound action list is an exact calldata prefix, not the whole
+call; the remaining suffix is the separately encoded screening option, and the
+current `Invoke` enum tag is 10.
+
 The Wallet API artifact is not an opaque blob. The submitted pool call's
 calldata is Cairo serialization of `Span<ServerAction>`, and the proof output is
 `[class_hash, ...serialized_actions]`. The backend can therefore verify that
-`proof.output.slice(1)` equals the submitted calldata and decode enough of the
-stable ABI to enforce route policy before relaying.
+`proof.output.slice(1)` equals the submitted calldata prefix and decode enough
+of the stable ABI to enforce route policy before relaying.
 
 STRKWORLD now rejects an external `Invoke` under transfer/unshield routes,
 requires the exact HMAC-authorized relay-fee `TransferTo`, and rejects an extra

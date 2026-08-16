@@ -280,7 +280,9 @@ export class WalletApiPrivacyOperations implements PrivacyOperations {
           assertFeeCeiling(current.feeAmount, feeCeiling);
           emitProgress(onProgress, { stage: 'awaiting-approval', message: 'Confirm the shield in your wallet' });
           const result = await wallet.strk20InvokeTransaction(toActions(intents));
-          throwIfAborted(signal);
+          // Once the wallet returns a transaction hash the public deposit may
+          // already be on-chain. Do not turn that success into a retryable
+          // cancellation merely because the caller aborted while it settled.
           emitProgress(onProgress, { stage: 'confirming', message: 'Shield submitted' });
           emitProgress(onProgress, { stage: 'done', message: 'Done' });
           return { transactionHash: result.transaction_hash };
@@ -499,11 +501,17 @@ interface Semver {
 const REQUIRED_VERSION = parseSemver(REQUIRED_WALLET_API)!;
 
 function parseSemver(value: string): Semver | null {
-  const match = /^(?:v)?(\d+)\.(\d+)\.(\d+)(?:-([0-9A-Za-z.-]+))?$/.exec(value);
+  const match = /^(?:v)?(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-([0-9A-Za-z.-]+))?$/.exec(value);
   if (!match) return null;
   const core = [Number(match[1]), Number(match[2]), Number(match[3])] as Semver['core'];
   if (core.some((part) => !Number.isSafeInteger(part))) return null;
-  return { core, prerelease: match[4]?.split('.') ?? null };
+  const prerelease = match[4]?.split('.') ?? null;
+  if (prerelease?.some((identifier) =>
+    identifier.length === 0 ||
+    !/^[0-9A-Za-z-]+$/.test(identifier) ||
+    (/^\d+$/.test(identifier) && identifier.length > 1 && identifier.startsWith('0'))
+  )) return null;
+  return { core, prerelease };
 }
 
 function compareSemver(left: Semver, right: Semver): number {
@@ -519,9 +527,9 @@ function compareSemver(left: Semver, right: Semver): number {
     if (a === undefined) return -1;
     if (b === undefined) return 1;
     if (a === b) continue;
-    const aNumber = /^\d+$/.test(a) ? Number(a) : null;
-    const bNumber = /^\d+$/.test(b) ? Number(b) : null;
-    if (aNumber !== null && bNumber !== null) return aNumber - bNumber;
+    const aNumber = /^\d+$/.test(a) ? BigInt(a) : null;
+    const bNumber = /^\d+$/.test(b) ? BigInt(b) : null;
+    if (aNumber !== null && bNumber !== null) return aNumber < bNumber ? -1 : 1;
     if (aNumber !== null) return -1;
     if (bNumber !== null) return 1;
     return a.localeCompare(b);

@@ -7,6 +7,7 @@ const STRK = '0x04718f5a0fc34cc1af16a1cdee98ffb20c31f5cd61d6ab07201858f4287c938d
 const ALICE = '0x0111';
 const BOB = '0x0222';
 const SIX_STRK = 6_000000000000000000n;
+const RELAY_FEE = 1_000000000000000n;
 const CEILING = 10_000000000000000000n;
 
 function has(warnings: readonly BatchWarning[], kind: BatchWarning['kind']) {
@@ -31,7 +32,7 @@ describe('the fee comes out of the balance being spent', () => {
 
   it('warns when confirming would strand the player below a future fee', async () => {
     const ops = new FakePrivacyOperations({
-      balances: { [STRK]: SIX_STRK + SIX_STRK + 10n ** 18n },
+      balances: { [STRK]: SIX_STRK + SIX_STRK + 10n ** 18n + RELAY_FEE },
       registered: [BOB],
     });
     const batch = await ops.prepare([
@@ -43,7 +44,7 @@ describe('the fee comes out of the balance being spent', () => {
   it('charges a different operation token and the STRK pool fee independently', async () => {
     const usdc = '0x1234';
     const ops = new FakePrivacyOperations({
-      balances: { [usdc]: 5n, [STRK]: 6n },
+      balances: { [usdc]: 5n, [STRK]: 6n + RELAY_FEE },
       registered: [BOB],
       poolConfig: { feeAmount: 6n },
     });
@@ -51,7 +52,7 @@ describe('the fee comes out of the balance being spent', () => {
       { kind: 'transfer', token: usdc, amount: 5n, recipient: BOB },
     ]);
 
-    await expect(batch.confirm({ feeCeiling: 6n })).resolves.toBeDefined();
+    await expect(batch.confirm({ feeCeiling: 6n + RELAY_FEE })).resolves.toBeDefined();
     await expect(ops.balances([usdc, STRK])).resolves.toEqual([
       expect.objectContaining({ token: usdc, spendable: 0n }),
       expect.objectContaining({ token: STRK, spendable: 0n }),
@@ -125,6 +126,22 @@ describe('a shield is never bundled with what it funds', () => {
 });
 
 describe('the fee can move between prepare and confirm', () => {
+  it('guards and charges the whole private fee quoted in totalCost', async () => {
+    const ops = fresh();
+    const batch = await ops.prepare([
+      { kind: 'transfer', token: STRK, amount: 10n ** 18n, recipient: BOB },
+    ]);
+    expect(batch.totalCost).toBe(SIX_STRK + RELAY_FEE);
+    await expect(batch.confirm({ feeCeiling: SIX_STRK })).rejects.toThrow(/ceiling/i);
+
+    const retry = await ops.prepare([
+      { kind: 'transfer', token: STRK, amount: 10n ** 18n, recipient: BOB },
+    ]);
+    await retry.confirm({ feeCeiling: retry.totalCost });
+    const [balance] = await ops.balances([STRK]);
+    expect(balance?.spendable).toBe(100n * 10n ** 18n - 10n ** 18n - retry.totalCost);
+  });
+
   it('refuses to sign when the fee breaches the ceiling', async () => {
     const ops = fresh();
     const batch = await ops.prepare([

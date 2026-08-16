@@ -31,7 +31,7 @@ import type {
  * It models the sharp edges rather than the happy path, because the happy path
  * is not what breaks:
  *   - notes are unspendable until they mature
- *   - the pool fee comes out of the same balance being spent
+ *   - operation value and the complete private fee are charged in their own tokens
  *   - the fee can change between prepare and confirm
  *   - a shield cannot be batched with the transfer it funds
  *   - deposits are always to self
@@ -224,7 +224,9 @@ export class FakePrivacyOperations implements PrivacyOperations {
       }
     }
 
-    // Charge spends in their own token and the pool fee in the fee token.
+    const relayFee = hasSpend ? 1_000000000000000n : 0n;
+
+    // Charge spends in their own token and both private fees in the fee token.
     const spendByToken = new Map<string, bigint>();
     for (const intent of intents) {
       if (intent.kind === 'shield') continue;
@@ -234,7 +236,10 @@ export class FakePrivacyOperations implements PrivacyOperations {
     }
     if (hasSpend) {
       const feeToken = normalise(this.pool.feeToken);
-      spendByToken.set(feeToken, (spendByToken.get(feeToken) ?? 0n) + feeAtPrepare);
+      spendByToken.set(
+        feeToken,
+        (spendByToken.get(feeToken) ?? 0n) + feeAtPrepare + relayFee,
+      );
     }
     for (const [token, required] of spendByToken) {
       const have = this.spendable.get(token) ?? this.lookupLoose(token);
@@ -245,8 +250,8 @@ export class FakePrivacyOperations implements PrivacyOperations {
           `Needs ${required}, has ${have}. Remember the pool fee is paid in ${this.pool.feeToken}.`,
         );
       }
-      if (sameAddress(token, this.pool.feeToken) && remaining < feeAtPrepare) {
-        warnings.push({ kind: 'leaves-below-fee', remaining, feeEstimate: feeAtPrepare });
+      if (sameAddress(token, this.pool.feeToken) && remaining < feeAtPrepare + relayFee) {
+        warnings.push({ kind: 'leaves-below-fee', remaining, feeEstimate: feeAtPrepare + relayFee });
       }
     }
 
@@ -260,7 +265,7 @@ export class FakePrivacyOperations implements PrivacyOperations {
       });
     }
 
-    const gasEstimate = 1_000000000000000n;
+    const gasEstimate = relayFee;
     const self = this;
     let discarded = false;
     let confirmationAttempted = false;
@@ -281,10 +286,11 @@ export class FakePrivacyOperations implements PrivacyOperations {
         await self.tick('confirm', sig);
 
         // The fee can move between prepare and confirm. This is the guard.
-        if (self.pool.feeAmount > feeCeiling) {
+        const currentFee = self.pool.feeAmount + relayFee;
+        if (currentFee > feeCeiling) {
           throw new PrivacyError(
             'unknown',
-            `Pool fee is now ${self.pool.feeAmount}, above the ceiling of ${feeCeiling}. Re-prepare.`,
+            `Private fee is now ${currentFee}, above the ceiling of ${feeCeiling}. Re-prepare.`,
           );
         }
 
@@ -292,7 +298,7 @@ export class FakePrivacyOperations implements PrivacyOperations {
         emitProgress(onProgress, { stage: 'proving', message: 'Your wallet is generating a proof' });
         emitProgress(onProgress, { stage: 'submitting', message: 'Submitting' });
 
-        self.applyIntents(intents, self.pool.feeAmount);
+        self.applyIntents(intents, currentFee);
         self.submitted.push([...intents]);
         emitProgress(onProgress, { stage: 'done', message: 'Done' });
         return { transactionHash: `0xfake${(++self.txCounter).toString(16).padStart(4, '0')}` };

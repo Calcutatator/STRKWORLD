@@ -19,7 +19,7 @@ the lane boundary — that is why the repo is shaped the way it is.
 | **Chain** | `packages/privacy` | Active |
 | **World** | `packages/world` + `packages/lobby` | Active |
 | **Shell** | `apps/web` | Active, starts week 2 |
-| **Backend** | `apps/backend` | Active, starts after Phase 0 |
+| **Backend** | `apps/backend` | Active; offline implementation in progress under D-028 |
 | **Bridge** | `packages/bridge` | Active, fully independent |
 | **Art** | `packages/world/assets` | Active, low coupling |
 | ~~Contracts~~ | — | **Dormant until post-v1** |
@@ -80,8 +80,10 @@ One agent (or the lead) locks these first:
    is not in the type cannot leak.
 
 `WorldEvents` and `PresenceState` are locked. The financial seam is deliberately
-still provisional (D-015); dependent lanes use it behind adapters until the
-spike closes it.
+still source-derived and provisional (D-015/D-028); dependent lanes use it
+behind adapters until the Chain lane records an explicit freeze decision. The
+funded wallet run validates the result before launch but does not gate that
+decision or current development.
 
 Once frozen, changes to `packages/shared` require a decision entry. Not
 bureaucracy — a change there breaks three lanes at once, so it should be a

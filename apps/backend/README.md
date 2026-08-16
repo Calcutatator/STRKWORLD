@@ -49,10 +49,14 @@ prepared submission, pool config, recipient public key and receipt lookup.
 Schemas reject unknown fields. The
 submission validator accepts only the configured pool's `apply_actions`,
 bounded calldata and a non-empty bounded proof. It verifies that the proof
-output contains the same serialized server actions as the call, decodes that
-`Span<ServerAction>`, and applies route policy: transfer/unshield cannot hide an
-external `Invoke`, the exact authorized paymaster withdrawal must be present,
-and a transfer cannot smuggle a public withdrawal.
+output contains the exact serialized-server-action prefix of the call, then
+strictly parses the remaining screening option (`[]` compatibility, `[1]`
+None, or `[0, issued_at, r, s]` Some). It decodes the current twelve-variant
+`Span<ServerAction>` ABI and applies route policy: transfer/unshield cannot hide
+an external `Invoke`, the exact authorized paymaster withdrawal must be
+present, and public deposit/transfer-from/viewing-key or computed-invoke actions
+cannot be smuggled through a private route. A `Some` screening attestation is
+also rejected on these non-deposit routes; the current pool expects `None`.
 
 For AVNU swaps the server selects an exact-input quote and requests
 `quoteToCalls({ private: true })`. Its HMAC authorization additionally binds
@@ -66,8 +70,10 @@ Fee build returns an HMAC authorization binding route, fee token, operation
 token, recipient, amount and block-validity window. The server keeps no quote
 row to correlate with the later proof. Pool-native submissions receive bounded
 jitter, then enter a bounded process-local admission queue. They are checked
-again after both waits; an expired request is removed from the queue and can
-never relay later. Quote-bound swaps skip both delay and queuing: if the
+again after both waits against the current block, current pool proof-validity
+window, and current route/token allowlists; a stale or newly forbidden request
+is removed from the queue and can never relay later. Quote-bound swaps skip
+both delay and queuing: if the
 in-flight slot is unavailable they fail fast and must be re-quoted. Every
 request also has a configured deadline. The edge abort signal and deadline are
 propagated to AVNU and raw Starknet RPC, and timeout responses contain no

@@ -20,6 +20,7 @@ import type {
   PaymasterPort,
   PoolRpcPort,
   PrivateRoute,
+  RoutePolicy,
   SwapPlannerPort,
 } from './types.js';
 import {
@@ -188,7 +189,7 @@ export class BackendApi {
     const validity = requirePositiveInteger(value.proofValidityBlocks, 'proof validity');
     const claims = await this.authorizations.verify(value.feeAuthorization);
     if (!claims) throw new ApiFailure(401, 'Fee authorization is invalid.');
-    this.validateClaims(claims, route, validity, policy.maxRelayFee);
+    this.validateClaims(claims, route, validity, policy);
     if (claims.swap && claims.swap.quoteExpiresAt <= this.clockNow()) {
       throw new ApiFailure(409, 'The private swap quote has expired.');
     }
@@ -198,20 +199,24 @@ export class BackendApi {
       amount: claims.amount,
     }, claims.operationToken, claims.swap);
 
-    let block = await this.rpc.getBlockNumber(signal);
-    if (block > claims.expiresAtBlock) throw new ApiFailure(409, 'Prepared proof has expired.');
+    await this.assertCurrentProofFreshness(claims, signal, 'Prepared proof has expired.');
     if (!policy.quoteBound && policy.maxQueueDelayMs > 0) {
       const delay = clamp(this.randomInt(policy.maxQueueDelayMs), 0, policy.maxQueueDelayMs);
       if (delay > 0) await abortable(this.sleep(delay), signal);
-      block = await this.rpc.getBlockNumber(signal);
-      if (block > claims.expiresAtBlock) throw new ApiFailure(409, 'Prepared proof expired in the queue.');
+      await this.assertCurrentProofFreshness(claims, signal, 'Prepared proof expired in the queue.');
     }
     try {
       return await this.submissionQueue.run(async () => {
-        const currentBlock = await this.rpc.getBlockNumber(signal);
-        if (currentBlock > claims.expiresAtBlock) {
-          throw new ApiFailure(409, 'Prepared proof expired in the submission queue.');
+        if (!this.config.globalEnabled) {
+          throw new ApiFailure(503, 'Private operations are temporarily disabled.');
         }
+        const currentPolicy = this.routePolicy(route);
+        this.validateClaims(claims, route, validity, currentPolicy);
+        await this.assertCurrentProofFreshness(
+          claims,
+          signal,
+          'Prepared proof expired in the submission queue.',
+        );
         if (claims.swap && claims.swap.quoteExpiresAt <= this.clockNow()) {
           throw new ApiFailure(409, 'The private swap quote expired before submission.');
         }
@@ -385,16 +390,52 @@ export class BackendApi {
     claims: FeeAuthorizationClaims,
     route: PrivateRoute,
     validity: number,
-    maxFee: bigint,
+    policy: RoutePolicy,
   ): void {
     if (claims.v !== 1 || claims.route !== route) throw new ApiFailure(401, 'Fee authorization route mismatch.');
     if (!sameAddress(claims.feeToken, this.config.feeToken) || !sameAddress(claims.token, this.config.feeToken)) {
       throw new ApiFailure(401, 'Fee authorization token mismatch.');
     }
-    if (claims.amount <= 0n || claims.amount > maxFee) throw new ApiFailure(401, 'Fee authorization exceeds policy.');
+    if (claims.amount <= 0n || claims.amount > policy.maxRelayFee) {
+      throw new ApiFailure(401, 'Fee authorization exceeds policy.');
+    }
+    if (!policy.allowedTokens.some((token) => sameAddress(token, claims.operationToken))) {
+      throw new ApiFailure(401, 'Fee authorization operation token is no longer allowlisted.');
+    }
+    if ((route === 'swap') !== Boolean(claims.swap)) {
+      throw new ApiFailure(401, 'Fee authorization private-route binding is invalid.');
+    }
+    const swap = claims.swap;
+    if (swap && (
+      !sameAddress(swap.sellToken, claims.operationToken) ||
+      !policy.allowedTokens.some((token) => sameAddress(token, swap.sellToken)) ||
+      !policy.allowedTokens.some((token) => sameAddress(token, swap.buyToken))
+    )) {
+      throw new ApiFailure(401, 'Fee authorization swap token is no longer allowlisted.');
+    }
     requireFelt(claims.recipient, 'authorized fee recipient');
-    if (claims.expiresAtBlock - claims.issuedAtBlock !== validity) {
+    if (
+      !Number.isSafeInteger(claims.issuedAtBlock) ||
+      !Number.isSafeInteger(claims.expiresAtBlock) ||
+      claims.issuedAtBlock < 0 ||
+      claims.expiresAtBlock - claims.issuedAtBlock !== validity
+    ) {
       throw new ApiFailure(401, 'Proof-validity claim mismatch.');
+    }
+  }
+
+  private async assertCurrentProofFreshness(
+    claims: FeeAuthorizationClaims,
+    signal: AbortSignal,
+    message: string,
+  ): Promise<void> {
+    const [block, poolConfig] = await Promise.all([
+      this.rpc.getBlockNumber(signal),
+      this.rpc.getPoolConfig(signal),
+    ]);
+    const currentExpiry = claims.issuedAtBlock + poolConfig.proofValidityBlocks;
+    if (!Number.isSafeInteger(currentExpiry) || block > Math.min(claims.expiresAtBlock, currentExpiry)) {
+      throw new ApiFailure(409, message);
     }
   }
 

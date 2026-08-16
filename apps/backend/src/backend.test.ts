@@ -24,6 +24,7 @@ const artifact: PreparedArtifact = {
 function fixture(overrides: Partial<BackendConfig> = {}) {
   let block = 1_000;
   let now = 1_000;
+  let proofValidityBlocks = 450;
   const delays: number[] = [];
   const submitted: PreparedArtifact[] = [];
   const paymaster: PaymasterPort = {
@@ -37,7 +38,7 @@ function fixture(overrides: Partial<BackendConfig> = {}) {
   };
   const rpc: PoolRpcPort = {
     async getPoolConfig() {
-      return { feeAmount: 6n, feeToken: STRK, proofValidityBlocks: 450, noteMaturityBlocks: 10 };
+      return { feeAmount: 6n, feeToken: STRK, proofValidityBlocks, noteMaturityBlocks: 10 };
     },
     async getPublicKey(address) {
       return address === '0x456' ? '0x99' : '0x0';
@@ -108,11 +109,13 @@ function fixture(overrides: Partial<BackendConfig> = {}) {
   });
   return {
     api,
+    config,
     paymaster,
     rpc,
     delays,
     submitted,
     setBlock(value: number) { block = value; },
+    setProofValidityBlocks(value: number) { proofValidityBlocks = value; },
     setNow(value: number) { now = value; },
   };
 }
@@ -271,6 +274,37 @@ describe('bounded private submission', () => {
     expect(submitted).toHaveLength(1);
   });
 
+  it('rechecks the current token allowlist before relaying an issued authorization', async () => {
+    const { api, config, submitted } = fixture();
+    const quote = await fee(api);
+    config.routes.transfer.allowedTokens = [STRK];
+
+    await expect(api.handle({
+      method: 'POST', path: '/v1/private/submissions',
+      body: {
+        v: 1, route: 'transfer', artifact,
+        feeAuthorization: quote.authorization, proofValidityBlocks: 450,
+      },
+    })).resolves.toMatchObject({ status: 401 });
+    expect(submitted).toHaveLength(0);
+  });
+
+  it('uses the current pool proof-validity window after authorization issuance', async () => {
+    const { api, setBlock, setProofValidityBlocks, submitted } = fixture();
+    const quote = await fee(api);
+    setProofValidityBlocks(1);
+    setBlock(1_002);
+
+    await expect(api.handle({
+      method: 'POST', path: '/v1/private/submissions',
+      body: {
+        v: 1, route: 'transfer', artifact,
+        feeAuthorization: quote.authorization, proofValidityBlocks: 450,
+      },
+    })).resolves.toMatchObject({ status: 409 });
+    expect(submitted).toHaveLength(0);
+  });
+
   it('never delays a quote-bound route', async () => {
     const { api, delays } = fixture();
     const prepared = await api.handle({
@@ -297,7 +331,7 @@ describe('bounded private submission', () => {
       '0x3',
       '0x3', '0x999', '0xabc', '0x14',
       '0x3', FEE_RECIPIENT, STRK, '0x7',
-      '0x9', '0x999', `0x${invokeCalldata.length.toString(16)}`, ...invokeCalldata,
+      '0xa', '0x999', `0x${invokeCalldata.length.toString(16)}`, ...invokeCalldata,
     ];
     const swapArtifact: PreparedArtifact = {
       call: { contract_address: POOL, entry_point: 'apply_actions', calldata: swapCalldata },
@@ -332,7 +366,7 @@ describe('bounded private submission', () => {
       '0x3',
       '0x3', '0x999', '0xabc', '0x14',
       '0x3', FEE_RECIPIENT, STRK, '0x7',
-      '0x9', '0x999', `0x${invokeCalldata.length.toString(16)}`, ...invokeCalldata,
+      '0xa', '0x999', `0x${invokeCalldata.length.toString(16)}`, ...invokeCalldata,
     ];
     setNow(2_001);
     await expect(api.handle({
@@ -366,7 +400,7 @@ describe('bounded private submission', () => {
     const invokeCalldata = [
       '0x2',
       '0x3', FEE_RECIPIENT, STRK, '0x7',
-      '0x9', '0x999', '0x0',
+      '0xa', '0x999', '0x0',
     ];
     await expect(api.handle({
       method: 'POST', path: '/v1/private/submissions',
@@ -484,6 +518,41 @@ describe('bounded private submission', () => {
     await expect(queued).resolves.toMatchObject({ status: 409 });
     expect(submitCalls).toBe(1);
   });
+
+  it('honors a route kill switch while a submission is waiting in the queue', async () => {
+    const { api, config, paymaster } = fixture({
+      submissionQueue: { maxInFlight: 1, maxQueued: 1 },
+    });
+    const quote = await fee(api);
+    let releaseFirst!: () => void;
+    let submitCalls = 0;
+    vi.spyOn(paymaster, 'submit').mockImplementation(async () => {
+      submitCalls += 1;
+      if (submitCalls === 1) {
+        await new Promise<void>((resolve) => { releaseFirst = resolve; });
+      }
+      return { transactionHash: `0x${submitCalls}` };
+    });
+    const request = {
+      method: 'POST',
+      path: '/v1/private/submissions',
+      body: {
+        v: 1, route: 'transfer', artifact,
+        feeAuthorization: quote.authorization, proofValidityBlocks: 450,
+      },
+    } as const;
+
+    const first = api.handle(request);
+    await vi.waitFor(() => expect(submitCalls).toBe(1));
+    const queued = api.handle(request);
+    await new Promise<void>((resolve) => setTimeout(resolve, 0));
+    config.routes.transfer.enabled = false;
+    releaseFirst();
+
+    await expect(first).resolves.toMatchObject({ status: 200 });
+    await expect(queued).resolves.toMatchObject({ status: 503 });
+    expect(submitCalls).toBe(1);
+  });
 });
 
 describe('quote-bound swap withdrawal matching', () => {
@@ -501,7 +570,7 @@ describe('quote-bound swap withdrawal matching', () => {
     const calldata = [
       '0x3',
       ...transfers,
-      '0x9', '0x999', '0x2', ...invokePrefix, '0x777',
+      '0xa', '0x999', '0x2', ...invokePrefix, '0x777',
     ];
     return {
       call: { contract_address: POOL, entry_point: 'apply_actions', calldata },
@@ -533,6 +602,89 @@ describe('quote-bound swap withdrawal matching', () => {
       STRK,
       swapBinding,
     )).not.toThrow();
+  });
+
+  it('accepts the current screening None suffix without treating it as proof output', () => {
+    const screened = swapArtifact([
+      '0x3', '0x999', STRK, '0x7',
+      '0x3', '0x999', STRK, '0x7',
+    ]);
+    screened.call.calldata!.push('0x1');
+
+    expect(() => validateServerActionRoute(
+      'swap', screened,
+      { token: STRK, recipient: '0x999', amount: 7n },
+      STRK,
+      swapBinding,
+    )).not.toThrow();
+  });
+
+  it('rejects a deposit screening attestation on a non-deposit private route', () => {
+    const screened = swapArtifact([
+      '0x3', '0x999', STRK, '0x7',
+      '0x3', '0x999', STRK, '0x7',
+    ]);
+    screened.call.calldata!.push('0x0', '0x64', '0x1', '0x2');
+
+    expect(() => validateServerActionRoute(
+      'swap', screened,
+      { token: STRK, recipient: '0x999', amount: 7n },
+      STRK,
+      swapBinding,
+    )).toThrow(/screening|deposit/i);
+  });
+
+  it('decodes the current five-felt open-note event before a swap invoke', () => {
+    const transfers = [
+      '0x3', '0x999', STRK, '0x7',
+      '0x3', '0x999', STRK, '0x7',
+    ];
+    const calldata = [
+      '0x4',
+      ...transfers,
+      '0x7', '0x11', '0x12', '0x13', '0xabc', '0x777',
+      '0xa', '0x999', '0x2', ...invokePrefix, '0x777',
+    ];
+
+    expect(() => validateServerActionRoute(
+      'swap', {
+        call: { contract_address: POOL, entry_point: 'apply_actions', calldata },
+        proof: { data: 'proof', output: ['0xc1', ...calldata], proof_facts: ['0x1'] },
+      },
+      { token: STRK, recipient: '0x999', amount: 7n },
+      STRK,
+      swapBinding,
+    )).not.toThrow();
+  });
+
+  it('rejects a current-ABI computed invoke and a public deposit on private routes', () => {
+    const computed = swapArtifact([
+      '0x3', '0x999', STRK, '0x7',
+      '0x3', '0x999', STRK, '0x7',
+    ]);
+    computed.call.calldata![computed.call.calldata!.indexOf('0xa')] = '0xb';
+    computed.proof.output = ['0xc1', ...computed.call.calldata!];
+    expect(() => validateServerActionRoute(
+      'swap', computed,
+      { token: STRK, recipient: '0x999', amount: 7n },
+      STRK,
+      swapBinding,
+    )).toThrow(/computed|unauthorized|action/i);
+
+    const depositCalldata = [
+      '0x3',
+      '0x2', '0x123', STRK, '0x1',
+      '0x6', '0x123', STRK, '0x1',
+      '0x3', FEE_RECIPIENT, STRK, '0x7',
+    ];
+    expect(() => validateServerActionRoute(
+      'transfer', {
+        call: { contract_address: POOL, entry_point: 'apply_actions', calldata: depositCalldata },
+        proof: { data: 'proof', output: ['0xc1', ...depositCalldata], proof_facts: ['0x1'] },
+      },
+      { token: STRK, recipient: FEE_RECIPIENT, amount: 7n },
+      STRK,
+    )).toThrow(/deposit|unauthorized|action/i);
   });
 });
 

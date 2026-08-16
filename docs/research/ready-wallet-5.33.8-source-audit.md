@@ -47,6 +47,21 @@ proof facts must be present. This supports the backend queue design, but the
 backend must independently validate the decoded route rather than trusting a
 client-provided proof wrapper.
 
+## Prepared-proof calldata boundary
+
+The prepared proof output is `[class_hash, ...serialized_server_actions]`.
+Ready 5.33.8 submits those actions as the exact prefix of the pool call, then
+appends the independently serialized `Option<ScreeningAttestation>` required by
+the current `apply_actions` ABI. A relay must compare the proof output with the
+action prefix and strictly parse the suffix; comparing it with all calldata
+would reject a valid current artifact.
+
+The current canonical Cairo source and pool ABI both expose twelve
+`ServerAction` variants: `EmitEncNoteCreated` is tag 8, `EmitNoteUsed` tag 9,
+`Invoke` tag 10, and `InvokeWithComputation` tag 11. This was checked against
+the shipped bundle, canonical source and current class ABI without generating a
+proof or submitting a transaction.
+
 ## Phase 0 answer matrix
 
 | Question | Current answer | Evidence strength |

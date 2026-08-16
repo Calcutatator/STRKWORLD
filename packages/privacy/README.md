@@ -63,8 +63,10 @@ interface PrivacyOperations {
 }
 ```
 
-The interface is **provisional until the Phase 0 spike** (D-015). Changing it
-needs a decision entry and a heads-up to the shell lane — never a quiet edit.
+The interface remains **provisional until the Chain lane explicitly freezes
+it** under D-028. Source-derived implementation work proceeds now; a change
+still needs a decision entry and a heads-up to the shell lane — never a quiet
+edit.
 
 `WalletApiPrivacyOperations` is the source-derived wallet-backed
 implementation and `FakePrivacyOperations` implements the same interface for
@@ -77,11 +79,12 @@ that:
 2. a second implementation can be added without touching callers,
 3. the forward-compatibility test can prove a non-extension wallet works.
 
-The seam is **provisional until the Phase 0 wallet spike closes**. D-015
-replaced the earlier one-shot methods because they could not express atomic
-batches, fee validation before proving, cancellation, or backend-delayed
-submission. A post-spike change needs a decision entry and a heads-up to the
-Shell lane.
+The seam is **source-derived and provisional pending an explicit Chain-lane
+freeze decision**. D-015 replaced the earlier one-shot methods because they
+could not express atomic batches, fee validation before proving, cancellation,
+or backend-delayed submission. D-028 moved the funded wallet run to the
+pre-launch checklist rather than leaving it as a development gate. Any seam
+change still needs a decision entry and a heads-up to the Shell lane.
 
 The shipped Wallet API types expose one aggregate balance per token, not the
 spendable/maturing split used by the low-level SDK. Real wallet results therefore
@@ -198,11 +201,11 @@ ops.setPoolFee(20n * 10n**18n) // governance moved the fee mid-flight
 
 It models the sharp edges rather than the happy path, because the happy path is
 not what breaks: notes are unspendable until they mature, operation amounts are
-charged in their own tokens while the pool fee is charged only in the live fee
-token, a shield is never batched with what it funds, and deposits are always to
-self. Prepared batches are single-attempt: after any confirmation attempt the
-caller must prepare again, which prevents a double-click from submitting the
-same financial intent twice.
+charged in their own tokens while the complete private fee (pool plus relay) is
+charged in the live fee token, a shield is never batched with what it funds,
+and deposits are always to self. Prepared batches are single-attempt: after any
+confirmation attempt the caller must prepare again, which prevents a
+double-click from submitting the same financial intent twice.
 
 The offline adapter tests now cover ShieldUp-derived action construction,
 fee-ceiling rechecks, recipient preflight, proof submission and private AVNU
