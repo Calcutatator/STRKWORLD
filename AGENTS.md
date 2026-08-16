@@ -209,6 +209,20 @@ Format: `### YYYY-MM-DD — short title` then what, why it matters, how verified
 
 ---
 
+### 2026-08-16 — No game-development MCPs exist; the tooling here is conventional
+
+Searched the MCP registry for Phaser, Tiled, tilemap, sprite, pixel art, asset
+generation and Godot. **Zero results.**
+
+There is no MCP shortcut for the world build. The pipeline is ordinary desktop
+and library tooling — Tiled for maps, Aseprite for sprites, a texture packer,
+Phaser's own loaders. Do not spend time looking for one.
+
+*Verified:* `mcp__mcp-registry__search_mcp_registry` with eight game-dev
+keywords, 2026-08-16, empty result set.
+
+---
+
 ### 2026-08-16 — A private building is an approved execution route, not a facade
 
 The world is a capability-bounded UI over three valid financial paths:
