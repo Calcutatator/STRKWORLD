@@ -89,7 +89,7 @@ export class PrivacyError extends Error {
   constructor(
     readonly kind: PrivacyErrorKind,
     message: string,
-    readonly cause?: unknown,
+    override readonly cause?: unknown,
   ) {
     super(message);
     this.name = 'PrivacyError';

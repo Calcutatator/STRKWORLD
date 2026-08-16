@@ -105,8 +105,8 @@ export const PRIVACY_REGISTER: readonly RouteGrade[] = [
     grade: 'public-edge',
     observable:
       'The ERC-20 approve and the pool deposit are both public. Your address and the amount are visible on-chain. Deposits are always to self, so the depositor is always named.',
-    // TODO(calc): disclosure copy — route stays locked until written.
-    disclosure: null,
+    disclosure:
+      'Shielding is public. Your wallet address, token and amount will be visible on-chain. Privacy begins after the funds enter the pool.',
     approvedBy: 'calc',
     approvedOn: '2026-08-16',
     rationale:
@@ -119,8 +119,8 @@ export const PRIVACY_REGISTER: readonly RouteGrade[] = [
     grade: 'public-edge',
     observable:
       'Withdrawal reveals token, amount and recipient. Withdrawing a similar amount to the same address shortly after depositing is publicly linkable by pattern alone.',
-    // TODO(calc): disclosure copy — route stays locked until written.
-    disclosure: null,
+    disclosure:
+      'Unshielding is public. The token, amount and destination address will be visible on-chain. Similar amounts or timing can link it to other public activity.',
     approvedBy: 'calc',
     approvedOn: '2026-08-16',
     rationale:
@@ -133,8 +133,8 @@ export const PRIVACY_REGISTER: readonly RouteGrade[] = [
     grade: 'anonymous',
     observable:
       'Unlinkable but not amount-confidential. The withdraw leg to the executor is a public event with a visible amount, and the swap runs on public AMM liquidity. Who traded is hidden; what and how much is not.',
-    // TODO(calc): disclosure copy — route stays locked until written.
-    disclosure: null,
+    disclosure:
+      'This swap hides who traded, but not the tokens or amounts. The executor and public exchange activity are visible on-chain.',
     approvedBy: 'calc',
     approvedOn: '2026-08-16',
     rationale:
@@ -147,8 +147,8 @@ export const PRIVACY_REGISTER: readonly RouteGrade[] = [
     grade: 'public',
     observable:
       'Entirely public. The solver delivers to your address with a visible amount, and the shield that follows has its own public leg. Privacy begins only after the funds are in the pool.',
-    // TODO(calc): disclosure copy — route stays locked until written.
-    disclosure: null,
+    disclosure:
+      'Bridging is public. Your destination address and amount are visible, and shielding afterwards is also public. Privacy begins only after the funds enter the pool.',
     approvedBy: 'calc',
     approvedOn: '2026-08-16',
     rationale:
