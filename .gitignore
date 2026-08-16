@@ -6,6 +6,8 @@ dist/
 build/
 .vite/
 *.tsbuildinfo
+# container-only TypeScript emit (deploy/backend/tsconfig.build.json)
+.docker-build/
 
 # environment — never commit real values
 .env

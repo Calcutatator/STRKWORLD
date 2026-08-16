@@ -21,12 +21,32 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
-          node-version: 20
+          # 22.12 is the repository floor (D-025). CI said 20, which is the
+          # exact mismatch D-025 was written to stop: AVNU SDK 4.2.0 requires
+          # Node 22 and Vite supports Node 22 from 22.12.
+          node-version: '22.12'
           cache: npm
       # ci, not install — reproducible from the committed lockfile.
       - run: npm ci
       - run: npm run typecheck
       - run: npm test
+
+  headers:
+    name: No cross-origin isolation headers (D-005)
+    runs-on: ubuntu-latest
+    # Builds apps/web for production, serves the real artifact, and asserts
+    # the responses carry no isolation headers — and that no config file
+    # introduces them. They break web wallets and the failure is silent, so
+    # this gate is the only thing that would catch it before players do.
+    # D-005 asks for exactly this: "a comment and a header test".
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22.12'
+          cache: npm
+      - run: npm ci
+      - run: node scripts/check-headers.mjs
 
   drift:
     name: Protocol drift canary

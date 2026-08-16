@@ -1,0 +1,32 @@
+# Docker build context exclusions. The build context is the repository root
+# (see deploy/backend/Dockerfile). deploy/backend/Dockerfile COPYs explicit
+# paths rather than `.`, so this is defence in depth — but the first line is
+# the one that matters: a real secret must never enter a build context, where
+# it survives in image layers and `docker history`.
+
+.env
+.env.local
+.env.*.local
+*.pem
+*.key
+
+node_modules
+**/node_modules
+.git
+.github
+
+# build output — the image compiles its own
+dist
+build
+.vite
+.docker-build
+coverage
+*.tsbuildinfo
+
+# not needed at runtime
+docs
+.agents
+.claude
+scripts
+*.md
+.DS_Store
