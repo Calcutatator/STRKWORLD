@@ -103,14 +103,21 @@ export interface PresenceState {
 // Named "event bus" rather than "bridge" to avoid collision with the Bridge
 // building.
 
-/** Emitted by the world, consumed by the shell. Semantic, never financial. */
-export interface WorldEvents {
+/**
+ * Emitted by the world, consumed by the shell. Semantic, never financial.
+ *
+ * Declared as a `type`, not an `interface`, and it matters: TypeScript gives
+ * type aliases an implicit index signature but not interfaces, so an interface
+ * here cannot satisfy `EventBus`'s `Record<string, unknown>` constraint. Nine
+ * typecheck errors came from exactly that. Do not convert it back.
+ */
+export type WorldEvents = {
   'building:entered': { building: BuildingId };
   'building:exited': { building: BuildingId };
   'building:locked': { building: BuildingId; reason: 'coming-soon' };
   'player:moved': { position: Position; facing: Facing };
   'world:ready': Record<string, never>;
-}
+};
 
 /**
  * Pushed by the shell into the world. Presentation data only.
@@ -119,7 +126,7 @@ export interface WorldEvents {
  * bigint and never a token address. Phaser cannot be tempted into arithmetic
  * on money it should not hold.
  */
-export interface ShellEvents {
+export type ShellEvents = {
   /** Pre-formatted for display. Null while unknown or disconnected. */
   'hud:balance': { display: string | null };
   /** Count of in-flight operations, for an ambient indicator. */
@@ -128,7 +135,7 @@ export interface ShellEvents {
   'wallet:status': { status: WalletStatus };
   /** Ask the world to release the player from a building interior. */
   'world:exit-building': Record<string, never>;
-}
+};
 
 /**
  * Connection state as the world needs to understand it.

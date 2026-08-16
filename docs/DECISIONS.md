@@ -792,3 +792,39 @@ must back the global budget/rate counters with an aggregate atomic store or run
 a single admission-control instance; process-local counters alone are not a
 production-wide cap. Exhausting sponsorship locks financial doors without
 taking down the city or exposing a public fallback.
+
+---
+
+## D-027 — The event bus contract, added retroactively to the frozen seam
+
+**2026-08-16 · Accepted · retroactive; documents a change already merged**
+
+**Process note, first.** Commit `7bd1bc1` added 24 lines to
+`packages/shared/src/index.ts` — a frozen seam — **without a decision entry
+first**, which D-011 requires. That was my error. This entry closes it rather
+than pretending it did not happen, and the sequencing rule stands: for a frozen
+seam, the decision comes before the code.
+
+**Context.** `WorldEvents` and `ShellEvents` were frozen as data shapes, but
+nothing described the *channel* carrying them. The world and shell each needed
+to know what they were handed at init.
+
+**Decision.** Add a type-only `EventBus<Events>` interface and a `WorldBus`
+alias to `packages/shared`. Type-only because that package holds no logic; the
+implementation lives in `apps/web` and is passed to the world at init, so the
+dependency points one way — the world *receives* a bus, it never constructs one.
+
+`WorldEvents` and `ShellEvents` are declared as **`type` aliases, not
+interfaces**. This is load-bearing, not style: TypeScript gives type aliases an
+implicit index signature and interfaces none, so an interface cannot satisfy
+`Record<string, unknown>`. Leaving them as interfaces produced nine typecheck
+errors on `main` — green tests, red build, which is the worst combination
+because it teaches everyone to ignore red. Do not convert them back.
+
+**Who this affects.** The World lane consumes the bus type; the Shell lane
+implements and owns it. No payload shape changed, so nothing that was already
+built against `WorldEvents`/`ShellEvents` breaks.
+
+**Consequences.** The one-directional rule is now expressible in types rather
+than only in review: the world can be handed a narrowed emit-only view out and
+an on-only view in.
