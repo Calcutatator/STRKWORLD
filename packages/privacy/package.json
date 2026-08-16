@@ -8,11 +8,12 @@
   "scripts": {
     "typecheck": "tsc --noEmit"
   },
+  "comment": "EXACT pins, all four together. This is the combination the official STRK20 integration skill tested. Do not float one and pin the others — see AGENTS.md findings, 2026-08-16.",
   "dependencies": {
     "@strkworld/shared": "*",
-    "starknet": "10.7.0",
+    "starknet": "10.4.0",
     "@starknet-io/types-js": "0.10.3",
-    "@starknet-io/get-starknet-discovery": "*",
-    "@starknet-io/get-starknet-wallet-standard": "*"
+    "@starknet-io/get-starknet-discovery": "6.0.3",
+    "@starknet-io/get-starknet-wallet-standard": "6.0.3"
   }
 }

@@ -99,8 +99,21 @@ curl -s -X POST $RPC -H 'Content-Type: application/json' \
 `.env.example` proves nothing about a service existing. A method name in a
 doc page proves nothing about a wallet implementing it.
 
-**Canonical STRK20 docs:** `https://strk20-by-example.org/llms-full.txt` —
-the whole site as one Markdown file. Note that
+**Read the vendored skills first — they are the primary reference.**
+`.agents/skills/` carries five STRK20 skills with official doc pages bundled
+as Markdown, so you do not need the network and cannot be defeated by the SPA
+problem below:
+
+| Skill | Use it for |
+|---|---|
+| `strk20-wallet-api` | **Our route.** Actions, capability detection, private DeFi, AVNU private swaps |
+| `strk20-privacy` | Concepts — notes, nullifiers, channels, viewing keys, what is and is not hidden |
+| `strk20-anonymizer-contracts` | Cairo helpers. Needed for the Vault, post-v1 |
+| `strk20-privacy-sdk` | The low-level route. **Not ours** — read only to understand what we are not doing |
+| `strk20-privacy-integration` | The official ask/plan/execute planner |
+
+**Canonical STRK20 docs online:** `https://strk20-by-example.org/llms-full.txt`
+— the whole site as one Markdown file. Note that
 `strk20.starknet.io/docs/<path>` is a client-rendered SPA that returns an
 empty shell to fetchers, so a 200 there means nothing.
 
@@ -112,6 +125,50 @@ Append what you learn. Newest first. Include how you verified it — a finding
 without a verification method is a rumour.
 
 Format: `### YYYY-MM-DD — short title` then what, why it matters, how verified.
+
+---
+
+### 2026-08-16 — Pin the connection stack as a set, never mix floating and pinned
+
+The four connection packages must be pinned **exactly and together**:
+
+```
+starknet                                 10.4.0
+@starknet-io/types-js                    0.10.3
+@starknet-io/get-starknet-discovery      6.0.3
+@starknet-io/get-starknet-wallet-standard 6.0.3
+```
+
+This is the combination the official integration skill tested end to end.
+Newer versions exist (`starknet` 10.7.0, get-starknet 6.0.4 on `next`), and
+they may well be fine — but mixing a floating `starknet` with stale connection
+pins produces a stack nobody has run, which is the worst of both.
+
+We had exactly that defect: `starknet: "10.7.0"` alongside
+`get-starknet-*: "*"`. Fixed.
+
+Either use these four as a set, or bump them together and re-run the wallet
+tests. Never one without the others.
+
+*Verified:* all four resolve on npm; `starknet@10.4.0` installed clean and
+exposes `WalletAccountV6` with 10 `strk20` references in its type definitions.
+*Credit:* the `welttowelt/strk20-skills` wallet-api skill, which flags this
+hazard explicitly.
+
+---
+
+### 2026-08-16 — A shield is TWO wallet prompts, and the second reads as a bug
+
+The ERC-20 `approve` must land on-chain before the private deposit, so the
+wallet prompts twice for what the player thinks is one action.
+
+**Label both steps in the UI.** Unlabelled, the second prompt reads as a
+duplicate-transaction bug and players cancel it.
+
+For our Bridge deposit flow this compounds: bridge deposit, then `approve`,
+then shield. Three prompts for one intent. The room has to narrate that.
+
+*Source:* `.agents/skills/strk20-wallet-api/SKILL.md`.
 
 ---
 

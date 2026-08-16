@@ -52,14 +52,24 @@ Write against `WalletWithStarknetFeatures` and extension, iframe and web wallet 
 
 | Package | Pin | Note |
 |---|---|---|
-| `starknet` | `^10.4.0` → 10.7.0 | **Trap:** npm `latest` is **10.0.2** with zero STRK20. A bare install fails silently — every symbol undefined |
-| `@starknet-io/types-js` | `0.10.3` | Genuinely stable `latest`. Action types and error codes live here |
+| `starknet` | **`10.4.0` exact** | **Trap:** npm `latest` is **10.0.2** with zero STRK20 — a bare install fails silently, every symbol undefined. Pin exact; see the connection-stack note below |
+| `@starknet-io/types-js` | **`0.10.3` exact** | Action types and error codes live here |
+| `@starknet-io/get-starknet-discovery` | **`6.0.3` exact** | Dynamic wallet discovery. Never the static `get-starknet-wallets` list |
+| `@starknet-io/get-starknet-wallet-standard` | **`6.0.3` exact** | `WalletWithStarknetFeatures` |
 | `@starknetfoundation/starknet-start-react` | `^2.0.1` | The hooks package the STRK20 docs point at. **Not** `@starknet-react/core` |
 | `@avnu/avnu-sdk` | `^4.2.0` | Private swaps need ≥ 4.2.0. Surface labelled Preview |
 | `phaser` | `4.2.1` | **Trap:** the Tiled parser does not support external tilesets. `ParseTilesets.js` does `if (set.source) console.warn('External tilesets unsupported. Use Embed Tileset and re-export')` and skips them. **Embed tileset definitions in exported JSON, or flatten them at build time.** Authoring maps with external `.tsx` produces maps Phaser silently refuses to load |
 | `@colyseus/core` | `0.17.50` | Presence only. Use the narrow set, not the legacy `colyseus.js` (0.16.x, a major behind) or the full auth/playground meta-package |
 | `@colyseus/ws-transport` | `0.17.13` | |
 | `@colyseus/sdk` | `0.17.43` | Client side |
+
+**The connection stack is pinned exactly, all four together.** This is the
+combination the official STRK20 integration skill tested end to end. Newer
+versions exist — `starknet` 10.7.0 and get-starknet 6.0.4 are on `next` — but
+mixing a floating `starknet` with stale connection pins is the specific hazard
+that produces a stack nobody has run. Either use these four as a set, or bump
+them together and re-run the wallet tests.
+
 | ~~`starkzap`~~ | — | **Excluded.** 3.0.0 contains zero `strk20`; pins `starknet ^9.2.1` and `@avnu/avnu-sdk ^4.1.0-rc.0`, both below the STRK20 floors. Its signer abstraction is worth reading; the package is not usable here |
 | ~~`starknetkit`~~ | — | **Excluded.** 3.4.3 exposes 16 `wallet_*` methods, none STRK20, and pins `types-js 0.8.4` |
 
