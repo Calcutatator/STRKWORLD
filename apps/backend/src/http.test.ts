@@ -1,0 +1,47 @@
+import { describe, expect, it, vi } from 'vitest';
+import { createBackendFetchHandler } from './http.js';
+
+describe('privacy-safe Fetch edge', () => {
+  it('passes only method, path and parsed body into the backend core', async () => {
+    const api = {
+      handle: vi.fn(async () => ({ status: 200, body: { feeAmount: '6' } })),
+    };
+    const handler = createBackendFetchHandler(api);
+    const response = await handler(new Request('https://private.example/v1/rpc/pool-config', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ v: 1 }),
+    }));
+    expect(api.handle).toHaveBeenCalledWith({
+      method: 'POST', path: '/v1/rpc/pool-config', body: { v: 1 },
+    });
+    expect(response.status).toBe(200);
+    expect(response.headers.get('cache-control')).toBe('no-store');
+  });
+
+  it('rejects non-JSON, query parameters and oversized bodies before the core', async () => {
+    const api = { handle: vi.fn(async () => ({ status: 200, body: {} })) };
+    const handler = createBackendFetchHandler(api, { maxRequestBytes: 8 });
+    await expect(handler(new Request('https://private.example/v1/rpc/pool-config?address=0xabc', {
+      method: 'POST', headers: { 'content-type': 'application/json' }, body: '{}',
+    }))).resolves.toMatchObject({ status: 400 });
+    await expect(handler(new Request('https://private.example/v1/rpc/pool-config', {
+      method: 'POST', headers: { 'content-type': 'text/plain' }, body: '{}',
+    }))).resolves.toMatchObject({ status: 415 });
+    await expect(handler(new Request('https://private.example/v1/rpc/pool-config', {
+      method: 'POST', headers: { 'content-type': 'application/json' }, body: '{"v":123456789}',
+    }))).resolves.toMatchObject({ status: 413 });
+    expect(api.handle).not.toHaveBeenCalled();
+  });
+
+  it('returns a generic parse error without echoing malformed input', async () => {
+    const api = { handle: vi.fn(async () => ({ status: 200, body: {} })) };
+    const handler = createBackendFetchHandler(api);
+    const response = await handler(new Request('https://private.example/v1/private/fees', {
+      method: 'POST', headers: { 'content-type': 'application/json' }, body: '{secret',
+    }));
+    expect(response.status).toBe(400);
+    await expect(response.text()).resolves.not.toContain('secret');
+    expect(api.handle).not.toHaveBeenCalled();
+  });
+});

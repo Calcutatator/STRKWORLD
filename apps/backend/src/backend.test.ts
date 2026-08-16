@@ -356,4 +356,21 @@ describe('privacy-safe RPC and operations', () => {
       .resolves.toMatchObject({ status: 503 });
     expect(call).not.toHaveBeenCalled();
   });
+
+  it('rejects a swap configuration that could delay or broaden the quote-bound route', () => {
+    expect(() => fixture({
+      routes: {
+        transfer: { enabled: true, maxRelayFee: 10n, maxQueueDelayMs: 500, quoteBound: false },
+        unshield: { enabled: true, maxRelayFee: 10n, maxQueueDelayMs: 500, quoteBound: false },
+        swap: {
+          enabled: true,
+          maxRelayFee: 10n,
+          maxQueueDelayMs: 500,
+          quoteBound: false,
+          allowedTokens: [],
+          maxSlippageBps: 5_000,
+        },
+      },
+    })).toThrow(/quote-bound/i);
+  });
 });

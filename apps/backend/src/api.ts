@@ -22,7 +22,7 @@ import {
   validateArtifact,
 } from './validation.js';
 
-interface BackendApiOptions {
+export interface BackendApiOptions {
   config: BackendConfig;
   paymaster: PaymasterPort;
   rpc: PoolRpcPort;
@@ -46,6 +46,7 @@ export class BackendApi {
   private readonly clockNow: () => number;
 
   constructor(options: BackendApiOptions) {
+    validateBackendConfig(options.config);
     this.config = options.config;
     this.paymaster = options.paymaster;
     this.rpc = options.rpc;
@@ -385,4 +386,39 @@ function toFelt(value: bigint): string {
 function clamp(value: number, min: number, max: number): number {
   if (!Number.isFinite(value)) return min;
   return Math.max(min, Math.min(max, Math.floor(value)));
+}
+
+function validateBackendConfig(config: BackendConfig): void {
+  if (!isFelt(config.poolAddress) || !isFelt(config.feeToken)) {
+    throw new Error('Backend pool and fee-token addresses must be felts.');
+  }
+  if (
+    !Number.isSafeInteger(config.maxCalldataItems) || config.maxCalldataItems <= 0 ||
+    !Number.isSafeInteger(config.maxProofBytes) || config.maxProofBytes <= 0 ||
+    !Number.isSafeInteger(config.rateLimit.maxRequests) || config.rateLimit.maxRequests <= 0 ||
+    !Number.isSafeInteger(config.rateLimit.windowMs) || config.rateLimit.windowMs <= 0
+  ) {
+    throw new Error('Backend size and rate limits must be positive integers.');
+  }
+  for (const [route, policy] of Object.entries(config.routes)) {
+    if (
+      policy.maxRelayFee < 0n ||
+      !Number.isSafeInteger(policy.maxQueueDelayMs) ||
+      policy.maxQueueDelayMs < 0
+    ) {
+      throw new Error(`Backend ${route} policy has invalid limits.`);
+    }
+  }
+  const swap = config.routes.swap;
+  if (
+    !swap.quoteBound ||
+    swap.maxQueueDelayMs !== 0 ||
+    !swap.allowedTokens?.length ||
+    swap.allowedTokens.some((token) => !isFelt(token)) ||
+    !Number.isSafeInteger(swap.maxSlippageBps) ||
+    (swap.maxSlippageBps ?? 0) <= 0 ||
+    (swap.maxSlippageBps ?? 0) > 1_000
+  ) {
+    throw new Error('Backend swap policy must be quote-bound, immediate and allowlisted.');
+  }
 }

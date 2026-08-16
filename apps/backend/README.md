@@ -69,7 +69,10 @@ delay path. Kill switches, fee caps and a global aggregate rate limit fail
 closed. `AggregateMetrics` contains counts only.
 
 The code deliberately does not choose an HTTP framework or deployment host.
-That adapter must pass only `{method, path, body}` and must disable provider and
-platform request logging for these routes; adding a framework whose default
-access log captures IP, path or latency would violate D-014 even though this
-core itself logs nothing.
+`createBackendFetchHandler()` is the deployable Fetch API edge: it performs
+bounded streaming body reads, accepts same-origin JSON without reflecting
+CORS, rejects query strings, returns `no-store`, and passes only
+`{method, path, body}` into the core. The deployment must still disable
+provider and platform request logging for these routes; a platform whose
+default access log captures IP, path or latency would violate D-014 even though
+the handler and core themselves log nothing.
