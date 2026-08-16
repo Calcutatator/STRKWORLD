@@ -90,17 +90,32 @@ else
 fi
 
 # 4e. The vendored knowledge layer is part of the project contract. Agents can
-#     use it offline, while skills-lock.json records source and content hashes.
+#     use it offline, while skills-lock.json records source and content hashes —
+#     and those hashes are verified here, not merely recorded (they were wrong
+#     from the first commit and nothing noticed; see the 2026-08-16 audit
+#     finding).
 missing_skills=""
+hash_fail=""
 for skill in strk20-privacy strk20-wallet-api strk20-anonymizer-contracts strk20-privacy-sdk strk20-privacy-integration; do
-  if [ ! -f ".agents/skills/$skill/SKILL.md" ]; then
+  f=".agents/skills/$skill/SKILL.md"
+  if [ ! -f "$f" ]; then
     missing_skills="$missing_skills $skill"
+    continue
+  fi
+  want=$(python3 -c "import json,sys; print(json.load(open('skills-lock.json'))['skills']['$skill']['computedHash'])" 2>/dev/null)
+  got=$(shasum -a 256 "$f" 2>/dev/null | cut -d' ' -f1)
+  if [ -z "$want" ] || [ "$want" != "$got" ]; then
+    hash_fail="$hash_fail $skill"
   fi
 done
 if [ -n "$missing_skills" ]; then
   bad "required STRK20 skill missing:$missing_skills"
+elif [ -n "$hash_fail" ]; then
+  bad "vendored skill content does not match skills-lock.json:$hash_fail"
+  note "Either the skill was edited (re-vendor or update the lock deliberately)"
+  note "or the lock is stale. Recompute: shasum -a 256 .agents/skills/<name>/SKILL.md"
 else
-  ok "required STRK20 skills are vendored"
+  ok "required STRK20 skills are vendored and match skills-lock.json"
 fi
 
 # 5. The lobby never sees money. Checks code, not comments — docs legitimately
@@ -159,7 +174,37 @@ if [ -f "$reg" ]; then
   report=$(python3 - "$reg" <<'PYEOF'
 import re, sys
 src = open(sys.argv[1]).read()
-blocks = re.findall(r"\{\s*building:.*?\n  \}", src, re.S)
+
+# Brace-depth parser: find each object literal whose first key is `building:`,
+# regardless of indentation or formatting. The previous regex only closed a
+# block on a line of exactly two spaces + `}`, so ordinary reformatting made
+# entries silently invisible to this safety gate (fail-open). This fails
+# CLOSED instead: zero parsed entries in a file that mentions `building:`
+# is itself a failure. (Known limit: a brace inside a disclosure string will
+# confuse the depth count for that entry — keep braces out of the copy.)
+blocks = []
+for m in re.finditer(r"\{", src):
+    start = m.start()
+    # A register entry's first key is a QUOTED building id ({ building: 'bank' });
+    # the RouteEntry type declaration ({ building: BuildingId }) is unquoted and
+    # must not be parsed as an entry.
+    if not re.match(r"\{\s*building\s*:\s*'", src[start:start + 60]):
+        continue
+    depth = 0
+    for i in range(start, len(src)):
+        c = src[i]
+        if c == "{":
+            depth += 1
+        elif c == "}":
+            depth -= 1
+            if depth == 0:
+                blocks.append(src[start:i + 1])
+                break
+
+if not blocks and "building:" in src:
+    print("PARSEFAIL:yes")
+    sys.exit(0)
+
 unapproved, nocopy = [], []
 for b in blocks:
     route = (re.search(r"route:\s*'([^']+)'", b) or [None, "?"])[1]
@@ -172,12 +217,19 @@ for b in blocks:
         unapproved.append(f"{route} ({grade})")
     elif not disclosed:
         nocopy.append(route)
+print("PARSEFAIL:")
 print("UNAPPROVED:" + " ".join(unapproved))
 print("NOCOPY:" + " ".join(nocopy))
 PYEOF
 )
+  parsefail=$(echo "$report" | grep "^PARSEFAIL:" | cut -d: -f2- | xargs)
   unapproved=$(echo "$report" | grep "^UNAPPROVED:" | cut -d: -f2- | xargs)
   nocopy=$(echo "$report" | grep "^NOCOPY:" | cut -d: -f2- | xargs)
+
+  if [ -n "$parsefail" ]; then
+    bad "could not parse the privacy register — check 8 cannot verify D-020"
+    note "A gate that cannot read its register must fail, not pass vacuously."
+  fi
 
   if [ -n "$unapproved" ]; then
     bad "privacy deviation(s) with no recorded approval: $unapproved"

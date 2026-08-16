@@ -47,17 +47,28 @@ before the wallet is asked to prove or sign.
 
 ## The interface
 
+Intent-based and two-phase since D-015 — the earlier single-shot
+shield/unshield/transfer shape is superseded. `src/operations.ts` is
+authoritative; in outline:
+
 ```ts
 interface PrivacyOperations {
   capability(signal?: AbortSignal): Promise<WalletCapability>
   poolConfig(signal?: AbortSignal): Promise<PoolConfig>
-  balances(tokens?: string[], signal?: AbortSignal): Promise<PrivateBalance[]>
-  recipientStatus(address: string, signal?: AbortSignal): Promise<RecipientStatus>
+  balances(tokens?: Address[], signal?: AbortSignal): Promise<PrivateBalance[]>
+  recipientStatus(address: Address, signal?: AbortSignal): Promise<RecipientStatus>
   prepare(intents: Intent[], signal?: AbortSignal): Promise<PreparedBatch>
+  // PreparedBatch.confirm({ feeCeiling, onProgress?, signal? }) executes;
+  // it refuses to sign if the fee moved past the ceiling.
 }
 ```
 
-`WalletApiPrivacyOperations` is the implementation. The interface exists so
+The interface is **provisional until the Phase 0 spike** (D-015). Changing it
+needs a decision entry and a heads-up to the shell lane — never a quiet edit.
+
+`WalletApiPrivacyOperations` is the planned wallet-backed implementation; it
+lands in Phase 2 (see the commented export in `src/index.ts`). Until then
+`FakePrivacyOperations` implements the same interface. The interface exists so
 that:
 
 1. the whole financial layer can be driven by a mock in tests,

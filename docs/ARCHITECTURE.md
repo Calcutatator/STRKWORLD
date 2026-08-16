@@ -6,25 +6,25 @@ How STRKWORLD is put together, and what must never cross a boundary.
 
 ## The shape
 
-Three concerns that barely talk to each other, composed by a thin shell.
+Four concerns that barely talk to each other, composed by a thin shell.
 
 ```
-┌──────────────────────────────────────────────────────────┐
-│  apps/web — the shell                                     │
-│  routing · layout · event bus · providers       │
-└───────┬──────────────────┬───────────────────┬───────────┘
-        │                  │                   │
-┌───────▼────────┐ ┌───────▼────────┐ ┌────────▼────────┐
-│ packages/      │ │ packages/      │ │ packages/       │
-│ privacy        │ │ world          │ │ lobby           │
-│                │ │                │ │                 │
-│ Starknet.      │ │ Phaser.        │ │ Colyseus.       │
-│ Money.         │ │ Movement.      │ │ Positions.      │
-│ Wallet.        │ │ Tilemaps.      │ │ Ephemeral IDs.  │
-│                │ │                │ │                 │
-│ Knows nothing  │ │ Knows nothing  │ │ Knows nothing   │
-│ about the game │ │ about money    │ │ about anything  │
-└────────┬───────┘ └────────────────┘ └─────────────────┘
+┌─────────────────────────────────────────────────────────────────────┐
+│  apps/web — the shell                                                │
+│  routing · layout · event bus · providers · bridge→shield sequencing │
+└───────┬───────────────┬───────────────┬───────────────┬─────────────┘
+        │               │               │               │
+┌───────▼───────┐ ┌─────▼─────────┐ ┌───▼───────────┐ ┌─▼─────────────┐
+│ packages/     │ │ packages/     │ │ packages/     │ │ packages/     │
+│ privacy       │ │ bridge        │ │ world         │ │ lobby         │
+│               │ │               │ │               │ │               │
+│ Starknet.     │ │ 1Click.       │ │ Phaser.       │ │ Colyseus.     │
+│ Money.        │ │ Public        │ │ Movement.     │ │ Positions.    │
+│ Wallet.       │ │ funding.      │ │ Tilemaps.     │ │ Ephemeral IDs.│
+│               │ │               │ │               │ │               │
+│ Knows nothing │ │ Knows nothing │ │ Knows nothing │ │ Knows nothing │
+│ about the game│ │ about the pool│ │ about money   │ │ about anything│
+└────────┬──────┘ └───────────────┘ └───────────────┘ └───────────────┘
          │
     ┌────▼─────┐
     │  Wallet  │  holds viewing key · discovers notes
@@ -75,6 +75,15 @@ limits, fee ceilings and route kill switches. If an approved private route is
 unavailable, the building is locked; there is no unshield-and-call or public
 frontend fallback (D-018).
 
+Route admission is also graded (D-020): **absolute privacy is the default**,
+and any route below `private` is a deviation needing the project lead's
+recorded approval *plus* player-facing disclosure, both stored in
+`packages/shared/src/privacy-grades.ts`. An unapproved or undisclosed
+deviation renders a locked door — CI check 8 enforces this rather than
+trusting anyone to remember. Routes that leave value sitting in public
+(`bridge.deposit`, `exchange.swap`) must offer the next step back into the
+pool — the `returnToPool` property on the register entry (D-021).
+
 A custom anonymizer atomically receives pool input, calls the external
 protocol and returns the output to a pool note. It keeps the player's wallet
 address out of the protocol action, but the application, action, timing and
@@ -119,13 +128,29 @@ interface PrivacyOperations {
 }
 ```
 
-`WalletApiPrivacyOperations` is the pool-native implementation and the seam
-also owns first-party and anonymizer-backed route adapters. Callers can request
-only typed intents; they cannot supply arbitrary protocol calls. The interface
-also lets the whole financial layer be driven by a mock in tests.
+The interface is **provisional until the Phase 0 spike** (D-015); changing it
+needs a decision entry and a heads-up to dependent lanes, never a quiet edit.
+`WalletApiPrivacyOperations` is the planned pool-native implementation (lands
+in Phase 2); until then `FakePrivacyOperations` — same interface, fault
+injection, no chain — drives everything. The seam also owns first-party and
+anonymizer-backed route adapters. Callers can request only typed intents; they
+cannot supply arbitrary protocol calls.
 
 **Must not:** import from `world` or `lobby`, contain UI, or branch on wallet
 identity.
+
+### `packages/bridge`
+
+One-way funding: any asset on any chain → STRK on Starknet, followed by a
+prompted (never automatic) shield at the Bank (D-012). NEAR Intents 1Click
+orchestration, resumable across reloads and devices. Since D-012 removed the
+OUT direction it is chain-free on the Starknet side — 1Click + viem only, no
+`starknet` import. The shell owns the bridge → shield sequencing, because this
+package must never import `packages/privacy` (D-009, CI-enforced).
+
+**Must not:** import `@strkworld/privacy`, offer an OUT direction or a
+destination-token choice, or present arrival as private — bridging is a
+funding feature, and its copy must say the arrival leg is public.
 
 ### `packages/world`
 

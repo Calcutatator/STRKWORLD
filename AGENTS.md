@@ -195,6 +195,10 @@ vendored snapshot:
 - The approval/deposit sequence is real, but Ready 5.33.8 currently puts its
   approval call(s) and privacy call in one transaction action. Exact visible
   prompt count remains a live-wallet result. Do not hardcode two.
+  The hardcoded two-prompt claim appears in the snapshot at
+  `strk20-wallet-api/SKILL.md:73-74` **and**
+  `strk20-privacy-integration/references/wallet-api-route.md:60` — treat both
+  as superseded by this correction.
 - Bundled upstream SDK references contain commands that write an auth token
   directly to `.npmrc`. Never execute those. If the SDK is ever used in a
   different, approved key-holding project, follow the safer environment
@@ -509,6 +513,46 @@ Phaser's own loaders. Do not spend time looking for one.
 
 *Verified:* `mcp__mcp-registry__search_mcp_registry` with eight game-dev
 keywords, 2026-08-16, empty result set.
+
+---
+
+### 2026-08-16 — Consistency audit: docs had drifted from the decision log; fixed
+
+An orchestration-level audit (five parallel readers, each defect then
+adversarially re-verified against file:line before being accepted) found the
+top-level docs lagging the decision log. All fixes are doc/tooling-level — no
+decision changed:
+
+- `ARCHITECTURE.md` omitted `packages/bridge` entirely (topology and
+  Boundaries), and `SPEC.md`'s v1 summary, build plan and §7 dropped the
+  Bridge its own §4 table marks Active (D-009/D-012). Both now carry it.
+- Neither `SPEC.md` nor `ARCHITECTURE.md` mentioned the D-020
+  grade/approval/disclosure gate or D-021 `returnToPool`. Both now do.
+- `SPEC.md` §7 still said "external tilesets" (contradicting D-008), one §8
+  bullet still called the event bus "the bridge" (D-010), and the Verdict/§6
+  hardcoded a one-prompt-per-batch outcome that §8 lists as a Phase 0 unknown.
+- `docs/BRIEF-chain-lanes.md` stated "a shield is two wallet prompts" as fact,
+  reintroducing the claim the finding below (same date) retired. Reworded;
+  the two vendored-skill occurrences are now named in §5 above.
+- `packages/privacy/README.md` documented the pre-D-015 single-shot interface,
+  a `WalletApiPrivacyOperations` that does not exist yet, and the superseded
+  `starknet@10.7.0` pin. Rewritten against `src/operations.ts`.
+  `docs/research/primary-source-verification.md`'s pin section now carries a
+  supersession banner pointing at the set-pin finding.
+- `skills-lock.json` content hashes matched neither the vendored files nor
+  upstream at the pinned commit — wrong from the first commit, and nothing
+  verified them. Recomputed (sha256 of each vendored `SKILL.md`), and
+  check 4e now verifies them instead of only checking file existence.
+- Check 8's register parser only recognised entries whose closing brace sat at
+  exactly two-space indent — ordinary reformatting silently hid entries from a
+  safety gate (fail-open). Replaced with a brace-depth parser that fails
+  closed when it cannot parse the register.
+
+*Verified:* every defect confirmed by an independent adversarial verifier
+against exact file:line before fixing; `./scripts/check-invariants.sh` re-run
+after the changes — the only remaining failure is the four approved deviations
+awaiting the project lead's disclosure copy, which is the known, deliberate
+state.
 
 ---
 

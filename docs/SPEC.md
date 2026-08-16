@@ -22,7 +22,7 @@ only through a reviewed app-specific anonymizer.
 
 Every interface in this document was read from packages installed from npm, not from documentation. `starknet@10.7.0` carries all four `strk20*` methods on `WalletAccountV6` and as standalone functions over `WalletWithStarknetFeatures`; `@starknet-io/types-js@0.10.3` defines the four action variants and the error codes; `@starknetfoundation/starknet-start-react@2.0.1` ships the three hooks plus a paymaster set.
 
-The binding constraints are economic and procedural, not architectural: one wallet prompt per shielded transaction with no session-key mechanism, a per-transaction pool fee, a note-maturity wait before funds are spendable, and a registration step the game cannot perform on the player's behalf. Each has a design answer below.
+The binding constraints are economic and procedural, not architectural: wallet prompting on every shielded transaction with no session-key mechanism (the exact prompt count is wallet-dependent — Phase 0 measures it), a per-transaction pool fee, a note-maturity wait before funds are spendable, and a registration step the game cannot perform on the player's behalf. Each has a design answer below.
 
 ---
 
@@ -168,6 +168,13 @@ and has a kill switch. There is no public fallback. If the approved private
 route is unavailable, the building stays locked rather than unshielding and
 calling from the player's wallet or redirecting to a normal app frontend.
 
+Admission is also graded (D-020): absolute privacy is the default, and any
+route below `private` needs the project lead's recorded approval plus
+player-facing disclosure in `packages/shared/src/privacy-grades.ts` — an
+unapproved or undisclosed deviation renders a locked door, enforced in CI.
+Routes that leave value in public (`bridge.deposit`, `exchange.swap`) must
+offer the next step back into the pool via `returnToPool` (D-021).
+
 For Wallet API concepts and operations, use the
 [STRK20 Wallet API guide](https://strk20-by-example.org/starknet-wallet-api/overview).
 For custom helpers, use the
@@ -286,7 +293,7 @@ If a mock that is neither extension nor web wallet can play the game, a real web
 
 Session keys are absent from the dapp surface and blocked at the contract level: the pool's `assert_valid_os_call` requires `caller_address.is_zero()`, which `execute_from_outside` can never satisfy. Every call shows its own approval UI, and the spec warns the dapp "must tolerate long-running calls."
 
-**Design answer:** the `actions` array is atomic. Accumulate player intent off-chain inside a building and settle one batch on exit — one prompt, one proof, one fee. This converts cost from per-move to per-session. Architect it from day one; retrofitting is expensive.
+**Design answer:** the `actions` array is atomic. Accumulate player intent off-chain inside a building and settle one batch on exit — one proof, one fee, and as few prompts as the wallet will render (whether a multi-action array shows one confirmation or several is a Phase 0 measurement, not a guarantee — see §8). This converts cost from per-move to per-session. Architect it from day one; retrofitting is expensive.
 
 ### Registration happens in the wallet, not the game
 
@@ -349,8 +356,9 @@ defeat session-level correlation while the pool is small (D-015).
 
 ## 7. What the game builds
 
-- **The game itself** — Phaser 4 canvas, Tiled maps with **embedded** tilesets (Phaser rejects external — see AGENTS.md), React overlay, PWA shell. STRK20 provides zero game primitives.
+- **The game itself** — Phaser 4 canvas, Tiled maps with embedded tilesets (D-008 — Phaser rejects external `.tsx`), React overlay, PWA shell. STRK20 provides zero game primitives.
 - **Colyseus lobby** — presence and position only. Never sees an address.
+- **The Bridge funding edge** — NEAR Intents 1Click orchestration in `packages/bridge`, deposit-only, public by design, followed by a prompted shield (D-009, D-012).
 - **Starknet RPC** for public reads — receipts, adapter contract reads. Not `publicProvider()` in production.
 - **Backend** — paymaster key custody, privacy-safe RPC reads, route validation
   and the bounded submission queue. No per-request logs.
@@ -402,7 +410,7 @@ Parallel with Phase 0.
 - One street: roads, grass, four facades, interiors, door triggers
 - Colyseus lobby, ephemeral pseudonyms
 - Leave or suspend lobby presence on building entry; no building event on the wire
-- React↔Phaser bridge: hooks own wallet state, push into Phaser via event emitter
+- React↔Phaser event bus (D-010: "bridge" refers only to the building): hooks own wallet state, push into Phaser via event emitter
 
 ### Phase 2 — The Bank · 2–3 weeks
 
@@ -417,6 +425,13 @@ Parallel with Phase 0.
 AVNU SDK's first-party executor and paymaster path, behind the same typed route
 gate. No project-owned Cairo and no queue delay on an expiring quote.
 
+### The Bridge — parallel from week 1
+
+Fully independent of the Phase 0 spike and the STRK20 seam, so it runs in
+parallel throughout (see `WORKPLAN.md`): port shieldup's 1Click wrapper and
+resumable pipeline, deposit-only per D-012, manual-deposit mode first, honest
+public-leg copy, and the prompted shield hand-off owned by the shell.
+
 ### Phase 4 — Hardening and launch · weeks 5–8
 
 Multiplayer resilience, mainnet regression suite, dependency and security hardening, art pass, launch operations.
@@ -429,7 +444,7 @@ Toolchain when it starts: Scarb `2.17.0`, Starknet Foundry `0.59.0` — verified
 
 Only proceed if Phase 0 confirmed the shipped wallet honours arbitrary-contract `invoke`.
 
-**v1 — Bank, Exchange and Post Office on mainnet in roughly 6–8 weeks**, Phase 1 parallelised, no Cairo and therefore no audit on the critical path.
+**v1 — Bank, Exchange, Post Office and the Bridge funding edge on mainnet in roughly 6–8 weeks**, Phase 1 and the Bridge parallelised, no Cairo and therefore no audit on the critical path.
 
 ---
 

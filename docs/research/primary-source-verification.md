@@ -57,6 +57,15 @@ Current code verification at commit `290f830`:
 
 ## Package and SDK verification
 
+> **Superseded on version pins (2026-08-16).** The versions below were what
+> this pass verified against, but the repo now pins the connection stack as
+> an exact set — `starknet@10.4.0`, `@starknet-io/types-js@0.10.3`,
+> `@starknet-io/get-starknet-discovery@6.0.3`,
+> `@starknet-io/get-starknet-wallet-standard@6.0.3` — the combination the
+> official integration skill tested end to end. See the AGENTS.md finding
+> "Pin the connection stack as a set". Bump all four together or not at all;
+> the 10.7.0 / 6.0.4 references below are historical.
+
 ### Confirmed package state
 
 Registry/package inspection produced this reproducible set:

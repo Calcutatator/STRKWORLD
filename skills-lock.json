@@ -5,31 +5,36 @@
       "source": "welttowelt/strk20-skills",
       "sourceType": "github",
       "skillPath": "skills/strk20-anonymizer-contracts/SKILL.md",
-      "computedHash": "42bdde254987ea0c93d7aca6d3c69adfe50310c2f67a4b7a0167e64f8a0db178"
+      "computedHash": "7ab6789934c866b31da44447321b994dca6537a48fd39dfe1169dc0ec4b1d82c",
+      "hashOf": "sha256 of the vendored SKILL.md file bytes"
     },
     "strk20-privacy": {
       "source": "welttowelt/strk20-skills",
       "sourceType": "github",
       "skillPath": "skills/strk20-privacy/SKILL.md",
-      "computedHash": "5bd5d058c8dfc97e99a2d6679658988ded4ebc627a0791290f6793c6098e3e65"
+      "computedHash": "8b787418305e7c5f355abadd5118b75b23f6e079282c367bd68ca373db887a20",
+      "hashOf": "sha256 of the vendored SKILL.md file bytes"
     },
     "strk20-privacy-integration": {
       "source": "starkience/strk20-agent-skills",
       "sourceType": "github",
       "skillPath": "skills/strk20-privacy-integration/SKILL.md",
-      "computedHash": "cf326cefa06fbaf6c8f090a94fd7e439e489cf1276d7ddd3edb454a02605eebc"
+      "computedHash": "2e80d8deff08182b5ed6ceb872986d09084c2083d5cad80ea2b68a012f77f3a8",
+      "hashOf": "sha256 of the vendored SKILL.md file bytes"
     },
     "strk20-privacy-sdk": {
       "source": "welttowelt/strk20-skills",
       "sourceType": "github",
       "skillPath": "skills/strk20-privacy-sdk/SKILL.md",
-      "computedHash": "ea268962ba03277eec64420adf5f3aa0b5fc40a076e065c21331bc7f8d7aa1ef"
+      "computedHash": "41adfc9c0810472197cfacafd89b554e148598b42b2728e31c327fe3f2ec78f1",
+      "hashOf": "sha256 of the vendored SKILL.md file bytes"
     },
     "strk20-wallet-api": {
       "source": "welttowelt/strk20-skills",
       "sourceType": "github",
       "skillPath": "skills/strk20-wallet-api/SKILL.md",
-      "computedHash": "6544d3e102dcb2f7ffba2e65f1ab6fc5a8fcdd803d8b9e6fc7389be4ef7147a4"
+      "computedHash": "acdbc74d8e3c1911a25a6fa6f7b66fc48422d7367c75599a73a2501e76efe0d4",
+      "hashOf": "sha256 of the vendored SKILL.md file bytes"
     }
   }
 }
