@@ -3,6 +3,7 @@ import {
   BackendApi,
   HmacAuthorizationCodec,
   MemoryAuthorizationCodec,
+  validateServerActionRoute,
   type BackendConfig,
   type PaymasterPort,
   type PoolRpcPort,
@@ -55,9 +56,16 @@ function fixture(overrides: Partial<BackendConfig> = {}) {
     maxProofBytes: 2_000_000,
     globalEnabled: true,
     rateLimit: { maxRequests: 100, windowMs: 60_000 },
+    sponsorshipBudget: { maxFeeAmount: 1_000n, windowMs: 60_000 },
     routes: {
-      transfer: { enabled: true, maxRelayFee: 10n, maxQueueDelayMs: 500, quoteBound: false },
-      unshield: { enabled: true, maxRelayFee: 10n, maxQueueDelayMs: 500, quoteBound: false },
+      transfer: {
+        enabled: true, maxRelayFee: 10n, maxQueueDelayMs: 500, quoteBound: false,
+        allowedTokens: [STRK, '0xabc'],
+      },
+      unshield: {
+        enabled: true, maxRelayFee: 10n, maxQueueDelayMs: 500, quoteBound: false,
+        allowedTokens: [STRK, '0xabc'],
+      },
       swap: {
         enabled: true,
         maxRelayFee: 10n,
@@ -157,6 +165,10 @@ describe('strict fee authorization', () => {
       method: 'POST', path: '/v1/private/fees',
       body: { v: 1, route: 'transfer', feeToken: STRK, operationToken: '0xabc', target: '0xevil' },
     })).resolves.toMatchObject({ status: 400 });
+    await expect(api.handle({
+      method: 'POST', path: '/v1/private/fees',
+      body: { v: 1, route: 'transfer', feeToken: STRK, operationToken: '0xdead' },
+    })).resolves.toMatchObject({ status: 400 });
 
     vi.spyOn(paymaster, 'buildFee').mockResolvedValue({ token: '0xdead', recipient: FEE_RECIPIENT, amount: 1n });
     await expect(fee(api)).rejects.toThrow();
@@ -166,8 +178,14 @@ describe('strict fee authorization', () => {
 
     const disabled = fixture({
       routes: {
-        transfer: { enabled: false, maxRelayFee: 10n, maxQueueDelayMs: 500, quoteBound: false },
-        unshield: { enabled: true, maxRelayFee: 10n, maxQueueDelayMs: 500, quoteBound: false },
+        transfer: {
+          enabled: false, maxRelayFee: 10n, maxQueueDelayMs: 500, quoteBound: false,
+          allowedTokens: [STRK, '0xabc'],
+        },
+        unshield: {
+          enabled: true, maxRelayFee: 10n, maxQueueDelayMs: 500, quoteBound: false,
+          allowedTokens: [STRK, '0xabc'],
+        },
         swap: {
           enabled: true,
           maxRelayFee: 10n,
@@ -202,6 +220,37 @@ describe('bounded private submission', () => {
     expect(response).toEqual({ status: 200, body: { transactionHash: '0xsubmitted' } });
     expect(delays).toEqual([250]);
     expect(submitted).toEqual([artifact]);
+  });
+
+  it('binds an unshield public withdrawal to the authorized token allowlist', async () => {
+    const { api, submitted } = fixture();
+    const quote = await fee(api, 'unshield');
+    const makeArtifact = (withdrawToken: string): PreparedArtifact => {
+      const calldata = [
+        '0x2',
+        '0x3', FEE_RECIPIENT, STRK, '0x7',
+        '0x3', '0x456', withdrawToken, '0x14',
+      ];
+      return {
+        call: { contract_address: POOL, entry_point: 'apply_actions', calldata },
+        proof: { data: 'proof', output: ['0xc1', ...calldata], proof_facts: ['0x1'] },
+      };
+    };
+    await expect(api.handle({
+      method: 'POST', path: '/v1/private/submissions',
+      body: {
+        v: 1, route: 'unshield', artifact: makeArtifact('0xabc'),
+        feeAuthorization: quote.authorization, proofValidityBlocks: 450,
+      },
+    })).resolves.toMatchObject({ status: 200 });
+    await expect(api.handle({
+      method: 'POST', path: '/v1/private/submissions',
+      body: {
+        v: 1, route: 'unshield', artifact: makeArtifact('0xdead'),
+        feeAuthorization: quote.authorization, proofValidityBlocks: 450,
+      },
+    })).resolves.toMatchObject({ status: 400 });
+    expect(submitted).toHaveLength(1);
   });
 
   it('never delays a quote-bound route', async () => {
@@ -327,6 +376,75 @@ describe('bounded private submission', () => {
     })).resolves.toMatchObject({ status: 409 });
     expect(submitted).toHaveLength(0);
   });
+
+  it('stops before relay when the aggregate sponsorship budget is exhausted', async () => {
+    const { api, submitted } = fixture({
+      sponsorshipBudget: { maxFeeAmount: 6n, windowMs: 60_000 },
+    });
+    const quote = await fee(api);
+    await expect(api.handle({
+      method: 'POST', path: '/v1/private/submissions',
+      body: {
+        v: 1,
+        route: 'transfer',
+        artifact,
+        feeAuthorization: quote.authorization,
+        proofValidityBlocks: 450,
+      },
+    })).resolves.toMatchObject({ status: 503 });
+    expect(submitted).toHaveLength(0);
+    expect(api.metrics.snapshot()).toMatchObject({ budgetExhausted: 1 });
+  });
+});
+
+describe('quote-bound swap withdrawal matching', () => {
+  const invokePrefix = ['0xabc'];
+  const swapBinding = {
+    executor: '0x999',
+    sellToken: STRK,
+    buyToken: '0xabc',
+    sellAmount: 7n,
+    quoteExpiresAt: 2_000,
+    invokePrefix,
+  };
+
+  function swapArtifact(transfers: string[]): PreparedArtifact {
+    const calldata = [
+      '0x3',
+      ...transfers,
+      '0x9', '0x999', '0x2', ...invokePrefix, '0x777',
+    ];
+    return {
+      call: { contract_address: POOL, entry_point: 'apply_actions', calldata },
+      proof: { data: 'proof', output: ['0xc1', ...calldata], proof_facts: ['0x1'] },
+    };
+  }
+
+  it('does not let one withdrawal satisfy both fee and sell while a second is arbitrary', () => {
+    expect(() => validateServerActionRoute(
+      'swap',
+      swapArtifact([
+        '0x3', '0x999', STRK, '0x7',
+        '0x3', '0xdead', '0xbeef', '0x1',
+      ]),
+      { token: STRK, recipient: '0x999', amount: 7n },
+      STRK,
+      swapBinding,
+    )).toThrow(/withdrawals/i);
+  });
+
+  it('accepts two separately assigned withdrawals even when their fields are identical', () => {
+    expect(() => validateServerActionRoute(
+      'swap',
+      swapArtifact([
+        '0x3', '0x999', STRK, '0x7',
+        '0x3', '0x999', STRK, '0x7',
+      ]),
+      { token: STRK, recipient: '0x999', amount: 7n },
+      STRK,
+      swapBinding,
+    )).not.toThrow();
+  });
 });
 
 describe('privacy-safe RPC and operations', () => {
@@ -360,8 +478,14 @@ describe('privacy-safe RPC and operations', () => {
   it('rejects a swap configuration that could delay or broaden the quote-bound route', () => {
     expect(() => fixture({
       routes: {
-        transfer: { enabled: true, maxRelayFee: 10n, maxQueueDelayMs: 500, quoteBound: false },
-        unshield: { enabled: true, maxRelayFee: 10n, maxQueueDelayMs: 500, quoteBound: false },
+        transfer: {
+          enabled: true, maxRelayFee: 10n, maxQueueDelayMs: 500, quoteBound: false,
+          allowedTokens: [STRK],
+        },
+        unshield: {
+          enabled: true, maxRelayFee: 10n, maxQueueDelayMs: 500, quoteBound: false,
+          allowedTokens: [STRK],
+        },
         swap: {
           enabled: true,
           maxRelayFee: 10n,
@@ -371,6 +495,6 @@ describe('privacy-safe RPC and operations', () => {
           maxSlippageBps: 5_000,
         },
       },
-    })).toThrow(/quote-bound/i);
+    })).toThrow(/invalid|quote-bound/i);
   });
 });

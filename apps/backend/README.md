@@ -65,8 +65,14 @@ Fee build returns an HMAC authorization binding route, fee token, operation
 token, recipient, amount and block-validity window. The server keeps no quote
 row to correlate with the later proof. Pool-native submissions receive bounded
 jitter and are checked again after the delay; quote-bound swaps never enter the
-delay path. Kill switches, fee caps and a global aggregate rate limit fail
-closed. `AggregateMetrics` contains counts only.
+delay path. Kill switches, fee caps, a global aggregate rate limit and an
+aggregate fee-token sponsorship budget fail closed. `AggregateMetrics`
+contains counts only; production alerts on `budgetExhausted` without attaching
+a request identity. A multi-instance deployment needs one atomic aggregate
+admission store because in-process counters are instance-local (D-026).
+`BackendApiOptions.rateLimiter` and `.sponsorshipBudget` accept atomic
+deployment adapters; the in-memory defaults are for tests or a single
+admission-control instance only.
 
 The code deliberately does not choose an HTTP framework or deployment host.
 `createBackendFetchHandler()` is the deployable Fetch API edge: it performs

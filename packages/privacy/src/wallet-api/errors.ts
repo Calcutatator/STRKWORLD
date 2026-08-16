@@ -1,4 +1,4 @@
-import { PrivacyError } from '../types.js';
+import { PrivacyError, type PrivacyErrorKind } from '../types.js';
 
 const CODE_TO_KIND = {
   113: 'user-rejected',
@@ -13,27 +13,19 @@ export function mapWalletError(error: unknown): PrivacyError {
   if (error instanceof PrivacyError) return error;
   const code = readCode(error);
   const kind = code === null ? 'unreachable' : (CODE_TO_KIND[code as keyof typeof CODE_TO_KIND] ?? 'unknown');
-  const message = readMessage(error) ?? safeMessage(kind);
-  return new PrivacyError(kind, message, error);
+  return new PrivacyError(kind, safeMessage(kind), error);
 }
 
-function readCode(error: unknown): number | null {
+function readCode(error: unknown, seen = new Set<object>()): number | null {
   if (!error || typeof error !== 'object') return null;
+  if (seen.has(error)) return null;
+  seen.add(error);
   const candidate = error as { code?: unknown; error?: unknown; cause?: unknown };
   if (typeof candidate.code === 'number') return candidate.code;
-  return readCode(candidate.error) ?? readCode(candidate.cause);
+  return readCode(candidate.error, seen) ?? readCode(candidate.cause, seen);
 }
 
-function readMessage(error: unknown): string | null {
-  if (error instanceof Error && error.message) return error.message;
-  if (error && typeof error === 'object' && 'message' in error) {
-    const message = (error as { message?: unknown }).message;
-    if (typeof message === 'string' && message) return message;
-  }
-  return null;
-}
-
-function safeMessage(kind: ReturnType<typeof mapKind>): string {
+function safeMessage(kind: PrivacyErrorKind): string {
   switch (kind) {
     case 'user-rejected': return 'The wallet request was declined.';
     case 'not-registered': return 'This wallet is not registered with the privacy pool.';
@@ -43,15 +35,4 @@ function safeMessage(kind: ReturnType<typeof mapKind>): string {
     case 'unreachable': return 'The wallet or network could not be reached.';
     default: return 'The privacy operation failed.';
   }
-}
-
-function mapKind():
-  | 'user-rejected'
-  | 'not-registered'
-  | 'insufficient-balance'
-  | 'privacy-leak'
-  | 'unsupported-wallet'
-  | 'unreachable'
-  | 'unknown' {
-  return 'unknown';
 }

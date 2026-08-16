@@ -121,8 +121,13 @@ describe('fixed Starknet RPC adapter', () => {
       const request = JSON.parse(String(init?.body)) as { method: string; params: unknown[] };
       requests.push(request);
       if (request.method === 'starknet_call') {
-        const call = request.params[0] as { calldata: string[] };
-        return new Response(JSON.stringify({ jsonrpc: '2.0', id: 1, result: call.calldata.length ? ['0x99'] : ['0x6', '0x0'] }));
+        const call = request.params[0] as { entry_point_selector: string; calldata: string[] };
+        const result = call.calldata.length
+          ? ['0x99']
+          : call.entry_point_selector === '0x11d6d65b366023adbdaeaa04008285431f4509d78e78cda7067e58fbba35147'
+            ? ['0x1c2']
+            : ['0x6', '0x0'];
+        return new Response(JSON.stringify({ jsonrpc: '2.0', id: 1, result }));
       }
       return new Response(JSON.stringify({ jsonrpc: '2.0', id: 1, result: 1000 }));
     });
@@ -130,6 +135,8 @@ describe('fixed Starknet RPC adapter', () => {
     await expect(rpc.getPoolConfig()).resolves.toMatchObject({ feeAmount: 6n, proofValidityBlocks: 450 });
     await expect(rpc.getPublicKey('0x456')).resolves.toBe('0x99');
     await expect(rpc.getBlockNumber()).resolves.toBe(1000);
-    expect(requests.map((request) => request.method)).toEqual(['starknet_call', 'starknet_call', 'starknet_blockNumber']);
+    expect(requests.map((request) => request.method)).toEqual([
+      'starknet_call', 'starknet_call', 'starknet_call', 'starknet_blockNumber',
+    ]);
   });
 });

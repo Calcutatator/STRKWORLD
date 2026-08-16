@@ -79,6 +79,8 @@ export interface WalletRoutePolicy {
   maxIntents: number;
   maxRelayFee: bigint;
   enabledRoutes: readonly ('shield' | 'unshield' | 'transfer' | 'swap')[];
+  /** Every token crossing an enabled route must be explicitly admitted. */
+  allowedTokens: Readonly<Record<'shield' | 'unshield' | 'transfer' | 'swap', readonly Address[]>>;
   swap?: {
     expectedChainId: string;
     slippageBps: number;

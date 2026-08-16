@@ -36,6 +36,7 @@ export {
   MANUAL_POLL_INTERVAL_MS,
   MAX_ACTIVE_POLLING_MS,
   QUOTE_DEADLINE_MS,
+  type CreateDepositInput,
   type CreateManualDepositInput,
   type WatchDepositOptions,
 } from './service.js';

@@ -5,6 +5,7 @@ import {
   type Quote,
 } from '@avnu/avnu-sdk';
 import type { SwapPlan, SwapPlannerPort } from './types.js';
+import { sameAddress } from './validation.js';
 
 interface AvnuSwapFunctions {
   getQuotes: typeof getQuotes;
@@ -80,8 +81,4 @@ function quoteMatches(
 function normalizeExpiry(value: number | null | undefined): number | null {
   if (value === null || value === undefined || !Number.isFinite(value)) return null;
   return value < 1_000_000_000_000 ? value * 1_000 : value;
-}
-
-function sameAddress(a: string, b: string): boolean {
-  try { return BigInt(a) === BigInt(b); } catch { return false; }
 }

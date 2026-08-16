@@ -82,6 +82,14 @@ describe('a shield is never bundled with what it funds', () => {
     ])).rejects.toMatchObject({ kind: 'privacy-leak' });
   });
 
+  it('matches production by rejecting mixed private route kinds', async () => {
+    const ops = fresh();
+    await expect(ops.prepare([
+      { kind: 'transfer', token: STRK, amount: 10n ** 18n, recipient: BOB },
+      { kind: 'unshield', token: STRK, amount: 10n ** 18n, recipient: ALICE },
+    ])).rejects.toThrow(/one approved route/i);
+  });
+
   it('models the shipped wallet source as one batched shield action', async () => {
     const ops = fresh();
     const batch = await ops.prepare([{ kind: 'shield', token: STRK, amount: 10n ** 18n }]);
@@ -114,12 +122,11 @@ describe('the fee can move between prepare and confirm', () => {
 });
 
 describe('recipients must be registered', () => {
-  it('warns rather than failing late', async () => {
+  it('blocks an unregistered recipient before proof generation', async () => {
     const ops = fresh();
-    const batch = await ops.prepare([
+    await expect(ops.prepare([
       { kind: 'transfer', token: STRK, amount: 10n ** 18n, recipient: '0x0999' },
-    ]);
-    expect(has(batch.warnings, 'recipient-unregistered')).toBe(true);
+    ])).rejects.toMatchObject({ kind: 'not-registered' });
   });
 
   it('reports unregistered addresses from the preflight', async () => {

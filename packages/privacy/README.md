@@ -29,6 +29,10 @@ door stays locked. Never expose raw contract targets, selectors or calldata to
 the shell; this package owns their allowlists plus token, quote, slippage, fee
 and action-limit validation. See `docs/DECISIONS.md` D-018.
 
+Every enabled route also receives an explicit token allowlist. Syntactically
+valid is not admitted: input and output tokens must pass that route's list
+before the wallet is asked to prove or sign.
+
 ## What this must never do
 
 - Import from `@strkworld/world` or `@strkworld/lobby`

@@ -353,7 +353,7 @@ export class WalletApiPrivacyOperations implements PrivacyOperations {
       throw new PrivacyError('unknown', 'The relay returned an unexpected fee token.');
     }
     assertAddress(fee.recipient, 'relay fee recipient');
-    if (fee.amount < 0n || fee.amount > this.policy.maxRelayFee) {
+    if (fee.amount <= 0n || fee.amount > this.policy.maxRelayFee) {
       throw new PrivacyError('unknown', 'The relay fee exceeds the route policy.');
     }
     if (!fee.authorization || !Number.isSafeInteger(fee.expiresAtBlock) || fee.expiresAtBlock <= 0) {
@@ -377,7 +377,16 @@ export class WalletApiPrivacyOperations implements PrivacyOperations {
       } else if (intent.kind === 'transfer') {
         const status = await this.recipientStatus(intent.recipient, signal);
         if (status === 'unregistered') {
-          warnings.push({ kind: 'recipient-unregistered', recipient: intent.recipient });
+          throw new PrivacyError(
+            'not-registered',
+            'The recipient is not registered with the privacy pool.',
+          );
+        }
+        if (status === 'unknown') {
+          throw new PrivacyError(
+            'unreachable',
+            'The recipient registration check could not be completed.',
+          );
         }
       }
     }
@@ -398,7 +407,17 @@ function validateIntents(intents: Intent[], policy: WalletRoutePolicy): void {
       throw new PrivacyError('unknown', 'Minimum output must be positive.');
     }
     assertAddress(intent.kind === 'swap' ? intent.tokenIn : intent.token, 'token');
-    if (intent.kind === 'swap') assertAddress(intent.tokenOut, 'output token');
+    const allowed = policy.allowedTokens[intent.kind];
+    const inputToken = intent.kind === 'swap' ? intent.tokenIn : intent.token;
+    if (!allowed.some((token) => sameAddress(token, inputToken))) {
+      throw new PrivacyError('unknown', `The ${intent.kind} input token is not allowlisted.`);
+    }
+    if (intent.kind === 'swap') {
+      assertAddress(intent.tokenOut, 'output token');
+      if (!allowed.some((token) => sameAddress(token, intent.tokenOut))) {
+        throw new PrivacyError('unknown', 'The swap output token is not allowlisted.');
+      }
+    }
     if (intent.kind === 'unshield' || intent.kind === 'transfer') {
       assertAddress(intent.recipient, 'recipient');
     }

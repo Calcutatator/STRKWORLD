@@ -2,7 +2,13 @@ export { BackendApi, type BackendApiOptions } from './api.js';
 export { AvnuPaymasterPort, type AvnuPaymasterOptions } from './avnu-paymaster.js';
 export { AvnuSwapPlanner, type AvnuSwapPlannerOptions } from './avnu-swap-planner.js';
 export { HmacAuthorizationCodec, MemoryAuthorizationCodec } from './authorization.js';
-export { AggregateMetrics, AggregateRateLimiter } from './metrics.js';
+export {
+  AggregateBudget,
+  AggregateMetrics,
+  AggregateRateLimiter,
+  type RequestRateLimiterPort,
+  type SponsorshipBudgetPort,
+} from './metrics.js';
 export {
   createBackendFetchHandler,
   DEFAULT_MAX_REQUEST_BYTES,

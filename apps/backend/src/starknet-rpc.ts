@@ -2,6 +2,7 @@ import type { PoolRpcPort } from './types.js';
 
 const FEE_SELECTOR = '0x3d323cd692ad43935b81ce230c47bfc57f69656249c5a33fe5223c17dd32ed2';
 const PUBLIC_KEY_SELECTOR = '0x1a35984e05126dbecb7c3bb9929e7dd9106d460c59b1633739a5c733a5fb13b';
+const PROOF_VALIDITY_SELECTOR = '0x11d6d65b366023adbdaeaa04008285431f4509d78e78cda7067e58fbba35147';
 
 type FetchLike = (input: string, init?: RequestInit) => Promise<Response>;
 
@@ -9,7 +10,6 @@ export interface StarknetRpcOptions {
   rpcUrl: string;
   poolAddress: string;
   feeToken: string;
-  proofValidityBlocks?: number;
   noteMaturityBlocks?: number;
   fetcher?: FetchLike;
 }
@@ -24,13 +24,20 @@ export class StarknetRpcPoolPort implements PoolRpcPort {
   }
 
   async getPoolConfig() {
-    const result = await this.callPool(FEE_SELECTOR, []);
-    const low = BigInt(result[0] ?? '0x0');
-    const high = BigInt(result[1] ?? '0x0');
+    const [feeResult, validityResult] = await Promise.all([
+      this.callPool(FEE_SELECTOR, []),
+      this.callPool(PROOF_VALIDITY_SELECTOR, []),
+    ]);
+    const low = BigInt(feeResult[0] ?? '0x0');
+    const high = BigInt(feeResult[1] ?? '0x0');
+    const proofValidityBlocks = feltToPositiveSafeInteger(
+      validityResult[0],
+      'proof-validity window',
+    );
     return {
       feeAmount: low + (high << 128n),
       feeToken: this.options.feeToken,
-      proofValidityBlocks: this.options.proofValidityBlocks ?? 450,
+      proofValidityBlocks,
       noteMaturityBlocks: this.options.noteMaturityBlocks ?? 10,
     };
   }
@@ -75,4 +82,13 @@ export class StarknetRpcPoolPort implements PoolRpcPort {
     if (payload.error || !('result' in payload)) throw new Error('Starknet RPC returned an error.');
     return payload.result;
   }
+}
+
+function feltToPositiveSafeInteger(value: string | undefined, label: string): number {
+  if (!value) throw new Error(`Starknet RPC returned no ${label}.`);
+  const parsed = BigInt(value);
+  if (parsed <= 0n || parsed > BigInt(Number.MAX_SAFE_INTEGER)) {
+    throw new Error(`Starknet RPC returned an invalid ${label}.`);
+  }
+  return Number(parsed);
 }

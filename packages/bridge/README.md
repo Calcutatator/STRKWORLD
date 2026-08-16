@@ -110,6 +110,13 @@ record contains addresses and timing and must be labelled sensitive; imports
 revalidate the route and quote signature and reset display state until the
 provider is checked again.
 
+Wallet-signed origins use the same signed quote and resume record.
+`createSignedDeposit()` prepares that route; the origin-wallet adapter signs
+and broadcasts the chain-specific transfer, then
+`reportDepositTransaction()` submits its hash to 1Click and verifies the
+returned quote binding. Chain-wallet UI remains a shell concern, not a generic
+private-key surface in this package.
+
 ## What this must never do
 
 - Import `@strkworld/privacy` — CI enforces this. The shell sequences the two

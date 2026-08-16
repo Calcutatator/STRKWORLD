@@ -185,6 +185,13 @@ export class FakePrivacyOperations implements PrivacyOperations {
         'Shielding and private spending must be prepared as separate operations.',
       );
     }
+    const kinds = new Set(intents.map((intent) => intent.kind));
+    if (!hasShield && kinds.size > 1) {
+      throw new PrivacyError('unknown', 'A private batch may contain only one approved route type.');
+    }
+    if (kinds.has('swap') && intents.length > 1) {
+      throw new PrivacyError('unknown', 'A private swap must be prepared one at a time.');
+    }
     const promptCount = 1;
 
     for (const intent of intents) {
@@ -201,7 +208,10 @@ export class FakePrivacyOperations implements PrivacyOperations {
         });
       }
       if (intent.kind === 'transfer' && !this.registeredAddrs.has(normalise(intent.recipient))) {
-        warnings.push({ kind: 'recipient-unregistered', recipient: intent.recipient });
+        throw new PrivacyError(
+          'not-registered',
+          'The recipient is not registered with the privacy pool.',
+        );
       }
     }
 

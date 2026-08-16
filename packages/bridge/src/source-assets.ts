@@ -48,7 +48,14 @@ export async function loadSourceAssets(client: TokenRegistryClient): Promise<Sou
   for (const token of live) {
     if (token.assetId === STRK_ON_STARKNET_ASSET_ID) continue;
     const chainName = CHAIN_MAP[String(token.blockchain)];
-    if (!chainName) continue;
+    if (
+      !chainName ||
+      !token.assetId ||
+      !token.symbol ||
+      !Number.isSafeInteger(token.decimals) ||
+      token.decimals < 0 ||
+      token.decimals > 36
+    ) continue;
     const fallback = byId.get(token.assetId);
     byId.set(token.assetId, {
       assetId: token.assetId,

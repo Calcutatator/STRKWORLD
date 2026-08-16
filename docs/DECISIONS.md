@@ -127,7 +127,7 @@ year.
 
 ## D-006 — Cap sponsorship, not user funds
 
-**2026-08-16 · Accepted · supersedes an earlier recommendation**
+**2026-08-16 · Accepted · supersedes an earlier recommendation · per-account control superseded by D-026**
 
 **Context.** An earlier draft recommended a contract-enforced cap on user
 balances to bound the blast radius of an unaudited system. That conflated two
@@ -729,3 +729,66 @@ before relay. `exchange.swap.returnToPool` is false because the output is
 already a private note; `bridge.deposit` remains true because bridge delivery
 is public. Funded mainnet evidence is still required before launch to prove
 Wallet API artifact compatibility with AVNU's live paymaster.
+
+---
+
+## D-024 — The approved privacy disclosures are canonical product copy
+
+**2026-08-16 · Accepted · implements D-020**
+
+**Context.** D-020 locked every below-private route until the project lead had
+approved both the deviation and plain-language player copy. The project lead
+approved the four proposed strings on 2026-08-16.
+
+**Decision.** The disclosure strings in
+`packages/shared/src/privacy-grades.ts` for Bank shield/unshield, Exchange swap
+and Bridge deposit are the canonical approved copy. Panels import those values;
+they do not paraphrase them locally.
+
+**Consequences.** The four approved deviations pass the privacy gate. A future
+copy change is another frozen-seam change and needs a decision entry so wording
+cannot silently drift from the reviewed privacy grade.
+
+---
+
+## D-025 — Node 22.12 is the repository runtime floor
+
+**2026-08-16 · Accepted**
+
+**Context.** AVNU SDK 4.2.0 is the approved first-party private-swap route and
+declares Node 22 or newer. Vite supports Node 22 from 22.12. Advertising Node
+20 made a clean install appear supported while the Exchange dependency said it
+was not.
+
+**Decision.** Set the repository engine floor to Node 22.12. Do not suppress
+engine checks or claim a Node 20 build target.
+
+**Consequences.** Local development, CI and backend deployment use Node 22.12+
+(the current workspace is newer). Any future downgrade must first replace or
+obtain an explicit compatibility commitment for the AVNU SDK.
+
+---
+
+## D-026 — Sponsorship controls stay aggregate and unlinkable
+
+**2026-08-16 · Accepted · partially supersedes D-006**
+
+**Context.** D-006 asked for per-account sponsorship rate limits. D-014 later
+made the backend an explicit correlation adversary and forbade durable request
+identity. Keying private submissions by account, wallet or IP would give the
+operator exactly the cross-request linkage the backend is designed not to
+retain.
+
+**Decision.** Do not add account/IP-keyed sponsorship state. Enforce a global
+request-rate window, an aggregate token-denominated sponsorship budget, route
+and transaction fee ceilings, HMAC-bound short-lived authorizations, and
+global/per-route kill switches. A budget rejection increments only an
+aggregate metric; production monitoring alerts on that counter without
+recording the triggering request.
+
+**Consequences.** A Sybil can consume shared capacity but cannot turn the
+budget control into an account-correlation database. Multi-instance deployment
+must back the global budget/rate counters with an aggregate atomic store or run
+a single admission-control instance; process-local counters alone are not a
+production-wide cap. Exhausting sponsorship locks financial doors without
+taking down the city or exposing a public fallback.

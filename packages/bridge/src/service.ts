@@ -17,13 +17,16 @@ import type { BridgeRecord, BridgeStatus, SourceAsset } from './types.js';
 export const DEFAULT_SLIPPAGE_BPS = 100;
 export const QUOTE_DEADLINE_MS = 30 * 60 * 1_000;
 
-export interface CreateManualDepositInput {
+export interface CreateDepositInput {
   source: SourceAsset;
   amountIn: bigint;
   starknetRecipient: string;
   refundAddress: string;
   slippageBps?: number;
 }
+
+/** @deprecated Use `CreateDepositInput`; retained for the first shell adapter. */
+export type CreateManualDepositInput = CreateDepositInput;
 
 interface BridgeServiceOptions {
   client: OneClickClient;
@@ -60,7 +63,21 @@ export class BridgeService {
     this.sleep = options.sleep ?? abortableSleep;
   }
 
-  async createManualDeposit(input: CreateManualDepositInput): Promise<BridgeRecord> {
+  async createManualDeposit(input: CreateDepositInput): Promise<BridgeRecord> {
+    if (input.source.depositMode !== 'manual') {
+      throw new Error('Manual bridge creation requires a manual source asset.');
+    }
+    return this.createDeposit(input);
+  }
+
+  async createSignedDeposit(input: CreateDepositInput): Promise<BridgeRecord> {
+    if (input.source.depositMode !== 'signed') {
+      throw new Error('Signed bridge creation requires a wallet-signable source asset.');
+    }
+    return this.createDeposit(input);
+  }
+
+  private async createDeposit(input: CreateDepositInput): Promise<BridgeRecord> {
     validateInput(input);
     const deadline = new Date(this.now() + QUOTE_DEADLINE_MS).toISOString();
     const request = {
@@ -96,14 +113,40 @@ export class BridgeService {
       signedQuote,
       status: {
         leg: 'awaiting-deposit',
-        message: signedQuote.quote.depositMemo
-          ? 'Send the exact amount with both the deposit address and memo.'
-          : 'Send the exact amount to the deposit address.',
+        message: input.source.depositMode === 'signed'
+          ? 'Approve the exact origin deposit in your connected wallet.'
+          : signedQuote.quote.depositMemo
+            ? 'Send the exact amount with both the deposit address and memo.'
+            : 'Send the exact amount to the deposit address.',
         pollingStopped: false,
       },
     };
     this.store.save(record);
     return record;
+  }
+
+  /** Notify 1Click after an origin-wallet adapter broadcasts the deposit. */
+  async reportDepositTransaction(
+    txHash: string,
+    nearSenderAccount?: string,
+  ): Promise<BridgeStatus> {
+    if (!txHash || txHash.length > 256 || /\s/.test(txHash)) {
+      throw new Error('The origin deposit transaction hash is invalid.');
+    }
+    const record = this.resume();
+    if (!record) throw new Error('No bridge deposit is available to resume.');
+    const raw = await this.client.submitDepositTx({
+      txHash,
+      depositAddress: record.signedQuote.quote.depositAddress!,
+      ...(nearSenderAccount ? { nearSenderAccount } : {}),
+      ...(record.signedQuote.quote.depositMemo
+        ? { memo: record.signedQuote.quote.depositMemo }
+        : {}),
+    });
+    this.verifyStatusQuote(raw, record);
+    const status = mapStatus(raw);
+    this.store.save({ ...record, status, updatedAt: this.now() });
+    return status;
   }
 
   resume(): BridgeRecord | null {
@@ -149,6 +192,7 @@ export class BridgeService {
       record.signedQuote.quote.depositAddress!,
       record.signedQuote.quote.depositMemo,
     );
+    this.verifyStatusQuote(raw, record);
     let status = mapStatus(raw);
     if (status.leg === 'awaiting-deposit' && quoteExpired(record, this.now())) {
       status = {
@@ -201,7 +245,7 @@ export class BridgeService {
   }
 
   private verifyRecord(record: BridgeRecord): void {
-    const input: CreateManualDepositInput = {
+    const input: CreateDepositInput = {
       source: record.source,
       amountIn: record.amountIn,
       starknetRecipient: record.starknetRecipient,
@@ -214,12 +258,29 @@ export class BridgeService {
       throw new Error('1Click quote signature verification failed.');
     }
   }
+
+  private verifyStatusQuote(raw: { quoteResponse: QuoteResponse }, record: BridgeRecord): void {
+    if (
+      raw.quoteResponse.correlationId !== record.signedQuote.correlationId ||
+      raw.quoteResponse.signature !== record.signedQuote.signature
+    ) {
+      throw new Error('1Click status did not match the persisted signed quote.');
+    }
+    const input: CreateDepositInput = {
+      source: record.source,
+      amountIn: record.amountIn,
+      starknetRecipient: record.starknetRecipient,
+      refundAddress: record.refundAddress,
+      slippageBps: record.signedQuote.quoteRequest.slippageTolerance,
+    };
+    assertSignedQuote(raw.quoteResponse, input, record.signedQuote.quoteRequest);
+    if (!this.quoteVerifier(raw.quoteResponse)) {
+      throw new Error('1Click status quote signature verification failed.');
+    }
+  }
 }
 
-function validateInput(input: CreateManualDepositInput): void {
-  if (input.source.depositMode !== 'manual') {
-    throw new Error('This bridge service currently supports manual deposits only.');
-  }
+function validateInput(input: CreateDepositInput): void {
   if (
     !input.source.assetId ||
     !input.source.symbol ||
@@ -242,7 +303,7 @@ function validateInput(input: CreateManualDepositInput): void {
 
 function assertSignedQuote(
   response: QuoteResponse,
-  input: CreateManualDepositInput,
+  input: CreateDepositInput,
   request: QuoteRequest,
 ): void {
   if (!response.signature || !response.timestamp || !response.correlationId) {
@@ -291,7 +352,10 @@ function quoteExpired(record: BridgeRecord, now: number): boolean {
   return Number.isFinite(deadline) && now >= deadline;
 }
 
-function mapStatus(raw: GetExecutionStatusResponse): BridgeStatus {
+function mapStatus(raw: {
+  status: string;
+  swapDetails: GetExecutionStatusResponse['swapDetails'];
+}): BridgeStatus {
   switch (String(raw.status)) {
     case 'PENDING_DEPOSIT':
       return { leg: 'awaiting-deposit', message: 'Waiting for the origin deposit.', pollingStopped: false };

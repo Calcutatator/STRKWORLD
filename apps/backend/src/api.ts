@@ -1,4 +1,10 @@
-import { AggregateMetrics, AggregateRateLimiter } from './metrics.js';
+import {
+  AggregateBudget,
+  AggregateMetrics,
+  AggregateRateLimiter,
+  type RequestRateLimiterPort,
+  type SponsorshipBudgetPort,
+} from './metrics.js';
 import { validateServerActionRoute } from './server-actions.js';
 import type {
   ApiRequest,
@@ -31,11 +37,13 @@ export interface BackendApiOptions {
   sleep?: (ms: number) => Promise<void>;
   now?: () => number;
   swapPlanner?: SwapPlannerPort;
+  rateLimiter?: RequestRateLimiterPort;
+  sponsorshipBudget?: SponsorshipBudgetPort;
 }
 
 export class BackendApi {
   readonly metrics = new AggregateMetrics();
-  private readonly limiter: AggregateRateLimiter;
+  private readonly limiter: RequestRateLimiterPort;
   private readonly config: BackendConfig;
   private readonly paymaster: PaymasterPort;
   private readonly rpc: PoolRpcPort;
@@ -44,6 +52,7 @@ export class BackendApi {
   private readonly sleep: (ms: number) => Promise<void>;
   private readonly swapPlanner?: SwapPlannerPort;
   private readonly clockNow: () => number;
+  private readonly budget: SponsorshipBudgetPort;
 
   constructor(options: BackendApiOptions) {
     validateBackendConfig(options.config);
@@ -56,18 +65,23 @@ export class BackendApi {
     this.swapPlanner = options.swapPlanner;
     const now = options.now ?? Date.now;
     this.clockNow = now;
-    this.limiter = new AggregateRateLimiter(
-      this.config.rateLimit.maxRequests,
-      this.config.rateLimit.windowMs,
-      now,
+    this.limiter = options.rateLimiter ?? new AggregateRateLimiter(
+      this.config.rateLimit.maxRequests, this.config.rateLimit.windowMs, now,
+    );
+    this.budget = options.sponsorshipBudget ?? new AggregateBudget(
+      this.config.sponsorshipBudget.maxFeeAmount, this.config.sponsorshipBudget.windowMs, now,
     );
   }
 
   async handle(request: ApiRequest): Promise<ApiResponse> {
     this.metrics.request();
-    if (!this.limiter.take()) {
-      this.metrics.limited();
-      return { status: 429, body: { code: 'RATE_LIMITED', message: 'Service is busy. Try again shortly.' } };
+    try {
+      if (!await this.limiter.take()) {
+        this.metrics.limited();
+        return { status: 429, body: { code: 'RATE_LIMITED', message: 'Service is busy. Try again shortly.' } };
+      }
+    } catch (error) {
+      return this.failure(error);
     }
     if (!this.config.globalEnabled) {
       this.metrics.failure();
@@ -106,6 +120,9 @@ export class BackendApi {
     if (!sameAddress(feeToken, this.config.feeToken)) {
       throw new ApiFailure(400, 'Fee token is not allowlisted.');
     }
+    if (!policy.allowedTokens.some((token) => sameAddress(token, operationToken))) {
+      throw new ApiFailure(400, 'Operation token is not allowlisted for this route.');
+    }
     const [fee, poolConfig, block] = await Promise.all([
       this.paymaster.buildFee({
         route,
@@ -118,7 +135,7 @@ export class BackendApi {
     ]);
     if (!sameAddress(fee.token, feeToken)) throw new ApiFailure(400, 'Paymaster changed the fee token.');
     requireFelt(fee.recipient, 'fee recipient');
-    if (fee.amount < 0n || fee.amount > policy.maxRelayFee) {
+    if (fee.amount <= 0n || fee.amount > policy.maxRelayFee) {
       throw new ApiFailure(400, 'Paymaster fee exceeds the route ceiling.');
     }
     const claims: FeeAuthorizationClaims = {
@@ -167,7 +184,7 @@ export class BackendApi {
       token: claims.token,
       recipient: claims.recipient,
       amount: claims.amount,
-    }, claims.swap);
+    }, claims.operationToken, claims.swap);
 
     let block = await this.rpc.getBlockNumber();
     if (block > claims.expiresAtBlock) throw new ApiFailure(409, 'Prepared proof has expired.');
@@ -176,6 +193,10 @@ export class BackendApi {
       if (delay > 0) await this.sleep(delay);
       block = await this.rpc.getBlockNumber();
       if (block > claims.expiresAtBlock) throw new ApiFailure(409, 'Prepared proof expired in the queue.');
+    }
+    if (!await this.budget.take(claims.amount)) {
+      this.metrics.budgetLimited();
+      throw new ApiFailure(503, 'The private sponsorship budget is temporarily exhausted.');
     }
     const result = await this.paymaster.submit({
       route,
@@ -216,7 +237,7 @@ export class BackendApi {
     if (slippageBps > (policy.maxSlippageBps ?? 500)) {
       throw new ApiFailure(400, 'Swap slippage exceeds route policy.');
     }
-    const allowlist = policy.allowedTokens ?? [];
+    const allowlist = policy.allowedTokens;
     if (
       !allowlist.some((token) => sameAddress(token, sellToken)) ||
       !allowlist.some((token) => sameAddress(token, buyToken))
@@ -258,7 +279,7 @@ export class BackendApi {
     });
     if (
       !sameAddress(fee.token, this.config.feeToken) ||
-      fee.amount < 0n ||
+      fee.amount <= 0n ||
       fee.amount > policy.maxRelayFee
     ) {
       throw new ApiFailure(400, 'Paymaster fee exceeds swap policy.');
@@ -338,7 +359,7 @@ export class BackendApi {
     if (!sameAddress(claims.feeToken, this.config.feeToken) || !sameAddress(claims.token, this.config.feeToken)) {
       throw new ApiFailure(401, 'Fee authorization token mismatch.');
     }
-    if (claims.amount < 0n || claims.amount > maxFee) throw new ApiFailure(401, 'Fee authorization exceeds policy.');
+    if (claims.amount <= 0n || claims.amount > maxFee) throw new ApiFailure(401, 'Fee authorization exceeds policy.');
     requireFelt(claims.recipient, 'authorized fee recipient');
     if (claims.expiresAtBlock - claims.issuedAtBlock !== validity) {
       throw new ApiFailure(401, 'Proof-validity claim mismatch.');
@@ -397,6 +418,9 @@ function validateBackendConfig(config: BackendConfig): void {
     !Number.isSafeInteger(config.maxProofBytes) || config.maxProofBytes <= 0 ||
     !Number.isSafeInteger(config.rateLimit.maxRequests) || config.rateLimit.maxRequests <= 0 ||
     !Number.isSafeInteger(config.rateLimit.windowMs) || config.rateLimit.windowMs <= 0
+    || config.sponsorshipBudget.maxFeeAmount < 0n
+    || !Number.isSafeInteger(config.sponsorshipBudget.windowMs)
+    || config.sponsorshipBudget.windowMs <= 0
   ) {
     throw new Error('Backend size and rate limits must be positive integers.');
   }
@@ -404,7 +428,9 @@ function validateBackendConfig(config: BackendConfig): void {
     if (
       policy.maxRelayFee < 0n ||
       !Number.isSafeInteger(policy.maxQueueDelayMs) ||
-      policy.maxQueueDelayMs < 0
+      policy.maxQueueDelayMs < 0 ||
+      policy.allowedTokens.length === 0 ||
+      policy.allowedTokens.some((token) => !isFelt(token))
     ) {
       throw new Error(`Backend ${route} policy has invalid limits.`);
     }
@@ -413,8 +439,6 @@ function validateBackendConfig(config: BackendConfig): void {
   if (
     !swap.quoteBound ||
     swap.maxQueueDelayMs !== 0 ||
-    !swap.allowedTokens?.length ||
-    swap.allowedTokens.some((token) => !isFelt(token)) ||
     !Number.isSafeInteger(swap.maxSlippageBps) ||
     (swap.maxSlippageBps ?? 0) <= 0 ||
     (swap.maxSlippageBps ?? 0) > 1_000

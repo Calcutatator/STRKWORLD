@@ -3,6 +3,8 @@ import {
   type GetExecutionStatusResponse,
   type QuoteRequest,
   type QuoteResponse,
+  type SubmitDepositTxRequest,
+  type SubmitDepositTxResponse,
   type TokenResponse,
 } from '@defuse-protocol/one-click-sdk-typescript';
 
@@ -14,6 +16,7 @@ export interface OneClickClient {
     depositAddress: string,
     depositMemo?: string,
   ): Promise<GetExecutionStatusResponse>;
+  submitDepositTx(request: SubmitDepositTxRequest): Promise<SubmitDepositTxResponse>;
 }
 
 export class OneClickSdkClient implements OneClickClient {
@@ -30,5 +33,9 @@ export class OneClickSdkClient implements OneClickClient {
     depositMemo?: string,
   ): Promise<GetExecutionStatusResponse> {
     return OneClickService.getExecutionStatus(depositAddress, depositMemo);
+  }
+
+  async submitDepositTx(request: SubmitDepositTxRequest): Promise<SubmitDepositTxResponse> {
+    return OneClickService.submitDepositTx(request);
   }
 }

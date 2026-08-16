@@ -18,8 +18,7 @@ export interface RoutePolicy {
   maxRelayFee: bigint;
   maxQueueDelayMs: number;
   quoteBound: boolean;
-  /** Required for swap; ignored by pool-native routes. */
-  allowedTokens?: readonly string[];
+  allowedTokens: readonly string[];
   maxSlippageBps?: number;
 }
 
@@ -30,6 +29,7 @@ export interface BackendConfig {
   maxProofBytes: number;
   globalEnabled: boolean;
   rateLimit: { maxRequests: number; windowMs: number };
+  sponsorshipBudget: { maxFeeAmount: bigint; windowMs: number };
   routes: Record<PrivateRoute, RoutePolicy>;
 }
 

@@ -61,7 +61,14 @@ function fixture() {
     pool,
     submission: gateway,
     supportedVersions,
-    policy: { maxIntents: 8, maxRelayFee: 10n, enabledRoutes: ['shield', 'unshield', 'transfer'] },
+    policy: {
+      maxIntents: 8,
+      maxRelayFee: 10n,
+      enabledRoutes: ['shield', 'unshield', 'transfer'],
+      allowedTokens: {
+        shield: [STRK, TOKEN], unshield: [STRK, TOKEN], transfer: [STRK, TOKEN], swap: [STRK, TOKEN],
+      },
+    },
   });
   return { ops, wallet, pool, gateway, supportedVersions, invoked, prepared, artifact };
 }
@@ -89,6 +96,14 @@ describe('WalletApiPrivacyOperations capability and reads', () => {
     const { ops } = fixture();
     await expect(ops.recipientStatus(BOB)).resolves.toBe('registered');
     await expect(ops.recipientStatus('0x999')).resolves.toBe('unregistered');
+  });
+
+  it('blocks an unregistered transfer during prepare instead of proving a doomed action', async () => {
+    const { ops, prepared } = fixture();
+    await expect(ops.prepare([
+      { kind: 'transfer', token: TOKEN, amount: 20n, recipient: '0x999' },
+    ])).rejects.toMatchObject({ kind: 'not-registered' });
+    expect(prepared).toHaveLength(0);
   });
 });
 
@@ -159,6 +174,9 @@ describe('Wallet API action routes', () => {
     await expect(
       ops.prepare([{ kind: 'swap', tokenIn: TOKEN, tokenOut: STRK, amountIn: 10n, minAmountOut: 1n }]),
     ).rejects.toThrow(/disabled/i);
+    await expect(
+      ops.prepare([{ kind: 'shield', token: '0xdead', amount: 10n }]),
+    ).rejects.toThrow(/allowlisted/i);
   });
 
   it('proves the exact quote-bound AVNU plan and submits it without a second wallet signature', async () => {
@@ -182,6 +200,9 @@ describe('Wallet API action routes', () => {
         maxIntents: 8,
         maxRelayFee: 10n,
         enabledRoutes: ['shield', 'unshield', 'transfer', 'swap'],
+        allowedTokens: {
+          shield: [STRK, TOKEN], unshield: [STRK, TOKEN], transfer: [STRK, TOKEN], swap: [STRK, TOKEN],
+        },
         swap: { expectedChainId: '0x534e5f4d41494e', slippageBps: 100 },
       },
     });
@@ -230,6 +251,9 @@ describe('Wallet API action routes', () => {
         maxIntents: 8,
         maxRelayFee: 10n,
         enabledRoutes: ['swap'],
+        allowedTokens: {
+          shield: [STRK, TOKEN], unshield: [STRK, TOKEN], transfer: [STRK, TOKEN], swap: [STRK, TOKEN],
+        },
         swap: { expectedChainId: '0x534e5f4d41494e', slippageBps: 100 },
       },
     });
@@ -255,5 +279,12 @@ describe('wallet error mapping', () => {
   it('does not remap an existing PrivacyError', () => {
     const error = new PrivacyError('unreachable', 'offline');
     expect(mapWalletError(error)).toBe(error);
+  });
+
+  it('never exposes a raw wallet or RPC message to the player', () => {
+    const mapped = mapWalletError({ code: 163, message: 'RPC https://secret.example failed with internal trace' });
+    expect(mapped.kind).toBe('unknown');
+    expect(mapped.message).toBe('The privacy operation failed.');
+    expect(mapped.message).not.toContain('secret.example');
   });
 });

@@ -3,6 +3,8 @@ import type {
   GetExecutionStatusResponse,
   QuoteRequest,
   QuoteResponse,
+  SubmitDepositTxRequest,
+  SubmitDepositTxResponse,
   TokenResponse,
 } from '@defuse-protocol/one-click-sdk-typescript';
 import {
@@ -80,6 +82,7 @@ function status(
 
 class StubClient implements OneClickClient {
   quoteRequests: QuoteRequest[] = [];
+  depositRequests: SubmitDepositTxRequest[] = [];
   statuses: GetExecutionStatusResponse[] = [];
 
   async getTokens(): Promise<TokenResponse[]> {
@@ -95,6 +98,11 @@ class StubClient implements OneClickClient {
     const next = this.statuses.shift();
     if (!next) throw new Error('no status queued');
     return next;
+  }
+
+  async submitDepositTx(value: SubmitDepositTxRequest): Promise<SubmitDepositTxResponse> {
+    this.depositRequests.push(value);
+    return status('KNOWN_DEPOSIT_TX' as never) as unknown as SubmitDepositTxResponse;
   }
 }
 
@@ -153,6 +161,45 @@ describe('BridgeService', () => {
       strkReceived: 1_980_000_000_000_000_000n,
       settlementTxHash: '0xsettled',
     });
+  });
+
+  it('supports a wallet-signed origin deposit and reports its transaction to 1Click', async () => {
+    const client = new StubClient();
+    const store = new MemoryBridgeStore();
+    const service = new BridgeService({ client, store, quoteVerifier: () => true, now: () => NOW });
+    await service.createSignedDeposit({
+      source: { ...SOURCE, depositMode: 'signed' },
+      amountIn: 1_000_000n,
+      starknetRecipient: '0x123',
+      refundAddress: request.refundTo,
+    });
+    await expect(service.reportDepositTransaction('0xorigin-tx')).resolves.toMatchObject({
+      leg: 'deposit-detected',
+    });
+    expect(client.depositRequests).toEqual([{
+      txHash: '0xorigin-tx', depositAddress: '0xdeposit',
+    }]);
+  });
+
+  it('rejects a status response bound to a different signed quote', async () => {
+    const client = new StubClient();
+    const store = new MemoryBridgeStore();
+    const service = new BridgeService({ client, store, quoteVerifier: () => true, now: () => NOW });
+    await service.createManualDeposit({
+      source: SOURCE,
+      amountIn: 1_000_000n,
+      starknetRecipient: '0x123',
+      refundAddress: request.refundTo,
+    });
+    client.statuses.push({
+      ...status('SUCCESS' as never),
+      quoteResponse: {
+        ...signedQuote,
+        correlationId: 'different-quote',
+      },
+    });
+    await expect(service.refresh()).rejects.toThrow(/persisted signed quote/i);
+    expect(store.load()?.status.leg).toBe('awaiting-deposit');
   });
 
   it('rejects a quote that omits its deposit address or signed dispute evidence', async () => {
@@ -294,6 +341,20 @@ describe('source registry and refund validation', () => {
       availability: 'live',
     });
     expect(assets.some((asset) => asset.availability === 'fallback')).toBe(true);
+  });
+
+  it('drops malformed live token metadata instead of applying the wrong decimal scale', async () => {
+    const assets = await loadSourceAssets({
+      getTokens: async () => [{
+        assetId: 'nep141:broken.omft.near',
+        symbol: 'BROKEN',
+        decimals: 999,
+        blockchain: 'arb',
+        price: 1,
+        priceUpdatedAt: '2026-08-16T12:00:00Z',
+      }] as TokenResponse[],
+    });
+    expect(assets.some((asset) => asset.assetId === 'nep141:broken.omft.near')).toBe(false);
   });
 
   it('uses chain-specific shape checks for irreversible refund addresses', () => {
