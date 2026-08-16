@@ -1,32 +1,63 @@
 # Docker build context exclusions. The build context is the repository root
-# (see deploy/backend/Dockerfile). deploy/backend/Dockerfile COPYs explicit
-# paths rather than `.`, so this is defence in depth — but the first line is
-# the one that matters: a real secret must never enter a build context, where
-# it survives in image layers and `docker history`.
+# (see deploy/backend/Dockerfile). That Dockerfile COPYs explicit paths rather
+# than `.`, so this is defence in depth — but the secrets block below is the
+# one that matters: a real secret must never enter a build context, where it
+# survives in image layers and in `docker history`.
+#
+# Directory patterns are written twice, `x` and `x/**`. Docker prunes a matched
+# directory's subtree on its own, so the second form is redundant to Docker —
+# it is here because the single form makes the intent unverifiable by anything
+# that matches paths rather than walking them, and this file is a secrets
+# control that should read the same to a human, a linter and the daemon.
 
-.env
-.env.local
-.env.*.local
+# --- secrets: never in a build context ---
+# Broad on purpose. An explicit list of .env, .env.local and .env.*.local
+# missed .env.production, which is exactly the filename .env.production.example
+# invites someone to create. The two templates are re-included; they hold only
+# placeholders.
+.env*
+!.env.example
+!.env.production.example
 *.pem
 *.key
+*.p12
+*.pfx
+id_rsa*
+.npmrc
 
+# --- not ours to ship ---
 node_modules
+node_modules/**
 **/node_modules
+**/node_modules/**
 .git
+.git/**
 .github
+.github/**
 
-# build output — the image compiles its own
+# --- build output: the image compiles its own ---
 dist
+dist/**
+**/dist
+**/dist/**
 build
+build/**
 .vite
+.vite/**
 .docker-build
+.docker-build/**
 coverage
+coverage/**
 *.tsbuildinfo
 
-# not needed at runtime
+# --- not needed at runtime ---
 docs
+docs/**
 .agents
+.agents/**
 .claude
+.claude/**
 scripts
+scripts/**
 *.md
 .DS_Store

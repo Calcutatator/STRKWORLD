@@ -14,10 +14,10 @@
  *     (apps/backend/src/http.ts:15) returns `(Request) => Promise<Response>`;
  *     nothing calls `node:http`.
  *   - No configuration loader. `process.env` appears nowhere under
- *     `apps/backend/src` — `BackendConfig` (apps/backend/src/types.ts:26) is
+ *     `apps/backend/src` — `BackendConfig` (apps/backend/src/types.ts:25) is
  *     constructed in code.
  *   - No composition root. Nothing instantiates `BackendApi`
- *     (apps/backend/src/api.ts:53) with `AvnuPaymasterPort`,
+ *     (apps/backend/src/api.ts:52) with `AvnuPaymasterPort`,
  *     `StarknetRpcPoolPort` and `HmacAuthorizationCodec`.
  *
  * Those are the Backend lane's, not the deployment lane's: choosing the
