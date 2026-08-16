@@ -828,3 +828,35 @@ built against `WorldEvents`/`ShellEvents` breaks.
 **Consequences.** The one-directional rule is now expressible in types rather
 than only in review: the world can be handed a narrowed emit-only view out and
 an on-only view in.
+
+## D-028 — Development proceeds without the funded live-wallet run
+
+**2026-08-16 · Accepted · amends D-015; qualifies D-022 and D-023**
+
+**Context.** The remaining Phase 0 item is a funded live-wallet UI run on
+mainnet — visible prompt sequence, real latency, and Wallet API artifact
+compatibility with AVNU's live paymaster. It needs the project lead's funded
+wallet, and it had become the single gate several strands of work were
+waiting on. The Ready 5.33.8 source audit has already answered the structural
+questions from shipped code.
+
+**Decision.** The project lead has decided: **build as far as possible on
+source-derived expectations, without waiting for live wallet runs.**
+Divergences a later run reveals are handled as ordinary bugs and decision
+amendments, not as blockers today.
+
+- `PrivacyOperations` may be frozen on current source-derived evidence once
+  the Chain lane judges it ready (decision entry plus heads-up, as always).
+- Prompt-count and latency remain **provisional in code and copy**: drive UI
+  from the hooks' pending states, never from an assumed count — SPEC §5
+  rule 5 already requires exactly this.
+- D-022 and D-023's funded-evidence caveats move from "gate during
+  development" to **required validation on the pre-launch checklist**. The
+  launch does not happen without the run; the building of it does.
+
+**Consequences.** No lane waits on wallet access. The accepted risk is rework
+where the funded run contradicts a source-derived expectation; the mitigation
+is that every such expectation is already marked provisional. The funded run
+stays on the launch checklist with its two named questions: the rendered
+prompt sequence, and AVNU paymaster acceptance of a real wallet-produced
+artifact.
