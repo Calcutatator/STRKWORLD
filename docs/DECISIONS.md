@@ -404,7 +404,7 @@ adversary rather than an assumed-honest one.
 
 ## D-015 — Unfreeze `PrivacyOperations`; the submission queue moves server-side
 
-**2026-08-16 · Accepted · amends D-004 and D-011**
+**2026-08-16 · Accepted · amends D-004 and D-011 · development gate amended by D-028**
 
 **Context.** Two findings from the same review, with one root cause: decisions
 were locked before the evidence that should shape them existed.
@@ -663,7 +663,7 @@ that their funds never made it in.
 
 ## D-022 — One prepared batch produces one submission; wallet maturity is unknown
 
-**2026-08-16 · Accepted · amends D-015**
+**2026-08-16 · Accepted · amends D-015 · funded-evidence caveat qualified by D-028**
 
 **Context.** The production Wallet API adapter exposed two mismatches in the
 provisional financial seam. First, `PreparedBatch.confirm()` returns one
@@ -698,7 +698,7 @@ split or loses one of two transaction receipts.
 
 ## D-023 — AVNU swaps are server-planned, wallet-proven and quote-bound
 
-**2026-08-16 · Accepted · amends D-014, D-015 and D-018; partially supersedes D-021**
+**2026-08-16 · Accepted · amends D-014, D-015 and D-018; partially supersedes D-021 · funded-evidence caveat qualified by D-028**
 
 **Context.** The Exchange needs AVNU's dynamic private executor and paymaster,
 but the browser cannot hold the paymaster key and must never be allowed to turn

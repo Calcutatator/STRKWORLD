@@ -24,6 +24,7 @@ export { validateSourceAddress, validateStarknetAddress } from './address-valida
 export { OneClickSdkClient, type OneClickClient } from './client.js';
 export {
   LocalBridgeStore,
+  MAX_RESUME_RECORD_BYTES,
   MemoryBridgeStore,
   deserializeBridgeRecord,
   serializeBridgeRecord,

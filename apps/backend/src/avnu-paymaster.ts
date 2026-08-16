@@ -39,7 +39,7 @@ export class AvnuPaymasterPort implements PaymasterPort {
       poolAddress: input.poolAddress,
       feeMode: { poolFeeToken: input.feeToken },
       paymasterApiKey: this.apiKey,
-    }, this.sdkOptions);
+    }, { ...this.sdkOptions, abortSignal: input.signal });
   }
 
   async submit(input: Parameters<PaymasterPort['submit']>[0]) {
@@ -47,7 +47,7 @@ export class AvnuPaymasterPort implements PaymasterPort {
       callAndProof: toAvnuArtifact(input.artifact),
       feeMode: { poolFeeToken: input.fee.token },
       paymasterApiKey: this.apiKey,
-    }, this.sdkOptions);
+    }, { ...this.sdkOptions, abortSignal: input.signal });
   }
 }
 

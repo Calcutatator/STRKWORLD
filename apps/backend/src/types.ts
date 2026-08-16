@@ -27,9 +27,11 @@ export interface BackendConfig {
   feeToken: string;
   maxCalldataItems: number;
   maxProofBytes: number;
+  requestTimeoutMs: number;
   globalEnabled: boolean;
   rateLimit: { maxRequests: number; windowMs: number };
   sponsorshipBudget: { maxFeeAmount: bigint; windowMs: number };
+  submissionQueue: { maxInFlight: number; maxQueued: number };
   routes: Record<PrivateRoute, RoutePolicy>;
 }
 
@@ -45,24 +47,26 @@ export interface PaymasterPort {
     poolAddress: string;
     feeToken: string;
     operationToken: string;
+    signal?: AbortSignal;
   }): Promise<RelayFee>;
   submit(input: {
     route: PrivateRoute;
     artifact: PreparedArtifact;
     fee: RelayFee;
+    signal?: AbortSignal;
   }): Promise<{ transactionHash: string }>;
 }
 
 export interface PoolRpcPort {
-  getPoolConfig(): Promise<{
+  getPoolConfig(signal?: AbortSignal): Promise<{
     feeAmount: bigint;
     feeToken: string;
     proofValidityBlocks: number;
     noteMaturityBlocks: number;
   }>;
-  getPublicKey(address: string): Promise<string>;
-  getReceipt(transactionHash: string): Promise<unknown>;
-  getBlockNumber(): Promise<number>;
+  getPublicKey(address: string, signal?: AbortSignal): Promise<string>;
+  getReceipt(transactionHash: string, signal?: AbortSignal): Promise<unknown>;
+  getBlockNumber(signal?: AbortSignal): Promise<number>;
 }
 
 export interface FeeAuthorizationClaims extends RelayFee {
@@ -106,6 +110,7 @@ export interface SwapPlannerPort {
     sellAmount: bigint;
     minAmountOut: bigint;
     slippageBps: number;
+    signal?: AbortSignal;
   }): Promise<SwapPlan>;
 }
 
@@ -118,6 +123,7 @@ export interface ApiRequest {
   method: string;
   path: string;
   body: unknown;
+  signal?: AbortSignal;
 }
 
 export interface ApiResponse {

@@ -93,6 +93,13 @@ persists the complete signed response as dispute evidence. `refresh()` maps
 solver states into the small `BridgeStatus` vocabulary without leaking raw
 provider states into the shell.
 
+The live registry loader currently maps every non-Starknet blockchain label
+returned by 1Click into a source-chain family, while deliberately excluding
+same-chain Starknet assets from the Bridge picker. Address checks are only a
+fast shape guard; the signed quote endpoint remains authoritative. Executable
+quote amounts, output minimum, time estimate, deadline and exact request
+binding are all rechecked before a deposit address is retained.
+
 `OneClickClient` and `BridgeStore` are ports. Production uses the shipped SDK
 and browser storage; tests use deterministic in-memory implementations. The
 remaining funded acceptance test is an issued deposit address that is actually
@@ -109,6 +116,10 @@ and `importResumeRecord()` provide an explicit cross-device path. The exported
 record contains addresses and timing and must be labelled sensitive; imports
 revalidate the route and quote signature and reset display state until the
 provider is checked again.
+
+Resume imports are capped at 256 kB before JSON parsing. This is both a browser
+resource bound and a reminder that import is signed evidence recovery, not an
+arbitrary document upload.
 
 Wallet-signed origins use the same signed quote and resume record.
 `createSignedDeposit()` prepares that route; the origin-wallet adapter signs
@@ -185,6 +196,12 @@ breaking and re-verify quote and status shapes when moving.
 
 The EVM side pulls `viem`. Lazy-load the building so that chunk only reaches
 players who open it.
+
+The SDK client is currently unauthenticated. Official 1Click authentication
+docs say that route pays a 0.2% fee; an authenticated JWT route is fee-free but
+the credential must be kept server-side. Before launch, choose explicitly
+between displaying/accepting the quoted fee and adding a narrow credential
+proxy. Never bundle the JWT in this browser package.
 
 ---
 

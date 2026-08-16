@@ -13,6 +13,7 @@ interface StorageLike {
 }
 
 const STORAGE_KEY = 'strkworld.bridge.inbound.v1';
+export const MAX_RESUME_RECORD_BYTES = 256_000;
 
 export function serializeBridgeRecord(record: BridgeRecord): string {
   return JSON.stringify(record, (_key, value: unknown) =>
@@ -21,6 +22,10 @@ export function serializeBridgeRecord(record: BridgeRecord): string {
 }
 
 export function deserializeBridgeRecord(raw: string): BridgeRecord | null {
+  if (
+    raw.length > MAX_RESUME_RECORD_BYTES ||
+    new TextEncoder().encode(raw).byteLength > MAX_RESUME_RECORD_BYTES
+  ) return null;
   try {
     const value = JSON.parse(raw, (_key, entry: unknown) => {
       if (

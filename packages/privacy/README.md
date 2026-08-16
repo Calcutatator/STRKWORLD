@@ -66,9 +66,11 @@ interface PrivacyOperations {
 The interface is **provisional until the Phase 0 spike** (D-015). Changing it
 needs a decision entry and a heads-up to the shell lane — never a quiet edit.
 
-`WalletApiPrivacyOperations` is the planned wallet-backed implementation; it
-lands in Phase 2 (see the commented export in `src/index.ts`). Until then
-`FakePrivacyOperations` implements the same interface. The interface exists so
+`WalletApiPrivacyOperations` is the source-derived wallet-backed
+implementation and `FakePrivacyOperations` implements the same interface for
+deterministic offline work. The implementation has not yet passed the funded
+pre-launch run required by D-028, so rendered prompt sequence, latency and
+live-paymaster artifact acceptance remain provisional. The interface exists so
 that:
 
 1. the whole financial layer can be driven by a mock in tests,
@@ -170,9 +172,8 @@ do not move.
 Use `WalletAccountV6` instance methods. The standalone `strk20*` functions
 are not exported from the package root.
 
-`@avnu/avnu-sdk` is pinned exactly at `4.2.0`. Its manifest requires Node 22,
-so the Exchange lane is not a supported Node 20 build even though the root
-manifest still lists Node 20; see the findings log.
+`@avnu/avnu-sdk` is pinned exactly at `4.2.0`. Its manifest requires Node 22;
+the repository now requires Node 22.12 or newer and Node 20 is not a target.
 
 ---
 
@@ -196,11 +197,16 @@ ops.setPoolFee(20n * 10n**18n) // governance moved the fee mid-flight
 ```
 
 It models the sharp edges rather than the happy path, because the happy path is
-not what breaks: notes are unspendable until they mature, the fee comes out of
-the balance being spent, a shield is never batched with what it funds, and
-deposits are always to self.
+not what breaks: notes are unspendable until they mature, operation amounts are
+charged in their own tokens while the pool fee is charged only in the live fee
+token, a shield is never batched with what it funds, and deposits are always to
+self. Prepared batches are single-attempt: after any confirmation attempt the
+caller must prepare again, which prevents a double-click from submitting the
+same financial intent twice.
 
-Parity tests against `shieldup`'s known-good mainnet behaviour come next —
-there is a working implementation to diff against, so parity beats exploration.
+The offline adapter tests now cover ShieldUp-derived action construction,
+fee-ceiling rechecks, recipient preflight, proof submission and private AVNU
+swap shape. The remaining parity work is the funded Ready/paymaster run on the
+D-028 pre-launch checklist; no fixture claims it happened.
 
 Never put real key material or a real RPC key in a fixture.

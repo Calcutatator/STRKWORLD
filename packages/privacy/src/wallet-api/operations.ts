@@ -8,7 +8,13 @@ import type {
   PrivacyOperations,
   WalletCapability,
 } from '../operations.js';
-import { PrivacyError, type PrivateBalance, type RecipientStatus } from '../types.js';
+import {
+  PrivacyError,
+  type OperationProgress,
+  type PrivateBalance,
+  type ProgressCallback,
+  type RecipientStatus,
+} from '../types.js';
 import { mapWalletError } from './errors.js';
 import type {
   PoolNativeRoute,
@@ -22,6 +28,7 @@ import type {
 } from './types.js';
 
 const REQUIRED_WALLET_API = '0.10.3';
+const STARK_FIELD_PRIME = (1n << 251n) + 17n * (1n << 192n) + 1n;
 
 export interface WalletApiPrivacyOperationsOptions {
   wallet: WalletStrk20Account;
@@ -54,10 +61,14 @@ export class WalletApiPrivacyOperations implements PrivacyOperations {
     try {
       const versions = await this.supportedVersions(signal);
       throwIfAborted(signal);
-      const highest = [...versions].sort(compareSemver).at(-1) ?? null;
+      const supported = versions
+        .map((raw) => ({ raw, parsed: parseSemver(raw) }))
+        .filter((version): version is { raw: string; parsed: Semver } => version.parsed !== null)
+        .sort((left, right) => compareSemver(left.parsed, right.parsed));
+      const highest = supported.at(-1) ?? null;
       return {
-        supportsStrk20: highest !== null && compareSemver(highest, REQUIRED_WALLET_API) >= 0,
-        walletApiVersion: highest,
+        supportsStrk20: highest !== null && compareSemver(highest.parsed, REQUIRED_VERSION) >= 0,
+        walletApiVersion: highest?.raw ?? null,
         registration: 'unknown',
       };
     } catch (error) {
@@ -161,6 +172,7 @@ export class WalletApiPrivacyOperations implements PrivacyOperations {
 
     const owner = this;
     let discarded = false;
+    let confirmationAttempted = false;
     return {
       intents: [intent],
       poolFee: config.feeAmount,
@@ -170,6 +182,8 @@ export class WalletApiPrivacyOperations implements PrivacyOperations {
       promptCount: 1,
       async confirm({ feeCeiling, onProgress, signal: confirmSignal }) {
         if (discarded) throw new PrivacyError('unknown', 'batch already discarded');
+        assertFirstConfirmation(confirmationAttempted);
+        confirmationAttempted = true;
         throwIfAborted(confirmSignal);
         try {
           const current = await owner.pool.config(confirmSignal);
@@ -189,11 +203,11 @@ export class WalletApiPrivacyOperations implements PrivacyOperations {
             takerAddress: owner.wallet.address,
           };
           const actions = buildStrk20Actions(avnuPlan);
-          onProgress?.({ stage: 'awaiting-approval', message: 'Confirm the private swap in your wallet' });
-          onProgress?.({ stage: 'proving', message: 'Your wallet is generating a proof' });
+          emitProgress(onProgress, { stage: 'awaiting-approval', message: 'Confirm the private swap in your wallet' });
+          emitProgress(onProgress, { stage: 'proving', message: 'Your wallet is generating a proof' });
           const artifact = await owner.wallet.strk20PrepareInvoke(actions, false);
           throwIfAborted(confirmSignal);
-          onProgress?.({ stage: 'submitting', message: 'Submitting the quote-bound private swap' });
+          emitProgress(onProgress, { stage: 'submitting', message: 'Submitting the quote-bound private swap' });
           const result = await owner.submission.submit({
             route: 'swap',
             artifact,
@@ -201,10 +215,10 @@ export class WalletApiPrivacyOperations implements PrivacyOperations {
             proofValidityBlocks: current.proofValidityBlocks,
             signal: confirmSignal,
           });
-          onProgress?.({ stage: 'done', message: 'Done' });
+          emitProgress(onProgress, { stage: 'done', message: 'Done' });
           return result;
         } catch (error) {
-          onProgress?.({ stage: 'failed', message: 'Private swap failed' });
+          emitProgress(onProgress, { stage: 'failed', message: 'Private swap failed' });
           throw mapWalletError(error);
         }
       },
@@ -248,6 +262,7 @@ export class WalletApiPrivacyOperations implements PrivacyOperations {
     const wallet = this.wallet;
     const pool = this.pool;
     let discarded = false;
+    let confirmationAttempted = false;
     return {
       intents: [...intents],
       poolFee: config.feeAmount,
@@ -257,18 +272,20 @@ export class WalletApiPrivacyOperations implements PrivacyOperations {
       promptCount: 1,
       async confirm({ feeCeiling, onProgress, signal }) {
         if (discarded) throw new PrivacyError('unknown', 'batch already discarded');
+        assertFirstConfirmation(confirmationAttempted);
+        confirmationAttempted = true;
         throwIfAborted(signal);
         try {
           const current = await pool.config(signal);
           assertFeeCeiling(current.feeAmount, feeCeiling);
-          onProgress?.({ stage: 'awaiting-approval', message: 'Confirm the shield in your wallet' });
+          emitProgress(onProgress, { stage: 'awaiting-approval', message: 'Confirm the shield in your wallet' });
           const result = await wallet.strk20InvokeTransaction(toActions(intents));
           throwIfAborted(signal);
-          onProgress?.({ stage: 'confirming', message: 'Shield submitted' });
-          onProgress?.({ stage: 'done', message: 'Done' });
+          emitProgress(onProgress, { stage: 'confirming', message: 'Shield submitted' });
+          emitProgress(onProgress, { stage: 'done', message: 'Done' });
           return { transactionHash: result.transaction_hash };
         } catch (error) {
-          onProgress?.({ stage: 'failed', message: 'Shield failed' });
+          emitProgress(onProgress, { stage: 'failed', message: 'Shield failed' });
           throw mapWalletError(error);
         }
       },
@@ -286,6 +303,7 @@ export class WalletApiPrivacyOperations implements PrivacyOperations {
   ): PreparedBatch {
     const owner = this;
     let discarded = false;
+    let confirmationAttempted = false;
     return {
       intents: [...intents],
       poolFee: config.feeAmount,
@@ -295,6 +313,8 @@ export class WalletApiPrivacyOperations implements PrivacyOperations {
       promptCount: 1,
       async confirm({ feeCeiling, onProgress, signal }) {
         if (discarded) throw new PrivacyError('unknown', 'batch already discarded');
+        assertFirstConfirmation(confirmationAttempted);
+        confirmationAttempted = true;
         throwIfAborted(signal);
         try {
           const current = await owner.pool.config(signal);
@@ -309,11 +329,11 @@ export class WalletApiPrivacyOperations implements PrivacyOperations {
               recipient: relayFee.recipient,
             },
           ];
-          onProgress?.({ stage: 'awaiting-approval', message: 'Confirm in your wallet' });
-          onProgress?.({ stage: 'proving', message: 'Your wallet is generating a proof' });
+          emitProgress(onProgress, { stage: 'awaiting-approval', message: 'Confirm in your wallet' });
+          emitProgress(onProgress, { stage: 'proving', message: 'Your wallet is generating a proof' });
           const artifact = await owner.wallet.strk20PrepareInvoke(actions, false);
           throwIfAborted(signal);
-          onProgress?.({ stage: 'submitting', message: 'Queued for private submission' });
+          emitProgress(onProgress, { stage: 'submitting', message: 'Queued for private submission' });
           const result = await owner.submission.submit({
             route,
             artifact,
@@ -321,10 +341,10 @@ export class WalletApiPrivacyOperations implements PrivacyOperations {
             proofValidityBlocks: current.proofValidityBlocks,
             signal,
           });
-          onProgress?.({ stage: 'done', message: 'Done' });
+          emitProgress(onProgress, { stage: 'done', message: 'Done' });
           return result;
         } catch (error) {
-          onProgress?.({ stage: 'failed', message: 'Private operation failed' });
+          emitProgress(onProgress, { stage: 'failed', message: 'Private operation failed' });
           throw mapWalletError(error);
         }
       },
@@ -448,7 +468,7 @@ function toFelt(value: bigint): string {
 }
 
 function assertAddress(address: string, label: string): void {
-  if (!/^0x[0-9a-fA-F]{1,64}$/.test(address)) {
+  if (!isFelt(address) || BigInt(address) === 0n) {
     throw new PrivacyError('unknown', `Invalid ${label} address.`);
   }
 }
@@ -458,7 +478,7 @@ function sameAddress(a: string, b: string): boolean {
 }
 
 function isFelt(value: string): boolean {
-  return /^0x[0-9a-fA-F]{1,64}$/.test(value);
+  return /^0x[0-9a-fA-F]{1,64}$/.test(value) && BigInt(value) < STARK_FIELD_PRIME;
 }
 
 function assertFeeCeiling(actual: bigint, ceiling: bigint): void {
@@ -471,12 +491,50 @@ function throwIfAborted(signal?: AbortSignal): void {
   if (signal?.aborted) throw new PrivacyError('user-rejected', 'Operation cancelled.');
 }
 
-function compareSemver(a: string, b: string): number {
-  const left = a.split('.').map((part) => Number.parseInt(part, 10) || 0);
-  const right = b.split('.').map((part) => Number.parseInt(part, 10) || 0);
-  for (let index = 0; index < Math.max(left.length, right.length); index += 1) {
-    const difference = (left[index] ?? 0) - (right[index] ?? 0);
+interface Semver {
+  core: [number, number, number];
+  prerelease: string[] | null;
+}
+
+const REQUIRED_VERSION = parseSemver(REQUIRED_WALLET_API)!;
+
+function parseSemver(value: string): Semver | null {
+  const match = /^(?:v)?(\d+)\.(\d+)\.(\d+)(?:-([0-9A-Za-z.-]+))?$/.exec(value);
+  if (!match) return null;
+  const core = [Number(match[1]), Number(match[2]), Number(match[3])] as Semver['core'];
+  if (core.some((part) => !Number.isSafeInteger(part))) return null;
+  return { core, prerelease: match[4]?.split('.') ?? null };
+}
+
+function compareSemver(left: Semver, right: Semver): number {
+  for (let index = 0; index < left.core.length; index += 1) {
+    const difference = left.core[index]! - right.core[index]!;
     if (difference !== 0) return difference;
   }
+  if (left.prerelease === null) return right.prerelease === null ? 0 : 1;
+  if (right.prerelease === null) return -1;
+  for (let index = 0; index < Math.max(left.prerelease.length, right.prerelease.length); index += 1) {
+    const a = left.prerelease[index];
+    const b = right.prerelease[index];
+    if (a === undefined) return -1;
+    if (b === undefined) return 1;
+    if (a === b) continue;
+    const aNumber = /^\d+$/.test(a) ? Number(a) : null;
+    const bNumber = /^\d+$/.test(b) ? Number(b) : null;
+    if (aNumber !== null && bNumber !== null) return aNumber - bNumber;
+    if (aNumber !== null) return -1;
+    if (bNumber !== null) return 1;
+    return a.localeCompare(b);
+  }
   return 0;
+}
+
+function assertFirstConfirmation(attempted: boolean): void {
+  if (attempted) {
+    throw new PrivacyError('unknown', 'This batch was already confirmed or attempted. Prepare a new batch.');
+  }
+}
+
+function emitProgress(callback: ProgressCallback | undefined, progress: OperationProgress): void {
+  try { callback?.(progress); } catch { /* Observers cannot alter a financial operation. */ }
 }

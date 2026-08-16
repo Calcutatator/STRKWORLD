@@ -220,6 +220,63 @@ Format: `### YYYY-MM-DD — short title` then what, why it matters, how verified
 
 ---
 
+### 2026-08-16 — Secret scanning has one exact public-contract false positive
+
+Gitleaks 8.30.1's default `generic-api-key` rule flags
+`DEFAULT_POOL.feeToken` in `packages/privacy/src/testing/fake.ts`. That value is
+the canonical public Starknet STRK token contract, not a credential. Both the
+current-tree and 32-commit scans pass after allowing only that exact public
+value. Do not exclude the file or disable the generic rule: either would hide a
+real credential added beside it.
+
+*Verified:* ran redacted `gitleaks dir` and `gitleaks git` scans, inspected only
+the flagged rule and location, matched the value to the repository's canonical
+STRK address, then reran both scans with a process-local exact-value allowlist.
+No other finding remained. No secret value was printed or committed.
+
+---
+
+### 2026-08-16 — 1Click authentication is a server-side fee decision
+
+The 1Click API can be called without authentication, but official current docs
+say unauthenticated requests incur a 0.2% fee. JWT-authenticated requests are
+fee-free, and the same docs require that credential to be stored securely.
+The bridge SDK currently runs in the browser without a token; silently adding
+a JWT there would expose it to every player.
+
+Before launch choose one explicit route: retain the unauthenticated SDK flow
+and disclose the signed quote's fee, or add a narrow server-side credential
+proxy that preserves the backend privacy threat model. Never place a 1Click
+JWT in `packages/bridge`, frontend configuration, a PWA asset or a committed
+environment file.
+
+*Verified:* read the official 1Click authentication and TypeScript SDK pages,
+then inspected the installed
+`@defuse-protocol/one-click-sdk-typescript@0.1.25` exports and STRKWORLD's
+`OneClickSdkClient` on 2026-08-16. No credential was created or used.
+
+---
+
+### 2026-08-16 — The Bridge loader now covers every current non-Starknet registry family
+
+The current 1Click token response contains 35 blockchain labels. STRKWORLD's
+loader now maps all 34 non-Starknet families and deliberately excludes the
+same-chain Starknet destination from the inbound Bridge picker. The map covers
+EVM, Solana-compatible, Move, UTXO and account-chain families; their local
+validators are shape checks only, and the signed 1Click quote remains
+authoritative.
+
+Treat this as live provider metadata, not a permanent compatibility claim. An
+unknown future label is skipped rather than guessed, and freshness checks must
+run when the pinned SDK or registry changes.
+
+*Verified:* called `OneClickService.getTokens()` read-only on 2026-08-16 (186
+tokens, 35 labels), compared every returned label with `CHAIN_MAP`, and ran the
+17-test bridge suite including representative family validation. No quote was
+issued, no deposit address was created and no funds moved.
+
+---
+
 ### 2026-08-16 — Ready 5.33.8 prompts for private reads and batches deposit approval
 
 The current shipped Ready extension creates an explicit approval action for

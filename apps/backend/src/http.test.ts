@@ -13,7 +13,7 @@ describe('privacy-safe Fetch edge', () => {
       body: JSON.stringify({ v: 1 }),
     }));
     expect(api.handle).toHaveBeenCalledWith({
-      method: 'POST', path: '/v1/rpc/pool-config', body: { v: 1 },
+      method: 'POST', path: '/v1/rpc/pool-config', body: { v: 1 }, signal: expect.any(AbortSignal),
     });
     expect(response.status).toBe(200);
     expect(response.headers.get('cache-control')).toBe('no-store');

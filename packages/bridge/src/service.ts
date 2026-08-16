@@ -309,6 +309,9 @@ function assertSignedQuote(
   if (!response.signature || !response.timestamp || !response.correlationId) {
     throw new Error('1Click returned no signed quote dispute evidence.');
   }
+  if (!Number.isFinite(Date.parse(response.timestamp))) {
+    throw new Error('1Click returned an invalid signed quote timestamp.');
+  }
   if (!response.quote.depositAddress) throw new Error('1Click returned no deposit address.');
   if (
     !response.quote.deadline ||
@@ -328,6 +331,16 @@ function assertSignedQuote(
     throw new Error('1Click quote destination was not Starknet STRK.');
   }
   if (
+    response.quote.amountIn !== input.amountIn.toString() ||
+    !isPositiveDecimal(response.quote.amountOut) ||
+    !isPositiveDecimal(response.quote.minAmountOut) ||
+    BigInt(response.quote.minAmountOut) > BigInt(response.quote.amountOut) ||
+    !Number.isFinite(response.quote.timeEstimate) ||
+    response.quote.timeEstimate < 0
+  ) {
+    throw new Error('1Click returned invalid executable quote amounts.');
+  }
+  if (
     response.quoteRequest.originAsset !== input.source.assetId ||
     response.quoteRequest.amount !== input.amountIn.toString() ||
     response.quoteRequest.recipient !== input.starknetRecipient ||
@@ -343,6 +356,10 @@ function assertSignedQuote(
   ) {
     throw new Error('1Click signed quote did not match the requested route.');
   }
+}
+
+function isPositiveDecimal(value: string): boolean {
+  return /^[1-9][0-9]*$/.test(value);
 }
 
 function quoteExpired(record: BridgeRecord, now: number): boolean {

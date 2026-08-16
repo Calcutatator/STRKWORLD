@@ -45,7 +45,12 @@ export function createBackendFetchHandler(
       }
     }
 
-    const result = await api.handle({ method: request.method, path: url.pathname, body });
+    const result = await api.handle({
+      method: request.method,
+      path: url.pathname,
+      body,
+      signal: request.signal,
+    });
     return json(result.status, result.body);
   };
 }

@@ -4,12 +4,14 @@ export class AggregateMetrics {
   private failures = 0;
   private rateLimited = 0;
   private budgetExhausted = 0;
+  private queueRejected = 0;
 
   request(): void { this.requests += 1; }
   success(): void { this.successes += 1; }
   failure(): void { this.failures += 1; }
   limited(): void { this.rateLimited += 1; }
   budgetLimited(): void { this.budgetExhausted += 1; }
+  queueLimited(): void { this.queueRejected += 1; }
 
   snapshot() {
     return {
@@ -18,6 +20,7 @@ export class AggregateMetrics {
       failures: this.failures,
       rateLimited: this.rateLimited,
       budgetExhausted: this.budgetExhausted,
+      queueRejected: this.queueRejected,
     };
   }
 }

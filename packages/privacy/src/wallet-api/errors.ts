@@ -12,8 +12,18 @@ const CODE_TO_KIND = {
 export function mapWalletError(error: unknown): PrivacyError {
   if (error instanceof PrivacyError) return error;
   const code = readCode(error);
-  const kind = code === null ? 'unreachable' : (CODE_TO_KIND[code as keyof typeof CODE_TO_KIND] ?? 'unknown');
+  const kind = isAbortError(error)
+    ? 'user-rejected'
+    : code === null
+      ? 'unreachable'
+      : (CODE_TO_KIND[code as keyof typeof CODE_TO_KIND] ?? 'unknown');
   return new PrivacyError(kind, safeMessage(kind), error);
+}
+
+function isAbortError(error: unknown): boolean {
+  return error instanceof DOMException
+    ? error.name === 'AbortError'
+    : Boolean(error && typeof error === 'object' && 'name' in error && error.name === 'AbortError');
 }
 
 function readCode(error: unknown, seen = new Set<object>()): number | null {

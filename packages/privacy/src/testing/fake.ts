@@ -1,8 +1,10 @@
 import {
   PrivacyError,
   type Address,
+  type OperationProgress,
   type PrivacyErrorKind,
   type PrivateBalance,
+  type ProgressCallback,
   type RecipientStatus,
   type TxResult,
 } from '../types.js';
@@ -171,6 +173,13 @@ export class FakePrivacyOperations implements PrivacyOperations {
     if (intents.length === 0) {
       throw new PrivacyError('unknown', 'prepare called with no intents');
     }
+    for (const intent of intents) {
+      const amount = intent.kind === 'swap' ? intent.amountIn : intent.amount;
+      if (amount <= 0n) throw new PrivacyError('unknown', 'Amounts must be positive.');
+      if (intent.kind === 'swap' && intent.minAmountOut <= 0n) {
+        throw new PrivacyError('unknown', 'Minimum output must be positive.');
+      }
+    }
 
     const warnings: BatchWarning[] = [];
     const feeAtPrepare = this.pool.feeAmount;
@@ -215,7 +224,7 @@ export class FakePrivacyOperations implements PrivacyOperations {
       }
     }
 
-    // Would this strand the player below a future fee?
+    // Charge spends in their own token and the pool fee in the fee token.
     const spendByToken = new Map<string, bigint>();
     for (const intent of intents) {
       if (intent.kind === 'shield') continue;
@@ -223,16 +232,20 @@ export class FakePrivacyOperations implements PrivacyOperations {
       const amount = intent.kind === 'swap' ? intent.amountIn : intent.amount;
       spendByToken.set(normalise(token), (spendByToken.get(normalise(token)) ?? 0n) + amount);
     }
-    for (const [token, spend] of spendByToken) {
+    if (hasSpend) {
+      const feeToken = normalise(this.pool.feeToken);
+      spendByToken.set(feeToken, (spendByToken.get(feeToken) ?? 0n) + feeAtPrepare);
+    }
+    for (const [token, required] of spendByToken) {
       const have = this.spendable.get(token) ?? this.lookupLoose(token);
-      const remaining = have - spend - feeAtPrepare;
+      const remaining = have - required;
       if (remaining < 0n) {
         throw new PrivacyError(
           'insufficient-balance',
-          `Needs ${spend + feeAtPrepare}, has ${have}. Remember the pool fee comes out of the same balance.`,
+          `Needs ${required}, has ${have}. Remember the pool fee is paid in ${this.pool.feeToken}.`,
         );
       }
-      if (remaining < feeAtPrepare) {
+      if (sameAddress(token, this.pool.feeToken) && remaining < feeAtPrepare) {
         warnings.push({ kind: 'leaves-below-fee', remaining, feeEstimate: feeAtPrepare });
       }
     }
@@ -250,6 +263,7 @@ export class FakePrivacyOperations implements PrivacyOperations {
     const gasEstimate = 1_000000000000000n;
     const self = this;
     let discarded = false;
+    let confirmationAttempted = false;
 
     return {
       intents: [...intents],
@@ -260,6 +274,10 @@ export class FakePrivacyOperations implements PrivacyOperations {
       promptCount,
       async confirm({ feeCeiling, onProgress, signal: sig }) {
         if (discarded) throw new PrivacyError('unknown', 'batch already discarded');
+        if (confirmationAttempted) {
+          throw new PrivacyError('unknown', 'This batch was already confirmed or attempted. Prepare a new batch.');
+        }
+        confirmationAttempted = true;
         await self.tick('confirm', sig);
 
         // The fee can move between prepare and confirm. This is the guard.
@@ -270,13 +288,13 @@ export class FakePrivacyOperations implements PrivacyOperations {
           );
         }
 
-        onProgress?.({ stage: 'awaiting-approval', message: 'Confirm in your wallet' });
-        onProgress?.({ stage: 'proving', message: 'Your wallet is generating a proof' });
-        onProgress?.({ stage: 'submitting', message: 'Submitting' });
+        emitProgress(onProgress, { stage: 'awaiting-approval', message: 'Confirm in your wallet' });
+        emitProgress(onProgress, { stage: 'proving', message: 'Your wallet is generating a proof' });
+        emitProgress(onProgress, { stage: 'submitting', message: 'Submitting' });
 
         self.applyIntents(intents, self.pool.feeAmount);
         self.submitted.push([...intents]);
-        onProgress?.({ stage: 'done', message: 'Done' });
+        emitProgress(onProgress, { stage: 'done', message: 'Done' });
         return { transactionHash: `0xfake${(++self.txCounter).toString(16).padStart(4, '0')}` };
       },
       discard() {
@@ -378,4 +396,8 @@ function sameAddress(a: string, b: string): boolean {
   } catch {
     return a === b;
   }
+}
+
+function emitProgress(callback: ProgressCallback | undefined, progress: OperationProgress): void {
+  try { callback?.(progress); } catch { /* Observers cannot alter a financial operation. */ }
 }

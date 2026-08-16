@@ -10,7 +10,8 @@ submit eligible prepared Wallet API calls and proxy those reads.
 
 - Paymaster-key custody and fee-action ceiling checks
 - Recipient-registration and receipt RPC proxies
-- Bounded submission jitter for eligible prepared calls only
+- Bounded submission jitter and concurrency for eligible prepared calls only
+- A hard request deadline propagated to AVNU and Starknet RPC
 - Aggregate rate, budget and health counters
 - Global and per-route kill switches
 
@@ -64,12 +65,18 @@ the swap route.
 Fee build returns an HMAC authorization binding route, fee token, operation
 token, recipient, amount and block-validity window. The server keeps no quote
 row to correlate with the later proof. Pool-native submissions receive bounded
-jitter and are checked again after the delay; quote-bound swaps never enter the
-delay path. Kill switches, fee caps, a global aggregate rate limit and an
-aggregate fee-token sponsorship budget fail closed. `AggregateMetrics`
+jitter, then enter a bounded process-local admission queue. They are checked
+again after both waits; an expired request is removed from the queue and can
+never relay later. Quote-bound swaps skip both delay and queuing: if the
+in-flight slot is unavailable they fail fast and must be re-quoted. Every
+request also has a configured deadline. The edge abort signal and deadline are
+propagated to AVNU and raw Starknet RPC, and timeout responses contain no
+request material. Kill switches, fee caps, a global aggregate rate limit and
+an aggregate fee-token sponsorship budget fail closed. `AggregateMetrics`
 contains counts only; production alerts on `budgetExhausted` without attaching
 a request identity. A multi-instance deployment needs one atomic aggregate
-admission store because in-process counters are instance-local (D-026).
+admission store because in-process counters and queue capacity are
+instance-local (D-026).
 `BackendApiOptions.rateLimiter` and `.sponsorshipBudget` accept atomic
 deployment adapters; the in-memory defaults are for tests or a single
 admission-control instance only.
@@ -78,7 +85,8 @@ The code deliberately does not choose an HTTP framework or deployment host.
 `createBackendFetchHandler()` is the deployable Fetch API edge: it performs
 bounded streaming body reads, accepts same-origin JSON without reflecting
 CORS, rejects query strings, returns `no-store`, and passes only
-`{method, path, body}` into the core. The deployment must still disable
+`{method, path, body, signal}` into the core. The signal carries cancellation,
+not identity or financial data. The deployment must still disable
 provider and platform request logging for these routes; a platform whose
 default access log captures IP, path or latency would violate D-014 even though
 the handler and core themselves log nothing.

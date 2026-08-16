@@ -1,5 +1,7 @@
 import type { BackendConfig, PreparedArtifact, PrivateRoute } from './types.js';
 
+const STARK_FIELD_PRIME = (1n << 251n) + 17n * (1n << 192n) + 1n;
+
 export class ApiFailure extends Error {
   constructor(readonly status: number, message: string) {
     super(message);
@@ -23,10 +25,14 @@ export function requireVersion(record: Record<string, unknown>): void {
 }
 
 export function requireFelt(value: unknown, label: string): string {
-  if (typeof value !== 'string' || !/^0x[0-9a-fA-F]{1,64}$/.test(value)) {
+  if (typeof value !== 'string' || !isFelt(value)) {
     throw new ApiFailure(400, `Invalid ${label}.`);
   }
   return value;
+}
+
+export function isFelt(value: string): boolean {
+  return /^0x[0-9a-fA-F]{1,64}$/.test(value) && BigInt(value) < STARK_FIELD_PRIME;
 }
 
 export function requireRoute(value: unknown): PrivateRoute {

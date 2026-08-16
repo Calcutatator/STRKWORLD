@@ -98,6 +98,13 @@ describe('WalletApiPrivacyOperations capability and reads', () => {
     await expect(ops.recipientStatus('0x999')).resolves.toBe('unregistered');
   });
 
+  it('rejects values outside the Stark field before an RPC or wallet call', async () => {
+    const { ops, pool } = fixture();
+    const publicKey = vi.spyOn(pool, 'publicKey');
+    await expect(ops.recipientStatus(`0x${'f'.repeat(64)}`)).rejects.toThrow(/invalid recipient/i);
+    expect(publicKey).not.toHaveBeenCalled();
+  });
+
   it('blocks an unregistered transfer during prepare instead of proving a doomed action', async () => {
     const { ops, prepared } = fixture();
     await expect(ops.prepare([
@@ -140,6 +147,32 @@ describe('Wallet API action routes', () => {
         proofValidityBlocks: 450,
       }),
     );
+  });
+
+  it('allows exactly one confirmation attempt for a prepared batch', async () => {
+    const { ops, gateway } = fixture();
+    const batch = await ops.prepare([
+      { kind: 'transfer', token: TOKEN, amount: 20n, recipient: BOB },
+    ]);
+
+    await expect(batch.confirm({ feeCeiling: POOL_FEE + 2n })).resolves.toMatchObject({
+      transactionHash: '0xprivate',
+    });
+    await expect(batch.confirm({ feeCeiling: POOL_FEE + 2n })).rejects.toThrow(/already confirmed/i);
+    expect(gateway.submit).toHaveBeenCalledTimes(1);
+  });
+
+  it('does not let a throwing progress observer interrupt a financial operation', async () => {
+    const { ops, gateway } = fixture();
+    const batch = await ops.prepare([
+      { kind: 'transfer', token: TOKEN, amount: 20n, recipient: BOB },
+    ]);
+
+    await expect(batch.confirm({
+      feeCeiling: POOL_FEE + 2n,
+      onProgress: () => { throw new Error('render observer failed'); },
+    })).resolves.toMatchObject({ transactionHash: '0xprivate' });
+    expect(gateway.submit).toHaveBeenCalledTimes(1);
   });
 
   it('rechecks fees and refuses before asking the wallet to prove', async () => {
@@ -286,5 +319,38 @@ describe('wallet error mapping', () => {
     expect(mapped.kind).toBe('unknown');
     expect(mapped.message).toBe('The privacy operation failed.');
     expect(mapped.message).not.toContain('secret.example');
+  });
+
+  it('maps abort-shaped wallet failures to cancellation rather than an outage', () => {
+    expect(mapWalletError(new DOMException('aborted', 'AbortError'))).toMatchObject({
+      kind: 'user-rejected',
+      message: 'The wallet request was declined.',
+    });
+  });
+});
+
+describe('Wallet API capability versions', () => {
+  it('does not treat malformed versions or a 0.10.3 prerelease as stable support', async () => {
+    const { wallet, pool, gateway } = fixture();
+    const ops = new WalletApiPrivacyOperations({
+      wallet,
+      pool,
+      submission: gateway,
+      supportedVersions: async () => ['not-a-version', '0.10.3-rc.1'],
+      policy: {
+        maxIntents: 8,
+        maxRelayFee: 10n,
+        enabledRoutes: ['transfer'],
+        allowedTokens: {
+          shield: [STRK, TOKEN], unshield: [STRK, TOKEN], transfer: [STRK, TOKEN], swap: [STRK, TOKEN],
+        },
+      },
+    });
+
+    await expect(ops.capability()).resolves.toEqual({
+      supportsStrk20: false,
+      walletApiVersion: '0.10.3-rc.1',
+      registration: 'unknown',
+    });
   });
 });

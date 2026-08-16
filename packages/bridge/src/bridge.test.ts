@@ -9,10 +9,13 @@ import type {
 } from '@defuse-protocol/one-click-sdk-typescript';
 import {
   BridgeService,
+  MAX_RESUME_RECORD_BYTES,
   MemoryBridgeStore,
   STRK_ON_STARKNET_ASSET_ID,
   loadSourceAssets,
+  deserializeBridgeRecord,
   validateSourceAddress,
+  validateStarknetAddress,
   type OneClickClient,
   type SourceAsset,
 } from './index.js';
@@ -218,6 +221,24 @@ describe('BridgeService', () => {
     expect(store.load()).toBeNull();
   });
 
+  it('rejects a signed quote whose executable amounts do not match the request', async () => {
+    const client = new StubClient();
+    const store = new MemoryBridgeStore();
+    client.getQuote = async () => ({
+      ...signedQuote,
+      quote: { ...signedQuote.quote, amountIn: '999999', amountOut: '0', minAmountOut: '0' },
+    });
+    const service = new BridgeService({ client, store, quoteVerifier: () => true, now: () => NOW });
+
+    await expect(service.createManualDeposit({
+      source: SOURCE,
+      amountIn: 1_000_000n,
+      starknetRecipient: '0x123',
+      refundAddress: request.refundTo,
+    })).rejects.toThrow(/amount/i);
+    expect(store.load()).toBeNull();
+  });
+
   it('fails closed when the SDK cannot verify the signed quote', async () => {
     const client = new StubClient();
     const store = new MemoryBridgeStore();
@@ -357,10 +378,43 @@ describe('source registry and refund validation', () => {
     expect(assets.some((asset) => asset.assetId === 'nep141:broken.omft.near')).toBe(false);
   });
 
+  it('keeps every currently supported non-Starknet chain family available', async () => {
+    const live = [
+      ['near', 'NEAR'],
+      ['btc', 'BTC'],
+      ['sui', 'SUI'],
+      ['aptos', 'APT'],
+      ['hypercore', 'USDC'],
+      ['starknet', 'ETH'],
+    ].map(([blockchain, symbol], index) => ({
+      assetId: `nep141:source-${index}.omft.near`,
+      symbol,
+      decimals: 8,
+      blockchain,
+      price: 1,
+      priceUpdatedAt: '2026-08-16T12:00:00Z',
+    })) as TokenResponse[];
+    const assets = await loadSourceAssets({ getTokens: async () => live });
+
+    expect(assets).toEqual(expect.arrayContaining([
+      expect.objectContaining({ chainName: 'near' }),
+      expect.objectContaining({ chainName: 'bitcoin' }),
+      expect.objectContaining({ chainName: 'sui' }),
+      expect.objectContaining({ chainName: 'aptos' }),
+      expect.objectContaining({ chainName: 'hypercore' }),
+    ]));
+    expect(assets.some((asset) => String(asset.chainName) === 'starknet')).toBe(false);
+  });
+
   it('uses chain-specific shape checks for irreversible refund addresses', () => {
     expect(validateSourceAddress('arbitrum', request.refundTo)).toEqual({ ok: true });
     expect(validateSourceAddress('arbitrum', '0x123').ok).toBe(false);
     expect(validateSourceAddress('stellar', `G${'A'.repeat(55)}`)).toEqual({ ok: true });
+    expect(validateSourceAddress('near', 'alice.near')).toEqual({ ok: true });
+    expect(validateSourceAddress('bitcoin', `bc1q${'a'.repeat(38)}`)).toEqual({ ok: true });
+    expect(validateSourceAddress('sui', `0x${'a'.repeat(64)}`)).toEqual({ ok: true });
+    expect(validateSourceAddress('arbitrum', `0x${'0'.repeat(40)}`).ok).toBe(false);
+    expect(validateStarknetAddress(`0x${'f'.repeat(64)}`).ok).toBe(false);
   });
 });
 
@@ -395,5 +449,9 @@ describe('bridge persistence', () => {
       status: { leg: 'settled' as const, message: 'done', pollingStopped: true },
     };
     expect(store.deserialize(store.serialize(old))).toEqual(old);
+  });
+
+  it('rejects oversized imported resume records before parsing them', () => {
+    expect(deserializeBridgeRecord(' '.repeat(MAX_RESUME_RECORD_BYTES + 1))).toBeNull();
   });
 });

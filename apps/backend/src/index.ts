@@ -10,6 +10,11 @@ export {
   type SponsorshipBudgetPort,
 } from './metrics.js';
 export {
+  BoundedSubmissionQueue,
+  SubmissionQueueFullError,
+  type SubmissionQueuePort,
+} from './submission-queue.js';
+export {
   createBackendFetchHandler,
   DEFAULT_MAX_REQUEST_BYTES,
   type BackendFetchHandlerOptions,

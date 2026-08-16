@@ -32,7 +32,7 @@ function fixture(overrides: Partial<BackendConfig> = {}) {
     },
     async submit(input) {
       submitted.push(input.artifact);
-      return { transactionHash: '0xsubmitted' };
+      return { transactionHash: '0x5ab' };
     },
   };
   const rpc: PoolRpcPort = {
@@ -54,9 +54,11 @@ function fixture(overrides: Partial<BackendConfig> = {}) {
     feeToken: STRK,
     maxCalldataItems: 128,
     maxProofBytes: 2_000_000,
+    requestTimeoutMs: 30_000,
     globalEnabled: true,
     rateLimit: { maxRequests: 100, windowMs: 60_000 },
     sponsorshipBudget: { maxFeeAmount: 1_000n, windowMs: 60_000 },
+    submissionQueue: { maxInFlight: 4, maxQueued: 16 },
     routes: {
       transfer: {
         enabled: true, maxRelayFee: 10n, maxQueueDelayMs: 500, quoteBound: false,
@@ -201,6 +203,22 @@ describe('strict fee authorization', () => {
       body: { v: 1, route: 'transfer', feeToken: STRK, operationToken: '0xabc' },
     })).resolves.toMatchObject({ status: 503 });
   });
+
+  it('aborts a stalled upstream at the configured request deadline', async () => {
+    const { api, paymaster } = fixture({ requestTimeoutMs: 1 });
+    let observedSignal: AbortSignal | undefined;
+    vi.spyOn(paymaster, 'buildFee').mockImplementation(async (input) => {
+      observedSignal = input.signal;
+      await new Promise((resolve) => setTimeout(resolve, 20));
+      return { token: STRK, recipient: FEE_RECIPIENT, amount: 7n };
+    });
+
+    await expect(api.handle({
+      method: 'POST', path: '/v1/private/fees',
+      body: { v: 1, route: 'transfer', feeToken: STRK, operationToken: '0xabc' },
+    })).resolves.toMatchObject({ status: 504 });
+    expect(observedSignal?.aborted).toBe(true);
+  });
 });
 
 describe('bounded private submission', () => {
@@ -217,7 +235,7 @@ describe('bounded private submission', () => {
         proofValidityBlocks: 450,
       },
     });
-    expect(response).toEqual({ status: 200, body: { transactionHash: '0xsubmitted' } });
+    expect(response).toEqual({ status: 200, body: { transactionHash: '0x5ab' } });
     expect(delays).toEqual([250]);
     expect(submitted).toEqual([artifact]);
   });
@@ -395,6 +413,77 @@ describe('bounded private submission', () => {
     expect(submitted).toHaveLength(0);
     expect(api.metrics.snapshot()).toMatchObject({ budgetExhausted: 1 });
   });
+
+  it('bounds concurrent pool-native submissions and rejects overflow before relay', async () => {
+    const { api, paymaster } = fixture({
+      submissionQueue: { maxInFlight: 1, maxQueued: 1 },
+    });
+    const quote = await fee(api);
+    let releaseFirst!: () => void;
+    let submitCalls = 0;
+    vi.spyOn(paymaster, 'submit').mockImplementation(async () => {
+      submitCalls += 1;
+      if (submitCalls === 1) {
+        await new Promise<void>((resolve) => { releaseFirst = resolve; });
+      }
+      return { transactionHash: `0x${submitCalls}` };
+    });
+    const request = {
+      method: 'POST',
+      path: '/v1/private/submissions',
+      body: {
+        v: 1, route: 'transfer', artifact,
+        feeAuthorization: quote.authorization, proofValidityBlocks: 450,
+      },
+    } as const;
+
+    const first = api.handle(request);
+    await vi.waitFor(() => expect(submitCalls).toBe(1));
+    const second = api.handle(request);
+    const third = api.handle(request);
+    const overflow = await third;
+    releaseFirst();
+
+    await expect(first).resolves.toMatchObject({ status: 200 });
+    await expect(second).resolves.toMatchObject({ status: 200 });
+    expect(overflow).toMatchObject({ status: 503 });
+    expect(submitCalls).toBe(2);
+    expect(api.metrics.snapshot()).toMatchObject({ queueRejected: 1 });
+  });
+
+  it('rechecks proof freshness after a queued submission is admitted', async () => {
+    const { api, paymaster, setBlock } = fixture({
+      submissionQueue: { maxInFlight: 1, maxQueued: 1 },
+    });
+    const quote = await fee(api);
+    let releaseFirst!: () => void;
+    let submitCalls = 0;
+    vi.spyOn(paymaster, 'submit').mockImplementation(async () => {
+      submitCalls += 1;
+      if (submitCalls === 1) {
+        await new Promise<void>((resolve) => { releaseFirst = resolve; });
+      }
+      return { transactionHash: `0x${submitCalls}` };
+    });
+    const request = {
+      method: 'POST',
+      path: '/v1/private/submissions',
+      body: {
+        v: 1, route: 'transfer', artifact,
+        feeAuthorization: quote.authorization, proofValidityBlocks: 450,
+      },
+    } as const;
+
+    const first = api.handle(request);
+    await vi.waitFor(() => expect(submitCalls).toBe(1));
+    const queued = api.handle(request);
+    setBlock(1_451);
+    releaseFirst();
+
+    await expect(first).resolves.toMatchObject({ status: 200 });
+    await expect(queued).resolves.toMatchObject({ status: 409 });
+    expect(submitCalls).toBe(1);
+  });
 });
 
 describe('quote-bound swap withdrawal matching', () => {
@@ -457,6 +546,16 @@ describe('privacy-safe RPC and operations', () => {
     await expect(api.handle({ method: 'POST', path: '/v1/rpc/receipt', body: { v: 1, transactionHash: '0xaaa' } }))
       .resolves.toMatchObject({ status: 200, body: { transactionHash: '0xaaa' } });
     expect(JSON.stringify(api.metrics.snapshot())).not.toMatch(/0x456|0xaaa|publicKey|artifact/);
+  });
+
+  it('rejects out-of-field Starknet values before touching RPC', async () => {
+    const { api, rpc } = fixture();
+    const publicKey = vi.spyOn(rpc, 'getPublicKey');
+    await expect(api.handle({
+      method: 'POST', path: '/v1/rpc/public-key',
+      body: { v: 1, address: `0x${'f'.repeat(64)}` },
+    })).resolves.toMatchObject({ status: 400 });
+    expect(publicKey).not.toHaveBeenCalled();
   });
 
   it('enforces a global aggregate rate limit without an IP key', async () => {

@@ -69,8 +69,10 @@ is most expensive.
 
 One agent (or the lead) locks these first:
 
-1. **`PrivacyOperations`** — provisional after D-015. Freeze it only after the
-   Phase 0 spike and D-018 route-admission shape are verified.
+1. **`PrivacyOperations`** — provisional after D-015. D-028 removes the funded
+   wallet run as a development gate: freeze it from the completed shipped-code
+   audit and D-018 route-admission shape when the Chain lane records that
+   decision. Funded behavior remains a pre-launch validation.
 2. **`WorldEvents` / `ShellEvents`** — the event bus contract, in
    `packages/shared/src/index.ts`. **Frozen.**
 3. **`PresenceState`** — the lobby room schema, in the same file. **Frozen.**
@@ -94,7 +96,7 @@ Lanes do not all start usefully at the same time.
 ```
 Week 0   ├── FREEZE SEAMS ──────────────────────────────────┐
          │                                                   │
-Week 1   ├── Chain: Phase 0 wallet spike  ⚠ GATES DESIGN     │
+Week 1   ├── Chain: shipped-wallet source audit              │
          ├── World: scenes, movement, collision              │
          ├── Bridge: port 1Click wrapper + pipeline          │
          └── Art: source packs, licence audit                │
@@ -113,15 +115,13 @@ Week 4-5 ├── Shell: Bank + Post Office + Bridge panels wired
 Week 6-8 └── Integration, mainnet regression, hardening, launch
 ```
 
-**The Phase 0 spike gates real design decisions**, so it runs first and its
-results are broadcast to every lane. Four questions no document can answer,
-detailed in [`SPEC.md`](SPEC.md) §8 — whether the shipped wallet honours
-arbitrary-contract `invoke`, whether `strk20Balances` prompts, whether a
-multi-action array renders one confirmation or several, and real end-to-end
-latency.
-
-If `strk20Balances` prompts on every call, the Shell lane's balance HUD design
-changes completely. Better to know in week one than week four.
+**D-028 supersedes the funded Phase 0 run as a development gate.** The Ready
+5.33.8 source audit answered the structural questions needed to keep building:
+private reads prompt, action arrays become one wallet action, deposits batch
+approval calls, and arbitrary `invoke` remains unproven end to end. No lane
+waits for wallet access. Rendered prompt sequence, real latency and AVNU
+paymaster acceptance of a wallet-produced artifact stay on the pre-launch
+checklist and any divergence is handled as a normal bug.
 
 ---
 
@@ -133,9 +133,11 @@ Each brief is written so an agent can be pointed at it and start.
 
 **Owns** `packages/privacy`. The STRK20 seam.
 
-**First task — the Phase 0 spike.** A scratch page, not production code. Drive
-all three methods against a real extension on mainnet with tiny amounts.
-Answer the four questions and write findings into `AGENTS.md`.
+**First task — completed source audit, funded validation deferred.** Inspect the
+shipped wallet implementation and package types, record source-derived behavior
+in `AGENTS.md`, and implement against it. Before launch, drive all three methods
+against a real extension on mainnet with tiny amounts and amend any finding the
+live run contradicts (D-028).
 
 **Then:** implement `WalletApiPrivacyOperations` against the provisional seam.
 Wallet connection via `get-starknet-discovery` (never the static wallet list),
@@ -266,7 +268,9 @@ funds are in the pool. Copy must say so.
 
 **Done when:** a player deposits from another chain, ends up with a shielded
 balance, sees honest copy about what was public, and the flow survives a reload
-mid-deposit.
+mid-deposit. Before launch, the lead must also choose and verify either the
+disclosed unauthenticated 1Click fee or a narrow server-side JWT proxy; the JWT
+must never enter the browser bundle.
 
 **Reference:** `packages/bridge/README.md` · DECISIONS.md D-009, D-012
 

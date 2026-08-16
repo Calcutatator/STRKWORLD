@@ -39,6 +39,24 @@ describe('the fee comes out of the balance being spent', () => {
     ]);
     expect(has(batch.warnings, 'leaves-below-fee')).toBe(true);
   });
+
+  it('charges a different operation token and the STRK pool fee independently', async () => {
+    const usdc = '0x1234';
+    const ops = new FakePrivacyOperations({
+      balances: { [usdc]: 5n, [STRK]: 6n },
+      registered: [BOB],
+      poolConfig: { feeAmount: 6n },
+    });
+    const batch = await ops.prepare([
+      { kind: 'transfer', token: usdc, amount: 5n, recipient: BOB },
+    ]);
+
+    await expect(batch.confirm({ feeCeiling: 6n })).resolves.toBeDefined();
+    await expect(ops.balances([usdc, STRK])).resolves.toEqual([
+      expect.objectContaining({ token: usdc, spendable: 0n }),
+      expect.objectContaining({ token: STRK, spendable: 0n }),
+    ]);
+  });
 });
 
 describe('shielded funds are not immediately spendable', () => {
@@ -117,6 +135,40 @@ describe('the fee can move between prepare and confirm', () => {
     ops.setPoolFee(20n * 10n ** 18n); // governance moved it
 
     await expect(batch.confirm({ feeCeiling: CEILING })).rejects.toThrow(/above the ceiling/);
+    expect(ops.submitted).toHaveLength(0);
+  });
+
+  it('allows exactly one confirmation attempt', async () => {
+    const ops = fresh();
+    const batch = await ops.prepare([
+      { kind: 'transfer', token: STRK, amount: 10n ** 18n, recipient: BOB },
+    ]);
+
+    await batch.confirm({ feeCeiling: CEILING });
+    await expect(batch.confirm({ feeCeiling: CEILING })).rejects.toThrow(/already confirmed/i);
+    expect(ops.submitted).toHaveLength(1);
+  });
+
+  it('does not let a throwing progress observer interrupt the simulated submission', async () => {
+    const ops = fresh();
+    const batch = await ops.prepare([
+      { kind: 'transfer', token: STRK, amount: 10n ** 18n, recipient: BOB },
+    ]);
+
+    await expect(batch.confirm({
+      feeCeiling: CEILING,
+      onProgress: () => { throw new Error('render observer failed'); },
+    })).resolves.toBeDefined();
+    expect(ops.submitted).toHaveLength(1);
+  });
+});
+
+describe('invalid fake intents', () => {
+  it('rejects non-positive amounts before mutating balances', async () => {
+    const ops = fresh();
+    await expect(ops.prepare([
+      { kind: 'transfer', token: STRK, amount: -1n, recipient: BOB },
+    ])).rejects.toThrow(/positive/i);
     expect(ops.submitted).toHaveLength(0);
   });
 });

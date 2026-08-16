@@ -6,6 +6,11 @@ import {
   type SponsorshipBudgetPort,
 } from './metrics.js';
 import { validateServerActionRoute } from './server-actions.js';
+import {
+  BoundedSubmissionQueue,
+  SubmissionQueueFullError,
+  type SubmissionQueuePort,
+} from './submission-queue.js';
 import type {
   ApiRequest,
   ApiResponse,
@@ -19,6 +24,7 @@ import type {
 } from './types.js';
 import {
   ApiFailure,
+  isFelt,
   requireFelt,
   requirePositiveInteger,
   requireRecord,
@@ -39,6 +45,7 @@ export interface BackendApiOptions {
   swapPlanner?: SwapPlannerPort;
   rateLimiter?: RequestRateLimiterPort;
   sponsorshipBudget?: SponsorshipBudgetPort;
+  submissionQueue?: SubmissionQueuePort;
 }
 
 export class BackendApi {
@@ -53,6 +60,7 @@ export class BackendApi {
   private readonly swapPlanner?: SwapPlannerPort;
   private readonly clockNow: () => number;
   private readonly budget: SponsorshipBudgetPort;
+  private readonly submissionQueue: SubmissionQueuePort;
 
   constructor(options: BackendApiOptions) {
     validateBackendConfig(options.config);
@@ -71,43 +79,46 @@ export class BackendApi {
     this.budget = options.sponsorshipBudget ?? new AggregateBudget(
       this.config.sponsorshipBudget.maxFeeAmount, this.config.sponsorshipBudget.windowMs, now,
     );
+    this.submissionQueue = options.submissionQueue ?? new BoundedSubmissionQueue(
+      this.config.submissionQueue.maxInFlight,
+      this.config.submissionQueue.maxQueued,
+    );
   }
 
   async handle(request: ApiRequest): Promise<ApiResponse> {
     this.metrics.request();
+    const deadline = createRequestDeadline(request.signal, this.config.requestTimeoutMs);
     try {
-      if (!await this.limiter.take()) {
+      if (!await abortable(Promise.resolve(this.limiter.take()), deadline.signal)) {
         this.metrics.limited();
         return { status: 429, body: { code: 'RATE_LIMITED', message: 'Service is busy. Try again shortly.' } };
       }
-    } catch (error) {
-      return this.failure(error);
-    }
-    if (!this.config.globalEnabled) {
-      this.metrics.failure();
-      return { status: 503, body: { code: 'SERVICE_DISABLED', message: 'Private operations are temporarily disabled.' } };
-    }
-    if (request.method !== 'POST') return this.failure(new ApiFailure(405, 'Method not allowed.'));
+      if (!this.config.globalEnabled) {
+        this.metrics.failure();
+        return { status: 503, body: { code: 'SERVICE_DISABLED', message: 'Private operations are temporarily disabled.' } };
+      }
+      if (request.method !== 'POST') return this.failure(new ApiFailure(405, 'Method not allowed.'));
 
-    try {
       let response: ApiResponse;
       switch (request.path) {
-        case '/v1/private/fees': response = await this.fee(request.body); break;
-        case '/v1/private/submissions': response = await this.submit(request.body); break;
-        case '/v1/private/swaps/prepare': response = await this.prepareSwap(request.body); break;
-        case '/v1/rpc/pool-config': response = await this.poolConfig(request.body); break;
-        case '/v1/rpc/public-key': response = await this.publicKey(request.body); break;
-        case '/v1/rpc/receipt': response = await this.receipt(request.body); break;
+        case '/v1/private/fees': response = await abortable(this.fee(request.body, deadline.signal), deadline.signal); break;
+        case '/v1/private/submissions': response = await abortable(this.submit(request.body, deadline.signal), deadline.signal); break;
+        case '/v1/private/swaps/prepare': response = await abortable(this.prepareSwap(request.body, deadline.signal), deadline.signal); break;
+        case '/v1/rpc/pool-config': response = await abortable(this.poolConfig(request.body, deadline.signal), deadline.signal); break;
+        case '/v1/rpc/public-key': response = await abortable(this.publicKey(request.body, deadline.signal), deadline.signal); break;
+        case '/v1/rpc/receipt': response = await abortable(this.receipt(request.body, deadline.signal), deadline.signal); break;
         default: throw new ApiFailure(404, 'Endpoint not found.');
       }
       this.metrics.success();
       return response;
     } catch (error) {
       return this.failure(error);
+    } finally {
+      deadline.dispose();
     }
   }
 
-  private async fee(body: unknown): Promise<ApiResponse> {
+  private async fee(body: unknown, signal: AbortSignal): Promise<ApiResponse> {
     const value = requireRecord(body, ['v', 'route', 'feeToken', 'operationToken']);
     requireVersion(value);
     const route = requireRoute(value.route);
@@ -129,9 +140,10 @@ export class BackendApi {
         poolAddress: this.config.poolAddress,
         feeToken,
         operationToken,
+        signal,
       }),
-      this.rpc.getPoolConfig(),
-      this.rpc.getBlockNumber(),
+      this.rpc.getPoolConfig(signal),
+      this.rpc.getBlockNumber(signal),
     ]);
     if (!sameAddress(fee.token, feeToken)) throw new ApiFailure(400, 'Paymaster changed the fee token.');
     requireFelt(fee.recipient, 'fee recipient');
@@ -161,7 +173,7 @@ export class BackendApi {
     };
   }
 
-  private async submit(body: unknown): Promise<ApiResponse> {
+  private async submit(body: unknown, signal: AbortSignal): Promise<ApiResponse> {
     const value = requireRecord(
       body,
       ['v', 'route', 'artifact', 'feeAuthorization', 'proofValidityBlocks'],
@@ -186,30 +198,49 @@ export class BackendApi {
       amount: claims.amount,
     }, claims.operationToken, claims.swap);
 
-    let block = await this.rpc.getBlockNumber();
+    let block = await this.rpc.getBlockNumber(signal);
     if (block > claims.expiresAtBlock) throw new ApiFailure(409, 'Prepared proof has expired.');
     if (!policy.quoteBound && policy.maxQueueDelayMs > 0) {
       const delay = clamp(this.randomInt(policy.maxQueueDelayMs), 0, policy.maxQueueDelayMs);
-      if (delay > 0) await this.sleep(delay);
-      block = await this.rpc.getBlockNumber();
+      if (delay > 0) await abortable(this.sleep(delay), signal);
+      block = await this.rpc.getBlockNumber(signal);
       if (block > claims.expiresAtBlock) throw new ApiFailure(409, 'Prepared proof expired in the queue.');
     }
-    if (!await this.budget.take(claims.amount)) {
-      this.metrics.budgetLimited();
-      throw new ApiFailure(503, 'The private sponsorship budget is temporarily exhausted.');
+    try {
+      return await this.submissionQueue.run(async () => {
+        const currentBlock = await this.rpc.getBlockNumber(signal);
+        if (currentBlock > claims.expiresAtBlock) {
+          throw new ApiFailure(409, 'Prepared proof expired in the submission queue.');
+        }
+        if (claims.swap && claims.swap.quoteExpiresAt <= this.clockNow()) {
+          throw new ApiFailure(409, 'The private swap quote expired before submission.');
+        }
+        if (!await this.budget.take(claims.amount)) {
+          this.metrics.budgetLimited();
+          throw new ApiFailure(503, 'The private sponsorship budget is temporarily exhausted.');
+        }
+        const result = await this.paymaster.submit({
+          route,
+          artifact,
+          fee: { token: claims.token, recipient: claims.recipient, amount: claims.amount },
+          signal,
+        });
+        requireFelt(result.transactionHash, 'submitted transaction hash');
+        return { status: 200, body: result };
+      }, { allowQueue: !policy.quoteBound, signal });
+    } catch (error) {
+      if (error instanceof SubmissionQueueFullError) {
+        this.metrics.queueLimited();
+        throw new ApiFailure(503, 'The private submission queue is full. Try again shortly.');
+      }
+      throw error;
     }
-    const result = await this.paymaster.submit({
-      route,
-      artifact,
-      fee: { token: claims.token, recipient: claims.recipient, amount: claims.amount },
-    });
-    return { status: 200, body: result };
   }
 
-  private async poolConfig(body: unknown): Promise<ApiResponse> {
+  private async poolConfig(body: unknown, signal: AbortSignal): Promise<ApiResponse> {
     const value = requireRecord(body, ['v']);
     requireVersion(value);
-    const config = await this.rpc.getPoolConfig();
+    const config = await this.rpc.getPoolConfig(signal);
     return {
       status: 200,
       body: {
@@ -221,7 +252,7 @@ export class BackendApi {
     };
   }
 
-  private async prepareSwap(body: unknown): Promise<ApiResponse> {
+  private async prepareSwap(body: unknown, signal: AbortSignal): Promise<ApiResponse> {
     if (!this.swapPlanner) throw new ApiFailure(503, 'The private swap planner is unavailable.');
     const value = requireRecord(
       body,
@@ -246,9 +277,9 @@ export class BackendApi {
     }
 
     const [plan, block, poolConfig] = await Promise.all([
-      this.swapPlanner.prepare({ sellToken, buyToken, sellAmount, minAmountOut, slippageBps }),
-      this.rpc.getBlockNumber(),
-      this.rpc.getPoolConfig(),
+      this.swapPlanner.prepare({ sellToken, buyToken, sellAmount, minAmountOut, slippageBps, signal }),
+      this.rpc.getBlockNumber(signal),
+      this.rpc.getPoolConfig(signal),
     ]);
     if (
       !plan.quoteId ||
@@ -276,6 +307,7 @@ export class BackendApi {
       poolAddress: this.config.poolAddress,
       feeToken: this.config.feeToken,
       operationToken: sellToken,
+      signal,
     });
     if (
       !sameAddress(fee.token, this.config.feeToken) ||
@@ -329,18 +361,18 @@ export class BackendApi {
     };
   }
 
-  private async publicKey(body: unknown): Promise<ApiResponse> {
+  private async publicKey(body: unknown, signal: AbortSignal): Promise<ApiResponse> {
     const value = requireRecord(body, ['v', 'address']);
     requireVersion(value);
     const address = requireFelt(value.address, 'address');
-    return { status: 200, body: { publicKey: await this.rpc.getPublicKey(address) } };
+    return { status: 200, body: { publicKey: await this.rpc.getPublicKey(address, signal) } };
   }
 
-  private async receipt(body: unknown): Promise<ApiResponse> {
+  private async receipt(body: unknown, signal: AbortSignal): Promise<ApiResponse> {
     const value = requireRecord(body, ['v', 'transactionHash']);
     requireVersion(value);
     const hash = requireFelt(value.transactionHash, 'transaction hash');
-    return { status: 200, body: await this.rpc.getReceipt(hash) };
+    return { status: 200, body: await this.rpc.getReceipt(hash, signal) };
   }
 
   private routePolicy(route: PrivateRoute) {
@@ -371,6 +403,9 @@ export class BackendApi {
     if (error instanceof ApiFailure) {
       return { status: error.status, body: { code: `HTTP_${error.status}`, message: error.message } };
     }
+    if (isAbortFailure(error)) {
+      return { status: 504, body: { code: 'UPSTREAM_TIMEOUT', message: 'A private service dependency timed out.' } };
+    }
     return { status: 502, body: { code: 'UPSTREAM_FAILURE', message: 'A private service dependency failed.' } };
   }
 }
@@ -396,10 +431,6 @@ function serializeCairo1Calls(
   ];
 }
 
-function isFelt(value: string): boolean {
-  return /^0x[0-9a-fA-F]{1,64}$/.test(value);
-}
-
 function toFelt(value: bigint): string {
   return `0x${value.toString(16)}`;
 }
@@ -416,11 +447,16 @@ function validateBackendConfig(config: BackendConfig): void {
   if (
     !Number.isSafeInteger(config.maxCalldataItems) || config.maxCalldataItems <= 0 ||
     !Number.isSafeInteger(config.maxProofBytes) || config.maxProofBytes <= 0 ||
+    !Number.isSafeInteger(config.requestTimeoutMs) || config.requestTimeoutMs <= 0 ||
     !Number.isSafeInteger(config.rateLimit.maxRequests) || config.rateLimit.maxRequests <= 0 ||
     !Number.isSafeInteger(config.rateLimit.windowMs) || config.rateLimit.windowMs <= 0
     || config.sponsorshipBudget.maxFeeAmount < 0n
     || !Number.isSafeInteger(config.sponsorshipBudget.windowMs)
     || config.sponsorshipBudget.windowMs <= 0
+    || !Number.isSafeInteger(config.submissionQueue.maxInFlight)
+    || config.submissionQueue.maxInFlight <= 0
+    || !Number.isSafeInteger(config.submissionQueue.maxQueued)
+    || config.submissionQueue.maxQueued < 0
   ) {
     throw new Error('Backend size and rate limits must be positive integers.');
   }
@@ -445,4 +481,50 @@ function validateBackendConfig(config: BackendConfig): void {
   ) {
     throw new Error('Backend swap policy must be quote-bound, immediate and allowlisted.');
   }
+}
+
+function createRequestDeadline(
+  parent: AbortSignal | undefined,
+  timeoutMs: number,
+): { signal: AbortSignal; dispose: () => void } {
+  const controller = new AbortController();
+  const onParentAbort = () => controller.abort(
+    parent?.reason ?? new DOMException('Request aborted.', 'AbortError'),
+  );
+  if (parent?.aborted) onParentAbort();
+  else parent?.addEventListener('abort', onParentAbort, { once: true });
+  const timeout = setTimeout(() => {
+    controller.abort(new DOMException('Request deadline exceeded.', 'TimeoutError'));
+  }, timeoutMs);
+  return {
+    signal: controller.signal,
+    dispose: () => {
+      clearTimeout(timeout);
+      parent?.removeEventListener('abort', onParentAbort);
+    },
+  };
+}
+
+function abortable<T>(promise: Promise<T>, signal: AbortSignal): Promise<T> {
+  if (signal.aborted) return Promise.reject(abortReason(signal));
+  return new Promise<T>((resolve, reject) => {
+    const onAbort = () => {
+      cleanup();
+      reject(abortReason(signal));
+    };
+    const cleanup = () => signal.removeEventListener('abort', onAbort);
+    signal.addEventListener('abort', onAbort, { once: true });
+    promise.then(
+      (value) => { cleanup(); resolve(value); },
+      (error) => { cleanup(); reject(error); },
+    );
+  });
+}
+
+function abortReason(signal: AbortSignal): unknown {
+  return signal.reason ?? new DOMException('Request aborted.', 'AbortError');
+}
+
+function isAbortFailure(error: unknown): boolean {
+  return error instanceof DOMException && (error.name === 'AbortError' || error.name === 'TimeoutError');
 }

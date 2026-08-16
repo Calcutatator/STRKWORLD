@@ -23,10 +23,10 @@ export class StarknetRpcPoolPort implements PoolRpcPort {
     this.fetcher = options.fetcher ?? fetch;
   }
 
-  async getPoolConfig() {
+  async getPoolConfig(signal?: AbortSignal) {
     const [feeResult, validityResult] = await Promise.all([
-      this.callPool(FEE_SELECTOR, []),
-      this.callPool(PROOF_VALIDITY_SELECTOR, []),
+      this.callPool(FEE_SELECTOR, [], signal),
+      this.callPool(PROOF_VALIDITY_SELECTOR, [], signal),
     ]);
     const low = BigInt(feeResult[0] ?? '0x0');
     const high = BigInt(feeResult[1] ?? '0x0');
@@ -42,40 +42,41 @@ export class StarknetRpcPoolPort implements PoolRpcPort {
     };
   }
 
-  async getPublicKey(address: string): Promise<string> {
-    const result = await this.callPool(PUBLIC_KEY_SELECTOR, [address]);
+  async getPublicKey(address: string, signal?: AbortSignal): Promise<string> {
+    const result = await this.callPool(PUBLIC_KEY_SELECTOR, [address], signal);
     return result[0] ?? '0x0';
   }
 
-  async getReceipt(transactionHash: string): Promise<unknown> {
-    return this.rpc('starknet_getTransactionReceipt', [transactionHash]);
+  async getReceipt(transactionHash: string, signal?: AbortSignal): Promise<unknown> {
+    return this.rpc('starknet_getTransactionReceipt', [transactionHash], signal);
   }
 
-  async getBlockNumber(): Promise<number> {
-    const value = await this.rpc('starknet_blockNumber', []);
+  async getBlockNumber(signal?: AbortSignal): Promise<number> {
+    const value = await this.rpc('starknet_blockNumber', [], signal);
     if (typeof value !== 'number' || !Number.isSafeInteger(value)) {
       throw new Error('Starknet RPC returned an invalid block number.');
     }
     return value;
   }
 
-  private async callPool(selector: string, calldata: string[]): Promise<string[]> {
+  private async callPool(selector: string, calldata: string[], signal?: AbortSignal): Promise<string[]> {
     const value = await this.rpc('starknet_call', [{
       contract_address: this.options.poolAddress,
       entry_point_selector: selector,
       calldata,
-    }, 'latest']);
+    }, 'latest'], signal);
     if (!Array.isArray(value) || value.some((item) => typeof item !== 'string')) {
       throw new Error('Starknet RPC returned an invalid call result.');
     }
     return value as string[];
   }
 
-  private async rpc(method: string, params: unknown[]): Promise<unknown> {
+  private async rpc(method: string, params: unknown[], signal?: AbortSignal): Promise<unknown> {
     const response = await this.fetcher(this.options.rpcUrl, {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({ jsonrpc: '2.0', id: ++this.id, method, params }),
+      signal,
     });
     if (!response.ok) throw new Error('Starknet RPC request failed.');
     const payload = await response.json() as { result?: unknown; error?: unknown };

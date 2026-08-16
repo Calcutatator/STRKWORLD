@@ -35,7 +35,7 @@ export class AvnuSwapPlanner implements SwapPlannerPort {
       sellTokenAddress: input.sellToken,
       buyTokenAddress: input.buyToken,
       sellAmount: input.sellAmount,
-    }, this.options.baseUrl ? { baseUrl: this.options.baseUrl } : undefined);
+    }, avnuOptions(this.options.baseUrl, input.signal));
     const quote = quotes.find((candidate) => quoteMatches(candidate, input));
     if (!quote) throw new Error('AVNU returned no quote satisfying the minimum output.');
     const expiry = normalizeExpiry(quote.expiry);
@@ -45,7 +45,7 @@ export class AvnuSwapPlanner implements SwapPlannerPort {
       quoteId: quote.quoteId,
       slippage: input.slippageBps / 10_000,
       private: true,
-    }, this.options.baseUrl ? { baseUrl: this.options.baseUrl } : undefined);
+    }, avnuOptions(this.options.baseUrl, input.signal));
     if (!built.executorAddress || built.chainId !== this.options.chainId) {
       throw new Error('AVNU did not return a mainnet private executor.');
     }
@@ -66,6 +66,10 @@ export class AvnuSwapPlanner implements SwapPlannerPort {
       }),
     };
   }
+}
+
+function avnuOptions(baseUrl: string | undefined, signal: AbortSignal | undefined) {
+  return baseUrl || signal ? { baseUrl, abortSignal: signal } : undefined;
 }
 
 function quoteMatches(
