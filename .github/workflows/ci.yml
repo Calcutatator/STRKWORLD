@@ -12,6 +12,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - run: ./scripts/check-invariants.sh
+      - run: ./scripts/check-tilemaps.sh
 
   verify:
     name: Typecheck and test
