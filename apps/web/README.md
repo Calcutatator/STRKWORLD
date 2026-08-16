@@ -2,7 +2,7 @@
 
 **The shell. Composes everything.**
 
-Providers, routing, layout, and the React ↔ Phaser bridge. Owns two
+Providers, routing, layout, and the event bus. Owns two
 subsystems that sit between the game and the money and belong to neither:
 
 - **The batch accumulator** — collects player intent during a building visit

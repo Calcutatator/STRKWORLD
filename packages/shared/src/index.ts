@@ -17,7 +17,7 @@ export type BuildingId =
   | 'exchange'
   /** Private address-to-address transfer. */
   | 'post-office'
-  /** Cross-chain value in and out via NEAR Intents. Public by nature. */
+  /** Deposit from any chain -> STRK -> pool, via NEAR Intents. Arrival is public. */
   | 'bridge'
   /** Vesu lending. Facade only in v1 — see DECISIONS.md D-007. */
   | 'vault';

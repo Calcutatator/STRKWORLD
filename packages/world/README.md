@@ -24,7 +24,7 @@ in as plain data by the shell.
 
 ---
 
-## The bridge
+## The event bus
 
 One-directional. React owns wallet and financial state; this package receives
 plain data and emits semantic events.
@@ -34,7 +34,7 @@ plain data and emits semantic events.
 emitter.emit('building:entered', { building: 'bank' })
 
 // in — the shell tells the world what to render
-emitter.on('hud:balance', (b: { symbol: string; display: string }) => { ... })
+emitter.on('hud:balance', (b: { display: string | null }) => { ... })
 ```
 
 The world must run correctly with no wallet connected at all. That is what

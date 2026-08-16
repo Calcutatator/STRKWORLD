@@ -56,7 +56,7 @@ README before changing anything inside it.
 ```
 apps/
   web/          The application shell. Composes everything. Owns routing,
-                layout, and the React ↔ Phaser bridge.
+                layout, and the event bus.
 
 packages/
   privacy/      The STRK20 seam. Owns the PrivacyOperations interface and

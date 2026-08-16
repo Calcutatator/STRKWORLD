@@ -65,7 +65,7 @@ decision entry explaining why before writing the code.
 | `packages/world` | Phaser scenes, movement, collision, tilemaps, sprites | Import `starknet` or any wallet package. Know what money is |
 | `packages/lobby` | Colyseus presence, positions, ephemeral IDs | Touch an address, balance, tx hash, or building name |
 | `packages/shared` | Types and constants crossing boundaries | Contain logic or dependencies |
-| `apps/web` | Composition, routing, layout, React ↔ Phaser bridge | Contain business logic that belongs in a package |
+| `apps/web` | Composition, routing, layout, the event bus | Contain business logic that belongs in a package |
 
 The bridge is one-directional: React owns wallet and financial state and
 pushes into Phaser via an event emitter. Phaser never reaches back into

@@ -35,13 +35,17 @@ else
   ok "no cross-origin isolation headers"
 fi
 
-# 4. Only chain-facing packages talk to Starknet. The bridge needs it for the
-#    OUT-direction ERC-20 transfer; world, lobby and shared never do.
-if grep -rn "from ['\"]starknet\|from ['\"]@starknet-io" \
-     --include="*.ts" --include="*.tsx" packages/world packages/lobby packages/shared 2>/dev/null; then
-  bad "starknet imported outside the chain-facing packages (privacy, bridge)"
+# 4. Only packages/privacy talks to Starknet. Since D-012 removed the OUT
+#    direction, the bridge no longer needs it either — it is 1Click + viem only.
+#    apps/web is included: the shell must go through PrivacyOperations, not
+#    reach past it to the wallet directly.
+if grep -rnE "from ['\"](starknet|@starknet-io|@starknetfoundation)" \
+     --include="*.ts" --include="*.tsx" \
+     packages/world packages/lobby packages/shared packages/bridge apps/web 2>/dev/null; then
+  bad "starknet imported outside packages/privacy"
+  note "The shell goes through PrivacyOperations. See docs/ARCHITECTURE.md."
 else
-  ok "starknet confined to privacy + bridge"
+  ok "starknet confined to packages/privacy"
 fi
 
 # 4b. The bridge must not reach into the STRK20 seam — it is public rails, and
@@ -60,9 +64,12 @@ fi
 
 # 5. The lobby never sees money. Checks code, not comments — docs legitimately
 #    name these terms in order to forbid them.
+#    Matches substrings, not word boundaries: playerAddress, walletAddress and
+#    buildingName all slipped through a \b...\b pattern. Building names are
+#    forbidden in lobby traffic too (AGENTS.md), so they are in the pattern.
 lobby_hits=$(find packages/lobby/src -name "*.ts" -type f 2>/dev/null -exec \
   sed -E 's://.*$::; /^[[:space:]]*\*/d; /^[[:space:]]*\/\*/d' {} + \
-  | grep -niE "\b(address|balance|txHash|transactionHash|privateKey|viewingKey)\b" || true)
+  | grep -niE "address|balance|tx_?hash|transaction|private_?key|viewing_?key|building|token|amount|shield" || true)
 if [ -n "$lobby_hits" ]; then
   printf '%s\n' "$lobby_hits"
   bad "financial identifier in lobby code — it must never see money"

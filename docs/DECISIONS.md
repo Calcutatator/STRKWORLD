@@ -358,3 +358,88 @@ directly portable.
 key". Fee build and submission go behind our own endpoints; proving stays
 client-side in the player's wallet. This is the backend from D-009 and the
 Shell lane owns it.
+
+---
+
+## D-014 — The backend is a first-class component with its own privacy rules
+
+**2026-08-16 · Accepted**
+
+**Context.** An independent review found that D-013 quietly put a server on the
+critical path of *every* private action — fee build and submission must be
+proxied because the AVNU paymaster key cannot ship to a browser — and that this
+server had no package, no lane owner, no deployment story and no threat model.
+
+Worse: **it is a stronger correlation oracle than the lobby the docs obsess
+over.** It sees the call, the proof, the IP, and the session timing of every
+private action, *before broadcast*. The lobby only ever sees position.
+
+A second leak came with it. `.env.example` used a `VITE_` prefixed RPC URL,
+which Vite compiles into the public bundle — so the game's own reads
+(`get_public_key(<intended recipient>)` for the Post Office preflight, receipt
+polling for tx hashes) hand a third-party RPC provider tuples of player IP,
+intended recipient, and timing. That is a deanonymisation channel the
+wallet-side privacy story never covers, because it is ours, not the wallet's.
+
+**Decision.** The backend is a package with the same "must never" treatment as
+the lobby:
+
+- **Logs nothing per-request.** No IP, no call, no proof, no timing, no
+  correlation between them. Aggregate counters only.
+- **Proxies the RPC reads** so the recipient preflight and receipt polling do
+  not leave the player's browser to a third party.
+- **Holds the paymaster key**, and validates the returned `fee_action` against
+  a ceiling before it ever reaches the player.
+- **Owns the D-004 submission queue** (see D-015).
+
+The client-side `VITE_STARKNET_RPC_URL` remains only for reads that are already
+public and unlinkable, and must use a domain-allowlisted key.
+
+**Consequences.** "The lobby is structurally incapable of seeing an address" is
+true and was never sufficient. The operator can deanonymise through components
+the threat model never mentioned. This entry makes the operator a modelled
+adversary rather than an assumed-honest one.
+
+---
+
+## D-015 — Unfreeze `PrivacyOperations`; the submission queue moves server-side
+
+**2026-08-16 · Accepted · amends D-004 and D-011**
+
+**Context.** Two findings from the same review, with one root cause: decisions
+were locked before the evidence that should shape them existed.
+
+**`PrivacyOperations` was frozen wrong.** It offers only single-shot
+`shield/unshield/transfer/privateSwap`, each its own transaction — but the
+batch accumulator is the load-bearing economic mechanism in SPEC §6 and
+ARCHITECTURE, and the interface has no batched-intent entry point. `PoolConfig`
+and `WalletCapability` are defined and unreachable. D-013 requires validating
+the paymaster fee *before signing*, which needs an estimate-then-confirm split
+the one-shot methods cannot express. There is no `AbortSignal` on operations
+that D-004 delays and proving makes slow.
+
+**D-004's queue was misplaced.** Via `strk20InvokeTransaction` the *wallet*
+submits on approval, so a client-side delay only delays when the prompt
+appears — the player then approves and broadcast follows within seconds. It
+delayed the prompt, not the broadcast, while adding a real defect: a prompt
+firing after the player has walked away, or a lost intent if they closed the
+tab. The project's own commissioned research said so plainly and the decision
+was taken the same day without engaging with it.
+
+**Decision.**
+
+1. `PrivacyOperations` is **provisional, not frozen.** Revise it after the
+   Phase 0 spike, then freeze. `WorldEvents` and `PresenceState` stay frozen —
+   they do not depend on the spike.
+2. The submission queue moves to the **backend, on the `strk20PrepareInvoke`
+   path**, where broadcast timing is genuinely ours to control. Bounded by the
+   450-block proof-validity window, and it must never delay a quote-bound AVNU
+   action.
+3. Copy states plainly that timing privacy is weak while the pool is small.
+   Jitter does not defeat session-granularity correlation, and pretending
+   otherwise is the kind of claim this project has committed not to make.
+
+**Consequences.** One seam unfreezes and the lanes depending on it — Shell
+especially — start against a provisional interface. That is the correct
+trade: building four things against an interface known to be wrong is more
+expensive than waiting a week for the spike.

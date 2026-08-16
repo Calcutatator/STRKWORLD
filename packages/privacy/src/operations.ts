@@ -10,6 +10,13 @@ import type {
 /**
  * The financial seam.
  *
+ * ⚠ PROVISIONAL — NOT FROZEN. This interface was frozen prematurely and is
+ * known to be incomplete: it has no batched-intent entry point (the batch
+ * accumulator is the core economic mechanism), no PoolConfig or capability
+ * getter, no estimate-then-confirm split (D-013 requires validating the
+ * paymaster's fee before signing), and no AbortSignal. Revise it after the
+ * Phase 0 wallet spike, then freeze. See docs/DECISIONS.md D-015.
+ *
  * Everything the rest of STRKWORLD knows about money goes through this
  * interface. Nothing outside `@strkworld/privacy` imports `starknet`.
  *
