@@ -6,11 +6,16 @@ dist/
 build/
 .vite/
 *.tsbuildinfo
+# container-only TypeScript emit (deploy/backend/tsconfig.build.json)
+.docker-build/
 
-# environment — never commit real values
-.env
-.env.local
-.env.*.local
+# environment — never commit real values.
+# Deliberately broad. The earlier list (.env, .env.local, .env.*.local) missed
+# .env.production, which is the exact filename .env.production.example invites
+# someone to create. Ignore everything and re-include the templates by name.
+.env*
+!.env.example
+!.env.production.example
 
 # editors / OS
 .DS_Store
