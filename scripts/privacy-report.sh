@@ -8,7 +8,7 @@ set -uo pipefail
 cd "$(dirname "$0")/.." || exit 1
 
 npx --yes tsx@4 -e '
-import { PRIVACY_REGISTER, isRoutePlayable, isDeviation } from "./packages/shared/src/privacy-grades.ts";
+import { PRIVACY_REGISTER, isRoutePlayable, isDeviation, routesAwaitingApproval, routesAwaitingCopy } from "./packages/shared/src/privacy-grades.ts";
 
 const LABEL: Record<string, string> = {
   private:       "PRIVATE      parties and amounts hidden, no public leg",
@@ -18,31 +18,38 @@ const LABEL: Record<string, string> = {
 };
 
 console.log("\nSTRKWORLD — privacy levels by route\n");
-console.log("Default is absolute privacy. Anything below needs your approval.\n");
+console.log("Default is absolute privacy. Anything below needs approval AND disclosure.\n");
 
 for (const r of PRIVACY_REGISTER) {
-  const playable = isRoutePlayable(r);
-  const mark = !isDeviation(r.grade) ? "  " : playable ? "OK" : "!!";
+  const dev = isDeviation(r.grade);
+  const mark = !dev ? "  " : isRoutePlayable(r) ? "OK" : "!!";
   console.log(`${mark} ${r.route}`);
   console.log(`     ${LABEL[r.grade]}`);
   console.log(`     observer sees: ${r.observable}`);
   if (r.disclosure) console.log(`     player is told: "${r.disclosure}"`);
-  if (isDeviation(r.grade)) {
-    console.log(playable
-      ? `     approved by ${r.approvedBy} on ${r.approvedOn} — ${r.rationale}`
-      : `     ⚠ AWAITING YOUR APPROVAL — this route stays locked until approved`);
+  if (dev) {
+    if (!r.approvedBy)      console.log("     ⚠ AWAITING APPROVAL — decision for the project lead");
+    else if (!r.disclosure) console.log(`     ⚠ approved by ${r.approvedBy} on ${r.approvedOn} — AWAITING PLAYER-FACING COPY`);
+    else                    console.log(`     approved by ${r.approvedBy} on ${r.approvedOn}`);
+    if (r.rationale) console.log(`     rationale: ${r.rationale}`);
   }
+  if (r.returnToPool) console.log("     → funnels the player back into the pool afterwards (D-021)");
   console.log();
 }
 
-const pending = PRIVACY_REGISTER.filter(r => !isRoutePlayable(r));
-if (pending.length === 0) {
-  console.log("Every deviation is approved and disclosed.");
-} else {
-  console.log(`${pending.length} route(s) awaiting your approval:\n`);
-  for (const r of pending) console.log(`  - ${r.route} (${r.grade})`);
-  console.log("\nTo approve: set approvedBy, approvedOn and rationale in");
-  console.log("packages/shared/src/privacy-grades.ts, then commit.");
-  console.log("Until then these buildings render a locked door, not a downgrade.");
+const noApproval = routesAwaitingApproval();
+const noCopy = routesAwaitingCopy();
+
+if (noApproval.length) {
+  console.log(`${noApproval.length} route(s) awaiting APPROVAL — a decision, not a task:`);
+  for (const r of noApproval) console.log(`  - ${r.route} (${r.grade})`);
+  console.log("  Set approvedBy, approvedOn and rationale in packages/shared/src/privacy-grades.ts\n");
 }
+if (noCopy.length) {
+  console.log(`${noCopy.length} approved route(s) awaiting PLAYER-FACING COPY:`);
+  for (const r of noCopy) console.log(`  - ${r.route} (${r.grade})`);
+  console.log("  Write the disclosure string in the same file. Until then the door stays locked —");
+  console.log("  an approved deviation the player is never told about is still a silent downgrade.\n");
+}
+if (!noApproval.length && !noCopy.length) console.log("Every deviation is approved and disclosed.\n");
 ' 2>&1
