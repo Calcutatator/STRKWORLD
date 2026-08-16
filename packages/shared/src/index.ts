@@ -145,3 +145,27 @@ export type WalletStatus =
   | 'unregistered';
 
 export type EventName = keyof WorldEvents | keyof ShellEvents;
+
+// ---------------------------------------------------------------------------
+// Event bus contract
+// ---------------------------------------------------------------------------
+
+/**
+ * A typed publish/subscribe channel.
+ *
+ * Type-only, because `packages/shared` holds no logic. The shell constructs the
+ * implementation and hands it to the world at init, which is what keeps the
+ * dependency pointing one way: the world receives a bus, it never reaches for
+ * one.
+ */
+export interface EventBus<Events extends Record<string, unknown>> {
+  emit<K extends keyof Events>(event: K, payload: Events[K]): void;
+  on<K extends keyof Events>(event: K, handler: (payload: Events[K]) => void): () => void;
+  once<K extends keyof Events>(event: K, handler: (payload: Events[K]) => void): () => void;
+  off<K extends keyof Events>(event: K, handler: (payload: Events[K]) => void): void;
+  /** Drop every listener. Call on teardown so HMR does not accumulate them. */
+  clear(): void;
+}
+
+/** What the world receives: it emits WorldEvents and listens for ShellEvents. */
+export type WorldBus = EventBus<WorldEvents> & EventBus<ShellEvents>;
