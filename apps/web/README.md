@@ -39,19 +39,42 @@ disappear is accepted for v1 (D-019).
 
 ## Composition
 
-The shell does not mount itself. Whoever owns the composition root wires the
-three pieces together, which keeps world mounting and panel rendering
-independent of each other:
+`main.tsx` is the composition root. It creates the two buses once, at module
+scope, and mounts `App` inside `StrictMode`. `App` wires the three pieces
+together and takes the buses as props, so a test can drive it against buses it
+controls:
 
 ```tsx
-const worldBus = createEventBus<WorldEvents>();
-const shellBus = createEventBus<ShellEvents>();
+// main.tsx — the two buses, created once and never again.
+const worldOut = createEventBus<WorldEvents>();   // world emits, shell listens
+const shellIn = createEventBus<ShellEvents>();    // shell emits, world listens
+createRoot(root).render(<StrictMode><App worldOut={worldOut} shellIn={shellIn} /></StrictMode>);
 
-<PrivacyProvider operations={ops} shellBus={shellBus}>
-  <WorldHost out={worldBus} in={shellBus} />
-  <PanelLayer world={worldBus} />
+// App.tsx — the tree.
+<PrivacyProvider demo shellBus={shellIn} fallback={<Boot/>}>
+  <WorldHost out={worldOut} in={shellIn} />   {/* world lane's mount point, untouched */}
+  <PanelLayer world={worldOut} />             {/* opens a panel on building:entered */}
 </PrivacyProvider>
 ```
+
+The buses are created **once, at module scope**, on purpose: StrictMode
+double-mounts `App`, and a bus made inside a component would hand the world a
+fresh instance on the second pass, stranding every subscription made against
+the first. The world's own Phaser/WebGL lifecycle is ref-counted inside
+`@strkworld/world` so the double-mount is otherwise safe.
+
+`PanelLayer` subscribes to the world-out bus in an effect with cleanup, so the
+StrictMode mount→cleanup→mount cycle leaves exactly one set of live handlers.
+It maps `building:entered` → open that building's room, `building:locked` →
+the locked-door surface, `building:exited` → close. Its event→state step
+(`nextActiveRoom`) and its room rendering (`ActiveRoomView`) are pulled out as
+a pure reducer and a pure view so both are tested without a DOM.
+
+**`v1` runs against the fake, by design.** `App` passes `demo`, so a served
+production build shows the "not wired yet" surface rather than a practice
+balance — the bundle still builds (Phaser and the seam land in their own lazy
+chunks, out of the 229 kB entry), it just declines to invent money until a real
+adapter is wired. See the seam rules below.
 
 **There is no default seam.** `operations` is required unless `demo` is set
 explicitly, and `demo` throws in a production build. A fallback that quietly
