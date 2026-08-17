@@ -5,6 +5,7 @@ import { COPY } from '../../copy.js';
 import { PrivacyProvider } from '../../privacy/PrivacyProvider.js';
 import { PRIVACY_REGISTER, type RouteGrade } from '../../privacy/register.js';
 import { parseTokenAmount } from '../../format.js';
+import { createReceiptLedger } from '../../receipts/receipt-ledger.js';
 import { createBankPanel, type BankPanel as BankPanelMachine } from './bank-machine.js';
 import { BankPanel } from './BankPanel.js';
 
@@ -41,6 +42,13 @@ function render(panel: BankPanelMachine, seam: FakePrivacyOperations): string {
   );
 }
 
+/** The ConfirmGate subtree, so assertions cannot be satisfied by the page around it. */
+function commitGate(markup: string): string | null {
+  const start = markup.indexOf('class="confirm-gate"');
+  if (start === -1) return null;
+  return markup.slice(start);
+}
+
 /** The confirm button's opening tag, or null when it is not on screen at all. */
 function confirmButton(markup: string): string | null {
   return markup.match(/<button[^>]*class="confirm"[^>]*>/)?.[0] ?? null;
@@ -49,7 +57,7 @@ function confirmButton(markup: string): string | null {
 describe('BankPanel rendering', () => {
   it('renders the queued batch disclosure at the commit point, after a tab switch', async () => {
     const seam = operations();
-    const panel = createBankPanel({ operations: seam });
+    const panel = createBankPanel({ operations: seam, receipts: createReceiptLedger() });
     await panel.open();
     panel.setAmount('1');
     await panel.addToBatch();
@@ -69,22 +77,45 @@ describe('BankPanel rendering', () => {
 
   it('never shows a confirm button without the disclosures for what it commits', async () => {
     const seam = operations();
-    const panel = createBankPanel({ operations: seam });
+    const panel = createBankPanel({ operations: seam, receipts: createReceiptLedger() });
     await panel.open();
     panel.setAmount('1');
     await panel.addToBatch();
     await panel.prepare();
 
+    // Inside the gate's own subtree. An earlier version of this test only
+    // asserted "somewhere before the button", which the panel header satisfied
+    // while never leaving shield mode — so it would have passed with the gate
+    // rendering no disclosure at all.
+    const gate = commitGate(render(panel, seam));
+    expect(gate).not.toBeNull();
+    expect(gate).toContain(SHIELD_DISCLOSURE);
+    expect(gate!.indexOf(SHIELD_DISCLOSURE)).toBeLessThan(gate!.indexOf('class="confirm"'));
+  });
+
+  it('withdraws the tab-keyed header disclosure at the commit point', async () => {
+    // The reverse mismatch: a private transfer queued while the shield tab is
+    // selected used to show public-deposit copy over a private transfer.
+    const seam = operations();
+    const panel = createBankPanel({ operations: seam, receipts: createReceiptLedger() });
+    await panel.open();
+    panel.setMode('transfer');
+    panel.setRecipient(BOB);
+    panel.setAmount('1');
+    await panel.addToBatch();
+    panel.setMode('shield');
+    await panel.prepare();
+
     const markup = render(panel, seam);
-    const button = markup.indexOf('class="confirm"');
-    const disclosure = markup.indexOf(SHIELD_DISCLOSURE);
-    expect(disclosure).toBeGreaterThan(-1);
-    expect(disclosure).toBeLessThan(button);
+    // A private transfer discloses nothing, so nothing must be disclosed.
+    expect(markup).not.toContain(SHIELD_DISCLOSURE);
+    expect(markup).not.toContain('data-testid="disclosure"');
+    expect(commitGate(markup)).not.toContain('commit-disclosures');
   });
 
   it('disables confirm while the wallet works, and keeps the disclosure on screen', async () => {
     const seam = operations();
-    const panel = createBankPanel({ operations: seam });
+    const panel = createBankPanel({ operations: seam, receipts: createReceiptLedger() });
     await panel.open();
     panel.setAmount('1');
     await panel.addToBatch();
@@ -111,7 +142,7 @@ describe('BankPanel rendering', () => {
       returnToPool: false,
     };
     const seam = operations();
-    const panel = createBankPanel({ operations: seam, register: [unapproved] });
+    const panel = createBankPanel({ operations: seam, receipts: createReceiptLedger(), register: [unapproved] });
     await panel.open();
 
     const markup = render(panel, seam);
@@ -127,7 +158,7 @@ describe('BankPanel rendering', () => {
 
   it('offers a way back to the counter after a submission', async () => {
     const seam = operations();
-    const panel = createBankPanel({ operations: seam });
+    const panel = createBankPanel({ operations: seam, receipts: createReceiptLedger() });
     await panel.open();
     panel.setAmount('1');
     await panel.addToBatch();
@@ -141,7 +172,7 @@ describe('BankPanel rendering', () => {
 
   it('offers no MAX control until a maximum can be stated', async () => {
     const seam = operations();
-    const panel = createBankPanel({ operations: seam });
+    const panel = createBankPanel({ operations: seam, receipts: createReceiptLedger() });
     await panel.open();
     panel.setMode('transfer');
     await panel.refreshBalance();
@@ -153,7 +184,7 @@ describe('BankPanel rendering', () => {
 
   it('states review figures exactly', async () => {
     const seam = operations();
-    const panel = createBankPanel({ operations: seam });
+    const panel = createBankPanel({ operations: seam, receipts: createReceiptLedger() });
     await panel.open();
     panel.setMode('transfer');
     panel.setRecipient(BOB);
@@ -166,5 +197,44 @@ describe('BankPanel rendering', () => {
     // as 0.001, but the pool fee and total must survive at full precision.
     expect(markup).toContain('6 STRK');
     expect(markup).toContain('0.001 STRK');
+  });
+});
+
+describe('BankPanel — closing during a signature', () => {
+  it('says plainly that closing will not cancel it', async () => {
+    const seam = operations();
+    const panel = createBankPanel({ operations: seam, receipts: createReceiptLedger() });
+    await panel.open();
+    panel.setAmount('1');
+    await panel.addToBatch();
+    await panel.prepare();
+
+    const submitting = panel.confirm();
+    const markup = render(panel, seam);
+    // The close control stays enabled — a disabled one traps the player behind
+    // a wallet that may never answer, and the world can unmount the panel
+    // regardless. The receipt ledger is what makes closing safe.
+    expect(markup).toContain(COPY.flow.closingWillNotCancel);
+    expect(markup.match(/<button[^>]*class="panel-close"[^>]*>/)?.[0]).not.toContain('disabled');
+    await submitting;
+  });
+
+  it('shows a receipt recovered from the ledger on reopening', async () => {
+    const receipts = createReceiptLedger();
+    const seam = operations();
+    const first = createBankPanel({ operations: seam, receipts });
+    await first.open();
+    first.setAmount('1');
+    await first.addToBatch();
+    await first.prepare();
+    await first.confirm();
+    first.close();
+
+    const reopened = createBankPanel({ operations: seam, receipts });
+    await reopened.open();
+
+    const markup = render(reopened, seam);
+    expect(markup).toContain(COPY.flow.submitted);
+    expect(markup).toContain(COPY.flow.back);
   });
 });

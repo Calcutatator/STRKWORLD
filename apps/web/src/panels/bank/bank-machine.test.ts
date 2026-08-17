@@ -10,6 +10,7 @@ import { PRIVACY_REGISTER } from '../../privacy/register.js';
 import { COPY } from '../../copy.js';
 import { formatTokenAmountExact, parseTokenAmount } from '../../format.js';
 import { createConnectFlow } from '../../connect/connect-machine.js';
+import { createReceiptLedger } from '../../receipts/receipt-ledger.js';
 import { createBankPanel, type BankPanel } from './bank-machine.js';
 
 const STRK: Address = '0x04718f5a0fc34cc1af16a1cdee98ffb20c31f5cd61d6ab07201858f4287c938d';
@@ -32,7 +33,7 @@ async function openPanel(
   operations: PrivacyOperations,
   options: Partial<Parameters<typeof createBankPanel>[0]> = {},
 ): Promise<BankPanel> {
-  const panel = createBankPanel({ operations, ...options });
+  const panel = createBankPanel({ operations, receipts: createReceiptLedger(), ...options });
   await panel.open();
   return panel;
 }
@@ -152,20 +153,58 @@ describe('bank panel — maturity-aware balance', () => {
     const gas = panel.store.getState().quotedGasEstimate;
     expect(gas).not.toBeNull();
 
+    // Cancelling a review does NOT empty the visit — the 1 STRK is still
+    // queued, and a maximum that ignores it is a button that always fails.
     panel.cancelPrepared();
-    panel.clearBatch();
+    expect(panel.store.getState().batch).toHaveLength(1);
     await panel.refreshBalance();
     panel.applyMax();
 
-    const max = strk('100') - POOL_FEE - gas!;
+    const max = strk('100') - POOL_FEE - gas! - strk('1');
     expect(panel.maxSpendable()).toBe(max);
     expect(panel.store.getState().amountText).toBe(formatTokenAmountExact(max));
 
-    // The regression this exists for: MAX then Review used to fail every time.
+    // The regression this exists for: queue, MAX, then Review used to fail.
     panel.setRecipient(BOB);
     await panel.addToBatch();
     await panel.prepare();
     expect(panel.store.getState().flow.name).toBe('review');
+  });
+
+  it('counts every queued intent against the maximum', async () => {
+    const operations = fake();
+    const panel = await openPanel(operations);
+    panel.setMode('transfer');
+    panel.setRecipient(BOB);
+    panel.setAmount('1');
+    await panel.addToBatch();
+    await panel.prepare();
+    const gas = panel.store.getState().quotedGasEstimate!;
+    panel.cancelPrepared();
+    await panel.refreshBalance();
+
+    panel.setRecipient(BOB);
+    panel.setAmount('2');
+    await panel.addToBatch();
+
+    expect(panel.store.getState().batch).toHaveLength(2);
+    expect(panel.maxSpendable()).toBe(strk('100') - POOL_FEE - gas - strk('3'));
+  });
+
+  it('offers no maximum once the visit already spends everything', async () => {
+    const operations = fake({ balances: { [STRK]: strk('10') } });
+    const panel = await openPanel(operations);
+    panel.setMode('transfer');
+    panel.setRecipient(BOB);
+    panel.setAmount('4');
+    await panel.addToBatch();
+    await panel.prepare();
+    panel.cancelPrepared();
+    await panel.refreshBalance();
+
+    // 10 held, 4 queued, 6 pool fee and the relay estimate on top: the visit
+    // already spends more than there is, so there is no maximum to offer.
+    expect(panel.maxSpendable()).toBeNull();
   });
 
   it('never derives a maximum when the wallet reports only an aggregate (D-022)', async () => {
@@ -657,5 +696,230 @@ describe('bank panel — after a submission', () => {
     const panel = await openPanel(fake());
     panel.acknowledge();
     expect(panel.store.getState().flow.name).toBe('composing');
+  });
+});
+
+describe('bank panel — a receipt outlives the room', () => {
+  /**
+   * The panel's lifecycle is not the player's decision: the world emits
+   * `building:exited` and `PanelLayer` unmounts the panel. If the hash lived in
+   * panel state, a transaction that settled during that would leave the player
+   * with nothing at all.
+   *
+   * These tests target the window **after** the wallet has been handed the
+   * batch, which is the one that loses money-shaped information. The
+   * pre-signing window is covered above and is safe by construction: nothing
+   * was signed, so there is nothing to lose.
+   */
+
+  /**
+   * Hold the seam inside `PreparedBatch.confirm()` so the close lands mid-sign.
+   * `entered` resolves when the wallet has been handed the batch; `release`
+   * lets it settle. No timers, so no ordering left to chance.
+   */
+  function gateSigning(operations: FakePrivacyOperations): {
+    entered: Promise<void>;
+    release: () => void;
+  } {
+    let onEntered!: () => void;
+    let onRelease!: () => void;
+    const entered = new Promise<void>((resolve) => {
+      onEntered = resolve;
+    });
+    const held = new Promise<void>((resolve) => {
+      onRelease = resolve;
+    });
+
+    const realPrepare = operations.prepare.bind(operations);
+    vi.spyOn(operations, 'prepare').mockImplementation(async (intents, signal) => {
+      const batch = await realPrepare(intents, signal);
+      return {
+        ...batch,
+        async confirm(options) {
+          onEntered();
+          await held;
+          return batch.confirm(options);
+        },
+      };
+    });
+
+    return { entered, release: onRelease };
+  }
+
+  it('records the hash even when the room closes while the wallet is signing', async () => {
+    const receipts = createReceiptLedger();
+    const operations = fake();
+    const gate = gateSigning(operations);
+    const panel = createBankPanel({ operations, receipts });
+    await panel.open();
+    panel.setAmount('1');
+    await panel.addToBatch();
+    await panel.prepare();
+
+    const inFlight = panel.confirm();
+    await gate.entered;
+    // The world pulls the player out of the building mid-signature.
+    panel.close();
+    gate.release();
+    await inFlight;
+
+    // The transaction settled. Losing the receipt is not an option.
+    expect(operations.submitted).toHaveLength(1);
+    expect(receipts.pending('bank')).toHaveLength(1);
+    expect(receipts.pending('bank')[0]?.transactionHash).toMatch(/^0xfake/);
+    expect(receipts.pending('bank')[0]?.intents).toHaveLength(1);
+    // And the closed panel was not written into.
+    expect(panel.store.getState().flow.name).toBe('idle');
+  });
+
+  it('shows an outstanding receipt when the room reopens', async () => {
+    const receipts = createReceiptLedger();
+    const operations = fake();
+    const gate = gateSigning(operations);
+    const first = createBankPanel({ operations, receipts });
+    await first.open();
+    first.setAmount('1');
+    await first.addToBatch();
+    await first.prepare();
+    const inFlight = first.confirm();
+    await gate.entered;
+    first.close();
+    gate.release();
+    await inFlight;
+
+    // PanelLayer builds a new machine on remount, so the receipt has to be
+    // found rather than remembered.
+    vi.restoreAllMocks();
+    const reopened = createBankPanel({ operations, receipts });
+    await reopened.open();
+
+    const flow = reopened.store.getState().flow;
+    expect(flow.name).toBe('submitted');
+    expect(flow.name === 'submitted' && flow.transactionHash).toBe(
+      receipts.pending('bank')[0]?.transactionHash,
+    );
+
+    reopened.acknowledge();
+    expect(receipts.pending('bank')).toHaveLength(0);
+    expect(reopened.store.getState().flow.name).toBe('composing');
+  });
+
+  it('opens straight into composing when nothing is outstanding', async () => {
+    const receipts = createReceiptLedger();
+    const panel = createBankPanel({ operations: fake(), receipts });
+    await panel.open();
+    expect(panel.store.getState().flow.name).toBe('composing');
+  });
+
+  it('does not re-show a receipt the player has already seen', async () => {
+    const receipts = createReceiptLedger();
+    const operations = fake();
+    const panel = createBankPanel({ operations, receipts });
+    await panel.open();
+    panel.setAmount('1');
+    await panel.addToBatch();
+    await panel.prepare();
+    await panel.confirm();
+    panel.acknowledge();
+    panel.close();
+
+    const reopened = createBankPanel({ operations, receipts });
+    await reopened.open();
+    expect(reopened.store.getState().flow.name).toBe('composing');
+  });
+});
+
+describe('bank panel — a finished read cannot write the wrong figure', () => {
+  /** A promise the test releases, so ordering is decided here and not by a timer. */
+  function deferred<T>(): { promise: Promise<T>; resolve: (value: T) => void } {
+    let resolve!: (value: T) => void;
+    const promise = new Promise<T>((r) => {
+      resolve = r;
+    });
+    return { promise, resolve };
+  }
+
+  const loaded = (amount: bigint): PrivateBalance[] => [
+    { token: STRK, total: amount, spendable: amount, maturing: 0n, maturityKnown: true },
+  ];
+
+  it('a balance read in flight when a submission lands does not restore the old figure', async () => {
+    const operations = fake();
+    const gate = deferred<PrivateBalance[]>();
+    vi.spyOn(operations, 'balances').mockReturnValue(gate.promise);
+
+    const panel = await openPanel(operations);
+    const read = panel.refreshBalance();
+
+    await panel.prepare.call(panel); // no batch yet: harmless, keeps ordering explicit
+    panel.setMode('transfer');
+    panel.setRecipient(BOB);
+    panel.setAmount('1');
+    await panel.addToBatch();
+    await panel.prepare();
+    await panel.confirm();
+    expect(panel.store.getState().flow.name).toBe('submitted');
+
+    // The read now finishes, carrying the pre-submission figure.
+    gate.resolve(loaded(strk('100')));
+    await read;
+
+    // Showing it would contradict the notice sitting next to it.
+    expect(panel.store.getState().balance.status).toBe('unrequested');
+    expect(panel.store.getState().notice?.text).toBe(COPY.balance.changed);
+  });
+
+  it('a balance read that finishes after close does not write into a shut room', async () => {
+    const operations = fake();
+    const gate = deferred<PrivateBalance[]>();
+    vi.spyOn(operations, 'balances').mockReturnValue(gate.promise);
+
+    const panel = await openPanel(operations);
+    const read = panel.refreshBalance();
+    panel.close();
+    gate.resolve(loaded(strk('100')));
+    await read;
+
+    expect(panel.store.getState().balance.status).toBe('unrequested');
+    expect(panel.store.getState().flow.name).toBe('idle');
+  });
+
+  it('a preflight that finishes after close does not queue an intent', async () => {
+    const operations = fake();
+    const gate = deferred<'registered'>();
+    vi.spyOn(operations, 'recipientStatus').mockReturnValue(gate.promise);
+
+    const panel = await openPanel(operations);
+    panel.setMode('transfer');
+    panel.setRecipient(BOB);
+    panel.setAmount('1');
+    const adding = panel.addToBatch();
+    panel.close();
+    gate.resolve('registered');
+    await adding;
+
+    expect(panel.store.getState().batch).toHaveLength(0);
+    expect(panel.store.getState().adding).toBe(false);
+  });
+
+  it('only the newest balance read is allowed to land', async () => {
+    const operations = fake();
+    const first = deferred<PrivateBalance[]>();
+    const second = deferred<PrivateBalance[]>();
+    vi.spyOn(operations, 'balances')
+      .mockReturnValueOnce(first.promise)
+      .mockReturnValueOnce(second.promise);
+
+    const panel = await openPanel(operations);
+    const a = panel.refreshBalance();
+    const b = panel.refreshBalance();
+
+    second.resolve(loaded(strk('50')));
+    await b;
+    first.resolve(loaded(strk('100')));
+    await a;
+
+    const balance = panel.store.getState().balance;
+    expect(balance.status === 'loaded' && balance.total).toBe(strk('50'));
   });
 });

@@ -220,6 +220,58 @@ Format: `### YYYY-MM-DD — short title` then what, why it matters, how verified
 
 ---
 
+### 2026-08-16 — The unmount is not the player's decision, and neither is the receipt
+
+Second review round on the Shell lane. The blockers held, and three reachable
+breaks remained. All three are the same shape: an async step finishing into a
+world that has moved on.
+
+**A panel is unmounted by the world, not by the player.** `building:exited`
+unmounts the building panel, so a transaction that settles during that window had
+its hash written into a store that no longer exists — settled money, no receipt,
+nothing said. Receipts therefore live in a ledger above the panels, written the
+instant the seam returns and *before* any liveness check, and a reopened room
+finds what is outstanding. Disabling the close button is not the fix: it traps
+the player behind a wallet that may never answer, and the world can unmount the
+panel anyway.
+
+**Do not discard a batch the wallet is already signing.** Writing the fix above
+exposed a second defect immediately: the panel's close path called
+`PreparedBatch.discard()` unconditionally, and the seam is entitled to treat a
+discarded batch as unsubmittable — the deterministic fake does exactly that. So
+closing the room *cancelled a settling transaction*, turning "the player walked
+out" into "it never happened". A batch handed to the wallet is no longer the
+shell's to release.
+
+**One invalidation counter is not enough.** Guarding balance reads with the same
+counter that guards submissions means a balance read cancels a submission. Three
+clocks, three reasons: a newer attempt, a closed panel, a newer read. Without the
+third, a read in flight when a submission lands restores the pre-submission
+figure underneath a notice saying the balance has changed.
+
+**And, again: verify the test, not just the code.** Two more tests in this lane
+passed while asserting nothing. One checked that a disclosure appeared "before
+the confirm button" — satisfied by the panel header, so it would have passed with
+the commit gate rendering no disclosure at all. The other exercised the window
+*before* signing rather than after, which is the safe one. A test written against
+a bug you have already fixed proves nothing unless you have watched it fail.
+
+*Verified:* every fix by a test observed failing first. The receipt tests hold the
+seam inside `PreparedBatch.confirm()` with a deferred rather than a timer, so the
+close lands mid-signature deterministically — and it was that test, not review,
+that caught the discard defect. The header-disclosure fix was verified by
+reverting it and watching the new test fail. The import-boundary test was
+verified against three separate escape hatches (a bare side-effect import, a
+package subpath, a bare deep import), each observed failing, then removed.
+
+*Outstanding, not ours:* the fake's `gasEstimate` is constant regardless of batch
+shape, so a MAX computed from a quote taken on a smaller batch cannot be shown
+to understate the real cost. `computeMax` documents that it is a floor in that
+case and prepare stays authoritative. A stale-quote test follows the Chain
+lane's gas-model change.
+
+---
+
 ### 2026-08-16 — A correct state machine can still be a wrong screen
 
 Review of the Shell PR found four blockers. The machine layer passed 84 tests

@@ -20,11 +20,13 @@ import {
 } from '../../accumulator/batch-accumulator.js';
 import {
   ROUTE_BY_INTENT_KIND,
+  batchRequiresDisclosure,
   disclosuresForIntents,
   routeDisclosure,
   routeDoor,
   type DoorState,
 } from '../routes.js';
+import type { ReceiptLedger } from '../../receipts/receipt-ledger.js';
 
 /**
  * The Bank panel, as a state machine.
@@ -112,6 +114,12 @@ export interface PreparedSummary {
    * without them.
    */
   disclosures: readonly string[];
+  /**
+   * Whether any route in `intents` is a below-private deviation, and therefore
+   * whether `disclosures` being empty is a bug rather than a fact. The commit
+   * gate fails closed on the combination.
+   */
+  requiresDisclosure: boolean;
 }
 
 export type BankFlow =
@@ -187,6 +195,13 @@ export interface BankPanelOptions {
   /** Injectable for tests that need an unapproved route. */
   register?: readonly RouteGrade[];
   accumulator?: BatchAccumulator;
+  /**
+   * Where receipts go. **Required, and deliberately not defaulted:** its
+   * lifetime has to outlive the panel, because a transaction settles whether or
+   * not the room is still mounted and `building:exited` is not the player's
+   * decision. A per-panel default would compile and lose receipts.
+   */
+  receipts: ReceiptLedger;
 }
 
 export interface BankPanel {
@@ -212,25 +227,41 @@ export interface BankPanel {
 }
 
 export function createBankPanel(options: BankPanelOptions): BankPanel {
-  const { operations, onError } = options;
+  const { operations, onError, receipts } = options;
   const register = options.register ?? PRIVACY_REGISTER;
   const feeTolerance = options.feeTolerance ?? 0n;
   const accumulator = options.accumulator ?? createBatchAccumulator({ maxIntents: options.maxIntents });
 
   const store = createStore<BankState>(initialState('shield', register));
   let prepared: PreparedBatch | null = null;
+  /** True from the moment the batch is handed to the wallet until it answers. */
+  let signing = false;
   let readCount = 0;
 
   /**
-   * Identity for the current prepare/confirm attempt.
+   * Three invalidation clocks, because there are three distinct reasons a
+   * finished async step should not write what it learned.
    *
-   * Every patch from an asynchronous step checks it. Without this, a late
-   * rejection from an abandoned attempt can overwrite the state of the one
-   * that succeeded.
+   * `attempt` — a newer prepare/confirm, or a cancel, has replaced this one.
+   * `session` — the panel closed. Nothing may write into a reset store.
+   * `balanceRead` — a newer read, or a submission that changed the balance,
+   *   has superseded this read. Without it, a read in flight when a submission
+   *   lands overwrites the post-submission reset with the pre-submission
+   *   figure, under a notice saying the balance has changed.
+   *
+   * One counter for all three would mean a balance read cancelling a
+   * submission, which is worse than the bug it fixes.
    */
   let attempt = 0;
+  let session = 0;
+  let balanceRead = 0;
   const begin = (): number => (attempt += 1);
   const current = (id: number): boolean => attempt === id;
+  const live = (id: number): boolean => session === id;
+  const beginRead = (): number => (balanceRead += 1);
+  const invalidateReads = (): void => {
+    balanceRead += 1;
+  };
 
   function patch(next: Partial<BankState>): void {
     store.setState((previous) => ({ ...previous, ...next }));
@@ -245,9 +276,12 @@ export function createBankPanel(options: BankPanelOptions): BankPanel {
   }
 
   function fail(error: unknown, recovery: 'prepare-again' | 'close', id: number): void {
+    // The guard comes first, including for `onError`. An abandoned attempt must
+    // not drive shell-level state either: the room it would escalate into
+    // belongs to the operation the player is actually running now.
+    if (!current(id)) return;
     const failure = toFailure(error);
     onError?.(failure);
-    if (!current(id)) return;
     discardPrepared();
     patch({
       flow: { name: 'failed', kind: failure.kind, message: COPY.errors[failure.kind], recovery },
@@ -255,6 +289,15 @@ export function createBankPanel(options: BankPanelOptions): BankPanel {
   }
 
   function discardPrepared(): void {
+    // A batch the wallet is already signing is not ours to release. Discarding
+    // it cannot unring that bell, and the seam is entitled to treat a discarded
+    // batch as unsubmittable — which would turn "the player left the room" into
+    // "the transaction never happened", losing a settling payment. Drop the
+    // reference and let the submission finish into the receipt ledger.
+    if (signing) {
+      prepared = null;
+      return;
+    }
     prepared?.discard();
     prepared = null;
   }
@@ -274,7 +317,18 @@ export function createBankPanel(options: BankPanelOptions): BankPanel {
     // reserves only the pool fee is a button that always fails at prepare.
     // The network cost is only known once something has been costed.
     if (fee === undefined || state.quotedGasEstimate === null) return null;
-    const spendable = state.balance.spendable - fee - state.quotedGasEstimate;
+    // And what is already queued is already spent. Cancelling a review does not
+    // empty the visit, so a maximum that ignores the queue is a button that
+    // fails the moment anything is waiting in it.
+    //
+    // Known limit: `quotedGasEstimate` was measured for the batch as it stood
+    // at that quote. If the visit has grown since, the real network cost may be
+    // higher and this maximum is a floor rather than an exact figure — prepare
+    // stays authoritative and fails legibly. The deterministic fake currently
+    // returns a constant estimate regardless of batch shape, so no test can
+    // observe the difference; a stale-quote test follows the fake's gas model.
+    const spendable =
+      state.balance.spendable - fee - state.quotedGasEstimate - queuedSpend(state.batch);
     return spendable > 0n ? spendable : null;
   }
 
@@ -294,14 +348,28 @@ export function createBankPanel(options: BankPanelOptions): BankPanel {
       try {
         const pool = await operations.poolConfig(signal);
         if (!current(id)) return;
-        patch({ pool, token: pool.feeToken, flow: { name: 'composing' } });
+        // A transaction that settled while the room was shut left its receipt
+        // in the ledger. Show it before anything else: it is the only proof the
+        // player has that their money moved.
+        const outstanding = receipts.pending('bank')[0];
+        patch({
+          pool,
+          token: pool.feeToken,
+          flow: outstanding
+            ? { name: 'submitted', transactionHash: outstanding.transactionHash }
+            : { name: 'composing' },
+        });
       } catch (error) {
         fail(error, 'close', id);
       }
     },
 
     close(): void {
-      begin(); // Invalidate anything still in flight.
+      // Invalidate everything still in flight. A settled transaction's receipt
+      // is already in the ledger by then, so nothing of value is dropped.
+      begin();
+      session += 1;
+      invalidateReads();
       discardPrepared();
       accumulator.clear();
       store.setState(initialState(store.getState().mode, register));
@@ -335,9 +403,14 @@ export function createBankPanel(options: BankPanelOptions): BankPanel {
         notice('error', COPY.notices.poolNotLoaded);
         return;
       }
+      const mySession = session;
+      const epoch = beginRead();
       patch({ balance: { status: 'loading' }, notice: null });
       try {
         const balances = await operations.balances([token], signal);
+        // A figure read before a submission is not the balance after it, and a
+        // closed panel must not be written into at all.
+        if (!live(mySession) || balanceRead !== epoch) return;
         const entry = balances.find((candidate) => sameAddress(candidate.token, token));
         readCount += 1;
         patch({
@@ -351,6 +424,7 @@ export function createBankPanel(options: BankPanelOptions): BankPanel {
           },
         });
       } catch (error) {
+        if (!live(mySession) || balanceRead !== epoch) return;
         const failure = toFailure(error);
         onError?.(failure);
         patch({
@@ -407,6 +481,7 @@ export function createBankPanel(options: BankPanelOptions): BankPanel {
         }
       }
 
+      const mySession = session;
       patch({ adding: true });
       try {
         let pending: BankNotice | null = null;
@@ -416,6 +491,9 @@ export function createBankPanel(options: BankPanelOptions): BankPanel {
           // read and the 118 mapping must agree, so both exist.
           try {
             const status = await operations.recipientStatus(recipient, signal);
+            // The room may have closed while the pool was answering. Queuing an
+            // intent into a reset panel is a financial write nobody asked for.
+            if (!live(mySession)) return;
             if (status === 'unregistered') {
               notice('error', COPY.notices.recipientUnregistered);
               return;
@@ -424,6 +502,7 @@ export function createBankPanel(options: BankPanelOptions): BankPanel {
               pending = { tone: 'info', text: COPY.notices.recipientUnknown };
             }
           } catch (error) {
+            if (!live(mySession)) return;
             const failure = toFailure(error);
             onError?.(failure);
             notice('error', COPY.errors[failure.kind]);
@@ -447,7 +526,7 @@ export function createBankPanel(options: BankPanelOptions): BankPanel {
         setBatch(result.value);
         patch({ amountText: '', recipientText: '', notice: pending });
       } finally {
-        patch({ adding: false });
+        if (live(mySession)) patch({ adding: false });
       }
     },
 
@@ -498,6 +577,7 @@ export function createBankPanel(options: BankPanelOptions): BankPanel {
               feeCeiling: batch.totalCost + feeTolerance,
               warnings: batch.warnings,
               disclosures: disclosuresForIntents(batch.intents, register),
+              requiresDisclosure: batchRequiresDisclosure(batch.intents, register),
               // `promptCount` is deliberately not carried into the summary:
               // it is a source-derived expectation awaiting the funded run
               // (D-028), and no pending UI may be driven from it.
@@ -542,6 +622,7 @@ export function createBankPanel(options: BankPanelOptions): BankPanel {
       }
 
       try {
+        signing = true;
         const result = await batch.confirm({
           feeCeiling: summary.feeCeiling,
           signal,
@@ -550,9 +631,20 @@ export function createBankPanel(options: BankPanelOptions): BankPanel {
             patch({ flow: { name: 'submitting', stage, message: stageCopy(stage), summary } });
           },
         });
-        if (!current(id)) return;
+        signing = false;
+        // Record first, unconditionally. The transaction has settled; the hash
+        // is the only proof the player has, and whether their panel is still
+        // mounted is not their decision — the world can unmount it mid-signing.
+        receipts.record({
+          building: 'bank',
+          transactionHash: result.transactionHash,
+          intents: summary.intents,
+        });
         prepared = null;
         accumulator.clear();
+        // Any balance read still in flight predates this submission.
+        invalidateReads();
+        if (!current(id)) return;
         setBatch(accumulator.intents);
         patch({
           flow: { name: 'submitted', transactionHash: result.transactionHash },
@@ -561,6 +653,7 @@ export function createBankPanel(options: BankPanelOptions): BankPanel {
           notice: { tone: 'info', text: COPY.balance.changed },
         });
       } catch (error) {
+        signing = false;
         // The seam reports a ceiling breach as a generic failure, so ask the
         // pool whether that is what happened rather than matching on a string.
         if (toFailure(error).kind === 'unknown' && (await feeMovedPast(summary, signal))) {
@@ -582,7 +675,9 @@ export function createBankPanel(options: BankPanelOptions): BankPanel {
     },
 
     acknowledge(): void {
-      if (store.getState().flow.name !== 'submitted') return;
+      const flow = store.getState().flow;
+      if (flow.name !== 'submitted') return;
+      receipts.acknowledge(flow.transactionHash);
       patch({ flow: { name: 'composing' }, notice: null });
     },
 
@@ -599,6 +694,14 @@ export function createBankPanel(options: BankPanelOptions): BankPanel {
       return false;
     }
   }
+}
+
+/** What the visit has already committed to spend, in the pool's fee token. */
+function queuedSpend(intents: readonly Intent[]): bigint {
+  return intents.reduce(
+    (total, intent) => total + (intent.kind === 'swap' ? intent.amountIn : intent.amount),
+    0n,
+  );
 }
 
 function initialState(mode: BankMode, register: readonly RouteGrade[]): BankState {

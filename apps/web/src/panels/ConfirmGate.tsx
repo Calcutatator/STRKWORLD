@@ -18,17 +18,28 @@ import { COPY } from '../copy.js';
  */
 export function ConfirmGate({
   disclosures,
+  requiresDisclosure,
   busy,
   onConfirm,
   onCancel,
 }: {
   /** Approved copy for the routes in the batch being committed, verbatim. */
   disclosures: readonly string[];
+  /**
+   * Whether the batch contains a below-private route. With no disclosures for
+   * such a batch, this gate refuses to enable the button: the register already
+   * makes an undisclosed deviation unplayable, so arriving here means something
+   * between the register and the screen dropped the copy, and confirming would
+   * be the silent downgrade with extra steps.
+   */
+  requiresDisclosure: boolean;
   /** True while the submission is in flight. */
   busy: boolean;
   onConfirm: () => void;
   onCancel: () => void;
 }) {
+  const missingDisclosure = requiresDisclosure && disclosures.length === 0;
+
   return (
     <div className="confirm-gate">
       {disclosures.length > 0 ? (
@@ -39,7 +50,18 @@ export function ConfirmGate({
         </ul>
       ) : null}
 
-      <button type="button" className="confirm" onClick={onConfirm} disabled={busy}>
+      {missingDisclosure ? (
+        <p className="confirm-blocked" role="alert">
+          {COPY.notices.disclosureMissing}
+        </p>
+      ) : null}
+
+      <button
+        type="button"
+        className="confirm"
+        onClick={onConfirm}
+        disabled={busy || missingDisclosure}
+      >
         {COPY.flow.confirm}
       </button>
       <button type="button" className="cancel" onClick={onCancel} disabled={busy}>

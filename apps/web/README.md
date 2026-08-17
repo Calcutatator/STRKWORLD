@@ -31,7 +31,8 @@ disappear is accepted for v1 (D-019).
 | `src/accumulator/` | The batch accumulator |
 | `src/connect/` | Capability detection, and the rooms for a wallet that cannot help |
 | `src/panels/` | The building-panel framework, the privacy gate, and the rooms |
-| `src/privacy/` | The seam context, failure classification, and the register import |
+| `src/privacy/` | The seam context, failure classification, build context, and the register import |
+| `src/receipts/` | The receipt ledger — receipts outlive the panel that made them |
 | `src/panels/bank/` | The Bank: shield, unshield, private transfer |
 | `src/copy.ts` | Every player-facing string the shell owns |
 | `src/format.ts` | `bigint` ↔ display. No `number` anywhere near money |
@@ -88,6 +89,18 @@ Bank reads pool config and stops; the balance appears when the player asks, and
 returns to unrequested after a submission changes it. There is no timer in this
 app, and `bank-machine.test.ts` advances ten minutes of fake time to prove it.
 
+**A receipt is not panel state.** A transaction settles whether or not the room
+is still on screen, and the panel's lifecycle is not the player's decision — the
+world emits `building:exited` and `PanelLayer` unmounts the panel. So the hash is
+recorded in the provider's receipt ledger the instant the seam returns, before
+any liveness check, and a reopened room finds it there. For the same reason a
+batch already handed to the wallet is never discarded: discarding cannot unring
+that bell, and the seam is entitled to treat a discarded batch as unsubmittable,
+which would turn "the player left the room" into "the transaction never
+happened". The close control stays enabled and says what closing does and does
+not do; disabling it would trap the player behind a wallet that may never answer
+and would be theatre anyway.
+
 **Never state a maximum that has to be guessed.** Three separate cases, one
 rule. The shipped Wallet API returns one figure per token, so the production
 adapter sets `maturityKnown: false` — then there is no maximum, not a guess and
@@ -95,7 +108,8 @@ not the total (D-022). There is no maximum for a shield, because the shell
 cannot see public STRK and D-013's stranding trap makes the last of it exactly
 what must not be sent. And there is no maximum before the first quote: the pool
 fee *and* the network cost come out of the same shielded balance, and the seam
-only reports the network cost at prepare time.
+only reports the network cost at prepare time. What is already queued counts
+too — cancelling a review does not empty the visit.
 
 **The confirm button lives in `ConfirmGate`, and nowhere else.** It takes the
 approved disclosures for the batch being committed as a required prop and
@@ -103,17 +117,26 @@ renders them immediately above itself. Disclosures follow what is *queued*, not
 what control was last touched — otherwise queuing a shield and switching tab
 hides the disclosure while leaving the deposit confirmable.
 
-**Move state before you await.** A guard that reads the flow, awaits, and then
-transitions is not a guard: two clicks in one tick both pass it. Attempts carry
-an id, and a late answer from an abandoned one never patches state — a player
-must never be told "nothing was signed" about a settled transaction.
+**Move state before you await, and guard everything after one.** A guard that
+reads the flow, awaits, and then transitions is not a guard: two clicks in one
+tick both pass it. Past that, three separate clocks decide whether a finished
+async step may write what it learned — a newer attempt, a closed panel, or a
+newer balance read. One counter for all three would mean a balance read
+cancelling a submission, which is worse than the bug it fixes.
 
 **No runtime import of `@strkworld/privacy` in the shell.** Its entry point
 re-exports the wallet adapter, which pulls `starknet`; a single value import
 puts all of it in the entry chunk. Types are erased and free, failures are
 classified structurally in `src/privacy/errors.ts`, and the demo seam is loaded
 dynamically. `architecture.test.ts` enforces it, along with the rule that
-exactly one file deep-imports `packages/shared`.
+exactly one file deep-imports `packages/shared`. It counts `import … from`,
+`export … from` and bare `import 'x'`, and matches subpaths — all three were
+escape hatches in an earlier version of that test.
+
+**The demo seam needs naming, and cannot ship.** `detectBuildContext` fails
+closed: only an explicit development signal counts as development, because
+`import.meta.env` is absent outside Vite and "cannot tell" must not permit
+balances nobody holds.
 
 **Disclosures are imported, never written here.** The approved strings live in
 `packages/shared/src/privacy-grades.ts` (D-024). `copy.test.ts` fails if any of
