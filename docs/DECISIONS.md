@@ -448,11 +448,12 @@ expensive than waiting a week for the spike.
 
 ## D-016 — Interiors are overlays; the avatar never leaves the street
 
-**2026-08-16 · PARTLY SUPERSEDED BY [D-019](#d-019--entering-a-building-removes-the-avatar-from-lobby-presence)**
+**2026-08-16 · SUPERSEDED — presence requirement by [D-019](#d-019--entering-a-building-removes-the-avatar-from-lobby-presence), overlay mechanism by [D-030](#d-030--a-building-has-two-modes-game-mode-primary-and-menu-mode)**
 
-> The overlay choice stands. The requirement that the avatar remain on the
-> street and make entry indistinguishable **does not** — D-019 accepts
-> building-presence leakage for v1. Read D-019 before acting on this entry.
+> Superseded twice, and neither remainder is safe to act on. D-019 accepts the
+> avatar disappearing on entry, so the "stay on the street" requirement is gone.
+> D-030 replaces the overlay mechanism entirely: interiors are now instanced
+> walkable rooms (Game Mode), not React overlays. Read D-030 and D-019, not this.
 
 **Context.** An independent review found a leak the privacy design missed.
 `PresenceState` deliberately excludes building entry — position is broadcast,
@@ -484,7 +485,14 @@ outside it.
 
 ## D-017 — v1 is a hub with working buildings; game design comes later
 
-**2026-08-16 · Accepted**
+**2026-08-16 · SUPERSEDED — v1 scope by [D-031](#d-031--game-mode-is-the-v1-target)**
+
+> The "stop at working doors, no game design in v1" scope is superseded: the
+> project leads have made Game Mode (D-030) the v1 target (D-031). D-017's core
+> success criterion still holds — a player uses a real privacy protocol and
+> understands what was private — but v1 is now a walkable instanced room, not a
+> bare hub. This entry's reasoning on *why game design was deferred* remains the
+> honest record; its scope conclusion does not. Read D-031.
 
 **Context.** The review flagged that the financial layer is specified
 rigorously and the game barely — a street, four doors, four panels, with
@@ -887,3 +895,144 @@ This is not blanket authorization for future multi-lane commits.
 **Consequences.** The audit can close with one coherent set of invariants and
 evidence, while the usual lane boundary remains in force after the follow-up
 commit. The breach and its reason are visible to every syncing agent.
+
+---
+
+## D-030 — A building has two modes: Game Mode (primary) and Menu Mode
+
+**2026-08-17 · Accepted · supersedes D-016's overlay mechanism**
+
+**Context.** Until now a building interior was a React panel overlaid on the
+street (D-016). The project leads have chosen a richer interior model, and want
+the panel stack kept as a secondary, faster path.
+
+**Decision.** Every building is entered in one of two modes.
+
+**Game Mode — the primary experience, the one we optimise for.** Entering a
+building transports the player into a **fixed, instanced, walkable room** — it
+should feel like a separate place, not a menu over the street. Inside:
+
+- Each of the building's functions is a **station**: a square the player walks
+  up to. Related functions may be **combined into one station** (e.g. shield +
+  unshield share a station), and a station may cover a set of functions where
+  that makes sense. How functions group is a design/UX detail we will adjust
+  freely later — it is not load-bearing.
+- Walking **next to** a station **highlights** it. The player **collides** with
+  a station and cannot walk over it.
+- Walking up to a station **opens an interaction window** for that function.
+- **Execution is per-window** (see D-032): pressing the function in the window
+  executes it there and then. Not accumulated and settled on room exit.
+- Stations are **pixel-art illustrations** of their function eventually (a post
+  box for transfer, a shield monument for shield/unshield). **Placeholder for
+  now: the square simply carries the text label** ("shield", "transfer") for
+  ease of testing while we build.
+
+**Menu Mode — the secondary, direct path.** A **button hovers in the top-right**
+of the screen while in a building. Clicking it opens the **existing panel UI**
+— the full set of the building's functions at once. This is the stack already
+built and tested (`PanelLayer`, the building panels, the disclosure system). It
+is for advanced players, quick execution, and testing. We optimise Game Mode
+first; Menu Mode is the escape hatch, not the default.
+
+**All modes.** The avatar **leaves the overworld** for the duration of the
+visit and rejoins on exit — this is D-019, and Game Mode makes it structural: a
+separate room cannot leak the interior to the lobby.
+
+**Guardrails — a mode changes the entry point, never the execution path.**
+
+- A station or a Menu Mode panel is only a **themed entry to the same typed
+  intent**. Both **must reuse the same `ConfirmGate` and the approved
+  disclosure** (D-020, D-024). A station that executed a `public-edge` shield
+  without the approved copy on screen would reopen the exact hole closed in
+  PR #2/#6. The privacy machinery is shared; only the doorway to it differs.
+- **A locked or unapproved route renders a locked station**, exactly as the
+  Vault is a locked door today (D-018). The privacy-grade gate runs before a
+  station goes live.
+- **Combine functions within a grade, not across it.** Shield + unshield are
+  both `public-edge`, so one station is clean. A station mixing a `private`
+  transfer with a `public` shield would blur two different disclosures — each
+  function still shows its own grade's copy at commit, so grouping should
+  respect grade boundaries.
+
+**Consequences.** D-016's overlay-vs-instanced-scene choice is superseded:
+interiors are now instanced rooms, not overlays. **This introduces no privacy
+regression** — D-016's privacy rationale (keep the avatar on the street so entry
+is indistinguishable) was already conceded by D-019, which accepted the avatar
+disappearing on entry. The one guardrail that survives from D-016: the room and
+its transition are **client-local rendering only** — the lobby still sees only
+the avatar vanish, never a room, a building id, or a function.
+
+Lane split when we build: World lane (Phaser) owns the instanced room, station
+placement, proximity highlight, collision, and the enter/exit transition. Shell
+lane (React) owns the interaction window (reusing the built panels), the
+Menu Mode button and panel, and mode state. The world↔shell seam
+(`packages/shared`) is frozen (D-011); the new events Game Mode needs (a
+station-activated event, a mode toggle) are a controlled seam extension and get
+their own decision entry when we start.
+
+---
+
+## D-031 — Game Mode is the v1 target
+
+**2026-08-17 · Accepted · supersedes D-017's v1 scope**
+
+**Context.** D-017 set v1 as a bare hub — working doors and panels, and no game
+design — and explicitly reserved the game-design pass for **the project lead**.
+To be clear on who that is: the **project leads are this decision-making layer**
+(the humans and the orchestrator setting direction); the sub-agents and other
+instances are the workers who implement it. The project leads have now initiated
+that pass.
+
+**Decision.** **Game Mode (D-030) is the v1 target**, not a post-v1 phase. v1 is
+no longer "doors that open panels"; v1 is a player walking into an instanced
+building room and using its functions at stations, with Menu Mode as the
+secondary path.
+
+**Consequences.** This is not a reversal of D-017 so much as its intended
+sequel: D-017 deferred game design to the project lead, and this is the project
+lead exercising that ownership. The current hub demo (walkable street, doors
+that open panels) stands as the **working baseline** we build Game Mode on top
+of — we do not throw it away, we grow it. Scope for v1 is larger than D-017's
+"stop at working doors"; the World and Shell lanes gain the Game Mode work
+described in D-030. Success for v1 still includes D-017's core: a player uses a
+real privacy protocol with real funds and understands what was and was not
+private — now inside a room rather than over a menu.
+
+---
+
+## D-032 — Game Mode executes each function on use, not as a batch on room exit
+
+**2026-08-17 · Accepted · amends D-015**
+
+**Context.** The batch accumulator (D-015) collects intents during a building
+visit and settles one atomic batch, chosen partly to amortise the per-action
+pool fee across a session (SPEC §6). Game Mode offers a different interaction:
+walk to a station, press the function, it happens.
+
+**Decision.** In **Game Mode, each function executes when the player uses its
+station** — per-window, immediately. It is **not** accumulated and settled on
+room exit. The batch accumulator remains available in **Menu Mode** for players
+who want to compose several actions and settle once; it is no longer the primary
+settlement model.
+
+**Consequences.**
+
+- **Fee economics change in Game Mode.** Each station action is its own
+  transaction with its own pool fee (6 STRK live, D-013) plus relay fee — there
+  is no per-session amortisation. This is a conscious trade of fee-efficiency
+  for immediacy and legibility. If per-action fees prove too costly in testing,
+  revisit — Menu Mode's batching is the fallback lever, and this decision is the
+  thing to amend rather than a hidden assumption to unwind.
+- **Privacy is preserved.** Per-window execution does not re-link avatar action
+  to broadcast timing (the D-004 concern): the avatar has already left presence
+  on entering the room (D-019), so the lobby cannot observe in-room timing, and
+  each action still routes through an approved private route (D-018) with
+  backend submission decoupling where the route permits (D-015).
+- **D-022 still binds.** A shield must not be bundled with the spend it funds.
+  Per-window execution makes this easy — separate stations, separate
+  transactions — but a combined station must not fold a deposit into the action
+  it funds.
+
+We are deliberately **not** fixing the finer per-window-vs-grouped execution
+questions now; design will settle what a single station covers. The rule is:
+execute on use, in Game Mode.
