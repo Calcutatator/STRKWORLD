@@ -148,6 +148,28 @@ describe('doors come from a Tiled object layer, not hardcoded coordinates', () =
     // export will use is already the one under test.
     expect(map.doors.map((d) => d.building).sort()).toEqual([...BUILDINGS].sort());
   });
+
+  // Regression: the facade row was filled solid and the door was only a trigger
+  // object on top of it, so the player collided one tile short of the trigger
+  // row and no door ever fired. A door the player cannot stand on is not a door.
+  it('makes every door tile walkable, so the trigger is reachable', () => {
+    for (const door of map.doors) {
+      for (let dx = 0; dx < door.width; dx++) {
+        for (let dy = 0; dy < door.height; dy++) {
+          expect(isSolidAt(map, door.x + dx, door.y + dy)).toBe(false);
+        }
+      }
+    }
+  });
+
+  it('connects each door to the road by a walkable column below it', () => {
+    for (const door of map.doors) {
+      // From the door row down to the road, the approach column must be clear.
+      for (let y = door.y; y < 13; y++) {
+        expect(isSolidAt(map, door.x, y)).toBe(false);
+      }
+    }
+  });
 });
 
 describe('coordinate conversion', () => {

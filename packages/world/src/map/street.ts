@@ -125,6 +125,15 @@ export function createStreetMap(): DistrictMap {
 
     // The door is a gap in the facade, two tiles wide and centred.
     const doorX = x + Math.floor(buildingWidth / 2) - 1;
+
+    // Carve the gap into the tile layer, not just the object layer. The facade
+    // fill above covered the whole row as SOLID; without re-opening the door
+    // columns the player collides with the facade one tile short of the trigger
+    // row and `building:entered` never fires. The door tiles must be walkable
+    // for the door to be reachable — a locked door stays reachable so it can
+    // emit `building:locked`. (Reachability is asserted in street.test.ts.)
+    fill(tiles, doorX, facadeRow, 2, 1, 'pavement');
+
     doorObjects.push({
       name: `door:${building}`,
       x: doorX * TILE_SIZE,
