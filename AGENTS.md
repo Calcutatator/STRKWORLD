@@ -304,6 +304,57 @@ to its own file (78→ stable across repeated runs). A subprocess launched with
 `colyseus:message`/`patch`/`connection` lines. An `OPTIONS` preflight from a
 disallowed origin comes back with no `Access-Control-Allow-Origin` and no
 credentials header; an allowed origin is reflected.
+---
+
+### 2026-08-17 — World lane: the object-layer property trap, plus two adjacent ones, building the door triggers
+
+Building commit 2 (door triggers) against the earlier finding that object-layer
+custom properties arrive un-flattened. Confirmed it end to end and found two
+adjacent traps the next World/Shell agent would otherwise hit.
+
+**The property trap, with the exact mechanism.** Object-layer objects keep
+Tiled's raw `properties: [{ name, type, value }]` array; tileset tile-properties
+are flattened to a keyed object. The divergence is two functions:
+`tilemaps/parsers/tiled/ParseObject.js` builds the object with
+`Pick(tiledObject, [...,'properties',...])`, and `utils/object/Pick.js` copies
+each listed key **verbatim** — so the array passes straight through. Meanwhile
+`ParseTilesets.js` (the `set.tiles` loop, ~line 62-70) does
+`tile.properties.forEach(p => newProps[p.name] = p.value)`. So
+`object.properties.building` is always `undefined`; you must flatten first.
+Isolated as `packages/world/src/tiled-object-props.ts:flattenProperties` with
+its own test that pins the array-has-no-keyed-access shape so the reason it
+exists cannot be optimised away.
+
+**NEW — object-layer coordinates are PIXELS, tile logic is TILES.** A Tiled
+rectangle object carries `x/y/width/height` in pixels with a top-left origin;
+the world's `DoorZone`/`doorAt`/`worldToTile` work in tiles. The adapter
+(`objectLayerToDoors`) divides by `TILE_SIZE` on the way in. Skip that and every
+door lands `TILE_SIZE` (32 px) off its facade — and it still *looks* like a door
+on screen, so it is the kind of bug a look does not catch. The adapter also
+fails closed: an object whose `building` property is absent or names a building
+outside the shared `BUILDINGS` registry produces no door, rather than a door to
+nowhere.
+
+**NEW — the `game.registry` bus is present by `create()`, but read it lazily
+anyway.** The scene emits on the bus the shell stashes with
+`game.registry.set('bus', ...)` in the Phaser config's `postBoot`. `Game.start`
+(core/Game.js ~line 410) calls `this.config.postBoot(this)` **before**
+`this.loop.start(...)`, and scene `create()` runs on the first loop step — so
+the bus is already set when `create()` runs. The scene still resolves it
+per-emit rather than caching it in `create()`: it costs nothing, it stays
+correct if that ordering ever shifts, and it degrades to a no-op under a
+headless/bus-less boot (which is what keeps the door-trigger state machine
+unit-testable with a fake bus instead of a game).
+
+*Verified:* read the named phaser@4.2.1 source (`ParseObject.js`, `Pick.js`,
+`ParseTilesets.js`, `core/Game.js`) directly from the installed package, not
+docs. The property flattening, the pixel→tile conversion and the door-to-door
+enter/exit transitions are covered by 16 new headless tests
+(`tiled-object-props.test.ts`, `door-trigger.test.ts`, and object-layer cases in
+`map/street.test.ts`) that assert against a fake bus — no Phaser, no canvas, no
+network. `building:locked` already existed in the frozen `WorldEvents`
+(`{ building; reason: 'coming-soon' }`), so the Vault routes through it; nothing
+in `packages/shared` was touched.
 
 ---
 

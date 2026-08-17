@@ -4,10 +4,12 @@ import {
   createStreetMap,
   doorAt,
   isSolidAt,
+  objectLayerToDoors,
   TILE_SIZE,
   tileToWorld,
   worldToTile,
 } from './street.js';
+import type { TiledObject } from '../tiled-object-props.js';
 
 const map = createStreetMap();
 
@@ -94,6 +96,57 @@ describe('door lookup', () => {
     // A locked door is a designed state with its own copy, not a failure.
     const vault = map.doors.find((d) => d.building === 'vault')!;
     expect(doorAt(map, vault.x, vault.y)?.locked).toBe(true);
+  });
+});
+
+describe('doors come from a Tiled object layer, not hardcoded coordinates', () => {
+  it('reads the building id from a flattened object property', () => {
+    // A Tiled object: pixel rect + raw `[{name,type,value}]` property array.
+    const objects: TiledObject[] = [
+      {
+        name: 'door:bank',
+        x: 4 * TILE_SIZE,
+        y: 10 * TILE_SIZE,
+        width: 2 * TILE_SIZE,
+        height: 1 * TILE_SIZE,
+        properties: [{ name: 'building', type: 'string', value: 'bank' }],
+      },
+    ];
+    expect(objectLayerToDoors(objects)).toEqual([
+      { building: 'bank', x: 4, y: 10, width: 2, height: 1, locked: false },
+    ]);
+  });
+
+  it('reads the locked flag from the object property', () => {
+    const objects: TiledObject[] = [
+      {
+        x: 0,
+        y: 0,
+        width: TILE_SIZE,
+        height: TILE_SIZE,
+        properties: [
+          { name: 'building', type: 'string', value: 'vault' },
+          { name: 'locked', type: 'bool', value: true },
+        ],
+      },
+    ];
+    expect(objectLayerToDoors(objects)[0]?.locked).toBe(true);
+  });
+
+  it('fails closed: an object naming an unknown building is not a door', () => {
+    const objects: TiledObject[] = [
+      { x: 0, y: 0, width: TILE_SIZE, height: TILE_SIZE, properties: [
+        { name: 'building', type: 'string', value: 'casino' },
+      ] },
+      { x: 0, y: 0, width: TILE_SIZE, height: TILE_SIZE, properties: [] },
+    ];
+    expect(objectLayerToDoors(objects)).toEqual([]);
+  });
+
+  it('produces exactly one door per known building for the procedural map', () => {
+    // The real map's doors are the adapter's output — the parsing path a Tiled
+    // export will use is already the one under test.
+    expect(map.doors.map((d) => d.building).sort()).toEqual([...BUILDINGS].sort());
   });
 });
 
