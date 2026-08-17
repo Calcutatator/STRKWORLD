@@ -1,4 +1,5 @@
 import type * as PhaserTypes from 'phaser';
+import type { EventBus, WorldEvents } from '@strkworld/shared';
 import {
   createStreetMap,
   isSolidAt,
@@ -9,6 +10,7 @@ import {
   type DistrictMap,
   type TileKind,
 } from '../map/street.js';
+import { createDoorTrigger, type DoorTrigger } from '../door-trigger.js';
 
 /**
  * The street.
@@ -46,6 +48,7 @@ export function createStreetScene({ Phaser, onTileChanged }: StreetSceneDeps) {
     private cursors!: PhaserTypes.Types.Input.Keyboard.CursorKeys;
     private wasd!: Record<'up' | 'down' | 'left' | 'right', PhaserTypes.Input.Keyboard.Key>;
     private lastTile = { x: -1, y: -1 };
+    private doors!: DoorTrigger;
 
     constructor() {
       super({ key: 'street' });
@@ -61,6 +64,7 @@ export function createStreetScene({ Phaser, onTileChanged }: StreetSceneDeps) {
       this.createPlayer();
       this.createInput();
       this.createCamera();
+      this.createDoorTriggers();
     }
 
     override update(): void {
@@ -132,6 +136,28 @@ export function createStreetScene({ Phaser, onTileChanged }: StreetSceneDeps) {
       camera.setZoom(2);
     }
 
+    /**
+     * Door triggers emit onto the world's outbound bus. The bus is read lazily
+     * from the registry at emit time rather than cached here: the shell sets it
+     * in `postBoot`, which Phaser runs before the loop starts, so it is present
+     * by `create()` — but resolving it per-emit keeps the scene correct if that
+     * ordering ever shifts, and a no-op when there is no bus (headless boot).
+     *
+     * No network I/O and no wallet: emitting a semantic event is all that
+     * happens. The door-trigger state machine itself is tested headlessly.
+     */
+    private createDoorTriggers(): void {
+      const out: Pick<EventBus<WorldEvents>, 'emit'> = {
+        emit: (event, payload) => {
+          const bus = this.game.registry.get('bus') as
+            | { out?: EventBus<WorldEvents> }
+            | undefined;
+          bus?.out?.emit(event, payload);
+        },
+      };
+      this.doors = createDoorTrigger(this.map, out);
+    }
+
     // -- per frame -----------------------------------------------------------
 
     private movePlayer(): void {
@@ -164,6 +190,7 @@ export function createStreetScene({ Phaser, onTileChanged }: StreetSceneDeps) {
       const tile = worldToTile(this.player.x, this.player.y);
       if (tile.x === this.lastTile.x && tile.y === this.lastTile.y) return;
       this.lastTile = tile;
+      this.doors.update(tile);
       onTileChanged?.(tile);
     }
   };

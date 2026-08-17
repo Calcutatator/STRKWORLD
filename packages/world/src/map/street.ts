@@ -1,4 +1,5 @@
-import type { BuildingId } from '@strkworld/shared';
+import { BUILDINGS, type BuildingId } from '@strkworld/shared';
+import { flattenProperties, type TiledObject } from '../tiled-object-props.js';
 
 /**
  * The first district, as data.
@@ -105,11 +106,18 @@ export function createStreetMap(): DistrictMap {
     { building: 'vault', x: 39, locked: true },
   ];
 
-  const doors: DoorZone[] = [];
   const buildingWidth = 7;
   const buildingHeight = 6;
   const buildingTop = 5;
   const facadeRow = buildingTop + buildingHeight - 1;
+
+  // Doors are authored as a Tiled-shaped OBJECT LAYER, not as hardcoded zones:
+  // each object carries a raw `[{ name, type, value }]` property array with the
+  // `building` id, exactly as Phaser hands an object layer through. Coordinates
+  // are in pixels, Tiled's convention. `objectLayerToDoors` (below) flattens
+  // and converts, so replacing this array with a real Tiled export is a swap of
+  // the data source — the parsing path downstream is already the one under test.
+  const doorObjects: TiledObject[] = [];
 
   for (const { building, x, locked } of plan) {
     fill(tiles, x, buildingTop, buildingWidth, buildingHeight - 1, 'wall');
@@ -117,13 +125,16 @@ export function createStreetMap(): DistrictMap {
 
     // The door is a gap in the facade, two tiles wide and centred.
     const doorX = x + Math.floor(buildingWidth / 2) - 1;
-    doors.push({
-      building,
-      x: doorX,
-      y: facadeRow,
-      width: 2,
-      height: 1,
-      locked,
+    doorObjects.push({
+      name: `door:${building}`,
+      x: doorX * TILE_SIZE,
+      y: facadeRow * TILE_SIZE,
+      width: 2 * TILE_SIZE,
+      height: 1 * TILE_SIZE,
+      properties: [
+        { name: 'building', type: 'string', value: building },
+        { name: 'locked', type: 'bool', value: locked },
+      ],
     });
 
     // A pavement approach so the door is reachable from the road.
@@ -135,9 +146,43 @@ export function createStreetMap(): DistrictMap {
     width,
     height,
     tiles,
-    doors,
+    doors: objectLayerToDoors(doorObjects),
     spawn: { x: 24, y: 15 },
   };
+}
+
+/**
+ * Convert a Tiled object layer into door zones.
+ *
+ * This is the seam a real Tiled export drops into unchanged: hand it
+ * `map.getObjectLayer('doors').objects` and it produces the same `DoorZone[]`
+ * the procedural map produces today. It flattens each object's raw property
+ * array (see `flattenProperties` and the trap it documents), reads the
+ * `building` id and optional `locked` flag, and converts Tiled's pixel rects to
+ * tile coordinates.
+ *
+ * Fails CLOSED: an object with no `building` property, or one naming a building
+ * the shared registry does not know, is not a door and is skipped — a
+ * mistyped property yields no door rather than a door to nowhere.
+ */
+export function objectLayerToDoors(objects: TiledObject[]): DoorZone[] {
+  const doors: DoorZone[] = [];
+  for (const obj of objects) {
+    const props = flattenProperties(obj.properties);
+    const building = props['building'];
+    if (typeof building !== 'string' || !BUILDINGS.includes(building as BuildingId)) {
+      continue;
+    }
+    doors.push({
+      building: building as BuildingId,
+      x: Math.round(obj.x / TILE_SIZE),
+      y: Math.round(obj.y / TILE_SIZE),
+      width: Math.round(obj.width / TILE_SIZE),
+      height: Math.round(obj.height / TILE_SIZE),
+      locked: props['locked'] === true,
+    });
+  }
+  return doors;
 }
 
 /** Is this tile coordinate blocked? Out of bounds counts as blocked. */
