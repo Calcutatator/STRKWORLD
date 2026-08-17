@@ -150,6 +150,17 @@ export class UpdateThrottle {
     return true;
   }
 
+  /**
+   * Unconditionally record `now` as the last accepted time for a session.
+   *
+   * Unlike `accept`, this always writes — it is for a non-move event that must
+   * still consume the rate floor, so that the next `move` waits a full interval
+   * from it. Used by `resume` (see `LobbyPresence.resume`).
+   */
+  stamp(key: string, now: number): void {
+    this.#lastAccepted.set(key, now);
+  }
+
   /** Forget a session. Called on leave so the map cannot grow unbounded. */
   forget(key: string): void {
     this.#lastAccepted.delete(key);

@@ -25,17 +25,22 @@ import {
 } from './config';
 import {
   UpdateThrottle,
+  createGameId,
   normalizeCoordinate,
   normalizeFacing,
-  normalizeGameId,
   normalizeSprite,
   selectVisible,
 } from './policy';
 import { LobbyState, PresenceEntry } from './state';
 
-/** What a client may offer when it joins or reappears. All of it untrusted. */
+/**
+ * What a client may offer when it joins or reappears. All of it untrusted.
+ *
+ * Note there is deliberately no `gameId`: the identifier is minted on the
+ * server (see `admit`), so a client-supplied one has nowhere to arrive. Any
+ * such field on the wire is ignored by construction.
+ */
 export interface PlacementRequest {
-  gameId?: unknown;
   x?: unknown;
   y?: unknown;
   facing?: unknown;
@@ -50,10 +55,6 @@ export interface MoveRequest {
 }
 
 export type AdmitRejection =
-  /** Not 16 lowercase hex characters. */
-  | 'malformed-id'
-  /** Another live session already holds it. */
-  | 'id-in-use'
   /** This connection already holds a session. */
   | 'session-in-use'
   /** Coordinates were absent or not finite. */
@@ -100,6 +101,11 @@ export interface LobbyPresenceOptions {
   minUpdateIntervalMs?: number;
   capacity?: number;
   worldLimit?: number;
+  /**
+   * Randomness source for server-minted identifiers. Injectable so a test can
+   * be deterministic; production uses `crypto.getRandomValues`.
+   */
+  random?: (bytes: Uint8Array) => Uint8Array;
 }
 
 interface Session {
@@ -119,6 +125,7 @@ export class LobbyPresence {
   readonly #capacity: number;
   readonly #worldLimit: number;
   readonly #throttle: UpdateThrottle;
+  readonly #random: ((bytes: Uint8Array) => Uint8Array) | undefined;
 
   /**
    * Connection key to session. Lives only as long as the connection: it is
@@ -146,6 +153,7 @@ export class LobbyPresence {
     this.#throttle = new UpdateThrottle(
       options.minUpdateIntervalMs ?? MIN_UPDATE_INTERVAL_MS,
     );
+    this.#random = options.random;
   }
 
   get peers(): MapSchema<PresenceEntry> {
@@ -153,30 +161,28 @@ export class LobbyPresence {
   }
 
   /**
-   * Admit a connection under a client-generated identifier.
+   * Admit a connection, minting its session identifier on the server.
    *
-   * Every rejection reason is a shape or capacity problem. There is no
-   * authentication here and there is deliberately nothing to authenticate
-   * against — a lobby session is anonymous by construction.
+   * The identifier is generated here, not supplied by the client — a
+   * client-offered id has no field to arrive in (see `PlacementRequest`) and
+   * would be ignored anyway. That is what makes "ephemeral per-session" an
+   * enforced property rather than a client courtesy: the client cannot pin,
+   * reuse or choose the entropy of its identity.
+   *
+   * Every rejection is a shape or capacity problem. There is no authentication
+   * and deliberately nothing to authenticate against — a lobby session is
+   * anonymous by construction.
    */
   admit(sessionKey: string, request: PlacementRequest): AdmitOutcome {
     if (this.#sessions.has(sessionKey)) {
       this.#refused += 1;
       return { ok: false, reason: 'session-in-use' };
     }
-    const gameId = normalizeGameId(request.gameId);
-    if (gameId === null) {
-      this.#refused += 1;
-      return { ok: false, reason: 'malformed-id' };
-    }
-    if (this.#isClaimed(gameId)) {
-      this.#refused += 1;
-      return { ok: false, reason: 'id-in-use' };
-    }
     if (this.#sessions.size >= this.#capacity) {
       this.#refused += 1;
       return { ok: false, reason: 'at-capacity' };
     }
+    const gameId = this.#mintGameId();
     const placed = this.#place(gameId, request);
     if (!placed) {
       this.#refused += 1;
@@ -218,13 +224,17 @@ export class LobbyPresence {
    * survives the call, so a later leak cannot reconstruct it. The identifier
    * stays reserved to this connection so no one else can take it and so
    * `resume` puts the same player back.
+   *
+   * The session's rate-floor timestamp is deliberately *not* cleared. Clearing
+   * it would let the first move after a resume bypass the floor, and a
+   * suspend/resume cycle would become a way to write a position on demand
+   * outside the rate limit.
    */
   suspend(sessionKey: string): boolean {
     const session = this.#sessions.get(sessionKey);
     if (session === undefined || session.suspended) return false;
     session.suspended = true;
     this.peers.delete(session.gameId);
-    this.#throttle.forget(sessionKey);
     this.#suspensions += 1;
     return true;
   }
@@ -234,11 +244,19 @@ export class LobbyPresence {
    *
    * The client supplies its position again because the room threw the old one
    * away. That is the point of erasing it.
+   *
+   * The placement is routed through the rate floor: `resume` stamps the throttle
+   * with `now`, so a client cannot use repeated suspend/resume as an
+   * unthrottled position-write channel, and the next `move` must still wait a
+   * full interval. The un-suspend itself always succeeds — it is a rare state
+   * transition gated by the shell's building-exit — but it can never write
+   * faster than a move could.
    */
-  resume(sessionKey: string, request: PlacementRequest): boolean {
+  resume(sessionKey: string, request: PlacementRequest, now: number): boolean {
     const session = this.#sessions.get(sessionKey);
     if (session === undefined || !session.suspended) return false;
     if (!this.#place(session.gameId, request)) return false;
+    this.#throttle.stamp(sessionKey, now);
     session.suspended = false;
     this.#resumptions += 1;
     this.#peak = Math.max(this.#peak, this.peers.size);
@@ -303,6 +321,17 @@ export class LobbyPresence {
       throttled: this.#throttled,
       peak: this.#peak,
     };
+  }
+
+  /** Mint a server-side identifier that no live session already holds. */
+  #mintGameId(): GameId {
+    for (let attempt = 0; attempt < 8; attempt += 1) {
+      const candidate = createGameId(this.#random);
+      if (!this.#isClaimed(candidate)) return candidate;
+    }
+    // 64 bits of entropy against at most HARD_MAX_CLIENTS live ids makes eight
+    // collisions in a row astronomically unlikely; fail loud rather than spin.
+    throw new Error('could not mint a unique gameId');
   }
 
   #isClaimed(gameId: GameId): boolean {

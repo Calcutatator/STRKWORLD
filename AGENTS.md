@@ -267,6 +267,92 @@ correct clone. No wallet, no network, no transaction.
 
 ---
 
+### 2026-08-17 — Colyseus: the first client's join options can become the room's config
+
+This is the highest-severity finding in the project so far, and it broke the
+core lobby invariant in shipped code. A room's `onCreate` is called by the
+matchmaker with `merge({}, clientOptions, handlerOptions)`
+(`@colyseus/core@0.17.50` `MatchMaker.mjs`, `handleCreateRoom`), where `merge`
+(`utils/Utils.mjs`) is a shallow last-wins copy. When the room is defined with
+empty handler options (`server.define(name, Room, {})`), the merged object is
+just `clientOptions` — the join payload of whichever unauthenticated client
+created the room. A room that reads its configuration from that argument lets a
+client set it.
+
+The lobby did exactly that: `spriteKeys`, `defaultSprite`, `interestRadius`,
+`maxVisiblePeers`, `minUpdateIntervalMs`, `capacity` and `worldLimit` were read
+from `onCreate`'s options. One `POST /matchmake/joinOrCreate/street` with
+`{"spriteKeys":["0xdead… 12.5 STRK to the Bank"],"defaultSprite":"…same…"}` —
+no socket, no second step — made an honest observer's `peers()` return a peer
+whose sprite was that string. A hex id, a token amount and a building name on
+the wire: a direct break of "the lobby never sees money", and the
+allowlist-based normalisers were validating against an allowlist the attacker
+wrote. `capacity: 99999` → `maxClients` 99999 was reproduced the same way.
+
+**Fix, defence in depth.** (a) The room reads config only from a
+`protected roomConfig` field set at construction, and ignores its `onCreate`
+options argument entirely (the parameter is named `_untrustedOptions`).
+`definePresenceRoom(config)` returns a subclass that bakes the trusted config
+into that field, so it is captured in the class, never routed through
+matchmaking. (b) `startPresenceServer` also passes the resolved config as
+define-time handler options, so even Colyseus's own merge favours it. (c)
+`resolveRoomConfig` clamps every numeric field (capacity ≤ 128, etc.) so a bad
+value cannot produce an unbounded room even if the boundary failed.
+
+**Server-mint the identity too.** The same class of trust error applied to
+`gameId`: it was client-supplied. It is now minted on the server at `admit()`
+and a client-supplied one is ignored (the join `PlacementRequest` type has no
+`gameId` field). The client learns its assigned id from a one-off `welcome`
+message. "Ephemeral per-session" is now enforced, not trusted.
+
+*Verified:* reproduced the exploit end-to-end (a raw `joinOrCreate` with hostile
+options; an honest observer then saw the injected string as a peer sprite) —
+the assertion failed on the shipped code. After the fix the same scenario shows
+trusted sprites and the injected string reaches no one; a unit test drives a
+room's `onCreate` with hostile options and asserts `maxClients` stays the
+trusted default; 82 lobby tests pass. Read `MatchMaker.mjs`/`Utils.mjs` in the
+pinned build to confirm the merge order.
+
+---
+
+### 2026-08-17 — Colyseus matchmaker is a process-global; one Server per test file
+
+`matchMaker` in `@colyseus/core` is a module-level singleton shared by every
+`Server` in the process. Starting a second `Server` and later calling
+`gracefullyShutdown()` on it tears down shared matchmaker state, and a room
+created on a *different* still-running server then answers matchmaking with a
+truncated body — the client-side symptom is `SyntaxError: Unexpected end of
+JSON input` from the SDK's `fetch`+`JSON.parse`, not an obvious server error.
+
+So tests that need to shut a server down mid-run, or need a differently
+configured server, must not share a process with another server. Vitest
+isolates each test file in its own worker, so the rule is **one `Server` per
+test file**: the reconcile suite and the server-drop suite each got their own
+file. Also relevant to production: run exactly one presence `Server` per
+process.
+
+Two smaller server-side facts confirmed while fixing the above, both overridable
+process-globals reached through the exported `matchMaker`:
+
+- **CORS default is permissive-with-credentials.** `matchMaker.controller`'s
+  `DEFAULT_CORS_HEADERS` sets `Access-Control-Allow-Credentials: true` and
+  `getCorsHeaders` reflects the request `Origin` (or `*`). `startPresenceServer`
+  overrides both to an origin allowlist with no credentials header.
+- **Per-connection debug channels are exported `debug` instances.** Setting
+  `.enabled = false` on `debugConnection`/`debugMessage`/`debugPatch` (and
+  `presence`/`driver`/`matchmaking`) from `@colyseus/core` hard-disables them
+  regardless of the `DEBUG` env var, which is narrower than `debug.disable()`
+  and leaves unrelated `debug` usage alone.
+
+*Verified:* the JSON-input failure appeared only when a shutdown-in-file test
+sat beside another server in `client.test.ts`, and vanished once each was moved
+to its own file (78→ stable across repeated runs). A subprocess launched with
+`DEBUG=colyseus:*` that joins and sends a move prints zero coordinates and zero
+`colyseus:message`/`patch`/`connection` lines. An `OPTIONS` preflight from a
+disallowed origin comes back with no `Access-Control-Allow-Origin` and no
+credentials header; an allowed origin is reflected.
+---
+
 ### 2026-08-17 — World lane: the object-layer property trap, plus two adjacent ones, building the door triggers
 
 Building commit 2 (door triggers) against the earlier finding that object-layer

@@ -10,8 +10,8 @@
  *
  * **Nothing in this class performs network I/O except `connect`, `resume` and
  * `disconnect`, and those only when you call them.** Constructing a client
- * opens nothing. Subscribing with `onPeers` opens nothing. That rule exists
- * because the consumer mounts under React StrictMode, where a scene
+ * opens nothing. Subscribing with `onPeers` or `onStatus` opens nothing. That
+ * rule exists because the consumer mounts under React StrictMode, where a scene
  * constructor, a `create()` or a mount effect runs twice: a join hidden inside
  * any of those produces two presence entries for one player, and the second
  * one is a ghost that walks around after the real player leaves.
@@ -23,6 +23,22 @@
  *
  * Suspend and resume follow the same rule: the shell calls `suspend()` on
  * interior entry (D-019) and `resume()` on exit. Neither happens by itself.
+ *
+ * ## Identity is the server's to assign
+ *
+ * The session identifier is minted by the server and delivered to this client
+ * in a one-off `welcome` message; `connect()` resolves only once it has
+ * arrived, so `gameId` is known and self-filtering is correct from the first
+ * `peers()` call. The client does not choose its own identity.
+ *
+ * ## Sending is floored and reconciled
+ *
+ * `updatePosition` may be called every frame. The client never sends faster
+ * than `MIN_CLIENT_SEND_INTERVAL_MS`, which is at or above the server's hard
+ * message ceiling, so it cannot be force-disconnected for flooding. And it
+ * keeps re-sending the latest requested position until the server's copy of
+ * this avatar matches it, so the final position of a movement always lands even
+ * if an intermediate send was dropped by the server's own rate floor.
  */
 
 import { Client as ColyseusClient, type Room as ColyseusRoom } from '@colyseus/sdk';
@@ -31,9 +47,9 @@ import {
   DEFAULT_ROOM_NAME,
   DEFAULT_SPRITE,
   MESSAGE,
-  MIN_UPDATE_INTERVAL_MS,
+  MIN_CLIENT_SEND_INTERVAL_MS,
+  SERVER_MESSAGE,
 } from './config';
-import { createGameId } from './policy';
 import type { LobbyState } from './state';
 
 export type LobbyStatus =
@@ -47,6 +63,22 @@ export type LobbyStatus =
   | 'suspended'
   /** Left, by request or because the server closed. Reusable. */
   | 'closed';
+
+/** Why a status transition happened. Present on transitions into `closed`. */
+export type LobbyStatusReason =
+  /** `disconnect()` was called locally. */
+  | 'client-left'
+  /** The server closed the connection (drop, restart, kick). */
+  | 'server-dropped'
+  /** A transport or matchmaking error. */
+  | 'error';
+
+export interface LobbyStatusEvent {
+  readonly status: LobbyStatus;
+  readonly reason?: LobbyStatusReason;
+  /** The websocket close code, when the server dropped the connection. */
+  readonly code?: number;
+}
 
 /** One nearby player, as plain data. */
 export interface PeerSnapshot {
@@ -68,48 +100,66 @@ export interface LobbyClientOptions {
   endpoint: string;
   /** Where the avatar first appears. */
   start: Placement;
-  /**
-   * Ephemeral session identifier. Generated if omitted, which is the normal
-   * case. Supply one only to make a test deterministic — never derive it from
-   * anything that outlives the session.
-   */
-  gameId?: GameId;
   /** Cosmetic. An unrecognised key is replaced by the server's default. */
   sprite?: string;
   /** Defaults to `street`. */
   roomName?: string;
   /**
-   * Floor between two position messages, in ms. Defaults to the server's own
-   * floor, so the world can call `updatePosition` every frame for free.
+   * Requested floor between two position messages, in ms. Raised to
+   * `MIN_CLIENT_SEND_INTERVAL_MS` if smaller — a consumer cannot ask the client
+   * to send fast enough to be disconnected by the server's hard ceiling.
    */
   minSendIntervalMs?: number;
+  /**
+   * How long `connect()` waits for the server's `welcome` (identity) message
+   * before proceeding without it, in ms. Defaults to 5000. On timeout the
+   * connection is still usable; self-filtering just starts once the message
+   * eventually arrives.
+   */
+  welcomeTimeoutMs?: number;
 }
 
 type PeersListener = (peers: readonly PeerSnapshot[]) => void;
+type StatusListener = (event: LobbyStatusEvent) => void;
+
+interface WelcomePayload {
+  gameId: string;
+}
 
 export class LobbyClient {
   readonly #options: LobbyClientOptions;
-  readonly #gameId: GameId;
   readonly #minSendIntervalMs: number;
-  readonly #listeners = new Set<PeersListener>();
+  readonly #welcomeTimeoutMs: number;
+  readonly #peerListeners = new Set<PeersListener>();
+  readonly #statusListeners = new Set<StatusListener>();
 
   #room: ColyseusRoom<unknown, LobbyState> | null = null;
   #joining: Promise<void> | null = null;
   #status: LobbyStatus = 'idle';
 
+  /** The server-assigned identity. Null until the `welcome` message arrives. */
+  #gameId: GameId | null = null;
+
+  /** True while a local `disconnect()` is in progress, so onLeave can tell. */
+  #leavingByRequest = false;
+
+  /** The latest requested position not yet confirmed on the server. */
+  #desired: Required<Placement> | null = null;
   #lastSentAt = 0;
-  #lastSent: Required<Placement> | null = null;
-  #queued: Required<Placement> | null = null;
-  #flushHandle: ReturnType<typeof setTimeout> | null = null;
+  #reconcileHandle: ReturnType<typeof setTimeout> | null = null;
 
   /** Pure. Opens no connection. */
   constructor(options: LobbyClientOptions) {
     this.#options = options;
-    this.#gameId = options.gameId ?? createGameId();
-    this.#minSendIntervalMs = options.minSendIntervalMs ?? MIN_UPDATE_INTERVAL_MS;
+    this.#minSendIntervalMs = Math.max(
+      options.minSendIntervalMs ?? MIN_CLIENT_SEND_INTERVAL_MS,
+      MIN_CLIENT_SEND_INTERVAL_MS,
+    );
+    this.#welcomeTimeoutMs = options.welcomeTimeoutMs ?? 5000;
   }
 
-  get gameId(): GameId {
+  /** The server-assigned identifier, or null before it has been received. */
+  get gameId(): GameId | null {
     return this.#gameId;
   }
 
@@ -121,14 +171,14 @@ export class LobbyClient {
    * Join the room. Explicit, imperative, and safe to call twice.
    *
    * Concurrent callers share one attempt; a caller that arrives after the join
-   * succeeded returns immediately. Either way the room holds one entry for
-   * this client.
+   * succeeded returns immediately. Resolves once the server has assigned this
+   * client its identity.
    */
   async connect(): Promise<void> {
     if (this.#room !== null) return;
     if (this.#joining !== null) return this.#joining;
 
-    this.#status = 'connecting';
+    this.#setStatus('connecting');
     this.#joining = this.#join();
     try {
       await this.#joining;
@@ -140,31 +190,15 @@ export class LobbyClient {
   /**
    * Report where the avatar is.
    *
-   * Cheap enough to call from an update loop: identical positions are
-   * discarded, and anything inside the send floor is held and flushed once the
-   * floor passes, so the last position of a movement always arrives. A call
-   * made while suspended or disconnected does nothing.
+   * Cheap enough to call from an update loop. The position is recorded as the
+   * desired one and reconciled toward the server: sent no faster than the floor,
+   * re-sent until the server's copy matches, and dropped only once confirmed. A
+   * call made while suspended or disconnected does nothing.
    */
   updatePosition(x: number, y: number, facing: Facing = 'down'): void {
     if (this.#status !== 'connected' || this.#room === null) return;
-
-    const next = { x: Math.round(x), y: Math.round(y), facing };
-    if (samePlacement(next, this.#lastSent)) return;
-
-    const now = Date.now();
-    const elapsed = now - this.#lastSentAt;
-    if (elapsed >= this.#minSendIntervalMs) {
-      this.#send(next, now);
-      return;
-    }
-
-    this.#queued = next;
-    if (this.#flushHandle === null) {
-      this.#flushHandle = setTimeout(
-        () => this.#flush(),
-        this.#minSendIntervalMs - elapsed,
-      );
-    }
+    this.#desired = { x: Math.round(x), y: Math.round(y), facing };
+    this.#pump(Date.now());
   }
 
   /**
@@ -176,10 +210,10 @@ export class LobbyClient {
    */
   suspend(): void {
     if (this.#status !== 'connected' || this.#room === null) return;
-    this.#cancelQueued();
+    this.#cancelReconcile();
+    this.#desired = null;
     this.#room.send(MESSAGE.suspend);
-    this.#status = 'suspended';
-    this.#lastSent = null;
+    this.#setStatus('suspended');
   }
 
   /**
@@ -194,18 +228,20 @@ export class LobbyClient {
     if (this.#status !== 'suspended' || this.#room === null) {
       throw new Error(`resume() requires a suspended client, not "${this.#status}"`);
     }
-    const next = {
+    const next: Required<Placement> = {
       x: Math.round(placement.x),
       y: Math.round(placement.y),
-      facing: placement.facing ?? ('down' as Facing),
+      facing: placement.facing ?? 'down',
     };
     this.#room.send(MESSAGE.resume, {
       ...next,
       sprite: this.#options.sprite ?? DEFAULT_SPRITE,
     });
-    this.#status = 'connected';
-    this.#lastSent = next;
+    // The server writes this placement unconditionally on resume, so it is the
+    // confirmed position; nothing to reconcile until the consumer moves again.
+    this.#desired = null;
     this.#lastSentAt = Date.now();
+    this.#setStatus('connected');
   }
 
   /**
@@ -216,10 +252,28 @@ export class LobbyClient {
    * state change until it is removed.
    */
   onPeers(listener: PeersListener): () => void {
-    this.#listeners.add(listener);
+    this.#peerListeners.add(listener);
     listener(this.peers());
     return () => {
-      this.#listeners.delete(listener);
+      this.#peerListeners.delete(listener);
+    };
+  }
+
+  /**
+   * Subscribe to connection-status changes. Returns an unsubscribe function.
+   *
+   * Fires once immediately with the current status, then on every transition.
+   * A transition into `closed` carries a `reason` distinguishing a local
+   * `disconnect()` (`client-left`) from a server drop (`server-dropped`, with
+   * the close `code`) or an error (`error`) — so the consumer can tell "the
+   * player left" from "the connection died" rather than inferring it from an
+   * empty peer list.
+   */
+  onStatus(listener: StatusListener): () => void {
+    this.#statusListeners.add(listener);
+    listener({ status: this.#status });
+    return () => {
+      this.#statusListeners.delete(listener);
     };
   }
 
@@ -229,7 +283,7 @@ export class LobbyClient {
     if (room === null) return [];
     const out: PeerSnapshot[] = [];
     room.state?.peers?.forEach((entry) => {
-      if (entry.gameId === this.#gameId) return;
+      if (this.#gameId !== null && entry.gameId === this.#gameId) return;
       out.push({
         gameId: entry.gameId,
         x: entry.position.x,
@@ -243,12 +297,19 @@ export class LobbyClient {
 
   /** Leave the room. The client can be connected again afterwards. */
   async disconnect(): Promise<void> {
-    this.#cancelQueued();
+    this.#cancelReconcile();
+    this.#desired = null;
     const room = this.#room;
     this.#room = null;
-    this.#status = 'closed';
-    if (room !== null) await room.leave(true);
-    this.#emit();
+    this.#gameId = null;
+    this.#leavingByRequest = true;
+    this.#setStatus('closed', 'client-left');
+    try {
+      if (room !== null) await room.leave(true);
+    } finally {
+      this.#leavingByRequest = false;
+    }
+    this.#emitPeers();
   }
 
   async #join(): Promise<void> {
@@ -257,63 +318,140 @@ export class LobbyClient {
       const room = await sdk.joinOrCreate<LobbyState>(
         this.#options.roomName ?? DEFAULT_ROOM_NAME,
         {
-          gameId: this.#gameId,
           x: Math.round(this.#options.start.x),
           y: Math.round(this.#options.start.y),
           facing: this.#options.start.facing ?? 'down',
           sprite: this.#options.sprite ?? DEFAULT_SPRITE,
         },
       );
-      room.onStateChange(() => this.#emit());
-      room.onLeave(() => {
-        this.#room = null;
-        this.#status = 'closed';
-        this.#cancelQueued();
-        this.#emit();
+
+      const welcomed = new Promise<void>((resolve) => {
+        room.onMessage(SERVER_MESSAGE.welcome, (payload: WelcomePayload) => {
+          this.#gameId = payload.gameId as GameId;
+          this.#emitPeers();
+          resolve();
+        });
       });
+
+      room.onStateChange(() => {
+        this.#emitPeers();
+        if (this.#status === 'connected') this.#pump(Date.now());
+      });
+      room.onError((code, message) => {
+        this.#room = null;
+        this.#gameId = null;
+        this.#cancelReconcile();
+        this.#setStatus('closed', 'error', code);
+        this.#emitPeers();
+        void message;
+      });
+      room.onLeave((code) => {
+        this.#room = null;
+        this.#gameId = null;
+        this.#cancelReconcile();
+        if (!this.#leavingByRequest) {
+          this.#setStatus('closed', 'server-dropped', code);
+        }
+        this.#emitPeers();
+      });
+
       this.#room = room;
-      this.#status = 'connected';
+      this.#desired = null;
       this.#lastSentAt = 0;
-      this.#lastSent = null;
-      this.#emit();
+      this.#setStatus('connected');
+      this.#emitPeers();
+
+      await this.#awaitWelcome(welcomed);
     } catch (error) {
-      this.#status = 'idle';
+      this.#setStatus('idle');
       throw error;
     }
   }
 
-  #send(placement: Required<Placement>, now: number): void {
-    this.#room?.send(MESSAGE.move, placement);
-    this.#lastSent = placement;
-    this.#lastSentAt = now;
-    this.#queued = null;
-  }
-
-  #flush(): void {
-    this.#flushHandle = null;
-    const queued = this.#queued;
-    if (queued === null || this.#status !== 'connected') return;
-    this.#send(queued, Date.now());
-  }
-
-  #cancelQueued(): void {
-    if (this.#flushHandle !== null) {
-      clearTimeout(this.#flushHandle);
-      this.#flushHandle = null;
+  /** Resolve when the welcome message arrives, or after the timeout. */
+  async #awaitWelcome(welcomed: Promise<void>): Promise<void> {
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const timeout = new Promise<void>((resolve) => {
+      timer = setTimeout(resolve, this.#welcomeTimeoutMs);
+    });
+    try {
+      await Promise.race([welcomed, timeout]);
+    } finally {
+      if (timer !== undefined) clearTimeout(timer);
     }
-    this.#queued = null;
   }
 
-  #emit(): void {
-    if (this.#listeners.size === 0) return;
+  /**
+   * Send the desired position if it is due, otherwise schedule a retry; clear
+   * it once the server's copy of this avatar matches.
+   */
+  #pump(now: number): void {
+    if (this.#status !== 'connected' || this.#room === null) return;
+    const desired = this.#desired;
+    if (desired === null) return;
+
+    const self = this.#serverSelf();
+    if (self !== null && samePlacement(desired, self)) {
+      this.#desired = null;
+      this.#cancelReconcile();
+      return;
+    }
+
+    const elapsed = now - this.#lastSentAt;
+    if (elapsed >= this.#minSendIntervalMs) {
+      this.#room.send(MESSAGE.move, desired);
+      this.#lastSentAt = now;
+      // Re-check after an interval: if the server accepted this move its state
+      // change will clear #desired; if it was dropped by the server floor, we
+      // resend. Converges once the server's copy matches.
+      this.#scheduleReconcile(this.#minSendIntervalMs);
+    } else {
+      this.#scheduleReconcile(this.#minSendIntervalMs - elapsed);
+    }
+  }
+
+  /** The server's current position for this client's own avatar, if known. */
+  #serverSelf(): Required<Placement> | null {
+    const id = this.#gameId;
+    if (id === null || this.#room === null) return null;
+    const entry = this.#room.state?.peers?.get(id);
+    if (entry === undefined) return null;
+    return {
+      x: entry.position.x,
+      y: entry.position.y,
+      facing: entry.facing as Facing,
+    };
+  }
+
+  #scheduleReconcile(delay: number): void {
+    this.#cancelReconcile();
+    this.#reconcileHandle = setTimeout(() => {
+      this.#reconcileHandle = null;
+      this.#pump(Date.now());
+    }, delay);
+  }
+
+  #cancelReconcile(): void {
+    if (this.#reconcileHandle !== null) {
+      clearTimeout(this.#reconcileHandle);
+      this.#reconcileHandle = null;
+    }
+  }
+
+  #setStatus(status: LobbyStatus, reason?: LobbyStatusReason, code?: number): void {
+    this.#status = status;
+    if (this.#statusListeners.size === 0) return;
+    const event: LobbyStatusEvent = { status, ...(reason ? { reason } : {}), ...(code !== undefined ? { code } : {}) };
+    for (const listener of this.#statusListeners) listener(event);
+  }
+
+  #emitPeers(): void {
+    if (this.#peerListeners.size === 0) return;
     const snapshot = this.peers();
-    for (const listener of this.#listeners) listener(snapshot);
+    for (const listener of this.#peerListeners) listener(snapshot);
   }
 }
 
-function samePlacement(
-  a: Required<Placement>,
-  b: Required<Placement> | null,
-): boolean {
-  return b !== null && a.x === b.x && a.y === b.y && a.facing === b.facing;
+function samePlacement(a: Required<Placement>, b: Required<Placement>): boolean {
+  return a.x === b.x && a.y === b.y && a.facing === b.facing;
 }
