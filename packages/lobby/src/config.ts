@@ -31,10 +31,36 @@ export const MIN_UPDATE_INTERVAL_MS = 50;
 /**
  * Hard per-connection message ceiling handed to Colyseus itself.
  *
- * The throttle above silently drops; this one disconnects. It is deliberately
- * well above the throttle so a normal client never trips it.
+ * The throttle above silently drops; this one disconnects. Colyseus counts
+ * every inbound message before dispatch — including the ones the throttle
+ * would drop — and force-closes the socket on exceed, with no notice to the
+ * client. So a client must be constructed such that it *cannot* reach this
+ * rate; see MIN_CLIENT_SEND_INTERVAL_MS below.
  */
 export const MAX_MESSAGES_PER_SECOND = 40;
+
+/**
+ * The interval the hard ceiling implies, in ms. Sending faster than this risks
+ * the force-close. `Math.ceil` so the rounding is conservative (25ms, not
+ * 24.99ms).
+ */
+export const HARD_MIN_INTERVAL_MS = Math.ceil(1000 / MAX_MESSAGES_PER_SECOND);
+
+/**
+ * The floor the client clamps its own send interval to.
+ *
+ * Two constraints, and this is the stricter of the two: never send moves
+ * faster than the server accepts them (`MIN_UPDATE_INTERVAL_MS`, since faster
+ * is silently dropped), and never approach the hard ceiling
+ * (`HARD_MIN_INTERVAL_MS`). Being at or above `MIN_UPDATE_INTERVAL_MS` clears
+ * both with a comfortable margin for the occasional suspend/resume that also
+ * counts against the ceiling. A consumer may ask for a smaller interval; the
+ * client raises it to this floor rather than trusting the request.
+ */
+export const MIN_CLIENT_SEND_INTERVAL_MS = Math.max(
+  MIN_UPDATE_INTERVAL_MS,
+  HARD_MIN_INTERVAL_MS,
+);
 
 /** How often the room encodes state changes, in ms. 20fps. */
 export const PATCH_RATE_MS = 50;
@@ -61,6 +87,16 @@ export const MAX_VISIBLE_PEERS = 24;
 export const MAX_CLIENTS_PER_ROOM = 48;
 
 /**
+ * Absolute ceiling on room capacity, regardless of what an operator asks for.
+ *
+ * `resolveRoomConfig` clamps to this. It exists so a typo — or, if the trusted
+ * boundary ever failed, a hostile value — cannot produce a room that admits an
+ * unbounded number of sessions (a `maxClients` of 99999 was reproduced live
+ * before the trusted-config fix).
+ */
+export const HARD_MAX_CLIENTS = 128;
+
+/**
  * Coordinates are clamped to this half-extent, in world pixels.
  *
  * Position is public within the world, but an unbounded float is a channel:
@@ -72,10 +108,13 @@ export const WORLD_LIMIT = 8192;
 /**
  * The only shape a session identifier may take: 16 lowercase hex characters.
  *
- * 64 bits of client-generated randomness. The narrowness is the point — a
- * free-form identifier field is somewhere a client could smuggle a string
- * that this package is forbidden to hold, and a fixed 16-character hex window
- * cannot carry one.
+ * 64 bits of randomness, generated on the **server** at admission (see
+ * `LobbyPresence.admit`). The narrowness is the point — a free-form identifier
+ * field is somewhere a client could smuggle a string that this package is
+ * forbidden to hold, and a fixed 16-character hex window cannot carry one. A
+ * client-supplied identifier is ignored outright, so "ephemeral per-session"
+ * is a property the server enforces rather than one it trusts the client to
+ * respect.
  */
 export const GAME_ID_PATTERN = /^[0-9a-f]{16}$/;
 
@@ -85,10 +124,11 @@ export const GAME_ID_LENGTH = 16;
 /**
  * Sprite keys a client may choose from.
  *
- * Placeholder until the World lane publishes its asset registry; a room can be
- * defined with its own list through `PresenceRoomOptions.spriteKeys`. An
- * unrecognised key is replaced with the default rather than rejected, so a
- * mismatch between lanes costs a wrong-looking avatar and never a leak.
+ * Placeholder until the World lane publishes its asset registry; a server
+ * operator overrides the list through `startPresenceServer({ room: { spriteKeys } })`,
+ * which is a trusted channel — the client join payload is not. An unrecognised
+ * key is replaced with the default rather than rejected, so a mismatch between
+ * lanes costs a wrong-looking avatar and never a leak.
  */
 export const DEFAULT_SPRITE_KEYS: readonly string[] = [
   'avatar-1',
@@ -119,8 +159,115 @@ export const MESSAGE = {
   move: 'move',
   /** No payload. The avatar disappears for everyone else. See D-019. */
   suspend: 'suspend',
-  /** `{ x, y, facing, sprite }` — reappear after a suspend. */
+  /** `{ x, y, facing }` — reappear after a suspend. */
   resume: 'resume',
 } as const;
 
 export type MessageType = (typeof MESSAGE)[keyof typeof MESSAGE];
+
+/**
+ * Server-to-client messages. Exactly one, and it carries only the recipient's
+ * own server-assigned session identifier so the client can recognise its own
+ * avatar in the shared state. Nothing about any other player rides here.
+ */
+export const SERVER_MESSAGE = {
+  /** `{ gameId }` — sent once, right after a join is admitted. */
+  welcome: 'welcome',
+} as const;
+
+export type ServerMessageType =
+  (typeof SERVER_MESSAGE)[keyof typeof SERVER_MESSAGE];
+
+// ---------------------------------------------------------------------------
+// Trusted room configuration
+// ---------------------------------------------------------------------------
+
+/**
+ * The complete, resolved configuration of a presence room.
+ *
+ * ⚠ This is a *trusted* object. Under Colyseus matchmaking, a room's
+ * `onCreate` receives `merge({}, clientOptions, handlerOptions)` — the client
+ * half of which is attacker-controlled and, before this type existed, became
+ * the room's entire config when the handler side was empty (a hex id + token
+ * amount smuggled through `spriteKeys`/`defaultSprite` reached other players'
+ * screens). A room must therefore build its config with `resolveRoomConfig`
+ * from an operator-supplied source and never from its `onCreate` argument.
+ */
+export interface PresenceRoomConfig {
+  readonly spriteKeys: readonly string[];
+  readonly defaultSprite: string;
+  readonly interestRadius: number;
+  readonly maxVisiblePeers: number;
+  readonly minUpdateIntervalMs: number;
+  readonly capacity: number;
+  readonly worldLimit: number;
+  readonly maxMessagesPerSecond: number;
+  readonly patchRateMs: number;
+}
+
+/** Operator-supplied overrides. Every field optional; all are clamped. */
+export type PresenceRoomConfigOverrides = Partial<PresenceRoomConfig>;
+
+/** The frozen defaults. What a room uses when the operator overrides nothing. */
+export const DEFAULT_ROOM_CONFIG: PresenceRoomConfig = Object.freeze({
+  spriteKeys: DEFAULT_SPRITE_KEYS,
+  defaultSprite: DEFAULT_SPRITE,
+  interestRadius: INTEREST_RADIUS,
+  maxVisiblePeers: MAX_VISIBLE_PEERS,
+  minUpdateIntervalMs: MIN_UPDATE_INTERVAL_MS,
+  capacity: MAX_CLIENTS_PER_ROOM,
+  worldLimit: WORLD_LIMIT,
+  maxMessagesPerSecond: MAX_MESSAGES_PER_SECOND,
+  patchRateMs: PATCH_RATE_MS,
+});
+
+function clamp(value: unknown, lo: number, hi: number, fallback: number): number {
+  if (typeof value !== 'number' || !Number.isFinite(value)) return fallback;
+  return Math.max(lo, Math.min(hi, Math.round(value)));
+}
+
+/**
+ * Merge operator overrides over the frozen defaults, clamping every numeric
+ * field to a safe range, and return a frozen config.
+ *
+ * The clamps are not there to police a trusted operator — they are the last
+ * line of defence in depth. If the trusted boundary ever failed and a hostile
+ * value reached this function, a capacity of 99999 still becomes
+ * `HARD_MAX_CLIENTS` and a negative interval still becomes something sane.
+ *
+ * `spriteKeys` and `defaultSprite` are strings and cannot be range-clamped, so
+ * they are simply taken from the override or the default. That is safe because
+ * this function is only ever called with an operator-supplied override; the
+ * whole point of the trusted boundary is that a client value never arrives
+ * here to begin with.
+ */
+export function resolveRoomConfig(
+  overrides: PresenceRoomConfigOverrides = {},
+): PresenceRoomConfig {
+  const spriteKeys =
+    Array.isArray(overrides.spriteKeys) &&
+    overrides.spriteKeys.length > 0 &&
+    overrides.spriteKeys.every((k) => typeof k === 'string')
+      ? Object.freeze([...overrides.spriteKeys])
+      : DEFAULT_ROOM_CONFIG.spriteKeys;
+
+  const defaultSprite =
+    typeof overrides.defaultSprite === 'string' &&
+    spriteKeys.includes(overrides.defaultSprite)
+      ? overrides.defaultSprite
+      : spriteKeys.includes(DEFAULT_ROOM_CONFIG.defaultSprite)
+        ? DEFAULT_ROOM_CONFIG.defaultSprite
+        : (spriteKeys[0] as string);
+
+  return Object.freeze({
+    spriteKeys,
+    defaultSprite,
+    interestRadius: clamp(overrides.interestRadius, 0, WORLD_LIMIT * 2, INTEREST_RADIUS),
+    maxVisiblePeers: clamp(overrides.maxVisiblePeers, 1, HARD_MAX_CLIENTS, MAX_VISIBLE_PEERS),
+    minUpdateIntervalMs: clamp(overrides.minUpdateIntervalMs, 0, 10_000, MIN_UPDATE_INTERVAL_MS),
+    capacity: clamp(overrides.capacity, 1, HARD_MAX_CLIENTS, MAX_CLIENTS_PER_ROOM),
+    worldLimit: clamp(overrides.worldLimit, 1, 1_000_000, WORLD_LIMIT),
+    maxMessagesPerSecond: clamp(overrides.maxMessagesPerSecond, 1, 1000, MAX_MESSAGES_PER_SECOND),
+    patchRateMs: clamp(overrides.patchRateMs, 10, 1000, PATCH_RATE_MS),
+  });
+}

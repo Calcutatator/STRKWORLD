@@ -20,8 +20,13 @@ side channel. So the constraint is structural rather than a matter of care:
 
 - The room schema is the enforcement point. A field that cannot be added to
   the schema cannot leak.
-- Player identity is an **ephemeral per-session `gameId`**, generated
-  client-side, never derived from an address, discarded on disconnect.
+- The room's configuration is trusted server state, never client input. This
+  is not an incidental detail: it is the fix for a confirmed break where a
+  client's join payload became the room's config (see "Configuration is
+  trusted" below).
+- Player identity is an **ephemeral per-session `gameId`**, minted on the
+  **server**, never derived from an address, discarded on disconnect. A
+  client-supplied identifier is ignored.
 - No persistence. When the room empties, nothing remains.
 
 If a feature seems to need an address in the lobby, it needs a different
@@ -54,10 +59,43 @@ LOBBY_PORT=3000 npm run dev --workspace=@strkworld/lobby
 point fails loudly if the port is taken rather than quietly moving, because
 the shell has the endpoint configured.
 
-It prints the endpoint and nothing else, ever. There is no per-connection line
-to print — joins, leaves and positions are exactly the things this package is
-not allowed to record. Aggregate counters are available on the room
-(`PresenceRoom.counters`) and name no individual player.
+It prints one line — the endpoint — and logs nothing per connection of its own.
+Colyseus's own `debug` channels *could* print joins, moves and message bodies
+under `DEBUG=colyseus:*`; `startPresenceServer` force-disables the
+per-connection ones (`connection`, `message`, `patch`, `presence`, `driver`,
+`matchmaking`) so that switch cannot expose a player's coordinates. Aggregate
+counters are available on the room (`PresenceRoom.counters`) and name no
+individual player.
+
+### The HTTP surface is real
+
+Colyseus registers an HTTP matchmaking API on the same port
+(`POST /matchmake/<method>/<room>` plus an `OPTIONS` preflight) — that is how
+the websocket handshake is negotiated, so the presence port is not
+websocket-only and the join payload rides as an HTTP body. Two consequences:
+
+- **CORS.** Colyseus's default reflects any `Origin` back with
+  `Access-Control-Allow-Credentials: true`. `startPresenceServer` replaces that
+  with an origin allowlist (`allowedOrigins`, default the local Vite
+  dev/preview origins) and drops the credentials header. A non-browser client
+  sends no `Origin` and is unaffected.
+- **Proxy logs.** A fronting proxy logs request bodies by default; this process
+  cannot control that. It is why the join body must carry nothing sensitive —
+  which, structurally, it cannot: the id is server-minted and every other field
+  is a coordinate or a checked enum. Relevant to the backend's D-014 no-log
+  posture if the two ever share a proxy.
+
+### Configuration is trusted, never client-set
+
+A room's sprite list, capacity, interest radius, rate floor and world bounds
+come only from the server operator — `startPresenceServer({ room })` or
+`definePresenceRoom(config)`. They are **not** read from the room's `onCreate`
+options, because under Colyseus matchmaking those are
+`merge({}, clientOptions, handlerOptions)` and the client half is a join
+payload. A client cannot influence room config. (This closed a confirmed break
+in which one unauthenticated `POST /matchmake/joinOrCreate` set the room's
+entire config, including a `spriteKeys`/`defaultSprite` allowlist through which
+a hex id and a token amount reached honest players' screens.)
 
 ---
 
@@ -76,13 +114,23 @@ const lobby = new LobbyClient({
 });
 
 await lobby.connect();                        // explicit. never automatic
-const stop = lobby.onPeers((peers) => scene.render(peers));
+const stopPeers = lobby.onPeers((peers) => scene.render(peers));
+const stopStatus = lobby.onStatus((e) => {    // learn if the connection dies
+  if (e.status === 'closed' && e.reason === 'server-dropped') reconnectUI();
+});
 lobby.updatePosition(x, y, 'left');           // safe to call every frame
 lobby.suspend();                              // on building entry (D-019)
 lobby.resume({ x, y, facing: 'down' });       // on exit
 await lobby.disconnect();
-stop();
+stopPeers();
+stopStatus();
 ```
+
+Import the client from the root entry or `@strkworld/lobby/client`. The server
+side lives at `@strkworld/lobby/server` — importing it pulls in `@colyseus/core`
+and `@colyseus/ws-transport` (and, through the transport, `express`), so it
+must never enter a browser bundle. The two entries are split precisely so the
+shell and World lane get the client without the server's dependency tree.
 
 ### The lifecycle contract
 
@@ -101,9 +149,19 @@ returns immediately, and concurrent calls share one attempt. `client.test.ts`
 asserts against a real server that two `connect()` calls produce exactly one
 presence entry.
 
-`updatePosition` is cheap enough for an update loop. It discards unchanged
-positions, and anything inside the send floor is held and flushed once the
-floor passes, so the final position of a movement always arrives.
+`updatePosition` is cheap enough for an update loop. The client never sends
+faster than `MIN_CLIENT_SEND_INTERVAL_MS` — which is at or above the server's
+hard message ceiling — so a consumer cannot drive it into a flood-disconnect no
+matter how small a `minSendIntervalMs` it requests. And it re-sends the latest
+requested position until the server's copy of this avatar matches it, so the
+final position of a movement lands even if the server's own rate floor dropped
+an intermediate send.
+
+`onStatus` reports connection-state transitions. A transition into `closed`
+carries a `reason`: `client-left` for a local `disconnect()`, `server-dropped`
+(with the close `code`) when the server closes the socket, or `error`. That is
+how the consumer tells "the player left" from "the connection died" rather than
+inferring it from an empty peer list.
 
 `resume` throws if the client was never connected or has been disconnected.
 Reconnecting is the shell's decision to make explicitly, not a side effect of
@@ -118,15 +176,17 @@ field for field and adds nothing:
 
 | Field | Type | Constrained to |
 |---|---|---|
-| `gameId` | string | Exactly 16 lowercase hex characters. Rejected otherwise |
+| `gameId` | string | 16 lowercase hex characters, **minted on the server**. A client-supplied id is ignored |
 | `position` | `{ x, y }` | Finite numbers, rounded to whole pixels, clamped to ±8192 |
 | `facing` | string | One of `up` `down` `left` `right`. Substituted otherwise |
-| `sprite` | string | A key from the room's sprite list. Substituted otherwise |
+| `sprite` | string | A key from the room's **trusted** sprite list. Substituted otherwise |
 
 Every field is narrowed at the boundary, which is the second half of the
 enforcement. A schema with the right field names but a free-form string in one
 of them would still be a channel: a player could set their sprite to their own
-address. Nothing outside those ranges reaches an entry.
+address. Nothing outside those ranges reaches an entry — and the allowlist a
+sprite is checked against is trusted server config, never a list the joining
+client supplied.
 
 The client-to-server vocabulary is three verbs — `move`, `suspend`, `resume` —
 and a join payload. There is no message through which a client could tell the
@@ -208,12 +268,20 @@ nothing in this package uses it.
 | File | Covers |
 |---|---|
 | `policy.test.ts` | Normalisers, throttle, interest selection |
-| `presence.test.ts` | Admission, movement, suspend/resume, counters |
-| `privacy.test.ts` | Schema field set, suspend, randomised leak hunt |
-| `client.test.ts` | The wrapper against a real server on a real socket |
+| `presence.test.ts` | Admission, server-minted id, movement, suspend/resume, counters |
+| `privacy.test.ts` | Schema field set, **attacker-config model**, suspend, randomised leak hunt |
+| `client.test.ts` | The wrapper against a real server — idempotent connect, attacker-config over the wire, send-rate floor, status |
+| `client-reconcile.test.ts` | The final position lands despite a server-dropped move |
+| `client-drop.test.ts` | A server drop is reported as `server-dropped` |
 
 `privacy.test.ts` is the point of this package. The vocabulary it scans for
 lives in `src/testing/forbidden-vocabulary.json` rather than in TypeScript,
 because check 5 of `scripts/check-invariants.sh` fails the build on those words
 appearing in any lobby `.ts` file — a test that spelled them in TypeScript
 would trip the very gate it exists to reinforce.
+
+The `client-reconcile` and `client-drop` suites each live in their own file
+with a single server: Colyseus's matchmaker is a process-global, so a test that
+shuts a server down (or needs a differently tuned one) must not share a process
+with another server. Vitest isolates test files, so one server per file keeps
+them from corrupting each other.
