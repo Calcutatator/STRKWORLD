@@ -1,33 +1,53 @@
 import { useEffect, useMemo } from 'react';
-import type { Intent } from '@strkworld/privacy';
 import { COPY } from '../../copy.js';
-import { formatStrk, formatTokenAmountExact, shortenAddress } from '../../format.js';
+import { formatStrk, formatStrkExact, shortenAddress } from '../../format.js';
 import { usePrivacy } from '../../privacy/PrivacyProvider.js';
 import { useStore } from '../../store/use-store.js';
+import { ConfirmGate } from '../ConfirmGate.js';
+import { LockedNotice } from '../LockedRoom.js';
 import { PanelFrame } from '../PanelFrame.js';
-import { createBankPanel, type BankMode, type BankState } from './bank-machine.js';
+import { routeDoor } from '../routes.js';
+import { createBankPanel, ROUTE_BY_MODE, type BankMode, type BankPanel as BankPanelMachine, type BankState } from './bank-machine.js';
+import { describeIntent, describeWarning } from './summary-copy.js';
 
 /**
  * The Bank.
  *
  * A thin view over `bank-machine.ts`. Every rule that matters — no polled
  * balance, no invented maximum, no prompt counting, no mixing a shield with a
- * spend — lives in the machine, where it is tested without a renderer. This
- * file decides what the room looks like and nothing else.
+ * spend, no second confirm — lives in the machine, where it is tested without a
+ * renderer. This file decides what the room looks like, and enforces two things
+ * that are purely about rendering: a locked route shows a locked door rather
+ * than a form nobody can submit, and the confirm button only exists inside
+ * `ConfirmGate`, which cannot render without the batch's approved disclosures.
  */
-export function BankPanel({ onClose }: { onClose: () => void }) {
+export function BankPanel({
+  onClose,
+  panel: injected,
+}: {
+  onClose: () => void;
+  /** Supply a driven machine to render a specific state. Tests use this. */
+  panel?: BankPanelMachine;
+}) {
   const { operations, connect, shellBus } = usePrivacy();
 
-  const panel = useMemo(
-    () => createBankPanel({ operations, onError: (error) => connect.noteOperationError(error) }),
-    [operations, connect],
+  const owned = useMemo(
+    () =>
+      injected
+        ? null
+        : createBankPanel({ operations, onError: (failure) => connect.noteOperationError(failure) }),
+    [injected, operations, connect],
   );
+  const panel = injected ?? owned!;
   const state = useStore(panel.store);
 
   useEffect(() => {
-    void panel.open();
-    return () => panel.close();
-  }, [panel]);
+    // An injected machine belongs to whoever injected it, including its
+    // lifecycle. Opening it here would fight them for it.
+    if (!owned) return;
+    void owned.open();
+    return () => owned.close();
+  }, [owned]);
 
   // Push presentation data into the world. Pre-formatted strings only: the
   // world never receives a bigint or a token address.
@@ -43,34 +63,49 @@ export function BankPanel({ onClose }: { onClose: () => void }) {
     shellBus?.emit('hud:pending', { count: busy ? 1 : 0 });
   }, [shellBus, state.flow]);
 
+  const committing = state.flow.name === 'review' || state.flow.name === 'submitting';
+
   return (
     <PanelFrame title={COPY.bank.title} disclosure={state.disclosure} onClose={onClose}>
-      <ModeTabs mode={state.mode} onSelect={(mode) => panel.setMode(mode)} />
-      <BalanceBlock state={state} onRefresh={() => void panel.refreshBalance()} />
+      <ModeTabs mode={state.mode} register={state.door} onSelect={(mode) => panel.setMode(mode)} />
 
-      {state.flow.name === 'review' ? (
-        <ReviewBlock
-          state={state}
-          onConfirm={() => void panel.confirm()}
-          onCancel={() => panel.cancelPrepared()}
-        />
-      ) : state.flow.name === 'submitting' ? (
-        <p className="flow-pending" aria-live="polite" data-stage={state.flow.stage}>
-          {state.flow.message}
-        </p>
-      ) : state.flow.name === 'submitted' ? (
-        <p className="flow-done" aria-live="polite">
-          {COPY.flow.submitted} <code>{shortenAddress(state.flow.transactionHash)}</code>
-        </p>
+      {!state.door.open ? (
+        <LockedNotice reason={state.door.reason ?? 'unknown-route'} message={state.door.message} />
       ) : (
-        <ComposeBlock state={state} panel={panel} />
-      )}
+        <>
+          <BalanceBlock state={state} onRefresh={() => void panel.refreshBalance()} />
 
-      {state.flow.name === 'failed' ? (
-        <p className="flow-failed" role="alert">
-          {state.flow.message}
-        </p>
-      ) : null}
+          {committing ? (
+            <CommitBlock
+              state={state}
+              onConfirm={() => void panel.confirm()}
+              onCancel={() => panel.cancelPrepared()}
+            />
+          ) : state.flow.name === 'submitted' ? (
+            <div className="flow-done" aria-live="polite">
+              <p>
+                {COPY.flow.submitted} <code>{shortenAddress(state.flow.transactionHash)}</code>
+              </p>
+              <button type="button" onClick={() => panel.acknowledge()}>
+                {COPY.flow.back}
+              </button>
+            </div>
+          ) : (
+            <ComposeBlock state={state} panel={panel} />
+          )}
+
+          {state.flow.name === 'failed' ? (
+            <div className="flow-failed" role="alert">
+              <p>{state.flow.message}</p>
+              {state.flow.recovery === 'prepare-again' ? (
+                <button type="button" onClick={() => panel.cancelPrepared()}>
+                  {COPY.flow.back}
+                </button>
+              ) : null}
+            </div>
+          ) : null}
+        </>
+      )}
 
       {state.notice ? (
         <p className={`panel-notice notice-${state.notice.tone}`} role="status">
@@ -81,7 +116,15 @@ export function BankPanel({ onClose }: { onClose: () => void }) {
   );
 }
 
-function ModeTabs({ mode, onSelect }: { mode: BankMode; onSelect: (mode: BankMode) => void }) {
+function ModeTabs({
+  mode,
+  register,
+  onSelect,
+}: {
+  mode: BankMode;
+  register: BankState['door'];
+  onSelect: (mode: BankMode) => void;
+}) {
   const modes: readonly [BankMode, string][] = [
     ['shield', COPY.bank.shield],
     ['unshield', COPY.bank.unshield],
@@ -89,17 +132,23 @@ function ModeTabs({ mode, onSelect }: { mode: BankMode; onSelect: (mode: BankMod
   ];
   return (
     <nav className="panel-modes" role="tablist">
-      {modes.map(([value, label]) => (
-        <button
-          key={value}
-          type="button"
-          role="tab"
-          aria-selected={mode === value}
-          onClick={() => onSelect(value)}
-        >
-          {label}
-        </button>
-      ))}
+      {modes.map(([value, label]) => {
+        // Each tab reports its own door, so a route that loses its approval is
+        // visibly shut rather than looking available until it is clicked.
+        const door = value === mode ? register : routeDoor(ROUTE_BY_MODE[value]);
+        return (
+          <button
+            key={value}
+            type="button"
+            role="tab"
+            aria-selected={mode === value}
+            data-locked={door.open ? undefined : 'true'}
+            onClick={() => onSelect(value)}
+          >
+            {label}
+          </button>
+        );
+      })}
     </nav>
   );
 }
@@ -145,14 +194,8 @@ function BalanceBlock({ state, onRefresh }: { state: BankState; onRefresh: () =>
   );
 }
 
-function ComposeBlock({
-  state,
-  panel,
-}: {
-  state: BankState;
-  panel: ReturnType<typeof createBankPanel>;
-}) {
-  const busy = state.flow.name === 'preparing';
+function ComposeBlock({ state, panel }: { state: BankState; panel: BankPanelMachine }) {
+  const busy = state.flow.name === 'preparing' || state.adding;
   const needsRecipient = state.mode !== 'shield';
   const max = panel.maxSpendable();
 
@@ -193,7 +236,7 @@ function ComposeBlock({
         </label>
       ) : null}
 
-      <button type="submit" disabled={!state.door.open || busy}>
+      <button type="submit" disabled={busy}>
         {COPY.batch.add}
       </button>
 
@@ -202,22 +245,17 @@ function ComposeBlock({
       <p className="panel-hint">{COPY.batch.why}</p>
       <button
         type="button"
+        className="review"
         disabled={state.batch.length === 0 || busy}
         onClick={() => void panel.prepare()}
       >
-        {busy ? COPY.flow.preparing : COPY.flow.review}
+        {state.flow.name === 'preparing' ? COPY.flow.preparing : COPY.flow.review}
       </button>
     </form>
   );
 }
 
-function BatchList({
-  state,
-  panel,
-}: {
-  state: BankState;
-  panel: ReturnType<typeof createBankPanel>;
-}) {
+function BatchList({ state, panel }: { state: BankState; panel: BankPanelMachine }) {
   if (state.batch.length === 0) {
     return <p className="batch-empty">{COPY.batch.empty}</p>;
   }
@@ -240,7 +278,14 @@ function BatchList({
   );
 }
 
-function ReviewBlock({
+/**
+ * Review and submission are one surface.
+ *
+ * The disclosures and the figures stay on screen while the wallet works, and
+ * the confirm button is disabled rather than removed — the panel must not
+ * rearrange itself under the player's cursor at the moment of commitment.
+ */
+function CommitBlock({
   state,
   onConfirm,
   onCancel,
@@ -249,8 +294,10 @@ function ReviewBlock({
   onConfirm: () => void;
   onCancel: () => void;
 }) {
-  if (state.flow.name !== 'review') return null;
-  const { summary } = state.flow;
+  const flow = state.flow;
+  if (flow.name !== 'review' && flow.name !== 'submitting') return null;
+  const { summary } = flow;
+  const busy = flow.name === 'submitting';
 
   return (
     <div className="panel-review">
@@ -261,13 +308,14 @@ function ReviewBlock({
         ))}
       </ul>
 
+      {/* Exact figures: this is the number being agreed to, not an ambient one. */}
       <dl className="review-costs">
         <dt>{COPY.bank.poolFee}</dt>
-        <dd title={COPY.bank.poolFeeNote}>{formatStrk(summary.poolFee)}</dd>
+        <dd title={COPY.bank.poolFeeNote}>{formatStrkExact(summary.poolFee)}</dd>
         <dt>{COPY.bank.networkCost}</dt>
-        <dd>{formatStrk(summary.gasEstimate)}</dd>
+        <dd>{formatStrkExact(summary.gasEstimate)}</dd>
         <dt>{COPY.bank.total}</dt>
-        <dd>{formatStrk(summary.totalCost)}</dd>
+        <dd>{formatStrkExact(summary.totalCost)}</dd>
       </dl>
 
       {summary.warnings.length > 0 ? (
@@ -278,48 +326,18 @@ function ReviewBlock({
         </ul>
       ) : null}
 
-      <button type="button" onClick={onConfirm}>
-        {COPY.flow.confirm}
-      </button>
-      <button type="button" onClick={onCancel}>
-        {COPY.flow.cancel}
-      </button>
+      {flow.name === 'submitting' ? (
+        <p className="flow-pending" aria-live="polite" data-stage={flow.stage}>
+          {flow.message}
+        </p>
+      ) : null}
+
+      <ConfirmGate
+        disclosures={summary.disclosures}
+        busy={busy}
+        onConfirm={onConfirm}
+        onCancel={onCancel}
+      />
     </div>
   );
-}
-
-function describeIntent(intent: Intent): string {
-  switch (intent.kind) {
-    case 'shield':
-      return `${COPY.bank.shield} ${formatTokenAmountExact(intent.amount)}`;
-    case 'unshield':
-      return `${COPY.bank.unshield} ${formatTokenAmountExact(intent.amount)} → ${shortenAddress(intent.recipient)}`;
-    case 'transfer':
-      return `${COPY.bank.transfer} ${formatTokenAmountExact(intent.amount)} → ${shortenAddress(intent.recipient)}`;
-    case 'swap':
-      return `${formatTokenAmountExact(intent.amountIn)} → ${shortenAddress(intent.tokenOut)}`;
-  }
-}
-
-/**
- * Seam warnings, said plainly.
- *
- * `public-leg` carries its own detail string from `packages/privacy`, which
- * describes exactly what becomes visible; it is shown as given rather than
- * summarised, for the same reason the disclosures are.
- */
-function describeWarning(warning: import('@strkworld/privacy').BatchWarning): string {
-  switch (warning.kind) {
-    case 'public-leg':
-      return warning.detail;
-    case 'leaves-below-fee':
-      return `${COPY.balance.feeReserved} (${formatStrk(warning.remaining)} left)`;
-    case 'funds-maturing':
-      return `${COPY.balance.maturing} ${formatStrk(warning.maturingAmount)}`;
-    case 'recipient-unregistered':
-      return COPY.notices.recipientUnregistered;
-    case 'multiple-prompts':
-      // Reported by the seam, never assumed by the shell.
-      return `Your wallet expects to ask you ${warning.count} times.`;
-  }
 }

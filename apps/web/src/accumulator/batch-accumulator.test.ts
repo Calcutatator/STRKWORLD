@@ -96,6 +96,18 @@ describe('batch accumulator', () => {
     expect(batch.accept('transfer').ok).toBe(false);
   });
 
+  it('does not treat a prototype member as an intent kind', () => {
+    // `kind in INTENT_SHAPES` walked the prototype chain, so `toString` passed
+    // the kind check and was then indexed into as if it were a field list.
+    const batch = createBatchAccumulator();
+    for (const kind of ['toString', 'constructor', 'hasOwnProperty', '__proto__']) {
+      const result = batch.accept({ kind, token: TOKEN, amount: 1n });
+      expect(result.ok, kind).toBe(false);
+      expect(!result.ok && result.rejection.reason).toBe('not-an-intent');
+    }
+    expect(batch.intents).toHaveLength(0);
+  });
+
   it('rejects an intent missing a required field', () => {
     const batch = createBatchAccumulator();
     const result = batch.accept({ kind: 'transfer', token: TOKEN, amount: 1n });

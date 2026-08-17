@@ -66,9 +66,17 @@ export function formatTokenAmount(
   return trimmed === '' || trimmed === '-' ? '0' : trimmed;
 }
 
-/** `"12.5 STRK"`. The world only ever receives pre-formatted strings. */
+/**
+ * `"12.5 STRK"`, shortened. For ambient display only — the HUD, a list of
+ * balances. Never for a figure the player is agreeing to.
+ */
 export function formatStrk(amount: bigint): string {
   return `${formatTokenAmount(amount)} ${STRK_SYMBOL}`;
+}
+
+/** `"12.500000000000000001 STRK"`. Every figure at the commit point uses this. */
+export function formatStrkExact(amount: bigint): string {
+  return `${formatTokenAmountExact(amount)} ${STRK_SYMBOL}`;
 }
 
 /**

@@ -1,11 +1,12 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   FakePrivacyOperations,
-  PrivacyError,
   type Address,
   type PrivacyOperations,
   type PrivateBalance,
 } from '@strkworld/privacy';
+import type { ShellFailure } from '../../privacy/errors.js';
+import { PRIVACY_REGISTER } from '../../privacy/register.js';
 import { COPY } from '../../copy.js';
 import { formatTokenAmountExact, parseTokenAmount } from '../../format.js';
 import { createConnectFlow } from '../../connect/connect-machine.js';
@@ -16,6 +17,7 @@ const BOB: Address = '0x02b4c7d1a1f8f39e0e6e8b9a2c7d0e3f4a5b6c7d8e9f0a1b2c3d4e5f
 const STRANGER: Address = '0x0111111111111111111111111111111111111111111111111111111111111111';
 
 const POOL_FEE = 6_000000000000000000n;
+const SHIELD_DISCLOSURE = PRIVACY_REGISTER.find((entry) => entry.route === 'bank.shield')!.disclosure;
 const strk = (whole: string) => parseTokenAmount(whole)!;
 
 function fake(overrides: ConstructorParameters<typeof FakePrivacyOperations>[0] = {}) {
@@ -124,14 +126,46 @@ describe('bank panel — maturity-aware balance', () => {
     expect(balance.status === 'loaded' && balance.spendable).toBe(strk('100'));
   });
 
-  it('offers a maximum that leaves the live pool fee behind', async () => {
+  it('offers no maximum until the network cost has been quoted', async () => {
+    // Both fees come out of the same shielded balance. A maximum that reserves
+    // only the pool fee is a button that always fails at prepare.
     const panel = await openPanel(fake());
     await panel.refreshBalance();
     panel.setMode('transfer');
 
-    expect(panel.maxSpendable()).toBe(strk('100') - POOL_FEE);
+    expect(panel.store.getState().quotedGasEstimate).toBeNull();
+    expect(panel.maxSpendable()).toBeNull();
     panel.applyMax();
-    expect(panel.store.getState().amountText).toBe(formatTokenAmountExact(strk('100') - POOL_FEE));
+    expect(panel.store.getState().amountText).toBe('');
+    expect(panel.store.getState().notice?.text).toBe(COPY.balance.costUnknown);
+  });
+
+  it('reserves both fees once a quote exists, and that maximum survives review', async () => {
+    const operations = fake();
+    const panel = await openPanel(operations);
+    panel.setMode('transfer');
+    panel.setRecipient(BOB);
+    panel.setAmount('1');
+    await panel.addToBatch();
+    await panel.prepare();
+
+    const gas = panel.store.getState().quotedGasEstimate;
+    expect(gas).not.toBeNull();
+
+    panel.cancelPrepared();
+    panel.clearBatch();
+    await panel.refreshBalance();
+    panel.applyMax();
+
+    const max = strk('100') - POOL_FEE - gas!;
+    expect(panel.maxSpendable()).toBe(max);
+    expect(panel.store.getState().amountText).toBe(formatTokenAmountExact(max));
+
+    // The regression this exists for: MAX then Review used to fail every time.
+    panel.setRecipient(BOB);
+    await panel.addToBatch();
+    await panel.prepare();
+    expect(panel.store.getState().flow.name).toBe('review');
   });
 
   it('never derives a maximum when the wallet reports only an aggregate (D-022)', async () => {
@@ -397,14 +431,17 @@ describe('bank panel — fault injection', () => {
     await panel.addToBatch();
     await panel.prepare();
 
-    // The shell's pre-check sees the old fee; the wallet-side guard is what
-    // actually stops the signature.
+    // The shell's pre-check sees the old fee, so the wallet-side guard is what
+    // stops the signature. The seam can only report that as a generic failure,
+    // so the panel asks the pool what happened rather than matching a string.
     const stale = await operations.poolConfig();
     operations.setPoolFee(strk('20'));
-    vi.spyOn(operations, 'poolConfig').mockResolvedValue(stale);
+    vi.spyOn(operations, 'poolConfig').mockResolvedValueOnce(stale);
     await panel.confirm();
 
-    expect(panel.store.getState().flow.name).toBe('failed');
+    const flow = panel.store.getState().flow;
+    expect(flow.name === 'failed' && flow.message).toBe(COPY.notices.feeMoved);
+    expect(flow.name === 'failed' && flow.recovery).toBe('prepare-again');
     expect(operations.submitted).toHaveLength(0);
   });
 
@@ -470,7 +507,7 @@ describe('bank panel — error mapping', () => {
   it('maps an unmapped throw to the generic failure rather than leaking it', async () => {
     const operations = fake();
     vi.spyOn(operations, 'prepare').mockRejectedValue(new Error('RPC 500: upstream exploded'));
-    const seen: PrivacyError[] = [];
+    const seen: ShellFailure[] = [];
     const panel = await openPanel(operations, { onError: (error) => seen.push(error) });
     panel.setAmount('1');
     await panel.addToBatch();
@@ -479,6 +516,146 @@ describe('bank panel — error mapping', () => {
     const flow = panel.store.getState().flow;
     expect(flow.name === 'failed' && flow.message).toBe(COPY.errors.unknown);
     expect(flow.name === 'failed' && flow.message).not.toContain('RPC 500');
-    expect(seen[0]).toBeInstanceOf(PrivacyError);
+    expect(seen[0]?.kind).toBe('unknown');
+  });
+});
+
+describe('bank panel — disclosure follows the batch, not the controls', () => {
+  it('keeps the shield disclosure on the commit surface after a tab switch', async () => {
+    const panel = await openPanel(fake());
+    panel.setAmount('1');
+    await panel.addToBatch();
+
+    // The player queues a shield, then wanders to another tab. What is queued
+    // has not changed, so what must be disclosed has not changed either.
+    panel.setMode('transfer');
+    expect(panel.store.getState().disclosure).toBeNull();
+    expect(panel.store.getState().batchDisclosures).toEqual([SHIELD_DISCLOSURE]);
+
+    await panel.prepare();
+    const flow = panel.store.getState().flow;
+    expect(flow.name).toBe('review');
+    expect(flow.name === 'review' && flow.summary.disclosures).toEqual([SHIELD_DISCLOSURE]);
+  });
+
+  it('carries the register string verbatim, not a copy of it', async () => {
+    const panel = await openPanel(fake());
+    panel.setAmount('1');
+    await panel.addToBatch();
+    await panel.prepare();
+
+    const flow = panel.store.getState().flow;
+    const registerEntry = PRIVACY_REGISTER.find((entry) => entry.route === 'bank.shield');
+    expect(flow.name === 'review' && flow.summary.disclosures[0]).toBe(registerEntry?.disclosure);
+  });
+
+  it('discloses nothing for a batch of private transfers', async () => {
+    const panel = await openPanel(fake());
+    panel.setMode('transfer');
+    panel.setRecipient(BOB);
+    panel.setAmount('1');
+    await panel.addToBatch();
+    await panel.prepare();
+
+    const flow = panel.store.getState().flow;
+    expect(flow.name === 'review' && flow.summary.disclosures).toEqual([]);
+  });
+
+  it('keeps the disclosures on screen while the wallet works', async () => {
+    const operations = fake({ latencyMs: 2 });
+    const panel = await openPanel(operations);
+    panel.setAmount('1');
+    await panel.addToBatch();
+    await panel.prepare();
+
+    const submitting = panel.confirm();
+    const flow = panel.store.getState().flow;
+    expect(flow.name).toBe('submitting');
+    expect(flow.name === 'submitting' && flow.summary.disclosures).toEqual([SHIELD_DISCLOSURE]);
+    await submitting;
+  });
+});
+
+describe('bank panel — one attempt at a time', () => {
+  it('ignores a second confirm rather than submitting twice', async () => {
+    const operations = fake({ latencyMs: 2 });
+    const panel = await openPanel(operations);
+    panel.setMode('transfer');
+    panel.setRecipient(BOB);
+    panel.setAmount('1');
+    await panel.addToBatch();
+    await panel.prepare();
+
+    // Both clicks land in the same tick, before any re-render could disable
+    // the button. The synchronous move out of `review` is the actual guard.
+    await Promise.all([panel.confirm(), panel.confirm()]);
+
+    expect(operations.submitted).toHaveLength(1);
+    expect(panel.store.getState().flow.name).toBe('submitted');
+  });
+
+  it('never overwrites a settled submission with a late failure', async () => {
+    const operations = fake({ latencyMs: 2 });
+    operations.injectFault({ kind: 'unreachable', on: 'confirm' });
+    const panel = await openPanel(operations);
+    panel.setAmount('1');
+    await panel.addToBatch();
+    await panel.prepare();
+
+    const abandoned = panel.confirm();
+    // The player gives up and goes back to the counter while it is in flight.
+    panel.cancelPrepared();
+    await abandoned;
+
+    // Telling someone "nothing was signed" about a state they have left is the
+    // failure this guard exists for.
+    expect(panel.store.getState().flow.name).toBe('composing');
+  });
+
+  it('a panel closed mid-submission does not reopen into a stale result', async () => {
+    const operations = fake({ latencyMs: 2 });
+    const panel = await openPanel(operations);
+    panel.setAmount('1');
+    await panel.addToBatch();
+    await panel.prepare();
+
+    const inFlight = panel.confirm();
+    panel.close();
+    await inFlight;
+
+    expect(panel.store.getState().flow.name).toBe('idle');
+  });
+
+  it('queues one intent when Add is double-clicked', async () => {
+    const panel = await openPanel(fake());
+    panel.setMode('transfer');
+    panel.setRecipient(BOB);
+    panel.setAmount('1');
+
+    await Promise.all([panel.addToBatch(), panel.addToBatch()]);
+
+    expect(panel.store.getState().batch).toHaveLength(1);
+    expect(panel.store.getState().adding).toBe(false);
+  });
+});
+
+describe('bank panel — after a submission', () => {
+  it('offers the way back to the counter', async () => {
+    const panel = await openPanel(fake());
+    panel.setAmount('1');
+    await panel.addToBatch();
+    await panel.prepare();
+    await panel.confirm();
+    expect(panel.store.getState().flow.name).toBe('submitted');
+
+    panel.acknowledge();
+    expect(panel.store.getState().flow.name).toBe('composing');
+    expect(panel.store.getState().batch).toHaveLength(0);
+  });
+
+  it('acknowledge does nothing from any other state', async () => {
+    const panel = await openPanel(fake());
+    panel.acknowledge();
+    expect(panel.store.getState().flow.name).toBe('composing');
   });
 });

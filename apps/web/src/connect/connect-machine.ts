@@ -1,6 +1,7 @@
-import { PrivacyError, type PrivacyOperations, type WalletCapability } from '@strkworld/privacy';
+import type { PrivacyOperations, WalletCapability } from '@strkworld/privacy';
 import type { WalletStatus } from '@strkworld/shared';
 import { createStore, type Store } from '../store/store.js';
+import { toFailure } from '../privacy/errors.js';
 
 /**
  * The connect flow, as a state machine over capability detection.
@@ -91,12 +92,11 @@ export function createConnectFlow(operations: PrivacyOperations): ConnectFlow {
     },
 
     noteOperationError(error: unknown): ConnectState {
-      if (error instanceof PrivacyError) {
-        if (error.kind === 'not-registered') {
-          store.setState({ name: 'not-registered' });
-        } else if (error.kind === 'unsupported-wallet') {
-          store.setState({ name: 'unsupported-wallet', walletApiVersion: versionOf(store.getState()) });
-        }
+      const { kind } = toFailure(error);
+      if (kind === 'not-registered') {
+        store.setState({ name: 'not-registered' });
+      } else if (kind === 'unsupported-wallet') {
+        store.setState({ name: 'unsupported-wallet', walletApiVersion: versionOf(store.getState()) });
       }
       return store.getState();
     },
@@ -122,20 +122,18 @@ function classify(capability: WalletCapability): ConnectState {
 }
 
 function fromError(error: unknown): ConnectState {
-  if (error instanceof PrivacyError) {
-    if (error.kind === 'unsupported-wallet') {
+  switch (toFailure(error).kind) {
+    case 'unsupported-wallet':
       return { name: 'unsupported-wallet', walletApiVersion: null };
-    }
-    if (error.kind === 'not-registered') {
+    case 'not-registered':
       return { name: 'not-registered' };
-    }
     // A declined connection is not a failure state — the player is simply not
     // connected, and the connect room is where they should land.
-    if (error.kind === 'user-rejected') {
+    case 'user-rejected':
       return { name: 'disconnected' };
-    }
+    default:
+      return { name: 'unreachable' };
   }
-  return { name: 'unreachable' };
 }
 
 function versionOf(state: ConnectState): string | null {

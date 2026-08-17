@@ -31,6 +31,7 @@ disappear is accepted for v1 (D-019).
 | `src/accumulator/` | The batch accumulator |
 | `src/connect/` | Capability detection, and the rooms for a wallet that cannot help |
 | `src/panels/` | The building-panel framework, the privacy gate, and the rooms |
+| `src/privacy/` | The seam context, failure classification, and the register import |
 | `src/panels/bank/` | The Bank: shield, unshield, private transfer |
 | `src/copy.ts` | Every player-facing string the shell owns |
 | `src/format.ts` | `bigint` ↔ display. No `number` anywhere near money |
@@ -45,16 +46,22 @@ independent of each other:
 const worldBus = createEventBus<WorldEvents>();
 const shellBus = createEventBus<ShellEvents>();
 
-<PrivacyProvider shellBus={shellBus}>
+<PrivacyProvider operations={ops} shellBus={shellBus}>
   <WorldHost out={worldBus} in={shellBus} />
   <PanelLayer world={worldBus} />
 </PrivacyProvider>
 ```
 
-`PrivacyProvider` defaults to `FakePrivacyOperations`. That is the intended
-default, not a placeholder: the whole shell is built and tested against the
-deterministic fake, and the production adapter implements the same interface,
-so switching is one prop at the composition root.
+**There is no default seam.** `operations` is required unless `demo` is set
+explicitly, and `demo` throws in a production build. A fallback that quietly
+supplied the fake would mean a mis-wired build showing a working Bank holding
+250 STRK nobody owns — money-shaped fiction in a product whose whole claim is
+that it moves real funds.
+
+For local work, `<PrivacyProvider demo fallback={…}>` loads
+`FakePrivacyOperations` through a dynamic import. The whole shell is built and
+tested against that fake and the production adapter implements the same
+interface, so switching is one prop.
 
 ## Panels are state machines with a view on top
 
@@ -66,6 +73,13 @@ both practical:
   whether to sign a transaction is the part that gets tested.
 - The financial state machine outlives whatever the room looks like.
 
+Render rules get their own `.test.tsx` files. They use `react-dom/server`'s
+`renderToStaticMarkup` with a machine driven into the state under test and
+passed in — no jsdom, no testing-library, no new dependency. A correct machine
+rendered wrongly is its own class of defect, and it is the one this lane
+actually shipped: a disclosure keyed to a tab, a maximum that always failed, a
+confirm button that survived its own click.
+
 ## Rules the code enforces so nobody has to remember them
 
 **A balance read is a wallet interaction.** Ready 5.33.8 raises an explicit
@@ -74,11 +88,32 @@ Bank reads pool config and stops; the balance appears when the player asks, and
 returns to unrequested after a submission changes it. There is no timer in this
 app, and `bank-machine.test.ts` advances ten minutes of fake time to prove it.
 
-**Never derive MAX from an aggregate.** The shipped Wallet API returns one
-figure per token, so the production adapter sets `maturityKnown: false`. When it
-does, there is no maximum — not a guess, not the total (D-022). There is also no
-maximum for a shield, because the shell cannot see public STRK and D-013's
-stranding trap makes the last of it exactly what must not be sent.
+**Never state a maximum that has to be guessed.** Three separate cases, one
+rule. The shipped Wallet API returns one figure per token, so the production
+adapter sets `maturityKnown: false` — then there is no maximum, not a guess and
+not the total (D-022). There is no maximum for a shield, because the shell
+cannot see public STRK and D-013's stranding trap makes the last of it exactly
+what must not be sent. And there is no maximum before the first quote: the pool
+fee *and* the network cost come out of the same shielded balance, and the seam
+only reports the network cost at prepare time.
+
+**The confirm button lives in `ConfirmGate`, and nowhere else.** It takes the
+approved disclosures for the batch being committed as a required prop and
+renders them immediately above itself. Disclosures follow what is *queued*, not
+what control was last touched — otherwise queuing a shield and switching tab
+hides the disclosure while leaving the deposit confirmable.
+
+**Move state before you await.** A guard that reads the flow, awaits, and then
+transitions is not a guard: two clicks in one tick both pass it. Attempts carry
+an id, and a late answer from an abandoned one never patches state — a player
+must never be told "nothing was signed" about a settled transaction.
+
+**No runtime import of `@strkworld/privacy` in the shell.** Its entry point
+re-exports the wallet adapter, which pulls `starknet`; a single value import
+puts all of it in the entry chunk. Types are erased and free, failures are
+classified structurally in `src/privacy/errors.ts`, and the demo seam is loaded
+dynamically. `architecture.test.ts` enforces it, along with the rule that
+exactly one file deep-imports `packages/shared`.
 
 **Disclosures are imported, never written here.** The approved strings live in
 `packages/shared/src/privacy-grades.ts` (D-024). `copy.test.ts` fails if any of

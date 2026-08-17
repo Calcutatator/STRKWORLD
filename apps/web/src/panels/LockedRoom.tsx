@@ -25,10 +25,25 @@ export function LockedRoom({
 }) {
   return (
     <PanelFrame title={COPY.buildings[building]} disclosure={null} onClose={onClose}>
-      <p className="room-locked" data-lock-reason={reason}>
-        {message}
-      </p>
+      <LockedNotice reason={reason} message={message} />
     </PanelFrame>
+  );
+}
+
+/**
+ * The locked-door surface on its own.
+ *
+ * A building can be locked, and so can one control inside an otherwise open
+ * building — the Bank's shield tab would lock on its own if that route lost its
+ * approval. Both render this, so a locked route never appears as a working form
+ * with a greyed-out button: that reads as a bug, and invites a player to go
+ * looking for the way around it.
+ */
+export function LockedNotice({ reason, message }: { reason: LockReason; message: string }) {
+  return (
+    <p className="room-locked" data-lock-reason={reason} role="note">
+      {message}
+    </p>
   );
 }
 

@@ -1,9 +1,6 @@
+import type { Intent } from '@strkworld/privacy';
 import type { BuildingId } from '@strkworld/shared';
-import {
-  PRIVACY_REGISTER,
-  isRoutePlayable,
-  type RouteGrade,
-} from '@strkworld/shared/src/privacy-grades.js';
+import { PRIVACY_REGISTER, isRoutePlayable, type RouteGrade } from '../privacy/register.js';
 import { COPY } from '../copy.js';
 
 /**
@@ -100,6 +97,40 @@ export function buildingDoor(
   const routes = buildingRoutes(building, register);
   if (routes.length === 0) return locked('coming-soon');
   return routes.some((entry) => isRoutePlayable(entry)) ? OPEN : locked('unapproved-route');
+}
+
+/**
+ * Which graded route executes a given intent.
+ *
+ * The register grades the private transfer once, under the Post Office; the
+ * Bank's transfer control drives that same pool-native route rather than
+ * inventing an id the project lead never graded.
+ */
+export const ROUTE_BY_INTENT_KIND: Record<Intent['kind'], string> = {
+  shield: 'bank.shield',
+  unshield: 'bank.unshield',
+  transfer: 'post-office.transfer',
+  swap: 'exchange.swap',
+};
+
+/**
+ * The approved disclosures for the intents actually queued, de-duplicated.
+ *
+ * Derived from the batch rather than from whatever control the player last
+ * touched. A player who queues a shield and then switches tab is still about
+ * to commit a public deposit, and must still be told so at the moment they
+ * commit — which is why the commit surface renders this, not the tab.
+ */
+export function disclosuresForIntents(
+  intents: readonly Intent[],
+  register: readonly RouteGrade[] = PRIVACY_REGISTER,
+): readonly string[] {
+  const seen = new Set<string>();
+  for (const intent of intents) {
+    const disclosure = routeDisclosure(ROUTE_BY_INTENT_KIND[intent.kind], register);
+    if (disclosure) seen.add(disclosure);
+  }
+  return [...seen];
 }
 
 /** Routes that leave value sitting in public and must offer the way back (D-021). */

@@ -220,6 +220,54 @@ Format: `### YYYY-MM-DD — short title` then what, why it matters, how verified
 
 ---
 
+### 2026-08-16 — A correct state machine can still be a wrong screen
+
+Review of the Shell PR found four blockers. The machine layer passed 84 tests
+and every one of those blockers was real, because all four lived in the gap
+between what the machine decided and what a player could see or do.
+
+**The disclosure was keyed to a control, not to the batch.** The Bank showed
+the approved D-024 copy for the mode tab currently selected. Queue a shield,
+click the transfer tab, and the disclosure unmounted while the shield stayed
+queued and confirmable — a public deposit committed with the approved copy
+nowhere on screen. The fix is structural rather than careful: disclosures are
+derived from the intents actually queued, carried on the prepared summary, and
+rendered by the one component that owns the confirm button. A panel cannot ship
+a confirm button without passing the disclosures for what it commits.
+
+**A guard that runs before an `await` is not a guard.** `confirm()` checked the
+flow, then awaited a fee read before moving out of `review`. Two clicks in one
+tick both passed the check. Worse, a late rejection from an abandoned attempt
+could overwrite a settled `submitted` with `failed` — telling a player nothing
+was signed about a transaction that had settled. Both are fixed by moving the
+state transition above every await and giving each attempt an id that later
+patches check.
+
+**A reserve must match the accounting that spends it.** MAX subtracted only the
+pool fee, but prepare charges pool fee *plus* the relay/gas estimate from the
+same shielded balance, so MAX-then-review failed every time. The seam only
+reports the network cost at prepare time, so there is no maximum to offer before
+the first quote — the panel now says so instead of guessing, which is the same
+rule D-022 already forces for note maturity.
+
+**A lint-style test must be verified by breaking the code.** The first version
+of the shell's import-boundary test passed while asserting nothing: its regex
+matched the word "imports" in a doc comment rather than the import statement
+below it. It also missed `export … from` entirely, so a re-export of the
+forbidden path would have sailed through.
+
+*Verified:* every fix by an added failing-first test — 40 new ones, including
+component tests that render each surface. The boundary test was verified
+adversarially: two temporary files (a deep `@strkworld/shared/src/…` import and
+a runtime `@strkworld/privacy` import) were added, each observed to fail the
+relevant assertion, then deleted and the suite re-run green. Component tests use
+`react-dom/server`'s `renderToStaticMarkup` with a pre-driven machine injected —
+no jsdom, no testing-library, no new dependency — which works because
+`useSyncExternalStore` is given a server snapshot. No wallet, no network and no
+transaction was involved.
+
+---
+
 ### 2026-08-16 — Four traps found building the shell against the fake seam
 
 Shell lane, building the panel framework, the Bank and the batch accumulator
@@ -249,12 +297,14 @@ failure with an obvious next step. The Bank now re-reads `poolConfig()`
 immediately before confirming purely to produce a legible sentence, and still
 passes `feeCeiling` — the seam remains the guard, the read is only for words.
 
-**Two silent tooling traps in `apps/web`.** Invariant check 4d greps raw file
-text with no comment stripping (unlike check 5), so a *comment* mentioning a
-forbidden protocol field fails the build. And `vitest.config.ts` includes only
-`apps/**/*.test.ts` — a `.test.tsx` is never collected, so a React component
-test would pass CI by not existing. Panel logic lives in plain `.ts` state
-machines partly for this reason.
+**Two silent tooling traps in `apps/web`. Both fixed by the tooling PR (#4) —
+recorded here for the reasoning, not as current behaviour.** Invariant check 4d
+greped raw file text with no comment stripping (unlike check 5), so a *comment*
+mentioning a forbidden protocol field failed the build; it is comment-aware now.
+And `vitest.config.ts` included only `apps/**/*.test.ts` — a `.test.tsx` was
+never collected, so a React component test would have passed CI by not existing;
+`.tsx` is collected now. Panel logic still lives in plain `.ts` state machines,
+but that is a testability choice rather than a workaround.
 
 *Verified:* the two resolution claims by running `tsc --noEmit -p tsconfig.json`
 and the full `vitest run` against the subpath import; the register claims by

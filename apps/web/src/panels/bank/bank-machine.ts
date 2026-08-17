@@ -1,16 +1,15 @@
-import {
-  PrivacyError,
-  type Address,
-  type BatchWarning,
-  type Intent,
-  type OperationStage,
-  type PoolConfig,
-  type PreparedBatch,
-  type PrivacyErrorKind,
-  type PrivacyOperations,
+import type {
+  Address,
+  BatchWarning,
+  Intent,
+  OperationStage,
+  PoolConfig,
+  PreparedBatch,
+  PrivacyErrorKind,
+  PrivacyOperations,
 } from '@strkworld/privacy';
-import type { RouteGrade } from '@strkworld/shared/src/privacy-grades.js';
-import { PRIVACY_REGISTER } from '@strkworld/shared/src/privacy-grades.js';
+import { PRIVACY_REGISTER, type RouteGrade } from '../../privacy/register.js';
+import { toFailure, type ShellFailure } from '../../privacy/errors.js';
 import { COPY } from '../../copy.js';
 import { formatTokenAmountExact, looksLikeAddress, parseTokenAmount, sameAddress } from '../../format.js';
 import { createStore, type Store } from '../../store/store.js';
@@ -19,7 +18,13 @@ import {
   type BatchAccumulator,
   type BatchRejectionReason,
 } from '../../accumulator/batch-accumulator.js';
-import { routeDisclosure, routeDoor, type DoorState } from '../routes.js';
+import {
+  ROUTE_BY_INTENT_KIND,
+  disclosuresForIntents,
+  routeDisclosure,
+  routeDoor,
+  type DoorState,
+} from '../routes.js';
 
 /**
  * The Bank panel, as a state machine.
@@ -29,8 +34,9 @@ import { routeDisclosure, routeDoor, type DoorState } from '../routes.js';
  * intent through the batch accumulator; the panel never composes a protocol
  * action and has no way to name a contract or a selector (D-018).
  *
- * Three behaviours here are consequences of verified wallet behaviour rather
- * than taste, and are the reason this is a state machine and not a form:
+ * Five behaviours here are consequences of verified protocol or wallet
+ * behaviour rather than taste, and are why this is a state machine and not a
+ * form:
  *
  * **A balance read is a wallet interaction, so it is never automatic.** Ready
  * 5.33.8 raises an explicit "Share private balances" approval for
@@ -47,21 +53,25 @@ import { routeDisclosure, routeDoor, type DoorState } from '../routes.js';
  * the funded run has not happened (D-028); the summary deliberately drops it,
  * and every pending state on screen is driven by the operation's own stage
  * (SPEC §5 rule 5).
+ *
+ * **Disclosures follow the batch, not the controls.** The approved copy shown
+ * at the commit point is derived from the intents actually queued, so switching
+ * tab after queuing a shield cannot hide the fact that a public deposit is what
+ * is about to be signed (D-020, D-024).
+ *
+ * **Every submission is an attempt with an identity.** A second confirm cannot
+ * start, and a late answer from an abandoned attempt cannot overwrite the state
+ * of the one that settled — telling a player "nothing was signed" about a
+ * settled transaction is the worst lie this panel could tell.
  */
 
 export type BankMode = 'shield' | 'unshield' | 'transfer';
 
-/**
- * The register grades the private transfer once, as `post-office.transfer`.
- * The Bank's transfer control drives that exact route, so it reads that entry
- * rather than inventing a `bank.transfer` grade the project lead never saw. If
- * the Bank's transfer is ever meant to be a distinct route, it needs its own
- * register entry — which is a frozen-seam change and a decision entry.
- */
+/** The graded route each control drives. See `ROUTE_BY_INTENT_KIND`. */
 export const ROUTE_BY_MODE: Record<BankMode, string> = {
-  shield: 'bank.shield',
-  unshield: 'bank.unshield',
-  transfer: 'post-office.transfer',
+  shield: ROUTE_BY_INTENT_KIND.shield,
+  unshield: ROUTE_BY_INTENT_KIND.unshield,
+  transfer: ROUTE_BY_INTENT_KIND.transfer,
 };
 
 export type BalanceView =
@@ -96,6 +106,12 @@ export interface PreparedSummary {
   /** The hard guard passed to `confirm`. Never signs above the quoted total. */
   feeCeiling: bigint;
   warnings: readonly BatchWarning[];
+  /**
+   * Approved disclosures for the routes in `intents`, verbatim from the
+   * register. Carried on the summary so the commit surface cannot render
+   * without them.
+   */
+  disclosures: readonly string[];
 }
 
 export type BankFlow =
@@ -104,7 +120,17 @@ export type BankFlow =
   | { name: 'composing' }
   | { name: 'preparing' }
   | { name: 'review'; summary: PreparedSummary }
-  | { name: 'submitting'; stage: OperationStage; message: string }
+  | {
+      name: 'submitting';
+      stage: OperationStage;
+      message: string;
+      /**
+       * Carried through submission so the approved disclosures and the figures
+       * stay on screen while the wallet works, rather than the panel swapping
+       * out from under the player at the moment of commitment.
+       */
+      summary: PreparedSummary;
+    }
   | { name: 'submitted'; transactionHash: string }
   | {
       name: 'failed';
@@ -123,15 +149,24 @@ export interface BankState {
   mode: BankMode;
   routeId: string;
   door: DoorState;
-  /** Approved copy, imported verbatim from the register. Null when private. */
+  /** Approved copy for the mode being composed. Null when the route is private. */
   disclosure: string | null;
+  /** Approved copy for what is queued. The commit point renders these. */
+  batchDisclosures: readonly string[];
   pool: PoolConfig | null;
   /** The game's money and its fee token, read live rather than hardcoded. */
   token: Address | null;
   balance: BalanceView;
+  /**
+   * Network cost from the most recent quote in this visit. The seam only
+   * reports it at prepare time, and MAX is not offered without it.
+   */
+  quotedGasEstimate: bigint | null;
   amountText: string;
   recipientText: string;
   batch: readonly Intent[];
+  /** True while a queue action is resolving, so a second click cannot double it. */
+  adding: boolean;
   notice: BankNotice | null;
   flow: BankFlow;
 }
@@ -139,10 +174,10 @@ export interface BankState {
 export interface BankPanelOptions {
   operations: PrivacyOperations;
   /**
-   * Called with every `PrivacyError` the panel sees so the shell can escalate
-   * a 118 or a 162 into its designed room. The panel still shows its own state.
+   * Called with every failure the panel sees so the shell can escalate a 118
+   * or a 162 into its designed room. The panel still shows its own state.
    */
-  onError?: (error: PrivacyError) => void;
+  onError?: (failure: ShellFailure) => void;
   /**
    * Headroom over the quoted total. Zero by default: we refuse to sign a fee
    * larger than the one the player was shown.
@@ -171,6 +206,8 @@ export interface BankPanel {
   prepare(signal?: AbortSignal): Promise<void>;
   confirm(signal?: AbortSignal): Promise<void>;
   cancelPrepared(): void;
+  /** Leave the receipt and return to the counter. */
+  acknowledge(): void;
   dismissNotice(): void;
 }
 
@@ -184,6 +221,17 @@ export function createBankPanel(options: BankPanelOptions): BankPanel {
   let prepared: PreparedBatch | null = null;
   let readCount = 0;
 
+  /**
+   * Identity for the current prepare/confirm attempt.
+   *
+   * Every patch from an asynchronous step checks it. Without this, a late
+   * rejection from an abandoned attempt can overwrite the state of the one
+   * that succeeded.
+   */
+  let attempt = 0;
+  const begin = (): number => (attempt += 1);
+  const current = (id: number): boolean => attempt === id;
+
   function patch(next: Partial<BankState>): void {
     store.setState((previous) => ({ ...previous, ...next }));
   }
@@ -192,17 +240,17 @@ export function createBankPanel(options: BankPanelOptions): BankPanel {
     patch({ notice: { tone, text } });
   }
 
-  function fail(error: unknown, recovery: 'prepare-again' | 'close'): void {
-    const privacyError = asPrivacyError(error);
-    onError?.(privacyError);
+  function setBatch(intents: readonly Intent[]): void {
+    patch({ batch: intents, batchDisclosures: disclosuresForIntents(intents, register) });
+  }
+
+  function fail(error: unknown, recovery: 'prepare-again' | 'close', id: number): void {
+    const failure = toFailure(error);
+    onError?.(failure);
+    if (!current(id)) return;
     discardPrepared();
     patch({
-      flow: {
-        name: 'failed',
-        kind: privacyError.kind,
-        message: COPY.errors[privacyError.kind],
-        recovery,
-      },
+      flow: { name: 'failed', kind: failure.kind, message: COPY.errors[failure.kind], recovery },
     });
   }
 
@@ -222,8 +270,11 @@ export function createBankPanel(options: BankPanelOptions): BankPanel {
     // unsafe button D-022 exists to prevent.
     if (!state.balance.maturityKnown) return null;
     const fee = state.pool?.feeAmount;
-    if (fee === undefined) return null;
-    const spendable = state.balance.spendable - fee;
+    // Both fees come out of the same shielded balance, so a maximum that
+    // reserves only the pool fee is a button that always fails at prepare.
+    // The network cost is only known once something has been costed.
+    if (fee === undefined || state.quotedGasEstimate === null) return null;
+    const spendable = state.balance.spendable - fee - state.quotedGasEstimate;
     return spendable > 0n ? spendable : null;
   }
 
@@ -238,16 +289,19 @@ export function createBankPanel(options: BankPanelOptions): BankPanel {
      * Ready 5.33.8 audit says a HUD must not have.
      */
     async open(signal?: AbortSignal): Promise<void> {
+      const id = begin();
       patch({ flow: { name: 'loading-pool' } });
       try {
         const pool = await operations.poolConfig(signal);
+        if (!current(id)) return;
         patch({ pool, token: pool.feeToken, flow: { name: 'composing' } });
       } catch (error) {
-        fail(error, 'close');
+        fail(error, 'close', id);
       }
     },
 
     close(): void {
+      begin(); // Invalidate anything still in flight.
       discardPrepared();
       accumulator.clear();
       store.setState(initialState(store.getState().mode, register));
@@ -297,14 +351,10 @@ export function createBankPanel(options: BankPanelOptions): BankPanel {
           },
         });
       } catch (error) {
-        const privacyError = asPrivacyError(error);
-        onError?.(privacyError);
+        const failure = toFailure(error);
+        onError?.(failure);
         patch({
-          balance: {
-            status: 'failed',
-            kind: privacyError.kind,
-            message: COPY.errors[privacyError.kind],
-          },
+          balance: { status: 'failed', kind: failure.kind, message: COPY.errors[failure.kind] },
         });
       }
     },
@@ -313,15 +363,26 @@ export function createBankPanel(options: BankPanelOptions): BankPanel {
 
     applyMax(): void {
       const max = computeMax();
-      if (max === null) {
+      if (max !== null) {
+        patch({
+          amountText: formatTokenAmountExact(max),
+          notice: { tone: 'info', text: COPY.balance.feeReserved },
+        });
+        return;
+      }
+      const state = store.getState();
+      if (state.balance.status === 'loaded' && !state.balance.maturityKnown) {
         notice('info', COPY.balance.maturityUnknown);
         return;
       }
-      patch({ amountText: formatTokenAmountExact(max), notice: { tone: 'info', text: COPY.balance.feeReserved } });
+      notice('info', COPY.balance.costUnknown);
     },
 
     async addToBatch(signal?: AbortSignal): Promise<void> {
       const state = store.getState();
+      // A second click while the first is still resolving would queue the same
+      // intent twice, and the player would see one row appear and then another.
+      if (state.adding) return;
       if (!state.door.open) {
         notice('error', state.door.message);
         return;
@@ -346,57 +407,59 @@ export function createBankPanel(options: BankPanelOptions): BankPanel {
         }
       }
 
-      let pending: BankNotice | null = null;
-      if (state.mode === 'transfer') {
-        // Preflight, because a transfer to an unregistered account otherwise
-        // fails late in the wallet with nothing a player can act on. The pool
-        // read and the 118 mapping must agree, so both exist.
-        try {
-          const status = await operations.recipientStatus(recipient, signal);
-          if (status === 'unregistered') {
-            notice('error', COPY.notices.recipientUnregistered);
+      patch({ adding: true });
+      try {
+        let pending: BankNotice | null = null;
+        if (state.mode === 'transfer') {
+          // Preflight, because a transfer to an unregistered account otherwise
+          // fails late in the wallet with nothing a player can act on. The pool
+          // read and the 118 mapping must agree, so both exist.
+          try {
+            const status = await operations.recipientStatus(recipient, signal);
+            if (status === 'unregistered') {
+              notice('error', COPY.notices.recipientUnregistered);
+              return;
+            }
+            if (status === 'unknown') {
+              pending = { tone: 'info', text: COPY.notices.recipientUnknown };
+            }
+          } catch (error) {
+            const failure = toFailure(error);
+            onError?.(failure);
+            notice('error', COPY.errors[failure.kind]);
             return;
           }
-          if (status === 'unknown') {
-            pending = { tone: 'info', text: COPY.notices.recipientUnknown };
-          }
-        } catch (error) {
-          const privacyError = asPrivacyError(error);
-          onError?.(privacyError);
-          notice('error', COPY.errors[privacyError.kind]);
+        }
+
+        const intent: Intent =
+          state.mode === 'shield'
+            ? { kind: 'shield', token: state.token, amount }
+            : state.mode === 'unshield'
+              ? { kind: 'unshield', token: state.token, amount, recipient }
+              : { kind: 'transfer', token: state.token, amount, recipient };
+
+        const result = accumulator.accept(intent);
+        if (!result.ok) {
+          notice('error', rejectionCopy(result.rejection));
           return;
         }
+
+        setBatch(result.value);
+        patch({ amountText: '', recipientText: '', notice: pending });
+      } finally {
+        patch({ adding: false });
       }
-
-      const intent: Intent =
-        state.mode === 'shield'
-          ? { kind: 'shield', token: state.token, amount }
-          : state.mode === 'unshield'
-            ? { kind: 'unshield', token: state.token, amount, recipient }
-            : { kind: 'transfer', token: state.token, amount, recipient };
-
-      const result = accumulator.accept(intent);
-      if (!result.ok) {
-        notice('error', rejectionCopy(result.rejection));
-        return;
-      }
-
-      patch({
-        batch: result.value,
-        amountText: '',
-        recipientText: '',
-        notice: pending,
-      });
     },
 
     removeFromBatch(index: number): void {
-      patch({ batch: accumulator.remove(index) });
+      setBatch(accumulator.remove(index));
     },
 
     clearBatch(): void {
       accumulator.clear();
       discardPrepared();
-      patch({ batch: accumulator.intents, notice: null, flow: { name: 'composing' } });
+      setBatch(accumulator.intents);
+      patch({ notice: null, flow: { name: 'composing' } });
     },
 
     /**
@@ -413,12 +476,18 @@ export function createBankPanel(options: BankPanelOptions): BankPanel {
         return;
       }
 
+      const id = begin();
       discardPrepared();
       patch({ flow: { name: 'preparing' }, notice: null });
       try {
         const batch = await operations.prepare([...confirmed.value], signal);
+        if (!current(id)) {
+          batch.discard();
+          return;
+        }
         prepared = batch;
         patch({
+          quotedGasEstimate: batch.gasEstimate,
           flow: {
             name: 'review',
             summary: {
@@ -428,6 +497,7 @@ export function createBankPanel(options: BankPanelOptions): BankPanel {
               totalCost: batch.totalCost,
               feeCeiling: batch.totalCost + feeTolerance,
               warnings: batch.warnings,
+              disclosures: disclosuresForIntents(batch.intents, register),
               // `promptCount` is deliberately not carried into the summary:
               // it is a source-derived expectation awaiting the funded run
               // (D-028), and no pending UI may be driven from it.
@@ -435,7 +505,7 @@ export function createBankPanel(options: BankPanelOptions): BankPanel {
           },
         });
       } catch (error) {
-        fail(error, 'prepare-again');
+        fail(error, 'prepare-again', id);
       }
     },
 
@@ -445,12 +515,19 @@ export function createBankPanel(options: BankPanelOptions): BankPanel {
       if (state.flow.name !== 'review' || !batch) return;
       const { summary } = state.flow;
 
+      // Leave `review` synchronously, before the first await. Two clicks in one
+      // tick both reach here; the second finds the flow already moved on. The
+      // disabled button is the courtesy, this is the guard.
+      const id = begin();
+      patch({ flow: { name: 'submitting', stage: 'composing', message: COPY.flow.handingOver, summary } });
+
       // Re-read the live fee before asking the wallet for anything. The seam's
       // ceiling is the real guard and is still passed below, but it can only
       // report "the fee moved" as a generic failure; reading it here means the
       // player gets that sentence instead of "something went wrong".
       try {
         const pool = await operations.poolConfig(signal);
+        if (!current(id)) return;
         patch({ pool });
         if (pool.feeAmount + summary.gasEstimate > summary.feeCeiling) {
           discardPrepared();
@@ -460,35 +537,52 @@ export function createBankPanel(options: BankPanelOptions): BankPanel {
           return;
         }
       } catch (error) {
-        fail(error, 'prepare-again');
+        fail(error, 'prepare-again', id);
         return;
       }
 
-      patch({ flow: { name: 'submitting', stage: 'composing', message: COPY.flow.handingOver } });
       try {
         const result = await batch.confirm({
           feeCeiling: summary.feeCeiling,
           signal,
           onProgress: ({ stage }) => {
-            patch({ flow: { name: 'submitting', stage, message: stageCopy(stage) } });
+            if (!current(id)) return;
+            patch({ flow: { name: 'submitting', stage, message: stageCopy(stage), summary } });
           },
         });
+        if (!current(id)) return;
         prepared = null;
         accumulator.clear();
+        setBatch(accumulator.intents);
         patch({
-          batch: accumulator.intents,
           flow: { name: 'submitted', transactionHash: result.transactionHash },
           // The balance moved. It is not re-read here: the player asks.
           balance: { status: 'unrequested' },
           notice: { tone: 'info', text: COPY.balance.changed },
         });
       } catch (error) {
-        fail(error, 'prepare-again');
+        // The seam reports a ceiling breach as a generic failure, so ask the
+        // pool whether that is what happened rather than matching on a string.
+        if (toFailure(error).kind === 'unknown' && (await feeMovedPast(summary, signal))) {
+          if (!current(id)) return;
+          discardPrepared();
+          patch({
+            flow: { name: 'failed', kind: 'unknown', message: COPY.notices.feeMoved, recovery: 'prepare-again' },
+          });
+          return;
+        }
+        fail(error, 'prepare-again', id);
       }
     },
 
     cancelPrepared(): void {
+      begin();
       discardPrepared();
+      patch({ flow: { name: 'composing' }, notice: null });
+    },
+
+    acknowledge(): void {
+      if (store.getState().flow.name !== 'submitted') return;
       patch({ flow: { name: 'composing' }, notice: null });
     },
 
@@ -496,6 +590,15 @@ export function createBankPanel(options: BankPanelOptions): BankPanel {
       patch({ notice: null });
     },
   };
+
+  async function feeMovedPast(summary: PreparedSummary, signal?: AbortSignal): Promise<boolean> {
+    try {
+      const pool = await operations.poolConfig(signal);
+      return pool.feeAmount + summary.gasEstimate > summary.feeCeiling;
+    } catch {
+      return false;
+    }
+  }
 }
 
 function initialState(mode: BankMode, register: readonly RouteGrade[]): BankState {
@@ -505,12 +608,15 @@ function initialState(mode: BankMode, register: readonly RouteGrade[]): BankStat
     routeId,
     door: routeDoor(routeId, register),
     disclosure: routeDisclosure(routeId, register),
+    batchDisclosures: [],
     pool: null,
     token: null,
     balance: { status: 'unrequested' },
+    quotedGasEstimate: null,
     amountText: '',
     recipientText: '',
     batch: [],
+    adding: false,
     notice: null,
     flow: { name: 'idle' },
   };
@@ -553,9 +659,4 @@ export function rejectionCopy(rejection: BatchRejectionReason): string {
     case 'not-an-intent':
       return COPY.notices.notAnIntent;
   }
-}
-
-function asPrivacyError(error: unknown): PrivacyError {
-  if (error instanceof PrivacyError) return error;
-  return new PrivacyError('unknown', 'unmapped failure', error);
 }

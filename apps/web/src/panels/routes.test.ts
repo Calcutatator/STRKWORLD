@@ -1,13 +1,16 @@
 import { describe, expect, it } from 'vitest';
-import { PRIVACY_REGISTER, type RouteGrade } from '@strkworld/shared/src/privacy-grades.js';
+import { PRIVACY_REGISTER, type RouteGrade } from '../privacy/register.js';
 import { COPY } from '../copy.js';
+import type { Intent } from '@strkworld/privacy';
 import {
   buildingDoor,
+  disclosuresForIntents,
   findRoute,
   isRouteOpen,
   routeDisclosure,
   routeDoor,
   routeReturnsToPool,
+  ROUTE_BY_INTENT_KIND,
 } from './routes.js';
 import { resolveRoom } from './panel-framework.js';
 
@@ -122,5 +125,35 @@ describe('room resolution', () => {
     const room = resolveRoom('vault', { vault: 'vault-panel' }, [unapprovedDeviation]);
     expect(room.kind).toBe('locked');
     expect(room.kind === 'locked' && room.reason).toBe('unapproved-route');
+  });
+});
+
+describe('disclosures for a batch', () => {
+  const TOKEN = '0x04718f5a0fc34cc1af16a1cdee98ffb20c31f5cd61d6ab07201858f4287c938d';
+  const BOB = '0x02b4c7d1a1f8f39e0e6e8b9a2c7d0e3f4a5b6c7d8e9f0a1b2c3d4e5f60718293';
+  const shield: Intent = { kind: 'shield', token: TOKEN, amount: 1n };
+  const transfer: Intent = { kind: 'transfer', token: TOKEN, amount: 1n, recipient: BOB };
+
+  it('returns the register string for each route in the batch, verbatim', () => {
+    const entry = findRoute('bank.shield');
+    expect(disclosuresForIntents([shield])).toEqual([entry?.disclosure]);
+  });
+
+  it('says nothing for a batch that needs no disclosure', () => {
+    expect(disclosuresForIntents([transfer, transfer])).toEqual([]);
+  });
+
+  it('de-duplicates, because one route said twice is not two disclosures', () => {
+    expect(disclosuresForIntents([shield, shield, shield])).toHaveLength(1);
+  });
+
+  it('covers every intent kind the seam can carry', () => {
+    const kinds: Intent['kind'][] = ['shield', 'unshield', 'transfer', 'swap'];
+    for (const kind of kinds) {
+      expect(ROUTE_BY_INTENT_KIND[kind], kind).toBeTruthy();
+      // Every mapped id must exist in the register, or the door fails closed
+      // and the control silently stops working.
+      expect(findRoute(ROUTE_BY_INTENT_KIND[kind]), kind).toBeDefined();
+    }
   });
 });

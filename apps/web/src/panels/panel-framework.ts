@@ -1,6 +1,5 @@
 import type { BuildingId } from '@strkworld/shared';
-import type { RouteGrade } from '@strkworld/shared/src/privacy-grades.js';
-import { PRIVACY_REGISTER } from '@strkworld/shared/src/privacy-grades.js';
+import { PRIVACY_REGISTER, type RouteGrade } from '../privacy/register.js';
 import { COPY } from '../copy.js';
 import { buildingDoor, type LockReason } from './routes.js';
 

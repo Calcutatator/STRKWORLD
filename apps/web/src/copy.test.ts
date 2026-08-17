@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { PRIVACY_REGISTER } from '@strkworld/shared/src/privacy-grades.js';
+import { PRIVACY_REGISTER } from './privacy/register.js';
 import { COPY, allCopyStrings } from './copy.js';
 
 describe('shell copy', () => {

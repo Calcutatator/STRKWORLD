@@ -156,7 +156,10 @@ function parseIntent(candidate: unknown): BatchResult<Intent> {
   }
   const record = candidate as Record<string, unknown>;
   const kind = record['kind'];
-  if (typeof kind !== 'string' || !(kind in INTENT_SHAPES)) {
+  // `Object.hasOwn`, not `in`: `in` walks the prototype chain, so `toString`
+  // and `constructor` would pass the kind check and then be indexed into,
+  // handing the validator a function where it expected a field list.
+  if (typeof kind !== 'string' || !Object.hasOwn(INTENT_SHAPES, kind)) {
     return reject(`unknown intent kind ${JSON.stringify(kind)}`);
   }
 

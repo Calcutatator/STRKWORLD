@@ -61,6 +61,8 @@ export const COPY = {
       'Your balance has changed. Read it again whenever you want the new figure — STRKWORLD will not ask your wallet on its own.',
     maturityUnknown:
       'Your wallet reports one total and decides for itself which notes are old enough to spend, so there is no maximum to fill in here.',
+    costUnknown:
+      'The network cost is only known once something has been costed, and it comes out of the same balance. Review anything once and the maximum appears.',
     maturing: 'Some of this is still maturing and cannot be spent yet.',
     feeReserved: 'The maximum leaves the pool fee behind, so you are not stranded one transaction short.',
   },
@@ -76,9 +78,15 @@ export const COPY = {
     review: 'Check this before you confirm',
     confirm: 'Confirm',
     cancel: 'Cancel',
-    back: 'Back',
+    back: 'Back to the counter',
     close: 'Close',
     submitted: 'Sent.',
+    /**
+     * Said without a number on purpose. How many times a wallet asks is a
+     * source-derived expectation awaiting the funded run (D-028), and printing
+     * a count is how a provisional finding becomes a promise to a player.
+     */
+    mayAskMoreThanOnce: 'Your wallet may ask you to confirm more than once.',
   },
 
   batch: {
