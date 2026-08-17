@@ -220,6 +220,104 @@ Format: `### YYYY-MM-DD — short title` then what, why it matters, how verified
 
 ---
 
+### 2026-08-16 — A correct state machine can still be a wrong screen
+
+Review of the Shell PR found four blockers. The machine layer passed 84 tests
+and every one of those blockers was real, because all four lived in the gap
+between what the machine decided and what a player could see or do.
+
+**The disclosure was keyed to a control, not to the batch.** The Bank showed
+the approved D-024 copy for the mode tab currently selected. Queue a shield,
+click the transfer tab, and the disclosure unmounted while the shield stayed
+queued and confirmable — a public deposit committed with the approved copy
+nowhere on screen. The fix is structural rather than careful: disclosures are
+derived from the intents actually queued, carried on the prepared summary, and
+rendered by the one component that owns the confirm button. A panel cannot ship
+a confirm button without passing the disclosures for what it commits.
+
+**A guard that runs before an `await` is not a guard.** `confirm()` checked the
+flow, then awaited a fee read before moving out of `review`. Two clicks in one
+tick both passed the check. Worse, a late rejection from an abandoned attempt
+could overwrite a settled `submitted` with `failed` — telling a player nothing
+was signed about a transaction that had settled. Both are fixed by moving the
+state transition above every await and giving each attempt an id that later
+patches check.
+
+**A reserve must match the accounting that spends it.** MAX subtracted only the
+pool fee, but prepare charges pool fee *plus* the relay/gas estimate from the
+same shielded balance, so MAX-then-review failed every time. The seam only
+reports the network cost at prepare time, so there is no maximum to offer before
+the first quote — the panel now says so instead of guessing, which is the same
+rule D-022 already forces for note maturity.
+
+**A lint-style test must be verified by breaking the code.** The first version
+of the shell's import-boundary test passed while asserting nothing: its regex
+matched the word "imports" in a doc comment rather than the import statement
+below it. It also missed `export … from` entirely, so a re-export of the
+forbidden path would have sailed through.
+
+*Verified:* every fix by an added failing-first test — 40 new ones, including
+component tests that render each surface. The boundary test was verified
+adversarially: two temporary files (a deep `@strkworld/shared/src/…` import and
+a runtime `@strkworld/privacy` import) were added, each observed to fail the
+relevant assertion, then deleted and the suite re-run green. Component tests use
+`react-dom/server`'s `renderToStaticMarkup` with a pre-driven machine injected —
+no jsdom, no testing-library, no new dependency — which works because
+`useSyncExternalStore` is given a server snapshot. No wallet, no network and no
+transaction was involved.
+
+---
+
+### 2026-08-16 — Four traps found building the shell against the fake seam
+
+Shell lane, building the panel framework, the Bank and the batch accumulator
+against `FakePrivacyOperations`. Four things the next agent in `apps/web`
+would otherwise rediscover the expensive way.
+
+**The canonical disclosures have no package entry point.** `packages/shared`
+declares no `exports` map and `src/index.ts` does not re-export
+`privacy-grades.ts`, so D-024's approved copy is only reachable as
+`@strkworld/shared/src/privacy-grades.js`. That resolves today under both
+`moduleResolution: bundler` and Vite's `.js`→`.ts` fallback, but it is
+load-bearing and fragile: **adding an `exports` field to that package.json
+breaks every disclosure import in the shell at once.** If anyone adds one, add
+a `./privacy-grades` subpath in the same change.
+
+**The register has no `bank.transfer` route.** The private transfer is graded
+once, as `post-office.transfer`. The Bank's transfer control drives that same
+pool-native route and therefore reads that entry — inventing a `bank.transfer`
+id would have failed closed to a locked door, which is the gate working
+correctly. If the Bank's transfer is ever meant to be a distinct route, it
+needs its own register entry, and that is a frozen-seam change plus a decision.
+
+**A fee that moved past the ceiling is not a distinct error kind.**
+`PreparedBatch.confirm()` rejects with `PrivacyError('unknown')`, so a shell
+that maps kinds to copy tells the player "that did not go through" for the one
+failure with an obvious next step. The Bank now re-reads `poolConfig()`
+immediately before confirming purely to produce a legible sentence, and still
+passes `feeCeiling` — the seam remains the guard, the read is only for words.
+
+**Two silent tooling traps in `apps/web`. Both fixed by the tooling PR (#4) —
+recorded here for the reasoning, not as current behaviour.** Invariant check 4d
+greped raw file text with no comment stripping (unlike check 5), so a *comment*
+mentioning a forbidden protocol field failed the build; it is comment-aware now.
+And `vitest.config.ts` included only `apps/**/*.test.ts` — a `.test.tsx` was
+never collected, so a React component test would have passed CI by not existing;
+`.tsx` is collected now. Panel logic still lives in plain `.ts` state machines,
+but that is a testability choice rather than a workaround.
+
+*Verified:* the two resolution claims by running `tsc --noEmit -p tsconfig.json`
+and the full `vitest run` against the subpath import; the register claims by
+reading `packages/shared/src/privacy-grades.ts` and asserting in
+`apps/web/src/panels/routes.test.ts` that an id absent from the register locks
+the door. The two tooling traps were confirmed by execution, not inspection: a
+temporary file whose only mention of the forbidden field was inside a comment
+made `./scripts/check-invariants.sh` fail, and a temporary `.test.tsx`
+containing `expect(1).toBe(2)` left the suite at 211 passing because it was
+never collected. Both temporary files were deleted. No wallet, no network and
+no transaction was involved at any point.
+---
+
 ### 2026-08-16 — Colyseus 0.17: five traps between the pinned set and a working room
 
 The narrow pin set (`@colyseus/core@0.17.50` + `@colyseus/ws-transport@0.17.13`
