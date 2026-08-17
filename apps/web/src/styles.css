@@ -1,0 +1,119 @@
+/*
+ * Shell layout, deliberately minimal.
+ *
+ * v1 is a hub — the buildings working is the target, not the paint (D-017). The
+ * one thing that has to be right here is stacking: interiors are overlays over
+ * the street (D-016), so the world fills the page and the panel sits above it.
+ * A visual pass is a later, separate job.
+ */
+
+:root {
+  color-scheme: dark;
+  --ink: #e8e8f0;
+  --ground: #0e0e14;
+  --panel: #1a1a24;
+  --panel-edge: #2c2c3a;
+  --accent: #6c7bff;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  margin: 0;
+  height: 100%;
+}
+
+body {
+  background: var(--ground);
+  color: var(--ink);
+  font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+}
+
+.strkworld {
+  position: relative;
+  height: 100vh;
+  overflow: hidden;
+}
+
+/* The world fills the page and sits at the bottom of the stack. */
+.world-host {
+  position: absolute;
+  inset: 0;
+}
+
+.world-host canvas {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+/* Every building surface is an overlay centred over the street. */
+.panel,
+.room {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  padding: 1.5rem;
+  background: color-mix(in srgb, var(--ground) 72%, transparent);
+  z-index: 10;
+}
+
+.panel > *,
+.room > * {
+  width: min(30rem, 100%);
+  background: var(--panel);
+  border: 1px solid var(--panel-edge);
+  border-radius: 12px;
+  padding: 1.5rem;
+}
+
+/* PanelFrame renders its own <section class="panel">; keep its body readable. */
+.panel-header {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.panel-disclosure,
+.commit-disclosures,
+.room-locked,
+.panel-notice {
+  border-left: 3px solid var(--accent);
+  padding-left: 0.75rem;
+  margin: 0.75rem 0;
+  opacity: 0.92;
+}
+
+button {
+  font: inherit;
+  color: var(--ink);
+  background: #262636;
+  border: 1px solid var(--panel-edge);
+  border-radius: 8px;
+  padding: 0.5rem 0.9rem;
+  cursor: pointer;
+}
+
+button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+button[data-locked="true"] {
+  opacity: 0.5;
+}
+
+.shell-boot,
+.shell-crashed {
+  display: grid;
+  place-items: center;
+  height: 100vh;
+  padding: 2rem;
+  text-align: center;
+}

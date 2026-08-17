@@ -126,6 +126,11 @@ export const COPY = {
 
   unbuilt: 'This room is still being built.',
 
+  boot: 'Waking up the city…',
+  productionNotWired:
+    'STRKWORLD is not wired to a live wallet yet. This build runs against a practice city, which is disabled here on purpose — no real balance would ever be shown.',
+  crashed: 'Something in the city fell over. Reloading the page will bring it back.',
+
   notices: {
     badAmount: 'That is not an amount this token can hold. Check the number and the decimal places.',
     badRecipient: 'That does not look like a Starknet address.',

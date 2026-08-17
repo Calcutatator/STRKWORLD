@@ -220,6 +220,53 @@ Format: `### YYYY-MM-DD — short title` then what, why it matters, how verified
 
 ---
 
+### 2026-08-17 — The composition root, and the one door the world never closes
+
+Wired the shell's composition root (`apps/web/src/main.tsx` + `App.tsx`) over
+the World lane's door triggers, all against the fake. Three things the next
+agent in `apps/web` or the World lane should know.
+
+**`world:exit-building` exists in the frozen bus, but the world does not consume
+it yet.** `packages/shared` declares it in `ShellEvents`, so the shell emits it
+on panel close as designed — but `street-scene.ts` only reads the `in` bus's
+type, never subscribes to it (grep: the sole reference to `in` in
+`packages/world/src` is the runtime's config type). And the world does not
+install its own `input-gate` in the scene either. Net effect today: closing a
+panel with the Close button emits `world:exit-building` into the void, and
+because input is never suspended, the player was free to walk the whole time.
+Walking off an *entered* door emits `building:exited`, which closes the panel —
+so the Bank closes on walk-away. This is a World-lane wiring gap, not a shell
+one; flagged, not touched.
+
+**The locked Vault emits no exit, by the world's own design.**
+`door-trigger.ts:60-61` emits `building:exited` only for a door that was
+actually *entered*; a locked door emits `building:locked` on arrival and
+nothing on departure (asserted in `door-trigger.test.ts:58`, "never
+entered/exited"). So the shell's locked surface cannot auto-close on
+walk-away — it is dismissed with its Close control instead. Auto-close would
+need the world to emit an exit/left signal for locked doors (or gate input on
+`building:locked` the way it does on `building:entered`). That is a
+World/shared change; the shell handles what the contract actually sends.
+
+**The preview dev server can bind to the wrong checkout.** A dev smoke against
+`preview_start` served a stale `main.tsx` (`export {}`) because the reused
+preview process was rooted in a *different* clone in the scratchpad
+(`scratchpad/STRKWORLD`), not the working tree. Confirmed by the served module's
+sourcemap carrying the old content and `ps` showing the vite process's cwd.
+Running `vite` directly from the actual clone rendered correctly: React mounts,
+`main.strkworld` + `.world-host` + a Phaser canvas present, the street draws
+(facades, pavement, grass, avatar, camera-follow), zero console errors. If a
+preview looks stale, check the vite process's working directory before
+believing the code is wrong.
+
+*Verified:* `npm run build` succeeds with Phaser (1.38 MB) and the seam-bearing
+`demo-operations` (543 kB, pulls starknet) in their own lazy chunks, entry chunk
+229 kB; `scripts/check-headers.mjs` green (no isolation headers); full suite 414
+across 35 files; the browser mount checked in a real Chromium against the
+correct clone. No wallet, no network, no transaction.
+
+---
+
 ### 2026-08-17 — Colyseus: the first client's join options can become the room's config
 
 This is the highest-severity finding in the project so far, and it broke the
