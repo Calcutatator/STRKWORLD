@@ -10,6 +10,7 @@ import { PRIVACY_REGISTER } from '../../privacy/register.js';
 import { COPY } from '../../copy.js';
 import { formatTokenAmountExact, parseTokenAmount } from '../../format.js';
 import { createConnectFlow } from '../../connect/connect-machine.js';
+import { createReceiptLedger } from '../../receipts/receipt-ledger.js';
 import { createBankPanel, type BankPanel } from './bank-machine.js';
 
 const STRK: Address = '0x04718f5a0fc34cc1af16a1cdee98ffb20c31f5cd61d6ab07201858f4287c938d';
@@ -32,9 +33,16 @@ async function openPanel(
   operations: PrivacyOperations,
   options: Partial<Parameters<typeof createBankPanel>[0]> = {},
 ): Promise<BankPanel> {
-  const panel = createBankPanel({ operations, ...options });
+  const panel = createBankPanel({ operations, receipts: createReceiptLedger(), ...options });
   await panel.open();
   return panel;
+}
+
+/** The network cost the seam just quoted, read off the review state. */
+function quotedCost(panel: BankPanel): bigint {
+  const flow = panel.store.getState().flow;
+  if (flow.name !== 'review') throw new Error(`expected review, got ${flow.name}`);
+  return flow.summary.gasEstimate;
 }
 
 afterEach(() => {
@@ -133,14 +141,33 @@ describe('bank panel — maturity-aware balance', () => {
     await panel.refreshBalance();
     panel.setMode('transfer');
 
-    expect(panel.store.getState().quotedGasEstimate).toBeNull();
+    expect(panel.store.getState().quotedGasForNextIntent).toBeNull();
     expect(panel.maxSpendable()).toBeNull();
     panel.applyMax();
     expect(panel.store.getState().amountText).toBe('');
     expect(panel.store.getState().notice?.text).toBe(COPY.balance.costUnknown);
   });
 
-  it('reserves both fees once a quote exists, and that maximum survives review', async () => {
+  it('offers no maximum for a visit shape it has never seen costed', async () => {
+    // The relay fee is charged per action, so a figure measured on a one-intent
+    // batch is not the cost of a two-intent batch. Reusing it is what made MAX
+    // a button that always failed.
+    const panel = await openPanel(fake());
+    panel.setMode('transfer');
+    panel.setRecipient(BOB);
+    panel.setAmount('1');
+    await panel.addToBatch();
+    await panel.prepare();
+    panel.cancelPrepared();
+    await panel.refreshBalance();
+
+    // One transfer has been costed; a batch of two has not, and that is the
+    // shape another Add would create.
+    expect(panel.store.getState().quotedGasForNextIntent).toBeNull();
+    expect(panel.maxSpendable()).toBeNull();
+  });
+
+  it('reserves both fees for the empty visit, and that maximum survives review', async () => {
     const operations = fake();
     const panel = await openPanel(operations);
     panel.setMode('transfer');
@@ -148,16 +175,13 @@ describe('bank panel — maturity-aware balance', () => {
     panel.setAmount('1');
     await panel.addToBatch();
     await panel.prepare();
-
-    const gas = panel.store.getState().quotedGasEstimate;
-    expect(gas).not.toBeNull();
-
+    const gasForOne = quotedCost(panel);
     panel.cancelPrepared();
     panel.clearBatch();
     await panel.refreshBalance();
-    panel.applyMax();
 
-    const max = strk('100') - POOL_FEE - gas!;
+    panel.applyMax();
+    const max = strk('100') - POOL_FEE - gasForOne;
     expect(panel.maxSpendable()).toBe(max);
     expect(panel.store.getState().amountText).toBe(formatTokenAmountExact(max));
 
@@ -166,6 +190,56 @@ describe('bank panel — maturity-aware balance', () => {
     await panel.addToBatch();
     await panel.prepare();
     expect(panel.store.getState().flow.name).toBe('review');
+  });
+
+  it('counts the queued intents, and survives review, once that shape is costed', async () => {
+    const operations = fake();
+    const panel = await openPanel(operations);
+    panel.setMode('transfer');
+
+    // Cost a two-transfer visit, so the shape a MAX would create is known.
+    for (const amount of ['1', '1']) {
+      panel.setRecipient(BOB);
+      panel.setAmount(amount);
+      await panel.addToBatch();
+    }
+    await panel.prepare();
+    const gasForTwo = quotedCost(panel);
+    panel.cancelPrepared();
+
+    // Drop back to one queued intent. Cancelling never empties the visit, so
+    // the remaining 1 STRK has to count against the maximum.
+    panel.removeFromBatch(1);
+    expect(panel.store.getState().batch).toHaveLength(1);
+    await panel.refreshBalance();
+
+    const max = strk('100') - POOL_FEE - gasForTwo - strk('1');
+    expect(panel.maxSpendable()).toBe(max);
+
+    panel.applyMax();
+    panel.setRecipient(BOB);
+    await panel.addToBatch();
+    await panel.prepare();
+    expect(panel.store.getState().flow.name).toBe('review');
+  });
+
+  it('offers no maximum once the visit already spends everything', async () => {
+    const operations = fake({ balances: { [STRK]: strk('10') } });
+    const panel = await openPanel(operations);
+    panel.setMode('transfer');
+    for (const amount of ['4', '1']) {
+      panel.setRecipient(BOB);
+      panel.setAmount(amount);
+      await panel.addToBatch();
+    }
+    await panel.prepare();
+    panel.cancelPrepared();
+    panel.removeFromBatch(1);
+    await panel.refreshBalance();
+
+    // 10 held, 4 queued, 6 pool fee and the relay estimate on top: the visit
+    // already spends more than there is, so there is no maximum to offer.
+    expect(panel.maxSpendable()).toBeNull();
   });
 
   it('never derives a maximum when the wallet reports only an aggregate (D-022)', async () => {
@@ -657,5 +731,304 @@ describe('bank panel — after a submission', () => {
     const panel = await openPanel(fake());
     panel.acknowledge();
     expect(panel.store.getState().flow.name).toBe('composing');
+  });
+});
+
+describe('bank panel — a receipt outlives the room', () => {
+  /**
+   * The panel's lifecycle is not the player's decision: the world emits
+   * `building:exited` and `PanelLayer` unmounts the panel. If the hash lived in
+   * panel state, a transaction that settled during that would leave the player
+   * with nothing at all.
+   *
+   * These tests target the window **after** the wallet has been handed the
+   * batch, which is the one that loses money-shaped information. The
+   * pre-signing window is covered above and is safe by construction: nothing
+   * was signed, so there is nothing to lose.
+   */
+
+  /**
+   * Hold the seam inside `PreparedBatch.confirm()` so the close lands mid-sign.
+   * `entered` resolves when the wallet has been handed the batch; `release`
+   * lets it settle. No timers, so no ordering left to chance.
+   */
+  function gateSigning(operations: FakePrivacyOperations): {
+    entered: Promise<void>;
+    release: () => void;
+  } {
+    let onEntered!: () => void;
+    let onRelease!: () => void;
+    const entered = new Promise<void>((resolve) => {
+      onEntered = resolve;
+    });
+    const held = new Promise<void>((resolve) => {
+      onRelease = resolve;
+    });
+
+    const realPrepare = operations.prepare.bind(operations);
+    vi.spyOn(operations, 'prepare').mockImplementation(async (intents, signal) => {
+      const batch = await realPrepare(intents, signal);
+      return {
+        ...batch,
+        async confirm(options) {
+          onEntered();
+          await held;
+          return batch.confirm(options);
+        },
+      };
+    });
+
+    return { entered, release: onRelease };
+  }
+
+  it('records the hash even when the room closes while the wallet is signing', async () => {
+    const receipts = createReceiptLedger();
+    const operations = fake();
+    const gate = gateSigning(operations);
+    const panel = createBankPanel({ operations, receipts });
+    await panel.open();
+    panel.setAmount('1');
+    await panel.addToBatch();
+    await panel.prepare();
+
+    const inFlight = panel.confirm();
+    await gate.entered;
+    // The world pulls the player out of the building mid-signature.
+    panel.close();
+    gate.release();
+    await inFlight;
+
+    // The transaction settled. Losing the receipt is not an option.
+    expect(operations.submitted).toHaveLength(1);
+    expect(receipts.pending('bank')).toHaveLength(1);
+    expect(receipts.pending('bank')[0]?.transactionHash).toMatch(/^0xfake/);
+    expect(receipts.pending('bank')[0]?.intents).toHaveLength(1);
+    // And the closed panel was not written into.
+    expect(panel.store.getState().flow.name).toBe('idle');
+  });
+
+  it('shows an outstanding receipt when the room reopens', async () => {
+    const receipts = createReceiptLedger();
+    const operations = fake();
+    const gate = gateSigning(operations);
+    const first = createBankPanel({ operations, receipts });
+    await first.open();
+    first.setAmount('1');
+    await first.addToBatch();
+    await first.prepare();
+    const inFlight = first.confirm();
+    await gate.entered;
+    first.close();
+    gate.release();
+    await inFlight;
+
+    // PanelLayer builds a new machine on remount, so the receipt has to be
+    // found rather than remembered.
+    vi.restoreAllMocks();
+    const reopened = createBankPanel({ operations, receipts });
+    await reopened.open();
+
+    const flow = reopened.store.getState().flow;
+    expect(flow.name).toBe('submitted');
+    expect(flow.name === 'submitted' && flow.transactionHash).toBe(
+      receipts.pending('bank')[0]?.transactionHash,
+    );
+
+    reopened.acknowledge();
+    expect(receipts.pending('bank')).toHaveLength(0);
+    expect(reopened.store.getState().flow.name).toBe('composing');
+  });
+
+  it('opens straight into composing when nothing is outstanding', async () => {
+    const receipts = createReceiptLedger();
+    const panel = createBankPanel({ operations: fake(), receipts });
+    await panel.open();
+    expect(panel.store.getState().flow.name).toBe('composing');
+  });
+
+  it('does not re-show a receipt the player has already seen', async () => {
+    const receipts = createReceiptLedger();
+    const operations = fake();
+    const panel = createBankPanel({ operations, receipts });
+    await panel.open();
+    panel.setAmount('1');
+    await panel.addToBatch();
+    await panel.prepare();
+    await panel.confirm();
+    panel.acknowledge();
+    panel.close();
+
+    const reopened = createBankPanel({ operations, receipts });
+    await reopened.open();
+    expect(reopened.store.getState().flow.name).toBe('composing');
+  });
+});
+
+describe('bank panel — a finished read cannot write the wrong figure', () => {
+  /** A promise the test releases, so ordering is decided here and not by a timer. */
+  function deferred<T>(): { promise: Promise<T>; resolve: (value: T) => void } {
+    let resolve!: (value: T) => void;
+    const promise = new Promise<T>((r) => {
+      resolve = r;
+    });
+    return { promise, resolve };
+  }
+
+  const loaded = (amount: bigint): PrivateBalance[] => [
+    { token: STRK, total: amount, spendable: amount, maturing: 0n, maturityKnown: true },
+  ];
+
+  it('a balance read in flight when a submission lands does not restore the old figure', async () => {
+    const operations = fake();
+    const gate = deferred<PrivateBalance[]>();
+    vi.spyOn(operations, 'balances').mockReturnValue(gate.promise);
+
+    const panel = await openPanel(operations);
+    const read = panel.refreshBalance();
+
+    await panel.prepare.call(panel); // no batch yet: harmless, keeps ordering explicit
+    panel.setMode('transfer');
+    panel.setRecipient(BOB);
+    panel.setAmount('1');
+    await panel.addToBatch();
+    await panel.prepare();
+    await panel.confirm();
+    expect(panel.store.getState().flow.name).toBe('submitted');
+
+    // The read now finishes, carrying the pre-submission figure.
+    gate.resolve(loaded(strk('100')));
+    await read;
+
+    // Showing it would contradict the notice sitting next to it.
+    expect(panel.store.getState().balance.status).toBe('unrequested');
+    expect(panel.store.getState().notice?.text).toBe(COPY.balance.changed);
+  });
+
+  it('a balance read that finishes after close does not write into a shut room', async () => {
+    const operations = fake();
+    const gate = deferred<PrivateBalance[]>();
+    vi.spyOn(operations, 'balances').mockReturnValue(gate.promise);
+
+    const panel = await openPanel(operations);
+    const read = panel.refreshBalance();
+    panel.close();
+    gate.resolve(loaded(strk('100')));
+    await read;
+
+    expect(panel.store.getState().balance.status).toBe('unrequested');
+    expect(panel.store.getState().flow.name).toBe('idle');
+  });
+
+  it('a preflight that finishes after close does not queue an intent', async () => {
+    const operations = fake();
+    const gate = deferred<'registered'>();
+    vi.spyOn(operations, 'recipientStatus').mockReturnValue(gate.promise);
+
+    const panel = await openPanel(operations);
+    panel.setMode('transfer');
+    panel.setRecipient(BOB);
+    panel.setAmount('1');
+    const adding = panel.addToBatch();
+    panel.close();
+    gate.resolve('registered');
+    await adding;
+
+    expect(panel.store.getState().batch).toHaveLength(0);
+    expect(panel.store.getState().adding).toBe(false);
+  });
+
+  it('only the newest balance read is allowed to land', async () => {
+    const operations = fake();
+    const first = deferred<PrivateBalance[]>();
+    const second = deferred<PrivateBalance[]>();
+    vi.spyOn(operations, 'balances')
+      .mockReturnValueOnce(first.promise)
+      .mockReturnValueOnce(second.promise);
+
+    const panel = await openPanel(operations);
+    const a = panel.refreshBalance();
+    const b = panel.refreshBalance();
+
+    second.resolve(loaded(strk('50')));
+    await b;
+    first.resolve(loaded(strk('100')));
+    await a;
+
+    const balance = panel.store.getState().balance;
+    expect(balance.status === 'loaded' && balance.total).toBe(strk('50'));
+  });
+});
+
+describe('bank panel — a quote is evidence about one batch shape', () => {
+  /**
+   * The relay fee is charged per action, so the cost of a batch depends on its
+   * shape. A quote is therefore evidence about the shape it was taken on and
+   * nothing else — there is no interpolation between two observations here,
+   * because a fitted curve is still a guess about somebody's money.
+   */
+  it('does not reuse a one-intent quote for a two-intent visit', async () => {
+    const operations = fake();
+    const panel = await openPanel(operations);
+    panel.setMode('transfer');
+    panel.setRecipient(BOB);
+    panel.setAmount('1');
+    await panel.addToBatch();
+    await panel.prepare();
+    const gasForOne = quotedCost(panel);
+    panel.cancelPrepared();
+
+    panel.setRecipient(BOB);
+    panel.setAmount('1');
+    await panel.addToBatch();
+    await panel.prepare();
+    const gasForTwo = quotedCost(panel);
+
+    // If these were equal the whole precaution would be untestable, which is
+    // exactly the state the fake was in before its gas model varied.
+    expect(gasForTwo).toBeGreaterThan(gasForOne);
+  });
+
+  it('re-offers a maximum only for a shape it has actually costed', async () => {
+    const operations = fake();
+    const panel = await openPanel(operations);
+    panel.setMode('transfer');
+    panel.setRecipient(BOB);
+    panel.setAmount('1');
+    await panel.addToBatch();
+    await panel.prepare();
+    panel.cancelPrepared();
+    await panel.refreshBalance();
+
+    // One queued intent: a MAX would make two, and two has not been costed.
+    expect(panel.maxSpendable()).toBeNull();
+
+    panel.setRecipient(BOB);
+    panel.setAmount('1');
+    await panel.addToBatch();
+    await panel.prepare();
+    panel.cancelPrepared();
+    panel.removeFromBatch(1);
+
+    // Two has now been costed, and one is queued again.
+    expect(panel.maxSpendable()).not.toBeNull();
+  });
+
+  it('forgets the estimate when the mode changes the shape', async () => {
+    const operations = fake();
+    const panel = await openPanel(operations);
+    panel.setMode('transfer');
+    panel.setRecipient(BOB);
+    panel.setAmount('1');
+    await panel.addToBatch();
+    await panel.prepare();
+    panel.cancelPrepared();
+    panel.clearBatch();
+    await panel.refreshBalance();
+    expect(panel.maxSpendable()).not.toBeNull();
+
+    // An unshield is a differently shaped batch, and no unshield has been costed.
+    panel.setMode('unshield');
+    expect(panel.store.getState().quotedGasForNextIntent).toBeNull();
+    expect(panel.maxSpendable()).toBeNull();
   });
 });

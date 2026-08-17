@@ -62,7 +62,7 @@ export const COPY = {
     maturityUnknown:
       'Your wallet reports one total and decides for itself which notes are old enough to spend, so there is no maximum to fill in here.',
     costUnknown:
-      'The network cost is only known once something has been costed, and it comes out of the same balance. Review anything once and the maximum appears.',
+      'The network cost depends on how much you queue, comes out of the same balance, and is only known once a visit of this shape has been costed. Review this visit once and the maximum appears.',
     maturing: 'Some of this is still maturing and cannot be spent yet.',
     feeReserved: 'The maximum leaves the pool fee behind, so you are not stranded one transaction short.',
   },
@@ -87,6 +87,9 @@ export const COPY = {
      * a count is how a provisional finding becomes a promise to a player.
      */
     mayAskMoreThanOnce: 'Your wallet may ask you to confirm more than once.',
+    closingWillNotCancel:
+      'Your wallet is signing. Closing this room will not cancel it, and your receipt will be waiting when you come back.',
+    receiptWaiting: 'This settled while the room was shut.',
   },
 
   batch: {
@@ -138,6 +141,8 @@ export const COPY = {
     emptyBatch: 'There is nothing queued to confirm.',
     notAnIntent: 'STRKWORLD only sends the actions its own controls produce.',
     poolNotLoaded: 'Still reading the pool settings.',
+    disclosureMissing:
+      'This cannot be confirmed: the approved wording for what it makes public is missing, and STRKWORLD will not ask you to agree to something it cannot describe.',
     feeMoved:
       'The pool fee moved above the total you were shown, so nothing was signed. Prepare it again to see the new figure.',
   },

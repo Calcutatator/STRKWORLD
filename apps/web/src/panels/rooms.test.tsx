@@ -35,6 +35,7 @@ describe('the commit gate', () => {
     const markup = renderToStaticMarkup(
       <ConfirmGate
         disclosures={['Shielding is public.', 'Second thing.']}
+        requiresDisclosure
         busy={false}
         onConfirm={() => {}}
         onCancel={() => {}}
@@ -44,9 +45,32 @@ describe('the commit gate', () => {
     expect(markup).toContain('Second thing.');
   });
 
+  it('refuses to enable confirm for a below-private batch with no disclosure', () => {
+    // Belt to the register's braces: the register already refuses to make an
+    // undisclosed deviation playable, so reaching here means the copy was lost
+    // on the way to the screen.
+    const markup = renderToStaticMarkup(
+      <ConfirmGate
+        disclosures={[]}
+        requiresDisclosure
+        busy={false}
+        onConfirm={() => {}}
+        onCancel={() => {}}
+      />,
+    );
+    expect(markup).toContain(COPY.notices.disclosureMissing);
+    expect(markup.match(/<button[^>]*class="confirm"[^>]*>/)?.[0]).toContain('disabled');
+  });
+
   it('disables both controls while a submission is in flight', () => {
     const markup = renderToStaticMarkup(
-      <ConfirmGate disclosures={[]} busy onConfirm={() => {}} onCancel={() => {}} />,
+      <ConfirmGate
+        disclosures={[]}
+        requiresDisclosure={false}
+        busy
+        onConfirm={() => {}}
+        onCancel={() => {}}
+      />,
     );
     expect(markup.match(/disabled/g) ?? []).toHaveLength(2);
   });
