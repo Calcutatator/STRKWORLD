@@ -133,6 +133,25 @@ export function disclosuresForIntents(
   return [...seen];
 }
 
+/**
+ * Whether any route in the batch is a below-private deviation.
+ *
+ * The register already refuses to make an undisclosed deviation playable, so
+ * `disclosures` being empty for such a batch means something between the
+ * register and the screen has gone wrong. The commit gate uses this to fail
+ * closed on that combination rather than trusting the chain that produced it.
+ */
+export function batchRequiresDisclosure(
+  intents: readonly Intent[],
+  register: readonly RouteGrade[] = PRIVACY_REGISTER,
+): boolean {
+  return intents.some((intent) => {
+    const entry = findRoute(ROUTE_BY_INTENT_KIND[intent.kind], register);
+    // An unknown route is not a "no disclosure needed" answer.
+    return entry === undefined || entry.grade !== 'private';
+  });
+}
+
 /** Routes that leave value sitting in public and must offer the way back (D-021). */
 export function routeReturnsToPool(
   routeId: string,

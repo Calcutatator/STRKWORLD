@@ -2,6 +2,8 @@ import { createContext, useContext, useEffect, useMemo, useState, type ReactNode
 import type { PrivacyOperations } from '@strkworld/privacy';
 import type { EventBus, ShellEvents } from '@strkworld/shared';
 import { createConnectFlow, toWalletStatus, type ConnectFlow, type ConnectState } from '../connect/connect-machine.js';
+import { createReceiptLedger, type ReceiptLedger } from '../receipts/receipt-ledger.js';
+import { detectBuildContext, type BuildContext } from './build-context.js';
 import { useStore } from '../store/use-store.js';
 
 /**
@@ -23,6 +25,14 @@ export interface ShellPrivacy {
   operations: PrivacyOperations;
   connect: ConnectFlow;
   connectState: ConnectState;
+  /**
+   * Receipts, held here rather than in a panel.
+   *
+   * The world decides when a panel unmounts, so a hash kept in panel state is
+   * lost exactly when it matters most — a transaction that settled while the
+   * room was closing. This outlives every panel below it.
+   */
+  receipts: ReceiptLedger;
   /** Optional channel into the world for HUD pushes. */
   shellBus: EventBus<ShellEvents> | null;
 }
@@ -46,14 +56,13 @@ export interface PrivacyProviderProps {
   shellBus?: EventBus<ShellEvents> | null;
   /** Rendered while the demo seam loads. */
   fallback?: ReactNode;
+  /**
+   * Build context. Defaults to detection, which fails closed when it cannot
+   * tell. A host that knows its own build may state it; it can only ever make
+   * the demo check match reality, since reaching the fake still requires `demo`.
+   */
+  build?: BuildContext;
   children: ReactNode;
-}
-
-function isProductionBuild(): boolean {
-  // Typed access rather than `import.meta.env.PROD`: the repository tsconfig
-  // does not pull in Vite's client types, and the shell should not need them
-  // for one flag.
-  return (import.meta as { env?: { PROD?: boolean } }).env?.PROD === true;
 }
 
 export function PrivacyProvider({
@@ -61,6 +70,7 @@ export function PrivacyProvider({
   demo = false,
   shellBus = null,
   fallback = null,
+  build,
   children,
 }: PrivacyProviderProps) {
   if (!operations) {
@@ -71,7 +81,7 @@ export function PrivacyProvider({
           'no silent fallback, because a fake balance in a real build is money-shaped fiction.',
       );
     }
-    if (isProductionBuild()) {
+    if ((build ?? detectBuildContext()).production) {
       throw new Error(
         '<PrivacyProvider demo> reached a production build. The deterministic fake ' +
           'must never ship: it reports balances nobody holds.',
@@ -119,14 +129,17 @@ function PrivacyRuntime({
 }) {
   const connect = useMemo(() => createConnectFlow(operations), [operations]);
   const connectState = useStore(connect.store);
+  // Deliberately not keyed to `operations`: a receipt is evidence about the
+  // chain, and it must not be discarded because the shell swapped seams.
+  const receipts = useMemo(() => createReceiptLedger(), []);
 
   useEffect(() => {
     shellBus?.emit('wallet:status', { status: toWalletStatus(connectState) });
   }, [shellBus, connectState]);
 
   const value = useMemo<ShellPrivacy>(
-    () => ({ operations, connect, connectState, shellBus }),
-    [operations, connect, connectState, shellBus],
+    () => ({ operations, connect, connectState, receipts, shellBus }),
+    [operations, connect, connectState, receipts, shellBus],
   );
 
   return <PrivacyContext.Provider value={value}>{children}</PrivacyContext.Provider>;

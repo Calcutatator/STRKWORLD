@@ -43,20 +43,38 @@ function stripComments(text: string): string {
 }
 
 /**
- * Module specifiers, from both `import ... from` and `export ... from`.
+ * Every module specifier a file depends on, in three forms.
  *
- * A re-export is exactly as much of a dependency as an import — this file's
- * first version missed that, and passed only because a sentence in a comment
- * happened to contain the word "imports". Anchoring each statement to the start
- * of a line is what stops prose matching.
+ * All three have been escape hatches in an earlier version of this file:
+ *
+ * - `import … from 'x'` — the obvious one.
+ * - `export … from 'x'` — exactly as much of a dependency as an import, and
+ *   missed at first. The first version also passed vacuously, because its
+ *   pattern matched the word "imports" in a doc comment rather than the
+ *   statement below it; hence the comment stripping and the line anchor.
+ * - `import 'x'` — a side-effect import with no clause, which pulls the whole
+ *   module in while matching neither of the above.
+ *
+ * A specifier is returned with `clause: null` when there was no clause, which
+ * is what lets the type-only rule treat it as a runtime import.
  */
-function imports(text: string): { clause: string; specifier: string }[] {
-  const found: { clause: string; specifier: string }[] = [];
-  const pattern = /^[ \t]*(?:import|export)\b([\s\S]*?)\bfrom\s*['"]([^'"]+)['"]/gm;
-  for (const match of stripComments(text).matchAll(pattern)) {
+function imports(text: string): { clause: string | null; specifier: string }[] {
+  const found: { clause: string | null; specifier: string }[] = [];
+  const source = stripComments(text);
+  const withClause = /^[ \t]*(?:import|export)\b([\s\S]*?)\bfrom\s*['"]([^'"]+)['"]/gm;
+  for (const match of source.matchAll(withClause)) {
     found.push({ clause: match[1]?.trim() ?? '', specifier: match[2] ?? '' });
   }
+  const bare = /^[ \t]*import\s*['"]([^'"]+)['"]/gm;
+  for (const match of source.matchAll(bare)) {
+    found.push({ clause: null, specifier: match[1] ?? '' });
+  }
   return found;
+}
+
+/** `@strkworld/privacy` itself, or any subpath of it. */
+function isSeam(specifier: string): boolean {
+  return specifier === '@strkworld/privacy' || specifier.startsWith('@strkworld/privacy/');
 }
 
 const isTest = (path: string): boolean => /\.test\.tsx?$/.test(path);
@@ -73,7 +91,7 @@ describe('shell boundaries', () => {
       .filter(({ path }) => !isTest(path) && path !== 'privacy/demo-operations.ts')
       .flatMap(({ path, text }) =>
         imports(text)
-          .filter(({ clause, specifier }) => specifier === '@strkworld/privacy' && !clause.startsWith('type'))
+          .filter(({ clause, specifier }) => isSeam(specifier) && !clause?.startsWith('type'))
           .map(() => path),
       );
     expect(offenders).toEqual([]);

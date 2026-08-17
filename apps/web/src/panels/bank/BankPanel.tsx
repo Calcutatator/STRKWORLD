@@ -29,14 +29,18 @@ export function BankPanel({
   /** Supply a driven machine to render a specific state. Tests use this. */
   panel?: BankPanelMachine;
 }) {
-  const { operations, connect, shellBus } = usePrivacy();
+  const { operations, connect, receipts, shellBus } = usePrivacy();
 
   const owned = useMemo(
     () =>
       injected
         ? null
-        : createBankPanel({ operations, onError: (failure) => connect.noteOperationError(failure) }),
-    [injected, operations, connect],
+        : createBankPanel({
+            operations,
+            receipts,
+            onError: (failure) => connect.noteOperationError(failure),
+          }),
+    [injected, operations, connect, receipts],
   );
   const panel = injected ?? owned!;
   const state = useStore(panel.store);
@@ -66,7 +70,16 @@ export function BankPanel({
   const committing = state.flow.name === 'review' || state.flow.name === 'submitting';
 
   return (
-    <PanelFrame title={COPY.bank.title} disclosure={state.disclosure} onClose={onClose}>
+    // The header disclosure previews the mode being composed. At the commit
+    // point it is withdrawn, so ConfirmGate's batch-derived set is the only
+    // disclosure on screen — otherwise a shield tab with a transfer queued
+    // shows public-deposit copy over a private transfer.
+    <PanelFrame
+      title={COPY.bank.title}
+      disclosure={committing ? null : state.disclosure}
+      closingNote={state.flow.name === 'submitting' ? COPY.flow.closingWillNotCancel : null}
+      onClose={onClose}
+    >
       <ModeTabs mode={state.mode} register={state.door} onSelect={(mode) => panel.setMode(mode)} />
 
       {!state.door.open ? (
@@ -334,6 +347,7 @@ function CommitBlock({
 
       <ConfirmGate
         disclosures={summary.disclosures}
+        requiresDisclosure={summary.requiresDisclosure}
         busy={busy}
         onConfirm={onConfirm}
         onCancel={onCancel}
