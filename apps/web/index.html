@@ -1,0 +1,33 @@
+<!doctype html>
+<!--
+  Build entry point for `vite build`. Added by the deployment lane because a
+  production build (and therefore the D-005 header test) needs an entry module;
+  the Shell lane owns the real markup and should replace the body freely.
+
+  Do not add a <meta http-equiv> cross-origin isolation policy here, and do not
+  ask the host to send one. It breaks the postMessage popups and cross-origin
+  iframes web wallets rely on, and we do no in-browser proving. See
+  docs/DECISIONS.md D-005; enforced by scripts/check-headers.mjs.
+  (The header names are not spelled out in this file on purpose:
+  scripts/check-invariants.sh greps apps/**/*.html for them without parsing
+  comments, so naming them here would trip that check.)
+
+  Beyond that, this file carries NO site-wide policy — deliberately. A
+  referrer-policy, CSP or permissions-policy meta set here would be an
+  undeclared decision smuggled in through scaffolding, and some of them have
+  real consequences: `no-referrer`, for instance, can break an RPC provider
+  that domain-allowlists via the Referer header, which is the control
+  docs/OPS.md DECISIONS-NEEDED item 7 depends on. Those choices belong to the
+  Shell lane with an entry in docs/DECISIONS.md.
+-->
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>STRKWORLD</title>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>

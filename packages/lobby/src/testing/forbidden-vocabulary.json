@@ -1,0 +1,68 @@
+{
+  "why": [
+    "The vocabulary the privacy tests scan room state for.",
+    "It lives in JSON rather than TypeScript on purpose: check 5 of",
+    "scripts/check-invariants.sh greps every .ts file under packages/lobby/src",
+    "for exactly these words and fails the build when it finds one, so a test",
+    "that spelled them in TypeScript would trip the very gate it exists to",
+    "reinforce. Keeping the list as data satisfies both: the scanner sees no",
+    "financial vocabulary in lobby code, and the test still has real strings to",
+    "search for.",
+    "Nothing here may be a word spellable in hexadecimal alone — an ephemeral",
+    "gameId is 16 hex characters, so a word like 'fee' would match by chance",
+    "roughly once in every three hundred sessions and make the test flaky.",
+    "For the same reason the wei-scale pattern requires 17 digits rather than",
+    "15: an identifier that happens to be all digits is only 16 long."
+  ],
+  "substrings": [
+    "address",
+    "balance",
+    "hash",
+    "transaction",
+    "wallet",
+    "account",
+    "token",
+    "amount",
+    "shield",
+    "unshield",
+    "strk",
+    "starknet",
+    "nullifier",
+    "viewing key",
+    "viewingkey",
+    "private key",
+    "privatekey",
+    "proof",
+    "deposit",
+    "withdraw",
+    "transfer",
+    "swap",
+    "note",
+    "bank",
+    "exchange",
+    "post-office",
+    "vault",
+    "bridge"
+  ],
+  "patterns": [
+    {
+      "name": "felt or hex identifier",
+      "regex": "0x[0-9a-fA-F]{4,}"
+    },
+    {
+      "name": "wei-scale integer",
+      "regex": "[0-9]{17,}"
+    },
+    {
+      "name": "decimal currency figure",
+      "regex": "[0-9]+\\.[0-9]{4,}"
+    }
+  ],
+  "smuggleAttempts": [
+    "0xdeadbeefcafef00ddeadbeefcafef00ddeadbeefcafef00ddeadbeefcafef00d",
+    "12.5 STRK",
+    "1000000000000000000",
+    "bank",
+    "my wallet address"
+  ]
+}

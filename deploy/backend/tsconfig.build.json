@@ -1,0 +1,21 @@
+{
+  // Emit config for the container image only. The repo's tsconfig sets
+  // `noEmit` because nothing in-tree compiles; the backend package is consumed
+  // as TypeScript source (apps/backend/package.json `main` points at
+  // `./src/index.ts`). A container needs plain JavaScript, so this overrides
+  // the emit settings and nothing else.
+  //
+  // Deliberately outside apps/backend: that directory belongs to the Backend
+  // lane. If that lane later adds its own build script, delete this file and
+  // point deploy/backend/Dockerfile at theirs.
+  "extends": "../../tsconfig.json",
+  "compilerOptions": {
+    "noEmit": false,
+    "outDir": "../../.docker-build",
+    "rootDir": "../..",
+    "declaration": false,
+    "sourceMap": true
+  },
+  "include": ["../../apps/backend/src/**/*.ts"],
+  "exclude": ["../../apps/backend/src/**/*.test.ts"]
+}
