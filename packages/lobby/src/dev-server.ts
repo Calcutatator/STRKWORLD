@@ -8,9 +8,13 @@
  * quietly moving to another one, because the shell has the endpoint
  * configured.
  *
- * It prints the endpoint and nothing else. There is no per-connection line to
- * print: joins, leaves and positions are exactly the things this package is
- * not allowed to record.
+ * It prints one line — the endpoint — and this package logs nothing per
+ * connection of its own. Colyseus's own `debug` channels *could* print joins,
+ * leaves and per-message payloads under `DEBUG=colyseus:*`; `startPresenceServer`
+ * force-disables the per-connection ones so that switch cannot expose a
+ * player's coordinates (see logging.ts). What this process cannot control is a
+ * fronting proxy logging the matchmaking HTTP request body, which is why that
+ * body carries nothing sensitive to begin with.
  */
 
 import { DEFAULT_LOBBY_PORT, DEFAULT_ROOM_NAME } from './config';

@@ -1,12 +1,15 @@
 /**
  * The tests this lane exists for.
  *
- * Everything else in the package can be rewritten. These three properties
- * cannot change without a decision entry:
+ * Everything else in the package can be rewritten. These properties cannot
+ * change without a decision entry:
  *
  *   1. The room schema's field set is exactly the frozen `PresenceState`.
- *   2. Suspending takes a player out of every other observer's view.
- *   3. No sequence of client input puts a financial-looking string into room
+ *   2. A client cannot set the room's configuration — the attacker-config
+ *      break that reached production (a hostile `spriteKeys`/`defaultSprite`
+ *      allowlist putting a hex id and token amount on other players' screens).
+ *   3. Suspending takes a player out of every other observer's view.
+ *   4. No sequence of client input puts a financial-looking string into room
  *      state or onto the wire.
  *
  * The vocabulary they scan for lives in `testing/forbidden-vocabulary.json`
@@ -17,8 +20,10 @@
 
 import { Encoder, Metadata } from '@colyseus/schema';
 import { describe, expect, it } from 'vitest';
-import type { Position, PresenceState } from '@strkworld/shared';
+import type { GameId, Position, PresenceState } from '@strkworld/shared';
+import { DEFAULT_ROOM_CONFIG, resolveRoomConfig } from './config';
 import { LobbyPresence } from './presence';
+import { PresenceRoom, definePresenceRoom } from './room';
 import { LobbyState, PositionSchema, PresenceEntry } from './state';
 import vocabulary from './testing/forbidden-vocabulary.json';
 
@@ -72,15 +77,11 @@ function findLeak(surface: string): string | null {
   return null;
 }
 
-/**
- * A well-formed identifier from a small number.
- *
- * Prefixed with hex letters so the digits never form a run long enough to look
- * like a wei-scale integer to the scan — a real generated identifier is 16
- * random hex characters and has the same property with overwhelming odds.
- */
-function id(n: number): string {
-  return `ab${String(n).padStart(14, '0')}`;
+/** Admit a session and return the server-minted identifier. */
+function join(registry: LobbyPresence, session: string, x = 0, y = 0): GameId {
+  const outcome = registry.admit(session, { x, y });
+  if (!outcome.ok) throw new Error(`admit failed: ${outcome.reason}`);
+  return outcome.gameId;
 }
 
 /** Deterministic PRNG, so a failure is reproducible. */
@@ -121,8 +122,8 @@ describe('the schema is the enforcement point', () => {
 
   it('does not encode a property that is not declared', () => {
     const registry = new LobbyPresence();
-    registry.admit('s1', { gameId: id(1), x: 1, y: 2 });
-    const entry = registry.peers.get(id(1));
+    const id = join(registry, 's1', 1, 2);
+    const entry = registry.peers.get(id);
     expect(entry).toBeDefined();
 
     for (const attempt of vocabulary.smuggleAttempts) {
@@ -135,23 +136,89 @@ describe('the schema is the enforcement point', () => {
   });
 });
 
+describe('a client cannot set the room configuration', () => {
+  // BLOCKER 1/2. Under Colyseus matchmaking, onCreate is called with
+  // merge({}, clientOptions, handlerOptions). This models the original bug
+  // exactly: hostile client options with an empty handler side, which used to
+  // become the room's whole config. The room must ignore its onCreate argument
+  // and use its trusted this.roomConfig instead.
+  const HOSTILE = {
+    capacity: 99999,
+    interestRadius: 1_000_000,
+    maxVisiblePeers: 99999,
+    minUpdateIntervalMs: 0,
+    worldLimit: 10_000_000,
+    maxMessagesPerSecond: 100000,
+    spriteKeys: ['0xdeadbeefcafef00d 12.5 STRK to the Bank'],
+    defaultSprite: '0xdeadbeefcafef00d 12.5 STRK to the Bank',
+  };
+
+  it('the base room ignores hostile onCreate options entirely', () => {
+    const room = new PresenceRoom();
+    (room as unknown as { onCreate: (o: unknown) => void }).onCreate(HOSTILE);
+    // Capacity is the trusted default, not 99999 (the live-reproduced value).
+    expect(room.maxClients).toBe(DEFAULT_ROOM_CONFIG.capacity);
+  });
+
+  it('a configured room uses the operator config, not hostile options', () => {
+    const config = resolveRoomConfig({ capacity: 10 });
+    const RoomClass = definePresenceRoom(config);
+    const room = new RoomClass();
+    (room as unknown as { onCreate: (o: unknown) => void }).onCreate(HOSTILE);
+    expect(room.maxClients).toBe(10);
+  });
+
+  it('a hostile sprite allowlist never reaches an entry', () => {
+    // The registry is what actually holds sprites; drive it with the config a
+    // room would build from HOSTILE if it (wrongly) trusted onCreate options,
+    // versus the trusted config it actually uses. With the trusted config, a
+    // client asking for the hostile sprite gets a trusted fallback.
+    const registry = new LobbyPresence(DEFAULT_ROOM_CONFIG);
+    const id = registry.admit('s1', {
+      x: 0,
+      y: 0,
+      sprite: HOSTILE.defaultSprite,
+    });
+    expect(id.ok).toBe(true);
+    if (!id.ok) throw new Error('unreachable');
+    const entry = registry.peers.get(id.gameId);
+    expect(entry?.sprite).toBe(DEFAULT_ROOM_CONFIG.defaultSprite);
+    expect(findLeak(stateOf(registry))).toBeNull();
+  });
+
+  it('resolveRoomConfig clamps even a hostile-looking numeric override', () => {
+    // Defence in depth: resolveRoomConfig is the operator channel, but if a
+    // hostile value ever reached it, the clamp still holds.
+    const config = resolveRoomConfig({
+      capacity: 99999,
+      interestRadius: -5,
+      minUpdateIntervalMs: -1,
+      maxMessagesPerSecond: 10 ** 9,
+    });
+    expect(config.capacity).toBeLessThanOrEqual(128);
+    expect(config.interestRadius).toBeGreaterThanOrEqual(0);
+    expect(config.minUpdateIntervalMs).toBeGreaterThanOrEqual(0);
+    expect(config.maxMessagesPerSecond).toBeLessThanOrEqual(1000);
+  });
+});
+
 describe('suspend removes a player from every other view', () => {
   it('takes the entry out of a nearby observer’s interest set', () => {
     const registry = new LobbyPresence({ interestRadius: 500 });
-    registry.admit('watcher', { gameId: id(1), x: 0, y: 0 });
-    registry.admit('walker', { gameId: id(2), x: 20, y: 20 });
+    join(registry, 'watcher', 0, 0);
+    const walker = join(registry, 'walker', 20, 20);
 
-    expect(registry.visibleTo('watcher').map((e) => e.gameId)).toEqual([id(2)]);
+    expect(registry.visibleTo('watcher').map((e) => e.gameId)).toEqual([walker]);
 
     registry.suspend('walker');
 
     expect(registry.visibleTo('watcher')).toEqual([]);
-    expect(registry.peers.has(id(2))).toBe(false);
+    expect(registry.peers.has(walker)).toBe(false);
   });
 
   it('leaves nothing behind about where the player was standing', () => {
     const registry = new LobbyPresence();
-    registry.admit('walker', { gameId: id(2), x: 1234, y: 5678 });
+    registry.admit('walker', { x: 1234, y: 5678 });
     registry.suspend('walker');
     expect(stateOf(registry)).not.toContain('1234');
     expect(stateOf(registry)).not.toContain('5678');
@@ -159,33 +226,41 @@ describe('suspend removes a player from every other view', () => {
 
   it('puts the player back only where the client says, on an explicit resume', () => {
     const registry = new LobbyPresence({ interestRadius: 500 });
-    registry.admit('watcher', { gameId: id(1), x: 0, y: 0 });
-    registry.admit('walker', { gameId: id(2), x: 20, y: 20 });
+    join(registry, 'watcher', 0, 0);
+    const walker = join(registry, 'walker', 20, 20);
     registry.suspend('walker');
-    registry.resume('walker', { x: 30, y: 30 });
+    registry.resume('walker', { x: 30, y: 30 }, 1000);
 
     const seen = registry.visibleTo('watcher');
-    expect(seen.map((e) => e.gameId)).toEqual([id(2)]);
+    expect(seen.map((e) => e.gameId)).toEqual([walker]);
     expect(seen[0]?.position.x).toBe(30);
   });
 });
 
 describe('no sequence of client input reaches state with money in it', () => {
-  it('refuses every hostile value offered as an identifier', () => {
+  it('ignores every hostile value that might be offered as an identifier', () => {
+    // The server mints the identifier; a client-supplied one is not read. So a
+    // hostile "gameId" is not rejected — it simply never becomes identity, and
+    // never appears in state.
     const registry = new LobbyPresence();
     vocabulary.smuggleAttempts.forEach((attempt, index) => {
-      const outcome = registry.admit(`s${index}`, { gameId: attempt, x: 0, y: 0 });
-      expect(outcome).toEqual({ ok: false, reason: 'malformed-id' });
+      const outcome = registry.admit(`s${index}`, {
+        x: 0,
+        y: 0,
+        // @ts-expect-error — not part of PlacementRequest; models a wire field
+        gameId: attempt,
+      });
+      expect(outcome.ok).toBe(true);
     });
-    expect(registry.peers.size).toBe(0);
+    expect(registry.peers.size).toBe(vocabulary.smuggleAttempts.length);
     expect(findLeak(stateOf(registry))).toBeNull();
+    expect(findLeak(wireOf(new Encoder(registry.state)))).toBeNull();
   });
 
   it('replaces every hostile value offered as a sprite or a facing', () => {
     const registry = new LobbyPresence();
     vocabulary.smuggleAttempts.forEach((attempt, index) => {
       registry.admit(`s${index}`, {
-        gameId: id(index),
         x: 0,
         y: 0,
         sprite: attempt,
@@ -212,7 +287,6 @@ describe('no sequence of client input reaches state with money in it', () => {
     for (let step = 0; step < 4000; step += 1) {
       clock += Math.floor(random() * 120);
       const session = sessions[Math.floor(random() * sessions.length)] as string;
-      const index = sessions.indexOf(session);
       const hostile = random() < 0.4;
       const payload = hostile
         ? attempts[Math.floor(random() * attempts.length)]
@@ -221,7 +295,6 @@ describe('no sequence of client input reaches state with money in it', () => {
       switch (Math.floor(random() * 5)) {
         case 0:
           registry.admit(session, {
-            gameId: hostile ? payload : id(index),
             x: hostile ? payload : Math.floor(random() * 2000) - 1000,
             y: hostile ? payload : Math.floor(random() * 2000) - 1000,
             facing: hostile ? payload : 'up',
@@ -243,11 +316,15 @@ describe('no sequence of client input reaches state with money in it', () => {
           registry.suspend(session);
           break;
         case 3:
-          registry.resume(session, {
-            x: hostile ? payload : Math.floor(random() * 2000) - 1000,
-            y: hostile ? payload : Math.floor(random() * 2000) - 1000,
-            sprite: hostile ? payload : 'avatar-4',
-          });
+          registry.resume(
+            session,
+            {
+              x: hostile ? payload : Math.floor(random() * 2000) - 1000,
+              y: hostile ? payload : Math.floor(random() * 2000) - 1000,
+              sprite: hostile ? payload : 'avatar-4',
+            },
+            clock,
+          );
           break;
         default:
           registry.release(session);
