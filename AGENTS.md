@@ -220,6 +220,31 @@ Format: `### YYYY-MM-DD — short title` then what, why it matters, how verified
 
 ---
 
+### 2026-08-17 — Chain lane: the private/swap submit paths can settle a tx then throw, losing the hash
+
+`packages/privacy/src/wallet-api/operations.ts`: `prepareShield` deliberately
+guards the settle-then-throw case — once the wallet returns a transaction hash
+the public deposit may already be on-chain, so it does not turn a post-submit
+failure into a retryable cancellation. **`preparePrivate` and `prepareSwap`
+have no equivalent guard.** If `owner.submission.submit(...)` rejects *after*
+the relay has already accepted the tx on-chain (e.g. a dropped response),
+`confirm()` throws and the caller records no receipt — a settled transaction
+reported to the player as nothing. This breaks the same "a settled tx must
+leave a receipt" invariant the shell's receipt ledger was built to uphold, but
+the shell cannot close it: the seam hands back no hash on the throwing path.
+
+**Chain lane fix:** give the private and swap submit paths the same
+post-submit success-preservation `prepareShield` already has — once a hash
+exists, surface it even if a later step fails, rather than throwing it away.
+
+*Verified:* adversarial trace of `wallet-api/operations.ts` submit paths
+against the `prepareShield` guard, 2026-08-17, during PR #6 verification. Not
+reproducible against the deterministic fake (which never settles-then-throws),
+which is exactly why it survived the shell's tests — the hole is in the real
+seam only.
+
+---
+
 ### 2026-08-16 — The unmount is not the player's decision, and neither is the receipt
 
 Second review round on the Shell lane. The blockers held, and three reachable
