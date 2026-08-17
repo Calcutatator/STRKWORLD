@@ -60,6 +60,52 @@ describe('the fee comes out of the balance being spent', () => {
   });
 });
 
+describe('the gas estimate varies with the batch shape', () => {
+  // Anti-regression for the "green by construction" trap. The estimate used to
+  // be a constant (`hasSpend ? 1e15 : 0`), so prepare(1) and prepare(5) were
+  // indistinguishable and no test could catch a reserve or MAX taken from one
+  // batch shape and then spent on another. If this ever goes back to a constant
+  // these assertions fail.
+  it('scales the gas estimate with the number of spend actions', async () => {
+    const ops = fresh();
+    const one = await ops.prepare([
+      { kind: 'transfer', token: STRK, amount: 10n ** 18n, recipient: BOB },
+    ]);
+    const five = await ops.prepare(
+      Array.from({ length: 5 }, () => ({
+        kind: 'transfer' as const,
+        token: STRK,
+        amount: 10n ** 18n,
+        recipient: BOB,
+      })),
+    );
+
+    expect(one.gasEstimate).toBe(RELAY_FEE);
+    expect(five.gasEstimate).toBe(RELAY_FEE * 5n);
+    expect(five.gasEstimate).not.toBe(one.gasEstimate);
+    // The shape-dependent estimate is carried through to totalCost, not dropped.
+    expect(one.totalCost).toBe(SIX_STRK + RELAY_FEE);
+    expect(five.totalCost).toBe(SIX_STRK + RELAY_FEE * 5n);
+  });
+
+  it('charges no relay/gas for a shield-only batch', async () => {
+    const ops = fresh(0n);
+    const batch = await ops.prepare([{ kind: 'shield', token: STRK, amount: 10n ** 18n }]);
+    expect(batch.gasEstimate).toBe(0n);
+  });
+
+  it('weights a private swap heavier than a single transfer', async () => {
+    const usdc = '0x1234';
+    const ops = new FakePrivacyOperations({
+      balances: { [usdc]: 10n * 10n ** 18n, [STRK]: 100n * 10n ** 18n },
+    });
+    const swap = await ops.prepare([
+      { kind: 'swap', tokenIn: usdc, tokenOut: STRK, amountIn: 10n ** 18n, minAmountOut: 1n },
+    ]);
+    expect(swap.gasEstimate).toBe(RELAY_FEE * 2n);
+  });
+});
+
 describe('shielded funds are not immediately spendable', () => {
   it('holds a deposit as maturing until enough blocks pass', async () => {
     const ops = fresh(0n);

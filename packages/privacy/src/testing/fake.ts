@@ -33,6 +33,7 @@ import type {
  *   - notes are unspendable until they mature
  *   - operation value and the complete private fee are charged in their own tokens
  *   - the fee can change between prepare and confirm
+ *   - the relay/gas estimate scales with the batch shape, never a constant
  *   - a shield cannot be batched with the transfer it funds
  *   - deposits are always to self
  */
@@ -54,6 +55,39 @@ const DEFAULT_POOL: PoolConfig = {
   proofValidityBlocks: 450,
   noteMaturityBlocks: 10,
 };
+
+/** Relay/gas cost the fake attributes to one pool-native spend action. */
+const RELAY_FEE_PER_ACTION = 1_000000000000000n; // 1e15 — the single-spend baseline
+
+/**
+ * Deterministic relay/gas estimate for a prepared batch.
+ *
+ * This is a FIXTURE, not a fee oracle. The production adapter obtains this
+ * number from the paymaster's relay estimate (see `estimateRelay` in
+ * `wallet-api/operations.ts`), which scales with the on-chain work the batch
+ * performs. We reproduce that shape-dependence deterministically: the estimate
+ * grows with the number of spend actions and their kind — a private swap drives
+ * an executor and mints an output note, strictly more work than a pool-native
+ * transfer or unshield, so it counts double.
+ *
+ * It intentionally ignores the numeric amount — a larger felt is not more
+ * calldata — so the estimate stays a predictable function of the batch *shape*
+ * that consuming lanes can assert against. Shield-only batches pay no relay fee
+ * here: their gas is the public deposit's own, outside the pool.
+ *
+ * The point of making this vary at all: a reserve or MAX computed against one
+ * batch shape must be *detectably* wrong when spent on another. The previous
+ * constant (`hasSpend ? 1e15 : 0`) was invariant to intent count, so it hid
+ * exactly that class of bug — a stale gas quote reused across batch shapes.
+ */
+function estimateRelayFee(intents: Intent[]): bigint {
+  let units = 0n;
+  for (const intent of intents) {
+    if (intent.kind === 'shield') continue;
+    units += intent.kind === 'swap' ? 2n : 1n;
+  }
+  return units * RELAY_FEE_PER_ACTION;
+}
 
 /** A fault the next matching call will raise. Consumed on use unless `sticky`. */
 export interface Fault {
@@ -224,7 +258,8 @@ export class FakePrivacyOperations implements PrivacyOperations {
       }
     }
 
-    const relayFee = hasSpend ? 1_000000000000000n : 0n;
+    // Deterministic, and a function of the batch shape — not a constant.
+    const relayFee = estimateRelayFee(intents);
 
     // Charge spends in their own token and both private fees in the fee token.
     const spendByToken = new Map<string, bigint>();
