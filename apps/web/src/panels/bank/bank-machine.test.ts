@@ -38,6 +38,13 @@ async function openPanel(
   return panel;
 }
 
+/** The network cost the seam just quoted, read off the review state. */
+function quotedCost(panel: BankPanel): bigint {
+  const flow = panel.store.getState().flow;
+  if (flow.name !== 'review') throw new Error(`expected review, got ${flow.name}`);
+  return flow.summary.gasEstimate;
+}
+
 afterEach(() => {
   vi.useRealTimers();
 });
@@ -134,14 +141,33 @@ describe('bank panel — maturity-aware balance', () => {
     await panel.refreshBalance();
     panel.setMode('transfer');
 
-    expect(panel.store.getState().quotedGasEstimate).toBeNull();
+    expect(panel.store.getState().quotedGasForNextIntent).toBeNull();
     expect(panel.maxSpendable()).toBeNull();
     panel.applyMax();
     expect(panel.store.getState().amountText).toBe('');
     expect(panel.store.getState().notice?.text).toBe(COPY.balance.costUnknown);
   });
 
-  it('reserves both fees once a quote exists, and that maximum survives review', async () => {
+  it('offers no maximum for a visit shape it has never seen costed', async () => {
+    // The relay fee is charged per action, so a figure measured on a one-intent
+    // batch is not the cost of a two-intent batch. Reusing it is what made MAX
+    // a button that always failed.
+    const panel = await openPanel(fake());
+    panel.setMode('transfer');
+    panel.setRecipient(BOB);
+    panel.setAmount('1');
+    await panel.addToBatch();
+    await panel.prepare();
+    panel.cancelPrepared();
+    await panel.refreshBalance();
+
+    // One transfer has been costed; a batch of two has not, and that is the
+    // shape another Add would create.
+    expect(panel.store.getState().quotedGasForNextIntent).toBeNull();
+    expect(panel.maxSpendable()).toBeNull();
+  });
+
+  it('reserves both fees for the empty visit, and that maximum survives review', async () => {
     const operations = fake();
     const panel = await openPanel(operations);
     panel.setMode('transfer');
@@ -149,57 +175,66 @@ describe('bank panel — maturity-aware balance', () => {
     panel.setAmount('1');
     await panel.addToBatch();
     await panel.prepare();
-
-    const gas = panel.store.getState().quotedGasEstimate;
-    expect(gas).not.toBeNull();
-
-    // Cancelling a review does NOT empty the visit — the 1 STRK is still
-    // queued, and a maximum that ignores it is a button that always fails.
+    const gasForOne = quotedCost(panel);
     panel.cancelPrepared();
-    expect(panel.store.getState().batch).toHaveLength(1);
+    panel.clearBatch();
     await panel.refreshBalance();
-    panel.applyMax();
 
-    const max = strk('100') - POOL_FEE - gas! - strk('1');
+    panel.applyMax();
+    const max = strk('100') - POOL_FEE - gasForOne;
     expect(panel.maxSpendable()).toBe(max);
     expect(panel.store.getState().amountText).toBe(formatTokenAmountExact(max));
 
-    // The regression this exists for: queue, MAX, then Review used to fail.
+    // The regression this exists for: MAX then Review used to fail every time.
     panel.setRecipient(BOB);
     await panel.addToBatch();
     await panel.prepare();
     expect(panel.store.getState().flow.name).toBe('review');
   });
 
-  it('counts every queued intent against the maximum', async () => {
+  it('counts the queued intents, and survives review, once that shape is costed', async () => {
     const operations = fake();
     const panel = await openPanel(operations);
     panel.setMode('transfer');
-    panel.setRecipient(BOB);
-    panel.setAmount('1');
-    await panel.addToBatch();
+
+    // Cost a two-transfer visit, so the shape a MAX would create is known.
+    for (const amount of ['1', '1']) {
+      panel.setRecipient(BOB);
+      panel.setAmount(amount);
+      await panel.addToBatch();
+    }
     await panel.prepare();
-    const gas = panel.store.getState().quotedGasEstimate!;
+    const gasForTwo = quotedCost(panel);
     panel.cancelPrepared();
+
+    // Drop back to one queued intent. Cancelling never empties the visit, so
+    // the remaining 1 STRK has to count against the maximum.
+    panel.removeFromBatch(1);
+    expect(panel.store.getState().batch).toHaveLength(1);
     await panel.refreshBalance();
 
-    panel.setRecipient(BOB);
-    panel.setAmount('2');
-    await panel.addToBatch();
+    const max = strk('100') - POOL_FEE - gasForTwo - strk('1');
+    expect(panel.maxSpendable()).toBe(max);
 
-    expect(panel.store.getState().batch).toHaveLength(2);
-    expect(panel.maxSpendable()).toBe(strk('100') - POOL_FEE - gas - strk('3'));
+    panel.applyMax();
+    panel.setRecipient(BOB);
+    await panel.addToBatch();
+    await panel.prepare();
+    expect(panel.store.getState().flow.name).toBe('review');
   });
 
   it('offers no maximum once the visit already spends everything', async () => {
     const operations = fake({ balances: { [STRK]: strk('10') } });
     const panel = await openPanel(operations);
     panel.setMode('transfer');
-    panel.setRecipient(BOB);
-    panel.setAmount('4');
-    await panel.addToBatch();
+    for (const amount of ['4', '1']) {
+      panel.setRecipient(BOB);
+      panel.setAmount(amount);
+      await panel.addToBatch();
+    }
     await panel.prepare();
     panel.cancelPrepared();
+    panel.removeFromBatch(1);
     await panel.refreshBalance();
 
     // 10 held, 4 queued, 6 pool fee and the relay estimate on top: the visit
@@ -921,5 +956,79 @@ describe('bank panel — a finished read cannot write the wrong figure', () => {
 
     const balance = panel.store.getState().balance;
     expect(balance.status === 'loaded' && balance.total).toBe(strk('50'));
+  });
+});
+
+describe('bank panel — a quote is evidence about one batch shape', () => {
+  /**
+   * The relay fee is charged per action, so the cost of a batch depends on its
+   * shape. A quote is therefore evidence about the shape it was taken on and
+   * nothing else — there is no interpolation between two observations here,
+   * because a fitted curve is still a guess about somebody's money.
+   */
+  it('does not reuse a one-intent quote for a two-intent visit', async () => {
+    const operations = fake();
+    const panel = await openPanel(operations);
+    panel.setMode('transfer');
+    panel.setRecipient(BOB);
+    panel.setAmount('1');
+    await panel.addToBatch();
+    await panel.prepare();
+    const gasForOne = quotedCost(panel);
+    panel.cancelPrepared();
+
+    panel.setRecipient(BOB);
+    panel.setAmount('1');
+    await panel.addToBatch();
+    await panel.prepare();
+    const gasForTwo = quotedCost(panel);
+
+    // If these were equal the whole precaution would be untestable, which is
+    // exactly the state the fake was in before its gas model varied.
+    expect(gasForTwo).toBeGreaterThan(gasForOne);
+  });
+
+  it('re-offers a maximum only for a shape it has actually costed', async () => {
+    const operations = fake();
+    const panel = await openPanel(operations);
+    panel.setMode('transfer');
+    panel.setRecipient(BOB);
+    panel.setAmount('1');
+    await panel.addToBatch();
+    await panel.prepare();
+    panel.cancelPrepared();
+    await panel.refreshBalance();
+
+    // One queued intent: a MAX would make two, and two has not been costed.
+    expect(panel.maxSpendable()).toBeNull();
+
+    panel.setRecipient(BOB);
+    panel.setAmount('1');
+    await panel.addToBatch();
+    await panel.prepare();
+    panel.cancelPrepared();
+    panel.removeFromBatch(1);
+
+    // Two has now been costed, and one is queued again.
+    expect(panel.maxSpendable()).not.toBeNull();
+  });
+
+  it('forgets the estimate when the mode changes the shape', async () => {
+    const operations = fake();
+    const panel = await openPanel(operations);
+    panel.setMode('transfer');
+    panel.setRecipient(BOB);
+    panel.setAmount('1');
+    await panel.addToBatch();
+    await panel.prepare();
+    panel.cancelPrepared();
+    panel.clearBatch();
+    await panel.refreshBalance();
+    expect(panel.maxSpendable()).not.toBeNull();
+
+    // An unshield is a differently shaped batch, and no unshield has been costed.
+    panel.setMode('unshield');
+    expect(panel.store.getState().quotedGasForNextIntent).toBeNull();
+    expect(panel.maxSpendable()).toBeNull();
   });
 });

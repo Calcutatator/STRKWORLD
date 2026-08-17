@@ -264,11 +264,26 @@ reverting it and watching the new test fail. The import-boundary test was
 verified against three separate escape hatches (a bare side-effect import, a
 package subpath, a bare deep import), each observed failing, then removed.
 
-*Outstanding, not ours:* the fake's `gasEstimate` is constant regardless of batch
-shape, so a MAX computed from a quote taken on a smaller batch cannot be shown
-to understate the real cost. `computeMax` documents that it is a floor in that
-case and prepare stays authoritative. A stale-quote test follows the Chain
-lane's gas-model change.
+**And the stale quote was real, found by CI within the hour.** The Chain lane's
+varying-gas fake (PR #5) landed while this branch was open, and the MAX test
+that passed locally failed on CI immediately: the relay fee is charged per
+action, so a figure measured on a one-intent batch is not the cost of a
+two-intent batch. Reusing it made MAX a floor rather than a maximum — the same
+bug in a smaller coat.
+
+A quote is now evidence about **one batch shape** and nothing else, keyed by the
+sorted intent kinds, and MAX is offered only for a shape that has actually been
+costed. No interpolation between two observations: a fitted curve is still a
+guess about somebody's money, and the seam has no non-proving estimate call to
+ask instead. The cost is that MAX is unavailable the first time a visit reaches
+a new shape, which is the same answer D-022 already forces for unknown note
+maturity — not a guess, and not the total.
+
+*A seam gap worth naming:* `PrivacyOperations` has no cheap cost estimate.
+`prepare()` is the only oracle and it is a wallet proving interaction, so the
+shell cannot cost a batch it has not yet asked the player to approve. A
+non-proving `estimate(intents)` would let MAX be exact on first use for any
+shape. That is a Chain-lane call, not a shell workaround.
 
 ---
 

@@ -106,10 +106,13 @@ rule. The shipped Wallet API returns one figure per token, so the production
 adapter sets `maturityKnown: false` — then there is no maximum, not a guess and
 not the total (D-022). There is no maximum for a shield, because the shell
 cannot see public STRK and D-013's stranding trap makes the last of it exactly
-what must not be sent. And there is no maximum before the first quote: the pool
-fee *and* the network cost come out of the same shielded balance, and the seam
-only reports the network cost at prepare time. What is already queued counts
-too — cancelling a review does not empty the visit.
+what must not be sent. And there is no maximum for a visit shape that has not
+been costed: the pool fee *and* the network cost come out of the same shielded
+balance, the seam reports the network cost only at prepare time, and it varies
+with batch shape because the relay fee is per action. So a quote is evidence
+about one shape, kept keyed by the sorted intent kinds, with no interpolation
+between observations. What is already queued counts too — cancelling a review
+does not empty the visit.
 
 **The confirm button lives in `ConfirmGate`, and nowhere else.** It takes the
 approved disclosures for the batch being committed as a required prop and

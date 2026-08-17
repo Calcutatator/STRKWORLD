@@ -166,10 +166,18 @@ export interface BankState {
   token: Address | null;
   balance: BalanceView;
   /**
-   * Network cost from the most recent quote in this visit. The seam only
-   * reports it at prepare time, and MAX is not offered without it.
+   * Network cost **observed for a batch of exactly the shape a MAX would
+   * create** — the queued intents plus one more of the current mode.
+   *
+   * The seam reports the network cost only at prepare time, and it varies with
+   * batch shape: the relay fee is charged per action. So a figure measured on a
+   * one-intent batch is not the cost of a two-intent batch, and reusing it is
+   * how MAX became a button that always failed. Evidence is therefore kept per
+   * shape and MAX is offered only when the exact shape has been costed. Null
+   * means no maximum can be stated, which is the same answer D-022 forces for
+   * unknown note maturity: not a guess, and not the total.
    */
-  quotedGasEstimate: bigint | null;
+  quotedGasForNextIntent: bigint | null;
   amountText: string;
   recipientText: string;
   batch: readonly Intent[];
@@ -255,6 +263,16 @@ export function createBankPanel(options: BankPanelOptions): BankPanel {
   let attempt = 0;
   let session = 0;
   let balanceRead = 0;
+  /**
+   * Network cost per batch shape, as reported by the seam.
+   *
+   * Keyed by the sorted intent kinds rather than by a count, because the seam
+   * prices a swap differently from a transfer. Only ever written from an actual
+   * quote — there is no model in here, and no interpolation between two
+   * observations, because a fitted curve is still a guess about somebody's
+   * money.
+   */
+  const gasByShape = new Map<string, bigint>();
   const begin = (): number => (attempt += 1);
   const current = (id: number): boolean => attempt === id;
   const live = (id: number): boolean => session === id;
@@ -272,7 +290,16 @@ export function createBankPanel(options: BankPanelOptions): BankPanel {
   }
 
   function setBatch(intents: readonly Intent[]): void {
-    patch({ batch: intents, batchDisclosures: disclosuresForIntents(intents, register) });
+    patch({
+      batch: intents,
+      batchDisclosures: disclosuresForIntents(intents, register),
+      quotedGasForNextIntent: gasForNextIntent(intents, store.getState().mode),
+    });
+  }
+
+  /** The observed cost for the batch this visit would have after one more Add. */
+  function gasForNextIntent(intents: readonly Intent[], mode: BankMode): bigint | null {
+    return gasByShape.get(shapeKey([...intents.map((intent) => intent.kind), mode])) ?? null;
   }
 
   function fail(error: unknown, recovery: 'prepare-again' | 'close', id: number): void {
@@ -316,19 +343,12 @@ export function createBankPanel(options: BankPanelOptions): BankPanel {
     // Both fees come out of the same shielded balance, so a maximum that
     // reserves only the pool fee is a button that always fails at prepare.
     // The network cost is only known once something has been costed.
-    if (fee === undefined || state.quotedGasEstimate === null) return null;
+    if (fee === undefined || state.quotedGasForNextIntent === null) return null;
     // And what is already queued is already spent. Cancelling a review does not
     // empty the visit, so a maximum that ignores the queue is a button that
     // fails the moment anything is waiting in it.
-    //
-    // Known limit: `quotedGasEstimate` was measured for the batch as it stood
-    // at that quote. If the visit has grown since, the real network cost may be
-    // higher and this maximum is a floor rather than an exact figure — prepare
-    // stays authoritative and fails legibly. The deterministic fake currently
-    // returns a constant estimate regardless of batch shape, so no test can
-    // observe the difference; a stale-quote test follows the fake's gas model.
     const spendable =
-      state.balance.spendable - fee - state.quotedGasEstimate - queuedSpend(state.batch);
+      state.balance.spendable - fee - state.quotedGasForNextIntent - queuedSpend(state.batch);
     return spendable > 0n ? spendable : null;
   }
 
@@ -382,6 +402,9 @@ export function createBankPanel(options: BankPanelOptions): BankPanel {
         routeId,
         door: routeDoor(routeId, register),
         disclosure: routeDisclosure(routeId, register),
+        // A different mode means a differently shaped batch, and therefore
+        // different evidence.
+        quotedGasForNextIntent: gasForNextIntent(store.getState().batch, mode),
         amountText: '',
         recipientText: '',
         notice: null,
@@ -565,8 +588,10 @@ export function createBankPanel(options: BankPanelOptions): BankPanel {
           return;
         }
         prepared = batch;
+        // Evidence, filed against the exact shape it was measured on.
+        gasByShape.set(shapeKey(batch.intents.map((intent) => intent.kind)), batch.gasEstimate);
         patch({
-          quotedGasEstimate: batch.gasEstimate,
+          quotedGasForNextIntent: gasForNextIntent(store.getState().batch, store.getState().mode),
           flow: {
             name: 'review',
             summary: {
@@ -696,6 +721,16 @@ export function createBankPanel(options: BankPanelOptions): BankPanel {
   }
 }
 
+/**
+ * A batch shape, as an order-independent key.
+ *
+ * Sorted because the seam prices a set of actions, not a sequence of them, so
+ * two orderings of the same actions are one observation rather than two.
+ */
+function shapeKey(kinds: readonly string[]): string {
+  return [...kinds].sort().join('+');
+}
+
 /** What the visit has already committed to spend, in the pool's fee token. */
 function queuedSpend(intents: readonly Intent[]): bigint {
   return intents.reduce(
@@ -715,7 +750,7 @@ function initialState(mode: BankMode, register: readonly RouteGrade[]): BankStat
     pool: null,
     token: null,
     balance: { status: 'unrequested' },
-    quotedGasEstimate: null,
+    quotedGasForNextIntent: null,
     amountText: '',
     recipientText: '',
     batch: [],

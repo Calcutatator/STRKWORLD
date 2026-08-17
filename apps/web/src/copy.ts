@@ -62,7 +62,7 @@ export const COPY = {
     maturityUnknown:
       'Your wallet reports one total and decides for itself which notes are old enough to spend, so there is no maximum to fill in here.',
     costUnknown:
-      'The network cost is only known once something has been costed, and it comes out of the same balance. Review anything once and the maximum appears.',
+      'The network cost depends on how much you queue, comes out of the same balance, and is only known once a visit of this shape has been costed. Review this visit once and the maximum appears.',
     maturing: 'Some of this is still maturing and cannot be spent yet.',
     feeReserved: 'The maximum leaves the pool fee behind, so you are not stranded one transaction short.',
   },
