@@ -59,7 +59,10 @@ async function ensureHost(config: WorldConfig): Promise<Host<Game, HTMLElement>>
         // two presence entries for one player. Joins are shell-driven.
         scene: [createStreetScene({ Phaser })],
         callbacks: {
-          postBoot: (game) => {
+          // Phaser creates and boots scenes after `preBoot` but before
+          // `postBoot`. The street scene captures the shell bus while it
+          // creates its room controller, so it must be present at preBoot.
+          preBoot: (game) => {
             game.registry.set('bus', config);
           },
         },

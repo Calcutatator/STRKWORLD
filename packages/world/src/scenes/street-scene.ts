@@ -179,8 +179,8 @@ export function createStreetScene({ Phaser, onTileChanged }: StreetSceneDeps) {
     /**
      * Door triggers emit onto the world's outbound bus. The bus is read lazily
      * from the registry at emit time rather than cached here: the shell sets it
-     * in `postBoot`, which Phaser runs before the loop starts, so it is present
-     * by `create()` — but resolving it per-emit keeps the scene correct if that
+     * in `preBoot`, before Phaser creates the scene, so it is present by
+     * `create()` — but resolving it per-emit keeps the scene correct if that
      * ordering ever shifts, and a no-op when there is no bus (headless boot).
      *
      * No network I/O and no wallet: emitting a semantic event is all that
