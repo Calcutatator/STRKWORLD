@@ -30,6 +30,15 @@ export type { TiledObject, TiledProperty } from './tiled-object-props.js';
 export { createDoorTrigger } from './door-trigger.js';
 export type { DoorTrigger } from './door-trigger.js';
 
+// Street movement is a Phaser-free adapter seam; lobby throttling remains
+// outside this package's movement reporter.
+export { createStreetMovementAdapter, createStreetMovementReporter } from './street-movement.js';
+export type {
+  MovementInput,
+  StreetMovementAdapter,
+  StreetMovementReporter,
+} from './street-movement.js';
+
 // Input gating. The shell suspends world input while a panel is open.
 export { bindInputGate, createInputGate } from './input-gate.js';
 export type { InputGate, KeyboardLike } from './input-gate.js';
