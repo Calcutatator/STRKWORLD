@@ -74,7 +74,8 @@ currently active room. A definition may name a building and opaque station but
 never a route or action.
 
 The Bank remains the frozen first tracer. The Post Office is the second, with
-one `post-office:transfer` station labelled `TRANSFER`. Both use the same
+one `post-office:transfer` station labelled `TRANSFER`; the Exchange is the
+third, with one `exchange:swap` station labelled `SWAP`. All use the same
 18×12, 32 px procedural envelope for this placeholder phase. Shell remains the
 authorization boundary: every visit begins with stations locked until the
 matching current snapshot arrives.

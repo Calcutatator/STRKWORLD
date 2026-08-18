@@ -137,8 +137,27 @@ export const POST_OFFICE_ROOM_DEFINITION = {
   ],
 } as const satisfies FixedRoomDefinition;
 
+export const EXCHANGE_ROOM_DEFINITION = {
+  building: 'exchange',
+  width: 18,
+  height: 12,
+  spawn: { x: 9, y: 9 },
+  exit: { x: 8, y: 11, width: 2, height: 1 },
+  stations: [
+    {
+      station: 'exchange:swap',
+      label: 'SWAP',
+      x: 13,
+      y: 3,
+      width: 2,
+      height: 1,
+    },
+  ],
+} as const satisfies FixedRoomDefinition;
+
 export const FIXED_ROOM_DEFINITIONS = {
   bank: BANK_ROOM_DEFINITION,
+  exchange: EXCHANGE_ROOM_DEFINITION,
   'post-office': POST_OFFICE_ROOM_DEFINITION,
 } as const satisfies Partial<Record<BuildingId, FixedRoomDefinition>>;
 

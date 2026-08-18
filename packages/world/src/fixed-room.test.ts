@@ -2,6 +2,8 @@ import { describe, expect, it } from 'vitest';
 import type { EventBus, ShellEvents, WorldEvents } from '@strkworld/shared';
 import {
   BANK_ROOM_DEFINITION,
+  EXCHANGE_ROOM_DEFINITION,
+  FIXED_ROOM_DEFINITIONS,
   FixedRoomDefinitionError,
   POST_OFFICE_ROOM_DEFINITION,
   createFixedRoom,
@@ -67,6 +69,7 @@ function harness(definition = POST_OFFICE_ROOM_DEFINITION) {
 describe('fixed room definitions', () => {
   it.each([
     ['bank', BANK_ROOM_DEFINITION],
+    ['exchange', EXCHANGE_ROOM_DEFINITION],
     ['post office', POST_OFFICE_ROOM_DEFINITION],
   ])('%s uses the fixed walkable envelope', (_name, definition) => {
     const room = createFixedRoom(definition);
@@ -78,6 +81,20 @@ describe('fixed room definitions', () => {
     expect(room.stations).toHaveLength(1);
     expect(isFixedRoomSolidAt(room, room.stations[0]!.x, room.stations[0]!.y)).toBe(true);
     expect(isFixedRoomApproach(room, room.stations[0]!.x, room.stations[0]!.y + 1)).toBe(true);
+  });
+
+  it('registers the Exchange swap station at the authored coordinates', () => {
+    expect(EXCHANGE_ROOM_DEFINITION.stations).toEqual([
+      {
+        station: 'exchange:swap',
+        label: 'SWAP',
+        x: 13,
+        y: 3,
+        width: 2,
+        height: 1,
+      },
+    ]);
+    expect(FIXED_ROOM_DEFINITIONS).toMatchObject({ exchange: EXCHANGE_ROOM_DEFINITION });
   });
 
   it('places the Post Office transfer station at the accepted coordinates', () => {

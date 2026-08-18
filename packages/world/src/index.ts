@@ -63,6 +63,7 @@ export {
 // public shape; new Game Mode rooms use this shared deep module directly.
 export {
   BANK_ROOM_DEFINITION,
+  EXCHANGE_ROOM_DEFINITION,
   FIXED_ROOM_DEFINITIONS,
   FIXED_ROOM_TILE_SIZE,
   FixedRoomDefinitionError,
