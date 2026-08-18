@@ -16,7 +16,7 @@ the lane boundary — that is why the repo is shaped the way it is.
 
 | Lane | Package | Status in v1 |
 |---|---|---|
-| **Chain** | `packages/privacy` | Active; financial seam frozen under D-036 |
+| **Chain** | `packages/privacy` | Active; seam frozen under D-036 with D-041 swap review |
 | **World** | `packages/world` + `packages/lobby` | Active |
 | **Shell** | `apps/web` | Active, starts week 2 |
 | **Backend** | `apps/backend` | Active; offline implementation in progress under D-028 |
@@ -148,10 +148,11 @@ the full error taxonomy mapped to `PrivacyErrorKind`. Add a route registry that
 maps each typed intent to a pool-native action, AVNU's private executor or an
 audited anonymizer deployment.
 
-**Current frontier:** D-036 freezes the implemented `PrivacyOperations` seam.
-A lost submit response must never become a blind retry. The next Chain slice
-requires a bounded project-lead brief; funded Wallet API/paymaster validation
-remains on the pre-launch checklist rather than reopening the development seam.
+**Current frontier:** D-036 freezes the implemented `PrivacyOperations` seam,
+and D-041 authorizes one bounded extension: sanitized expected/minimum output,
+slippage and expiry review data for a prepared swap. It exposes no quote or
+relay authority. A lost submit response must never become a blind retry;
+funded Wallet API/paymaster validation remains on the pre-launch checklist.
 
 **Dependency drift rechecked for D-036:** the 2026-08-18 integration freshness
 check still finds get-starknet discovery's `next` tag at 6.0.4,

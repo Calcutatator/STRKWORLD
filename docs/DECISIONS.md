@@ -1214,7 +1214,7 @@ D-028 freeze.
 
 ## D-036 — `PrivacyOperations` is frozen on source-derived evidence
 
-**2026-08-18 · Accepted · implements D-028 and supersedes D-015's provisional seam status**
+**2026-08-18 · Accepted · implements D-028 and supersedes D-015's provisional seam status · narrowly extended by D-041 for truthful swap review**
 
 **Context.** D-015 correctly unfroze the original one-shot interface. The
 replacement intent-based, prepare-then-confirm seam is implemented by both the
@@ -1460,3 +1460,65 @@ recipient preflight, commit-gate/receipt/uncertainty reuse, route-disabled
 fail-closed behavior, and unchanged one-intent Post Office station behavior.
 Exchange, Bridge and Vault continue to resolve honestly according to their
 current registry and route state. Browser acceptance remains user-owned.
+
+---
+
+## D-041 — Prepared swaps expose sanitized quote review, not relay authority
+
+**2026-08-18 · Accepted · technical direction delegated to the project lead · narrow extension of the D-036 freeze**
+
+**Context.** The Exchange is the next substantive v1 Game Mode building. The
+source-derived Wallet API adapter already receives AVNU's expected buy amount
+and quote expiry, while its configured swap policy supplies slippage. It
+validates those values before proving and again before submission. The frozen
+`PreparedBatch` contract, however, exposes only the original swap intent,
+aggregate fee figures, warnings and prompt metadata.
+
+That is enough to show what the player sells and a minimum output they typed,
+but not the quote they are actually reviewing. Asking a player to invent a
+minimum without an expected output is a poor real-funds surface; displaying an
+expected amount, expiry or slippage inferred elsewhere would be worse. Raw
+quote IDs, executor calls and fee authorizations must also stay behind the
+privacy boundary because they are relay authority, not product review data.
+
+**Decision.** Add one optional source-derived review field to `PreparedBatch`:
+
+```ts
+interface SwapReview {
+  expectedAmountOut: bigint;
+  minimumAmountOut: bigint;
+  slippageBps: number;
+  expiresAt: number;
+}
+
+interface PreparedBatch {
+  readonly swapReview?: SwapReview;
+  // existing frozen fields and methods remain unchanged
+}
+```
+
+It is present only for a successfully prepared single swap. The Wallet API
+adapter maps `expectedAmountOut` and `expiresAt` from the already validated
+`PreparedPrivateSwap`, copies `minimumAmountOut` from the typed intent, and
+copies `slippageBps` from the exact policy used to request and validate the
+plan. Production construction must reject malformed, expired or inconsistent
+values before returning the batch. The deterministic fake may expose review
+data only from explicit deterministic inputs; it must not read the clock,
+invent a market rate or label the minimum as an estimate.
+
+The field contains no quote ID, executor, calls, calldata, HMAC authorization,
+paymaster detail or submit handle. It does not authorize anything and is not a
+recovery handle. Confirmation still revalidates the quote and submits it
+immediately: quote-bound routes retain zero intentional delay and cannot enter
+the ordinary queue. D-034/D-035 still govern hashless response loss as
+non-retryable session uncertainty.
+
+**Consequences.** This is the smallest justified change to the D-036 public
+shape; all five `PrivacyOperations` methods, intent variants, confirmation
+semantics, error taxonomy and other public fields remain frozen. Chain updates
+the Wallet API adapter, deterministic fake, exports, tests and package docs.
+Shell receives a dependent-lane heads-up now and must require `swapReview` at
+the Exchange commit surface rather than fabricating missing quote data. The
+backend response already carries expected output and expiry, so no backend or
+shared-event schema changes. Any wish to expose raw quote or relay fields is a
+new decision.
