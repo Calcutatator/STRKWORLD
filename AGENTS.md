@@ -252,6 +252,29 @@ Format: `### YYYY-MM-DD — short title` then what, why it matters, how verified
 
 ---
 
+### 2026-08-18 — Prepared swap review is sanitized and deterministic
+
+D-041 adds the optional `PreparedBatch.swapReview` field for a successfully
+prepared single AVNU swap. It contains only the validated expected output and
+expiry, the typed intent's minimum output, and the exact slippage policy used
+to request the quote. Quote IDs, executor data, calldata, authorizations,
+paymaster details and recovery handles remain private. The Wallet API adapter
+rejects malformed or stale expected-output/expiry data before returning a
+review. Pool-native batches have no review field.
+
+`FakePrivacyOperations` exposes review data only when its explicit deterministic
+configuration supplies expected output, expiry and slippage; it derives the
+minimum from the swap intent and never reads a clock or invents a market rate.
+The existing quote-bound immediate submission and D-034 accepted-hash versus
+hashless uncertainty semantics are unchanged.
+
+*Verified:* targeted Wallet API and fake tests were observed red before the
+mapping, then green after the adapter, public type, fake configuration and
+sanitization assertions were added; privacy typecheck and invariant checks also
+pass. No wallet, proof, signature or transaction was used.
+
+---
+
 ### 2026-08-18 — A reusable room is authored data, so validate it before Phaser owns it
 
 Extracting the accepted Bank interior into D-039's shared fixed-room core made

@@ -106,6 +106,39 @@ describe('the gas estimate varies with the batch shape', () => {
   });
 });
 
+describe('deterministic prepared swap review', () => {
+  it('uses only explicit review inputs and derives minimum output from the intent', async () => {
+    const make = async () => {
+      const ops = new FakePrivacyOperations({
+        balances: { [STRK]: 100n * 10n ** 18n, ['0x1234']: 100n * 10n ** 18n },
+        swapReview: { expectedAmountOut: 95n, expiresAt: 2_000, slippageBps: 100 },
+      });
+      const batch = await ops.prepare([
+        { kind: 'swap', tokenIn: '0x1234', tokenOut: STRK, amountIn: 20n, minAmountOut: 90n },
+      ]);
+      return batch.swapReview;
+    };
+
+    await expect(make()).resolves.toEqual({
+      expectedAmountOut: 95n,
+      minimumAmountOut: 90n,
+      slippageBps: 100,
+      expiresAt: 2_000,
+    });
+    await expect(make()).resolves.toEqual(await make());
+  });
+
+  it('does not invent review data when no explicit swap review is configured', async () => {
+    const ops = new FakePrivacyOperations({
+      balances: { [STRK]: 100n * 10n ** 18n, ['0x1234']: 100n * 10n ** 18n },
+    });
+    const batch = await ops.prepare([
+      { kind: 'swap', tokenIn: '0x1234', tokenOut: STRK, amountIn: 20n, minAmountOut: 90n },
+    ]);
+    expect(batch.swapReview).toBeUndefined();
+  });
+});
+
 describe('shielded funds are not immediately spendable', () => {
   it('holds a deposit as maturing until enough blocks pass', async () => {
     const ops = fresh(0n);

@@ -68,6 +68,14 @@ export type BatchWarning =
   /** The wallet prompts more than once for what reads as one action. */
   | { kind: 'multiple-prompts'; count: number };
 
+/** Display-only review data for one prepared AVNU swap. */
+export interface SwapReview {
+  readonly expectedAmountOut: bigint;
+  readonly minimumAmountOut: bigint;
+  readonly slippageBps: number;
+  readonly expiresAt: number;
+}
+
 // ---------------------------------------------------------------------------
 // Prepared batch — the estimate half of estimate-then-confirm
 // ---------------------------------------------------------------------------
@@ -91,6 +99,8 @@ export interface PreparedBatch {
   readonly warnings: readonly BatchWarning[];
   /** Expected prompts from shipped wallet source; funded UI verification is still pending. */
   readonly promptCount: number;
+  /** Sanitized display-only review data, present only for a prepared single swap. */
+  readonly swapReview?: SwapReview;
 
   /**
    * Submit. Rejects with `PrivacyError`; never throws a raw wallet error.

@@ -24,6 +24,7 @@ export type {
   PoolConfig,
   PreparedBatch,
   PrivacyOperations,
+  SwapReview,
   WalletCapability,
 } from './operations.js';
 

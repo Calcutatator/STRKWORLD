@@ -181,6 +181,12 @@ export class WalletApiPrivacyOperations implements PrivacyOperations {
       totalCost: config.feeAmount + plan.fee.amount,
       warnings,
       promptCount: 1,
+      swapReview: {
+        expectedAmountOut: plan.buyAmount,
+        minimumAmountOut: intent.minAmountOut,
+        slippageBps: swapPolicy.slippageBps,
+        expiresAt: plan.expiresAt,
+      },
       async confirm({ feeCeiling, onProgress, signal: confirmSignal }) {
         if (discarded) throw new PrivacyError('unknown', 'batch already discarded');
         assertFirstConfirmation(confirmationAttempted);
@@ -241,6 +247,9 @@ export class WalletApiPrivacyOperations implements PrivacyOperations {
   ): void {
     if (plan.chainId !== expectedChainId) {
       throw new PrivacyError('unknown', 'The private swap quote is for the wrong network.');
+    }
+    if (typeof plan.buyAmount !== 'bigint' || plan.buyAmount <= 0n) {
+      throw new PrivacyError('unknown', 'The private swap expected output is malformed.');
     }
     if (!Number.isSafeInteger(plan.expiresAt) || plan.expiresAt <= this.now()) {
       throw new PrivacyError('unknown', 'The private swap quote has expired.');

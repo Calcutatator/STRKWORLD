@@ -84,6 +84,15 @@ express atomic batches, fee validation before proving, cancellation, or
 backend-delayed submission. D-028 keeps rendered prompt sequence, latency and
 live-paymaster artifact acceptance on the mandatory pre-launch checklist.
 
+For a successfully prepared single AVNU swap, `PreparedBatch.swapReview`
+contains only the display-safe `expectedAmountOut`, `minimumAmountOut`,
+`slippageBps` and quote `expiresAt`. It is review data, not relay authority:
+quote IDs, executor calls, calldata, authorizations, paymaster details and
+recovery handles never cross this seam. The fake exposes the same field only
+when its explicit deterministic `swapReview` configuration supplies the
+expected output, expiry and slippage; it never reads a clock or invents a
+market rate.
+
 The shipped Wallet API types expose one aggregate balance per token, not the
 spendable/maturing split used by the low-level SDK. Real wallet results therefore
 set `maturityKnown: false` and keep both subfields at conservative zero. The
