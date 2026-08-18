@@ -252,6 +252,28 @@ Format: `### YYYY-MM-DD — short title` then what, why it matters, how verified
 
 ---
 
+### 2026-08-18 — Vite workspace scripts do not find the repository-root env by default
+
+The root setup guide and committed `.env.example` tell developers to create
+`STRKWORLD/.env.local`, but `npm run dev` delegates to the `apps/web` workspace.
+Without an explicit `envDir`, Vite searches from that workspace root and
+silently misses the repository-root file. The practical symptom for D-037 is a
+truthful but surprising solo game even though `VITE_LOBBY_URL` appears to be
+configured; the same trap applies to every browser-side `VITE_*` setting.
+
+`apps/web/vite.config.ts` now sets `envDir: '../..'`, making the committed root
+template and setup command the actual configuration contract. Vite still
+exposes only `VITE_`-prefixed values to browser code; backend secrets remain
+runtime process variables and must never be prefixed or sent through Vite.
+
+*Verified:* the config regression test was observed failing before `envDir`
+was added. A temporary root `.env.envprobe` containing only a harmless lobby
+marker was then loaded by a separate Vite mode on port 5199, and the served
+`import.meta.env` contained that exact marker. The probe file and server were
+removed afterwards; no secret was read or written.
+
+---
+
 ### 2026-08-18 — Remote peer state must replay, and self-filtering must wait for welcome
 
 D-038 carries remote avatars through a dedicated World-owned retained source,
@@ -270,6 +292,14 @@ empty snapshot until welcome supplies the ID; the welcome handler then emits
 the correctly filtered full snapshot. Do not infer that a room or `connected`
 status is enough to distinguish self from peers.
 
+A second test now crosses the complete real composition seam with two
+`LobbyClient`-backed Shell controllers against one local Colyseus server. It
+proves that the retained World snapshots contain the other server-minted
+identity only, replace on movement, clear when the other player enters the
+Bank, resume at the restored street placement on exit, and clear on controller
+or server teardown. Keep one server per test file because the matchmaker is a
+process-global.
+
 *Verified:* a new real-server websocket test was observed failing on the old
 client because one pre-welcome snapshot contained the eventual local ID, then
 passing after the identity gate. D-038's source/renderer/adapter suites cover
@@ -277,7 +307,9 @@ synchronous replay, immutable replacement and clear, stale callbacks, invalid
 data, safe textures, interior visibility and idempotent teardown. The final
 integrated gate passed 548 tests across 53 files, all workspace typechecks, the
 production build and repository invariants. No browser, wallet, financial data
-or transaction was used.
+or transaction was used. After the real composition and environment-contract
+regressions were added, the repository gate passed 550 tests across 55 files
+with the same typecheck, build and invariant gates green.
 
 ---
 

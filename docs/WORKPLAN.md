@@ -260,9 +260,13 @@ player — with honest in-product copy about what is and is not hidden.
 **Owns** `apps/backend`. Paymaster custody, proxied RPC reads and bounded
 submission for prepared Wallet API calls.
 
-**First task:** expose the minimum endpoints needed by `packages/privacy`, with
-strict request schemas, fee ceilings, per-route allowlists, rate limits,
-aggregate-only metrics and global plus per-route kill switches.
+**Completed offline baseline:** the minimum `packages/privacy` endpoints,
+strict schemas, fee ceilings, fixed per-route policy, rate limits, aggregate
+budgets, global/per-route kill switches, strict environment loader and
+logging-free HTTP composition root. The remaining backend work is operational:
+an approved aggregate-only signal, deployment integration, and the funded
+Wallet API/paymaster checks retained by D-028. Do not invent a health or
+metrics route without the D-014 privacy review recorded in `docs/OPS.md`.
 
 **Must not:** log or persist IPs, calls, proofs, timings, recipients or
 transaction hashes; accept arbitrary contract targets or calldata; delay a
@@ -284,11 +288,12 @@ a public call.
 **Fully independent** — no dependency on the Phase 0 spike or the STRK20 seam.
 Can start immediately at full speed.
 
-**First task:** port the 1Click wrapper and the resumable pipeline from
-`shieldup`'s `src/bridge/` — `one-click.ts`, `persistence.ts`,
-`source-tokens.ts`, `address-validation.ts`. Drop the OUT paths and the AVNU
-leg; neither survives the narrowed scope (D-012). Port behaviour, not the
-lockfile.
+**Completed offline baseline:** the deposit-only 1Click wrapper, manual-first
+resumable pipeline, persistence/export/import, source-token/address validation
+and refund/failure states are implemented behind a network/storage boundary.
+The OUT path and AVNU leg do not exist (D-012). Remaining work is Shell room
+composition plus live provider acceptance, after the lead chooses and verifies
+the disclosed unauthenticated fee or a narrow server-side JWT proxy.
 
 **Build manual deposit mode first.** A player funding from a centralised
 exchange leaves the tab, goes to a withdrawal screen, and comes back minutes

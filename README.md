@@ -90,24 +90,36 @@ docs/
 
 ## Getting started
 
-Requires Node 20+ and npm 10+.
+Requires Node 22.12+ and npm 10+.
 
 ```bash
 npm install
 cp .env.example .env.local     # then fill in your own RPC key
+
+# Terminal 1 — privacy-minimal multiplayer presence
+npm run dev --workspace=@strkworld/lobby
+
+# Terminal 2 — game at http://localhost:5173/
 npm run dev
 ```
 
 ### Environment
 
-Put server-side credentials in `.env.local`. **Never commit them.**
-`.env.local` is gitignored; `.env.example` is the committed template and
-contains no secrets. Any browser-exposed `VITE_` RPC key must be domain
-allowlisted; privacy-sensitive reads go through the backend proxy.
+The web workspace is configured to load the repository-root `.env.local`.
+That file is gitignored; `.env.example` is the committed template and contains
+no secrets. Any browser-exposed `VITE_` RPC key is compiled into the public
+bundle and must be domain allowlisted; privacy-sensitive reads go through the
+backend proxy.
+
+Server-side credentials are runtime environment variables for the backend;
+Vite does not load or expose them. Export/inject them into that process using
+the deployment mechanism described in `docs/OPS.md`, and never commit them.
+If `VITE_LOBBY_URL` is absent or invalid, the game deliberately starts in
+explicit solo mode rather than guessing an endpoint.
 
 ```
-STARKNET_RPC_URL=https://starknet-mainnet.example/<SERVER_KEY>
 VITE_STARKNET_CHAIN_ID=SN_MAIN
+VITE_LOBBY_URL=ws://localhost:2567
 ```
 
 ---

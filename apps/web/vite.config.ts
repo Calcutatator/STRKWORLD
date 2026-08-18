@@ -19,5 +19,9 @@ import { defineConfig } from 'vite';
  * tree-shake, and a single eager import would ship the whole engine up front.
  */
 export default defineConfig({
+  // The committed template and setup guide live at the workspace root. Vite's
+  // workspace script otherwise searches apps/web and silently misses the
+  // copied root .env.local file.
+  envDir: '../..',
   plugins: [react()],
 });

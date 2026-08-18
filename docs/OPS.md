@@ -6,16 +6,19 @@ choice is real and verified. Everything that does is marked `[HOST]` and is
 listed in [DECISIONS-NEEDED](#decisions-needed) at the bottom. Nothing in this
 document recommends a vendor.
 
-Two deployables:
+Three deployables:
 
 | | What | Built by | Runs as |
 |---|---|---|---|
 | **web** | `apps/web` — the static shell | `npm run build --workspace=@strkworld/web` | static files on a CDN/static host `[HOST]` |
 | **backend** | `apps/backend` — paymaster custody, RPC proxy, submission queue | `deploy/backend/Dockerfile` | a container `[HOST]` |
+| **lobby** | `packages/lobby` — privacy-minimal Colyseus presence | production packaging not built yet | a single Node process behind `wss://` `[HOST]` |
 
-They must share an origin. See [The same-origin
+The web and backend must share an origin. See [The same-origin
 constraint](#the-same-origin-constraint) — it is an input to the hosting
-decision, not a detail to settle afterwards.
+decision, not a detail to settle afterwards. The lobby is a separate WebSocket
+service with an explicit browser-origin allowlist; it does not receive cookies
+or financial data.
 
 ---
 
@@ -38,6 +41,13 @@ the repo `tsconfig.json` sets `noEmit`; `apps/backend/package.json:6` points
 The container compiles its own JavaScript via
 `deploy/backend/tsconfig.build.json` rather than adding a build script to
 another lane's package.
+
+**`packages/lobby` is implemented but not production-packaged.** Its local
+`dev`/`start` script runs the TypeScript entry with `tsx`; that is sufficient
+for verified local presence, not a production deployment artifact. Choose its
+host and add a minimal Node build/container only after the domain fixes the
+`wss://` endpoint and allowed web origin. Run exactly one Colyseus server per
+process because its matchmaker is process-global.
 
 ---
 
@@ -430,6 +440,9 @@ ready. Trade-off notes are neutral and name no vendor.
    browser. D-014's position is that anything linking player IP to intended
    recipient or timing goes through the backend proxy.
 
-Related open item, not a decision: the lobby has no host either
-(`VITE_LOBBY_URL`). It is out of scope for this PR because `packages/lobby`
-has no server yet.
+Related open item, not a decision: the implemented standalone lobby server has
+no production host yet. `packages/lobby` exposes the privacy-minimal Colyseus
+server and the web composition consumes `VITE_LOBBY_URL`; local development is
+verified on `ws://localhost:2567`. Production still needs a TLS-capable host,
+an explicit browser-origin allowlist, proxy access-log review and a `wss://`
+endpoint built into the web bundle after the domain is chosen.
