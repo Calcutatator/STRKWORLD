@@ -33,3 +33,29 @@ export type { DoorTrigger } from './door-trigger.js';
 // Input gating. The shell suspends world input while a panel is open.
 export { bindInputGate, createInputGate } from './input-gate.js';
 export type { InputGate, KeyboardLike } from './input-gate.js';
+
+// D-033's first fixed Game Mode room. Geometry and the interaction state
+// machine are Phaser-free; the runtime scene is a thin rendering adapter.
+export {
+  BANK_ROOM_BUILDING,
+  BANK_ROOM_TILE_SIZE,
+  BANK_SHIELDING_LABEL,
+  BANK_SHIELDING_STATION,
+  bankRoomTileAt,
+  createBankRoom,
+  createBankRoomController,
+  isBankRoomExit,
+  isBankRoomSolidAt,
+  isBankStationApproach,
+  normalizeBankStationSnapshot,
+} from './bank-room.js';
+export type {
+  BankRoomController,
+  BankRoomControllerOptions,
+  BankRoomMap,
+  BankRoomRect,
+  BankRoomState,
+  BankRoomTile,
+  BankStationSnapshot,
+  RoomInputGate,
+} from './bank-room.js';

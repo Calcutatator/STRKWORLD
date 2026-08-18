@@ -30,6 +30,8 @@ import { doorAt, type DistrictMap, type DoorZone } from './map/street.js';
 export interface DoorTrigger {
   /** Call when the player's tile changes. Idempotent within one door zone. */
   update(tile: { x: number; y: number }): void;
+  /** Clear local occupancy without emitting an exit (room transitions use this). */
+  reset(): void;
   /**
    * The building whose interior the player is currently inside, or null. A
    * locked door is never "inside" — the door read as closed. For assertions.
@@ -70,6 +72,10 @@ export function createDoorTrigger(map: DistrictMap, out: WorldEmit): DoorTrigger
       }
 
       active = next;
+    },
+
+    reset() {
+      active = null;
     },
 
     get inside() {
