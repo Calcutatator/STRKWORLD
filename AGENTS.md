@@ -252,6 +252,30 @@ Format: `### YYYY-MM-DD — short title` then what, why it matters, how verified
 
 ---
 
+### 2026-08-18 — A shared financial machine needs an explicit receipt owner
+
+D-039/D-040 reused the Bank's financial state machine for Post Office transfer
+surfaces. Parameterizing the title, allowed modes and batch limit was not
+enough: receipt restoration still queried `pending('bank')`, and successful
+submissions still recorded `building: 'bank'`. A Post Office transfer could
+therefore reappear in the Bank and fail to reappear where it was made.
+
+Receipt ownership is now an explicit building input to the shared machine,
+defaulting to Bank for compatibility and passed as Post Office by both its Menu
+Mode adapter and Game Mode station. The same review found a React lifecycle
+trap: an inline `['transfer']` array changed identity on every wrapper render,
+which could recreate the memoized financial machine and discard queued state.
+Station configuration arrays that participate in machine ownership are stable
+module values.
+
+*Verified:* red/green tests pin Post Office pending-receipt restoration,
+Post Office receipt recording, Bank's unchanged default ownership, two-transfer
+Menu batching and the station's one-intent limit. The full workspace passes 598
+tests across 57 files, every workspace typecheck, the production build, the
+invariant scan and `git diff --check`.
+
+---
+
 ### 2026-08-18 — Prepared swap review is sanitized and deterministic
 
 D-041 adds the optional `PreparedBatch.swapReview` field for a successfully
@@ -298,8 +322,9 @@ now rejects non-array, empty, unsupported and duplicate mode lists, plus an
 initial mode outside that list, even from untyped callers. The Post Office Game
 Mode tracer exposes one Transfer action and reuses the existing recipient
 preflight, route admission, commit gate, receipts and uncertainty handling; it
-does not leak Menu Mode's batch controls, and Post Office Menu Mode remains the
-honest unbuilt surface.
+does not leak Menu Mode's batch controls. D-039 left Post Office Menu Mode as
+the honest unbuilt surface; D-040 now completes it as a separately bounded,
+transfer-only batch surface with explicit Post Office receipt ownership.
 
 *Verified:* validation and multi-station presentation were driven by 15 observed
 red tests plus a separately observed empty-station regression; the Shell's

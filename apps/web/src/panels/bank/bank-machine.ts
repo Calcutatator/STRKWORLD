@@ -8,6 +8,7 @@ import type {
   PrivacyErrorKind,
   PrivacyOperations,
 } from '@strkworld/privacy';
+import type { BuildingId } from '@strkworld/shared';
 import { PRIVACY_REGISTER, type RouteGrade } from '../../privacy/register.js';
 import { toFailure, type ShellFailure } from '../../privacy/errors.js';
 import { COPY } from '../../copy.js';
@@ -221,6 +222,8 @@ export interface BankPanelOptions {
    * decision. A per-panel default would compile and lose receipts.
    */
   receipts: ReceiptLedger;
+  /** Building that owns receipts restored or recorded by this machine. */
+  building?: BuildingId;
 }
 
 export interface BankPanel {
@@ -247,6 +250,7 @@ export interface BankPanel {
 
 export function createBankPanel(options: BankPanelOptions): BankPanel {
   const { operations, onError, receipts } = options;
+  const building = options.building ?? 'bank';
   // Keep the runtime boundary fail-closed for JavaScript or deliberately
   // untyped callers. TypeScript callers must provide an explicit policy.
   const canStartFinancialAction = options.canStartFinancialAction ?? (() => false);
@@ -428,7 +432,7 @@ export function createBankPanel(options: BankPanelOptions): BankPanel {
         // A transaction that settled while the room was shut left its receipt
         // in the ledger. Show it before anything else: it is the only proof the
         // player has that their money moved.
-        const outstanding = receipts.pending('bank')[0];
+        const outstanding = receipts.pending(building)[0];
         patch({
           pool,
           token: pool.feeToken,
@@ -733,7 +737,7 @@ export function createBankPanel(options: BankPanelOptions): BankPanel {
         // is the only proof the player has, and whether their panel is still
         // mounted is not their decision — the world can unmount it mid-signing.
         receipts.record({
-          building: 'bank',
+          building,
           transactionHash: result.transactionHash,
           intents: summary.intents,
         });

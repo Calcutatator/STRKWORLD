@@ -2,6 +2,7 @@ import type { ComponentType } from 'react';
 import type { BuildingId } from '@strkworld/shared';
 import { COPY } from '../copy.js';
 import { BankPanel } from './bank/BankPanel.js';
+import { PostOfficePanel } from './post-office/PostOfficePanel.js';
 import type { PanelRegistry } from './panel-framework.js';
 
 /**
@@ -25,4 +26,9 @@ export interface BuildingPanelDescriptor {
 
 export const BUILDING_PANELS: PanelRegistry<BuildingPanelDescriptor> = {
   bank: { building: 'bank', title: COPY.buildings.bank, Component: BankPanel },
+  'post-office': {
+    building: 'post-office',
+    title: COPY.buildings['post-office'],
+    Component: PostOfficePanel,
+  },
 };

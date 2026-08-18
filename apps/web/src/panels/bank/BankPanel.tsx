@@ -1,4 +1,5 @@
 import { useEffect, useMemo } from 'react';
+import type { BuildingId } from '@strkworld/shared';
 import { COPY } from '../../copy.js';
 import { formatStrk, formatStrkExact, shortenAddress } from '../../format.js';
 import { usePrivacy } from '../../privacy/PrivacyProvider.js';
@@ -31,6 +32,7 @@ export function BankPanel({
   allowedModes,
   initialMode,
   title = COPY.bank.title,
+  building = 'bank',
 }: {
   onClose: () => void;
   /** Supply a driven machine to render a specific state. Tests use this. */
@@ -43,6 +45,8 @@ export function BankPanel({
   initialMode?: BankMode;
   /** The existing machine can render a different building title. */
   title?: string;
+  /** Receipt ownership, independent of the reused Bank machine visuals. */
+  building?: BuildingId;
 }) {
   const { operations, receipts, noteOperationError, shellBus, submissionUncertainty } = usePrivacy();
   const modes = allowedModes ?? (experience === 'station' ? BANK_STATION_MODES : BANK_MENU_MODES);
@@ -56,6 +60,7 @@ export function BankPanel({
             receipts,
             allowedModes: modes,
             initialMode,
+            building,
             maxIntents: experience === 'station' ? 1 : undefined,
             onError: noteOperationError,
             canStartFinancialAction: () => {
@@ -63,7 +68,7 @@ export function BankPanel({
               return !current.active || current.acknowledged;
             },
           }),
-    [injected, operations, receipts, noteOperationError, experience, modes, initialMode, submissionUncertainty],
+    [injected, operations, receipts, noteOperationError, experience, modes, initialMode, building, submissionUncertainty],
   );
   const panel = injected ?? owned!;
   const state = useStore(panel.store);

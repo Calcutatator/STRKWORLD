@@ -386,6 +386,40 @@ describe('bank panel — composing a visit', () => {
     expect(operations.submitted[0]).toHaveLength(2);
   });
 
+  it('batches two compatible transfers in the exact Post Office Menu configuration', async () => {
+    const operations = fake();
+    const panel = await openPanel(operations, {
+      allowedModes: ['transfer'],
+      initialMode: 'transfer',
+    });
+
+    for (const amount of ['1', '2']) {
+      panel.setRecipient(BOB);
+      panel.setAmount(amount);
+      await panel.addToBatch();
+    }
+
+    expect(panel.store.getState()).toMatchObject({
+      mode: 'transfer',
+      routeId: 'post-office.transfer',
+      batch: [
+        { kind: 'transfer', token: STRK, amount: strk('1'), recipient: BOB },
+        { kind: 'transfer', token: STRK, amount: strk('2'), recipient: BOB },
+      ],
+    });
+
+    await panel.prepare();
+    await panel.confirm();
+
+    expect(operations.submitted).toEqual([
+      [
+        { kind: 'transfer', token: STRK, amount: strk('1'), recipient: BOB },
+        { kind: 'transfer', token: STRK, amount: strk('2'), recipient: BOB },
+      ],
+    ]);
+    expect(panel.store.getState().flow.name).toBe('submitted');
+  });
+
   it('executes a transfer-only station as one typed private transfer', async () => {
     const operations = fake();
     const panel = await openPanel(operations, {
@@ -1044,6 +1078,42 @@ describe('bank panel — a receipt outlives the room', () => {
     expect(receipts.pending('bank')[0]?.intents).toHaveLength(1);
     // And the closed panel was not written into.
     expect(panel.store.getState().flow.name).toBe('idle');
+  });
+
+  it('owns Post Office pending and submitted receipts by building, while Bank stays Bank', async () => {
+    const receipts = createReceiptLedger();
+    const operations = fake();
+    receipts.record({ building: 'post-office', transactionHash: '0xpending-post-office', intents: [] });
+
+    const postOffice = await openPanel(operations, {
+      receipts,
+      allowedModes: ['transfer'],
+      initialMode: 'transfer',
+      building: 'post-office',
+    });
+    expect(postOffice.store.getState()).toMatchObject({
+      flow: { name: 'submitted', transactionHash: '0xpending-post-office' },
+      mode: 'transfer',
+      routeId: 'post-office.transfer',
+    });
+    postOffice.acknowledge();
+
+    postOffice.setRecipient(BOB);
+    postOffice.setAmount('1');
+    await postOffice.addToBatch();
+    await postOffice.prepare();
+    await postOffice.confirm();
+    expect(receipts.pending('post-office')).toHaveLength(1);
+    expect(receipts.pending('post-office')[0]?.transactionHash).toMatch(/^0xfake/);
+    expect(receipts.pending('bank')).toHaveLength(0);
+
+    const bank = await openPanel(operations, { receipts });
+    bank.setAmount('1');
+    await bank.addToBatch();
+    await bank.prepare();
+    await bank.confirm();
+    expect(receipts.pending('bank')).toHaveLength(1);
+    expect(receipts.pending('post-office')).toHaveLength(1);
   });
 
   it('shows an outstanding receipt when the room reopens', async () => {

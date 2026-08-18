@@ -96,7 +96,7 @@ describe('VisitLayerView', () => {
     expect(markup).toContain('This station confirms one action at a time.');
   });
 
-  it('keeps Post Office Menu Mode explicitly unbuilt', () => {
+  it('renders Post Office Menu Mode as a transfer-only batch surface', () => {
     const markup = render(
       <VisitLayerView
         state={{ name: 'visiting', building: 'post-office', surface: { name: 'menu' } }}
@@ -107,9 +107,12 @@ describe('VisitLayerView', () => {
       />,
     );
 
-    expect(markup).toContain('class="room-unbuilt"');
-    expect(markup).toContain('This room is still being built.');
-    expect(markup).not.toContain('name="amount"');
+    expect(markup).toContain('data-experience="menu"');
+    expect(markup).toContain('Private transfer');
+    expect(markup).toContain('Add to this visit');
+    expect(markup).toContain('Nothing queued yet');
+    expect(markup).not.toContain('Shield');
+    expect(markup).not.toContain('Unshield');
   });
 
   it('re-runs the privacy gate and renders no financial form when a station is disabled', () => {

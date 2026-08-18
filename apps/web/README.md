@@ -89,11 +89,13 @@ fail closed and return controls to the World.
 The first tracer maps the opaque `bank:shielding` station to the existing Bank
 machine, limited to Shield/Unshield and one intent. D-039 adds
 `post-office:transfer` as the second tracer and configures that same machine for
-Transfer only. Both stations therefore reuse typed intents, recipient
-preflight where applicable, `ConfirmGate`, approved disclosures, uncertainty
-handling and the session receipt ledger; only their allowed controls differ.
-Post Office Menu Mode remains the honest `UnbuiltRoom` in this slice. The World
-never receives either station's route or financial meaning.
+Transfer only. D-040 adds a small Post Office Menu adapter over that machine,
+so Menu Mode permits compatible private transfers to batch while the station
+remains limited to one action. Both surfaces therefore reuse typed intents,
+recipient preflight where applicable, `ConfirmGate`, approved disclosures,
+uncertainty handling and the session receipt ledger; only their allowed
+controls and batch policy differ. The World never receives either station's
+route or financial meaning.
 
 `SessionNoticeLayer` is a sibling above the World and visit surfaces. If a
 private submission response is lost after dispatch, D-034 classifies the result

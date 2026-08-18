@@ -118,6 +118,7 @@ export function VisitLayerView({
       return (
         <BankPanel
           experience="station"
+          building={station.definition.building}
           allowedModes={station.definition.modes}
           initialMode={station.definition.initialMode}
           title={COPY.buildings[station.definition.building]}
