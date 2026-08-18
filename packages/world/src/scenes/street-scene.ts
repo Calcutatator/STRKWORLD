@@ -1,5 +1,5 @@
 import type * as PhaserTypes from 'phaser';
-import type { EventBus, WorldEvents } from '@strkworld/shared';
+import type { EventBus, ShellEvents, WorldEvents } from '@strkworld/shared';
 import {
   createStreetMap,
   isSolidAt,
@@ -11,6 +11,15 @@ import {
   type TileKind,
 } from '../map/street.js';
 import { createDoorTrigger, type DoorTrigger } from '../door-trigger.js';
+import {
+  BANK_ROOM_TILE_SIZE,
+  createBankRoom,
+  createBankRoomController,
+  isBankRoomSolidAt,
+  type BankRoomController,
+  type BankRoomMap,
+} from '../bank-room.js';
+import { createInputGate, type InputGate } from '../input-gate.js';
 
 /**
  * The street.
@@ -28,6 +37,7 @@ import { createDoorTrigger, type DoorTrigger } from '../door-trigger.js';
 
 const PLAYER_SPEED = 160;
 const PLAYER_SIZE = 24;
+const ROOM_ORIGIN = { x: 2 * TILE_SIZE, y: 2 * TILE_SIZE };
 
 type Scene = PhaserTypes.Scene;
 type Sprite = PhaserTypes.Physics.Arcade.Sprite;
@@ -49,6 +59,14 @@ export function createStreetScene({ Phaser, onTileChanged }: StreetSceneDeps) {
     private wasd!: Record<'up' | 'down' | 'left' | 'right', PhaserTypes.Input.Keyboard.Key>;
     private lastTile = { x: -1, y: -1 };
     private doors!: DoorTrigger;
+    private inputGate!: InputGate;
+    private bankRoom!: BankRoomController;
+    private bankMap!: BankRoomMap;
+    private roomGraphics?: PhaserTypes.GameObjects.Graphics;
+    private roomLabel?: PhaserTypes.GameObjects.Text;
+    private roomStationGraphics?: PhaserTypes.GameObjects.Graphics;
+    private returnTile = { x: 0, y: 0 };
+    private cleanedUp = false;
 
     constructor() {
       super({ key: 'street' });
@@ -63,13 +81,31 @@ export function createStreetScene({ Phaser, onTileChanged }: StreetSceneDeps) {
       this.drawGround();
       this.createPlayer();
       this.createInput();
+      this.createBankRoom();
       this.createCamera();
       this.createDoorTriggers();
+      this.createRoomVisuals();
+      this.events.once('shutdown', this.cleanShutdown, this);
     }
 
-    override update(): void {
+    override update(_time: number, delta: number): void {
+      if (this.bankRoom.state.inRoom) {
+        this.moveRoomPlayer(delta);
+        this.reportRoomTile();
+        return;
+      }
       this.movePlayer();
       this.reportTile();
+    }
+
+    private cleanShutdown(): void {
+      if (this.cleanedUp) return;
+      this.cleanedUp = true;
+      this.bankRoom?.destroy();
+      this.inputGate?.resume();
+      this.roomGraphics?.destroy();
+      this.roomStationGraphics?.destroy();
+      this.roomLabel?.destroy();
     }
 
     // -- construction --------------------------------------------------------
@@ -123,9 +159,13 @@ export function createStreetScene({ Phaser, onTileChanged }: StreetSceneDeps) {
 
     private createInput(): void {
       const keyboard = this.input.keyboard;
-      if (!keyboard) return;
+      if (!keyboard) {
+        this.inputGate = NOOP_INPUT_GATE;
+        return;
+      }
       this.cursors = keyboard.createCursorKeys();
       this.wasd = keyboard.addKeys('W,A,S,D') as typeof this.wasd;
+      this.inputGate = createInputGate(keyboard);
     }
 
     private createCamera(): void {
@@ -149,13 +189,154 @@ export function createStreetScene({ Phaser, onTileChanged }: StreetSceneDeps) {
     private createDoorTriggers(): void {
       const out: Pick<EventBus<WorldEvents>, 'emit'> = {
         emit: (event, payload) => {
-          const bus = this.game.registry.get('bus') as
-            | { out?: EventBus<WorldEvents> }
-            | undefined;
-          bus?.out?.emit(event, payload);
+          // Enter the local room before publishing the semantic event.  The
+          // Shell's synchronous `world:stations` response must not race a
+          // controller that is still considered outside.
+          if (event === 'building:entered') {
+            const entered = payload as WorldEvents['building:entered'];
+            if (entered.building === 'bank') {
+              this.returnTile = this.bankDoorReturnTile();
+              this.bankRoom.enter();
+            }
+          } else if (event === 'building:exited') {
+            this.inputGate.resume();
+          }
+          this.resolveBus()?.out?.emit(event, payload);
         },
       };
       this.doors = createDoorTrigger(this.map, out);
+    }
+
+    /** The first room is procedural; this is the only scene/state glue. */
+    private createBankRoom(): void {
+      this.bankMap = createBankRoom();
+      const bus = this.resolveBus();
+      const out: Pick<EventBus<WorldEvents>, 'emit'> = {
+        emit: (event, payload) => bus?.out?.emit(event, payload),
+      };
+      this.bankRoom = createBankRoomController({
+        out,
+        in: bus?.in,
+        input: this.inputGate,
+        onEnter: () => this.enterBankRoom(),
+        onExit: () => this.exitBankRoom(),
+        onChange: () => this.renderBankRoom(),
+      });
+    }
+
+    private resolveBus():
+      | { out: EventBus<WorldEvents>; in: EventBus<ShellEvents> }
+      | undefined {
+      return this.game.registry.get('bus') as
+        | { out: EventBus<WorldEvents>; in: EventBus<ShellEvents> }
+        | undefined;
+    }
+
+    private createRoomVisuals(): void {
+      this.roomGraphics = this.add.graphics().setDepth(1);
+      this.roomStationGraphics = this.add.graphics().setDepth(2);
+      this.roomLabel = this.add
+        .text(0, 0, '', {
+          color: '#f4e9c9',
+          fontFamily: 'monospace',
+          fontSize: '12px',
+          align: 'center',
+        })
+        .setOrigin(0.5)
+        .setDepth(3);
+      this.roomGraphics.setVisible(false);
+      this.roomStationGraphics.setVisible(false);
+      this.roomLabel.setVisible(false);
+    }
+
+    private enterBankRoom(): void {
+      this.player.setVelocity(0, 0);
+      const body = this.player.body as PhaserTypes.Physics.Arcade.Body;
+      body.setEnable(false);
+      this.ground?.setVisible(false);
+      this.roomGraphics?.setVisible(true);
+      this.roomStationGraphics?.setVisible(true);
+      this.roomLabel?.setVisible(true);
+      this.physics.world.setBounds(
+        ROOM_ORIGIN.x,
+        ROOM_ORIGIN.y,
+        this.bankMap.width * BANK_ROOM_TILE_SIZE,
+        this.bankMap.height * BANK_ROOM_TILE_SIZE,
+      );
+      this.player.setPosition(
+        ROOM_ORIGIN.x + this.bankMap.spawn.x * BANK_ROOM_TILE_SIZE + BANK_ROOM_TILE_SIZE / 2,
+        ROOM_ORIGIN.y + this.bankMap.spawn.y * BANK_ROOM_TILE_SIZE + BANK_ROOM_TILE_SIZE / 2,
+      );
+      this.cameras.main.setBounds(
+        ROOM_ORIGIN.x,
+        ROOM_ORIGIN.y,
+        this.bankMap.width * BANK_ROOM_TILE_SIZE,
+        this.bankMap.height * BANK_ROOM_TILE_SIZE,
+      );
+      this.lastTile = { x: -1, y: -1 };
+      this.renderBankRoom();
+    }
+
+    private exitBankRoom(): void {
+      this.player.setVelocity(0, 0);
+      const body = this.player.body as PhaserTypes.Physics.Arcade.Body;
+      body.setEnable(true);
+      this.ground?.setVisible(true);
+      this.roomGraphics?.setVisible(false);
+      this.roomStationGraphics?.setVisible(false);
+      this.roomLabel?.setVisible(false);
+      this.physics.world.setBounds(0, 0, this.map.width * TILE_SIZE, this.map.height * TILE_SIZE);
+      this.cameras.main.setBounds(0, 0, this.map.width * TILE_SIZE, this.map.height * TILE_SIZE);
+      const world = tileToWorld(this.returnTile.x, this.returnTile.y);
+      this.player.setPosition(world.x, world.y);
+      this.lastTile = { x: -1, y: -1 };
+      // The door trigger is reset by reporting the safe approach tile; the
+      // next physical approach can therefore enter once again.
+      this.doors?.reset();
+      this.reportTile();
+    }
+
+    private bankDoorReturnTile(): { x: number; y: number } {
+      const door = this.map.doors.find((candidate) => candidate.building === 'bank');
+      return { x: door?.x ?? this.map.spawn.x, y: (door?.y ?? this.map.spawn.y) + 1 };
+    }
+
+    private renderBankRoom(): void {
+      if (!this.roomGraphics || !this.roomStationGraphics || !this.roomLabel) return;
+      const state = this.bankRoom.state;
+      this.roomGraphics.clear();
+      for (let y = 0; y < this.bankMap.height; y++) {
+        for (let x = 0; x < this.bankMap.width; x++) {
+          const tile = this.bankMap.tiles[y]?.[x];
+          const colour = tile === 'wall' ? 0x39343b : tile === 'exit' ? 0x8a7c62 : 0x514c5a;
+          this.roomGraphics.fillStyle(colour, 1);
+          this.roomGraphics.fillRect(
+            ROOM_ORIGIN.x + x * BANK_ROOM_TILE_SIZE,
+            ROOM_ORIGIN.y + y * BANK_ROOM_TILE_SIZE,
+            BANK_ROOM_TILE_SIZE,
+            BANK_ROOM_TILE_SIZE,
+          );
+        }
+      }
+      this.roomStationGraphics.clear();
+      const station = this.bankMap.station;
+      const highlighted = state.highlightedStation === station.station;
+      this.roomStationGraphics.fillStyle(
+        state.station.status === 'available' ? (highlighted ? 0xe2b45d : 0xb07b41) : 0x665f67,
+        1,
+      );
+      this.roomStationGraphics.fillRect(
+        ROOM_ORIGIN.x + station.x * BANK_ROOM_TILE_SIZE,
+        ROOM_ORIGIN.y + station.y * BANK_ROOM_TILE_SIZE,
+        station.width * BANK_ROOM_TILE_SIZE,
+        station.height * BANK_ROOM_TILE_SIZE,
+      );
+      this.roomLabel
+        .setText(state.station.label)
+        .setPosition(
+          ROOM_ORIGIN.x + (station.x + station.width / 2) * BANK_ROOM_TILE_SIZE,
+          ROOM_ORIGIN.y + (station.y - 0.65) * BANK_ROOM_TILE_SIZE,
+        );
     }
 
     // -- per frame -----------------------------------------------------------
@@ -186,6 +367,35 @@ export function createStreetScene({ Phaser, onTileChanged }: StreetSceneDeps) {
       }
     }
 
+    private moveRoomPlayer(delta: number): void {
+      if (!this.cursors || this.bankRoom.state.controlOwner !== 'world') return;
+      const held = this.heldDirections();
+      let vx = 0;
+      let vy = 0;
+      if (held.left) vx -= 1;
+      if (held.right) vx += 1;
+      if (held.up) vy -= 1;
+      if (held.down) vy += 1;
+      if (vx === 0 && vy === 0) return;
+      const length = Math.hypot(vx, vy);
+      const step = PLAYER_SPEED * Math.max(delta, 1) / 1000;
+      const nextX = this.player.x + (vx / length) * step;
+      const nextY = this.player.y + (vy / length) * step;
+      const nextTile = worldToRoomTile(nextX, nextY);
+      const currentTile = worldToRoomTile(this.player.x, this.player.y);
+      if (!isBankRoomSolidAt(this.bankMap, nextTile.x, currentTile.y)) this.player.x = nextX;
+      if (!isBankRoomSolidAt(this.bankMap, nextTile.x, nextTile.y)) this.player.y = nextY;
+    }
+
+    private heldDirections() {
+      return {
+        left: this.cursors.left.isDown || this.wasd?.left?.isDown,
+        right: this.cursors.right.isDown || this.wasd?.right?.isDown,
+        up: this.cursors.up.isDown || this.wasd?.up?.isDown,
+        down: this.cursors.down.isDown || this.wasd?.down?.isDown,
+      };
+    }
+
     private reportTile(): void {
       const tile = worldToTile(this.player.x, this.player.y);
       if (tile.x === this.lastTile.x && tile.y === this.lastTile.y) return;
@@ -193,6 +403,28 @@ export function createStreetScene({ Phaser, onTileChanged }: StreetSceneDeps) {
       this.doors.update(tile);
       onTileChanged?.(tile);
     }
+
+    private reportRoomTile(): void {
+      const tile = worldToRoomTile(this.player.x, this.player.y);
+      if (tile.x === this.lastTile.x && tile.y === this.lastTile.y) return;
+      this.lastTile = tile;
+      this.bankRoom.update(tile);
+    }
+  };
+}
+
+const NOOP_INPUT_GATE: InputGate = {
+  suspend: () => {},
+  resume: () => {},
+  get suspended() {
+    return false;
+  },
+};
+
+function worldToRoomTile(x: number, y: number): { x: number; y: number } {
+  return {
+    x: Math.floor((x - ROOM_ORIGIN.x) / BANK_ROOM_TILE_SIZE),
+    y: Math.floor((y - ROOM_ORIGIN.y) / BANK_ROOM_TILE_SIZE),
   };
 }
 
