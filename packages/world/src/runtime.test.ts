@@ -18,13 +18,13 @@ vi.mock('phaser', () => {
         const scene = new (SceneType as new () => unknown)() as unknown as {
           game: Game;
           resolveBus(): unknown;
-          createBankRoom(): void;
+          createFixedRooms(): void;
         };
         scene.game = this;
         // Invoke the real StreetScene seam after Phaser has assigned its
-        // Game. This is the same registry lookup used by createBankRoom().
+        // Game. This is the same registry lookup used by createFixedRooms().
         sceneBusAtCreate.push(scene.resolveBus());
-        scene.createBankRoom();
+        scene.createFixedRooms();
       }
       config.callbacks?.postBoot?.(this);
     }
