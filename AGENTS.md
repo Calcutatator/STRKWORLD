@@ -252,6 +252,38 @@ Format: `### YYYY-MM-DD — short title` then what, why it matters, how verified
 
 ---
 
+### 2026-08-18 — Phaser starts auto-start scenes before `postBoot`
+
+The Bank room exposed a lifecycle ordering error in the World composition
+root. `runtime.ts` put the World/Shell buses into `game.registry` from the
+Phaser config's `postBoot` callback, while `street-scene.ts` captured that
+registry value when it created the Bank controller. The controller therefore
+captured `undefined` and could never receive the Shell's `world:stations`
+snapshot. The street door still worked because its emitter resolved the bus
+lazily, making the failure look like a station collision problem: the player
+could enter the Bank and reach the station, but the station remained locked and
+could neither highlight nor activate.
+
+The exact Phaser 4.2.1 order is: `Game.texturesReady()` emits `READY`;
+`SceneManager.bootQueue`, already registered on that event, synchronously
+starts the auto-start scene and runs its lifecycle; only after the `READY`
+listeners return does `texturesReady()` call `Game.start()`, which invokes
+`config.postBoot`. Comparing only `Game.start()` with the first loop step misses
+the synchronous Scene Manager path. A dependency needed by scene creation must
+be installed in `preBoot`, which `Game.boot()` invokes before the `READY` event,
+or supplied without relying on registry timing.
+
+*Verified:* the user's fresh-checkout screenshot showed the avatar stopped at
+the station but no highlight or window. Pixel sampling the station fill gave
+`#655f67` after screenshot colour conversion, matching the source's locked
+`0x665f67` branch rather than available brown `0xb07b41` or highlighted gold
+`0xe2b45d`. The current Shell station-resolution tests pass. The installed
+`phaser@4.2.1` source was traced through `core/Game.js:texturesReady/start` and
+`scene/SceneManager.js:bootQueue`, confirming the ordering above. No wallet,
+network or transaction was used.
+
+---
+
 ### 2026-08-18 — Shieldup balances reconcile state, not a hashless submission
 
 Shieldup is a useful production-behaviour reference, but it does not close
@@ -485,6 +517,9 @@ on screen, so it is the kind of bug a look does not catch. The adapter also
 fails closed: an object whose `building` property is absent or names a building
 outside the shared `BUILDINGS` registry produces no door, rather than a door to
 nowhere.
+
+**Status: superseded by “Phaser starts auto-start scenes before `postBoot`”
+(2026-08-18). The bus-timing claim below is wrong; do not act on it.**
 
 **NEW — the `game.registry` bus is present by `create()`, but read it lazily
 anyway.** The scene emits on the bus the shell stashes with
