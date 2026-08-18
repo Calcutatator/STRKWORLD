@@ -214,6 +214,197 @@ describe('BridgeService', () => {
     });
   });
 
+  it('accepts a settled amount when 1Click omits the optional destination hash', async () => {
+    const client = new StubClient();
+    const store = new MemoryBridgeStore();
+    const service = new BridgeService({ client, store, quoteVerifier: () => true, now: () => NOW });
+    await service.createManualDeposit({
+      source: SOURCE,
+      amountIn: 1_000_000n,
+      starknetRecipient: '0x123',
+      refundAddress: request.refundTo,
+    });
+
+    client.statuses.push(status('SUCCESS' as never, {
+      amountOut: '1980000000000000000',
+      destinationChainTxHashes: [],
+    }));
+    await expect(service.refresh()).resolves.toMatchObject({
+      leg: 'settled',
+      strkReceived: 1_980_000_000_000_000_000n,
+      settlementTxHash: undefined,
+    });
+  });
+
+  it.each([
+    ['zero', '0'],
+    ['negative', '-1'],
+    ['fractional', '1.5'],
+    ['exponential', '1e3'],
+    ['oversized', '1'.repeat(79)],
+  ])('rejects a SUCCESS status with a %s amountOut before settling', async (_label, amountOut) => {
+    const client = new StubClient();
+    const store = new MemoryBridgeStore();
+    const service = new BridgeService({ client, store, quoteVerifier: () => true, now: () => NOW });
+    await service.createManualDeposit({
+      source: SOURCE,
+      amountIn: 1_000_000n,
+      starknetRecipient: '0x123',
+      refundAddress: request.refundTo,
+    });
+
+    client.statuses.push(status('SUCCESS' as never, {
+      amountOut,
+      destinationChainTxHashes: [{ hash: '0xsettled', explorerUrl: 'https://example/tx' }],
+    }));
+    await expect(service.refresh()).rejects.toThrow('1Click returned invalid execution status data.');
+    expect(store.load()?.status.leg).toBe('awaiting-deposit');
+  });
+
+  it.each([
+    ['omitted', undefined],
+    ['null', null],
+  ])('rejects a SUCCESS status with %s amountOut', async (_label, amountOut) => {
+    const client = new StubClient();
+    const store = new MemoryBridgeStore();
+    const service = new BridgeService({ client, store, quoteVerifier: () => true, now: () => NOW });
+    await service.createManualDeposit({
+      source: SOURCE,
+      amountIn: 1_000_000n,
+      starknetRecipient: '0x123',
+      refundAddress: request.refundTo,
+    });
+
+    client.statuses.push(status('SUCCESS' as never, {
+      ...(amountOut === undefined ? {} : { amountOut: amountOut as never }),
+      destinationChainTxHashes: [],
+    }));
+    await expect(service.refresh()).rejects.toThrow('1Click returned invalid execution status data.');
+    expect(store.load()?.status.leg).toBe('awaiting-deposit');
+  });
+
+  it('rejects a SUCCESS status with a non-array destination transaction list', async () => {
+    const client = new StubClient();
+    const store = new MemoryBridgeStore();
+    const service = new BridgeService({ client, store, quoteVerifier: () => true, now: () => NOW });
+    await service.createManualDeposit({
+      source: SOURCE,
+      amountIn: 1_000_000n,
+      starknetRecipient: '0x123',
+      refundAddress: request.refundTo,
+    });
+
+    client.statuses.push(status('SUCCESS' as never, {
+      amountOut: '1980000000000000000',
+      destinationChainTxHashes: null as never,
+    }));
+    await expect(service.refresh()).rejects.toThrow('1Click returned invalid execution status data.');
+  });
+
+  it('rejects a SUCCESS status whose surfaced destination entry has no hash', async () => {
+    const client = new StubClient();
+    const store = new MemoryBridgeStore();
+    const service = new BridgeService({ client, store, quoteVerifier: () => true, now: () => NOW });
+    await service.createManualDeposit({
+      source: SOURCE,
+      amountIn: 1_000_000n,
+      starknetRecipient: '0x123',
+      refundAddress: request.refundTo,
+    });
+
+    client.statuses.push(status('SUCCESS' as never, {
+      amountOut: '1980000000000000000',
+      destinationChainTxHashes: [{} as never],
+    }));
+    await expect(service.refresh()).rejects.toThrow('1Click returned invalid execution status data.');
+  });
+
+  it('rejects an amountOut above the uint256 upper bound', async () => {
+    const client = new StubClient();
+    const store = new MemoryBridgeStore();
+    const service = new BridgeService({ client, store, quoteVerifier: () => true, now: () => NOW });
+    await service.createManualDeposit({
+      source: SOURCE,
+      amountIn: 1_000_000n,
+      starknetRecipient: '0x123',
+      refundAddress: request.refundTo,
+    });
+
+    client.statuses.push(status('SUCCESS' as never, {
+      amountOut: (1n << 256n).toString(),
+      destinationChainTxHashes: [],
+    }));
+    await expect(service.refresh()).rejects.toThrow('1Click returned invalid execution status data.');
+  });
+
+  it.each([
+    ['INCOMPLETE_DEPOSIT', 'deposit-detected', false],
+    ['REFUNDED', 'failed', true],
+    ['FAILED', 'failed', true],
+  ])('maps a valid %s response safely', async (providerStatus, leg, pollingStopped) => {
+    const client = new StubClient();
+    const store = new MemoryBridgeStore();
+    const service = new BridgeService({ client, store, quoteVerifier: () => true, now: () => NOW });
+    await service.createManualDeposit({
+      source: SOURCE,
+      amountIn: 1_000_000n,
+      starknetRecipient: '0x123',
+      refundAddress: request.refundTo,
+    });
+
+    client.statuses.push(status(providerStatus as never));
+    await expect(service.refresh()).resolves.toMatchObject({ leg, pollingStopped });
+  });
+
+  it.each([
+    ['undefined', undefined],
+    ['empty', ''],
+    ['whitespace', '   '],
+    ['oversized', 'x'.repeat(257)],
+    ['non-string', null],
+  ])('rejects a SUCCESS status with a %s settlement hash', async (_label, hash) => {
+    const client = new StubClient();
+    const store = new MemoryBridgeStore();
+    const service = new BridgeService({ client, store, quoteVerifier: () => true, now: () => NOW });
+    await service.createManualDeposit({
+      source: SOURCE,
+      amountIn: 1_000_000n,
+      starknetRecipient: '0x123',
+      refundAddress: request.refundTo,
+    });
+
+    client.statuses.push(status('SUCCESS' as never, {
+      amountOut: '1980000000000000000',
+      destinationChainTxHashes: [{ hash: hash as never, explorerUrl: 'https://example/tx' }],
+    }));
+    await expect(service.refresh()).rejects.toThrow(/invalid execution status data/i);
+    expect(store.load()?.status.leg).toBe('awaiting-deposit');
+  });
+
+  it.each([
+    ['empty', ''],
+    ['whitespace', ' 0xorigin '],
+    ['oversized', 'x'.repeat(257)],
+    ['undefined', undefined],
+    ['non-string', null],
+  ])('rejects a surfaced %s origin transaction hash', async (_label, hash) => {
+    const client = new StubClient();
+    const store = new MemoryBridgeStore();
+    const service = new BridgeService({ client, store, quoteVerifier: () => true, now: () => NOW });
+    await service.createManualDeposit({
+      source: SOURCE,
+      amountIn: 1_000_000n,
+      starknetRecipient: '0x123',
+      refundAddress: request.refundTo,
+    });
+
+    client.statuses.push(status('PROCESSING' as never, {
+      originChainTxHashes: [{ hash: hash as never, explorerUrl: 'https://example/tx' }],
+    }));
+    await expect(service.refresh()).rejects.toThrow(/invalid execution status data/i);
+    expect(store.load()?.status.leg).toBe('awaiting-deposit');
+  });
+
   it('supports a wallet-signed origin deposit and reports its transaction to 1Click', async () => {
     const client = new StubClient();
     const store = new MemoryBridgeStore();

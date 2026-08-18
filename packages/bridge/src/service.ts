@@ -17,6 +17,11 @@ import type { BridgeRecord, BridgeStatus, SourceAsset } from './types.js';
 export const DEFAULT_SLIPPAGE_BPS = 100;
 export const QUOTE_DEADLINE_MS = 30 * 60 * 1_000;
 
+const MAX_TRANSACTION_HASH_LENGTH = 256;
+const MAX_BASE_UNIT_AMOUNT_DIGITS = 78;
+const MAX_BASE_UNIT_AMOUNT = (1n << 256n) - 1n;
+const INVALID_EXECUTION_STATUS_MESSAGE = '1Click returned invalid execution status data.';
+
 export interface CreateDepositInput {
   source: SourceAsset;
   amountIn: bigint;
@@ -383,7 +388,7 @@ function mapStatus(raw: {
     case 'INCOMPLETE_DEPOSIT':
       return {
         leg: 'deposit-detected',
-        depositTxHash: raw.swapDetails.originChainTxHashes[0]?.hash,
+        depositTxHash: firstTransactionHash(raw.swapDetails.originChainTxHashes),
         message: String(raw.status) === 'INCOMPLETE_DEPOSIT'
           ? 'A deposit was detected but is below the quoted amount.'
           : 'Deposit detected; waiting for the solver.',
@@ -392,23 +397,29 @@ function mapStatus(raw: {
     case 'PROCESSING':
       return {
         leg: 'solver-settling',
-        depositTxHash: raw.swapDetails.originChainTxHashes[0]?.hash,
+        depositTxHash: firstTransactionHash(raw.swapDetails.originChainTxHashes),
         message: 'The solver is delivering STRK to Starknet.',
         pollingStopped: false,
       };
     case 'SUCCESS':
-      return {
-        leg: 'settled',
-        depositTxHash: raw.swapDetails.originChainTxHashes[0]?.hash,
-        settlementTxHash: raw.swapDetails.destinationChainTxHashes[0]?.hash,
-        strkReceived: raw.swapDetails.amountOut ? BigInt(raw.swapDetails.amountOut) : undefined,
-        message: 'STRK arrived publicly. Shielding is the separate next step.',
-        pollingStopped: true,
-      };
+      {
+        const strkReceived = parseSettlementAmount(raw.swapDetails.amountOut);
+        const settlementTxHash = firstTransactionHash(
+          raw.swapDetails.destinationChainTxHashes,
+        );
+        return {
+          leg: 'settled',
+          depositTxHash: firstTransactionHash(raw.swapDetails.originChainTxHashes),
+          settlementTxHash,
+          strkReceived,
+          message: 'STRK arrived publicly. Shielding is the separate next step.',
+          pollingStopped: true,
+        };
+      }
     case 'REFUNDED':
       return {
         leg: 'failed',
-        depositTxHash: raw.swapDetails.originChainTxHashes[0]?.hash,
+        depositTxHash: firstTransactionHash(raw.swapDetails.originChainTxHashes),
         message: 'The bridge did not settle and 1Click reports a refund.',
         pollingStopped: true,
       };
@@ -421,6 +432,45 @@ function mapStatus(raw: {
     default:
       throw new Error('1Click returned an unknown execution status.');
   }
+}
+
+function firstTransactionHash(entries: unknown): string | undefined {
+  if (!Array.isArray(entries)) throw invalidExecutionStatus();
+  const first = entries[0];
+  if (first === undefined) return undefined;
+  if (!first || typeof first !== 'object' || !('hash' in first)) {
+    throw invalidExecutionStatus();
+  }
+  return boundedTransactionHash(first.hash);
+}
+
+function boundedTransactionHash(value: unknown): string {
+  if (
+    typeof value !== 'string' ||
+    value.length === 0 ||
+    value.length > MAX_TRANSACTION_HASH_LENGTH ||
+    /\s/.test(value)
+  ) {
+    throw invalidExecutionStatus();
+  }
+  return value;
+}
+
+function parseSettlementAmount(value: unknown): bigint {
+  if (
+    typeof value !== 'string' ||
+    !/^[1-9][0-9]*$/.test(value) ||
+    value.length > MAX_BASE_UNIT_AMOUNT_DIGITS
+  ) {
+    throw invalidExecutionStatus();
+  }
+  const amount = BigInt(value);
+  if (amount > MAX_BASE_UNIT_AMOUNT) throw invalidExecutionStatus();
+  return amount;
+}
+
+function invalidExecutionStatus(): Error {
+  return new Error(INVALID_EXECUTION_STATUS_MESSAGE);
 }
 
 function throwIfAborted(signal?: AbortSignal): void {

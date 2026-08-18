@@ -252,6 +252,34 @@ Format: `### YYYY-MM-DD — short title` then what, why it matters, how verified
 
 ---
 
+### 2026-08-18 — Treat 1Click execution status as hostile runtime data
+
+The generated 1Click SDK types do not validate the response received over the
+network. In particular, a `SUCCESS` response can still carry an absent,
+non-decimal, non-positive or over-uint256 `amountOut`; passing that value
+directly to `BigInt` either throws a provider-shaped error or records a false
+settlement. Transaction-hash arrays and their first entries need the same
+runtime boundary. A destination hash is optional in the pinned SDK, so an empty
+list is valid and must not prevent a genuine positive settlement from being
+recorded.
+
+`BridgeService.refresh()` now accepts settlement only after validating a
+positive decimal uint256 amount, and validates any origin or destination hash
+it surfaces as a bounded non-whitespace string. Malformed provider data leaves
+the prior bridge record intact and produces one generic local error; it never
+copies the provider payload into the player-facing failure. This validation is
+independent of signed-quote verification: the quote binds the intended route,
+whereas the later status response reports what actually settled.
+
+*Verified:* adversarial service tests cover absent, null, zero, negative,
+fractional, exponential, oversized and over-uint256 amounts; malformed hash
+arrays and entries; an omitted optional destination hash; and every supported
+terminal status. The 42-test Bridge suite, package typecheck, invariant scan
+and independent read-only review all pass. No quote, deposit, wallet signature
+or transaction was created.
+
+---
+
 ### 2026-08-18 — Exchange confirmation has three independent freshness gates
 
 D-042 exposed three places where a truthful prepared swap can go stale without
