@@ -128,9 +128,8 @@ interface PrivacyOperations {
 }
 ```
 
-The interface is **source-derived and provisional until the Chain lane records
-an explicit freeze decision** (D-015/D-028); changing it needs a decision entry
-and a heads-up to dependent lanes, never a quiet edit.
+The interface is **source-derived and frozen under D-036**; changing it needs
+a decision entry and a heads-up to dependent lanes, never a quiet edit.
 `WalletApiPrivacyOperations` is the implemented pool-native adapter and
 `FakePrivacyOperations` — same interface, fault injection, no chain — drives
 deterministic offline work. The funded Wallet API/paymaster run remains a

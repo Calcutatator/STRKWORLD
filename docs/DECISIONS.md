@@ -404,7 +404,7 @@ adversary rather than an assumed-honest one.
 
 ## D-015 — Unfreeze `PrivacyOperations`; the submission queue moves server-side
 
-**2026-08-16 · Accepted · amends D-004 and D-011 · development gate amended by D-028**
+**2026-08-16 · Accepted · amends D-004 and D-011 · development gate amended by D-028 · provisional seam status superseded by [D-036](#d-036--privacyoperations-is-frozen-on-source-derived-evidence)**
 
 **Context.** Two findings from the same review, with one root cause: decisions
 were locked before the evidence that should shape them existed.
@@ -1209,3 +1209,51 @@ Backend contracts do not change. Once the Shell tests prove retention across
 station/Menu/room transitions, re-locking on a second uncertainty, and blocked
 prepare/confirm paths, D-034/D-035 are complete and the Chain lane may take the
 D-028 freeze.
+
+---
+
+## D-036 — `PrivacyOperations` is frozen on source-derived evidence
+
+**2026-08-18 · Accepted · implements D-028 and supersedes D-015's provisional seam status**
+
+**Context.** D-015 correctly unfroze the original one-shot interface. The
+replacement intent-based, prepare-then-confirm seam is implemented by both the
+wallet-backed adapter and deterministic fake. D-034 now distinguishes a lost
+post-dispatch response from retryable pre-submit failure, and D-035's reviewed
+Shell gate retains that uncertainty for the browser session and blocks further
+actions until explicit balance-check acknowledgement. The conditions D-028 set
+for a source-derived development freeze are therefore complete.
+
+The required freshness check was rerun before this decision. The published
+`next` tags moved to discovery 6.0.4 and wallet-standard 6.0.5, and upstream
+replaced `packages/sub_account_anonymizer` with
+`packages/shadow_account_anonymizer`. Stable Wallet API 0.10.3 and AVNU 4.2.0
+did not move. Those facts do not change this seam: STRKWORLD remains on its
+exact tested direct pins, and no shadow-account route is admitted by v1.
+
+**Decision.** Freeze the current exported financial contract in
+`packages/privacy/src/operations.ts` and `types.ts`: the five
+`PrivacyOperations` methods, typed `Intent` variants, `PreparedBatch`
+prepare/confirm/discard contract, its warnings and costs, pool/capability and
+balance shapes, recipient status, transaction result/progress shapes, and the
+public `PrivacyErrorKind` taxonomy.
+
+Any change to that contract now requires a decision entry and a heads-up to
+dependent lanes before implementation. Wallet implementation details, live
+pool values, route configuration and dependency upgrades are not silently
+authorized by this freeze; each remains governed by its existing boundary and
+verification rules.
+
+**Evidence boundary.** This is a **source-derived development freeze**, not a
+claim that funded mainnet behavior has been validated. The `promptCount` field
+shape is frozen, but its rendered value, prompt sequence and latency remain
+provisional. Ready/Xverse behavior and AVNU acceptance of a real
+wallet-produced artifact remain mandatory pre-launch checks under D-028. A
+contradiction from that run is handled through a new decision and coordinated
+seam change, never by quietly editing the frozen interface.
+
+**Consequences.** Dependent lanes may now treat `PrivacyOperations` as stable.
+D-015's queue placement and two-phase rationale remain in force; only its
+provisional status is superseded. D-034/D-035 remain the required handling for
+hashless private-submission uncertainty, with no automatic retry or recovery
+storage.

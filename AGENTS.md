@@ -252,6 +252,39 @@ Format: `### YYYY-MM-DD — short title` then what, why it matters, how verified
 
 ---
 
+### 2026-08-18 — `PrivacyOperations` is source-derived and frozen
+
+D-036 freezes the current financial seam after the D-034
+`submission-uncertain` classification and D-035 Shell acknowledgement gate
+landed and passed integrated review. The freeze covers the five
+`PrivacyOperations` methods and their transitive public contract: typed
+intents, prepared-batch confirm/discard behavior, costs and warnings,
+capability/pool/balance/recipient/result/progress shapes, and the public error
+taxonomy. Any change now requires a decision and dependent-lane heads-up before
+implementation.
+
+This supersedes the older “not ready for D-028 freeze” finding below because
+its exact blocker has been resolved. It does **not** turn source evidence into
+a funded-mainnet claim: prompt count, rendered prompt sequence, latency,
+Ready/Xverse behavior and AVNU acceptance of a real wallet-produced artifact
+remain pre-launch validation under D-028.
+
+The required freshness probe still reports discovery `next` 6.0.4,
+wallet-standard `next` 6.0.5, and upstream replacement of
+`packages/sub_account_anonymizer` by
+`packages/shadow_account_anonymizer`. Stable Wallet API 0.10.3 and AVNU 4.2.0
+remain unchanged. STRKWORLD keeps its exact tested direct pins and current v1
+routes; the freeze neither upgrades dependencies nor admits a shadow-account
+route.
+
+*Verified:* reran the vendored integration freshness script against npm,
+GitHub and the Wallet API release list; inspected the installed package types
+and exact package pins; and ran the privacy package tests/typecheck plus the
+repository documentation, invariant and diff checks. No wallet was opened, no
+proof or signature was produced, and no transaction was submitted.
+
+---
+
 ### 2026-08-18 — Phaser starts auto-start scenes before `postBoot`
 
 The Bank room exposed a lifecycle ordering error in the World composition

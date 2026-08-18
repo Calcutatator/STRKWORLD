@@ -16,10 +16,10 @@ import type {
  * operations and could not express batching, fee validation before signing, or
  * cancellation — all of which the design depends on.
  *
- * ⚠ Still PROVISIONAL. D-028 removed the funded wallet run as a development
- * gate, but a submission whose response disappears before its hash arrives is
- * still indistinguishable from a pre-settlement transport failure. Do not
- * freeze until that uncertainty has an explicit cross-lane outcome and copy.
+ * FROZEN 2026-08-18 under D-036 on source-derived evidence. Any change to this
+ * interface or its transitive public shapes needs a decision entry and a
+ * heads-up to dependent lanes before implementation. Funded prompt behavior,
+ * latency and live-paymaster artifact acceptance remain pre-launch checks.
  *
  * Implementations must not branch on wallet identity. Capability is determined
  * at runtime, which is what keeps web wallets possible later without a rewrite.

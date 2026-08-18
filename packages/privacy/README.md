@@ -63,12 +63,9 @@ interface PrivacyOperations {
 }
 ```
 
-The interface remains **provisional until the Chain lane explicitly freezes
-it** under D-028. Source-derived implementation work proceeds now. The current
-blocker is exact: a lost submission response before the hash reaches the
-browser is not distinguishable from a pre-settlement transport failure, and
-the public seam has no `submission-uncertain` outcome. A change still needs a
-decision entry and a heads-up to the shell lane — never a quiet edit.
+The interface is **source-derived and frozen under D-036**. Any change to its
+methods or transitive public shapes needs a decision entry and a heads-up to
+dependent lanes before implementation — never a quiet edit.
 
 `WalletApiPrivacyOperations` is the source-derived wallet-backed
 implementation and `FakePrivacyOperations` implements the same interface for
@@ -81,12 +78,11 @@ that:
 2. a second implementation can be added without touching callers,
 3. the forward-compatibility test can prove a non-extension wallet works.
 
-The seam is **source-derived and provisional pending an explicit Chain-lane
-freeze decision**. D-015 replaced the earlier one-shot methods because they
-could not express atomic batches, fee validation before proving, cancellation,
-or backend-delayed submission. D-028 moved the funded wallet run to the
-pre-launch checklist rather than leaving it as a development gate. Any seam
-change still needs a decision entry and a heads-up to the Shell lane.
+The D-036 freeze is contract stability for development, not a live-wallet
+claim. D-015 replaced the earlier one-shot methods because they could not
+express atomic batches, fee validation before proving, cancellation, or
+backend-delayed submission. D-028 keeps rendered prompt sequence, latency and
+live-paymaster artifact acceptance on the mandatory pre-launch checklist.
 
 The shipped Wallet API types expose one aggregate balance per token, not the
 spendable/maturing split used by the low-level SDK. Real wallet results therefore
@@ -122,10 +118,10 @@ would lose one receipt and blur the public/private boundary. The shell must run
 the two explicit operations in sequence.
 
 If the transport fails **before** the accepted hash is received, no Chain-only
-code can prove whether the relay settled. Do not advise a blind retry and do not
-describe that state as “nothing was sent.” Resolving it requires either an
-explicit uncertain-submission outcome consumed by the Shell or an idempotent
-backend recovery handle; this is the remaining freeze blocker.
+code can prove whether the relay settled. D-034 maps that state to the
+single-attempt, non-retryable `submission-uncertain` outcome, and D-035 requires
+the Shell's balance-check acknowledgement gate before another action. Never
+describe it as “nothing was sent” and never retry automatically.
 
 `strk20PrepareInvoke(actions, true)` is simulation only. It skips proof
 generation and returns an empty, non-submittable proof; use it for previews,

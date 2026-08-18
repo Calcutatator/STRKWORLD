@@ -89,9 +89,10 @@ refuses to sign if the fee moved. `FakePrivacyOperations` already implements
 the same interface with fault injection — the shell is being built against it,
 so your implementation must behave the same way.
 
-**The interface is PROVISIONAL, not frozen** (D-015). You may change it after
-the spike — but a change breaks the shell lane, so it needs a decision entry
-and a heads-up, not a quiet edit.
+**The interface is SOURCE-DERIVED AND FROZEN** (D-036). A change breaks the
+Shell lane, so it needs a decision entry and a heads-up before implementation,
+never a quiet edit. Funded behavior remains a pre-launch validation under
+D-028.
 
 **Build the backend** (`apps/backend`, D-014). It holds the paymaster key,
 proxies RPC reads, and owns the submission queue. Treat it as a privacy

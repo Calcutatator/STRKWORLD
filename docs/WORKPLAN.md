@@ -16,7 +16,7 @@ the lane boundary — that is why the repo is shaped the way it is.
 
 | Lane | Package | Status in v1 |
 |---|---|---|
-| **Chain** | `packages/privacy` | Active |
+| **Chain** | `packages/privacy` | Active; financial seam frozen under D-036 |
 | **World** | `packages/world` + `packages/lobby` | Active |
 | **Shell** | `apps/web` | Active, starts week 2 |
 | **Backend** | `apps/backend` | Active; offline implementation in progress under D-028 |
@@ -69,21 +69,19 @@ is most expensive.
 
 One agent (or the lead) locks these first:
 
-1. **`PrivacyOperations`** — provisional after D-015. D-028 removes the funded
-   wallet run as a development gate: freeze it from the completed shipped-code
-   audit and D-018 route-admission shape when the Chain lane records that
-   decision. Funded behavior remains a pre-launch validation.
+1. **`PrivacyOperations`** — **frozen under D-036** from the completed
+   shipped-code audit, D-018 route-admission shape and D-034/D-035 uncertainty
+   contract. Funded behavior remains a pre-launch validation under D-028.
 2. **`WorldEvents` / `ShellEvents`** — the event bus contract, in
    `packages/shared/src/index.ts`. **Frozen.**
 3. **`PresenceState`** — the lobby room schema, in the same file. **Frozen.**
    It is the enforcement point for "the lobby never sees money": a field that
    is not in the type cannot leak.
 
-`WorldEvents` and `PresenceState` are locked. The financial seam is deliberately
-still source-derived and provisional (D-015/D-028); dependent lanes use it
-behind adapters until the Chain lane records an explicit freeze decision. The
-funded wallet run validates the result before launch but does not gate that
-decision or current development.
+`WorldEvents`, `PresenceState` and the source-derived financial seam are now
+locked. `PrivacyOperations` froze under D-036; the funded wallet run validates
+its source-derived assumptions before launch but did not gate that decision or
+current development.
 
 Once frozen, changes to `packages/shared` require a decision entry. Not
 bureaucracy — a change there breaks three lanes at once, so it should be a
@@ -141,7 +139,8 @@ in `AGENTS.md`, and implement against it. Before launch, drive all three methods
 against a real extension on mainnet with tiny amounts and amend any finding the
 live run contradicts (D-028).
 
-**Then:** implement `WalletApiPrivacyOperations` against the provisional seam.
+**Then — complete:** implement `WalletApiPrivacyOperations` against the
+source-derived seam, now frozen by D-036.
 Wallet connection via `get-starknet-discovery` (never the static wallet list),
 capability detection by version query only, action-array construction with the
 open-note invariant, recipient preflight via the pool's `get_public_key`, and
@@ -149,17 +148,17 @@ the full error taxonomy mapped to `PrivacyErrorKind`. Add a route registry that
 maps each typed intent to a pool-native action, AVNU's private executor or an
 audited anonymizer deployment.
 
-**Current frontier:** D-034's Chain classification and D-035's reviewed Shell
-balance-check gate are implemented. Once the integrated D-033–D-035 branch is
-merged, record the explicit source-derived seam freeze authorized by D-028. A
-lost submit response must never become a blind retry.
+**Current frontier:** D-036 freezes the implemented `PrivacyOperations` seam.
+A lost submit response must never become a blind retry. The next Chain slice
+requires a bounded project-lead brief; funded Wallet API/paymaster validation
+remains on the pre-launch checklist rather than reopening the development seam.
 
-**Dependency drift to re-check before the next Chain package change:** the
-2026-08-18 integration freshness check found get-starknet discovery's `next`
-tag at 6.0.4, wallet-standard's at 6.0.5, and the upstream monorepo replacing
-the cited `sub_account_anonymizer` path with a new
-`shadow_account_anonymizer`. None is used by the D-035 Shell-only slice; do not
-change pins or route assumptions without a separate verified Chain brief.
+**Dependency drift rechecked for D-036:** the 2026-08-18 integration freshness
+check still finds get-starknet discovery's `next` tag at 6.0.4,
+wallet-standard's at 6.0.5, and the upstream monorepo replacing the cited
+`sub_account_anonymizer` path with `shadow_account_anonymizer`. The exact
+tested pins and v1 routes do not change; any upgrade or route assumption needs
+a separate verified Chain brief.
 
 **Must not:** contain UI, import from `world` or `lobby`, branch on wallet
 identity, read balances for feature detection, or expose an arbitrary target,
