@@ -149,6 +149,11 @@ the full error taxonomy mapped to `PrivacyErrorKind`. Add a route registry that
 maps each typed intent to a pool-native action, AVNU's private executor or an
 audited anonymizer deployment.
 
+**Current frontier:** implement D-034's non-retryable
+`submission-uncertain` outcome with the Shell, then record the explicit
+source-derived seam freeze authorized by D-028. A lost submit response must
+never become a blind retry.
+
 **Must not:** contain UI, import from `world` or `lobby`, branch on wallet
 identity, read balances for feature detection, or expose an arbitrary target,
 selector or calldata escape hatch.
@@ -166,13 +171,16 @@ to end. A missing route must produce a locked door, never a public fallback.
 
 **Owns** `packages/world` and `packages/lobby`.
 
-**First task:** a walkable street. Phaser 4 scene, player sprite with walking
-animation, collision, camera follow, and four building entrances emitting
-`building:entered`. No chain, no wallet, no money — this lane must run
-correctly with nothing connected.
+**Completed baseline:** a walkable street. Phaser 4 scene, generated player,
+collision, camera follow, five facades, four active entrances emitting
+`building:entered`, and a locked Vault.
 
-**Then:** tilemaps for the first district, the Colyseus room with the ephemeral
-`gameId` lifecycle, position throttling and interest management.
+**Current frontier:** D-033's procedural Bank room — fixed square geometry,
+physical exit, one solid `bank:shielding` station, proximity highlight,
+control handoff and local enter/exit transition. Keep geometry and station
+state Phaser-free and headlessly tested. The Colyseus room already owns the
+server-minted ephemeral `gameId` lifecycle, throttling and interest management;
+`apps/web` still needs to compose its suspend/resume lifecycle.
 
 **Must not:** import `starknet` or any wallet package. Put an address, balance,
 transaction hash, building name or entry event into lobby traffic. On local
@@ -195,15 +203,22 @@ browser; and nothing financial or building-specific enters lobby traffic.
 **Owns** `apps/web`. Starts week 2, once the seams are frozen and World has
 something to mount.
 
-**First task:** the event bus. React owns wallet and financial
-state; Phaser receives plain data via an event emitter and never reads back.
+**Completed baseline:** the event bus, connect/capability rooms, route gate,
+Bank panel, batch accumulator, canonical disclosures, `ConfirmGate`, stale
+write guards and session receipt ledger. React owns wallet and financial state;
+Phaser receives presentation data and never reads back.
 
-**Then:** building panels, the connect flow with capability detection, the
-`NOT_REGISTERED` and unsupported-wallet rooms as designed screens rather than
-error toasts, and the typed adapters from each panel to the financial seam.
+**Current frontier:** implement D-033's visit controller. Building entry starts
+Game Mode; station activation opens a per-function window over the same Bank
+machine/`ConfirmGate`; the top-right Menu Mode button opens the existing panel.
+Station/Menu close returns control to the room, while building exit tears down
+the visit. Coordinate D-034's session-retained uncertain-submission notice with
+the Chain lane before the financial seam freezes.
 
-The **batch accumulator** collects typed intent during a building visit and
-emits one atomic batch on confirmation. It never accepts raw protocol calldata.
+The **batch accumulator is Menu Mode only** under D-032. It collects typed
+intent during a building visit and emits one atomic batch on confirmation. Game
+Mode prepares and confirms each station function separately. Neither path ever
+accepts raw protocol calldata.
 
 **Critical constraint:** batching amortises fees, but **never bundle a deposit
 with the transfer it funds**. Deposits carry a public ERC-20 leg naming the
@@ -292,9 +307,11 @@ non-commercial only, and this is a public project handling real funds. Audit
 per pack, not per tag. A pack that cannot be cleared gets dropped, not
 grandfathered.
 
-**Then:** four building facades themed to their protocols, a player sprite
-sheet with four-direction walking, and the Aseprite → embedded-tileset export
-pipeline.
+**Then:** five building facades (four active plus the locked Vault) themed to
+their protocols, a player sprite sheet with four-direction walking, and the
+Aseprite → embedded-tileset export pipeline. D-033 keeps the first Bank room
+procedural; final room/station art starts only after World freezes its 32 px
+footprints and asset names.
 
 **Done when:** the world renders as a coherent place, every asset has a
 recorded licence cleared for commercial use, and exported maps load in Phaser

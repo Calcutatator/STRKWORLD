@@ -1036,3 +1036,127 @@ settlement model.
 We are deliberately **not** fixing the finer per-window-vs-grouped execution
 questions now; design will settle what a single station covers. The rule is:
 execute on use, in Game Mode.
+
+---
+
+## D-033 — Game Mode extends the frozen event bus with opaque stations and control ownership
+
+**2026-08-18 · Accepted · extends D-011 and D-027; implements the seam change anticipated by D-030**
+
+**Context.** Game Mode needs the World to render and activate stations while
+the Shell remains the sole owner of wallet state, route admission, disclosures,
+mode state and financial execution. Encoding concrete actions or privacy grades
+in Phaser would break the package boundary; encoding only a literal mode toggle
+would leave input ownership and locked-station rendering implicit.
+
+**Decision.** Extend the shared event vocabulary once, with this semantic
+shape:
+
+```ts
+type StationId = `${BuildingId}:${string}`;
+
+type GameModeWorldEvents = {
+  'station:activated': { building: BuildingId; station: StationId };
+};
+
+type GameModeShellEvents = {
+  'world:control-owner': {
+    building: BuildingId;
+    owner: 'world' | 'shell';
+  };
+  'world:stations': {
+    building: BuildingId;
+    stations: readonly {
+      station: StationId;
+      label: string;
+      status: 'available' | 'locked';
+    }[];
+  };
+  'world:exit-building': { building: BuildingId };
+};
+```
+
+`world:exit-building` already exists with an empty payload; this decision adds
+the active building so a stale React callback cannot eject the player from a
+newer room. Commands for a building other than the active local room are
+ignored.
+
+Station IDs are **opaque presentation identifiers**, not action or route IDs.
+The Shell owns the registry that maps a station to one or more existing panel
+functions. That lets design regroup functions without changing the bus. Labels
+and lock state are preformatted presentation data, like the existing HUD
+events. A missing or unknown station defaults locked, and the Shell re-runs the
+real route/privacy gate before it renders a functional window; the World's
+snapshot is never authorization.
+
+The Shell owns `game` versus `menu` mode. The World needs only to know who owns
+controls. It suspends input **before** emitting `station:activated`; closing the
+station window or Menu Mode returns control to the World. React owns Escape.
+Walking next to an available station auto-opens it once per approach, matching
+D-030; leaving the approach zone re-arms it. No focus event crosses the bus.
+
+The first tracer is a procedural Bank room with a physical exit tile and one
+`bank:shielding` station labelled `SHIELD / UNSHIELD`. The station may expose
+only the first completed function while the slice is under construction; its
+grouping is not a new execution path. Closing a station or Menu Mode returns to
+the room. It does not exit the building. The physical exit ends the first
+slice's visit; `world:exit-building` remains available for a later explicit
+accessible exit control.
+
+**Lobby consequence.** `apps/web` composes the `LobbyClient` lifecycle because
+the Shell sees visit start/end and owns the explicit suspend/resume decision.
+World continues to emit only movement and local visit semantics. Building,
+room, station, mode and function identity never enter lobby state or traffic.
+
+**Consequences.** World can build room geometry, collision, proximity and
+transitions without money or wallet imports. Shell can build Game/Menu state
+and reuse the existing panels and `ConfirmGate`. The initial asset contract is
+procedural 32 px geometry and text; Art waits until room and station footprints
+are frozen. Tests must cover fail-closed station state, control handoff before
+activation, stale-building commands, listener cleanup, input reset, and the
+unchanged lobby vocabulary.
+
+---
+
+## D-034 — A lost private-submission response is non-retryable uncertainty
+
+**2026-08-18 · Accepted · extends the D-015 submission contract and unblocks the D-028 seam freeze after implementation**
+
+**Context.** Commit `59bfc8b` preserves a private transfer or swap receipt once
+the submission gateway has delivered a transaction hash. A connection can
+still disappear after the backend accepts the transaction but before the
+browser learns the hash. The current `unreachable` copy says “Nothing was
+sent,” and a blind retry can duplicate an action that settled.
+
+A backend idempotency-key-to-transaction-hash store could recover this state,
+but it would introduce the per-request linkage D-014 deliberately excludes.
+The project does not add that correlation surface to solve a rare transport
+ambiguity in v1.
+
+**Decision.** Add `submission-uncertain` to the public `PrivacyErrorKind`. Once
+a private submit request has been dispatched, a transport failure before a
+validated hash reaches the browser maps to this kind, not to retryable
+`unreachable`. Pre-submit configuration, fee, proof and wallet failures keep
+their existing precise outcomes.
+
+`submission-uncertain` is **single-attempt and non-retryable**. The Shell must
+retain it above the interaction window for the rest of the browser session and
+show copy that does not claim success or failure:
+
+> We could not confirm whether this private action was submitted. Do not retry
+> it yet. Reconnect, wait a few minutes, and refresh your private balance before
+> taking another action.
+
+Closing a station, switching mode or leaving the room must not erase that
+notice. Automatic retry, a “Try again” control, and “Nothing was sent” are all
+defects for this outcome. Durable cross-reload persistence of private financial
+history remains a separate privacy decision; this decision requires session
+retention, not local storage.
+
+**Consequences.** Chain and Shell may make one coordinated seam change under
+this decision: the error kind and backend-client classification in
+`packages/privacy`, then exhaustive copy/state/receipt handling in `apps/web`.
+No backend schema or storage change is authorized. Once that change is tested,
+the Chain lane may record the explicit source-derived `PrivacyOperations`
+freeze allowed by D-028. Funded Ready/Xverse behavior and real paymaster
+acceptance remain pre-launch validation, not development gates.
