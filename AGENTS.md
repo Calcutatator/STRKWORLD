@@ -276,6 +276,11 @@ server drop precedes welcome completion, exit follows the drop, and destroy
 precedes late room acquisition. No browser, lobby server, wallet or network was
 used.
 
+*Manual acceptance:* the user hard-refreshed the live checkout at
+`http://localhost:5173/`, confirmed the explicit solo state left the street
+playable, and re-entered the Bank to verify that the shield/unshield station
+still highlighted and opened its action window.
+
 ---
 
 ### 2026-08-18 — `PrivacyOperations` is source-derived and frozen
