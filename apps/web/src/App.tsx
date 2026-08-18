@@ -45,7 +45,7 @@ export function App({
     <ErrorBoundary fallback={(message) => <BootFailure message={message} />}>
       <PrivacyProvider demo shellBus={shellIn} fallback={<Boot />}>
         <main className="strkworld">
-          <WorldHost out={worldOut} in={shellIn} />
+          <WorldHost out={worldOut} in={shellIn} remotePeers={presence.remotePeers} />
           <VisitLayer world={worldOut} shell={shellIn} />
           <PresenceStatusLayer presence={presence} world={worldOut} />
           <SessionNoticeLayer />

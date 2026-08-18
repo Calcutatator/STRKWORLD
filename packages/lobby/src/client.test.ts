@@ -15,7 +15,7 @@ import {
   MAX_MESSAGES_PER_SECOND,
   MIN_CLIENT_SEND_INTERVAL_MS,
 } from './config';
-import { LobbyClient, type LobbyStatusEvent } from './client';
+import { LobbyClient, type LobbyStatusEvent, type PeerSnapshot } from './client';
 import { startPresenceServer, type PresenceServer } from './server';
 import vocabulary from './testing/forbidden-vocabulary.json';
 
@@ -93,6 +93,17 @@ describe('identity is server-assigned', () => {
     await a.connect();
     await b.connect();
     expect(a.gameId).not.toBe(b.gameId);
+  });
+
+  it('never publishes the local avatar while its server identity is still arriving', async () => {
+    const client = makeClient(0, 0);
+    const seen: Array<readonly PeerSnapshot[]> = [];
+    client.onPeers((peers) => seen.push(peers));
+
+    await client.connect();
+
+    expect(client.gameId).not.toBeNull();
+    expect(seen.flat().some((peer) => peer.gameId === client.gameId)).toBe(false);
   });
 });
 

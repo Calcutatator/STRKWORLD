@@ -1,5 +1,6 @@
 import { useEffect, useRef } from 'react';
 import type { ShellEvents, WorldEvents, EventBus } from '@strkworld/shared';
+import type { RemotePeerSource } from '@strkworld/world';
 
 /**
  * Mounts the world into the React tree.
@@ -15,9 +16,11 @@ import type { ShellEvents, WorldEvents, EventBus } from '@strkworld/shared';
 export function WorldHost({
   out,
   in: shellIn,
+  remotePeers,
 }: {
   out: EventBus<WorldEvents>;
   in: EventBus<ShellEvents>;
+  remotePeers: RemotePeerSource;
 }) {
   const parent = useRef<HTMLDivElement>(null);
 
@@ -30,7 +33,7 @@ export function WorldHost({
     // the entry chunk.
     void import('@strkworld/world/runtime').then(({ acquireWorld }) => {
       if (cancelled) return;
-      return acquireWorld(node, { out, in: shellIn });
+      return acquireWorld(node, { out, in: shellIn, remotePeers });
     });
 
     return () => {
@@ -39,7 +42,7 @@ export function WorldHost({
         releaseWorld(),
       );
     };
-  }, [out, shellIn]);
+  }, [out, shellIn, remotePeers]);
 
   return <div ref={parent} className="world-host" data-testid="world-host" />;
 }

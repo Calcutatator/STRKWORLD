@@ -25,6 +25,11 @@ import {
   type MovementInput,
   type StreetMovementAdapter,
 } from '../street-movement.js';
+import {
+  createRemoteAvatarLayer,
+  type RemoteAvatarLayer,
+} from '../remote-avatar-layer.js';
+import type { RemotePeerSource } from '../remote-peer.js';
 
 /**
  * The street.
@@ -52,9 +57,11 @@ export interface StreetSceneDeps {
   Phaser: typeof PhaserTypes;
   /** Called when the player's tile changes. The scene reports; it decides nothing. */
   onTileChanged?: (tile: { x: number; y: number }) => void;
+  /** Optional retained presentation snapshots; the World owns the seam. */
+  remotePeers?: RemotePeerSource;
 }
 
-export function createStreetScene({ Phaser, onTileChanged }: StreetSceneDeps) {
+export function createStreetScene({ Phaser, onTileChanged, remotePeers }: StreetSceneDeps) {
   return class StreetScene extends Phaser.Scene {
     private map!: DistrictMap;
     // Phaser 4 can return either renderer-backed layer type from createLayer.
@@ -71,6 +78,7 @@ export function createStreetScene({ Phaser, onTileChanged }: StreetSceneDeps) {
     private roomGraphics?: PhaserTypes.GameObjects.Graphics;
     private roomLabel?: PhaserTypes.GameObjects.Text;
     private roomStationGraphics?: PhaserTypes.GameObjects.Graphics;
+    private remoteAvatars?: RemoteAvatarLayer;
     private returnTile = { x: 0, y: 0 };
     private cleanedUp = false;
 
@@ -89,6 +97,7 @@ export function createStreetScene({ Phaser, onTileChanged }: StreetSceneDeps) {
         emit: (event, payload) => this.resolveBus()?.out.emit(event, payload),
       });
       this.createPlayer();
+      this.remoteAvatars = createRemoteAvatarLayer({ scene: this, source: remotePeers });
       this.createInput();
       this.createBankRoom();
       this.createCamera();
@@ -119,6 +128,8 @@ export function createStreetScene({ Phaser, onTileChanged }: StreetSceneDeps) {
       this.roomGraphics?.destroy();
       this.roomStationGraphics?.destroy();
       this.roomLabel?.destroy();
+      this.remoteAvatars?.destroy();
+      this.remoteAvatars = undefined;
     }
 
     // -- construction --------------------------------------------------------
@@ -268,6 +279,7 @@ export function createStreetScene({ Phaser, onTileChanged }: StreetSceneDeps) {
       const body = this.player.body as PhaserTypes.Physics.Arcade.Body;
       body.setEnable(false);
       this.ground?.setVisible(false);
+      this.remoteAvatars?.setVisible(false);
       this.roomGraphics?.setVisible(true);
       this.roomStationGraphics?.setVisible(true);
       this.roomLabel?.setVisible(true);
@@ -296,6 +308,7 @@ export function createStreetScene({ Phaser, onTileChanged }: StreetSceneDeps) {
       const body = this.player.body as PhaserTypes.Physics.Arcade.Body;
       body.setEnable(true);
       this.ground?.setVisible(true);
+      this.remoteAvatars?.setVisible(true);
       this.roomGraphics?.setVisible(false);
       this.roomStationGraphics?.setVisible(false);
       this.roomLabel?.setVisible(false);

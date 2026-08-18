@@ -50,6 +50,21 @@ event. The Shell injects a World-owned replaying source before scene creation;
 this package subscribes and reconciles complete presentation-only snapshots.
 It never imports the lobby or controls its connection lifecycle.
 
+The source is subscribe-only at the World boundary. The Shell keeps the
+publisher/controller beside its lobby lifecycle and passes only the source to
+`acquireWorld`:
+
+```ts
+const channel = createRemotePeerSource();
+acquireWorld(parent, { out, in: shellIn, remotePeers: channel.source });
+channel.publish(peers);
+channel.clear();
+```
+
+Each snapshot contains only `{ id, x, y, facing, sprite }`. The World drops
+invalid identity, position or facing data, replaces omitted IDs, and maps the
+approved cosmetic sprite key onto its safe local avatar texture.
+
 ---
 
 ## Map authoring

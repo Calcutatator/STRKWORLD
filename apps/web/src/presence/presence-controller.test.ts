@@ -1,10 +1,12 @@
 import { describe, expect, it, vi } from 'vitest';
 import type { Facing, WorldEvents } from '@strkworld/shared';
+import type { RemotePeerSnapshot } from '@strkworld/world';
 import { createEventBus } from '../bus/event-bus.js';
 import { createPresenceController, type PresenceClient } from './presence-controller.js';
 
 function fakeClient() {
   const statuses = new Set<(event: { status: string; reason?: string }) => void>();
+  const peerListeners = new Set<(peers: readonly { gameId: string; x: number; y: number; facing: Facing; sprite: string }[]) => void>();
   const calls: unknown[][] = [];
   let status = 'idle';
   const client: PresenceClient = {
@@ -14,13 +16,116 @@ function fakeClient() {
     resume: vi.fn((...args: [{ x: number; y: number; facing: Facing }]) => { status = 'connected'; calls.push(['resume', ...args]); }),
     disconnect: vi.fn(async () => { status = 'closed'; }),
     onStatus: vi.fn((fn) => { statuses.add(fn); fn({ status }); return () => statuses.delete(fn); }),
+    onPeers: vi.fn((fn) => { peerListeners.add(fn); fn([]); return () => peerListeners.delete(fn); }),
   };
-  return { client, calls, drop: () => { status = 'closed'; statuses.forEach((fn) => fn({ status, reason: 'server-dropped' })); } };
+  return {
+    client,
+    calls,
+    publishPeers: (peers: readonly { gameId: string; x: number; y: number; facing: Facing; sprite: string }[]) => peerListeners.forEach((fn) => fn(peers)),
+    capturePeerListener: () => [...peerListeners][0],
+    peerListenerCount: () => peerListeners.size,
+    drop: () => { status = 'closed'; statuses.forEach((fn) => fn({ status, reason: 'server-dropped' })); },
+  };
 }
 
 const moved = { position: { x: 40, y: 72 }, facing: 'left' as const };
 
 describe('presence controller', () => {
+  it('exposes a replaying opaque remote-peer source adapted from lobby snapshots', async () => {
+    const world = createEventBus<WorldEvents>();
+    const made = fakeClient();
+    const presence = createPresenceController({ endpoint: 'ws://example', factory: () => made.client });
+    const snapshots: RemotePeerSnapshot[][] = [];
+    const rawSnapshots: (readonly RemotePeerSnapshot[])[] = [];
+    const stopSource = presence.remotePeers.subscribe((peers) => {
+      rawSnapshots.push(peers);
+      snapshots.push([...peers]);
+    });
+
+    expect(snapshots).toEqual([[]]);
+    const stopWorld = presence.listen(world);
+    world.emit('player:moved', moved);
+    await Promise.resolve();
+    expect(made.client.onPeers).toHaveBeenCalledTimes(1);
+    made.publishPeers([{ gameId: 'peer-7', x: 40, y: 72, facing: 'left', sprite: 'avatar-2' }]);
+
+    expect(snapshots.at(-1)).toEqual([{ id: 'peer-7', x: 40, y: 72, facing: 'left', sprite: 'avatar-2' }]);
+    expect(Object.isFrozen(rawSnapshots.at(-1))).toBe(true);
+    expect(Object.isFrozen(rawSnapshots.at(-1)?.[0])).toBe(true);
+    stopSource();
+    stopWorld();
+  });
+
+  it('publishes complete replacements and clears on a lobby drop', async () => {
+    const world = createEventBus<WorldEvents>();
+    const made = fakeClient();
+    const presence = createPresenceController({ endpoint: 'ws://example', factory: () => made.client });
+    const snapshots: RemotePeerSnapshot[][] = [];
+    const stopSource = presence.remotePeers.subscribe((peers) => snapshots.push([...peers]));
+    const stopWorld = presence.listen(world);
+    world.emit('player:moved', moved);
+    await Promise.resolve();
+
+    made.publishPeers([
+      { gameId: 'peer-1', x: 40, y: 72, facing: 'down', sprite: 'avatar-1' },
+      { gameId: 'peer-2', x: 80, y: 72, facing: 'left', sprite: 'avatar-2' },
+    ]);
+    made.publishPeers([{ gameId: 'peer-2', x: 88, y: 72, facing: 'left', sprite: 'avatar-2' }]);
+    made.drop();
+
+    expect(snapshots.at(-3)).toEqual([
+      { id: 'peer-1', x: 40, y: 72, facing: 'down', sprite: 'avatar-1' },
+      { id: 'peer-2', x: 80, y: 72, facing: 'left', sprite: 'avatar-2' },
+    ]);
+    expect(snapshots.at(-2)).toEqual([{ id: 'peer-2', x: 88, y: 72, facing: 'left', sprite: 'avatar-2' }]);
+    expect(snapshots.at(-1)).toEqual([]);
+    stopSource();
+    stopWorld();
+  });
+
+  it('detaches stale peer callbacks on drop and replacement', async () => {
+    const world = createEventBus<WorldEvents>();
+    const first = fakeClient();
+    const second = fakeClient();
+    let calls = 0;
+    const presence = createPresenceController({ endpoint: 'ws://example', factory: () => (calls++ === 0 ? first.client : second.client) });
+    const snapshots: RemotePeerSnapshot[][] = [];
+    presence.remotePeers.subscribe((peers) => snapshots.push([...peers]));
+    const stopWorld = presence.listen(world);
+    world.emit('player:moved', moved);
+    await Promise.resolve();
+    const stale = first.capturePeerListener();
+    first.drop();
+    stale?.([{ gameId: 'stale', x: 1, y: 2, facing: 'up', sprite: 'avatar-1' }]);
+    expect(snapshots.at(-1)).toEqual([]);
+
+    presence.reconnect();
+    await Promise.resolve();
+    expect(first.peerListenerCount()).toBe(0);
+    expect(second.peerListenerCount()).toBe(1);
+    first.publishPeers([{ gameId: 'stale-again', x: 3, y: 4, facing: 'up', sprite: 'avatar-1' }]);
+    second.publishPeers([{ gameId: 'fresh', x: 5, y: 6, facing: 'down', sprite: 'avatar-2' }]);
+    expect(snapshots.at(-1)).toEqual([{ id: 'fresh', x: 5, y: 6, facing: 'down', sprite: 'avatar-2' }]);
+    stopWorld();
+  });
+
+  it('clears the retained source on destroy', async () => {
+    const world = createEventBus<WorldEvents>();
+    const made = fakeClient();
+    const presence = createPresenceController({ endpoint: 'ws://example', factory: () => made.client });
+    const snapshots: RemotePeerSnapshot[][] = [];
+    presence.remotePeers.subscribe((peers) => snapshots.push([...peers]));
+    const stopWorld = presence.listen(world);
+    world.emit('player:moved', moved);
+    await Promise.resolve();
+    made.publishPeers([{ gameId: 'peer-1', x: 40, y: 72, facing: 'down', sprite: 'avatar-1' }]);
+    await presence.destroy();
+
+    expect(snapshots.at(-1)).toEqual([]);
+    expect(made.peerListenerCount()).toBe(0);
+    stopWorld();
+  });
+
   it('does not construct or connect until the first real street movement', () => {
     const world = createEventBus<WorldEvents>();
     const made = fakeClient();

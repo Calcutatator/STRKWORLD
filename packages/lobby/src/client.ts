@@ -280,10 +280,14 @@ export class LobbyClient {
   /** The current nearby players. Excludes this client's own avatar. */
   peers(): readonly PeerSnapshot[] {
     const room = this.#room;
-    if (room === null) return [];
+    // The room can exist briefly before the server's welcome message assigns
+    // this session's id. Publishing during that window would make our own
+    // entry indistinguishable from a peer and flash a duplicate local avatar.
+    // The welcome handler emits again as soon as self-filtering is possible.
+    if (room === null || this.#gameId === null) return [];
     const out: PeerSnapshot[] = [];
     room.state?.peers?.forEach((entry) => {
-      if (this.#gameId !== null && entry.gameId === this.#gameId) return;
+      if (entry.gameId === this.#gameId) return;
       out.push({
         gameId: entry.gameId,
         x: entry.position.x,

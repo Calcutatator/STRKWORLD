@@ -68,3 +68,21 @@ export type {
   BankStationSnapshot,
   RoomInputGate,
 } from './bank-room.js';
+
+// D-038 retained full-snapshot seam. The Shell receives only `source`; its
+// publisher/controller is kept outside Phaser and is never imported by the
+// World runtime.
+export {
+  createRemotePeerSource,
+  reconcileRemotePeers,
+  validateRemotePeer,
+  DEFAULT_REMOTE_SPRITE,
+  REMOTE_SPRITE_KEYS,
+  REMOTE_WORLD_LIMIT,
+} from './remote-peer.js';
+export type {
+  RemotePeerListener,
+  RemotePeerSnapshot,
+  RemotePeerSource,
+  RemotePeerSourceController,
+} from './remote-peer.js';

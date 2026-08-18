@@ -1,6 +1,7 @@
 import type { EventBus } from '@strkworld/shared';
-import type { LobbyClientOptions, LobbyStatusEvent } from '@strkworld/lobby/client';
+import type { LobbyClientOptions, LobbyStatusEvent, PeerSnapshot } from '@strkworld/lobby/client';
 import type { Facing, WorldEvents } from '@strkworld/shared';
+import { createRemotePeerSource, type RemotePeerSnapshot, type RemotePeerSource } from '@strkworld/world';
 import { LobbyClient } from '@strkworld/lobby/client';
 
 export type PresenceAvailability = 'connecting' | 'connected' | 'suspended' | 'unavailable';
@@ -12,12 +13,14 @@ export interface PresenceClient {
   resume(placement: { x: number; y: number; facing: Facing }): void;
   disconnect(): Promise<void>;
   onStatus(listener: (event: LobbyStatusEvent) => void): () => void;
+  onPeers(listener: (peers: readonly PeerSnapshot[]) => void): () => void;
 }
 export type PresenceFactory = (options: LobbyClientOptions) => PresenceClient;
 export interface PresenceController {
   listen(world: EventBus<WorldEvents>): () => void;
   subscribe(listener: () => void): () => void;
   getState(): PresenceState;
+  readonly remotePeers: RemotePeerSource;
   reconnect(): void;
   destroy(): Promise<void>;
 }
@@ -32,15 +35,28 @@ export function createPresenceController({ endpoint, factory = (options) => new 
   let connecting: Promise<void> | null = null;
   let destroyed = false;
   let statusStop: (() => void) | null = null;
+  let peerStop: (() => void) | null = null;
   let destroying: Promise<void> | null = null;
   let replacing: Promise<void> | null = null;
   const listeners = new Set<() => void>();
+  const peerChannel = createRemotePeerSource();
+  const peerSource = peerChannel.source;
+  const clearPeers = () => peerChannel.clear();
+  const clearClientPeers = () => {
+    peerStop?.();
+    peerStop = null;
+    clearPeers();
+  };
   const setState = (next: PresenceState) => {
     if (destroyed) return;
     state = next;
     for (const listener of listeners) listener();
   };
-  const unavailable = () => { if (!destroyed) setState({ status: 'unavailable', canReconnect: Boolean(endpoint) }); };
+  const unavailable = () => {
+    if (destroyed) return;
+    clearClientPeers();
+    setState({ status: 'unavailable', canReconnect: Boolean(endpoint) });
+  };
   const onStatus = (event: LobbyStatusEvent) => {
     if (destroyed) return;
     if (event.status === 'connected') {
@@ -51,12 +67,26 @@ export function createPresenceController({ endpoint, factory = (options) => new 
     }
     else if (event.status === 'connecting') setState({ status: 'connecting', canReconnect: true });
     else if (event.status === 'suspended') setState({ status: 'suspended', canReconnect: true });
-    else if ((event.status === 'closed' && event.reason !== 'client-left') || event.status === 'idle') unavailable();
+    else if (event.status === 'closed' || event.status === 'idle') {
+      if (event.status === 'idle' || event.reason !== 'client-left') unavailable();
+      else clearClientPeers();
+    }
   };
   const ensureClient = () => {
     if (!endpoint || destroyed || client) return client;
     client = factory({ endpoint, start: placement ?? { x: 0, y: 0, facing: 'down' } });
     statusStop = client.onStatus(onStatus);
+    const ownedClient = client;
+    let active = true;
+    const stopPeers = ownedClient.onPeers((snapshot) => {
+      if (active && !destroyed && client === ownedClient) {
+        peerChannel.publish(snapshot.map(({ gameId, x, y, facing, sprite }) => ({ id: gameId, x, y, facing, sprite })));
+      }
+    });
+    peerStop = () => {
+      active = false;
+      stopPeers();
+    };
     return client;
   };
   const connect = () => {
@@ -71,6 +101,7 @@ export function createPresenceController({ endpoint, factory = (options) => new 
         reconnectRequested = false;
         statusStop?.();
         statusStop = null;
+        clearClientPeers();
         client = null;
         return next.disconnect().then(() => {
           if (!destroyed) connect();
@@ -116,6 +147,7 @@ export function createPresenceController({ endpoint, factory = (options) => new 
     const stale = client;
     statusStop?.();
     statusStop = null;
+    clearClientPeers();
     client = null;
     replacing = (async () => {
       try { await stale?.disconnect(); } catch { /* reconnect remains explicit */ }
@@ -125,6 +157,7 @@ export function createPresenceController({ endpoint, factory = (options) => new 
   return {
     listen(world) { const stops = [world.on('player:moved', onMoved), world.on('building:entered', onEntered), world.on('building:exited', onExited)]; return () => stops.forEach((stop) => stop()); },
     subscribe(listener) { listeners.add(listener); return () => listeners.delete(listener); },
+    remotePeers: peerSource,
     getState: () => state,
     reconnect() {
       if (!endpoint || destroyed || !placement) return;
@@ -142,6 +175,7 @@ export function createPresenceController({ endpoint, factory = (options) => new 
       destroyed = true;
       statusStop?.();
       statusStop = null;
+      clearClientPeers();
       const current = client;
       destroying = Promise.all([
         current ? current.disconnect() : Promise.resolve(),

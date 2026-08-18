@@ -1,6 +1,7 @@
 import type { WorldEvents, ShellEvents, EventBus } from '@strkworld/shared';
 import { createHost, type Host } from './host.js';
 import { createStreetScene } from './scenes/street-scene.js';
+import type { RemotePeerSource } from './remote-peer.js';
 
 /**
  * Phaser wiring. This is the only module in the package that imports Phaser,
@@ -25,6 +26,8 @@ export interface WorldHandle {
 export interface WorldConfig {
   out: EventBus<WorldEvents>;
   in: EventBus<ShellEvents>;
+  /** Optional retained full snapshots for presentation-only remote avatars. */
+  remotePeers?: RemotePeerSource;
 }
 
 type Game = PhaserTypes.Game;
@@ -57,7 +60,7 @@ async function ensureHost(config: WorldConfig): Promise<Host<Game, HTMLElement>>
         // Nothing in scene lifecycle does network I/O: under a mounting
         // regression create() runs twice, and a lobby join here would produce
         // two presence entries for one player. Joins are shell-driven.
-        scene: [createStreetScene({ Phaser })],
+        scene: [createStreetScene({ Phaser, remotePeers: config.remotePeers })],
         callbacks: {
           // Phaser creates and boots scenes after `preBoot` but before
           // `postBoot`. The street scene captures the shell bus while it

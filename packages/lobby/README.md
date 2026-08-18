@@ -104,6 +104,9 @@ a hex id and a token amount reached honest players' screens.)
 `LobbyClient` is what the Shell consumes. Plain data in, plain data out; no
 Phaser, no React, no DOM. Under D-038 the Shell maps peer snapshots into a
 World-owned replaying source; `packages/world` never imports this client.
+Peer snapshots remain empty until the server-minted welcome ID arrives, because
+the client cannot reliably exclude its own room entry before that point. The
+welcome handler publishes the first correctly self-filtered full snapshot.
 
 ```ts
 import { LobbyClient } from '@strkworld/lobby/client';

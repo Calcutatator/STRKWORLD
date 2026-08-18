@@ -44,23 +44,27 @@ disappear is accepted for v1 (D-019).
 
 ## Composition
 
-`main.tsx` is the composition root. It creates the two buses once, at module
-scope, and mounts `App` inside `StrictMode`. `App` wires the four pieces
-together and takes the buses as props, so a test can drive it against buses it
-controls:
+`main.tsx` is the composition root. It creates the two buses and the explicit
+presence controller once, at module scope, and mounts `App` inside `StrictMode`.
+`App` wires the pieces together and takes those seams as props, so a test can
+drive it against instances it controls:
 
 ```tsx
 // main.tsx — the two buses, created once and never again.
 const worldOut = createEventBus<WorldEvents>();   // world emits, shell listens
 const shellIn = createEventBus<ShellEvents>();    // shell emits, world listens
-createRoot(root).render(<StrictMode><App worldOut={worldOut} shellIn={shellIn} /></StrictMode>);
+const presence = createPresenceController({ endpoint: lobbyEndpoint() });
+createRoot(root).render(
+  <StrictMode><App worldOut={worldOut} shellIn={shellIn} presence={presence} /></StrictMode>,
+);
 
 // App.tsx — the tree.
 <PrivacyProvider demo shellBus={shellIn} fallback={<Boot/>}>
   <main className="strkworld">
-    <WorldHost out={worldOut} in={shellIn} />   {/* world lane's mount point, untouched */}
+    <WorldHost out={worldOut} in={shellIn} remotePeers={presence.remotePeers} />
     <VisitLayer world={worldOut} shell={shellIn} /> {/* Game Mode first; stations or Menu above */}
-    <SessionNoticeLayer />                     {/* session truth above every visit surface */}
+    <PresenceStatusLayer presence={presence} world={worldOut} /> {/* truthful solo/reconnect state */}
+    <SessionNoticeLayer />                         {/* session truth above every visit surface */}
   </main>
 </PrivacyProvider>
 ```
@@ -98,9 +102,9 @@ timestamp, and it deliberately has no local-storage or dismiss path.
 
 **`v1` runs against the fake, by design.** `App` passes `demo`, so a served
 production build shows the "not wired yet" surface rather than a practice
-balance — the bundle still builds (Phaser and the seam land in their own lazy
-chunks, out of the 229 kB entry), it just declines to invent money until a real
-adapter is wired. See the seam rules below.
+balance — the bundle still builds (Phaser and the demo seam land in their own
+lazy chunks, outside the entry chunk), it just declines to invent money until a
+real adapter is wired. See the seam rules below.
 
 **There is no default seam.** `operations` is required unless `demo` is set
 explicitly, and `demo` throws in a production build. A fallback that quietly

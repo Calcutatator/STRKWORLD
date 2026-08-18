@@ -192,10 +192,12 @@ lifecycle: connect after the first placement, suspend before an interior can be
 visible, resume from the restored placement, and degrade to explicit solo play
 with manual reconnect.
 
-The active multiplayer slice is D-038 remote-avatar presentation. The Shell
-adapts privacy-minimal lobby snapshots into a replaying World-owned source;
-Phaser reconciles the full snapshot without importing the lobby or widening
-the frozen shared event bus.
+The D-038 remote-avatar implementation is complete and headlessly verified.
+The Shell adapts privacy-minimal lobby snapshots into a replaying World-owned
+source; Phaser reconciles the full snapshot without importing the lobby or
+widening the frozen shared event bus. Its remaining acceptance is manual:
+two browsers must see one another move, then see the other avatar disappear on
+Bank entry and return at the restored street placement on exit.
 
 **Must not:** import `starknet` or any wallet package. Put an address, balance,
 transaction hash, building name or entry event into lobby traffic. On local
@@ -224,11 +226,13 @@ write guards, session receipt ledger, and D-037's explicit lobby lifecycle with
 truthful solo fallback. React owns wallet and financial state; Phaser receives
 presentation data and never reads back.
 
-**Current frontier:** D-019/D-037 Shell composition is complete. Implement the
-D-038 Shell adapter from `LobbyClient.onPeers()` into the World-owned replaying
-source, including drop/replacement/destroy clearing. Do not widen
-`ShellEvents`, expose the LobbyClient to Phaser, or change the completed
-D-033–D-036 Game Mode, uncertainty and financial-seam behavior.
+**Current frontier:** D-019/D-037 Shell composition and the D-038 adapter are
+complete. The retained source clears on drop/replacement/destroy and suppresses
+pre-welcome self snapshots until the server-minted ID permits filtering. The
+remaining D-038 gate is the user-run two-browser acceptance described in the
+World lane. Do not widen `ShellEvents`, expose the LobbyClient to Phaser, or
+change the completed D-033–D-036 Game Mode, uncertainty and financial-seam
+behavior.
 
 The **batch accumulator is Menu Mode only** under D-032. It collects typed
 intent during a building visit and emits one atomic batch on confirmation. Game

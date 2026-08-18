@@ -252,6 +252,35 @@ Format: `### YYYY-MM-DD — short title` then what, why it matters, how verified
 
 ---
 
+### 2026-08-18 — Remote peer state must replay, and self-filtering must wait for welcome
+
+D-038 carries remote avatars through a dedicated World-owned retained source,
+not the one-shot shared event bus. `subscribe()` synchronously replays the
+latest immutable full snapshot, so a lobby update that arrives before Phaser
+boots or while it remounts is not lost. The Shell owns the LobbyClient adapter
+and clears the source on drop, replacement and teardown; World owns validation,
+full replacement, safe cosmetic fallback, interior hiding and non-physics
+presentation.
+
+The first integrated review exposed a second ordering consequence of the
+existing pre-welcome window: `LobbyClient` had a room and emitted peers before
+it knew its own server-minted `gameId`, so `peers()` could not self-filter and
+briefly published the local avatar as a remote one. `peers()` now returns an
+empty snapshot until welcome supplies the ID; the welcome handler then emits
+the correctly filtered full snapshot. Do not infer that a room or `connected`
+status is enough to distinguish self from peers.
+
+*Verified:* a new real-server websocket test was observed failing on the old
+client because one pre-welcome snapshot contained the eventual local ID, then
+passing after the identity gate. D-038's source/renderer/adapter suites cover
+synchronous replay, immutable replacement and clear, stale callbacks, invalid
+data, safe textures, interior visibility and idempotent teardown. The final
+integrated gate passed 548 tests across 53 files, all workspace typechecks, the
+production build and repository invariants. No browser, wallet, financial data
+or transaction was used.
+
+---
+
 ### 2026-08-18 — Lobby `connected` precedes welcome completion
 
 `LobbyClient.connect()` does not resolve at the same moment the client becomes
