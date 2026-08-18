@@ -147,8 +147,9 @@ identity.
 
 ### `packages/bridge`
 
-One-way funding: any asset on any chain → STRK on Starknet, followed by a
-prompted (never automatic) shield at the Bank (D-012). NEAR Intents 1Click
+One-way funding: any asset on any chain → STRK on Starknet, then an optional,
+explicit Bank shield when exact public-cost planning is available (D-012/D-043).
+NEAR Intents 1Click
 orchestration, resumable across reloads and devices. Since D-012 removed the
 OUT direction it is chain-free on the Starknet side — 1Click + viem only, no
 `starknet` import. The shell owns the bridge → shield sequencing, because this
@@ -166,6 +167,13 @@ fresh plan, not a guaranteed fee, and it is not a method on
 deposit instructions, replans from the actual settled amount, and revalidates
 at the Bank commit point. The shield remains an explicit second transaction
 with its own Bank-owned receipt, never an automatic Bridge action.
+
+No production Ready planner exists today: the visible Ready route does not
+prove the fee allowance consumed separately by the pool. Production therefore
+locks new quotes, deposit instructions and the Bridge-to-Bank handoff. The
+offline demo supplies only a deterministic fake. Saved/imported signed evidence
+remains inspectable, refreshable and exportable without a wallet or planner,
+and no Bridge-to-shield correlation is stored.
 
 **Must not:** import `@strkworld/privacy`, offer an OUT direction or a
 destination-token choice, or present arrival as private — bridging is a
@@ -242,8 +250,8 @@ station footprints; it contains no route, action, wallet or financial meaning.
 The street scene remains the sole Phaser scene and renders the active
 definition. Shell separately maps station IDs to admitted routes and sends only
 labels/lock state across the frozen D-033 bus. This keeps collision, entry/exit,
-control handoff and teardown in one World implementation as Bank, Post Office
-and later rooms are added.
+control handoff and teardown in one World implementation across Bank, Post
+Office, Exchange and Bridge.
 
 ---
 

@@ -1,14 +1,16 @@
 # @strkworld/bridge
 
-**One path in. Deposit from another chain and end up shielded.**
+**One path in. Deposit from another chain, then explicitly shield when the
+public-cost route is available.**
 
 ```
 any asset, any chain  →  STRK on Starknet  →  STRK20 privacy pool
 ```
 
 That is the whole building. No direction toggle, no destination token picker,
-no route options. The player clicks **Deposit**, and there is exactly one
-outcome.
+no route options. The intended flow has one direction, but every step fails
+closed: recovery remains usable even when a safe new deposit or shield cannot
+be offered.
 
 ---
 
@@ -23,8 +25,10 @@ failure mode we do not have to handle.
 - **Destination is always STRK.** NEAR Intents 1Click delivers STRK on Starknet
   natively, so fixing the output **removes the AVNU swap leg entirely** — no
   second slippage, no second quote, no second thing that can fail halfway.
-- **Always ends shielded.** The player's intent is "put money in this world",
-  and in this world money lives in the pool.
+- **The intended terminal state is shielded.** The player's intent is "put
+  money in this world", and in this world money lives in the pool. If exact
+  public-cost planning is unavailable, the handoff stays locked rather than
+  guessing a reserve or claiming completion.
 
 `shieldup`'s bridge was bidirectional with an arbitrary destination token and
 an AVNU leg downstream. Roughly half of that complexity does not come across.
@@ -62,7 +66,8 @@ Step 2 costs gas, and that gas must be **public** STRK — a pool deposit cannot
 be paid for out of the pool balance it is about to create (D-013).
 
 So the deposit flow must never shield the full delivered amount. Size the
-reserve from a live fee estimate, not a constant, and shield the remainder. A
+reserve from a verified live fee estimate, not a constant, and shield the
+remainder. A
 player who shields everything is stranded one transaction short of doing
 anything at all, and it reads as the app having taken their money. `shieldup`
 shipped this as a known open UX defect — do not inherit it.
@@ -70,6 +75,11 @@ shipped this as a known open UX defect — do not inherit it.
 The happy consequence: this building is the *only* place a player needs public
 STRK, and it is also the place that produces it. Every private-side action
 afterwards pays its own fee from shielded notes.
+
+The current production Ready route does not prove the pool-fee allowance that
+this estimate must cover. No production planner is exported, so real new quote
+instructions and the Bridge-to-Bank handoff remain locked. The checked-in fake
+exists only for deterministic offline demo and tests.
 
 ---
 
@@ -160,8 +170,9 @@ The backend must not quietly acquire a durable database of deposit addresses,
 recipients and timing.
 
 The signed recipient is always the active connected Starknet account. It is
-not editable. Recovery and export can work while disconnected, but a new quote
-or post-settlement shield continuation requires the same account after
+not editable. Recovery inspection, refresh, import and export work while
+disconnected or while planning is unavailable, but a new quote or
+post-settlement shield continuation requires the same account after
 field-element-normalized comparison. The Bridge record remains authoritative
 until explicit discard; the separate shield receipt belongs to the Bank, and
 the app stores no Bridge-to-shield correlation. Switching accounts blocks new
@@ -224,12 +235,19 @@ meaning. The signed expected and minimum outputs remain the exact review data.
 
 Post-settlement shielding uses a separate optional Chain-owned public planning
 capability, not an import from this package and not a `PrivacyOperations`
-method. It estimates the precise public approve-plus-privacy call shape against
-fresh wallet/account state; it does not guarantee the eventual fee. Shell
+method. A future production implementation must estimate the precise public
+approve-plus-privacy call shape against fresh wallet/account state; it cannot
+guarantee the eventual fee. Shell
 requires the capability before quoting, preflights the signed minimum before
 showing deposit instructions, replans from actual received STRK, and revalidates
 at the Bank commit point. The ordinary Bank fee ceiling still applies. A failed
 or inconsistent plan blocks the relevant step; nothing auto-submits.
+
+The current Shell composition uses this contract only with the deterministic
+offline planner. In production, a missing planner locks new quote creation and
+deposit instructions, but an existing signed record can still be inspected,
+refreshed, exported or explicitly replaced. The package never performs the
+shield and stores no Bridge-to-shield correlation.
 
 ---
 

@@ -261,7 +261,7 @@ against it at once.
 
 ## D-012 — The Bridge is deposit-only, always to STRK, always ending shielded
 
-**2026-08-16 · Accepted · narrows D-009**
+**2026-08-16 · Accepted · narrows D-009 · D-043 adds the fail-closed exact-planning gate**
 
 **Context.** D-009 carried shieldup's bridge shape across: bidirectional, with
 an arbitrary destination token reached via an AVNU swap leg. That is a lot of
@@ -1595,7 +1595,7 @@ unchanged Bank/Post Office behavior. Rendered acceptance remains user-owned.
 
 ## D-043 — Bridge v1 is manual, direct and wallet-bound; exact shielding fails closed
 
-**2026-08-18 · Accepted; amended by project-lead direction · completes D-009/D-012's v1 composition choice and adds no method to the D-036-frozen `PrivacyOperations` seam**
+**2026-08-18 · Accepted and implemented offline; production fee-aware planning remains a D-028 funded gate · completes D-009/D-012's v1 composition choice and adds no method to the D-036-frozen `PrivacyOperations` seam**
 
 **Context.** The independent Bridge package already owns a signed, resumable
 1Click deposit record, but the game has no Bridge room or Shell controller.
@@ -1675,9 +1675,11 @@ and quote-time output is never used as the settled balance.
 
 **Consequences.** Chain adds and tests only the separate public-shield planner
 port and deterministic fake (which requires the explicit token denomination,
-allows a zero pool fee, and rejects zero gas); no production Ready adapter or wallet-fee claim
-crosses the seam. World adds only room definition/presentation data. Shell may
-compose the Bridge machine and injected planner, but a real new Bridge deposit
+allows a zero pool fee, and rejects zero gas); no production Ready adapter or
+wallet-fee claim
+crosses the seam. World adds only room definition/presentation data. Shell
+composes the Bridge machine and injected offline planner, but a real new Bridge
+deposit
 stays locked while the planner is absent. Bridge remains independent of
 `packages/privacy`; Backend and lobby do not change. Tests cover fake address,
 field/uint256 bounds, aborts, reserve subtraction, non-positive remainders,

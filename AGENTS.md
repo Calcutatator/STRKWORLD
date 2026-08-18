@@ -252,6 +252,47 @@ Format: `### YYYY-MM-DD — short title` then what, why it matters, how verified
 
 ---
 
+### 2026-08-18 — Bridge recovery outlives the room; deposit instructions do not outlive their evidence
+
+D-043 is composed offline through a Shell-owned manual Bridge state machine
+and the shared fixed-room core. Entering the room or touching
+`bridge:deposit` performs no quote, poll, wallet, balance, proof or submission
+work. A new quote is bound to the normalized active account and its actionable
+deposit address/memo remains hidden until the signed minimum has passed an
+injected public-shield planning preflight. Expiry, a non-awaiting status, an
+account change, a changed signed record or a failed plan revokes those
+instructions. Saved/imported signed evidence remains inspectable, refreshable
+and exportable without an account or planner.
+
+1Click quote creation is not abortable in the pinned service, so component
+lifecycle state alone is insufficient. The Shell keeps a service-object-scoped
+single-flight coordinator across room close/remount. Close or discard cancels
+the UI claim; a late returned quote is deleted only when it is the exact signed
+evidence that flight created. An explicit recovery import remains immediately
+usable during a hung flight and is restored if the stale response later tries
+to overwrite it; a later discard suppresses that restoration. This prevents a
+provider response from resurrecting an orphaned deposit address or destroying
+the player's chosen recovery record.
+
+After `SUCCESS`, only validated actual `strkReceived` enters a fresh plan. The
+ordinary Bank owns the separate shield review and receipt. Immediately before
+wallet confirmation it rechecks the active account, machine generation, exact
+settled record/amount and unchanged plan; no Bridge step prepares, signs or
+submits automatically, and no Bridge-to-shield correlation is stored. The
+offline demo supplies deterministic quote/status/planner fixtures and refuses
+production. No production Ready planner exists, so real new quotes and deposit
+instructions remain locked pending the fee-aware D-028 funded/source gate.
+
+*Verified:* Shell commit `befda52` passed 329 web tests, web typecheck,
+production build, invariant scan and diff hygiene. Independent adversarial
+review replayed expiry, account-switch, close/import/discard, remount,
+single-flight, stale-response cleanup, different-record preservation and Bank
+commit-point cases with no remaining P1-P3 finding. No browser automation,
+wallet prompt, proof, signature, provider quote or transaction was used;
+rendered acceptance remains user-owned at `http://localhost:5173/`.
+
+---
+
 ### 2026-08-18 — Ready public shielding is unsupported until fee handling is proven
 
 D-043 retains a separate sanitized `PublicShieldPlanner` port and a

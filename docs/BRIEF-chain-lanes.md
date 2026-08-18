@@ -100,10 +100,15 @@ component with the same seriousness as the lobby: it sees call, proof, IP and
 timing before broadcast, which makes it a stronger correlation oracle than
 anything else in the system. Written no-logging policy required.
 
-**Port the Bridge** from `shieldup`'s `src/bridge/` — roughly 1,200 lines of
-proven 1Click orchestration, minus the OUT direction and the AVNU leg, which
-D-012 removed. Port behaviour, not the lockfile; that tree carries 36
-transitive advisories.
+**Bridge port and offline composition are complete.** The deposit-only 1Click
+service, signed recovery record, manual Shell flow and fixed World room are in
+place without the OUT direction or AVNU leg removed by D-012. D-043 exposes no
+production Ready public-shield planner: only the deterministic demo can create
+a new quote today, while saved/imported evidence remains inspectable,
+refreshable and exportable without a wallet or planner. Settlement uses actual
+validated `strkReceived`; shielding is a separate explicit Bank action with no
+automatic submission or persisted Bridge correlation. The remaining route is
+a funded/source-verification gate, not permission to infer Ready fee handling.
 
 ## Hard rules
 

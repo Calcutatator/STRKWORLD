@@ -38,7 +38,9 @@ disappear is accepted for v1 (D-019).
 | `src/panels/` | The building-window framework, privacy gate, and locked/unbuilt surfaces |
 | `src/privacy/` | The seam context, failure classification, session uncertainty, build context, and register import |
 | `src/receipts/` | The receipt ledger — receipts outlive the panel that made them |
+| `src/bridge/` | The manual Bridge machine, service-scoped quote coordinator, runtime provider, and offline demo |
 | `src/panels/bank/` | The Bank: shield, unshield, private transfer |
+| `src/panels/bridge/` | The Bridge recovery/deposit view and explicit Bank shield handoff |
 | `src/panels/exchange/` | The Exchange: one reviewed private swap over a display-only six-asset catalog |
 | `src/copy.ts` | Every player-facing string the shell owns |
 | `src/format.ts` | `bigint` ↔ display. No `number` anywhere near money |
@@ -61,12 +63,14 @@ createRoot(root).render(
 
 // App.tsx — the tree.
 <PrivacyProvider demo shellBus={shellIn} fallback={<Boot/>}>
-  <main className="strkworld">
-    <WorldHost out={worldOut} in={shellIn} remotePeers={presence.remotePeers} />
-    <VisitLayer world={worldOut} shell={shellIn} /> {/* Game Mode first; stations or Menu above */}
-    <PresenceStatusLayer presence={presence} world={worldOut} /> {/* truthful solo/reconnect state */}
-    <SessionNoticeLayer />                         {/* session truth above every visit surface */}
-  </main>
+  <BridgeProvider demo>
+    <main className="strkworld">
+      <WorldHost out={worldOut} in={shellIn} remotePeers={presence.remotePeers} />
+      <VisitLayer world={worldOut} shell={shellIn} /> {/* Game Mode first; stations or Menu above */}
+      <PresenceStatusLayer presence={presence} world={worldOut} /> {/* truthful solo/reconnect state */}
+      <SessionNoticeLayer />                         {/* session truth above every visit surface */}
+    </main>
+  </BridgeProvider>
 </PrivacyProvider>
 ```
 
@@ -98,6 +102,17 @@ uncertainty handling and the session receipt ledger; only their allowed
 controls and batch policy differ. The World never receives either station's
 route or financial meaning.
 
+The Bridge is a separate manual state machine, not a financial batch mode. It
+binds a signed 1Click quote to the active account, requires a public-shield
+planner preflight before revealing an actionable deposit address, and keeps
+the signed browser-local record available for explicit refresh, import and
+export. After validated settlement it plans from actual `strkReceived` and
+hands a prefilled shield into the ordinary Bank review; the player still
+prepares and confirms it explicitly, the receipt belongs to the Bank, and no
+Bridge-to-shield correlation is persisted. A service-scoped single-flight
+coordinator prevents an unabortable late quote response from resurrecting or
+overwriting recovery evidence after the room closes.
+
 `SessionNoticeLayer` is a sibling above the World and visit surfaces. If a
 private submission response is lost after dispatch, D-034 classifies the result
 as `submission-uncertain`: the Bank blocks another action, offers no retry, and
@@ -106,11 +121,13 @@ The notice therefore survives station close, Menu/Game switching and building
 exit. It stores no intent, recipient, transaction hash, request handle or
 timestamp, and it deliberately has no local-storage or dismiss path.
 
-**`v1` runs against the fake, by design.** `App` passes `demo`, so a served
-production build shows the "not wired yet" surface rather than a practice
-balance — the bundle still builds (Phaser and the demo seam land in their own
-lazy chunks, outside the entry chunk), it just declines to invent money until a
-real adapter is wired. See the seam rules below.
+**Local v1 runs against two explicit fakes.** `PrivacyProvider` supplies the
+deterministic private-operation seam and `BridgeProvider` supplies a separate
+offline 1Click/planner runtime. Both are lazy chunks and both refuse a
+production build. The offline Bridge can demonstrate quote, recovery,
+settlement and Bank handoff, but it does not represent a real deposit. No
+production Ready planner is exported, so real new quotes and deposit
+instructions remain locked until the fee-aware route is verified.
 
 **There is no default seam.** `operations` is required unless `demo` is set
 explicitly, and `demo` throws in a production build. A fallback that quietly

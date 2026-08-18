@@ -16,7 +16,7 @@ the lane boundary — that is why the repo is shaped the way it is.
 
 | Lane | Package | Status in v1 |
 |---|---|---|
-| **Chain** | `packages/privacy` | Active; private seam frozen, D-043 public-shield planner next |
+| **Chain** | `packages/privacy` | Active; private seam frozen, D-043 planner port/fake complete, production Ready planner blocked |
 | **World** | `packages/world` + `packages/lobby` | Active |
 | **Shell** | `apps/web` | Active, starts week 2 |
 | **Backend** | `apps/backend` | Active; offline implementation in progress under D-028 |
@@ -156,20 +156,20 @@ minimum without changing the public shape. A lost submit response must never
 become a blind retry; funded Wallet API/paymaster validation remains on the
 pre-launch checklist.
 
-**D-043 next:** add a separate optional public-shield planner port and
-deterministic fake. It is not a method on the frozen `PrivacyOperations`
-interface. The port defines `amountToShield` as the deposit action amount and
-`plannedReserve = poolFee + estimated public gas`, with
+**D-043 complete offline:** a separate optional public-shield planner port and
+deterministic fake are implemented. It is not a method on the frozen
+`PrivacyOperations` interface. The port defines `amountToShield` as the
+deposit action amount and `plannedReserve = poolFee + estimated public gas`, with
 `amountToShield + plannedReserve <= available` required. The token, pool fee,
 gas estimate, reserve and shield amount share one Bridge public-STRK
 denomination; mismatches fail closed. A zero pool fee is valid, while gas must
 be positive so the reserve is non-zero. The current Ready
 high-level route is explicitly unsupported: it visibly approves only the
 deposit amount while the pool separately pulls its STRK fee. Do not invent an
-extra approval, wallet execute fallback or AVNU/paymaster behavior. Shell may
-inject a future reviewed production planner, but a real Bridge-to-Bank deposit
-must stay locked while that capability is absent. Give Shell the final fake and
-type exports; the real route remains a D-028 funded/source-verification gate.
+extra approval, wallet execute fallback or AVNU/paymaster behavior. Shell can
+inject a future reviewed production planner, but a real new Bridge quote and
+deposit instructions stay locked while that capability is absent. The real
+route remains a D-028 funded/source-verification gate.
 
 **Dependency drift rechecked for D-036:** the 2026-08-18 integration freshness
 check still finds get-starknet discovery's `next` tag at 6.0.4,
@@ -231,10 +231,11 @@ event, lobby field or financial meaning entered World. Headless tests pin its
 geometry, station presentation and boot-order snapshot. Rendered room and
 station acceptance remains user-run at `http://localhost:5173/`.
 
-**D-043 next:** add the Bridge as another definition of the same fixed-room
-core with one opaque `bridge:deposit` station. World owns geometry, highlight,
-activation, exit and teardown only; it must not gain a recipient, quote,
-deposit address, status or wallet concept.
+**D-043 complete offline:** the Bridge is another definition of the same
+fixed-room core with one opaque `bridge:deposit` station. World owns geometry,
+highlight, activation, exit and teardown only; it gained no recipient, quote,
+deposit address, status or wallet concept. Rendered room and station acceptance
+remains user-run at `http://localhost:5173/`.
 
 **Must not:** import `starknet` or any wallet package. Put an address, balance,
 transaction hash, building name or entry event into lobby traffic. On local
@@ -287,17 +288,18 @@ expiry and exact fees at `ConfirmGate`; receipts are owned by `exchange` and
 outlive the room. Catalog metadata is never route authority. Rendered
 acceptance remains user-run at `http://localhost:5173/`.
 
-**D-043 next:** compose the manual-only Bridge machine and room. Retain the
+**D-043 complete offline:** the manual-only Bridge machine and room retain the
 concrete connected account beside the privacy seam, bind every new quote to its
 address, keep the signed Bridge record in browser-local Bridge storage, and
 allow recovery inspection without a wallet. New quotes require both a matching
-account and, when available, the separately injected public-shield planner
+account and the separately injected public-shield planner
 capability; before deposit instructions, preflight it against the signed
 minimum output. Settlement uses provider-reported `strkReceived`, rechecks
 account and requests a fresh plan, then revalidates at the Bank commit point
 before offering the explicit ordinary shield. Until a reviewed production
 planner proves the fee allowance/transfer path, the real new Bridge deposit
-handoff is locked; the manual quote/status/recovery surfaces may still proceed.
+handoff is locked: only the deterministic offline demo creates new quotes,
+while saved/imported record inspection, refresh and export remain usable.
 It never auto-submits and never writes Bridge state into the privacy receipt
 ledger. Account switches preserve the old record for refresh/export while
 blocking new financial continuation. Direct unauthenticated 1Click is the
@@ -368,8 +370,9 @@ resumable pipeline, persistence/export/import, source-token/address validation
 and refund/failure states are implemented behind a network/storage boundary.
 The OUT path and AVNU leg do not exist (D-012). Runtime status data is now
 validated before it can settle a record. D-043 chooses direct unauthenticated
-1Click for v1; the Shell room/composition and live funded provider acceptance
-remain.
+1Click for v1; the Shell room/composition is complete offline, while a real new
+quote and Bridge-to-Bank handoff remain locked behind the missing production
+planner and live funded provider acceptance.
 
 **Build manual deposit mode first.** A player funding from a centralised
 exchange leaves the tab, goes to a withdrawal screen, and comes back minutes
