@@ -63,6 +63,12 @@ export interface PrivateSubmissionGateway {
     feeAuthorization: string;
     proofValidityBlocks: number;
     signal?: AbortSignal;
+    /**
+     * Report acceptance as soon as a transaction hash is known, before any
+     * fallible response cleanup. `confirm()` preserves this receipt if the
+     * gateway subsequently throws.
+     */
+    onAccepted?: (result: TxResult) => void;
   }): Promise<TxResult>;
   /** Quote-bound AVNU route. Missing means swaps fail closed. */
   prepareSwap?(input: {

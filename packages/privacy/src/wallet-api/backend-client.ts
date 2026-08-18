@@ -56,7 +56,9 @@ export class BackendPrivacyClient implements PoolReadClient, PrivateSubmissionGa
       feeAuthorization: input.feeAuthorization,
       proofValidityBlocks: input.proofValidityBlocks,
     }, input.signal));
-    return { transactionHash: asString(value.transactionHash) };
+    const result = { transactionHash: asString(value.transactionHash) };
+    input.onAccepted?.(result);
+    return result;
   }
 
   async prepareSwap(

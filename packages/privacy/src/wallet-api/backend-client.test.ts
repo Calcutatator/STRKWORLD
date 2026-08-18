@@ -31,6 +31,27 @@ describe('BackendPrivacyClient', () => {
     await expect(client.config()).rejects.toMatchObject({ kind: 'unreachable', message: 'paused' });
   });
 
+  it('reports an accepted private hash before returning the submission receipt', async () => {
+    const client = new BackendPrivacyClient(
+      'https://backend.example',
+      async () => response({ transactionHash: '0xaccepted' }),
+    );
+    const onAccepted = vi.fn();
+
+    await expect(client.submit({
+      route: 'transfer',
+      artifact: {
+        call: { contract_address: '0x123', entry_point: 'apply_actions', calldata: ['0x1'] },
+        proof: { data: 'proof', output: ['0x1'], proof_facts: ['0x2'] },
+      },
+      feeAuthorization: 'auth',
+      proofValidityBlocks: 450,
+      onAccepted,
+    })).resolves.toEqual({ transactionHash: '0xaccepted' });
+    expect(onAccepted).toHaveBeenCalledOnce();
+    expect(onAccepted).toHaveBeenCalledWith({ transactionHash: '0xaccepted' });
+  });
+
   it('parses a quote-bound private swap plan without losing bigint amounts', async () => {
     const fetcher = vi.fn(async () => response({
       quoteId: 'quote-1',

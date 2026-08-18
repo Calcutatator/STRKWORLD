@@ -64,9 +64,11 @@ interface PrivacyOperations {
 ```
 
 The interface remains **provisional until the Chain lane explicitly freezes
-it** under D-028. Source-derived implementation work proceeds now; a change
-still needs a decision entry and a heads-up to the shell lane — never a quiet
-edit.
+it** under D-028. Source-derived implementation work proceeds now. The current
+blocker is exact: a lost submission response before the hash reaches the
+browser is not distinguishable from a pre-settlement transport failure, and
+the public seam has no `submission-uncertain` outcome. A change still needs a
+decision entry and a heads-up to the shell lane — never a quiet edit.
 
 `WalletApiPrivacyOperations` is the source-derived wallet-backed
 implementation and `FakePrivacyOperations` implements the same interface for
@@ -101,7 +103,9 @@ on the route:
 - A private pool action is proven with
   `wallet_strk20PrepareInvoke(actions, false)`. The resulting call and proof can
   be validated, queued within the live proof-validity window, and relayed by
-  AVNU's paymaster without the user's account signer.
+  AVNU's paymaster without the user's account signer. The submission port
+  reports acceptance as soon as it knows the transaction hash; `confirm()`
+  preserves that receipt if later gateway cleanup throws.
 - A quote-bound AVNU swap uses the same wallet proof artifact but skips timing
   delay; delaying it risks submitting an expired quote. The backend chooses
   the private quote and executor calls, then the browser passes that bounded
@@ -116,6 +120,12 @@ Mixed shield/private input is rejected rather than silently split. One
 `PreparedBatch.confirm()` returns one transaction hash, so claiming to split it
 would lose one receipt and blur the public/private boundary. The shell must run
 the two explicit operations in sequence.
+
+If the transport fails **before** the accepted hash is received, no Chain-only
+code can prove whether the relay settled. Do not advise a blind retry and do not
+describe that state as “nothing was sent.” Resolving it requires either an
+explicit uncertain-submission outcome consumed by the Shell or an idempotent
+backend recovery handle; this is the remaining freeze blocker.
 
 `strk20PrepareInvoke(actions, true)` is simulation only. It skips proof
 generation and returns an empty, non-submittable proof; use it for previews,

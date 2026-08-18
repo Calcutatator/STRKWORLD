@@ -16,9 +16,10 @@ import type {
  * operations and could not express batching, fee validation before signing, or
  * cancellation — all of which the design depends on.
  *
- * ⚠ Still PROVISIONAL pending the Phase 0 wallet spike, which may change
- * `WalletCapability` and the prompt-count assumptions. Do not freeze until
- * then.
+ * ⚠ Still PROVISIONAL. D-028 removed the funded wallet run as a development
+ * gate, but a submission whose response disappears before its hash arrives is
+ * still indistinguishable from a pre-settlement transport failure. Do not
+ * freeze until that uncertainty has an explicit cross-lane outcome and copy.
  *
  * Implementations must not branch on wallet identity. Capability is determined
  * at runtime, which is what keeps web wallets possible later without a rewrite.
@@ -171,9 +172,10 @@ export interface WalletCapability {
   /**
    * Whether the account is registered in the pool.
    *
-   * `unknown` until something has been called — there is no probe that cannot
-   * trigger a consent prompt. Phase 0 must establish whether wallets
-   * auto-register on first use, which would make this mostly moot.
+   * `unknown` until something has been called — there is no silent dapp probe.
+   * Ready 5.33.8 rejects its dapp-facing STRK20 calls when registration is
+   * absent; onboarding must hand the player to the wallet's own registration
+   * flow rather than pretending the dapp can perform it.
    */
   registration: 'registered' | 'unregistered' | 'unknown';
 }

@@ -164,6 +164,23 @@ describe('Wallet API action routes', () => {
     );
   });
 
+  it('returns a private receipt when the gateway throws after reporting acceptance', async () => {
+    const { ops, gateway } = fixture();
+    vi.mocked(gateway.submit).mockImplementation(async (input) => {
+      input.onAccepted?.({ transactionHash: '0xsettled-private' });
+      throw new Error('response stream failed after acceptance');
+    });
+    const batch = await ops.prepare([
+      { kind: 'transfer', token: TOKEN, amount: 20n, recipient: BOB },
+    ]);
+
+    await expect(batch.confirm({ feeCeiling: POOL_FEE + 2n })).resolves.toEqual({
+      transactionHash: '0xsettled-private',
+    });
+    await expect(batch.confirm({ feeCeiling: POOL_FEE + 2n })).rejects.toThrow(/already confirmed/i);
+    expect(gateway.submit).toHaveBeenCalledTimes(1);
+  });
+
   it('allows exactly one confirmation attempt for a prepared batch', async () => {
     const { ops, gateway } = fixture();
     const batch = await ops.prepare([
@@ -276,6 +293,48 @@ describe('Wallet API action routes', () => {
       artifact,
       feeAuthorization: AUTH.authorization,
     }));
+  });
+
+  it('returns a swap receipt when the gateway throws after reporting acceptance', async () => {
+    const { wallet, pool, gateway, supportedVersions } = fixture();
+    gateway.prepareSwap = vi.fn(async () => ({
+      quoteId: 'quote-1',
+      buyAmount: 95n,
+      expiresAt: 2_000,
+      chainId: '0x534e5f4d41494e',
+      executorAddress: '0x999',
+      executorCalls: [{ contractAddress: '0x111', entrypoint: 'swap', calldata: ['0xaaa'] }],
+      fee: { token: STRK, recipient: FEE_RECIPIENT, amount: 1n, ...AUTH },
+    }));
+    vi.mocked(gateway.submit).mockImplementation(async (input) => {
+      input.onAccepted?.({ transactionHash: '0xsettled-swap' });
+      throw new Error('response stream failed after acceptance');
+    });
+    const ops = new WalletApiPrivacyOperations({
+      wallet,
+      pool,
+      submission: gateway,
+      supportedVersions,
+      now: () => 1_000,
+      policy: {
+        maxIntents: 8,
+        maxRelayFee: 10n,
+        enabledRoutes: ['swap'],
+        allowedTokens: {
+          shield: [STRK, TOKEN], unshield: [STRK, TOKEN], transfer: [STRK, TOKEN], swap: [STRK, TOKEN],
+        },
+        swap: { expectedChainId: '0x534e5f4d41494e', slippageBps: 100 },
+      },
+    });
+    const batch = await ops.prepare([
+      { kind: 'swap', tokenIn: TOKEN, tokenOut: STRK, amountIn: 20n, minAmountOut: 90n },
+    ]);
+
+    await expect(batch.confirm({ feeCeiling: POOL_FEE + 1n })).resolves.toEqual({
+      transactionHash: '0xsettled-swap',
+    });
+    await expect(batch.confirm({ feeCeiling: POOL_FEE + 1n })).rejects.toThrow(/already confirmed/i);
+    expect(gateway.submit).toHaveBeenCalledTimes(1);
   });
 
   it('rejects a stale or wrong-chain private swap before proving', async () => {

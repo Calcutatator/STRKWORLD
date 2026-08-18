@@ -14,6 +14,7 @@ import {
   type PrivateBalance,
   type ProgressCallback,
   type RecipientStatus,
+  type TxResult,
 } from '../types.js';
 import { mapWalletError } from './errors.js';
 import type {
@@ -185,6 +186,7 @@ export class WalletApiPrivacyOperations implements PrivacyOperations {
         assertFirstConfirmation(confirmationAttempted);
         confirmationAttempted = true;
         throwIfAborted(confirmSignal);
+        let acceptedResult: TxResult | undefined;
         try {
           const current = await owner.pool.config(confirmSignal);
           owner.validateSwapPlan(intent, current, plan, swapPolicy.expectedChainId);
@@ -214,10 +216,15 @@ export class WalletApiPrivacyOperations implements PrivacyOperations {
             feeAuthorization: plan.fee.authorization,
             proofValidityBlocks: current.proofValidityBlocks,
             signal: confirmSignal,
+            onAccepted(result) { acceptedResult = result; },
           });
           emitProgress(onProgress, { stage: 'done', message: 'Done' });
           return result;
         } catch (error) {
+          if (acceptedResult) {
+            emitProgress(onProgress, { stage: 'done', message: 'Done' });
+            return acceptedResult;
+          }
           emitProgress(onProgress, { stage: 'failed', message: 'Private swap failed' });
           throw mapWalletError(error);
         }
@@ -318,6 +325,7 @@ export class WalletApiPrivacyOperations implements PrivacyOperations {
         assertFirstConfirmation(confirmationAttempted);
         confirmationAttempted = true;
         throwIfAborted(signal);
+        let acceptedResult: TxResult | undefined;
         try {
           const current = await owner.pool.config(signal);
           const relayFee = await owner.estimateRelay(route, operationToken, current, signal);
@@ -342,10 +350,15 @@ export class WalletApiPrivacyOperations implements PrivacyOperations {
             feeAuthorization: relayFee.authorization,
             proofValidityBlocks: current.proofValidityBlocks,
             signal,
+            onAccepted(result) { acceptedResult = result; },
           });
           emitProgress(onProgress, { stage: 'done', message: 'Done' });
           return result;
         } catch (error) {
+          if (acceptedResult) {
+            emitProgress(onProgress, { stage: 'done', message: 'Done' });
+            return acceptedResult;
+          }
           emitProgress(onProgress, { stage: 'failed', message: 'Private operation failed' });
           throw mapWalletError(error);
         }

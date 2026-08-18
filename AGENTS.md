@@ -220,6 +220,40 @@ Format: `### YYYY-MM-DD — short title` then what, why it matters, how verified
 
 ---
 
+### 2026-08-18 — Known hashes survive gateway failure; hashless response loss remains uncertain
+
+`PrivateSubmissionGateway.submit` now has an internal `onAccepted` signal.
+Pool-native private and quote-bound swap confirmations retain the first
+accepted `TxResult`; if the gateway later throws, `PreparedBatch.confirm()`
+returns that hash, emits success, and remains single-attempt. The production
+`BackendPrivacyClient` reports acceptance immediately after validating the
+response hash.
+
+This closes the “once a hash exists, surface it” part of the 2026-08-17
+settle-then-throw finding. It cannot close a connection drop **before** the
+hash reaches the browser: the current backend exposes neither an idempotent
+submission lookup nor an earlier recovery handle, so Chain code cannot know
+whether the relay accepted the transaction. Today that transport path maps to
+`PrivacyError('unreachable')`, while the Shell's exhaustive copy says “Nothing
+was sent.” A blind retry could therefore duplicate intent even though the
+prepared proof itself is single-attempt.
+
+`PrivacyOperations` is **not ready for the D-028 source-derived freeze** until
+one controlled cross-lane decision chooses either (a) a public
+`submission-uncertain` outcome with non-retry Shell handling, or (b) a
+privacy-safe idempotent backend recovery mechanism. Do not broaden the current
+Chain change into either lane without that decision.
+
+*Verified:* red/green Wallet API seam tests make both transfer and swap
+gateways report an accepted hash and then throw; each confirmation returns the
+receipt, a second confirmation is rejected, and the gateway is called once.
+`BackendPrivacyClient` has a separate red/green contract test for the
+acceptance signal. The hashless case was verified by tracing `post()`'s fetch
+failure path and the Shell's exhaustive `unreachable` copy. No network, wallet,
+proof, signature or transaction submission was used.
+
+---
+
 ### 2026-08-17 — The composition root, and the one door the world never closes
 
 Wired the shell's composition root (`apps/web/src/main.tsx` + `App.tsx`) over
