@@ -8,6 +8,9 @@ describe('failure classification', () => {
     expect(toFailure(new PrivacyError('insufficient-balance', 'error 119')).kind).toBe(
       'insufficient-balance',
     );
+    expect(toFailure(new PrivacyError('submission-uncertain', 'response lost')).kind).toBe(
+      'submission-uncertain',
+    );
   });
 
   it('classifies anything else as unknown and keeps the cause for logs', () => {

@@ -163,6 +163,8 @@ export const COPY = {
       'Your wallet does not support the version of the privacy API this needs.',
     'user-rejected': 'You declined it in your wallet. Nothing was sent.',
     unreachable: 'Could not reach the network or your wallet. Nothing was sent.',
+    'submission-uncertain':
+      'We could not confirm whether this private action was submitted. Do not retry it yet. Reconnect, wait a few minutes, and refresh your private balance before taking another action.',
     unknown: 'That did not go through, and nothing was signed.',
   } satisfies Record<PrivacyErrorKind, string>,
 } as const;

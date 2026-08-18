@@ -31,6 +31,15 @@ describe('shell copy', () => {
     }
   });
 
+  it('uses the exact D-034 uncertainty copy without a retry or failure claim', () => {
+    const copy = COPY.errors['submission-uncertain'];
+    expect(copy).toBe(
+      'We could not confirm whether this private action was submitted. Do not retry it yet. Reconnect, wait a few minutes, and refresh your private balance before taking another action.',
+    );
+    expect(copy).not.toContain('Try again');
+    expect(copy).not.toContain('Nothing was sent');
+  });
+
   it('never promises that timing or a batch hides more than it does', () => {
     for (const line of allCopyStrings()) {
       expect(line.toLowerCase(), line).not.toContain('untraceable');
