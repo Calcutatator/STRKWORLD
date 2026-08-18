@@ -590,7 +590,7 @@ street and make entry indistinguishable is superseded.
 
 ## D-020 — Absolute privacy is the default; every deviation needs approval
 
-**2026-08-16 · Accepted · strengthens D-018**
+**2026-08-16 · Accepted · strengthens D-018 · approval gate completed by D-024**
 
 **Context.** D-018 established that every financial building needs an approved
 private execution path. It did not say *how private*, and the routes differ

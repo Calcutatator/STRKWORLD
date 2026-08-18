@@ -80,9 +80,11 @@ and any route below `private` is a deviation needing the project lead's
 recorded approval *plus* player-facing disclosure, both stored in
 `packages/shared/src/privacy-grades.ts`. An unapproved or undisclosed
 deviation renders a locked door — CI check 8 enforces this rather than
-trusting anyone to remember. Routes that leave value sitting in public
-(`bridge.deposit`, `exchange.swap`) must offer the next step back into the
-pool — the `returnToPool` property on the register entry (D-021).
+trusting anyone to remember. A route that leaves player-held value sitting in
+public (`bridge.deposit`) must offer the next step back into the pool — the
+`returnToPool` property on the register entry (D-021). AVNU's private swap is
+the D-023 exception because its bought asset lands directly in an OPEN pool
+note.
 
 A custom anonymizer atomically receives pool input, calls the external
 protocol and returns the output to a pool note. It keeps the player's wallet

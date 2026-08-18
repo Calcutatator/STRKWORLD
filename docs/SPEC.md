@@ -172,8 +172,10 @@ Admission is also graded (D-020): absolute privacy is the default, and any
 route below `private` needs the project lead's recorded approval plus
 player-facing disclosure in `packages/shared/src/privacy-grades.ts` — an
 unapproved or undisclosed deviation renders a locked door, enforced in CI.
-Routes that leave value in public (`bridge.deposit`, `exchange.swap`) must
-offer the next step back into the pool via `returnToPool` (D-021).
+Routes that leave player-held value in public (`bridge.deposit`) must offer the
+next step back into the pool via `returnToPool` (D-021). AVNU's private swap is
+the D-023 exception: its public executor leg ends in an OPEN pool note, so the
+bought asset is already shielded and `exchange.swap.returnToPool` is false.
 
 For Wallet API concepts and operations, use the
 [STRK20 Wallet API guide](https://strk20-by-example.org/starknet-wallet-api/overview).
