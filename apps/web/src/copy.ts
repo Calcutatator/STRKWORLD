@@ -115,6 +115,17 @@ export const COPY = {
     total: 'Total',
   },
 
+  exchange: {
+    sell: 'Sell',
+    buy: 'Buy',
+    chooseAsset: 'Choose asset',
+    expectedBuy: 'Expected buy',
+    protectedMinimum: 'Protected minimum',
+    slippage: 'Slippage',
+    expiresAt: 'Quote expires',
+    oneSwap: 'This Exchange prepares and confirms one swap at a time.',
+  },
+
   gameMode: {
     menu: 'Menu Mode',
     singleAction: 'This station confirms one action at a time.',

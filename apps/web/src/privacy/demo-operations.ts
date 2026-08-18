@@ -29,5 +29,10 @@ export function createDemoOperations(): FakePrivacyOperations {
   return new FakePrivacyOperations({
     balances: { [STRK]: 250n * 10n ** 18n },
     registered: [DEMO_NEIGHBOUR],
+    swapReview: {
+      expectedAmountOut: 2n * 10n ** 18n,
+      slippageBps: 50,
+      expiresAt: 4_102_444_800_000,
+    },
   });
 }

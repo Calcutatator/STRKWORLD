@@ -39,6 +39,7 @@ disappear is accepted for v1 (D-019).
 | `src/privacy/` | The seam context, failure classification, session uncertainty, build context, and register import |
 | `src/receipts/` | The receipt ledger — receipts outlive the panel that made them |
 | `src/panels/bank/` | The Bank: shield, unshield, private transfer |
+| `src/panels/exchange/` | The Exchange: one reviewed private swap over a display-only six-asset catalog |
 | `src/copy.ts` | Every player-facing string the shell owns |
 | `src/format.ts` | `bigint` ↔ display. No `number` anywhere near money |
 

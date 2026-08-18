@@ -216,6 +216,23 @@ describe('visit controller', () => {
 });
 
 describe('station registry', () => {
+  it('publishes exactly one opaque single-swap Exchange station', () => {
+    expect(stationSnapshot('exchange')).toEqual([
+      { station: 'exchange:swap', label: 'SWAP', status: 'available' },
+    ]);
+    const resolved = resolveStation('exchange', 'exchange:swap');
+    expect(resolved.status).toBe('available');
+    if (resolved.status !== 'available') return;
+    expect(resolved.definition).toEqual({
+      station: 'exchange:swap',
+      building: 'exchange',
+      label: 'SWAP',
+      routes: ['exchange.swap'],
+      view: 'exchange',
+    });
+    expect(resolved.definition).not.toHaveProperty('modes');
+  });
+
   it('publishes only the approved transfer station for the Post Office', () => {
     expect(stationSnapshot('post-office')).toEqual([
       { station: 'post-office:transfer', label: 'TRANSFER', status: 'available' },

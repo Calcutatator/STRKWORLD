@@ -1,4 +1,5 @@
 import { COPY } from '../copy.js';
+import type { ReactNode } from 'react';
 
 /**
  * The commit point, and the only place a confirm button exists.
@@ -22,6 +23,7 @@ export function ConfirmGate({
   busy,
   onConfirm,
   onCancel,
+  children,
 }: {
   /** Approved copy for the routes in the batch being committed, verbatim. */
   disclosures: readonly string[];
@@ -37,11 +39,14 @@ export function ConfirmGate({
   busy: boolean;
   onConfirm: () => void;
   onCancel: () => void;
+  /** Immutable review figures belong at the same commit point as the button. */
+  children?: ReactNode;
 }) {
   const missingDisclosure = requiresDisclosure && disclosures.length === 0;
 
   return (
     <div className="confirm-gate">
+      {children}
       {disclosures.length > 0 ? (
         <ul className="commit-disclosures" data-testid="commit-disclosures">
           {disclosures.map((disclosure) => (

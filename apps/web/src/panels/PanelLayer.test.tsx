@@ -86,8 +86,8 @@ describe('ActiveRoomView', () => {
     expect(markup).toContain(COPY.locked.comingSoon);
   });
 
-  it('shows the unbuilt surface for an approved building with no room yet', () => {
-    const markup = renderToStaticMarkup(
+  it('renders the built Exchange surface for an approved building', () => {
+    const markup = render(
       <ActiveRoomView
         active={{ source: 'entered', building: 'exchange' }}
         panels={BUILDING_PANELS}
@@ -95,8 +95,8 @@ describe('ActiveRoomView', () => {
         onClose={() => {}}
       />,
     );
-    expect(markup).toContain(COPY.unbuilt);
-    expect(markup).not.toContain('data-lock-reason');
+    expect(markup).toContain(COPY.buildings.exchange);
+    expect(markup).toContain(COPY.balance.unrequested);
   });
 
   it('gates a functional room behind the connect flow when the wallet is not connected', () => {

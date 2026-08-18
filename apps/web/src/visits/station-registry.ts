@@ -3,6 +3,15 @@ import { PRIVACY_REGISTER, type RouteGrade } from '../privacy/register.js';
 import { routeDoor, type DoorState } from '../panels/routes.js';
 import type { BankMode } from '../panels/bank/bank-machine.js';
 
+type BankStationDefinition = {
+  station: StationId; building: BuildingId; label: string; routes: readonly string[];
+  view: 'bank'; modes: readonly BankMode[]; initialMode: BankMode;
+};
+type ExchangeStationDefinition = {
+  station: StationId; building: 'exchange'; label: string; routes: readonly string[];
+  view: 'exchange';
+};
+
 /**
  * Shell-owned meaning for an opaque station id.
  *
@@ -10,15 +19,7 @@ import type { BankMode } from '../panels/bank/bank-machine.js';
  * label and lock state; routes, modes and privacy grades stay here with the
  * financial controls they admit (D-033).
  */
-export interface StationDefinition {
-  station: StationId;
-  building: BuildingId;
-  label: string;
-  routes: readonly string[];
-  modes: readonly BankMode[];
-  initialMode: BankMode;
-  view: 'bank';
-}
+export type StationDefinition = BankStationDefinition | ExchangeStationDefinition;
 
 const STATIONS: readonly StationDefinition[] = [
   {
@@ -38,6 +39,13 @@ const STATIONS: readonly StationDefinition[] = [
     modes: ['transfer'],
     initialMode: 'transfer',
     view: 'bank',
+  },
+  {
+    station: 'exchange:swap',
+    building: 'exchange',
+    label: 'SWAP',
+    routes: ['exchange.swap'],
+    view: 'exchange',
   },
 ] as const;
 

@@ -1421,7 +1421,7 @@ unbuilt. Browser acceptance remains user-owned.
 
 ## D-040 — Post Office Menu Mode is the transfer-only batch surface
 
-**2026-08-18 · Accepted · technical direction delegated to the project lead · completes the bounded deferral in D-039**
+**2026-08-18 · Accepted · technical direction delegated to the project lead · completes the bounded deferral in D-039 · Exchange deferral completed by D-042**
 
 **Context.** D-030 and D-032 already define Menu Mode as a building-wide
 transaction surface that batches compatible typed intents for one later
@@ -1527,7 +1527,7 @@ new decision.
 
 ## D-042 — The Exchange reviews AVNU's protected minimum over a six-asset display catalog
 
-**2026-08-18 · Accepted · technical direction delegated to the project lead · implements D-030–D-032 and amends D-041's minimum mapping**
+**2026-08-18 · Accepted · technical direction delegated to the project lead · implements D-030–D-032, completes D-040's Exchange deferral and amends D-041's minimum mapping**
 
 **Context.** D-041 exposed the expected output, the typed intent's minimum,
 the configured slippage and quote expiry. Tracing the installed AVNU 4.2.0

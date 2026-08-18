@@ -252,6 +252,43 @@ Format: `### YYYY-MM-DD — short title` then what, why it matters, how verified
 
 ---
 
+### 2026-08-18 — Exchange confirmation has three independent freshness gates
+
+D-042 exposed three places where a truthful prepared swap can go stale without
+changing its public shape. `swapReview.expiresAt` is Unix epoch
+**milliseconds**: the backend normalizes AVNU's seconds before the browser sees
+it, so Shell must construct `Date` directly from that value and recheck it both
+when the review is accepted and immediately before wallet handoff. Multiplying
+it by 1,000 produces a plausible but false far-future date rather than a useful
+failure.
+
+The session uncertainty gate has the same time-of-check problem. Checking it
+before the live pool-fee read is insufficient because another action can become
+uncertain during that await. Exchange now checks after the read and again at
+the last instruction before `PreparedBatch.confirm()`. The fee ceiling remains
+the hard wallet-side guard; when a stale Shell fee read is followed by a
+generic ceiling rejection, a second pool read classifies the failure as a moved
+fee instead of inventing an error-string contract.
+
+Finally, uncertainty blocks new financial work, not evidence of work already
+settled. A restored Exchange receipt renders ahead of the blocked compose or
+review branches, and successful confirmation records the receipt before any
+panel-liveness check. Closing a room after wallet handoff therefore cannot hide
+the hash, while a late hashless rejection still promotes the one-bit session
+uncertainty notice and never creates a retry path.
+
+*Verified:* adversarial tests hold fee reads and confirmations with explicit
+deferreds, close only after the wallet handoff is observed, advance an injected
+clock across quote expiry, flip uncertainty during the awaited fee read, and
+exercise the stale-read/second-read fee classification. Static rendering pins
+the canonical amounts, slippage, millisecond UTC expiry, exact fees and D-024
+copy inside `ConfirmGate`, hides confirmation while blocked, and keeps a
+settled receipt visible. The web suite passes 285 tests; typecheck, production
+build, invariant scan and diff validation pass. No browser, wallet, proof,
+signature or transaction was used.
+
+---
+
 ### 2026-08-18 — Prepared swaps canonicalize AVNU’s protected minimum
 
 D-042 changes only the prepared swap’s internal intent value, not the frozen

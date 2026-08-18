@@ -210,9 +210,11 @@ the shared buses and privacy seam remain frozen. Its remaining acceptance is
 manual: enter and physically exit both rooms, and confirm that each station
 highlights and opens only its admitted surface.
 
-**Next bounded World slice:** D-042 adds the Exchange as the third definition
-in that same fixed-room core, with one opaque `exchange:swap` station. No new
-scene, shared event, lobby field or financial meaning enters World.
+**D-042 complete offline:** the Exchange is the third definition in the same
+fixed-room core, with one opaque `exchange:swap` station. No new scene, shared
+event, lobby field or financial meaning entered World. Headless tests pin its
+geometry, station presentation and boot-order snapshot. Rendered room and
+station acceptance remains user-run at `http://localhost:5173/`.
 
 **Must not:** import `starknet` or any wallet package. Put an address, balance,
 transaction hash, building name or entry event into lobby traffic. On local
@@ -257,12 +259,13 @@ Menu Mode with the same transfer-only machine and Menu Mode's compatible
 multi-transfer batching. The remaining rendered gate is user-run acceptance
 recorded in the World lane.
 
-**Next bounded Shell slice:** D-042 builds a dedicated single-swap Exchange
-machine and panel over the checked-in six-asset display catalog. Both Menu and
-Game Mode remain one swap at a time, require the canonical D-024 disclosure and
-D-041/D-042 review, and own receipts under `exchange`. The player explicitly
-requests the six-token balance read; the Shell never treats catalog metadata as
-route authority.
+**D-042 complete offline:** the dedicated Exchange machine and panel use the
+checked-in six-asset display catalog in both Menu and Game Mode, one swap at a
+time. The player explicitly requests balances; the prepared review carries the
+canonical D-024 disclosure, expected and protected outputs, slippage, absolute
+expiry and exact fees at `ConfirmGate`; receipts are owned by `exchange` and
+outlive the room. Catalog metadata is never route authority. Rendered
+acceptance remains user-run at `http://localhost:5173/`.
 
 The **batch accumulator is Menu Mode only** under D-032. It collects typed
 intent during a building visit and emits one atomic batch on confirmation. Game
@@ -298,9 +301,10 @@ an approved aggregate-only signal, deployment integration, and the funded
 Wallet API/paymaster checks retained by D-028. Do not invent a health or
 metrics route without the D-014 privacy review recorded in `docs/OPS.md`.
 
-**Next bounded Backend slice:** D-042 independently checks that AVNU's
+**D-042 complete offline:** Backend independently checks that AVNU's
 slippage-protected output is at least the caller's requested quote floor before
-issuing swap relay authority. No response schema or endpoint is added.
+issuing swap relay authority. The check uses AVNU's installed helper and adds
+no response schema or endpoint.
 
 **Must not:** log or persist IPs, calls, proofs, timings, recipients or
 transaction hashes; accept arbitrary contract targets or calldata; delay a

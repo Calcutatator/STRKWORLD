@@ -146,6 +146,23 @@ describe('VisitLayerView', () => {
     expect(markup).not.toContain('name="amount"');
   });
 
+  it('renders Exchange Menu and station as one-swap surfaces with no batch vocabulary', () => {
+    for (const surface of [{ name: 'menu' }, { name: 'station', station: 'exchange:swap' }] as const) {
+      const markup = render(<VisitLayerView state={{ name: 'visiting', building: 'exchange', surface }} connected onOpenMenu={() => {}} onCloseSurface={() => {}} onDismissLocked={() => {}} />);
+      expect(markup).toContain('This Exchange prepares and confirms one swap at a time.');
+      expect(markup).not.toContain('Add to this visit');
+      expect(markup).not.toContain('Nothing queued yet');
+    }
+  });
+
+  it('locks a disabled Exchange station without exposing a balance or amount form', () => {
+    const disabled = PRIVACY_REGISTER.map((entry) => entry.route === 'exchange.swap' ? { ...entry, disclosure: null, approvedBy: null, approvedOn: null, rationale: null } : entry);
+    const markup = render(<VisitLayerView state={{ name: 'visiting', building: 'exchange', surface: { name: 'station', station: 'exchange:swap' } }} connected register={disabled} onOpenMenu={() => {}} onCloseSurface={() => {}} onDismissLocked={() => {}} />);
+    expect(markup).toContain('data-lock-reason="unapproved-route"');
+    expect(markup).not.toContain('name="amount"');
+    expect(markup).not.toContain('Show my balance');
+  });
+
   it('fails closed when a stale or unknown station reaches the view', () => {
     const markup = render(
       <VisitLayerView

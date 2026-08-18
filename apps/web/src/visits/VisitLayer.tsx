@@ -3,6 +3,7 @@ import type { EventBus, ShellEvents, WorldEvents } from '@strkworld/shared';
 import { COPY } from '../copy.js';
 import { ConnectRoom } from '../connect/ConnectRoom.js';
 import { BankPanel } from '../panels/bank/BankPanel.js';
+import { ExchangePanel } from '../panels/exchange/ExchangePanel.js';
 import { LockedRoom, UnbuiltRoom } from '../panels/LockedRoom.js';
 import { PanelFrame } from '../panels/PanelFrame.js';
 import { resolveRoom, type PanelRegistry } from '../panels/panel-framework.js';
@@ -125,6 +126,9 @@ export function VisitLayerView({
           onClose={onCloseSurface}
         />
       );
+    }
+    if (station.definition.view === 'exchange') {
+      return <ExchangePanel experience="station" onClose={onCloseSurface} />;
     }
   }
 
