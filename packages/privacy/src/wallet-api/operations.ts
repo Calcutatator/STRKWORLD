@@ -16,6 +16,7 @@ import {
   type RecipientStatus,
   type TxResult,
 } from '../types.js';
+import { protectedMinimumOut } from '../protected-minimum.js';
 import { mapWalletError } from './errors.js';
 import type {
   PoolNativeRoute,
@@ -170,12 +171,20 @@ export class WalletApiPrivacyOperations implements PrivacyOperations {
       signal,
     });
     this.validateSwapPlan(intent, config, plan, swapPolicy.expectedChainId);
+    const protectedMinimum = protectedMinimumOut(plan.buyAmount, swapPolicy.slippageBps);
+    if (protectedMinimum < intent.minAmountOut) {
+      throw new PrivacyError(
+        'unknown',
+        'The requested swap floor exceeds AVNU’s protected minimum.',
+      );
+    }
+    const canonicalIntent = { ...intent, minAmountOut: protectedMinimum };
 
     const owner = this;
     let discarded = false;
     let confirmationAttempted = false;
     return {
-      intents: [intent],
+      intents: [canonicalIntent],
       poolFee: config.feeAmount,
       gasEstimate: plan.fee.amount,
       totalCost: config.feeAmount + plan.fee.amount,
@@ -183,7 +192,7 @@ export class WalletApiPrivacyOperations implements PrivacyOperations {
       promptCount: 1,
       swapReview: {
         expectedAmountOut: plan.buyAmount,
-        minimumAmountOut: intent.minAmountOut,
+        minimumAmountOut: canonicalIntent.minAmountOut,
         slippageBps: swapPolicy.slippageBps,
         expiresAt: plan.expiresAt,
       },
@@ -195,12 +204,12 @@ export class WalletApiPrivacyOperations implements PrivacyOperations {
         let acceptedResult: TxResult | undefined;
         try {
           const current = await owner.pool.config(confirmSignal);
-          owner.validateSwapPlan(intent, current, plan, swapPolicy.expectedChainId);
+          owner.validateSwapPlan(canonicalIntent, current, plan, swapPolicy.expectedChainId);
           assertFeeCeiling(current.feeAmount + plan.fee.amount, feeCeiling);
           const avnuPlan: PrivateSwapPlan = {
-            sellTokenAddress: intent.tokenIn,
-            sellAmount: intent.amountIn,
-            buyTokenAddress: intent.tokenOut,
+            sellTokenAddress: canonicalIntent.tokenIn,
+            sellAmount: canonicalIntent.amountIn,
+            buyTokenAddress: canonicalIntent.tokenOut,
             executorAddress: plan.executorAddress,
             executorCalls: plan.executorCalls,
             fee: {

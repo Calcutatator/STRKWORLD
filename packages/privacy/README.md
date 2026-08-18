@@ -93,6 +93,13 @@ when its explicit deterministic `swapReview` configuration supplies the
 expected output, expiry and slippage; it never reads a clock or invents a
 market rate.
 
+The incoming swap minimum is only a quote floor. After validating the plan,
+Chain computes AVNU's protected minimum as exact bigint arithmetic:
+`expectedAmountOut - (expectedAmountOut * slippageBps / 10_000)`. A floor above
+that result is rejected; otherwise both the prepared swap intent and
+`swapReview.minimumAmountOut` carry the protected value used again at confirm
+time.
+
 The shipped Wallet API types expose one aggregate balance per token, not the
 spendable/maturing split used by the low-level SDK. Real wallet results therefore
 set `maturityKnown: false` and keep both subfields at conservative zero. The

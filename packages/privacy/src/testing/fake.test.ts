@@ -111,19 +111,24 @@ describe('deterministic prepared swap review', () => {
     const make = async () => {
       const ops = new FakePrivacyOperations({
         balances: { [STRK]: 100n * 10n ** 18n, ['0x1234']: 100n * 10n ** 18n },
-        swapReview: { expectedAmountOut: 95n, expiresAt: 2_000, slippageBps: 100 },
+        swapReview: { expectedAmountOut: 101n, expiresAt: 2_000, slippageBps: 333 },
       });
       const batch = await ops.prepare([
-        { kind: 'swap', tokenIn: '0x1234', tokenOut: STRK, amountIn: 20n, minAmountOut: 90n },
+        { kind: 'swap', tokenIn: '0x1234', tokenOut: STRK, amountIn: 20n, minAmountOut: 1n },
       ]);
-      return batch.swapReview;
+      return { review: batch.swapReview, intent: batch.intents[0] };
     };
 
     await expect(make()).resolves.toEqual({
-      expectedAmountOut: 95n,
-      minimumAmountOut: 90n,
-      slippageBps: 100,
-      expiresAt: 2_000,
+      review: {
+        expectedAmountOut: 101n,
+        minimumAmountOut: 98n,
+        slippageBps: 333,
+        expiresAt: 2_000,
+      },
+      intent: {
+        kind: 'swap', tokenIn: '0x1234', tokenOut: STRK, amountIn: 20n, minAmountOut: 98n,
+      },
     });
     await expect(make()).resolves.toEqual(await make());
   });

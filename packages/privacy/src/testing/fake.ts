@@ -17,6 +17,7 @@ import type {
   SwapReview,
   WalletCapability,
 } from '../operations.js';
+import { protectedMinimumOut } from '../protected-minimum.js';
 
 /**
  * A deterministic, in-memory `PrivacyOperations`.
@@ -306,14 +307,13 @@ export class FakePrivacyOperations implements PrivacyOperations {
     }
 
     const gasEstimate = relayFee;
-    const swapIntent = intents.length === 1 && intents[0]?.kind === 'swap' ? intents[0] : undefined;
-    const swapReview = swapIntent ? this.buildSwapReview(swapIntent) : undefined;
+    const { intents: canonicalIntents, swapReview } = this.canonicalizeIntents(intents);
     const self = this;
     let discarded = false;
     let confirmationAttempted = false;
 
     return {
-      intents: [...intents],
+      intents: [...canonicalIntents],
       poolFee: feeAtPrepare,
       gasEstimate,
       totalCost: feeAtPrepare + gasEstimate,
@@ -341,8 +341,8 @@ export class FakePrivacyOperations implements PrivacyOperations {
         emitProgress(onProgress, { stage: 'proving', message: 'Your wallet is generating a proof' });
         emitProgress(onProgress, { stage: 'submitting', message: 'Submitting' });
 
-        self.applyIntents(intents, currentFee);
-        self.submitted.push([...intents]);
+        self.applyIntents(canonicalIntents, currentFee);
+        self.submitted.push([...canonicalIntents]);
         emitProgress(onProgress, { stage: 'done', message: 'Done' });
         return { transactionHash: `0xfake${(++self.txCounter).toString(16).padStart(4, '0')}` };
       },
@@ -354,25 +354,29 @@ export class FakePrivacyOperations implements PrivacyOperations {
 
   // -- internals ------------------------------------------------------------
 
-  private buildSwapReview(intent: Extract<Intent, { kind: 'swap' }>): SwapReview | undefined {
+  private canonicalizeIntents(intents: Intent[]): {
+    intents: Intent[];
+    swapReview?: SwapReview;
+  } {
     const configured = this.configuredSwapReview;
-    if (!configured) return undefined;
-    if (
-      typeof configured.expectedAmountOut !== 'bigint' ||
-      configured.expectedAmountOut <= 0n ||
-      configured.expectedAmountOut < intent.minAmountOut ||
-      !Number.isSafeInteger(configured.slippageBps) ||
-      configured.slippageBps <= 0 ||
-      !Number.isSafeInteger(configured.expiresAt) ||
-      configured.expiresAt <= 0
-    ) {
+    const intent = intents.length === 1 && intents[0]?.kind === 'swap' ? intents[0] : undefined;
+    if (!configured || !intent) return { intents: [...intents] };
+    if (!Number.isSafeInteger(configured.expiresAt) || configured.expiresAt <= 0) {
       throw new PrivacyError('unknown', 'The deterministic swap review is invalid.');
     }
+    const protectedMinimum = protectedMinimumOut(configured.expectedAmountOut, configured.slippageBps);
+    if (protectedMinimum < intent.minAmountOut) {
+      throw new PrivacyError('unknown', 'The requested swap floor exceeds the protected minimum.');
+    }
+    const canonicalIntent = { ...intent, minAmountOut: protectedMinimum };
     return {
-      expectedAmountOut: configured.expectedAmountOut,
-      minimumAmountOut: intent.minAmountOut,
-      slippageBps: configured.slippageBps,
-      expiresAt: configured.expiresAt,
+      intents: [canonicalIntent],
+      swapReview: {
+        expectedAmountOut: configured.expectedAmountOut,
+        minimumAmountOut: canonicalIntent.minAmountOut,
+        slippageBps: configured.slippageBps,
+        expiresAt: configured.expiresAt,
+      },
     };
   }
 

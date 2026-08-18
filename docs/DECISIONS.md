@@ -1533,10 +1533,12 @@ new decision.
 the configured slippage and quote expiry. Tracing the installed AVNU 4.2.0
 implementation found a sharper distinction: `quoteToCalls` derives the amount
 actually protected by the executor as
-`floor(expected × (10,000 - slippageBps) / 10,000)`. The current backend only
-checks that the quote's expected output exceeds the intent minimum. A player
-could therefore type a floor above AVNU's protected amount, see that floor in
-the review, and still receive less. That is not truthful enough for real funds.
+`expected - floor(expected × slippageBps / 10,000)`. The operation order is
+intentional: integer rounding can make the algebraically rearranged expression
+one base unit lower. The current backend only checks that the quote's expected
+output exceeds the intent minimum. A player could therefore type a floor above
+AVNU's protected amount, see that floor in the review, and still receive less.
+That is not truthful enough for real funds.
 
 The repository also had no product token catalog. The production Shieldup
 reference at `290f8306571ce45e630c5a08b243d7b5f8c232b4` uses a checked-in,

@@ -252,6 +252,31 @@ Format: `### YYYY-MM-DD — short title` then what, why it matters, how verified
 
 ---
 
+### 2026-08-18 — Prepared swaps canonicalize AVNU’s protected minimum
+
+D-042 changes only the prepared swap’s internal intent value, not the frozen
+public shape. After validating the AVNU plan, Chain computes the protected
+minimum with exact bigint arithmetic:
+`expectedAmountOut - (expectedAmountOut * slippageBps / 10_000)`. It rejects a
+nonpositive result or a requested quote floor above that result, then returns a
+canonical single-swap intent whose `minAmountOut` and sanitized
+`swapReview.minimumAmountOut` are identical. Confirm-time validation uses that
+canonical intent, so a later fee/quote recheck cannot fall back to the
+provisional floor.
+
+The deterministic fake applies the same calculation only when explicit
+expected-output/slippage configuration is supplied; it derives no market rate,
+reads no clock, and omits `swapReview` when unconfigured. Quote-bound immediate
+submission and D-034 uncertainty handling are unchanged.
+
+*Verified:* the rounding, canonical-intent/review equality, above-protected
+floor rejection and fake determinism tests were observed red before the shared
+helper and mappings were added, then green. The full privacy suite passes 70
+tests; package typecheck, invariant checks and diff validation pass. No wallet,
+proof, signature or transaction was used.
+
+---
+
 ### 2026-08-18 — A shared financial machine needs an explicit receipt owner
 
 D-039/D-040 reused the Bank's financial state machine for Post Office transfer

@@ -276,10 +276,13 @@ describe('Wallet API action routes', () => {
     ]);
     expect(batch.swapReview).toEqual({
       expectedAmountOut: 95n,
-      minimumAmountOut: 90n,
+      minimumAmountOut: 95n,
       slippageBps: 100,
       expiresAt: 2_000,
     });
+    expect(batch.intents).toEqual([{
+      kind: 'swap', tokenIn: TOKEN, tokenOut: STRK, amountIn: 20n, minAmountOut: 95n,
+    }]);
     expect(Object.keys(batch.swapReview ?? {}).sort()).toEqual([
       'expectedAmountOut',
       'expiresAt',
@@ -309,6 +312,75 @@ describe('Wallet API action routes', () => {
       artifact,
       feeAuthorization: AUTH.authorization,
     }));
+  });
+
+  it('canonicalizes the protected minimum with exact bigint truncation', async () => {
+    const { wallet, pool, gateway, supportedVersions } = fixture();
+    gateway.prepareSwap = vi.fn(async () => ({
+      quoteId: 'quote-rounding',
+      buyAmount: 101n,
+      expiresAt: 2_000,
+      chainId: '0x534e5f4d41494e',
+      executorAddress: '0x999',
+      executorCalls: [{ contractAddress: '0x111', entrypoint: 'swap', calldata: ['0xaaa'] }],
+      fee: { token: STRK, recipient: FEE_RECIPIENT, amount: 1n, ...AUTH },
+    }));
+    const ops = new WalletApiPrivacyOperations({
+      wallet,
+      pool,
+      submission: gateway,
+      supportedVersions,
+      now: () => 1_000,
+      policy: {
+        maxIntents: 8,
+        maxRelayFee: 10n,
+        enabledRoutes: ['swap'],
+        allowedTokens: {
+          shield: [STRK, TOKEN], unshield: [STRK, TOKEN], transfer: [STRK, TOKEN], swap: [STRK, TOKEN],
+        },
+        swap: { expectedChainId: '0x534e5f4d41494e', slippageBps: 333 },
+      },
+    });
+    const batch = await ops.prepare([
+      { kind: 'swap', tokenIn: TOKEN, tokenOut: STRK, amountIn: 20n, minAmountOut: 1n },
+    ]);
+    expect(batch.intents[0]).toMatchObject({ minAmountOut: 98n });
+    expect(batch.swapReview).toMatchObject({ expectedAmountOut: 101n, minimumAmountOut: 98n, slippageBps: 333 });
+    expect(batch.swapReview?.minimumAmountOut).toBe(batch.intents[0]?.kind === 'swap'
+      ? batch.intents[0].minAmountOut
+      : undefined);
+  });
+
+  it('rejects a requested floor above AVNU’s protected minimum', async () => {
+    const { wallet, pool, gateway, supportedVersions } = fixture();
+    gateway.prepareSwap = vi.fn(async () => ({
+      quoteId: 'quote-floor',
+      buyAmount: 101n,
+      expiresAt: 2_000,
+      chainId: '0x534e5f4d41494e',
+      executorAddress: '0x999',
+      executorCalls: [{ contractAddress: '0x111', entrypoint: 'swap', calldata: ['0xaaa'] }],
+      fee: { token: STRK, recipient: FEE_RECIPIENT, amount: 1n, ...AUTH },
+    }));
+    const ops = new WalletApiPrivacyOperations({
+      wallet,
+      pool,
+      submission: gateway,
+      supportedVersions,
+      now: () => 1_000,
+      policy: {
+        maxIntents: 8,
+        maxRelayFee: 10n,
+        enabledRoutes: ['swap'],
+        allowedTokens: {
+          shield: [STRK, TOKEN], unshield: [STRK, TOKEN], transfer: [STRK, TOKEN], swap: [STRK, TOKEN],
+        },
+        swap: { expectedChainId: '0x534e5f4d41494e', slippageBps: 333 },
+      },
+    });
+    await expect(ops.prepare([
+      { kind: 'swap', tokenIn: TOKEN, tokenOut: STRK, amountIn: 20n, minAmountOut: 99n },
+    ])).rejects.toThrow(/protected minimum/i);
   });
 
   it('returns a swap receipt when the gateway throws after reporting acceptance', async () => {
