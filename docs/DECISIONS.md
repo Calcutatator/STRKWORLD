@@ -1595,7 +1595,7 @@ unchanged Bank/Post Office behavior. Rendered acceptance remains user-owned.
 
 ## D-043 — Bridge v1 is manual, direct and wallet-bound; exact shielding fails closed
 
-**2026-08-18 · Accepted · product and technical direction delegated to the project lead · completes D-009/D-012's v1 composition choice and adds no method to the D-036-frozen `PrivacyOperations` seam**
+**2026-08-18 · Accepted; amended by project-lead direction · completes D-009/D-012's v1 composition choice and adds no method to the D-036-frozen `PrivacyOperations` seam**
 
 **Context.** The independent Bridge package already owns a signed, resumable
 1Click deposit record, but the game has no Bridge room or Shell controller.
@@ -1644,41 +1644,44 @@ receipt; STRKWORLD persists no Bridge-to-shield correlation.
 
 Reserve sizing is a separate, optional Chain-owned public capability,
 not a sixth `PrivacyOperations` method and not a Bridge dependency on Privacy.
-Its source-derived implementation must plan the maximum public shield from the
-actual settled STRK amount and return the active recipient, positive amount to
-shield, fresh wallet-specific cost estimates and a planned public reserve. It
-must own the wallet-specific construction needed to estimate the precise
-approve-plus-privacy call shape expected to be signed. This is an estimate
-against current account, allowance, deployment and fee state, not a guaranteed
-final fee. Capability is detected structurally, never by wallet name. The
-initial Ready implementation may therefore be available while another wallet
-fails closed.
+The public port and sanitized plan shape are retained, with
+`amountToShield` meaning the deposit action amount and
+`plannedReserve = poolFee + estimated public gas`; a valid implementation must
+prove `amountToShield + plannedReserve <= available`. All monetary fields use
+the same Bridge public-STRK input-token denomination; a planner must reject a
+fee or gas estimate in another denomination. A zero governance pool fee is
+valid, but the gas estimate must remain positive so `plannedReserve` cannot be
+zero. However, the current
+Ready high-level route is explicitly unsupported: its shipped source visibly
+approves only the deposit amount while canonical `apply_actions` separately
+pulls `fee_amount` from the caller. Chain must not infer an extra approval,
+wallet execute fallback or AVNU/paymaster fee behavior. The real Bridge-to-Bank
+handoff remains locked until a funded/source-verified fee-aware route, or a
+separately reviewed route, is accepted. The deterministic fake is for offline
+demo/test estimates only and is not production capability.
 
 There are two deliberate phases. Before a quote, Shell requires a matching
-active account and the structural planner capability. After the signed quote
-arrives but before deposit instructions are exposed, it preflights the planner
-against the quote's signed minimum output; a failed or non-positive plan blocks
-funding. After 1Click reports `SUCCESS`, Shell uses the actual validated
-`strkReceived`, rechecks the active account and requests a fresh maximum-shield
-plan. It revalidates that plan at the Bank commit point, and the ordinary Bank
-fee ceiling and confirmation checks remain authoritative. Missing or stale
-estimates, a changed account, non-positive remainder, inconsistent
-recipient/reserve arithmetic or a changed plan block the handoff. The player
-then explicitly reviews and signs the ordinary Bank shield; it is never
-submitted automatically and quote-time output is never used as the settled
-balance.
+active account. Before deposit instructions are exposed, an injected production
+planner must be available and must preflight the signed minimum output; a
+missing, failed or non-positive plan keeps the real handoff locked. After 1Click
+reports `SUCCESS`, Shell uses the actual validated `strkReceived`, rechecks the
+active account and requests a fresh maximum-shield plan. It revalidates that
+plan at the Bank commit point, and the ordinary Bank fee ceiling and
+confirmation checks remain authoritative. Missing or stale estimates, a
+changed account, non-positive remainder, inconsistent recipient/reserve
+arithmetic or a changed plan block the handoff. The player then explicitly
+reviews and signs the ordinary Bank shield; it is never submitted automatically
+and quote-time output is never used as the settled balance.
 
-**Consequences.** Chain adds and tests a separate public-shield planner port,
-a deterministic fake and the smallest source-derived Ready adapter without
-changing the frozen private seam. World adds only room definition/presentation
-data. Shell adds the Bridge machine, local persistence adapter, recipient gate,
-manual quote/recovery/status surfaces and explicit Bank handoff. Bridge remains
-independent of `packages/privacy`; Backend and lobby do not change. Tests must
-cover address normalization and account switches, recovery without a wallet,
-actual-settled-versus-quoted output, reserve subtraction and non-positive
-remainders, two-phase estimator failure/unsupported capability, approve/privacy call
-ordering, stale plans, reload/import, provider status validation and the absence
-of automatic submission or cross-ledger correlation. Ready/Xverse prompt
-packaging, account deployment, allowance-sensitive estimates, live fee ceilings
-and one tiny mainnet completion remain funded pre-launch checks. Rendered game
-acceptance remains user-owned.
+**Consequences.** Chain adds and tests only the separate public-shield planner
+port and deterministic fake (which requires the explicit token denomination,
+allows a zero pool fee, and rejects zero gas); no production Ready adapter or wallet-fee claim
+crosses the seam. World adds only room definition/presentation data. Shell may
+compose the Bridge machine and injected planner, but a real new Bridge deposit
+stays locked while the planner is absent. Bridge remains independent of
+`packages/privacy`; Backend and lobby do not change. Tests cover fake address,
+field/uint256 bounds, aborts, reserve subtraction, non-positive remainders,
+changing deterministic estimates and the absence of a production Ready
+planner. Ready/Xverse prompt packaging, account deployment, allowance/fee
+handling, live fee ceilings and one tiny mainnet completion remain funded
+pre-launch checks. Rendered game acceptance remains user-owned.

@@ -156,15 +156,20 @@ minimum without changing the public shape. A lost submit response must never
 become a blind retry; funded Wallet API/paymaster validation remains on the
 pre-launch checklist.
 
-**D-043 next:** add a separate optional public-shield planner, deterministic
-fake and smallest source-derived Ready adapter. It is not a method on the
-frozen `PrivacyOperations` interface. Given actual available public STRK, the
-planner must bind the active account, construct/estimate the real public
-approve-plus-privacy shape, and return a positive maximum shield amount with
-fresh wallet-specific cost components and a planned reserve. Its result is not
-a guaranteed fee. Unsupported wallets, changed accounts and unavailable or
-inconsistent estimates fail closed. Give Shell a dependent-lane heads-up before
-freezing the exact new public shape.
+**D-043 next:** add a separate optional public-shield planner port and
+deterministic fake. It is not a method on the frozen `PrivacyOperations`
+interface. The port defines `amountToShield` as the deposit action amount and
+`plannedReserve = poolFee + estimated public gas`, with
+`amountToShield + plannedReserve <= available` required. The token, pool fee,
+gas estimate, reserve and shield amount share one Bridge public-STRK
+denomination; mismatches fail closed. A zero pool fee is valid, while gas must
+be positive so the reserve is non-zero. The current Ready
+high-level route is explicitly unsupported: it visibly approves only the
+deposit amount while the pool separately pulls its STRK fee. Do not invent an
+extra approval, wallet execute fallback or AVNU/paymaster behavior. Shell may
+inject a future reviewed production planner, but a real Bridge-to-Bank deposit
+must stay locked while that capability is absent. Give Shell the final fake and
+type exports; the real route remains a D-028 funded/source-verification gate.
 
 **Dependency drift rechecked for D-036:** the 2026-08-18 integration freshness
 check still finds get-starknet discovery's `next` tag at 6.0.4,
@@ -286,15 +291,18 @@ acceptance remains user-run at `http://localhost:5173/`.
 concrete connected account beside the privacy seam, bind every new quote to its
 address, keep the signed Bridge record in browser-local Bridge storage, and
 allow recovery inspection without a wallet. New quotes require both a matching
-account and the separate public-shield planner capability; before deposit
-instructions, preflight it against the signed minimum output. Settlement uses
-provider-reported `strkReceived`, rechecks account and requests a fresh plan,
-then revalidates at the Bank commit point before offering the explicit ordinary
-shield. It never auto-submits and never writes Bridge state into the privacy
-receipt ledger. Account switches preserve the old record for refresh/export
-while blocking new financial continuation. Direct unauthenticated 1Click is
-the accepted v1 route, with its 0.2% provider fee disclosed and no fabricated
-fee breakdown.
+account and, when available, the separately injected public-shield planner
+capability; before deposit instructions, preflight it against the signed
+minimum output. Settlement uses provider-reported `strkReceived`, rechecks
+account and requests a fresh plan, then revalidates at the Bank commit point
+before offering the explicit ordinary shield. Until a reviewed production
+planner proves the fee allowance/transfer path, the real new Bridge deposit
+handoff is locked; the manual quote/status/recovery surfaces may still proceed.
+It never auto-submits and never writes Bridge state into the privacy receipt
+ledger. Account switches preserve the old record for refresh/export while
+blocking new financial continuation. Direct unauthenticated 1Click is the
+accepted v1 route, with its 0.2% provider fee disclosed and no fabricated fee
+breakdown.
 
 The **batch accumulator is Menu Mode only** under D-032. It collects typed
 intent during a building visit and emits one atomic batch on confirmation. Game

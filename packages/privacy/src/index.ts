@@ -30,6 +30,7 @@ export type {
 
 // Test double. Safe to import from any lane — no network, no wallet, no chain.
 export { FakePrivacyOperations, type FakeConfig, type Fault } from './testing/fake.js';
+export { FakePublicShieldPlanner, type FakePublicShieldPlannerConfig } from './testing/public-shield.js';
 
 export {
   WalletApiPrivacyOperations,
@@ -40,6 +41,9 @@ export {
   type PoolNativeRoute,
   type PrivateRoute,
   type PoolReadClient,
+  type PublicShieldPlan,
+  type PublicShieldPlanInput,
+  type PublicShieldPlanner,
   type PrivateSubmissionGateway,
   type PreparedPrivateSwap,
   type RelayFeeQuote,

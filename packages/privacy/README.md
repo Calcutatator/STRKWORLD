@@ -84,6 +84,40 @@ express atomic batches, fee validation before proving, cancellation, or
 backend-delayed submission. D-028 keeps rendered prompt sequence, latency and
 live-paymaster artifact acceptance on the mandatory pre-launch checklist.
 
+### Optional public-shield planning port
+
+`PublicShieldPlanner` is a separate optional capability; it is not another
+`PrivacyOperations` method and Bridge does not depend on it. The port and its
+sanitized `PublicShieldPlan` shape are available for Shell composition, but
+there is deliberately **no production Ready implementation** yet. Ready's
+shipped high-level route visibly approves only the deposit amount while the
+pool separately collects its STRK fee with `transfer_from`; D-043 therefore
+requires the Bridge handoff to fail closed until a funded/source-verified
+fee-aware route is accepted. No manual extra approval or wallet execute
+fallback is inferred.
+
+`planMax({ token, available, expectedRecipient? }, signal?)` is the intended
+port shape. A valid implementation must return only:
+
+```text
+{ token, recipient, available, amountToShield, poolFee, gasEstimate, plannedReserve }
+```
+
+`plannedReserve` is exactly `poolFee + gasEstimate`, and the planner must return
+only when `amountToShield + plannedReserve <= available` with a positive,
+field-sized shield amount. Estimates are current-account, allowance,
+deployment and fee state, not guaranteed final fees; Shell must request a
+fresh plan before Bank commit and retain the ordinary fee-ceiling confirmation.
+Unsupported capability, malformed or changing estimates, account switches,
+abort, overflow and non-positive remainders fail closed. The
+`FakePublicShieldPlanner` is the only implementation currently exported: it
+accepts an explicit Bridge public-STRK token denomination and deterministic
+estimates. `token`, `available`, `poolFee`, `gasEstimate`, `plannedReserve` and
+`amountToShield` are all in that same input-token denomination; a different
+token is rejected. A zero governance pool fee is valid, but the public gas
+estimate must be positive so the reserve cannot be zero. The fake enforces
+Stark field/uint256 bounds and never reads a clock, network or market.
+
 For a successfully prepared single AVNU swap, `PreparedBatch.swapReview`
 contains only the display-safe `expectedAmountOut`, `minimumAmountOut`,
 `slippageBps` and quote `expiresAt`. It is review data, not relay authority:

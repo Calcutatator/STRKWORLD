@@ -252,6 +252,42 @@ Format: `### YYYY-MM-DD — short title` then what, why it matters, how verified
 
 ---
 
+### 2026-08-18 — Ready public shielding is unsupported until fee handling is proven
+
+D-043 retains a separate sanitized `PublicShieldPlanner` port and a
+deterministic `FakePublicShieldPlanner`, but exports no production Ready
+adapter or wallet-fee capability. Ready 5.33.8's shipped `URe` source emits an
+ERC-20 approval for each deposit amount only. The canonical STRK20 pool source
+at commit `66e3caae8c0201227a6719696d004e30d90aea65` proves
+`apply_actions()` separately calls `collect_fee()`, which performs
+`checked_transfer_from(STRK, caller, fee_collector, fee_amount)`. Shieldup's
+pinned production shield path therefore approves `deposit.amount + fee` for
+STRK. The visible Ready high-level route does not prove where that fee
+allowance/transfer is supplied, so Chain must not infer an extra approval,
+wallet execute fallback or AVNU/paymaster behavior. A real Bridge-to-Bank
+handoff stays locked until a funded/source-verified fee-aware route is accepted.
+
+The public port still defines `amountToShield` as the deposit action amount and
+`plannedReserve = poolFee + estimated public gas`; a valid implementation must
+prove `amountToShield + plannedReserve <= available`. Every monetary field is
+denominated in the same Bridge public-STRK input token, and a planner must
+reject a fee/gas denomination mismatch. The fake requires that token
+explicitly, accepts a zero governance pool fee, rejects zero gas (so the
+reserve remains positive), and enforces field-prime address/token bounds,
+uint256 bounds, abort handling, non-positive remainder rejection and
+deterministic changing estimates. No production planner claim crosses the
+seam.
+
+*Verified:* read the installed `starknet@10.4.0` declarations, the committed
+Ready 5.33.8 bundle/source audit, canonical STRK20 `privacy.cairo`, and
+Shieldup at `290f8306571ce45e630c5a08b243d7b5f8c232b4`. Vitest coverage asserts
+the fake reserve arithmetic, normalization, abort/overflow/malformed inputs,
+changing deterministic estimates and the absence of a Ready planner export.
+No wallet prompt, proof, signature, submission, RPC secret or funded call was
+used.
+
+---
+
 ### 2026-08-18 — Direct 1Click needs no key, but its fee fields need clarification
 
 The pinned `@defuse-protocol/one-click-sdk-typescript@0.1.25` accepts an
