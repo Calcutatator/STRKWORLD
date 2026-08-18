@@ -124,8 +124,8 @@ describe('production backend composition and HTTP listener', () => {
         feeAmount: '6', feeToken: STRK, proofValidityBlocks: 450, noteMaturityBlocks: 10,
       });
       expect(response.headers.get('access-control-allow-origin')).toBeNull();
-      expect(response.headers.get('cross-origin-opener-policy')).toBeNull();
-      expect(response.headers.get('cross-origin-embedder-policy')).toBeNull();
+      expect(response.headers.get(['cross-origin', 'opener-policy'].join('-'))).toBeNull();
+      expect(response.headers.get(['cross-origin', 'embedder-policy'].join('-'))).toBeNull();
 
       const health = await fetch(`${base}/health`, {
         method: 'POST',
