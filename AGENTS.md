@@ -280,7 +280,11 @@ the station but no highlight or window. Pixel sampling the station fill gave
 `0xe2b45d`. The current Shell station-resolution tests pass. The installed
 `phaser@4.2.1` source was traced through `core/Game.js:texturesReady/start` and
 `scene/SceneManager.js:bootQueue`, confirming the ordering above. No wallet,
-network or transaction was used.
+network or transaction was used. The regression was then observed failing on
+the old `postBoot` wiring with an undefined scene bus and passing after the bus
+moved to `preBoot`; the full repository suite passed 496 tests. Finally, the
+user hard-refreshed the current localhost checkout, approached the same station
+and confirmed that it highlighted and opened the Bank action window.
 
 ---
 
