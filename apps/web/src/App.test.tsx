@@ -13,8 +13,9 @@ import { App } from './App.js';
  * instant this asserts: the tree wires together and shows its boot state
  * without throwing, and crucially the demo path does **not** trip the
  * production gate under the test runner (a Vite dev context). The event-driven
- * behaviour is covered by `PanelLayer.test.tsx`; the render of each room by its
- * own test. This is the seam between them.
+ * visit state and event behaviour is covered by `visit-controller.test.ts`;
+ * Game Mode, station windows and Menu Mode rendering are covered by
+ * `VisitLayer.test.tsx`. This is the seam between them.
  */
 describe('App', () => {
   it('mounts to its boot state without throwing, demo gate not tripped', () => {

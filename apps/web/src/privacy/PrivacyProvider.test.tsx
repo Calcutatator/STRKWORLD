@@ -1,7 +1,8 @@
 import { describe, expect, it, vi } from 'vitest';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { FakePrivacyOperations } from '@strkworld/privacy';
-import { PrivacyProvider, usePrivacy } from './PrivacyProvider.js';
+import { PrivacyProvider, usePrivacy, type ShellPrivacy } from './PrivacyProvider.js';
+import { createSubmissionUncertainty } from './submission-uncertainty.js';
 
 function Probe() {
   const { connectState } = usePrivacy();
@@ -54,5 +55,50 @@ describe('PrivacyProvider', () => {
       </PrivacyProvider>,
     );
     expect(markup).toBe('<p>loading</p>');
+  });
+
+  it('routes an uncertain operation into provider-lifetime session memory', () => {
+    const uncertainty = createSubmissionUncertainty();
+    let shell: ShellPrivacy | null = null;
+    function Capture() {
+      shell = usePrivacy();
+      return null;
+    }
+    renderToStaticMarkup(
+      <PrivacyProvider
+        operations={new FakePrivacyOperations()}
+        submissionUncertainty={uncertainty}
+      >
+        <Capture />
+      </PrivacyProvider>,
+    );
+
+    expect(shell).not.toBeNull();
+    (shell as ShellPrivacy | null)?.noteOperationError({ kind: 'submission-uncertain' });
+
+    expect(uncertainty.store.getState()).toEqual({ active: true, acknowledged: false });
+  });
+
+  it('re-locks an acknowledged session when another uncertainty is reported', () => {
+    const uncertainty = createSubmissionUncertainty();
+    let shell: ShellPrivacy | null = null;
+    function Capture() {
+      shell = usePrivacy();
+      return null;
+    }
+    renderToStaticMarkup(
+      <PrivacyProvider
+        operations={new FakePrivacyOperations()}
+        submissionUncertainty={uncertainty}
+      >
+        <Capture />
+      </PrivacyProvider>,
+    );
+
+    uncertainty.retain();
+    uncertainty.acknowledge();
+    expect(uncertainty.store.getState()).toEqual({ active: true, acknowledged: true });
+    (shell as ShellPrivacy | null)?.noteOperationError({ kind: 'submission-uncertain' });
+    expect(uncertainty.store.getState()).toEqual({ active: true, acknowledged: false });
   });
 });

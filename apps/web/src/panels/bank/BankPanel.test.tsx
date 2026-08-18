@@ -1,12 +1,17 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { FakePrivacyOperations, type Address } from '@strkworld/privacy';
 import { COPY } from '../../copy.js';
 import { PrivacyProvider } from '../../privacy/PrivacyProvider.js';
+import { createSubmissionUncertainty } from '../../privacy/submission-uncertainty.js';
 import { PRIVACY_REGISTER, type RouteGrade } from '../../privacy/register.js';
 import { parseTokenAmount } from '../../format.js';
 import { createReceiptLedger } from '../../receipts/receipt-ledger.js';
-import { createBankPanel, type BankPanel as BankPanelMachine } from './bank-machine.js';
+import {
+  createBankPanel,
+  type BankPanel as BankPanelMachine,
+  type BankPanelOptions,
+} from './bank-machine.js';
 import { BankPanel } from './BankPanel.js';
 
 /**
@@ -25,6 +30,11 @@ import { BankPanel } from './BankPanel.js';
 const STRK: Address = '0x04718f5a0fc34cc1af16a1cdee98ffb20c31f5cd61d6ab07201858f4287c938d';
 const BOB: Address = '0x02b4c7d1a1f8f39e0e6e8b9a2c7d0e3f4a5b6c7d8e9f0a1b2c3d4e5f60718293';
 const SHIELD_DISCLOSURE = PRIVACY_REGISTER.find((entry) => entry.route === 'bank.shield')!.disclosure!;
+const allowFinancialActions = () => true;
+
+function createAllowedBankPanel(options: Omit<BankPanelOptions, 'canStartFinancialAction'>) {
+  return createBankPanel({ ...options, canStartFinancialAction: allowFinancialActions });
+}
 
 function operations() {
   return new FakePrivacyOperations({
@@ -34,10 +44,15 @@ function operations() {
   });
 }
 
-function render(panel: BankPanelMachine, seam: FakePrivacyOperations): string {
+function render(
+  panel: BankPanelMachine,
+  seam: FakePrivacyOperations,
+  experience: 'menu' | 'station' = 'menu',
+  submissionUncertainty = createSubmissionUncertainty(),
+): string {
   return renderToStaticMarkup(
-    <PrivacyProvider operations={seam}>
-      <BankPanel panel={panel} onClose={() => {}} />
+    <PrivacyProvider operations={seam} submissionUncertainty={submissionUncertainty}>
+      <BankPanel panel={panel} experience={experience} onClose={() => {}} />
     </PrivacyProvider>,
   );
 }
@@ -55,9 +70,27 @@ function confirmButton(markup: string): string | null {
 }
 
 describe('BankPanel rendering', () => {
+  it('keeps the approved disclosure inside the station commit gate', async () => {
+    const seam = operations();
+    const panel = createAllowedBankPanel({
+      operations: seam,
+      receipts: createReceiptLedger(),
+      maxIntents: 1,
+    });
+    await panel.open();
+    panel.setAmount('1');
+    await panel.addToBatch();
+    await panel.prepare();
+
+    const gate = commitGate(render(panel, seam, 'station'));
+    expect(gate).not.toBeNull();
+    expect(gate).toContain(SHIELD_DISCLOSURE);
+    expect(confirmButton(gate!)).not.toBeNull();
+  });
+
   it('renders the queued batch disclosure at the commit point, after a tab switch', async () => {
     const seam = operations();
-    const panel = createBankPanel({ operations: seam, receipts: createReceiptLedger() });
+    const panel = createAllowedBankPanel({ operations: seam, receipts: createReceiptLedger() });
     await panel.open();
     panel.setAmount('1');
     await panel.addToBatch();
@@ -77,7 +110,7 @@ describe('BankPanel rendering', () => {
 
   it('never shows a confirm button without the disclosures for what it commits', async () => {
     const seam = operations();
-    const panel = createBankPanel({ operations: seam, receipts: createReceiptLedger() });
+    const panel = createAllowedBankPanel({ operations: seam, receipts: createReceiptLedger() });
     await panel.open();
     panel.setAmount('1');
     await panel.addToBatch();
@@ -97,7 +130,7 @@ describe('BankPanel rendering', () => {
     // The reverse mismatch: a private transfer queued while the shield tab is
     // selected used to show public-deposit copy over a private transfer.
     const seam = operations();
-    const panel = createBankPanel({ operations: seam, receipts: createReceiptLedger() });
+    const panel = createAllowedBankPanel({ operations: seam, receipts: createReceiptLedger() });
     await panel.open();
     panel.setMode('transfer');
     panel.setRecipient(BOB);
@@ -115,7 +148,7 @@ describe('BankPanel rendering', () => {
 
   it('disables confirm while the wallet works, and keeps the disclosure on screen', async () => {
     const seam = operations();
-    const panel = createBankPanel({ operations: seam, receipts: createReceiptLedger() });
+    const panel = createAllowedBankPanel({ operations: seam, receipts: createReceiptLedger() });
     await panel.open();
     panel.setAmount('1');
     await panel.addToBatch();
@@ -142,7 +175,11 @@ describe('BankPanel rendering', () => {
       returnToPool: false,
     };
     const seam = operations();
-    const panel = createBankPanel({ operations: seam, receipts: createReceiptLedger(), register: [unapproved] });
+    const panel = createAllowedBankPanel({
+      operations: seam,
+      receipts: createReceiptLedger(),
+      register: [unapproved],
+    });
     await panel.open();
 
     const markup = render(panel, seam);
@@ -156,9 +193,108 @@ describe('BankPanel rendering', () => {
     expect(markup).toMatch(/<button[^>]*data-locked="true"/);
   });
 
+  it('shows uncertainty without a retry path or another financial form', async () => {
+    const seam = operations();
+    const panel = createAllowedBankPanel({ operations: seam, receipts: createReceiptLedger() });
+    await panel.open();
+    panel.setAmount('1');
+    await panel.addToBatch();
+    await panel.prepare();
+    seam.injectFault({ kind: 'submission-uncertain', on: 'confirm' });
+    await panel.confirm();
+
+    const markup = render(panel, seam, 'station');
+    expect(markup).toContain(COPY.errors['submission-uncertain']);
+    expect(markup).not.toContain('Try again');
+    expect(markup).not.toContain('Nothing was sent');
+    expect(markup).not.toContain('name="amount"');
+    expect(markup).not.toContain('Review this action');
+  });
+
+  it('renders balance/recovery only while the D-035 gate blocks an open review', async () => {
+    const seam = operations();
+    const uncertainty = createSubmissionUncertainty();
+    const panel = createBankPanel({
+      operations: seam,
+      receipts: createReceiptLedger(),
+      canStartFinancialAction: () => {
+        const state = uncertainty.store.getState();
+        return !state.active || state.acknowledged;
+      },
+    });
+    await panel.open();
+    panel.setAmount('1');
+    await panel.addToBatch();
+    await panel.prepare();
+    uncertainty.retain();
+    await panel.confirm();
+
+    const markup = render(panel, seam, 'station', uncertainty);
+    expect(seam.submitted).toHaveLength(0);
+    expect(markup).toContain(COPY.balance.refresh);
+    expect(markup).not.toContain('name="amount"');
+    expect(confirmButton(markup)).toBeNull();
+  });
+
+  it('opens a new Bank with its financial form withheld while the session gate is active', async () => {
+    const seam = operations();
+    const prepare = vi.spyOn(seam, 'prepare');
+    const uncertainty = createSubmissionUncertainty();
+    uncertainty.retain();
+    const panel = createBankPanel({
+      operations: seam,
+      receipts: createReceiptLedger(),
+      canStartFinancialAction: () => {
+        const state = uncertainty.store.getState();
+        return !state.active || state.acknowledged;
+      },
+    });
+    await panel.open();
+    panel.setAmount('1');
+    await panel.addToBatch();
+    await panel.prepare();
+
+    const markup = render(panel, seam, 'menu', uncertainty);
+    expect(panel.store.getState().batch).toHaveLength(0);
+    expect(prepare).not.toHaveBeenCalled();
+    expect(seam.submitted).toHaveLength(0);
+    expect(markup).toContain(COPY.balance.refresh);
+    expect(markup).not.toContain('name="amount"');
+    expect(markup).not.toContain(COPY.batch.add);
+    expect(confirmButton(markup)).toBeNull();
+  });
+
+  it('releases the same Bank surface after acknowledgement', async () => {
+    const seam = operations();
+    const uncertainty = createSubmissionUncertainty();
+    const panel = createBankPanel({
+      operations: seam,
+      receipts: createReceiptLedger(),
+      canStartFinancialAction: () => {
+        const state = uncertainty.store.getState();
+        return !state.active || state.acknowledged;
+      },
+      onError: (failure) => {
+        if (failure.kind === 'submission-uncertain') uncertainty.retain();
+      },
+    });
+    await panel.open();
+    panel.setAmount('1');
+    await panel.addToBatch();
+    await panel.prepare();
+    seam.injectFault({ kind: 'submission-uncertain', on: 'confirm' });
+    await panel.confirm();
+
+    expect(confirmButton(render(panel, seam, 'station', uncertainty))).toBeNull();
+    uncertainty.acknowledge();
+    const markup = render(panel, seam, 'station', uncertainty);
+    expect(markup).toContain('name="amount"');
+    expect(markup).not.toContain(COPY.submissionUncertainty.acknowledge);
+  });
+
   it('offers a way back to the counter after a submission', async () => {
     const seam = operations();
-    const panel = createBankPanel({ operations: seam, receipts: createReceiptLedger() });
+    const panel = createAllowedBankPanel({ operations: seam, receipts: createReceiptLedger() });
     await panel.open();
     panel.setAmount('1');
     await panel.addToBatch();
@@ -172,7 +308,7 @@ describe('BankPanel rendering', () => {
 
   it('offers no MAX control until a maximum can be stated', async () => {
     const seam = operations();
-    const panel = createBankPanel({ operations: seam, receipts: createReceiptLedger() });
+    const panel = createAllowedBankPanel({ operations: seam, receipts: createReceiptLedger() });
     await panel.open();
     panel.setMode('transfer');
     await panel.refreshBalance();
@@ -184,7 +320,7 @@ describe('BankPanel rendering', () => {
 
   it('states review figures exactly', async () => {
     const seam = operations();
-    const panel = createBankPanel({ operations: seam, receipts: createReceiptLedger() });
+    const panel = createAllowedBankPanel({ operations: seam, receipts: createReceiptLedger() });
     await panel.open();
     panel.setMode('transfer');
     panel.setRecipient(BOB);
@@ -203,7 +339,7 @@ describe('BankPanel rendering', () => {
 describe('BankPanel — closing during a signature', () => {
   it('says plainly that closing will not cancel it', async () => {
     const seam = operations();
-    const panel = createBankPanel({ operations: seam, receipts: createReceiptLedger() });
+    const panel = createAllowedBankPanel({ operations: seam, receipts: createReceiptLedger() });
     await panel.open();
     panel.setAmount('1');
     await panel.addToBatch();
@@ -222,7 +358,7 @@ describe('BankPanel — closing during a signature', () => {
   it('shows a receipt recovered from the ledger on reopening', async () => {
     const receipts = createReceiptLedger();
     const seam = operations();
-    const first = createBankPanel({ operations: seam, receipts });
+    const first = createAllowedBankPanel({ operations: seam, receipts });
     await first.open();
     first.setAmount('1');
     await first.addToBatch();
@@ -230,7 +366,7 @@ describe('BankPanel — closing during a signature', () => {
     await first.confirm();
     first.close();
 
-    const reopened = createBankPanel({ operations: seam, receipts });
+    const reopened = createAllowedBankPanel({ operations: seam, receipts });
     await reopened.open();
 
     const markup = render(reopened, seam);

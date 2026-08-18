@@ -2,12 +2,16 @@
 
 **The shell. Composes everything.**
 
-Providers, routing, layout, and the event bus. Owns the building panels and the
-batch accumulator that sits between the game and the financial seam:
+Providers, routing, layout, and the event bus. Owns the local visit controller,
+the interaction windows, and the batch accumulator that sits between Menu Mode
+and the financial seam:
 
-- **The batch accumulator** — collects player intent during a building visit
-  and emits one atomic `Intent[]` on confirm. This is the only lever against
-  per-action prompts and fees, so it is load-bearing for the economy.
+- **Game Mode** — the default. A building entry starts a local visit in the
+  World's instanced room; an admitted station opens one React interaction
+  window and confirms one typed action at a time.
+- **Menu Mode** — the secondary path. Its top-right control opens the existing
+  full building panel, where the batch accumulator collects player intent and
+  emits one atomic `Intent[]` on confirm. This is the fee-amortising path.
 
 The shell emits only typed intents. It never accepts a raw contract target,
 selector or protocol argument blob, and it never falls back to unshielding and
@@ -27,11 +31,12 @@ disappear is accepted for v1 (D-019).
 |---|---|
 | `src/bus/` | The typed event bus implementation. The shell owns it and hands it to the world |
 | `src/world/` | `WorldHost` — acquires and releases the world. React never owns the game lifecycle |
+| `src/visits/` | `VisitLayer`, the Game/Menu visit controller, and the Shell-owned opaque station registry |
 | `src/store/` | A 40-line observable store, plus its `useSyncExternalStore` hook |
-| `src/accumulator/` | The batch accumulator |
+| `src/accumulator/` | Menu Mode's batch accumulator |
 | `src/connect/` | Capability detection, and the rooms for a wallet that cannot help |
-| `src/panels/` | The building-panel framework, the privacy gate, and the rooms |
-| `src/privacy/` | The seam context, failure classification, build context, and the register import |
+| `src/panels/` | The building-window framework, privacy gate, and locked/unbuilt surfaces |
+| `src/privacy/` | The seam context, failure classification, session uncertainty, build context, and register import |
 | `src/receipts/` | The receipt ledger — receipts outlive the panel that made them |
 | `src/panels/bank/` | The Bank: shield, unshield, private transfer |
 | `src/copy.ts` | Every player-facing string the shell owns |
@@ -40,7 +45,7 @@ disappear is accepted for v1 (D-019).
 ## Composition
 
 `main.tsx` is the composition root. It creates the two buses once, at module
-scope, and mounts `App` inside `StrictMode`. `App` wires the three pieces
+scope, and mounts `App` inside `StrictMode`. `App` wires the four pieces
 together and takes the buses as props, so a test can drive it against buses it
 controls:
 
@@ -52,8 +57,11 @@ createRoot(root).render(<StrictMode><App worldOut={worldOut} shellIn={shellIn} /
 
 // App.tsx — the tree.
 <PrivacyProvider demo shellBus={shellIn} fallback={<Boot/>}>
-  <WorldHost out={worldOut} in={shellIn} />   {/* world lane's mount point, untouched */}
-  <PanelLayer world={worldOut} />             {/* opens a panel on building:entered */}
+  <main className="strkworld">
+    <WorldHost out={worldOut} in={shellIn} />   {/* world lane's mount point, untouched */}
+    <VisitLayer world={worldOut} shell={shellIn} /> {/* Game Mode first; stations or Menu above */}
+    <SessionNoticeLayer />                     {/* session truth above every visit surface */}
+  </main>
 </PrivacyProvider>
 ```
 
@@ -63,12 +71,30 @@ fresh instance on the second pass, stranding every subscription made against
 the first. The world's own Phaser/WebGL lifecycle is ref-counted inside
 `@strkworld/world` so the double-mount is otherwise safe.
 
-`PanelLayer` subscribes to the world-out bus in an effect with cleanup, so the
-StrictMode mount→cleanup→mount cycle leaves exactly one set of live handlers.
-It maps `building:entered` → open that building's room, `building:locked` →
-the locked-door surface, `building:exited` → close. Its event→state step
-(`nextActiveRoom`) and its room rendering (`ActiveRoomView`) are pulled out as
-a pure reducer and a pure view so both are tested without a DOM.
+`VisitLayer` creates a Shell-owned visit controller and subscribes it to the
+world-out bus in an effect with cleanup, so the StrictMode
+mount→cleanup→mount cycle leaves exactly one set of live handlers. A
+`building:entered` event starts in the room surface: Game Mode is the default,
+and only the top-right Menu Mode control is rendered over the World. The Shell
+publishes presentation-only station snapshots; an admitted
+`station:activated` event hands controls to React and opens that station's
+window. Closing a station or Menu Mode returns controls to the room. Only a
+matching `building:exited` ends the visit. Unknown or newly locked stations
+fail closed and return controls to the World.
+
+The first tracer maps the opaque `bank:shielding` station to the existing Bank
+machine, limited to Shield/Unshield and one intent. The station and Menu Mode
+therefore share the same typed routes, `ConfirmGate`, approved disclosures and
+session receipt ledger; only their interaction shape differs. The World never
+receives the station's route or financial meaning.
+
+`SessionNoticeLayer` is a sibling above the World and visit surfaces. If a
+private submission response is lost after dispatch, D-034 classifies the result
+as `submission-uncertain`: the Bank blocks another action, offers no retry, and
+the provider retains one in-memory flag for the rest of the browser session.
+The notice therefore survives station close, Menu/Game switching and building
+exit. It stores no intent, recipient, transaction hash, request handle or
+timestamp, and it deliberately has no local-storage or dismiss path.
 
 **`v1` runs against the fake, by design.** `App` passes `demo`, so a served
 production build shows the "not wired yet" surface rather than a practice
@@ -114,7 +140,7 @@ app, and `bank-machine.test.ts` advances ten minutes of fake time to prove it.
 
 **A receipt is not panel state.** A transaction settles whether or not the room
 is still on screen, and the panel's lifecycle is not the player's decision — the
-world emits `building:exited` and `PanelLayer` unmounts the panel. So the hash is
+world emits `building:exited` and `VisitLayer` unmounts the window. So the hash is
 recorded in the provider's receipt ledger the instant the seam returns, before
 any liveness check, and a reopened room finds it there. For the same reason a
 batch already handed to the wallet is never discarded: discarding cannot unring
@@ -123,6 +149,14 @@ which would turn "the player left the room" into "the transaction never
 happened". The close control stays enabled and says what closing does and does
 not do; disabling it would trap the player behind a wallet that may never answer
 and would be theatre anyway.
+
+**Submission uncertainty is not a failure claim.** Once a private request has
+been dispatched, losing its response means the Shell cannot safely say whether
+it settled. `submission-uncertain` is single-attempt and has no “Try again”
+path. Its exact D-034 copy lives in the provider-level session notice above all
+station and Menu windows; closing or changing surfaces cannot erase it. A page
+reload starts a new session — durable financial history would require a
+separate privacy decision.
 
 **Never state a maximum that has to be guessed.** Three separate cases, one
 rule. The shipped Wallet API returns one figure per token, so the production

@@ -7,7 +7,7 @@ import { createStore, type Store } from '../store/store.js';
  *
  * A submitted transaction settles whether or not the room is still on screen,
  * and the panel's lifecycle is **not** under the player's control: the world
- * emits `building:exited` and `PanelLayer` unmounts the panel. Keeping the hash
+ * emits `building:exited` and `VisitLayer` unmounts the window. Keeping the hash
  * in panel state therefore loses it — the transaction settles, the player is
  * told nothing, and the only proof they have is gone.
  *

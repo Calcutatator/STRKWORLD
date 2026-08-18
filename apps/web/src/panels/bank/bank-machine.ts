@@ -204,6 +204,11 @@ export interface BankPanelOptions {
   register?: readonly RouteGrade[];
   accumulator?: BatchAccumulator;
   /**
+   * Session-level capability for starting financial work. Every caller must
+   * choose a policy; the rendered Bank injects the live D-035 gate.
+   */
+  canStartFinancialAction: () => boolean;
+  /**
    * Where receipts go. **Required, and deliberately not defaulted:** its
    * lifetime has to outlive the panel, because a transaction settles whether or
    * not the room is still mounted and `building:exited` is not the player's
@@ -236,6 +241,9 @@ export interface BankPanel {
 
 export function createBankPanel(options: BankPanelOptions): BankPanel {
   const { operations, onError, receipts } = options;
+  // Keep the runtime boundary fail-closed for JavaScript or deliberately
+  // untyped callers. TypeScript callers must provide an explicit policy.
+  const canStartFinancialAction = options.canStartFinancialAction ?? (() => false);
   const register = options.register ?? PRIVACY_REGISTER;
   const feeTolerance = options.feeTolerance ?? 0n;
   const accumulator = options.accumulator ?? createBatchAccumulator({ maxIntents: options.maxIntents });
@@ -289,6 +297,12 @@ export function createBankPanel(options: BankPanelOptions): BankPanel {
     patch({ notice: { tone, text } });
   }
 
+  function gateOpen(): boolean {
+    if (canStartFinancialAction()) return true;
+    notice('error', COPY.errors['submission-uncertain']);
+    return false;
+  }
+
   function setBatch(intents: readonly Intent[]): void {
     patch({
       batch: intents,
@@ -303,15 +317,32 @@ export function createBankPanel(options: BankPanelOptions): BankPanel {
   }
 
   function fail(error: unknown, recovery: 'prepare-again' | 'close', id: number): void {
-    // The guard comes first, including for `onError`. An abandoned attempt must
-    // not drive shell-level state either: the room it would escalate into
-    // belongs to the operation the player is actually running now.
-    if (!current(id)) return;
     const failure = toFailure(error);
-    onError?.(failure);
+    // D-034 is the exception to the ordinary stale-write rule. A private
+    // submit response can be lost after the player closes the window; the
+    // provider-level notice must still learn about that ambiguity. The notice
+    // stores one bit only and `retain()` is idempotent.
+    if (failure.kind === 'submission-uncertain') onError?.(failure);
+
+    // Every panel-local write remains guarded. An abandoned attempt must not
+    // reopen or overwrite a newer surface.
+    if (!current(id)) return;
+    if (failure.kind !== 'submission-uncertain') onError?.(failure);
     discardPrepared();
+    if (failure.kind === 'submission-uncertain') {
+      // The lost response is single-attempt. Do not leave the old intent in a
+      // newly unlocked form where acknowledgement could turn it into a blind
+      // retry; the player may compose a fresh action after the gate opens.
+      accumulator.clear();
+      setBatch(accumulator.intents);
+    }
     patch({
-      flow: { name: 'failed', kind: failure.kind, message: COPY.errors[failure.kind], recovery },
+      flow: {
+        name: 'failed',
+        kind: failure.kind,
+        message: COPY.errors[failure.kind],
+        recovery: failure.kind === 'submission-uncertain' ? 'close' : recovery,
+      },
     });
   }
 
@@ -476,6 +507,7 @@ export function createBankPanel(options: BankPanelOptions): BankPanel {
     },
 
     async addToBatch(signal?: AbortSignal): Promise<void> {
+      if (!gateOpen()) return;
       const state = store.getState();
       // A second click while the first is still resolving would queue the same
       // intent twice, and the player would see one row appear and then another.
@@ -517,6 +549,7 @@ export function createBankPanel(options: BankPanelOptions): BankPanel {
             // The room may have closed while the pool was answering. Queuing an
             // intent into a reset panel is a financial write nobody asked for.
             if (!live(mySession)) return;
+            if (!gateOpen()) return;
             if (status === 'unregistered') {
               notice('error', COPY.notices.recipientUnregistered);
               return;
@@ -572,6 +605,7 @@ export function createBankPanel(options: BankPanelOptions): BankPanel {
      * presenting it as a background preview.
      */
     async prepare(signal?: AbortSignal): Promise<void> {
+      if (!gateOpen()) return;
       const confirmed = accumulator.confirm();
       if (!confirmed.ok) {
         notice('error', rejectionCopy(confirmed.rejection));
@@ -615,6 +649,7 @@ export function createBankPanel(options: BankPanelOptions): BankPanel {
     },
 
     async confirm(signal?: AbortSignal): Promise<void> {
+      if (!gateOpen()) return;
       const state = store.getState();
       const batch = prepared;
       if (state.flow.name !== 'review' || !batch) return;
@@ -633,6 +668,11 @@ export function createBankPanel(options: BankPanelOptions): BankPanel {
       try {
         const pool = await operations.poolConfig(signal);
         if (!current(id)) return;
+        if (!canStartFinancialAction()) {
+          patch({ flow: { name: 'review', summary } });
+          notice('error', COPY.errors['submission-uncertain']);
+          return;
+        }
         patch({ pool });
         if (pool.feeAmount + summary.gasEstimate > summary.feeCeiling) {
           discardPrepared();
@@ -647,6 +687,11 @@ export function createBankPanel(options: BankPanelOptions): BankPanel {
       }
 
       try {
+        if (!canStartFinancialAction()) {
+          patch({ flow: { name: 'review', summary } });
+          notice('error', COPY.errors['submission-uncertain']);
+          return;
+        }
         signing = true;
         const result = await batch.confirm({
           feeCeiling: summary.feeCeiling,

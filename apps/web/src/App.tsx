@@ -2,15 +2,16 @@ import type { EventBus, ShellEvents, WorldEvents } from '@strkworld/shared';
 import { COPY } from './copy.js';
 import { ErrorBoundary } from './ErrorBoundary.js';
 import { PrivacyProvider } from './privacy/PrivacyProvider.js';
-import { PanelLayer } from './panels/PanelLayer.js';
+import { SessionNoticeLayer } from './privacy/SessionNoticeLayer.js';
+import { VisitLayer } from './visits/VisitLayer.js';
 import { WorldHost } from './world/WorldHost.js';
 
 /**
  * The composition root, as a component.
  *
  * Everything the shell is made of, wired together and nothing more: the
- * financial seam over the top, the world underneath, the building overlay above
- * it. It takes the two buses as props rather than constructing them, so the
+ * financial seam over the top, the world underneath, and the visit controls
+ * above it. It takes the two buses as props rather than constructing them, so the
  * same tree can be mounted by `main.tsx` against the real page and by a test
  * against buses it controls — the buses are the seam between world and shell,
  * and a composition root that manufactures its own seam cannot be driven from
@@ -39,7 +40,8 @@ export function App({
       <PrivacyProvider demo shellBus={shellIn} fallback={<Boot />}>
         <main className="strkworld">
           <WorldHost out={worldOut} in={shellIn} />
-          <PanelLayer world={worldOut} />
+          <VisitLayer world={worldOut} shell={shellIn} />
+          <SessionNoticeLayer />
         </main>
       </PrivacyProvider>
     </ErrorBoundary>
