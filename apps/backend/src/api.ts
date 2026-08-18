@@ -512,6 +512,12 @@ function validateBackendConfig(config: BackendConfig): void {
       throw new Error(`Backend ${route} policy has invalid limits.`);
     }
   }
+  for (const route of ['transfer', 'unshield'] as const) {
+    const policy = config.routes[route];
+    if (policy.quoteBound || policy.maxQueueDelayMs === 0) {
+      throw new Error(`Backend ${route} route policy must be non-quote-bound and delayed.`);
+    }
+  }
   const swap = config.routes.swap;
   if (
     !swap.quoteBound ||
