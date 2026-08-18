@@ -1416,3 +1416,47 @@ Post Office publishes only its transfer station, rechecks route admission at
 activation, renders no Shield/Unshield or batch controls, executes one typed
 transfer through the existing commit path, and leaves Menu Mode explicitly
 unbuilt. Browser acceptance remains user-owned.
+
+---
+
+## D-040 — Post Office Menu Mode is the transfer-only batch surface
+
+**2026-08-18 · Accepted · technical direction delegated to the project lead · completes the bounded deferral in D-039**
+
+**Context.** D-030 and D-032 already define Menu Mode as a building-wide
+transaction surface that batches compatible typed intents for one later
+confirmation. D-039 deliberately stopped after the Post Office Game Mode
+station so adding a station could not silently fabricate a full panel. The
+remaining Post Office surface now has no unresolved financial behavior: its
+only approved route is the pool-native private transfer, and the existing Bank
+machine already owns transfer intent construction, recipient preflight,
+batching, preparation, confirmation, receipts and uncertainty handling.
+
+Building a second transfer state machine would split those invariants. Turning
+the whole panel registry into a configurable financial-form framework would
+instead broaden a seam for one building-specific set of defaults.
+
+**Decision.** Post Office Menu Mode uses a small semantic panel adapter over
+the existing financial machine. It supplies the Post Office title, permits only
+`transfer`, opens on `transfer`, and uses `experience="menu"`. Menu Mode may
+therefore batch several compatible private transfers under D-032; the
+`post-office:transfer` station remains the D-039 one-intent Game Mode path.
+
+The Post Office panel is added to the existing building-panel registry. The
+ordinary privacy gate still runs before registry resolution, and the panel
+still rechecks the route at action time. It shows no Shield or Unshield control,
+accepts no raw target or calldata, adds no public fallback, and introduces no
+new product or privacy copy. Because `post-office.transfer` is the project's
+fully private route, the existing `ConfirmGate` must remain present but has no
+deviation disclosure to render.
+
+No World, shared-event, lobby, backend, Bridge or `PrivacyOperations` change is
+part of this slice. Exchange remains unbuilt until its quote and minimum-output
+confirmation surface is specified; Bridge composition remains independent.
+
+**Consequences.** Shell tests must prove registry admission, transfer-only
+controls, Menu Mode batch vocabulary and more than one compatible transfer,
+recipient preflight, commit-gate/receipt/uncertainty reuse, route-disabled
+fail-closed behavior, and unchanged one-intent Post Office station behavior.
+Exchange, Bridge and Vault continue to resolve honestly according to their
+current registry and route state. Browser acceptance remains user-owned.

@@ -246,8 +246,9 @@ D-039 is complete and headlessly verified: the opaque Post Office station is
 admitted and the existing financial machine is configured for one transfer
 mode and one intent. Game Mode reuses recipient preflight, route admission,
 `ConfirmGate`, receipts and uncertainty handling; Post Office Menu Mode remains
-explicitly unbuilt until its own bounded panel slice. The remaining gate is the
-same user-run rendered-game acceptance recorded in the World lane.
+the next bounded Shell-only slice under D-040: the same machine, transfer-only,
+with Menu Mode's compatible multi-transfer batching. The remaining rendered
+gate is user-run acceptance recorded in the World lane.
 
 The **batch accumulator is Menu Mode only** under D-032. It collects typed
 intent during a building visit and emits one atomic batch on confirmation. Game
