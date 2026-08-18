@@ -1,4 +1,4 @@
-import { PrivacyError, type TxResult } from '../types.js';
+import { PrivacyError, type PrivacyErrorKind, type TxResult } from '../types.js';
 import type { PoolConfig } from '../operations.js';
 import type {
   PoolReadClient,
@@ -55,7 +55,7 @@ export class BackendPrivacyClient implements PoolReadClient, PrivateSubmissionGa
       artifact: input.artifact,
       feeAuthorization: input.feeAuthorization,
       proofValidityBlocks: input.proofValidityBlocks,
-    }, input.signal));
+    }, input.signal, 'submission-uncertain'));
     const result = { transactionHash: asString(value.transactionHash) };
     input.onAccepted?.(result);
     return result;
@@ -100,10 +100,15 @@ export class BackendPrivacyClient implements PoolReadClient, PrivateSubmissionGa
     };
   }
 
-  private async post(path: string, body: unknown, signal?: AbortSignal): Promise<unknown> {
-    let response: Response;
+  private async post(
+    path: string,
+    body: unknown,
+    signal?: AbortSignal,
+    transportFailureKind: PrivacyErrorKind = 'unreachable',
+  ): Promise<unknown> {
+    let pendingResponse: Promise<Response>;
     try {
-      response = await this.fetcher(`${this.baseUrl.replace(/\/$/, '')}${path}`, {
+      pendingResponse = this.fetcher(`${this.baseUrl.replace(/\/$/, '')}${path}`, {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify(body),
@@ -112,6 +117,18 @@ export class BackendPrivacyClient implements PoolReadClient, PrivateSubmissionGa
     } catch (error) {
       throw new PrivacyError('unreachable', 'The private service could not be reached.', error);
     }
+    let response: Response;
+    try {
+      response = await pendingResponse;
+    } catch (error) {
+      throw new PrivacyError(
+        transportFailureKind,
+        transportFailureKind === 'submission-uncertain'
+          ? 'The private submission response was lost.'
+          : 'The private service could not be reached.',
+        error,
+      );
+    }
     if (!response.ok) {
       const failure = await response.json().catch(() => null) as { message?: unknown } | null;
       throw new PrivacyError(
@@ -119,7 +136,20 @@ export class BackendPrivacyClient implements PoolReadClient, PrivateSubmissionGa
         typeof failure?.message === 'string' ? failure.message : 'The private service rejected the request.',
       );
     }
-    return response.json();
+    try {
+      return await response.json();
+    } catch (error) {
+      if (error instanceof SyntaxError) {
+        throw new PrivacyError('unknown', 'The private service returned an invalid response.', error);
+      }
+      throw new PrivacyError(
+        transportFailureKind,
+        transportFailureKind === 'submission-uncertain'
+          ? 'The private submission response was lost.'
+          : 'The private service response was lost.',
+        error,
+      );
+    }
   }
 }
 

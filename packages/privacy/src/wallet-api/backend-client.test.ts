@@ -52,6 +52,97 @@ describe('BackendPrivacyClient', () => {
     expect(onAccepted).toHaveBeenCalledWith({ transactionHash: '0xaccepted' });
   });
 
+  it('marks a lost private-submit response after dispatch as submission uncertainty', async () => {
+    const client = new BackendPrivacyClient(
+      'https://backend.example',
+      async () => { throw new TypeError('response connection closed'); },
+    );
+
+    await expect(client.submit({
+      route: 'transfer',
+      artifact: {
+        call: { contract_address: '0x123', entry_point: 'apply_actions', calldata: ['0x1'] },
+        proof: { data: 'proof', output: ['0x1'], proof_facts: ['0x2'] },
+      },
+      feeAuthorization: 'auth',
+      proofValidityBlocks: 450,
+    })).rejects.toMatchObject({ kind: 'submission-uncertain' });
+  });
+
+  it('keeps a private submit failure before dispatch retryable', async () => {
+    const client = new BackendPrivacyClient(
+      'https://backend.example',
+      () => { throw new TypeError('request could not be dispatched'); },
+    );
+
+    await expect(client.submit({
+      route: 'transfer',
+      artifact: {
+        call: { contract_address: '0x123', entry_point: 'apply_actions', calldata: ['0x1'] },
+        proof: { data: 'proof', output: ['0x1'], proof_facts: ['0x2'] },
+      },
+      feeAuthorization: 'auth',
+      proofValidityBlocks: 450,
+    })).rejects.toMatchObject({ kind: 'unreachable' });
+  });
+
+  it('marks a private-submit response stream loss as submission uncertainty', async () => {
+    const body = new ReadableStream<Uint8Array>({
+      start(controller) {
+        controller.enqueue(new TextEncoder().encode('{"transactionHash":"0x'));
+        controller.error(new TypeError('response stream terminated'));
+      },
+    });
+    const client = new BackendPrivacyClient(
+      'https://backend.example',
+      async () => new Response(body, { status: 200 }),
+    );
+
+    await expect(client.submit({
+      route: 'transfer',
+      artifact: {
+        call: { contract_address: '0x123', entry_point: 'apply_actions', calldata: ['0x1'] },
+        proof: { data: 'proof', output: ['0x1'], proof_facts: ['0x2'] },
+      },
+      feeAuthorization: 'auth',
+      proofValidityBlocks: 450,
+    })).rejects.toMatchObject({ kind: 'submission-uncertain' });
+  });
+
+  it('keeps a malformed private-submit response as an unknown protocol failure', async () => {
+    const client = new BackendPrivacyClient(
+      'https://backend.example',
+      async () => new Response('{not-json', { status: 200 }),
+    );
+
+    await expect(client.submit({
+      route: 'transfer',
+      artifact: {
+        call: { contract_address: '0x123', entry_point: 'apply_actions', calldata: ['0x1'] },
+        proof: { data: 'proof', output: ['0x1'], proof_facts: ['0x2'] },
+      },
+      feeAuthorization: 'auth',
+      proofValidityBlocks: 450,
+    })).rejects.toMatchObject({ kind: 'unknown' });
+  });
+
+  it('keeps an explicit unavailable response from private submit retryable', async () => {
+    const client = new BackendPrivacyClient(
+      'https://backend.example',
+      async () => response({ message: 'submissions paused' }, 503),
+    );
+
+    await expect(client.submit({
+      route: 'transfer',
+      artifact: {
+        call: { contract_address: '0x123', entry_point: 'apply_actions', calldata: ['0x1'] },
+        proof: { data: 'proof', output: ['0x1'], proof_facts: ['0x2'] },
+      },
+      feeAuthorization: 'auth',
+      proofValidityBlocks: 450,
+    })).rejects.toMatchObject({ kind: 'unreachable', message: 'submissions paused' });
+  });
+
   it('parses a quote-bound private swap plan without losing bigint amounts', async () => {
     const fetcher = vi.fn(async () => response({
       quoteId: 'quote-1',

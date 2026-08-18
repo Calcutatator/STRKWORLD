@@ -88,6 +88,8 @@ export type PrivacyErrorKind =
   | 'user-rejected'
   /** Network or wallet unreachable. Retryable. */
   | 'unreachable'
+  /** Private submit was dispatched, but no validated receipt returned. Never retry blindly. */
+  | 'submission-uncertain'
   /** Anything unmapped. Log it, then add a case. */
   | 'unknown';
 
