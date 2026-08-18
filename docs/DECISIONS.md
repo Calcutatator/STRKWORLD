@@ -1257,3 +1257,47 @@ D-015's queue placement and two-phase rationale remain in force; only its
 provisional status is superseded. D-034/D-035 remain the required handling for
 hashless private-submission uncertainty, with no automatic retry or recovery
 storage.
+
+---
+
+## D-037 — Lobby failure degrades to explicit solo play
+
+**2026-08-18 · Accepted · completes D-019's unavailable-path behavior**
+
+**Context.** D-019 removes an avatar from lobby presence while the player is
+inside a building, and D-030 assigns the `LobbyClient` lifecycle to the Shell.
+The lobby client and server already implement privacy-minimal movement,
+payload-free suspend and position-only resume, but neither decision says what
+the product does when `VITE_LOBBY_URL` is absent, the initial join fails or an
+existing lobby connection drops.
+
+Blocking the World would be simpler at the first render, but it would turn a
+non-financial presence outage into an outage for navigation, private balance
+access and financial actions. Silently continuing would be worse: the player
+would reasonably believe multiplayer presence was active when it was not.
+
+**Decision.** Lobby availability is independent of wallet and financial
+availability. If the lobby is missing or unreachable, STRKWORLD remains fully
+playable in **solo mode** and shows a clear multiplayer-unavailable status. It
+never invents peers or claims a connection exists. A configured endpoint gets
+an explicit manual reconnect control; there is no automatic retry loop.
+
+The presence lifecycle has only the states needed to make that truthful:
+connecting, connected, suspended and unavailable. The Shell connects only
+after it has the first real street placement, forwards only the frozen
+`player:moved` payload, suspends on local building entry and resumes from the
+World's restored street placement on physical exit. A reconnect must never
+make the avatar reappear while the player is inside a building; it waits for or
+is completed from the next street placement.
+
+Lobby errors, endpoint values and connection timing do not enter lobby state,
+financial state or transaction copy. The unavailable surface carries no
+wallet, building, station, action or balance detail. Room entry, financial
+controls and D-034/D-035 recovery remain usable while presence is unavailable.
+
+**Consequences.** This adds a small, isolated Shell status/reconnect surface
+and lifecycle controller. It adds no blockchain, backend, lobby-server,
+storage or shared-event contract. Tests must prove explicit connect ownership,
+StrictMode-safe listener cleanup, street-only reconnect, suspend/resume order,
+continued World/financial availability, and that no lobby call receives a
+building or financial field.

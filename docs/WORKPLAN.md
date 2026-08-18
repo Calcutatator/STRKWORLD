@@ -185,8 +185,10 @@ collision, camera follow, five facades, four active entrances emitting
 accepted: fixed square geometry, physical exit, one solid `bank:shielding`
 station, proximity highlight, control handoff and local enter/exit transition.
 The Phaser boot-order regression is headlessly pinned so the station receives
-its Shell snapshot before interaction. Next, compose the already-approved
-D-019 lobby presence suspend/resume lifecycle around local room entry and exit.
+its Shell snapshot before interaction. The World half of D-019 now emits the
+frozen street-only `player:moved` payload, suppresses interior coordinates and
+restores placement before building exit. Shell composition is the remaining
+D-019/D-037 work.
 
 **Must not:** import `starknet` or any wallet package. Put an address, balance,
 transaction hash, building name or entry event into lobby traffic. On local
@@ -214,16 +216,13 @@ Bank panel, batch accumulator, canonical disclosures, `ConfirmGate`, stale
 write guards and session receipt ledger. React owns wallet and financial state;
 Phaser receives presentation data and never reads back.
 
-**Current frontier:** the integrated D-033 World room and D-034/D-035
-uncertain-submission recovery slice is implemented, independently reviewed and
-manually accepted. Building entry starts Game Mode; station activation opens a
-per-function window over the same Bank machine/`ConfirmGate`; the top-right
-Menu Mode button opens the existing panel. Station/Menu close returns control
-to the room, while building exit tears down the visit. After uncertainty, the
-session notice blocks every Bank machine action until the player explicitly
-acknowledges a private-balance check, without claiming the lost request
-succeeded or failed. Hold the next financial-seam change until Chain records
-the D-028 freeze.
+**Current frontier:** D-036 has frozen the financial seam. Complete D-019/D-037
+by composing one explicit `LobbyClient` lifecycle over the World's
+`player:moved`, `building:entered` and `building:exited` events. Lobby failure
+degrades to clearly labelled solo play with manual reconnect; it never blocks
+World navigation or financial access, never automatically retries, and never
+rejoins presence while the player is inside. The completed D-033–D-035 Game
+Mode and uncertain-submission behavior remains unchanged.
 
 The **batch accumulator is Menu Mode only** under D-032. It collects typed
 intent during a building visit and emits one atomic batch on confirmation. Game
