@@ -1120,7 +1120,7 @@ unchanged lobby vocabulary.
 
 ## D-034 — A lost private-submission response is non-retryable uncertainty
 
-**2026-08-18 · Accepted · extends the D-015 submission contract and unblocks the D-028 seam freeze after implementation**
+**2026-08-18 · Accepted · extends the D-015 submission contract · recovery acknowledgement extended by D-035 · unblocks the D-028 seam freeze after implementation**
 
 **Context.** Commit `59bfc8b` preserves a private transfer or swap receipt once
 the submission gateway has delivered a transaction hash. A connection can
@@ -1160,3 +1160,52 @@ No backend schema or storage change is authorized. Once that change is tested,
 the Chain lane may record the explicit source-derived `PrivacyOperations`
 freeze allowed by D-028. Funded Ready/Xverse behavior and real paymaster
 acceptance remain pre-launch validation, not development gates.
+
+---
+
+## D-035 — Balance-check acknowledgement releases the uncertainty gate
+
+**2026-08-18 · Accepted · extends D-034 after the Shieldup production-reference audit**
+
+**Context.** D-034 says a hashless post-dispatch response loss is non-retryable
+and keeps a notice for the browser session. A review found that closing and
+reopening the Bank still creates a fresh form, so copy alone does not prevent a
+duplicate economic intent. The player can deliberately read their private
+balance, but that read is eventual state reconciliation rather than a
+submission receipt: a changed balance is useful evidence, while an unchanged
+balance can still mean pending confirmation, note discovery lag, maturity or a
+temporarily unavailable wallet service.
+
+The audited Shieldup reference behaves the same way. It polls note discovery
+and offers manual refresh, but has no hash-to-note correlation, idempotency key
+or authoritative submission lookup. Easy balance access therefore makes the
+ambiguity recoverable; it does not make immediate retry safe.
+
+**Decision.** D-034's session notice becomes an enforceable acknowledgement
+gate, not a full-session lock. While an uncertainty is active and
+unacknowledged, every Bank entry path may show balance refresh and recovery
+information but must not start, prepare or confirm a financial action. The
+player releases the gate only through an explicit control labelled:
+
+> I refreshed and checked my private balance
+
+That control is an acknowledgement of the player's check, not an automated
+claim that STRKWORLD correlated a balance delta to the lost request. After it,
+new actions are available again and the session still shows:
+
+> A previous private action is still unconfirmed. You checked your refreshed
+> balance before continuing.
+
+If another uncertain submission occurs, the gate closes again and needs a new
+acknowledgement. There is never an automatic retry. The session state may hold
+only `active` and `acknowledged` booleans: no intent, token, amount, recipient,
+timestamp, hash, balance snapshot or request handle, and no local storage.
+
+**Consequences.** Shell owns the gate and enforces it at both the rendered Bank
+surface and the Bank machine's public action seam. Balance reads remain
+player-initiated Wallet API calls; they are not feature detection and the
+acknowledgement does not force an additional balance-consent prompt. Chain and
+Backend contracts do not change. Once the Shell tests prove retention across
+station/Menu/room transitions, re-locking on a second uncertainty, and blocked
+prepare/confirm paths, D-034/D-035 are complete and the Chain lane may take the
+D-028 freeze.

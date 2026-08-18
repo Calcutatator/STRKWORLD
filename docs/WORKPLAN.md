@@ -149,10 +149,17 @@ the full error taxonomy mapped to `PrivacyErrorKind`. Add a route registry that
 maps each typed intent to a pool-native action, AVNU's private executor or an
 audited anonymizer deployment.
 
-**Current frontier:** implement D-034's non-retryable
-`submission-uncertain` outcome with the Shell, then record the explicit
+**Current frontier:** the Chain half of D-034 is merged. Wait for the Shell to
+complete D-035's balance-check acknowledgement gate, then record the explicit
 source-derived seam freeze authorized by D-028. A lost submit response must
 never become a blind retry.
+
+**Dependency drift to re-check before the next Chain package change:** the
+2026-08-18 integration freshness check found get-starknet discovery's `next`
+tag at 6.0.4, wallet-standard's at 6.0.5, and the upstream monorepo replacing
+the cited `sub_account_anonymizer` path with a new
+`shadow_account_anonymizer`. None is used by the D-035 Shell-only slice; do not
+change pins or route assumptions without a separate verified Chain brief.
 
 **Must not:** contain UI, import from `world` or `lobby`, branch on wallet
 identity, read balances for feature detection, or expose an arbitrary target,
@@ -208,12 +215,15 @@ Bank panel, batch accumulator, canonical disclosures, `ConfirmGate`, stale
 write guards and session receipt ledger. React owns wallet and financial state;
 Phaser receives presentation data and never reads back.
 
-**Current frontier:** implement D-033's visit controller. Building entry starts
-Game Mode; station activation opens a per-function window over the same Bank
-machine/`ConfirmGate`; the top-right Menu Mode button opens the existing panel.
-Station/Menu close returns control to the room, while building exit tears down
-the visit. Coordinate D-034's session-retained uncertain-submission notice with
-the Chain lane before the financial seam freezes.
+**Current frontier:** finish the merged D-033 World room integration and
+D-034/D-035 uncertain-submission recovery as one reviewed Shell slice.
+Building entry starts Game Mode; station activation opens a per-function window
+over the same Bank machine/`ConfirmGate`; the top-right Menu Mode button opens
+the existing panel. Station/Menu close returns control to the room, while
+building exit tears down the visit. After uncertainty, retain the session
+notice and block new Bank actions until the player explicitly acknowledges a
+private-balance check; acknowledgement re-enables actions without claiming the
+lost request succeeded or failed.
 
 The **batch accumulator is Menu Mode only** under D-032. It collects typed
 intent during a building visit and emits one atomic batch on confirmation. Game
