@@ -221,6 +221,15 @@ while Phaser boots or remounts. The Shell maps `LobbyClient.onPeers()` into
 that source; World receives only opaque peer ID, position, facing and approved
 sprite key. The frozen `WorldEvents` / `ShellEvents` contract is unchanged.
 
+Game Mode interiors use one data-driven fixed-room core (D-039). A definition
+contains only local presentation geometry, an opaque building ID and opaque
+station footprints; it contains no route, action, wallet or financial meaning.
+The street scene remains the sole Phaser scene and renders the active
+definition. Shell separately maps station IDs to admitted routes and sends only
+labels/lock state across the frozen D-033 bus. This keeps collision, entry/exit,
+control handoff and teardown in one World implementation as Bank, Post Office
+and later rooms are added.
+
 ---
 
 ## Forward compatibility

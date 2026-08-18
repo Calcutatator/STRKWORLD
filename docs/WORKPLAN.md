@@ -199,6 +199,11 @@ widening the frozen shared event bus. Its remaining acceptance is manual:
 two browsers must see one another move, then see the other avatar disappear on
 Bank entry and return at the restored street placement on exit.
 
+**Next implementation slice:** D-039 extracts the accepted fixed-room behavior
+into one data-driven World core and adds the Post Office as the second Game
+Mode room, with one opaque `post-office:transfer` station. Bank geometry and
+behavior remain unchanged; the shared buses and privacy seam remain frozen.
+
 **Must not:** import `starknet` or any wallet package. Put an address, balance,
 transaction hash, building name or entry event into lobby traffic. On local
 entry, the shell leaves or suspends lobby presence; other players seeing the
@@ -233,6 +238,12 @@ remaining D-038 gate is the user-run two-browser acceptance described in the
 World lane. Do not widen `ShellEvents`, expose the LobbyClient to Phaser, or
 change the completed D-033–D-036 Game Mode, uncertainty and financial-seam
 behavior.
+
+D-039 is the next Shell implementation slice: admit the opaque Post Office
+station and configure the existing financial machine for a single transfer
+mode/intent. Game Mode reuses recipient preflight, route admission,
+`ConfirmGate`, receipts and uncertainty handling; Post Office Menu Mode remains
+explicitly unbuilt until its own bounded panel slice.
 
 The **batch accumulator is Menu Mode only** under D-032. It collects typed
 intent during a building visit and emits one atomic batch on confirmation. Game

@@ -87,10 +87,13 @@ matching `building:exited` ends the visit. Unknown or newly locked stations
 fail closed and return controls to the World.
 
 The first tracer maps the opaque `bank:shielding` station to the existing Bank
-machine, limited to Shield/Unshield and one intent. The station and Menu Mode
-therefore share the same typed routes, `ConfirmGate`, approved disclosures and
-session receipt ledger; only their interaction shape differs. The World never
-receives the station's route or financial meaning.
+machine, limited to Shield/Unshield and one intent. D-039 adds
+`post-office:transfer` as the second tracer and configures that same machine for
+Transfer only. Both stations therefore reuse typed intents, recipient
+preflight where applicable, `ConfirmGate`, approved disclosures, uncertainty
+handling and the session receipt ledger; only their allowed controls differ.
+Post Office Menu Mode remains the honest `UnbuiltRoom` in this slice. The World
+never receives either station's route or financial meaning.
 
 `SessionNoticeLayer` is a sibling above the World and visit surfaces. If a
 private submission response is lost after dispatch, D-034 classifies the result

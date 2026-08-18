@@ -1356,3 +1356,63 @@ behavior, street/interior visibility, and StrictMode-safe unsubscribe. Smooth
 interpolation may be added behind the World interface later; timestamps,
 revisions, map IDs and animation metadata are not added to the cross-lane shape
 for v1.
+
+---
+
+## D-039 — Fixed Game Mode rooms share one data-driven core; Post Office is the second tracer
+
+**2026-08-18 · Accepted · technical direction delegated to the project lead · extends D-030–D-033**
+
+**Context.** The accepted Game Mode target gives every v1 building a fixed,
+walkable, client-local room with opaque stations. The Bank tracer proves the
+event ordering, input handoff and per-window financial path, but its geometry,
+controller and Phaser adapter are named and structured around one Bank station.
+Copying that implementation for each remaining building would duplicate the
+privacy-sensitive control handoff, fail-closed station admission, exit/presence
+ordering and collision rules. Creating a separate Phaser scene per building
+would instead add asynchronous scene lifecycle and bus propagation to a model
+that needs only different fixed data.
+
+**Decision.** World gets one Phaser-free fixed-room core configured by a room
+definition: building ID, dimensions, spawn, physical exit, and one or more
+opaque station footprints with fallback labels. It owns geometry validation,
+solid tiles, approach detection, fail-closed Shell snapshot normalization,
+single-activation arming, matching-building commands, input ownership, physical
+exit and teardown. The existing street scene remains the sole Phaser scene and
+adapts whichever configured room is active. Room entry still occurs before the
+synchronous `building:entered` event reaches Shell; street placement is restored
+and reported before `building:exited`; remote avatars remain hidden throughout
+the local interior.
+
+The current Bank definition and public compatibility exports remain
+behavior-identical: 18×12 tiles at 32 px, spawn `(9,9)`, two-tile bottom exit,
+and `bank:shielding` at `x=8..9,y=3`. The Post Office is the second definition
+using the same stable 18×12 envelope, spawn and exit, with one solid
+`post-office:transfer` station at `x=3..4,y=3` labelled `TRANSFER`. Shared room
+dimensions keep camera/transition behavior predictable while station placement
+remains data that later art can replace.
+
+Shell adds that opaque station and maps it only to the already approved
+`post-office.transfer` route. The existing financial panel/machine is deepened
+with an explicit non-empty allowed-mode list and initial mode; Bank Game Mode
+keeps Shield/Unshield, while the Post Office station exposes Transfer only and
+allows one intent. Recipient preflight, typed intent construction, balance and
+uncertainty gates, receipt lifetime, route admission and `ConfirmGate` remain
+the same implementation. The private route needs no disclosure, but it still
+passes through the gate. Post Office Menu Mode remains the truthful existing
+`UnbuiltRoom` in this slice; a station does not imply a fabricated full panel.
+
+No `WorldEvents`, `ShellEvents`, `PresenceState`, `PrivacyOperations`, privacy
+route or player-facing privacy claim changes. A need for a visit token,
+different route, new copy or shared event is a new decision rather than an
+implementation convenience.
+
+**Consequences.** Tests must preserve every Bank behavior while proving the
+generic core against both definitions: locked-until-current-snapshot,
+malformed/duplicate rejection, station collision and re-arming, suspend-before-
+activate, stale-building command rejection, building-specific safe return,
+remote-avatar visibility and idempotent teardown. Shell tests must prove that
+Post Office publishes only its transfer station, rechecks route admission at
+activation, renders no Shield/Unshield or batch controls, executes one typed
+transfer through the existing commit path, and leaves Menu Mode explicitly
+unbuilt. Browser acceptance remains user-owned.

@@ -65,6 +65,20 @@ Each snapshot contains only `{ id, x, y, facing, sprite }`. The World drops
 invalid identity, position or facing data, replaces omitted IDs, and maps the
 approved cosmetic sprite key onto its safe local avatar texture.
 
+## Fixed Game Mode rooms
+
+D-039 makes fixed interiors data, not separate Phaser scenes. The Phaser-free
+room core owns tiles, collision, physical exit, station approach/activation and
+Shell control handoff for every definition; the street scene only presents the
+currently active room. A definition may name a building and opaque station but
+never a route or action.
+
+The Bank remains the frozen first tracer. The Post Office is the second, with
+one `post-office:transfer` station labelled `TRANSFER`. Both use the same
+18×12, 32 px procedural envelope for this placeholder phase. Shell remains the
+authorization boundary: every visit begins with stations locked until the
+matching current snapshot arrives.
+
 ---
 
 ## Map authoring
