@@ -112,6 +112,68 @@ describe('AVNU private swap planner', () => {
     })).rejects.toThrow(/no quote/i);
     expect(quoteToCalls).not.toHaveBeenCalled();
   });
+
+  it('rejects a quote whose protected minimum is below the requested minimum', async () => {
+    const quoteToCalls = vi.fn();
+    const planner = new AvnuSwapPlanner({
+      chainId: '0x534e5f4d41494e',
+      now: () => 1_000,
+      functions: {
+        getQuotes: vi.fn(async () => [{
+          quoteId: 'quote-protected-floor',
+          sellTokenAddress: '0xabc',
+          buyTokenAddress: '0x4718',
+          sellAmount: 20n,
+          buyAmount: 100n,
+          expiry: 2,
+          chainId: '0x534e5f4d41494e',
+        }]) as never,
+        quoteToCalls: quoteToCalls as never,
+        toPaymasterCall: vi.fn() as never,
+      },
+    });
+    await expect(planner.prepare({
+      sellToken: '0xabc',
+      buyToken: '0x4718',
+      sellAmount: 20n,
+      minAmountOut: 100n,
+      slippageBps: 100,
+    })).rejects.toThrow(/no quote/i);
+    expect(quoteToCalls).not.toHaveBeenCalled();
+  });
+
+  it('uses AVNU bigint rounding for the protected minimum and accepts its exact boundary', async () => {
+    const quoteToCalls = vi.fn(async () => ({
+      chainId: '0x534e5f4d41494e',
+      executorAddress: '0x999',
+      calls: [],
+    }));
+    const planner = new AvnuSwapPlanner({
+      chainId: '0x534e5f4d41494e',
+      now: () => 1_000,
+      functions: {
+        getQuotes: vi.fn(async () => [{
+          quoteId: 'quote-rounding',
+          sellTokenAddress: '0xabc',
+          buyTokenAddress: '0x4718',
+          sellAmount: 20n,
+          buyAmount: 101n,
+          expiry: 2,
+          chainId: '0x534e5f4d41494e',
+        }]) as never,
+        quoteToCalls: quoteToCalls as never,
+        toPaymasterCall: vi.fn() as never,
+      },
+    });
+    await expect(planner.prepare({
+      sellToken: '0xabc',
+      buyToken: '0x4718',
+      sellAmount: 20n,
+      minAmountOut: 100n,
+      slippageBps: 100,
+    })).resolves.toMatchObject({ buyAmount: 101n });
+    expect(quoteToCalls).toHaveBeenCalledTimes(1);
+  });
 });
 
 describe('fixed Starknet RPC adapter', () => {

@@ -1,4 +1,5 @@
 import {
+  calculateMinReceivedAmount,
   getQuotes,
   quoteToCalls,
   toPaymasterCall,
@@ -79,7 +80,7 @@ function quoteMatches(
   return sameAddress(quote.sellTokenAddress, input.sellToken) &&
     sameAddress(quote.buyTokenAddress, input.buyToken) &&
     quote.sellAmount === input.sellAmount &&
-    quote.buyAmount >= input.minAmountOut;
+    calculateMinReceivedAmount(quote.buyAmount, input.slippageBps / 10_000) >= input.minAmountOut;
 }
 
 function normalizeExpiry(value: number | null | undefined): number | null {
