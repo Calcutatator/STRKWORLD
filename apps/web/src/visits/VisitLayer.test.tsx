@@ -71,6 +71,47 @@ describe('VisitLayerView', () => {
     expect(markup).not.toContain('Nothing queued yet');
   });
 
+  it('renders the Post Office station as one private transfer action', () => {
+    const markup = render(
+      <VisitLayerView
+        state={{
+          name: 'visiting',
+          building: 'post-office',
+          surface: { name: 'station', station: 'post-office:transfer' },
+        }}
+        connected
+        onOpenMenu={() => {}}
+        onCloseSurface={() => {}}
+        onDismissLocked={() => {}}
+      />,
+    );
+
+    expect(markup).toContain('data-experience="station"');
+    expect(markup).toContain('The Post Office');
+    expect(markup).toContain('Private transfer');
+    expect(markup).not.toContain('Shield');
+    expect(markup).not.toContain('Unshield');
+    expect(markup).not.toContain('Add to this visit');
+    expect(markup).not.toContain('Nothing queued yet');
+    expect(markup).toContain('This station confirms one action at a time.');
+  });
+
+  it('keeps Post Office Menu Mode explicitly unbuilt', () => {
+    const markup = render(
+      <VisitLayerView
+        state={{ name: 'visiting', building: 'post-office', surface: { name: 'menu' } }}
+        connected
+        onOpenMenu={() => {}}
+        onCloseSurface={() => {}}
+        onDismissLocked={() => {}}
+      />,
+    );
+
+    expect(markup).toContain('class="room-unbuilt"');
+    expect(markup).toContain('This room is still being built.');
+    expect(markup).not.toContain('name="amount"');
+  });
+
   it('re-runs the privacy gate and renders no financial form when a station is disabled', () => {
     const unapprovedShield: RouteGrade = {
       ...PRIVACY_REGISTER.find((entry) => entry.route === 'bank.shield')!,

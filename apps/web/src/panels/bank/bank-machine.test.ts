@@ -61,6 +61,83 @@ afterEach(() => {
 });
 
 describe('bank panel — entering the room', () => {
+  it('rejects an unsupported mode from an untyped caller', () => {
+    expect(() =>
+      createBankPanel({
+        operations: fake(),
+        receipts: createReceiptLedger(),
+        canStartFinancialAction: allowFinancialActions,
+        allowedModes: ['transfer', 'swap'],
+        initialMode: 'transfer',
+      } as unknown as BankPanelOptions),
+    ).toThrow('unsupported allowed mode: swap');
+  });
+
+  it('rejects duplicate allowed modes from an untyped caller', () => {
+    expect(() =>
+      createBankPanel({
+        operations: fake(),
+        receipts: createReceiptLedger(),
+        canStartFinancialAction: allowFinancialActions,
+        allowedModes: ['transfer', 'transfer'],
+        initialMode: 'transfer',
+      } as unknown as BankPanelOptions),
+    ).toThrow('duplicate allowed mode: transfer');
+  });
+
+  it('rejects an empty mode list from an untyped caller', () => {
+    expect(() =>
+      createBankPanel({
+        operations: fake(),
+        receipts: createReceiptLedger(),
+        canStartFinancialAction: allowFinancialActions,
+        allowedModes: [],
+        initialMode: 'transfer',
+      } as unknown as BankPanelOptions),
+    ).toThrow('requires at least one allowed mode');
+  });
+
+  it('rejects a non-array mode list from an untyped caller', () => {
+    expect(() =>
+      createBankPanel({
+        operations: fake(),
+        receipts: createReceiptLedger(),
+        canStartFinancialAction: allowFinancialActions,
+        allowedModes: null,
+        initialMode: 'transfer',
+      } as unknown as BankPanelOptions),
+    ).toThrow('allowed modes must be an array');
+  });
+
+  it('rejects an initial mode outside the allowed list from an untyped caller', () => {
+    expect(() =>
+      createBankPanel({
+        operations: fake(),
+        receipts: createReceiptLedger(),
+        canStartFinancialAction: allowFinancialActions,
+        allowedModes: ['transfer'],
+        initialMode: 'shield',
+      } as unknown as BankPanelOptions),
+    ).toThrow('initial mode is not allowed: shield');
+  });
+
+  it('can be configured as a transfer-only Post Office station', async () => {
+    const panel = await openPanel(fake(), {
+      allowedModes: ['transfer'],
+      initialMode: 'transfer',
+      maxIntents: 1,
+    });
+
+    expect(panel.store.getState()).toMatchObject({
+      mode: 'transfer',
+      routeId: 'post-office.transfer',
+      door: { open: true },
+    });
+
+    panel.setMode('shield');
+    expect(panel.store.getState().mode).toBe('transfer');
+  });
+
   it('reads pool config on open and never asks the wallet for a balance', async () => {
     const operations = fake();
     const balances = vi.spyOn(operations, 'balances');
@@ -307,6 +384,28 @@ describe('bank panel — composing a visit', () => {
 
     expect(operations.submitted).toHaveLength(1);
     expect(operations.submitted[0]).toHaveLength(2);
+  });
+
+  it('executes a transfer-only station as one typed private transfer', async () => {
+    const operations = fake();
+    const panel = await openPanel(operations, {
+      allowedModes: ['transfer'],
+      initialMode: 'transfer',
+      maxIntents: 1,
+    });
+
+    panel.setRecipient(BOB);
+    panel.setAmount('1');
+    await panel.addToBatch();
+    expect(panel.store.getState().batch).toHaveLength(1);
+
+    await panel.prepare();
+    await panel.confirm();
+
+    expect(operations.submitted).toEqual([
+      [{ kind: 'transfer', token: STRK, amount: strk('1'), recipient: BOB }],
+    ]);
+    expect(panel.store.getState().flow.name).toBe('submitted');
   });
 
   it('rejects a shield queued alongside a spend, with the reason (D-022)', async () => {

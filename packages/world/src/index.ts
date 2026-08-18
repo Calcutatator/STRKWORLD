@@ -58,6 +58,40 @@ export {
   isBankStationApproach,
   normalizeBankStationSnapshot,
 } from './bank-room.js';
+
+// D-039 fixed-room core.  The Bank facade above preserves its original
+// public shape; new Game Mode rooms use this shared deep module directly.
+export {
+  BANK_ROOM_DEFINITION,
+  FIXED_ROOM_DEFINITIONS,
+  FIXED_ROOM_TILE_SIZE,
+  FixedRoomDefinitionError,
+  POST_OFFICE_ROOM_DEFINITION,
+  createFixedRoom,
+  createFixedRoomController,
+  fixedRoomStationAtApproach,
+  fixedRoomStationPresentations,
+  fixedRoomTileAt,
+  isFixedRoomApproach,
+  isFixedRoomExit,
+  isFixedRoomSolidAt,
+  normalizeFixedRoomStations,
+  validateFixedRoomDefinition,
+} from './fixed-room.js';
+export type {
+  FixedRoomController,
+  FixedRoomControllerOptions,
+  FixedRoomDefinition,
+  FixedRoomDefinitionErrorCode,
+  FixedRoomInputGate,
+  FixedRoomMap,
+  FixedRoomRect,
+  FixedRoomState,
+  FixedRoomStationDefinition,
+  FixedRoomStationPresentation,
+  FixedRoomStationSnapshot,
+  FixedRoomTile,
+} from './fixed-room.js';
 export type {
   BankRoomController,
   BankRoomControllerOptions,

@@ -11,6 +11,7 @@ import {
   createBankPanel,
   type BankPanel as BankPanelMachine,
   type BankPanelOptions,
+  type BankMode,
 } from './bank-machine.js';
 import { BankPanel } from './BankPanel.js';
 
@@ -49,10 +50,11 @@ function render(
   seam: FakePrivacyOperations,
   experience: 'menu' | 'station' = 'menu',
   submissionUncertainty = createSubmissionUncertainty(),
+  options: { allowedModes?: readonly BankMode[]; initialMode?: BankMode; title?: string } = {},
 ): string {
   return renderToStaticMarkup(
     <PrivacyProvider operations={seam} submissionUncertainty={submissionUncertainty}>
-      <BankPanel panel={panel} experience={experience} onClose={() => {}} />
+      <BankPanel panel={panel} experience={experience} onClose={() => {}} {...options} />
     </PrivacyProvider>,
   );
 }
@@ -144,6 +146,78 @@ describe('BankPanel rendering', () => {
     expect(markup).not.toContain(SHIELD_DISCLOSURE);
     expect(markup).not.toContain('data-testid="disclosure"');
     expect(commitGate(markup)).not.toContain('commit-disclosures');
+  });
+
+  it('keeps the Post Office transfer in ConfirmGate without a public disclosure', async () => {
+    const seam = operations();
+    const panel = createAllowedBankPanel({
+      operations: seam,
+      receipts: createReceiptLedger(),
+      allowedModes: ['transfer'],
+      initialMode: 'transfer',
+      maxIntents: 1,
+    });
+    await panel.open();
+    panel.setRecipient(BOB);
+    panel.setAmount('1');
+    await panel.addToBatch();
+    await panel.prepare();
+
+    const markup = render(panel, seam, 'station', undefined, {
+      allowedModes: ['transfer'],
+      initialMode: 'transfer',
+      title: 'The Post Office',
+    });
+    const gate = commitGate(markup);
+    expect(gate).not.toBeNull();
+    expect(gate).toContain('class="confirm"');
+    expect(gate).not.toContain('commit-disclosures');
+    expect(markup).toContain('The Post Office');
+    expect(markup).toContain('Private transfer');
+    expect(markup).not.toContain('Shield');
+    expect(markup).not.toContain('Unshield');
+    expect(markup).not.toContain('Add to this visit');
+  });
+
+  it('keeps a queued Post Office action reviewable without Menu Mode batch controls', async () => {
+    const seam = operations();
+    const panel = createAllowedBankPanel({
+      operations: seam,
+      receipts: createReceiptLedger(),
+      allowedModes: ['transfer'],
+      initialMode: 'transfer',
+      maxIntents: 1,
+    });
+    await panel.open();
+    panel.setRecipient(BOB);
+    panel.setAmount('1');
+    await panel.addToBatch();
+
+    const markup = render(panel, seam, 'station', undefined, {
+      allowedModes: ['transfer'],
+      initialMode: 'transfer',
+      title: 'The Post Office',
+    });
+    expect(markup).toContain('Private transfer 1 STRK');
+    expect(markup).toMatch(/<button[^>]*class="review"[^>]*>Check this before you confirm<\/button>/);
+    expect(markup).not.toContain(COPY.batch.title);
+    expect(markup).not.toContain(COPY.batch.add);
+    expect(markup).not.toContain(COPY.batch.empty);
+    expect(markup).not.toContain(COPY.batch.clear);
+    expect(markup).not.toContain(COPY.batch.why);
+  });
+
+  it('keeps the clear-batch control in Bank Menu Mode', async () => {
+    const seam = operations();
+    const panel = createAllowedBankPanel({ operations: seam, receipts: createReceiptLedger() });
+    await panel.open();
+    panel.setAmount('1');
+    await panel.addToBatch();
+
+    const markup = render(panel, seam, 'menu');
+    expect(markup).toContain(COPY.batch.title);
+    expect(markup).toContain(COPY.batch.clear);
+    expect(markup).toContain(COPY.batch.why);
   });
 
   it('disables confirm while the wallet works, and keeps the disclosure on screen', async () => {

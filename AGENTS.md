@@ -252,6 +252,42 @@ Format: `### YYYY-MM-DD — short title` then what, why it matters, how verified
 
 ---
 
+### 2026-08-18 — A reusable room is authored data, so validate it before Phaser owns it
+
+Extracting the accepted Bank interior into D-039's shared fixed-room core made
+two Bank-specific assumptions visible. First, TypeScript types do not protect
+the runtime from malformed authored geometry. A room definition is now rejected
+before controller listeners or Phaser objects exist unless its dimensions are
+positive integers, its spawn is a walkable interior tile, its exit is a
+positive in-bounds border rectangle, and it has at least one valid interior
+station. Station IDs must match the room's building, and duplicate IDs,
+overlapping footprints and overlapping approach halos are rejected. Ambiguous
+approach ownership must never depend on definition order.
+
+Second, one Phaser text object cannot present a data model that permits several
+stations: each loop iteration overwrites the previous label. The adapter now
+owns one label per opaque station ID and hides and destroys the full collection
+with the room lifecycle. A Phaser-free presentation projection pins that
+one-to-one relationship independently of rendering.
+
+The same runtime-boundary rule applies in Shell. The reused financial machine
+now rejects non-array, empty, unsupported and duplicate mode lists, plus an
+initial mode outside that list, even from untyped callers. The Post Office Game
+Mode tracer exposes one Transfer action and reuses the existing recipient
+preflight, route admission, commit gate, receipts and uncertainty handling; it
+does not leak Menu Mode's batch controls, and Post Office Menu Mode remains the
+honest unbuilt surface.
+
+*Verified:* validation and multi-station presentation were driven by 15 observed
+red tests plus a separately observed empty-station regression; the Shell's
+untyped configuration cases and station-only surface were also observed red
+before green. Focused integration passes 140 tests across six World/Shell
+files, and both affected package typechecks pass. No shared event, lobby or
+privacy seam changed. The full repository passes 588 tests across 56 files,
+all workspace typechecks, the production build and the invariant checker.
+
+---
+
 ### 2026-08-18 — Vite workspace scripts do not find the repository-root env by default
 
 The root setup guide and committed `.env.example` tell developers to create

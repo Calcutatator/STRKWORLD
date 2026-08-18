@@ -1,5 +1,5 @@
 import type * as PhaserTypes from 'phaser';
-import type { EventBus, ShellEvents, WorldEvents } from '@strkworld/shared';
+import type { BuildingId, EventBus, ShellEvents, StationId, WorldEvents } from '@strkworld/shared';
 import {
   createStreetMap,
   isSolidAt,
@@ -12,23 +12,23 @@ import {
 } from '../map/street.js';
 import { createDoorTrigger, type DoorTrigger } from '../door-trigger.js';
 import {
-  BANK_ROOM_TILE_SIZE,
-  createBankRoom,
-  createBankRoomController,
-  isBankRoomSolidAt,
-  type BankRoomController,
-  type BankRoomMap,
-} from '../bank-room.js';
+  FIXED_ROOM_DEFINITIONS,
+  FIXED_ROOM_TILE_SIZE,
+  createFixedRoom,
+  createFixedRoomController,
+  fixedRoomStationPresentations,
+  isFixedRoomSolidAt,
+  type FixedRoomController,
+  type FixedRoomDefinition,
+  type FixedRoomMap,
+} from '../fixed-room.js';
 import { createInputGate, type InputGate } from '../input-gate.js';
 import {
   createStreetMovementAdapter,
   type MovementInput,
   type StreetMovementAdapter,
 } from '../street-movement.js';
-import {
-  createRemoteAvatarLayer,
-  type RemoteAvatarLayer,
-} from '../remote-avatar-layer.js';
+import { createRemoteAvatarLayer, type RemoteAvatarLayer } from '../remote-avatar-layer.js';
 import type { RemotePeerSource } from '../remote-peer.js';
 
 /**
@@ -72,11 +72,12 @@ export function createStreetScene({ Phaser, onTileChanged, remotePeers }: Street
     private lastTile = { x: -1, y: -1 };
     private doors!: DoorTrigger;
     private inputGate!: InputGate;
-    private bankRoom!: BankRoomController;
-    private bankMap!: BankRoomMap;
+    private roomControllers!: Partial<Record<BuildingId, FixedRoomController>>;
+    private roomMaps!: Partial<Record<BuildingId, FixedRoomMap>>;
+    private activeRoom?: BuildingId;
     private movement!: StreetMovementAdapter;
     private roomGraphics?: PhaserTypes.GameObjects.Graphics;
-    private roomLabel?: PhaserTypes.GameObjects.Text;
+    private roomLabels = new Map<StationId, PhaserTypes.GameObjects.Text>();
     private roomStationGraphics?: PhaserTypes.GameObjects.Graphics;
     private remoteAvatars?: RemoteAvatarLayer;
     private returnTile = { x: 0, y: 0 };
@@ -97,9 +98,12 @@ export function createStreetScene({ Phaser, onTileChanged, remotePeers }: Street
         emit: (event, payload) => this.resolveBus()?.out.emit(event, payload),
       });
       this.createPlayer();
-      this.remoteAvatars = createRemoteAvatarLayer({ scene: this, source: remotePeers });
+      this.remoteAvatars = createRemoteAvatarLayer({
+        scene: this,
+        source: remotePeers,
+      });
       this.createInput();
-      this.createBankRoom();
+      this.createFixedRooms();
       this.createCamera();
       this.createDoorTriggers();
       this.createRoomVisuals();
@@ -107,27 +111,27 @@ export function createStreetScene({ Phaser, onTileChanged, remotePeers }: Street
     }
 
     override update(_time: number, delta: number): void {
-      if (this.bankRoom.state.inRoom) {
+      const room = this.activeRoomController();
+      if (room?.state.inRoom) {
         this.moveRoomPlayer(delta);
         this.movement.interiorUpdate(() => this.reportRoomTile());
         return;
       }
       const input = this.movePlayer();
-      this.movement.streetUpdate(
-        { x: this.player.x, y: this.player.y },
-        input,
-        () => this.reportTile(),
+      this.movement.streetUpdate({ x: this.player.x, y: this.player.y }, input, () =>
+        this.reportTile(),
       );
     }
 
     private cleanShutdown(): void {
       if (this.cleanedUp) return;
       this.cleanedUp = true;
-      this.bankRoom?.destroy();
+      for (const room of Object.values(this.roomControllers ?? {})) room?.destroy();
       this.inputGate?.resume();
       this.roomGraphics?.destroy();
       this.roomStationGraphics?.destroy();
-      this.roomLabel?.destroy();
+      for (const label of this.roomLabels.values()) label.destroy();
+      this.roomLabels.clear();
       this.remoteAvatars?.destroy();
       this.remoteAvatars = undefined;
     }
@@ -171,12 +175,7 @@ export function createStreetScene({ Phaser, onTileChanged, remotePeers }: Street
       this.player = this.physics.add.sprite(spawn.x, spawn.y, 'player');
       this.player.setDepth(10);
       this.player.setCollideWorldBounds(true);
-      this.physics.world.setBounds(
-        0,
-        0,
-        this.map.width * TILE_SIZE,
-        this.map.height * TILE_SIZE,
-      );
+      this.physics.world.setBounds(0, 0, this.map.width * TILE_SIZE, this.map.height * TILE_SIZE);
 
       if (this.ground) this.physics.add.collider(this.player, this.ground);
       this.movement.initial({ x: this.player.x, y: this.player.y });
@@ -219,9 +218,10 @@ export function createStreetScene({ Phaser, onTileChanged, remotePeers }: Street
           // controller that is still considered outside.
           if (event === 'building:entered') {
             const entered = payload as WorldEvents['building:entered'];
-            if (entered.building === 'bank') {
-              this.returnTile = this.bankDoorReturnTile();
-              this.bankRoom.enter();
+            if (this.roomControllers[entered.building]) {
+              this.returnTile = this.roomDoorReturnTile(entered.building);
+              this.activeRoom = entered.building;
+              this.roomControllers[entered.building]!.enter();
             }
           } else if (event === 'building:exited') {
             this.inputGate.resume();
@@ -232,49 +232,42 @@ export function createStreetScene({ Phaser, onTileChanged, remotePeers }: Street
       this.doors = createDoorTrigger(this.map, out);
     }
 
-    /** The first room is procedural; this is the only scene/state glue. */
-    private createBankRoom(): void {
-      this.bankMap = createBankRoom();
+    /** Build all configured rooms; the Phaser scene remains the sole adapter. */
+    private createFixedRooms(): void {
+      this.roomMaps = {};
+      this.roomControllers = {};
       const bus = this.resolveBus();
       const out: Pick<EventBus<WorldEvents>, 'emit'> = {
         emit: (event, payload) => bus?.out?.emit(event, payload),
       };
-      this.bankRoom = createBankRoomController({
-        out,
-        in: bus?.in,
-        input: this.inputGate,
-        onEnter: () => this.enterBankRoom(),
-        onExit: () => this.exitBankRoom(),
-        onChange: () => this.renderBankRoom(),
-      });
+      for (const definition of Object.values(FIXED_ROOM_DEFINITIONS)) {
+        const building = definition.building;
+        this.roomMaps[building] = createFixedRoom(definition);
+        this.roomControllers[building] = createFixedRoomController({
+          definition,
+          out,
+          in: bus?.in,
+          input: this.inputGate,
+          onEnter: () => this.enterRoom(definition),
+          onExit: () => this.exitRoom(definition),
+          onChange: () => this.renderRoom(),
+        });
+      }
     }
 
-    private resolveBus():
-      | { out: EventBus<WorldEvents>; in: EventBus<ShellEvents> }
-      | undefined {
+    private resolveBus(): { out: EventBus<WorldEvents>; in: EventBus<ShellEvents> } | undefined {
       return this.game.registry.get('bus') as
-        | { out: EventBus<WorldEvents>; in: EventBus<ShellEvents> }
-        | undefined;
+        { out: EventBus<WorldEvents>; in: EventBus<ShellEvents> } | undefined;
     }
 
     private createRoomVisuals(): void {
       this.roomGraphics = this.add.graphics().setDepth(1);
       this.roomStationGraphics = this.add.graphics().setDepth(2);
-      this.roomLabel = this.add
-        .text(0, 0, '', {
-          color: '#f4e9c9',
-          fontFamily: 'monospace',
-          fontSize: '12px',
-          align: 'center',
-        })
-        .setOrigin(0.5)
-        .setDepth(3);
       this.roomGraphics.setVisible(false);
       this.roomStationGraphics.setVisible(false);
-      this.roomLabel.setVisible(false);
     }
 
-    private enterBankRoom(): void {
+    private enterRoom(definition: FixedRoomDefinition): void {
       this.player.setVelocity(0, 0);
       const body = this.player.body as PhaserTypes.Physics.Arcade.Body;
       body.setEnable(false);
@@ -282,28 +275,27 @@ export function createStreetScene({ Phaser, onTileChanged, remotePeers }: Street
       this.remoteAvatars?.setVisible(false);
       this.roomGraphics?.setVisible(true);
       this.roomStationGraphics?.setVisible(true);
-      this.roomLabel?.setVisible(true);
       this.physics.world.setBounds(
         ROOM_ORIGIN.x,
         ROOM_ORIGIN.y,
-        this.bankMap.width * BANK_ROOM_TILE_SIZE,
-        this.bankMap.height * BANK_ROOM_TILE_SIZE,
+        definition.width * FIXED_ROOM_TILE_SIZE,
+        definition.height * FIXED_ROOM_TILE_SIZE,
       );
       this.player.setPosition(
-        ROOM_ORIGIN.x + this.bankMap.spawn.x * BANK_ROOM_TILE_SIZE + BANK_ROOM_TILE_SIZE / 2,
-        ROOM_ORIGIN.y + this.bankMap.spawn.y * BANK_ROOM_TILE_SIZE + BANK_ROOM_TILE_SIZE / 2,
+        ROOM_ORIGIN.x + definition.spawn.x * FIXED_ROOM_TILE_SIZE + FIXED_ROOM_TILE_SIZE / 2,
+        ROOM_ORIGIN.y + definition.spawn.y * FIXED_ROOM_TILE_SIZE + FIXED_ROOM_TILE_SIZE / 2,
       );
       this.cameras.main.setBounds(
         ROOM_ORIGIN.x,
         ROOM_ORIGIN.y,
-        this.bankMap.width * BANK_ROOM_TILE_SIZE,
-        this.bankMap.height * BANK_ROOM_TILE_SIZE,
+        definition.width * FIXED_ROOM_TILE_SIZE,
+        definition.height * FIXED_ROOM_TILE_SIZE,
       );
       this.lastTile = { x: -1, y: -1 };
-      this.renderBankRoom();
+      this.renderRoom();
     }
 
-    private exitBankRoom(): void {
+    private exitRoom(_definition: FixedRoomDefinition): void {
       this.player.setVelocity(0, 0);
       const body = this.player.body as PhaserTypes.Physics.Arcade.Body;
       body.setEnable(true);
@@ -311,7 +303,7 @@ export function createStreetScene({ Phaser, onTileChanged, remotePeers }: Street
       this.remoteAvatars?.setVisible(true);
       this.roomGraphics?.setVisible(false);
       this.roomStationGraphics?.setVisible(false);
-      this.roomLabel?.setVisible(false);
+      for (const label of this.roomLabels.values()) label.setVisible(false);
       this.physics.world.setBounds(0, 0, this.map.width * TILE_SIZE, this.map.height * TILE_SIZE);
       this.cameras.main.setBounds(0, 0, this.map.width * TILE_SIZE, this.map.height * TILE_SIZE);
       const world = tileToWorld(this.returnTile.x, this.returnTile.y);
@@ -323,49 +315,71 @@ export function createStreetScene({ Phaser, onTileChanged, remotePeers }: Street
       // Rejoin presence at the restored street placement before the room
       // controller publishes building:exited.
       this.movement.exit({ x: this.player.x, y: this.player.y }, () => this.reportTile());
+      this.activeRoom = undefined;
     }
 
-    private bankDoorReturnTile(): { x: number; y: number } {
-      const door = this.map.doors.find((candidate) => candidate.building === 'bank');
-      return { x: door?.x ?? this.map.spawn.x, y: (door?.y ?? this.map.spawn.y) + 1 };
+    private roomDoorReturnTile(building: BuildingId): { x: number; y: number } {
+      const door = this.map.doors.find((candidate) => candidate.building === building);
+      return {
+        x: door?.x ?? this.map.spawn.x,
+        y: (door?.y ?? this.map.spawn.y) + 1,
+      };
     }
 
-    private renderBankRoom(): void {
-      if (!this.roomGraphics || !this.roomStationGraphics || !this.roomLabel) return;
-      const state = this.bankRoom.state;
+    private renderRoom(): void {
+      if (!this.roomGraphics || !this.roomStationGraphics) return;
+      const controller = this.activeRoomController();
+      const map = this.activeRoomMap();
+      if (!controller || !map) return;
+      const state = controller.state;
       this.roomGraphics.clear();
-      for (let y = 0; y < this.bankMap.height; y++) {
-        for (let x = 0; x < this.bankMap.width; x++) {
-          const tile = this.bankMap.tiles[y]?.[x];
+      for (let y = 0; y < map.height; y++) {
+        for (let x = 0; x < map.width; x++) {
+          const tile = map.tiles[y]?.[x];
           const colour = tile === 'wall' ? 0x39343b : tile === 'exit' ? 0x8a7c62 : 0x514c5a;
           this.roomGraphics.fillStyle(colour, 1);
           this.roomGraphics.fillRect(
-            ROOM_ORIGIN.x + x * BANK_ROOM_TILE_SIZE,
-            ROOM_ORIGIN.y + y * BANK_ROOM_TILE_SIZE,
-            BANK_ROOM_TILE_SIZE,
-            BANK_ROOM_TILE_SIZE,
+            ROOM_ORIGIN.x + x * FIXED_ROOM_TILE_SIZE,
+            ROOM_ORIGIN.y + y * FIXED_ROOM_TILE_SIZE,
+            FIXED_ROOM_TILE_SIZE,
+            FIXED_ROOM_TILE_SIZE,
           );
         }
       }
       this.roomStationGraphics.clear();
-      const station = this.bankMap.station;
-      const highlighted = state.highlightedStation === station.station;
-      this.roomStationGraphics.fillStyle(
-        state.station.status === 'available' ? (highlighted ? 0xe2b45d : 0xb07b41) : 0x665f67,
-        1,
-      );
-      this.roomStationGraphics.fillRect(
-        ROOM_ORIGIN.x + station.x * BANK_ROOM_TILE_SIZE,
-        ROOM_ORIGIN.y + station.y * BANK_ROOM_TILE_SIZE,
-        station.width * BANK_ROOM_TILE_SIZE,
-        station.height * BANK_ROOM_TILE_SIZE,
-      );
-      this.roomLabel
-        .setText(state.station.label)
-        .setPosition(
-          ROOM_ORIGIN.x + (station.x + station.width / 2) * BANK_ROOM_TILE_SIZE,
-          ROOM_ORIGIN.y + (station.y - 0.65) * BANK_ROOM_TILE_SIZE,
+      for (const label of this.roomLabels.values()) label.setVisible(false);
+      for (const station of fixedRoomStationPresentations(map, state)) {
+        this.roomStationGraphics.fillStyle(
+          station.status === 'available' ? (station.highlighted ? 0xe2b45d : 0xb07b41) : 0x665f67,
+          1,
         );
+        this.roomStationGraphics.fillRect(
+          ROOM_ORIGIN.x + station.x * FIXED_ROOM_TILE_SIZE,
+          ROOM_ORIGIN.y + station.y * FIXED_ROOM_TILE_SIZE,
+          station.width * FIXED_ROOM_TILE_SIZE,
+          station.height * FIXED_ROOM_TILE_SIZE,
+        );
+        let label = this.roomLabels.get(station.station);
+        if (!label) {
+          label = this.add
+            .text(0, 0, '', {
+              color: '#f4e9c9',
+              fontFamily: 'monospace',
+              fontSize: '12px',
+              align: 'center',
+            })
+            .setOrigin(0.5)
+            .setDepth(3);
+          this.roomLabels.set(station.station, label);
+        }
+        label
+          .setVisible(true)
+          .setText(station.label)
+          .setPosition(
+            ROOM_ORIGIN.x + (station.x + station.width / 2) * FIXED_ROOM_TILE_SIZE,
+            ROOM_ORIGIN.y + (station.y - 0.65) * FIXED_ROOM_TILE_SIZE,
+          );
+      }
     }
 
     // -- per frame -----------------------------------------------------------
@@ -398,7 +412,9 @@ export function createStreetScene({ Phaser, onTileChanged, remotePeers }: Street
     }
 
     private moveRoomPlayer(delta: number): void {
-      if (!this.cursors || this.bankRoom.state.controlOwner !== 'world') return;
+      const controller = this.activeRoomController();
+      const map = this.activeRoomMap();
+      if (!this.cursors || !controller || !map || controller.state.controlOwner !== 'world') return;
       const held = this.heldDirections();
       let vx = 0;
       let vy = 0;
@@ -408,13 +424,17 @@ export function createStreetScene({ Phaser, onTileChanged, remotePeers }: Street
       if (held.down) vy += 1;
       if (vx === 0 && vy === 0) return;
       const length = Math.hypot(vx, vy);
-      const step = PLAYER_SPEED * Math.max(delta, 1) / 1000;
+      const step = (PLAYER_SPEED * Math.max(delta, 1)) / 1000;
       const nextX = this.player.x + (vx / length) * step;
       const nextY = this.player.y + (vy / length) * step;
-      const nextTile = worldToRoomTile(nextX, nextY);
       const currentTile = worldToRoomTile(this.player.x, this.player.y);
-      if (!isBankRoomSolidAt(this.bankMap, nextTile.x, currentTile.y)) this.player.x = nextX;
-      if (!isBankRoomSolidAt(this.bankMap, nextTile.x, nextTile.y)) this.player.y = nextY;
+      const horizontalTile = worldToRoomTile(nextX, this.player.y);
+      if (!isFixedRoomSolidAt(map, horizontalTile.x, currentTile.y)) this.player.x = nextX;
+      // Recompute the vertical candidate after horizontal movement. This
+      // prevents a diagonal corner from testing collision against an x tile
+      // that the horizontal step was unable to enter.
+      const verticalTile = worldToRoomTile(this.player.x, nextY);
+      if (!isFixedRoomSolidAt(map, verticalTile.x, verticalTile.y)) this.player.y = nextY;
     }
 
     private heldDirections() {
@@ -439,7 +459,15 @@ export function createStreetScene({ Phaser, onTileChanged, remotePeers }: Street
       const tile = worldToRoomTile(this.player.x, this.player.y);
       if (tile.x === this.lastTile.x && tile.y === this.lastTile.y) return;
       this.lastTile = tile;
-      this.bankRoom.update(tile);
+      this.activeRoomController()?.update(tile);
+    }
+
+    private activeRoomController(): FixedRoomController | undefined {
+      return this.activeRoom ? this.roomControllers?.[this.activeRoom] : undefined;
+    }
+
+    private activeRoomMap(): FixedRoomMap | undefined {
+      return this.activeRoom ? this.roomMaps?.[this.activeRoom] : undefined;
     }
   };
 }
@@ -461,8 +489,8 @@ const NO_MOVEMENT: MovementInput = {
 
 function worldToRoomTile(x: number, y: number): { x: number; y: number } {
   return {
-    x: Math.floor((x - ROOM_ORIGIN.x) / BANK_ROOM_TILE_SIZE),
-    y: Math.floor((y - ROOM_ORIGIN.y) / BANK_ROOM_TILE_SIZE),
+    x: Math.floor((x - ROOM_ORIGIN.x) / FIXED_ROOM_TILE_SIZE),
+    y: Math.floor((y - ROOM_ORIGIN.y) / FIXED_ROOM_TILE_SIZE),
   };
 }
 

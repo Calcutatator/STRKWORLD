@@ -216,6 +216,20 @@ describe('visit controller', () => {
 });
 
 describe('station registry', () => {
+  it('publishes only the approved transfer station for the Post Office', () => {
+    expect(stationSnapshot('post-office')).toEqual([
+      { station: 'post-office:transfer', label: 'TRANSFER', status: 'available' },
+    ]);
+    expect(resolveStation('post-office', 'post-office:transfer')).toMatchObject({
+      status: 'available',
+      definition: {
+        routes: ['post-office.transfer'],
+        modes: ['transfer'],
+        initialMode: 'transfer',
+      },
+    });
+  });
+
   it('defaults unknown stations to locked', () => {
     expect(resolveStation('bank', 'bank:unknown')).toMatchObject({ status: 'locked' });
   });

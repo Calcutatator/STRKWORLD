@@ -1,6 +1,7 @@
 import type { BuildingId, ShellEvents, StationId } from '@strkworld/shared';
 import { PRIVACY_REGISTER, type RouteGrade } from '../privacy/register.js';
 import { routeDoor, type DoorState } from '../panels/routes.js';
+import type { BankMode } from '../panels/bank/bank-machine.js';
 
 /**
  * Shell-owned meaning for an opaque station id.
@@ -14,6 +15,8 @@ export interface StationDefinition {
   building: BuildingId;
   label: string;
   routes: readonly string[];
+  modes: readonly BankMode[];
+  initialMode: BankMode;
   view: 'bank';
 }
 
@@ -23,6 +26,17 @@ const STATIONS: readonly StationDefinition[] = [
     building: 'bank',
     label: 'SHIELD / UNSHIELD',
     routes: ['bank.shield', 'bank.unshield'],
+    modes: ['shield', 'unshield'],
+    initialMode: 'shield',
+    view: 'bank',
+  },
+  {
+    station: 'post-office:transfer',
+    building: 'post-office',
+    label: 'TRANSFER',
+    routes: ['post-office.transfer'],
+    modes: ['transfer'],
+    initialMode: 'transfer',
     view: 'bank',
   },
 ] as const;

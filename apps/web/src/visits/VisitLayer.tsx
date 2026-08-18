@@ -115,7 +115,15 @@ export function VisitLayerView({
     if (!connected) return <ConnectionSurface building={state.building} onClose={onCloseSurface} />;
 
     if (station.definition.view === 'bank') {
-      return <BankPanel experience="station" onClose={onCloseSurface} />;
+      return (
+        <BankPanel
+          experience="station"
+          allowedModes={station.definition.modes}
+          initialMode={station.definition.initialMode}
+          title={COPY.buildings[station.definition.building]}
+          onClose={onCloseSurface}
+        />
+      );
     }
   }
 

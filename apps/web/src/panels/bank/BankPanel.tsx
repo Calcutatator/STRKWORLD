@@ -10,6 +10,9 @@ import { routeDoor } from '../routes.js';
 import { createBankPanel, ROUTE_BY_MODE, type BankMode, type BankPanel as BankPanelMachine, type BankState } from './bank-machine.js';
 import { describeIntent, describeWarning } from './summary-copy.js';
 
+const BANK_MENU_MODES: readonly BankMode[] = ['shield', 'unshield', 'transfer'];
+const BANK_STATION_MODES: readonly BankMode[] = ['shield', 'unshield'];
+
 /**
  * The Bank.
  *
@@ -25,14 +28,24 @@ export function BankPanel({
   onClose,
   panel: injected,
   experience = 'menu',
+  allowedModes,
+  initialMode,
+  title = COPY.bank.title,
 }: {
   onClose: () => void;
   /** Supply a driven machine to render a specific state. Tests use this. */
   panel?: BankPanelMachine;
   /** Menu Mode batches a visit; the first Game Mode station admits one action. */
   experience?: 'menu' | 'station';
+  /** Fixed stations can expose a strict subset of the Bank controls. */
+  allowedModes?: readonly BankMode[];
+  /** Fixed stations can open on their one meaningful control. */
+  initialMode?: BankMode;
+  /** The existing machine can render a different building title. */
+  title?: string;
 }) {
   const { operations, receipts, noteOperationError, shellBus, submissionUncertainty } = usePrivacy();
+  const modes = allowedModes ?? (experience === 'station' ? BANK_STATION_MODES : BANK_MENU_MODES);
 
   const owned = useMemo(
     () =>
@@ -41,6 +54,8 @@ export function BankPanel({
         : createBankPanel({
             operations,
             receipts,
+            allowedModes: modes,
+            initialMode,
             maxIntents: experience === 'station' ? 1 : undefined,
             onError: noteOperationError,
             canStartFinancialAction: () => {
@@ -48,7 +63,7 @@ export function BankPanel({
               return !current.active || current.acknowledged;
             },
           }),
-    [injected, operations, receipts, noteOperationError, experience, submissionUncertainty],
+    [injected, operations, receipts, noteOperationError, experience, modes, initialMode, submissionUncertainty],
   );
   const panel = injected ?? owned!;
   const state = useStore(panel.store);
@@ -86,9 +101,6 @@ export function BankPanel({
     state.flow.recovery === 'close' &&
     (state.flow.kind !== 'submission-uncertain' || !uncertaintyState.acknowledged);
 
-  const modes: readonly BankMode[] =
-    experience === 'station' ? ['shield', 'unshield'] : ['shield', 'unshield', 'transfer'];
-
   // The header disclosure previews the mode being composed. At the commit
   // point it is withdrawn, so ConfirmGate's batch-derived set is the only
   // disclosure on screen — otherwise a shield tab with a transfer queued
@@ -96,7 +108,7 @@ export function BankPanel({
   return (
     <div className="bank-experience" data-experience={experience}>
       <PanelFrame
-        title={COPY.bank.title}
+        title={title}
         disclosure={committing ? null : state.disclosure}
         closingNote={state.flow.name === 'submitting' ? COPY.flow.closingWillNotCancel : null}
         onClose={onClose}
@@ -294,7 +306,7 @@ function ComposeBlock({
       </button>
 
       {experience === 'station' ? (
-        state.batch.length > 0 ? <StationAction state={state} panel={panel} /> : null
+        state.batch.length > 0 ? <StationAction state={state} /> : null
       ) : (
         <BatchList state={state} panel={panel} />
       )}
@@ -319,15 +331,12 @@ function ComposeBlock({
  * batch machine so the route, disclosure and receipt invariants stay shared,
  * but it must not present Menu Mode's multi-action visit vocabulary.
  */
-function StationAction({ state, panel }: { state: BankState; panel: BankPanelMachine }) {
+function StationAction({ state }: { state: BankState }) {
   const intent = state.batch[0];
   if (!intent) return null;
   return (
     <p className="station-action" role="status">
-      {describeIntent(intent)}{' '}
-      <button type="button" onClick={() => panel.clearBatch()}>
-        {COPY.batch.clear}
-      </button>
+      {describeIntent(intent)}
     </p>
   );
 }

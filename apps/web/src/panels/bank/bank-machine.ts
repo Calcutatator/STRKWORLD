@@ -69,6 +69,8 @@ import type { ReceiptLedger } from '../../receipts/receipt-ledger.js';
 
 export type BankMode = 'shield' | 'unshield' | 'transfer';
 
+const ALL_BANK_MODES: readonly BankMode[] = ['shield', 'unshield', 'transfer'];
+
 /** The graded route each control drives. See `ROUTE_BY_INTENT_KIND`. */
 export const ROUTE_BY_MODE: Record<BankMode, string> = {
   shield: ROUTE_BY_INTENT_KIND.shield,
@@ -200,6 +202,10 @@ export interface BankPanelOptions {
    */
   feeTolerance?: bigint;
   maxIntents?: number;
+  /** Explicit controls for a fixed station. An omitted list keeps Menu Mode. */
+  allowedModes?: readonly BankMode[];
+  /** The first mode shown by a fixed station. Must be in `allowedModes`. */
+  initialMode?: BankMode;
   /** Injectable for tests that need an unapproved route. */
   register?: readonly RouteGrade[];
   accumulator?: BatchAccumulator;
@@ -246,9 +252,29 @@ export function createBankPanel(options: BankPanelOptions): BankPanel {
   const canStartFinancialAction = options.canStartFinancialAction ?? (() => false);
   const register = options.register ?? PRIVACY_REGISTER;
   const feeTolerance = options.feeTolerance ?? 0n;
+  const configuredModes: unknown = options.allowedModes;
+  if (configuredModes !== undefined && !Array.isArray(configuredModes)) {
+    throw new Error('BankPanel allowed modes must be an array');
+  }
+  const allowedModes = (
+    configuredModes === undefined ? ALL_BANK_MODES : configuredModes
+  ) as readonly BankMode[];
+  if (allowedModes.length === 0) throw new Error('BankPanel requires at least one allowed mode');
+  const seenModes = new Set<BankMode>();
+  for (const mode of allowedModes) {
+    if (!ALL_BANK_MODES.includes(mode)) {
+      throw new Error(`BankPanel unsupported allowed mode: ${String(mode)}`);
+    }
+    if (seenModes.has(mode)) throw new Error(`BankPanel duplicate allowed mode: ${mode}`);
+    seenModes.add(mode);
+  }
+  const initialMode = options.initialMode ?? allowedModes[0]!;
+  if (!allowedModes.includes(initialMode)) {
+    throw new Error(`BankPanel initial mode is not allowed: ${initialMode}`);
+  }
   const accumulator = options.accumulator ?? createBatchAccumulator({ maxIntents: options.maxIntents });
 
-  const store = createStore<BankState>(initialState('shield', register));
+  const store = createStore<BankState>(initialState(initialMode, register));
   let prepared: PreparedBatch | null = null;
   /** True from the moment the batch is handed to the wallet until it answers. */
   let signing = false;
@@ -427,6 +453,7 @@ export function createBankPanel(options: BankPanelOptions): BankPanel {
     },
 
     setMode(mode: BankMode): void {
+      if (!allowedModes.includes(mode)) return;
       const routeId = ROUTE_BY_MODE[mode];
       patch({
         mode,
