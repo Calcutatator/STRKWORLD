@@ -20,6 +20,11 @@ import {
   type BankRoomMap,
 } from '../bank-room.js';
 import { createInputGate, type InputGate } from '../input-gate.js';
+import {
+  createStreetMovementAdapter,
+  type MovementInput,
+  type StreetMovementAdapter,
+} from '../street-movement.js';
 
 /**
  * The street.
@@ -62,6 +67,7 @@ export function createStreetScene({ Phaser, onTileChanged }: StreetSceneDeps) {
     private inputGate!: InputGate;
     private bankRoom!: BankRoomController;
     private bankMap!: BankRoomMap;
+    private movement!: StreetMovementAdapter;
     private roomGraphics?: PhaserTypes.GameObjects.Graphics;
     private roomLabel?: PhaserTypes.GameObjects.Text;
     private roomStationGraphics?: PhaserTypes.GameObjects.Graphics;
@@ -79,6 +85,9 @@ export function createStreetScene({ Phaser, onTileChanged }: StreetSceneDeps) {
 
     create(): void {
       this.drawGround();
+      this.movement = createStreetMovementAdapter({
+        emit: (event, payload) => this.resolveBus()?.out.emit(event, payload),
+      });
       this.createPlayer();
       this.createInput();
       this.createBankRoom();
@@ -91,11 +100,15 @@ export function createStreetScene({ Phaser, onTileChanged }: StreetSceneDeps) {
     override update(_time: number, delta: number): void {
       if (this.bankRoom.state.inRoom) {
         this.moveRoomPlayer(delta);
-        this.reportRoomTile();
+        this.movement.interiorUpdate(() => this.reportRoomTile());
         return;
       }
-      this.movePlayer();
-      this.reportTile();
+      const input = this.movePlayer();
+      this.movement.streetUpdate(
+        { x: this.player.x, y: this.player.y },
+        input,
+        () => this.reportTile(),
+      );
     }
 
     private cleanShutdown(): void {
@@ -155,6 +168,7 @@ export function createStreetScene({ Phaser, onTileChanged }: StreetSceneDeps) {
       );
 
       if (this.ground) this.physics.add.collider(this.player, this.ground);
+      this.movement.initial({ x: this.player.x, y: this.player.y });
     }
 
     private createInput(): void {
@@ -293,7 +307,9 @@ export function createStreetScene({ Phaser, onTileChanged }: StreetSceneDeps) {
       // The door trigger is reset by reporting the safe approach tile; the
       // next physical approach can therefore enter once again.
       this.doors?.reset();
-      this.reportTile();
+      // Rejoin presence at the restored street placement before the room
+      // controller publishes building:exited.
+      this.movement.exit({ x: this.player.x, y: this.player.y }, () => this.reportTile());
     }
 
     private bankDoorReturnTile(): { x: number; y: number } {
@@ -341,9 +357,9 @@ export function createStreetScene({ Phaser, onTileChanged }: StreetSceneDeps) {
 
     // -- per frame -----------------------------------------------------------
 
-    private movePlayer(): void {
-      if (!this.cursors) return;
-      const held = {
+    private movePlayer(): MovementInput {
+      if (!this.cursors) return NO_MOVEMENT;
+      const held: MovementInput = {
         left: this.cursors.left.isDown || this.wasd?.left?.isDown,
         right: this.cursors.right.isDown || this.wasd?.right?.isDown,
         up: this.cursors.up.isDown || this.wasd?.up?.isDown,
@@ -365,6 +381,7 @@ export function createStreetScene({ Phaser, onTileChanged }: StreetSceneDeps) {
       } else {
         body.setVelocity(0, 0);
       }
+      return held;
     }
 
     private moveRoomPlayer(delta: number): void {
@@ -388,6 +405,7 @@ export function createStreetScene({ Phaser, onTileChanged }: StreetSceneDeps) {
     }
 
     private heldDirections() {
+      if (!this.cursors) return NO_MOVEMENT;
       return {
         left: this.cursors.left.isDown || this.wasd?.left?.isDown,
         right: this.cursors.right.isDown || this.wasd?.right?.isDown,
@@ -419,6 +437,13 @@ const NOOP_INPUT_GATE: InputGate = {
   get suspended() {
     return false;
   },
+};
+
+const NO_MOVEMENT: MovementInput = {
+  left: false,
+  right: false,
+  up: false,
+  down: false,
 };
 
 function worldToRoomTile(x: number, y: number): { x: number; y: number } {
