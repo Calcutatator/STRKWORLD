@@ -21,6 +21,7 @@ const KINDS: readonly PrivacyErrorKind[] = [
   'unsupported-wallet',
   'user-rejected',
   'unreachable',
+  'submission-uncertain',
   'unknown',
 ];
 
