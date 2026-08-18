@@ -1214,7 +1214,7 @@ D-028 freeze.
 
 ## D-036 — `PrivacyOperations` is frozen on source-derived evidence
 
-**2026-08-18 · Accepted · implements D-028 and supersedes D-015's provisional seam status · narrowly extended by D-041 for truthful swap review**
+**2026-08-18 · Accepted · implements D-028 and supersedes D-015's provisional seam status · narrowly extended by D-041/D-042 for truthful swap review**
 
 **Context.** D-015 correctly unfroze the original one-shot interface. The
 replacement intent-based, prepare-then-confirm seam is implemented by both the
@@ -1465,7 +1465,7 @@ current registry and route state. Browser acceptance remains user-owned.
 
 ## D-041 — Prepared swaps expose sanitized quote review, not relay authority
 
-**2026-08-18 · Accepted · technical direction delegated to the project lead · narrow extension of the D-036 freeze**
+**2026-08-18 · Accepted · technical direction delegated to the project lead · narrow extension of the D-036 freeze · minimum-source rule superseded by D-042**
 
 **Context.** The Exchange is the next substantive v1 Game Mode building. The
 source-derived Wallet API adapter already receives AVNU's expected buy amount
@@ -1522,3 +1522,69 @@ the Exchange commit surface rather than fabricating missing quote data. The
 backend response already carries expected output and expiry, so no backend or
 shared-event schema changes. Any wish to expose raw quote or relay fields is a
 new decision.
+
+---
+
+## D-042 — The Exchange reviews AVNU's protected minimum over a six-asset display catalog
+
+**2026-08-18 · Accepted · technical direction delegated to the project lead · implements D-030–D-032 and amends D-041's minimum mapping**
+
+**Context.** D-041 exposed the expected output, the typed intent's minimum,
+the configured slippage and quote expiry. Tracing the installed AVNU 4.2.0
+implementation found a sharper distinction: `quoteToCalls` derives the amount
+actually protected by the executor as
+`floor(expected × (10,000 - slippageBps) / 10,000)`. The current backend only
+checks that the quote's expected output exceeds the intent minimum. A player
+could therefore type a floor above AVNU's protected amount, see that floor in
+the review, and still receive less. That is not truthful enough for real funds.
+
+The repository also had no product token catalog. The production Shieldup
+reference at `290f8306571ce45e630c5a08b243d7b5f8c232b4` uses a checked-in,
+mainnet-tested six-token catalog for shielded swaps: STRK (18 decimals), ETH
+(18), USDC (6), USDT (6), WBTC (8) and strkBTC (8). It offers only positive
+shielded balances as sell assets, permits any different catalog asset as the
+buy side, and lets AVNU route availability fail closed. It does not establish
+STRK/USDC as a privileged pair.
+
+**Decision.** The v1 Exchange uses that six-token catalog, with the exact
+mainnet addresses and display metadata checked into `apps/web`. It is
+presentation data, never route authority: the wallet policy and backend
+`BACKEND_ROUTE_SWAP_ALLOWED_TOKENS` remain the enforcement boundary, and a
+missing/disabled route stays locked or fails closed. STRKWORLD does not fetch
+AVNU's broad token list at runtime and does not admit user-added tokens in v1.
+The player explicitly asks the wallet to read those six balances; no automatic
+balance read occurs. Only positive balances become sell choices, the buy choice
+must differ, and the catalog order supplies the deterministic default.
+
+Both Exchange modes execute one swap at a time. Game Mode adds one opaque
+`exchange:swap` station to the existing fixed-room core. Menu Mode presents the
+same single-swap flow without batch controls: swaps cannot share a prepared
+batch, so a Menu label must not imply fee amortisation that cannot happen.
+
+The Shell requests a plan with the smallest positive quote floor and never
+shows that provisional intent. Chain canonicalizes the prepared swap to AVNU's
+policy-protected minimum using exact bigint basis-point arithmetic; both
+`PreparedBatch.intents[0].minAmountOut` and
+`PreparedBatch.swapReview.minimumAmountOut` carry that value. The deterministic
+fake derives it only from explicit expected-output/slippage inputs. Backend
+independently rejects any requested quote floor above the amount protected by
+the same AVNU calculation before issuing relay authority. This supersedes only
+D-041's rule that copied the incoming floor; the public shape stays unchanged.
+
+The commit surface shows the exact sell and expected-buy amounts, the protected
+minimum, configured slippage, absolute quote expiry, pool/network/total fees,
+and D-024's canonical Exchange disclosure. It never exposes quote ID, executor,
+calls, calldata, HMAC authorization, paymaster details or a recovery handle.
+Confirmation remains immediate and single-attempt; D-034/D-035 uncertainty,
+session receipts owned by `exchange`, close-mid-submit behavior and manual
+balance refresh remain unchanged.
+
+**Consequences.** No new browser/backend API, shared event or public
+`PrivacyOperations` field is required. World changes only authored room data;
+Shell owns the display catalog and interaction; Chain owns prepared-review
+canonicalization; Backend owns the independent floor guard. Tests must prove
+catalog identity/uniqueness, explicit balance gating, distinct pairs, missing
+review fail-closed behavior, exact protected-minimum rounding, backend rejection
+of an unenforceable requested floor, canonical disclosure, exact fees/expiry,
+one confirmation, Exchange receipt ownership, uncertainty retention and
+unchanged Bank/Post Office behavior. Rendered acceptance remains user-owned.

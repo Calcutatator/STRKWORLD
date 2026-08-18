@@ -16,7 +16,7 @@ the lane boundary — that is why the repo is shaped the way it is.
 
 | Lane | Package | Status in v1 |
 |---|---|---|
-| **Chain** | `packages/privacy` | Active; seam frozen under D-036 with D-041 swap review |
+| **Chain** | `packages/privacy` | Active; seam frozen under D-036 with D-041/D-042 swap review |
 | **World** | `packages/world` + `packages/lobby` | Active |
 | **Shell** | `apps/web` | Active, starts week 2 |
 | **Backend** | `apps/backend` | Active; offline implementation in progress under D-028 |
@@ -149,10 +149,12 @@ maps each typed intent to a pool-native action, AVNU's private executor or an
 audited anonymizer deployment.
 
 **Current frontier:** D-036 freezes the implemented `PrivacyOperations` seam,
-and D-041 authorizes one bounded extension: sanitized expected/minimum output,
-slippage and expiry review data for a prepared swap. It exposes no quote or
-relay authority. A lost submit response must never become a blind retry;
-funded Wallet API/paymaster validation remains on the pre-launch checklist.
+and D-041/D-042 authorize one bounded prepared-swap review: sanitized expected
+output, AVNU's policy-protected minimum, slippage and expiry, with no quote or
+relay authority. Chain canonicalizes the prepared intent to that protected
+minimum without changing the public shape. A lost submit response must never
+become a blind retry; funded Wallet API/paymaster validation remains on the
+pre-launch checklist.
 
 **Dependency drift rechecked for D-036:** the 2026-08-18 integration freshness
 check still finds get-starknet discovery's `next` tag at 6.0.4,
@@ -208,6 +210,10 @@ the shared buses and privacy seam remain frozen. Its remaining acceptance is
 manual: enter and physically exit both rooms, and confirm that each station
 highlights and opens only its admitted surface.
 
+**Next bounded World slice:** D-042 adds the Exchange as the third definition
+in that same fixed-room core, with one opaque `exchange:swap` station. No new
+scene, shared event, lobby field or financial meaning enters World.
+
 **Must not:** import `starknet` or any wallet package. Put an address, balance,
 transaction hash, building name or entry event into lobby traffic. On local
 entry, the shell leaves or suspends lobby presence; other players seeing the
@@ -251,6 +257,13 @@ Menu Mode with the same transfer-only machine and Menu Mode's compatible
 multi-transfer batching. The remaining rendered gate is user-run acceptance
 recorded in the World lane.
 
+**Next bounded Shell slice:** D-042 builds a dedicated single-swap Exchange
+machine and panel over the checked-in six-asset display catalog. Both Menu and
+Game Mode remain one swap at a time, require the canonical D-024 disclosure and
+D-041/D-042 review, and own receipts under `exchange`. The player explicitly
+requests the six-token balance read; the Shell never treats catalog metadata as
+route authority.
+
 The **batch accumulator is Menu Mode only** under D-032. It collects typed
 intent during a building visit and emits one atomic batch on confirmation. Game
 Mode prepares and confirms each station function separately. Neither path ever
@@ -284,6 +297,10 @@ logging-free HTTP composition root. The remaining backend work is operational:
 an approved aggregate-only signal, deployment integration, and the funded
 Wallet API/paymaster checks retained by D-028. Do not invent a health or
 metrics route without the D-014 privacy review recorded in `docs/OPS.md`.
+
+**Next bounded Backend slice:** D-042 independently checks that AVNU's
+slippage-protected output is at least the caller's requested quote floor before
+issuing swap relay authority. No response schema or endpoint is added.
 
 **Must not:** log or persist IPs, calls, proofs, timings, recipients or
 transaction hashes; accept arbitrary contract targets or calldata; delay a
