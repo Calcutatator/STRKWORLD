@@ -45,6 +45,11 @@ emitter.on('hud:balance', (b: { display: string | null }) => { ... })
 The world must run correctly with no wallet connected at all. That is what
 Phase 1 builds, and it is what makes the world independently testable.
 
+Remote-avatar snapshots are the one retained-state side seam (D-038), not an
+event. The Shell injects a World-owned replaying source before scene creation;
+this package subscribes and reconciles complete presentation-only snapshots.
+It never imports the lobby or controls its connection lifecycle.
+
 ---
 
 ## Map authoring

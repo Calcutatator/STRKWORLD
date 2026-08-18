@@ -192,10 +192,10 @@ lifecycle: connect after the first placement, suspend before an interior can be
 visible, resume from the restored placement, and degrade to explicit solo play
 with manual reconnect.
 
-The next multiplayer slice is remote-avatar presentation. It needs one
-recorded cross-lane seam from the lobby client's privacy-minimal peer snapshots
-into World rendering; do not make Phaser import the lobby or add peer fields to
-the financial/event path without that decision.
+The active multiplayer slice is D-038 remote-avatar presentation. The Shell
+adapts privacy-minimal lobby snapshots into a replaying World-owned source;
+Phaser reconciles the full snapshot without importing the lobby or widening
+the frozen shared event bus.
 
 **Must not:** import `starknet` or any wallet package. Put an address, balance,
 transaction hash, building name or entry event into lobby traffic. On local
@@ -224,11 +224,11 @@ write guards, session receipt ledger, and D-037's explicit lobby lifecycle with
 truthful solo fallback. React owns wallet and financial state; Phaser receives
 presentation data and never reads back.
 
-**Current frontier:** D-019/D-037 Shell composition is complete. The next
-multiplayer change is blocked on the project-lead/user decision for the narrow
-peer-presentation seam named in the World lane; it is not permission to widen
-the frozen financial bus. The completed D-033–D-036 Game Mode, uncertainty and
-financial-seam behavior remains unchanged.
+**Current frontier:** D-019/D-037 Shell composition is complete. Implement the
+D-038 Shell adapter from `LobbyClient.onPeers()` into the World-owned replaying
+source, including drop/replacement/destroy clearing. Do not widen
+`ShellEvents`, expose the LobbyClient to Phaser, or change the completed
+D-033–D-036 Game Mode, uncertainty and financial-seam behavior.
 
 The **batch accumulator is Menu Mode only** under D-032. It collects typed
 intent during a building visit and emits one atomic batch on confirmation. Game

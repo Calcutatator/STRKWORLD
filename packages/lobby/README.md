@@ -101,8 +101,9 @@ a hex id and a token amount reached honest players' screens.)
 
 ## The client wrapper
 
-`LobbyClient` is what `packages/world` consumes. Plain data in, plain data out;
-no Phaser, no React, no DOM.
+`LobbyClient` is what the Shell consumes. Plain data in, plain data out; no
+Phaser, no React, no DOM. Under D-038 the Shell maps peer snapshots into a
+World-owned replaying source; `packages/world` never imports this client.
 
 ```ts
 import { LobbyClient } from '@strkworld/lobby/client';
@@ -114,7 +115,7 @@ const lobby = new LobbyClient({
 });
 
 await lobby.connect();                        // explicit. never automatic
-const stopPeers = lobby.onPeers((peers) => scene.render(peers));
+const stopPeers = lobby.onPeers(mapPeersIntoWorldSource);
 const stopStatus = lobby.onStatus((e) => {    // learn if the connection dies
   if (e.status === 'closed' && e.reason === 'server-dropped') reconnectUI();
 });

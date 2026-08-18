@@ -1301,3 +1301,58 @@ storage or shared-event contract. Tests must prove explicit connect ownership,
 StrictMode-safe listener cleanup, street-only reconnect, suspend/resume order,
 continued World/financial availability, and that no lobby call receives a
 building or financial field.
+
+---
+
+## D-038 — Remote avatars use a replaying World-owned source
+
+**2026-08-18 · Accepted · technical direction delegated to the project lead**
+
+**Context.** D-019 and D-037 put `LobbyClient` connection ownership in the
+Shell and freeze the privacy-minimal lobby payload, but the client's peer
+snapshots have no approved path into Phaser. Sending a one-shot peer event over
+`ShellEvents` looks small but is not sufficient: a snapshot can arrive while
+Phaser is still loading or remounting, and the current event bus deliberately
+does not retain or replay state. Adding it there would also widen the frozen
+`packages/shared` seam from D-011 with lobby-shaped data.
+
+An imperative World handle has the opposite problem. It gives the Shell a
+renderer method whose availability depends on asynchronous Phaser boot,
+StrictMode cleanup and HMR, forcing the caller to buffer state and understand
+World lifecycle details.
+
+**Decision.** Remote-avatar state crosses a dedicated, World-owned
+`RemotePeerSource` seam. Its external interface has one operation:
+`subscribe(listener)`, which synchronously replays the current immutable full
+snapshot, publishes later full snapshots in arrival order, and returns an
+idempotent unsubscribe. An empty snapshot is authoritative and removes every
+remote avatar; omission of one opaque peer ID removes that avatar.
+
+The source shape contains only an opaque ephemeral ID, world position, facing
+and an approved cosmetic sprite key. The Shell adapts
+`LobbyClient.onPeers()` into that shape and owns all connection, replacement,
+error and reconnect behavior. World owns validation, full-snapshot
+reconciliation, safe sprite fallback, interior visibility and Phaser teardown.
+The World receives no lobby status, endpoint, close code, reconnect state,
+building, wallet or financial field, and performs no network action.
+
+The latest snapshot is retained across World boot/remount so delivery cannot
+race scene subscription. A lobby drop, client replacement or controller
+destruction clears it. While the local player is inside a building, the World
+hides the remote-avatar layer; the retained peer snapshot may continue to
+update and is reconciled when the street returns. Remote avatars are
+presentation-only and never participate in local collision.
+
+This is a narrow state source beside the D-010 event bus, not a replacement
+for it. `WorldEvents` and `ShellEvents`, the lobby `PresenceState`, and the
+frozen `PrivacyOperations` contract remain unchanged.
+
+**Consequences.** The new interface and its Phaser-free tests live in
+`packages/world`; the concrete Lobby-to-World adapter lives in `apps/web`.
+`WorldConfig` receives the source before scene creation. Tests at the approved
+seams must prove synchronous replay, full replacement/removal, drop and
+teardown clearing, stale-client listener cleanup, invalid-data fail-closed
+behavior, street/interior visibility, and StrictMode-safe unsubscribe. Smooth
+interpolation may be added behind the World interface later; timestamps,
+revisions, map IDs and animation metadata are not added to the cross-lane shape
+for v1.

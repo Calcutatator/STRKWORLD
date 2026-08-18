@@ -98,16 +98,19 @@ it must not be presented as defeating timing correlation (D-015).
 
 ```
 Phaser position tick
+  → WorldEvents.player:moved → Shell presence controller
   → throttled → lobby client
   → Colyseus room broadcasts { gameId, x, y, sprite }
-  → other clients → Phaser
+  → other clients → Shell adapter
+  → replaying RemotePeerSource → Phaser
 ```
 
-`gameId` is ephemeral and per-session. It is generated client-side, never
-derived from an address, and is discarded on disconnect. Entering a building
-leaves or suspends presence, so other clients see the avatar disappear. The
-lobby receives no building ID or entry event. Building-choice and visit-timing
-inference from that disappearance is an accepted v1 trade-off (D-019).
+`gameId` is ephemeral and per-session. It is minted by the trusted lobby
+server, never derived from an address, and discarded on disconnect. Entering a
+building leaves or suspends presence, so other clients see the avatar
+disappear. The lobby receives no building ID or entry event. Building-choice
+and visit-timing inference from that disappearance is an accepted v1 trade-off
+(D-019).
 
 ---
 
@@ -211,6 +214,12 @@ One-directional by design.
 
 This means the game can run with no wallet connected — which is exactly what
 Phase 1 builds, and what makes the world independently testable.
+
+Remote peers are retained state rather than one-shot commands. D-038 gives
+them a separate World-owned replaying source so a snapshot cannot be lost
+while Phaser boots or remounts. The Shell maps `LobbyClient.onPeers()` into
+that source; World receives only opaque peer ID, position, facing and approved
+sprite key. The frozen `WorldEvents` / `ShellEvents` contract is unchanged.
 
 ---
 
