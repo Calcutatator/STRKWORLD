@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import type { EventBus, ShellEvents, WorldEvents } from '@strkworld/shared';
 import {
   BANK_ROOM_DEFINITION,
+  BRIDGE_ROOM_DEFINITION,
   EXCHANGE_ROOM_DEFINITION,
   FIXED_ROOM_DEFINITIONS,
   FixedRoomDefinitionError,
@@ -47,7 +48,7 @@ function bus<Events extends Record<string, unknown>>(): EventBus<Events> {
   } as EventBus<Events>;
 }
 
-function harness(definition = POST_OFFICE_ROOM_DEFINITION) {
+function harness(definition: FixedRoomDefinition = POST_OFFICE_ROOM_DEFINITION) {
   const out = bus<WorldEvents>();
   const inputCalls: string[] = [];
   const shell = bus<ShellEvents>();
@@ -71,6 +72,7 @@ describe('fixed room definitions', () => {
     ['bank', BANK_ROOM_DEFINITION],
     ['exchange', EXCHANGE_ROOM_DEFINITION],
     ['post office', POST_OFFICE_ROOM_DEFINITION],
+    ['bridge', BRIDGE_ROOM_DEFINITION],
   ])('%s uses the fixed walkable envelope', (_name, definition) => {
     const room = createFixedRoom(definition);
     expect(room.width).toBe(18);
@@ -108,6 +110,27 @@ describe('fixed room definitions', () => {
         height: 1,
       },
     ]);
+  });
+
+  it('pins the Bridge deposit station at the accepted coordinates', () => {
+    expect(BRIDGE_ROOM_DEFINITION).toEqual({
+      building: 'bridge',
+      width: 18,
+      height: 12,
+      spawn: { x: 9, y: 9 },
+      exit: { x: 8, y: 11, width: 2, height: 1 },
+      stations: [
+        {
+          station: 'bridge:deposit',
+          label: 'DEPOSIT',
+          x: 8,
+          y: 3,
+          width: 2,
+          height: 1,
+        },
+      ],
+    });
+    expect(FIXED_ROOM_DEFINITIONS).toMatchObject({ bridge: BRIDGE_ROOM_DEFINITION });
   });
 
   it.each([
@@ -262,6 +285,15 @@ describe('fixed room station admission', () => {
       },
     ]);
   });
+
+  it('admits only the Bridge deposit station', () => {
+    expect(
+      normalizeFixedRoomStations(BRIDGE_ROOM_DEFINITION, [
+        { station: 'bridge:deposit', label: 'DEPOSIT', status: 'available' },
+        { station: 'bank:shielding', label: 'forged', status: 'available' },
+      ]),
+    ).toEqual([{ station: 'bridge:deposit', label: 'DEPOSIT', status: 'available' }]);
+  });
 });
 
 describe('fixed room controller', () => {
@@ -352,5 +384,24 @@ describe('fixed room controller', () => {
     expect(h.inputCalls.length).toBe(calls);
     expect(h.inputCalls.at(-1)).toBe('resume');
     expect(h.events).toEqual([]);
+  });
+
+  it('uses the Bridge building and station ids for admission, activation, and exit', () => {
+    const h = harness(BRIDGE_ROOM_DEFINITION);
+    h.controller.enter();
+    h.shell.emit('world:stations', {
+      building: 'bridge',
+      stations: [{ station: 'bridge:deposit', label: 'DEPOSIT', status: 'available' }],
+    });
+
+    h.controller.update({ x: 8, y: 4 });
+    expect(h.events).toEqual([
+      { event: 'station:activated', payload: { building: 'bridge', station: 'bridge:deposit' } },
+    ]);
+    expect(h.controller.state.highlightedStation).toBe('bridge:deposit');
+
+    h.controller.update({ x: 9, y: 11 });
+    expect(h.events.at(-1)).toEqual({ event: 'building:exited', payload: { building: 'bridge' } });
+    expect(h.controller.state.inRoom).toBe(false);
   });
 });
