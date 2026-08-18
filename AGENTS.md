@@ -252,6 +252,32 @@ Format: `### YYYY-MM-DD — short title` then what, why it matters, how verified
 
 ---
 
+### 2026-08-18 — Lobby `connected` precedes welcome completion
+
+`LobbyClient.connect()` does not resolve at the same moment the client becomes
+visible. After Colyseus returns a room, the client stores the room and emits
+`connected`, then waits up to five seconds for the server-minted welcome ID.
+The Shell must therefore react to the status edge itself. Waiting for the
+`connect()` promise before suspending lets an avatar remain visible after its
+player has entered a building; treating the controller as suspended without
+calling the client can then make physical exit call `resume()` on a connected
+or closed client.
+
+The D-037 controller now suspends immediately when `connected` arrives while
+the World is inside, never promotes a dropped pre-welcome join back to
+`suspended`, and preserves only an explicitly requested reconnect through that
+race. Teardown unsubscribes status listeners and closes a room acquired after
+the first disconnect attempt, so an HMR or page exit cannot leave a late lobby
+presence behind.
+
+*Verified:* read the pinned `packages/lobby/src/client.ts` join order and drove
+adversarial red/green controller tests where entry precedes `connected`, a
+server drop precedes welcome completion, exit follows the drop, and destroy
+precedes late room acquisition. No browser, lobby server, wallet or network was
+used.
+
+---
+
 ### 2026-08-18 — `PrivacyOperations` is source-derived and frozen
 
 D-036 freezes the current financial seam after the D-034

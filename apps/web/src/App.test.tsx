@@ -4,6 +4,7 @@ import { createEventBus } from './bus/event-bus.js';
 import type { ShellEvents, WorldEvents } from '@strkworld/shared';
 import { COPY } from './copy.js';
 import { App } from './App.js';
+import { createPresenceController } from './presence/presence-controller.js';
 
 /**
  * The composition root composes.
@@ -21,10 +22,15 @@ describe('App', () => {
   it('mounts to its boot state without throwing, demo gate not tripped', () => {
     const worldOut = createEventBus<WorldEvents>();
     const shellIn = createEventBus<ShellEvents>();
-    const markup = renderToStaticMarkup(<App worldOut={worldOut} shellIn={shellIn} />);
+    const markup = renderToStaticMarkup(
+      <App worldOut={worldOut} shellIn={shellIn} presence={createPresenceController({})} />,
+    );
     expect(markup).toContain(COPY.boot);
     // The production refusal would surface here if the dev gate were wrong.
     expect(markup).not.toContain(COPY.productionNotWired);
     expect(markup).not.toContain('must never ship');
+    // The injected unavailable controller does not replace the provider's
+    // normal boot composition; it is inert until the real tree mounts.
+    expect(markup).not.toContain('Multiplayer unavailable');
   });
 });

@@ -77,9 +77,30 @@ function isSeam(specifier: string): boolean {
   return specifier === '@strkworld/privacy' || specifier.startsWith('@strkworld/privacy/');
 }
 
+function isAllowedLobbyImport(specifier: string): boolean {
+  return specifier === '@strkworld/lobby/client';
+}
+
 const isTest = (path: string): boolean => /\.test\.tsx?$/.test(path);
 
 describe('shell boundaries', () => {
+  it('imports only the browser lobby client, never the server entry', () => {
+    const offenders = sources()
+      .filter(({ path }) => !isTest(path))
+      .flatMap(({ path, text }) => imports(text)
+        .filter(({ specifier }) => (specifier === '@strkworld/lobby' || specifier.startsWith('@strkworld/lobby/')) && !isAllowedLobbyImport(specifier))
+        .map(() => path));
+    expect(offenders).toEqual([]);
+    expect(isAllowedLobbyImport('@strkworld/lobby/client')).toBe(true);
+    expect(isAllowedLobbyImport('@strkworld/lobby/server')).toBe(false);
+    expect(isAllowedLobbyImport('@strkworld/lobby')).toBe(false);
+    // Adversarial fixture: the scanner must catch a bare server-capable entry,
+    // not only a `/server` subpath.
+    expect(imports("import { LobbyClient } from '@strkworld/lobby';").some(({ specifier }) =>
+      specifier === '@strkworld/lobby' && !isAllowedLobbyImport(specifier),
+    )).toBe(true);
+  });
+
   it('holds no runtime import of the financial seam outside the lazy demo module', () => {
     // `@strkworld/privacy` re-exports the wallet adapter, which pulls
     // `starknet` — roughly 900 kB. A single value import anywhere in the eager

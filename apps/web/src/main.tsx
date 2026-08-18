@@ -4,6 +4,9 @@ import type { ShellEvents, WorldEvents } from '@strkworld/shared';
 import { createEventBus } from './bus/event-bus.js';
 import { App } from './App.js';
 import './styles.css';
+import { createPresenceController } from './presence/presence-controller.js';
+import { lobbyEndpoint } from './presence/config.js';
+import { installPresenceTeardown } from './presence/lifecycle.js';
 
 /**
  * STRKWORLD shell entry point.
@@ -21,6 +24,9 @@ import './styles.css';
  */
 const worldOut = createEventBus<WorldEvents>();
 const shellIn = createEventBus<ShellEvents>();
+const presence = createPresenceController({ endpoint: lobbyEndpoint() });
+const hot = (import.meta as ImportMeta & { hot?: { dispose(callback: () => void): void } }).hot;
+installPresenceTeardown(presence, typeof window === 'undefined' ? undefined : window, hot);
 
 const container = document.getElementById('root');
 if (!container) {
@@ -29,6 +35,6 @@ if (!container) {
 
 createRoot(container).render(
   <StrictMode>
-    <App worldOut={worldOut} shellIn={shellIn} />
+    <App worldOut={worldOut} shellIn={shellIn} presence={presence} />
   </StrictMode>,
 );

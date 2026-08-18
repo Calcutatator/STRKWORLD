@@ -5,6 +5,8 @@ import { PrivacyProvider } from './privacy/PrivacyProvider.js';
 import { SessionNoticeLayer } from './privacy/SessionNoticeLayer.js';
 import { VisitLayer } from './visits/VisitLayer.js';
 import { WorldHost } from './world/WorldHost.js';
+import type { PresenceController } from './presence/presence-controller.js';
+import { PresenceStatusLayer } from './presence/PresenceStatusLayer.js';
 
 /**
  * The composition root, as a component.
@@ -31,16 +33,21 @@ import { WorldHost } from './world/WorldHost.js';
 export function App({
   worldOut,
   shellIn,
+  presence,
 }: {
   worldOut: EventBus<WorldEvents>;
   shellIn: EventBus<ShellEvents>;
+  presence: PresenceController;
 }) {
+  // Presence owns one explicit lifecycle. Effect cleanup only removes event
+  // listeners; the controller is destroyed by the composition root's owner.
   return (
     <ErrorBoundary fallback={(message) => <BootFailure message={message} />}>
       <PrivacyProvider demo shellBus={shellIn} fallback={<Boot />}>
         <main className="strkworld">
           <WorldHost out={worldOut} in={shellIn} />
           <VisitLayer world={worldOut} shell={shellIn} />
+          <PresenceStatusLayer presence={presence} world={worldOut} />
           <SessionNoticeLayer />
         </main>
       </PrivacyProvider>

@@ -187,8 +187,15 @@ station, proximity highlight, control handoff and local enter/exit transition.
 The Phaser boot-order regression is headlessly pinned so the station receives
 its Shell snapshot before interaction. The World half of D-019 now emits the
 frozen street-only `player:moved` payload, suppresses interior coordinates and
-restores placement before building exit. Shell composition is the remaining
-D-019/D-037 work.
+restores placement before building exit. D-037 now composes the matching Shell
+lifecycle: connect after the first placement, suspend before an interior can be
+visible, resume from the restored placement, and degrade to explicit solo play
+with manual reconnect.
+
+The next multiplayer slice is remote-avatar presentation. It needs one
+recorded cross-lane seam from the lobby client's privacy-minimal peer snapshots
+into World rendering; do not make Phaser import the lobby or add peer fields to
+the financial/event path without that decision.
 
 **Must not:** import `starknet` or any wallet package. Put an address, balance,
 transaction hash, building name or entry event into lobby traffic. On local
@@ -213,16 +220,15 @@ something to mount.
 
 **Completed baseline:** the event bus, connect/capability rooms, route gate,
 Bank panel, batch accumulator, canonical disclosures, `ConfirmGate`, stale
-write guards and session receipt ledger. React owns wallet and financial state;
-Phaser receives presentation data and never reads back.
+write guards, session receipt ledger, and D-037's explicit lobby lifecycle with
+truthful solo fallback. React owns wallet and financial state; Phaser receives
+presentation data and never reads back.
 
-**Current frontier:** D-036 has frozen the financial seam. Complete D-019/D-037
-by composing one explicit `LobbyClient` lifecycle over the World's
-`player:moved`, `building:entered` and `building:exited` events. Lobby failure
-degrades to clearly labelled solo play with manual reconnect; it never blocks
-World navigation or financial access, never automatically retries, and never
-rejoins presence while the player is inside. The completed D-033–D-035 Game
-Mode and uncertain-submission behavior remains unchanged.
+**Current frontier:** D-019/D-037 Shell composition is complete. The next
+multiplayer change is blocked on the project-lead/user decision for the narrow
+peer-presentation seam named in the World lane; it is not permission to widen
+the frozen financial bus. The completed D-033–D-036 Game Mode, uncertainty and
+financial-seam behavior remains unchanged.
 
 The **batch accumulator is Menu Mode only** under D-032. It collects typed
 intent during a building visit and emits one atomic batch on confirmation. Game

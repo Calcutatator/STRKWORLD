@@ -121,6 +121,14 @@ export const COPY = {
     reviewAction: 'Review this action',
   },
 
+  presence: {
+    connecting: 'Connecting to multiplayer…',
+    connected: 'Multiplayer connected',
+    suspended: 'Playing inside',
+    unavailable: 'Multiplayer unavailable — playing solo.',
+    reconnect: 'Reconnect multiplayer',
+  },
+
   locked: {
     comingSoon:
       'This building is shut. It opens once its private route is built, reviewed and approved.',

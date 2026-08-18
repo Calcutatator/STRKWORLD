@@ -71,6 +71,21 @@ body {
   background: var(--panel);
 }
 
+.presence-status {
+  position: absolute;
+  right: 1rem;
+  bottom: 1rem;
+  z-index: 20;
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.6rem 0.8rem;
+  border: 1px solid var(--panel-edge);
+  border-radius: 8px;
+  background: var(--panel);
+  font-size: 0.9rem;
+}
+
 /* Financial and locked surfaces are windows above the active World scene. */
 .panel,
 .room {
