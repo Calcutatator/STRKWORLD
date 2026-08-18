@@ -110,6 +110,54 @@ class StubClient implements OneClickClient {
 }
 
 describe('BridgeService', () => {
+  it('preserves an existing resumable deposit until it is explicitly discarded', async () => {
+    for (const [existingMode, replacementMode] of [
+      ['manual', 'signed'],
+      ['signed', 'manual'],
+    ] as const) {
+      const client = new StubClient();
+      const store = new MemoryBridgeStore();
+      const service = new BridgeService({ client, store, quoteVerifier: () => true, now: () => NOW });
+      const existingSource = { ...SOURCE, depositMode: existingMode };
+      const replacementSource = { ...SOURCE, depositMode: replacementMode };
+      const createExisting = existingMode === 'manual'
+        ? service.createManualDeposit.bind(service)
+        : service.createSignedDeposit.bind(service);
+      const createReplacement = replacementMode === 'manual'
+        ? service.createManualDeposit.bind(service)
+        : service.createSignedDeposit.bind(service);
+
+      const original = await createExisting({
+        source: existingSource,
+        amountIn: 1_000_000n,
+        starknetRecipient: '0x123',
+        refundAddress: request.refundTo,
+      });
+      const exportedBeforeReplacement = service.exportResumeRecord();
+
+      await expect(createReplacement({
+        source: replacementSource,
+        amountIn: 1_000_000n,
+        starknetRecipient: '0x123',
+        refundAddress: request.refundTo,
+      })).rejects.toThrow(/existing bridge deposit|discard/i);
+      expect(service.resume()).toEqual(original);
+      expect(service.exportResumeRecord()).toBe(exportedBeforeReplacement);
+
+      service.discard();
+      await expect(createReplacement({
+        source: replacementSource,
+        amountIn: 1_000_000n,
+        starknetRecipient: '0x123',
+        refundAddress: request.refundTo,
+      })).resolves.toMatchObject({
+        amountIn: 1_000_000n,
+        source: { depositMode: replacementMode },
+        starknetRecipient: '0x123',
+      });
+    }
+  });
+
   it('creates only inbound exact-input quotes to Starknet STRK and retains the signed response', async () => {
     const client = new StubClient();
     const store = new MemoryBridgeStore();
