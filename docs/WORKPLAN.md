@@ -149,10 +149,17 @@ the full error taxonomy mapped to `PrivacyErrorKind`. Add a route registry that
 maps each typed intent to a pool-native action, AVNU's private executor or an
 audited anonymizer deployment.
 
-**Current frontier:** implement D-034's non-retryable
-`submission-uncertain` outcome with the Shell, then record the explicit
-source-derived seam freeze authorized by D-028. A lost submit response must
-never become a blind retry.
+**Current frontier:** D-034's Chain classification and D-035's reviewed Shell
+balance-check gate are implemented. Once the integrated D-033–D-035 branch is
+merged, record the explicit source-derived seam freeze authorized by D-028. A
+lost submit response must never become a blind retry.
+
+**Dependency drift to re-check before the next Chain package change:** the
+2026-08-18 integration freshness check found get-starknet discovery's `next`
+tag at 6.0.4, wallet-standard's at 6.0.5, and the upstream monorepo replacing
+the cited `sub_account_anonymizer` path with a new
+`shadow_account_anonymizer`. None is used by the D-035 Shell-only slice; do not
+change pins or route assumptions without a separate verified Chain brief.
 
 **Must not:** contain UI, import from `world` or `lobby`, branch on wallet
 identity, read balances for feature detection, or expose an arbitrary target,
@@ -175,12 +182,12 @@ to end. A missing route must produce a locked door, never a public fallback.
 collision, camera follow, five facades, four active entrances emitting
 `building:entered`, and a locked Vault.
 
-**Current frontier:** D-033's procedural Bank room — fixed square geometry,
-physical exit, one solid `bank:shielding` station, proximity highlight,
-control handoff and local enter/exit transition. Keep geometry and station
-state Phaser-free and headlessly tested. The Colyseus room already owns the
-server-minted ephemeral `gameId` lifecycle, throttling and interest management;
-`apps/web` still needs to compose its suspend/resume lifecycle.
+**Current frontier:** D-033's procedural Bank room is implemented and manually
+accepted: fixed square geometry, physical exit, one solid `bank:shielding`
+station, proximity highlight, control handoff and local enter/exit transition.
+The Phaser boot-order regression is headlessly pinned so the station receives
+its Shell snapshot before interaction. Next, compose the already-approved
+D-019 lobby presence suspend/resume lifecycle around local room entry and exit.
 
 **Must not:** import `starknet` or any wallet package. Put an address, balance,
 transaction hash, building name or entry event into lobby traffic. On local
@@ -208,12 +215,16 @@ Bank panel, batch accumulator, canonical disclosures, `ConfirmGate`, stale
 write guards and session receipt ledger. React owns wallet and financial state;
 Phaser receives presentation data and never reads back.
 
-**Current frontier:** implement D-033's visit controller. Building entry starts
-Game Mode; station activation opens a per-function window over the same Bank
-machine/`ConfirmGate`; the top-right Menu Mode button opens the existing panel.
-Station/Menu close returns control to the room, while building exit tears down
-the visit. Coordinate D-034's session-retained uncertain-submission notice with
-the Chain lane before the financial seam freezes.
+**Current frontier:** the integrated D-033 World room and D-034/D-035
+uncertain-submission recovery slice is implemented, independently reviewed and
+manually accepted. Building entry starts Game Mode; station activation opens a
+per-function window over the same Bank machine/`ConfirmGate`; the top-right
+Menu Mode button opens the existing panel. Station/Menu close returns control
+to the room, while building exit tears down the visit. After uncertainty, the
+session notice blocks every Bank machine action until the player explicitly
+acknowledges a private-balance check, without claiming the lost request
+succeeded or failed. Hold the next financial-seam change until Chain records
+the D-028 freeze.
 
 The **batch accumulator is Menu Mode only** under D-032. It collects typed
 intent during a building visit and emits one atomic batch on confirmation. Game

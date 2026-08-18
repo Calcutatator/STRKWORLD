@@ -24,12 +24,15 @@ import { describeIntent, describeWarning } from './summary-copy.js';
 export function BankPanel({
   onClose,
   panel: injected,
+  experience = 'menu',
 }: {
   onClose: () => void;
   /** Supply a driven machine to render a specific state. Tests use this. */
   panel?: BankPanelMachine;
+  /** Menu Mode batches a visit; the first Game Mode station admits one action. */
+  experience?: 'menu' | 'station';
 }) {
-  const { operations, connect, receipts, shellBus } = usePrivacy();
+  const { operations, receipts, noteOperationError, shellBus, submissionUncertainty } = usePrivacy();
 
   const owned = useMemo(
     () =>
@@ -38,12 +41,18 @@ export function BankPanel({
         : createBankPanel({
             operations,
             receipts,
-            onError: (failure) => connect.noteOperationError(failure),
+            maxIntents: experience === 'station' ? 1 : undefined,
+            onError: noteOperationError,
+            canStartFinancialAction: () => {
+              const current = submissionUncertainty.store.getState();
+              return !current.active || current.acknowledged;
+            },
           }),
-    [injected, operations, connect, receipts],
+    [injected, operations, receipts, noteOperationError, experience, submissionUncertainty],
   );
   const panel = injected ?? owned!;
   const state = useStore(panel.store);
+  const uncertaintyState = useStore(submissionUncertainty.store);
 
   useEffect(() => {
     // An injected machine belongs to whoever injected it, including its
@@ -68,84 +77,104 @@ export function BankPanel({
   }, [shellBus, state.flow]);
 
   const committing = state.flow.name === 'review' || state.flow.name === 'submitting';
+  const gateBlocked = uncertaintyState.active && !uncertaintyState.acknowledged;
+  // A submission-uncertain failure is closed only while the session gate is
+  // closed. Once the player acknowledges their balance check, the same Bank
+  // machine can compose a new action without recreating the room.
+  const blocked =
+    state.flow.name === 'failed' &&
+    state.flow.recovery === 'close' &&
+    (state.flow.kind !== 'submission-uncertain' || !uncertaintyState.acknowledged);
 
+  const modes: readonly BankMode[] =
+    experience === 'station' ? ['shield', 'unshield'] : ['shield', 'unshield', 'transfer'];
+
+  // The header disclosure previews the mode being composed. At the commit
+  // point it is withdrawn, so ConfirmGate's batch-derived set is the only
+  // disclosure on screen — otherwise a shield tab with a transfer queued
+  // shows public-deposit copy over a private transfer.
   return (
-    // The header disclosure previews the mode being composed. At the commit
-    // point it is withdrawn, so ConfirmGate's batch-derived set is the only
-    // disclosure on screen — otherwise a shield tab with a transfer queued
-    // shows public-deposit copy over a private transfer.
-    <PanelFrame
-      title={COPY.bank.title}
-      disclosure={committing ? null : state.disclosure}
-      closingNote={state.flow.name === 'submitting' ? COPY.flow.closingWillNotCancel : null}
-      onClose={onClose}
-    >
-      <ModeTabs mode={state.mode} register={state.door} onSelect={(mode) => panel.setMode(mode)} />
+    <div className="bank-experience" data-experience={experience}>
+      <PanelFrame
+        title={COPY.bank.title}
+        disclosure={committing ? null : state.disclosure}
+        closingNote={state.flow.name === 'submitting' ? COPY.flow.closingWillNotCancel : null}
+        onClose={onClose}
+      >
+        <ModeTabs
+          mode={state.mode}
+          register={state.door}
+          modes={modes}
+          onSelect={(mode) => panel.setMode(mode)}
+        />
 
-      {!state.door.open ? (
-        <LockedNotice reason={state.door.reason ?? 'unknown-route'} message={state.door.message} />
-      ) : (
-        <>
-          <BalanceBlock state={state} onRefresh={() => void panel.refreshBalance()} />
+        {!state.door.open ? (
+          <LockedNotice reason={state.door.reason ?? 'unknown-route'} message={state.door.message} />
+        ) : (
+          <>
+            <BalanceBlock state={state} onRefresh={() => void panel.refreshBalance()} />
 
-          {committing ? (
-            <CommitBlock
-              state={state}
-              onConfirm={() => void panel.confirm()}
-              onCancel={() => panel.cancelPrepared()}
-            />
-          ) : state.flow.name === 'submitted' ? (
-            <div className="flow-done" aria-live="polite">
-              <p>
-                {COPY.flow.submitted} <code>{shortenAddress(state.flow.transactionHash)}</code>
-              </p>
-              <button type="button" onClick={() => panel.acknowledge()}>
-                {COPY.flow.back}
-              </button>
-            </div>
-          ) : (
-            <ComposeBlock state={state} panel={panel} />
-          )}
-
-          {state.flow.name === 'failed' ? (
-            <div className="flow-failed" role="alert">
-              <p>{state.flow.message}</p>
-              {state.flow.recovery === 'prepare-again' ? (
-                <button type="button" onClick={() => panel.cancelPrepared()}>
+            {gateBlocked && state.flow.name === 'review' ? null : committing ? (
+              <CommitBlock
+                state={state}
+                onConfirm={() => void panel.confirm()}
+                onCancel={() => panel.cancelPrepared()}
+              />
+            ) : state.flow.name === 'submitted' ? (
+              <div className="flow-done" aria-live="polite">
+                <p>
+                  {COPY.flow.submitted} <code>{shortenAddress(state.flow.transactionHash)}</code>
+                </p>
+                <button type="button" onClick={() => panel.acknowledge()}>
                   {COPY.flow.back}
                 </button>
-              ) : null}
-            </div>
-          ) : null}
-        </>
-      )}
+              </div>
+            ) : blocked || gateBlocked ? null : (
+              <ComposeBlock state={state} panel={panel} experience={experience} />
+            )}
 
-      {state.notice ? (
-        <p className={`panel-notice notice-${state.notice.tone}`} role="status">
-          {state.notice.text}
-        </p>
-      ) : null}
-    </PanelFrame>
+            {state.flow.name === 'failed' ? (
+              <div className="flow-failed" role="alert">
+                <p>{state.flow.message}</p>
+                {state.flow.recovery === 'prepare-again' ? (
+                  <button type="button" onClick={() => panel.cancelPrepared()}>
+                    {COPY.flow.back}
+                  </button>
+                ) : null}
+              </div>
+            ) : null}
+          </>
+        )}
+
+        {state.notice ? (
+          <p className={`panel-notice notice-${state.notice.tone}`} role="status">
+            {state.notice.text}
+          </p>
+        ) : null}
+      </PanelFrame>
+    </div>
   );
 }
 
 function ModeTabs({
   mode,
   register,
+  modes,
   onSelect,
 }: {
   mode: BankMode;
   register: BankState['door'];
+  modes: readonly BankMode[];
   onSelect: (mode: BankMode) => void;
 }) {
-  const modes: readonly [BankMode, string][] = [
-    ['shield', COPY.bank.shield],
-    ['unshield', COPY.bank.unshield],
-    ['transfer', COPY.bank.transfer],
-  ];
+  const labels: Record<BankMode, string> = {
+    shield: COPY.bank.shield,
+    unshield: COPY.bank.unshield,
+    transfer: COPY.bank.transfer,
+  };
   return (
     <nav className="panel-modes" role="tablist">
-      {modes.map(([value, label]) => {
+      {modes.map((value) => {
         // Each tab reports its own door, so a route that loses its approval is
         // visibly shut rather than looking available until it is clicked.
         const door = value === mode ? register : routeDoor(ROUTE_BY_MODE[value]);
@@ -158,7 +187,7 @@ function ModeTabs({
             data-locked={door.open ? undefined : 'true'}
             onClick={() => onSelect(value)}
           >
-            {label}
+            {labels[value]}
           </button>
         );
       })}
@@ -207,7 +236,15 @@ function BalanceBlock({ state, onRefresh }: { state: BankState; onRefresh: () =>
   );
 }
 
-function ComposeBlock({ state, panel }: { state: BankState; panel: BankPanelMachine }) {
+function ComposeBlock({
+  state,
+  panel,
+  experience,
+}: {
+  state: BankState;
+  panel: BankPanelMachine;
+  experience: 'menu' | 'station';
+}) {
   const busy = state.flow.name === 'preparing' || state.adding;
   const needsRecipient = state.mode !== 'shield';
   const max = panel.maxSpendable();
@@ -249,13 +286,22 @@ function ComposeBlock({ state, panel }: { state: BankState; panel: BankPanelMach
         </label>
       ) : null}
 
-      <button type="submit" disabled={busy}>
-        {COPY.batch.add}
+      <button
+        type="submit"
+        disabled={busy || (experience === 'station' && state.batch.length > 0)}
+      >
+        {experience === 'station' ? COPY.gameMode.reviewAction : COPY.batch.add}
       </button>
 
-      <BatchList state={state} panel={panel} />
+      {experience === 'station' ? (
+        state.batch.length > 0 ? <StationAction state={state} panel={panel} /> : null
+      ) : (
+        <BatchList state={state} panel={panel} />
+      )}
 
-      <p className="panel-hint">{COPY.batch.why}</p>
+      <p className="panel-hint">
+        {experience === 'station' ? COPY.gameMode.singleAction : COPY.batch.why}
+      </p>
       <button
         type="button"
         className="review"
@@ -265,6 +311,24 @@ function ComposeBlock({ state, panel }: { state: BankState; panel: BankPanelMach
         {state.flow.name === 'preparing' ? COPY.flow.preparing : COPY.flow.review}
       </button>
     </form>
+  );
+}
+
+/**
+ * Game Mode has one action per station window. It still uses the same typed
+ * batch machine so the route, disclosure and receipt invariants stay shared,
+ * but it must not present Menu Mode's multi-action visit vocabulary.
+ */
+function StationAction({ state, panel }: { state: BankState; panel: BankPanelMachine }) {
+  const intent = state.batch[0];
+  if (!intent) return null;
+  return (
+    <p className="station-action" role="status">
+      {describeIntent(intent)}{' '}
+      <button type="button" onClick={() => panel.clearBatch()}>
+        {COPY.batch.clear}
+      </button>
+    </p>
   );
 }
 

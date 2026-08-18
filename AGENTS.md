@@ -107,6 +107,14 @@ automating Chrome or the in-app browser unless the user explicitly asks for
 browser automation. Headless/unit/integration checks remain agent-owned; this
 rule applies to visual and interactive browser acceptance of the game.
 
+### Questions for the user are explicit gates
+
+When the project lead needs an answer from the user, it must ping the user in
+the orchestration task, ask the precise question plainly, and pause that
+decision path. Do not bury a question in a progress update and then continue by
+guessing what the answer might be. Independent work that does not depend on the
+answer may continue.
+
 ### Newest wins, and supersession is explicit
 
 Direction comes from the **most recent** verified learning. An older document
@@ -241,6 +249,42 @@ Append what you learn. Newest first. Include how you verified it — a finding
 without a verification method is a rumour.
 
 Format: `### YYYY-MM-DD — short title` then what, why it matters, how verified.
+
+---
+
+### 2026-08-18 — Phaser starts auto-start scenes before `postBoot`
+
+The Bank room exposed a lifecycle ordering error in the World composition
+root. `runtime.ts` put the World/Shell buses into `game.registry` from the
+Phaser config's `postBoot` callback, while `street-scene.ts` captured that
+registry value when it created the Bank controller. The controller therefore
+captured `undefined` and could never receive the Shell's `world:stations`
+snapshot. The street door still worked because its emitter resolved the bus
+lazily, making the failure look like a station collision problem: the player
+could enter the Bank and reach the station, but the station remained locked and
+could neither highlight nor activate.
+
+The exact Phaser 4.2.1 order is: `Game.texturesReady()` emits `READY`;
+`SceneManager.bootQueue`, already registered on that event, synchronously
+starts the auto-start scene and runs its lifecycle; only after the `READY`
+listeners return does `texturesReady()` call `Game.start()`, which invokes
+`config.postBoot`. Comparing only `Game.start()` with the first loop step misses
+the synchronous Scene Manager path. A dependency needed by scene creation must
+be installed in `preBoot`, which `Game.boot()` invokes before the `READY` event,
+or supplied without relying on registry timing.
+
+*Verified:* the user's fresh-checkout screenshot showed the avatar stopped at
+the station but no highlight or window. Pixel sampling the station fill gave
+`#655f67` after screenshot colour conversion, matching the source's locked
+`0x665f67` branch rather than available brown `0xb07b41` or highlighted gold
+`0xe2b45d`. The current Shell station-resolution tests pass. The installed
+`phaser@4.2.1` source was traced through `core/Game.js:texturesReady/start` and
+`scene/SceneManager.js:bootQueue`, confirming the ordering above. No wallet,
+network or transaction was used. The regression was then observed failing on
+the old `postBoot` wiring with an undefined scene bus and passing after the bus
+moved to `preBoot`; the full repository suite passed 496 tests. Finally, the
+user hard-refreshed the current localhost checkout, approached the same station
+and confirmed that it highlighted and opened the Bank action window.
 
 ---
 
@@ -477,6 +521,9 @@ on screen, so it is the kind of bug a look does not catch. The adapter also
 fails closed: an object whose `building` property is absent or names a building
 outside the shared `BUILDINGS` registry produces no door, rather than a door to
 nowhere.
+
+**Status: superseded by “Phaser starts auto-start scenes before `postBoot`”
+(2026-08-18). The bus-timing claim below is wrong; do not act on it.**
 
 **NEW — the `game.registry` bus is present by `create()`, but read it lazily
 anyway.** The scene emits on the bus the shell stashes with

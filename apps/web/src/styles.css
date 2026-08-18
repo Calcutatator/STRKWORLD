@@ -1,10 +1,9 @@
 /*
  * Shell layout, deliberately minimal.
  *
- * v1 is a hub — the buildings working is the target, not the paint (D-017). The
- * one thing that has to be right here is stacking: interiors are overlays over
- * the street (D-016), so the world fills the page and the panel sits above it.
- * A visual pass is a later, separate job.
+ * Game Mode is the v1 target (D-030–D-031). The World fills the page with the
+ * active street or instanced room; React station and Menu Mode windows stack
+ * above that render. A visual pass is a later, separate job.
  */
 
 :root {
@@ -51,7 +50,28 @@ body {
   height: 100%;
 }
 
-/* Every building surface is an overlay centred over the street. */
+.menu-mode-button {
+  position: absolute;
+  top: 1rem;
+  right: 1rem;
+  z-index: 9;
+}
+
+.session-notice {
+  position: absolute;
+  top: 1rem;
+  left: 50%;
+  z-index: 20;
+  width: min(42rem, calc(100% - 2rem));
+  transform: translateX(-50%);
+  padding: 0.9rem 1rem;
+  border: 1px solid var(--panel-edge);
+  border-left: 4px solid var(--accent);
+  border-radius: 8px;
+  background: var(--panel);
+}
+
+/* Financial and locked surfaces are windows above the active World scene. */
 .panel,
 .room {
   position: absolute;

@@ -11,7 +11,12 @@ import { COPY } from '../../copy.js';
 import { formatTokenAmountExact, parseTokenAmount } from '../../format.js';
 import { createConnectFlow } from '../../connect/connect-machine.js';
 import { createReceiptLedger } from '../../receipts/receipt-ledger.js';
-import { createBankPanel, type BankPanel } from './bank-machine.js';
+import { createSubmissionUncertainty } from '../../privacy/submission-uncertainty.js';
+import {
+  createBankPanel,
+  type BankPanel,
+  type BankPanelOptions,
+} from './bank-machine.js';
 
 const STRK: Address = '0x04718f5a0fc34cc1af16a1cdee98ffb20c31f5cd61d6ab07201858f4287c938d';
 const BOB: Address = '0x02b4c7d1a1f8f39e0e6e8b9a2c7d0e3f4a5b6c7d8e9f0a1b2c3d4e5f60718293';
@@ -20,6 +25,7 @@ const STRANGER: Address = '0x011111111111111111111111111111111111111111111111111
 const POOL_FEE = 6_000000000000000000n;
 const SHIELD_DISCLOSURE = PRIVACY_REGISTER.find((entry) => entry.route === 'bank.shield')!.disclosure;
 const strk = (whole: string) => parseTokenAmount(whole)!;
+const allowFinancialActions = () => true;
 
 function fake(overrides: ConstructorParameters<typeof FakePrivacyOperations>[0] = {}) {
   return new FakePrivacyOperations({
@@ -33,7 +39,12 @@ async function openPanel(
   operations: PrivacyOperations,
   options: Partial<Parameters<typeof createBankPanel>[0]> = {},
 ): Promise<BankPanel> {
-  const panel = createBankPanel({ operations, receipts: createReceiptLedger(), ...options });
+  const panel = createBankPanel({
+    operations,
+    receipts: createReceiptLedger(),
+    ...options,
+    canStartFinancialAction: options.canStartFinancialAction ?? allowFinancialActions,
+  });
   await panel.open();
   return panel;
 }
@@ -534,6 +545,76 @@ describe('bank panel — fault injection', () => {
     expect(operations.submitted).toHaveLength(0);
   });
 
+  it('makes submission uncertainty non-retryable and retains it above the panel', async () => {
+    const operations = fake();
+    const receipts = createReceiptLedger();
+    const uncertainty = createSubmissionUncertainty();
+    const panel = await openPanel(operations, {
+      receipts,
+      onError: (failure) => {
+        if (failure.kind === 'submission-uncertain') uncertainty.retain();
+      },
+    });
+    panel.setAmount('1');
+    await panel.addToBatch();
+    await panel.prepare();
+    operations.injectFault({ kind: 'submission-uncertain', on: 'confirm' });
+
+    await panel.confirm();
+
+    const flow = panel.store.getState().flow;
+    expect(flow.name === 'failed' && flow.kind).toBe('submission-uncertain');
+    expect(flow.name === 'failed' && flow.message).toBe(COPY.errors['submission-uncertain']);
+    expect(flow.name === 'failed' && flow.recovery).toBe('close');
+    expect(uncertainty.store.getState()).toEqual({ active: true, acknowledged: false });
+    expect(receipts.pending('bank')).toHaveLength(0);
+
+    await panel.confirm();
+    expect(operations.submitted).toHaveLength(0);
+  });
+
+  it('retains late submission uncertainty after the station window closes', async () => {
+    const operations = fake();
+    const uncertainty = createSubmissionUncertainty();
+    let entered!: () => void;
+    let release!: () => void;
+    const insideConfirm = new Promise<void>((resolve) => {
+      entered = resolve;
+    });
+    const held = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const realPrepare = operations.prepare.bind(operations);
+    vi.spyOn(operations, 'prepare').mockImplementation(async (intents, signal) => {
+      const batch = await realPrepare(intents, signal);
+      return {
+        ...batch,
+        async confirm() {
+          entered();
+          await held;
+          throw { kind: 'submission-uncertain' };
+        },
+      };
+    });
+    const panel = await openPanel(operations, {
+      onError: (failure) => {
+        if (failure.kind === 'submission-uncertain') uncertainty.retain();
+      },
+    });
+    panel.setAmount('1');
+    await panel.addToBatch();
+    await panel.prepare();
+
+    const inFlight = panel.confirm();
+    await insideConfirm;
+    panel.close();
+    release();
+    await inFlight;
+
+    expect(panel.store.getState().flow.name).toBe('idle');
+    expect(uncertainty.store.getState()).toEqual({ active: true, acknowledged: false });
+  });
+
   it('closes cleanly, discarding the prepared batch and the visit', async () => {
     const operations = fake();
     const panel = await openPanel(operations);
@@ -734,10 +815,65 @@ describe('bank panel — after a submission', () => {
   });
 });
 
+describe('bank panel — D-035 balance-check gate', () => {
+  it('fails closed when an untyped caller omits the gate policy', async () => {
+    const operations = fake();
+    const prepare = vi.spyOn(operations, 'prepare');
+    const panel = createBankPanel({
+      operations,
+      receipts: createReceiptLedger(),
+    } as unknown as BankPanelOptions);
+    await panel.open();
+    panel.setAmount('1');
+
+    await panel.addToBatch();
+    await panel.prepare();
+
+    expect(panel.store.getState().batch).toHaveLength(0);
+    expect(prepare).not.toHaveBeenCalled();
+    expect(operations.submitted).toHaveLength(0);
+  });
+
+  it('blocks add, prepare and confirm after the session gate closes, then re-enables after acknowledgement', async () => {
+    const operations = fake();
+    let allowed = true;
+    const panel = await openPanel(operations, { canStartFinancialAction: () => allowed });
+    panel.setAmount('1');
+
+    allowed = false;
+    const prepare = vi.spyOn(operations, 'prepare');
+    await panel.addToBatch();
+    expect(panel.store.getState().batch).toHaveLength(0);
+    expect(prepare).not.toHaveBeenCalled();
+
+    allowed = true;
+    await panel.addToBatch();
+    expect(panel.store.getState().batch).toHaveLength(1);
+    await panel.prepare();
+    expect(prepare).toHaveBeenCalledOnce();
+    expect(panel.store.getState().flow.name).toBe('review');
+
+    allowed = false;
+    prepare.mockClear();
+    const poolConfig = vi.spyOn(operations, 'poolConfig');
+    await panel.prepare();
+    expect(prepare).not.toHaveBeenCalled();
+    expect(panel.store.getState().flow.name).toBe('review');
+
+    await panel.confirm();
+    expect(poolConfig).not.toHaveBeenCalled();
+    expect(operations.submitted).toHaveLength(0);
+
+    allowed = true;
+    await panel.confirm();
+    expect(operations.submitted).toHaveLength(1);
+  });
+});
+
 describe('bank panel — a receipt outlives the room', () => {
   /**
    * The panel's lifecycle is not the player's decision: the world emits
-   * `building:exited` and `PanelLayer` unmounts the panel. If the hash lived in
+   * `building:exited` and `VisitLayer` unmounts the window. If the hash lived in
    * panel state, a transaction that settled during that would leave the player
    * with nothing at all.
    *
@@ -785,7 +921,11 @@ describe('bank panel — a receipt outlives the room', () => {
     const receipts = createReceiptLedger();
     const operations = fake();
     const gate = gateSigning(operations);
-    const panel = createBankPanel({ operations, receipts });
+    const panel = createBankPanel({
+      operations,
+      receipts,
+      canStartFinancialAction: allowFinancialActions,
+    });
     await panel.open();
     panel.setAmount('1');
     await panel.addToBatch();
@@ -811,7 +951,11 @@ describe('bank panel — a receipt outlives the room', () => {
     const receipts = createReceiptLedger();
     const operations = fake();
     const gate = gateSigning(operations);
-    const first = createBankPanel({ operations, receipts });
+    const first = createBankPanel({
+      operations,
+      receipts,
+      canStartFinancialAction: allowFinancialActions,
+    });
     await first.open();
     first.setAmount('1');
     await first.addToBatch();
@@ -822,10 +966,14 @@ describe('bank panel — a receipt outlives the room', () => {
     gate.release();
     await inFlight;
 
-    // PanelLayer builds a new machine on remount, so the receipt has to be
+    // VisitLayer builds a new machine on remount, so the receipt has to be
     // found rather than remembered.
     vi.restoreAllMocks();
-    const reopened = createBankPanel({ operations, receipts });
+    const reopened = createBankPanel({
+      operations,
+      receipts,
+      canStartFinancialAction: allowFinancialActions,
+    });
     await reopened.open();
 
     const flow = reopened.store.getState().flow;
@@ -841,7 +989,11 @@ describe('bank panel — a receipt outlives the room', () => {
 
   it('opens straight into composing when nothing is outstanding', async () => {
     const receipts = createReceiptLedger();
-    const panel = createBankPanel({ operations: fake(), receipts });
+    const panel = createBankPanel({
+      operations: fake(),
+      receipts,
+      canStartFinancialAction: allowFinancialActions,
+    });
     await panel.open();
     expect(panel.store.getState().flow.name).toBe('composing');
   });
@@ -849,7 +1001,11 @@ describe('bank panel — a receipt outlives the room', () => {
   it('does not re-show a receipt the player has already seen', async () => {
     const receipts = createReceiptLedger();
     const operations = fake();
-    const panel = createBankPanel({ operations, receipts });
+    const panel = createBankPanel({
+      operations,
+      receipts,
+      canStartFinancialAction: allowFinancialActions,
+    });
     await panel.open();
     panel.setAmount('1');
     await panel.addToBatch();
@@ -858,7 +1014,11 @@ describe('bank panel — a receipt outlives the room', () => {
     panel.acknowledge();
     panel.close();
 
-    const reopened = createBankPanel({ operations, receipts });
+    const reopened = createBankPanel({
+      operations,
+      receipts,
+      canStartFinancialAction: allowFinancialActions,
+    });
     await reopened.open();
     expect(reopened.store.getState().flow.name).toBe('composing');
   });

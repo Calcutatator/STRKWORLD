@@ -1,10 +1,23 @@
-import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
+import {
+  createContext,
+  useCallback,
+  useContext,
+  useEffect,
+  useMemo,
+  useState,
+  type ReactNode,
+} from 'react';
 import type { PrivacyOperations } from '@strkworld/privacy';
 import type { EventBus, ShellEvents } from '@strkworld/shared';
 import { createConnectFlow, toWalletStatus, type ConnectFlow, type ConnectState } from '../connect/connect-machine.js';
 import { createReceiptLedger, type ReceiptLedger } from '../receipts/receipt-ledger.js';
 import { detectBuildContext, type BuildContext } from './build-context.js';
 import { useStore } from '../store/use-store.js';
+import {
+  createSubmissionUncertainty,
+  type SubmissionUncertainty,
+} from './submission-uncertainty.js';
+import { toFailure } from './errors.js';
 
 /**
  * Wallet and financial state for the whole shell.
@@ -33,6 +46,10 @@ export interface ShellPrivacy {
    * room was closing. This outlives every panel below it.
    */
   receipts: ReceiptLedger;
+  /** D-034's one-bit, in-memory browser-session retention. */
+  submissionUncertainty: SubmissionUncertainty;
+  /** Routes operation failures to account state and session-level notices. */
+  noteOperationError(error: unknown): void;
   /** Optional channel into the world for HUD pushes. */
   shellBus: EventBus<ShellEvents> | null;
 }
@@ -62,6 +79,8 @@ export interface PrivacyProviderProps {
    * the demo check match reality, since reaching the fake still requires `demo`.
    */
   build?: BuildContext;
+  /** Injectable only so retention and rendering can be driven without a DOM. */
+  submissionUncertainty?: SubmissionUncertainty;
   children: ReactNode;
 }
 
@@ -71,6 +90,7 @@ export function PrivacyProvider({
   shellBus = null,
   fallback = null,
   build,
+  submissionUncertainty,
   children,
 }: PrivacyProviderProps) {
   if (!operations) {
@@ -112,7 +132,11 @@ export function PrivacyProvider({
   if (!resolved) return <>{fallback}</>;
 
   return (
-    <PrivacyRuntime operations={resolved} shellBus={shellBus}>
+    <PrivacyRuntime
+      operations={resolved}
+      shellBus={shellBus}
+      injectedSubmissionUncertainty={submissionUncertainty}
+    >
       {children}
     </PrivacyRuntime>
   );
@@ -121,10 +145,12 @@ export function PrivacyProvider({
 function PrivacyRuntime({
   operations,
   shellBus,
+  injectedSubmissionUncertainty,
   children,
 }: {
   operations: PrivacyOperations;
   shellBus: EventBus<ShellEvents> | null;
+  injectedSubmissionUncertainty?: SubmissionUncertainty;
   children: ReactNode;
 }) {
   const connect = useMemo(() => createConnectFlow(operations), [operations]);
@@ -132,14 +158,45 @@ function PrivacyRuntime({
   // Deliberately not keyed to `operations`: a receipt is evidence about the
   // chain, and it must not be discarded because the shell swapped seams.
   const receipts = useMemo(() => createReceiptLedger(), []);
+  // One in-memory flag for the provider's lifetime. It intentionally has no
+  // cross-reload persistence and carries no financial/request context.
+  const submissionUncertainty = useMemo(
+    () => injectedSubmissionUncertainty ?? createSubmissionUncertainty(),
+    [injectedSubmissionUncertainty],
+  );
+
+  const noteOperationError = useCallback(
+    (error: unknown): void => {
+      const failure = toFailure(error);
+      if (failure.kind === 'submission-uncertain') submissionUncertainty.retain();
+      connect.noteOperationError(failure);
+    },
+    [connect, submissionUncertainty],
+  );
 
   useEffect(() => {
     shellBus?.emit('wallet:status', { status: toWalletStatus(connectState) });
   }, [shellBus, connectState]);
 
   const value = useMemo<ShellPrivacy>(
-    () => ({ operations, connect, connectState, receipts, shellBus }),
-    [operations, connect, connectState, receipts, shellBus],
+    () => ({
+      operations,
+      connect,
+      connectState,
+      receipts,
+      submissionUncertainty,
+      noteOperationError,
+      shellBus,
+    }),
+    [
+      operations,
+      connect,
+      connectState,
+      receipts,
+      submissionUncertainty,
+      noteOperationError,
+      shellBus,
+    ],
   );
 
   return <PrivacyContext.Provider value={value}>{children}</PrivacyContext.Provider>;

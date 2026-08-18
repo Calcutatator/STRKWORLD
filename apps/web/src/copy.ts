@@ -115,6 +115,12 @@ export const COPY = {
     total: 'Total',
   },
 
+  gameMode: {
+    menu: 'Menu Mode',
+    singleAction: 'This station confirms one action at a time.',
+    reviewAction: 'Review this action',
+  },
+
   locked: {
     comingSoon:
       'This building is shut. It opens once its private route is built, reviewed and approved.',
@@ -167,6 +173,12 @@ export const COPY = {
       'We could not confirm whether this private action was submitted. Do not retry it yet. Reconnect, wait a few minutes, and refresh your private balance before taking another action.',
     unknown: 'That did not go through, and nothing was signed.',
   } satisfies Record<PrivacyErrorKind, string>,
+
+  submissionUncertainty: {
+    acknowledge: 'I refreshed and checked my private balance',
+    acknowledged:
+      'A previous private action is still unconfirmed. You checked your refreshed balance before continuing.',
+  },
 } as const;
 
 /** Flattened for the copy tests. Order is not meaningful. */
