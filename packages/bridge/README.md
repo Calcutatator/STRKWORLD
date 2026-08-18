@@ -82,7 +82,7 @@ afterwards pays its own fee from shielded notes.
   from the old ShieldUp list alone
 - The resumable pipeline: a bridge takes minutes and must survive a page
   reload, a tab close and a crash
-- Receipts
+- The signed, browser-local Bridge record used as progress and dispute evidence
 
 ## Implemented offline boundary
 
@@ -105,6 +105,13 @@ and browser storage; tests use deterministic in-memory implementations. The
 remaining funded acceptance test is an issued deposit address that is actually
 funded and reaches `SUCCESS`. No test fixture pretends that has happened.
 
+Network responses remain untrusted even though the SDK supplies TypeScript
+types. A settlement requires a validated positive uint256 `amountOut`; any
+transaction hash surfaced to the shell is bounded and whitespace-free. The SDK
+permits a successful response without a destination hash, so the actual amount,
+not an invented hash requirement, decides settlement. Malformed status leaves
+the prior record intact and produces one generic local error.
+
 `watch()` polls manual deposits on a bounded clock. After ten active minutes it
 persists a resumable "still pending" state instead of calling that timeout a
 failure; terminal solver states stop immediately. An unfunded quote becomes
@@ -121,7 +128,8 @@ Resume imports are capped at 256 kB before JSON parsing. This is both a browser
 resource bound and a reminder that import is signed evidence recovery, not an
 arbitrary document upload.
 
-Wallet-signed origins use the same signed quote and resume record.
+The package retains a post-v1 wallet-signed-origin API using the same signed
+quote and resume record, but v1 Shell does not expose it.
 `createSignedDeposit()` prepares that route; the origin-wallet adapter signs
 and broadcasts the chain-specific transfer, then
 `reportDepositTransaction()` submits its hash to 1Click and verifies the
@@ -150,6 +158,15 @@ Browser-local persistence covers reloads, tab closes and crashes on the same
 device. Cross-device resume is explicit export/import, not background sync.
 The backend must not quietly acquire a durable database of deposit addresses,
 recipients and timing.
+
+The signed recipient is always the active connected Starknet account. It is
+not editable. Recovery and export can work while disconnected, but a new quote
+or post-settlement shield continuation requires the same account after
+field-element-normalized comparison. The Bridge record remains authoritative
+until explicit discard; the separate shield receipt belongs to the Bank, and
+the app stores no Bridge-to-shield correlation. Switching accounts blocks new
+funding and shielding but preserves the old recipient-bound record for status
+refresh and export; it never retargets or silently deletes that evidence.
 
 Persist the complete signed 1Click quote, not only the display fields. The
 current SDK marks the response signature, timestamp, original request and
@@ -197,11 +214,22 @@ breaking and re-verify quote and status shapes when moving.
 The EVM side pulls `viem`. Lazy-load the building so that chunk only reaches
 players who open it.
 
-The SDK client is currently unauthenticated. Official 1Click authentication
-docs say that route pays a 0.2% fee; an authenticated JWT route is fee-free but
-the credential must be kept server-side. Before launch, choose explicitly
-between displaying/accepting the quoted fee and adding a narrow credential
-proxy. Never bundle the JWT in this browser package.
+V1 deliberately uses the SDK directly without authentication. Official 1Click
+authentication and fee docs say this route pays a 0.2% platform fee; the room
+must disclose it. There is no JWT proxy, and a JWT must never be bundled in
+this package or any browser configuration. A live dry quote currently echoes
+an `appFees` entry even when the request omits one; do not call that a
+STRKWORLD fee or invent a total fee breakdown until the provider clarifies its
+meaning. The signed expected and minimum outputs remain the exact review data.
+
+Post-settlement shielding uses a separate optional Chain-owned public planning
+capability, not an import from this package and not a `PrivacyOperations`
+method. It estimates the precise public approve-plus-privacy call shape against
+fresh wallet/account state; it does not guarantee the eventual fee. Shell
+requires the capability before quoting, preflights the signed minimum before
+showing deposit instructions, replans from actual received STRK, and revalidates
+at the Bank commit point. The ordinary Bank fee ceiling still applies. A failed
+or inconsistent plan blocks the relevant step; nothing auto-submits.
 
 ---
 

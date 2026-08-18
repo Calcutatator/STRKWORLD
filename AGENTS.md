@@ -252,6 +252,34 @@ Format: `### YYYY-MM-DD — short title` then what, why it matters, how verified
 
 ---
 
+### 2026-08-18 — Direct 1Click needs no key, but its fee fields need clarification
+
+The pinned `@defuse-protocol/one-click-sdk-typescript@0.1.25` accepts an
+optional JWT and sends `Authorization: Bearer …` only when one is configured.
+An unauthenticated browser call is therefore a supported route, not a missing
+environment variable. Official 1Click documentation currently assigns that
+route a 0.2% platform fee; authenticated distribution is described as
+fee-free apart from protocol, spread and execution costs. D-043 chooses the
+direct unauthenticated route for v1, with disclosure, rather than adding a
+credential-bearing backend.
+
+One live unauthenticated `dry: true` quote returned HTTP 201 and the advertised
+unauthenticated rate limit, without issuing a deposit address or transaction.
+It also echoed one 10-bps `quoteRequest.appFees` entry even though the request
+omitted `appFees`. The relationship between that field and the documented
+0.2% platform fee is not established. Until Defuse confirms it, show the
+signed expected/minimum output and the canonical 0.2% disclosure, but do not
+claim an exact total fee breakdown or call the echoed entry a STRKWORLD fee.
+
+*Verified:* inspected the exact installed SDK constructor/request code, the
+official API-key and fees pages, a read-only live dry quote, and Shieldup's
+production 1Click client at commit
+`290f8306571ce45e630c5a08b243d7b5f8c232b4`. Shieldup also calls 1Click
+directly without a JWT. No credential, deposit address, wallet signature or
+transaction was created.
+
+---
+
 ### 2026-08-18 — Treat 1Click execution status as hostile runtime data
 
 The generated 1Click SDK types do not validate the response received over the
@@ -1183,6 +1211,10 @@ No other finding remained. No secret value was printed or committed.
 ---
 
 ### 2026-08-16 — 1Click authentication is a server-side fee decision
+
+*Status: resolved by D-043; v1 uses the direct unauthenticated route and
+discloses the documented 0.2% platform fee. The browser-JWT prohibition below
+remains in force.*
 
 The 1Click API can be called without authentication, but official current docs
 say unauthenticated requests incur a 0.2% fee. JWT-authenticated requests are

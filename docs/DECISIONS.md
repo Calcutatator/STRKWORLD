@@ -1590,3 +1590,95 @@ review fail-closed behavior, exact protected-minimum rounding, backend rejection
 of an unenforceable requested floor, canonical disclosure, exact fees/expiry,
 one confirmation, Exchange receipt ownership, uncertainty retention and
 unchanged Bank/Post Office behavior. Rendered acceptance remains user-owned.
+
+---
+
+## D-043 — Bridge v1 is manual, direct and wallet-bound; exact shielding fails closed
+
+**2026-08-18 · Accepted · product and technical direction delegated to the project lead · completes D-009/D-012's v1 composition choice and adds no method to the D-036-frozen `PrivacyOperations` seam**
+
+**Context.** The independent Bridge package already owns a signed, resumable
+1Click deposit record, but the game has no Bridge room or Shell controller.
+Three facts decide the composition. First, the pinned 1Click SDK works directly
+from the browser without a credential; official provider documentation prices
+that route at a 0.2% platform fee, while a JWT must remain secret. Second, a
+bridge quote must deliver to the currently connected Starknet account, not a
+free-form address. The Wallet API account already has a source-derived
+`address`, so widening `PrivacyOperations` just to expose identity would weaken
+the seam. Third, the existing shield preparation reports zero gas estimate and
+there is no generic Wallet Standard fee estimator. Subtracting a constant from
+real funds would only disguise that missing capability.
+
+**Decision.** Bridge v1 uses the pinned 1Click SDK directly and
+unauthenticated. There is no backend credential proxy and no browser JWT. The
+surface discloses the provider's 0.2% unauthenticated platform fee and shows
+the signed quote's exact input, expected output and minimum output. It does not
+invent a total fee breakdown or label the provider's currently unexplained
+`appFees` echo as a STRKWORLD fee; that response field is a provider-clarification
+launch check.
+
+Only manual deposit mode is exposed in v1. The existing signed-origin package
+path remains dormant rather than creating chain-wallet adapters in the Shell.
+World adds a real fixed Bridge room with one opaque `bridge:deposit` station;
+Shell owns its meaning. Entering or touching the station never starts a quote,
+poll, wallet prompt or transaction. Every consequential step remains an
+explicit player action under D-004.
+
+The real composition root retains the concrete connected Wallet API account
+alongside `PrivacyOperations`. A new quote binds its Starknet recipient to that
+account's validated address; the player cannot edit it. Address comparisons use
+validated Starknet field-element equality, not display spelling. A recovered
+or imported record may still be refreshed, exported and inspected without a
+wallet, but no new quote or shield continuation is allowed unless the active
+account matches the signed recipient. An account switch blocks new quotes and
+shielding immediately, but preserves the old recipient-bound record for status
+refresh, inspection and export. It never retargets or silently discards that
+evidence.
+
+`BridgeRecord` in the browser-local `BridgeStore` is the authoritative bridge
+progress and dispute-evidence record. It is sensitive, survives reload, may be
+explicitly exported/imported, and remains after settlement until the player
+explicitly discards it. It is not copied into the privacy receipt ledger or a
+server database. The later shield is a separate Bank-owned transaction and
+receipt; STRKWORLD persists no Bridge-to-shield correlation.
+
+Reserve sizing is a separate, optional Chain-owned public capability,
+not a sixth `PrivacyOperations` method and not a Bridge dependency on Privacy.
+Its source-derived implementation must plan the maximum public shield from the
+actual settled STRK amount and return the active recipient, positive amount to
+shield, fresh wallet-specific cost estimates and a planned public reserve. It
+must own the wallet-specific construction needed to estimate the precise
+approve-plus-privacy call shape expected to be signed. This is an estimate
+against current account, allowance, deployment and fee state, not a guaranteed
+final fee. Capability is detected structurally, never by wallet name. The
+initial Ready implementation may therefore be available while another wallet
+fails closed.
+
+There are two deliberate phases. Before a quote, Shell requires a matching
+active account and the structural planner capability. After the signed quote
+arrives but before deposit instructions are exposed, it preflights the planner
+against the quote's signed minimum output; a failed or non-positive plan blocks
+funding. After 1Click reports `SUCCESS`, Shell uses the actual validated
+`strkReceived`, rechecks the active account and requests a fresh maximum-shield
+plan. It revalidates that plan at the Bank commit point, and the ordinary Bank
+fee ceiling and confirmation checks remain authoritative. Missing or stale
+estimates, a changed account, non-positive remainder, inconsistent
+recipient/reserve arithmetic or a changed plan block the handoff. The player
+then explicitly reviews and signs the ordinary Bank shield; it is never
+submitted automatically and quote-time output is never used as the settled
+balance.
+
+**Consequences.** Chain adds and tests a separate public-shield planner port,
+a deterministic fake and the smallest source-derived Ready adapter without
+changing the frozen private seam. World adds only room definition/presentation
+data. Shell adds the Bridge machine, local persistence adapter, recipient gate,
+manual quote/recovery/status surfaces and explicit Bank handoff. Bridge remains
+independent of `packages/privacy`; Backend and lobby do not change. Tests must
+cover address normalization and account switches, recovery without a wallet,
+actual-settled-versus-quoted output, reserve subtraction and non-positive
+remainders, two-phase estimator failure/unsupported capability, approve/privacy call
+ordering, stale plans, reload/import, provider status validation and the absence
+of automatic submission or cross-ledger correlation. Ready/Xverse prompt
+packaging, account deployment, allowance-sensitive estimates, live fee ceilings
+and one tiny mainnet completion remain funded pre-launch checks. Rendered game
+acceptance remains user-owned.

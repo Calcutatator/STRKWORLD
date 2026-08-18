@@ -16,7 +16,7 @@ the lane boundary — that is why the repo is shaped the way it is.
 
 | Lane | Package | Status in v1 |
 |---|---|---|
-| **Chain** | `packages/privacy` | Active; seam frozen under D-036 with D-041/D-042 swap review |
+| **Chain** | `packages/privacy` | Active; private seam frozen, D-043 public-shield planner next |
 | **World** | `packages/world` + `packages/lobby` | Active |
 | **Shell** | `apps/web` | Active, starts week 2 |
 | **Backend** | `apps/backend` | Active; offline implementation in progress under D-028 |
@@ -156,6 +156,16 @@ minimum without changing the public shape. A lost submit response must never
 become a blind retry; funded Wallet API/paymaster validation remains on the
 pre-launch checklist.
 
+**D-043 next:** add a separate optional public-shield planner, deterministic
+fake and smallest source-derived Ready adapter. It is not a method on the
+frozen `PrivacyOperations` interface. Given actual available public STRK, the
+planner must bind the active account, construct/estimate the real public
+approve-plus-privacy shape, and return a positive maximum shield amount with
+fresh wallet-specific cost components and a planned reserve. Its result is not
+a guaranteed fee. Unsupported wallets, changed accounts and unavailable or
+inconsistent estimates fail closed. Give Shell a dependent-lane heads-up before
+freezing the exact new public shape.
+
 **Dependency drift rechecked for D-036:** the 2026-08-18 integration freshness
 check still finds get-starknet discovery's `next` tag at 6.0.4,
 wallet-standard's at 6.0.5, and the upstream monorepo replacing the cited
@@ -216,6 +226,11 @@ event, lobby field or financial meaning entered World. Headless tests pin its
 geometry, station presentation and boot-order snapshot. Rendered room and
 station acceptance remains user-run at `http://localhost:5173/`.
 
+**D-043 next:** add the Bridge as another definition of the same fixed-room
+core with one opaque `bridge:deposit` station. World owns geometry, highlight,
+activation, exit and teardown only; it must not gain a recipient, quote,
+deposit address, status or wallet concept.
+
 **Must not:** import `starknet` or any wallet package. Put an address, balance,
 transaction hash, building name or entry event into lobby traffic. On local
 entry, the shell leaves or suspends lobby presence; other players seeing the
@@ -266,6 +281,20 @@ canonical D-024 disclosure, expected and protected outputs, slippage, absolute
 expiry and exact fees at `ConfirmGate`; receipts are owned by `exchange` and
 outlive the room. Catalog metadata is never route authority. Rendered
 acceptance remains user-run at `http://localhost:5173/`.
+
+**D-043 next:** compose the manual-only Bridge machine and room. Retain the
+concrete connected account beside the privacy seam, bind every new quote to its
+address, keep the signed Bridge record in browser-local Bridge storage, and
+allow recovery inspection without a wallet. New quotes require both a matching
+account and the separate public-shield planner capability; before deposit
+instructions, preflight it against the signed minimum output. Settlement uses
+provider-reported `strkReceived`, rechecks account and requests a fresh plan,
+then revalidates at the Bank commit point before offering the explicit ordinary
+shield. It never auto-submits and never writes Bridge state into the privacy
+receipt ledger. Account switches preserve the old record for refresh/export
+while blocking new financial continuation. Direct unauthenticated 1Click is
+the accepted v1 route, with its 0.2% provider fee disclosed and no fabricated
+fee breakdown.
 
 The **batch accumulator is Menu Mode only** under D-032. It collects typed
 intent during a building visit and emits one atomic batch on confirmation. Game
@@ -329,9 +358,10 @@ Can start immediately at full speed.
 **Completed offline baseline:** the deposit-only 1Click wrapper, manual-first
 resumable pipeline, persistence/export/import, source-token/address validation
 and refund/failure states are implemented behind a network/storage boundary.
-The OUT path and AVNU leg do not exist (D-012). Remaining work is Shell room
-composition plus live provider acceptance, after the lead chooses and verifies
-the disclosed unauthenticated fee or a narrow server-side JWT proxy.
+The OUT path and AVNU leg do not exist (D-012). Runtime status data is now
+validated before it can settle a record. D-043 chooses direct unauthenticated
+1Click for v1; the Shell room/composition and live funded provider acceptance
+remain.
 
 **Build manual deposit mode first.** A player funding from a centralised
 exchange leaves the tab, goes to a withdrawal screen, and comes back minutes
@@ -345,13 +375,13 @@ direction, a token picker or a route choice. Imply that arriving is private.
 and the shield that follows has its own public leg. Privacy begins after the
 funds are in the pool. Copy must say so.
 
-**Done when:** a player deposits from another chain, ends up with a shielded
-balance, sees honest copy about what was public, and the flow survives a reload
-mid-deposit. Before launch, the lead must also choose and verify either the
-disclosed unauthenticated 1Click fee or a narrow server-side JWT proxy; the JWT
-must never enter the browser bundle.
+**Done when:** a player manually deposits from another chain to the bound active
+account, recovers the signed record across reload/import, sees honest copy about
+the public 0.2%-fee route, and explicitly shields the freshly planned remainder.
+Malformed status, account mismatch or unavailable cost planning must fail
+closed. The JWT must never enter the browser bundle.
 
-**Reference:** `packages/bridge/README.md` · DECISIONS.md D-009, D-012
+**Reference:** `packages/bridge/README.md` · DECISIONS.md D-009, D-012, D-043
 
 ---
 

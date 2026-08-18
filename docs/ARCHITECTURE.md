@@ -152,7 +152,20 @@ prompted (never automatic) shield at the Bank (D-012). NEAR Intents 1Click
 orchestration, resumable across reloads and devices. Since D-012 removed the
 OUT direction it is chain-free on the Starknet side — 1Click + viem only, no
 `starknet` import. The shell owns the bridge → shield sequencing, because this
-package must never import `packages/privacy` (D-009, CI-enforced).
+package must never import `packages/privacy` (D-009, CI-enforced). D-043 keeps
+the signed `BridgeRecord` as browser-local bridge evidence and binds its
+recipient to the concrete connected Wallet API account retained by the
+composition root; neither identity nor Bridge state is added to the frozen
+private seam.
+
+The post-settlement reserve is supplied through a separate optional Chain-owned
+public-shield planning capability. It owns wallet-specific estimation of the
+precise public call shape and fails closed when unsupported; the result is a
+fresh plan, not a guaranteed fee, and it is not a method on
+`PrivacyOperations`. Shell preflights against the signed minimum before showing
+deposit instructions, replans from the actual settled amount, and revalidates
+at the Bank commit point. The shield remains an explicit second transaction
+with its own Bank-owned receipt, never an automatic Bridge action.
 
 **Must not:** import `@strkworld/privacy`, offer an OUT direction or a
 destination-token choice, or present arrival as private — bridging is a
