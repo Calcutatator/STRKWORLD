@@ -139,4 +139,12 @@ describe('shell boundaries', () => {
     expect(provider).toContain("import('./demo-operations.js')");
     expect(imports(provider).map((entry) => entry.specifier)).not.toContain('./demo-operations.js');
   });
+
+  it('loads the demo Bridge and 1Click runtime dynamically, never in the entry graph', () => {
+    const provider = readFileSync(join(SRC, 'bridge/BridgeProvider.tsx'), 'utf8');
+    expect(provider).toContain("import('./demo-runtime.js')");
+    expect(imports(provider).map((entry) => entry.specifier)).not.toContain('./demo-runtime.js');
+    const runtime = readFileSync(join(SRC, 'bridge/demo-runtime.ts'), 'utf8');
+    expect(runtime).toContain("import('@strkworld/privacy')");
+  });
 });

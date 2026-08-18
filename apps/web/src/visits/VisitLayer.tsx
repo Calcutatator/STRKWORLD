@@ -1,15 +1,17 @@
-import { useEffect, useMemo, type ReactElement } from 'react';
+import { useEffect, useMemo, useRef, type ReactElement } from 'react';
 import type { EventBus, ShellEvents, WorldEvents } from '@strkworld/shared';
 import { COPY } from '../copy.js';
 import { ConnectRoom } from '../connect/ConnectRoom.js';
 import { BankPanel } from '../panels/bank/BankPanel.js';
 import { ExchangePanel } from '../panels/exchange/ExchangePanel.js';
+import { BridgePanel } from '../panels/bridge/BridgePanel.js';
 import { LockedRoom, UnbuiltRoom } from '../panels/LockedRoom.js';
 import { PanelFrame } from '../panels/PanelFrame.js';
 import { resolveRoom, type PanelRegistry } from '../panels/panel-framework.js';
 import { BUILDING_PANELS, type BuildingPanelDescriptor } from '../panels/registry.js';
 import { PRIVACY_REGISTER, type RouteGrade } from '../privacy/register.js';
 import { usePrivacy } from '../privacy/PrivacyProvider.js';
+import { useBridge } from '../bridge/BridgeProvider.js';
 import { useStore } from '../store/use-store.js';
 import { resolveStation } from './station-registry.js';
 import { createVisitController, type VisitState } from './visit-controller.js';
@@ -32,7 +34,13 @@ export function VisitLayer({
   register?: readonly RouteGrade[];
 }) {
   const { connectState } = usePrivacy();
-  const controller = useMemo(() => createVisitController(shell, register), [shell, register]);
+  const bridge = useBridge();
+  const bridgeRef = useRef(bridge);
+  bridgeRef.current = bridge;
+  const controller = useMemo(() => createVisitController(shell, register, {
+    get bridgeAccountAvailable() { return bridgeRef.current.account !== null; },
+    get bridgePlannerAvailable() { return Boolean(bridgeRef.current.planner); },
+  }), [shell, register]);
   const state = useStore(controller.store);
 
   useEffect(() => controller.listen(world), [controller, world]);
@@ -53,6 +61,10 @@ export function VisitLayer({
     <VisitLayerView
       state={state}
       connected={connectState.name === 'connected'}
+      bridgeCapabilities={{
+        bridgeAccountAvailable: bridge.account !== null,
+        bridgePlannerAvailable: Boolean(bridge.planner),
+      }}
       register={register}
       onOpenMenu={() => controller.openMenu()}
       onCloseSurface={() => controller.closeSurface()}
@@ -65,6 +77,7 @@ export function VisitLayer({
 export function VisitLayerView({
   state,
   connected,
+  bridgeCapabilities,
   register = PRIVACY_REGISTER,
   panels = BUILDING_PANELS,
   onOpenMenu,
@@ -73,6 +86,7 @@ export function VisitLayerView({
 }: {
   state: VisitState;
   connected: boolean;
+  bridgeCapabilities?: import('./station-registry.js').StationCapabilities;
   register?: readonly RouteGrade[];
   panels?: PanelRegistry<BuildingPanelDescriptor>;
   onOpenMenu: () => void;
@@ -101,7 +115,7 @@ export function VisitLayerView({
   }
 
   if (state.surface.name === 'station') {
-    const station = resolveStation(state.building, state.surface.station, register);
+    const station = resolveStation(state.building, state.surface.station, register, bridgeCapabilities);
     if (station.status === 'locked') {
       return (
         <LockedRoom
@@ -113,7 +127,7 @@ export function VisitLayerView({
       );
     }
 
-    if (!connected) return <ConnectionSurface building={state.building} onClose={onCloseSurface} />;
+    if (!connected && station.definition.view !== 'bridge') return <ConnectionSurface building={state.building} onClose={onCloseSurface} />;
 
     if (station.definition.view === 'bank') {
       return (
@@ -130,6 +144,9 @@ export function VisitLayerView({
     if (station.definition.view === 'exchange') {
       return <ExchangePanel experience="station" onClose={onCloseSurface} />;
     }
+    if (station.definition.view === 'bridge') {
+      return <BridgePanel experience="station" onClose={onCloseSurface} />;
+    }
   }
 
   const room = resolveRoom(state.building, panels, register);
@@ -145,6 +162,9 @@ export function VisitLayerView({
   }
   if (room.kind === 'unbuilt') {
     return <UnbuiltRoom building={room.building} message={room.message} onClose={onCloseSurface} />;
+  }
+  if (state.building === 'bridge') {
+    return <BridgePanel experience="menu" onClose={onCloseSurface} />;
   }
   if (!connected) return <ConnectionSurface building={state.building} onClose={onCloseSurface} />;
 

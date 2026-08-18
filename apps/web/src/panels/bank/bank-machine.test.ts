@@ -210,6 +210,42 @@ describe('bank panel — entering the room', () => {
   });
 });
 
+describe('bank panel — optional Bridge commit guard', () => {
+  it('rejects a changed handoff plan before the wallet confirm and asks to prepare again', async () => {
+    const guard = vi.fn(async () => false);
+    const operations = fake();
+    const panel = await openPanel(operations, {
+      allowedModes: ['shield'],
+      initialMode: 'shield',
+      preConfirmGuard: guard,
+    });
+    panel.setAmount('1');
+    await panel.addToBatch();
+    await panel.prepare();
+    await panel.confirm();
+    expect(guard).toHaveBeenCalledOnce();
+    expect(operations.submitted).toHaveLength(0);
+    expect(panel.store.getState().flow).toMatchObject({ name: 'failed', recovery: 'prepare-again' });
+    const flow = panel.store.getState().flow;
+    expect(flow.name === 'failed' ? flow.message : null).toBe(COPY.notices.bridgePlanMoved);
+  });
+
+  it('does not write a late Bridge guard result into a closed Bank machine', async () => {
+    let release!: (value: boolean) => void;
+    const guard = vi.fn(() => new Promise<boolean>((resolve) => { release = resolve; }));
+    const panel = await openPanel(fake(), { allowedModes: ['shield'], initialMode: 'shield', preConfirmGuard: guard });
+    panel.setAmount('1');
+    await panel.addToBatch();
+    await panel.prepare();
+    const confirming = panel.confirm();
+    for (let i = 0; i < 5 && !release; i += 1) await Promise.resolve();
+    panel.close();
+    release(false);
+    await confirming;
+    expect(panel.store.getState().flow.name).toBe('idle');
+  });
+});
+
 describe('bank panel — maturity-aware balance', () => {
   it('shows the spendable/maturing split when the source knows it', async () => {
     const operations = fake();

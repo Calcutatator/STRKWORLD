@@ -4,6 +4,7 @@ import { COPY } from '../copy.js';
 import { BankPanel } from './bank/BankPanel.js';
 import { PostOfficePanel } from './post-office/PostOfficePanel.js';
 import { ExchangePanel } from './exchange/ExchangePanel.js';
+import { BridgePanel } from './bridge/BridgePanel.js';
 import type { PanelRegistry } from './panel-framework.js';
 
 /**
@@ -33,4 +34,5 @@ export const BUILDING_PANELS: PanelRegistry<BuildingPanelDescriptor> = {
     title: COPY.buildings['post-office'],
     Component: PostOfficePanel,
   },
+  bridge: { building: 'bridge', title: COPY.buildings.bridge, Component: BridgePanel },
 };

@@ -2,6 +2,7 @@ import type { BuildingId, ShellEvents, StationId } from '@strkworld/shared';
 import { PRIVACY_REGISTER, type RouteGrade } from '../privacy/register.js';
 import { routeDoor, type DoorState } from '../panels/routes.js';
 import type { BankMode } from '../panels/bank/bank-machine.js';
+import { COPY } from '../copy.js';
 
 type BankStationDefinition = {
   station: StationId; building: BuildingId; label: string; routes: readonly string[];
@@ -11,6 +12,10 @@ type ExchangeStationDefinition = {
   station: StationId; building: 'exchange'; label: string; routes: readonly string[];
   view: 'exchange';
 };
+type BridgeStationDefinition = {
+  station: StationId; building: 'bridge'; label: string; routes: readonly string[];
+  view: 'bridge';
+};
 
 /**
  * Shell-owned meaning for an opaque station id.
@@ -19,7 +24,13 @@ type ExchangeStationDefinition = {
  * label and lock state; routes, modes and privacy grades stay here with the
  * financial controls they admit (D-033).
  */
-export type StationDefinition = BankStationDefinition | ExchangeStationDefinition;
+export type StationDefinition = BankStationDefinition | ExchangeStationDefinition | BridgeStationDefinition;
+
+export interface StationCapabilities {
+  /** The account reader is deliberately coarse: the World only gets a lock bit. */
+  bridgeAccountAvailable?: boolean;
+  bridgePlannerAvailable?: boolean;
+}
 
 const STATIONS: readonly StationDefinition[] = [
   {
@@ -47,6 +58,13 @@ const STATIONS: readonly StationDefinition[] = [
     routes: ['exchange.swap'],
     view: 'exchange',
   },
+  {
+    station: 'bridge:deposit',
+    building: 'bridge',
+    label: 'DEPOSIT',
+    routes: ['bridge.deposit'],
+    view: 'bridge',
+  },
 ] as const;
 
 export type StationResolution =
@@ -61,6 +79,7 @@ export function resolveStation(
   building: BuildingId,
   station: StationId,
   register: readonly RouteGrade[] = PRIVACY_REGISTER,
+  capabilities: StationCapabilities = {},
 ): StationResolution {
   const definition = STATIONS.find(
     (candidate) => candidate.building === building && candidate.station === station,
@@ -77,6 +96,16 @@ export function resolveStation(
     const door = routeDoor(route, register);
     if (!door.open) return { status: 'locked', definition, door };
   }
+  if (
+    definition.view === 'bridge' &&
+    (!capabilities.bridgeAccountAvailable || !capabilities.bridgePlannerAvailable)
+  ) {
+    return {
+      status: 'locked',
+      definition,
+      door: { open: false, reason: 'capability-unavailable', message: COPY.bridge.unavailable },
+    };
+  }
   return { status: 'available', definition };
 }
 
@@ -84,10 +113,11 @@ export function resolveStation(
 export function stationSnapshot(
   building: BuildingId,
   register: readonly RouteGrade[] = PRIVACY_REGISTER,
+  capabilities: StationCapabilities = {},
 ): ShellEvents['world:stations']['stations'] {
   return STATIONS.filter((station) => station.building === building).map((definition) => ({
     station: definition.station,
     label: definition.label,
-    status: resolveStation(building, definition.station, register).status,
+    status: resolveStation(building, definition.station, register, capabilities).status,
   }));
 }

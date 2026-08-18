@@ -7,6 +7,7 @@ import { VisitLayer } from './visits/VisitLayer.js';
 import { WorldHost } from './world/WorldHost.js';
 import type { PresenceController } from './presence/presence-controller.js';
 import { PresenceStatusLayer } from './presence/PresenceStatusLayer.js';
+import { BridgeProvider, type BridgeProviderProps } from './bridge/BridgeProvider.js';
 
 /**
  * The composition root, as a component.
@@ -34,22 +35,27 @@ export function App({
   worldOut,
   shellIn,
   presence,
+  bridge,
 }: {
   worldOut: EventBus<WorldEvents>;
   shellIn: EventBus<ShellEvents>;
   presence: PresenceController;
+  /** Real composition supplies the service, account reader and planner together. */
+  bridge?: Omit<BridgeProviderProps, 'children' | 'demo' | 'fallback' | 'build'>;
 }) {
   // Presence owns one explicit lifecycle. Effect cleanup only removes event
   // listeners; the controller is destroyed by the composition root's owner.
   return (
     <ErrorBoundary fallback={(message) => <BootFailure message={message} />}>
       <PrivacyProvider demo shellBus={shellIn} fallback={<Boot />}>
-        <main className="strkworld">
-          <WorldHost out={worldOut} in={shellIn} remotePeers={presence.remotePeers} />
-          <VisitLayer world={worldOut} shell={shellIn} />
-          <PresenceStatusLayer presence={presence} world={worldOut} />
-          <SessionNoticeLayer />
-        </main>
+        <BridgeProvider {...bridge} demo={!bridge}>
+          <main className="strkworld">
+            <WorldHost out={worldOut} in={shellIn} remotePeers={presence.remotePeers} />
+            <VisitLayer world={worldOut} shell={shellIn} />
+            <PresenceStatusLayer presence={presence} world={worldOut} />
+            <SessionNoticeLayer />
+          </main>
+        </BridgeProvider>
       </PrivacyProvider>
     </ErrorBoundary>
   );

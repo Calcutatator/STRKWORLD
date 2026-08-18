@@ -33,6 +33,7 @@ export function BankPanel({
   initialMode,
   title = COPY.bank.title,
   building = 'bank',
+  preConfirmGuard,
 }: {
   onClose: () => void;
   /** Supply a driven machine to render a specific state. Tests use this. */
@@ -47,6 +48,7 @@ export function BankPanel({
   title?: string;
   /** Receipt ownership, independent of the reused Bank machine visuals. */
   building?: BuildingId;
+  preConfirmGuard?: () => Promise<boolean>;
 }) {
   const { operations, receipts, noteOperationError, shellBus, submissionUncertainty } = usePrivacy();
   const modes = allowedModes ?? (experience === 'station' ? BANK_STATION_MODES : BANK_MENU_MODES);
@@ -63,12 +65,13 @@ export function BankPanel({
             building,
             maxIntents: experience === 'station' ? 1 : undefined,
             onError: noteOperationError,
+            preConfirmGuard,
             canStartFinancialAction: () => {
               const current = submissionUncertainty.store.getState();
               return !current.active || current.acknowledged;
             },
           }),
-    [injected, operations, receipts, noteOperationError, experience, modes, initialMode, building, submissionUncertainty],
+    [injected, operations, receipts, noteOperationError, experience, modes, initialMode, building, preConfirmGuard, submissionUncertainty],
   );
   const panel = injected ?? owned!;
   const state = useStore(panel.store);

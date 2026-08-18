@@ -7,7 +7,7 @@ import type {
 } from '@strkworld/shared';
 import { PRIVACY_REGISTER, type RouteGrade } from '../privacy/register.js';
 import { createStore, type Store } from '../store/store.js';
-import { resolveStation, stationSnapshot } from './station-registry.js';
+import { resolveStation, stationSnapshot, type StationCapabilities } from './station-registry.js';
 
 export type VisitState =
   | { name: 'outside' }
@@ -41,6 +41,7 @@ export interface VisitController {
 export function createVisitController(
   shell: EventBus<ShellEvents>,
   register: readonly RouteGrade[] = PRIVACY_REGISTER,
+  capabilities: StationCapabilities | (() => StationCapabilities) = {},
 ): VisitController {
   const store = createStore<VisitState>({ name: 'outside' });
 
@@ -50,7 +51,11 @@ export function createVisitController(
 
   function enter(building: BuildingId): void {
     store.setState({ name: 'visiting', building, surface: { name: 'room' } });
-    shell.emit('world:stations', { building, stations: stationSnapshot(building, register) });
+    shell.emit('world:stations', { building, stations: stationSnapshot(building, register, currentCapabilities()) });
+  }
+
+  function currentCapabilities(): StationCapabilities {
+    return typeof capabilities === 'function' ? capabilities() : capabilities;
   }
 
   function activate(building: BuildingId, station: StationId): void {
@@ -63,7 +68,7 @@ export function createVisitController(
       return;
     }
 
-    const resolution = resolveStation(building, station, register);
+    const resolution = resolveStation(building, station, register, currentCapabilities());
     if (resolution.status === 'locked') {
       // World suspends movement before emitting station:activated. An unknown
       // or newly-disabled station must fail closed without leaving input stuck.

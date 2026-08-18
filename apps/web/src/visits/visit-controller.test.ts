@@ -247,6 +247,32 @@ describe('station registry', () => {
     });
   });
 
+  it('publishes the Bridge station and fails closed without both runtime capabilities', () => {
+    expect(stationSnapshot('bridge')).toEqual([
+      { station: 'bridge:deposit', label: 'DEPOSIT', status: 'locked' },
+    ]);
+    expect(stationSnapshot('bridge', undefined, {
+      bridgeAccountAvailable: true,
+      bridgePlannerAvailable: true,
+    })).toEqual([
+      { station: 'bridge:deposit', label: 'DEPOSIT', status: 'available' },
+    ]);
+  });
+
+  it('rechecks Bridge capability at activation instead of trusting the snapshot', () => {
+    const world = createEventBus<WorldEvents>();
+    const shell = createEventBus<ShellEvents>();
+    const caps = { bridgeAccountAvailable: false, bridgePlannerAvailable: false };
+    const controller = createVisitController(shell, undefined, () => caps);
+    const stop = controller.listen(world);
+    world.emit('building:entered', { building: 'bridge' });
+    caps.bridgeAccountAvailable = true;
+    caps.bridgePlannerAvailable = true;
+    world.emit('station:activated', { building: 'bridge', station: 'bridge:deposit' });
+    expect(controller.store.getState()).toMatchObject({ surface: { name: 'station', station: 'bridge:deposit' } });
+    stop();
+  });
+
   it('defaults unknown stations to locked', () => {
     expect(resolveStation('bank', 'bank:unknown')).toMatchObject({ status: 'locked' });
   });

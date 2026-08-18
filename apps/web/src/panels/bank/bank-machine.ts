@@ -224,6 +224,8 @@ export interface BankPanelOptions {
   receipts: ReceiptLedger;
   /** Building that owns receipts restored or recorded by this machine. */
   building?: BuildingId;
+  /** Optional last-instruction guard for a composed handoff (D-043). */
+  preConfirmGuard?: () => Promise<boolean>;
 }
 
 export interface BankPanel {
@@ -721,6 +723,25 @@ export function createBankPanel(options: BankPanelOptions): BankPanel {
         if (!canStartFinancialAction()) {
           patch({ flow: { name: 'review', summary } });
           notice('error', COPY.errors['submission-uncertain']);
+          return;
+        }
+        const handoffReady = options.preConfirmGuard ? await options.preConfirmGuard() : true;
+        if (!current(id)) return;
+        if (!canStartFinancialAction()) {
+          patch({ flow: { name: 'review', summary } });
+          notice('error', COPY.errors['submission-uncertain']);
+          return;
+        }
+        if (!handoffReady) {
+          discardPrepared();
+          patch({
+            flow: {
+              name: 'failed',
+              kind: 'unknown',
+              message: COPY.notices.bridgePlanMoved,
+              recovery: 'prepare-again',
+            },
+          });
           return;
         }
         signing = true;

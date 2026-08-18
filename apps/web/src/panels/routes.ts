@@ -17,7 +17,7 @@ import { COPY } from '../copy.js';
  * that is not in it has not been graded.
  */
 
-export type LockReason = 'coming-soon' | 'unapproved-route' | 'unknown-route';
+export type LockReason = 'coming-soon' | 'unapproved-route' | 'unknown-route' | 'capability-unavailable';
 
 export interface DoorState {
   open: boolean;
@@ -34,6 +34,8 @@ function locked(reason: LockReason): DoorState {
       ? COPY.locked.comingSoon
       : reason === 'unapproved-route'
         ? COPY.locked.unapprovedRoute
+        : reason === 'capability-unavailable'
+          ? COPY.bridge.unavailable
         : COPY.locked.unknownRoute;
   return { open: false, reason, message };
 }
