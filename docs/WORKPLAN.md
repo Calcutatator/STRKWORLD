@@ -313,6 +313,23 @@ Aseprite → embedded-tileset export pipeline. D-033 keeps the first Bank room
 procedural; final room/station art starts only after World freezes its 32 px
 footprints and asset names.
 
+**Frozen first-room asset contract (D-033 tracer):** the procedural Bank is an
+18×12 grid of 32 px tiles (576×384 px), with a one-tile perimeter, spawn at
+tile `(9, 9)`, a walkable two-tile exit at `x=8..9, y=11`, and the solid
+`bank:shielding` station at `x=8..9, y=3` (64×32 px). A future art handoff
+therefore needs seamless floor, perimeter wall, walkable exit, and station
+assets. The station needs available, locked and highlighted presentation
+states, either as separate art or a deterministic code treatment; that choice
+is not made yet. Keep `SHIELD / UNSHIELD` as live text rather than baking it
+into pixels, and do not encode route, wallet or authorization meaning in art.
+
+No asset pack is present today. Every landed file or atlas frame must have an
+`assets/CREDITS.md` record naming its source, creator, licence and licence URL,
+required attribution, modification/redistribution terms, verification date,
+and whether it is original, commissioned or third-party. Aesthetic direction,
+palette, external pack versus bespoke work, atlas format and station-state
+treatment all require the user's direction before Art writes files.
+
 **Done when:** the world renders as a coherent place, every asset has a
 recorded licence cleared for commercial use, and exported maps load in Phaser
 without warnings.
@@ -327,6 +344,30 @@ identifier in lobby code.
 
 **Branch per lane, small PRs.** `chain/…`, `world/…`, `shell/…`, `art/…`.
 Long-lived lane branches accumulate conflicts; merge often.
+
+**The project-lead task orchestrates; workers execute.** Product direction,
+cross-lane seam choices, adversarial review and final integration stay in the
+project-lead task. Lane workers receive bounded package-owned briefs and use a
+lower-cost model by default; reserve the highest-cost reasoning model for lead
+decisions or a worker escalation that genuinely needs it. A worker does not
+quietly turn an implementation detail into product direction — it reports the
+choice and the lead records it in `DECISIONS.md` before dependent work starts.
+Whenever a key choice is not already settled, or the worker is undecided about
+what to execute, it stops **before writing** and pings the orchestration task at
+`codex://threads/01a014f6-ede0-7681-818d-5428e71cfb6f`. It resumes only after
+the lead has presented the options, consequences and recommendation to the
+user in that task, the user has answered, and the resulting direction is
+recorded in the repository. The lead does not silently make product or
+cross-lane decisions on the user's behalf.
+
+**Keep the current world live while orchestrating.** While the project-lead
+task is active, serve the current working tree at `http://localhost:5173/`.
+After an integrated World or Shell change, give the user a concise visual and
+interactive test script against that URL and wait for their result. Do not
+automate Chrome or the in-app browser unless the user explicitly requests it;
+browser automation has proved slow and unreliable for game testing. Agents
+still own headless, unit, integration, type, build and invariant checks. The
+live preview is a collaboration surface, not acceptance evidence by itself.
 
 **`packages/shared` is frozen.** A change there needs a decision entry, because
 it breaks three lanes simultaneously.
