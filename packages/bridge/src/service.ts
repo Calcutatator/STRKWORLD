@@ -78,6 +78,9 @@ export class BridgeService {
   }
 
   private async createDeposit(input: CreateDepositInput): Promise<BridgeRecord> {
+    if (this.resume()) {
+      throw new Error('An existing bridge deposit is available. Discard it before creating a new deposit.');
+    }
     validateInput(input);
     const deadline = new Date(this.now() + QUOTE_DEADLINE_MS).toISOString();
     const request = {
