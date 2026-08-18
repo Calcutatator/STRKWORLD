@@ -83,6 +83,30 @@ fact or a direction is not in the repo in a structured place, it does not exist
 Uncommitted work is not in the repo. Commit and push before you stop, even
 mid-task — an unpushed branch is invisible to every other agent.
 
+### Workers stop at decisions
+
+Workers execute a bounded lane brief; they do not make product direction or
+cross-lane choices. If a worker reaches a key decision, finds the brief
+ambiguous, or is undecided about what to execute, it must **stop before writing
+the affected change** and ping the project-lead orchestration task at
+`codex://threads/01a014f6-ede0-7681-818d-5428e71cfb6f` for direction.
+
+The project lead does not decide that product or cross-lane choice alone. It
+must present the decision, options, consequences and recommendation to the user
+in that orchestration task and wait for the user's direction. Silence is not
+approval. The user's answer is then recorded in `docs/DECISIONS.md` (and the
+brief/seam is updated where needed) before the worker resumes. Fully specified
+implementation details inside an approved brief do not need another
+checkpoint.
+
+### The user tests the game in a browser
+
+For rendered game acceptance, stop and give the user a short test script for
+the live current checkout at `http://localhost:5173/`. Do not spend agent time
+automating Chrome or the in-app browser unless the user explicitly asks for
+browser automation. Headless/unit/integration checks remain agent-owned; this
+rule applies to visual and interactive browser acceptance of the game.
+
 ### Newest wins, and supersession is explicit
 
 Direction comes from the **most recent** verified learning. An older document
@@ -217,6 +241,44 @@ Append what you learn. Newest first. Include how you verified it — a finding
 without a verification method is a rumour.
 
 Format: `### YYYY-MM-DD — short title` then what, why it matters, how verified.
+
+---
+
+### 2026-08-18 — Shieldup balances reconcile state, not a hashless submission
+
+Shieldup is a useful production-behaviour reference, but it does not close
+D-034. Its private paymaster wrapper returns a transaction hash only after a
+successful JSON-RPC response; fetch failure has no phase, accepted signal,
+idempotency key or recovery lookup. The transfer, unshield and private-swap
+callers then wait for confirmation inside the same error boundary, so even a
+known hash can be discarded by a later provider-read failure. Its current
+"nothing went on-chain" unavailable copy is therefore not safe to copy for a
+post-dispatch response loss.
+
+Its balance model is the reusable part: discover every unspent private note,
+tally by token, poll every 30 seconds and offer manual refresh, while preserving
+an optimistic value when discovery is temporarily unavailable. That gives the
+player eventual state reconciliation, but there is no transaction-hash-to-note
+correlation and no authoritative submission lookup. A changed balance can
+support resolving an uncertain action; an unchanged balance cannot yet prove
+that it failed, and a retry before settlement can still duplicate intent.
+
+Use Shieldup as a behaviour and test-seam reference only. It directly hosts an
+indexer discovery provider, proving service and viewing-key identity through
+`@starkware-libs/starknet-privacy-sdk`; copying that infrastructure would break
+STRKWORLD's D-002 trust boundary. STRKWORLD's Wallet API implementation and
+vendored Wallet API types remain authoritative.
+
+*Verified:* authenticated read-only audit of private repository
+`Calcutatator/shieldup` at clean `main`
+`290f8306571ce45e630c5a08b243d7b5f8c232b4`, including
+`private-paymaster.ts:247-280,408-435`,
+`shielded-ops.ts:279-359,462-584`, `shielded-balances.ts:54-109`,
+`Home.tsx:516-600,1038-1210,1253-1258,1384-1541`, `history.ts:20-121`
+and `sdk.ts:200-238`. The commit and the two central source excerpts were
+independently fetched through the GitHub API. In the reference checkout,
+`npm run typecheck`, `npm run build` and all 213 logic checks passed; there is
+no adversarial execute-response-loss or balance-reconciliation test.
 
 ---
 
