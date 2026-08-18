@@ -97,7 +97,7 @@ export function PanelLayer({
     setActive(null);
     // Ask the world to release the player. The world owns the avatar; the shell
     // only ever asks (D-010). `world:exit-building` is part of the frozen bus.
-    shellBus?.emit('world:exit-building', {});
+    shellBus?.emit('world:exit-building', { building: active.building });
   };
 
   return (

@@ -52,6 +52,15 @@ export const SHIELDED_BUILDINGS: readonly BuildingId[] = [
   'vault',
 ] as const;
 
+/**
+ * Client-local identifier for a station inside a building room.
+ *
+ * The suffix is presentation vocabulary owned by the World/Shell integration,
+ * never a route, selector, intent or financial payload. Shell validates the
+ * full id against its station registry before opening a function window.
+ */
+export type StationId = `${BuildingId}:${string}`;
+
 // ---------------------------------------------------------------------------
 // Lobby presence
 // ---------------------------------------------------------------------------
@@ -59,8 +68,8 @@ export const SHIELDED_BUILDINGS: readonly BuildingId[] = [
 /**
  * Ephemeral, per-session player identity.
  *
- * Generated client-side, never derived from an address, discarded on
- * disconnect. This type must never be widened to carry anything identifying.
+ * Minted by the trusted lobby server, never derived from an address, discarded
+ * on disconnect. This type must never be widened to carry anything identifying.
  */
 export type GameId = string & { readonly __brand: 'GameId' };
 
@@ -115,6 +124,8 @@ export type WorldEvents = {
   'building:entered': { building: BuildingId };
   'building:exited': { building: BuildingId };
   'building:locked': { building: BuildingId; reason: 'coming-soon' };
+  /** Client-local presentation event. Financial meaning stays in the Shell. */
+  'station:activated': { building: BuildingId; station: StationId };
   'player:moved': { position: Position; facing: Facing };
   'world:ready': Record<string, never>;
 };
@@ -133,8 +144,22 @@ export type ShellEvents = {
   'hud:pending': { count: number };
   /** Drives door states and prompt copy. */
   'wallet:status': { status: WalletStatus };
-  /** Ask the world to release the player from a building interior. */
-  'world:exit-building': Record<string, never>;
+  /** Transfer keyboard/movement ownership without exposing Shell mode state. */
+  'world:control-owner': {
+    building: BuildingId;
+    owner: 'world' | 'shell';
+  };
+  /** Presentation-only station labels and lock state. Missing means locked. */
+  'world:stations': {
+    building: BuildingId;
+    stations: readonly {
+      station: StationId;
+      label: string;
+      status: 'available' | 'locked';
+    }[];
+  };
+  /** Ask the world to release the player from the named building interior. */
+  'world:exit-building': { building: BuildingId };
 };
 
 /**
