@@ -31,8 +31,9 @@
 #      It must be disabled for these routes before the service takes traffic.
 #   2. `NODE_OPTIONS`, `NODE_DEBUG` and any APM/tracing agent are left unset
 #      on purpose. An injected agent is a per-request observer.
-# The container therefore writes to stdout only at startup and on fatal error.
-# Anything appearing on stdout during steady-state traffic is a defect.
+# Successful startup and steady-state traffic are silent. The launcher writes
+# only a configuration error to stderr if the compiled entry is missing;
+# anything appearing on stdout during traffic is a defect.
 
 # Node 22.12 is the repository floor (D-025): AVNU SDK 4.2.0 requires Node 22,
 # and Vite supports Node 22 from 22.12. Overridable so the tag can be pinned to
@@ -111,7 +112,7 @@ EXPOSE 8080
 # rather than preferences:
 #   - The backend exposes no health route. Its six paths are all POST
 #     operations (apps/backend/src/api.ts:105-110). Adding one belongs to the
-#     Backend lane; see docs/OPS.md "Open items for the Backend lane".
+#     Backend lane; see docs/OPS.md "Remaining Backend operations work".
 #   - Probing a real route would be worse than useless. Every request consumes
 #     the D-026 global aggregate rate window shared with real players, and a
 #     probe every 30s is a per-request event the platform would log — exactly
@@ -122,6 +123,6 @@ HEALTHCHECK --interval=30s --timeout=3s --start-period=10s --retries=3 \
   CMD node -e "const net=require('node:net');const s=net.connect(Number(process.env.PORT),'127.0.0.1');s.on('connect',()=>{s.destroy();process.exit(0)});s.on('error',()=>process.exit(1));s.setTimeout(2500,()=>process.exit(1));"
 
 # launch.mjs verifies the compiled composition root exists and starts it. It
-# holds no configuration and no business logic — see the file for why it
-# exists and what the Backend lane still owes.
+# holds no configuration and no business logic — see the file for why that
+# deployment/runtime separation exists.
 CMD ["node", "--disable-proto=throw", "launch.mjs"]

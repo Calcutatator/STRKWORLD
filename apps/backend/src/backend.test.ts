@@ -726,26 +726,27 @@ describe('privacy-safe RPC and operations', () => {
     expect(call).not.toHaveBeenCalled();
   });
 
-  it('rejects a swap configuration that could delay or broaden the quote-bound route', () => {
-    expect(() => fixture({
-      routes: {
-        transfer: {
-          enabled: true, maxRelayFee: 10n, maxQueueDelayMs: 500, quoteBound: false,
-          allowedTokens: [STRK],
+  it('fixes pool-native routes as delayed and swaps as quote-bound and immediate', () => {
+    const { config } = fixture();
+    const invalidPolicies: Array<{
+      route: keyof BackendConfig['routes'];
+      changes: Partial<BackendConfig['routes']['transfer']>;
+    }> = [
+      { route: 'transfer', changes: { quoteBound: true } },
+      { route: 'transfer', changes: { maxQueueDelayMs: 0 } },
+      { route: 'unshield', changes: { quoteBound: true } },
+      { route: 'unshield', changes: { maxQueueDelayMs: 0 } },
+      { route: 'swap', changes: { quoteBound: false } },
+      { route: 'swap', changes: { maxQueueDelayMs: 1 } },
+    ];
+
+    for (const { route, changes } of invalidPolicies) {
+      expect(() => fixture({
+        routes: {
+          ...config.routes,
+          [route]: { ...config.routes[route], ...changes },
         },
-        unshield: {
-          enabled: true, maxRelayFee: 10n, maxQueueDelayMs: 500, quoteBound: false,
-          allowedTokens: [STRK],
-        },
-        swap: {
-          enabled: true,
-          maxRelayFee: 10n,
-          maxQueueDelayMs: 500,
-          quoteBound: false,
-          allowedTokens: [],
-          maxSlippageBps: 5_000,
-        },
-      },
-    })).toThrow(/invalid|quote-bound/i);
+      }), `${route}: ${Object.keys(changes).join(', ')}`).toThrow(/route policy|quote-bound|immediate|delayed/i);
+    }
   });
 });

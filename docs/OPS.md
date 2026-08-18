@@ -88,9 +88,11 @@ Image properties, all verifiable by reading `deploy/backend/Dockerfile`:
 - No secret in any `ENV` or `ARG`. Only `NODE_ENV` and `PORT` are baked.
 - `HEALTHCHECK` is a TCP connect — see [Healthcheck](#healthcheck).
 
-**The image builds but will not start yet.** See [Open items for the Backend
-lane](#open-items-for-the-backend-lane); the container exits 78 with a named
-error rather than crash-looping.
+The image now starts the strict composition root in
+`apps/backend/src/server.ts`: it parses the variables in
+`.env.production.example`, constructs `BackendApi` and its production ports,
+and binds a logging-free `node:http` listener on `0.0.0.0:$PORT`.
+`deploy/backend/launch.mjs` exits 78 only when the compiled entry is absent.
 
 Deploy steps once a host exists `[HOST]`: push image to a registry, inject
 secrets from the secret store as environment variables (never as build args),
@@ -157,13 +159,12 @@ transaction (D-018). That is the design, not a degradation.
 Also available as ceilings rather than switches: `routes.<r>.maxRelayFee`
 (reject anything above a fee ceiling) and `routes.<r>.allowedTokens`.
 
-**How to flip one `[HOST]`:** today these are constructor options, not
-environment reads — `process.env` appears nowhere under `apps/backend/src`.
-Until the composition root lands (see below), a kill switch means a redeploy,
-not a config change. `.env.production.example` specifies the variable names
-that make them runtime-flippable.
+**How to flip one `[HOST]`:** update the corresponding environment value in
+the host's secret/config store and restart or redeploy the backend process.
+`apps/backend/src/environment.ts` parses the value before the listener binds;
+an invalid setting fails startup rather than silently widening a route.
 
-**Kill-switch drill, once flippable:** flip → confirm the affected route
+**Kill-switch drill:** flip → restart → confirm the affected route
 returns 503 → confirm the unaffected routes still work → confirm the city and
 lobby are unaffected → confirm the client shows a locked building rather than
 an error toast.
@@ -327,38 +328,25 @@ must also be checked for access logging (D-014) and for isolation headers
 
 ---
 
-## Open items for the Backend lane
+## Remaining Backend operations work
 
-Found while containerizing; **reported, not fixed** — these are business logic
-with privacy consequences and belong to that lane.
+The production composition root, strict configuration loader and logging-free
+HTTP listener are present. These deployment/observability items remain open:
 
-1. **No composition root.** Nothing instantiates `BackendApi`
-   (`apps/backend/src/api.ts:52`) with `AvnuPaymasterPort`,
-   `StarknetRpcPoolPort` and `HmacAuthorizationCodec`.
-2. **No HTTP listener.** `createBackendFetchHandler()`
-   (`apps/backend/src/http.ts:15`) returns `(Request) => Promise<Response>`;
-   nothing calls `node:http`. The README says the code "deliberately does not
-   choose an HTTP framework or deployment host" — correct, but something must
-   bind a port.
-3. **No configuration loader.** `process.env` appears nowhere under
-   `apps/backend/src`. `BackendConfig` (`apps/backend/src/types.ts:25`) is
-   constructed in code, so today the kill switches are code changes rather
-   than the runtime controls D-026 describes.
-   `.env.production.example` proposes names, derived from the option shapes.
-4. **No health endpoint.** See [Healthcheck](#healthcheck).
-5. **No metrics exposure.** `AggregateMetrics.snapshot()`
+1. **No health endpoint.** See [Healthcheck](#healthcheck). TCP-only liveness is
+   intentional until a deeper signal can pass D-014 review.
+2. **No metrics exposure.** `AggregateMetrics.snapshot()`
    (`apps/backend/src/metrics.ts:16`) exists and is on no route, so the
    D-026 alert on `budgetExhausted` has nothing to read.
-6. **Multi-instance caveat (already noted in D-026).** `AggregateRateLimiter`
+3. **Multi-instance caveat (already noted in D-026).** `AggregateRateLimiter`
    and `AggregateBudget` (`apps/backend/src/metrics.ts:61`, `:37`) are
    process-local. Two instances means two budgets. Run a single
    admission-control instance, or supply the atomic adapters
    `BackendApiOptions.rateLimiter` / `.sponsorshipBudget`. A shared aggregate
    store must hold counters only — never a per-request key.
 
-`deploy/backend/launch.mjs` turns items 1–3 into a named startup error
-(exit 78) instead of a crash loop, and starts the composition root unchanged
-once it exists at `apps/backend/src/server.js`.
+The listener has no health, CORS or access-log path. Do not add one as a host
+convenience: it is a Backend-lane change with a privacy review.
 
 ---
 

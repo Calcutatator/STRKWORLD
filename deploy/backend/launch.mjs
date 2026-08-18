@@ -1,33 +1,20 @@
 /**
  * Container launcher for @strkworld/backend.
  *
- * WHAT THIS IS NOT. It holds no configuration, reads no environment variable
- * other than the one naming the entry module, opens no socket, and constructs
- * no port. All of that is the Backend lane's composition root, which does not
- * exist yet (see below). This file exists only so a container that cannot
- * start says why, once, instead of crash-looping on MODULE_NOT_FOUND.
+ * WHAT THIS DOES. The Backend lane owns the composition root in
+ * `apps/backend/src/server.ts`: it strictly parses the runtime environment,
+ * constructs the API and its server-side ports, and binds the logging-free
+ * `node:http` listener. This file only resolves the compiled entry module and
+ * imports it. Keeping deployment concerns here means the image has no second
+ * configuration parser or request path to audit.
  *
- * WHAT IS MISSING, precisely. `apps/backend` exports a framework-neutral core
- * and a Fetch API edge, and nothing that binds them to a port:
+ * `BACKEND_ENTRY` is deployment configuration, not request data. The default
+ * is the compiled composition root used by the Dockerfile; an override exists
+ * for an image layout change without changing this launcher.
  *
- *   - No HTTP listener. `createBackendFetchHandler()`
- *     (apps/backend/src/http.ts:15) returns `(Request) => Promise<Response>`;
- *     nothing calls `node:http`.
- *   - No configuration loader. `process.env` appears nowhere under
- *     `apps/backend/src` — `BackendConfig` (apps/backend/src/types.ts:25) is
- *     constructed in code.
- *   - No composition root. Nothing instantiates `BackendApi`
- *     (apps/backend/src/api.ts:52) with `AvnuPaymasterPort`,
- *     `StarknetRpcPoolPort` and `HmacAuthorizationCodec`.
- *
- * Those are the Backend lane's, not the deployment lane's: choosing the
- * paymaster port, the fee ceilings and the HMAC secret handling is business
- * logic with privacy consequences (D-014, D-026). When that lane adds a
- * composition root that starts a listener, this launcher runs it unchanged —
- * default `apps/backend/src/server.js`, overridable with BACKEND_ENTRY.
- *
- * Logging: this file writes to stdout at startup and on fatal error only.
- * It must never gain a per-request log line (D-014).
+ * Logging: successful startup is silent. A missing entry emits one
+ * configuration error to stderr and exits with EX_CONFIG; it must never gain
+ * a per-request log line (D-014).
  */
 
 import { existsSync } from 'node:fs';
@@ -40,16 +27,12 @@ const absolute = resolve(process.cwd(), entry);
 if (!existsSync(absolute)) {
   process.stderr.write(
     [
-      'strkworld-backend: cannot start — no composition root.',
+      'strkworld-backend: cannot start — compiled entry is missing.',
       '',
       `  expected: ${entry}`,
       '',
-      '  apps/backend ships a request core (BackendApi) and a Fetch API edge',
-      '  (createBackendFetchHandler) but nothing that binds them to a port,',
-      '  loads configuration from the environment, or constructs the paymaster,',
-      '  RPC and authorization ports. That work belongs to the Backend lane.',
-      '',
-      '  See docs/OPS.md, "Open items for the Backend lane".',
+      '  Build the backend image from the repository root so the compiled',
+      '  composition root is copied into the expected path.',
       '',
     ].join('\n'),
   );
