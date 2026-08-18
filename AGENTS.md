@@ -107,6 +107,14 @@ automating Chrome or the in-app browser unless the user explicitly asks for
 browser automation. Headless/unit/integration checks remain agent-owned; this
 rule applies to visual and interactive browser acceptance of the game.
 
+### Questions for the user are explicit gates
+
+When the project lead needs an answer from the user, it must ping the user in
+the orchestration task, ask the precise question plainly, and pause that
+decision path. Do not bury a question in a progress update and then continue by
+guessing what the answer might be. Independent work that does not depend on the
+answer may continue.
+
 ### Newest wins, and supersession is explicit
 
 Direction comes from the **most recent** verified learning. An older document
