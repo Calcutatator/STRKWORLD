@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useMemo, useRef } from 'react';
 import type { ShellEvents, WorldEvents, EventBus } from '@strkworld/shared';
 import type { RemotePeerSource } from '@strkworld/world';
 import { worldLeaseManager } from './world-acquisition.js';
@@ -24,6 +24,7 @@ export function WorldHost({
   remotePeers: RemotePeerSource;
 }) {
   const parent = useRef<HTMLDivElement>(null);
+  const leaseKey = useMemo(() => ({ out, shellIn, remotePeers }), [out, shellIn, remotePeers]);
 
   useEffect(() => {
     const node = parent.current;
@@ -35,8 +36,8 @@ export function WorldHost({
       const runtime = await import('@strkworld/world/runtime');
       await runtime.acquireWorld(node, { out, in: shellIn, remotePeers });
       return runtime.releaseWorld;
-    });
-  }, [out, shellIn, remotePeers]);
+    }, leaseKey);
+  }, [out, shellIn, remotePeers, leaseKey]);
 
   return <div ref={parent} className="world-host" data-testid="world-host" />;
 }

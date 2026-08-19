@@ -38,14 +38,15 @@ describe('WorldHost acquisition lifecycle', () => {
       }),
     );
     const manager = createWorldLeaseManager();
+    const leaseKey = {};
 
     // React StrictMode can clean the first effect before its replacement has
     // acquired a lease. The pending acquisition must remain reusable across
     // that zero-live-lease window.
-    const firstCleanup = manager.acquire(acquire);
+    const firstCleanup = manager.acquire(acquire, leaseKey);
     firstCleanup();
     expect(release).not.toHaveBeenCalled();
-    const secondCleanup = manager.acquire(acquire);
+    const secondCleanup = manager.acquire(acquire, leaseKey);
 
     expect(acquire).toHaveBeenCalledTimes(1);
     expect(live).toBe(0);
@@ -60,6 +61,114 @@ describe('WorldHost acquisition lifecycle', () => {
     secondCleanup();
     expect(live).toBe(0);
     expect(release).toHaveBeenCalledTimes(1);
+  });
+
+  it('waits for a stale pending acquisition before starting changed config', async () => {
+    const first = deferred<() => void>();
+    const second = deferred<() => void>();
+    const calls: string[] = [];
+    const manager = createWorldLeaseManager();
+    const firstCleanup = manager.acquire(() => {
+      calls.push('first');
+      return first.promise;
+    }, 'first');
+
+    firstCleanup();
+    const secondCleanup = manager.acquire(() => {
+      calls.push('second');
+      return second.promise;
+    }, 'second');
+
+    expect(calls).toEqual(['first']);
+    first.resolve(() => calls.push('released-first'));
+    await flushPromises();
+
+    expect(calls).toEqual(['first', 'released-first', 'second']);
+    second.resolve(() => calls.push('released-second'));
+    await flushPromises();
+    secondCleanup();
+    expect(calls).toEqual(['first', 'released-first', 'second', 'released-second']);
+  });
+
+  it('starts the replacement after stale rejection and handles early cleanup', async () => {
+    const first = deferred<() => void>();
+    const second = deferred<() => void>();
+    const calls: string[] = [];
+    const manager = createWorldLeaseManager();
+    const firstCleanup = manager.acquire(() => {
+      calls.push('first');
+      return first.promise;
+    }, 'first');
+
+    firstCleanup();
+    const secondCleanup = manager.acquire(() => {
+      calls.push('second');
+      return second.promise;
+    }, 'second');
+    secondCleanup();
+
+    first.reject(new Error('stale import failed'));
+    await flushPromises();
+    expect(calls).toEqual(['first', 'second']);
+
+    const releaseSecond = vi.fn();
+    second.resolve(releaseSecond);
+    await flushPromises();
+    expect(releaseSecond).toHaveBeenCalledTimes(1);
+
+    const thirdRelease = vi.fn();
+    const thirdCleanup = manager.acquire(() => Promise.resolve(thirdRelease), 'third');
+    await flushPromises();
+    thirdCleanup();
+    expect(thirdRelease).toHaveBeenCalledTimes(1);
+  });
+
+  it('serializes multiple changed configs before the first acquisition settles', async () => {
+    const first = deferred<() => void>();
+    const second = deferred<() => void>();
+    const third = deferred<() => void>();
+    const calls: string[] = [];
+    let live = 0;
+    let peakLive = 0;
+    const manager = createWorldLeaseManager();
+    const acquire = (name: string, gate: Deferred<() => void>) => () => {
+      calls.push(`start-${name}`);
+      return gate.promise.then(() => {
+        live++;
+        peakLive = Math.max(peakLive, live);
+        calls.push(`live-${name}`);
+        return () => {
+          live--;
+          calls.push(`release-${name}`);
+        };
+      });
+    };
+
+    const firstCleanup = manager.acquire(acquire('first', first), 'first');
+    firstCleanup();
+    const secondCleanup = manager.acquire(acquire('second', second), 'second');
+    secondCleanup();
+    const thirdCleanup = manager.acquire(acquire('third', third), 'third');
+
+    expect(calls).toEqual(['start-first']);
+    first.resolve(() => undefined);
+    await flushPromises();
+    expect(calls).toEqual(['start-first', 'live-first', 'release-first', 'start-second']);
+
+    second.resolve(() => undefined);
+    await flushPromises();
+    expect(calls).toEqual([
+      'start-first', 'live-first', 'release-first',
+      'start-second', 'live-second', 'release-second', 'start-third',
+    ]);
+
+    third.resolve(() => undefined);
+    await flushPromises();
+    expect(live).toBe(1);
+    expect(peakLive).toBe(1);
+    thirdCleanup();
+    expect(live).toBe(0);
+    expect(calls.at(-1)).toBe('release-third');
   });
 
   it('releases once when every pending lease cleans up before resolution', async () => {
