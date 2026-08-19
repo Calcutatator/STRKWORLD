@@ -427,7 +427,8 @@ verified. Trade-off notes are neutral and name no vendor.
    Two distinct keys are needed and they are not interchangeable:
    - **Browser** (`VITE_STARKNET_RPC_URL`) — compiled into the public bundle
      and shipped to every player, so a domain allowlist is the only control
-     that exists. Requires item 2 and the item 3 edge implementation.
+     that exists. Requires item 2 and the item 3 edge/composition host
+     verification.
    - **Server** (`STARKNET_RPC_URL`) — not domain-allowlistable, because a
      server request sends no `Origin`. Restrict by IP or provider-side key
      scoping instead.

@@ -19,9 +19,9 @@ the lane boundary — that is why the repo is shaped the way it is.
 | **Chain** | `packages/privacy` | Active; private seam frozen, D-043 planner port/fake complete, production Ready planner blocked |
 | **World** | `packages/world` + `packages/lobby` | Active |
 | **Shell** | `apps/web` | Active, starts week 2 |
-| **Backend** | `apps/backend` | Active; offline implementation in progress under D-028 |
+| **Backend** | `apps/backend` | Active; offline implementation complete; host, Docker, domain, secrets, Alchemy controls and live staging remain |
 | **Bridge** | `packages/bridge` | Active, fully independent |
-| **Art** | `packages/world/assets` | Active; Kenney Urban CC0 placeholder approved under D-044, final base still under comparison |
+| **Art** | `packages/world/assets` | Active; Kenney Urban CC0 acquired and runtime mappings complete, final visual direction and station states remain user-gated |
 | ~~Contracts~~ | — | **Dormant until post-v1** |
 
 ### Why Contracts is dormant
@@ -342,11 +342,13 @@ submission for prepared Wallet API calls.
 
 **Completed offline baseline:** the minimum `packages/privacy` endpoints,
 strict schemas, fee ceilings, fixed per-route policy, rate limits, aggregate
-budgets, global/per-route kill switches, strict environment loader and
-logging-free HTTP composition root. The remaining backend work is operational:
-an approved aggregate-only signal, deployment integration, and the funded
-Wallet API/paymaster checks retained by D-028. Do not invent a health or
-metrics route without the D-014 privacy review recorded in `docs/OPS.md`.
+budgets, global/per-route kill switches, strict environment loader, logging-free
+HTTP composition root, and the Fly edge/composition integration. The remaining
+backend frontier is operational: an approved aggregate-only signal, host and
+Docker verification, domain and secret controls, Alchemy account/key and
+provider-control verification, live staging checks, and the funded Wallet
+API/paymaster checks retained by D-028. Do not invent a health or metrics route
+without the D-014 privacy review recorded in `docs/OPS.md`.
 
 **D-045/D-046 deployment direction:** target one Fly.io app/Machine with a
 same-origin edge/composition process for the web build, `/api` and lobby
@@ -416,11 +418,13 @@ closed. The JWT must never enter the browser bundle.
 **Owns** assets. Lowest coupling of any lane — can run entirely in parallel and
 mostly hands over files.
 
-**First task — D-044 approved:** Kenney Urban CC0 at clean 2× may be used as a
-reversible placeholder base for roads, grass, pavement and generic structures.
-No asset has been downloaded yet. In parallel, scan for a closer CC0 16-bit /
-JRPG-like base before locking the final visual direction. Record the licence for
-**every** pack in `assets/CREDITS.md` as it lands.
+**D-044 placeholder import complete:** Kenney Urban CC0 at clean 2× is acquired,
+credited and sliced at runtime for road, pavement, wall, facade and door roles.
+Grass remains procedural and no Kenney frame is claimed as roof treatment. The
+final visual direction, external-pack versus bespoke choice and station states
+remain user-gated; a closer CC0 16-bit/JRPG-like base may still be compared
+before any final art lock. Record the licence for **every** additional pack in
+`assets/CREDITS.md` as it lands.
 
 **Licence audit is the real work here.** Popular "free" packs are frequently
 non-commercial only, and this is a public project handling real funds. Audit
@@ -443,13 +447,13 @@ states, either as separate art or a deterministic code treatment; that choice
 is not made yet. Keep `SHIELD / UNSHIELD` as live text rather than baking it
 into pixels, and do not encode route, wallet or authorization meaning in art.
 
-No asset pack is present today. Every landed file or atlas frame must have an
-`assets/CREDITS.md` record naming its source, creator, licence and licence URL,
-required attribution, modification/redistribution terms, verification date,
-and whether it is original, commissioned or third-party. Placeholder
-acquisition and manifest work may proceed under D-044. Final palette, final
-external pack versus bespoke work, atlas format and station-state treatment
-remain open and require the user's review before final art writes.
+The acquired Kenney files and runtime atlas mappings have an
+`assets/CREDITS.md` record naming their source, creator, licence and licence
+URL, required attribution, modification/redistribution terms, verification
+date, and third-party status. Every additional landed file or atlas frame must
+meet the same record. Final palette, final external pack versus bespoke work,
+atlas format and station-state treatment remain open and require the user's
+review before final art writes.
 
 **Done when:** the world renders as a coherent place, every asset has a
 recorded licence cleared for commercial use, and exported maps load in Phaser
