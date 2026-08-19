@@ -250,6 +250,53 @@ without a verification method is a rumour.
 
 Format: `### YYYY-MM-DD — short title` then what, why it matters, how verified.
 
+### 2026-08-20 — Pending World configuration changes retain one acquisition owner
+
+`WorldHost` now keys its lease by the current event buses and remote-peer
+source. The lease manager keeps same-key StrictMode remounts single-flight,
+but a changed key replaces a stale zero-lease acquisition only after that
+acquisition settles. A late success releases the stale World before the
+replacement starts; a late rejection still advances the replacement. Every
+queued replacement owns an observed promise immediately, so an A→B→C change
+chain cannot lose its acquisition owner, and early cleanup still releases the
+new World as soon as it arrives. This is an internal Web lifecycle seam; it
+does not widen the World package API, event payloads, presence or financial
+behavior, and it is not rendered Phaser acceptance.
+
+*Verified:* the chained replacement case failed red with a `TypeError` while
+reading `then` from B's null acquisition; commit `b6ea5c7` makes A, B and C
+serialize with a peak of one live World. The same-key, stale-success,
+stale-rejection, early-cleanup and fresh-acquisition cases also passed.
+[GitHub Actions run 32313669728](https://github.com/Calcutatator/STRKWORLD/actions/runs/32313669728)
+completed successfully at that commit. No browser, wallet, network or
+transaction was used.
+
+### 2026-08-20 — Every Node timer delay is capped without shortening its budget
+
+All call sites that can reach Node timers now keep each scheduled delay at or
+below `2_147_483_647` ms. Backend production parsing and direct composition
+reject transfer or unshield queue delays above that ceiling. Lobby client
+construction rejects an unsafe send interval, and reconciliation caps rollback
+arithmetic without moving the monotonic send floor. Bridge polling caps each
+sleep while counting every capped sleep toward the original cumulative active
+budget, so a longer valid budget is completed as multiple delays instead of
+being truncated. These are local scheduling guards: wire schemas, routing,
+queue policy, provider status validation and abort/cancellation authority are
+unchanged, and the Bridge cap does not time out a hung provider request.
+
+*Verified:* red Backend cases accepted an overflowing environment/direct
+route delay; red Lobby cases accepted unsafe intervals or scheduled overflow
+after clock rollback; and red Bridge cases passed an over-ceiling sleep to its
+timer. Commits `6637e2f`, `dfb1d4e` and `5c98ddc` make the exact ceiling pass,
+reject or cap the next integer, preserve Lobby reconciliation, and split the
+Bridge's `2_147_483_648` ms budget into `2_147_483_647` plus `1` ms. Their
+hosted CI runs all completed successfully:
+[Backend 32312060302](https://github.com/Calcutatator/STRKWORLD/actions/runs/32312060302),
+[Lobby 32312864117](https://github.com/Calcutatator/STRKWORLD/actions/runs/32312864117),
+and [Bridge 32313298876](https://github.com/Calcutatator/STRKWORLD/actions/runs/32313298876).
+No server/socket, remote lobby, provider request, wallet, proof, signature or
+transaction was used by the focused tests.
+
 ### 2026-08-20 — Final D-049 art passes mechanical review; the shared index is cumulative
 
 The final handoff at `packages/world/assets/player-sprites/v1/` contains root
