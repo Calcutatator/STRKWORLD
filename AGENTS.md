@@ -250,6 +250,58 @@ without a verification method is a rumour.
 
 Format: `### YYYY-MM-DD — short title` then what, why it matters, how verified.
 
+### 2026-08-19 — Lobby movement timing is monotonic on both sides of the wire
+
+Lobby movement and resume throttles now use `performance.now()` in both the
+client and room process. The client keeps a nullable send floor rather than
+using zero as a sentinel, preserves that floor through a clock rollback, and
+reconciles the latest requested placement when the interval is genuinely due.
+The server rejects negative or non-finite samples without moving a session,
+never moves an accepted floor backward, and validates resume time before
+restoring a suspended peer. These are local scheduling values only: no time,
+identity, building or financial field was added to the presence protocol.
+
+*Verified:* commit `009ae3f` added client rollback/reconciliation, throttle
+rollback/oscillation/invalid-sample and presence move/resume tests. The focused
+Lobby tests and typecheck, invariant scan and diff check passed. No browser,
+remote lobby, wallet, network or financial action was used.
+
+### 2026-08-19 — Disconnect invalidates an in-flight wallet capability result
+
+The Shell connect flow now gives each capability check a generation. A
+disconnect increments it, clears the shared in-flight slot and sets the store
+to disconnected, so a late capability success or failure may settle its own
+promise but cannot overwrite current UI state. A subsequent connect starts a
+fresh check immediately and its result remains authoritative when the older
+attempt later settles. This is logical stale-result suppression, not
+cancellation of the underlying wallet call, and it changes neither
+`PrivacyOperations` nor capability classification.
+
+*Verified:* commit `84134e1` added deterministic deferred tests for late
+success, late failure and a fresh attempt winning over its predecessor.
+[GitHub Actions run 32292050613](https://github.com/Calcutatator/STRKWORLD/actions/runs/32292050613)
+passed workspace typecheck/tests, invariants, header checks, drift canary and
+both deployment image checks. No wallet, proof, signature or transaction was
+used.
+
+### 2026-08-19 — BridgeProvider derives live capability from current props
+
+A supplied Bridge service is now composed synchronously from the current
+provider props, so removing it or entering a production-rejected demo state
+cannot leave a previously live runtime visible until an effect flushes. Only
+the optional lazy demo uses resolved state; its generation guard is private to
+the provider, clears stale demo state on configuration changes and prevents a
+late import from resurrecting an obsolete runtime. Production still rejects
+demo mode even when a service is present, and availability still requires both
+the current account snapshot and planner, preserving D-043's production lock.
+
+*Verified:* final corrective commit `b9adc4c` keeps the demo lifecycle guard
+internal and tests unavailable, direct-live and production-rejected render
+states. [GitHub Actions run 32291442814](https://github.com/Calcutatator/STRKWORLD/actions/runs/32291442814)
+passed workspace typecheck/tests, invariants, header checks, drift canary and
+both deployment image checks. No provider request, wallet, proof, signature or
+transaction was used.
+
 ### 2026-08-19 — Interior movement uses bounded half-tile collision substeps
 
 Fixed rooms and Avatar Studio now share a bounded movement helper that samples
