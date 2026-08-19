@@ -66,6 +66,9 @@ const DEFAULT_MAX_INTENTS = 16;
 
 export function createBatchAccumulator(options: AccumulatorOptions = {}): BatchAccumulator {
   const limit = options.maxIntents ?? DEFAULT_MAX_INTENTS;
+  if (!Number.isSafeInteger(limit) || limit <= 0) {
+    throw new Error('maxIntents must be a positive safe integer');
+  }
   let intents: Intent[] = [];
 
   function snapshot(): readonly Intent[] {

@@ -132,12 +132,36 @@ describe('batch accumulator', () => {
     expect(!batch.accept(shield(-1n)).ok).toBe(true);
   });
 
-  it('bounds one visit', () => {
-    const batch = createBatchAccumulator({ maxIntents: 2 });
-    batch.accept(transfer(1n));
-    batch.accept(transfer(2n));
-    const result = batch.accept(transfer(3n));
+  it('bounds one visit at the minimum configured limit', () => {
+    const batch = createBatchAccumulator({ maxIntents: 1 });
+    expect(batch.accept(transfer(1n)).ok).toBe(true);
+    const result = batch.accept(transfer(2n));
     expect(!result.ok && result.rejection.reason).toBe('batch-full');
+    expect(!result.ok && result.rejection).toEqual({ reason: 'batch-full', limit: 1 });
+  });
+
+  it('accepts a reasonable configured maximum', () => {
+    const batch = createBatchAccumulator({ maxIntents: 32 });
+    for (let amount = 1n; amount <= 32n; amount += 1n) {
+      expect(batch.accept(transfer(amount)).ok).toBe(true);
+    }
+
+    const result = batch.accept(transfer(33n));
+    expect(!result.ok && result.rejection).toEqual({ reason: 'batch-full', limit: 32 });
+  });
+
+  it.each([
+    Number.NaN,
+    Number.NEGATIVE_INFINITY,
+    Number.POSITIVE_INFINITY,
+    0,
+    -1,
+    1.5,
+    Number.MAX_SAFE_INTEGER + 1,
+  ])('rejects an invalid maximum intent bound', (maxIntents) => {
+    expect(() => createBatchAccumulator({ maxIntents })).toThrowError(
+      'maxIntents must be a positive safe integer',
+    );
   });
 
   it('refuses to confirm nothing', () => {
