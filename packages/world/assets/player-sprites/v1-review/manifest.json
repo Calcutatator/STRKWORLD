@@ -42,11 +42,20 @@
     "The hidden avatar room should display one cosy down-facing idle figure per character, not both states.",
     "The fighting state is a visual toggle paired with the same character. It must not encode wallet, protocol, financial, route, balance, or transaction state."
   ],
+  "calibrationReview": {
+    "status": "approved",
+    "approvedOn": "2026-08-19",
+    "scope": "sixteen true-resolution idle calibrations, one per avatar-1..avatar-16 key"
+  },
   "currentArtGate": {
-    "deliverable": "sixteen true-resolution idle calibrations, one per avatar-1..avatar-16 key",
+    "deliverable": "movement prototypes for characters 1, 4, 6 and 7 only",
+    "characters": [1, 4, 6, 7],
+    "states": ["cosy", "fighting"],
+    "directionRows": ["down", "left", "right", "up"],
+    "frameColumns": ["idle", "walk-1", "walk-2"],
     "pauseForUserReview": true,
-    "movementPrototypeCharactersAfterApproval": [1, 4, 6, 7],
-    "remainingMovementFramesBlockedUntilPrototypeReview": true
+    "blockedCharactersUntilPrototypeReview": [2, 3, 5, 8],
+    "runtimeReady": false
   },
   "characters": [
     {

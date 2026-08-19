@@ -1909,8 +1909,8 @@ orientation; rendered acceptance is required again after implementation.
 ## D-049 — Avatar art uses one fixed 64x64 logical canvas
 
 **2026-08-19 · Accepted by the user · supersedes D-047's provisional 32x32
-runtime-art assumption; export topology and shadow policy approved, final
-pixels and integration pending**
+runtime-art assumption; export topology, shadow policy and true-resolution
+idle calibration approved, movement pixels and integration pending**
 
 **Context.** The approved art direction deliberately includes two larger
 characters and fighting poses whose weapons extend beyond a 32x32 cell. A
@@ -1946,11 +1946,13 @@ shadow separately behind every local, remote and Studio avatar; that shadow is
 presentation only and does not change the fixed feet point or 24x24 gameplay
 body.
 
-The next art deliverable is deliberately smaller than the final sheets:
-sixteen true-resolution idle calibrations, one for each opaque key. Art pauses
-for the user's review of that calibration before producing movement prototypes
-for characters 1, 4, 6 and 7. Approval of this export contract is not approval
-of those future pixels.
+On 2026-08-19 the user approved the sixteen true-resolution idle calibrations,
+one for each opaque key. That review authorizes only movement prototypes for
+characters 1, 4, 6 and 7, in both cosy and fighting states, with all four
+facings and the `idle`, `walk-1`, `walk-2` columns. Art pauses for the user's
+visual review of those prototypes before producing movement work for
+characters 2, 3, 5 or 8. Calibration approval is not approval of the movement
+pixels or runtime assets.
 
 Variable per-key canvases and separate body/weapon layers are rejected for the
 initial runtime. They require a later decision if final accepted art proves the
@@ -1960,9 +1962,9 @@ are not the final transparent export.
 
 **Consequences.** The sprite-studio task retains ownership of cleanup, final
 pixels, the sixteen per-key sheets and the tagged editable source. Runtime
-integration waits for the idle-calibration review, movement prototypes, final
-handoff and the user's final-art approval. World may then use one visual object
-per avatar state while keeping the existing physics sprite/body as the
+integration waits for movement-prototype review, the remaining characters,
+final handoff and the user's final-art approval. World may then use one visual
+object per avatar state while keeping the existing physics sprite/body as the
 authoritative position and collision seam. Tests must pin exact sheet/cell
 geometry, logical canvas, feet, frame vocabulary, transparent padding,
 shadow-free source pixels, fixed 24x24 gameplay geometry, opaque-key fallback

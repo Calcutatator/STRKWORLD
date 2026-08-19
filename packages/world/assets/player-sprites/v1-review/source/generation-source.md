@@ -39,9 +39,12 @@ James approved the final export topology separately from the pixels: sixteen
 transparent 192x256 PNG sheets, one for each opaque key, laid out as 3 columns
 by 4 rows of 64x64 cells, plus one tagged editable Aseprite source. There is no
 mega-atlas. Frames contain no baked shadow pixels; World may draw one
-consistent shadow separately. The next art handoff is limited to sixteen
-true-resolution idle calibrations, followed by user review before movement
-prototypes for characters 1, 4, 6 and 7.
+consistent shadow separately. James approved the sixteen true-resolution idle
+calibrations on 2026-08-19. The next art handoff is limited to movement
+prototypes for characters 1, 4, 6 and 7 in both cosy and fighting states, with
+all four facings and the `idle`, `walk-1`, `walk-2` columns. Art pauses for
+user visual review before movement work begins for characters 2, 3, 5 or 8.
+This approval does not make the review art or prototypes runtime-ready.
 
 ## Reference handling
 

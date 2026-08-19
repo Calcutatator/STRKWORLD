@@ -21,7 +21,7 @@ the lane boundary — that is why the repo is shaped the way it is.
 | **Shell** | `apps/web` | Active, starts week 2 |
 | **Backend** | `apps/backend` | Active; D-050 and both hosted image smokes complete; host, domain, secrets, Alchemy controls, live staging and funded checks remain |
 | **Bridge** | `packages/bridge` | Active, fully independent |
-| **Art** | `packages/world/assets` | Active; Kenney Urban CC0 acquired; D-049 export topology is approved, with the 16-idle calibration now user-gated before movement prototypes, final sheets and runtime art |
+| **Art** | `packages/world/assets` | Active; Kenney Urban CC0 acquired; D-049 export topology and 16-idle calibration approved, with 1/4/6/7 movement prototypes authorized as the next bounded gate before the remaining characters, final sheets and runtime art |
 | ~~Contracts~~ | — | **Dormant until post-v1** |
 
 ### Why Contracts is dormant
@@ -473,12 +473,13 @@ consistent shadow separately. It still needs frame-by-frame anchor validation
 and the user's final-art approval. Do not wire the review PNGs into runtime
 textures or call them accepted final art.
 
-**Current D-049 gate:** Art produces only sixteen true-resolution idle
-calibrations, one per opaque key, then pauses for user review. Movement
-prototypes for characters 1, 4, 6 and 7 start only after that approval; the
-remaining movement frames and final per-key sheets follow only after the
-prototype review. World does not begin final sprite integration from the
-current baked review sheets.
+**Current D-049 gate:** On 2026-08-19 the user approved the sixteen
+true-resolution idle calibrations, one per opaque key. Art may now produce
+movement prototypes for characters 1, 4, 6 and 7 only, covering both cosy and
+fighting states, all four facings, and the `idle`, `walk-1`, `walk-2` columns.
+It pauses for user visual review before producing movement work for characters
+2, 3, 5 or 8. World does not begin final sprite integration from the current
+baked review sheets or the unreviewed prototypes.
 
 **Licence audit is the real work here.** Popular "free" packs are frequently
 non-commercial only, and this is a public project handling real funds. Audit
