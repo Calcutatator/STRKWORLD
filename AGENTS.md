@@ -275,13 +275,16 @@ maps cosmetically behind those keys.
 assertions, edge tests for the fixed sprite set and `/metrics`, Fly typecheck,
 and invariant checks. No host, secret or deployment was used.
 
-*Forward note — superseded by D-047:* the `avatar-1` through `avatar-8`
-allowlist is a current deployment fact, not the final cosmetic contract. The
-user has approved eight characters with paired cosy/fighting states for the
-hidden Avatar Studio. The architecture audit must choose the safe wire shape
-(sixteen opaque state keys or eight character keys plus an opaque stance)
-before World, lobby and edge registries are expanded atomically. Do not treat
-this note as authorization to accept new keys yet.
+*Forward note — superseded by D-047:* the current `avatar-1` through
+`avatar-8` deployment is not the final cosmetic contract. D-047 fixes the
+existing single lobby `sprite` field at sixteen opaque keys: `avatar-1..8`
+cosy/default and `avatar-9..16` fighting, paired `1↔9` through `8↔16`; no
+stance field or message is added. The hidden Avatar Studio stays outside
+`BuildingId`/`BUILDINGS` and uses dedicated non-financial world events, so it
+must not enter the financial VisitLayer. Default/fallback is `avatar-1`, and
+selection is page/runtime-only. Expand World, lobby and edge registries
+atomically after the sprite handoff; until then do not accept the new keys in
+the live eight-key deployment.
 
 ### 2026-08-19 — Kenney pavement and door mappings require lossless art review
 

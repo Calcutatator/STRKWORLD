@@ -114,16 +114,20 @@ disappear. The lobby receives no building ID or entry event. Building-choice
 and visit-timing inference from that disappearance is an accepted v1 trade-off
 (D-019).
 
-The Avatar Studio is a hidden, non-financial fixed room under D-047. The
-street's south path reaches an offscreen doorway; no facade or public map label
-advertises it. The room shows eight selectable character figures. A collision
-selects one character in its cosy/default state, and a keyboard control will
-toggle that character's paired fighting/weapon-drawn state; the exact key is
-still open. The selected cosmetic state is resumed with street presence and
-has no wallet, account, protocol or financial meaning. The wire representation
-(sixteen opaque state keys versus eight character keys plus an opaque stance)
-is an active architecture audit; do not widen the registry or lobby payload
-until that audit is complete.
+The Avatar Studio is a hidden, non-financial room outside `BuildingId` and
+`BUILDINGS` under D-047. Its dedicated `avatar-studio:entered`,
+`avatar-studio:exited` and `avatar:selected` world events are ignored by
+`VisitLayer`, so entering it cannot render a financial or unbuilt building
+panel. The street's south path reaches an offscreen doorway; no facade or
+public map label advertises it. The room shows eight selectable character
+figures. A collision selects one character in its cosy/default state, and a
+keyboard control will toggle that character's paired fighting/weapon-drawn
+state; the exact key is still open and unbound. The selected cosmetic state is
+resumed with street presence and has no wallet, account, protocol or financial
+meaning. The existing single lobby `sprite` field carries sixteen opaque keys:
+`avatar-1..8` cosy/default and `avatar-9..16` fighting, paired `1↔9` through
+`8↔16`; there is no stance field or message. Default/fallback is `avatar-1`,
+and selection is page/runtime-only with no reload/tab/session persistence.
 
 ---
 
@@ -264,7 +268,11 @@ Remote peers are retained state rather than one-shot commands. D-038 gives
 them a separate World-owned replaying source so a snapshot cannot be lost
 while Phaser boots or remounts. The Shell maps `LobbyClient.onPeers()` into
 that source; World receives only opaque peer ID, position, facing and approved
-sprite key. The frozen `WorldEvents` / `ShellEvents` contract is unchanged.
+sprite key. The D-038 `WorldEvents` / `ShellEvents` contract remains unchanged;
+D-047 is a later, explicitly controlled extension of `WorldEvents` only for
+the nonfinancial Avatar Studio (`avatar-studio:entered`,
+`avatar-studio:exited`, `avatar:selected`). `ShellEvents` and the lobby schema
+remain unchanged.
 
 Game Mode interiors use one data-driven fixed-room core (D-039). A definition
 contains only local presentation geometry, an opaque building ID and opaque

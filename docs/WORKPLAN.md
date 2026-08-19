@@ -73,7 +73,10 @@ One agent (or the lead) locks these first:
    shipped-code audit, D-018 route-admission shape and D-034/D-035 uncertainty
    contract. Funded behavior remains a pre-launch validation under D-028.
 2. **`WorldEvents` / `ShellEvents`** — the event bus contract, in
-   `packages/shared/src/index.ts`. **Frozen.**
+   `packages/shared/src/index.ts`. Frozen for existing lanes; D-047 is the
+   sole approved controlled extension, limited to three nonfinancial
+   `WorldEvents` (`avatar-studio:entered`, `avatar-studio:exited`,
+   `avatar:selected`). `ShellEvents` remains frozen.
 3. **`PresenceState`** — the lobby room schema, in the same file. **Frozen.**
    It is the enforcement point for "the lobby never sees money": a field that
    is not in the type cannot leak.
@@ -237,20 +240,25 @@ highlight, activation, exit and teardown only; it gained no recipient, quote,
 deposit address, status or wallet concept. Rendered room and station acceptance
 remains user-run at `http://localhost:5173/`.
 
-**D-047 Avatar Studio brief:** add one hidden, non-financial fixed room for
-cosmetic selection. Extend the street path south from spawn to an offscreen
-bottom doorway; do not render a facade or public map label. The room contains
-eight collision-selectable avatar figures supplied by the separate sprite
-studio, each with a cosy/default and fighting/weapon-drawn state. Touching one
-selects that character in its cosy state; a keyboard toggle changes between its
-paired states, with the exact key still open pending the user's response. This
-is a World/Shell/lobby integration, not a financial surface: no wallet or route
-state enters the room, and the lobby still receives only position, facing and
-an allowlisted opaque cosmetic state. An architecture audit must choose
-between sixteen opaque state keys and eight character keys plus an opaque
-stance value before the registries are expanded atomically. Durable
-cross-reload cosmetic persistence is intentionally not part of D-047 and needs
-a separate product choice if desired.
+**D-047 Avatar Studio brief:** add one hidden, non-financial room outside
+`BuildingId`/`BUILDINGS` for cosmetic selection. Extend the street path south
+from spawn to an offscreen bottom doorway; do not render a facade or public map
+label. Use dedicated non-financial world events
+`avatar-studio:entered`, `avatar-studio:exited` and `avatar:selected`, which
+`VisitLayer` must ignore. The room contains eight collision-selectable avatar
+figures supplied by the separate sprite studio, each with a cosy/default and
+fighting/weapon-drawn state. Touching one selects that character in its cosy
+state; a keyboard toggle changes between its paired states, with the exact key
+still open and unbound pending the user's response. The existing single lobby
+`sprite` field carries sixteen opaque keys: `avatar-1..8` cosy/default and
+`avatar-9..16` fighting, paired `1↔9` through `8↔16`, with no stance field or
+message. Default/fallback is `avatar-1`; expand World/lobby/edge registries
+atomically, while the current eight-key deployment remains live until that
+rollout. This is a World/Shell/lobby integration, not a financial surface: no
+wallet or route state enters the room, and the lobby still receives only
+position, facing and an allowlisted opaque cosmetic state. Cosmetic selection
+is page/runtime-only and resets to `avatar-1` on reload, tab close or a new
+session; durable persistence is out of scope.
 
 **Must not:** import `starknet` or any wallet package. Put an address, balance,
 transaction hash, building name or entry event into lobby traffic. On local
@@ -452,8 +460,8 @@ separate studio, and the Aseprite → embedded-tileset export pipeline. D-033
 keeps the first Bank room procedural; final room/station art starts only after
 World freezes its 32 px footprints and asset names. Avatar Studio figures must
 preserve a stable 32 px runtime footprint and anchor; their final style and
-state-to-key manifest remain subject to the user's approval and the pending
-wire-seam audit.
+state-to-key art manifest remain subject to the user's approval, while the
+sixteen-key wire seam is fixed by D-047.
 
 **Frozen first-room asset contract (D-033 tracer):** the procedural Bank is an
 18×12 grid of 32 px tiles (576×384 px), with a one-tile perimeter, spawn at

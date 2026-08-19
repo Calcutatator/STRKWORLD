@@ -1812,45 +1812,51 @@ visual variants each. The user also wants character selection to be a small
 world interaction rather than a long menu overlay, without adding a financial
 or identity meaning to appearance.
 
-**Decision.** v1 supports exactly eight opaque cosmetic character selections,
-with two visual states supplied for each character by the separate sprite
-studio: a cosy/default state and a fighting/weapon-drawn state. The selection
-room is a hidden, non-financial Avatar Studio: its building has no visible
-facade or public map label. The street path extends south from the spawn
-directly to the bottom/offscreen edge; walking into that end enters the hidden
-room. The room displays eight collision-selectable avatar figures. Touching a
-figure selects that character in its cosy/default state. A keyboard control
-will toggle the selected character between its paired cosy and fighting
-states; the exact key remains an open implementation question pending the
-user's response.
+**Decision.** v1 uses the existing single lobby `sprite` field for exactly
+sixteen opaque cosmetic-state keys: `avatar-1` through `avatar-8` are the
+cosy/default states and `avatar-9` through `avatar-16` are their fighting
+partners (`1↔9`, `2↔10`, through `8↔16`). The pair meaning is local registry
+data; no stance field or stance message is added to the lobby. The selection
+room is a hidden, non-financial Avatar Studio: it is outside `BuildingId` and
+`BUILDINGS`, has no visible facade or public map label, and uses dedicated
+non-financial world events (`avatar-studio:entered`, `avatar-studio:exited`,
+and `avatar:selected`) so the financial `VisitLayer` cannot render it. The
+street path extends south from the spawn directly to the bottom/offscreen
+edge; walking into that end enters the hidden room. The room displays eight
+collision-selectable avatar figures. Touching a figure selects that character
+in its cosy/default state. A keyboard control will toggle the selected
+character between its paired states; the exact key remains open and no key is
+bound until the user chooses it.
 
 Appearance has no wallet, account, protocol, building or financial meaning.
 The lobby continues to receive only an allowlisted opaque cosmetic state and
 position/facing; it never receives a selection identity or room/building
-meaning. The architect is auditing whether the smallest safe wire seam is
-sixteen opaque state keys or eight character keys plus an opaque stance value.
-That representation, its registry expansion and the atomic World/lobby/edge
-rollout are intentionally not fixed by this decision. The final art, palette,
-names and key-to-art mapping remain subject to the user's approval in the
-sprite-studio task.
+meaning. The default and fallback are `avatar-1`. The World, lobby and edge
+registries must expand to the sixteen keys atomically; until that rollout the
+current eight-key deployment remains the safe live contract. The final art,
+palette, names and key-to-art mapping remain subject to the user's approval in
+the sprite-studio task.
 
-Cosmetic persistence across browser reloads, tabs or sessions is not decided
-here. The initial implementation may keep the selection in the existing live
-session/runtime state; any durable persistence policy is a separate product
-choice. The room remains subject to the existing interior presence lifecycle:
-entering it suspends lobby presence, and the selected key is used when street
-presence resumes. No avatar selection may trigger a wallet read, quote,
-balance operation or transaction.
+Cosmetic selection is page/runtime state only: reload, tab close and a new
+session reset to `avatar-1`; durable persistence is out of scope. The room
+remains subject to the existing interior presence lifecycle: entering it
+suspends lobby presence, and the selected key is used when street presence
+resumes. No avatar selection may trigger a wallet read, quote, balance
+operation or transaction.
 
 **Consequences.** World owns the hidden entrance, path extension, room
 geometry, collision and selection figures. Shell owns the local cosmetic state
-handoff, if an existing composition seam requires one. Lobby and deployment
-must update their trusted allowlist together with World rendering once the
-state representation is audited; partial rollouts fail closed to the existing
-default rather than exposing arbitrary values. Art supplies eight compatible
-characters with two states each and a manifest, but does not change the
-runtime contract or choose financial/protocol semantics.
+handoff, if an existing composition seam requires one. The approved
+nonfinancial WorldEvents extension is limited to
+`avatar-studio:entered`, `avatar-studio:exited` and `avatar:selected`;
+ShellEvents and the lobby schema remain unchanged. Lobby and deployment must
+update their trusted allowlist together with World rendering once the atomic
+implementation and sprite-art handoff are complete; partial rollouts fail
+closed to the existing default rather than exposing arbitrary values. Art
+supplies eight compatible characters with two states each and a manifest, but
+does not change the runtime contract or choose financial/protocol semantics.
 
 This decision extends D-030's fixed-room model to a non-financial cosmetic
-room. It does not change D-019 presence rules, the frozen lobby vocabulary,
-the event-bus seam, or any privacy/financial route.
+room. It does not change D-019 presence rules, the lobby schema, ShellEvents,
+or any privacy/financial route; its three named WorldEvents are the controlled
+event-bus extension for this room.
