@@ -1974,8 +1974,8 @@ shadows and weapon extents before the placeholder renderer is retired.
 
 ## D-050 — The standalone Backend owns graceful signal shutdown
 
-**2026-08-19 · Accepted technical decision · implementation required before
-the deployment CI gate is green**
+**2026-08-19 · Accepted technical decision · implemented at `375bad4` and
+verified by hosted CI run `32282522737`**
 
 **Context.** Commit `7adc821` added quarantined production-image boot smokes.
 GitHub Actions run
@@ -1987,10 +1987,10 @@ started at `17:08:53.501` and failed after Docker stop at `17:08:57.255`:
 that the exit status was not the expected `143`; it did not log the actual
 status.
 
-The image uses an exec-form `CMD`, so Node is PID 1. Neither
-`deploy/backend/launch.mjs` nor `apps/backend/src/server.ts` installs a signal
-handler, and `server.ts` currently discards the `RunningBackendServer` returned
-by `listenBackendServer()`. Node 22.12's source registers reset-on-handle
+At `7adc821`, the image used an exec-form `CMD`, so Node was PID 1. Neither
+`deploy/backend/launch.mjs` nor `apps/backend/src/server.ts` installed a signal
+handler, and `server.ts` discarded the `RunningBackendServer` returned by
+`listenBackendServer()`. Node 22.12's source registers reset-on-handle
 defaults for `SIGTERM` and `SIGINT`; that handler resets terminal state and
 re-raises the signal. Docker documents both that a PID-1 process ignores a
 signal whose action is default and that `docker stop` sends `SIGKILL` after its
@@ -2025,9 +2025,20 @@ launcher was rejected because `apps/backend` creates and owns the
 `RunningBackendServer`; keeping lifecycle beside that handle is the smaller
 and testable boundary.
 
-**Consequences.** This is operational lifecycle work only. It changes no
-`PrivacyOperations` method, HTTP route or response, schema, lobby field,
-financial policy or submission semantics. Fly's passing image smoke remains
-valid. The standalone Backend image and the overall deployment CI gate remain
-failed until the Backend lifecycle tests and final image smoke pass; staging
-and deployment remain open afterwards.
+**Consequences.** Commit `375bad4` implements the injectable, single-flight
+lifecycle, retains the live server through startup, closes it exactly once on
+either signal, exits `0` after success and nonzero after failure, and changes
+the standalone smoke to require bounded exit `0`. GitHub Actions run
+[`32282522737`](https://github.com/Calcutatator/STRKWORLD/actions/runs/32282522737),
+deployment job
+[`96164346536`](https://github.com/Calcutatator/STRKWORLD/actions/runs/32282522737/job/96164346536),
+then passed both deployment typechecks, both image builds and both image
+smokes in 1m12s; the full typecheck/test job also passed. This supersedes the
+failed lifecycle result from run `32279807295`, while retaining that run as
+the evidence that exposed the defect.
+
+This is operational lifecycle work only. It changes no `PrivacyOperations`
+method, HTTP route or response, schema, lobby field, financial policy or
+submission semantics. Hosted image lifecycle is now verified. Host access-log
+policy, TLS, secrets, real Alchemy/RPC and AVNU calls, live staging, deployment
+and funded routes remain unverified.

@@ -250,6 +250,36 @@ without a verification method is a rumour.
 
 Format: `### YYYY-MM-DD — short title` then what, why it matters, how verified.
 
+### 2026-08-19 — Hosted CI proves both production images stop cleanly
+
+The standalone Backend originally reached TCP readiness but failed its image
+smoke after Docker's three-second stop grace. Its exec-form Node process was
+PID 1 and owned no `SIGTERM`/`SIGINT` listener. Node 22.12's default handler
+resets and re-raises the signal, while Linux gives PID 1 special default-signal
+semantics; the unlogged result was therefore consistent with Docker exhausting
+the grace and forcing `SIGKILL`, but exit `137` was never directly observed.
+
+D-050 now gives `apps/backend` explicit lifecycle ownership. Both signals feed
+one injectable single-flight path that retains and closes the live
+`RunningBackendServer` exactly once, exits `0` on success and nonzero on close
+failure. The standalone image smoke requires that bounded clean exit and never
+accepts a forced kill. This is the same lifecycle shape already used by the
+passing Fly composition, without adding a route, log, schema or financial
+field.
+
+*Verified:* the lifecycle and smoke tests were observed red against the missing
+handler/old exit expectation, then green after the D-050 implementation at
+commit `375bad4`. GitHub Actions run
+[`32282522737`](https://github.com/Calcutatator/STRKWORLD/actions/runs/32282522737)
+passed all 78 test files / 852 tests. Its hosted deployment job
+[`96164346536`](https://github.com/Calcutatator/STRKWORLD/actions/runs/32282522737/job/96164346536)
+completed in 1m12s with both deploy typechecks, image builds and quarantined
+image smokes green. The prior failing run was
+[`32279807295`](https://github.com/Calcutatator/STRKWORLD/actions/runs/32279807295).
+No secret, API request, RPC/paymaster call, staging deployment, wallet or funded
+transaction was used; this evidence must not be cited as funded-route or live
+provider readiness.
+
 ### 2026-08-19 — Clean CI now proves both deploy images and the Fly edge fails closed
 
 The public Fly edge no longer forwards ambient browser identity carriers into

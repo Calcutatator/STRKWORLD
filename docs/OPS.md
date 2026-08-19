@@ -367,30 +367,31 @@ convenience: it is a Backend-lane change with a privacy review.
 
 ---
 
-## Not verified on this branch
+## Deployment evidence and remaining gaps
 
 Stated plainly so nobody reads more assurance into this document than it earns:
 
-- **Both Dockerfiles build in GitHub CI; Fly boot smoke passes, but standalone
-  Backend shutdown currently fails.** Successful runs
-  [32274724770](https://github.com/Calcutatator/STRKWORLD/actions/runs/32274724770),
-  [32276418952](https://github.com/Calcutatator/STRKWORLD/actions/runs/32276418952)
-  and
-  [32277158593](https://github.com/Calcutatator/STRKWORLD/actions/runs/32277158593)
-  each completed the `Deployment typecheck and build` job, including
-  `strkworld-fly:ci` and `strkworld-backend:ci` image builds. This verifies the
-  Docker build stages and current root-context packaging. At commit `7adc821`,
-  run
+- **Both production images now build and boot-smoke in hosted GitHub CI.** At
+  commit `375bad4`, run
+  [32282522737](https://github.com/Calcutatator/STRKWORLD/actions/runs/32282522737),
+  deployment job
+  [96164346536](https://github.com/Calcutatator/STRKWORLD/actions/runs/32282522737/job/96164346536),
+  completed in 1m12s with both deploy typechecks, both image builds and both
+  image smokes green. Each smoke uses `--network none`, inert syntactically
+  valid configuration with the Backend and financial routes disabled, no
+  port/volume/env-file/log export, and verifies image user `node` plus PID-1
+  effective UID 1000. Fly's in-container probe requires `/` = 200 and
+  `/health` plus `/metrics` = 404 before a bounded clean stop. The standalone
+  Backend uses only an in-container TCP connect, makes no API request and now
+  closes its `RunningBackendServer` once before bounded exit `0`.
+- **This is image-lifecycle evidence, not service or funded-route evidence.**
+  Network quarantine means the smokes make no real RPC, AVNU or API call and
+  use no secret. They do not verify TLS, platform access-log policy, real
+  provider credentials/controls, staging, deployment, wallet behavior,
+  paymaster acceptance or funded mainnet execution. The earlier run
   [32279807295](https://github.com/Calcutatator/STRKWORLD/actions/runs/32279807295)
-  built both images and passed the Fly readiness/shutdown smoke. The standalone
-  Backend reached TCP readiness, but the full smoke step ran 3.754 seconds
-  around `docker container stop --time 3` and then failed the expected
-  exit-status assertion. The actual code was not logged; Docker's documented
-  grace-expiry `SIGKILL` makes exit `137` a high-confidence inference, not
-  observed evidence. D-050 requires Backend
-  to close its `RunningBackendServer` exactly once on `SIGTERM`/`SIGINT` and
-  requires the final image to stop with exit `0` inside five seconds. Host
-  access logging, TLS, secrets, staging and deployment remain unverified.
+  remains the historical failing signal test superseded by D-050 and the
+  successful hosted run above.
 - **No end-to-end deploy has happened**, because no host exists.
 - **`apps/web/index.html`** was added by this lane because a production build
   needs an entry module and there was none. It is scaffolding; the Shell lane
