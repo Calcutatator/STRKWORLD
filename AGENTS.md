@@ -250,6 +250,25 @@ without a verification method is a rumour.
 
 Format: `### YYYY-MM-DD — short title` then what, why it matters, how verified.
 
+### 2026-08-20 — Batch intent limits are positive safe integers
+
+The Menu Mode batch accumulator now validates its internal `maxIntents`
+configuration when it is constructed. Only positive safe integers are
+accepted; `NaN`, infinities, zero, negatives, fractions and values above
+`Number.MAX_SAFE_INTEGER` fail immediately with one fixed local error. Valid
+limits still reject the first excess intent as `batch-full` with the configured
+limit, including the minimum limit of one; the default remains sixteen. This
+is a guard on trusted Shell composition, not a browser, wire or financial-input
+parser, and it changes no intent validation, batching mode, wallet seam,
+confirmation or transaction behavior.
+
+*Verified:* the red parameterized cases constructed accumulators with malformed
+limits; commit `f93da8a` makes all seven reject with
+`maxIntents must be a positive safe integer`, while paired green cases pin
+limits one and thirty-two plus their exact `batch-full` result. The focused
+accumulator tests and Web typecheck, invariant scan and diff check passed. No
+production build, browser, wallet, proof, signature or transaction was used.
+
 ### 2026-08-20 — Bridge active polling keeps its budget through clock rollback
 
 `BridgeService.watch()` now measures its active window from the greatest
