@@ -1,8 +1,18 @@
 import { describe, expect, it } from 'vitest';
 import type { WorldEvents } from '@strkworld/shared';
 import {
+  AVATAR_STUDIO_DEFINITION,
+  isAvatarStudioSolidAt,
+} from './avatar-studio.js';
+import {
+  BANK_ROOM_DEFINITION,
+  createFixedRoom,
+  isFixedRoomSolidAt,
+} from './fixed-room.js';
+import {
   createStreetMovementAdapter,
   createStreetMovementReporter,
+  moveWithCollisionSubsteps,
   type MovementInput,
 } from './street-movement.js';
 
@@ -15,6 +25,116 @@ function capture() {
 }
 
 describe('street movement seam', () => {
+  it.each([
+    ['right', { x: 160, y: 0 }, { x: 16, y: 0 }],
+    ['left', { x: -160, y: 0 }, { x: -16, y: 0 }],
+    ['down', { x: 0, y: 160 }, { x: 0, y: 16 }],
+  ])('preserves exact small-delta %s displacement', (_direction, velocity, expected) => {
+    expect(
+      moveWithCollisionSubsteps({
+        position: { x: 100, y: 100 },
+        velocity,
+        delta: 100,
+        tileSize: 32,
+        toTile: (x, y) => ({ x: Math.floor(x / 32), y: Math.floor(y / 32) }),
+        isSolidAt: () => false,
+      }),
+    ).toEqual({ x: 100 + expected.x, y: 100 + expected.y });
+  });
+
+  it('preserves normal and sprint displacement at the movement speeds', () => {
+    const move = (speed: number) =>
+      moveWithCollisionSubsteps({
+        position: { x: 100, y: 100 },
+        velocity: { x: speed, y: 0 },
+        delta: 100,
+        tileSize: 32,
+        toTile: (x, y) => ({ x: Math.floor(x / 32), y: Math.floor(y / 32) }),
+        isSolidAt: () => false,
+      });
+
+    expect(move(160)).toEqual({ x: 116, y: 100 });
+    expect(move(240)).toEqual({ x: 124, y: 100 });
+  });
+
+  it('checks horizontal collision before the vertical diagonal candidate', () => {
+    const checked: Array<[number, number]> = [];
+    const position = moveWithCollisionSubsteps({
+      position: { x: 0, y: 0 },
+      velocity: { x: 160, y: 160 },
+      delta: 100,
+      tileSize: 32,
+      toTile: (x, y) => ({ x: Math.floor(x / 16), y: Math.floor(y / 16) }),
+      isSolidAt: (x, y) => {
+        checked.push([x, y]);
+        return x === 1 && y === 0;
+      },
+    });
+
+    expect(position).toEqual({ x: 8, y: 16 });
+    expect(checked.slice(0, 2)).toEqual([
+      [0, 0],
+      [0, 0],
+    ]);
+    expect(checked).toContainEqual([1, 0]);
+  });
+
+  it('fails closed for malformed inputs and truncates extreme finite travel', () => {
+    const base = { x: 100, y: 100 };
+    const options = {
+      position: base,
+      velocity: { x: 160, y: 0 },
+      delta: 100,
+      tileSize: 32,
+      toTile: (x: number, y: number) => ({ x: Math.floor(x / 32), y: Math.floor(y / 32) }),
+      isSolidAt: () => false,
+    };
+
+    expect(moveWithCollisionSubsteps({ ...options, delta: Number.POSITIVE_INFINITY })).toEqual(base);
+    expect(moveWithCollisionSubsteps({ ...options, velocity: { x: Number.NaN, y: 0 } })).toEqual(base);
+    expect(moveWithCollisionSubsteps({ ...options, tileSize: 0 })).toEqual(base);
+
+    let checks = 0;
+    const extreme = moveWithCollisionSubsteps({
+      ...options,
+      delta: Number.MAX_VALUE,
+      isSolidAt: () => {
+        checks++;
+        return false;
+      },
+    });
+    expect(Number.isFinite(extreme.x)).toBe(true);
+    expect(extreme.x).toBeGreaterThan(base.x);
+    expect(checks).toBeLessThan(1_100);
+  });
+
+  it('does not tunnel through a solid interior tile during a large fixed-room delta', () => {
+    const room = createFixedRoom(BANK_ROOM_DEFINITION);
+    const position = moveWithCollisionSubsteps({
+      position: { x: 9 * 32 + 16, y: 9 * 32 + 16 },
+      velocity: { x: 0, y: -160 },
+      delta: 1400,
+      tileSize: 32,
+      toTile: (x, y) => ({ x: Math.floor(x / 32), y: Math.floor(y / 32) }),
+      isSolidAt: (x, y) => isFixedRoomSolidAt(room, x, y),
+    });
+
+    expect(position).toEqual({ x: 9 * 32 + 16, y: 4 * 32 });
+  });
+
+  it('uses the same bounded collision seam for Avatar Studio movement', () => {
+    const position = moveWithCollisionSubsteps({
+      position: { x: 5 * 32 + 16, y: 9 * 32 + 16 },
+      velocity: { x: 0, y: -160 },
+      delta: 2200,
+      tileSize: 32,
+      toTile: (x, y) => ({ x: Math.floor(x / 32), y: Math.floor(y / 32) }),
+      isSolidAt: (x, y) => isAvatarStudioSolidAt(AVATAR_STUDIO_DEFINITION, x, y),
+    });
+
+    expect(position).toEqual({ x: 5 * 32 + 16, y: 32 });
+  });
+
   it('emits the initial placement with only the frozen movement payload', () => {
     const h = capture();
     h.reporter.initial({ x: 784, y: 496 });

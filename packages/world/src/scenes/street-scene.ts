@@ -48,6 +48,7 @@ import {
 import { createInputGate, type InputGate } from '../input-gate.js';
 import {
   createStreetMovementAdapter,
+  moveWithCollisionSubsteps,
   type MovementInput,
   type StreetMovementAdapter,
 } from '../street-movement.js';
@@ -633,18 +634,15 @@ export function createStreetScene({ Phaser, onTileChanged, remotePeers }: Street
       const held = this.heldDirections();
       const velocity = calculateMovementVelocity(held, this.sprinting());
       if (velocity.x === 0 && velocity.y === 0) return;
-      const stepX = (velocity.x * Math.max(delta, 1)) / 1000;
-      const stepY = (velocity.y * Math.max(delta, 1)) / 1000;
-      const nextX = this.player.x + stepX;
-      const nextY = this.player.y + stepY;
-      const currentTile = worldToRoomTile(this.player.x, this.player.y);
-      const horizontalTile = worldToRoomTile(nextX, this.player.y);
-      if (!isFixedRoomSolidAt(map, horizontalTile.x, currentTile.y)) this.player.x = nextX;
-      // Recompute the vertical candidate after horizontal movement. This
-      // prevents a diagonal corner from testing collision against an x tile
-      // that the horizontal step was unable to enter.
-      const verticalTile = worldToRoomTile(this.player.x, nextY);
-      if (!isFixedRoomSolidAt(map, verticalTile.x, verticalTile.y)) this.player.y = nextY;
+      const position = moveWithCollisionSubsteps({
+        position: { x: this.player.x, y: this.player.y },
+        velocity,
+        delta,
+        tileSize: FIXED_ROOM_TILE_SIZE,
+        toTile: worldToRoomTile,
+        isSolidAt: (x, y) => isFixedRoomSolidAt(map, x, y),
+      });
+      this.player.setPosition(position.x, position.y);
     }
 
     private moveAvatarStudioPlayer(delta: number): void {
@@ -652,15 +650,15 @@ export function createStreetScene({ Phaser, onTileChanged, remotePeers }: Street
       const held = this.heldDirections();
       const velocity = calculateMovementVelocity(held, this.sprinting());
       if (velocity.x === 0 && velocity.y === 0) return;
-      const stepX = (velocity.x * Math.max(delta, 1)) / 1000;
-      const stepY = (velocity.y * Math.max(delta, 1)) / 1000;
-      const currentTile = worldToRoomTile(this.player.x, this.player.y);
-      const nextX = this.player.x + stepX;
-      const horizontalTile = worldToRoomTile(nextX, this.player.y);
-      if (!isAvatarStudioSolidAt(AVATAR_STUDIO_DEFINITION, horizontalTile.x, currentTile.y)) this.player.x = nextX;
-      const nextY = this.player.y + stepY;
-      const verticalTile = worldToRoomTile(this.player.x, nextY);
-      if (!isAvatarStudioSolidAt(AVATAR_STUDIO_DEFINITION, verticalTile.x, verticalTile.y)) this.player.y = nextY;
+      const position = moveWithCollisionSubsteps({
+        position: { x: this.player.x, y: this.player.y },
+        velocity,
+        delta,
+        tileSize: AVATAR_STUDIO_TILE_SIZE,
+        toTile: worldToRoomTile,
+        isSolidAt: (x, y) => isAvatarStudioSolidAt(AVATAR_STUDIO_DEFINITION, x, y),
+      });
+      this.player.setPosition(position.x, position.y);
       this.movement.interiorUpdate(() => this.reportAvatarStudioTile());
     }
 
