@@ -224,15 +224,20 @@ export class BridgeService {
       throw new Error('Bridge active-polling window must be a positive integer.');
     }
     const startedAt = this.now();
+    let maxWallElapsed = 0;
+    let scheduledSleepMs = 0;
     for (;;) {
       throwIfAborted(options.signal);
       const status = await this.refresh();
       options.onUpdate?.(status);
       if (status.pollingStopped) return status;
 
-      const elapsed = Math.max(0, this.now() - startedAt);
+      maxWallElapsed = Math.max(maxWallElapsed, this.now() - startedAt);
+      const elapsed = Math.max(0, maxWallElapsed, scheduledSleepMs);
       if (elapsed >= maxActiveMs) return this.stopActivePolling(status);
-      await this.sleep(Math.min(intervalMs, maxActiveMs - elapsed), options.signal);
+      const delay = Math.min(intervalMs, maxActiveMs - elapsed);
+      scheduledSleepMs += delay;
+      await this.sleep(delay, options.signal);
     }
   }
 

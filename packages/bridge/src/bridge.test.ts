@@ -530,6 +530,145 @@ describe('BridgeService', () => {
     expect(store.load()?.status).toMatchObject({ leg: 'awaiting-deposit', pollingStopped: true });
   });
 
+  it('stops active polling when the wall clock rolls backwards', async () => {
+    const client = new StubClient();
+    const store = new MemoryBridgeStore();
+    let now = NOW;
+    let rollback = false;
+    let sleeps = 0;
+    const service = new BridgeService({
+      client,
+      store,
+      quoteVerifier: () => true,
+      now: () => (rollback ? --now : NOW),
+      sleep: async () => {
+        sleeps += 1;
+        if (sleeps >= 3) throw new Error('polling did not honor its active bound');
+      },
+    });
+    await service.createManualDeposit({
+      source: SOURCE,
+      amountIn: 1_000_000n,
+      starknetRecipient: '0x123',
+      refundAddress: request.refundTo,
+    });
+    rollback = true;
+    client.statuses.push(
+      status('PENDING_DEPOSIT' as never),
+      status('PENDING_DEPOSIT' as never),
+      status('PENDING_DEPOSIT' as never),
+    );
+
+    await expect(service.watch({ intervalMs: 10, maxActiveMs: 20 })).resolves.toMatchObject({
+      leg: 'awaiting-deposit',
+      pollingStopped: true,
+    });
+  });
+
+  it('does not lose active polling time when the wall clock oscillates', async () => {
+    const client = new StubClient();
+    const store = new MemoryBridgeStore();
+    let watching = false;
+    let watchRead = 0;
+    let sleeps = 0;
+    const watchTimes = [
+      NOW,
+      NOW + 5, NOW + 5, NOW + 5,
+      NOW - 5, NOW - 5, NOW - 5,
+      NOW + 5, NOW + 5, NOW + 5,
+    ];
+    const service = new BridgeService({
+      client,
+      store,
+      quoteVerifier: () => true,
+      now: () => watching ? watchTimes[Math.min(watchRead++, watchTimes.length - 1)]! : NOW,
+      sleep: async () => {
+        sleeps += 1;
+        if (sleeps >= 3) throw new Error('oscillation erased the active polling budget');
+      },
+    });
+    await service.createManualDeposit({
+      source: SOURCE,
+      amountIn: 1_000_000n,
+      starknetRecipient: '0x123',
+      refundAddress: request.refundTo,
+    });
+    watching = true;
+    client.statuses.push(
+      status('PENDING_DEPOSIT' as never),
+      status('PENDING_DEPOSIT' as never),
+      status('PENDING_DEPOSIT' as never),
+    );
+
+    await expect(service.watch({ intervalMs: 10, maxActiveMs: 20 })).resolves.toMatchObject({
+      leg: 'awaiting-deposit',
+      pollingStopped: true,
+    });
+    expect(sleeps).toBe(2);
+  });
+
+  it('uses the exact remaining active budget for the final polling interval', async () => {
+    const client = new StubClient();
+    const store = new MemoryBridgeStore();
+    const delays: number[] = [];
+    const service = new BridgeService({
+      client,
+      store,
+      quoteVerifier: () => true,
+      now: () => NOW,
+      sleep: async (ms) => { delays.push(ms); },
+    });
+    await service.createManualDeposit({
+      source: SOURCE,
+      amountIn: 1_000_000n,
+      starknetRecipient: '0x123',
+      refundAddress: request.refundTo,
+    });
+    client.statuses.push(
+      status('PENDING_DEPOSIT' as never),
+      status('PENDING_DEPOSIT' as never),
+      status('PENDING_DEPOSIT' as never),
+      status('PENDING_DEPOSIT' as never),
+    );
+
+    await expect(service.watch({ intervalMs: 7, maxActiveMs: 20 })).resolves.toMatchObject({
+      leg: 'awaiting-deposit',
+      pollingStopped: true,
+    });
+    expect(delays).toEqual([7, 7, 6]);
+  });
+
+  it('propagates an abort without rewriting the persisted pending status', async () => {
+    const client = new StubClient();
+    const store = new MemoryBridgeStore();
+    const controller = new AbortController();
+    const reason = new Error('stop watching');
+    const service = new BridgeService({
+      client,
+      store,
+      quoteVerifier: () => true,
+      now: () => NOW,
+      sleep: async (_ms, signal) => {
+        controller.abort(reason);
+        throw signal?.reason;
+      },
+    });
+    await service.createManualDeposit({
+      source: SOURCE,
+      amountIn: 1_000_000n,
+      starknetRecipient: '0x123',
+      refundAddress: request.refundTo,
+    });
+    client.statuses.push(status('PENDING_DEPOSIT' as never));
+
+    await expect(service.watch({ intervalMs: 10, maxActiveMs: 20, signal: controller.signal }))
+      .rejects.toBe(reason);
+    expect(store.load()?.status).toMatchObject({
+      leg: 'awaiting-deposit',
+      pollingStopped: false,
+    });
+  });
+
   it('marks an unfunded quote expired only after checking the provider status', async () => {
     const client = new StubClient();
     const store = new MemoryBridgeStore();
