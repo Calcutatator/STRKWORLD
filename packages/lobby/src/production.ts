@@ -1,4 +1,5 @@
 import { DEFAULT_LOBBY_PORT } from './config.js';
+import { isProductionHostname } from './production-origin.js';
 import { startPresenceServer, type PresenceServer } from './server.js';
 
 export interface ProductionLobbyEnvironment {
@@ -66,10 +67,7 @@ function isRealHttpsOrigin(value: string): boolean {
       !url.pathname.replace(/\/$/, '') &&
       !url.search &&
       !url.hash &&
-      host !== 'localhost' &&
-      host !== '127.0.0.1' &&
-      host !== '[::1]' &&
-      !host.endsWith('.invalid')
+      isProductionHostname(host)
     );
   } catch {
     return false;

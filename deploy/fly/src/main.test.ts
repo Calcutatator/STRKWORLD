@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { FlyStartupAbortError, type FlyComposition, type FlyCompositionOptions } from './compose';
-import { runFlySupervisor, type FlySupervisorSignals } from './main';
+import { parseFlyEnvironment, runFlySupervisor, type FlySupervisorSignals } from './main';
 
 class FakeSignals implements FlySupervisorSignals {
   private readonly listeners = new Map<'SIGTERM' | 'SIGINT', Set<() => void>>([
@@ -35,11 +35,80 @@ const compositionOptions: Omit<FlyCompositionOptions, 'onFatal' | 'startupSignal
   publicOrigin: 'https://game.example',
 };
 
+const rejectedPublicOrigins = [
+  'https://127.0.0.2',
+  'https://127.1',
+  'https://127.0.1',
+  'https://2130706433',
+  'https://0x7f000002',
+  'https://017700000002',
+  'https://[::1]',
+  'https://[::ffff:127.0.0.2]',
+  'https://[::ffff:7f00:2]',
+  'https://localhost',
+  'https://player.localhost',
+  'https://nested.player.localhost',
+  'https://example.invalid',
+  'https://placeholder.example',
+  'https://replace.example',
+  'https://replace-host.example',
+  'https://replace_host.example',
+  'https://replace-this.example',
+  'https://replace_this.example',
+  'https://replace-me.example',
+  'https://replace_me.example',
+  'https://replace-with-host.example',
+  'https://replace_with_hostname.example',
+  'https://replace-with-me.example',
+  'https://replace_with_me.example',
+  'https://replacewithme.example',
+  'https://replace.with.host.example',
+  'https://yourhost.example',
+  'https://your_host.example',
+  'https://your-host.example',
+  'https://yourhostname.example',
+  'https://your_hostname.example',
+  'https://yourdomain.example',
+  'https://your-domain.example',
+  'https://your.host.example',
+];
+
+const acceptedPublicOrigins = [
+  'https://your-company.com',
+  'https://replaceable.example.com',
+  'https://placeholdertech.com',
+];
+
 function composition(shutdown: () => Promise<void> = async () => undefined): FlyComposition {
   return { address: { address: '0.0.0.0', family: 'IPv4', port: 8080 }, shutdown };
 }
 
 describe('Fly supervisor lifecycle', () => {
+  it.each(rejectedPublicOrigins)('rejects non-production public origin %s with a generic Fly error', (publicOrigin) => {
+    let thrown: unknown;
+    try {
+      parseFlyEnvironment({
+        PORT: '8080',
+        FLY_PUBLIC_ORIGIN: publicOrigin,
+        LOBBY_ALLOWED_ORIGINS: publicOrigin,
+      });
+    } catch (error) {
+      thrown = error;
+    }
+    expect(thrown).toBeInstanceOf(Error);
+    const message = thrown instanceof Error ? thrown.message : String(thrown);
+    expect(message).toBe('Invalid FLY_PUBLIC_ORIGIN.');
+    expect(message).not.toContain(publicOrigin);
+  });
+
+  it.each(acceptedPublicOrigins)('accepts legitimate substring domain %s', (publicOrigin) => {
+    expect(parseFlyEnvironment({
+      PORT: '8080',
+      FLY_PUBLIC_ORIGIN: publicOrigin,
+      LOBBY_ALLOWED_ORIGINS: publicOrigin,
+    })).toMatchObject({ publicOrigin });
+  });
+
   it('aborts deferred startup and exits orderly when a signal arrives', async () => {
     const signals = new FakeSignals();
     const exitCodes: number[] = [];

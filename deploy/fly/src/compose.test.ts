@@ -107,13 +107,47 @@ describe('Fly composition process boundary', () => {
     'https://[::ffff:127.0.0.2]',
     'https://[::ffff:7f00:2]',
     'https://example.invalid',
+    'https://placeholder.example',
+    'https://replace.example',
+    'https://replace-host.example',
+    'https://replace_host.example',
+    'https://replace-this.example',
+    'https://replace_this.example',
+    'https://replace-me.example',
+    'https://replace_me.example',
+    'https://replace-with-host.example',
+    'https://replace_with_hostname.example',
+    'https://replace-with-me.example',
+    'https://replace_with_me.example',
+    'https://replacewithme.example',
+    'https://replace.with.host.example',
     'https://REPLACE-WITH-HOST.example',
+    'https://yourhost.example',
+    'https://your_host.example',
+    'https://your-host.example',
+    'https://yourhostname.example',
+    'https://your_hostname.example',
+    'https://yourdomain.example',
+    'https://your-domain.example',
+    'https://your.host.example',
   ])('rejects non-production public origin %s', (publicOrigin) => {
     expect(() => parseFlyEnvironment({
       PORT: '8080',
       FLY_PUBLIC_ORIGIN: publicOrigin,
       LOBBY_ALLOWED_ORIGINS: publicOrigin,
     })).toThrow('FLY_PUBLIC_ORIGIN');
+  });
+
+  it.each([
+    'https://your-company.com',
+    'https://replaceable.example.com',
+    'https://placeholdertech.com',
+  ])('accepts legitimate public origin %s', (publicOrigin) => {
+    expect(parseFlyEnvironment({
+      PORT: '8080',
+      FLY_PUBLIC_ORIGIN: publicOrigin,
+      LOBBY_ALLOWED_ORIGINS: publicOrigin,
+    })).toMatchObject({ publicOrigin });
   });
 
   it('waits for both private children before binding the public edge', async () => {
