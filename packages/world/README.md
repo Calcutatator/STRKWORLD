@@ -16,6 +16,13 @@ in as plain data by the shell.
 - Building entrances and their trigger zones
 - Semantic events out: `building:entered`, `building:exited`, `player:moved`
 
+## Controls
+
+Arrow keys and WASD move the avatar identically outdoors and in every fixed
+room interior. Hold either Shift key to sprint at exactly 1.5× walk speed;
+releasing Shift immediately returns to walk speed. Diagonal movement remains
+normalized, including while sprinting.
+
 On `building:entered`, the shell removes or suspends the player's lobby
 presence while the local interior UI is open. The world emits the semantic
 event only; it never sends the building ID through lobby traffic. Other

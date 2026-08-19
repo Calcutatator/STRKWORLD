@@ -28,6 +28,11 @@ import {
   type MovementInput,
   type StreetMovementAdapter,
 } from '../street-movement.js';
+import {
+  calculateMovementVelocity,
+  createWasdKeyMapping,
+  mergeMovementInput,
+} from '../movement-input.js';
 import { createRemoteAvatarLayer, type RemoteAvatarLayer } from '../remote-avatar-layer.js';
 import type { RemotePeerSource } from '../remote-peer.js';
 
@@ -45,7 +50,6 @@ import type { RemotePeerSource } from '../remote-peer.js';
  * presence entries for one player. Joins are shell-driven and explicit.
  */
 
-const PLAYER_SPEED = 160;
 const PLAYER_SIZE = 24;
 const ROOM_ORIGIN = { x: 2 * TILE_SIZE, y: 2 * TILE_SIZE };
 
@@ -192,7 +196,14 @@ export function createStreetScene({ Phaser, onTileChanged, remotePeers }: Street
         return;
       }
       this.cursors = keyboard.createCursorKeys();
-      this.wasd = keyboard.addKeys('W,A,S,D') as typeof this.wasd;
+      this.wasd = keyboard.addKeys(
+        createWasdKeyMapping({
+          W: Phaser.Input.Keyboard.KeyCodes.W,
+          A: Phaser.Input.Keyboard.KeyCodes.A,
+          S: Phaser.Input.Keyboard.KeyCodes.S,
+          D: Phaser.Input.Keyboard.KeyCodes.D,
+        }),
+      ) as typeof this.wasd;
       this.inputGate = createInputGate(keyboard);
     }
 
@@ -411,28 +422,10 @@ export function createStreetScene({ Phaser, onTileChanged, remotePeers }: Street
 
     private movePlayer(): MovementInput {
       if (!this.cursors) return NO_MOVEMENT;
-      const held: MovementInput = {
-        left: this.cursors.left.isDown || this.wasd?.left?.isDown,
-        right: this.cursors.right.isDown || this.wasd?.right?.isDown,
-        up: this.cursors.up.isDown || this.wasd?.up?.isDown,
-        down: this.cursors.down.isDown || this.wasd?.down?.isDown,
-      };
-
-      let vx = 0;
-      let vy = 0;
-      if (held.left) vx -= 1;
-      if (held.right) vx += 1;
-      if (held.up) vy -= 1;
-      if (held.down) vy += 1;
-
-      // Normalise so diagonals are not faster than the cardinals.
+      const held = this.heldDirections();
+      const velocity = calculateMovementVelocity(held, this.sprinting());
       const body = this.player.body as PhaserTypes.Physics.Arcade.Body;
-      if (vx !== 0 || vy !== 0) {
-        const length = Math.hypot(vx, vy);
-        body.setVelocity((vx / length) * PLAYER_SPEED, (vy / length) * PLAYER_SPEED);
-      } else {
-        body.setVelocity(0, 0);
-      }
+      body.setVelocity(velocity.x, velocity.y);
       return held;
     }
 
@@ -441,17 +434,12 @@ export function createStreetScene({ Phaser, onTileChanged, remotePeers }: Street
       const map = this.activeRoomMap();
       if (!this.cursors || !controller || !map || controller.state.controlOwner !== 'world') return;
       const held = this.heldDirections();
-      let vx = 0;
-      let vy = 0;
-      if (held.left) vx -= 1;
-      if (held.right) vx += 1;
-      if (held.up) vy -= 1;
-      if (held.down) vy += 1;
-      if (vx === 0 && vy === 0) return;
-      const length = Math.hypot(vx, vy);
-      const step = (PLAYER_SPEED * Math.max(delta, 1)) / 1000;
-      const nextX = this.player.x + (vx / length) * step;
-      const nextY = this.player.y + (vy / length) * step;
+      const velocity = calculateMovementVelocity(held, this.sprinting());
+      if (velocity.x === 0 && velocity.y === 0) return;
+      const stepX = (velocity.x * Math.max(delta, 1)) / 1000;
+      const stepY = (velocity.y * Math.max(delta, 1)) / 1000;
+      const nextX = this.player.x + stepX;
+      const nextY = this.player.y + stepY;
       const currentTile = worldToRoomTile(this.player.x, this.player.y);
       const horizontalTile = worldToRoomTile(nextX, this.player.y);
       if (!isFixedRoomSolidAt(map, horizontalTile.x, currentTile.y)) this.player.x = nextX;
@@ -464,12 +452,24 @@ export function createStreetScene({ Phaser, onTileChanged, remotePeers }: Street
 
     private heldDirections() {
       if (!this.cursors) return NO_MOVEMENT;
-      return {
-        left: this.cursors.left.isDown || this.wasd?.left?.isDown,
-        right: this.cursors.right.isDown || this.wasd?.right?.isDown,
-        up: this.cursors.up.isDown || this.wasd?.up?.isDown,
-        down: this.cursors.down.isDown || this.wasd?.down?.isDown,
-      };
+      return mergeMovementInput(
+        {
+          left: this.cursors.left.isDown,
+          right: this.cursors.right.isDown,
+          up: this.cursors.up.isDown,
+          down: this.cursors.down.isDown,
+        },
+        {
+          left: this.wasd?.left?.isDown ?? false,
+          right: this.wasd?.right?.isDown ?? false,
+          up: this.wasd?.up?.isDown ?? false,
+          down: this.wasd?.down?.isDown ?? false,
+        },
+      );
+    }
+
+    private sprinting(): boolean {
+      return this.cursors?.shift?.isDown ?? false;
     }
 
     private reportTile(): void {
