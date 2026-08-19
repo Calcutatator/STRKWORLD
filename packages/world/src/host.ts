@@ -24,14 +24,18 @@ export interface HostOptions<T, P> {
    * Calling `acquire` or `release` while this runs is rejected.
    */
   start: (parent: P) => T;
-  /** Destroy it. Called only after the ref count has stayed at zero. */
-  stop: (instance: T) => void;
+  /**
+   * Destroy it. Called only after the ref count has stayed at zero.
+   * Calling `acquire` or `release` while this runs is rejected.
+   */
+  stop: (instance: T) => void | Promise<void>;
   /**
    * Defer teardown so a synchronous remount can cancel it. Injectable for
    * tests; defaults to a macrotask, which is what makes the StrictMode
-   * double-invoke harmless.
+   * double-invoke harmless. The deferrer owns any returned promise and must
+   * surface its rejection.
    */
-  defer?: (fn: () => void) => unknown;
+  defer?: (fn: () => void | Promise<void>) => unknown;
   cancel?: (handle: unknown) => void;
 }
 
@@ -46,16 +50,30 @@ export interface Host<T, P> {
 
 export function createHost<T, P>(options: HostOptions<T, P>): Host<T, P> {
   const lifecycleDuringStartError = 'Host lifecycle cannot be changed while start is running';
-  const defer = options.defer ?? ((fn: () => void) => setTimeout(fn, 0));
+  const lifecycleDuringStopError = 'Host lifecycle cannot be changed while stop is running';
+  const defer =
+    options.defer ??
+    ((fn: () => void | Promise<void>) =>
+      setTimeout(() => {
+        const result = fn();
+        if (result === undefined) return;
+        void result.catch((error: unknown) => {
+          queueMicrotask(() => {
+            throw error;
+          });
+        });
+      }, 0));
   const cancel = options.cancel ?? ((handle: unknown) => clearTimeout(handle as never));
 
   let instance: T | null = null;
   let refs = 0;
   let pending: unknown = null;
   let starting = false;
+  let stopping = false;
 
   function acquire(parent: P): T {
     if (starting) throw new Error(lifecycleDuringStartError);
+    if (stopping) throw new Error(lifecycleDuringStopError);
     const previousRefs = refs;
     const previousPending = pending;
     refs++;
@@ -81,14 +99,27 @@ export function createHost<T, P>(options: HostOptions<T, P>): Host<T, P> {
 
   function release(): void {
     if (starting) throw new Error(lifecycleDuringStartError);
+    if (stopping) throw new Error(lifecycleDuringStopError);
     refs = Math.max(0, refs - 1);
     if (refs > 0 || pending !== null || instance === null) return;
     pending = defer(() => {
       pending = null;
       // Re-check: a holder may have acquired while the teardown was queued.
       if (refs > 0 || instance === null) return;
-      options.stop(instance);
-      instance = null;
+      const doomed = instance;
+      stopping = true;
+      const finish = () => {
+        instance = null;
+        stopping = false;
+      };
+      try {
+        const result = options.stop(doomed);
+        if (result !== undefined) return Promise.resolve(result).finally(finish);
+      } catch (error) {
+        finish();
+        throw error;
+      }
+      finish();
     });
   }
 

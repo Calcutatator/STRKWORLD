@@ -100,6 +100,42 @@ describe('teardown', () => {
     expect(h.started).toBe(2);
   });
 
+  it('clears failed teardown ownership before surfacing the stop error', () => {
+    const queue: Array<() => void> = [];
+    const stopped: Array<{ id: number }> = [];
+    let attempts = 0;
+    const host = createHost<{ id: number }, string>({
+      start: () => ({ id: ++attempts }),
+      stop: (instance) => {
+        stopped.push(instance);
+        if (instance.id === 1) throw new Error('destroy failed');
+      },
+      defer: (fn) => {
+        queue.push(fn);
+        return queue.length - 1;
+      },
+      cancel: (handle) => {
+        queue[handle as number] = () => {};
+      },
+    });
+
+    host.acquire('#host');
+    host.release();
+    const [flush] = queue.splice(0, 1);
+    if (flush === undefined) throw new Error('missing deferred teardown');
+    expect(() => flush()).toThrow('destroy failed');
+    expect(host.current).toBeNull();
+    expect(host.refCount).toBe(0);
+
+    expect(host.acquire('#host')).toEqual({ id: 2 });
+    host.release();
+    const [retryFlush] = queue.splice(0, 1);
+    if (retryFlush === undefined) throw new Error('missing retry teardown');
+    retryFlush();
+    expect(stopped).toEqual([{ id: 1 }, { id: 2 }]);
+    expect(host.current).toBeNull();
+  });
+
   it('survives release being called more times than acquire', () => {
     const h = harness();
     h.host.acquire('#host');
@@ -218,6 +254,235 @@ describe('construction reentrancy', () => {
     host.release();
     for (const fn of queue.splice(0, queue.length)) fn();
     expect(stop).toHaveBeenCalledOnce();
+    expect(host.refCount).toBe(0);
+    expect(host.current).toBeNull();
+  });
+});
+
+describe('teardown reentrancy', () => {
+  it('rejects a caught nested acquire without orphaning the stopped instance', () => {
+    const queue: Array<() => void> = [];
+    const stopped: Array<{ id: number }> = [];
+    let attempts = 0;
+    let nestedError: unknown;
+    let acquireDuringStop = () => {};
+    const host = createHost<{ id: number }, string>({
+      start: () => ({ id: ++attempts }),
+      stop: (instance) => {
+        stopped.push(instance);
+        if (instance.id !== 1) return;
+        try {
+          acquireDuringStop();
+        } catch (error) {
+          nestedError = error;
+        }
+      },
+      defer: (fn) => {
+        queue.push(fn);
+        return queue.length - 1;
+      },
+    });
+    acquireDuringStop = () => {
+      host.acquire('#nested');
+    };
+
+    host.acquire('#host');
+    host.release();
+    for (const fn of queue.splice(0, queue.length)) fn();
+    expect(nestedError).toStrictEqual(
+      new Error('Host lifecycle cannot be changed while stop is running'),
+    );
+    expect(host.refCount).toBe(0);
+    expect(host.current).toBeNull();
+
+    expect(host.acquire('#host')).toEqual({ id: 2 });
+    host.release();
+    for (const fn of queue.splice(0, queue.length)) fn();
+    expect(stopped).toEqual([{ id: 1 }, { id: 2 }]);
+    expect(host.refCount).toBe(0);
+    expect(host.current).toBeNull();
+  });
+
+  it('surfaces an uncaught nested acquire after restoring teardown state', () => {
+    const queue: Array<() => void> = [];
+    let attempts = 0;
+    let stopped = 0;
+    let acquireDuringStop = () => {};
+    const host = createHost<{ id: number }, string>({
+      start: () => ({ id: ++attempts }),
+      stop: (instance) => {
+        stopped++;
+        if (instance.id === 1) acquireDuringStop();
+      },
+      defer: (fn) => {
+        queue.push(fn);
+        return queue.length - 1;
+      },
+    });
+    acquireDuringStop = () => {
+      host.acquire('#nested');
+    };
+
+    host.acquire('#host');
+    host.release();
+    const [flush] = queue.splice(0, 1);
+    if (flush === undefined) throw new Error('missing deferred teardown');
+    expect(() => flush()).toThrow('Host lifecycle cannot be changed while stop is running');
+    expect(host.refCount).toBe(0);
+    expect(host.current).toBeNull();
+
+    expect(host.acquire('#host')).toEqual({ id: 2 });
+    host.release();
+    for (const fn of queue.splice(0, queue.length)) fn();
+    expect(stopped).toBe(2);
+    expect(host.refCount).toBe(0);
+    expect(host.current).toBeNull();
+  });
+
+  it('rejects a nested release before it mutates refs or queues teardown', () => {
+    const queue: Array<() => void> = [];
+    let attempts = 0;
+    let stopped = 0;
+    let nestedError: unknown;
+    let releaseDuringStop = () => {};
+    const host = createHost<{ id: number }, string>({
+      start: () => ({ id: ++attempts }),
+      stop: (instance) => {
+        stopped++;
+        if (instance.id !== 1) return;
+        try {
+          releaseDuringStop();
+        } catch (error) {
+          nestedError = error;
+        }
+      },
+      defer: (fn) => {
+        queue.push(fn);
+        return queue.length - 1;
+      },
+    });
+    releaseDuringStop = () => {
+      host.release();
+    };
+
+    host.acquire('#host');
+    host.release();
+    for (const fn of queue.splice(0, queue.length)) fn();
+    expect(nestedError).toStrictEqual(
+      new Error('Host lifecycle cannot be changed while stop is running'),
+    );
+    expect(queue).toHaveLength(0);
+    expect(host.refCount).toBe(0);
+    expect(host.current).toBeNull();
+
+    expect(host.acquire('#host')).toEqual({ id: 2 });
+    host.release();
+    for (const fn of queue.splice(0, queue.length)) fn();
+    expect(stopped).toBe(2);
+    expect(host.refCount).toBe(0);
+    expect(host.current).toBeNull();
+  });
+});
+
+describe('async teardown', () => {
+  it('holds lifecycle ownership until async stop succeeds, then starts fresh', async () => {
+    const queue: Array<() => void | Promise<void>> = [];
+    let attempts = 0;
+    let stopped = 0;
+    let resolveStop: (() => void) | undefined;
+    const stopDone = new Promise<void>((resolve) => {
+      resolveStop = resolve;
+    });
+    const host = createHost<{ id: number }, string>({
+      start: () => ({ id: ++attempts }),
+      stop: (instance) => {
+        stopped++;
+        if (instance.id === 1) return stopDone;
+      },
+      defer: (fn) => {
+        queue.push(fn);
+        return queue.length - 1;
+      },
+    });
+
+    const first = host.acquire('#host');
+    host.release();
+    const flush = queue.shift();
+    if (flush === undefined) throw new Error('missing deferred teardown');
+    const teardown = flush();
+    expect(teardown).toBeInstanceOf(Promise);
+    expect(host.current).toBe(first);
+    expect(host.refCount).toBe(0);
+    expect(() => host.acquire('#nested')).toThrow(
+      'Host lifecycle cannot be changed while stop is running',
+    );
+    expect(() => host.release()).toThrow(
+      'Host lifecycle cannot be changed while stop is running',
+    );
+    expect(host.refCount).toBe(0);
+
+    if (resolveStop === undefined) throw new Error('missing stop resolver');
+    resolveStop();
+    await teardown;
+    expect(host.current).toBeNull();
+
+    expect(host.acquire('#host')).toEqual({ id: 2 });
+    host.release();
+    const retryFlush = queue.shift();
+    if (retryFlush === undefined) throw new Error('missing retry teardown');
+    retryFlush();
+    expect(stopped).toBe(2);
+    expect(host.refCount).toBe(0);
+    expect(host.current).toBeNull();
+  });
+
+  it('surfaces async stop failure, restores ownership, and starts fresh', async () => {
+    const queue: Array<() => void | Promise<void>> = [];
+    let attempts = 0;
+    let stopped = 0;
+    let rejectStop: ((error: Error) => void) | undefined;
+    const stopDone = new Promise<void>((_resolve, reject) => {
+      rejectStop = reject;
+    });
+    const host = createHost<{ id: number }, string>({
+      start: () => ({ id: ++attempts }),
+      stop: (instance) => {
+        stopped++;
+        if (instance.id === 1) return stopDone;
+      },
+      defer: (fn) => {
+        queue.push(fn);
+        return queue.length - 1;
+      },
+    });
+
+    const first = host.acquire('#host');
+    host.release();
+    const flush = queue.shift();
+    if (flush === undefined) throw new Error('missing deferred teardown');
+    const teardown = flush();
+    expect(teardown).toBeInstanceOf(Promise);
+    expect(host.current).toBe(first);
+    expect(() => host.acquire('#nested')).toThrow(
+      'Host lifecycle cannot be changed while stop is running',
+    );
+    expect(() => host.release()).toThrow(
+      'Host lifecycle cannot be changed while stop is running',
+    );
+    expect(host.refCount).toBe(0);
+
+    if (rejectStop === undefined) throw new Error('missing stop rejecter');
+    rejectStop(new Error('async destroy failed'));
+    await expect(teardown).rejects.toThrow('async destroy failed');
+    expect(host.refCount).toBe(0);
+    expect(host.current).toBeNull();
+
+    expect(host.acquire('#host')).toEqual({ id: 2 });
+    host.release();
+    const retryFlush = queue.shift();
+    if (retryFlush === undefined) throw new Error('missing retry teardown');
+    retryFlush();
+    expect(stopped).toBe(2);
     expect(host.refCount).toBe(0);
     expect(host.current).toBeNull();
   });
