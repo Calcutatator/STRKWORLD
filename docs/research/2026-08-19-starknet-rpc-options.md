@@ -4,6 +4,36 @@ Read-only comparison for STRKWORLD's mainnet JSON-RPC reads. No provider
 account, endpoint, API key or RPC call was created by this research. Provider
 documentation was checked on 2026-08-19. This note does not select a provider.
 
+## Hackathon/build-docs check
+
+The official [Starknet Hackathon Re{define} page](https://hackathon.starknet.org/)
+advertises a $27,000 prize pool and lists Xverse API-plan/mentorship benefits
+only for the top three projects using Xverse in the **Bitcoin** track. It does
+not promise participants a Starknet RPC account, free quota, or a production
+endpoint. STRKWORLD's privacy/open-track participation therefore cannot treat
+the hackathon page as an RPC entitlement.
+
+The official [Starknet full-nodes and RPC services
+directory](https://www.starknet.io/fullnodes-rpc-services/) labels Lava
+Protocol an “open Starknet RPC endpoint,” but gives no free-tier terms,
+authentication policy, quotas, origin controls, retention terms, or production
+SLA. The current [Starknet developer integrations
+page](https://docs.starknet.io/learn/cheatsheets/integrations) lists open
+endpoints as a provider category and specifically says the documented dRPC and
+Lava open endpoints are for **Sepolia**; neither page establishes a suitable
+unauthenticated mainnet endpoint for this project. An endpoint shown in an
+official directory is consequently an example/public listing, not evidence of
+free or production-capable service.
+
+Alchemy's current [Starknet RPC page](https://www.alchemy.com/rpc/starknet)
+does explicitly say that higher limits and archive data are available “with a
+free account” and provides a mainnet endpoint template requiring an API key.
+That is a free-tier provider account, not a hackathon grant and not an
+unauthenticated public endpoint. It remains the practical development fallback
+in this note, subject to the browser/server split, domain/IP controls, privacy
+review, quotas, and D-028 funded validation already listed below. No provider
+account was created and no endpoint was called for this check.
+
 ## Requirements and security split
 
 STRKWORLD needs two deliberately different RPC configurations:
