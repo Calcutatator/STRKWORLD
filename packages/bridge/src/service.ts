@@ -52,6 +52,7 @@ export interface WatchDepositOptions {
 
 export const MANUAL_POLL_INTERVAL_MS = 10_000;
 export const MAX_ACTIVE_POLLING_MS = 10 * 60 * 1_000;
+const MAX_TIMER_DELAY_MS = 2_147_483_647;
 
 export class BridgeService {
   private readonly client: OneClickClient;
@@ -235,7 +236,7 @@ export class BridgeService {
       maxWallElapsed = Math.max(maxWallElapsed, this.now() - startedAt);
       const elapsed = Math.max(0, maxWallElapsed, scheduledSleepMs);
       if (elapsed >= maxActiveMs) return this.stopActivePolling(status);
-      const delay = Math.min(intervalMs, maxActiveMs - elapsed);
+      const delay = Math.min(intervalMs, maxActiveMs - elapsed, MAX_TIMER_DELAY_MS);
       scheduledSleepMs += delay;
       await this.sleep(delay, options.signal);
     }

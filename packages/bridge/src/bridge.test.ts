@@ -638,6 +638,76 @@ describe('BridgeService', () => {
     expect(delays).toEqual([7, 7, 6]);
   });
 
+  it.each([2_147_483_647, 2_147_483_648])(
+    'keeps a requested polling sleep of %s within the Node timer ceiling',
+    async (requestedDelay) => {
+      const client = new StubClient();
+      const store = new MemoryBridgeStore();
+      const delays: number[] = [];
+      const stopped = new Error('stop after observing the first polling sleep');
+      const service = new BridgeService({
+        client,
+        store,
+        quoteVerifier: () => true,
+        now: () => NOW,
+        sleep: async (ms) => {
+          delays.push(ms);
+          throw stopped;
+        },
+      });
+      await service.createManualDeposit({
+        source: SOURCE,
+        amountIn: 1_000_000n,
+        starknetRecipient: '0x123',
+        refundAddress: request.refundTo,
+      });
+      client.statuses.push(status('PENDING_DEPOSIT' as never));
+
+      await expect(service.watch({
+        intervalMs: requestedDelay,
+        maxActiveMs: requestedDelay,
+      })).rejects.toBe(stopped);
+      expect(delays).toEqual([2_147_483_647]);
+    },
+  );
+
+  it('counts capped sleeps toward a large active window through clock rollback', async () => {
+    const client = new StubClient();
+    const store = new MemoryBridgeStore();
+    const delays: number[] = [];
+    let now = NOW;
+    const service = new BridgeService({
+      client,
+      store,
+      quoteVerifier: () => true,
+      now: () => now,
+      sleep: async (ms) => {
+        delays.push(ms);
+        now -= 1;
+      },
+    });
+    await service.createManualDeposit({
+      source: SOURCE,
+      amountIn: 1_000_000n,
+      starknetRecipient: '0x123',
+      refundAddress: request.refundTo,
+    });
+    client.statuses.push(
+      status('PENDING_DEPOSIT' as never),
+      status('PENDING_DEPOSIT' as never),
+      status('PENDING_DEPOSIT' as never),
+    );
+
+    await expect(service.watch({
+      intervalMs: 2_147_483_648,
+      maxActiveMs: 2_147_483_648,
+    })).resolves.toMatchObject({
+      leg: 'awaiting-deposit',
+      pollingStopped: true,
+    });
+    expect(delays).toEqual([2_147_483_647, 1]);
+  });
+
   it('propagates an abort without rewriting the persisted pending status', async () => {
     const client = new StubClient();
     const store = new MemoryBridgeStore();
