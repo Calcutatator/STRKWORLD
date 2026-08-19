@@ -540,6 +540,51 @@ describe('connect is idempotent', () => {
 });
 
 describe('presence', () => {
+  it('keeps its send floor through clock rollback and reconciles the latest placement', async () => {
+    const joined = fakeRoom();
+    const joinOrCreate = vi
+      .spyOn(ColyseusClient.prototype, 'joinOrCreate')
+      .mockImplementation(() => Promise.resolve(joined.room) as never);
+    let now = 1000;
+    const clock = vi.spyOn(performance, 'now').mockImplementation(() => now);
+    const client = new LobbyClient({
+      endpoint: server.endpoint,
+      start: { x: 0, y: 0 },
+    });
+
+    try {
+      const connecting = client.connect();
+      await Promise.resolve();
+      joined.welcome({ gameId: 'clock-client' });
+      await connecting;
+
+      client.updatePosition(10, 0, 'right');
+      expect(joined.send).toHaveBeenCalledTimes(1);
+
+      now = 900;
+      client.updatePosition(20, 0, 'left');
+      joined.stateChange();
+      now = 1000;
+      joined.stateChange();
+      now = 1049;
+      joined.stateChange();
+      expect(joined.send).toHaveBeenCalledTimes(1);
+
+      now = 1050;
+      joined.stateChange();
+      expect(joined.send).toHaveBeenCalledTimes(2);
+      expect(joined.send).toHaveBeenLastCalledWith('move', {
+        x: 20,
+        y: 0,
+        facing: 'left',
+      });
+    } finally {
+      await client.disconnect();
+      joinOrCreate.mockRestore();
+      clock.mockRestore();
+    }
+  });
+
   it('relays position updates to a nearby peer', async () => {
     const observer = makeClient(0, 0);
     await observer.connect();

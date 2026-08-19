@@ -155,7 +155,7 @@ export class LobbyClient {
 
   /** The latest requested position not yet confirmed on the server. */
   #desired: Required<Placement> | null = null;
-  #lastSentAt = 0;
+  #lastSentAt: number | null = null;
   #reconcileHandle: ReturnType<typeof setTimeout> | null = null;
 
   /** Pure. Opens no connection. */
@@ -215,7 +215,7 @@ export class LobbyClient {
   updatePosition(x: number, y: number, facing: Facing = 'down'): void {
     if (this.#status !== 'connected' || this.#room === null) return;
     this.#desired = { x: Math.round(x), y: Math.round(y), facing };
-    this.#pump(Date.now());
+    this.#pump(performance.now());
   }
 
   /**
@@ -259,7 +259,7 @@ export class LobbyClient {
     // The server writes this placement unconditionally on resume, so it is the
     // confirmed position; nothing to reconcile until the consumer moves again.
     this.#desired = null;
-    this.#lastSentAt = Date.now();
+    this.#lastSentAt = performance.now();
     this.#setStatus('connected');
   }
 
@@ -373,14 +373,14 @@ export class LobbyClient {
       // callbacks must be able to identify this room even before welcome.
       this.#room = room;
       this.#desired = null;
-      this.#lastSentAt = 0;
+      this.#lastSentAt = null;
       this.#setStatus('connected');
       this.#emitPeers();
 
       room.onStateChange(() => {
         if (!this.#isCurrentRoom(generation, room)) return;
         this.#emitPeers();
-        if (this.#status === 'connected') this.#pump(Date.now());
+        if (this.#status === 'connected') this.#pump(performance.now());
       });
       room.onError((code, _message) => {
         if (!this.#isCurrentRoom(generation, room)) return;
@@ -444,6 +444,10 @@ export class LobbyClient {
     if (this.#status !== 'connected' || this.#room === null) return;
     const desired = this.#desired;
     if (desired === null) return;
+    if (!isValidMonotonicTime(now)) {
+      this.#scheduleReconcile(this.#minSendIntervalMs);
+      return;
+    }
 
     const self = this.#serverSelf();
     if (self !== null && samePlacement(desired, self)) {
@@ -452,8 +456,8 @@ export class LobbyClient {
       return;
     }
 
-    const elapsed = now - this.#lastSentAt;
-    if (elapsed >= this.#minSendIntervalMs) {
+    const elapsed = this.#lastSentAt === null ? null : now - this.#lastSentAt;
+    if (elapsed === null || elapsed >= this.#minSendIntervalMs) {
       this.#room.send(MESSAGE.move, desired);
       this.#lastSentAt = now;
       // Re-check after an interval: if the server accepted this move its state
@@ -482,7 +486,7 @@ export class LobbyClient {
     this.#cancelReconcile();
     this.#reconcileHandle = setTimeout(() => {
       this.#reconcileHandle = null;
-      this.#pump(Date.now());
+      this.#pump(performance.now());
     }, delay);
   }
 
@@ -505,6 +509,10 @@ export class LobbyClient {
     const snapshot = this.peers();
     for (const listener of this.#peerListeners) listener(snapshot);
   }
+}
+
+function isValidMonotonicTime(value: number): boolean {
+  return Number.isFinite(value) && value >= 0;
 }
 
 function samePlacement(a: Required<Placement>, b: Required<Placement>): boolean {

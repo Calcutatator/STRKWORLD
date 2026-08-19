@@ -255,8 +255,16 @@ export class LobbyPresence {
   resume(sessionKey: string, request: PlacementRequest, now: number): boolean {
     const session = this.#sessions.get(sessionKey);
     if (session === undefined || !session.suspended) return false;
+    if (!isValidMonotonicTime(now)) return false;
+    // A resume writes a position, so it must consume the same safe floor as a
+    // move before that placement is allowed back into live state.
     if (!this.#place(session.gameId, request)) return false;
-    this.#throttle.stamp(sessionKey, now);
+    // `now` was validated before writing, so this can neither reject nor leave
+    // a newly placed session suspended. Keep the guard as local defence.
+    if (!this.#throttle.stamp(sessionKey, now)) {
+      this.peers.delete(session.gameId);
+      return false;
+    }
     session.suspended = false;
     this.#resumptions += 1;
     this.#peak = Math.max(this.#peak, this.peers.size);
@@ -360,4 +368,8 @@ export class LobbyPresence {
     this.peers.set(gameId, entry);
     return true;
   }
+}
+
+function isValidMonotonicTime(value: number): boolean {
+  return Number.isFinite(value) && value >= 0;
 }

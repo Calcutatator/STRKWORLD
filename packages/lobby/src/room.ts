@@ -108,7 +108,7 @@ export class PresenceRoom extends Room<{ state: LobbyState }> {
       const outcome = this.#registry.move(
         client.sessionId,
         payload ?? {},
-        Date.now(),
+        performance.now(),
       );
       if (outcome === 'applied') this.#syncViews();
     });
@@ -118,7 +118,7 @@ export class PresenceRoom extends Room<{ state: LobbyState }> {
     });
 
     this.onMessage(MESSAGE.resume, (client: Client, payload: PlacementRequest) => {
-      if (this.#registry.resume(client.sessionId, payload ?? {}, Date.now())) {
+      if (this.#registry.resume(client.sessionId, payload ?? {}, performance.now())) {
         this.#syncViews();
       }
     });

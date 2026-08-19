@@ -142,6 +142,7 @@ export class UpdateThrottle {
 
   /** True if this update is due; records the time when it is. */
   accept(key: string, now: number): boolean {
+    if (!isValidMonotonicTime(now)) return false;
     const previous = this.#lastAccepted.get(key);
     if (previous !== undefined && now - previous < this.#minIntervalMs) {
       return false;
@@ -151,14 +152,20 @@ export class UpdateThrottle {
   }
 
   /**
-   * Unconditionally record `now` as the last accepted time for a session.
+   * Record a valid `now` as the last accepted time for a session, without
+   * ever moving its floor backward.
    *
-   * Unlike `accept`, this always writes — it is for a non-move event that must
-   * still consume the rate floor, so that the next `move` waits a full interval
-   * from it. Used by `resume` (see `LobbyPresence.resume`).
+   * It is for a non-move event that must still consume the rate floor, so that
+   * the next `move` waits a full interval from it. Used by `resume` (see
+   * `LobbyPresence.resume`).
    */
-  stamp(key: string, now: number): void {
-    this.#lastAccepted.set(key, now);
+  stamp(key: string, now: number): boolean {
+    if (!isValidMonotonicTime(now)) return false;
+    const previous = this.#lastAccepted.get(key);
+    if (previous === undefined || now >= previous) {
+      this.#lastAccepted.set(key, now);
+    }
+    return true;
   }
 
   /** Forget a session. Called on leave so the map cannot grow unbounded. */
@@ -169,4 +176,9 @@ export class UpdateThrottle {
   get tracked(): number {
     return this.#lastAccepted.size;
   }
+}
+
+/** A monotonic source starts at zero; negative and non-finite samples are unsafe. */
+function isValidMonotonicTime(value: number): boolean {
+  return Number.isFinite(value) && value >= 0;
 }

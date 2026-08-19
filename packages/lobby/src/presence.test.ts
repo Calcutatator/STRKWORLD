@@ -159,6 +159,26 @@ describe('movement', () => {
     expect(registry.peers.get(id)?.position.x).toBe(30);
   });
 
+  it('keeps the server move floor through a rollback and lets it progress later', () => {
+    const registry = new LobbyPresence({ minUpdateIntervalMs: 50 });
+    const id = join(registry, 's1');
+
+    expect(registry.move('s1', { x: 10, y: 10 }, 1000)).toBe('applied');
+    expect(registry.move('s1', { x: 20, y: 20 }, 900)).toBe('throttled');
+    expect(registry.move('s1', { x: 30, y: 30 }, 1000)).toBe('throttled');
+    expect(registry.move('s1', { x: 40, y: 40 }, 1050)).toBe('applied');
+    expect(registry.peers.get(id)?.position.x).toBe(40);
+  });
+
+  it('fails closed for an invalid clock sample without changing placement', () => {
+    const registry = new LobbyPresence({ minUpdateIntervalMs: 50 });
+    const id = join(registry, 's1');
+
+    expect(registry.move('s1', { x: 10, y: 10 }, Number.NaN)).toBe('throttled');
+    expect(registry.peers.get(id)?.position.x).toBe(0);
+    expect(registry.move('s1', { x: 10, y: 10 }, 0)).toBe('applied');
+  });
+
   it('rejects a position that is not finite, without spending the rate floor', () => {
     const registry = new LobbyPresence({ minUpdateIntervalMs: 50 });
     join(registry, 's1');
@@ -231,6 +251,18 @@ describe('suspend and resume', () => {
     // suspend/resume did not hand the client a free write.
     expect(registry.move('s1', { x: 3, y: 3 }, 1015)).toBe('throttled');
     expect(registry.move('s1', { x: 4, y: 4 }, 1070)).toBe('applied');
+  });
+
+  it('refuses an invalid-time resume so it cannot bypass the move floor', () => {
+    const registry = new LobbyPresence({ minUpdateIntervalMs: 50 });
+    join(registry, 's1');
+    registry.suspend('s1');
+
+    expect(registry.resume('s1', { x: 2, y: 2 }, Infinity)).toBe(false);
+    expect(registry.entryFor('s1')).toBeUndefined();
+    expect(registry.resume('s1', { x: 2, y: 2 }, 1000)).toBe(true);
+    expect(registry.move('s1', { x: 3, y: 3 }, 1049)).toBe('throttled');
+    expect(registry.move('s1', { x: 4, y: 4 }, 1050)).toBe('applied');
   });
 });
 

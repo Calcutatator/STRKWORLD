@@ -139,6 +139,45 @@ describe('UpdateThrottle', () => {
     expect(throttle.accept('a', 1050)).toBe(true);
   });
 
+  it('keeps the floor monotonic through a rollback and repeated oscillation', () => {
+    const throttle = new UpdateThrottle(50);
+    expect(throttle.accept('a', 1000)).toBe(true);
+    expect(throttle.accept('a', 900)).toBe(false);
+    expect(throttle.accept('a', 1000)).toBe(false);
+    expect(throttle.accept('a', 900)).toBe(false);
+    expect(throttle.accept('a', 1000)).toBe(false);
+    // The floor eventually progresses once the clock source itself does.
+    expect(throttle.accept('a', 1050)).toBe(true);
+  });
+
+  it('fails closed for invalid samples without poisoning a session', () => {
+    const throttle = new UpdateThrottle(50);
+    for (const invalid of [Number.NaN, Infinity, -Infinity, -1]) {
+      expect(throttle.accept('a', invalid)).toBe(false);
+      expect(throttle.tracked).toBe(0);
+    }
+
+    // Zero is a valid monotonic-clock origin, not an invalid sentinel.
+    expect(throttle.accept('a', 0)).toBe(true);
+    for (const invalid of [Number.NaN, Infinity, -Infinity, -1]) {
+      expect(throttle.accept('a', invalid)).toBe(false);
+    }
+    expect(throttle.accept('a', 49)).toBe(false);
+    expect(throttle.accept('a', 50)).toBe(true);
+  });
+
+  it('stamps a valid forward floor but never moves it backward', () => {
+    const throttle = new UpdateThrottle(50);
+    expect(throttle.accept('a', 1000)).toBe(true);
+    expect(throttle.stamp('a', 900)).toBe(true);
+    expect(throttle.accept('a', 1049)).toBe(false);
+    expect(throttle.accept('a', 1050)).toBe(true);
+
+    expect(throttle.stamp('a', Number.NaN)).toBe(false);
+    expect(throttle.accept('a', 1099)).toBe(false);
+    expect(throttle.accept('a', 1100)).toBe(true);
+  });
+
   it('throttles each session independently', () => {
     const throttle = new UpdateThrottle(50);
     expect(throttle.accept('a', 1000)).toBe(true);
