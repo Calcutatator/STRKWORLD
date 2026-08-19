@@ -21,7 +21,7 @@ the lane boundary — that is why the repo is shaped the way it is.
 | **Shell** | `apps/web` | Active, starts week 2 |
 | **Backend** | `apps/backend` | Active; D-050 and both hosted image smokes complete; host, domain, secrets, Alchemy controls, live staging and funded checks remain |
 | **Bridge** | `packages/bridge` | Active, fully independent |
-| **Art** | `packages/world/assets` | Active; Kenney Urban CC0 acquired; D-049 export topology and 16-idle calibration approved, with 1/4/6/7 movement prototypes authorized as the next bounded gate before the remaining characters, final sheets and runtime art |
+| **Art** | `packages/world/assets` | Active; Kenney Urban CC0 acquired; D-049 authorizes all eight characters through final transparent export, QA and handoff; runtime integration and rendered acceptance remain separate |
 | ~~Contracts~~ | — | **Dormant until post-v1** |
 
 ### Why Contracts is dormant
@@ -484,13 +484,16 @@ consistent shadow separately. It still needs frame-by-frame anchor validation
 and the user's final-art approval. Do not wire the review PNGs into runtime
 textures or call them accepted final art.
 
-**Current D-049 gate:** On 2026-08-19 the user approved the sixteen
-true-resolution idle calibrations, one per opaque key. Art may now produce
-movement prototypes for characters 1, 4, 6 and 7 only, covering both cosy and
-fighting states, all four facings, and the `idle`, `walk-1`, `walk-2` columns.
-It pauses for user visual review before producing movement work for characters
-2, 3, 5 or 8. World does not begin final sprite integration from the current
-baked review sheets or the unreviewed prototypes.
+**Current D-049 gate:** On 2026-08-20 the user superseded the former mandatory
+pause after characters 1, 4, 6 and 7. Art may now carry all eight characters
+and both states through remaining movement production, the sixteen final
+transparent sheets, one tagged editable Aseprite source, mechanical QA and
+handoff. The 64×64 canvas, `(32, 56)` feet, 24×24 gameplay/contact body,
+per-key 192×256 sheet topology, no mega-atlas and no-baked-shadow policy remain
+fixed. This is an art-production authorization only: World does not integrate
+the baked review sheets or intermediate prototypes, and the final handoff
+still requires separate runtime integration review and user-run rendered
+acceptance.
 
 **Licence audit is the real work here.** Popular "free" packs are frequently
 non-commercial only, and this is a public project handling real funds. Audit

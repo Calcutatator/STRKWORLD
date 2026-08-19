@@ -250,6 +250,28 @@ without a verification method is a rumour.
 
 Format: `### YYYY-MM-DD — short title` then what, why it matters, how verified.
 
+### 2026-08-20 — Fly public and private service ports are pairwise distinct
+
+The strict Fly environment boundary now parses the public, Backend and lobby
+ports once and requires all three to differ, including when the private ports
+come from their defaults. A collision between any pair fails with the same
+generic `Fly service ports must be distinct.` error before the supervisor
+starts either child or binds the public edge. The check prevents one
+composition from assigning two services the same port; it does not prove a
+port is free on the host, or establish Fly routing, TLS, domain ownership,
+process readiness or deployment health. CORS, presence schema, financial
+routes, logging and secrets are unchanged.
+
+*Verified:* the red matrix previously accepted public/Backend, public/lobby
+and Backend/lobby collisions; commit `572fa03` makes all three reject while
+the existing valid/default environment cases remain green. The focused Fly
+port-collision test and Fly build typecheck, invariant scan and diff check
+passed.
+[GitHub Actions run 32308940057](https://github.com/Calcutatator/STRKWORLD/actions/runs/32308940057)
+also completed successfully. The port-collision test starts no process and
+binds no socket; no deployment, wallet, RPC, proof, signature or transaction
+was used.
+
 ### 2026-08-20 — Batch intent limits are positive safe integers
 
 The Menu Mode batch accumulator now validates its internal `maxIntents`

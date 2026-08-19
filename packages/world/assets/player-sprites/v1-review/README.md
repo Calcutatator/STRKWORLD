@@ -31,12 +31,14 @@ feet pivot.
 - No frame contains baked shadow pixels. World may render one consistent
   shadow separately; it remains outside the sprite source and gameplay body.
 
-James approved the 16 true-resolution idle calibrations on 2026-08-19. The
-current next deliverable is limited to movement prototypes for characters 1,
-4, 6 and 7, in both cosy and fighting states, with all four facings and the
-`idle`, `walk-1`, `walk-2` columns. Pause for James's visual review before
-producing movement work for characters 2, 3, 5 or 8. The calibration approval
-does not make the review package or prototypes runtime-ready.
+James approved the 16 true-resolution idle calibrations on 2026-08-19. On
+2026-08-20 he superseded the former mandatory pause after movement prototypes
+for characters 1, 4, 6 and 7 and authorized the art lane to carry all eight
+characters through final transparent exports, the tagged editable source,
+mechanical QA and handoff. This is production authorization for the art lane;
+it does not make this review package, an intermediate prototype or the final
+handoff runtime-ready, and it does not authorize World integration or replace
+rendered in-game acceptance.
 
 ## Files
 

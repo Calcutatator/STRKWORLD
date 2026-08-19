@@ -1908,9 +1908,10 @@ orientation; rendered acceptance is required again after implementation.
 
 ## D-049 — Avatar art uses one fixed 64x64 logical canvas
 
-**2026-08-19 · Accepted by the user · supersedes D-047's provisional 32x32
-runtime-art assumption; export topology, shadow policy and true-resolution
-idle calibration approved, movement pixels and integration pending**
+**2026-08-19 · Accepted by the user; 2026-08-20 art-production amendment
+authorizes all eight characters through final handoff and supersedes the
+interim pause after characters 1/4/6/7 · supersedes D-047's provisional 32x32
+runtime-art assumption; runtime integration and rendered acceptance pending**
 
 **Context.** The approved art direction deliberately includes two larger
 characters and fighting poses whose weapons extend beyond a 32x32 cell. A
@@ -1946,13 +1947,21 @@ shadow separately behind every local, remote and Studio avatar; that shadow is
 presentation only and does not change the fixed feet point or 24x24 gameplay
 body.
 
-On 2026-08-19 the user approved the sixteen true-resolution idle calibrations,
-one for each opaque key. That review authorizes only movement prototypes for
-characters 1, 4, 6 and 7, in both cosy and fighting states, with all four
-facings and the `idle`, `walk-1`, `walk-2` columns. Art pauses for the user's
-visual review of those prototypes before producing movement work for
-characters 2, 3, 5 or 8. Calibration approval is not approval of the movement
-pixels or runtime assets.
+**Initial 2026-08-19 gate — superseded by the 2026-08-20 authorization below.**
+The user first approved the sixteen true-resolution idle calibrations, one for
+each opaque key, and authorized movement prototypes only for characters 1, 4,
+6 and 7 before a mandatory pause. That calibration review was not approval of
+the movement pixels or runtime assets.
+
+**2026-08-20 art-production authorization.** The user has now authorized the
+art lane to carry all eight characters, both cosy and fighting states, through
+the complete production process without the former 1/4/6/7 pause: remaining
+movement work for characters 2, 3, 5 and 8, final transparent exports, the one
+tagged editable source, mechanical QA and the final handoff are all unblocked.
+The fixed canvas, feet/body, sheet topology, opaque-key mapping and no-baked-
+shadow requirements above remain unchanged. This authorizes art production
+and handoff only. It does not make an intermediate or final file runtime-ready,
+authorize World integration, or replace final in-game rendered acceptance.
 
 Variable per-key canvases and separate body/weapon layers are rejected for the
 initial runtime. They require a later decision if final accepted art proves the
@@ -1961,10 +1970,11 @@ current review sheets for runtime: they still contain baked backgrounds and
 are not the final transparent export.
 
 **Consequences.** The sprite-studio task retains ownership of cleanup, final
-pixels, the sixteen per-key sheets and the tagged editable source. Runtime
-integration waits for movement-prototype review, the remaining characters,
-final handoff and the user's final-art approval. World may then use one visual
-object per avatar state while keeping the existing physics sprite/body as the
+pixels, the sixteen per-key sheets, the tagged editable source and mechanical
+QA through the completed handoff; it no longer pauses between character
+groups. Runtime integration still waits for that complete handoff and a
+separate review of the final assets. World may then use one visual object per
+avatar state while keeping the existing physics sprite/body as the
 authoritative position and collision seam. Tests must pin exact sheet/cell
 geometry, logical canvas, feet, frame vocabulary, transparent padding,
 shadow-free source pixels, fixed 24x24 gameplay geometry, opaque-key fallback
