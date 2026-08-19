@@ -28,8 +28,8 @@ export interface AvatarStudioDefinition {
 export const AVATAR_STUDIO_DEFINITION = {
   width: AVATAR_STUDIO_WIDTH,
   height: AVATAR_STUDIO_HEIGHT,
-  spawn: { x: 9, y: 9 },
-  exit: { x: 8, y: 11, width: 2, height: 1 },
+  spawn: { x: 9, y: 1 },
+  exit: { x: 8, y: 0, width: 2, height: 1 },
   figures: [
     { figure: 1, sprite: 'avatar-1', x: 2, y: 3, width: 1, height: 1 },
     { figure: 2, sprite: 'avatar-2', x: 5, y: 3, width: 1, height: 1 },
@@ -161,9 +161,10 @@ export function validateAvatarStudioDefinition(definition: AvatarStudioDefinitio
     !insideRect(definition, definition.exit) ||
     definition.exit.width !== 2 ||
     definition.exit.height !== 1 ||
-    definition.exit.y !== definition.height - 1
+    definition.exit.x !== (definition.width - definition.exit.width) / 2 ||
+    definition.exit.y !== 0
   ) {
-    throw new Error('Avatar Studio exit must be a two-tile bottom-border opening');
+    throw new Error('Avatar Studio exit must be a centred two-tile top-border opening');
   }
   if (definition.figures.length !== 8) {
     throw new Error('Avatar Studio must contain exactly eight figures');
@@ -210,6 +211,25 @@ export function validateAvatarStudioDefinition(definition: AvatarStudioDefinitio
       'Avatar Studio spawn must be a walkable interior tile off the exit and figures',
     );
   }
+  if (
+    definition.spawn.x !== definition.exit.x + Math.floor(definition.exit.width / 2) ||
+    definition.spawn.y !== definition.exit.y + definition.exit.height
+  ) {
+    throw new Error('Avatar Studio spawn must be immediately inside the centred top opening');
+  }
+}
+
+/** Pixel centre of the validated interior spawn tile within the room. */
+export function avatarStudioSpawnToWorld(
+  definition: AvatarStudioDefinition,
+  roomOrigin: { readonly x: number; readonly y: number },
+  tileSize: number,
+): { x: number; y: number } {
+  validateAvatarStudioDefinition(definition);
+  return {
+    x: roomOrigin.x + definition.spawn.x * tileSize + tileSize / 2,
+    y: roomOrigin.y + definition.spawn.y * tileSize + tileSize / 2,
+  };
 }
 
 export function avatarStudioFigureAt(
@@ -239,7 +259,7 @@ export function isAvatarStudioSolidAt(
   return x === 0 || y === 0 || x === definition.width - 1 || y === definition.height - 1;
 }
 
-/** Presentation role for one tile; the bottom opening wins over the border. */
+/** Presentation role for one tile; the top opening wins over the border. */
 export function avatarStudioTileColour(
   definition: AvatarStudioDefinition,
   x: number,

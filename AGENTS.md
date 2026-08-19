@@ -250,6 +250,46 @@ without a verification method is a rumour.
 
 Format: `### YYYY-MM-DD — short title` then what, why it matters, how verified.
 
+### 2026-08-19 — Clean CI now proves both deploy images and the Fly edge fails closed
+
+The public Fly edge no longer forwards ambient browser identity carriers into
+private children. API requests are rebuilt with only validated JSON
+`content-type` and `content-length`; matchmaking and WebSocket traffic likewise
+use narrow route-specific headers, excluding cookies, authorization,
+proxy-authorization, forwarding and custom player-identity headers. Duplicate
+body metadata, missing or malformed JSON content type, non-decimal length and
+malformed raw HTTP are rejected generically before the backend is reached.
+
+The composition readiness test had a clean-checkout trap: it served
+`apps/web/dist`, an ignored local build that does not exist in CI, so the real
+edge correctly returned its static 404 after both children were ready. The test
+now creates and asserts its own temporary `index.html`. CI also has explicit
+no-emit checks for both non-workspace deploy targets and builds both repository
+Dockerfiles from the correct root context.
+
+*Verified:* commit `b369cae` adversarial edge and composition tests, Fly and
+backend deploy typechecks, invariant checks, and GitHub Actions run
+[`32274724770`](https://github.com/Calcutatator/STRKWORLD/actions/runs/32274724770)
+at the same commit. The run passed all 77 test files / 817 tests and built both
+`strkworld-fly:ci` and `strkworld-backend:ci` images. No deployment, secret,
+wallet or funded network action was performed.
+
+### 2026-08-19 — Authored World geometry fails closed before Phaser owns it
+
+Runtime types are not trusted as authored map validation. The Avatar Studio
+now rejects malformed, fractional, border-touching, overlapping or unreachable
+selector rectangles, invalid spawn tiles and any exit outside its fixed
+envelope before presentation objects or listeners are created. Tiled door
+import likewise accepts only finite safe-integer, positive, tile-aligned pixel
+rectangles inside validated map bounds; unknown buildings or malformed
+geometry produce no door instead of a rounded or out-of-map trigger.
+
+*Verified:* commit `d2a28ab` validator and adversarial tests for the canonical
+Studio plus zero, negative, fractional, non-finite, unsafe and out-of-bounds
+Tiled geometry; the focused World tests, World typecheck, invariant scan and
+diff check passed. This finding validates the fail-closed mechanism, not the
+older bottom-wall portal direction, which is superseded by D-048.
+
 ### 2026-08-19 — Avatar Studio foundation passes rendered acceptance; cosmetic handoff has two lifecycle gates
 
 D-047's non-financial foundation is implemented and has passed user-run
@@ -270,8 +310,11 @@ deduplicates reconnect requests. Presentation tests must drive the same
 adapter and teardown seam used by `StreetScene`, or a green fake can miss a
 production cleanup leak. The keyboard toggle is deliberately unbound pending
 the user's key choice. The PNG sheets committed at `e5eaea9` are review art,
-not runtime assets: they still need transparent-alpha cleanup, exact 32×32
-cell extraction, manual anchor/feet validation and user art approval.
+not runtime assets. At that point their review recorded transparent-alpha
+cleanup, exact 32×32 extraction, manual anchor/feet validation and user art
+approval as pending; D-049 supersedes the 32×32 extraction instruction with
+the fixed transparent 64×64 logical canvas while preserving the verified
+review provenance and the remaining cleanup/approval gates.
 
 *Verified:* exact World presentation/lifecycle ordering and teardown tests,
 World/shared tests and typechecks, lobby admission/resume tests, Fly edge
@@ -283,6 +326,15 @@ change, and two-tab presence hide/restore. No agent browser automation was
 used. The fighting-state toggle and final runtime sprite art were not accepted
 by that test and remain open; no wallet, proof, signature or transaction was
 used.
+
+*Forward note — navigation and art details superseded by D-048/D-049:* the
+hidden exterior street trigger remains at the south map edge, but the Studio
+interior now requires a centered 2×1 **top-wall** portal with entry immediately
+inside and exit back upward. The provisional 32×32 extraction is no longer the
+runtime target: all sixteen visual states use one transparent 64×64 logical
+canvas with feet at `(32, 56)` over an unchanged authoritative 24×24 gameplay
+body/contact footprint. The current review PNGs remain non-runtime art, and
+both changes require fresh implementation and user-rendered acceptance.
 
 ### 2026-08-19 — WorldHost leases must single-flight lazy Phaser acquisition
 

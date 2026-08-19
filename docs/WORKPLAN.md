@@ -17,11 +17,11 @@ the lane boundary — that is why the repo is shaped the way it is.
 | Lane | Package | Status in v1 |
 |---|---|---|
 | **Chain** | `packages/privacy` | Active; private seam frozen, D-043 planner port/fake complete, production Ready planner blocked |
-| **World** | `packages/world` + `packages/lobby` | Active; Avatar Studio foundation and doorway surround accepted on localhost; keyboard toggle and runtime sprite art remain |
+| **World** | `packages/world` + `packages/lobby` | Active; Avatar Studio foundation accepted on localhost; D-048 top-wall portal, keyboard toggle and D-049 runtime sprite art remain |
 | **Shell** | `apps/web` | Active, starts week 2 |
 | **Backend** | `apps/backend` | Active; offline implementation and Fly hardening complete; host, Docker, domain, secrets, Alchemy controls and live staging remain |
 | **Bridge** | `packages/bridge` | Active, fully independent |
-| **Art** | `packages/world/assets` | Active; Kenney Urban CC0 acquired and role mappings corrected; sprite review sheets are not runtime-ready, and final visual direction, sprite cleanup/approval and station states remain user-gated |
+| **Art** | `packages/world/assets` | Active; Kenney Urban CC0 acquired and role mappings corrected; sprite review sheets are not runtime-ready, and the D-049 transparent 64×64 export, final approval and station states remain user-gated |
 | ~~Contracts~~ | — | **Dormant until post-v1** |
 
 ### Why Contracts is dormant
@@ -240,9 +240,13 @@ highlight, activation, exit and teardown only; it gained no recipient, quote,
 deposit address, status or wallet concept. Rendered room and station acceptance
 remains user-run at `http://localhost:5173/`.
 
-**D-047 foundation complete and rendered-accepted locally:** the hidden south
-path and bottom-edge trigger enter a non-financial 18×12 Avatar Studio outside
-`BuildingId`/`BUILDINGS`, with no facade, public label or `VisitLayer` route.
+**D-047 foundation complete and rendered-accepted locally; D-048 portal change
+pending:** the hidden south path and bottom-edge street trigger enter a
+non-financial 18×12 Avatar Studio outside `BuildingId`/`BUILDINGS`, with no
+facade, public label or `VisitLayer` route. Replace the provisional interior
+bottom opening with a centered 2×1 top-wall portal, spawn immediately inside
+it, and exit by walking back upward through that same opening. Preserve the
+existing restored-street-placement-before-exit-event ordering.
 Eight collision selectors choose the cosy/default states. The three dedicated
 `WorldEvents` are the only event-bus extension, and World, lobby and Fly now
 share the existing single `sprite` field across `avatar-1..16`; there is no
@@ -256,7 +260,8 @@ remains open and unbound pending the user's choice, and runtime sprite art is
 not complete. On 2026-08-19 the user manually accepted the hard-refreshed
 localhost foundation: hidden entry, eight placeholder selectors, collision
 colour selection and two-tab presence hide/restore. No fighting-toggle or
-final-art acceptance is implied.
+final-art acceptance is implied, and the later D-048 interior portal direction
+requires a fresh rendered check.
 
 **Must not:** import `starknet` or any wallet package. Put an address, balance,
 transaction hash, building name or entry event into lobby traffic. On local
@@ -450,9 +455,12 @@ before any final art lock. Record the licence for **every** additional pack in
 **D-047 sprite review package only:** commit `e5eaea9` records the generated
 review sheets and manifest under `packages/world/assets/player-sprites/v1-review/`.
 Those PNGs are explicitly `review-art-not-runtime-ready`: their backgrounds
-are baked rather than transparent, and they still need exact 32×32 extraction,
-manual frame-by-frame anchor/feet validation and the user's art approval. Do
-not wire them into runtime textures or call them accepted final art.
+are baked rather than transparent. D-049 supersedes the provisional 32×32
+target: the final handoff must use one transparent 64×64 logical canvas for
+every `avatar-1..16` state, fixed feet at `(32, 56)`, with smaller art padded
+and characters 4 and 7 free to use more of the same canvas. It still needs
+frame-by-frame anchor validation and the user's art approval. Do not wire the
+review PNGs into runtime textures or call them accepted final art.
 
 **Licence audit is the real work here.** Popular "free" packs are frequently
 non-commercial only, and this is a public project handling real funds. Audit
@@ -463,10 +471,13 @@ grandfathered.
 their protocols, the eight-character/two-state sprite handoff from the
 separate studio, and the Aseprite → embedded-tileset export pipeline. D-033
 keeps the first Bank room procedural; final room/station art starts only after
-World freezes its 32 px footprints and asset names. Avatar Studio figures must
-preserve a stable 32 px runtime footprint and anchor; their final style and
-state-to-key art manifest remain subject to the user's approval, while the
-sixteen-key wire seam is fixed by D-047.
+World freezes its footprints and asset names. Avatar visuals use D-049's fixed
+64×64 logical canvas and `(32, 56)` feet while the authoritative local body and
+Studio contact footprint remain 24×24. Atlas trimming is allowed only when
+logical `sourceSize` and pivot metadata preserve that contract exactly. The
+final style and state-to-key art manifest remain subject to the user's
+approval, while the sixteen-key wire seam is fixed by D-047. Variable per-key
+canvases and layered body/weapon rendering are out of the initial slice.
 
 **Frozen first-room asset contract (D-033 tracer):** the procedural Bank is an
 18×12 grid of 32 px tiles (576×384 px), with a one-tile perimeter, spawn at

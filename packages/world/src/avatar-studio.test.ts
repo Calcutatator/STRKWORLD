@@ -2,16 +2,20 @@ import { describe, expect, it } from 'vitest';
 import type { AvatarSpriteKey, WorldEvents } from '@strkworld/shared';
 import {
   AVATAR_STUDIO_DEFINITION,
+  AVATAR_STUDIO_TILE_SIZE,
   avatarStudioFigureAt,
+  avatarStudioSpawnToWorld,
   avatarStudioTileColour,
   createAvatarStudioPresentation,
   createAvatarStudioController,
   isAvatarStudioSolidAt,
   type AvatarStudioDefinition,
   type AvatarStudioFigure,
+  type AvatarStudioPresentationPort,
   validateAvatarStudioDefinition,
 } from './avatar-studio.js';
 import { avatarPlaceholderTint } from './avatar-state.js';
+import { createStreetMap, tileToWorld } from './map/street.js';
 
 type Emitted = { [K in keyof WorldEvents]: { event: K; payload: WorldEvents[K] } }[keyof WorldEvents];
 
@@ -20,8 +24,8 @@ describe('hidden Avatar Studio', () => {
     expect(AVATAR_STUDIO_DEFINITION).toMatchObject({
       width: 18,
       height: 12,
-      spawn: { x: 9, y: 9 },
-      exit: { x: 8, y: 11, width: 2, height: 1 },
+      spawn: { x: 9, y: 1 },
+      exit: { x: 8, y: 0, width: 2, height: 1 },
     });
     expect(AVATAR_STUDIO_DEFINITION.figures).toHaveLength(8);
     expect(AVATAR_STUDIO_DEFINITION.figures.map((figure) => figure.sprite)).toEqual([
@@ -37,6 +41,12 @@ describe('hidden Avatar Studio', () => {
     expect(AVATAR_STUDIO_DEFINITION).not.toHaveProperty('building');
     expect(AVATAR_STUDIO_DEFINITION).not.toHaveProperty('stations');
     expect(() => validateAvatarStudioDefinition(AVATAR_STUDIO_DEFINITION)).not.toThrow();
+  });
+
+  it('derives the interior pixel spawn from the validated top-opening definition', () => {
+    expect(
+      avatarStudioSpawnToWorld(AVATAR_STUDIO_DEFINITION, { x: 64, y: 64 }, 32),
+    ).toEqual({ x: 368, y: 112 });
   });
 
   it('rejects overlapping selector rectangles that would make a later figure unreachable', () => {
@@ -90,9 +100,9 @@ describe('hidden Avatar Studio', () => {
   });
 
   it.each([
-    ['a fractional coordinate', { x: 9.5, y: 9 }],
+    ['a fractional coordinate', { x: 9.5, y: 1 }],
     ['the solid room border', { x: 0, y: 9 }],
-    ['the exit opening', { x: 8, y: 11 }],
+    ['the exit opening', { x: 8, y: 0 }],
     ['a selector rectangle', { x: 2, y: 3 }],
   ])('rejects a spawn on %s', (_label, spawn) => {
     expect(() => validateAvatarStudioDefinition(authoredDefinition({ spawn }))).toThrow(
@@ -101,16 +111,26 @@ describe('hidden Avatar Studio', () => {
   });
 
   it.each([
-    ['above the bottom border', { x: 8, y: 10, width: 2, height: 1 }],
-    ['only one tile wide', { x: 8, y: 11, width: 1, height: 1 }],
-    ['two tiles deep', { x: 8, y: 10, width: 2, height: 2 }],
-  ])('rejects an exit %s', (_label, exit) => {
-    expect(() => validateAvatarStudioDefinition(authoredDefinition({ exit }))).toThrow(
-      /exit must be a two-tile bottom-border opening/i,
+    ['one tile sideways from the opening centre', { x: 8, y: 1 }],
+    ['two rows inside the room', { x: 9, y: 2 }],
+  ])('rejects a spawn %s', (_label, spawn) => {
+    expect(() => validateAvatarStudioDefinition(authoredDefinition({ spawn }))).toThrow(
+      /spawn must be immediately inside the centred top opening/i,
     );
   });
 
-  it('selects a cosy figure on contact and exits through the bottom opening', () => {
+  it.each([
+    ['below the top border', { x: 8, y: 1, width: 2, height: 1 }],
+    ['only one tile wide', { x: 8, y: 0, width: 1, height: 1 }],
+    ['two tiles deep', { x: 8, y: 0, width: 2, height: 2 }],
+    ['off centre', { x: 7, y: 0, width: 2, height: 1 }],
+  ])('rejects an exit %s', (_label, exit) => {
+    expect(() => validateAvatarStudioDefinition(authoredDefinition({ exit }))).toThrow(
+      /exit must be a centred two-tile top-border opening/i,
+    );
+  });
+
+  it('selects a cosy figure on contact and exits upward through the top opening', () => {
     const events: Emitted[] = [];
     const controller = createAvatarStudioController({
       out: { emit: (event, payload) => events.push({ event, payload } as Emitted) },
@@ -128,28 +148,119 @@ describe('hidden Avatar Studio', () => {
       payload: { sprite: 'avatar-8' satisfies AvatarSpriteKey },
     });
 
-    controller.update({ x: 8, y: 11 });
+    controller.update({ x: 8, y: 0 });
     expect(controller.state.inRoom).toBe(false);
     expect(events.at(-1)).toEqual({ event: 'avatar-studio:exited', payload: {} });
   });
 
-  it('keeps the room border solid except for the two-tile exit', () => {
-    expect(isAvatarStudioSolidAt(AVATAR_STUDIO_DEFINITION, 0, 0)).toBe(true);
-    expect(isAvatarStudioSolidAt(AVATAR_STUDIO_DEFINITION, 8, 11)).toBe(false);
-    expect(isAvatarStudioSolidAt(AVATAR_STUDIO_DEFINITION, 9, 11)).toBe(false);
-    expect(isAvatarStudioSolidAt(AVATAR_STUDIO_DEFINITION, 9, 9)).toBe(false);
+  it('moves down from the interior spawn and exits only after moving back up through the opening', () => {
+    const operations: string[] = [];
+    const playerPositions: Array<{ x: number; y: number }> = [];
+    const map = createStreetMap();
+    const streetReturn = tileToWorld(map.spawn.x, map.spawn.y);
+    const studioSpawn = avatarStudioSpawnToWorld(
+      AVATAR_STUDIO_DEFINITION,
+      { x: 64, y: 64 },
+      AVATAR_STUDIO_TILE_SIZE,
+    );
+    const noop = (): void => {};
+    const port: AvatarStudioPresentationPort = {
+      setPlayerVelocity: noop,
+      setBodyEnabled: noop,
+      setGroundVisible: noop,
+      setDoorsVisible: noop,
+      setRemoteVisible: noop,
+      setLabelsVisible: noop,
+      setRoomVisible: noop,
+      setStudioVisible: noop,
+      setWorldBounds: noop,
+      setCameraBounds: noop,
+      setPlayerPosition: (position) => {
+        playerPositions.push(position);
+        operations.push(position === streetReturn ? 'position:street' : 'position:studio');
+      },
+      resetDoors: () => operations.push('doors:reset'),
+      resumeStreet: (position, report) => {
+        expect(position).toBe(streetReturn);
+        operations.push('presence:resume');
+        report();
+      },
+      destroyStudio: noop,
+    };
+    const presentation = createAvatarStudioPresentation({
+      port,
+      streetBounds: { x: 0, y: 0, width: map.width * 32, height: map.height * 32 },
+      studioBounds: { x: 64, y: 64, width: 18 * 32, height: 12 * 32 },
+      studioSpawn,
+      streetReturn,
+      reportStreet: () => operations.push('street:reported'),
+    });
+    const controller = createAvatarStudioController({
+      out: { emit: (event) => operations.push(event) },
+      onEnter: () => presentation.enter(),
+      onExit: () => presentation.exit(),
+    });
+
+    controller.enter();
+    expect(playerPositions.at(-1)).toEqual({ x: 368, y: 112 });
+    expect(AVATAR_STUDIO_DEFINITION.spawn.y).toBe(
+      AVATAR_STUDIO_DEFINITION.exit.y + AVATAR_STUDIO_DEFINITION.exit.height,
+    );
+
+    controller.update({
+      x: AVATAR_STUDIO_DEFINITION.spawn.x,
+      y: AVATAR_STUDIO_DEFINITION.spawn.y + 1,
+    });
+    expect(controller.state.inRoom).toBe(true);
+    controller.update(AVATAR_STUDIO_DEFINITION.spawn);
+    expect(controller.state.inRoom).toBe(true);
+    controller.update({
+      x: AVATAR_STUDIO_DEFINITION.exit.x + 1,
+      y: AVATAR_STUDIO_DEFINITION.exit.y,
+    });
+
+    expect(controller.state.inRoom).toBe(false);
+    expect(playerPositions.at(-1)).toBe(streetReturn);
+    expect(operations.slice(-5)).toEqual([
+      'position:street',
+      'doors:reset',
+      'presence:resume',
+      'street:reported',
+      'avatar-studio:exited',
+    ]);
+
+    const operationsAfterExit = operations.length;
+    controller.update({
+      x: AVATAR_STUDIO_DEFINITION.exit.x + 1,
+      y: AVATAR_STUDIO_DEFINITION.exit.y,
+    });
+    expect(controller.state.inRoom).toBe(false);
+    expect(operations).toHaveLength(operationsAfterExit);
+    expect(operations.filter((operation) => operation === 'avatar-studio:entered')).toHaveLength(1);
   });
 
-  it('renders the walkable bottom exit as an opening rather than a wall', () => {
-    expect(avatarStudioTileColour(AVATAR_STUDIO_DEFINITION, 8, 11)).toBe(0x8a7c62);
-    expect(avatarStudioTileColour(AVATAR_STUDIO_DEFINITION, 9, 11)).toBe(0x8a7c62);
-    expect(avatarStudioTileColour(AVATAR_STUDIO_DEFINITION, 0, 11)).toBe(0x39343b);
+  it('keeps the room border solid except for the two-tile exit', () => {
+    expect(isAvatarStudioSolidAt(AVATAR_STUDIO_DEFINITION, 0, 0)).toBe(true);
+    expect(isAvatarStudioSolidAt(AVATAR_STUDIO_DEFINITION, 8, 0)).toBe(false);
+    expect(isAvatarStudioSolidAt(AVATAR_STUDIO_DEFINITION, 9, 0)).toBe(false);
+    expect(isAvatarStudioSolidAt(AVATAR_STUDIO_DEFINITION, 9, 1)).toBe(false);
+    expect(isAvatarStudioSolidAt(AVATAR_STUDIO_DEFINITION, 9, 11)).toBe(true);
+  });
+
+  it('renders the walkable top exit as an opening rather than a wall', () => {
+    expect(avatarStudioTileColour(AVATAR_STUDIO_DEFINITION, 8, 0)).toBe(0x8a7c62);
+    expect(avatarStudioTileColour(AVATAR_STUDIO_DEFINITION, 9, 0)).toBe(0x8a7c62);
+    expect(avatarStudioTileColour(AVATAR_STUDIO_DEFINITION, 0, 0)).toBe(0x39343b);
   });
 
   it('supports enter/select/exit/re-enter/shutdown through one lifecycle seam', () => {
     const streetBounds = { x: 0, y: 0, width: 48 * 32, height: 28 * 32 };
     const studioBounds = { x: 64, y: 64, width: 18 * 32, height: 12 * 32 };
-    const studioSpawn = { x: 368, y: 368 };
+    const studioSpawn = avatarStudioSpawnToWorld(
+      AVATAR_STUDIO_DEFINITION,
+      { x: 64, y: 64 },
+      32,
+    );
     const streetReturn = { x: 784, y: 496 };
     const lifecycle = {
       groundVisible: true,
@@ -262,7 +373,7 @@ describe('hidden Avatar Studio', () => {
 
     controller.enter();
     controller.update({ x: 14, y: 6 });
-    controller.update({ x: 8, y: 11 });
+    controller.update({ x: 8, y: 0 });
 
     expect(lifecycle.groundVisible).toBe(true);
     expect(lifecycle.doorsVisible).toBe(true);

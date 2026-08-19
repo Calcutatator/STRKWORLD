@@ -23,6 +23,7 @@ import {
   AVATAR_STUDIO_HEIGHT,
   AVATAR_STUDIO_TILE_SIZE,
   AVATAR_STUDIO_WIDTH,
+  avatarStudioSpawnToWorld,
   avatarStudioTileColour,
   createAvatarStudioPresentation,
   createAvatarStudioController,
@@ -388,10 +389,11 @@ export function createStreetScene({ Phaser, onTileChanged, remotePeers }: Street
         },
         streetBounds,
         studioBounds,
-        studioSpawn: {
-          x: ROOM_ORIGIN.x + AVATAR_STUDIO_DEFINITION.spawn.x * AVATAR_STUDIO_TILE_SIZE + AVATAR_STUDIO_TILE_SIZE / 2,
-          y: ROOM_ORIGIN.y + AVATAR_STUDIO_DEFINITION.spawn.y * AVATAR_STUDIO_TILE_SIZE + AVATAR_STUDIO_TILE_SIZE / 2,
-        },
+        studioSpawn: avatarStudioSpawnToWorld(
+          AVATAR_STUDIO_DEFINITION,
+          ROOM_ORIGIN,
+          AVATAR_STUDIO_TILE_SIZE,
+        ),
         streetReturn: tileToWorld(this.map.spawn.x, this.map.spawn.y),
         reportStreet: () => this.reportTile(),
       });

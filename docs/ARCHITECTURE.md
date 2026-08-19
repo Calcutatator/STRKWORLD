@@ -116,8 +116,11 @@ and visit-timing inference from that disappearance is an accepted v1 trade-off
 
 The D-047 Avatar Studio foundation is implemented and user-rendered-accepted
 on localhost as a hidden, non-financial 18×12 room outside `BuildingId` and
-`BUILDINGS`. The south path ends at a bottom-edge trigger with no facade or
-public label; eight collision selectors choose cosy/default character states.
+`BUILDINGS`. The south path still ends at a bottom-edge trigger with no facade
+or public label. D-048 changes the interior to one centered 2×1 opening in the
+top wall: entry spawns immediately below it so southward travel continues into
+the room, and walking back up through it exits. Eight collision selectors
+choose cosy/default character states.
 Its dedicated
 `avatar-studio:entered`, `avatar-studio:exited` and `avatar:selected` events
 are ignored by `VisitLayer`. The existing single lobby `sprite` field now
@@ -133,10 +136,15 @@ client's captured sprite: Shell replaces it once, defers replacement while
 inside and deduplicates reconnect requests. The presentation lifecycle is one
 adapter used by both `StreetScene` and its deterministic teardown tests. The
 keyboard toggle remains unbound pending the user's key choice. Commit
-`e5eaea9` contains review PNGs only; transparent 32×32 extraction, anchor/feet
-cleanup, user art approval and runtime sprite wiring are still open. The
+`e5eaea9` contains review PNGs only. D-049 replaces their provisional 32×32
+target with one transparent 64×64 logical canvas for every opaque state, fixed
+feet at `(32, 56)` and the unchanged authoritative 24×24 gameplay/contact body.
+Smaller characters use transparent padding, while characters 4 and 7 may use
+more of the same canvas. Variable per-key canvases and layered weapons are not
+part of the initial runtime. Final transparent export, user art approval and
+runtime sprite wiring are still open. The
 accepted rendered foundation used placeholders; it did not exercise or accept
-the unbound fighting toggle or final sprite art.
+the D-048 portal orientation, unbound fighting toggle or final sprite art.
 
 ---
 

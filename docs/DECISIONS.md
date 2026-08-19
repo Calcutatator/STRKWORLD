@@ -1802,8 +1802,10 @@ supplies the necessary account/permissions and values.
 
 ## D-047 — The hidden Avatar Studio owns eight paired cosmetic characters
 
-**2026-08-19 · Accepted by the user · foundation implemented and rendered
-accepted on localhost; keyboard toggle and runtime sprite art remain open**
+**2026-08-19 · PARTIALLY SUPERSEDED — interior portal direction by
+[D-048](#d-048--the-avatar-studio-uses-a-top-wall-return-portal), runtime art
+geometry by [D-049](#d-049--avatar-art-uses-one-fixed-64x64-logical-canvas);
+remaining foundation implemented and rendered accepted on localhost**
 
 **Context.** The sprite studio is developing the player art independently from
 the World implementation. The current multiplayer contract has eight opaque
@@ -1860,3 +1862,90 @@ This decision extends D-030's fixed-room model to a non-financial cosmetic
 room. It does not change D-019 presence rules, the lobby schema, ShellEvents,
 or any privacy/financial route; its three named WorldEvents are the controlled
 event-bus extension for this room.
+
+---
+
+## D-048 — The Avatar Studio uses a top-wall return portal
+
+**2026-08-19 · Accepted by the user · supersedes D-047's interior
+bottom-opening direction; implementation pending**
+
+**Context.** D-047 correctly fixed the hidden street entrance at the south end
+of the spawn path, but the first room foundation also put the Studio's exit in
+its bottom wall. That reverses the visual direction of travel: the player walks
+south off the street and then appears near a second south-facing exit. The
+interior needs to make the transition read as one continuous passage rather
+than two unrelated doorways.
+
+**Decision.** The hidden exterior entrance stays where D-047 put it: the path
+continues south from spawn to the map's bottom/offscreen trigger, with no
+facade or public label. Inside the 18x12 Avatar Studio, the only portal is a
+centered two-tile-wide, one-tile-deep opening in the **top** wall. Entry places
+the player on a walkable interior tile immediately below that opening, so
+continuing to move down travels farther into the room. Leaving requires walking
+back up through the same top-wall opening.
+
+The portal is navigation geometry only. It does not turn the Studio into a
+`BuildingId`, station or financial visit, and it does not add an event or lobby
+field. Exit must preserve the established D-047 ordering: restore and publish
+the real street placement before `avatar-studio:exited` lets Shell resume
+presence.
+
+**Alternatives.** Keeping the bottom-wall exit was rejected because the room
+transition reads backwards. Adding separate entrance and exit portals was
+rejected because it invents an unnecessary route through a small selection
+room. Moving or revealing the exterior entrance was rejected because the user
+still wants the Avatar Studio hidden at the end of the south path.
+
+**Consequences.** World must update the authored Studio exit, spawn,
+walkability, presentation and transition tests together. The eight selector
+figures, opaque cosmetic keys, presence suspension and non-financial event
+seam remain unchanged. The previously accepted localhost test covers the
+foundation and hidden exterior entrance, not this new interior portal
+orientation; rendered acceptance is required again after implementation.
+
+---
+
+## D-049 — Avatar art uses one fixed 64x64 logical canvas
+
+**2026-08-19 · Accepted by the user · supersedes D-047's provisional 32x32
+runtime-art assumption; final transparent export and integration pending**
+
+**Context.** The approved art direction deliberately includes two larger
+characters and fighting poses whose weapons extend beyond a 32x32 cell. A
+layered body/weapon renderer could preserve that old cell size, but it would
+add animation synchronization, directional front/back layers, extra draw
+objects and a more fragile art pipeline. Variable per-character canvases would
+move size knowledge into every caller and make feet alignment inconsistent.
+
+**Decision.** Every visual state behind `avatar-1` through `avatar-16` uses one
+transparent **64x64 logical canvas** with a fixed feet point at **(32, 56)**.
+The authoritative gameplay footprint remains the existing centered 24x24 body
+for the local player and the same 24x24 contact footprint for Studio selectors;
+visual size never changes collision, reachability, movement or selection.
+Smaller characters retain their intended scale through transparent padding.
+Characters 4 and 7 may occupy more of the same canvas, but do not receive a
+different canvas or body.
+
+The lobby still carries only the existing opaque `sprite` key. No visual size,
+stance, feet, pivot, layer or weapon field is added to shared or lobby state.
+World resolves all canvas and anchor meaning locally from the allowlisted key.
+If a runtime atlas trims transparent pixels, its metadata must preserve the
+64x64 logical `sourceSize` and the (32, 56) pivot exactly; callers must observe
+the same logical canvas as an untrimmed export.
+
+Variable per-key canvases and separate body/weapon layers are rejected for the
+initial runtime. They require a later decision if final accepted art proves the
+single-canvas contract insufficient. This decision does not approve the
+current review sheets for runtime: they still contain baked backgrounds and
+are not the final transparent export.
+
+**Consequences.** The sprite-studio task retains ownership of cleanup, final
+pixels and the transparent 64x64 export. Runtime integration waits for that
+handoff and the user's final-art approval. World may then use one visual object
+per avatar state while keeping the existing physics sprite/body as the
+authoritative position and collision seam. Tests must pin exact logical canvas,
+feet, frame vocabulary, transparent padding, fixed 24x24 gameplay geometry,
+opaque-key fallback and local/remote/selector alignment. Rendered acceptance
+must cover the small character, both large characters, cosy/fighting pairs and
+weapon extents before the placeholder renderer is retired.
