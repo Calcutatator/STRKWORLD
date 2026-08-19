@@ -17,11 +17,11 @@ the lane boundary — that is why the repo is shaped the way it is.
 | Lane | Package | Status in v1 |
 |---|---|---|
 | **Chain** | `packages/privacy` | Active; private seam frozen, D-043 planner port/fake complete, production Ready planner blocked |
-| **World** | `packages/world` + `packages/lobby` | Active |
+| **World** | `packages/world` + `packages/lobby` | Active; WorldHost lifecycle complete offline, rendered acceptance remains user-owned |
 | **Shell** | `apps/web` | Active, starts week 2 |
-| **Backend** | `apps/backend` | Active; offline implementation complete; host, Docker, domain, secrets, Alchemy controls and live staging remain |
+| **Backend** | `apps/backend` | Active; offline implementation and Fly hardening complete; host, Docker, domain, secrets, Alchemy controls and live staging remain |
 | **Bridge** | `packages/bridge` | Active, fully independent |
-| **Art** | `packages/world/assets` | Active; Kenney Urban CC0 acquired and runtime mappings complete, final visual direction and station states remain user-gated |
+| **Art** | `packages/world/assets` | Active; Kenney Urban CC0 acquired, role mappings corrected and presentation audited, final visual direction and station states remain user-gated |
 | ~~Contracts~~ | — | **Dormant until post-v1** |
 
 ### Why Contracts is dormant

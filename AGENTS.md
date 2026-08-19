@@ -250,6 +250,45 @@ without a verification method is a rumour.
 
 Format: `### YYYY-MM-DD — short title` then what, why it matters, how verified.
 
+### 2026-08-19 — WorldHost leases must single-flight lazy Phaser acquisition
+
+React cleanup can beat a lazy Phaser import. The former stateless effect leases
+then let overlapping StrictMode effects pass the runtime's pre-import host
+check concurrently, creating and leaking two Games. `apps/web` now
+single-flights overlapping leases, keeps a zero-lease pending acquisition
+reusable, and releases the shared world only after the last live lease; failed
+acquisition resets the manager without exposing a rejection.
+
+*Verified:* deterministic acquire-count, peak-live, last-release and rejection
+tests, plus the Web typecheck. No browser or Phaser context was used.
+
+### 2026-08-19 — Fly production origins and lobby vocabulary are fixed at startup
+
+Fly startup now cross-validates `FLY_PUBLIC_ORIGIN` against the trimmed
+`LOBBY_ALLOWED_ORIGINS` list. The production-origin parser rejects localhost,
+IPv4 `127/8`, IPv4-mapped IPv6 loopback in dotted and hexadecimal forms, and
+placeholder/`.invalid` hosts with generic errors. The edge pins the opaque
+`avatar-1` through `avatar-8` contract and keeps `/metrics` at 404; final art
+maps cosmetically behind those keys.
+
+*Verified:* origin membership and loopback/placeholder tests, generic-error
+assertions, edge tests for the fixed sprite set and `/metrics`, Fly typecheck,
+and invariant checks. No host, secret or deployment was used.
+
+### 2026-08-19 — Kenney pavement and door mappings require lossless art review
+
+The earlier pavement mapping used frame 86, an object/edge tile with a purple
+lower-right block that repeated across the map. Lossless atlas inspection
+identified seamless frame 109 for the broad pavement fill. The earlier door
+mapping used frame 289, a tree-like object; the actual double-door is frame 284.
+Broad map kinds do not encode edge orientation, so seamless interior fills are
+required until authored edge semantics exist. Door presentation is a 32×32
+overlay centered over the unchanged 64×32 trigger; it does not alter map,
+collision or activation geometry.
+
+*Verified:* lossless atlas pixel/rectangle audit, exact mapping and presentation
+tests, the World suite, World typecheck and `./scripts/check-invariants.sh`.
+
 ### 2026-08-19 — Fly runtime must replace npm workspace symlinks
 
 The Fly image's production lobby is compiled JavaScript, but `npm ci` installs
