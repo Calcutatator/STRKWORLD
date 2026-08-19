@@ -250,6 +250,45 @@ without a verification method is a rumour.
 
 Format: `### YYYY-MM-DD — short title` then what, why it matters, how verified.
 
+### 2026-08-20 — Backend request timeouts stop at the Node timer ceiling
+
+The strict production parser now accepts `BACKEND_REQUEST_TIMEOUT_MS` only
+through `2_147_483_647`, the largest delay supported by Node's timer range,
+and rejects the next integer with the existing generic variable-naming error.
+That one value feeds both the HTTP server request timeout and the Backend API
+deadline, so an overflowing production setting can no longer be accepted and
+then execute with unintended timer behavior. This bound applies only to the
+request timeout; it changes no valid configuration, route policy, queue,
+authorization, response or submission semantics.
+
+*Verified:* the red boundary previously allowed `2_147_483_648`; commit
+`0e0069f` makes that regression green while a paired test accepts exactly
+`2_147_483_647`. The focused Backend environment/server tests and Backend
+typecheck, invariant scan and diff check passed.
+[GitHub Actions run 32307155130](https://github.com/Calcutatator/STRKWORLD/actions/runs/32307155130)
+also completed successfully. No server was bound, no request was sent, and no
+wallet, RPC, proof, signature or transaction was used.
+
+### 2026-08-20 — Stale wallet checks resolve to the authoritative current state
+
+Generation invalidation already prevented a late capability success or failure
+from mutating the connect store. It now governs the promise result too: if an
+attempt becomes stale while awaiting the wallet, it resolves to the store's
+current state rather than returning its obsolete classification. A caller
+therefore sees `disconnected` after an intervening disconnect, or the newer
+connected result after a fresh attempt wins. The underlying wallet request is
+still not cancelled, and `PrivacyOperations`, capability classification and
+wallet-status mapping are unchanged.
+
+*Verified:* the red cases returned the stale success/failure classification
+even though the store had moved on; commit `7c56661` makes both return
+`disconnected` after disconnect and makes an older failed attempt return the
+newer's connected result. The focused connect-flow tests and Web typecheck,
+invariant scan and diff check passed.
+[GitHub Actions run 32307101687](https://github.com/Calcutatator/STRKWORLD/actions/runs/32307101687)
+also completed successfully. No wallet, proof, signature or transaction was
+used.
+
 ### 2026-08-19 — Lobby movement timing is monotonic on both sides of the wire
 
 Lobby movement and resume throttles now use `performance.now()` in both the
@@ -283,6 +322,11 @@ success, late failure and a fresh attempt winning over its predecessor.
 passed workspace typecheck/tests, invariants, header checks, drift canary and
 both deployment image checks. No wallet, proof, signature or transaction was
 used.
+
+*Forward note — stale promise return behavior superseded by the 2026-08-20
+finding above:* generation invalidation still owns the store, but a stale
+capability promise now resolves to that authoritative current store state
+rather than its own obsolete classification.
 
 ### 2026-08-19 — BridgeProvider derives live capability from current props
 
