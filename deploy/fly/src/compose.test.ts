@@ -31,7 +31,10 @@ async function fakeChild(): Promise<string> {
         });
       }), delay);
     }
-    process.on('SIGTERM', () => server.close(() => process.exit(0)));
+    process.on('SIGTERM', () => {
+      if (process.env.IGNORE_SIGTERM) return;
+      server.close(() => process.exit(0));
+    });
   `);
   return path;
 }
@@ -55,6 +58,32 @@ async function freePort(): Promise<number> {
 
 async function ports(): Promise<{ publicPort: number; backendPort: number; lobbyPort: number }> {
   return { publicPort: await freePort(), backendPort: await freePort(), lobbyPort: await freePort() };
+}
+
+function signalArmedAfterAbortListeners(
+  controller: AbortController,
+  requiredListeners: number,
+): { signal: AbortSignal; armed: Promise<void> } {
+  let abortListeners = 0;
+  let resolveArmed: (() => void) | undefined;
+  const armed = new Promise<void>((resolve) => { resolveArmed = resolve; });
+  const signal = new Proxy(controller.signal, {
+    get(target, property) {
+      if (property === 'addEventListener') {
+        return (
+          type: string,
+          listener: EventListenerOrEventListenerObject,
+          options?: boolean | AddEventListenerOptions,
+        ) => {
+          target.addEventListener(type, listener, options);
+          if (type === 'abort' && ++abortListeners === requiredListeners) resolveArmed?.();
+        };
+      }
+      const value: unknown = Reflect.get(target, property, target);
+      return typeof value === 'function' ? value.bind(target) : value;
+    },
+  });
+  return { signal, armed };
 }
 
 describe('Fly composition process boundary', () => {
@@ -111,6 +140,123 @@ describe('Fly composition process boundary', () => {
     const response = await fetch(`http://127.0.0.1:${composition.address.port}/`);
     expect(response.status).toBe(200);
     await expect(response.text()).resolves.toBe('<html>test shell</html>');
+  });
+
+  it('aborts pending readiness and stops private children before exposing the edge', async () => {
+    const child = await fakeChild();
+    const controller = new AbortController();
+    const { publicPort, backendPort, lobbyPort } = await ports();
+    const { signal: startupSignal, armed } = signalArmedAfterAbortListeners(controller, 2);
+    const starting = startFlyComposition({
+      staticRoot: join(process.cwd(), 'apps/web/dist'),
+      backendEntry: child,
+      lobbyEntry: child,
+      publicPort,
+      backendPort,
+      lobbyPort,
+      publicOrigin: 'https://game.example',
+      environment: { ...process.env, START_DELAY_MS: '300' },
+      readinessTimeoutMs: 2_000,
+      startupSignal,
+    });
+    await armed;
+    controller.abort();
+
+    await expect(starting).rejects.toThrow('startup was aborted');
+    await expect(fetch(`http://127.0.0.1:${publicPort}/`)).rejects.toThrow();
+    await expect(fetch(`http://127.0.0.1:${backendPort}/`)).rejects.toThrow();
+    await expect(fetch(`http://127.0.0.1:${lobbyPort}/`)).rejects.toThrow();
+  });
+
+  it('reports cleanup failure when an orderly startup abort requires forced termination', async () => {
+    const child = await fakeChild();
+    const controller = new AbortController();
+    const { publicPort, backendPort, lobbyPort } = await ports();
+    let abortedReads = 0;
+    const startupSignal = new Proxy(controller.signal, {
+      get(target, property) {
+        if (property === 'aborted') {
+          if (++abortedReads === 3) controller.abort();
+          return target.aborted;
+        }
+        const value: unknown = Reflect.get(target, property, target);
+        return typeof value === 'function' ? value.bind(target) : value;
+      },
+    });
+    const starting = startFlyComposition({
+      staticRoot: join(process.cwd(), 'apps/web/dist'),
+      backendEntry: child,
+      lobbyEntry: child,
+      publicPort,
+      backendPort,
+      lobbyPort,
+      publicOrigin: 'https://game.example',
+      environment: { ...process.env, IGNORE_SIGTERM: '1' },
+      readinessTimeoutMs: 2_000,
+      shutdownTimeoutMs: 50,
+      startupSignal,
+    });
+
+    await expect(starting).rejects.toThrow('startup cleanup failed');
+    await expect(fetch(`http://127.0.0.1:${publicPort}/`)).rejects.toThrow();
+    await expect(fetch(`http://127.0.0.1:${backendPort}/`)).rejects.toThrow();
+    await expect(fetch(`http://127.0.0.1:${lobbyPort}/`)).rejects.toThrow();
+  });
+
+  it.each([
+    ['after readiness', 3],
+    ['after public bind', 4],
+    ['during the ownership handoff', 5],
+  ] as const)('rechecks an abort %s before handing off the public edge', async (_phase, abortRead) => {
+    const child = await fakeChild();
+    const { publicPort, backendPort, lobbyPort } = await ports();
+    const controller = new AbortController();
+    let abortedReads = 0;
+    const startupSignal = new Proxy(controller.signal, {
+      get(target, property) {
+        if (property === 'aborted') return ++abortedReads >= abortRead;
+        const value: unknown = Reflect.get(target, property, target);
+        return typeof value === 'function' ? value.bind(target) : value;
+      },
+    });
+
+    await expect(startFlyComposition({
+      staticRoot: join(process.cwd(), 'apps/web/dist'),
+      backendEntry: child,
+      lobbyEntry: child,
+      publicPort,
+      backendPort,
+      lobbyPort,
+      publicOrigin: 'https://game.example',
+      environment: process.env,
+      readinessTimeoutMs: 2_000,
+      startupSignal,
+    })).rejects.toThrow('startup was aborted');
+
+    await expect(fetch(`http://127.0.0.1:${publicPort}/`)).rejects.toThrow();
+  });
+
+  it('waits for forced child exits and rejects shutdown after the graceful deadline', async () => {
+    const child = await fakeChild();
+    const staticRoot = await fakeStaticRoot();
+    const { publicPort, backendPort, lobbyPort } = await ports();
+    const composition = await startFlyComposition({
+      staticRoot,
+      backendEntry: child,
+      lobbyEntry: child,
+      publicPort,
+      backendPort,
+      lobbyPort,
+      publicOrigin: 'https://game.example',
+      environment: { ...process.env, IGNORE_SIGTERM: '1' },
+      readinessTimeoutMs: 2_000,
+      shutdownTimeoutMs: 50,
+    });
+
+    await expect(composition.shutdown()).rejects.toThrow('forced termination');
+    await expect(fetch(`http://127.0.0.1:${publicPort}/`)).rejects.toThrow();
+    await expect(fetch(`http://127.0.0.1:${backendPort}/`)).rejects.toThrow();
+    await expect(fetch(`http://127.0.0.1:${lobbyPort}/`)).rejects.toThrow();
   });
 
   it('reports a ready child exit to the machine supervisor', async () => {

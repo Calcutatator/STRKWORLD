@@ -14,11 +14,21 @@ export interface FlyCompositionOptions {
   readonly readinessTimeoutMs?: number;
   readonly shutdownTimeoutMs?: number;
   readonly onFatal?: (error: Error) => void;
+  /** Abort startup before the public edge has been handed to the caller. */
+  readonly startupSignal?: AbortSignal;
 }
 
 export interface FlyComposition {
   readonly address: { address: string; family: string; port: number };
   shutdown(): Promise<void>;
+}
+
+/** Startup was cancelled before the public composition was handed off. */
+export class FlyStartupAbortError extends Error {
+  constructor() {
+    super('Private service startup was aborted.');
+    this.name = 'FlyStartupAbortError';
+  }
 }
 
 /** Start private children, wait for their TCP listeners, then expose one edge. */
@@ -47,7 +57,10 @@ export async function startFlyComposition(options: FlyCompositionOptions): Promi
       startupChildDied = true;
       return;
     }
-    void shutdown?.().finally(() => onFatal(error));
+    void shutdown?.().then(
+      () => onFatal(error),
+      () => onFatal(error),
+    );
   };
   children.forEach((child) => {
     child.once('exit', reportFatal);
@@ -56,9 +69,10 @@ export async function startFlyComposition(options: FlyCompositionOptions): Promi
 
   try {
     await Promise.all([
-      waitForChildReady(children[0], options.readinessTimeoutMs),
-      waitForChildReady(children[1], options.readinessTimeoutMs),
+      waitForChildReady(children[0], options.readinessTimeoutMs, options.startupSignal),
+      waitForChildReady(children[1], options.readinessTimeoutMs, options.startupSignal),
     ]);
+    assertStartupActive(options.startupSignal);
     if (startupChildDied) throw new Error('A private service exited before the public edge was ready.');
     edge = createEdgeServer({
       staticRoot: options.staticRoot,
@@ -67,6 +81,7 @@ export async function startFlyComposition(options: FlyCompositionOptions): Promi
       publicOrigin: options.publicOrigin,
     });
     const address = await listenPublic(edge, options.publicPort);
+    assertStartupActive(options.startupSignal);
     shutdown = (): Promise<void> => {
       if (shutdownPromise) return shutdownPromise;
       shutdownPromise = (async () => {
@@ -79,15 +94,25 @@ export async function startFlyComposition(options: FlyCompositionOptions): Promi
     // Give an exit that raced the readiness IPC/public listen a turn to arrive
     // before ownership of the composition is handed to the caller.
     await new Promise<void>((resolve) => setImmediate(resolve));
+    assertStartupActive(options.startupSignal);
     if (startupChildDied) throw new Error('A private service exited before the public edge was ready.');
     startup = false;
     return { address, shutdown };
   } catch (error) {
     stopping = true;
-    if (edge) await closeEdgeServer(edge, options.shutdownTimeoutMs ?? 5_000).catch(() => undefined);
-    await stopChildren(children, options.shutdownTimeoutMs ?? 5_000);
+    const cleanup = await Promise.allSettled([
+      edge ? closeEdgeServer(edge, options.shutdownTimeoutMs ?? 5_000) : Promise.resolve(),
+      stopChildren(children, options.shutdownTimeoutMs ?? 5_000),
+    ]);
+    if (cleanup.some((result) => result.status === 'rejected')) {
+      throw new Error('Fly composition startup cleanup failed.');
+    }
     throw error;
   }
+}
+
+function assertStartupActive(signal: AbortSignal | undefined): void {
+  if (signal?.aborted) throw new FlyStartupAbortError();
 }
 
 function launchChild(entry: string, environment: NodeJS.ProcessEnv): ChildProcess {
@@ -104,17 +129,26 @@ function launchChild(entry: string, environment: NodeJS.ProcessEnv): ChildProces
 async function waitForChildReady(
   child: ChildProcess | undefined,
   timeoutMs: number | undefined,
+  signal?: AbortSignal,
 ): Promise<void> {
   if (!child) throw new Error('Private service was not started.');
   let timer: ReturnType<typeof setTimeout> | undefined;
   let rejectReady: ((error: Error) => void) | undefined;
+  let resolveReady: (() => void) | undefined;
+  const onAbort = () => rejectReady?.(new FlyStartupAbortError());
+  const onMessage = (message: unknown) => {
+    if (message && typeof message === 'object' && (message as { type?: unknown }).type === 'ready') {
+      resolveReady?.();
+    }
+  };
   const ready = new Promise<void>((resolve, reject) => {
+    resolveReady = resolve;
     rejectReady = reject;
     timer = setTimeout(() => reject(new Error('Private service did not become ready.')), timeoutMs ?? 15_000);
-    child.on('message', (message: unknown) => {
-      if (message && typeof message === 'object' && (message as { type?: unknown }).type === 'ready') resolve();
-    });
+    child.on('message', onMessage);
   });
+  if (signal?.aborted) onAbort();
+  else signal?.addEventListener('abort', onAbort, { once: true });
   const onExit = () => rejectReady?.(new Error('Private service exited before readiness.'));
   child.once('exit', onExit);
   child.once('error', onExit);
@@ -125,6 +159,8 @@ async function waitForChildReady(
     if (timer) clearTimeout(timer);
     child.off('exit', onExit);
     child.off('error', onExit);
+    child.off('message', onMessage);
+    signal?.removeEventListener('abort', onAbort);
   }
 }
 
@@ -150,24 +186,40 @@ function listenPublic(server: Server, port: number): Promise<{ address: string; 
 }
 
 async function stopChildren(children: readonly ChildProcess[], timeoutMs: number): Promise<void> {
-  await Promise.all(children.map((child) => stopChild(child, timeoutMs)));
+  const results = await Promise.allSettled(children.map((child) => stopChild(child, timeoutMs)));
+  if (results.some((result) => result.status === 'rejected')) {
+    throw new Error('Private service shutdown required forced termination.');
+  }
 }
 
 function stopChild(child: ChildProcess, timeoutMs: number): Promise<void> {
-  if (child.exitCode !== null || child.signalCode !== null || child.killed) return Promise.resolve();
-  return new Promise((resolve) => {
+  if (child.exitCode !== null || child.signalCode !== null) return Promise.resolve();
+  return new Promise((resolve, reject) => {
     let settled = false;
-    const finish = () => {
+    let forced = false;
+    let forcedExitTimer: ReturnType<typeof setTimeout> | undefined;
+    const finish = (error?: Error) => {
       if (settled) return;
       settled = true;
-      clearTimeout(timer);
-      resolve();
+      clearTimeout(gracefulTimer);
+      if (forcedExitTimer) clearTimeout(forcedExitTimer);
+      child.off('exit', onExit);
+      if (error) reject(error);
+      else resolve();
     };
-    const timer = setTimeout(() => {
+    const onExit = () => {
+      finish(forced ? new Error('Private service required forced termination.') : undefined);
+    };
+    const forceExit = () => {
+      if (settled) return;
+      forced = true;
       child.kill('SIGKILL');
-      finish();
-    }, timeoutMs);
-    child.once('exit', finish);
+      forcedExitTimer = setTimeout(() => {
+        finish(new Error('Private service did not exit after forced termination.'));
+      }, timeoutMs);
+    };
+    const gracefulTimer = setTimeout(forceExit, timeoutMs);
+    child.once('exit', onExit);
     child.kill('SIGTERM');
   });
 }

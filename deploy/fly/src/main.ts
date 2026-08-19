@@ -1,7 +1,12 @@
 import { fileURLToPath } from 'node:url';
 import { isIP } from 'node:net';
 import { resolve } from 'node:path';
-import { startFlyComposition, type FlyComposition } from './compose.js';
+import {
+  FlyStartupAbortError,
+  startFlyComposition,
+  type FlyComposition,
+  type FlyCompositionOptions,
+} from './compose.js';
 
 interface FlyEnvironment {
   readonly publicPort: number;
@@ -140,39 +145,112 @@ function parsePort(value: string | undefined, name: string): number {
 
 async function run(): Promise<void> {
   const config = parseFlyEnvironment();
+  await runFlySupervisor({
+    compositionOptions: {
+      ...config,
+      environment: { ...process.env },
+    },
+  });
+}
+
+export interface FlySupervisorSignals {
+  once(signal: 'SIGTERM' | 'SIGINT', listener: () => void): void;
+  removeListener(signal: 'SIGTERM' | 'SIGINT', listener: () => void): void;
+}
+
+export interface FlySupervisorOptions {
+  readonly compositionOptions: Omit<FlyCompositionOptions, 'onFatal' | 'startupSignal'>;
+  readonly start?: typeof startFlyComposition;
+  readonly signals?: FlySupervisorSignals;
+  readonly exit?: (code: number) => void;
+}
+
+/**
+ * Own the complete Fly process lifecycle, including the interval in which the
+ * private children are starting but no composition has been returned yet.
+ *
+ * This is deliberately small and injectable: the production process uses the
+ * real signal source and exit function, while tests can prove every handoff
+ * without spawning a second supervisor process.
+ */
+export async function runFlySupervisor(options: FlySupervisorOptions): Promise<void> {
+  const signals = options.signals ?? process;
+  const start = options.start ?? startFlyComposition;
+  const exit = options.exit ?? ((code: number) => { process.exitCode = code; });
+  const startupAbort = new AbortController();
   let composition: FlyComposition | undefined;
-  let stopping = false;
-  const fatal = () => {
-    if (stopping) return;
-    stopping = true;
-    const closing = composition?.shutdown() ?? Promise.resolve();
-    void closing.then(
-      () => process.exit(1),
-      () => process.exit(1),
-    );
+  let stopCode: number | undefined;
+  let stopPromise: Promise<void> | undefined;
+  let exited = false;
+  let listenersDisposed = false;
+
+  let resolveComposition: (value: FlyComposition | undefined) => void = () => undefined;
+  const compositionReady = new Promise<FlyComposition | undefined>((resolve) => {
+    resolveComposition = resolve;
+  });
+
+  const disposeListeners = () => {
+    if (listenersDisposed) return;
+    listenersDisposed = true;
+    signals.removeListener('SIGTERM', onOrderlySignal);
+    signals.removeListener('SIGINT', onOrderlySignal);
   };
+
+  const exitOnce = (code: number) => {
+    if (exited) return;
+    exited = true;
+    disposeListeners();
+    exit(code);
+  };
+
+  const cleanup = async (): Promise<void> => {
+    const active = await compositionReady;
+    if (active) await active.shutdown();
+  };
+
+  const awaitStop = async (): Promise<void> => {
+    if (!stopPromise) return;
+    try {
+      await stopPromise;
+    } catch {
+      exitOnce(1);
+    }
+  };
+
+  const requestStop = (code: number) => {
+    stopCode = stopCode === undefined ? code : Math.max(stopCode, code);
+    startupAbort.abort();
+    if (!stopPromise) {
+      stopPromise = cleanup();
+      void stopPromise.then(
+        () => exitOnce(stopCode ?? code),
+        () => exitOnce(1),
+      );
+    }
+  };
+
+  const fatal = () => requestStop(1);
+  const onOrderlySignal = () => requestStop(0);
+  signals.once('SIGTERM', onOrderlySignal);
+  signals.once('SIGINT', onOrderlySignal);
 
   try {
-    composition = await startFlyComposition({
-      ...config,
+    composition = await start({
+      ...options.compositionOptions,
       onFatal: fatal,
-      environment: { ...process.env },
+      startupSignal: startupAbort.signal,
     });
-  } catch {
-    process.exitCode = 1;
-    return;
+    resolveComposition(composition);
+    // A signal or fatal callback can win immediately before this assignment;
+    // the single-flight cleanup already owns the returned composition then.
+    await awaitStop();
+  } catch (error) {
+    const cleanOrderlyAbort = stopCode === 0 && error instanceof FlyStartupAbortError;
+    if (!cleanOrderlyAbort) stopCode = 1;
+    resolveComposition(undefined);
+    if (stopPromise) await awaitStop();
+    else exitOnce(1);
   }
-
-  const shutdown = () => {
-    if (stopping) return;
-    stopping = true;
-    void composition?.shutdown().then(
-      () => process.exit(0),
-      () => process.exit(1),
-    );
-  };
-  process.once('SIGTERM', shutdown);
-  process.once('SIGINT', shutdown);
 }
 
 if (process.argv[1] && resolve(process.argv[1]) === resolve(fileURLToPath(import.meta.url))) {
