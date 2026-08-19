@@ -1,4 +1,9 @@
-import type { Facing } from '@strkworld/shared';
+import type { AvatarSpriteKey, Facing } from '@strkworld/shared';
+import {
+  AVATAR_SPRITE_KEYS,
+  DEFAULT_AVATAR_SPRITE,
+  validateAvatarSprite,
+} from './avatar-state.js';
 
 /**
  * The complete World-side shape for one nearby avatar.
@@ -34,19 +39,10 @@ export interface RemotePeerSourceController {
 export const REMOTE_WORLD_LIMIT = 8192;
 
 /** Cosmetic key used when an adapter sends an unknown sprite. */
-export const DEFAULT_REMOTE_SPRITE = 'avatar-1';
+export const DEFAULT_REMOTE_SPRITE = DEFAULT_AVATAR_SPRITE;
 
 /** The current approved lobby cosmetic key registry. */
-export const REMOTE_SPRITE_KEYS: readonly string[] = [
-  'avatar-1',
-  'avatar-2',
-  'avatar-3',
-  'avatar-4',
-  'avatar-5',
-  'avatar-6',
-  'avatar-7',
-  'avatar-8',
-];
+export const REMOTE_SPRITE_KEYS: readonly AvatarSpriteKey[] = AVATAR_SPRITE_KEYS;
 
 const FACINGS: readonly Facing[] = ['up', 'down', 'left', 'right'];
 const OPAQUE_ID = /^[A-Za-z0-9_-]{1,64}$/;
@@ -82,10 +78,7 @@ export function validateRemotePeer(value: unknown): RemotePeerSnapshot | null {
     x,
     y,
     facing: facing as Facing,
-    sprite:
-      typeof sprite === 'string' && REMOTE_SPRITE_KEYS.includes(sprite)
-        ? sprite
-        : DEFAULT_REMOTE_SPRITE,
+    sprite: validateAvatarSprite(sprite),
   });
 }
 

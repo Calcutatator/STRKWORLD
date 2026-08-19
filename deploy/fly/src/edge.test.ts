@@ -140,6 +140,28 @@ describe('Fly edge public boundary', () => {
     expect(matchmakeBody.body).toBe('{"x":1,"y":2,"facing":"down","sprite":"avatar-1"}');
   });
 
+  it.each(['avatar-9', 'avatar-16'])('admits and forwards only the D-047 placement fields for %s', async (sprite) => {
+    const root = await fixture();
+    const lobby = createServer((request, response) => {
+      const chunks: Buffer[] = [];
+      request.on('data', (chunk: Buffer) => chunks.push(chunk));
+      request.once('end', () => response.end(Buffer.concat(chunks).toString()));
+    });
+    const lobbyPort = await listen(lobby);
+    const edge = createEdgeServer({ staticRoot: root, backendPort: 1, lobbyPort, publicOrigin: 'https://game.example' });
+    const edgePort = await listen(edge);
+    const placement = { x: 1, y: 2, facing: 'down', sprite };
+
+    const response = await fetchEdge(edgePort, '/matchmake/joinOrCreate/street', {
+      method: 'POST',
+      body: JSON.stringify(placement),
+      headers: { Origin: 'https://game.example' },
+    });
+
+    expect(response.status).toBe(200);
+    expect(await response.text()).toBe(JSON.stringify(placement));
+  });
+
   it('tunnels every websocket upgrade to the lobby', async () => {
     const root = await fixture();
     const lobby = createServer();
@@ -237,7 +259,8 @@ describe('Fly edge public boundary', () => {
       ['/matchmake/joinOrCreate/street', 'POST', '[1,2,3]'],
       ['/matchmake/joinOrCreate/street', 'POST', '{"x":"1","y":2,"facing":"down","sprite":"avatar-1"}'],
       ['/matchmake/joinOrCreate/street', 'POST', '{"x":1,"y":2,"facing":"sideways","sprite":"avatar-1"}'],
-      ['/matchmake/joinOrCreate/street', 'POST', '{"x":1,"y":2,"facing":"down","sprite":"avatar-9"}'],
+      ['/matchmake/joinOrCreate/street', 'POST', '{"x":1,"y":2,"facing":"down","sprite":"avatar-17"}'],
+      ['/matchmake/joinOrCreate/street', 'POST', '{"x":1,"y":2,"facing":"down","sprite":"avatar-1","stance":"fighting"}'],
       ['/matchmake/joinOrCreate/street', 'POST', '{"x":1,"y":2,"facing":"down","sprite":"x"'.padEnd(5000, 'x') + '}'],
     ] as const;
     for (const [path, method, body] of invalid) {

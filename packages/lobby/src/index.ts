@@ -39,6 +39,7 @@ export {
   WORLD_LIMIT,
   resolveRoomConfig,
   type MessageType,
+  type LobbySprite,
   type PresenceRoomConfig,
   type PresenceRoomConfigOverrides,
   type ServerMessageType,

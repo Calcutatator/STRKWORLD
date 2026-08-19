@@ -49,8 +49,11 @@ import {
   MESSAGE,
   MIN_CLIENT_SEND_INTERVAL_MS,
   SERVER_MESSAGE,
+  type LobbySprite,
 } from './config';
 import type { LobbyState } from './state';
+
+export type { LobbySprite } from './config';
 
 export type LobbyStatus =
   /** Constructed, never connected. */
@@ -219,11 +222,13 @@ export class LobbyClient {
   /**
    * Reappear on the street after a suspend.
    *
-   * A placement is required because the server discarded the old one. Throws
-   * if this client was never connected or has been disconnected: reconnecting
-   * is the shell's decision to make explicitly, not a side effect of resuming.
+   * A placement is required because the server discarded the old one. D-047
+   * may supply one validated opaque sprite key with that placement; omission
+   * preserves the client configuration/default. Throws if this client was
+   * never connected or has been disconnected: reconnecting is the shell's
+   * decision to make explicitly, not a side effect of resuming.
    */
-  resume(placement: Placement): void {
+  resume(placement: Placement, sprite?: LobbySprite): void {
     if (this.#status === 'connected') return;
     if (this.#status !== 'suspended' || this.#room === null) {
       throw new Error(`resume() requires a suspended client, not "${this.#status}"`);
@@ -235,7 +240,7 @@ export class LobbyClient {
     };
     this.#room.send(MESSAGE.resume, {
       ...next,
-      sprite: this.#options.sprite ?? DEFAULT_SPRITE,
+      sprite: sprite ?? this.#options.sprite ?? DEFAULT_SPRITE,
     });
     // The server writes this placement unconditionally on resume, so it is the
     // confirmed position; nothing to reconcile until the consumer moves again.

@@ -124,7 +124,7 @@ const stopStatus = lobby.onStatus((e) => {    // learn if the connection dies
 });
 lobby.updatePosition(x, y, 'left');           // safe to call every frame
 lobby.suspend();                              // on building entry (D-019)
-lobby.resume({ x, y, facing: 'down' });       // on exit
+lobby.resume({ x, y, facing: 'down' }, 'avatar-9'); // optional D-047 selection
 await lobby.disconnect();
 stopPeers();
 stopStatus();

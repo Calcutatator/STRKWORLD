@@ -72,13 +72,25 @@ describe('remote peer reconciliation', () => {
       peer({ id: 'outside', x: 8193 }),
       peer({ id: 'bad-facing', facing: 'diagonal' as never }),
       peer({ id: 'bad id' }),
-      peer({ id: 'bad-sprite', sprite: '' }),
+      peer({ id: 'bad-sprite', sprite: 'avatar-17' }),
     ]);
 
     expect([...reconciled.values()]).toEqual([
       peer(),
       peer({ id: 'bad-sprite', sprite: 'avatar-1' }),
     ]);
+  });
+
+  it('preserves every approved fighting key and falls back for values outside the registry', () => {
+    const reconciled = reconcileRemotePeers([
+      peer({ id: 'fighting-9', sprite: 'avatar-9' }),
+      peer({ id: 'fighting-16', sprite: 'avatar-16' }),
+      peer({ id: 'unknown', sprite: 'avatar-17' }),
+    ]);
+
+    expect(reconciled.get('fighting-9')?.sprite).toBe('avatar-9');
+    expect(reconciled.get('fighting-16')?.sprite).toBe('avatar-16');
+    expect(reconciled.get('unknown')?.sprite).toBe('avatar-1');
   });
 
   it('uses the last occurrence for duplicate ids deterministically', () => {

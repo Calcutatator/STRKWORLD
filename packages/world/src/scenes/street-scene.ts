@@ -1,7 +1,15 @@
 import type * as PhaserTypes from 'phaser';
-import type { BuildingId, EventBus, ShellEvents, StationId, WorldEvents } from '@strkworld/shared';
+import type {
+  AvatarSpriteKey,
+  BuildingId,
+  EventBus,
+  ShellEvents,
+  StationId,
+  WorldEvents,
+} from '@strkworld/shared';
 import {
   createStreetMap,
+  isAvatarStudioEntrance,
   isSolidAt,
   TILE_SIZE,
   TILES,
@@ -10,6 +18,20 @@ import {
   type DistrictMap,
   type TileKind,
 } from '../map/street.js';
+import {
+  AVATAR_STUDIO_DEFINITION,
+  AVATAR_STUDIO_HEIGHT,
+  AVATAR_STUDIO_TILE_SIZE,
+  AVATAR_STUDIO_WIDTH,
+  avatarStudioTileColour,
+  createAvatarStudioPresentation,
+  createAvatarStudioController,
+  isAvatarStudioSolidAt,
+  type AvatarStudioPresentation,
+  type AvatarStudioController,
+} from '../avatar-studio.js';
+import { avatarPlaceholderTint, DEFAULT_AVATAR_SPRITE } from '../avatar-state.js';
+export { avatarPlaceholderTint } from '../avatar-state.js';
 import { createDoorTrigger, type DoorTrigger } from '../door-trigger.js';
 import {
   FIXED_ROOM_DEFINITIONS,
@@ -84,11 +106,16 @@ export function createStreetScene({ Phaser, onTileChanged, remotePeers }: Street
     private roomControllers!: Partial<Record<BuildingId, FixedRoomController>>;
     private roomMaps!: Partial<Record<BuildingId, FixedRoomMap>>;
     private activeRoom?: BuildingId;
+    private avatarStudio?: AvatarStudioController;
+    private avatarStudioPresentation?: AvatarStudioPresentation;
+    private avatarStudioActive = false;
     private movement!: StreetMovementAdapter;
     private roomGraphics?: PhaserTypes.GameObjects.Graphics;
     private roomLabels = new Map<StationId, PhaserTypes.GameObjects.Text>();
     private exteriorLabels = new Map<BuildingId, PhaserTypes.GameObjects.Text>();
     private roomStationGraphics?: PhaserTypes.GameObjects.Graphics;
+    private avatarStudioGraphics?: PhaserTypes.GameObjects.Graphics;
+    private avatarStudioFigures = new Map<number, PhaserTypes.GameObjects.Image>();
     private doorOverlays: PhaserTypes.GameObjects.Image[] = [];
     private remoteAvatars?: RemoteAvatarLayer;
     private returnTile = { x: 0, y: 0 };
@@ -121,6 +148,7 @@ export function createStreetScene({ Phaser, onTileChanged, remotePeers }: Street
       });
       this.createInput();
       this.createFixedRooms();
+      this.createAvatarStudio();
       this.createCamera();
       this.createDoorTriggers();
       this.createRoomVisuals();
@@ -130,6 +158,10 @@ export function createStreetScene({ Phaser, onTileChanged, remotePeers }: Street
 
     override update(_time: number, delta: number): void {
       const room = this.activeRoomController();
+      if (this.avatarStudioActive) {
+        this.moveAvatarStudioPlayer(delta);
+        return;
+      }
       if (room?.state.inRoom) {
         this.moveRoomPlayer(delta);
         this.movement.interiorUpdate(() => this.reportRoomTile());
@@ -145,9 +177,14 @@ export function createStreetScene({ Phaser, onTileChanged, remotePeers }: Street
       if (this.cleanedUp) return;
       this.cleanedUp = true;
       for (const room of Object.values(this.roomControllers ?? {})) room?.destroy();
+      this.avatarStudio?.destroy();
+      this.avatarStudio = undefined;
+      this.avatarStudioPresentation = undefined;
       this.inputGate?.resume();
       this.roomGraphics?.destroy();
       this.roomStationGraphics?.destroy();
+      this.avatarStudioGraphics?.destroy();
+      this.avatarStudioGraphics = undefined;
       for (const label of this.roomLabels.values()) label.destroy();
       this.roomLabels.clear();
       for (const label of this.exteriorLabels.values()) label.destroy();
@@ -223,6 +260,7 @@ export function createStreetScene({ Phaser, onTileChanged, remotePeers }: Street
       this.physics.world.setBounds(0, 0, this.map.width * TILE_SIZE, this.map.height * TILE_SIZE);
 
       if (this.ground) this.physics.add.collider(this.player, this.ground);
+      this.applyAvatarSprite(DEFAULT_AVATAR_SPRITE);
       this.movement.initial({ x: this.player.x, y: this.player.y });
     }
 
@@ -307,6 +345,73 @@ export function createStreetScene({ Phaser, onTileChanged, remotePeers }: Street
       }
     }
 
+    private createAvatarStudio(): void {
+      const bus = this.resolveBus();
+      const streetBounds = {
+        x: 0,
+        y: 0,
+        width: this.map.width * TILE_SIZE,
+        height: this.map.height * TILE_SIZE,
+      };
+      const studioBounds = {
+        x: ROOM_ORIGIN.x,
+        y: ROOM_ORIGIN.y,
+        width: AVATAR_STUDIO_WIDTH * AVATAR_STUDIO_TILE_SIZE,
+        height: AVATAR_STUDIO_HEIGHT * AVATAR_STUDIO_TILE_SIZE,
+      };
+      this.avatarStudioPresentation = createAvatarStudioPresentation({
+        port: {
+          setPlayerVelocity: (x, y) => this.player.setVelocity(x, y),
+          setBodyEnabled: (enabled) => (this.player.body as PhaserTypes.Physics.Arcade.Body).setEnable(enabled),
+          setGroundVisible: (visible) => this.ground?.setVisible(visible),
+          setDoorsVisible: (visible) => this.doorOverlays.forEach((overlay) => overlay.setVisible(visible)),
+          setRemoteVisible: (visible) => this.remoteAvatars?.setVisible(visible),
+          setLabelsVisible: (visible) => this.exteriorLabels.forEach((label) => label.setVisible(visible)),
+          setRoomVisible: (visible) => {
+            this.roomGraphics?.setVisible(visible);
+            this.roomStationGraphics?.setVisible(visible);
+          },
+          setStudioVisible: (visible) => {
+            this.avatarStudioGraphics?.setVisible(visible);
+            if (!visible) this.avatarStudioFigures.forEach((figure) => figure.setVisible(false));
+          },
+          setWorldBounds: (bounds) => this.physics.world.setBounds(bounds.x, bounds.y, bounds.width, bounds.height),
+          setCameraBounds: (bounds) => this.cameras.main.setBounds(bounds.x, bounds.y, bounds.width, bounds.height),
+          setPlayerPosition: (position) => this.player.setPosition(position.x, position.y),
+          resetDoors: () => this.doors?.reset(),
+          resumeStreet: (position, report) => this.movement.exit(position, report),
+          destroyStudio: () => {
+            this.avatarStudioGraphics?.clear();
+            for (const figure of this.avatarStudioFigures.values()) figure.destroy();
+            this.avatarStudioFigures.clear();
+          },
+        },
+        streetBounds,
+        studioBounds,
+        studioSpawn: {
+          x: ROOM_ORIGIN.x + AVATAR_STUDIO_DEFINITION.spawn.x * AVATAR_STUDIO_TILE_SIZE + AVATAR_STUDIO_TILE_SIZE / 2,
+          y: ROOM_ORIGIN.y + AVATAR_STUDIO_DEFINITION.spawn.y * AVATAR_STUDIO_TILE_SIZE + AVATAR_STUDIO_TILE_SIZE / 2,
+        },
+        streetReturn: tileToWorld(this.map.spawn.x, this.map.spawn.y),
+        reportStreet: () => this.reportTile(),
+      });
+      const out: Pick<EventBus<WorldEvents>, 'emit'> = {
+        emit: (event, payload) => {
+          if (event === 'avatar:selected') {
+            this.applyAvatarSprite((payload as WorldEvents['avatar:selected']).sprite);
+          }
+          bus?.out?.emit(event, payload);
+        },
+      };
+      this.avatarStudio = createAvatarStudioController({
+        out,
+        onEnter: () => this.enterAvatarStudioRoom(),
+        onExit: () => this.exitAvatarStudioRoom(),
+        onChange: () => this.renderAvatarStudio(),
+        onDestroy: () => this.avatarStudioPresentation?.destroy(),
+      });
+    }
+
     private resolveBus(): { out: EventBus<WorldEvents>; in: EventBus<ShellEvents> } | undefined {
       return this.game.registry.get('bus') as
         { out: EventBus<WorldEvents>; in: EventBus<ShellEvents> } | undefined;
@@ -315,8 +420,10 @@ export function createStreetScene({ Phaser, onTileChanged, remotePeers }: Street
     private createRoomVisuals(): void {
       this.roomGraphics = this.add.graphics().setDepth(1);
       this.roomStationGraphics = this.add.graphics().setDepth(2);
+      this.avatarStudioGraphics = this.add.graphics().setDepth(1);
       this.roomGraphics.setVisible(false);
       this.roomStationGraphics.setVisible(false);
+      this.avatarStudioGraphics.setVisible(false);
     }
 
     /** Render non-interactive placeholder signs over the street facades. */
@@ -391,6 +498,55 @@ export function createStreetScene({ Phaser, onTileChanged, remotePeers }: Street
       // controller publishes building:exited.
       this.movement.exit({ x: this.player.x, y: this.player.y }, () => this.reportTile());
       this.activeRoom = undefined;
+    }
+
+    private enterAvatarStudioRoom(): void {
+      this.avatarStudioActive = true;
+      this.activeRoom = undefined;
+      this.lastTile = { x: -1, y: -1 };
+      this.avatarStudioPresentation?.enter();
+    }
+
+    private exitAvatarStudioRoom(): void {
+      this.avatarStudioActive = false;
+      this.lastTile = { x: -1, y: -1 };
+      this.avatarStudioPresentation?.exit();
+    }
+
+    private renderAvatarStudio(): void {
+      if (!this.avatarStudioGraphics) return;
+      this.avatarStudioGraphics.clear();
+      if (!this.avatarStudioActive) return;
+      for (let y = 0; y < AVATAR_STUDIO_HEIGHT; y += 1) {
+        for (let x = 0; x < AVATAR_STUDIO_WIDTH; x += 1) {
+          this.avatarStudioGraphics.fillStyle(
+            avatarStudioTileColour(AVATAR_STUDIO_DEFINITION, x, y),
+            1,
+          );
+          this.avatarStudioGraphics.fillRect(
+            ROOM_ORIGIN.x + x * AVATAR_STUDIO_TILE_SIZE,
+            ROOM_ORIGIN.y + y * AVATAR_STUDIO_TILE_SIZE,
+            AVATAR_STUDIO_TILE_SIZE,
+            AVATAR_STUDIO_TILE_SIZE,
+          );
+        }
+      }
+      const highlighted = this.avatarStudio?.state.highlightedFigure;
+      for (const figure of AVATAR_STUDIO_DEFINITION.figures) {
+        let image = this.avatarStudioFigures.get(figure.figure);
+        if (!image) {
+          image = this.add.image(0, 0, 'player').setDepth(2).setDisplaySize(24, 24);
+          image.setData('figure', figure.figure);
+          this.avatarStudioFigures.set(figure.figure, image);
+        }
+        image
+          .setVisible(true)
+          .setPosition(
+            ROOM_ORIGIN.x + (figure.x + 0.5) * AVATAR_STUDIO_TILE_SIZE,
+            ROOM_ORIGIN.y + (figure.y + 0.5) * AVATAR_STUDIO_TILE_SIZE,
+          )
+          .setTint(highlighted === figure.figure ? 0xffd66b : avatarPlaceholderTint(figure.sprite));
+      }
     }
 
     private roomDoorReturnTile(building: BuildingId): { x: number; y: number } {
@@ -489,6 +645,23 @@ export function createStreetScene({ Phaser, onTileChanged, remotePeers }: Street
       if (!isFixedRoomSolidAt(map, verticalTile.x, verticalTile.y)) this.player.y = nextY;
     }
 
+    private moveAvatarStudioPlayer(delta: number): void {
+      if (!this.cursors || !this.avatarStudio?.state.inRoom) return;
+      const held = this.heldDirections();
+      const velocity = calculateMovementVelocity(held, this.sprinting());
+      if (velocity.x === 0 && velocity.y === 0) return;
+      const stepX = (velocity.x * Math.max(delta, 1)) / 1000;
+      const stepY = (velocity.y * Math.max(delta, 1)) / 1000;
+      const currentTile = worldToRoomTile(this.player.x, this.player.y);
+      const nextX = this.player.x + stepX;
+      const horizontalTile = worldToRoomTile(nextX, this.player.y);
+      if (!isAvatarStudioSolidAt(AVATAR_STUDIO_DEFINITION, horizontalTile.x, currentTile.y)) this.player.x = nextX;
+      const nextY = this.player.y + stepY;
+      const verticalTile = worldToRoomTile(this.player.x, nextY);
+      if (!isAvatarStudioSolidAt(AVATAR_STUDIO_DEFINITION, verticalTile.x, verticalTile.y)) this.player.y = nextY;
+      this.movement.interiorUpdate(() => this.reportAvatarStudioTile());
+    }
+
     private heldDirections() {
       if (!this.cursors) return NO_MOVEMENT;
       return mergeMovementInput(
@@ -515,8 +688,24 @@ export function createStreetScene({ Phaser, onTileChanged, remotePeers }: Street
       const tile = worldToTile(this.player.x, this.player.y);
       if (tile.x === this.lastTile.x && tile.y === this.lastTile.y) return;
       this.lastTile = tile;
+      if (!this.avatarStudioActive && isAvatarStudioEntrance(this.map, tile.x, tile.y)) {
+        this.avatarStudio?.enter();
+        return;
+      }
       this.doors.update(tile);
       onTileChanged?.(tile);
+    }
+
+    private reportAvatarStudioTile(): void {
+      const tile = worldToRoomTile(this.player.x, this.player.y);
+      if (tile.x === this.lastTile.x && tile.y === this.lastTile.y) return;
+      this.lastTile = tile;
+      this.avatarStudio?.update(tile);
+    }
+
+    private applyAvatarSprite(sprite: AvatarSpriteKey): void {
+      this.player.setTint(avatarPlaceholderTint(sprite));
+      this.player.setData('sprite', sprite);
     }
 
     private reportRoomTile(): void {

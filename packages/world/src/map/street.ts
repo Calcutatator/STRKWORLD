@@ -68,6 +68,14 @@ export interface BuildingExteriorLabel {
   y: number;
 }
 
+/** The hidden, non-building Avatar Studio entrance at the south edge. */
+export interface HiddenRoomEntrance {
+  readonly x: number;
+  readonly y: number;
+  readonly width: number;
+  readonly height: number;
+}
+
 export interface DistrictMap {
   name: string;
   width: number;
@@ -76,6 +84,7 @@ export interface DistrictMap {
   tiles: TileKind[][];
   doors: DoorZone[];
   exteriorLabels: BuildingExteriorLabel[];
+  avatarStudioEntrance: HiddenRoomEntrance;
   spawn: { x: number; y: number };
 }
 
@@ -176,6 +185,11 @@ export function createStreetMap(): DistrictMap {
     });
   }
 
+  // The hidden Avatar Studio has no facade or BUILDINGS entry. It is reached
+  // by a two-tile path that continues directly south from the spawn column to
+  // the bottom edge, where the offscreen trigger lives.
+  fill(tiles, 23, 17, 2, height - 17, 'pavement');
+
   return {
     name: 'street',
     width,
@@ -183,6 +197,7 @@ export function createStreetMap(): DistrictMap {
     tiles,
     doors: objectLayerToDoors(doorObjects),
     exteriorLabels,
+    avatarStudioEntrance: { x: 23, y: height - 1, width: 2, height: 1 },
     spawn: { x: 24, y: 15 },
   };
 }
@@ -247,6 +262,21 @@ export function doorAt(map: DistrictMap, tileX: number, tileY: number): DoorZone
     }
   }
   return null;
+}
+
+/** Which bottom-edge tile enters the hidden Avatar Studio? */
+export function isAvatarStudioEntrance(
+  map: DistrictMap,
+  tileX: number,
+  tileY: number,
+): boolean {
+  const entrance = map.avatarStudioEntrance;
+  return (
+    tileX >= entrance.x &&
+    tileX < entrance.x + entrance.width &&
+    tileY >= entrance.y &&
+    tileY < entrance.y + entrance.height
+  );
 }
 
 /** Pixel centre of a tile. */

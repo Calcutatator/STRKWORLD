@@ -81,6 +81,28 @@ export interface Position {
 export type Facing = 'up' | 'down' | 'left' | 'right';
 
 /**
+ * D-047's opaque cosmetic state keys. The World owns pair semantics; the
+ * lobby only allowlists and carries the string in the existing sprite field.
+ */
+export type AvatarSpriteKey =
+  | 'avatar-1'
+  | 'avatar-2'
+  | 'avatar-3'
+  | 'avatar-4'
+  | 'avatar-5'
+  | 'avatar-6'
+  | 'avatar-7'
+  | 'avatar-8'
+  | 'avatar-9'
+  | 'avatar-10'
+  | 'avatar-11'
+  | 'avatar-12'
+  | 'avatar-13'
+  | 'avatar-14'
+  | 'avatar-15'
+  | 'avatar-16';
+
+/**
  * ⚠ THE LOBBY SCHEMA — the enforcement point for "the lobby never sees money".
  *
  * This is the complete set of fields the lobby may broadcast or store. A field
@@ -128,6 +150,11 @@ export type WorldEvents = {
   'station:activated': { building: BuildingId; station: StationId };
   'player:moved': { position: Position; facing: Facing };
   'world:ready': Record<string, never>;
+  /** D-047: non-financial hidden Avatar Studio lifecycle. */
+  'avatar-studio:entered': Record<string, never>;
+  'avatar-studio:exited': Record<string, never>;
+  /** D-047: selected state, still only cosmetic presentation data. */
+  'avatar:selected': { sprite: AvatarSpriteKey };
 };
 
 /**

@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import type { Facing, WorldEvents } from '@strkworld/shared';
+import type { AvatarSpriteKey, Facing, WorldEvents } from '@strkworld/shared';
 import type { RemotePeerSnapshot } from '@strkworld/world';
 import { createEventBus } from '../bus/event-bus.js';
 import { createPresenceController, type PresenceClient } from './presence-controller.js';
@@ -13,7 +13,7 @@ function fakeClient() {
     connect: vi.fn(async () => { status = 'connected'; statuses.forEach((fn) => fn({ status })); }),
     updatePosition: vi.fn((...args: [number, number, Facing]) => calls.push(['updatePosition', ...args])),
     suspend: vi.fn(() => { status = 'suspended'; }),
-    resume: vi.fn((...args: [{ x: number; y: number; facing: Facing }]) => { status = 'connected'; calls.push(['resume', ...args]); }),
+    resume: vi.fn((...args: [{ x: number; y: number; facing: Facing }, AvatarSpriteKey]) => { status = 'connected'; calls.push(['resume', ...args]); }),
     disconnect: vi.fn(async () => { status = 'closed'; }),
     onStatus: vi.fn((fn) => { statuses.add(fn); fn({ status }); return () => statuses.delete(fn); }),
     onPeers: vi.fn((fn) => { peerListeners.add(fn); fn([]); return () => peerListeners.delete(fn); }),
@@ -30,6 +30,10 @@ function fakeClient() {
 }
 
 const moved = { position: { x: 40, y: 72 }, facing: 'left' as const };
+
+async function drainAsyncWork() {
+  await new Promise<void>((resolve) => setTimeout(resolve, 0));
+}
 
 describe('presence controller', () => {
   it('exposes a replaying opaque remote-peer source adapted from lobby snapshots', async () => {
@@ -186,7 +190,177 @@ describe('presence controller', () => {
     world.emit('building:exited', { building: 'bank' });
     expect(made.client.suspend).toHaveBeenCalledTimes(1);
     expect(made.calls).toContainEqual(['updatePosition', 44, 76, 'down']);
-    expect(made.calls).toContainEqual(['resume', { x: 999, y: 999, facing: 'up' }]);
+    expect(made.calls).toContainEqual(['resume', { x: 999, y: 999, facing: 'up' }, 'avatar-1']);
+    stop();
+  });
+
+  it('keeps an Avatar Studio selection local until exit, then resumes with it', async () => {
+    const world = createEventBus<WorldEvents>();
+    const made = fakeClient();
+    const presence = createPresenceController({ endpoint: 'ws://example', factory: () => made.client });
+    const stop = presence.listen(world);
+    world.emit('player:moved', moved);
+    await Promise.resolve();
+    await Promise.resolve();
+    made.calls.length = 0;
+    vi.mocked(made.client.updatePosition).mockClear();
+    vi.mocked(made.client.resume).mockClear();
+
+    world.emit('avatar-studio:entered', {});
+    world.emit('avatar:selected', { sprite: 'avatar-11' });
+    world.emit('player:moved', { position: { x: 700, y: 800 }, facing: 'up' });
+
+    expect(made.client.suspend).toHaveBeenCalledTimes(1);
+    expect(made.client.updatePosition).not.toHaveBeenCalled();
+    expect(made.client.resume).not.toHaveBeenCalled();
+
+    world.emit('player:moved', { position: { x: 72, y: 104 }, facing: 'down' });
+    expect(made.client.updatePosition).not.toHaveBeenCalled();
+    world.emit('avatar-studio:exited', {});
+    expect(made.calls).toEqual([
+      ['resume', { x: 72, y: 104, facing: 'down' }, 'avatar-11'],
+    ]);
+    stop();
+  });
+
+  it('uses the selected avatar when reconnecting outside the studio', async () => {
+    const world = createEventBus<WorldEvents>();
+    const first = fakeClient();
+    const second = fakeClient();
+    const clients = [first, second];
+    let created = 0;
+    const factory = vi.fn(() => clients[created++]!.client);
+    const presence = createPresenceController({ endpoint: 'ws://example', factory });
+    const stop = presence.listen(world);
+
+    world.emit('player:moved', moved);
+    await Promise.resolve();
+    world.emit('avatar-studio:entered', {});
+    world.emit('avatar:selected', { sprite: 'avatar-16' });
+    world.emit('player:moved', { position: { x: 700, y: 800 }, facing: 'up' });
+    world.emit('player:moved', { position: { x: 56, y: 104 }, facing: 'down' });
+    world.emit('avatar-studio:exited', {});
+    expect(first.calls).toContainEqual([
+      'resume',
+      { x: 56, y: 104, facing: 'down' },
+      'avatar-16',
+    ]);
+    expect(first.calls).not.toContainEqual([
+      'resume',
+      { x: 700, y: 800, facing: 'up' },
+      'avatar-16',
+    ]);
+    expect(first.calls).not.toContainEqual(['updatePosition', 700, 800, 'up']);
+    first.drop();
+    presence.reconnect();
+    await Promise.resolve();
+    await Promise.resolve();
+
+    expect(factory).toHaveBeenNthCalledWith(2, expect.objectContaining({
+      start: { x: 56, y: 104, facing: 'down' },
+      sprite: 'avatar-16',
+    }));
+    expect(second.client.connect).toHaveBeenCalledTimes(1);
+    stop();
+  });
+
+  it('replaces an in-flight join that captured the pre-selection sprite', async () => {
+    const world = createEventBus<WorldEvents>();
+    const first = fakeClient();
+    const second = fakeClient();
+    let resolveInitial!: () => void;
+    first.client.connect = vi.fn(() => new Promise<void>((resolve) => { resolveInitial = resolve; }));
+    const clients = [first, second];
+    let created = 0;
+    const factory = vi.fn(() => clients[created++]!.client);
+    const presence = createPresenceController({ endpoint: 'ws://example', factory });
+    const stop = presence.listen(world);
+
+    world.emit('player:moved', moved);
+    world.emit('avatar-studio:entered', {});
+    world.emit('avatar:selected', { sprite: 'avatar-14' });
+    world.emit('player:moved', { position: { x: 700, y: 800 }, facing: 'up' });
+    world.emit('player:moved', { position: { x: 48, y: 96 }, facing: 'down' });
+    world.emit('avatar-studio:exited', {});
+
+    expect(first.client.updatePosition).not.toHaveBeenCalled();
+    expect(first.client.resume).not.toHaveBeenCalled();
+
+    resolveInitial();
+    await Promise.resolve();
+    await Promise.resolve();
+    await Promise.resolve();
+
+    expect(first.client.disconnect).toHaveBeenCalledTimes(1);
+    expect(factory).toHaveBeenCalledTimes(2);
+    expect(factory).toHaveBeenNthCalledWith(2, expect.objectContaining({
+      start: { x: 48, y: 96, facing: 'down' },
+      sprite: 'avatar-14',
+    }));
+    expect(second.client.connect).toHaveBeenCalledTimes(1);
+    expect(first.client.updatePosition).not.toHaveBeenCalled();
+    stop();
+  });
+
+  it('retains one stale-sprite replacement when entry defers it until exit', async () => {
+    const world = createEventBus<WorldEvents>();
+    const first = fakeClient();
+    const second = fakeClient();
+    let resolveInitial!: () => void;
+    let resolveDisconnect!: () => void;
+    first.client.connect = vi.fn(() => new Promise<void>((resolve) => { resolveInitial = resolve; }));
+    first.client.disconnect = vi.fn(() => new Promise<void>((resolve) => { resolveDisconnect = resolve; }));
+    const clients = [first, second];
+    let created = 0;
+    const factory = vi.fn(() => clients[created++]!.client);
+    const presence = createPresenceController({ endpoint: 'ws://example', factory });
+    const stop = presence.listen(world);
+
+    world.emit('player:moved', moved);
+    world.emit('avatar-studio:entered', {});
+    world.emit('avatar:selected', { sprite: 'avatar-14' });
+    world.emit('player:moved', { position: { x: 48, y: 96 }, facing: 'down' });
+    world.emit('avatar-studio:exited', {});
+    resolveInitial();
+    await vi.waitFor(() => expect(first.client.disconnect).toHaveBeenCalledTimes(1));
+
+    world.emit('building:entered', { building: 'bank' });
+    world.emit('player:moved', { position: { x: 700, y: 800 }, facing: 'up' });
+    resolveDisconnect();
+    await drainAsyncWork();
+    expect(factory).toHaveBeenCalledTimes(1);
+
+    const restored = { position: { x: 120, y: 136 }, facing: 'left' as const };
+    world.emit('player:moved', restored);
+    world.emit('building:exited', { building: 'bank' });
+    await vi.waitFor(() => expect(second.client.connect).toHaveBeenCalledTimes(1));
+
+    expect(factory).toHaveBeenCalledTimes(2);
+    expect(factory).toHaveBeenNthCalledWith(2, expect.objectContaining({
+      start: { x: 120, y: 136, facing: 'left' },
+      sprite: 'avatar-14',
+    }));
+    expect(first.client.resume).not.toHaveBeenCalled();
+    expect(first.client.updatePosition).not.toHaveBeenCalledWith(700, 800, 'up');
+    stop();
+  });
+
+  it('ignores a malformed avatar selection at the runtime boundary', async () => {
+    const world = createEventBus<WorldEvents>();
+    const made = fakeClient();
+    const presence = createPresenceController({ endpoint: 'ws://example', factory: () => made.client });
+    const stop = presence.listen(world);
+
+    world.emit('player:moved', moved);
+    await Promise.resolve();
+    world.emit('avatar-studio:entered', {});
+    world.emit('avatar:selected', { sprite: 'account-shaped-free-form-value' } as never);
+    world.emit('avatar-studio:exited', {});
+
+    expect(made.client.resume).toHaveBeenCalledWith(
+      { x: 40, y: 72, facing: 'left' },
+      'avatar-1',
+    );
     stop();
   });
 
@@ -302,6 +476,43 @@ describe('presence controller', () => {
     }));
     expect(first.client.disconnect).toHaveBeenCalledTimes(1);
     expect(second.client.connect).toHaveBeenCalledTimes(1);
+    stop();
+  });
+
+  it('deduplicates reconnect clicks already covered by an active replacement', async () => {
+    const world = createEventBus<WorldEvents>();
+    const first = fakeClient();
+    const second = fakeClient();
+    const unexpectedThird = fakeClient();
+    let resolveDisconnect!: () => void;
+    let resolveSecondConnect!: () => void;
+    first.client.disconnect = vi.fn(() => new Promise<void>((resolve) => { resolveDisconnect = resolve; }));
+    second.client.connect = vi.fn(() => new Promise<void>((resolve) => { resolveSecondConnect = resolve; }));
+    const clients = [first, second, unexpectedThird];
+    let created = 0;
+    const factory = vi.fn(() => clients[created++]!.client);
+    const presence = createPresenceController({ endpoint: 'ws://example', factory });
+    const stop = presence.listen(world);
+
+    world.emit('player:moved', moved);
+    await drainAsyncWork();
+    first.drop();
+    presence.reconnect();
+    expect(first.client.disconnect).toHaveBeenCalledTimes(1);
+
+    presence.reconnect();
+    presence.reconnect();
+    resolveDisconnect();
+    await vi.waitFor(() => expect(second.client.connect).toHaveBeenCalledTimes(1));
+    resolveSecondConnect();
+    await drainAsyncWork();
+
+    expect(factory).toHaveBeenCalledTimes(2);
+    expect(first.client.disconnect).toHaveBeenCalledTimes(1);
+    expect(second.client.disconnect).not.toHaveBeenCalled();
+    expect(second.client.connect).toHaveBeenCalledTimes(1);
+    expect(unexpectedThird.client.connect).not.toHaveBeenCalled();
+    expect(presence.getState().status).toBe('connected');
     stop();
   });
 

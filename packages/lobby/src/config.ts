@@ -124,13 +124,14 @@ export const GAME_ID_LENGTH = 16;
 /**
  * Sprite keys a client may choose from.
  *
- * Placeholder until the World lane publishes its asset registry; a server
- * operator overrides the list through `startPresenceServer({ room: { spriteKeys } })`,
- * which is a trusted channel — the client join payload is not. An unrecognised
- * key is replaced with the default rather than rejected, so a mismatch between
- * lanes costs a wrong-looking avatar and never a leak.
+ * D-047 fixes the deployed vocabulary at sixteen opaque keys. The first eight
+ * are the cosy/default variants and the second eight are their paired fighting
+ * variants; that meaning stays cosmetic and never becomes another lobby field.
+ * A server operator may still override the list through the trusted
+ * `startPresenceServer({ room: { spriteKeys } })` channel. An unrecognised
+ * client value is replaced with the default rather than entering room state.
  */
-export const DEFAULT_SPRITE_KEYS: readonly string[] = [
+export const DEFAULT_SPRITE_KEYS = [
   'avatar-1',
   'avatar-2',
   'avatar-3',
@@ -139,10 +140,21 @@ export const DEFAULT_SPRITE_KEYS: readonly string[] = [
   'avatar-6',
   'avatar-7',
   'avatar-8',
-];
+  'avatar-9',
+  'avatar-10',
+  'avatar-11',
+  'avatar-12',
+  'avatar-13',
+  'avatar-14',
+  'avatar-15',
+  'avatar-16',
+] as const satisfies readonly string[];
+
+/** One key in D-047's fixed browser-to-lobby cosmetic vocabulary. */
+export type LobbySprite = (typeof DEFAULT_SPRITE_KEYS)[number];
 
 /** Substituted for any sprite key not on the allowed list. */
-export const DEFAULT_SPRITE = 'avatar-1';
+export const DEFAULT_SPRITE: LobbySprite = 'avatar-1';
 
 /** Substituted for any facing value outside the four legal ones. */
 export const DEFAULT_FACING: Facing = 'down';
@@ -159,7 +171,7 @@ export const MESSAGE = {
   move: 'move',
   /** No payload. The avatar disappears for everyone else. See D-019. */
   suspend: 'suspend',
-  /** `{ x, y, facing }` — reappear after a suspend. */
+  /** `{ x, y, facing, sprite }` — reappear after a suspend. */
   resume: 'resume',
 } as const;
 

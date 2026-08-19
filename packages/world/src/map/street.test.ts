@@ -3,6 +3,7 @@ import { ACTIVE_BUILDINGS, BUILDINGS } from '@strkworld/shared';
 import {
   createStreetMap,
   doorAt,
+  isAvatarStudioEntrance,
   isSolidAt,
   objectLayerToDoors,
   TILE_SIZE,
@@ -32,6 +33,17 @@ describe('the street is walkable', () => {
     expect(isSolidAt(map, map.width, 10)).toBe(true);
     expect(isSolidAt(map, 10, -1)).toBe(true);
     expect(isSolidAt(map, 10, map.height)).toBe(true);
+  });
+
+  it('extends a hidden two-tile path from spawn to the south edge', () => {
+    expect(map.avatarStudioEntrance).toEqual({ x: 23, y: 27, width: 2, height: 1 });
+    for (let y = map.spawn.y; y < map.height; y += 1) {
+      expect(isSolidAt(map, 23, y)).toBe(false);
+      expect(isSolidAt(map, 24, y)).toBe(false);
+    }
+    expect(isAvatarStudioEntrance(map, 23, 27)).toBe(true);
+    expect(isAvatarStudioEntrance(map, 24, 27)).toBe(true);
+    expect(isAvatarStudioEntrance(map, 22, 27)).toBe(false);
   });
 });
 

@@ -11,6 +11,7 @@
 export {
   createStreetMap,
   doorAt,
+  isAvatarStudioEntrance,
   isSolidAt,
   objectLayerToDoors,
   TILE_SIZE,
@@ -18,7 +19,50 @@ export {
   tileToWorld,
   worldToTile,
 } from './map/street.js';
-export type { BuildingExteriorLabel, DistrictMap, DoorZone, TileKind, TileSpec } from './map/street.js';
+export type {
+  BuildingExteriorLabel,
+  DistrictMap,
+  DoorZone,
+  HiddenRoomEntrance,
+  TileKind,
+  TileSpec,
+} from './map/street.js';
+
+// D-047 hidden, non-financial Avatar Studio. This registry and controller
+// carry only cosmetic state; they do not use BuildingId or financial stations.
+export {
+  AVATAR_SPRITE_KEYS,
+  DEFAULT_AVATAR_SPRITE,
+  avatarSpriteForFigure,
+  isAvatarSpriteKey,
+  pairedAvatarSprite,
+  validateAvatarSprite,
+} from './avatar-state.js';
+export type { AvatarSpriteKey } from '@strkworld/shared';
+export {
+  AVATAR_STUDIO_DEFINITION,
+  AVATAR_STUDIO_HEIGHT,
+  AVATAR_STUDIO_TILE_SIZE,
+  AVATAR_STUDIO_WIDTH,
+  avatarStudioFigureAt,
+  avatarStudioTileColour,
+  createAvatarStudioPresentation,
+  createAvatarStudioController,
+  isAvatarStudioExit,
+  isAvatarStudioSolidAt,
+  validateAvatarStudioDefinition,
+} from './avatar-studio.js';
+export type {
+  AvatarStudioController,
+  AvatarStudioControllerOptions,
+  AvatarStudioDefinition,
+  AvatarStudioFigure,
+  AvatarStudioRect,
+  AvatarStudioState,
+  AvatarStudioBounds,
+  AvatarStudioPresentation,
+  AvatarStudioPresentationPort,
+} from './avatar-studio.js';
 
 // Tiled object-layer property adapter. The seam a real Tiled export uses; see
 // the trap it documents (object-layer props arrive as a raw array, unflattened).

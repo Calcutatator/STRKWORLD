@@ -98,6 +98,17 @@ describe('remote avatar layer', () => {
     expect(layer.peers.size).toBe(1);
   });
 
+  it('uses the same deterministic tint for each cosy/fighting pair', () => {
+    const sourceController = createRemotePeerSource([peer({ sprite: 'avatar-9' })]);
+    const fake = fakeScene();
+    createRemoteAvatarLayer({ scene: fake.scene as never, source: sourceController.source });
+    const image = fake.objects[0]!;
+
+    expect(image.setTint).toHaveBeenCalledWith(0xf2e8c9);
+    sourceController.publish([peer({ sprite: 'avatar-16' })]);
+    expect(image.setTint).toHaveBeenLastCalledWith(0xc7f2df);
+  });
+
   it('removes omitted IDs, clears on empty, and hides the entire layer', () => {
     const sourceController = createRemotePeerSource([peer(), peer({ id: 'peer-2' })]);
     const fake = fakeScene();

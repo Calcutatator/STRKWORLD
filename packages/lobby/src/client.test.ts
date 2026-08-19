@@ -300,6 +300,60 @@ describe('presence', () => {
     expect(peers[0]?.facing).toBe('up');
   });
 
+  it('resumes with an explicitly selected approved sprite', async () => {
+    const observer = makeClient(0, 0);
+    await observer.connect();
+    const walker = makeClient(20, 0, 'avatar-2');
+    await walker.connect();
+
+    await waitFor(
+      () => observer.peers(),
+      (list) => list.length === 1,
+      'the walker to appear',
+    );
+    walker.suspend();
+    await waitFor(
+      () => observer.peers(),
+      (list) => list.length === 0,
+      'the walker to disappear',
+    );
+
+    walker.resume({ x: 40, y: 40, facing: 'up' }, 'avatar-16');
+    const peers = await waitFor(
+      () => observer.peers(),
+      (list) => list.length === 1,
+      'the walker to reappear with its selected sprite',
+    );
+    expect(peers[0]?.sprite).toBe('avatar-16');
+  });
+
+  it('preserves the configured sprite when resume omits a selection', async () => {
+    const observer = makeClient(0, 0);
+    await observer.connect();
+    const walker = makeClient(20, 0, 'avatar-9');
+    await walker.connect();
+
+    await waitFor(
+      () => observer.peers(),
+      (list) => list[0]?.sprite === 'avatar-9',
+      'the configured sprite to appear',
+    );
+    walker.suspend();
+    await waitFor(
+      () => observer.peers(),
+      (list) => list.length === 0,
+      'the walker to disappear',
+    );
+
+    walker.resume({ x: 40, y: 40, facing: 'up' });
+    const peers = await waitFor(
+      () => observer.peers(),
+      (list) => list.length === 1,
+      'the walker to reappear with its configured sprite',
+    );
+    expect(peers[0]?.sprite).toBe('avatar-9');
+  });
+
   it('drops a peer when it leaves', async () => {
     const observer = makeClient(0, 0);
     await observer.connect();

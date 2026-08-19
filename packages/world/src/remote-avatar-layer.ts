@@ -4,6 +4,7 @@ import {
   type RemotePeerSnapshot,
   type RemotePeerSource,
 } from './remote-peer.js';
+import { avatarPlaceholderTint, validateAvatarSprite } from './avatar-state.js';
 
 type Scene = PhaserTypes.Scene;
 type Image = PhaserTypes.GameObjects.Image;
@@ -22,17 +23,6 @@ export interface RemoteAvatarLayer {
   /** Unsubscribe and destroy the layer and all child images, once. */
   destroy(): void;
 }
-
-const REMOTE_TINTS: Readonly<Record<string, number>> = {
-  'avatar-1': 0xffffff,
-  'avatar-2': 0x9fd3ff,
-  'avatar-3': 0xffb5b5,
-  'avatar-4': 0xb8f0bc,
-  'avatar-5': 0xe0c0ff,
-  'avatar-6': 0xffdf9b,
-  'avatar-7': 0xaee9e4,
-  'avatar-8': 0xf4b4dd,
-};
 
 /**
  * Phaser-only presentation adapter for the World-owned remote snapshot.
@@ -108,7 +98,7 @@ function updateAvatar(avatar: Image, peer: RemotePeerSnapshot): void {
   avatar.setPosition(peer.x, peer.y);
   avatar.setFlipX(peer.facing === 'left');
   avatar.setFlipY(peer.facing === 'up');
-  avatar.setTint(REMOTE_TINTS[peer.sprite] ?? 0xffffff);
+  avatar.setTint(avatarPlaceholderTint(validateAvatarSprite(peer.sprite)));
   avatar.setData('facing', peer.facing);
   avatar.setData('sprite', peer.sprite);
 }

@@ -1,0 +1,310 @@
+import type { AvatarSpriteKey, EventBus, WorldEvents } from '@strkworld/shared';
+import { avatarSpriteForFigure } from './avatar-state.js';
+
+export const AVATAR_STUDIO_TILE_SIZE = 32;
+export const AVATAR_STUDIO_WIDTH = 18;
+export const AVATAR_STUDIO_HEIGHT = 12;
+
+export interface AvatarStudioRect {
+  readonly x: number;
+  readonly y: number;
+  readonly width: number;
+  readonly height: number;
+}
+
+export interface AvatarStudioFigure extends AvatarStudioRect {
+  readonly figure: number;
+  readonly sprite: AvatarSpriteKey;
+}
+
+export interface AvatarStudioDefinition {
+  readonly width: number;
+  readonly height: number;
+  readonly spawn: { readonly x: number; readonly y: number };
+  readonly exit: AvatarStudioRect;
+  readonly figures: readonly AvatarStudioFigure[];
+}
+
+export const AVATAR_STUDIO_DEFINITION = {
+  width: AVATAR_STUDIO_WIDTH,
+  height: AVATAR_STUDIO_HEIGHT,
+  spawn: { x: 9, y: 9 },
+  exit: { x: 8, y: 11, width: 2, height: 1 },
+  figures: [
+    { figure: 1, sprite: 'avatar-1', x: 2, y: 3, width: 1, height: 1 },
+    { figure: 2, sprite: 'avatar-2', x: 5, y: 3, width: 1, height: 1 },
+    { figure: 3, sprite: 'avatar-3', x: 8, y: 3, width: 1, height: 1 },
+    { figure: 4, sprite: 'avatar-4', x: 11, y: 3, width: 1, height: 1 },
+    { figure: 5, sprite: 'avatar-5', x: 14, y: 3, width: 1, height: 1 },
+    { figure: 6, sprite: 'avatar-6', x: 4, y: 6, width: 1, height: 1 },
+    { figure: 7, sprite: 'avatar-7', x: 9, y: 6, width: 1, height: 1 },
+    { figure: 8, sprite: 'avatar-8', x: 14, y: 6, width: 1, height: 1 },
+  ],
+} as const satisfies AvatarStudioDefinition;
+
+export interface AvatarStudioState {
+  readonly inRoom: boolean;
+  readonly selected: AvatarSpriteKey;
+  readonly highlightedFigure: number | null;
+}
+
+export interface AvatarStudioController {
+  readonly state: AvatarStudioState;
+  enter(): void;
+  update(tile: { x: number; y: number }): void;
+  destroy(): void;
+}
+
+export interface AvatarStudioControllerOptions {
+  readonly definition?: AvatarStudioDefinition;
+  readonly out: Pick<EventBus<WorldEvents>, 'emit'>;
+  readonly onEnter?: () => void;
+  readonly onExit?: () => void;
+  readonly onChange?: (state: AvatarStudioState) => void;
+  /** Teardown presentation objects without emitting a late world event. */
+  readonly onDestroy?: () => void;
+}
+
+export interface AvatarStudioBounds {
+  readonly x: number;
+  readonly y: number;
+  readonly width: number;
+  readonly height: number;
+}
+
+/** Phaser-free operations owned by the StreetScene presentation adapter. */
+export interface AvatarStudioPresentationPort {
+  setPlayerVelocity(x: number, y: number): void;
+  setBodyEnabled(enabled: boolean): void;
+  setGroundVisible(visible: boolean): void;
+  setDoorsVisible(visible: boolean): void;
+  setRemoteVisible(visible: boolean): void;
+  setLabelsVisible(visible: boolean): void;
+  setRoomVisible(visible: boolean): void;
+  setStudioVisible(visible: boolean): void;
+  setWorldBounds(bounds: AvatarStudioBounds): void;
+  setCameraBounds(bounds: AvatarStudioBounds): void;
+  setPlayerPosition(position: { x: number; y: number }): void;
+  resetDoors(): void;
+  resumeStreet(position: { x: number; y: number }, report: () => void): void;
+  destroyStudio(): void;
+}
+
+export interface AvatarStudioPresentation {
+  enter(): void;
+  exit(): void;
+  destroy(): void;
+}
+
+/**
+ * Shared lifecycle sequencing for the hidden room. The port is the only
+ * Phaser-facing part and is supplied by StreetScene; keeping this ordering
+ * here makes it testable without a canvas and prevents a missed restoration
+ * when the room is re-entered or the scene shuts down.
+ */
+export function createAvatarStudioPresentation(options: {
+  readonly port: AvatarStudioPresentationPort;
+  readonly streetBounds: AvatarStudioBounds;
+  readonly studioBounds: AvatarStudioBounds;
+  readonly studioSpawn: { x: number; y: number };
+  readonly streetReturn: { x: number; y: number };
+  readonly reportStreet: () => void;
+}): AvatarStudioPresentation {
+  let destroyed = false;
+  return {
+    enter(): void {
+      if (destroyed) return;
+      const { port } = options;
+      port.setPlayerVelocity(0, 0);
+      port.setBodyEnabled(false);
+      port.setGroundVisible(false);
+      port.setDoorsVisible(false);
+      port.setRemoteVisible(false);
+      port.setLabelsVisible(false);
+      port.setRoomVisible(false);
+      port.setStudioVisible(true);
+      port.setWorldBounds(options.studioBounds);
+      port.setCameraBounds(options.studioBounds);
+      port.setPlayerPosition(options.studioSpawn);
+    },
+    exit(): void {
+      if (destroyed) return;
+      const { port } = options;
+      port.setPlayerVelocity(0, 0);
+      port.setBodyEnabled(true);
+      port.setGroundVisible(true);
+      port.setDoorsVisible(true);
+      port.setRemoteVisible(true);
+      port.setLabelsVisible(true);
+      port.setRoomVisible(false);
+      port.setStudioVisible(false);
+      port.setWorldBounds(options.streetBounds);
+      port.setCameraBounds(options.streetBounds);
+      port.setPlayerPosition(options.streetReturn);
+      port.resetDoors();
+      port.resumeStreet(options.streetReturn, options.reportStreet);
+    },
+    destroy(): void {
+      if (destroyed) return;
+      destroyed = true;
+      options.port.destroyStudio();
+    },
+  };
+}
+
+export function validateAvatarStudioDefinition(definition: AvatarStudioDefinition): void {
+  if (definition.width !== AVATAR_STUDIO_WIDTH || definition.height !== AVATAR_STUDIO_HEIGHT) {
+    throw new Error('Avatar Studio must use the fixed 18x12 envelope');
+  }
+  if (!inside(definition, definition.spawn.x, definition.spawn.y)) {
+    throw new Error('Avatar Studio spawn must be inside the room');
+  }
+  if (!validRect(definition.exit) || !insideRect(definition, definition.exit)) {
+    throw new Error('Avatar Studio exit must be inside the room');
+  }
+  if (definition.figures.length !== 8) {
+    throw new Error('Avatar Studio must contain exactly eight figures');
+  }
+  const seen = new Set<number>();
+  for (const figure of definition.figures) {
+    if (!Number.isInteger(figure.figure) || figure.figure < 1 || figure.figure > 8) {
+      throw new Error('Avatar Studio figures must be numbered from 1 to 8');
+    }
+    if (seen.has(figure.figure) || figure.sprite !== avatarSpriteForFigure(figure.figure)) {
+      throw new Error('Avatar Studio figures must have unique cosy states');
+    }
+    if (!validRect(figure) || !insideRect(definition, figure) || overlaps(figure, definition.exit)) {
+      throw new Error('Avatar Studio figures must be in-bounds and off the exit');
+    }
+    seen.add(figure.figure);
+  }
+}
+
+export function avatarStudioFigureAt(
+  definition: AvatarStudioDefinition,
+  x: number,
+  y: number,
+): AvatarStudioFigure | null {
+  return definition.figures.find((figure) => insideRectAt(figure, x, y)) ?? null;
+}
+
+export function isAvatarStudioExit(
+  definition: AvatarStudioDefinition,
+  x: number,
+  y: number,
+): boolean {
+  return insideRectAt(definition.exit, x, y);
+}
+
+/** Figures are visual contact targets, not walls; the border is the collision. */
+export function isAvatarStudioSolidAt(
+  definition: AvatarStudioDefinition,
+  x: number,
+  y: number,
+): boolean {
+  if (!inside(definition, x, y)) return true;
+  if (isAvatarStudioExit(definition, x, y)) return false;
+  return x === 0 || y === 0 || x === definition.width - 1 || y === definition.height - 1;
+}
+
+/** Presentation role for one tile; the bottom opening wins over the border. */
+export function avatarStudioTileColour(
+  definition: AvatarStudioDefinition,
+  x: number,
+  y: number,
+): number {
+  if (isAvatarStudioExit(definition, x, y)) return 0x8a7c62;
+  if (x === 0 || y === 0 || x === definition.width - 1 || y === definition.height - 1) {
+    return 0x39343b;
+  }
+  return 0x514c5a;
+}
+
+export function createAvatarStudioController(
+  options: AvatarStudioControllerOptions,
+): AvatarStudioController {
+  const definition = options.definition ?? AVATAR_STUDIO_DEFINITION;
+  validateAvatarStudioDefinition(definition);
+  let inRoom = false;
+  let selected: AvatarSpriteKey = 'avatar-1';
+  let highlightedFigure: number | null = null;
+  let destroyed = false;
+
+  const state = (): AvatarStudioState => ({ inRoom, selected, highlightedFigure });
+  const publish = (): void => options.onChange?.(state());
+
+  const leave = (): void => {
+    if (!inRoom) return;
+    inRoom = false;
+    highlightedFigure = null;
+    options.onExit?.();
+    publish();
+    options.out.emit('avatar-studio:exited', {});
+  };
+
+  return {
+    get state() {
+      return state();
+    },
+    enter(): void {
+      if (destroyed || inRoom) return;
+      inRoom = true;
+      highlightedFigure = null;
+      options.onEnter?.();
+      publish();
+      options.out.emit('avatar-studio:entered', {});
+    },
+    update(tile): void {
+      if (destroyed || !inRoom) return;
+      if (isAvatarStudioExit(definition, tile.x, tile.y)) {
+        leave();
+        return;
+      }
+      const figure = avatarStudioFigureAt(definition, tile.x, tile.y);
+      const nextHighlight = figure?.figure ?? null;
+      if (nextHighlight !== highlightedFigure) {
+        highlightedFigure = nextHighlight;
+        publish();
+      }
+      if (figure && selected !== figure.sprite) {
+        selected = figure.sprite;
+        options.out.emit('avatar:selected', { sprite: selected });
+        publish();
+      }
+    },
+    destroy(): void {
+      if (destroyed) return;
+      destroyed = true;
+      inRoom = false;
+      highlightedFigure = null;
+      options.onDestroy?.();
+    },
+  };
+}
+
+function inside(definition: AvatarStudioDefinition, x: number, y: number): boolean {
+  return x >= 0 && y >= 0 && x < definition.width && y < definition.height;
+}
+
+function validRect(rect: AvatarStudioRect): boolean {
+  return (
+    Number.isInteger(rect.x) &&
+    Number.isInteger(rect.y) &&
+    Number.isInteger(rect.width) &&
+    Number.isInteger(rect.height) &&
+    rect.width > 0 &&
+    rect.height > 0
+  );
+}
+
+function insideRect(definition: AvatarStudioDefinition, rect: AvatarStudioRect): boolean {
+  return rect.x >= 0 && rect.y >= 0 && rect.x + rect.width <= definition.width && rect.y + rect.height <= definition.height;
+}
+
+function insideRectAt(rect: AvatarStudioRect, x: number, y: number): boolean {
+  return x >= rect.x && x < rect.x + rect.width && y >= rect.y && y < rect.y + rect.height;
+}
+
+function overlaps(a: AvatarStudioRect, b: AvatarStudioRect): boolean {
+  return a.x < b.x + b.width && a.x + a.width > b.x && a.y < b.y + b.height && a.y + a.height > b.y;
+}

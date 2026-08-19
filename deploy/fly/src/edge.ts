@@ -120,7 +120,24 @@ const MATCHMAKE_PATH = '/matchmake/joinOrCreate/street';
 const MAX_MATCHMAKE_BODY_BYTES = 4096;
 const ID_PATTERN = /^[A-Za-z0-9_-]{9}$/;
 const FACING = new Set(['up', 'down', 'left', 'right']);
-const SPRITES = new Set(['avatar-1', 'avatar-2', 'avatar-3', 'avatar-4', 'avatar-5', 'avatar-6', 'avatar-7', 'avatar-8']);
+const SPRITES = new Set([
+  'avatar-1',
+  'avatar-2',
+  'avatar-3',
+  'avatar-4',
+  'avatar-5',
+  'avatar-6',
+  'avatar-7',
+  'avatar-8',
+  'avatar-9',
+  'avatar-10',
+  'avatar-11',
+  'avatar-12',
+  'avatar-13',
+  'avatar-14',
+  'avatar-15',
+  'avatar-16',
+]);
 
 async function handleMatchmake(
   request: IncomingMessage,

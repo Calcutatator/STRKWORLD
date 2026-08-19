@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { GameId } from '@strkworld/shared';
-import { GAME_ID_PATTERN } from './config';
+import { DEFAULT_SPRITE_KEYS, GAME_ID_PATTERN } from './config';
 import { LobbyPresence } from './presence';
 
 /**
@@ -22,6 +22,36 @@ function join(
 }
 
 describe('admission', () => {
+  it('publishes exactly D-047\'s sixteen opaque sprite keys', () => {
+    expect(DEFAULT_SPRITE_KEYS).toEqual([
+      'avatar-1',
+      'avatar-2',
+      'avatar-3',
+      'avatar-4',
+      'avatar-5',
+      'avatar-6',
+      'avatar-7',
+      'avatar-8',
+      'avatar-9',
+      'avatar-10',
+      'avatar-11',
+      'avatar-12',
+      'avatar-13',
+      'avatar-14',
+      'avatar-15',
+      'avatar-16',
+    ]);
+  });
+
+  it.each(['avatar-9', 'avatar-16'])('admits the approved D-047 sprite key %s', (sprite) => {
+    const registry = new LobbyPresence();
+    const outcome = registry.admit('s1', { x: 0, y: 0, sprite });
+
+    expect(outcome.ok).toBe(true);
+    if (!outcome.ok) throw new Error('unreachable');
+    expect(registry.peers.get(outcome.gameId)?.sprite).toBe(sprite);
+  });
+
   it('admits a well-formed request and puts one entry on the street', () => {
     const registry = new LobbyPresence();
     const outcome = registry.admit('s1', {
@@ -92,16 +122,19 @@ describe('admission', () => {
     });
   });
 
-  it('substitutes the default sprite for an unrecognised key', () => {
-    const registry = new LobbyPresence();
-    const id = join(registry, 's1');
-    registry.release('s1');
-    const outcome = registry.admit('s1', { x: 0, y: 0, sprite: 'anything-else' });
-    expect(outcome.ok).toBe(true);
-    if (!outcome.ok) throw new Error('unreachable');
-    expect(registry.peers.get(outcome.gameId)?.sprite).toBe('avatar-1');
-    void id;
-  });
+  it.each(['anything-else', 'avatar-17'])(
+    'substitutes the default sprite for the unrecognised key %s',
+    (sprite) => {
+      const registry = new LobbyPresence();
+      const id = join(registry, 's1');
+      registry.release('s1');
+      const outcome = registry.admit('s1', { x: 0, y: 0, sprite });
+      expect(outcome.ok).toBe(true);
+      if (!outcome.ok) throw new Error('unreachable');
+      expect(registry.peers.get(outcome.gameId)?.sprite).toBe('avatar-1');
+      void id;
+    },
+  );
 });
 
 describe('movement', () => {
@@ -168,6 +201,15 @@ describe('suspend and resume', () => {
     expect(entry?.position.x).toBe(10);
     expect(entry?.position.y).toBe(20);
     expect(entry?.facing).toBe('right');
+  });
+
+  it('falls back rather than storing an unknown resumed sprite', () => {
+    const registry = new LobbyPresence();
+    const id = join(registry, 's1');
+    registry.suspend('s1');
+
+    expect(registry.resume('s1', { x: 10, y: 20, sprite: 'avatar-17' }, 1000)).toBe(true);
+    expect(registry.peers.get(id)?.sprite).toBe('avatar-1');
   });
 
   it('refuses to resume a session that is not suspended', () => {
