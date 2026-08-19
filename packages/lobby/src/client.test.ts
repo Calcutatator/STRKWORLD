@@ -275,12 +275,15 @@ describe('connect is idempotent', () => {
       client.onPeers((peers) => peerSnapshots.push(peers));
 
       const pending = client.connect();
+      const interrupted = expect(pending).rejects.toThrow(/interrupted/i);
       await Promise.resolve();
       await client.disconnect();
+      await interrupted;
 
       const reconnecting = client.connect();
       firstJoin.resolve(staleRoom.room);
-      await pending;
+      await Promise.resolve();
+      await Promise.resolve();
 
       expect(staleRoom.leave).toHaveBeenCalledWith(true);
       expect(client.status).toBe('connecting');
@@ -354,6 +357,186 @@ describe('connect is idempotent', () => {
       vi.useRealTimers();
     }
   });
+
+  it('rejects a join immediately when the room errors before welcome, without stale callbacks', async () => {
+    const joined = deferred<ColyseusRoom<unknown, LobbyState>>();
+    const failedRoom = fakeRoom();
+    const joinOrCreate = vi.spyOn(ColyseusClient.prototype, 'joinOrCreate');
+    joinOrCreate.mockImplementationOnce(() => joined.promise as never);
+
+    try {
+      const client = new LobbyClient({
+        endpoint: server.endpoint,
+        start: { x: 20, y: 0 },
+        welcomeTimeoutMs: 60_000,
+      });
+      opened.push(client);
+      const statuses: LobbyStatusEvent[] = [];
+      const peerSnapshots: Array<readonly PeerSnapshot[]> = [];
+      client.onStatus((event) => statuses.push(event));
+      client.onPeers((peers) => peerSnapshots.push(peers));
+
+      const connecting = client.connect();
+      const rejection = expect(connecting).rejects.toThrow(/error before welcome/i);
+      joined.resolve(failedRoom.room);
+      await Promise.resolve();
+      failedRoom.error(503, 'server unavailable');
+      await rejection;
+      expect(client.status).toBe('closed');
+      expect(client.gameId).toBeNull();
+      expect(statuses.map((event) => event.status)).toEqual(['idle', 'connecting', 'connected', 'closed']);
+
+      failedRoom.welcome({ gameId: 'late-error-game-id' });
+      failedRoom.stateChange();
+      failedRoom.left(1006, 'leave after error cleanup');
+      expect(client.status).toBe('closed');
+      expect(client.gameId).toBeNull();
+      expect(peerSnapshots.every((peers) => peers.length === 0)).toBe(true);
+      expect(failedRoom.leave).toHaveBeenCalledTimes(1);
+      expect(failedRoom.leave).toHaveBeenCalledWith(true);
+    } finally {
+      joinOrCreate.mockRestore();
+    }
+  });
+
+  it('shares the pending identity wait with a concurrent caller after the room has joined', async () => {
+    const joined = deferred<ColyseusRoom<unknown, LobbyState>>();
+    const pendingRoom = fakeRoom();
+    const joinOrCreate = vi.spyOn(ColyseusClient.prototype, 'joinOrCreate');
+    joinOrCreate.mockImplementationOnce(() => joined.promise as never);
+
+    try {
+      const client = makeClient(20, 0);
+      const first = client.connect();
+      joined.resolve(pendingRoom.room);
+      await Promise.resolve();
+
+      const second = client.connect();
+      pendingRoom.error(503, 'same attempt');
+
+      await expect(first).rejects.toThrow(/error before welcome/i);
+      await expect(second).rejects.toThrow(/error before welcome/i);
+      expect(joinOrCreate).toHaveBeenCalledTimes(1);
+      expect(pendingRoom.leave).toHaveBeenCalledTimes(1);
+    } finally {
+      joinOrCreate.mockRestore();
+    }
+  });
+
+  it('rejects a pre-welcome leave promptly, cleans the room once, and reconnects cleanly', async () => {
+    const firstJoin = deferred<ColyseusRoom<unknown, LobbyState>>();
+    const secondJoin = deferred<ColyseusRoom<unknown, LobbyState>>();
+    const failedRoom = fakeRoom();
+    const freshRoom = fakeRoom();
+    const joinOrCreate = vi.spyOn(ColyseusClient.prototype, 'joinOrCreate');
+    joinOrCreate
+      .mockImplementationOnce(() => firstJoin.promise as never)
+      .mockImplementationOnce(() => secondJoin.promise as never);
+
+    try {
+      const client = makeClient(20, 0);
+      const statuses: LobbyStatusEvent[] = [];
+      client.onStatus((event) => statuses.push(event));
+
+      const firstConnecting = client.connect();
+      firstJoin.resolve(failedRoom.room);
+      await Promise.resolve();
+      failedRoom.left(1006, 'server restart');
+      await expect(firstConnecting).rejects.toThrow(/left before welcome/i);
+
+      expect(client.status).toBe('closed');
+      expect(client.gameId).toBeNull();
+      expect(failedRoom.leave).not.toHaveBeenCalled();
+      expect(statuses.at(-1)).toMatchObject({ status: 'closed', reason: 'server-dropped', code: 1006 });
+
+      const reconnecting = client.connect();
+      secondJoin.resolve(freshRoom.room);
+      await Promise.resolve();
+      freshRoom.welcome({ gameId: 'fresh-after-leave' });
+      await reconnecting;
+
+      expect(freshRoom.leave).not.toHaveBeenCalled();
+      expect(client.status).toBe('connected');
+      expect(client.gameId).toBe('fresh-after-leave');
+    } finally {
+      joinOrCreate.mockRestore();
+    }
+  });
+
+  it('rejects a joined pre-welcome attempt immediately when explicitly disconnected', async () => {
+    const joined = deferred<ColyseusRoom<unknown, LobbyState>>();
+    const pendingRoom = fakeRoom();
+    const joinOrCreate = vi.spyOn(ColyseusClient.prototype, 'joinOrCreate');
+    joinOrCreate.mockImplementationOnce(() => joined.promise as never);
+
+    try {
+      const client = new LobbyClient({
+        endpoint: server.endpoint,
+        start: { x: 20, y: 0 },
+        welcomeTimeoutMs: 50,
+      });
+      opened.push(client);
+      let outcome: 'pending' | 'resolved' | 'rejected' = 'pending';
+      const connecting = client.connect();
+      void connecting.then(
+        () => {
+          outcome = 'resolved';
+        },
+        () => {
+          outcome = 'rejected';
+        },
+      );
+      joined.resolve(pendingRoom.room);
+      await Promise.resolve();
+
+      await client.disconnect();
+      await Promise.resolve();
+
+      expect(outcome).toBe('rejected');
+      await expect(connecting).rejects.toThrow(/interrupted/i);
+      expect(client.status).toBe('closed');
+      expect(client.gameId).toBeNull();
+      expect(pendingRoom.leave).toHaveBeenCalledTimes(1);
+      expect(pendingRoom.leave).toHaveBeenCalledWith(true);
+
+      pendingRoom.welcome({ gameId: 'late-disconnected-id' });
+      pendingRoom.stateChange();
+      expect(client.status).toBe('closed');
+      expect(client.gameId).toBeNull();
+    } finally {
+      joinOrCreate.mockRestore();
+    }
+  });
+
+  it.each([
+    ['error', (room: ReturnType<typeof fakeRoom>) => room.error(503, 'same-turn error')],
+    ['leave', (room: ReturnType<typeof fakeRoom>) => room.left(1006, 'same-turn leave')],
+  ] as const)(
+    'does not resolve connect when welcome is followed by a same-turn %s',
+    async (label, terminate) => {
+      const joined = deferred<ColyseusRoom<unknown, LobbyState>>();
+      const terminalRoom = fakeRoom();
+      const joinOrCreate = vi.spyOn(ColyseusClient.prototype, 'joinOrCreate');
+      joinOrCreate.mockImplementationOnce(() => joined.promise as never);
+
+      try {
+        const client = makeClient(20, 0);
+        const connecting = client.connect();
+        joined.resolve(terminalRoom.room);
+        await Promise.resolve();
+
+        terminalRoom.welcome({ gameId: 'same-turn-id' });
+        terminate(terminalRoom);
+
+        await expect(connecting).rejects.toThrow(/before connect completed/i);
+        expect(client.status).toBe('closed');
+        expect(client.gameId).toBeNull();
+        expect(terminalRoom.leave).toHaveBeenCalledTimes(label === 'error' ? 1 : 0);
+      } finally {
+        joinOrCreate.mockRestore();
+      }
+    },
+  );
 });
 
 describe('presence', () => {

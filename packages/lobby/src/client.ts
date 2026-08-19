@@ -129,6 +129,12 @@ interface WelcomePayload {
   gameId: string;
 }
 
+interface JoinAttempt {
+  readonly generation: number;
+  readonly promise: Promise<void>;
+  readonly interrupt: (error: Error) => void;
+}
+
 export class LobbyClient {
   readonly #options: LobbyClientOptions;
   readonly #minSendIntervalMs: number;
@@ -137,7 +143,7 @@ export class LobbyClient {
   readonly #statusListeners = new Set<StatusListener>();
 
   #room: ColyseusRoom<unknown, LobbyState> | null = null;
-  #joining: Promise<void> | null = null;
+  #joinAttempt: JoinAttempt | null = null;
   #joinGeneration = 0;
   #status: LobbyStatus = 'idle';
 
@@ -179,17 +185,22 @@ export class LobbyClient {
    * client its identity.
    */
   async connect(): Promise<void> {
+    if (this.#joinAttempt !== null) return this.#joinAttempt.promise;
     if (this.#room !== null) return;
-    if (this.#joining !== null) return this.#joining;
 
     const generation = ++this.#joinGeneration;
     this.#setStatus('connecting');
-    const joining = this.#join(generation);
-    this.#joining = joining;
+    let interrupt!: (error: Error) => void;
+    const interrupted = new Promise<never>((_resolve, reject) => {
+      interrupt = reject;
+    });
+    const promise = Promise.race([this.#join(generation, interrupted), interrupted]);
+    const attempt: JoinAttempt = { generation, promise, interrupt };
+    this.#joinAttempt = attempt;
     try {
-      await joining;
+      await promise;
     } finally {
-      if (this.#joining === joining) this.#joining = null;
+      if (this.#joinAttempt === attempt) this.#joinAttempt = null;
     }
   }
 
@@ -312,7 +323,9 @@ export class LobbyClient {
     this.#cancelReconcile();
     this.#desired = null;
     this.#joinGeneration += 1;
-    this.#joining = null;
+    const attempt = this.#joinAttempt;
+    this.#joinAttempt = null;
+    attempt?.interrupt(new Error('Lobby join interrupted by disconnect()'));
     const room = this.#room;
     this.#room = null;
     this.#gameId = null;
@@ -326,7 +339,7 @@ export class LobbyClient {
     this.#emitPeers();
   }
 
-  async #join(generation: number): Promise<void> {
+  async #join(generation: number, interrupted: Promise<never>): Promise<void> {
     const sdk = new ColyseusClient(this.#options.endpoint);
     try {
       const room = await sdk.joinOrCreate<LobbyState>(
@@ -344,7 +357,9 @@ export class LobbyClient {
         return;
       }
 
-      const welcomed = new Promise<void>((resolve) => {
+      let rejectWelcome!: (error: Error) => void;
+      const welcomed = new Promise<void>((resolve, reject) => {
+        rejectWelcome = reject;
         room.onMessage(SERVER_MESSAGE.welcome, (payload: WelcomePayload) => {
           if (!this.#isCurrentRoom(generation, room)) return;
           this.#gameId = payload.gameId as GameId;
@@ -353,19 +368,32 @@ export class LobbyClient {
         });
       });
 
+      // Publish the room before installing lifecycle callbacks. The SDK may
+      // deliver an error/leave immediately after joinOrCreate resolves; those
+      // callbacks must be able to identify this room even before welcome.
+      this.#room = room;
+      this.#desired = null;
+      this.#lastSentAt = 0;
+      this.#setStatus('connected');
+      this.#emitPeers();
+
       room.onStateChange(() => {
         if (!this.#isCurrentRoom(generation, room)) return;
         this.#emitPeers();
         if (this.#status === 'connected') this.#pump(Date.now());
       });
-      room.onError((code, message) => {
+      room.onError((code, _message) => {
         if (!this.#isCurrentRoom(generation, room)) return;
         this.#room = null;
         this.#gameId = null;
         this.#cancelReconcile();
         this.#setStatus('closed', 'error', code);
         this.#emitPeers();
-        void message;
+        rejectWelcome(new Error('Lobby room error before welcome'));
+        // onError does not prove the transport has closed. Leave this exact
+        // room once; clearing #room first makes a resulting onLeave callback
+        // stale and prevents recursive/double cleanup.
+        void room.leave(true).catch(() => undefined);
       });
       room.onLeave((code) => {
         if (!this.#isCurrentRoom(generation, room)) return;
@@ -376,17 +404,17 @@ export class LobbyClient {
           this.#setStatus('closed', 'server-dropped', code);
         }
         this.#emitPeers();
+        rejectWelcome(new Error('Lobby room left before welcome'));
       });
 
-      this.#room = room;
-      this.#desired = null;
-      this.#lastSentAt = 0;
-      this.#setStatus('connected');
-      this.#emitPeers();
-
-      await this.#awaitWelcome(welcomed);
+      await Promise.race([this.#awaitWelcome(welcomed), interrupted]);
+      if (!this.#isCurrentRoom(generation, room)) {
+        throw new Error('Lobby room closed before connect completed');
+      }
     } catch (error) {
-      if (this.#joinGeneration === generation) this.#setStatus('idle');
+      if (this.#joinGeneration === generation && this.#status === 'connecting') {
+        this.#setStatus('idle');
+      }
       throw error;
     }
   }
