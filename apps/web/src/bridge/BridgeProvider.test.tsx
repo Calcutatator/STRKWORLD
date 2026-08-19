@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { renderToStaticMarkup } from 'react-dom/server';
-import { BridgeProvider, createBridgeRuntimeGenerationGuard, useBridge } from './BridgeProvider.js';
+import { BridgeProvider, useBridge } from './BridgeProvider.js';
 
 function Probe() {
   const bridge = useBridge();
@@ -24,7 +24,7 @@ describe('BridgeProvider', () => {
     expect(markup).toContain('none');
   });
 
-  it('immediately removes a live runtime when the current service is absent', () => {
+  it('renders an unavailable runtime when no service is supplied', () => {
     const service = {} as never;
     const planner = { planMax: async () => { throw new Error('unused'); } };
     const live = renderToStaticMarkup(
@@ -36,14 +36,14 @@ describe('BridgeProvider', () => {
     expect(absent).toContain('data-available="no"');
   });
 
-  it('does not retain a live runtime when the provider is switched to a rejected build', () => {
+  it('refuses demo mode in production even when a service is supplied', () => {
     const service = {} as never;
     expect(() => renderToStaticMarkup(
       <BridgeProvider service={service} demo build={{ production: true }}><Probe /></BridgeProvider>,
     )).toThrow(/demo.*production/i);
   });
 
-  it('makes a newly supplied live service available immediately after an absent/demo state', () => {
+  it('derives a supplied live service during render', () => {
     const service = {} as never;
     const planner = { planMax: async () => { throw new Error('unused'); } };
     const absent = renderToStaticMarkup(<BridgeProvider demo={false}><Probe /></BridgeProvider>);
@@ -53,15 +53,5 @@ describe('BridgeProvider', () => {
 
     expect(absent).toContain('data-available="no"');
     expect(live).toContain('data-available="yes"');
-  });
-
-  it('rejects a stale async runtime resolution after its provider generation is invalidated', () => {
-    const guard = createBridgeRuntimeGenerationGuard();
-    const stale = guard.next();
-    guard.invalidate(stale);
-    const current = guard.next();
-
-    expect(guard.isCurrent(stale)).toBe(false);
-    expect(guard.isCurrent(current)).toBe(true);
   });
 });

@@ -40,14 +40,14 @@ const unavailable: BridgeRuntime = {
 
 const BridgeContext = createContext<BridgeRuntime>(unavailable);
 
-export interface BridgeRuntimeGenerationGuard {
+interface BridgeRuntimeGenerationGuard {
   next(): number;
   invalidate(token: number): void;
   isCurrent(token: number): boolean;
 }
 
-/** Small testable gate for optional runtime work that outlives a prop change. */
-export function createBridgeRuntimeGenerationGuard(): BridgeRuntimeGenerationGuard {
+/** Cancels optional demo work that outlives its owning provider effect. */
+function createBridgeRuntimeGenerationGuard(): BridgeRuntimeGenerationGuard {
   let generation = 0;
   return {
     next: () => ++generation,
