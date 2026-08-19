@@ -112,6 +112,117 @@ describe('teardown', () => {
   });
 });
 
+describe('failed acquisition', () => {
+  it('restores the lease state so a failed start can be retried and cleaned up', () => {
+    const queue: Array<() => void> = [];
+    let attempts = 0;
+    let stopped = 0;
+    const host = createHost<{ id: number }, string>({
+      start: () => {
+        attempts++;
+        if (attempts === 1) throw new Error('start failed');
+        return { id: attempts };
+      },
+      stop: () => {
+        stopped++;
+      },
+      defer: (fn) => {
+        queue.push(fn);
+        return queue.length - 1;
+      },
+      cancel: (handle) => {
+        queue[handle as number] = () => {};
+      },
+    });
+
+    expect(() => host.acquire('#host')).toThrow('start failed');
+    expect(host.refCount).toBe(0);
+    expect(host.current).toBeNull();
+    expect(queue).toHaveLength(0);
+
+    const instance = host.acquire('#host');
+    expect(instance).toEqual({ id: 2 });
+    expect(attempts).toBe(2);
+
+    host.release();
+    for (const fn of queue.splice(0, queue.length)) fn();
+    expect(stopped).toBe(1);
+    expect(host.current).toBeNull();
+  });
+});
+
+describe('construction reentrancy', () => {
+  it('rejects a nested acquire and restores a failed outer acquisition', () => {
+    let attempts = 0;
+    let nestedError: unknown;
+    let acquireAgain = () => {};
+    const host = createHost<{ id: number }, string>({
+      start: () => {
+        attempts++;
+        if (attempts === 1) {
+          try {
+            acquireAgain();
+          } catch (error) {
+            nestedError = error;
+          }
+          throw new Error('outer start failed');
+        }
+        return { id: attempts };
+      },
+      stop: vi.fn(),
+    });
+    acquireAgain = () => {
+      host.acquire('#nested');
+    };
+
+    expect(() => host.acquire('#host')).toThrow('outer start failed');
+    expect(nestedError).toStrictEqual(
+      new Error('Host lifecycle cannot be changed while start is running'),
+    );
+    expect(attempts).toBe(1);
+    expect(host.refCount).toBe(0);
+    expect(host.current).toBeNull();
+  });
+
+  it('rejects a nested release without orphaning a successful start', () => {
+    const queue: Array<() => void> = [];
+    const stop = vi.fn();
+    let nestedError: unknown;
+    let releaseDuringStart = () => {};
+    const host = createHost<{ id: number }, string>({
+      start: () => {
+        try {
+          releaseDuringStart();
+        } catch (error) {
+          nestedError = error;
+        }
+        return { id: 1 };
+      },
+      stop,
+      defer: (fn) => {
+        queue.push(fn);
+        return queue.length - 1;
+      },
+    });
+    releaseDuringStart = () => {
+      host.release();
+    };
+
+    const instance = host.acquire('#host');
+    expect(nestedError).toStrictEqual(
+      new Error('Host lifecycle cannot be changed while start is running'),
+    );
+    expect(host.refCount).toBe(1);
+    expect(host.current).toBe(instance);
+
+    host.release();
+    for (const fn of queue.splice(0, queue.length)) fn();
+    expect(stop).toHaveBeenCalledOnce();
+    expect(host.refCount).toBe(0);
+    expect(host.current).toBeNull();
+  });
+});
+
 describe('rapid churn', () => {
   it('holds one instance through repeated same-tick remounts', () => {
     // HMR and StrictMode can both produce bursts of this shape.

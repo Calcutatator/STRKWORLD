@@ -19,7 +19,10 @@
  */
 
 export interface HostOptions<T, P> {
-  /** Create the instance. Called only when the ref count rises from zero. */
+  /**
+   * Create the instance. Called only when the ref count rises from zero.
+   * Calling `acquire` or `release` while this runs is rejected.
+   */
   start: (parent: P) => T;
   /** Destroy it. Called only after the ref count has stayed at zero. */
   stop: (instance: T) => void;
@@ -42,14 +45,19 @@ export interface Host<T, P> {
 }
 
 export function createHost<T, P>(options: HostOptions<T, P>): Host<T, P> {
+  const lifecycleDuringStartError = 'Host lifecycle cannot be changed while start is running';
   const defer = options.defer ?? ((fn: () => void) => setTimeout(fn, 0));
   const cancel = options.cancel ?? ((handle: unknown) => clearTimeout(handle as never));
 
   let instance: T | null = null;
   let refs = 0;
   let pending: unknown = null;
+  let starting = false;
 
   function acquire(parent: P): T {
+    if (starting) throw new Error(lifecycleDuringStartError);
+    const previousRefs = refs;
+    const previousPending = pending;
     refs++;
     // A remount arriving before the deferred teardown ran: keep what we have.
     if (pending !== null) {
@@ -57,12 +65,22 @@ export function createHost<T, P>(options: HostOptions<T, P>): Host<T, P> {
       pending = null;
     }
     if (instance === null) {
-      instance = options.start(parent);
+      starting = true;
+      try {
+        instance = options.start(parent);
+      } catch (error) {
+        refs = previousRefs;
+        pending = previousPending;
+        throw error;
+      } finally {
+        starting = false;
+      }
     }
     return instance;
   }
 
   function release(): void {
+    if (starting) throw new Error(lifecycleDuringStartError);
     refs = Math.max(0, refs - 1);
     if (refs > 0 || pending !== null || instance === null) return;
     pending = defer(() => {
