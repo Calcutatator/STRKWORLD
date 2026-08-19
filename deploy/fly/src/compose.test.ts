@@ -101,6 +101,18 @@ describe('Fly composition process boundary', () => {
   });
 
   it.each([
+    { PORT: '18080', FLY_BACKEND_PORT: '18080', FLY_LOBBY_PORT: '12567' },
+    { PORT: '12567', FLY_BACKEND_PORT: '18080', FLY_LOBBY_PORT: '12567' },
+    { PORT: '8080', FLY_BACKEND_PORT: '18080', FLY_LOBBY_PORT: '18080' },
+  ])('rejects colliding Fly service ports', (ports) => {
+    expect(() => parseFlyEnvironment({
+      ...ports,
+      FLY_PUBLIC_ORIGIN: 'https://game.example',
+      LOBBY_ALLOWED_ORIGINS: 'https://game.example',
+    })).toThrowError('Fly service ports must be distinct.');
+  });
+
+  it.each([
     'https://localhost',
     'https://127.0.0.1',
     'https://[::1]',

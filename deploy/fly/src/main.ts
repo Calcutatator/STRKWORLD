@@ -24,10 +24,16 @@ export function parseFlyEnvironment(environment: NodeJS.ProcessEnv = process.env
   if (!allowedOrigins.includes(publicOrigin)) {
     throw new Error('FLY_PUBLIC_ORIGIN is not present in LOBBY_ALLOWED_ORIGINS.');
   }
+  const publicPort = parsePort(environment['PORT'], 'PORT');
+  const backendPort = parsePort(environment['FLY_BACKEND_PORT'] ?? '18080', 'FLY_BACKEND_PORT');
+  const lobbyPort = parsePort(environment['FLY_LOBBY_PORT'] ?? '12567', 'FLY_LOBBY_PORT');
+  if (new Set([publicPort, backendPort, lobbyPort]).size !== 3) {
+    throw new Error('Fly service ports must be distinct.');
+  }
   return {
-    publicPort: parsePort(environment['PORT'], 'PORT'),
-    backendPort: parsePort(environment['FLY_BACKEND_PORT'] ?? '18080', 'FLY_BACKEND_PORT'),
-    lobbyPort: parsePort(environment['FLY_LOBBY_PORT'] ?? '12567', 'FLY_LOBBY_PORT'),
+    publicPort,
+    backendPort,
+    lobbyPort,
     publicOrigin,
     staticRoot: environment['FLY_STATIC_ROOT'] ?? '/app/web-dist',
     backendEntry: environment['FLY_BACKEND_ENTRY'] ?? '/app/build/deploy/fly/src/backend-child.js',
