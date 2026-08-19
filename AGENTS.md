@@ -250,6 +250,67 @@ without a verification method is a rumour.
 
 Format: `### YYYY-MM-DD — short title` then what, why it matters, how verified.
 
+### 2026-08-19 — Interior movement uses bounded half-tile collision substeps
+
+Fixed rooms and Avatar Studio now share a bounded movement helper that samples
+collision in pixel substeps no larger than half a tile, preserves the existing
+axis-separated diagonal behavior, and caps extreme finite frame travel. A late
+or unusually large frame can no longer jump from one side of an authored solid
+interior tile to the other; malformed movement inputs fail closed. The helper
+changes movement robustness only and does not alter room geometry, portal
+direction, presence payloads or financial behavior.
+
+*Verified:* commit `cce0489` added large-delta tunnelling, diagonal ordering,
+normal/sprint displacement, malformed-input and Avatar Studio coverage; the
+focused World movement suite, World typecheck, invariant scan and diff check
+passed. No browser, wallet, network or transaction was used.
+
+### 2026-08-19 — Lobby joins reject on pre-welcome room failure and same-turn closure
+
+`LobbyClient.connect()` now shares one interruptible join attempt and rejects
+promptly when the joined room errors, leaves, or is explicitly disconnected
+before welcome. The room is published before lifecycle callbacks are attached,
+so an immediate error can be identified and cleaned up exactly once. A welcome
+followed in the same turn by error or leave does not resolve `connect()` as
+connected; stale callbacks remain generation- and room-guarded, and a fresh
+connect can proceed cleanly. The lobby protocol and privacy-minimal payload are
+unchanged.
+
+*Verified:* commit `74ebcb5` added pre-welcome error/leave/disconnect,
+concurrent-caller and same-turn welcome/closure tests; the focused Lobby suite,
+Lobby typecheck, invariant scan and diff check passed. No browser, wallet,
+network or financial action was used.
+
+### 2026-08-19 — World host teardown owns an async stop transition
+
+The World host now enters a stopping state before invoking `stop`, keeps the
+doomed instance as the lifecycle owner until an async stop settles, and clears
+that ownership on both success and failure. Nested `acquire` and `release`
+during synchronous or asynchronous teardown are rejected before changing
+references or queuing a second teardown; a failed stop can be retried with a
+fresh instance. This preserves the existing deferred final-release and
+construction reentrancy rules without adding a Phaser or Shell seam.
+
+*Verified:* commit `e5850c3` added caught/uncaught nested teardown and async
+success/failure tests; the focused World tests, World typecheck, invariant scan
+and diff check passed. No browser, wallet, network or financial action was
+used.
+
+### 2026-08-19 — Bridge planning is invalidated before account reads can race close
+
+Bridge saved-quote preflight and settled shield planning now begin their
+generation/session guard before the first account read. Closing the room while
+that read is pending therefore invalidates the attempt before a planner call,
+state patch or later account check can continue; the existing planner and
+commit guards remain in force after each subsequent await. This is a lifecycle
+guard only: it does not alter the public-shield planner contract, quote
+evidence, account binding or D-043 production lock.
+
+*Verified:* commit `02619ba` added deterministic deferred-account tests for both
+saved preflight and shield planning; the focused Shell tests, Web typecheck,
+invariant scan and diff check passed. No wallet, provider, planner network call,
+proof, signature or transaction was used.
+
 ### 2026-08-19 — Backend body abort races preserve generic 400 and authoritative 413
 
 The Backend HTTP boundary races each body read against the request abort,
