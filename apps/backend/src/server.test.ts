@@ -92,11 +92,19 @@ describe('strict production backend environment', () => {
     expect(parsed.backend.routes.swap).toMatchObject({ quoteBound: true, maxQueueDelayMs: 0 });
   });
 
+  it('accepts the maximum request timeout supported by the Node timer', () => {
+    const parsed = parseBackendEnvironment(validEnvironment({
+      BACKEND_REQUEST_TIMEOUT_MS: '2147483647',
+    }));
+    expect(parsed.backend.requestTimeoutMs).toBe(2_147_483_647);
+  });
+
   it.each([
     ['placeholder secret', { AVNU_PAYMASTER_API_KEY: 'REPLACE_WITH_AVNU_PAYMASTER_KEY' }],
     ['malformed boolean', { BACKEND_GLOBAL_ENABLED: 'yes' }],
     ['unsafe integer', { BACKEND_MAX_PROOF_BYTES: '9007199254740992' }],
     ['port overflow', { PORT: '65536' }],
+    ['request timeout overflow', { BACKEND_REQUEST_TIMEOUT_MS: '2147483648' }],
     ['fee overflow', { BACKEND_ROUTE_TRANSFER_MAX_RELAY_FEE: (1n << 128n).toString() }],
     ['immediate transfer', { BACKEND_ROUTE_TRANSFER_MAX_QUEUE_DELAY_MS: '0' }],
     ['delayed swap', { BACKEND_ROUTE_SWAP_MAX_QUEUE_DELAY_MS: '1' }],

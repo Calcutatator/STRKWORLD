@@ -6,6 +6,7 @@ import { isFelt } from './validation.js';
 
 const MAINNET_CHAIN_ID = '0x534e5f4d41494e';
 const MAX_U128 = (1n << 128n) - 1n;
+const MAX_NODE_TIMEOUT_MS = 2_147_483_647;
 const PLACEHOLDER = /(?:REPLACE(?:_|-|$)|PLACEHOLDER|CHANGE[_-]?ME|YOUR[_-])/i;
 
 type Environment = Readonly<Record<string, string | undefined>>;
@@ -40,7 +41,12 @@ export function parseBackendEnvironment(environment: Environment): ParsedBackend
       feeToken,
       maxCalldataItems: parseInteger(environment, 'BACKEND_MAX_CALLDATA_ITEMS', 1),
       maxProofBytes: parseInteger(environment, 'BACKEND_MAX_PROOF_BYTES', 1),
-      requestTimeoutMs: parseInteger(environment, 'BACKEND_REQUEST_TIMEOUT_MS', 1),
+      requestTimeoutMs: parseInteger(
+        environment,
+        'BACKEND_REQUEST_TIMEOUT_MS',
+        1,
+        MAX_NODE_TIMEOUT_MS,
+      ),
       globalEnabled: parseBoolean(environment, 'BACKEND_GLOBAL_ENABLED'),
       rateLimit: {
         maxRequests: parseInteger(environment, 'BACKEND_RATE_LIMIT_MAX_REQUESTS', 1),
