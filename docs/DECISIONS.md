@@ -1949,3 +1949,65 @@ feet, frame vocabulary, transparent padding, fixed 24x24 gameplay geometry,
 opaque-key fallback and local/remote/selector alignment. Rendered acceptance
 must cover the small character, both large characters, cosy/fighting pairs and
 weapon extents before the placeholder renderer is retired.
+
+---
+
+## D-050 — The standalone Backend owns graceful signal shutdown
+
+**2026-08-19 · Accepted technical decision · implementation required before
+the deployment CI gate is green**
+
+**Context.** Commit `7adc821` added quarantined production-image boot smokes.
+GitHub Actions run
+[`32279807295`](https://github.com/Calcutatator/STRKWORLD/actions/runs/32279807295)
+proved that the Fly image builds, reaches readiness and stops cleanly. The
+standalone Backend image also built and reached TCP readiness, but its smoke
+started at `17:08:53.501` and failed after Docker stop at `17:08:57.255`:
+3.754 seconds around the configured three-second grace. The smoke reported
+that the exit status was not the expected `143`; it did not log the actual
+status.
+
+The image uses an exec-form `CMD`, so Node is PID 1. Neither
+`deploy/backend/launch.mjs` nor `apps/backend/src/server.ts` installs a signal
+handler, and `server.ts` currently discards the `RunningBackendServer` returned
+by `listenBackendServer()`. Node 22.12's source registers reset-on-handle
+defaults for `SIGTERM` and `SIGINT`; that handler resets terminal state and
+re-raises the signal. Docker documents both that a PID-1 process ignores a
+signal whose action is default and that `docker stop` sends `SIGKILL` after its
+grace expires. The timing and failed status therefore make a forced `SIGKILL`
+/ exit `137` the high-confidence explanation, but not an observed fact because
+this CI log did not print the code. Sources: [Node 22.12 signal-handler
+source](https://github.com/nodejs/node/blob/v22.12.0/src/node.cc#L178-L181),
+[Node 22.12 handler registration](https://github.com/nodejs/node/blob/v22.12.0/src/node.cc#L655-L658),
+[Docker PID-1 signal
+behavior](https://docs.docker.com/reference/cli/docker/container/run/#pid-settings---pid)
+and [`docker container
+stop`](https://docs.docker.com/reference/cli/docker/container/stop/).
+
+**Decision.** Do not accept a forced kill as successful Backend shutdown.
+Backend owns an explicit `SIGTERM`/`SIGINT` lifecycle around the live
+`RunningBackendServer`. Both signals enter one single-flight shutdown path:
+close that server exactly once, allow successful close to finish with exit
+`0`, and finish nonzero if close fails. Repeated or overlapping signals must
+not double-close the server. Do not weaken the smoke to accept `137` or `143`.
+
+The public test seams are an injectable lifecycle boundary that proves signal
+coalescing, one close, success and failure outcomes, plus the final hosted
+standalone image. Its smoke remains network-none, uses only inert/disabled
+financial configuration, makes no API request, and must reach readiness then
+stop with exit `0` inside a bounded five seconds.
+
+**Alternatives.** Accepting the forced kill was rejected because it can drop
+live connections without exercising application cleanup. Adding only an init
+wrapper was rejected because forwarding a signal still leaves the Backend
+without ownership of its live server. Moving the handler into the deployment
+launcher was rejected because `apps/backend` creates and owns the
+`RunningBackendServer`; keeping lifecycle beside that handle is the smaller
+and testable boundary.
+
+**Consequences.** This is operational lifecycle work only. It changes no
+`PrivacyOperations` method, HTTP route or response, schema, lobby field,
+financial policy or submission semantics. Fly's passing image smoke remains
+valid. The standalone Backend image and the overall deployment CI gate remain
+failed until the Backend lifecycle tests and final image smoke pass; staging
+and deployment remain open afterwards.

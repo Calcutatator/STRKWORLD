@@ -19,7 +19,7 @@ the lane boundary — that is why the repo is shaped the way it is.
 | **Chain** | `packages/privacy` | Active; private seam frozen, D-043 planner port/fake complete, production Ready planner blocked |
 | **World** | `packages/world` + `packages/lobby` | Active; Avatar Studio foundation accepted on localhost; D-048 top-wall portal, keyboard toggle and D-049 runtime sprite art remain |
 | **Shell** | `apps/web` | Active, starts week 2 |
-| **Backend** | `apps/backend` | Active; offline implementation and Fly hardening complete; host, Docker, domain, secrets, Alchemy controls and live staging remain |
+| **Backend** | `apps/backend` | Active; offline implementation and Fly image smoke pass; D-050 standalone graceful shutdown, host, domain, secrets, Alchemy controls and live staging remain |
 | **Bridge** | `packages/bridge` | Active, fully independent |
 | **Art** | `packages/world/assets` | Active; Kenney Urban CC0 acquired and role mappings corrected; sprite review sheets are not runtime-ready, and the D-049 transparent 64×64 export, final approval and station states remain user-gated |
 | ~~Contracts~~ | — | **Dormant until post-v1** |
@@ -370,11 +370,12 @@ submission for prepared Wallet API calls.
 strict schemas, fee ceilings, fixed per-route policy, rate limits, aggregate
 budgets, global/per-route kill switches, strict environment loader, logging-free
 HTTP composition root, and the Fly edge/composition integration. The remaining
-backend frontier is operational: an approved aggregate-only signal, host and
-Docker verification, domain and secret controls, Alchemy account/key and
-provider-control verification, live staging checks, and the funded Wallet
-API/paymaster checks retained by D-028. Do not invent a health or metrics route
-without the D-014 privacy review recorded in `docs/OPS.md`.
+backend frontier is operational: D-050 graceful standalone shutdown, an
+approved aggregate-only signal, host and image verification, domain and secret
+controls, Alchemy account/key and provider-control verification, live staging
+checks, and the funded Wallet API/paymaster checks retained by D-028. Do not
+invent a health or metrics route without the D-014 privacy review recorded in
+`docs/OPS.md`.
 
 **D-045/D-046 deployment direction:** target one Fly.io app/Machine with a
 same-origin edge/composition process for the web build, `/api` and lobby
@@ -382,6 +383,15 @@ WebSocket. Use Alchemy provisionally with separate browser/public and
 server/private applications or keys. Account creation, domain setup, secret
 procurement, provider controls and production deployment remain gated
 operational work; no credentials are present.
+
+**D-050 shutdown blocker:** CI run
+[`32279807295`](https://github.com/Calcutatator/STRKWORLD/actions/runs/32279807295)
+passed the Fly image smoke, and the standalone Backend reached readiness, but
+the Backend did not exit cleanly inside Docker's three-second stop grace.
+Backend must retain its `RunningBackendServer`, coalesce `SIGTERM`/`SIGINT`
+into one close, exit `0` after successful close and nonzero after close failure.
+The final network-none/inert image smoke must prove readiness and exit `0`
+within five seconds before the deployment CI gate is considered green.
 
 **D-042 complete offline:** Backend independently checks that AVNU's
 slippage-protected output is at least the caller's requested quote floor before

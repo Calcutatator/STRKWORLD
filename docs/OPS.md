@@ -371,18 +371,26 @@ convenience: it is a Backend-lane change with a privacy review.
 
 Stated plainly so nobody reads more assurance into this document than it earns:
 
-- **Both Dockerfiles build in GitHub CI, but neither image has been
-  boot-smoked or deployed.** Successful runs
+- **Both Dockerfiles build in GitHub CI; Fly boot smoke passes, but standalone
+  Backend shutdown currently fails.** Successful runs
   [32274724770](https://github.com/Calcutatator/STRKWORLD/actions/runs/32274724770),
   [32276418952](https://github.com/Calcutatator/STRKWORLD/actions/runs/32276418952)
   and
   [32277158593](https://github.com/Calcutatator/STRKWORLD/actions/runs/32277158593)
   each completed the `Deployment typecheck and build` job, including
   `strkworld-fly:ci` and `strkworld-backend:ci` image builds. This verifies the
-  Docker build stages and current root-context packaging; it does not verify
-  container startup, process readiness, signal handling, host access logging,
-  TLS or secrets. Both images still require bounded boot smokes and a staging
-  deployment before either is trusted.
+  Docker build stages and current root-context packaging. At commit `7adc821`,
+  run
+  [32279807295](https://github.com/Calcutatator/STRKWORLD/actions/runs/32279807295)
+  built both images and passed the Fly readiness/shutdown smoke. The standalone
+  Backend reached TCP readiness, but the full smoke step ran 3.754 seconds
+  around `docker container stop --time 3` and then failed the expected
+  exit-status assertion. The actual code was not logged; Docker's documented
+  grace-expiry `SIGKILL` makes exit `137` a high-confidence inference, not
+  observed evidence. D-050 requires Backend
+  to close its `RunningBackendServer` exactly once on `SIGTERM`/`SIGINT` and
+  requires the final image to stop with exit `0` inside five seconds. Host
+  access logging, TLS, secrets, staging and deployment remain unverified.
 - **No end-to-end deploy has happened**, because no host exists.
 - **`apps/web/index.html`** was added by this lane because a production build
   needs an entry module and there was none. It is scaffolding; the Shell lane
