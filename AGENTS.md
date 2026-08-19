@@ -250,6 +250,27 @@ without a verification method is a rumour.
 
 Format: `### YYYY-MM-DD — short title` then what, why it matters, how verified.
 
+### 2026-08-20 — Bridge active polling keeps its budget through clock rollback
+
+`BridgeService.watch()` now measures its active window from the greatest
+observed wall-clock elapsed value and the cumulative sleep it has scheduled.
+A backward or oscillating clock therefore cannot erase polling time or keep a
+pending watch alive indefinitely. The final sleep uses only the exact remaining
+budget; exhaustion persists the existing resumable "still pending" status with
+`pollingStopped: true`, while an explicit abort propagates its reason without
+rewriting the pending record. This bounds the polling loop, not a separately
+hung provider request; the caller's abort signal remains that cancellation
+authority. Quote expiry, provider status validation, signed-evidence retention
+and all wallet/financial seams are unchanged.
+
+*Verified:* the red rollback and oscillation cases reached a guarded third
+sleep instead of exhausting a 20 ms active window; commit `18d6749` makes both
+stop within budget, pins a 7/7/6 ms final-sleep sequence for a 20 ms window,
+and proves abort leaves the persisted pending status active for later resume.
+The focused Bridge suite and package typecheck, invariant scan and diff check
+passed. No provider request, wallet, RPC, proof, signature or transaction was
+used.
+
 ### 2026-08-20 — Backend request timeouts stop at the Node timer ceiling
 
 The strict production parser now accepts `BACKEND_REQUEST_TIMEOUT_MS` only
