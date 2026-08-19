@@ -1,6 +1,7 @@
 import { useEffect, useRef } from 'react';
 import type { ShellEvents, WorldEvents, EventBus } from '@strkworld/shared';
 import type { RemotePeerSource } from '@strkworld/world';
+import { worldLeaseManager } from './world-acquisition.js';
 
 /**
  * Mounts the world into the React tree.
@@ -28,20 +29,13 @@ export function WorldHost({
     const node = parent.current;
     if (!node) return;
 
-    let cancelled = false;
     // Dynamic import keeps Phaser (~353 kB gzip, does not tree-shake) out of
     // the entry chunk.
-    void import('@strkworld/world/runtime').then(({ acquireWorld }) => {
-      if (cancelled) return;
-      return acquireWorld(node, { out, in: shellIn, remotePeers });
+    return worldLeaseManager.acquire(async () => {
+      const runtime = await import('@strkworld/world/runtime');
+      await runtime.acquireWorld(node, { out, in: shellIn, remotePeers });
+      return runtime.releaseWorld;
     });
-
-    return () => {
-      cancelled = true;
-      void import('@strkworld/world/runtime').then(({ releaseWorld }) =>
-        releaseWorld(),
-      );
-    };
   }, [out, shellIn, remotePeers]);
 
   return <div ref={parent} className="world-host" data-testid="world-host" />;
