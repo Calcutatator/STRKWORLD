@@ -127,6 +127,15 @@ if [ "$stop_finished" -lt "$stop_started" ] || [ $((stop_finished - stop_started
   fail 'container stop exceeded the bounded grace period'
 fi
 exit_code=$(docker inspect --type container --format '{{.State.ExitCode}}' "$owned_id") || fail 'could not inspect stopped container'
-[ "$exit_code" -eq 143 ] || fail 'container did not terminate with the expected SIGTERM status'
+case "$exit_code" in
+  0)
+    ;;
+  [1-9]|[1-9][0-9]|1[0-9][0-9]|2[0-4][0-9]|25[0-5])
+    fail "container exited with aggregate code $exit_code"
+    ;;
+  *)
+    fail 'Docker returned an invalid aggregate exit code'
+    ;;
+esac
 
 printf 'Backend image smoke passed.\n'

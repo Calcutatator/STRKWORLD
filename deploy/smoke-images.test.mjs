@@ -90,7 +90,6 @@ async function runSmoke(script, args = [], overrides = {}) {
         FAKE_DOCKER_LOG: log,
         FAKE_DOCKER_STATE: state,
         FAKE_DATE_STATE: dateState,
-        ...(fileURLToPath(script) === fileURLToPath(backendScript) ? { FAKE_DOCKER_EXIT_CODE: '143' } : {}),
         ...overrides,
       },
     });
@@ -285,13 +284,43 @@ describe('production image boot-smoke seam', () => {
     expect(smoke.calls).toContainEqual(['container', 'rm', '--force', '--', containerId]);
   });
 
-  it.each([
-    ['Fly', flyScript, '143'],
-    ['backend', backendScript, '137'],
-  ])('rejects an unexpected %s container exit status after the bounded stop', async (_label, script, exitCode) => {
-    const smoke = await runSmoke(script, [], { FAKE_DOCKER_EXIT_CODE: exitCode });
+  it('rejects an unexpected Fly container exit status after the bounded stop', async () => {
+    const smoke = await runSmoke(flyScript, [], { FAKE_DOCKER_EXIT_CODE: '143' });
     expect(smoke.error).toBeDefined();
     expect(smoke.error?.stderr).toMatch(/shutdown|SIGTERM/);
+    expect(smoke.calls).toContainEqual(['container', 'rm', '--force', '--', containerId]);
+  });
+
+  it.each(['1', '137', '255'])(
+    'reports only the canonical aggregate backend exit code %s when graceful shutdown fails',
+    async (exitCode) => {
+      const smoke = await runSmoke(backendScript, [], { FAKE_DOCKER_EXIT_CODE: exitCode });
+      expect(smoke.error).toBeDefined();
+      expect(smoke.error?.stderr.trim()).toBe(
+        `Backend image smoke failed: container exited with aggregate code ${exitCode}`,
+      );
+      expect(smoke.calls).toContainEqual(['container', 'rm', '--force', '--', containerId]);
+    },
+  );
+
+  it('rejects a malformed backend exit code without echoing it', async () => {
+    const malformed = '137 sensitive-provider-text';
+    const smoke = await runSmoke(backendScript, [], { FAKE_DOCKER_EXIT_CODE: malformed });
+    expect(smoke.error).toBeDefined();
+    expect(smoke.error?.stderr).toContain('invalid aggregate exit code');
+    expect(smoke.error?.stderr).not.toContain(malformed);
+    expect(smoke.calls).toContainEqual(['container', 'rm', '--force', '--', containerId]);
+  });
+
+  it.each([
+    ['a zero-padded value', '00'],
+    ['an out-of-range value', '256'],
+    ['an oversized digit string', '9'.repeat(80)],
+  ])('rejects %s as a non-canonical backend exit code without echoing it', async (_label, exitCode) => {
+    const smoke = await runSmoke(backendScript, [], { FAKE_DOCKER_EXIT_CODE: exitCode });
+    expect(smoke.error).toBeDefined();
+    expect(smoke.error?.stderr).toContain('invalid aggregate exit code');
+    expect(smoke.error?.stderr).not.toContain(exitCode);
     expect(smoke.calls).toContainEqual(['container', 'rm', '--force', '--', containerId]);
   });
 

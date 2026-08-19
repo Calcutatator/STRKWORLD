@@ -39,6 +39,23 @@ export interface RunningBackendServer {
   close(): Promise<void>;
 }
 
+export type BackendShutdownSignal = 'SIGTERM' | 'SIGINT';
+
+export interface BackendShutdownLifecycle {
+  listen(signal: BackendShutdownSignal, listener: () => void): () => void;
+  exit(code: 0 | 1): void;
+}
+
+const processShutdownLifecycle: BackendShutdownLifecycle = {
+  listen(signal, listener) {
+    process.once(signal, listener);
+    return () => process.off(signal, listener);
+  },
+  exit(code) {
+    process.exit(code);
+  },
+};
+
 /** Production composition root. Test overrides replace whole external ports. */
 export function createBackendRuntime(
   environment: Environment,
@@ -98,6 +115,38 @@ export function listenBackendServer(
     server.once('listening', onListening);
     server.listen(options.port, '0.0.0.0');
   });
+}
+
+/** Close the live listener once and finish with an explicit process status. */
+export function registerBackendShutdown(
+  close: () => Promise<void>,
+  lifecycle: BackendShutdownLifecycle = processShutdownLifecycle,
+): () => void {
+  const removers: Array<() => void> = [];
+  let active = true;
+  const detach = () => {
+    for (const remove of removers.splice(0)) remove();
+  };
+  const dispose = () => {
+    if (!active) return;
+    active = false;
+    detach();
+  };
+  const shutdown = () => {
+    if (!active) return;
+    active = false;
+    detach();
+    void Promise.resolve().then(close).then(
+      () => lifecycle.exit(0),
+      () => lifecycle.exit(1),
+    );
+  };
+  for (const signal of ['SIGTERM', 'SIGINT'] as const) {
+    const remove = lifecycle.listen(signal, shutdown);
+    if (active) removers.push(remove);
+    else remove();
+  }
+  return dispose;
 }
 
 function createBackendApi(

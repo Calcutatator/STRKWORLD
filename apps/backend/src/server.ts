@@ -1,4 +1,10 @@
-import { createBackendRuntime, listenBackendServer } from './runtime.js';
+import {
+  createBackendRuntime,
+  listenBackendServer,
+  registerBackendShutdown,
+} from './runtime.js';
 
 const runtime = createBackendRuntime(process.env);
-await listenBackendServer(runtime.server, { port: runtime.port });
+const starting = listenBackendServer(runtime.server, { port: runtime.port });
+registerBackendShutdown(async () => (await starting).close());
+await starting;

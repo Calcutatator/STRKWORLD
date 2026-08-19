@@ -1,11 +1,46 @@
 import { describe, expect, it, vi } from 'vitest';
 import { parseBackendEnvironment } from './environment.js';
-import { createBackendRuntime, listenBackendServer } from './runtime.js';
+import {
+  createBackendRuntime,
+  listenBackendServer,
+  registerBackendShutdown,
+} from './runtime.js';
 import type { PaymasterPort, PoolRpcPort, SwapPlannerPort } from './types.js';
 
 const MAINNET_CHAIN_ID = '0x534e5f4d41494e';
 const POOL = '0x123';
 const STRK = '0x4718';
+
+function shutdownHarness() {
+  const listeners = new Map<'SIGTERM' | 'SIGINT', Set<() => void>>([
+    ['SIGTERM', new Set()],
+    ['SIGINT', new Set()],
+  ]);
+  const exit = vi.fn((_code: 0 | 1) => undefined);
+  return {
+    lifecycle: {
+      listen(signal: 'SIGTERM' | 'SIGINT', listener: () => void) {
+        listeners.get(signal)!.add(listener);
+        return () => listeners.get(signal)!.delete(listener);
+      },
+      exit,
+    },
+    emit(signal: 'SIGTERM' | 'SIGINT') {
+      for (const listener of [...listeners.get(signal)!]) listener();
+    },
+    exit,
+    listeners(signal: 'SIGTERM' | 'SIGINT') {
+      return [...listeners.get(signal)!];
+    },
+    listenerCount(signal: 'SIGTERM' | 'SIGINT') {
+      return listeners.get(signal)!.size;
+    },
+  };
+}
+
+async function settleShutdown(): Promise<void> {
+  await new Promise<void>((resolve) => setImmediate(resolve));
+}
 
 function validEnvironment(overrides: Record<string, string> = {}): Record<string, string> {
   return {
@@ -138,5 +173,136 @@ describe('production backend composition and HTTP listener', () => {
       await running.close();
     }
     expect(runtime.server.listening).toBe(false);
+  });
+});
+
+describe('production backend shutdown lifecycle', () => {
+  it.each(['SIGTERM', 'SIGINT'] as const)('closes cleanly and exits zero on %s', async (signal) => {
+    const harness = shutdownHarness();
+    const close = vi.fn(async () => undefined);
+    registerBackendShutdown(close, harness.lifecycle);
+
+    harness.emit(signal);
+    await settleShutdown();
+
+    expect(close).toHaveBeenCalledTimes(1);
+    expect(harness.exit).toHaveBeenCalledWith(0);
+    expect(harness.listenerCount('SIGTERM')).toBe(0);
+    expect(harness.listenerCount('SIGINT')).toBe(0);
+  });
+
+  it('coalesces duplicate and cross-signal shutdown requests into one close', async () => {
+    const harness = shutdownHarness();
+    const close = vi.fn(async () => undefined);
+    registerBackendShutdown(close, harness.lifecycle);
+    const term = harness.listeners('SIGTERM')[0]!;
+    const interrupt = harness.listeners('SIGINT')[0]!;
+
+    term();
+    interrupt();
+    term();
+    await settleShutdown();
+
+    expect(close).toHaveBeenCalledTimes(1);
+    expect(harness.exit).toHaveBeenCalledTimes(1);
+    expect(harness.exit).toHaveBeenCalledWith(0);
+  });
+
+  it('accepts shutdown while the running server is not available yet', async () => {
+    const harness = shutdownHarness();
+    const close = vi.fn(async () => undefined);
+    let publishRunning!: () => void;
+    const starting = new Promise<{ close(): Promise<void> }>((resolve) => {
+      publishRunning = () => resolve({ close });
+    });
+    registerBackendShutdown(async () => (await starting).close(), harness.lifecycle);
+
+    harness.emit('SIGTERM');
+    harness.emit('SIGINT');
+    await Promise.resolve();
+
+    expect(close).not.toHaveBeenCalled();
+    expect(harness.exit).not.toHaveBeenCalled();
+
+    publishRunning();
+    await settleShutdown();
+
+    expect(close).toHaveBeenCalledTimes(1);
+    expect(harness.exit).toHaveBeenCalledTimes(1);
+    expect(harness.exit).toHaveBeenCalledWith(0);
+  });
+
+  it.each([
+    ['a synchronous close throw', () => { throw new Error('close failed'); }],
+    ['an asynchronous close rejection', () => Promise.reject(new Error('close failed'))],
+  ])('exits nonzero after %s', async (_label, closeImplementation) => {
+    const harness = shutdownHarness();
+    const close = vi.fn(closeImplementation);
+    registerBackendShutdown(close, harness.lifecycle);
+
+    expect(() => harness.emit('SIGTERM')).not.toThrow();
+    await settleShutdown();
+
+    expect(close).toHaveBeenCalledTimes(1);
+    expect(harness.exit).toHaveBeenCalledTimes(1);
+    expect(harness.exit).toHaveBeenCalledWith(1);
+  });
+
+  it('disposes listeners idempotently and ignores captured late signals', async () => {
+    const harness = shutdownHarness();
+    const close = vi.fn(async () => undefined);
+    const dispose = registerBackendShutdown(close, harness.lifecycle);
+    const captured = harness.listeners('SIGTERM')[0]!;
+
+    dispose();
+    dispose();
+    captured();
+    await settleShutdown();
+
+    expect(harness.listenerCount('SIGTERM')).toBe(0);
+    expect(harness.listenerCount('SIGINT')).toBe(0);
+    expect(close).not.toHaveBeenCalled();
+    expect(harness.exit).not.toHaveBeenCalled();
+  });
+
+  it('always exits once after a signal is accepted, even if the disposer is called later', async () => {
+    const harness = shutdownHarness();
+    let finishClose!: () => void;
+    const close = vi.fn(() => new Promise<void>((resolve) => { finishClose = resolve; }));
+    const dispose = registerBackendShutdown(close, harness.lifecycle);
+
+    harness.emit('SIGTERM');
+    await Promise.resolve();
+    expect(close).toHaveBeenCalledTimes(1);
+    dispose();
+    finishClose();
+    await settleShutdown();
+
+    expect(harness.exit).toHaveBeenCalledTimes(1);
+    expect(harness.exit).toHaveBeenCalledWith(0);
+  });
+
+  it('removes only its own signal listeners and leaves existing listeners unchanged', async () => {
+    const harness = shutdownHarness();
+    const existingTerm = vi.fn();
+    const existingInterrupt = vi.fn();
+    harness.lifecycle.listen('SIGTERM', existingTerm);
+    harness.lifecycle.listen('SIGINT', existingInterrupt);
+    const close = vi.fn(async () => undefined);
+    const dispose = registerBackendShutdown(close, harness.lifecycle);
+
+    expect(harness.listenerCount('SIGTERM')).toBe(2);
+    expect(harness.listenerCount('SIGINT')).toBe(2);
+    dispose();
+    harness.emit('SIGTERM');
+    harness.emit('SIGINT');
+    await settleShutdown();
+
+    expect(existingTerm).toHaveBeenCalledTimes(1);
+    expect(existingInterrupt).toHaveBeenCalledTimes(1);
+    expect(harness.listenerCount('SIGTERM')).toBe(1);
+    expect(harness.listenerCount('SIGINT')).toBe(1);
+    expect(close).not.toHaveBeenCalled();
+    expect(harness.exit).not.toHaveBeenCalled();
   });
 });
