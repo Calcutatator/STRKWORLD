@@ -21,10 +21,19 @@ The generated master-sheet prompts then asked for:
 - Two paired states per character: cosy/default and fighting.
 - Four direction rows: down, left, right, up.
 - Three animation columns: idle, walk-1, walk-2.
-- Identical 32x32 logical cells, fixed feet anchors and 24x24 collision
-  compatibility.
+- Historical request at generation time: identical 32x32 logical cells, fixed
+  feet anchors and 24x24 collision compatibility.
 - No logos, wallet cues, protocol symbols, financial states, route states,
   balances, or UI text.
+
+The live target was later amended to one universal transparent 64x64 logical
+canvas per frame, fixed feet point `(32,56)`, small characters retained through
+transparent padding, characters 4 and 7 allowed to occupy more of the canvas,
+atlas trimming only when preserving `sourceSize` 64x64 and the fixed pivot, and
+the runtime-owned 24x24 gameplay/contact body remaining authoritative. The
+runtime keys remain opaque `avatar-1` through `avatar-16`; no size, stance,
+feet, wallet, account, protocol, financial or route field is encoded in lobby
+traffic.
 
 ## Reference handling
 

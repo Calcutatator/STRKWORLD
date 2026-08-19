@@ -38,5 +38,7 @@ Grass remains procedural and no Kenney frame is claimed as roof treatment.
 - Modifications: The generated images were copied from Codex's generated-image
   output directory into the workspace. No pixel cleanup has been performed.
 - Runtime status: not runtime-ready. The PNGs are RGB with baked backgrounds
-  and need transparent-alpha cleanup, exact 32x32 cell extraction and anchor
-  validation before Phaser integration.
+  and need transparent-alpha cleanup, exact 64x64 logical frame extraction,
+  `sourceSize`/pivot preservation and `(32,56)` feet-anchor validation before
+  Phaser integration. The runtime-owned gameplay/contact body remains the
+  common 24x24 footprint.
