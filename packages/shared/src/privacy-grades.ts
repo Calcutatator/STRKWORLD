@@ -174,7 +174,14 @@ export function isDeviation(grade: PrivacyGrade): boolean {
  */
 export function isRoutePlayable(route: RouteGrade): boolean {
   if (!isDeviation(route.grade)) return true;
-  return route.approvedBy !== null && route.disclosure !== null;
+  return hasNonBlankText(route.approvedBy) &&
+    hasNonBlankText(route.approvedOn) &&
+    hasNonBlankText(route.rationale) &&
+    hasNonBlankText(route.disclosure);
+}
+
+function hasNonBlankText(value: unknown): value is string {
+  return typeof value === 'string' && value.trim().length > 0;
 }
 
 /** Deviations nobody has approved. These are decisions, not tasks. */
