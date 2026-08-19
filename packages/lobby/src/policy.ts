@@ -15,7 +15,7 @@ import {
   DEFAULT_SPRITE,
   GAME_ID_PATTERN,
   WORLD_LIMIT,
-} from './config';
+} from './config.js';
 
 const FACINGS: readonly Facing[] = ['up', 'down', 'left', 'right'];
 

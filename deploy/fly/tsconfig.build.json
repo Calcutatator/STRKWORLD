@@ -1,0 +1,21 @@
+{
+  "extends": "../../tsconfig.json",
+  "compilerOptions": {
+    "noEmit": false,
+    "outDir": "../../.fly-build",
+    "rootDir": "../..",
+    "declaration": false,
+    "sourceMap": true
+  },
+  "include": [
+    "../../apps/backend/src/**/*.ts",
+    "../../packages/lobby/src/**/*.ts",
+    "../../deploy/fly/src/**/*.ts"
+  ],
+  "exclude": [
+    "../../apps/backend/src/**/*.test.ts",
+    "../../packages/lobby/src/**/*.test.ts",
+    "../../packages/lobby/src/dev-server.ts",
+    "../../deploy/fly/src/**/*.test.ts"
+  ]
+}

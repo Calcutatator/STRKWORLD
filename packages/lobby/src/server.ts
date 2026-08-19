@@ -38,9 +38,9 @@ import {
   DEFAULT_ROOM_NAME,
   resolveRoomConfig,
   type PresenceRoomConfigOverrides,
-} from './config';
-import { definePresenceRoom } from './room';
-import { silenceColyseusDebug } from './logging';
+} from './config.js';
+import { definePresenceRoom } from './room.js';
+import { silenceColyseusDebug } from './logging.js';
 
 /** Origins allowed to reach the matchmaking HTTP API from a browser. */
 const DEFAULT_ALLOWED_ORIGINS: readonly string[] = [

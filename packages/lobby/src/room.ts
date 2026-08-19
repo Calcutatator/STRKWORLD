@@ -45,14 +45,14 @@ import {
   MESSAGE,
   SERVER_MESSAGE,
   type PresenceRoomConfig,
-} from './config';
+} from './config.js';
 import {
   LobbyPresence,
   type MoveRequest,
   type PlacementRequest,
   type PresenceCounters,
-} from './presence';
-import type { LobbyState, PresenceEntry } from './state';
+} from './presence.js';
+import type { LobbyState, PresenceEntry } from './state.js';
 
 /**
  * Close code used when a join is refused.
@@ -129,7 +129,7 @@ export class PresenceRoom extends Room<{ state: LobbyState }> {
       client.sessionId,
       (options ?? {}) as PlacementRequest,
     );
-    if (!outcome.ok) {
+    if (outcome.ok === false) {
       throw new ServerError(PRESENCE_REFUSED, outcome.reason);
     }
     client.view = new StateView();

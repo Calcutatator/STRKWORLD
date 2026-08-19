@@ -1,0 +1,23 @@
+# Supply the chosen existing app explicitly: `fly deploy -a <chosen-app> -c deploy/fly/fly.toml`.
+primary_region = "cdg"
+
+[build]
+  dockerfile = "deploy/fly/Dockerfile"
+
+[http_service]
+  internal_port = 8080
+  force_https = true
+  auto_stop_machines = "off"
+  auto_start_machines = true
+  min_machines_running = 1
+  processes = ["app"]
+
+[deploy]
+  # Immediate replacement avoids a second active Machine during deployment;
+  # verify this provider behavior in staging before real traffic.
+  strategy = "immediate"
+
+[[vm]]
+  memory = "512mb"
+  cpu_kind = "shared"
+  cpus = 1

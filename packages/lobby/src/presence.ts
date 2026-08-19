@@ -22,7 +22,7 @@ import {
   MAX_VISIBLE_PEERS,
   MIN_UPDATE_INTERVAL_MS,
   WORLD_LIMIT,
-} from './config';
+} from './config.js';
 import {
   UpdateThrottle,
   createGameId,
@@ -30,8 +30,8 @@ import {
   normalizeFacing,
   normalizeSprite,
   selectVisible,
-} from './policy';
-import { LobbyState, PresenceEntry } from './state';
+} from './policy.js';
+import { LobbyState, PresenceEntry } from './state.js';
 
 /**
  * What a client may offer when it joins or reappears. All of it untrusted.

@@ -16,6 +16,8 @@ export default defineConfig({
       'packages/**/*.test.tsx',
       'apps/**/*.test.ts',
       'apps/**/*.test.tsx',
+      'deploy/**/*.test.ts',
+      'deploy/**/*.test.mjs',
       'scripts/**/*.test.mjs',
     ],
     environment: 'node',
