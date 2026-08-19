@@ -490,8 +490,13 @@ and both states through remaining movement production, the sixteen final
 transparent sheets, one tagged editable Aseprite source, mechanical QA and
 handoff. The 64×64 canvas, `(32, 56)` feet, 24×24 gameplay/contact body,
 per-key 192×256 sheet topology, no mega-atlas and no-baked-shadow policy remain
-fixed. This is an art-production authorization only: World does not integrate
-the baked review sheets or intermediate prototypes, and the final handoff
+fixed. The art-owned final destination is exactly
+`packages/world/assets/player-sprites/v1/`: root-level `avatar-1.png` through
+`avatar-16.png`, `manifest.json` and `README.md`, plus
+`source/player-sprites.aseprite` and mechanical evidence under `qa/`. Preserve
+`v1-review/` as the existing provenance package; do not overwrite it. This is
+an art-production and handoff contract only: World does not integrate the baked
+review sheets or intermediate prototypes, and the completed `v1/` handoff
 still requires separate runtime integration review and user-run rendered
 acceptance.
 

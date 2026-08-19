@@ -1911,7 +1911,8 @@ orientation; rendered acceptance is required again after implementation.
 **2026-08-19 · Accepted by the user; 2026-08-20 art-production amendment
 authorizes all eight characters through final handoff and supersedes the
 interim pause after characters 1/4/6/7 · supersedes D-047's provisional 32x32
-runtime-art assumption; runtime integration and rendered acceptance pending**
+runtime-art assumption; final handoff layout fixed, runtime integration and
+rendered acceptance pending**
 
 **Context.** The approved art direction deliberately includes two larger
 characters and fighting poses whose weapons extend beyond a 32x32 cell. A
@@ -1942,6 +1943,15 @@ for each opaque `avatar-1` through `avatar-16` key. Each sheet is a 3-column by
 `down`, `left`, `right`, `up` rows. The handoff also includes one tagged,
 editable Aseprite source. A combined mega-atlas is not part of the delivery.
 
+The art lane owns that final handoff at exactly
+`packages/world/assets/player-sprites/v1/`. Its root contains
+`avatar-1.png` through `avatar-16.png`, `manifest.json` and `README.md`; the
+tagged editable source is `source/player-sprites.aseprite`, and mechanical QA
+evidence lives under `qa/`. The existing `v1-review/` package remains review
+provenance; its existing artifacts are neither moved nor overwritten by the
+final delivery. Fixing this destination layout does not assert that any `v1/`
+file exists, passes QA, is runtime-ready or has been integrated.
+
 No frame may contain baked shadow pixels. World may render one consistent
 shadow separately behind every local, remote and Studio avatar; that shadow is
 presentation only and does not change the fixed feet point or 24x24 gameplay
@@ -1971,11 +1981,11 @@ are not the final transparent export.
 
 **Consequences.** The sprite-studio task retains ownership of cleanup, final
 pixels, the sixteen per-key sheets, the tagged editable source and mechanical
-QA through the completed handoff; it no longer pauses between character
-groups. Runtime integration still waits for that complete handoff and a
-separate review of the final assets. World may then use one visual object per
-avatar state while keeping the existing physics sprite/body as the
-authoritative position and collision seam. Tests must pin exact sheet/cell
+QA through the completed `player-sprites/v1/` handoff; it no longer pauses
+between character groups. Runtime integration still waits for that complete
+handoff and a separate review of the final assets. World may then use one
+visual object per avatar state while keeping the existing physics sprite/body
+as the authoritative position and collision seam. Tests must pin exact sheet/cell
 geometry, logical canvas, feet, frame vocabulary, transparent padding,
 shadow-free source pixels, fixed 24x24 gameplay geometry, opaque-key fallback
 and local/remote/selector alignment. Rendered acceptance must cover the small

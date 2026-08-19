@@ -40,6 +40,21 @@ it does not make this review package, an intermediate prototype or the final
 handoff runtime-ready, and it does not authorize World integration or replace
 rendered in-game acceptance.
 
+## Final handoff destination
+
+The approved production handoff belongs at
+`packages/world/assets/player-sprites/v1/`, separate from this review package:
+
+- `avatar-1.png` through `avatar-16.png` at the handoff root.
+- `source/player-sprites.aseprite` as the one tagged editable source.
+- `manifest.json` and `README.md` at the handoff root.
+- Mechanical QA evidence under `qa/`.
+
+This is a destination contract, not evidence that the final files exist, pass
+QA, are runtime-ready or have been integrated. Keep every existing file in
+`v1-review/` as review provenance; final production must not overwrite or move
+this package.
+
 ## Files
 
 - `contact-sheet-approved-v2.png` - James-approved style direction.

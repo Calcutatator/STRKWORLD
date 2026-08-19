@@ -48,6 +48,14 @@ and deliver the complete art handoff. That authorization does not make the
 review art, intermediate prototypes or final handoff runtime-ready; World
 integration and rendered in-game acceptance remain separate gates.
 
+The approved final art-owned destination is
+`packages/world/assets/player-sprites/v1/`. It contains root-level
+`avatar-1.png` through `avatar-16.png`, `manifest.json` and `README.md`, the
+tagged source at `source/player-sprites.aseprite`, and mechanical QA evidence
+under `qa/`. This records the future handoff layout only. Nothing in this
+`v1-review/` provenance package is moved, overwritten, promoted to
+runtime-ready or accepted as an in-game render by that destination choice.
+
 ## Reference handling
 
 James provided Chrono Trigger screenshots as style and pixel-resolution
