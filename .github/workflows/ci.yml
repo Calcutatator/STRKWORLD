@@ -10,7 +10,7 @@ jobs:
     name: Invariants
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - run: ./scripts/check-invariants.sh
       - run: ./scripts/check-tilemaps.sh
 
@@ -18,8 +18,8 @@ jobs:
     name: Typecheck and test
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
         with:
           # 22.12 is the repository floor (D-025). CI said 20, which is the
           # exact mismatch D-025 was written to stop: AVNU SDK 4.2.0 requires
@@ -35,8 +35,8 @@ jobs:
     name: Deployment typecheck and build
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
         with:
           node-version: '22.12'
           cache: npm
@@ -72,8 +72,8 @@ jobs:
     # this gate is the only thing that would catch it before players do.
     # D-005 asks for exactly this: "a comment and a header test".
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
         with:
           node-version: '22.12'
           cache: npm
@@ -86,5 +86,5 @@ jobs:
     # Read-only mainnet asserts. The pool fee has already moved once (4 -> 6
     # STRK) and the docs did not follow; this catches the next one.
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - run: ./scripts/check-drift.sh
