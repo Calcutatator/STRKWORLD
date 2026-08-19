@@ -430,7 +430,9 @@ verified. Trade-off notes are neutral and name no vendor.
    Alchemy documents domain and IPv4 allowlists, but the selected plan and
    deployment-edge source-IP behavior must be verified before production.
    Confirm quotas, method/version support, 429 behavior, retention and
-   rotation. D-014's position is that anything linking player IP to intended
+   rotation. `scripts/check-drift.sh` remains a read-only protocol canary and
+   defaults to an open Lava endpoint only when no explicit RPC URL is injected;
+   it is not Alchemy assurance. D-014's position is that anything linking player IP to intended
    recipient or timing goes through the backend proxy.
 
 Related open item, not a decision: the implemented standalone lobby server has

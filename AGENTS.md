@@ -250,6 +250,32 @@ without a verification method is a rumour.
 
 Format: `### YYYY-MM-DD — short title` then what, why it matters, how verified.
 
+### 2026-08-19 — RPC assurance needs credentials; the fixed backend seam is already fail-closed
+
+The D-046 Alchemy choice cannot be meaningfully probed without an account,
+keys and a real endpoint. Adding a credential-free Alchemy smoke test would
+provide false assurance about method/version support, browser origin
+allowlisting, server IP restriction, quotas or provider retention. The current
+backend RPC seam is already narrow: it sends only fixed pool calls, block
+number and transaction-receipt reads; environment parsing rejects placeholders
+without echoing values; provider failures are generic and non-retrying; and
+backend admission returns aggregate 429s without a client retry loop. Browser
+RPC configuration is separate and public by design.
+
+`scripts/check-drift.sh` defaults to the open Lava endpoint when
+`STARKNET_RPC_URL` is absent. It is a read-only protocol drift canary, not
+evidence that Alchemy is configured or suitable for production. Production CI
+and deployment checks must inject the selected Alchemy server endpoint and
+then run the exact method/version, origin/IP, quota/429, redaction and
+retention checks from D-046.
+
+*Verified:* read `apps/backend/src/environment.ts`,
+`apps/backend/src/starknet-rpc.ts`, `apps/backend/src/api.ts`,
+`packages/privacy/src/wallet-api/backend-client.ts`, their focused tests,
+`scripts/check-drift.sh`, `docs/OPS.md` and the official Alchemy/QuickNode
+RPC documentation. No account, key, endpoint, network RPC call or source
+configuration was used.
+
 ### 2026-08-19 — Browser acceptance closes the local multiplayer seam; Bridge recovery is now resumable
 
 The current checkout has passed the first rendered multiplayer acceptance:
