@@ -163,6 +163,33 @@ describe('identity is server-assigned', () => {
   });
 });
 
+describe('client send interval configuration', () => {
+  it.each([Number.NaN, Number.POSITIVE_INFINITY, 2_147_483_648, Number.MAX_SAFE_INTEGER])(
+    'rejects timer-unsafe interval %s',
+    (minSendIntervalMs) => {
+      expect(
+        () =>
+          new LobbyClient({
+            endpoint: 'ws://127.0.0.1:2567',
+            start: { x: 0, y: 0 },
+            minSendIntervalMs,
+          }),
+      ).toThrow('Lobby client send interval is invalid.');
+    },
+  );
+
+  it('accepts the exact timer ceiling', () => {
+    expect(
+      () =>
+        new LobbyClient({
+          endpoint: 'ws://127.0.0.1:2567',
+          start: { x: 0, y: 0 },
+          minSendIntervalMs: 2_147_483_647,
+        }),
+    ).not.toThrow();
+  });
+});
+
 describe('nothing connects by itself', () => {
   it('constructs without opening a connection', async () => {
     const observer = makeClient(0, 0);
@@ -540,6 +567,52 @@ describe('connect is idempotent', () => {
 });
 
 describe('presence', () => {
+  it('keeps reconciliation timers within the timer ceiling through clock rollback', async () => {
+    const joined = fakeRoom();
+    const joinOrCreate = vi
+      .spyOn(ColyseusClient.prototype, 'joinOrCreate')
+      .mockImplementation(() => Promise.resolve(joined.room) as never);
+    let now = 1000;
+    const clock = vi.spyOn(performance, 'now').mockImplementation(() => now);
+    const timer = vi.spyOn(globalThis, 'setTimeout');
+    const client = new LobbyClient({
+      endpoint: server.endpoint,
+      start: { x: 0, y: 0 },
+      minSendIntervalMs: 2_147_483_647,
+    });
+
+    try {
+      const connecting = client.connect();
+      await Promise.resolve();
+      joined.welcome({ gameId: 'max-floor-client' });
+      await connecting;
+      timer.mockClear();
+
+      client.updatePosition(10, 0, 'right');
+      now = 900;
+      client.updatePosition(20, 0, 'left');
+      now = 2_147_484_647;
+      joined.stateChange();
+
+      expect(timer.mock.calls.map((call) => call[1])).toEqual([
+        2_147_483_647,
+        2_147_483_647,
+        2_147_483_647,
+      ]);
+      expect(joined.send).toHaveBeenCalledTimes(2);
+      expect(joined.send).toHaveBeenLastCalledWith('move', {
+        x: 20,
+        y: 0,
+        facing: 'left',
+      });
+    } finally {
+      await client.disconnect();
+      timer.mockRestore();
+      joinOrCreate.mockRestore();
+      clock.mockRestore();
+    }
+  });
+
   it('keeps its send floor through clock rollback and reconciles the latest placement', async () => {
     const joined = fakeRoom();
     const joinOrCreate = vi

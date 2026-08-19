@@ -55,6 +55,9 @@ import type { LobbyState } from './state';
 
 export type { LobbySprite } from './config';
 
+const MAX_TIMER_DELAY_MS = 2_147_483_647;
+const INVALID_CLIENT_SEND_INTERVAL_ERROR = 'Lobby client send interval is invalid.';
+
 export type LobbyStatus =
   /** Constructed, never connected. */
   | 'idle'
@@ -161,10 +164,14 @@ export class LobbyClient {
   /** Pure. Opens no connection. */
   constructor(options: LobbyClientOptions) {
     this.#options = options;
-    this.#minSendIntervalMs = Math.max(
+    const minSendIntervalMs = Math.max(
       options.minSendIntervalMs ?? MIN_CLIENT_SEND_INTERVAL_MS,
       MIN_CLIENT_SEND_INTERVAL_MS,
     );
+    if (!Number.isFinite(minSendIntervalMs) || minSendIntervalMs > MAX_TIMER_DELAY_MS) {
+      throw new Error(INVALID_CLIENT_SEND_INTERVAL_ERROR);
+    }
+    this.#minSendIntervalMs = minSendIntervalMs;
     this.#welcomeTimeoutMs = options.welcomeTimeoutMs ?? 5000;
   }
 
@@ -465,7 +472,9 @@ export class LobbyClient {
       // resend. Converges once the server's copy matches.
       this.#scheduleReconcile(this.#minSendIntervalMs);
     } else {
-      this.#scheduleReconcile(this.#minSendIntervalMs - elapsed);
+      this.#scheduleReconcile(
+        Math.min(this.#minSendIntervalMs - elapsed, MAX_TIMER_DELAY_MS),
+      );
     }
   }
 
