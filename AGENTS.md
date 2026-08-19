@@ -250,6 +250,42 @@ without a verification method is a rumour.
 
 Format: `### YYYY-MM-DD — short title` then what, why it matters, how verified.
 
+### 2026-08-20 — Final D-049 art passes mechanical review; the shared index is cumulative
+
+The final handoff at `packages/world/assets/player-sprites/v1/` contains root
+`README.md`, `manifest.json`, `avatar-1.png` through `avatar-16.png`, tagged
+`source/player-sprites.aseprite`, and `qa/README.md`, `qa-report.json`,
+`source-inspection.json`, `aseprite-roundtrip.json`,
+`all-characters-movement.png`, `background-readability.png` and
+`character-1-walk.gif` through `character-8-walk.gif`. Each sheet is a
+192x256 RGBA 3x4 grid of 64x64 cells: down/left/right/up rows,
+idle/walk-1/walk-2 columns, binary alpha, no clipping, at most 24 visible
+colours and feet fixed at `(32, 56)`.
+
+Independent decoding proved a valid 64x64 32-bit Aseprite source with 192
+125 ms frames, one `art` layer, exact 80 key/direction tags and two documented
+slices; all 192 reconstructed cels were pixel-identical to the PNGs. Separate
+scans matched every committed QA frame/hash, movement, palette, edge/shadow
+heuristic and approved idle. Provenance records project-owned original work
+from the James Wilcock-directed Codex/ImageGen workflow and no third-party
+pixels; that record is not an independent legal/originality determination.
+The manifest still says
+`final-art-handoff-awaiting-runtime-integration-and-rendered-acceptance`:
+delivery proves neither World integration nor user-rendered acceptance.
+
+Commit `86e8f5f` also exposed a shared-index trap. Another worker's art was
+already staged; `git add -- AGENTS.md` did not remove it, so both scopes were
+committed. Printing `git diff --cached` or `git status` in a command chain is
+not a gate because a successful print lets the commit continue. Orchestration
+must inspect the index separately, compare it with the exact intended path
+allowlist, and stop before commit on any unexpected path.
+
+*Verified:* commit inventory, Pillow frame/hash scans, direct Aseprite binary
+parsing and cel reconstruction, committed QA JSON, and
+`git show --name-status 86e8f5f`. No Aseprite executable was available, so no
+new CLI export was claimed. No runtime code, browser, Phaser scene, wallet,
+network or transaction was used.
+
 ### 2026-08-20 — StreetScene restarts own a fresh failure-safe lifecycle
 
 Phaser may restart the same `StreetScene` instance, so `create()` now opens a
