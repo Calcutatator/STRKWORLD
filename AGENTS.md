@@ -250,6 +250,36 @@ without a verification method is a rumour.
 
 Format: `### YYYY-MM-DD — short title` then what, why it matters, how verified.
 
+### 2026-08-20 — The receipt ledger owns immutable session snapshots
+
+`ReceiptLedger.record()` now copies the building and transaction hash, clones
+and freezes every current `Intent`, and retains them in frozen receipt, intent
+list and ledger-state snapshots. `pending()` likewise returns a frozen filtered
+view over the frozen held receipts. A caller can no longer mutate its original
+receipt or intents after recording, or mutate a value returned by `pending()`,
+to move settled evidence to another building, rewrite the hash used for
+acknowledgement or change what the receipt says settled. That ownership matters
+because the provider-level ledger is the evidence a reopened room uses after
+the submitting panel has unmounted.
+
+This is reference-alias protection for the current in-memory receipt shapes,
+not durable or authoritative transaction history. Receipts still disappear on
+reload, the ledger does not validate settlement, hashes or intents, and code
+holding the exposed store's write capability can still replace its state.
+Submission, acknowledgement, wallet and privacy semantics are unchanged.
+
+*Verified:* the red source-alias case changed a recorded Bank receipt to
+Exchange, rewrote `0xabc` so acknowledgement no longer matched, and replaced
+and appended shield intents; the red read-alias case could mutate every held
+layer exposed through `pending()`. Commit `c1577c4` makes the stored and returned
+building, hash, current flat intent objects and their containing arrays remain
+unchanged and frozen while acknowledgement by the original hash still clears
+the receipt. The focused receipt-ledger tests and Web typecheck, invariant scan
+and diff check passed.
+[GitHub Actions run 32309718683](https://github.com/Calcutatator/STRKWORLD/actions/runs/32309718683)
+also completed successfully. No browser, storage, wallet, network, proof,
+signature or transaction was used.
+
 ### 2026-08-20 — Fly public and private service ports are pairwise distinct
 
 The strict Fly environment boundary now parses the public, Backend and lobby
