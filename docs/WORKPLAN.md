@@ -17,11 +17,11 @@ the lane boundary — that is why the repo is shaped the way it is.
 | Lane | Package | Status in v1 |
 |---|---|---|
 | **Chain** | `packages/privacy` | Active; private seam frozen, D-043 planner port/fake complete, production Ready planner blocked |
-| **World** | `packages/world` + `packages/lobby` | Active; WorldHost lifecycle complete offline, rendered acceptance remains user-owned |
+| **World** | `packages/world` + `packages/lobby` | Active; WorldHost lifecycle complete offline, Avatar Studio and rendered acceptance remain outstanding |
 | **Shell** | `apps/web` | Active, starts week 2 |
 | **Backend** | `apps/backend` | Active; offline implementation and Fly hardening complete; host, Docker, domain, secrets, Alchemy controls and live staging remain |
 | **Bridge** | `packages/bridge` | Active, fully independent |
-| **Art** | `packages/world/assets` | Active; Kenney Urban CC0 acquired, role mappings corrected and presentation audited, final visual direction and station states remain user-gated |
+| **Art** | `packages/world/assets` | Active; Kenney Urban CC0 acquired, role mappings corrected, sprite studio owns the eight-character paired-state handoff, final visual direction and station states remain user-gated |
 | ~~Contracts~~ | — | **Dormant until post-v1** |
 
 ### Why Contracts is dormant
@@ -237,6 +237,21 @@ highlight, activation, exit and teardown only; it gained no recipient, quote,
 deposit address, status or wallet concept. Rendered room and station acceptance
 remains user-run at `http://localhost:5173/`.
 
+**D-047 Avatar Studio brief:** add one hidden, non-financial fixed room for
+cosmetic selection. Extend the street path south from spawn to an offscreen
+bottom doorway; do not render a facade or public map label. The room contains
+eight collision-selectable avatar figures supplied by the separate sprite
+studio, each with a cosy/default and fighting/weapon-drawn state. Touching one
+selects that character in its cosy state; a keyboard toggle changes between its
+paired states, with the exact key still open pending the user's response. This
+is a World/Shell/lobby integration, not a financial surface: no wallet or route
+state enters the room, and the lobby still receives only position, facing and
+an allowlisted opaque cosmetic state. An architecture audit must choose
+between sixteen opaque state keys and eight character keys plus an opaque
+stance value before the registries are expanded atomically. Durable
+cross-reload cosmetic persistence is intentionally not part of D-047 and needs
+a separate product choice if desired.
+
 **Must not:** import `starknet` or any wallet package. Put an address, balance,
 transaction hash, building name or entry event into lobby traffic. On local
 entry, the shell leaves or suspends lobby presence; other players seeing the
@@ -432,10 +447,13 @@ per pack, not per tag. A pack that cannot be cleared gets dropped, not
 grandfathered.
 
 **Then:** five building facades (four active plus the locked Vault) themed to
-their protocols, a player sprite sheet with four-direction walking, and the
-Aseprite → embedded-tileset export pipeline. D-033 keeps the first Bank room
-procedural; final room/station art starts only after World freezes its 32 px
-footprints and asset names.
+their protocols, the eight-character/two-state sprite handoff from the
+separate studio, and the Aseprite → embedded-tileset export pipeline. D-033
+keeps the first Bank room procedural; final room/station art starts only after
+World freezes its 32 px footprints and asset names. Avatar Studio figures must
+preserve a stable 32 px runtime footprint and anchor; their final style and
+state-to-key manifest remain subject to the user's approval and the pending
+wire-seam audit.
 
 **Frozen first-room asset contract (D-033 tracer):** the procedural Bank is an
 18×12 grid of 32 px tiles (576×384 px), with a one-tile perimeter, spawn at

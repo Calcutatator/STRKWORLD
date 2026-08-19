@@ -275,6 +275,14 @@ maps cosmetically behind those keys.
 assertions, edge tests for the fixed sprite set and `/metrics`, Fly typecheck,
 and invariant checks. No host, secret or deployment was used.
 
+*Forward note — superseded by D-047:* the `avatar-1` through `avatar-8`
+allowlist is a current deployment fact, not the final cosmetic contract. The
+user has approved eight characters with paired cosy/fighting states for the
+hidden Avatar Studio. The architecture audit must choose the safe wire shape
+(sixteen opaque state keys or eight character keys plus an opaque stance)
+before World, lobby and edge registries are expanded atomically. Do not treat
+this note as authorization to accept new keys yet.
+
 ### 2026-08-19 — Kenney pavement and door mappings require lossless art review
 
 The earlier pavement mapping used frame 86, an object/edge tile with a purple

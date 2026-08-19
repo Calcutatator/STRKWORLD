@@ -114,6 +114,17 @@ disappear. The lobby receives no building ID or entry event. Building-choice
 and visit-timing inference from that disappearance is an accepted v1 trade-off
 (D-019).
 
+The Avatar Studio is a hidden, non-financial fixed room under D-047. The
+street's south path reaches an offscreen doorway; no facade or public map label
+advertises it. The room shows eight selectable character figures. A collision
+selects one character in its cosy/default state, and a keyboard control will
+toggle that character's paired fighting/weapon-drawn state; the exact key is
+still open. The selected cosmetic state is resumed with street presence and
+has no wallet, account, protocol or financial meaning. The wire representation
+(sixteen opaque state keys versus eight character keys plus an opaque stance)
+is an active architecture audit; do not widen the registry or lobby payload
+until that audit is complete.
+
 ---
 
 ## Boundaries
