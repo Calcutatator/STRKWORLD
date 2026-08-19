@@ -119,10 +119,13 @@ commercial-use licensing before it lands — a per-pack audit, not a per-tag
 assumption. Record the licence for each asset in `assets/CREDITS.md` as you
 add it.
 
-The Kenney RPG Urban CC0 placeholder source is now acquired under
+The Kenney RPG Urban CC0 placeholder source is acquired under
 `assets/third-party/kenney-rpg-urban/` and recorded in `assets/CREDITS.md`.
-This provenance-only import is not rendered by the World runtime yet; frame
-mapping and visual treatment remain deferred for review.
+The street runtime uses the audited `tilemap.png` frames for road,
+pavement, wall and facade at clean 2× (the existing 32px tile/index/collision
+contracts stay unchanged). The door frame is a separate overlay at the
+existing door coordinates. Grass remains procedural; no Kenney frame is
+claimed as a roof treatment.
 
 Four buildings in v1: the Bank, the Exchange, the Post Office, and a visible
 but disabled Vault facade so the world reads as complete.

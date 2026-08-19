@@ -35,15 +35,20 @@ import {
 } from '../movement-input.js';
 import { createRemoteAvatarLayer, type RemoteAvatarLayer } from '../remote-avatar-layer.js';
 import type { RemotePeerSource } from '../remote-peer.js';
+import {
+  createKenneyRuntimeTextures,
+  KENNEY_ATLAS_KEY,
+  KENNEY_ATLAS_URL,
+  KENNEY_DOOR_TEXTURE_KEY,
+  KENNEY_TILE_TEXTURE_KEY,
+} from '../kenney-urban.js';
 
 /**
  * The street.
  *
- * Placeholder art is generated at runtime from the tile colours — no external
- * asset is loaded here. That is deliberate rather than lazy: it means a
- * walkable world exists before any licence audit, and when real tiles arrive
- * they replace `makePlaceholderTextures` alone. The map data, collision and
- * door contracts do not change.
+ * Placeholder street art is sliced at runtime from the audited Kenney CC0
+ * atlas; grass and the player remain procedural. The map data, collision and
+ * door contracts do not change when the art treatment changes.
  *
  * No network I/O happens in scene lifecycle. Under any future mounting
  * regression `create()` can run twice, and a lobby join here would produce two
@@ -84,6 +89,7 @@ export function createStreetScene({ Phaser, onTileChanged, remotePeers }: Street
     private roomLabels = new Map<StationId, PhaserTypes.GameObjects.Text>();
     private exteriorLabels = new Map<BuildingId, PhaserTypes.GameObjects.Text>();
     private roomStationGraphics?: PhaserTypes.GameObjects.Graphics;
+    private doorOverlays: PhaserTypes.GameObjects.Image[] = [];
     private remoteAvatars?: RemoteAvatarLayer;
     private returnTile = { x: 0, y: 0 };
     private cleanedUp = false;
@@ -94,11 +100,17 @@ export function createStreetScene({ Phaser, onTileChanged, remotePeers }: Street
 
     preload(): void {
       this.map = createStreetMap();
-      makePlaceholderTextures(this, Phaser);
+      this.load.image(KENNEY_ATLAS_KEY, KENNEY_ATLAS_URL);
     }
 
     create(): void {
+      createKenneyRuntimeTextures(this, Phaser, {
+        tileIndex: TILE_INDEX,
+        grassColour: TILES.grass.colour,
+      });
+      makePlayerTexture(this);
       this.drawGround();
+      this.createDoorOverlays();
       this.movement = createStreetMovementAdapter({
         emit: (event, payload) => this.resolveBus()?.out.emit(event, payload),
       });
@@ -142,6 +154,8 @@ export function createStreetScene({ Phaser, onTileChanged, remotePeers }: Street
       this.exteriorLabels.clear();
       this.remoteAvatars?.destroy();
       this.remoteAvatars = undefined;
+      for (const overlay of this.doorOverlays) overlay.destroy();
+      this.doorOverlays = [];
     }
 
     // -- construction --------------------------------------------------------
@@ -161,7 +175,14 @@ export function createStreetScene({ Phaser, onTileChanged, remotePeers }: Street
         tileWidth: TILE_SIZE,
         tileHeight: TILE_SIZE,
       });
-      const tileset = tilemap.addTilesetImage('tiles', 'tiles', TILE_SIZE, TILE_SIZE, 0, 0);
+      const tileset = tilemap.addTilesetImage(
+        KENNEY_TILE_TEXTURE_KEY,
+        KENNEY_TILE_TEXTURE_KEY,
+        TILE_SIZE,
+        TILE_SIZE,
+        0,
+        0,
+      );
       if (!tileset) return;
 
       const layer = tilemap.createLayer(0, tileset, 0, 0);
@@ -176,6 +197,21 @@ export function createStreetScene({ Phaser, onTileChanged, remotePeers }: Street
       layer.setCollision(solidIndices);
 
       this.ground = layer;
+    }
+
+    /** Door art is an overlay so it never changes the tile/index/collision map. */
+    private createDoorOverlays(): void {
+      for (const door of this.map.doors) {
+        const overlay = this.add
+          .image(
+            (door.x + door.width / 2) * TILE_SIZE,
+            (door.y + door.height / 2) * TILE_SIZE,
+            KENNEY_DOOR_TEXTURE_KEY,
+          )
+          .setDisplaySize(door.width * TILE_SIZE, door.height * TILE_SIZE)
+          .setDepth(1);
+        this.doorOverlays.push(overlay);
+      }
     }
 
     private createPlayer(): void {
@@ -306,6 +342,7 @@ export function createStreetScene({ Phaser, onTileChanged, remotePeers }: Street
       const body = this.player.body as PhaserTypes.Physics.Arcade.Body;
       body.setEnable(false);
       this.ground?.setVisible(false);
+      for (const overlay of this.doorOverlays) overlay.setVisible(false);
       this.remoteAvatars?.setVisible(false);
       for (const label of this.exteriorLabels.values()) label.setVisible(false);
       this.roomGraphics?.setVisible(true);
@@ -335,6 +372,7 @@ export function createStreetScene({ Phaser, onTileChanged, remotePeers }: Street
       const body = this.player.body as PhaserTypes.Physics.Arcade.Body;
       body.setEnable(true);
       this.ground?.setVisible(true);
+      for (const overlay of this.doorOverlays) overlay.setVisible(true);
       this.remoteAvatars?.setVisible(true);
       for (const label of this.exteriorLabels.values()) label.setVisible(true);
       this.roomGraphics?.setVisible(false);
@@ -533,29 +571,12 @@ export const TILE_INDEX: Record<TileKind, number> = {
 };
 
 /**
- * Generate the tileset strip, the player, in one pass.
- *
- * The single place real artwork replaces. Everything else — map data,
- * collision, doors, camera — is art-agnostic, so swapping this out changes
- * how the world looks and nothing about how it behaves.
+ * Generate the procedural player texture. The street tiles are sourced by
+ * createKenneyRuntimeTextures above; map data, collision, doors and camera
+ * remain art-agnostic.
  */
-function makePlaceholderTextures(scene: Scene, Phaser: typeof PhaserTypes): void {
-  const kinds = Object.keys(TILE_INDEX) as TileKind[];
+function makePlayerTexture(scene: Scene): void {
   const graphics = scene.make.graphics({ x: 0, y: 0 }, false);
-
-  // One horizontal strip, one frame per kind, in TILE_INDEX order.
-  for (const kind of kinds) {
-    const spec = TILES[kind];
-    const x = TILE_INDEX[kind] * TILE_SIZE;
-    graphics.fillStyle(spec.colour, 1);
-    graphics.fillRect(x, 0, TILE_SIZE, TILE_SIZE);
-    // A darker edge so the grid reads as a place rather than a flat wash.
-    graphics.lineStyle(1, darken(spec.colour), 0.35);
-    graphics.strokeRect(x + 0.5, 0.5, TILE_SIZE - 1, TILE_SIZE - 1);
-  }
-  graphics.generateTexture('tiles', kinds.length * TILE_SIZE, TILE_SIZE);
-
-  graphics.clear();
   graphics.fillStyle(0xf2e8c9, 1);
   graphics.fillRoundedRect(0, 0, PLAYER_SIZE, PLAYER_SIZE, 4);
   graphics.fillStyle(0x2b2b33, 1);
@@ -564,12 +585,4 @@ function makePlaceholderTextures(scene: Scene, Phaser: typeof PhaserTypes): void
   graphics.generateTexture('player', PLAYER_SIZE, PLAYER_SIZE);
 
   graphics.destroy();
-  void Phaser;
-}
-
-function darken(colour: number): number {
-  const r = Math.max(0, ((colour >> 16) & 0xff) - 40);
-  const g = Math.max(0, ((colour >> 8) & 0xff) - 40);
-  const b = Math.max(0, (colour & 0xff) - 40);
-  return (r << 16) | (g << 8) | b;
 }

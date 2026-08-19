@@ -18,5 +18,7 @@
 | `third-party/kenney-rpg-urban/tilemap.txt` | `Tilemap/tilemap.txt` | `fa8ecb82faa1b990dab06085f39dbba3dbb42699651bddca0acd4250feb4be9c` | Embedded tile dimensions and spacing metadata |
 | `third-party/kenney-rpg-urban/License.txt` | `License.txt` | `912065f2d428a62fa4e7b337d292f9eee26051eece4182661cff40310a54f7fa` | Embedded CC0/commercial-use notice |
 
-This is a provenance-only placeholder import. It is not yet rendered by the
-World runtime; frame mapping and visual treatment remain deferred for review.
+This is a reversible placeholder import. The World runtime slices only the
+audited road, pavement, wall and facade frames at clean 2× into its existing
+32px tile strip, with the audited door frame rendered as a separate overlay.
+Grass remains procedural and no Kenney frame is claimed as roof treatment.
