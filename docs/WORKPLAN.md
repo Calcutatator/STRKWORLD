@@ -17,11 +17,11 @@ the lane boundary — that is why the repo is shaped the way it is.
 | Lane | Package | Status in v1 |
 |---|---|---|
 | **Chain** | `packages/privacy` | Active; private seam frozen, D-043 planner port/fake complete, production Ready planner blocked |
-| **World** | `packages/world` + `packages/lobby` | Active; Avatar Studio foundation accepted on localhost; D-048 top-wall portal, keyboard toggle and D-049 reviewed sprite integration remain |
+| **World** | `packages/world` + `packages/lobby` | Active; Avatar Studio foundation accepted on localhost; D-049 final art approved for World-local integration; D-048 top-wall portal, sprite integration, rendered acceptance and keyboard toggle remain |
 | **Shell** | `apps/web` | Active, starts week 2 |
 | **Backend** | `apps/backend` | Active; D-050 and both hosted image smokes complete; host, domain, secrets, Alchemy controls, live staging and funded checks remain |
 | **Bridge** | `packages/bridge` | Active, fully independent |
-| **Art** | `packages/world/assets` | Active; Kenney Urban CC0 acquired; D-049 authorizes all eight characters through final transparent export, QA and handoff; runtime integration and rendered acceptance remain separate |
+| **Art** | `packages/world/assets` | D-049 v1 handoff complete at `86e8f5f`, independently QA-verified and visually approved; runtime integration and rendered acceptance remain separate |
 | ~~Contracts~~ | — | **Dormant until post-v1** |
 
 ### Why Contracts is dormant
@@ -256,12 +256,14 @@ defers that replacement while inside and deduplicates reconnect intent. Exit
 publishes the restored street placement before `avatar-studio:exited` resumes
 presence, and remote peers use deterministic placeholder tints. Reload, tab
 close or a new session still resets to `avatar-1`. The exact keyboard toggle
-remains open and unbound pending the user's choice, and runtime sprite art is
-not complete. On 2026-08-19 the user manually accepted the hard-refreshed
+remains open and unbound pending the user's choice. D-049 final art is now
+visually approved for World integration, but runtime sprite wiring is not
+complete. On 2026-08-19 the user manually accepted the hard-refreshed
 localhost foundation: hidden entry, eight placeholder selectors, collision
 colour selection and two-tab presence hide/restore. No fighting-toggle or
-final-art acceptance is implied, and the later D-048 interior portal direction
-requires a fresh rendered check.
+integrated-final-art acceptance is implied by that earlier foundation check;
+the later D-048 interior portal direction and D-049 sprite integration require
+a fresh rendered check.
 
 **Must not:** import `starknet` or any wallet package. Put an address, balance,
 transaction hash, building name or entry event into lobby traffic. On local
@@ -480,25 +482,36 @@ target: the final handoff is sixteen transparent 192×256 sheets, one per
 `(32, 56)`. It also includes one tagged editable Aseprite source and no
 mega-atlas. Smaller art stays padded and characters 4 and 7 may use more of the
 same canvas. Source frames contain no baked shadow pixels; World may add one
-consistent shadow separately. It still needs frame-by-frame anchor validation
-and the user's final-art approval. Do not wire the review PNGs into runtime
-textures or call them accepted final art.
+consistent shadow separately. At that review stage the final target still
+needed frame-by-frame anchor validation and the user's final-art approval. Do
+not wire the review PNGs into runtime textures or call them accepted final art.
+Those historical requirements apply to `v1-review/`, not the completed `v1/`
+handoff described below.
 
-**Current D-049 gate:** On 2026-08-20 the user superseded the former mandatory
-pause after characters 1, 4, 6 and 7. Art may now carry all eight characters
-and both states through remaining movement production, the sixteen final
-transparent sheets, one tagged editable Aseprite source, mechanical QA and
-handoff. The 64×64 canvas, `(32, 56)` feet, 24×24 gameplay/contact body,
-per-key 192×256 sheet topology, no mega-atlas and no-baked-shadow policy remain
-fixed. The art-owned final destination is exactly
+**D-049 final-art gate complete; World integration ready:** The complete v1
+handoff is committed at `86e8f5f`; independent QA verified its mechanical and
+source contracts, and James visually approved the committed assets for runtime
+integration. The 64×64 canvas, `(32, 56)` feet, authoritative 24×24
+gameplay/contact body, per-key 192×256 sheet topology, no mega-atlas and
+no-baked-shadow policy remain fixed. The art-owned final destination is exactly
 `packages/world/assets/player-sprites/v1/`: root-level `avatar-1.png` through
 `avatar-16.png`, `manifest.json` and `README.md`, plus
 `source/player-sprites.aseprite` and mechanical evidence under `qa/`. Preserve
-`v1-review/` as the existing provenance package; do not overwrite it. This is
-an art-production and handoff contract only: World does not integrate the baked
-review sheets or intermediate prototypes, and the completed `v1/` handoff
-still requires separate runtime integration review and user-run rendered
-acceptance.
+`v1-review/` as the existing provenance package; do not overwrite it. World
+must integrate the final `v1/` sheets, never the baked review sheets or
+intermediate prototypes. This approval is not a claim that integration exists
+or that the sprites have passed in-game rendered acceptance.
+
+The implementation slice is World-local. Add one semantic avatar-visual
+resolver keyed only by the existing allowlisted `avatar-1..avatar-16` values;
+it owns each per-key sheet, the 64×64 canvas, `(32, 56)` feet origin and
+`idle`/`walk-1`/`walk-2` frames in `down`/`left`/`right`/`up`. Local players,
+remote peers and Studio selectors must all use that resolver. Keep the existing
+24×24 local physics body and Studio contact body authoritative. Source sheets
+have no baked shadow; World may add one optional consistent runtime shadow.
+Do not change lobby/wire fields, shared types, Fly allowlists or financial
+seams. The fighting-state toggle key remains open and unbound until a newer
+decision approves it.
 
 **Licence audit is the real work here.** Popular "free" packs are frequently
 non-commercial only, and this is a public project handling real funds. Audit
@@ -514,10 +527,10 @@ World freezes its footprints and asset names. Avatar visuals use D-049's fixed
 Studio contact footprint remain 24×24. Atlas trimming is allowed only when
 logical `sourceSize` and pivot metadata preserve that contract exactly. Final
 source delivery remains one sheet per opaque key rather than a mega-atlas, and
-source pixels contain no shadow. The final style and state-to-key art manifest
-remain subject to the user's approval, while the sixteen-key wire seam is fixed
-by D-047. Variable per-key canvases and layered body/weapon rendering are out
-of the initial slice.
+source pixels contain no shadow. The approved v1 manifest now fixes the style
+and state-to-key art mapping, while the sixteen-key wire seam remains fixed by
+D-047. Variable per-key canvases and layered body/weapon rendering are out of
+the initial slice.
 
 **Frozen first-room asset contract (D-033 tracer):** the procedural Bank is an
 18×12 grid of 32 px tiles (576×384 px), with a one-tile perimeter, spawn at

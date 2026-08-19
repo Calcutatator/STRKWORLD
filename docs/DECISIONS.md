@@ -1804,7 +1804,8 @@ supplies the necessary account/permissions and values.
 
 **2026-08-19 · PARTIALLY SUPERSEDED — interior portal direction by
 [D-048](#d-048--the-avatar-studio-uses-a-top-wall-return-portal), runtime art
-geometry by [D-049](#d-049--avatar-art-uses-one-fixed-64x64-logical-canvas);
+geometry and final-art approval by
+[D-049](#d-049--avatar-art-uses-one-fixed-64x64-logical-canvas);
 remaining foundation implemented and rendered accepted on localhost**
 
 **Context.** The sprite studio is developing the player art independently from
@@ -1911,8 +1912,9 @@ orientation; rendered acceptance is required again after implementation.
 **2026-08-19 · Accepted by the user; 2026-08-20 art-production amendment
 authorizes all eight characters through final handoff and supersedes the
 interim pause after characters 1/4/6/7 · supersedes D-047's provisional 32x32
-runtime-art assumption; final handoff layout fixed, runtime integration and
-rendered acceptance pending**
+runtime-art assumption; final `v1/` handoff committed at `86e8f5f`, independently
+QA-verified and visually approved by James for runtime integration; World
+integration and rendered in-game acceptance pending**
 
 **Context.** The approved art direction deliberately includes two larger
 characters and fighting poses whose weapons extend beyond a 32x32 cell. A
@@ -1949,8 +1951,10 @@ The art lane owns that final handoff at exactly
 tagged editable source is `source/player-sprites.aseprite`, and mechanical QA
 evidence lives under `qa/`. The existing `v1-review/` package remains review
 provenance; its existing artifacts are neither moved nor overwritten by the
-final delivery. Fixing this destination layout does not assert that any `v1/`
-file exists, passes QA, is runtime-ready or has been integrated.
+final delivery. Fixing this destination layout did not itself assert that any
+`v1/` file existed, passed QA, was runtime-ready or had been integrated; the
+separate final-art approval below is the evidence that later cleared the art
+handoff for World integration.
 
 No frame may contain baked shadow pixels. World may render one consistent
 shadow separately behind every local, remote and Studio avatar; that shadow is
@@ -1969,9 +1973,22 @@ the complete production process without the former 1/4/6/7 pause: remaining
 movement work for characters 2, 3, 5 and 8, final transparent exports, the one
 tagged editable source, mechanical QA and the final handoff are all unblocked.
 The fixed canvas, feet/body, sheet topology, opaque-key mapping and no-baked-
-shadow requirements above remain unchanged. This authorizes art production
-and handoff only. It does not make an intermediate or final file runtime-ready,
-authorize World integration, or replace final in-game rendered acceptance.
+shadow requirements above remain unchanged. At that stage this authorized art
+production and handoff only; it did not make an intermediate or final file
+runtime-ready, authorize World integration, or replace final in-game rendered
+acceptance. The World-integration restriction is superseded by the final-art
+approval immediately below; the rendered-acceptance restriction is not.
+
+**2026-08-20 final-art approval.** Commit `86e8f5f` contains the complete
+`packages/world/assets/player-sprites/v1/` handoff: all sixteen per-key PNG
+sheets, the tagged editable Aseprite source, manifest and mechanical QA
+evidence. A separate independent QA review verified the fixed sheet/cell
+geometry, binary transparency, feet and body references, source round trip,
+frame vocabulary, shadow-free pixels and required character distinctions.
+James then visually approved those committed assets for runtime integration.
+This clears the final-art gate only: it does not claim that World has loaded or
+rendered the sheets, and it does not replace the required in-game rendered
+acceptance after implementation.
 
 Variable per-key canvases and separate body/weapon layers are rejected for the
 initial runtime. They require a later decision if final accepted art proves the
@@ -1979,18 +1996,30 @@ single-canvas contract insufficient. This decision does not approve the
 current review sheets for runtime: they still contain baked backgrounds and
 are not the final transparent export.
 
-**Consequences.** The sprite-studio task retains ownership of cleanup, final
-pixels, the sixteen per-key sheets, the tagged editable source and mechanical
-QA through the completed `player-sprites/v1/` handoff; it no longer pauses
-between character groups. Runtime integration still waits for that complete
-handoff and a separate review of the final assets. World may then use one
-visual object per avatar state while keeping the existing physics sprite/body
-as the authoritative position and collision seam. Tests must pin exact sheet/cell
-geometry, logical canvas, feet, frame vocabulary, transparent padding,
-shadow-free source pixels, fixed 24x24 gameplay geometry, opaque-key fallback
-and local/remote/selector alignment. Rendered acceptance must cover the small
-character, both large characters, cosy/fighting pairs, separately rendered
-shadows and weapon extents before the placeholder renderer is retired.
+**Consequences.** The Art lane's `player-sprites/v1/` handoff is complete and
+approved; `v1-review/` remains immutable provenance. World is now authorized
+to integrate the sixteen committed 192x256 sheets through one World-local
+semantic avatar-visual resolver. That resolver takes only an allowlisted opaque
+`avatar-1..avatar-16` key and owns the per-key sheet, 64x64 logical canvas,
+fixed `(32, 56)` feet origin and `idle`/`walk-1`/`walk-2` frames for all four
+facings. Local players, remote peers and Avatar Studio selectors must use that
+same resolver so fallback, frame selection, origin and scale cannot diverge.
+
+The existing centered 24x24 local physics body and 24x24 Studio contact body
+remain authoritative and must not be resized to the visual silhouette. Source
+frames have no baked shadow; World may add at most one consistent optional
+runtime-owned shadow behind every avatar presentation. Integration changes are
+World-local: no lobby/wire field, shared type, Fly allowlist or financial seam
+changes. The fighting-state toggle key remains open and unbound unless a newer
+decision explicitly approves it; art integration does not choose that key.
+
+Tests must pin exact sheet/cell geometry, logical canvas, feet, frame
+vocabulary, transparent padding, shadow-free source pixels, fixed 24x24
+gameplay geometry, all sixteen opaque-key mappings and common
+local/remote/Studio resolution. After implementation, separate rendered
+acceptance must cover the small character, both large characters,
+cosy/fighting pairs, all four facings, walk cadence, optional runtime shadow
+and weapon extents before the placeholder renderer is retired.
 
 ---
 

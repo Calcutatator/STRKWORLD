@@ -141,10 +141,17 @@ target with one transparent 64×64 logical canvas for every opaque state, fixed
 feet at `(32, 56)` and the unchanged authoritative 24×24 gameplay/contact body.
 Smaller characters use transparent padding, while characters 4 and 7 may use
 more of the same canvas. Variable per-key canvases and layered weapons are not
-part of the initial runtime. Final transparent export, user art approval and
-runtime sprite wiring are still open. The
-accepted rendered foundation used placeholders; it did not exercise or accept
-the D-048 portal orientation, unbound fighting toggle or final sprite art.
+part of the initial runtime. Commit `86e8f5f` contains the complete sixteen-key
+`v1/` handoff and QA evidence; independent QA verified it, and James visually
+approved those committed assets for runtime integration. World sprite wiring
+is still open and must route local players, remote peers and Studio selectors
+through one World-local semantic resolver for the per-key sheet, fixed origin
+and three movement frames in four facings. It changes no lobby/wire field,
+shared type or Fly allowlist. Source art has no baked shadow; World may add one
+optional consistent presentation shadow. The accepted rendered foundation
+used placeholders; it did not exercise or accept the D-048 portal orientation,
+unbound fighting toggle or integrated final sprites. A fresh user-run rendered
+check remains required after implementation.
 
 ---
 
