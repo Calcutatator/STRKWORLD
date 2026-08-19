@@ -250,6 +250,71 @@ without a verification method is a rumour.
 
 Format: `### YYYY-MM-DD — short title` then what, why it matters, how verified.
 
+### 2026-08-19 — Backend body abort races preserve generic 400 and authoritative 413
+
+The Backend HTTP boundary races each body read against the request abort,
+cancels a hanging stream and releases its reader lock defensively. A client
+abort before or immediately after JSON parsing returns the same generic 400
+`INVALID_JSON` response and never calls the Backend core. If a body already
+exceeds the byte limit, `REQUEST_TOO_LARGE` 413 remains authoritative even
+when hostile stream cancellation rejects; cancellation errors must not rewrite
+the size violation.
+
+*Verified:* commit `fb89749` adds hanging-body, post-parse-abort and rejecting-
+cancel tests; the focused Backend HTTP tests and typecheck passed. The boundary
+still forwards only `{method, path, body, signal}` and records no request
+identity or body data.
+
+### 2026-08-19 — World host acquisition must roll back refs and reject reentrancy
+
+`createHost.acquire()` increments its lease before starting the instance, so a
+throwing `start()` must restore the previous ref count and deferred-teardown
+handle before the caller retries. While `start()` runs, nested `acquire()` or
+`release()` is rejected with the lifecycle error; otherwise a nested callback
+can corrupt refs or orphan a successfully created instance. A successful start
+still uses the ordinary deferred final release cleanup.
+
+*Verified:* commit `894f8a0` adds failed-start retry and nested acquire/release
+tests; the World tests, World typecheck, invariant scan and diff check passed.
+No browser or Phaser runtime was used.
+
+### 2026-08-19 — Production origin classification is one internal Node-only seam
+
+The lobby production entrypoint and Fly startup must consume the same
+`packages/lobby/src/production-origin.ts` classifier. It owns hostname policy,
+including IPv4 `127/8`, IPv4-mapped IPv6 loopback in dotted and hexadecimal
+forms, localhost descendants, `.invalid` names and bounded placeholder labels;
+the callers retain whole-origin parsing and formatting. Keep this helper out
+of the browser/root lobby export and `packages/shared`, or a deployment-only
+policy becomes a client contract. Substring domains such as
+`placeholdertech.com` remain legitimate.
+
+*Verified:* commit `d6f2bad` routes both `packages/lobby/src/production.ts`
+and `deploy/fly/src/main.ts` through the helper, with the lobby and Fly tests
+pinning the same adversarial and legitimate-domain matrix. This changes no
+CORS, protocol schema, presence, financial, logging or browser behavior and
+does not prove domain ownership, TLS or host readiness.
+
+### 2026-08-19 — Fly startup owns pre-start cancellation and treats forced child termination as failure
+
+The Fly supervisor installs `SIGTERM`/`SIGINT` ownership before private
+children start and passes an `AbortSignal` through readiness, public listen and
+the final handoff turn. A signal before the composition is returned cancels
+startup; only stop code `0` together with the exact typed
+`FlyStartupAbortError` is a clean abort. Any other startup rejection,
+including cleanup failure, becomes exit `1`. Shutdown observes an `exit` event
+from every child: crossing the graceful deadline sends `SIGKILL` but remains a
+failure, and a second bounded wait rejects if a child never reports exit.
+`Promise.allSettled` waits for both child outcomes before startup cleanup
+reports failure. Do not resolve cleanup merely because `kill()` returned.
+
+*Verified:* commit `93dad50`'s Fly composition/supervisor tests cover aborts
+after both children are ready, after public listen and immediately before the
+return handoff, plus forced termination and listener removal; the focused Fly
+suite (4 files / 47 tests), full workspace suite (79 files / 884 tests), Fly
+and workspace typechecks, invariant scan, smoke-image syntax and diff check
+were green. No deployment, provider, wallet or funded route was used.
+
 ### 2026-08-19 — Hosted CI proves both production images stop cleanly
 
 The standalone Backend originally reached TCP readiness but failed its image

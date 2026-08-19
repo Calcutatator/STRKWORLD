@@ -2049,8 +2049,7 @@ and funded routes remain unverified.
 
 ## D-051 — Share the production origin policy between Node-only lobby callers
 
-**2026-08-19 · Accepted technical decision · implementation follows this
-boundary**
+**2026-08-19 · Accepted technical decision · implemented at `d6f2bad`**
 
 **Context.** Production hostname classification is deployment policy for the
 Node lobby, not browser or shared-domain logic. The lobby production entrypoint
@@ -2080,8 +2079,12 @@ lobby entry was rejected because production deployment policy is not a client
 contract. Putting it in `packages/shared` was rejected because it would widen a
 Node-only concern into a cross-runtime dependency.
 
-**Consequences.** Production startup and lobby admission share one tested
-classification boundary without changing CORS, protocol schema, presence
-messages, financial routes, logging or browser behavior. The helper is a
-deployment guard, not proof of domain ownership, TLS, provider readiness or
-funded-route readiness.
+**Consequences.** Commit `d6f2bad` implements the internal helper and routes
+both `packages/lobby/src/production.ts` and `deploy/fly/src/main.ts` through
+it. The lobby and Fly tests pin the same loopback, localhost, `.invalid`,
+placeholder and legitimate-substring matrix, including dotted and hexadecimal
+IPv4-mapped IPv6 loopback forms. Production startup and lobby admission share
+one tested classification boundary without changing CORS, protocol schema,
+presence messages, financial routes, logging or browser behavior. The helper
+is a deployment guard, not proof of domain ownership, TLS, provider readiness
+or funded-route readiness.

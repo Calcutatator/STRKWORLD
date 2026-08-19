@@ -391,15 +391,16 @@ passed both deployment typechecks, builds and network-none image smokes,
 including the standalone Backend's TCP readiness and bounded clean exit. This
 closes image lifecycle only; host/provider/funded gates above remain.
 
-**D-051 implementation brief:** production hostname classification is a
-Node-only lobby deployment policy. Add one small internal helper under
-`packages/lobby/src/production-origin.ts` (or the equivalent named module) and
-have `packages/lobby/src/production.ts` plus `deploy/fly/src/main.ts` consume
-it. Keep each caller's canonical whole-origin formatting, keep the helper out
-of the browser/root lobby export and `packages/shared`, and test the shared
-loopback/localhost/`.invalid`/placeholder rejection matrix plus legitimate
-substring-domain cases atomically in both lanes. This changes no CORS, schema,
-presence, financial or logging behavior.
+**D-051 complete:** commit `d6f2bad` adds the internal Node-only
+`packages/lobby/src/production-origin.ts` classifier and routes both
+`packages/lobby/src/production.ts` and `deploy/fly/src/main.ts` through it.
+The helper stays out of the browser/root lobby export and `packages/shared`;
+each caller retains canonical whole-origin parsing. Lobby and Fly tests pin the
+same loopback/localhost/`.invalid`/placeholder rejection matrix, including
+dotted and hexadecimal IPv4-mapped IPv6 loopback, plus legitimate
+substring-domain cases. This changes no CORS, schema, presence, financial or
+logging behavior and closes the implementation brief; deployment, TLS,
+provider and funded-route gates remain open.
 
 **D-042 complete offline:** Backend independently checks that AVNU's
 slippage-protected output is at least the caller's requested quote floor before
