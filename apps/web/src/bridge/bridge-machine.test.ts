@@ -75,6 +75,30 @@ describe('Bridge shell machine', () => {
     expect(h.machine.store.getState().instructionsVisible).toBe(true);
   });
 
+  it('does not continue saved preflight after close while reading the account', async () => {
+    let releaseAccount!: (value: string | null) => void;
+    let accountRead = false;
+    let accountDeferred = true;
+    const planner: PublicShieldPlanner = { planMax: vi.fn(async ({ available }: PublicShieldPlanInput) => plan(available)) };
+    const h = harness(record(), planner, {
+      now: () => Date.parse('2030-01-01T00:00:00.000Z'),
+      readAccount: () => {
+        accountRead = true;
+        if (!accountDeferred) return ACCOUNT;
+        return new Promise<string | null>((resolve) => { releaseAccount = (value) => { accountDeferred = false; resolve(value); }; });
+      },
+    });
+    const preflight = h.machine.preflightSavedQuote();
+    await Promise.resolve();
+    expect(accountRead).toBe(true);
+    h.machine.close();
+    const closedState = h.machine.store.getState();
+    releaseAccount(ACCOUNT);
+    await preflight;
+    expect(planner.planMax).not.toHaveBeenCalled();
+    expect(h.machine.store.getState()).toEqual(closedState);
+  });
+
   it('resumes a saved quote by refreshing status before exposing the next safe action', async () => {
     const h = harness(record());
     await h.machine.open();
@@ -274,6 +298,29 @@ describe('Bridge shell machine', () => {
     await Promise.all([first, second]);
     expect(planner.planMax).toHaveBeenCalledTimes(1);
     expect(h.machine.store.getState().flow.name).toBe('ready-to-shield');
+  });
+
+  it('does not continue shield planning after close while reading the account', async () => {
+    let releaseAccount!: (value: string | null) => void;
+    let accountRead = false;
+    let accountDeferred = true;
+    const planner: PublicShieldPlanner = { planMax: vi.fn(async ({ available }: PublicShieldPlanInput) => plan(available)) };
+    const h = harness(record({ leg: 'settled', message: 'settled', pollingStopped: true, strkReceived: 1_234n }), planner, {
+      readAccount: () => {
+        accountRead = true;
+        if (!accountDeferred) return ACCOUNT;
+        return new Promise<string | null>((resolve) => { releaseAccount = (value) => { accountDeferred = false; resolve(value); }; });
+      },
+    });
+    const planning = h.machine.planShield();
+    await Promise.resolve();
+    expect(accountRead).toBe(true);
+    h.machine.close();
+    const closedState = h.machine.store.getState();
+    releaseAccount(ACCOUNT);
+    await planning;
+    expect(planner.planMax).not.toHaveBeenCalled();
+    expect(h.machine.store.getState()).toEqual(closedState);
   });
 
   it('invalidates a commit guard when the saved evidence is imported during planning', async () => {

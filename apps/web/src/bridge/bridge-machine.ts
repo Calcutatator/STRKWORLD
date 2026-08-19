@@ -340,18 +340,20 @@ export function createBridgePanel(options: BridgePanelOptions): BridgePanel {
         fail(COPY.bridge.preflightExpired, 'quote');
         return;
       }
+      const id = begin();
+      const currentSession = session;
       const recipient = await account();
+      if (!live(id, currentSession)) return;
       if (!recipient || !sameAddress(recipient, record.starknetRecipient)) {
         fail(COPY.bridge.accountChanged, 'quote');
         return;
       }
-      const id = begin();
-      const currentSession = session;
       patch({ record, quote: review, preflightAvailable: false, flow: { name: 'preflighting' }, instructionsVisible: false });
       try {
         const plan = await planner.planMax({ token: STRK_TOKEN, available: review.minimumAmountOut, expectedRecipient: recipient });
         if (!live(id, currentSession) || !planValid(plan, review.minimumAmountOut, recipient)) throw new Error('invalid plan');
         const afterPlan = await account();
+        if (!live(id, currentSession)) return;
         const latest = recordAndReview();
         if (!afterPlan || !sameAddress(afterPlan, record.starknetRecipient)) {
           patch({ record: latest.record ?? record, quote: latest.review ?? review, preflightAvailable: false, instructionsVisible: false });
@@ -568,20 +570,22 @@ export function createBridgePanel(options: BridgePanelOptions): BridgePanel {
         fail(COPY.bridge.shieldUnavailable, 'none');
         return;
       }
+      const id = begin();
+      const currentSession = session;
       const recipient = await account();
+      if (!live(id, currentSession)) return;
       patch({ record, quote: quoteReview(record) });
       if (!recipient || !sameAddress(recipient, record.starknetRecipient)) {
         patch({ account: recipient, accountMatchesRecord: false });
         fail(COPY.bridge.accountChanged, 'none');
         return;
       }
-      const id = begin();
-      const currentSession = session;
       patch({ flow: { name: 'planning-shield' }, notice: null, account: recipient, accountMatchesRecord: true });
       try {
         const plan = await planner.planMax({ token: STRK_TOKEN, available: record.status.strkReceived, expectedRecipient: recipient });
         if (!live(id, currentSession) || !planValid(plan, record.status.strkReceived, recipient)) throw new Error('invalid plan');
         const afterPlan = await account();
+        if (!live(id, currentSession)) return;
         if (!afterPlan || !sameAddress(afterPlan, record.starknetRecipient)) {
           patch({ account: afterPlan, accountMatchesRecord: false });
           fail(COPY.bridge.accountChanged, 'none');
