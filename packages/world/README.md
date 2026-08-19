@@ -112,5 +112,10 @@ commercial-use licensing before it lands — a per-pack audit, not a per-tag
 assumption. Record the licence for each asset in `assets/CREDITS.md` as you
 add it.
 
+The Kenney RPG Urban CC0 placeholder source is now acquired under
+`assets/third-party/kenney-rpg-urban/` and recorded in `assets/CREDITS.md`.
+This provenance-only import is not rendered by the World runtime yet; frame
+mapping and visual treatment remain deferred for review.
+
 Four buildings in v1: the Bank, the Exchange, the Post Office, and a visible
 but disabled Vault facade so the world reads as complete.
