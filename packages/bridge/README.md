@@ -103,6 +103,13 @@ persists the complete signed response as dispute evidence. `refresh()` maps
 solver states into the small `BridgeStatus` vocabulary without leaking raw
 provider states into the shell.
 
+The browser runtime uses `LocalBridgeStore`, so the signed record survives a
+reload or a new runtime instance. Reopening exposes a concise resume action
+that refreshes provider status before presenting the next safe step. This is
+recovery of saved evidence, not permission to issue a new quote: real new
+quotes and deposit instructions remain gated on the reviewed production
+planner described by D-043.
+
 The live registry loader currently maps every non-Starknet blockchain label
 returned by 1Click into a source-chain family, while deliberately excluding
 same-chain Starknet assets from the Bridge picker. Address checks are only a

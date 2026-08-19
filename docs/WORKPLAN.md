@@ -306,6 +306,14 @@ blocking new financial continuation. Direct unauthenticated 1Click is the
 accepted v1 route, with its 0.2% provider fee disclosed and no fabricated fee
 breakdown.
 
+The browser recovery path now uses the persisted signed record: reopening the
+Bridge offers one resume action that refreshes provider status first, then
+shows only the next safe action. This preserves the stronger account and
+planner gates while matching the concise recovery shape validated in Shieldup.
+Saved evidence remains inspectable, refreshable and exportable even when a
+production planner is unavailable; only real new quotes and deposit
+instructions remain locked.
+
 The **batch accumulator is Menu Mode only** under D-032. It collects typed
 intent during a building visit and emits one atomic batch on confirmation. Game
 Mode prepares and confirms each station function separately. Neither path ever

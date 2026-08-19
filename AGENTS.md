@@ -250,6 +250,29 @@ without a verification method is a rumour.
 
 Format: `### YYYY-MM-DD — short title` then what, why it matters, how verified.
 
+### 2026-08-19 — Browser acceptance closes the local multiplayer seam; Bridge recovery is now resumable
+
+The current checkout has passed the first rendered multiplayer acceptance:
+multiple browser tabs connected to the local lobby and each tab displayed the
+other player's avatar. The browser matchmaking request is credentialed, so the
+lobby's allowlist must return `Access-Control-Allow-Credentials: true` for an
+approved origin; disallowed origins must receive neither an allow-origin nor a
+credentials grant. The reconnect path remains explicit and the lobby remains
+presence-only.
+
+The Bridge demo now persists its complete signed record in browser-local
+storage. Reopening the Bridge exposes one concise resume action that refreshes
+provider status before showing the next safe step; settled continuation still
+uses only validated actual `strkReceived`. This does not change the D-043 gate:
+real new quotes and deposit instructions still require a reviewed production
+planner, while saved evidence remains inspectable, refreshable and exportable.
+
+*Verified:* the user tested two live tabs at `http://localhost:5173/` and
+confirmed mutual avatars; lobby CORS tests assert credentialed allowlisted and
+blocked origins; Bridge persistence/resume and 43-test package suite pass;
+typechecks, invariants and diff checks pass. No wallet, proof, signature or
+transaction was used.
+
 ---
 
 ### 2026-08-18 — Bridge recovery outlives the room; deposit instructions do not outlive their evidence

@@ -1660,10 +1660,12 @@ handoff remains locked until a funded/source-verified fee-aware route, or a
 separately reviewed route, is accepted. The deterministic fake is for offline
 demo/test estimates only and is not production capability.
 
-There are two deliberate phases. Before a quote, Shell requires a matching
-active account. Before deposit instructions are exposed, an injected production
-planner must be available and must preflight the signed minimum output; a
-missing, failed or non-positive plan keeps the real handoff locked. After 1Click
+There are two deliberate phases. Before a real new provider quote or its
+deposit instructions, Shell requires a matching active account and an injected
+production planner that preflights the signed minimum output; a missing, failed
+or non-positive plan keeps that real handoff locked. Saved or imported signed
+evidence remains inspectable, refreshable and exportable without that planner
+or an active account. After 1Click
 reports `SUCCESS`, Shell uses the actual validated `strkReceived`, rechecks the
 active account and requests a fresh maximum-shield plan. It revalidates that
 plan at the Bank commit point, and the ordinary Bank fee ceiling and
