@@ -73,6 +73,9 @@ describe('Fly edge public boundary', () => {
     const health = await fetchEdge(port, '/health');
     expect(health.status).toBe(404);
     expect((await health.text()).toLowerCase()).not.toContain('healthy');
+
+    const metrics = await fetchEdge(port, '/metrics');
+    expect(metrics.status).toBe(404);
   });
 
   it('does not serve an SPA fallback that resolves outside the static root', async () => {
@@ -234,6 +237,7 @@ describe('Fly edge public boundary', () => {
       ['/matchmake/joinOrCreate/street', 'POST', '[1,2,3]'],
       ['/matchmake/joinOrCreate/street', 'POST', '{"x":"1","y":2,"facing":"down","sprite":"avatar-1"}'],
       ['/matchmake/joinOrCreate/street', 'POST', '{"x":1,"y":2,"facing":"sideways","sprite":"avatar-1"}'],
+      ['/matchmake/joinOrCreate/street', 'POST', '{"x":1,"y":2,"facing":"down","sprite":"avatar-9"}'],
       ['/matchmake/joinOrCreate/street', 'POST', '{"x":1,"y":2,"facing":"down","sprite":"x"'.padEnd(5000, 'x') + '}'],
     ] as const;
     for (const [path, method, body] of invalid) {

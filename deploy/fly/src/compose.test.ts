@@ -3,6 +3,7 @@ import { mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { createServer } from 'node:net';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { parseFlyEnvironment } from './main';
 import { startFlyComposition, type FlyComposition } from './compose';
 
 const compositions: FlyComposition[] = [];
@@ -50,6 +51,35 @@ async function ports(): Promise<{ publicPort: number; backendPort: number; lobby
 }
 
 describe('Fly composition process boundary', () => {
+  it('requires the public origin to be in the lobby origin allowlist', () => {
+    const base = {
+      PORT: '8080',
+      FLY_PUBLIC_ORIGIN: 'https://game.example',
+      LOBBY_ALLOWED_ORIGINS: 'https://other.example',
+    };
+    expect(() => parseFlyEnvironment(base)).toThrow('LOBBY_ALLOWED_ORIGINS');
+    expect(parseFlyEnvironment({
+      ...base,
+      LOBBY_ALLOWED_ORIGINS: 'https://other.example, https://game.example',
+    })).toMatchObject({ publicOrigin: 'https://game.example' });
+  });
+
+  it.each([
+    'https://localhost',
+    'https://127.0.0.1',
+    'https://[::1]',
+    'https://[::ffff:127.0.0.2]',
+    'https://[::ffff:7f00:2]',
+    'https://example.invalid',
+    'https://REPLACE-WITH-HOST.example',
+  ])('rejects non-production public origin %s', (publicOrigin) => {
+    expect(() => parseFlyEnvironment({
+      PORT: '8080',
+      FLY_PUBLIC_ORIGIN: publicOrigin,
+      LOBBY_ALLOWED_ORIGINS: publicOrigin,
+    })).toThrow('FLY_PUBLIC_ORIGIN');
+  });
+
   it('waits for both private children before binding the public edge', async () => {
     const child = await fakeChild();
     const { publicPort, backendPort, lobbyPort } = await ports();

@@ -52,6 +52,10 @@ closed unless it is a real `wss://` endpoint and verifies that the
 compiled web artifact contains it without an application-configured localhost
 endpoint. The pinned Colyseus SDK's exact unreachable `ws://127.0.0.1:2567`
 development fallback is allowed by the check and is not used by the shell.
+The runtime also fails closed unless `FLY_PUBLIC_ORIGIN` is present in the
+trimmed `LOBBY_ALLOWED_ORIGINS` list. The production edge contract is the
+fixed opaque key set `avatar-1` through `avatar-8`; final art and sprite
+variants map cosmetically behind those keys and do not expand lobby vocabulary.
 The committed config uses Fly's documented
 [`[deploy] strategy = "immediate"`](https://fly.io/docs/reference/configuration/)
 strategy. Fly replaces all Machines immediately without waiting for health
