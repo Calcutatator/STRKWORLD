@@ -138,6 +138,7 @@ export class LobbyClient {
 
   #room: ColyseusRoom<unknown, LobbyState> | null = null;
   #joining: Promise<void> | null = null;
+  #joinGeneration = 0;
   #status: LobbyStatus = 'idle';
 
   /** The server-assigned identity. Null until the `welcome` message arrives. */
@@ -181,12 +182,14 @@ export class LobbyClient {
     if (this.#room !== null) return;
     if (this.#joining !== null) return this.#joining;
 
+    const generation = ++this.#joinGeneration;
     this.#setStatus('connecting');
-    this.#joining = this.#join();
+    const joining = this.#join(generation);
+    this.#joining = joining;
     try {
-      await this.#joining;
+      await joining;
     } finally {
-      this.#joining = null;
+      if (this.#joining === joining) this.#joining = null;
     }
   }
 
@@ -308,6 +311,8 @@ export class LobbyClient {
   async disconnect(): Promise<void> {
     this.#cancelReconcile();
     this.#desired = null;
+    this.#joinGeneration += 1;
+    this.#joining = null;
     const room = this.#room;
     this.#room = null;
     this.#gameId = null;
@@ -321,7 +326,7 @@ export class LobbyClient {
     this.#emitPeers();
   }
 
-  async #join(): Promise<void> {
+  async #join(generation: number): Promise<void> {
     const sdk = new ColyseusClient(this.#options.endpoint);
     try {
       const room = await sdk.joinOrCreate<LobbyState>(
@@ -334,8 +339,14 @@ export class LobbyClient {
         },
       );
 
+      if (this.#joinGeneration !== generation) {
+        await room.leave(true).catch(() => undefined);
+        return;
+      }
+
       const welcomed = new Promise<void>((resolve) => {
         room.onMessage(SERVER_MESSAGE.welcome, (payload: WelcomePayload) => {
+          if (!this.#isCurrentRoom(generation, room)) return;
           this.#gameId = payload.gameId as GameId;
           this.#emitPeers();
           resolve();
@@ -343,10 +354,12 @@ export class LobbyClient {
       });
 
       room.onStateChange(() => {
+        if (!this.#isCurrentRoom(generation, room)) return;
         this.#emitPeers();
         if (this.#status === 'connected') this.#pump(Date.now());
       });
       room.onError((code, message) => {
+        if (!this.#isCurrentRoom(generation, room)) return;
         this.#room = null;
         this.#gameId = null;
         this.#cancelReconcile();
@@ -355,6 +368,7 @@ export class LobbyClient {
         void message;
       });
       room.onLeave((code) => {
+        if (!this.#isCurrentRoom(generation, room)) return;
         this.#room = null;
         this.#gameId = null;
         this.#cancelReconcile();
@@ -372,9 +386,13 @@ export class LobbyClient {
 
       await this.#awaitWelcome(welcomed);
     } catch (error) {
-      this.#setStatus('idle');
+      if (this.#joinGeneration === generation) this.#setStatus('idle');
       throw error;
     }
+  }
+
+  #isCurrentRoom(generation: number, room: ColyseusRoom<unknown, LobbyState>): boolean {
+    return this.#joinGeneration === generation && this.#room === room;
   }
 
   /** Resolve when the welcome message arrives, or after the timeout. */

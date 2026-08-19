@@ -8,8 +8,8 @@
  * observer on the other side of a socket.
  */
 
-import { Client as ColyseusClient } from '@colyseus/sdk';
-import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest';
+import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
+import { Client as ColyseusClient, type Room as ColyseusRoom } from '@colyseus/sdk';
 import {
   DEFAULT_ROOM_NAME,
   MAX_MESSAGES_PER_SECOND,
@@ -17,6 +17,7 @@ import {
 } from './config';
 import { LobbyClient, type LobbyStatusEvent, type PeerSnapshot } from './client';
 import { startPresenceServer, type PresenceServer } from './server';
+import type { LobbyState } from './state';
 import vocabulary from './testing/forbidden-vocabulary.json';
 
 // One server for the whole file. Colyseus's matchmaker is a process-global, so
@@ -51,6 +52,61 @@ async function waitFor<T>(
     if (Date.now() > limit) throw new Error(`timed out waiting for ${label}`);
     await new Promise((resolve) => setTimeout(resolve, 20));
   }
+}
+
+function deferred<T>(): { promise: Promise<T>; resolve: (value: T) => void } {
+  let resolve!: (value: T) => void;
+  const promise = new Promise<T>((done) => {
+    resolve = done;
+  });
+  return { promise, resolve };
+}
+
+function fakeRoom(): {
+  room: ColyseusRoom<unknown, LobbyState>;
+  leave: ReturnType<typeof vi.fn>;
+  send: ReturnType<typeof vi.fn>;
+  welcome: (payload: { gameId: string }) => void;
+  stateChange: () => void;
+  error: (code: number, message?: string) => void;
+  left: (code: number, reason?: string) => void;
+} {
+  let welcome: ((payload: { gameId: string }) => void) | undefined;
+  let stateChange: (() => void) | undefined;
+  let error: ((code: number, message?: string) => void) | undefined;
+  let left: ((code: number, reason?: string) => void) | undefined;
+  const leave = vi.fn(async () => 0);
+  const send = vi.fn();
+  const room = {
+    state: { peers: new Map() },
+    leave,
+    send,
+    onMessage: vi.fn((_type: unknown, callback: (payload: { gameId: string }) => void) => {
+      welcome = callback;
+      return () => undefined;
+    }),
+    onStateChange: vi.fn((callback: () => void) => {
+      stateChange = callback;
+      return () => undefined;
+    }),
+    onError: vi.fn((callback: (code: number, message?: string) => void) => {
+      error = callback;
+      return () => undefined;
+    }),
+    onLeave: vi.fn((callback: (code: number, reason?: string) => void) => {
+      left = callback;
+      return () => undefined;
+    }),
+  } as unknown as ColyseusRoom<unknown, LobbyState>;
+  return {
+    room,
+    leave,
+    send,
+    welcome: (payload) => welcome?.(payload),
+    stateChange: () => stateChange?.(),
+    error: (code, message) => error?.(code, message),
+    left: (code, reason) => left?.(code, reason),
+  };
 }
 
 /** Give the server a beat to prove it does *not* do something. */
@@ -199,6 +255,104 @@ describe('connect is idempotent', () => {
     );
     await settle();
     expect(observer.peers()).toHaveLength(1);
+  });
+
+  it('invalidates a pending join before an explicit reconnect', async () => {
+    const firstJoin = deferred<ColyseusRoom<unknown, LobbyState>>();
+    const secondJoin = deferred<ColyseusRoom<unknown, LobbyState>>();
+    const staleRoom = fakeRoom();
+    const freshRoom = fakeRoom();
+    const joinOrCreate = vi.spyOn(ColyseusClient.prototype, 'joinOrCreate');
+    joinOrCreate
+      .mockImplementationOnce(() => firstJoin.promise as never)
+      .mockImplementationOnce(() => secondJoin.promise as never);
+
+    try {
+      const client = makeClient(20, 0);
+      const statuses: LobbyStatusEvent[] = [];
+      const peerSnapshots: Array<readonly PeerSnapshot[]> = [];
+      client.onStatus((event) => statuses.push(event));
+      client.onPeers((peers) => peerSnapshots.push(peers));
+
+      const pending = client.connect();
+      await Promise.resolve();
+      await client.disconnect();
+
+      const reconnecting = client.connect();
+      firstJoin.resolve(staleRoom.room);
+      await pending;
+
+      expect(staleRoom.leave).toHaveBeenCalledWith(true);
+      expect(client.status).toBe('connecting');
+      expect(client.gameId).toBeNull();
+      expect(statuses.some((event) => event.status === 'connected')).toBe(false);
+      expect(peerSnapshots.every((peers) => peers.length === 0)).toBe(true);
+
+      secondJoin.resolve(freshRoom.room);
+      await Promise.resolve();
+      freshRoom.welcome({ gameId: 'fresh-game-id' });
+      await reconnecting;
+
+      expect(freshRoom.leave).not.toHaveBeenCalled();
+      expect(client.status).toBe('connected');
+      expect(client.gameId).toBe('fresh-game-id');
+    } finally {
+      joinOrCreate.mockRestore();
+    }
+  });
+
+  it('ignores callbacks from a room replaced by an explicit reconnect', async () => {
+    vi.useFakeTimers();
+    const firstJoin = deferred<ColyseusRoom<unknown, LobbyState>>();
+    const secondJoin = deferred<ColyseusRoom<unknown, LobbyState>>();
+    const staleRoom = fakeRoom();
+    const freshRoom = fakeRoom();
+    const joinOrCreate = vi.spyOn(ColyseusClient.prototype, 'joinOrCreate');
+    joinOrCreate
+      .mockImplementationOnce(() => firstJoin.promise as never)
+      .mockImplementationOnce(() => secondJoin.promise as never);
+
+    try {
+      const client = makeClient(20, 0);
+      const statuses: LobbyStatusEvent[] = [];
+      const peerSnapshots: Array<readonly PeerSnapshot[]> = [];
+      client.onStatus((event) => statuses.push(event));
+      client.onPeers((peers) => peerSnapshots.push(peers));
+
+      const firstConnecting = client.connect();
+      firstJoin.resolve(staleRoom.room);
+      await Promise.resolve();
+      staleRoom.welcome({ gameId: 'stale-game-id' });
+      await firstConnecting;
+
+      await client.disconnect();
+      const reconnecting = client.connect();
+      secondJoin.resolve(freshRoom.room);
+      await Promise.resolve();
+      freshRoom.welcome({ gameId: 'fresh-game-id' });
+      await reconnecting;
+
+      const statusCount = statuses.length;
+      const peerSnapshotCount = peerSnapshots.length;
+      client.updatePosition(99, 0, 'right');
+      const sentCount = freshRoom.send.mock.calls.length;
+
+      staleRoom.welcome({ gameId: 'late-stale-game-id' });
+      staleRoom.stateChange();
+      staleRoom.error(500, 'stale error');
+      staleRoom.left(400, 'stale leave');
+
+      expect(client.status).toBe('connected');
+      expect(client.gameId).toBe('fresh-game-id');
+      expect(statuses).toHaveLength(statusCount);
+      expect(peerSnapshots).toHaveLength(peerSnapshotCount);
+
+      await vi.advanceTimersByTimeAsync(MIN_CLIENT_SEND_INTERVAL_MS);
+      expect(freshRoom.send.mock.calls.length).toBeGreaterThan(sentCount);
+    } finally {
+      joinOrCreate.mockRestore();
+      vi.useRealTimers();
+    }
   });
 });
 
