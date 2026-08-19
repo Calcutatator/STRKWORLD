@@ -250,17 +250,17 @@ without a verification method is a rumour.
 
 Format: `### YYYY-MM-DD — short title` then what, why it matters, how verified.
 
-### 2026-08-19 — Avatar Studio foundation is offline; cosmetic handoff has two lifecycle gates
+### 2026-08-19 — Avatar Studio foundation passes rendered acceptance; cosmetic handoff has two lifecycle gates
 
-D-047's non-financial foundation is implemented offline. A hidden pavement
-path runs south from spawn to the bottom-edge trigger and enters a validated
-18×12 Avatar Studio with eight collision-selectable cosy figures. World uses
-only the three approved `WorldEvents`; World, lobby and Fly share the existing
-single `sprite` field across the sixteen opaque keys, with `avatar-1` as the
-default/fallback. The Shell keeps selection only for the current page runtime,
-resumes it with street presence and maps remote states to deterministic
-placeholder tints. No stance, building, wallet, account or financial field was
-added.
+D-047's non-financial foundation is implemented and has passed user-run
+rendered acceptance on localhost. A hidden pavement path runs south from spawn
+to the bottom-edge trigger and enters a validated 18×12 Avatar Studio with
+eight collision-selectable cosy figures. World uses only the three approved
+`WorldEvents`; World, lobby and Fly share the existing single `sprite` field
+across the sixteen opaque keys, with `avatar-1` as the default/fallback. The
+Shell keeps selection only for the current page runtime, resumes it with street
+presence and maps remote states to deterministic placeholder tints. No stance,
+building, wallet, account or financial field was added.
 
 The ordering is part of the privacy/lifecycle contract. On exit, the restored
 street `player:moved` placement must publish before `avatar-studio:exited`
@@ -276,8 +276,13 @@ cell extraction, manual anchor/feet validation and user art approval.
 *Verified:* exact World presentation/lifecycle ordering and teardown tests,
 World/shared tests and typechecks, lobby admission/resume tests, Fly edge
 allowlist tests, Shell presence replacement/reconnect tests, invariant checks
-and diff validation. No browser acceptance, final sprite-art integration,
-wallet, proof, signature or transaction was used.
+and diff validation. On 2026-08-19 the user manually hard-refreshed
+`http://localhost:5173/` and confirmed the facade door surround, hidden south
+path and entry, all eight placeholder figures, collision selection/colour
+change, and two-tab presence hide/restore. No agent browser automation was
+used. The fighting-state toggle and final runtime sprite art were not accepted
+by that test and remain open; no wallet, proof, signature or transaction was
+used.
 
 ### 2026-08-19 — WorldHost leases must single-flight lazy Phaser acquisition
 
@@ -313,8 +318,8 @@ stance field or message is added. The hidden Avatar Studio stays outside
 must not enter the financial VisitLayer. Default/fallback is `avatar-1`, and
 selection is page/runtime-only. The source registries are now expanded
 atomically offline as recorded in the newest Avatar Studio finding above; no
-production deployment, rendered acceptance or runtime sprite-art readiness is
-implied.
+production deployment or runtime sprite-art readiness is implied. The newest
+finding records the separate localhost rendered-foundation acceptance.
 
 ### 2026-08-19 — Kenney pavement and door mappings require lossless art review
 

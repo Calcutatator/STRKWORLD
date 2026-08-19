@@ -1802,8 +1802,8 @@ supplies the necessary account/permissions and values.
 
 ## D-047 — The hidden Avatar Studio owns eight paired cosmetic characters
 
-**2026-08-19 · Accepted by the user · foundation implemented offline; keyboard
-toggle, runtime sprite art and rendered acceptance remain open**
+**2026-08-19 · Accepted by the user · foundation implemented and rendered
+accepted on localhost; keyboard toggle and runtime sprite art remain open**
 
 **Context.** The sprite studio is developing the player art independently from
 the World implementation. The current multiplayer contract has eight opaque

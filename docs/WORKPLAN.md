@@ -17,7 +17,7 @@ the lane boundary — that is why the repo is shaped the way it is.
 | Lane | Package | Status in v1 |
 |---|---|---|
 | **Chain** | `packages/privacy` | Active; private seam frozen, D-043 planner port/fake complete, production Ready planner blocked |
-| **World** | `packages/world` + `packages/lobby` | Active; Avatar Studio foundation complete offline; keyboard toggle, runtime sprite art and rendered acceptance remain |
+| **World** | `packages/world` + `packages/lobby` | Active; Avatar Studio foundation and doorway surround accepted on localhost; keyboard toggle and runtime sprite art remain |
 | **Shell** | `apps/web` | Active, starts week 2 |
 | **Backend** | `apps/backend` | Active; offline implementation and Fly hardening complete; host, Docker, domain, secrets, Alchemy controls and live staging remain |
 | **Bridge** | `packages/bridge` | Active, fully independent |
@@ -240,8 +240,8 @@ highlight, activation, exit and teardown only; it gained no recipient, quote,
 deposit address, status or wallet concept. Rendered room and station acceptance
 remains user-run at `http://localhost:5173/`.
 
-**D-047 foundation complete offline:** the hidden south path and bottom-edge
-trigger enter a non-financial 18×12 Avatar Studio outside
+**D-047 foundation complete and rendered-accepted locally:** the hidden south
+path and bottom-edge trigger enter a non-financial 18×12 Avatar Studio outside
 `BuildingId`/`BUILDINGS`, with no facade, public label or `VisitLayer` route.
 Eight collision selectors choose the cosy/default states. The three dedicated
 `WorldEvents` are the only event-bus extension, and World, lobby and Fly now
@@ -252,8 +252,11 @@ defers that replacement while inside and deduplicates reconnect intent. Exit
 publishes the restored street placement before `avatar-studio:exited` resumes
 presence, and remote peers use deterministic placeholder tints. Reload, tab
 close or a new session still resets to `avatar-1`. The exact keyboard toggle
-remains open and unbound pending the user's choice; rendered acceptance and
-runtime sprite art are not complete.
+remains open and unbound pending the user's choice, and runtime sprite art is
+not complete. On 2026-08-19 the user manually accepted the hard-refreshed
+localhost foundation: hidden entry, eight placeholder selectors, collision
+colour selection and two-tab presence hide/restore. No fighting-toggle or
+final-art acceptance is implied.
 
 **Must not:** import `starknet` or any wallet package. Put an address, balance,
 transaction hash, building name or entry event into lobby traffic. On local
