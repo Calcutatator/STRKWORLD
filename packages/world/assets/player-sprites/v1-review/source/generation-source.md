@@ -35,6 +35,14 @@ runtime keys remain opaque `avatar-1` through `avatar-16`; no size, stance,
 feet, wallet, account, protocol, financial or route field is encoded in lobby
 traffic.
 
+James approved the final export topology separately from the pixels: sixteen
+transparent 192x256 PNG sheets, one for each opaque key, laid out as 3 columns
+by 4 rows of 64x64 cells, plus one tagged editable Aseprite source. There is no
+mega-atlas. Frames contain no baked shadow pixels; World may draw one
+consistent shadow separately. The next art handoff is limited to sixteen
+true-resolution idle calibrations, followed by user review before movement
+prototypes for characters 1, 4, 6 and 7.
+
 ## Reference handling
 
 James provided Chrono Trigger screenshots as style and pixel-resolution

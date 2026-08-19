@@ -17,11 +17,11 @@ the lane boundary — that is why the repo is shaped the way it is.
 | Lane | Package | Status in v1 |
 |---|---|---|
 | **Chain** | `packages/privacy` | Active; private seam frozen, D-043 planner port/fake complete, production Ready planner blocked |
-| **World** | `packages/world` + `packages/lobby` | Active; Avatar Studio foundation accepted on localhost; D-048 top-wall portal, keyboard toggle and D-049 runtime sprite art remain |
+| **World** | `packages/world` + `packages/lobby` | Active; Avatar Studio foundation accepted on localhost; D-048 top-wall portal, keyboard toggle and D-049 reviewed sprite integration remain |
 | **Shell** | `apps/web` | Active, starts week 2 |
 | **Backend** | `apps/backend` | Active; offline implementation and Fly image smoke pass; D-050 standalone graceful shutdown, host, domain, secrets, Alchemy controls and live staging remain |
 | **Bridge** | `packages/bridge` | Active, fully independent |
-| **Art** | `packages/world/assets` | Active; Kenney Urban CC0 acquired and role mappings corrected; sprite review sheets are not runtime-ready, and the D-049 transparent 64×64 export, final approval and station states remain user-gated |
+| **Art** | `packages/world/assets` | Active; Kenney Urban CC0 acquired; D-049 export topology is approved, with the 16-idle calibration now user-gated before movement prototypes, final sheets and runtime art |
 | ~~Contracts~~ | — | **Dormant until post-v1** |
 
 ### Why Contracts is dormant
@@ -466,11 +466,21 @@ before any final art lock. Record the licence for **every** additional pack in
 review sheets and manifest under `packages/world/assets/player-sprites/v1-review/`.
 Those PNGs are explicitly `review-art-not-runtime-ready`: their backgrounds
 are baked rather than transparent. D-049 supersedes the provisional 32×32
-target: the final handoff must use one transparent 64×64 logical canvas for
-every `avatar-1..16` state, fixed feet at `(32, 56)`, with smaller art padded
-and characters 4 and 7 free to use more of the same canvas. It still needs
-frame-by-frame anchor validation and the user's art approval. Do not wire the
-review PNGs into runtime textures or call them accepted final art.
+target: the final handoff is sixteen transparent 192×256 sheets, one per
+`avatar-1..16`, each a 3-column × 4-row grid of 64×64 cells with fixed feet at
+`(32, 56)`. It also includes one tagged editable Aseprite source and no
+mega-atlas. Smaller art stays padded and characters 4 and 7 may use more of the
+same canvas. Source frames contain no baked shadow pixels; World may add one
+consistent shadow separately. It still needs frame-by-frame anchor validation
+and the user's final-art approval. Do not wire the review PNGs into runtime
+textures or call them accepted final art.
+
+**Current D-049 gate:** Art produces only sixteen true-resolution idle
+calibrations, one per opaque key, then pauses for user review. Movement
+prototypes for characters 1, 4, 6 and 7 start only after that approval; the
+remaining movement frames and final per-key sheets follow only after the
+prototype review. World does not begin final sprite integration from the
+current baked review sheets.
 
 **Licence audit is the real work here.** Popular "free" packs are frequently
 non-commercial only, and this is a public project handling real funds. Audit
@@ -484,10 +494,12 @@ keeps the first Bank room procedural; final room/station art starts only after
 World freezes its footprints and asset names. Avatar visuals use D-049's fixed
 64×64 logical canvas and `(32, 56)` feet while the authoritative local body and
 Studio contact footprint remain 24×24. Atlas trimming is allowed only when
-logical `sourceSize` and pivot metadata preserve that contract exactly. The
-final style and state-to-key art manifest remain subject to the user's
-approval, while the sixteen-key wire seam is fixed by D-047. Variable per-key
-canvases and layered body/weapon rendering are out of the initial slice.
+logical `sourceSize` and pivot metadata preserve that contract exactly. Final
+source delivery remains one sheet per opaque key rather than a mega-atlas, and
+source pixels contain no shadow. The final style and state-to-key art manifest
+remain subject to the user's approval, while the sixteen-key wire seam is fixed
+by D-047. Variable per-key canvases and layered body/weapon rendering are out
+of the initial slice.
 
 **Frozen first-room asset contract (D-033 tracer):** the procedural Bank is an
 18×12 grid of 32 px tiles (576×384 px), with a one-tile perimeter, spawn at

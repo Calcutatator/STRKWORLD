@@ -18,6 +18,15 @@
     "collisionFootprint": "runtime-owned common 24x24 gameplay/contact body; visual art may overhang inside the 64x64 canvas",
     "sizePolicy": "all states use one 64x64 logical source canvas; small characters remain small with transparent padding; characters 4 and 7 may occupy more of the canvas",
     "atlasPolicy": "transparent trimming is allowed only if the atlas preserves sourceSize 64x64 and the fixed feet pivot",
+    "shadowPolicy": "source frames contain no baked shadow pixels; World may render one consistent shadow separately",
+    "delivery": {
+      "pngCount": 16,
+      "oneSheetPerPresenceKey": true,
+      "sheetSize": { "width": 192, "height": 256 },
+      "grid": { "columns": 3, "rows": 4 },
+      "megaAtlas": false,
+      "editableSource": { "format": "aseprite", "count": 1, "tagged": true }
+    },
     "presenceKeys": {
       "count": 16,
       "range": "avatar-1..avatar-16",
@@ -33,6 +42,12 @@
     "The hidden avatar room should display one cosy down-facing idle figure per character, not both states.",
     "The fighting state is a visual toggle paired with the same character. It must not encode wallet, protocol, financial, route, balance, or transaction state."
   ],
+  "currentArtGate": {
+    "deliverable": "sixteen true-resolution idle calibrations, one per avatar-1..avatar-16 key",
+    "pauseForUserReview": true,
+    "movementPrototypeCharactersAfterApproval": [1, 4, 6, 7],
+    "remainingMovementFramesBlockedUntilPrototypeReview": true
+  },
   "characters": [
     {
       "character": 1,

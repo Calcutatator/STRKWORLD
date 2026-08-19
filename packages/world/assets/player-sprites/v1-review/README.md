@@ -21,6 +21,22 @@ characters 4 and 7 may occupy more of the 64x64 canvas. Atlas tooling may trim
 transparent pixels only when it preserves 64x64 `sourceSize` and the fixed
 feet pivot.
 
+## Approved final export contract
+
+- Deliver 16 transparent 192x256 PNG sheets, one per opaque
+  `avatar-1..avatar-16` key. Do not deliver a combined mega-atlas.
+- Every sheet is exactly 3 columns x 4 rows of 64x64 cells: `idle`, `walk-1`,
+  `walk-2` across and `down`, `left`, `right`, `up` down.
+- Deliver one tagged editable Aseprite source alongside the PNG sheets.
+- No frame contains baked shadow pixels. World may render one consistent
+  shadow separately; it remains outside the sprite source and gameplay body.
+
+The current next deliverable is only a true-resolution calibration of the 16
+idle states, one per opaque key. Pause for James's art review after that
+calibration. Do not start movement prototypes for characters 1, 4, 6 and 7
+until that review is approved; do not fill the remaining movement frames until
+the prototypes are reviewed.
+
 ## Files
 
 - `contact-sheet-approved-v2.png` - James-approved style direction.
@@ -36,7 +52,7 @@ feet pivot.
   They are not transparent runtime assets.
 - The sheets need exact 64x64 logical frame extraction with transparent alpha.
 - Every frame needs manual `(32,56)` feet-position and pivot validation.
-- Any final sheet should be redrawn or cleaned in an editable pixel-art tool
-  such as Aseprite, then exported as transparent PNG.
+- Final art must be redrawn or cleaned in the tagged editable Aseprite source,
+  then exported through the approved per-key transparent sheet contract above.
 - No code, scene, lobby, manifest, or loader integration has happened in this
   package.

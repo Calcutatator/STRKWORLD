@@ -1909,7 +1909,8 @@ orientation; rendered acceptance is required again after implementation.
 ## D-049 — Avatar art uses one fixed 64x64 logical canvas
 
 **2026-08-19 · Accepted by the user · supersedes D-047's provisional 32x32
-runtime-art assumption; final transparent export and integration pending**
+runtime-art assumption; export topology and shadow policy approved, final
+pixels and integration pending**
 
 **Context.** The approved art direction deliberately includes two larger
 characters and fighting poses whose weapons extend beyond a 32x32 cell. A
@@ -1934,6 +1935,23 @@ If a runtime atlas trims transparent pixels, its metadata must preserve the
 64x64 logical `sourceSize` and the (32, 56) pivot exactly; callers must observe
 the same logical canvas as an untrimmed export.
 
+The final delivery is exactly sixteen transparent **192x256 PNG sheets**, one
+for each opaque `avatar-1` through `avatar-16` key. Each sheet is a 3-column by
+4-row grid of 64x64 cells: the existing `idle`, `walk-1`, `walk-2` columns and
+`down`, `left`, `right`, `up` rows. The handoff also includes one tagged,
+editable Aseprite source. A combined mega-atlas is not part of the delivery.
+
+No frame may contain baked shadow pixels. World may render one consistent
+shadow separately behind every local, remote and Studio avatar; that shadow is
+presentation only and does not change the fixed feet point or 24x24 gameplay
+body.
+
+The next art deliverable is deliberately smaller than the final sheets:
+sixteen true-resolution idle calibrations, one for each opaque key. Art pauses
+for the user's review of that calibration before producing movement prototypes
+for characters 1, 4, 6 and 7. Approval of this export contract is not approval
+of those future pixels.
+
 Variable per-key canvases and separate body/weapon layers are rejected for the
 initial runtime. They require a later decision if final accepted art proves the
 single-canvas contract insufficient. This decision does not approve the
@@ -1941,14 +1959,16 @@ current review sheets for runtime: they still contain baked backgrounds and
 are not the final transparent export.
 
 **Consequences.** The sprite-studio task retains ownership of cleanup, final
-pixels and the transparent 64x64 export. Runtime integration waits for that
+pixels, the sixteen per-key sheets and the tagged editable source. Runtime
+integration waits for the idle-calibration review, movement prototypes, final
 handoff and the user's final-art approval. World may then use one visual object
 per avatar state while keeping the existing physics sprite/body as the
-authoritative position and collision seam. Tests must pin exact logical canvas,
-feet, frame vocabulary, transparent padding, fixed 24x24 gameplay geometry,
-opaque-key fallback and local/remote/selector alignment. Rendered acceptance
-must cover the small character, both large characters, cosy/fighting pairs and
-weapon extents before the placeholder renderer is retired.
+authoritative position and collision seam. Tests must pin exact sheet/cell
+geometry, logical canvas, feet, frame vocabulary, transparent padding,
+shadow-free source pixels, fixed 24x24 gameplay geometry, opaque-key fallback
+and local/remote/selector alignment. Rendered acceptance must cover the small
+character, both large characters, cosy/fighting pairs, separately rendered
+shadows and weapon extents before the placeholder renderer is retired.
 
 ---
 
