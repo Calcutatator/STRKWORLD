@@ -267,12 +267,17 @@ constructor throws — `apps/backend/src/authorization.ts:49`). It signs the
 stateless authorization binding route, fee token, amount and block window;
 forging it forges a sponsorship grant.
 
-Rotating invalidates every in-flight authorization, so players mid-action see a
-failure. The authorization is block-window-bound and short-lived, so the
-blast radius is small but non-zero. Prefer a low-traffic window; a
-dual-secret overlap (verify against old and new, issue with new) would remove
-the gap and does not exist today — `HmacAuthorizationCodec` takes a single
-secret (`apps/backend/src/authorization.ts:48`, guard at `:49`).
+`HmacAuthorizationCodec` takes exactly one secret
+(`apps/backend/src/authorization.ts:48`, guard at `:49`). Rotation therefore
+requires a coordinated secret replacement and backend restart or redeploy;
+there is no overlap window. Every unconsumed authorization issued under the
+old secret then fails verification. The authorization is block-window-bound
+and short-lived, so the blast radius is small but non-zero. Saved Bridge
+evidence and an already accepted transaction hash are not HMAC fee
+authorizations and are unaffected. A dual-secret rollout (verify against old
+and new, issue with new) would require a new reviewed implementation and
+decision; do not infer that support from this runbook. Prefer a low-traffic
+window.
 
 Compromise: rotate immediately and accept the failed in-flight actions.
 
@@ -366,12 +371,18 @@ convenience: it is a Backend-lane change with a privacy review.
 
 Stated plainly so nobody reads more assurance into this document than it earns:
 
-- **`docker build` has not been run.** Docker is unavailable in the environment
-  this branch was authored in. The backend and Fly TypeScript emit steps the
-  images depend on *were* run and verified; static tests assert that the Fly
-  image replaces npm's workspace symlink with the compiled shared package.
-  Both Dockerfiles still need a real `docker build` on a machine with Docker,
-  followed by a staging boot test, before either image is trusted.
+- **Both Dockerfiles build in GitHub CI, but neither image has been
+  boot-smoked or deployed.** Successful runs
+  [32274724770](https://github.com/Calcutatator/STRKWORLD/actions/runs/32274724770),
+  [32276418952](https://github.com/Calcutatator/STRKWORLD/actions/runs/32276418952)
+  and
+  [32277158593](https://github.com/Calcutatator/STRKWORLD/actions/runs/32277158593)
+  each completed the `Deployment typecheck and build` job, including
+  `strkworld-fly:ci` and `strkworld-backend:ci` image builds. This verifies the
+  Docker build stages and current root-context packaging; it does not verify
+  container startup, process readiness, signal handling, host access logging,
+  TLS or secrets. Both images still require bounded boot smokes and a staging
+  deployment before either is trusted.
 - **No end-to-end deploy has happened**, because no host exists.
 - **`apps/web/index.html`** was added by this lane because a production build
   needs an entry module and there was none. It is scaffolding; the Shell lane
