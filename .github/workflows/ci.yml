@@ -62,12 +62,16 @@ jobs:
           --tag strkworld-fly:ci
           --build-arg VITE_LOBBY_URL=wss://ci.example.com
           .
+      - name: Smoke Fly composition image
+        run: deploy/fly/smoke-image.sh strkworld-fly:ci
       - name: Build standalone backend image
         run: >-
           docker build
           --file deploy/backend/Dockerfile
           --tag strkworld-backend:ci
           .
+      - name: Smoke standalone backend image
+        run: deploy/backend/smoke-image.sh strkworld-backend:ci
 
   headers:
     name: No cross-origin isolation headers (D-005)
