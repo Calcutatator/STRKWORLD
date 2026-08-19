@@ -78,6 +78,7 @@ export function createStreetScene({ Phaser, onTileChanged, remotePeers }: Street
     private movement!: StreetMovementAdapter;
     private roomGraphics?: PhaserTypes.GameObjects.Graphics;
     private roomLabels = new Map<StationId, PhaserTypes.GameObjects.Text>();
+    private exteriorLabels = new Map<BuildingId, PhaserTypes.GameObjects.Text>();
     private roomStationGraphics?: PhaserTypes.GameObjects.Graphics;
     private remoteAvatars?: RemoteAvatarLayer;
     private returnTile = { x: 0, y: 0 };
@@ -107,6 +108,7 @@ export function createStreetScene({ Phaser, onTileChanged, remotePeers }: Street
       this.createCamera();
       this.createDoorTriggers();
       this.createRoomVisuals();
+      this.createExteriorLabels();
       this.events.once('shutdown', this.cleanShutdown, this);
     }
 
@@ -132,6 +134,8 @@ export function createStreetScene({ Phaser, onTileChanged, remotePeers }: Street
       this.roomStationGraphics?.destroy();
       for (const label of this.roomLabels.values()) label.destroy();
       this.roomLabels.clear();
+      for (const label of this.exteriorLabels.values()) label.destroy();
+      this.exteriorLabels.clear();
       this.remoteAvatars?.destroy();
       this.remoteAvatars = undefined;
     }
@@ -267,12 +271,32 @@ export function createStreetScene({ Phaser, onTileChanged, remotePeers }: Street
       this.roomStationGraphics.setVisible(false);
     }
 
+    /** Render non-interactive placeholder signs over the street facades. */
+    private createExteriorLabels(): void {
+      for (const exterior of this.map.exteriorLabels) {
+        const position = tileToWorld(exterior.x, exterior.y);
+        const label = this.add
+          .text(position.x, position.y, exterior.text, {
+            color: '#f4e9c9',
+            fontFamily: 'monospace',
+            fontSize: '10px',
+            align: 'center',
+            stroke: '#2b2b33',
+            strokeThickness: 3,
+          })
+          .setOrigin(0.5)
+          .setDepth(3);
+        this.exteriorLabels.set(exterior.building, label);
+      }
+    }
+
     private enterRoom(definition: FixedRoomDefinition): void {
       this.player.setVelocity(0, 0);
       const body = this.player.body as PhaserTypes.Physics.Arcade.Body;
       body.setEnable(false);
       this.ground?.setVisible(false);
       this.remoteAvatars?.setVisible(false);
+      for (const label of this.exteriorLabels.values()) label.setVisible(false);
       this.roomGraphics?.setVisible(true);
       this.roomStationGraphics?.setVisible(true);
       this.physics.world.setBounds(
@@ -301,6 +325,7 @@ export function createStreetScene({ Phaser, onTileChanged, remotePeers }: Street
       body.setEnable(true);
       this.ground?.setVisible(true);
       this.remoteAvatars?.setVisible(true);
+      for (const label of this.exteriorLabels.values()) label.setVisible(true);
       this.roomGraphics?.setVisible(false);
       this.roomStationGraphics?.setVisible(false);
       for (const label of this.roomLabels.values()) label.setVisible(false);

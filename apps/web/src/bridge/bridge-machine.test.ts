@@ -75,6 +75,27 @@ describe('Bridge shell machine', () => {
     expect(h.machine.store.getState().instructionsVisible).toBe(true);
   });
 
+  it('resumes a saved quote by refreshing status before exposing the next safe action', async () => {
+    const h = harness(record());
+    await h.machine.open();
+    await h.machine.resumeSavedQuote();
+    expect(h.calls.refresh).toBe(1);
+    expect(h.planner?.planMax).toHaveBeenCalledWith(expect.objectContaining({
+      available: 1_900_000_000_000_000_000n,
+      expectedRecipient: '0x123',
+    }));
+    expect(h.machine.store.getState().instructionsVisible).toBe(true);
+  });
+
+  it('does not run deposit preflight after resume has reached a settled leg', async () => {
+    const h = harness(record({ leg: 'settled', message: 'settled', pollingStopped: true, strkReceived: 1_234n }));
+    await h.machine.resumeSavedQuote();
+    expect(h.calls.refresh).toBe(1);
+    expect(h.planner?.planMax).not.toHaveBeenCalled();
+    expect(h.machine.store.getState().instructionsVisible).toBe(false);
+    expect(h.machine.store.getState().record?.status.leg).toBe('settled');
+  });
+
   it('uses actual settled STRK, never quote output, for a shield plan', async () => {
     const planner: PublicShieldPlanner = { planMax: vi.fn(async ({ available }: PublicShieldPlanInput) => plan(available)) };
     const h = harness(record({ leg: 'settled', message: 'settled', pollingStopped: true, strkReceived: 1_234n }), planner);

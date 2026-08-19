@@ -115,7 +115,19 @@ export function createPresenceController({ endpoint, factory = (options) => new 
         next.updatePosition(placement!.x, placement!.y, placement!.facing);
         setState({ status: 'connected', canReconnect: true });
       }
-    }).catch(() => { connecting = null; if (!destroyed) unavailable(); });
+    }).catch(() => {
+      connecting = null;
+      if (destroyed) return;
+      unavailable();
+      // LobbyClient reports `idle` before a failed join's promise rejects.
+      // A reconnect click in that window is therefore explicit intent to
+      // replace this failed client; otherwise the request would remain stuck
+      // until another movement or click despite the visible reconnect action.
+      if (reconnectRequested && !inside && placement) {
+        reconnectRequested = false;
+        replaceStaleClient();
+      }
+    });
   };
   const onMoved = ({ position, facing }: WorldEvents['player:moved']) => {
     placement = { x: position.x, y: position.y, facing };
@@ -123,6 +135,10 @@ export function createPresenceController({ endpoint, factory = (options) => new 
     if (state.status === 'connected') client?.updatePosition(position.x, position.y, facing);
     else if (!hasAttempted) {
       hasAttempted = true;
+      // A reconnect click may have happened before the first placement. The
+      // placement itself is the first safe point at which to join, so consume
+      // that request when the normal first join starts.
+      reconnectRequested = false;
       connect();
     }
   };
@@ -160,9 +176,14 @@ export function createPresenceController({ endpoint, factory = (options) => new 
     remotePeers: peerSource,
     getState: () => state,
     reconnect() {
-      if (!endpoint || destroyed || !placement) return;
-      if (replacing) return;
+      if (!endpoint || destroyed) return;
+      // Keep the request even when the World has not supplied a street
+      // placement yet. We must not invent coordinates, but the button must
+      // also not become a silent no-op: the first real placement (or a later
+      // exit after one) will carry out the reconnect.
       reconnectRequested = true;
+      if (!placement) return;
+      if (replacing) return;
       if (!inside && !connecting) {
         reconnectRequested = false;
         if (client && state.status === 'unavailable') replaceStaleClient();

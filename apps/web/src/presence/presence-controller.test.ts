@@ -24,6 +24,7 @@ function fakeClient() {
     publishPeers: (peers: readonly { gameId: string; x: number; y: number; facing: Facing; sprite: string }[]) => peerListeners.forEach((fn) => fn(peers)),
     capturePeerListener: () => [...peerListeners][0],
     peerListenerCount: () => peerListeners.size,
+    emitStatus: (event: { status: string; reason?: string }) => statuses.forEach((fn) => fn(event)),
     drop: () => { status = 'closed'; statuses.forEach((fn) => fn({ status, reason: 'server-dropped' })); },
   };
 }
@@ -139,7 +140,7 @@ describe('presence controller', () => {
     stop();
   });
 
-  it('ignores reconnect requests before the first street placement', async () => {
+  it('queues reconnect before the first placement without inventing coordinates', async () => {
     const world = createEventBus<WorldEvents>();
     const made = fakeClient();
     const presence = createPresenceController({ endpoint: 'ws://example', factory: () => made.client });
@@ -149,6 +150,24 @@ describe('presence controller', () => {
     await Promise.resolve();
     expect(made.client.connect).toHaveBeenCalledTimes(1);
     expect(made.client.disconnect).not.toHaveBeenCalled();
+    stop();
+  });
+
+  it('retains a pre-placement reconnect through an interior visit and joins after exit', async () => {
+    const world = createEventBus<WorldEvents>();
+    const made = fakeClient();
+    const presence = createPresenceController({ endpoint: 'ws://example', factory: () => made.client });
+    const stop = presence.listen(world);
+
+    presence.reconnect();
+    world.emit('building:entered', { building: 'bank' });
+    world.emit('player:moved', moved);
+    expect(made.client.connect).not.toHaveBeenCalled();
+
+    world.emit('building:exited', { building: 'bank' });
+    await Promise.resolve();
+    expect(made.client.connect).toHaveBeenCalledTimes(1);
+    expect(made.client.connect).toHaveBeenCalledWith();
     stop();
   });
 
@@ -428,6 +447,37 @@ describe('presence controller', () => {
     await Promise.resolve();
     await Promise.resolve();
     expect(made.client.connect).toHaveBeenCalledTimes(2);
+    stop();
+  });
+
+  it('retries a failed join when reconnect was requested while it was settling', async () => {
+    const world = createEventBus<WorldEvents>();
+    const first = fakeClient();
+    const second = fakeClient();
+    let rejectInitial!: (error: unknown) => void;
+    first.client.connect = vi.fn(() => new Promise<void>((_resolve, reject) => { rejectInitial = reject; }));
+    const clients = [first, second];
+    let created = 0;
+    const presence = createPresenceController({
+      endpoint: 'ws://example',
+      factory: vi.fn(() => clients[created++]!.client),
+    });
+    const stop = presence.listen(world);
+
+    world.emit('player:moved', moved);
+    expect(first.client.connect).toHaveBeenCalledTimes(1);
+    // A real LobbyClient reports idle before its connect() promise rejects.
+    // The status layer is therefore already showing the reconnect action while
+    // the failed join is still unwinding.
+    first.emitStatus({ status: 'idle' });
+    presence.reconnect();
+    rejectInitial(new Error('server unavailable'));
+    await Promise.resolve();
+    await Promise.resolve();
+    await Promise.resolve();
+
+    expect(second.client.connect).toHaveBeenCalledTimes(1);
+    expect(presence.getState().status).toBe('connected');
     stop();
   });
 

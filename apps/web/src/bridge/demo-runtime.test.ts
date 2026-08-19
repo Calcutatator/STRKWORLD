@@ -3,6 +3,28 @@ import { createDemoBridgeRuntime } from './demo-runtime.js';
 import { createBridgePanel } from './bridge-machine.js';
 
 describe('demo Bridge runtime', () => {
+  it('persists the signed quote across runtime recreation', async () => {
+    const values = new Map<string, string>();
+    const storage: Storage = {
+      getItem: (key) => values.get(key) ?? null,
+      setItem: (key, value) => { values.set(key, value); },
+      removeItem: (key) => { values.delete(key); },
+      clear: () => { values.clear(); },
+      key: () => null,
+      length: 0,
+    };
+    const first = await createDemoBridgeRuntime(storage);
+    const source = (await first.loadSources())[0]!;
+    await first.service!.createManualDeposit({
+      source,
+      amountIn: 1_000_000n,
+      starknetRecipient: first.account!,
+      refundAddress: '0x1111111111111111111111111111111111111111',
+    });
+    const second = await createDemoBridgeRuntime(storage);
+    expect(second.service?.resume()?.signedQuote.correlationId).toBe('demo-correlation');
+  });
+
   it('uses fixed offline quote/status fixtures and reaches a validated settled amount', async () => {
     const runtime = await createDemoBridgeRuntime();
     const assets = await runtime.loadSources();

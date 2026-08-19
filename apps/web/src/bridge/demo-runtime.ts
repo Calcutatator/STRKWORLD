@@ -8,6 +8,7 @@ import type {
 } from '@defuse-protocol/one-click-sdk-typescript';
 import {
   BridgeService,
+  LocalBridgeStore,
   MemoryBridgeStore,
   loadSourceAssets,
   type OneClickClient,
@@ -22,8 +23,15 @@ const DEMO_NOW = Date.parse('2026-08-18T12:00:00.000Z');
 
 /** Offline 1Click client: it never creates a real deposit address or network request. */
 class DemoOneClickClient implements OneClickClient {
-  private signed: QuoteResponse | null = null;
+  private signed: QuoteResponse | null;
   private statusCall = 0;
+
+  constructor(savedQuote: QuoteResponse | null = null) {
+    // A persisted demo record is still only offline evidence, but the fake
+    // provider must know its signed quote after a reload so a resume can run
+    // the same status path as the first tab.
+    this.signed = savedQuote;
+  }
   async getTokens(): Promise<TokenResponse[]> {
     return [{
       assetId: 'nep141:arb-usdc.omft.near',
@@ -79,12 +87,13 @@ class DemoOneClickClient implements OneClickClient {
   }
 }
 
-export async function createDemoBridgeRuntime(): Promise<BridgeRuntime> {
+export async function createDemoBridgeRuntime(storage?: Storage): Promise<BridgeRuntime> {
   const { FakePublicShieldPlanner } = await import('@strkworld/privacy');
-  const client = new DemoOneClickClient();
+  const store = demoBridgeStore(storage);
+  const client = new DemoOneClickClient(store.load()?.signedQuote ?? null);
   const service = new BridgeService({
     client,
-    store: new MemoryBridgeStore(),
+    store,
     quoteVerifier: () => true,
     now: () => DEMO_NOW,
   });
@@ -103,4 +112,22 @@ export async function createDemoBridgeRuntime(): Promise<BridgeRuntime> {
     account: DEMO_ACCOUNT,
     available: () => true,
   };
+}
+
+/**
+ * The demo is the only browser runtime currently available. Keep its signed
+ * quote across reloads when Web Storage exists, while preserving a memory
+ * fallback for SSR, tests, and privacy-mode browsers that reject storage.
+ */
+function demoBridgeStore(storage?: Storage): LocalBridgeStore | MemoryBridgeStore {
+  try {
+    const candidate = storage ?? (typeof globalThis.localStorage !== 'undefined' ? globalThis.localStorage : undefined);
+    if (candidate) {
+      candidate.getItem('__strkworld_bridge_storage_probe__');
+      return new LocalBridgeStore(candidate);
+    }
+  } catch {
+    // Storage can be unavailable or throw in a restricted browser context.
+  }
+  return new MemoryBridgeStore();
 }

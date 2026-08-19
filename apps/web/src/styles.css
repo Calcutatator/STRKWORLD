@@ -98,7 +98,6 @@ body {
   z-index: 10;
 }
 
-.panel > *,
 .room > * {
   width: min(30rem, 100%);
   background: var(--panel);
@@ -107,7 +106,35 @@ body {
   padding: 1.5rem;
 }
 
-/* PanelFrame renders its own <section class="panel">; keep its body readable. */
+/* PanelFrame is one bounded window. Its contents scroll inside the window so
+ * long recovery records never push the close control off-screen. */
+.panel-card {
+  width: min(34rem, calc(100vw - 2rem));
+  max-height: calc(100vh - 2rem);
+  overflow: auto;
+  background: var(--panel);
+  border: 1px solid var(--panel-edge);
+  border-radius: 12px;
+}
+
+.panel-header,
+.panel-body,
+.panel-footer {
+  padding: 1.1rem 1.25rem;
+}
+
+.panel-header {
+  border-bottom: 1px solid var(--panel-edge);
+}
+
+.panel-body > :first-child {
+  margin-top: 0;
+}
+
+.panel-body > :last-child {
+  margin-bottom: 0;
+}
+
 .panel-header {
   display: flex;
   align-items: baseline;
@@ -123,6 +150,62 @@ body {
   padding-left: 0.75rem;
   margin: 0.75rem 0;
   opacity: 0.92;
+}
+
+.panel-card > .panel-disclosure {
+  margin: 0;
+  padding: 0.75rem 1.25rem 0.75rem 1rem;
+  border-bottom: 1px solid var(--panel-edge);
+}
+
+.bridge-compact-note {
+  margin: 0 0 1rem;
+  color: color-mix(in srgb, var(--ink) 78%, transparent);
+  font-size: 0.9rem;
+}
+
+.bridge-review,
+.bridge-plan {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 0.35rem 1rem;
+  margin: 1rem 0;
+}
+
+.bridge-review dt,
+.bridge-plan dt {
+  color: color-mix(in srgb, var(--ink) 70%, transparent);
+}
+
+.bridge-review dd,
+.bridge-plan dd {
+  margin: 0;
+  text-align: right;
+}
+
+.bridge-details {
+  margin: 0.85rem 0;
+  color: color-mix(in srgb, var(--ink) 78%, transparent);
+  font-size: 0.9rem;
+}
+
+.bridge-details summary {
+  cursor: pointer;
+}
+
+.bridge-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-top: 1rem;
+}
+
+.bridge-next-step {
+  margin: 1rem 0 0;
+  padding: 0.8rem;
+  border: 1px solid var(--panel-edge);
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--panel-edge) 28%, transparent);
 }
 
 button {

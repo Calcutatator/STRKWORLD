@@ -82,6 +82,8 @@ export interface BridgePanel {
     refundAddress: string;
   }): Promise<void>;
   preflightSavedQuote(): Promise<void>;
+  /** Refresh persisted evidence once, then expose only its next safe action. */
+  resumeSavedQuote(): Promise<void>;
   refresh(): Promise<void>;
   watch(): Promise<void>;
   exportRecord(): string | null;
@@ -277,6 +279,27 @@ export function createBridgePanel(options: BridgePanelOptions): BridgePanel {
     }
   }
 
+  async function refreshCurrent(): Promise<BridgeStatus | null> {
+    if (refreshBusy || watchController) return null;
+    refreshBusy = true;
+    const id = begin();
+    const currentSession = session;
+    patch({ flow: { name: 'loading' }, notice: null });
+    try {
+      await options.service.refresh();
+      if (!live(id, currentSession)) return null;
+      const { record, review } = recordAndReview();
+      const instructions = canShowInstructions(record, review);
+      patch({ record, quote: review, preflightAvailable: instructions, flow: { name: 'idle' }, instructionsVisible: instructions && store.getState().instructionsVisible });
+      return record?.status ?? null;
+    } catch {
+      if (live(id, currentSession)) fail(COPY.bridge.statusFailed, 'none');
+      return null;
+    } finally {
+      refreshBusy = false;
+    }
+  }
+
   return {
     store,
 
@@ -351,6 +374,16 @@ export function createBridgePanel(options: BridgePanelOptions): BridgePanel {
       } finally {
         preflightBusy = false;
       }
+    },
+
+    async resumeSavedQuote(): Promise<void> {
+      // A resumed quote is not executable merely because it exists in local
+      // storage. Refresh the provider first, then run the same account-bound
+      // planner gate used for a newly created quote. Other legs remain visible
+      // as evidence and expose their ordinary refresh/watch/settlement action.
+      if (!options.service.resume()) return;
+      const status = await refreshCurrent();
+      if (status?.leg === 'awaiting-deposit') await this.preflightSavedQuote();
     },
 
     close(): void {
@@ -450,23 +483,7 @@ export function createBridgePanel(options: BridgePanelOptions): BridgePanel {
       await flight.promise;
     },
 
-    async refresh(): Promise<void> {
-      if (refreshBusy || watchController) return;
-      refreshBusy = true;
-      const id = begin();
-      const currentSession = session;
-      patch({ flow: { name: 'loading' }, notice: null });
-      try {
-        await options.service.refresh();
-        if (!live(id, currentSession)) return;
-        const { record, review } = recordAndReview();
-        patch({ record, quote: review, preflightAvailable: canShowInstructions(record, review), flow: { name: 'idle' }, instructionsVisible: canShowInstructions(record, review) && store.getState().instructionsVisible });
-      } catch {
-        if (live(id, currentSession)) fail(COPY.bridge.statusFailed, 'none');
-      } finally {
-        refreshBusy = false;
-      }
-    },
+    refresh: async (): Promise<void> => { await refreshCurrent(); },
 
     async watch(): Promise<void> {
       if (watchController || refreshBusy) return;

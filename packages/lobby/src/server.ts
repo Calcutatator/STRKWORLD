@@ -18,7 +18,8 @@
  *   - **CORS.** Colyseus's default reflects any `Origin` back with
  *     `Access-Control-Allow-Credentials: true`, which is the permissive-with-
  *     credentials pattern. `startPresenceServer` replaces the CORS policy with
- *     an origin allowlist and drops the credentials header (we use no cookies).
+ *     an origin allowlist and grants credentials only to those approved local
+ *     web origins (the SDK uses credentialed matchmaking requests).
  *   - **Logging.** An HTTP body is the kind of thing a fronting proxy logs by
  *     default. That is out of this process's hands, but it is why the join
  *     payload must never carry anything sensitive — which, post-hardening, it
@@ -117,7 +118,11 @@ function lockCors(allowedOrigins: readonly string[]): void {
     // No Origin header → not a browser cross-origin request → nothing to grant.
     // A disallowed origin gets no Allow-Origin header, so the browser blocks it.
     if (origin !== null && allowed.has(origin)) {
-      return { 'Access-Control-Allow-Origin': origin, Vary: 'Origin' };
+      return {
+        'Access-Control-Allow-Origin': origin,
+        'Access-Control-Allow-Credentials': 'true',
+        Vary: 'Origin',
+      };
     }
     return { Vary: 'Origin' };
   };

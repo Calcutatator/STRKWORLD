@@ -36,27 +36,29 @@ export function PanelFrame({
 }) {
   return (
     <section className="panel" aria-label={title}>
-      <header className="panel-header">
-        <h2>{title}</h2>
-        <button type="button" className="panel-close" onClick={onClose}>
-          {COPY.flow.close}
-        </button>
-        {closingNote ? (
-          <p className="panel-closing-note" role="note">
-            {closingNote}
+      <div className="panel-card">
+        <header className="panel-header">
+          <h2>{title}</h2>
+          <button type="button" className="panel-close" onClick={onClose}>
+            {COPY.flow.close}
+          </button>
+          {closingNote ? (
+            <p className="panel-closing-note" role="note">
+              {closingNote}
+            </p>
+          ) : null}
+        </header>
+
+        {disclosure ? (
+          <p className="panel-disclosure" data-testid="disclosure" role="note">
+            {disclosure}
           </p>
         ) : null}
-      </header>
 
-      {disclosure ? (
-        <p className="panel-disclosure" data-testid="disclosure" role="note">
-          {disclosure}
-        </p>
-      ) : null}
+        <div className="panel-body">{children}</div>
 
-      <div className="panel-body">{children}</div>
-
-      {footer ? <footer className="panel-footer">{footer}</footer> : null}
+        {footer ? <footer className="panel-footer">{footer}</footer> : null}
+      </div>
     </section>
   );
 }

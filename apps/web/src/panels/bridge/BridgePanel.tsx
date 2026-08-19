@@ -84,8 +84,11 @@ export function BridgePanel({
   return (
     <section className="bridge-experience" data-experience={experience}>
       <PanelFrame title={COPY.bridge.title} disclosure={routeDisclosure('bridge.deposit')} onClose={onClose}>
-        <p className="panel-notice" role="note">{COPY.bridge.providerFee}</p>
-        <p className="panel-notice" role="note">{COPY.bridge.sensitive}</p>
+        <p className="bridge-compact-note" role="note">{COPY.bridge.providerFee}</p>
+        <details className="bridge-details">
+          <summary>Keep the signed record safe</summary>
+          <p>{COPY.bridge.sensitive}</p>
+        </details>
         {state.notice && state.notice.text !== COPY.bridge.providerFee ? <p className="panel-notice" role={state.notice.tone === 'error' ? 'alert' : 'note'}>{state.notice.text}</p> : null}
         {!runtime.planner ? <p className="room-locked" role="note">{COPY.bridge.plannerUnavailable}</p> : null}
 
@@ -99,9 +102,12 @@ export function BridgePanel({
             <label>{COPY.bridge.amount}
               <input value={amountText} onChange={(event) => setAmountText(event.target.value)} inputMode="decimal" />
             </label>
-            <label>{COPY.bridge.refundAddress}
-              <input value={refundAddress} onChange={(event) => setRefundAddress(event.target.value)} />
-            </label>
+            <details className="bridge-details">
+              <summary>{COPY.bridge.refundAddress}</summary>
+              <label>
+                <input value={refundAddress} onChange={(event) => setRefundAddress(event.target.value)} />
+              </label>
+            </details>
             <button type="button" disabled={state.flow.name === 'quoting' || state.flow.name === 'preflighting'} onClick={() => {
               if (!source) return;
               const parsed = parseSourceAmount(amountText, source.decimals);
@@ -113,8 +119,8 @@ export function BridgePanel({
 
         {review ? <QuoteReview review={review} /> : null}
         {runtime.planner && state.record && review && state.preflightAvailable && !state.instructionsVisible ? (
-          <button type="button" onClick={() => void owned.preflightSavedQuote()} disabled={state.flow.name === 'preflighting'}>
-            {COPY.bridge.preflight}
+          <button type="button" onClick={() => void owned.resumeSavedQuote()} disabled={state.flow.name === 'loading' || state.flow.name === 'preflighting'}>
+            {COPY.bridge.resume}
           </button>
         ) : null}
         {state.record && !state.instructionsVisible && state.flow.name === 'failed' ? (
@@ -150,16 +156,16 @@ export function BridgePanel({
           <BridgeDepositInstructions record={state.record} />
         ) : null}
         {!state.record ? (
-          <div className="bridge-recovery">
-            <label>{COPY.bridge.import}
-              <textarea value={importText} onChange={(event) => setImportText(event.target.value)} />
-            </label>
-            <button type="button" onClick={() => owned.importRecord(importText)}>{COPY.bridge.import}</button>
-            <button type="button" disabled>{COPY.bridge.export}</button>
-            <button type="button" disabled>{COPY.bridge.discard}</button>
-          </div>
+          <details className="bridge-details">
+            <summary>Recover a saved deposit</summary>
+            <div className="bridge-recovery">
+              <label>{COPY.bridge.import}
+                <textarea value={importText} onChange={(event) => setImportText(event.target.value)} />
+              </label>
+              <button type="button" onClick={() => owned.importRecord(importText)}>{COPY.bridge.import}</button>
+            </div>
+          </details>
         ) : null}
-        {plan && state.flow.name === 'ready-to-shield' ? <ShieldPlan plan={plan} /> : null}
         {shieldMachine ? <BankPanel panel={shieldMachine} experience="station" allowedModes={['shield']} initialMode="shield" title={COPY.bank.title} building="bank" onClose={() => setShowShieldBank(false)} /> : null}
       </PanelFrame>
     </section>
@@ -168,13 +174,20 @@ export function BridgePanel({
 
 function QuoteReview({ review }: { review: BridgeQuoteReview }) {
   return (
-    <dl className="bridge-review">
-      <dt>{COPY.bridge.amount}</dt><dd>{formatTokenAmountExact(review.amountIn, review.sourceDecimals)} {review.sourceSymbol}</dd>
-      <dt>{COPY.bridge.expected}</dt><dd>{formatStrkExact(review.expectedAmountOut)}</dd>
-      <dt>{COPY.bridge.minimum}</dt><dd>{formatStrkExact(review.minimumAmountOut)}</dd>
-      <dt>{COPY.bridge.recipient}</dt><dd><code>{shortenAddress(review.recipient)}</code></dd>
-      <dt>{COPY.bridge.deadline}</dt><dd>{review.deadline}</dd>
-    </dl>
+    <>
+      <dl className="bridge-review">
+        <dt>{COPY.bridge.amount}</dt><dd>{formatTokenAmountExact(review.amountIn, review.sourceDecimals)} {review.sourceSymbol}</dd>
+        <dt>{COPY.bridge.expected}</dt><dd>{formatStrkExact(review.expectedAmountOut)}</dd>
+        <dt>{COPY.bridge.minimum}</dt><dd>{formatStrkExact(review.minimumAmountOut)}</dd>
+      </dl>
+      <details className="bridge-details">
+        <summary>Quote details</summary>
+        <dl className="bridge-review">
+          <dt>{COPY.bridge.recipient}</dt><dd><code>{shortenAddress(review.recipient)}</code></dd>
+          <dt>{COPY.bridge.deadline}</dt><dd>{compactDeadline(review.deadline)}</dd>
+        </dl>
+      </details>
+    </>
   );
 }
 
@@ -215,14 +228,26 @@ function BridgeStatusPanel({
       <div className="bridge-actions">
         <button type="button" onClick={onRefresh} disabled={flow === 'loading'}>{COPY.bridge.refresh}</button>
         <button type="button" onClick={onWatch} disabled={flow === 'watching'}>{COPY.bridge.watch}</button>
-        {allowShield && status.leg === 'settled' ? <button type="button" onClick={onShield} disabled={flow === 'planning-shield'}>{plan ? COPY.bridge.shield : COPY.bridge.plan}</button> : null}
-        <button type="button" onClick={onExport}>{COPY.bridge.export}</button>
-        <button type="button" onClick={onDiscard}>{COPY.bridge.discard}</button>
+        {allowShield && status.leg === 'settled' && !plan ? <button type="button" onClick={onShield} disabled={flow === 'planning-shield'}>{COPY.bridge.plan}</button> : null}
       </div>
-      <label>{COPY.bridge.import}
-        <textarea value={importText} onChange={(event) => setImportText(event.target.value)} />
-      </label>
-      <button type="button" onClick={onImport}>{COPY.bridge.import}</button>
+      {plan && flow === 'ready-to-shield' ? (
+        <div className="bridge-next-step">
+          <strong>Next: shield at the Bank</strong>
+          <ShieldPlan plan={plan} />
+          <button type="button" onClick={onShield}>{COPY.bridge.shield}</button>
+        </div>
+      ) : null}
+      <details className="bridge-details">
+        <summary>Recovery options</summary>
+        <div className="bridge-actions">
+          <button type="button" onClick={onExport}>{COPY.bridge.export}</button>
+          <button type="button" onClick={onDiscard}>{COPY.bridge.discard}</button>
+        </div>
+        <label>{COPY.bridge.import}
+          <textarea value={importText} onChange={(event) => setImportText(event.target.value)} />
+        </label>
+        <button type="button" onClick={onImport}>{COPY.bridge.import}</button>
+      </details>
     </div>
   );
 }
@@ -243,10 +268,14 @@ function ShieldPlan({ plan }: { plan: import('@strkworld/privacy').PublicShieldP
   const values = planDisplay(plan);
   return <dl className="bridge-plan">
     <dt>{COPY.bridge.amountToShield}</dt><dd>{values.amountToShield} STRK</dd>
-    <dt>{COPY.bridge.poolFee}</dt><dd>{values.poolFee} STRK</dd>
-    <dt>{COPY.bridge.gasEstimate}</dt><dd>{values.gasEstimate} STRK</dd>
     <dt>{COPY.bridge.plannedReserve}</dt><dd>{values.plannedReserve} STRK</dd>
   </dl>;
+}
+
+function compactDeadline(deadline: string): string {
+  const parsed = new Date(deadline);
+  if (Number.isNaN(parsed.getTime())) return 'Unavailable';
+  return `${parsed.toISOString().slice(11, 16)} UTC`;
 }
 
 function parseSourceAmount(input: string, decimals: number): bigint | null {

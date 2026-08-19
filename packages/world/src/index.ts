@@ -18,7 +18,7 @@ export {
   tileToWorld,
   worldToTile,
 } from './map/street.js';
-export type { DistrictMap, DoorZone, TileKind, TileSpec } from './map/street.js';
+export type { BuildingExteriorLabel, DistrictMap, DoorZone, TileKind, TileSpec } from './map/street.js';
 
 // Tiled object-layer property adapter. The seam a real Tiled export uses; see
 // the trap it documents (object-layer props arrive as a raw array, unflattened).

@@ -51,6 +51,23 @@ export interface DoorZone {
   locked: boolean;
 }
 
+/**
+ * A non-interactive sign painted above a street facade.
+ *
+ * This is deliberately presentation-only. The text is authored world data,
+ * not a wallet route or lobby field, and the coordinates are tile-space so a
+ * renderer can place the sign without knowing anything about the building's
+ * interaction state.
+ */
+export interface BuildingExteriorLabel {
+  building: BuildingId;
+  /** Placeholder name/function shown to help players read the test district. */
+  text: string;
+  /** Tile-space anchor, normally the centre of the building wall. */
+  x: number;
+  y: number;
+}
+
 export interface DistrictMap {
   name: string;
   width: number;
@@ -58,6 +75,7 @@ export interface DistrictMap {
   /** Row-major, `height` rows of `width` tile kinds. */
   tiles: TileKind[][];
   doors: DoorZone[];
+  exteriorLabels: BuildingExteriorLabel[];
   spawn: { x: number; y: number };
 }
 
@@ -98,18 +116,19 @@ export function createStreetMap(): DistrictMap {
   fill(tiles, 0, 17, width, 2, 'pavement');
 
   // Five buildings along the north side, evenly spaced.
-  const plan: Array<{ building: BuildingId; x: number; locked: boolean }> = [
-    { building: 'bank', x: 3, locked: false },
-    { building: 'exchange', x: 12, locked: false },
-    { building: 'post-office', x: 21, locked: false },
-    { building: 'bridge', x: 30, locked: false },
-    { building: 'vault', x: 39, locked: true },
+  const plan: Array<{ building: BuildingId; x: number; locked: boolean; label: string }> = [
+    { building: 'bank', x: 3, locked: false, label: 'BANK\nSHIELD / UNSHIELD' },
+    { building: 'exchange', x: 12, locked: false, label: 'EXCHANGE\nSWAP' },
+    { building: 'post-office', x: 21, locked: false, label: 'POST OFFICE\nTRANSFER' },
+    { building: 'bridge', x: 30, locked: false, label: 'BRIDGE\nDEPOSIT' },
+    { building: 'vault', x: 39, locked: true, label: 'VAULT\nCOMING SOON' },
   ];
 
   const buildingWidth = 7;
   const buildingHeight = 6;
   const buildingTop = 5;
   const facadeRow = buildingTop + buildingHeight - 1;
+  const exteriorLabels: BuildingExteriorLabel[] = [];
 
   // Doors are authored as a Tiled-shaped OBJECT LAYER, not as hardcoded zones:
   // each object carries a raw `[{ name, type, value }]` property array with the
@@ -119,7 +138,7 @@ export function createStreetMap(): DistrictMap {
   // the data source — the parsing path downstream is already the one under test.
   const doorObjects: TiledObject[] = [];
 
-  for (const { building, x, locked } of plan) {
+  for (const { building, x, locked, label } of plan) {
     fill(tiles, x, buildingTop, buildingWidth, buildingHeight - 1, 'wall');
     fill(tiles, x, facadeRow, buildingWidth, 1, 'facade');
 
@@ -148,6 +167,13 @@ export function createStreetMap(): DistrictMap {
 
     // A pavement approach so the door is reachable from the road.
     fill(tiles, doorX, facadeRow + 1, 2, buildingTop + buildingHeight - 4, 'pavement');
+
+    exteriorLabels.push({
+      building,
+      text: label,
+      x: x + buildingWidth / 2,
+      y: buildingTop + 2,
+    });
   }
 
   return {
@@ -156,6 +182,7 @@ export function createStreetMap(): DistrictMap {
     height,
     tiles,
     doors: objectLayerToDoors(doorObjects),
+    exteriorLabels,
     spawn: { x: 24, y: 15 },
   };
 }

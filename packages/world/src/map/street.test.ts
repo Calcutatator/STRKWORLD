@@ -80,6 +80,27 @@ describe('every building is present and reachable', () => {
       }
     }
   });
+
+  it('gives every facade a readable placeholder name and function', () => {
+    expect(map.exteriorLabels).toEqual([
+      { building: 'bank', text: 'BANK\nSHIELD / UNSHIELD', x: 6.5, y: 7 },
+      { building: 'exchange', text: 'EXCHANGE\nSWAP', x: 15.5, y: 7 },
+      { building: 'post-office', text: 'POST OFFICE\nTRANSFER', x: 24.5, y: 7 },
+      { building: 'bridge', text: 'BRIDGE\nDEPOSIT', x: 33.5, y: 7 },
+      { building: 'vault', text: 'VAULT\nCOMING SOON', x: 42.5, y: 7 },
+    ]);
+  });
+
+  it('anchors each exterior label to the corresponding building door', () => {
+    for (const label of map.exteriorLabels) {
+      const door = map.doors.find((candidate) => candidate.building === label.building);
+      expect(door, label.building).toBeDefined();
+      // The sign is centred on the facade (not the narrower door opening).
+      expect(label.x).toBeGreaterThan(door!.x);
+      expect(label.x).toBeLessThan(door!.x + 5);
+      expect(label.y).toBeLessThan(door!.y);
+    }
+  });
 });
 
 describe('door lookup', () => {
