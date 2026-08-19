@@ -13,6 +13,7 @@ import {
 import type { TiledObject } from '../tiled-object-props.js';
 
 const map = createStreetMap();
+const DOOR_MAP_BOUNDS = { width: 48, height: 28 } as const;
 
 describe('the street is walkable', () => {
   it('spawns the player on a non-solid tile', () => {
@@ -145,7 +146,7 @@ describe('doors come from a Tiled object layer, not hardcoded coordinates', () =
         properties: [{ name: 'building', type: 'string', value: 'bank' }],
       },
     ];
-    expect(objectLayerToDoors(objects)).toEqual([
+    expect(objectLayerToDoors(objects, DOOR_MAP_BOUNDS)).toEqual([
       { building: 'bank', x: 4, y: 10, width: 2, height: 1, locked: false },
     ]);
   });
@@ -163,7 +164,7 @@ describe('doors come from a Tiled object layer, not hardcoded coordinates', () =
         ],
       },
     ];
-    expect(objectLayerToDoors(objects)[0]?.locked).toBe(true);
+    expect(objectLayerToDoors(objects, DOOR_MAP_BOUNDS)[0]?.locked).toBe(true);
   });
 
   it('fails closed: an object naming an unknown building is not a door', () => {
@@ -173,7 +174,67 @@ describe('doors come from a Tiled object layer, not hardcoded coordinates', () =
       ] },
       { x: 0, y: 0, width: TILE_SIZE, height: TILE_SIZE, properties: [] },
     ];
-    expect(objectLayerToDoors(objects)).toEqual([]);
+    expect(objectLayerToDoors(objects, DOOR_MAP_BOUNDS)).toEqual([]);
+  });
+
+  it('skips malformed or off-grid rectangle geometry instead of rounding it into a door', () => {
+    const valid = tiledDoor();
+    const malformed = [
+      tiledDoor({ x: Number.NaN }),
+      tiledDoor({ y: Number.POSITIVE_INFINITY }),
+      tiledDoor({ width: Number.NEGATIVE_INFINITY }),
+      tiledDoor({ height: Number.NaN }),
+      tiledDoor({ x: -TILE_SIZE }),
+      tiledDoor({ y: -TILE_SIZE }),
+      tiledDoor({ width: 0 }),
+      tiledDoor({ height: 0 }),
+      tiledDoor({ width: -TILE_SIZE }),
+      tiledDoor({ height: -TILE_SIZE }),
+      tiledDoor({ x: TILE_SIZE + 1 }),
+      tiledDoor({ y: TILE_SIZE + 1 }),
+      tiledDoor({ width: TILE_SIZE + 1 }),
+      tiledDoor({ height: TILE_SIZE + 1 }),
+    ];
+
+    expect(objectLayerToDoors([valid, ...malformed], DOOR_MAP_BOUNDS)).toEqual([
+      { building: 'bank', x: 1, y: 2, width: 2, height: 1, locked: false },
+    ]);
+  });
+
+  it('skips unsafe tile quotients and rectangles outside the explicit map bounds', () => {
+    const valid = tiledDoor();
+    const invalid = [
+      tiledDoor({ x: 2 ** 60 }),
+      tiledDoor({ x: DOOR_MAP_BOUNDS.width * TILE_SIZE }),
+      tiledDoor({ y: DOOR_MAP_BOUNDS.height * TILE_SIZE }),
+      tiledDoor({
+        x: (DOOR_MAP_BOUNDS.width - 1) * TILE_SIZE,
+        width: 2 * TILE_SIZE,
+      }),
+      tiledDoor({
+        y: (DOOR_MAP_BOUNDS.height - 1) * TILE_SIZE,
+        height: 2 * TILE_SIZE,
+      }),
+    ];
+
+    expect(objectLayerToDoors([valid, ...invalid], DOOR_MAP_BOUNDS)).toEqual([
+      { building: 'bank', x: 1, y: 2, width: 2, height: 1, locked: false },
+    ]);
+  });
+
+  it.each([
+    ['zero width', { width: 0, height: DOOR_MAP_BOUNDS.height }],
+    ['negative width', { width: -1, height: DOOR_MAP_BOUNDS.height }],
+    ['fractional width', { width: 1.5, height: DOOR_MAP_BOUNDS.height }],
+    ['non-finite width', { width: Number.POSITIVE_INFINITY, height: DOOR_MAP_BOUNDS.height }],
+    ['unsafe width', { width: Number.MAX_SAFE_INTEGER + 1, height: DOOR_MAP_BOUNDS.height }],
+    ['zero height', { width: DOOR_MAP_BOUNDS.width, height: 0 }],
+    ['negative height', { width: DOOR_MAP_BOUNDS.width, height: -1 }],
+    ['fractional height', { width: DOOR_MAP_BOUNDS.width, height: 1.5 }],
+    ['non-finite height', { width: DOOR_MAP_BOUNDS.width, height: Number.NaN }],
+    ['unsafe height', { width: DOOR_MAP_BOUNDS.width, height: Number.MAX_SAFE_INTEGER + 1 }],
+  ])('fails closed for %s map bounds', (_label, bounds) => {
+    expect(objectLayerToDoors([tiledDoor()], bounds)).toEqual([]);
   });
 
   it('produces exactly one door per known building for the procedural map', () => {
@@ -204,6 +265,17 @@ describe('doors come from a Tiled object layer, not hardcoded coordinates', () =
     }
   });
 });
+
+function tiledDoor(overrides: Partial<TiledObject> = {}): TiledObject {
+  return {
+    x: TILE_SIZE,
+    y: 2 * TILE_SIZE,
+    width: 2 * TILE_SIZE,
+    height: TILE_SIZE,
+    properties: [{ name: 'building', type: 'string', value: 'bank' }],
+    ...overrides,
+  };
+}
 
 describe('coordinate conversion', () => {
   it('round-trips a tile through world space', () => {

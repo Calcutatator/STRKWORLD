@@ -195,7 +195,7 @@ export function createStreetMap(): DistrictMap {
     width,
     height,
     tiles,
-    doors: objectLayerToDoors(doorObjects),
+    doors: objectLayerToDoors(doorObjects, { width, height }),
     exteriorLabels,
     avatarStudioEntrance: { x: 23, y: height - 1, width: 2, height: 1 },
     spawn: { x: 24, y: 15 },
@@ -212,28 +212,66 @@ export function createStreetMap(): DistrictMap {
  * `building` id and optional `locked` flag, and converts Tiled's pixel rects to
  * tile coordinates.
  *
- * Fails CLOSED: an object with no `building` property, or one naming a building
- * the shared registry does not know, is not a door and is skipped — a
- * mistyped property yields no door rather than a door to nowhere.
+ * Fails CLOSED: an object with no `building` property, one naming a building
+ * the shared registry does not know, malformed/off-grid rectangle geometry,
+ * or geometry outside the explicit map bounds is not a door and is skipped. A
+ * mistyped property or pixel coordinate yields no door rather than a rounded
+ * trigger somewhere else.
  */
-export function objectLayerToDoors(objects: TiledObject[]): DoorZone[] {
+export function objectLayerToDoors(
+  objects: TiledObject[],
+  bounds: Pick<DistrictMap, 'width' | 'height'>,
+): DoorZone[] {
   const doors: DoorZone[] = [];
+  if (!isValidMapBounds(bounds)) return doors;
+
   for (const obj of objects) {
     const props = flattenProperties(obj.properties);
     const building = props['building'];
     if (typeof building !== 'string' || !BUILDINGS.includes(building as BuildingId)) {
       continue;
     }
+    const geometry = normalizeDoorGeometry(obj);
+    if (geometry === null) continue;
+    if (
+      geometry.x > bounds.width - geometry.width ||
+      geometry.y > bounds.height - geometry.height
+    ) {
+      continue;
+    }
     doors.push({
       building: building as BuildingId,
-      x: Math.round(obj.x / TILE_SIZE),
-      y: Math.round(obj.y / TILE_SIZE),
-      width: Math.round(obj.width / TILE_SIZE),
-      height: Math.round(obj.height / TILE_SIZE),
+      ...geometry,
       locked: props['locked'] === true,
     });
   }
   return doors;
+}
+
+function isValidMapBounds(bounds: Pick<DistrictMap, 'width' | 'height'>): boolean {
+  return (
+    Number.isSafeInteger(bounds.width) &&
+    Number.isSafeInteger(bounds.height) &&
+    bounds.width > 0 &&
+    bounds.height > 0
+  );
+}
+
+function normalizeDoorGeometry(
+  object: Pick<TiledObject, 'x' | 'y' | 'width' | 'height'>,
+): Pick<DoorZone, 'x' | 'y' | 'width' | 'height'> | null {
+  const geometry = {
+    x: object.x / TILE_SIZE,
+    y: object.y / TILE_SIZE,
+    width: object.width / TILE_SIZE,
+    height: object.height / TILE_SIZE,
+  };
+  const values = [geometry.x, geometry.y, geometry.width, geometry.height];
+  if (!values.every(Number.isSafeInteger)) return null;
+  if (geometry.x < 0 || geometry.y < 0 || geometry.width <= 0 || geometry.height <= 0) {
+    return null;
+  }
+  return geometry;
 }
 
 /** Is this tile coordinate blocked? Out of bounds counts as blocked. */

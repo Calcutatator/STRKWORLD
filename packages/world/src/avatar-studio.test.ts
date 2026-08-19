@@ -7,6 +7,8 @@ import {
   createAvatarStudioPresentation,
   createAvatarStudioController,
   isAvatarStudioSolidAt,
+  type AvatarStudioDefinition,
+  type AvatarStudioFigure,
   validateAvatarStudioDefinition,
 } from './avatar-studio.js';
 import { avatarPlaceholderTint } from './avatar-state.js';
@@ -35,6 +37,77 @@ describe('hidden Avatar Studio', () => {
     expect(AVATAR_STUDIO_DEFINITION).not.toHaveProperty('building');
     expect(AVATAR_STUDIO_DEFINITION).not.toHaveProperty('stations');
     expect(() => validateAvatarStudioDefinition(AVATAR_STUDIO_DEFINITION)).not.toThrow();
+  });
+
+  it('rejects overlapping selector rectangles that would make a later figure unreachable', () => {
+    const figures: AvatarStudioFigure[] = AVATAR_STUDIO_DEFINITION.figures.map(
+      (figure) => ({ ...figure }),
+    );
+    figures[0] = { ...figures[0]!, width: 2 };
+    figures[1] = { ...figures[1]!, x: 3, y: 3 };
+
+    expect(() => validateAvatarStudioDefinition(authoredDefinition({ figures }))).toThrow(
+      /figures must not overlap/i,
+    );
+  });
+
+  it('requires exactly eight well-formed in-bounds selector rectangles', () => {
+    expect(() =>
+      validateAvatarStudioDefinition(authoredDefinition({
+        figures: AVATAR_STUDIO_DEFINITION.figures.slice(0, 7),
+      })),
+    ).toThrow(/exactly eight figures/i);
+
+    for (const malformed of [
+      { x: 2.5 },
+      { width: 0 },
+      { x: AVATAR_STUDIO_DEFINITION.width },
+    ]) {
+      const figures: AvatarStudioFigure[] = AVATAR_STUDIO_DEFINITION.figures.map(
+        (figure) => ({ ...figure }),
+      );
+      figures[0] = { ...figures[0]!, ...malformed };
+      expect(() => validateAvatarStudioDefinition(authoredDefinition({ figures }))).toThrow(
+        /figures must be in-bounds and off the exit/i,
+      );
+    }
+  });
+
+  it.each([
+    ['left', { x: 0, y: 3 }],
+    ['right', { x: AVATAR_STUDIO_DEFINITION.width - 1, y: 3 }],
+    ['top', { x: 2, y: 0 }],
+    ['bottom', { x: 2, y: AVATAR_STUDIO_DEFINITION.height - 1 }],
+  ])('rejects a selector on the solid %s border', (_border, position) => {
+    const figures: AvatarStudioFigure[] = AVATAR_STUDIO_DEFINITION.figures.map(
+      (figure) => ({ ...figure }),
+    );
+    figures[0] = { ...figures[0]!, ...position };
+
+    expect(() => validateAvatarStudioDefinition(authoredDefinition({ figures }))).toThrow(
+      /strictly inside the walkable interior/i,
+    );
+  });
+
+  it.each([
+    ['a fractional coordinate', { x: 9.5, y: 9 }],
+    ['the solid room border', { x: 0, y: 9 }],
+    ['the exit opening', { x: 8, y: 11 }],
+    ['a selector rectangle', { x: 2, y: 3 }],
+  ])('rejects a spawn on %s', (_label, spawn) => {
+    expect(() => validateAvatarStudioDefinition(authoredDefinition({ spawn }))).toThrow(
+      /spawn must be a walkable interior tile off the exit and figures/i,
+    );
+  });
+
+  it.each([
+    ['above the bottom border', { x: 8, y: 10, width: 2, height: 1 }],
+    ['only one tile wide', { x: 8, y: 11, width: 1, height: 1 }],
+    ['two tiles deep', { x: 8, y: 10, width: 2, height: 2 }],
+  ])('rejects an exit %s', (_label, exit) => {
+    expect(() => validateAvatarStudioDefinition(authoredDefinition({ exit }))).toThrow(
+      /exit must be a two-tile bottom-border opening/i,
+    );
   });
 
   it('selects a cosy figure on contact and exits through the bottom opening', () => {
@@ -278,3 +351,13 @@ describe('hidden Avatar Studio', () => {
     expect(lifecycle.figures.size).toBe(0);
   });
 });
+
+function authoredDefinition(
+  overrides: Partial<AvatarStudioDefinition>,
+): AvatarStudioDefinition {
+  return {
+    ...AVATAR_STUDIO_DEFINITION,
+    figures: AVATAR_STUDIO_DEFINITION.figures.map((figure) => ({ ...figure })),
+    ...overrides,
+  };
+}

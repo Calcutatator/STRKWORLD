@@ -156,27 +156,59 @@ export function validateAvatarStudioDefinition(definition: AvatarStudioDefinitio
   if (definition.width !== AVATAR_STUDIO_WIDTH || definition.height !== AVATAR_STUDIO_HEIGHT) {
     throw new Error('Avatar Studio must use the fixed 18x12 envelope');
   }
-  if (!inside(definition, definition.spawn.x, definition.spawn.y)) {
-    throw new Error('Avatar Studio spawn must be inside the room');
-  }
-  if (!validRect(definition.exit) || !insideRect(definition, definition.exit)) {
-    throw new Error('Avatar Studio exit must be inside the room');
+  if (
+    !validRect(definition.exit) ||
+    !insideRect(definition, definition.exit) ||
+    definition.exit.width !== 2 ||
+    definition.exit.height !== 1 ||
+    definition.exit.y !== definition.height - 1
+  ) {
+    throw new Error('Avatar Studio exit must be a two-tile bottom-border opening');
   }
   if (definition.figures.length !== 8) {
     throw new Error('Avatar Studio must contain exactly eight figures');
   }
   const seen = new Set<number>();
-  for (const figure of definition.figures) {
+  for (let index = 0; index < definition.figures.length; index += 1) {
+    const figure = definition.figures[index]!;
     if (!Number.isInteger(figure.figure) || figure.figure < 1 || figure.figure > 8) {
       throw new Error('Avatar Studio figures must be numbered from 1 to 8');
     }
     if (seen.has(figure.figure) || figure.sprite !== avatarSpriteForFigure(figure.figure)) {
       throw new Error('Avatar Studio figures must have unique cosy states');
     }
-    if (!validRect(figure) || !insideRect(definition, figure) || overlaps(figure, definition.exit)) {
-      throw new Error('Avatar Studio figures must be in-bounds and off the exit');
+    if (
+      !validRect(figure) ||
+      !insideRect(definition, figure) ||
+      !insideInteriorRect(definition, figure) ||
+      overlaps(figure, definition.exit)
+    ) {
+      throw new Error(
+        'Avatar Studio figures must be in-bounds and off the exit; selectors must be strictly inside the walkable interior',
+      );
+    }
+    for (let previous = 0; previous < index; previous += 1) {
+      if (overlaps(figure, definition.figures[previous]!)) {
+        throw new Error('Avatar Studio figures must not overlap');
+      }
     }
     seen.add(figure.figure);
+  }
+  if (
+    !Number.isInteger(definition.spawn.x) ||
+    !Number.isInteger(definition.spawn.y) ||
+    definition.spawn.x <= 0 ||
+    definition.spawn.y <= 0 ||
+    definition.spawn.x >= definition.width - 1 ||
+    definition.spawn.y >= definition.height - 1 ||
+    insideRectAt(definition.exit, definition.spawn.x, definition.spawn.y) ||
+    definition.figures.some((figure) =>
+      insideRectAt(figure, definition.spawn.x, definition.spawn.y),
+    )
+  ) {
+    throw new Error(
+      'Avatar Studio spawn must be a walkable interior tile off the exit and figures',
+    );
   }
 }
 
@@ -299,6 +331,18 @@ function validRect(rect: AvatarStudioRect): boolean {
 
 function insideRect(definition: AvatarStudioDefinition, rect: AvatarStudioRect): boolean {
   return rect.x >= 0 && rect.y >= 0 && rect.x + rect.width <= definition.width && rect.y + rect.height <= definition.height;
+}
+
+function insideInteriorRect(
+  definition: AvatarStudioDefinition,
+  rect: AvatarStudioRect,
+): boolean {
+  return (
+    rect.x > 0 &&
+    rect.y > 0 &&
+    rect.x + rect.width < definition.width &&
+    rect.y + rect.height < definition.height
+  );
 }
 
 function insideRectAt(rect: AvatarStudioRect, x: number, y: number): boolean {

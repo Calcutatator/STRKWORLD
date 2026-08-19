@@ -29,6 +29,39 @@ describe('visit controller', () => {
     });
   });
 
+  it('keeps Avatar Studio events outside the financial visit lifecycle', () => {
+    const world = createEventBus<WorldEvents>();
+    const shell = createEventBus<ShellEvents>();
+    const stations = vi.fn();
+    const owners = vi.fn();
+    shell.on('world:stations', stations);
+    shell.on('world:control-owner', owners);
+    const controller = createVisitController(shell);
+    controller.listen(world);
+    const emitStudioVisit = () => {
+      world.emit('avatar-studio:entered', {});
+      world.emit('avatar:selected', { sprite: 'avatar-12' });
+      world.emit('avatar-studio:exited', {});
+    };
+
+    const outside = controller.store.getState();
+    emitStudioVisit();
+    expect(controller.store.getState()).toBe(outside);
+    expect(stations).not.toHaveBeenCalled();
+    expect(owners).not.toHaveBeenCalled();
+
+    world.emit('building:entered', { building: 'bank' });
+    world.emit('station:activated', { building: 'bank', station: 'bank:shielding' });
+    const financialVisit = controller.store.getState();
+    const stationCalls = stations.mock.calls.length;
+    const ownerCalls = owners.mock.calls.length;
+
+    emitStudioVisit();
+    expect(controller.store.getState()).toBe(financialVisit);
+    expect(stations).toHaveBeenCalledTimes(stationCalls);
+    expect(owners).toHaveBeenCalledTimes(ownerCalls);
+  });
+
   it('opens and closes Menu Mode without ending the visit', () => {
     const world = createEventBus<WorldEvents>();
     const shell = createEventBus<ShellEvents>();
