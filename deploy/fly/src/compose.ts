@@ -9,6 +9,7 @@ export interface FlyCompositionOptions {
   readonly publicPort: number;
   readonly backendPort: number;
   readonly lobbyPort: number;
+  readonly publicOrigin: string;
   readonly environment?: NodeJS.ProcessEnv;
   readonly readinessTimeoutMs?: number;
   readonly shutdownTimeoutMs?: number;
@@ -32,11 +33,21 @@ export async function startFlyComposition(options: FlyCompositionOptions): Promi
   ];
   let stopping = false;
   let fatalReported = false;
+  let startup = true;
+  let startupChildDied = false;
+  let edge: Server | undefined;
+  let shutdownPromise: Promise<void> | undefined;
+  let shutdown: (() => Promise<void>) | undefined;
   const onFatal = options.onFatal ?? (() => undefined);
   const reportFatal = () => {
     if (stopping || fatalReported) return;
     fatalReported = true;
-    onFatal(new Error('A private service exited.'));
+    const error = new Error('A private service exited.');
+    if (startup) {
+      startupChildDied = true;
+      return;
+    }
+    void shutdown?.().finally(() => onFatal(error));
   };
   children.forEach((child) => {
     child.once('exit', reportFatal);
@@ -48,25 +59,32 @@ export async function startFlyComposition(options: FlyCompositionOptions): Promi
       waitForChildReady(children[0], options.readinessTimeoutMs),
       waitForChildReady(children[1], options.readinessTimeoutMs),
     ]);
-    const edge = createEdgeServer({
+    if (startupChildDied) throw new Error('A private service exited before the public edge was ready.');
+    edge = createEdgeServer({
       staticRoot: options.staticRoot,
       backendPort: options.backendPort,
       lobbyPort: options.lobbyPort,
+      publicOrigin: options.publicOrigin,
     });
     const address = await listenPublic(edge, options.publicPort);
-    let shutdownPromise: Promise<void> | undefined;
-    const shutdown = (): Promise<void> => {
+    shutdown = (): Promise<void> => {
       if (shutdownPromise) return shutdownPromise;
       shutdownPromise = (async () => {
         stopping = true;
-        await closeEdgeServer(edge, options.shutdownTimeoutMs ?? 5_000);
+        if (edge) await closeEdgeServer(edge, options.shutdownTimeoutMs ?? 5_000);
         await stopChildren(children, options.shutdownTimeoutMs ?? 5_000);
       })();
       return shutdownPromise;
     };
+    // Give an exit that raced the readiness IPC/public listen a turn to arrive
+    // before ownership of the composition is handed to the caller.
+    await new Promise<void>((resolve) => setImmediate(resolve));
+    if (startupChildDied) throw new Error('A private service exited before the public edge was ready.');
+    startup = false;
     return { address, shutdown };
   } catch (error) {
     stopping = true;
+    if (edge) await closeEdgeServer(edge, options.shutdownTimeoutMs ?? 5_000).catch(() => undefined);
     await stopChildren(children, options.shutdownTimeoutMs ?? 5_000);
     throw error;
   }

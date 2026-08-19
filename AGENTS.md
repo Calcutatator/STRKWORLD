@@ -250,6 +250,21 @@ without a verification method is a rumour.
 
 Format: `### YYYY-MM-DD — short title` then what, why it matters, how verified.
 
+### 2026-08-19 — Fly runtime must replace npm workspace symlinks
+
+The Fly image's production lobby is compiled JavaScript, but `npm ci` installs
+`@strkworld/shared` as a workspace symlink to the source tree. Copying only
+`node_modules` into the final image leaves that link pointing at a path that is
+not present, so package resolution is not proven by a successful build stage.
+The Fly build now emits `packages/shared` and replaces that runtime link with a
+small package manifest pointing at the compiled `src/index.js`. Docker was not
+available for an image boot test; the Dockerfile layout is covered by a static
+regression test, and the TypeScript emit was run locally.
+
+*Verified:* read the npm workspace install layout and emitted Fly tree, then
+ran `npx tsc -p deploy/fly/tsconfig.build.json --noEmit` plus the static Fly
+tests. No image, secret or deployment was created.
+
 ### 2026-08-19 — RPC assurance needs credentials; the fixed backend seam is already fail-closed
 
 The D-046 Alchemy choice cannot be meaningfully probed without an account,

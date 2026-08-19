@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it } from 'vitest';
-import { mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { isLoopbackHostname, validateLobbyBuildValue, validateStaticArtifact } from '../check-static.mjs';
@@ -10,6 +10,13 @@ afterEach(async () => {
 });
 
 describe('Fly static build gate', () => {
+  it('packages the compiled shared workspace into the runtime image', async () => {
+    const dockerfile = await readFile(new URL('../Dockerfile', import.meta.url), 'utf8');
+    expect(dockerfile).toContain('COPY --from=build --chown=node:node /repo/.fly-build/packages/shared ./node_modules/@strkworld/shared');
+    expect(dockerfile).toContain('"main":"./src/index.js"');
+    expect(dockerfile).toContain('RUN rm -f node_modules/@strkworld/shared');
+  });
+
   it('accepts only a real wss origin', () => {
     const rejected = [
       'https://example.com',

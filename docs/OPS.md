@@ -11,9 +11,9 @@ Three deployables:
 
 | | What | Built by | Runs as |
 |---|---|---|---|
-| **web** | `apps/web` — the static shell | `npm run build --workspace=@strkworld/web` | static files served by the Fly edge/composition process `[HOST]` |
-| **backend** | `apps/backend` — paymaster custody, RPC proxy, submission queue | `deploy/backend/Dockerfile` | one container/Machine `[HOST]` |
-| **lobby** | `packages/lobby` — privacy-minimal Colyseus presence | production packaging not built yet | one Node process behind the same app's `wss://` route `[HOST]` |
+| **web** | `apps/web` — the static shell | `deploy/fly/Dockerfile` (Vite workspace build) | static files served by the Fly edge/composition process `[HOST]` |
+| **backend** | `apps/backend` — paymaster custody, RPC proxy, submission queue | `deploy/fly/Dockerfile` (standalone `deploy/backend/Dockerfile` remains available) | one private child in the Fly Machine `[HOST]` |
+| **lobby** | `packages/lobby` — privacy-minimal Colyseus presence | `deploy/fly/Dockerfile` + `deploy/fly/tsconfig.build.json` | one private Node child behind the same app's `wss://` route `[HOST]` |
 
 The web and backend must share an origin. D-045 selects a single Fly app with
 an edge/composition process routing `/api` and `wss` while preserving this
@@ -30,7 +30,8 @@ Verified on this branch with Node 25.9.0 / npm 11.12.1.
 |---|---|---|
 | `npm run build` | delegates to workspaces via `--if-present` | only `@strkworld/web` has a build script |
 | `npm run build --workspace=@strkworld/web` | `apps/web/dist/` | `dist/index.html` + `dist/assets/index-<hash>.js` |
-| `npx tsc -p deploy/backend/tsconfig.build.json` | `.docker-build/apps/backend/src/*.js` | container-only; gitignored |
+| `npx tsc -p deploy/backend/tsconfig.build.json` | `.docker-build/apps/backend/src/*.js` | backend image only; container-only; gitignored |
+| `npx tsc -p deploy/fly/tsconfig.build.json` | `.fly-build/{deploy/fly,apps/backend,packages/{lobby,shared}}/**/*.js` | Fly composition image; container-only; gitignored |
 
 `apps/web/dist/` is what the static host serves. Content-hashed asset
 filenames mean assets can be cached immutably and `index.html` must not be.
@@ -42,12 +43,13 @@ The container compiles its own JavaScript via
 `deploy/backend/tsconfig.build.json` rather than adding a build script to
 another lane's package.
 
-**`packages/lobby` is implemented but not production-packaged.** Its local
-`dev`/`start` script runs the TypeScript entry with `tsx`; that is sufficient
-for verified local presence, not a production deployment artifact. Choose its
-host and add a minimal Node build/container only after the domain fixes the
-`wss://` endpoint and allowed web origin. Run exactly one Colyseus server per
-process because its matchmaker is process-global.
+**`packages/lobby` is production-composed but not host-verified.** The Fly
+Dockerfile emits the lobby and shared workspace packages as JavaScript and
+starts the lobby as a private child of the edge. The edge forwards only an
+explicit safe matchmaking header set, strips credentials, and requires the
+configured `FLY_PUBLIC_ORIGIN` on every WebSocket upgrade. Docker, Fly TLS,
+access-log behavior and a live `wss://` session remain host gates. Run exactly
+one Colyseus server per process because its matchmaker is process-global.
 
 ---
 
@@ -365,11 +367,11 @@ convenience: it is a Backend-lane change with a privacy review.
 Stated plainly so nobody reads more assurance into this document than it earns:
 
 - **`docker build` has not been run.** Docker is unavailable in the environment
-  this branch was authored in. The TypeScript emit step the image depends on
-  *was* run and verified (`npx tsc -p deploy/backend/tsconfig.build.json`
-  compiles cleanly, and the emitted ESM loads under Node with all 17 exports
-  intact). The Dockerfile itself needs one `docker build` on a machine that has
-  Docker before it is trusted.
+  this branch was authored in. The backend and Fly TypeScript emit steps the
+  images depend on *were* run and verified; static tests assert that the Fly
+  image replaces npm's workspace symlink with the compiled shared package.
+  Both Dockerfiles still need a real `docker build` on a machine with Docker,
+  followed by a staging boot test, before either image is trusted.
 - **No end-to-end deploy has happened**, because no host exists.
 - **`apps/web/index.html`** was added by this lane because a production build
   needs an entry module and there was none. It is scaffolding; the Shell lane
@@ -394,10 +396,12 @@ verified. Trade-off notes are neutral and name no vendor.
    Needed before the browser RPC key can be domain-allowlisted (item 6), before
    `VITE_LOBBY_URL` can be set, and before any TLS or origin decision.
 
-3. **Fly edge/composition implementation.**
-   The selected topology must serve `apps/web/dist/` and route `/api` and the
-   lobby WebSocket through one origin. The edge must be audited for access
-   logging and isolation headers before traffic.
+3. **Fly edge/composition host verification.**
+   The selected topology is implemented in `deploy/fly`; its image serves
+   `apps/web/dist/` and routes `/api`, credential-free matchmaking HTTP, and
+   origin-gated lobby WebSockets through one origin. Staging must verify Fly
+   access logging, TLS, `FLY_PUBLIC_ORIGIN`, exactly-one-Machine overlap and
+   isolation headers before traffic.
 
 4. **Secret-custody mechanism.**
    Three secrets need somewhere to live: `AVNU_PAYMASTER_API_KEY`,
@@ -435,9 +439,9 @@ verified. Trade-off notes are neutral and name no vendor.
    it is not Alchemy assurance. D-014's position is that anything linking player IP to intended
    recipient or timing goes through the backend proxy.
 
-Related open item, not a decision: the implemented standalone lobby server has
-no production host yet. `packages/lobby` exposes the privacy-minimal Colyseus
-server and the web composition consumes `VITE_LOBBY_URL`; local development is
-verified on `ws://localhost:2567`. Production still needs a TLS-capable host,
-an explicit browser-origin allowlist, proxy access-log review and a `wss://`
-endpoint built into the web bundle after the domain is chosen.
+Related open item, not a decision: no production host or live deploy exists
+yet. `packages/lobby` exposes the privacy-minimal Colyseus server and the Fly
+composition consumes `VITE_LOBBY_URL`; local development is verified on
+`ws://localhost:2567`. Production still needs a TLS-capable Fly app, the
+runtime `FLY_PUBLIC_ORIGIN`/`LOBBY_ALLOWED_ORIGINS` values, proxy access-log
+review and a live `wss://` session after the domain is chosen.

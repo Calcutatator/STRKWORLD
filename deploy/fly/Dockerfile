@@ -49,6 +49,13 @@ ENV PORT=8080
 COPY --from=runtime-deps --chown=node:node /repo/node_modules ./node_modules
 COPY --from=build --chown=node:node /repo/.fly-build ./build
 COPY --from=build --chown=node:node /repo/apps/web/dist ./web-dist
+# npm workspaces install @strkworld/shared as a symlink to the source tree,
+# which is absent from this minimal runtime image. Replace that link with the
+# compiled, self-contained package so Node can resolve the production lobby's
+# workspace import in the final image.
+RUN rm -f node_modules/@strkworld/shared
+COPY --from=build --chown=node:node /repo/.fly-build/packages/shared ./node_modules/@strkworld/shared
+RUN printf '{"type":"module","main":"./src/index.js","exports":{".":"./src/index.js"}}\n' > node_modules/@strkworld/shared/package.json
 RUN printf '{"type":"module"}\n' > package.json
 
 USER node

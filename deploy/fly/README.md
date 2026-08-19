@@ -21,6 +21,7 @@ fly secrets set -a <chosen-app-name> \
   STARKNET_RPC_URL=... \
   AVNU_PAYMASTER_API_KEY=... \
   FEE_AUTHORIZATION_SECRET=... \
+  FLY_PUBLIC_ORIGIN=https://<real-domain> \
   LOBBY_ALLOWED_ORIGINS=https://<real-domain> \
   ...backend route and budget values...
 fly deploy -a <chosen-app-name> -c deploy/fly/fly.toml \
@@ -42,8 +43,9 @@ Manual smoke checks after a staging deployment:
 2. A hashed `/assets/*` response is immutable; `/` and a client-side route are `no-cache`.
 3. `curl -i -X POST https://<domain>/api/v1/rpc/pool-config` reaches the backend with `/api` stripped and no `Access-Control-Allow-Origin` header.
 4. `curl -i -X OPTIONS https://<domain>/matchmake/joinOrCreate/street -H 'Origin: https://<real-domain>'` receives the allowlisted credentialed lobby CORS response; a different origin receives no allow-origin or credentials grant.
-5. Connect two browser sessions to `wss://<domain>/...` and verify mutual avatars. The user owns rendered acceptance; do not put wallet, address, balance, proof or transaction material in this smoke script.
-6. Inspect Fly configuration and logs for exactly one active Machine and no platform access logging that retains client IP, path, timing, request bodies or financial material. Confirm no COOP/COEP headers.
+5. Attempt a WebSocket upgrade with the configured origin, a missing origin and a different origin; only the configured origin may reach the lobby child. Confirm matchmaking HTTP and WebSocket upstreams receive no Cookie, Authorization, Proxy-Authorization or other unlisted credential header.
+6. Connect two browser sessions to `wss://<domain>/...` and verify mutual avatars. The user owns rendered acceptance; do not put wallet, address, balance, proof or transaction material in this smoke script.
+7. Inspect Fly configuration and logs for exactly one active Machine and no platform access logging that retains client IP, path, timing, request bodies or financial material. Confirm no COOP/COEP headers.
 
 `VITE_LOBBY_URL` is a public build value, not a secret. The Docker build fails
 closed unless it is a real `wss://` endpoint and verifies that the

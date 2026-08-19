@@ -24,10 +24,13 @@ async function fakeChild(): Promise<string> {
     const server = createServer((_request, response) => response.end('child'));
     if (process.env.EXIT_BEFORE_READY) setTimeout(() => process.exit(2), Number(process.env.EXIT_BEFORE_READY));
     if (!process.env.EXIT_BEFORE_READY) {
-      setTimeout(() => server.listen(port, '127.0.0.1', () => process.send?.({ type: 'ready' })), delay);
+      setTimeout(() => server.listen(port, '127.0.0.1', () => {
+        process.send?.({ type: 'ready' }, () => {
+          if (process.env.EXIT_AFTER_READY) setTimeout(() => process.exit(2), Number(process.env.EXIT_AFTER_READY));
+        });
+      }), delay);
     }
     process.on('SIGTERM', () => server.close(() => process.exit(0)));
-    if (process.env.EXIT_AFTER_READY) setTimeout(() => process.exit(2), Number(process.env.EXIT_AFTER_READY));
   `);
   return path;
 }
@@ -57,6 +60,7 @@ describe('Fly composition process boundary', () => {
       publicPort,
       backendPort,
       lobbyPort,
+      publicOrigin: 'https://game.example',
       environment: { ...process.env, START_DELAY_MS: '300' },
       readinessTimeoutMs: 2_000,
     });
@@ -82,6 +86,7 @@ describe('Fly composition process boundary', () => {
       publicPort,
       backendPort,
       lobbyPort,
+      publicOrigin: 'https://game.example',
       environment: { ...process.env, EXIT_AFTER_READY: '100' },
       readinessTimeoutMs: 2_000,
       onFatal: resolveFatal,
@@ -101,9 +106,43 @@ describe('Fly composition process boundary', () => {
       publicPort,
       backendPort,
       lobbyPort,
+      publicOrigin: 'https://game.example',
       environment: { ...process.env, EXIT_BEFORE_READY: '20' },
       readinessTimeoutMs: 2_000,
     })).rejects.toThrow('Private service exited before readiness.');
+  });
+
+  it('fails startup when a child dies immediately after reporting ready', async () => {
+    const child = await fakeChild();
+    const { publicPort, backendPort, lobbyPort } = await ports();
+    let composition: FlyComposition | undefined;
+    let startupError: unknown;
+    let resolveFatal: (error: Error) => void = () => undefined;
+    const fatalPromise = new Promise<Error>((resolve) => { resolveFatal = resolve; });
+    try {
+      composition = await startFlyComposition({
+        staticRoot: join(process.cwd(), 'apps/web/dist'),
+        backendEntry: child,
+        lobbyEntry: child,
+        publicPort,
+        backendPort,
+        lobbyPort,
+        publicOrigin: 'https://game.example',
+        environment: { ...process.env, EXIT_AFTER_READY: '0' },
+        readinessTimeoutMs: 2_000,
+        onFatal: resolveFatal,
+      });
+    } catch (error) {
+      startupError = error;
+    }
+    if (composition) {
+      compositions.push(composition);
+      await expect(fatalPromise).resolves.toMatchObject({ message: 'A private service exited.' });
+      await expect(fetch(`http://127.0.0.1:${composition.address.port}/`)).rejects.toThrow();
+    } else {
+      expect(startupError).toBeInstanceOf(Error);
+      await expect(fetch(`http://127.0.0.1:${publicPort}/`)).rejects.toThrow();
+    }
   });
 
   it('does not accept an unrelated listener as child readiness', async () => {
@@ -118,6 +157,7 @@ describe('Fly composition process boundary', () => {
       publicPort,
       backendPort,
       lobbyPort,
+      publicOrigin: 'https://game.example',
       environment: process.env,
       readinessTimeoutMs: 500,
     })).rejects.toThrow('Private service exited before readiness.');

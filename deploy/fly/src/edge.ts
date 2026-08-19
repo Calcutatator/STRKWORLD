@@ -13,6 +13,8 @@ export interface EdgeOptions {
   readonly staticRoot: string;
   readonly backendPort: number;
   readonly lobbyPort: number;
+  /** The only browser origin allowed to upgrade the lobby WebSocket. */
+  readonly publicOrigin: string;
 }
 
 const HOP_BY_HOP = new Set([
@@ -49,7 +51,7 @@ export function createEdgeServer(options: EdgeOptions): Server {
   const server = createServer((request, response) => {
     void handleRequest(request, response, { ...options, staticRoot: root });
   }).on('upgrade', (request, socket, head) => {
-    tunnelUpgrade(request, socket, head, options.lobbyPort);
+    tunnelUpgrade(request, socket, head, options.lobbyPort, options.publicOrigin);
   });
   const sockets = new Set<Socket>();
   activeSockets.set(server, sockets);
@@ -96,7 +98,7 @@ async function handleRequest(
     return proxyHttp(request, response, options.backendPort, stripApiPrefix(request.url ?? '/'));
   }
   if (pathname === '/matchmake' || pathname.startsWith('/matchmake/')) {
-    return proxyHttp(request, response, options.lobbyPort, request.url ?? '/');
+    return handleMatchmake(request, response, options);
   }
   if (method !== 'GET' && method !== 'HEAD') {
     return sendError(response, 405, 'METHOD_NOT_ALLOWED', 'The method is not allowed.');
@@ -112,6 +114,106 @@ function pathnameOf(url: string | undefined): string | null {
 function stripApiPrefix(url: string): string {
   const suffix = url.slice('/api'.length);
   return suffix === '' ? '/' : suffix;
+}
+
+const MATCHMAKE_PATH = '/matchmake/joinOrCreate/street';
+const MAX_MATCHMAKE_BODY_BYTES = 4096;
+const ID_PATTERN = /^[A-Za-z0-9_-]{9}$/;
+const FACING = new Set(['up', 'down', 'left', 'right']);
+const SPRITES = new Set(['avatar-1', 'avatar-2', 'avatar-3', 'avatar-4', 'avatar-5', 'avatar-6', 'avatar-7', 'avatar-8']);
+
+async function handleMatchmake(
+  request: IncomingMessage,
+  response: ServerResponse,
+  options: EdgeOptions,
+): Promise<void> {
+  const target = request.url ?? '/';
+  const queryStart = target.indexOf('?');
+  const pathname = queryStart < 0 ? target : target.slice(0, queryStart);
+  if (pathname !== MATCHMAKE_PATH || queryStart >= 0) {
+    return sendError(response, 404, 'NOT_FOUND', 'The requested resource was not found.');
+  }
+  if (request.method === 'OPTIONS') {
+    return proxyHttp(request, response, options.lobbyPort, MATCHMAKE_PATH, {
+      body: Buffer.alloc(0),
+      headers: lobbyHeaders(request, options.publicOrigin, true),
+    });
+  }
+  if (request.method !== 'POST') {
+    return sendError(response, 405, 'METHOD_NOT_ALLOWED', 'The method is not allowed.');
+  }
+
+  let body: Buffer;
+  try {
+    body = await readLimitedBody(request, MAX_MATCHMAKE_BODY_BYTES);
+  } catch (error) {
+    return sendError(response, error instanceof Error && error.message === 'BODY_TOO_LARGE' ? 413 : 400, 'BAD_REQUEST', 'The request is invalid.');
+  }
+  const placement = parsePlacement(body);
+  if (!placement) return sendError(response, 400, 'BAD_REQUEST', 'The request is invalid.');
+  const sanitized = Buffer.from(JSON.stringify(placement));
+  return proxyHttp(request, response, options.lobbyPort, MATCHMAKE_PATH, {
+    body: sanitized,
+    headers: lobbyHeaders(request, options.publicOrigin, false),
+  });
+}
+
+function lobbyHeaders(request: IncomingMessage, publicOrigin: string, preflight: boolean): Record<string, string> {
+  const headers: Record<string, string> = {};
+  const origin = request.headers.origin;
+  if (typeof origin === 'string' && origin === publicOrigin) headers.origin = origin;
+  if (!preflight) {
+    headers.accept = 'application/json';
+    headers['content-type'] = 'application/json';
+  }
+  return headers;
+}
+
+function readLimitedBody(request: IncomingMessage, maximum: number): Promise<Buffer> {
+  const declared = request.headers['content-length'];
+  if (typeof declared === 'string' && /^\d+$/.test(declared) && Number(declared) > maximum) {
+    request.resume();
+    return Promise.reject(new Error('BODY_TOO_LARGE'));
+  }
+  return new Promise((resolveBody, reject) => {
+    const chunks: Buffer[] = [];
+    let length = 0;
+    let settled = false;
+    const fail = (error: Error) => {
+      if (settled) return;
+      settled = true;
+      request.resume();
+      reject(error);
+    };
+    request.on('data', (chunk: Buffer | string) => {
+      const next = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk);
+      length += next.byteLength;
+      if (length > maximum) return fail(new Error('BODY_TOO_LARGE'));
+      chunks.push(next);
+    });
+    request.once('error', (error) => fail(error instanceof Error ? error : new Error('BODY_READ_FAILED')));
+    request.once('end', () => {
+      if (settled) return;
+      settled = true;
+      resolveBody(Buffer.concat(chunks));
+    });
+  });
+}
+
+function parsePlacement(body: Buffer): { x: number; y: number; facing: string; sprite: string } | null {
+  let value: unknown;
+  try { value = JSON.parse(body.toString('utf8')); } catch { return null; }
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
+  const keys = Object.keys(value).sort();
+  if (keys.join(',') !== 'facing,sprite,x,y') return null;
+  const placement = value as Record<string, unknown>;
+  if (
+    typeof placement.x !== 'number' || !Number.isSafeInteger(placement.x) || Math.abs(placement.x) > 8192 ||
+    typeof placement.y !== 'number' || !Number.isSafeInteger(placement.y) || Math.abs(placement.y) > 8192 ||
+    typeof placement.facing !== 'string' || !FACING.has(placement.facing) ||
+    typeof placement.sprite !== 'string' || !SPRITES.has(placement.sprite)
+  ) return null;
+  return { x: placement.x, y: placement.y, facing: placement.facing, sprite: placement.sprite };
 }
 
 async function serveStatic(
@@ -134,7 +236,9 @@ async function serveStatic(
     if (extname(relativePath) !== '') {
       return sendError(response, 404, 'NOT_FOUND', 'The requested resource was not found.');
     }
-    file = resolve(rootReal, 'index.html');
+    const fallback = await safeFile(resolve(rootReal, 'index.html'), rootReal);
+    if (!fallback) return sendError(response, 404, 'NOT_FOUND', 'The requested resource was not found.');
+    file = fallback;
   } else {
     file = candidate;
     if (relativePath.startsWith(`assets${sep}`)) {
@@ -178,11 +282,13 @@ function proxyHttp(
   response: ServerResponse,
   port: number,
   path: string,
+  options: { readonly headers?: Record<string, string>; readonly body?: Buffer } = {},
 ): void {
-  const headers: Record<string, string | string[]> = {};
-  for (const [name, value] of Object.entries(request.headers)) {
+  const headers: Record<string, string | string[]> = options.headers ?? {};
+  if (!options.headers) for (const [name, value] of Object.entries(request.headers)) {
     if (value !== undefined && !HOP_BY_HOP.has(name)) headers[name] = value;
   }
+  if (options.body !== undefined) headers['content-length'] = String(options.body.byteLength);
   const upstream = httpRequest(
     { hostname: '127.0.0.1', port, method: request.method, path, headers },
     (upstreamResponse) => {
@@ -198,7 +304,8 @@ function proxyHttp(
     else response.destroy();
   });
   request.once('aborted', () => upstream.destroy());
-  request.pipe(upstream);
+  if (options.body !== undefined) upstream.end(options.body);
+  else request.pipe(upstream);
 }
 
 function tunnelUpgrade(
@@ -206,17 +313,27 @@ function tunnelUpgrade(
   client: import('node:stream').Duplex,
   head: Buffer,
   port: number,
+  publicOrigin: string,
 ): void {
+  const key = request.headers['sec-websocket-key'];
+  const target = request.headers.origin === publicOrigin
+    ? parseWebSocketTarget(request.url)
+    : null;
+  if (request.method !== 'GET' || request.headers['sec-websocket-version'] !== '13' || typeof key !== 'string' || !isWebSocketKey(key) || !target) {
+    client.end('HTTP/1.1 403 Forbidden\r\nConnection: close\r\nContent-Length: 0\r\n\r\n');
+    return;
+  }
   const upstream = createConnection({ host: '127.0.0.1', port });
   let connected = false;
   upstream.once('connect', () => {
     connected = true;
-    const lines = [`${request.method ?? 'GET'} ${request.url ?? '/'} HTTP/${request.httpVersion}`];
-    for (const [name, value] of Object.entries(request.headers)) {
-      if (value === undefined) continue;
-      const values = Array.isArray(value) ? value : [value];
-      for (const item of values) lines.push(`${name}: ${item}`);
-    }
+    const lines = [`GET ${target} HTTP/${request.httpVersion}`];
+    lines.push('Host: 127.0.0.1');
+    lines.push('Connection: Upgrade');
+    lines.push('Upgrade: websocket');
+    lines.push(`Origin: ${publicOrigin}`);
+    lines.push(`Sec-WebSocket-Key: ${key}`);
+    lines.push('Sec-WebSocket-Version: 13');
     upstream.write(`${lines.join('\r\n')}\r\n\r\n`);
     if (head.length > 0) upstream.write(head);
     client.pipe(upstream).pipe(client);
@@ -233,6 +350,24 @@ function tunnelUpgrade(
   upstream.once('close', () => client.destroy());
 }
 
+function isWebSocketKey(value: string): boolean {
+  if (!/^[A-Za-z0-9+/]{22}==$/.test(value)) return false;
+  return Buffer.from(value, 'base64').byteLength === 16;
+}
+
+function parseWebSocketTarget(raw: string | undefined): string | null {
+  if (typeof raw !== 'string') return null;
+  let parsed: URL;
+  try { parsed = new URL(`ws://edge${raw}`); } catch { return null; }
+  if (parsed.hash || parsed.origin !== 'ws://edge' || parsed.searchParams.size !== 1 || !parsed.searchParams.has('sessionId')) return null;
+  const segments = parsed.pathname.split('/').filter(Boolean);
+  const sessionId = parsed.searchParams.get('sessionId');
+  if (segments.length !== 2 || segments.some((segment) => !ID_PATTERN.test(segment)) || !sessionId || !ID_PATTERN.test(sessionId)) return null;
+  if (parsed.searchParams.keys().next().value !== 'sessionId') return null;
+  if (parsed.searchParams.getAll('sessionId').length !== 1 || parsed.searchParams.has('_authToken') || parsed.searchParams.has('reconnectionToken')) return null;
+  return `/${segments[0]}/${segments[1]}?sessionId=${encodeURIComponent(sessionId)}`;
+}
+
 function sendError(response: ServerResponse, status: number, code: string, message: string): void {
   if (response.headersSent) {
     response.destroy();
@@ -245,37 +380,4 @@ function sendError(response: ServerResponse, status: number, code: string, messa
   response.setHeader('content-length', Buffer.byteLength(body));
   response.setHeader('x-content-type-options', 'nosniff');
   response.end(body);
-}
-
-export async function waitForTcp(
-  port: number,
-  options: { host?: string; timeoutMs?: number; intervalMs?: number } = {},
-): Promise<void> {
-  const host = options.host ?? '127.0.0.1';
-  const timeoutMs = options.timeoutMs ?? 15_000;
-  const intervalMs = options.intervalMs ?? 50;
-  const deadline = Date.now() + timeoutMs;
-  for (;;) {
-    try {
-      await connectOnce(host, port);
-      return;
-    } catch {
-      if (Date.now() >= deadline) throw new Error('Child service did not become ready.');
-      await new Promise((resolve) => setTimeout(resolve, intervalMs));
-    }
-  }
-}
-
-function connectOnce(host: string, port: number): Promise<void> {
-  return new Promise((resolve, reject) => {
-    const socket = createConnection({ host, port });
-    socket.once('connect', () => {
-      socket.destroy();
-      resolve();
-    });
-    socket.once('error', (error) => {
-      socket.destroy();
-      reject(error);
-    });
-  });
 }

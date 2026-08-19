@@ -6,6 +6,7 @@ interface FlyEnvironment {
   readonly publicPort: number;
   readonly backendPort: number;
   readonly lobbyPort: number;
+  readonly publicOrigin: string;
   readonly staticRoot: string;
   readonly backendEntry: string;
   readonly lobbyEntry: string;
@@ -16,10 +17,21 @@ export function parseFlyEnvironment(environment: NodeJS.ProcessEnv = process.env
     publicPort: parsePort(environment['PORT'], 'PORT'),
     backendPort: parsePort(environment['FLY_BACKEND_PORT'] ?? '18080', 'FLY_BACKEND_PORT'),
     lobbyPort: parsePort(environment['FLY_LOBBY_PORT'] ?? '12567', 'FLY_LOBBY_PORT'),
+    publicOrigin: parsePublicOrigin(environment['FLY_PUBLIC_ORIGIN']),
     staticRoot: environment['FLY_STATIC_ROOT'] ?? '/app/web-dist',
     backendEntry: environment['FLY_BACKEND_ENTRY'] ?? '/app/build/deploy/fly/src/backend-child.js',
     lobbyEntry: environment['FLY_LOBBY_ENTRY'] ?? '/app/build/deploy/fly/src/lobby-child.js',
   };
+}
+
+function parsePublicOrigin(value: string | undefined): string {
+  if (!value || value !== value.trim()) throw new Error('Invalid FLY_PUBLIC_ORIGIN.');
+  let origin: URL;
+  try { origin = new URL(value); } catch { throw new Error('Invalid FLY_PUBLIC_ORIGIN.'); }
+  if (origin.protocol !== 'https:' || origin.origin !== value || origin.pathname !== '/' || origin.search || origin.hash || origin.username || origin.password) {
+    throw new Error('Invalid FLY_PUBLIC_ORIGIN.');
+  }
+  return value;
 }
 
 function parsePort(value: string | undefined, name: string): number {
@@ -36,7 +48,11 @@ async function run(): Promise<void> {
   const fatal = () => {
     if (stopping) return;
     stopping = true;
-    void composition?.shutdown().finally(() => process.exit(1));
+    const closing = composition?.shutdown() ?? Promise.resolve();
+    void closing.then(
+      () => process.exit(1),
+      () => process.exit(1),
+    );
   };
 
   try {
