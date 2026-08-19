@@ -1,0 +1,4 @@
+# These two upstream Kenney files are retained byte-for-byte; keep their
+# original whitespace and exclude them from textual diff checks.
+packages/world/assets/third-party/kenney-rpg-urban/License.txt -diff
+packages/world/assets/third-party/kenney-rpg-urban/tilemap.txt -diff
