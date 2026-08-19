@@ -2044,3 +2044,44 @@ method, HTTP route or response, schema, lobby field, financial policy or
 submission semantics. Hosted image lifecycle is now verified. Host access-log
 policy, TLS, secrets, real Alchemy/RPC and AVNU calls, live staging, deployment
 and funded routes remain unverified.
+
+---
+
+## D-051 — Share the production origin policy between Node-only lobby callers
+
+**2026-08-19 · Accepted technical decision · implementation follows this
+boundary**
+
+**Context.** Production hostname classification is deployment policy for the
+Node lobby, not browser or shared-domain logic. The lobby production entrypoint
+and the Fly startup path had duplicated hostname checks. Duplicated regular
+expressions drift: one caller can reject a loopback or placeholder form while
+the other accepts it, leaving startup validation and request-origin validation
+with different security boundaries.
+
+**Decision.** Put one small, Node-only policy helper in
+`packages/lobby/src/production-origin.ts` (or an equivalently named module).
+`packages/lobby/src/production.ts` and `deploy/fly/src/main.ts` consume that
+helper. Do not export it through the browser-facing/root lobby entry and do not
+move the policy into `packages/shared`. Each caller retains its existing
+canonical whole-origin formatting and parsing rules; the shared helper only
+classifies the resulting production hostname.
+
+The policy rejects loopback hosts, including all IPv4 `127/8` and
+IPv4-mapped IPv6 loopback forms, localhost descendants, `.invalid` names and
+explicit placeholder labels. It must not reject legitimate substring domains
+such as `your-company.com`, `replaceable.example.com` or
+`placeholdertech.com`. Fly and lobby tests pin the same adversarial matrix
+atomically so a future policy change cannot update one caller in isolation.
+
+**Alternatives.** Keeping the two regexes separate was rejected because their
+security behavior can drift. Exporting the helper through the browser/root
+lobby entry was rejected because production deployment policy is not a client
+contract. Putting it in `packages/shared` was rejected because it would widen a
+Node-only concern into a cross-runtime dependency.
+
+**Consequences.** Production startup and lobby admission share one tested
+classification boundary without changing CORS, protocol schema, presence
+messages, financial routes, logging or browser behavior. The helper is a
+deployment guard, not proof of domain ownership, TLS, provider readiness or
+funded-route readiness.
