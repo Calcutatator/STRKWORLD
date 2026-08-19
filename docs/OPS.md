@@ -1,24 +1,24 @@
 # Operations runbook
 
-**Status: skeleton. Host-agnostic by necessity — no hosting provider, domain or
-secret store has been chosen.** Everything here that does not depend on that
-choice is real and verified. Everything that does is marked `[HOST]` and is
-listed in [DECISIONS-NEEDED](#decisions-needed) at the bottom. Nothing in this
-document recommends a vendor.
+**Status: Fly.io topology selected; provider account, domain and secret store
+are not configured.** The target is one public Fly app/Machine with a small
+edge/composition process serving the web build and routing same-origin `/api`
+and the lobby WebSocket (D-045). Everything that depends on account,
+credentials or domain remains marked `[HOST]` and listed in
+[DECISIONS-NEEDED](#decisions-needed).
 
 Three deployables:
 
 | | What | Built by | Runs as |
 |---|---|---|---|
-| **web** | `apps/web` — the static shell | `npm run build --workspace=@strkworld/web` | static files on a CDN/static host `[HOST]` |
-| **backend** | `apps/backend` — paymaster custody, RPC proxy, submission queue | `deploy/backend/Dockerfile` | a container `[HOST]` |
-| **lobby** | `packages/lobby` — privacy-minimal Colyseus presence | production packaging not built yet | a single Node process behind `wss://` `[HOST]` |
+| **web** | `apps/web` — the static shell | `npm run build --workspace=@strkworld/web` | static files served by the Fly edge/composition process `[HOST]` |
+| **backend** | `apps/backend` — paymaster custody, RPC proxy, submission queue | `deploy/backend/Dockerfile` | one container/Machine `[HOST]` |
+| **lobby** | `packages/lobby` — privacy-minimal Colyseus presence | production packaging not built yet | one Node process behind the same app's `wss://` route `[HOST]` |
 
-The web and backend must share an origin. See [The same-origin
-constraint](#the-same-origin-constraint) — it is an input to the hosting
-decision, not a detail to settle afterwards. The lobby is a separate WebSocket
-service with an explicit browser-origin allowlist; it does not receive cookies
-or financial data.
+The web and backend must share an origin. D-045 selects a single Fly app with
+an edge/composition process routing `/api` and `wss` while preserving this
+constraint. The lobby remains privacy-minimal, has an explicit browser-origin
+allowlist, and does not receive cookies or financial data.
 
 ---
 
@@ -379,37 +379,27 @@ Stated plainly so nobody reads more assurance into this document than it earns:
 
 ## DECISIONS-NEEDED
 
-The project lead must choose the following. Each blocks work that is otherwise
-ready. Trade-off notes are neutral and name no vendor.
+The project lead must supply or approve the following operational inputs. Each
+blocks work that is otherwise ready. D-045 selects one public Fly app/Machine,
+but it still contains three logical components — web serving, backend API and
+lobby presence — whose composition and lifecycle must be implemented and
+verified. Trade-off notes are neutral and name no vendor.
 
-1. **Hosting provider for the backend container.**
-   The image is host-agnostic and runs anywhere that takes a container.
-   Trade-offs: a platform that scales to zero adds cold-start latency to a
-   request already bounded by proof validity and quote expiry; a
-   platform-managed edge is one more place access logging and headers must be
-   audited (D-005, D-014); running more than one instance requires resolving
-   the D-026 aggregate-store caveat first, so "just autoscale" is not free.
+1. **Fly account, domain and deployment configuration.**
+   D-045 selects the topology but does not create an account, purchase a
+   domain, upload secrets or deploy. Those operational actions remain gated on
+   explicit values and permissions.
 
-2. **Static hosting for `apps/web`.**
-   Output is `apps/web/dist/` — plain static files, no server runtime.
-   Trade-offs: any static host works; the deciding factor is whether it can be
-   combined with the backend behind one origin (item 4) and whether its default
-   headers can be fully controlled.
-
-3. **Domain.**
-   Needed before the browser RPC key can be domain-allowlisted (item 7), before
+2. **Domain.**
+   Needed before the browser RPC key can be domain-allowlisted (item 6), before
    `VITE_LOBBY_URL` can be set, and before any TLS or origin decision.
 
-4. **How the web origin and the backend are combined into ONE origin.**
-   Forced by the same-origin constraint above — the backend sends no CORS
-   headers, on purpose. Options are a platform rewrite/proxy from the static
-   host to the container, or a reverse proxy in front of both. This is an input
-   to items 1 and 2, not a follow-up: picking a static host and a container
-   host that cannot be unified behind one origin means redoing both. Whatever
-   sits in the middle must also be audited for access logging and for
-   isolation headers.
+3. **Fly edge/composition implementation.**
+   The selected topology must serve `apps/web/dist/` and route `/api` and the
+   lobby WebSocket through one origin. The edge must be audited for access
+   logging and isolation headers before traffic.
 
-5. **Secret-custody mechanism.**
+4. **Secret-custody mechanism.**
    Three secrets need somewhere to live: `AVNU_PAYMASTER_API_KEY`,
    `STARKNET_RPC_URL` and `FEE_AUTHORIZATION_SECRET`. Requirements, not
    preferences: run-time injection as environment variables (never build args
@@ -419,7 +409,7 @@ ready. Trade-off notes are neutral and name no vendor.
    parts and ties custody to the hosting choice; a dedicated secret manager is
    portable across hosting changes and adds an integration.
 
-6. **AVNU paymaster API key procurement.**
+5. **AVNU paymaster API key procurement.**
    Who requests it from AVNU, under what account, and what the lead time is.
    Also needed: whether a second key can exist concurrently — the rotation
    runbook above assumes mint-then-revoke, and if AVNU issues only one key at a
@@ -427,17 +417,20 @@ ready. Trade-off notes are neutral and name no vendor.
    secret that spends our money, so it should be the first one whose rotation
    path is confirmed rather than assumed.
 
-7. **Domain-allowlisted RPC key(s).**
+6. **Alchemy RPC account, keys and domain/IP controls.**
+   D-046 selects Alchemy provisionally, but no account or key exists yet. Use
+   separate browser/public and server/private applications or keys.
    Two distinct keys are needed and they are not interchangeable:
    - **Browser** (`VITE_STARKNET_RPC_URL`) — compiled into the public bundle
      and shipped to every player, so a domain allowlist is the only control
-     that exists. Requires item 3.
+     that exists. Requires item 2 and the item 3 edge implementation.
    - **Server** (`STARKNET_RPC_URL`) — not domain-allowlistable, because a
      server request sends no `Origin`. Restrict by IP or provider-side key
      scoping instead.
-   The provider must therefore support both a domain allowlist *and* a
-   server-side restriction, and the plan should state which reads stay in the
-   browser. D-014's position is that anything linking player IP to intended
+   Alchemy documents domain and IPv4 allowlists, but the selected plan and
+   deployment-edge source-IP behavior must be verified before production.
+   Confirm quotas, method/version support, 429 behavior, retention and
+   rotation. D-014's position is that anything linking player IP to intended
    recipient or timing goes through the backend proxy.
 
 Related open item, not a decision: the implemented standalone lobby server has

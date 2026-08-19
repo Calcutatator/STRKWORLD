@@ -21,7 +21,7 @@ the lane boundary — that is why the repo is shaped the way it is.
 | **Shell** | `apps/web` | Active, starts week 2 |
 | **Backend** | `apps/backend` | Active; offline implementation in progress under D-028 |
 | **Bridge** | `packages/bridge` | Active, fully independent |
-| **Art** | `packages/world/assets` | Active, low coupling |
+| **Art** | `packages/world/assets` | Active; Kenney Urban CC0 placeholder approved under D-044, final base still under comparison |
 | ~~Contracts~~ | — | **Dormant until post-v1** |
 
 ### Why Contracts is dormant
@@ -348,6 +348,13 @@ an approved aggregate-only signal, deployment integration, and the funded
 Wallet API/paymaster checks retained by D-028. Do not invent a health or
 metrics route without the D-014 privacy review recorded in `docs/OPS.md`.
 
+**D-045/D-046 deployment direction:** target one Fly.io app/Machine with a
+same-origin edge/composition process for the web build, `/api` and lobby
+WebSocket. Use Alchemy provisionally with separate browser/public and
+server/private applications or keys. Account creation, domain setup, secret
+procurement, provider controls and production deployment remain gated
+operational work; no credentials are present.
+
 **D-042 complete offline:** Backend independently checks that AVNU's
 slippage-protected output is at least the caller's requested quote floor before
 issuing swap relay authority. The check uses AVNU's installed helper and adds
@@ -409,9 +416,11 @@ closed. The JWT must never enter the browser bundle.
 **Owns** assets. Lowest coupling of any lane — can run entirely in parallel and
 mostly hands over files.
 
-**First task:** source a CC0 or permissively licensed top-down city base —
-roads, grass, pavement, basic structures. Record the licence for **every** pack
-in `assets/CREDITS.md` as it lands.
+**First task — D-044 approved:** Kenney Urban CC0 at clean 2× may be used as a
+reversible placeholder base for roads, grass, pavement and generic structures.
+No asset has been downloaded yet. In parallel, scan for a closer CC0 16-bit /
+JRPG-like base before locking the final visual direction. Record the licence for
+**every** pack in `assets/CREDITS.md` as it lands.
 
 **Licence audit is the real work here.** Popular "free" packs are frequently
 non-commercial only, and this is a public project handling real funds. Audit
@@ -437,9 +446,10 @@ into pixels, and do not encode route, wallet or authorization meaning in art.
 No asset pack is present today. Every landed file or atlas frame must have an
 `assets/CREDITS.md` record naming its source, creator, licence and licence URL,
 required attribution, modification/redistribution terms, verification date,
-and whether it is original, commissioned or third-party. Aesthetic direction,
-palette, external pack versus bespoke work, atlas format and station-state
-treatment all require the user's direction before Art writes files.
+and whether it is original, commissioned or third-party. Placeholder
+acquisition and manifest work may proceed under D-044. Final palette, final
+external pack versus bespoke work, atlas format and station-state treatment
+remain open and require the user's review before final art writes.
 
 **Done when:** the world renders as a coherent place, every asset has a
 recorded licence cleared for commercial use, and exported maps load in Phaser

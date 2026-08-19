@@ -1689,3 +1689,111 @@ changing deterministic estimates and the absence of a production Ready
 planner. Ready/Xverse prompt packaging, account deployment, allowance/fee
 handling, live fee ceilings and one tiny mainnet completion remain funded
 pre-launch checks. Rendered game acceptance remains user-owned.
+
+---
+
+## D-044 — Kenney Urban CC0 is the placeholder art base
+
+**2026-08-19 · Accepted by the user · placeholder scope only**
+
+**Context.** The World tracer currently uses procedural and placeholder
+presentation. Art needs a commercially safe base for roads, grass, pavement
+and generic city structure, while the protocol facades and station states
+remain product-specific. The exact visual identity is not yet final.
+
+**Decision.** The Art lane may use the Kenney Urban CC0 pack at clean 2× as a
+placeholder base. It may not imply that Kenney authored STRKWORLD's protocol
+identity: facades, labels, station states and privacy-specific treatments stay
+separate and may be replaced. A parallel research lane scans for a closer CC0
+16-bit/JRPG-like base before any final art lock. No asset is downloaded or
+committed by this decision.
+
+Every acquired file still needs a source URL, pack/version, license evidence,
+retrieval date, modifications and `assets/CREDITS.md` entry. Kenney's CC0
+status is the reason this is safe as a placeholder, not a waiver of provenance
+or of later aesthetic review.
+
+**Consequences.** Art can begin a license/source manifest and a reversible
+placeholder integration brief immediately. Final palette, facades, room art,
+atlas format and station-state treatment remain open until the comparison
+and user review are complete. World/Shell contracts do not change.
+
+---
+
+## D-045 — Fly.io is the deployment topology
+
+**2026-08-19 · Accepted by the user as delegated technical direction · provider configuration deferred**
+
+**Context.** The web build, privacy backend and Colyseus lobby need one
+browser origin for `/api`, a long-lived `wss` presence service, runtime-only
+secrets and exactly one admission-control instance while the controls remain
+process-local. A static site plus a separately exposed backend would violate
+the same-origin constraint.
+
+**Decision.** Target one public Fly.io app/Machine with a small edge/composition
+process that serves `apps/web/dist`, routes same-origin `/api` to the backend,
+and upgrades the lobby WebSocket. Keep exactly one active backend/admission
+instance until D-026 aggregate adapters exist. Use Fly-managed TLS/custom
+domain support and runtime secret injection; never put secrets in Vite output,
+Docker build arguments or image layers. No Fly account, domain, secret or
+service is created by this decision.
+
+**Required launch checks.** Verify provider/platform access-log behavior against
+D-014, confirm no COOP/COEP headers are added, test deploy overlap does not
+create two active admission instances, verify runtime secret rotation, and
+test `/api` plus `wss` from two browser sessions. A separate RPC-provider
+decision remains pending the current hackathon-document scan and is not made
+here.
+
+**Alternatives considered.** Render Web Service and Railway Service remain
+viable one-service alternatives with similar edge composition work; separate
+static-site plus backend deployments are not accepted without a same-origin
+proxy. Vercel Functions are not selected because the current long-lived
+Colyseus/process-local design is not a serverless fit.
+
+**Consequences.** The deployment lane may draft a minimal Fly topology and
+staging checklist, but must stop before account creation, provider
+configuration, domain purchase, secret upload or production deployment until
+those operational permissions and values are explicitly supplied.
+
+---
+
+## D-046 — Use Alchemy for the initial Starknet RPC provider
+
+**2026-08-19 · Accepted as a provisional technical choice · no account or key created**
+
+**Context.** The browser needs a public mainnet RPC URL whose access can be
+restricted to the eventual domain. The backend needs a separate private RPC
+credential with server-side restriction. The hackathon/build-document scan did
+not establish a suitable free mainnet production entitlement or a better
+provider-specific control path. Alchemy's official documentation explicitly
+establishes Starknet mainnet endpoints, keyed accounts, domain allowlists and
+IPv4 allowlists.
+
+**Decision.** Use Alchemy for now, with two operationally separate applications
+or keys:
+
+- a browser/public app restricted by the production origin/domain;
+- a server/private app restricted by the backend deployment's source IPs.
+
+The browser key is public by design and may be compiled into Vite only after a
+domain exists. The server key remains runtime-only and never enters source,
+Vite output, Docker build args, image layers or logs. No Alchemy account, app,
+key or endpoint is created by this decision.
+
+**Required checks before funded validation.** Confirm exact Starknet RPC method
+and version support, domain/IP enforcement on the selected plans, quotas and
+429 behavior, key rotation, provider retention/access-log terms and whether
+the deployment edge presents stable source IPs. Keep D-028's funded Wallet
+API/paymaster run separate: an RPC provider does not prove wallet prompts,
+private proof acceptance or transaction execution.
+
+**Alternatives.** QuickNode remains a viable fallback if its Starknet plan
+exposes the documented endpoint security controls. Self-hosted Pathfinder/Juno
+offers control at the cost of node operations and a public read proxy. Neither
+is selected here.
+
+**Consequences.** The Backend/RPC lane may prepare a no-secret staging probe
+and provider-control checklist. It must stop before account creation, key
+procurement, domain allowlisting or production configuration until the user
+supplies the necessary account/permissions and values.

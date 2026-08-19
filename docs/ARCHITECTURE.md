@@ -222,6 +222,17 @@ recipients or transaction hashes. Aggregate operational counters only. It
 validates fee ceilings and route kill switches before submission (D-014,
 D-015, D-018).
 
+### Deployment composition (D-045/D-046)
+
+The target deployment is one public Fly.io app/Machine. An edge/composition
+process serves the built Vite shell, routes same-origin `/api` requests to the
+backend and upgrades the lobby WebSocket. Keep one active admission-control
+instance while its rate limits and budgets are process-local. Alchemy is the
+provisional Starknet RPC provider, split into a public origin-restricted
+browser application/key and a private server/IP-restricted application/key;
+neither account nor key is present in the repository. Provider edge access
+logs and headers remain launch checks under D-014/D-005.
+
 ---
 
 ## The event bus (React ↔ Phaser)
