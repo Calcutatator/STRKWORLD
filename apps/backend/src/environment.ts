@@ -83,7 +83,12 @@ function parsePoolRoute(environment: Environment, name: 'TRANSFER' | 'UNSHIELD')
   return {
     enabled: parseBoolean(environment, `BACKEND_ROUTE_${name}_ENABLED`),
     maxRelayFee: parseUnsignedBigint(environment, `BACKEND_ROUTE_${name}_MAX_RELAY_FEE`, MAX_U128),
-    maxQueueDelayMs: parseInteger(environment, `BACKEND_ROUTE_${name}_MAX_QUEUE_DELAY_MS`, 1),
+    maxQueueDelayMs: parseInteger(
+      environment,
+      `BACKEND_ROUTE_${name}_MAX_QUEUE_DELAY_MS`,
+      1,
+      MAX_NODE_TIMEOUT_MS,
+    ),
     quoteBound: false,
     allowedTokens: parseAllowedTokens(environment, `BACKEND_ROUTE_${name}_ALLOWED_TOKENS`),
   };

@@ -749,4 +749,17 @@ describe('privacy-safe RPC and operations', () => {
       }), `${route}: ${Object.keys(changes).join(', ')}`).toThrow(/route policy|quote-bound|immediate|delayed/i);
     }
   });
+
+  it.each(['transfer', 'unshield'] as const)(
+    'rejects a %s queue delay beyond the Node timer ceiling at direct construction',
+    (route) => {
+      const { config } = fixture();
+      expect(() => fixture({
+        routes: {
+          ...config.routes,
+          [route]: { ...config.routes[route], maxQueueDelayMs: 2_147_483_648 },
+        },
+      })).toThrow(`Backend ${route} policy has invalid limits.`);
+    },
+  );
 });

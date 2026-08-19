@@ -35,6 +35,8 @@ import {
   validateArtifact,
 } from './validation.js';
 
+const MAX_NODE_TIMEOUT_MS = 2_147_483_647;
+
 export interface BackendApiOptions {
   config: BackendConfig;
   paymaster: PaymasterPort;
@@ -506,6 +508,7 @@ function validateBackendConfig(config: BackendConfig): void {
       policy.maxRelayFee < 0n ||
       !Number.isSafeInteger(policy.maxQueueDelayMs) ||
       policy.maxQueueDelayMs < 0 ||
+      policy.maxQueueDelayMs > MAX_NODE_TIMEOUT_MS ||
       policy.allowedTokens.length === 0 ||
       policy.allowedTokens.some((token) => !isFelt(token))
     ) {
