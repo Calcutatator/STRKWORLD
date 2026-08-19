@@ -551,14 +551,14 @@ const NO_MOVEMENT: MovementInput = {
   down: false,
 };
 
-/** Keep a native-size door image centered over its unchanged trigger zone. */
+/** Keep a two-tile visual surround centered over the unchanged trigger zone. */
 export function doorOverlayLayout(
   door: Pick<DistrictMap['doors'][number], 'x' | 'y' | 'width' | 'height'>,
 ): { x: number; y: number; width: number; height: number } {
   return {
     x: (door.x + door.width / 2) * TILE_SIZE,
     y: (door.y + door.height / 2) * TILE_SIZE,
-    width: TILE_SIZE,
+    width: door.width * TILE_SIZE,
     height: TILE_SIZE,
   };
 }

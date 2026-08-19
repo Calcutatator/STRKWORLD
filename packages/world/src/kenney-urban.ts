@@ -152,7 +152,7 @@ export function createKenneyRuntimeTextures(
   );
   const door = scene.textures.createCanvas(
     KENNEY_DOOR_TEXTURE_KEY,
-    KENNEY_ATLAS.runtimeTileSize,
+    KENNEY_ATLAS.runtimeTileSize * 2,
     KENNEY_ATLAS.runtimeTileSize,
   );
   if (!tiles || !door) throw new Error('Could not create Kenney runtime textures');
@@ -175,7 +175,20 @@ export function createKenneyRuntimeTextures(
   tiles.setFilter(Phaser.Textures.FilterMode.NEAREST);
 
   door.context.imageSmoothingEnabled = false;
-  drawScaledFrame(door.context, source, kenneyTileForRole('door').rect, 0, 0);
+  // The trigger remains two tiles wide so it is reachable and stable, while
+  // the native door is one tile wide. Fill the visual surround with the
+  // existing facade course to hide the walkable pavement cells at either
+  // side without changing the map or collision contract.
+  const surround = kenneyTileForRole('facade').rect;
+  drawScaledFrame(door.context, source, surround, 0, 0);
+  drawScaledFrame(door.context, source, surround, KENNEY_ATLAS.runtimeTileSize, 0);
+  drawScaledFrame(
+    door.context,
+    source,
+    kenneyTileForRole('door').rect,
+    KENNEY_ATLAS.runtimeTileSize / 2,
+    0,
+  );
   door.refresh();
   door.setFilter(Phaser.Textures.FilterMode.NEAREST);
 }
