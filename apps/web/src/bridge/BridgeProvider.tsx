@@ -40,6 +40,44 @@ const unavailable: BridgeRuntime = {
 
 const BridgeContext = createContext<BridgeRuntime>(unavailable);
 
+export interface BridgeRuntimeGenerationGuard {
+  next(): number;
+  invalidate(token: number): void;
+  isCurrent(token: number): boolean;
+}
+
+/** Small testable gate for optional runtime work that outlives a prop change. */
+export function createBridgeRuntimeGenerationGuard(): BridgeRuntimeGenerationGuard {
+  let generation = 0;
+  return {
+    next: () => ++generation,
+    invalidate: (token) => {
+      if (token === generation) generation += 1;
+    },
+    isCurrent: (token) => token === generation,
+  };
+}
+
+function createRuntime({
+  service,
+  loadSources,
+  readAccount,
+  planner,
+  now,
+  account,
+}: Pick<BridgeProviderProps, 'service' | 'loadSources' | 'readAccount' | 'planner' | 'now' | 'account'>): BridgeRuntime {
+  if (!service) return unavailable;
+  return {
+    service,
+    loadSources: loadSources ?? (async () => []),
+    readAccount: readAccount ?? (() => account ?? null),
+    planner: planner ?? null,
+    now,
+    account: account ?? null,
+    available: () => Boolean(account && planner),
+  };
+}
+
 export function useBridge(): BridgeRuntime {
   return useContext(BridgeContext);
 }
@@ -62,47 +100,51 @@ export function BridgeProvider({
 }: BridgeProviderProps) {
   const demoRejected = demo && (build ?? detectBuildContext()).production;
 
-  const [resolved, setResolved] = useState<BridgeRuntime | null>(service && !demoRejected ? {
-    service,
-    loadSources: loadSources ?? (async () => []),
-    readAccount: readAccount ?? (() => null),
-    planner: planner ?? null,
-    now,
-    account,
-    available: () => Boolean(account && planner),
-  } : null);
+  const directRuntime = useMemo(
+    () => service && !demoRejected
+      ? createRuntime({ service, loadSources, readAccount, planner, now, account })
+      : null,
+    [service, loadSources, readAccount, planner, now, account, demoRejected],
+  );
+  const [resolved, setResolved] = useState<BridgeRuntime | null>(null);
+  const generation = useMemo(createBridgeRuntimeGenerationGuard, []);
 
   useEffect(() => {
-    if (!service || demoRejected) return;
-    setResolved({
-      service,
-      loadSources: loadSources ?? (async () => []),
-      readAccount: readAccount ?? (() => account),
-      planner: planner ?? null,
-      now,
-      account,
-      available: () => Boolean(account && planner),
-    });
-  }, [service, loadSources, readAccount, planner, account, now, demoRejected]);
-
-  useEffect(() => {
-    if (!demo || service || demoRejected) return;
+    const token = generation.next();
     let cancelled = false;
+    setResolved(null);
+    if (!demo || service || demoRejected) {
+      return () => {
+        cancelled = true;
+        generation.invalidate(token);
+      };
+    }
     void import('./demo-runtime.js').then(async ({ createDemoBridgeRuntime }) => {
       const runtime = await createDemoBridgeRuntime();
-      if (!cancelled) setResolved(runtime);
+      if (!cancelled && generation.isCurrent(token)) setResolved(runtime);
+    }).catch(() => {
+      // A failed optional demo import leaves the bridge unavailable. Do not
+      // resurrect a runtime from an earlier provider configuration.
     });
-    return () => { cancelled = true; };
-  }, [demo, service, demoRejected]);
+    return () => {
+      cancelled = true;
+      generation.invalidate(token);
+    };
+  }, [demo, service, demoRejected, generation]);
 
-  const runtime = useMemo(() => resolved ?? unavailable, [resolved]);
+  // Direct runtimes are derived from the current props during render. This
+  // makes a live -> absent/rejected transition immediately unavailable, even
+  // before React flushes the effect that cancels an in-flight demo import.
+  const runtime = directRuntime ?? (demo && !demoRejected ? resolved : null) ?? unavailable;
   if (demoRejected) {
     throw new Error('<BridgeProvider demo> reached a production build. Demo bridge funding is disabled.');
   }
   // Keep the shell mounted while the bridge chunk loads. The unavailable
   // runtime makes its station locked and its Menu panel honest; it never
   // fabricates a balance or starts a provider call.
-  return <BridgeContext.Provider value={runtime}>{resolved ? children : (fallback ?? children)}</BridgeContext.Provider>;
+  return <BridgeContext.Provider value={runtime}>
+    {directRuntime || resolved ? children : (fallback ?? children)}
+  </BridgeContext.Provider>;
 }
 
 /** Convenience account reader for hosts that already hold the account value. */
