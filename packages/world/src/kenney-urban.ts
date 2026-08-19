@@ -50,10 +50,10 @@ interface KenneyRoleMapping {
 
 const ROLE_MAPPINGS: Record<KenneyTileRole, KenneyRoleMapping> = {
   road: { role: 'road', frame: 468 },
-  pavement: { role: 'pavement', frame: 86 },
+  pavement: { role: 'pavement', frame: 109 },
   wall: { role: 'wall', frame: 72 },
   facade: { role: 'facade', frame: 99 },
-  door: { role: 'door', frame: 289 },
+  door: { role: 'door', frame: 284 },
 };
 
 const FRAME_COUNT = KENNEY_ATLAS.columns * KENNEY_ATLAS.rows;

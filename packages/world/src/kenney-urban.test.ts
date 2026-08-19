@@ -25,10 +25,10 @@ describe('Kenney Urban runtime atlas contract', () => {
       runtimeTileSize: 32,
     });
     expect(atlasFrameRect(468)).toEqual({ x: 153, y: 289, width: 16, height: 16 });
-    expect(atlasFrameRect(86)).toEqual({ x: 85, y: 51, width: 16, height: 16 });
+    expect(atlasFrameRect(109)).toEqual({ x: 17, y: 68, width: 16, height: 16 });
     expect(atlasFrameRect(72)).toEqual({ x: 306, y: 34, width: 16, height: 16 });
     expect(atlasFrameRect(99)).toEqual({ x: 306, y: 51, width: 16, height: 16 });
-    expect(atlasFrameRect(289)).toEqual({ x: 323, y: 170, width: 16, height: 16 });
+    expect(atlasFrameRect(284)).toEqual({ x: 238, y: 170, width: 16, height: 16 });
   });
 
   it('pins only the approved mappings and leaves grass and roof out of the atlas roles', () => {
@@ -40,12 +40,15 @@ describe('Kenney Urban runtime atlas contract', () => {
       runtimeWidth: 32,
       runtimeHeight: 32,
     });
-    expect(kenneyTileForRole('pavement').frame).toBe(86);
+    expect(kenneyTileForRole('pavement')).toMatchObject({
+      frame: 109,
+      rect: { x: 17, y: 68, width: 16, height: 16 },
+    });
     expect(kenneyTileForRole('wall').frame).toBe(72);
     expect(kenneyTileForRole('facade').frame).toBe(99);
     expect(kenneyTileForRole('door')).toMatchObject({
-      frame: 289,
-      rect: { x: 323, y: 170, width: 16, height: 16 },
+      frame: 284,
+      rect: { x: 238, y: 170, width: 16, height: 16 },
     });
     expect(() => kenneyTileForRole('grass' as never)).toThrow(/unsupported/i);
     expect(() => kenneyTileForRole('roof' as never)).toThrow(/unsupported/i);

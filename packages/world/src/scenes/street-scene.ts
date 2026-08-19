@@ -202,13 +202,14 @@ export function createStreetScene({ Phaser, onTileChanged, remotePeers }: Street
     /** Door art is an overlay so it never changes the tile/index/collision map. */
     private createDoorOverlays(): void {
       for (const door of this.map.doors) {
+        const layout = doorOverlayLayout(door);
         const overlay = this.add
           .image(
-            (door.x + door.width / 2) * TILE_SIZE,
-            (door.y + door.height / 2) * TILE_SIZE,
+            layout.x,
+            layout.y,
             KENNEY_DOOR_TEXTURE_KEY,
           )
-          .setDisplaySize(door.width * TILE_SIZE, door.height * TILE_SIZE)
+          .setDisplaySize(layout.width, layout.height)
           .setDepth(1);
         this.doorOverlays.push(overlay);
       }
@@ -549,6 +550,18 @@ const NO_MOVEMENT: MovementInput = {
   up: false,
   down: false,
 };
+
+/** Keep a native-size door image centered over its unchanged trigger zone. */
+export function doorOverlayLayout(
+  door: Pick<DistrictMap['doors'][number], 'x' | 'y' | 'width' | 'height'>,
+): { x: number; y: number; width: number; height: number } {
+  return {
+    x: (door.x + door.width / 2) * TILE_SIZE,
+    y: (door.y + door.height / 2) * TILE_SIZE,
+    width: TILE_SIZE,
+    height: TILE_SIZE,
+  };
+}
 
 function worldToRoomTile(x: number, y: number): { x: number; y: number } {
   return {
