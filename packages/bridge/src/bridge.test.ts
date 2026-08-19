@@ -9,6 +9,7 @@ import type {
 } from '@defuse-protocol/one-click-sdk-typescript';
 import {
   BridgeService,
+  LocalBridgeStore,
   MAX_RESUME_RECORD_BYTES,
   MemoryBridgeStore,
   STRK_ON_STARKNET_ASSET_ID,
@@ -658,6 +659,36 @@ describe('source registry and refund validation', () => {
 });
 
 describe('bridge persistence', () => {
+  it('persists a complete signed quote across LocalBridgeStore instances and clears corrupt storage', async () => {
+    const values = new Map<string, string>();
+    const storage = {
+      getItem: (key: string) => values.get(key) ?? null,
+      setItem: (key: string, value: string) => { values.set(key, value); },
+      removeItem: (key: string) => { values.delete(key); },
+    };
+    const client = new StubClient();
+    const first = new BridgeService({
+      client,
+      store: new LocalBridgeStore(storage),
+      quoteVerifier: () => true,
+      now: () => NOW,
+    });
+    const created = await first.createManualDeposit({
+      source: SOURCE,
+      amountIn: 1_000_000n,
+      starknetRecipient: '0x123',
+      refundAddress: request.refundTo,
+    });
+
+    const second = new LocalBridgeStore(storage);
+    expect(second.load()).toEqual(created);
+    expect(second.load()?.signedQuote).toEqual(signedQuote);
+
+    values.set('strkworld.bridge.inbound.v1', '{not-json');
+    expect(second.load()).toBeNull();
+    expect(values.has('strkworld.bridge.inbound.v1')).toBe(false);
+  });
+
   it('round-trips bigint fields while retaining the complete signed quote', async () => {
     const client = new StubClient();
     const store = new MemoryBridgeStore();
