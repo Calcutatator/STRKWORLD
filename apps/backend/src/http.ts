@@ -43,6 +43,9 @@ export function createBackendFetchHandler(
         }
         return json(400, { code: 'INVALID_JSON', message: 'Request body must be valid JSON.' });
       }
+      if (request.signal.aborted) {
+        return json(400, { code: 'INVALID_JSON', message: 'Request body must be valid JSON.' });
+      }
     }
 
     const result = await api.handle({
@@ -60,15 +63,48 @@ async function readBoundedText(request: Request, maxBytes: number): Promise<stri
   const reader = request.body.getReader();
   const chunks: Uint8Array[] = [];
   let total = 0;
-  for (;;) {
-    const { done, value } = await reader.read();
-    if (done) break;
-    total += value.byteLength;
-    if (total > maxBytes) {
-      await reader.cancel();
-      throw new RequestTooLargeError();
+  let rejectAborted!: (reason?: unknown) => void;
+  const aborted = new Promise<never>((_, reject) => {
+    rejectAborted = reject;
+  });
+  let abortHandled = false;
+  const onAbort = (): void => {
+    if (abortHandled) return;
+    abortHandled = true;
+    try {
+      void reader.cancel().catch(() => undefined);
+    } catch {
+      // The generic body-read boundary below handles a synchronous cancel failure.
     }
-    chunks.push(value);
+    rejectAborted(new Error('Request body read aborted.'));
+  };
+  request.signal.addEventListener('abort', onAbort, { once: true });
+  try {
+    for (;;) {
+      if (request.signal.aborted) {
+        onAbort();
+        await aborted;
+      }
+      const { done, value } = await Promise.race([reader.read(), aborted]);
+      if (done) break;
+      total += value.byteLength;
+      if (total > maxBytes) {
+        try {
+          await reader.cancel();
+        } catch {
+          // Cancellation failure does not change the authoritative size violation.
+        }
+        throw new RequestTooLargeError();
+      }
+      chunks.push(value);
+    }
+  } finally {
+    request.signal.removeEventListener('abort', onAbort);
+    try {
+      reader.releaseLock();
+    } catch {
+      // A hostile stream may keep a read pending after cancellation; its lock is then unreleasable.
+    }
   }
   const bytes = new Uint8Array(total);
   let offset = 0;
