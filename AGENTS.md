@@ -250,6 +250,35 @@ without a verification method is a rumour.
 
 Format: `### YYYY-MM-DD — short title` then what, why it matters, how verified.
 
+### 2026-08-19 — Avatar Studio foundation is offline; cosmetic handoff has two lifecycle gates
+
+D-047's non-financial foundation is implemented offline. A hidden pavement
+path runs south from spawn to the bottom-edge trigger and enters a validated
+18×12 Avatar Studio with eight collision-selectable cosy figures. World uses
+only the three approved `WorldEvents`; World, lobby and Fly share the existing
+single `sprite` field across the sixteen opaque keys, with `avatar-1` as the
+default/fallback. The Shell keeps selection only for the current page runtime,
+resumes it with street presence and maps remote states to deterministic
+placeholder tints. No stance, building, wallet, account or financial field was
+added.
+
+The ordering is part of the privacy/lifecycle contract. On exit, the restored
+street `player:moved` placement must publish before `avatar-studio:exited`
+resumes presence. A selection made while a lobby join is in flight makes that
+client stale and requires one replacement; replacement waits while inside and
+deduplicates reconnect requests. Presentation tests must drive the same
+adapter and teardown seam used by `StreetScene`, or a green fake can miss a
+production cleanup leak. The keyboard toggle is deliberately unbound pending
+the user's key choice. The PNG sheets committed at `e5eaea9` are review art,
+not runtime assets: they still need transparent-alpha cleanup, exact 32×32
+cell extraction, manual anchor/feet validation and user art approval.
+
+*Verified:* exact World presentation/lifecycle ordering and teardown tests,
+World/shared tests and typechecks, lobby admission/resume tests, Fly edge
+allowlist tests, Shell presence replacement/reconnect tests, invariant checks
+and diff validation. No browser acceptance, final sprite-art integration,
+wallet, proof, signature or transaction was used.
+
 ### 2026-08-19 — WorldHost leases must single-flight lazy Phaser acquisition
 
 React cleanup can beat a lazy Phaser import. The former stateless effect leases
@@ -282,9 +311,10 @@ cosy/default and `avatar-9..16` fighting, paired `1↔9` through `8↔16`; no
 stance field or message is added. The hidden Avatar Studio stays outside
 `BuildingId`/`BUILDINGS` and uses dedicated non-financial world events, so it
 must not enter the financial VisitLayer. Default/fallback is `avatar-1`, and
-selection is page/runtime-only. Expand World, lobby and edge registries
-atomically after the sprite handoff; until then do not accept the new keys in
-the live eight-key deployment.
+selection is page/runtime-only. The source registries are now expanded
+atomically offline as recorded in the newest Avatar Studio finding above; no
+production deployment, rendered acceptance or runtime sprite-art readiness is
+implied.
 
 ### 2026-08-19 — Kenney pavement and door mappings require lossless art review
 

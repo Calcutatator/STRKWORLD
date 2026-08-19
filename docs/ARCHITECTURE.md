@@ -114,20 +114,27 @@ disappear. The lobby receives no building ID or entry event. Building-choice
 and visit-timing inference from that disappearance is an accepted v1 trade-off
 (D-019).
 
-The Avatar Studio is a hidden, non-financial room outside `BuildingId` and
-`BUILDINGS` under D-047. Its dedicated `avatar-studio:entered`,
-`avatar-studio:exited` and `avatar:selected` world events are ignored by
-`VisitLayer`, so entering it cannot render a financial or unbuilt building
-panel. The street's south path reaches an offscreen doorway; no facade or
-public map label advertises it. The room shows eight selectable character
-figures. A collision selects one character in its cosy/default state, and a
-keyboard control will toggle that character's paired fighting/weapon-drawn
-state; the exact key is still open and unbound. The selected cosmetic state is
-resumed with street presence and has no wallet, account, protocol or financial
-meaning. The existing single lobby `sprite` field carries sixteen opaque keys:
-`avatar-1..8` cosy/default and `avatar-9..16` fighting, paired `1↔9` through
-`8↔16`; there is no stance field or message. Default/fallback is `avatar-1`,
-and selection is page/runtime-only with no reload/tab/session persistence.
+The D-047 Avatar Studio foundation is implemented offline as a hidden,
+non-financial 18×12 room outside `BuildingId` and `BUILDINGS`. The south path
+ends at a bottom-edge trigger with no facade or public label; eight collision
+selectors choose cosy/default character states. Its dedicated
+`avatar-studio:entered`, `avatar-studio:exited` and `avatar:selected` events
+are ignored by `VisitLayer`. The existing single lobby `sprite` field now
+allowlists sixteen opaque keys (`avatar-1..8` cosy/default,
+`avatar-9..16` paired fighting states); no stance field or message exists.
+Selection is page/runtime-only, defaults/falls back to `avatar-1`, resumes with
+street presence and has no wallet, account, protocol or financial meaning.
+
+On room exit, World publishes the restored street placement before emitting
+`avatar-studio:exited`, so Shell resumes or replaces presence from real
+coordinates. A selection made during an in-flight join invalidates that
+client's captured sprite: Shell replaces it once, defers replacement while
+inside and deduplicates reconnect requests. The presentation lifecycle is one
+adapter used by both `StreetScene` and its deterministic teardown tests. The
+keyboard toggle remains unbound pending the user's key choice. Commit
+`e5eaea9` contains review PNGs only; transparent 32×32 extraction, anchor/feet
+cleanup, user art approval, runtime sprite wiring and rendered acceptance are
+still open.
 
 ---
 

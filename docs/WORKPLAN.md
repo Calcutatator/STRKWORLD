@@ -17,11 +17,11 @@ the lane boundary — that is why the repo is shaped the way it is.
 | Lane | Package | Status in v1 |
 |---|---|---|
 | **Chain** | `packages/privacy` | Active; private seam frozen, D-043 planner port/fake complete, production Ready planner blocked |
-| **World** | `packages/world` + `packages/lobby` | Active; WorldHost lifecycle complete offline, Avatar Studio and rendered acceptance remain outstanding |
+| **World** | `packages/world` + `packages/lobby` | Active; Avatar Studio foundation complete offline; keyboard toggle, runtime sprite art and rendered acceptance remain |
 | **Shell** | `apps/web` | Active, starts week 2 |
 | **Backend** | `apps/backend` | Active; offline implementation and Fly hardening complete; host, Docker, domain, secrets, Alchemy controls and live staging remain |
 | **Bridge** | `packages/bridge` | Active, fully independent |
-| **Art** | `packages/world/assets` | Active; Kenney Urban CC0 acquired, role mappings corrected, sprite studio owns the eight-character paired-state handoff, final visual direction and station states remain user-gated |
+| **Art** | `packages/world/assets` | Active; Kenney Urban CC0 acquired and role mappings corrected; sprite review sheets are not runtime-ready, and final visual direction, sprite cleanup/approval and station states remain user-gated |
 | ~~Contracts~~ | — | **Dormant until post-v1** |
 
 ### Why Contracts is dormant
@@ -240,25 +240,20 @@ highlight, activation, exit and teardown only; it gained no recipient, quote,
 deposit address, status or wallet concept. Rendered room and station acceptance
 remains user-run at `http://localhost:5173/`.
 
-**D-047 Avatar Studio brief:** add one hidden, non-financial room outside
-`BuildingId`/`BUILDINGS` for cosmetic selection. Extend the street path south
-from spawn to an offscreen bottom doorway; do not render a facade or public map
-label. Use dedicated non-financial world events
-`avatar-studio:entered`, `avatar-studio:exited` and `avatar:selected`, which
-`VisitLayer` must ignore. The room contains eight collision-selectable avatar
-figures supplied by the separate sprite studio, each with a cosy/default and
-fighting/weapon-drawn state. Touching one selects that character in its cosy
-state; a keyboard toggle changes between its paired states, with the exact key
-still open and unbound pending the user's response. The existing single lobby
-`sprite` field carries sixteen opaque keys: `avatar-1..8` cosy/default and
-`avatar-9..16` fighting, paired `1↔9` through `8↔16`, with no stance field or
-message. Default/fallback is `avatar-1`; expand World/lobby/edge registries
-atomically, while the current eight-key deployment remains live until that
-rollout. This is a World/Shell/lobby integration, not a financial surface: no
-wallet or route state enters the room, and the lobby still receives only
-position, facing and an allowlisted opaque cosmetic state. Cosmetic selection
-is page/runtime-only and resets to `avatar-1` on reload, tab close or a new
-session; durable persistence is out of scope.
+**D-047 foundation complete offline:** the hidden south path and bottom-edge
+trigger enter a non-financial 18×12 Avatar Studio outside
+`BuildingId`/`BUILDINGS`, with no facade, public label or `VisitLayer` route.
+Eight collision selectors choose the cosy/default states. The three dedicated
+`WorldEvents` are the only event-bus extension, and World, lobby and Fly now
+share the existing single `sprite` field across `avatar-1..16`; there is no
+stance field or message. Shell retains the selected allowlisted key for the
+page runtime, replaces an in-flight client that captured an older sprite,
+defers that replacement while inside and deduplicates reconnect intent. Exit
+publishes the restored street placement before `avatar-studio:exited` resumes
+presence, and remote peers use deterministic placeholder tints. Reload, tab
+close or a new session still resets to `avatar-1`. The exact keyboard toggle
+remains open and unbound pending the user's choice; rendered acceptance and
+runtime sprite art are not complete.
 
 **Must not:** import `starknet` or any wallet package. Put an address, balance,
 transaction hash, building name or entry event into lobby traffic. On local
@@ -448,6 +443,13 @@ final visual direction, external-pack versus bespoke choice and station states
 remain user-gated; a closer CC0 16-bit/JRPG-like base may still be compared
 before any final art lock. Record the licence for **every** additional pack in
 `assets/CREDITS.md` as it lands.
+
+**D-047 sprite review package only:** commit `e5eaea9` records the generated
+review sheets and manifest under `packages/world/assets/player-sprites/v1-review/`.
+Those PNGs are explicitly `review-art-not-runtime-ready`: their backgrounds
+are baked rather than transparent, and they still need exact 32×32 extraction,
+manual frame-by-frame anchor/feet validation and the user's art approval. Do
+not wire them into runtime textures or call them accepted final art.
 
 **Licence audit is the real work here.** Popular "free" packs are frequently
 non-commercial only, and this is a public project handling real funds. Audit
