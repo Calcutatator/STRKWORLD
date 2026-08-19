@@ -58,28 +58,37 @@ export interface ConnectFlow {
 
 export function createConnectFlow(operations: PrivacyOperations): ConnectFlow {
   const store = createStore<ConnectState>({ name: 'disconnected' });
-  let inFlight: Promise<ConnectState> | null = null;
+  let generation = 0;
+  let inFlight: { generation: number; promise: Promise<ConnectState> } | null = null;
 
   async function detect(signal?: AbortSignal): Promise<ConnectState> {
-    if (inFlight) return inFlight;
+    if (inFlight) return inFlight.promise;
+    const attemptGeneration = ++generation;
     store.setState({ name: 'detecting' });
 
-    inFlight = (async (): Promise<ConnectState> => {
+    const promise = (async (): Promise<ConnectState> => {
       try {
         const capability = await operations.capability(signal);
         const next = classify(capability);
-        store.setState(next);
+        if (generation === attemptGeneration) {
+          store.setState(next);
+        }
         return next;
       } catch (error) {
         const next = fromError(error);
-        store.setState(next);
+        if (generation === attemptGeneration) {
+          store.setState(next);
+        }
         return next;
       } finally {
-        inFlight = null;
+        if (generation === attemptGeneration) {
+          inFlight = null;
+        }
       }
     })();
+    inFlight = { generation: attemptGeneration, promise };
 
-    return inFlight;
+    return promise;
   }
 
   return {
@@ -88,6 +97,8 @@ export function createConnectFlow(operations: PrivacyOperations): ConnectFlow {
     recheck: detect,
 
     disconnect(): void {
+      generation += 1;
+      inFlight = null;
       store.setState({ name: 'disconnected' });
     },
 

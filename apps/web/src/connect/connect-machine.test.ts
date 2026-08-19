@@ -1,6 +1,16 @@
 import { describe, expect, it, vi } from 'vitest';
-import { FakePrivacyOperations, PrivacyError } from '@strkworld/privacy';
+import { FakePrivacyOperations, PrivacyError, type PrivacyOperations } from '@strkworld/privacy';
 import { createConnectFlow, toWalletStatus } from './connect-machine.js';
+
+function deferred<T>(): { promise: Promise<T>; resolve(value: T): void; reject(error: unknown): void } {
+  let resolve!: (value: T) => void;
+  let reject!: (error: unknown) => void;
+  const promise = new Promise<T>((resolvePromise, rejectPromise) => {
+    resolve = resolvePromise;
+    reject = rejectPromise;
+  });
+  return { promise, resolve, reject };
+}
 
 describe('connect flow', () => {
   it('starts disconnected and reports it to the world', () => {
@@ -110,6 +120,67 @@ describe('connect flow', () => {
 
     await Promise.all([flow.connect(), flow.connect(), flow.connect()]);
     expect(capability).toHaveBeenCalledTimes(1);
+  });
+
+  it('stays disconnected when a capability query resolves after disconnect', async () => {
+    const capability = deferred<Awaited<ReturnType<PrivacyOperations['capability']>>>();
+    const operations = new FakePrivacyOperations();
+    vi.spyOn(operations, 'capability').mockReturnValue(capability.promise);
+    const flow = createConnectFlow(operations);
+
+    const pending = flow.connect();
+    flow.disconnect();
+    capability.resolve({ supportsStrk20: true, walletApiVersion: '0.10.3', registration: 'registered' });
+
+    await pending;
+    expect(flow.store.getState()).toEqual({ name: 'disconnected' });
+    expect(flow.status()).toBe('disconnected');
+  });
+
+  it('stays disconnected when a capability query rejects after disconnect', async () => {
+    const capability = deferred<Awaited<ReturnType<PrivacyOperations['capability']>>>();
+    const operations = new FakePrivacyOperations();
+    vi.spyOn(operations, 'capability').mockReturnValue(capability.promise);
+    const flow = createConnectFlow(operations);
+
+    const pending = flow.connect();
+    flow.disconnect();
+    capability.reject(new PrivacyError('unreachable', 'stale network failure'));
+
+    await pending;
+    expect(flow.store.getState()).toEqual({ name: 'disconnected' });
+    expect(flow.status()).toBe('disconnected');
+  });
+
+  it('starts a fresh attempt after disconnect and lets it win over the stale attempt', async () => {
+    const firstCapability = deferred<Awaited<ReturnType<PrivacyOperations['capability']>>>();
+    const secondCapability = deferred<Awaited<ReturnType<PrivacyOperations['capability']>>>();
+    const operations = new FakePrivacyOperations();
+    const capability = vi.spyOn(operations, 'capability')
+      .mockReturnValueOnce(firstCapability.promise)
+      .mockReturnValueOnce(secondCapability.promise);
+    const flow = createConnectFlow(operations);
+
+    const first = flow.connect();
+    flow.disconnect();
+    const second = flow.connect();
+    expect(second).not.toBe(first);
+    expect(capability).toHaveBeenCalledTimes(2);
+
+    secondCapability.resolve({ supportsStrk20: true, walletApiVersion: '0.10.3', registration: 'registered' });
+    await second;
+    expect(flow.store.getState()).toMatchObject({
+      name: 'connected',
+      capability: { walletApiVersion: '0.10.3' },
+    });
+
+    firstCapability.reject(new PrivacyError('unreachable', 'stale network failure'));
+    await first;
+    expect(flow.store.getState()).toMatchObject({
+      name: 'connected',
+      capability: { walletApiVersion: '0.10.3' },
+    });
+    expect(flow.status()).toBe('connected');
   });
 
   it('passes detecting through to the world as connecting', () => {
