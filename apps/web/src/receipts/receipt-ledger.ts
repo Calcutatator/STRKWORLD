@@ -27,10 +27,10 @@ import { createStore, type Store } from '../store/store.js';
  */
 
 export interface Receipt {
-  building: BuildingId;
-  transactionHash: string;
+  readonly building: BuildingId;
+  readonly transactionHash: string;
   /** What settled. Kept so the receipt can describe itself, not just its hash. */
-  intents: readonly Intent[];
+  readonly intents: readonly Intent[];
 }
 
 export interface ReceiptLedger {
@@ -43,7 +43,7 @@ export interface ReceiptLedger {
 }
 
 export function createReceiptLedger(): ReceiptLedger {
-  const store = createStore<readonly Receipt[]>([]);
+  const store = createStore<readonly Receipt[]>(Object.freeze([]));
 
   return {
     store,
@@ -52,15 +52,22 @@ export function createReceiptLedger(): ReceiptLedger {
       // Idempotent on hash: a retry that resolves twice must not produce two
       // receipts for one transaction.
       if (store.getState().some((held) => held.transactionHash === receipt.transactionHash)) return;
-      store.setState((held) => [...held, receipt]);
+      const snapshot: Receipt = Object.freeze({
+        building: receipt.building,
+        transactionHash: receipt.transactionHash,
+        intents: Object.freeze(receipt.intents.map((intent): Intent => Object.freeze({ ...intent }))),
+      });
+      store.setState((held) => Object.freeze([...held, snapshot]));
     },
 
     pending(building: BuildingId): readonly Receipt[] {
-      return store.getState().filter((receipt) => receipt.building === building);
+      return Object.freeze(store.getState().filter((receipt) => receipt.building === building));
     },
 
     acknowledge(transactionHash: string): void {
-      store.setState((held) => held.filter((receipt) => receipt.transactionHash !== transactionHash));
+      store.setState((held) => Object.freeze(
+        held.filter((receipt) => receipt.transactionHash !== transactionHash),
+      ));
     },
   };
 }

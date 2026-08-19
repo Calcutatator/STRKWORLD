@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import type { Intent } from '@strkworld/privacy';
-import { createReceiptLedger } from './receipt-ledger.js';
+import { createReceiptLedger, type Receipt } from './receipt-ledger.js';
 
 const TOKEN = '0x04718f5a0fc34cc1af16a1cdee98ffb20c31f5cd61d6ab07201858f4287c938d';
 const intents: readonly Intent[] = [{ kind: 'shield', token: TOKEN, amount: 1n }];
@@ -29,6 +29,57 @@ describe('receipt ledger', () => {
     ledger.record({ building: 'bank', transactionHash: '0xabc', intents });
     ledger.record({ building: 'bank', transactionHash: '0xabc', intents });
     expect(ledger.pending('bank')).toHaveLength(1);
+  });
+
+  it('owns a receipt snapshot after recording it', () => {
+    const sourceIntents: Intent[] = [{ kind: 'shield', token: TOKEN, amount: 1n }];
+    const source: Receipt = {
+      building: 'bank',
+      transactionHash: '0xabc',
+      intents: sourceIntents,
+    };
+    const ledger = createReceiptLedger();
+    ledger.record(source);
+
+    Reflect.set(source, 'building', 'exchange');
+    Reflect.set(source, 'transactionHash', '0xchanged');
+    sourceIntents[0] = { kind: 'shield', token: TOKEN, amount: 2n };
+    sourceIntents.push({ kind: 'shield', token: TOKEN, amount: 3n });
+
+    expect(ledger.pending('bank')).toEqual([{
+      building: 'bank',
+      transactionHash: '0xabc',
+      intents: [{ kind: 'shield', token: TOKEN, amount: 1n }],
+    }]);
+    expect(ledger.pending('exchange')).toHaveLength(0);
+    ledger.acknowledge('0xabc');
+    expect(ledger.pending('bank')).toHaveLength(0);
+  });
+
+  it('does not expose mutable held receipts through pending snapshots', () => {
+    const ledger = createReceiptLedger();
+    ledger.record({ building: 'bank', transactionHash: '0xabc', intents });
+
+    const pending = ledger.pending('bank');
+    const held = pending[0]!;
+    expect(Object.isFrozen(ledger.store.getState())).toBe(true);
+    expect(Object.isFrozen(pending)).toBe(true);
+    expect(Object.isFrozen(held)).toBe(true);
+    expect(Object.isFrozen(held.intents)).toBe(true);
+    expect(Object.isFrozen(held.intents[0])).toBe(true);
+    expect(Reflect.set(held, 'building', 'exchange')).toBe(false);
+    expect(Reflect.set(held, 'transactionHash', '0xchanged')).toBe(false);
+    expect(Reflect.set(held.intents[0]!, 'amount', 2n)).toBe(false);
+    expect(Reflect.set(held.intents, '0', { kind: 'shield', token: TOKEN, amount: 3n })).toBe(false);
+
+    expect(ledger.pending('bank')).toEqual([{
+      building: 'bank',
+      transactionHash: '0xabc',
+      intents: [{ kind: 'shield', token: TOKEN, amount: 1n }],
+    }]);
+    expect(ledger.pending('exchange')).toHaveLength(0);
+    ledger.acknowledge('0xabc');
+    expect(ledger.pending('bank')).toHaveLength(0);
   });
 
   it('keeps receipts oldest first, so nothing jumps the queue', () => {
