@@ -51,6 +51,17 @@ async function rawRequest(port: number, path: string): Promise<{ status: number;
   });
 }
 
+async function rawHttpRequest(port: number, request: string): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const socket = createConnection({ host: '127.0.0.1', port });
+    const chunks: Buffer[] = [];
+    socket.once('connect', () => socket.write(request));
+    socket.on('data', (chunk: Buffer) => chunks.push(chunk));
+    socket.once('end', () => resolve(Buffer.concat(chunks).toString()));
+    socket.once('error', reject);
+  });
+}
+
 describe('Fly edge public boundary', () => {
   it('serves assets and safely falls back to the SPA shell', async () => {
     const root = await fixture();
@@ -113,7 +124,11 @@ describe('Fly edge public boundary', () => {
     const edge = createEdgeServer({ staticRoot: root, backendPort, lobbyPort, publicOrigin: 'https://game.example' });
     const edgePort = await listen(edge);
 
-    const api = await fetchEdge(edgePort, '/api/v1/rpc/pool-config?x=1', { method: 'POST' });
+    const api = await fetchEdge(edgePort, '/api/v1/rpc/pool-config?x=1', {
+      method: 'POST',
+      body: '{}',
+      headers: { 'Content-Type': 'application/json' },
+    });
     expect(api.status).toBe(200);
     expect(await api.json()).toEqual({ path: '/v1/rpc/pool-config?x=1', method: 'POST' });
     expect(api.headers.get('access-control-allow-origin')).toBeNull();
@@ -138,6 +153,107 @@ describe('Fly edge public boundary', () => {
     expect(matchmakeBody.headers['proxy-authorization']).toBeUndefined();
     expect(matchmakeBody.headers['x-forwarded-for']).toBeUndefined();
     expect(matchmakeBody.body).toBe('{"x":1,"y":2,"facing":"down","sprite":"avatar-1"}');
+  });
+
+  it('forwards only JSON body metadata from the public API request', async () => {
+    const root = await fixture();
+    const backend = createServer((request, response) => {
+      const chunks: Buffer[] = [];
+      request.on('data', (chunk: Buffer) => chunks.push(chunk));
+      request.once('end', () => {
+        response.setHeader('content-type', 'application/json');
+        response.end(JSON.stringify({
+          path: request.url,
+          method: request.method,
+          headers: request.headers,
+          body: Buffer.concat(chunks).toString(),
+        }));
+      });
+    });
+    const backendPort = await listen(backend);
+    const edge = createEdgeServer({ staticRoot: root, backendPort, lobbyPort: 1, publicOrigin: 'https://game.example' });
+    const edgePort = await listen(edge);
+    const body = JSON.stringify({ v: 1, route: 'transfer', feeAuthorization: 'body-bound-authorization' });
+
+    const response = await fetchEdge(edgePort, '/api/v1/private/submit', {
+      method: 'POST',
+      body,
+      headers: {
+        'Content-Type': 'application/json; charset=utf-8',
+        Cookie: 'session=private',
+        Authorization: 'Bearer private',
+        'Proxy-Authorization': 'Basic private',
+        Forwarded: 'for=198.51.100.1',
+        'X-Forwarded-For': '198.51.100.1',
+        'X-Player-Identifier': 'private-player-id',
+      },
+    });
+
+    expect(response.status).toBe(200);
+    const received = await response.json() as {
+      path: string;
+      method: string;
+      headers: Record<string, string | undefined>;
+      body: string;
+    };
+    expect(received.path).toBe('/v1/private/submit');
+    expect(received.method).toBe('POST');
+    expect(received.body).toBe(body);
+    expect(received.headers['content-type']).toBe('application/json; charset=utf-8');
+    expect(received.headers['content-length']).toBe(String(Buffer.byteLength(body)));
+    expect(received.headers.cookie).toBeUndefined();
+    expect(received.headers.authorization).toBeUndefined();
+    expect(received.headers['proxy-authorization']).toBeUndefined();
+    expect(received.headers.forwarded).toBeUndefined();
+    expect(received.headers['x-forwarded-for']).toBeUndefined();
+    expect(received.headers['x-player-identifier']).toBeUndefined();
+  });
+
+  it.each([
+    [
+      'duplicate Content-Type',
+      'Content-Type: application/json\r\nContent-Type: application/json\r\nContent-Length: 2',
+    ],
+    [
+      'duplicate Content-Length',
+      'Content-Type: application/json\r\nContent-Length: 2\r\nContent-Length: 2',
+    ],
+    [
+      'missing Content-Type',
+      'Content-Length: 2',
+    ],
+    [
+      'malformed Content-Type',
+      'Content-Type: application/json; charset\r\nContent-Length: 2',
+    ],
+    [
+      'unsupported Content-Type',
+      'Content-Type: text/plain\r\nContent-Length: 2',
+    ],
+    [
+      'non-decimal Content-Length',
+      'Content-Type: application/json\r\nContent-Length: 2.0',
+    ],
+  ])('rejects %s before the private backend', async (_label, metadata) => {
+    const root = await fixture();
+    let backendCalls = 0;
+    const backend = createServer((_request, response) => {
+      backendCalls += 1;
+      response.end('unexpected');
+    });
+    const backendPort = await listen(backend);
+    const edge = createEdgeServer({ staticRoot: root, backendPort, lobbyPort: 1, publicOrigin: 'https://game.example' });
+    const edgePort = await listen(edge);
+
+    const raw = await rawHttpRequest(
+      edgePort,
+      `POST /api/v1/private/submit HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\n${metadata}\r\n\r\n{}`,
+    );
+    const [, body = ''] = raw.split('\r\n\r\n', 2);
+
+    expect(raw).toContain('HTTP/1.1 400 Bad Request');
+    expect(body).toBe(JSON.stringify({ code: 'BAD_REQUEST', message: 'The request is invalid.' }));
+    expect(backendCalls).toBe(0);
   });
 
   it.each(['avatar-9', 'avatar-16'])('admits and forwards only the D-047 placement fields for %s', async (sprite) => {
@@ -278,7 +394,11 @@ describe('Fly edge public boundary', () => {
     const root = await fixture();
     const edge = createEdgeServer({ staticRoot: root, backendPort: 1, lobbyPort: 1, publicOrigin: 'https://game.example' });
     const port = await listen(edge);
-    const response = await fetchEdge(port, '/api/v1/rpc/pool-config', { method: 'POST' });
+    const response = await fetchEdge(port, '/api/v1/rpc/pool-config', {
+      method: 'POST',
+      body: '{}',
+      headers: { 'Content-Type': 'application/json' },
+    });
     expect(response.status).toBe(502);
     expect(await response.json()).toEqual({ code: 'UPSTREAM_UNAVAILABLE', message: 'The service is temporarily unavailable.' });
   });

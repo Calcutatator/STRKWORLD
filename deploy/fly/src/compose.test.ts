@@ -36,6 +36,13 @@ async function fakeChild(): Promise<string> {
   return path;
 }
 
+async function fakeStaticRoot(): Promise<string> {
+  const directory = await mkdtemp(join(tmpdir(), 'strkworld-static-'));
+  directories.push(directory);
+  await writeFile(join(directory, 'index.html'), '<html>test shell</html>');
+  return directory;
+}
+
 async function freePort(): Promise<number> {
   const server = createServer();
   await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
@@ -82,9 +89,10 @@ describe('Fly composition process boundary', () => {
 
   it('waits for both private children before binding the public edge', async () => {
     const child = await fakeChild();
+    const staticRoot = await fakeStaticRoot();
     const { publicPort, backendPort, lobbyPort } = await ports();
     const starting = startFlyComposition({
-      staticRoot: join(process.cwd(), 'apps/web/dist'),
+      staticRoot,
       backendEntry: child,
       lobbyEntry: child,
       publicPort,
@@ -102,6 +110,7 @@ describe('Fly composition process boundary', () => {
     expect(composition.address.port).toBeGreaterThan(0);
     const response = await fetch(`http://127.0.0.1:${composition.address.port}/`);
     expect(response.status).toBe(200);
+    await expect(response.text()).resolves.toBe('<html>test shell</html>');
   });
 
   it('reports a ready child exit to the machine supervisor', async () => {

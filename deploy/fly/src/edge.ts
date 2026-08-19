@@ -52,6 +52,8 @@ export function createEdgeServer(options: EdgeOptions): Server {
     void handleRequest(request, response, { ...options, staticRoot: root });
   }).on('upgrade', (request, socket, head) => {
     tunnelUpgrade(request, socket, head, options.lobbyPort, options.publicOrigin);
+  }).on('clientError', (_error, socket) => {
+    sendRawBadRequest(socket);
   });
   const sockets = new Set<Socket>();
   activeSockets.set(server, sockets);
@@ -95,7 +97,14 @@ async function handleRequest(
     return sendError(response, 404, 'NOT_FOUND', 'The requested resource was not found.');
   }
   if (pathname === '/api' || pathname.startsWith('/api/')) {
-    return proxyHttp(request, response, options.backendPort, stripApiPrefix(request.url ?? '/'));
+    const headers = apiHeaders(request);
+    if (headers === null) {
+      request.resume();
+      return sendError(response, 400, 'BAD_REQUEST', 'The request is invalid.');
+    }
+    return proxyHttp(request, response, options.backendPort, stripApiPrefix(request.url ?? '/'), {
+      headers,
+    });
   }
   if (pathname === '/matchmake' || pathname.startsWith('/matchmake/')) {
     return handleMatchmake(request, response, options);
@@ -114,6 +123,109 @@ function pathnameOf(url: string | undefined): string | null {
 function stripApiPrefix(url: string): string {
   const suffix = url.slice('/api'.length);
   return suffix === '' ? '/' : suffix;
+}
+
+function apiHeaders(request: IncomingMessage): Record<string, string> | null {
+  const headers: Record<string, string> = {};
+  const contentTypes = rawHeaderValues(request, 'content-type');
+  if (contentTypes.length > 1) return null;
+  const contentType = contentTypes[0];
+  if (request.method === 'POST' && contentType === undefined) return null;
+  if (contentType !== undefined) {
+    if (!isJsonContentType(contentType)) return null;
+    headers['content-type'] = contentType;
+  }
+
+  const contentLengths = rawHeaderValues(request, 'content-length');
+  if (contentLengths.length > 1) return null;
+  const contentLength = contentLengths[0];
+  if (contentLength !== undefined) {
+    if (!/^\d+$/.test(contentLength) || !Number.isSafeInteger(Number(contentLength))) return null;
+    headers['content-length'] = contentLength;
+  }
+  return headers;
+}
+
+function rawHeaderValues(request: IncomingMessage, expectedName: string): string[] {
+  const values: string[] = [];
+  for (let index = 0; index < request.rawHeaders.length; index += 2) {
+    if (request.rawHeaders[index]?.toLowerCase() === expectedName) {
+      values.push(request.rawHeaders[index + 1] ?? '');
+    }
+  }
+  return values;
+}
+
+function isJsonContentType(value: string): boolean {
+  const separator = value.indexOf(';');
+  const mediaType = (separator < 0 ? value : value.slice(0, separator)).trim();
+  if (mediaType !== 'application/json') return false;
+  if (separator < 0) return true;
+
+  let index = separator;
+  while (index < value.length) {
+    if (value[index] !== ';') return false;
+    index += 1;
+    index = skipOptionalWhitespace(value, index);
+
+    const nameStart = index;
+    while (index < value.length && isHttpTokenCharacter(value[index]!)) index += 1;
+    if (index === nameStart) return false;
+    index = skipOptionalWhitespace(value, index);
+    if (value[index] !== '=') return false;
+    index += 1;
+    index = skipOptionalWhitespace(value, index);
+
+    if (value[index] === '"') {
+      index += 1;
+      let closed = false;
+      while (index < value.length) {
+        const character = value[index]!;
+        if (character === '"') {
+          index += 1;
+          closed = true;
+          break;
+        }
+        if (character === '\\') {
+          index += 1;
+          if (index >= value.length || !isVisibleHeaderCharacter(value[index]!)) return false;
+          index += 1;
+          continue;
+        }
+        if (!isQuotedHeaderCharacter(character)) return false;
+        index += 1;
+      }
+      if (!closed) return false;
+    } else {
+      const valueStart = index;
+      while (index < value.length && isHttpTokenCharacter(value[index]!)) index += 1;
+      if (index === valueStart) return false;
+    }
+
+    index = skipOptionalWhitespace(value, index);
+  }
+  return true;
+}
+
+function skipOptionalWhitespace(value: string, start: number): number {
+  let index = start;
+  while (value[index] === ' ' || value[index] === '\t') index += 1;
+  return index;
+}
+
+function isHttpTokenCharacter(character: string): boolean {
+  return /^[!#$%&'*+\-.^_`|~0-9A-Za-z]$/.test(character);
+}
+
+function isVisibleHeaderCharacter(character: string): boolean {
+  const code = character.charCodeAt(0);
+  return character === '\t' || (code >= 0x20 && code <= 0x7e);
+}
+
+function isQuotedHeaderCharacter(character: string): boolean {
+  const code = character.charCodeAt(0);
+  return character === '\t' || code === 0x20 || code === 0x21 ||
+    (code >= 0x23 && code <= 0x5b) || (code >= 0x5d && code <= 0x7e);
 }
 
 const MATCHMAKE_PATH = '/matchmake/joinOrCreate/street';
@@ -397,4 +509,19 @@ function sendError(response: ServerResponse, status: number, code: string, messa
   response.setHeader('content-length', Buffer.byteLength(body));
   response.setHeader('x-content-type-options', 'nosniff');
   response.end(body);
+}
+
+function sendRawBadRequest(socket: import('node:stream').Duplex): void {
+  if (socket.destroyed || !socket.writable) return;
+  const body = JSON.stringify({ code: 'BAD_REQUEST', message: 'The request is invalid.' });
+  socket.end([
+    'HTTP/1.1 400 Bad Request',
+    'Connection: close',
+    'Cache-Control: no-store',
+    'Content-Type: application/json; charset=utf-8',
+    `Content-Length: ${Buffer.byteLength(body)}`,
+    'X-Content-Type-Options: nosniff',
+    '',
+    body,
+  ].join('\r\n'));
 }

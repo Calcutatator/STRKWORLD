@@ -31,6 +31,38 @@ jobs:
       - run: npm run typecheck
       - run: npm test
 
+  deployment-builds:
+    name: Deployment typecheck and build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22.12'
+          cache: npm
+      - run: npm ci
+      # deploy/ is intentionally outside npm workspaces, so the root scripts
+      # do not reach either production composition config.
+      - name: Typecheck Fly composition
+        run: npx tsc --noEmit -p deploy/fly/tsconfig.build.json
+      - name: Typecheck standalone backend image
+        run: npx tsc --noEmit -p deploy/backend/tsconfig.build.json
+      # Both Dockerfiles require the repository root as their build context.
+      # The Fly value is public browser configuration, not a credential.
+      - name: Build Fly composition image
+        run: >-
+          docker build
+          --file deploy/fly/Dockerfile
+          --tag strkworld-fly:ci
+          --build-arg VITE_LOBBY_URL=wss://ci.example.com
+          .
+      - name: Build standalone backend image
+        run: >-
+          docker build
+          --file deploy/backend/Dockerfile
+          --tag strkworld-backend:ci
+          .
+
   headers:
     name: No cross-origin isolation headers (D-005)
     runs-on: ubuntu-latest
