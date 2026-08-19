@@ -133,6 +133,12 @@ export function createStreetScene({ Phaser, onTileChanged, remotePeers }: Street
     }
 
     create(): void {
+      // Phaser restarts reuse this Scene instance. Each create owns a fresh set
+      // of controllers, listeners and presentation objects to clean once.
+      this.cleanedUp = false;
+      this.ground = undefined;
+      this.lastTile = { x: -1, y: -1 };
+      this.events.once('shutdown', this.cleanShutdown, this);
       createKenneyRuntimeTextures(this, Phaser, {
         tileIndex: TILE_INDEX,
         grassColour: TILES.grass.colour,
@@ -155,7 +161,6 @@ export function createStreetScene({ Phaser, onTileChanged, remotePeers }: Street
       this.createDoorTriggers();
       this.createRoomVisuals();
       this.createExteriorLabels();
-      this.events.once('shutdown', this.cleanShutdown, this);
     }
 
     override update(_time: number, delta: number): void {
@@ -179,12 +184,20 @@ export function createStreetScene({ Phaser, onTileChanged, remotePeers }: Street
       if (this.cleanedUp) return;
       this.cleanedUp = true;
       for (const room of Object.values(this.roomControllers ?? {})) room?.destroy();
+      this.roomControllers = {};
+      this.roomMaps = {};
+      this.activeRoom = undefined;
+      this.avatarStudioActive = false;
+      this.ground = undefined;
       this.avatarStudio?.destroy();
       this.avatarStudio = undefined;
       this.avatarStudioPresentation = undefined;
       this.inputGate?.resume();
+      this.inputGate = NOOP_INPUT_GATE;
       this.roomGraphics?.destroy();
+      this.roomGraphics = undefined;
       this.roomStationGraphics?.destroy();
+      this.roomStationGraphics = undefined;
       this.avatarStudioGraphics?.destroy();
       this.avatarStudioGraphics = undefined;
       for (const label of this.roomLabels.values()) label.destroy();
@@ -195,6 +208,7 @@ export function createStreetScene({ Phaser, onTileChanged, remotePeers }: Street
       this.remoteAvatars = undefined;
       for (const overlay of this.doorOverlays) overlay.destroy();
       this.doorOverlays = [];
+      this.avatarStudioFigures.clear();
     }
 
     // -- construction --------------------------------------------------------
