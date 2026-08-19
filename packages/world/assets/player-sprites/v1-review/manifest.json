@@ -1,0 +1,94 @@
+{
+  "status": "review-art-not-runtime-ready",
+  "creativeProductionBoardId": "c902ae12-5745-4b53-8f75-b7f70246319f",
+  "approvedConcept": "contact-sheet-approved-v2.png",
+  "reviewSheets": {
+    "labeled": "master-sheet-labeled-v1.png",
+    "clean": "master-sheet-clean-review-v1.png"
+  },
+  "runtimeTarget": {
+    "frameSize": { "width": 32, "height": 32 },
+    "directionRows": ["down", "left", "right", "up"],
+    "frameColumns": ["idle", "walk-1", "walk-2"],
+    "states": ["cosy", "fighting"],
+    "roomDisplayFrame": "cosy.down.idle",
+    "origin": { "x": 0.5, "y": 0.5 },
+    "feetAnchor": "fixed per character across every frame in both states",
+    "collisionFootprint": "current 24x24 player body must remain valid inside each 32x32 cell",
+    "normalWalkFps": 8,
+    "sprintWalkFps": 12
+  },
+  "integrationNotes": [
+    "Do not wire this package directly into Phaser yet.",
+    "The review PNGs are RGB outputs with a baked light checkerboard, not transparent runtime PNGs.",
+    "The clean review sheet is visually useful, but it still needs alpha cleanup, exact 32x32 cell extraction, and frame-by-frame anchor validation before runtime integration.",
+    "The hidden avatar room should display one cosy down-facing idle figure per character, not both states.",
+    "The fighting state is a visual toggle paired with the same character. It must not encode wallet, protocol, financial, route, balance, or transaction state."
+  ],
+  "characters": [
+    {
+      "character": 1,
+      "runtimeKey": "avatar-1",
+      "sizeClass": "medium",
+      "roomDisplay": "cosy.down.idle",
+      "cosyState": "teal-scarf city runner in soft travel coat and satchel",
+      "fightingState": "same runner with light blade or short staff"
+    },
+    {
+      "character": 2,
+      "runtimeKey": "avatar-2",
+      "sizeClass": "medium",
+      "roomDisplay": "cosy.down.idle",
+      "cosyState": "red-haired mechanic courier in workshop clothes with goggles and tool bag",
+      "fightingState": "same courier with compact wrench or tool weapon"
+    },
+    {
+      "character": 3,
+      "runtimeKey": "avatar-3",
+      "sizeClass": "medium",
+      "roomDisplay": "cosy.down.idle",
+      "cosyState": "cream-hood teal explorer in soft cloak and satchel",
+      "fightingState": "same explorer with compact crossbow or hooked tool"
+    },
+    {
+      "character": 4,
+      "runtimeKey": "avatar-4",
+      "sizeClass": "large",
+      "roomDisplay": "cosy.down.idle",
+      "cosyState": "large guardian in heavy coat over partial armor",
+      "fightingState": "same guardian in fuller armor with shield and hammer"
+    },
+    {
+      "character": 5,
+      "runtimeKey": "avatar-5",
+      "sizeClass": "medium",
+      "roomDisplay": "cosy.down.idle",
+      "cosyState": "ivory and gold scholar mage in robe-coat with ledger satchel",
+      "fightingState": "same scholar with staff or focus"
+    },
+    {
+      "character": 6,
+      "runtimeKey": "avatar-6",
+      "sizeClass": "small",
+      "roomDisplay": "cosy.down.idle",
+      "cosyState": "small chibi mechanic girl in oversized workshop hoodie with goggles",
+      "fightingState": "same mechanic with oversized wrench or gadget"
+    },
+    {
+      "character": 7,
+      "runtimeKey": "avatar-7",
+      "sizeClass": "large",
+      "roomDisplay": "cosy.down.idle",
+      "cosyState": "large armored lancer in cloak over partial armor",
+      "fightingState": "same lancer with heavy spear, axe, or greatsword"
+    },
+    {
+      "character": 8,
+      "runtimeKey": "avatar-8",
+      "sizeClass": "medium",
+      "roomDisplay": "cosy.down.idle",
+      "cosyState": "navy duelist archivist in long coat with satchel",
+      "fightingState": "same archivist with rapier or slim blade"
+    }
+  ]
+}
