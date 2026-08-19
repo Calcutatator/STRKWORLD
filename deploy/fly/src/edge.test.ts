@@ -155,6 +155,60 @@ describe('Fly edge public boundary', () => {
     expect(matchmakeBody.body).toBe('{"x":1,"y":2,"facing":"down","sprite":"avatar-1"}');
   });
 
+  it('forwards the documented pool-config staging smoke without credentials', async () => {
+    const root = await fixture();
+    const backend = createServer((request, response) => {
+      const chunks: Buffer[] = [];
+      request.on('data', (chunk: Buffer) => chunks.push(chunk));
+      request.once('end', () => {
+        response.setHeader('content-type', 'application/json');
+        response.end(JSON.stringify({
+          path: request.url,
+          method: request.method,
+          headers: request.headers,
+          body: Buffer.concat(chunks).toString(),
+        }));
+      });
+    });
+    const backendPort = await listen(backend);
+    const edge = createEdgeServer({ staticRoot: root, backendPort, lobbyPort: 1, publicOrigin: 'https://game.example' });
+    const edgePort = await listen(edge);
+    const body = '{"v":1}';
+
+    const response = await fetchEdge(edgePort, '/api/v1/rpc/pool-config', {
+      method: 'POST',
+      body,
+      headers: {
+        'Content-Type': 'application/json',
+        Cookie: 'session=private',
+        Authorization: 'Bearer private',
+        'Proxy-Authorization': 'Basic private',
+        Forwarded: 'for=198.51.100.1',
+        'X-Forwarded-For': '198.51.100.1',
+        'X-Player-Identifier': 'private-player-id',
+      },
+    });
+
+    expect(response.status).toBe(200);
+    const received = await response.json() as {
+      path: string;
+      method: string;
+      headers: Record<string, string | undefined>;
+      body: string;
+    };
+    expect(received.path).toBe('/v1/rpc/pool-config');
+    expect(received.method).toBe('POST');
+    expect(received.body).toBe(body);
+    expect(received.headers['content-type']).toBe('application/json');
+    expect(received.headers['content-length']).toBe(String(Buffer.byteLength(body)));
+    expect(received.headers.cookie).toBeUndefined();
+    expect(received.headers.authorization).toBeUndefined();
+    expect(received.headers['proxy-authorization']).toBeUndefined();
+    expect(received.headers.forwarded).toBeUndefined();
+    expect(received.headers['x-forwarded-for']).toBeUndefined();
+    expect(received.headers['x-player-identifier']).toBeUndefined();
+  });
+
   it('forwards only JSON body metadata from the public API request', async () => {
     const root = await fixture();
     const backend = createServer((request, response) => {

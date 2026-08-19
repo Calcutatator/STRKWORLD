@@ -41,7 +41,7 @@ Manual smoke checks after a staging deployment:
 
 1. `curl -i https://<domain>/` returns the shell; `curl -i https://<domain>/health` and `/metrics` return 404.
 2. A hashed `/assets/*` response is immutable; `/` and a client-side route are `no-cache`.
-3. `curl -i -X POST https://<domain>/api/v1/rpc/pool-config` reaches the backend with `/api` stripped and no `Access-Control-Allow-Origin` header.
+3. `curl -i -X POST https://<domain>/api/v1/rpc/pool-config -H 'Content-Type: application/json' --data '{"v":1}'` reaches the backend with `/api` stripped, the exact JSON body and content metadata preserved, and no `Access-Control-Allow-Origin` header.
 4. `curl -i -X OPTIONS https://<domain>/matchmake/joinOrCreate/street -H 'Origin: https://<real-domain>'` receives the allowlisted credentialed lobby CORS response; a different origin receives no allow-origin or credentials grant.
 5. Attempt a WebSocket upgrade with the configured origin, a missing origin and a different origin; only the configured origin may reach the lobby child. Confirm matchmaking HTTP and WebSocket upstreams receive no Cookie, Authorization, Proxy-Authorization or other unlisted credential header.
 6. Connect two browser sessions to `wss://<domain>/...` and verify mutual avatars. The user owns rendered acceptance; do not put wallet, address, balance, proof or transaction material in this smoke script.
