@@ -250,6 +250,47 @@ without a verification method is a rumour.
 
 Format: `### YYYY-MM-DD — short title` then what, why it matters, how verified.
 
+### 2026-08-20 — StreetScene restarts own a fresh failure-safe lifecycle
+
+Phaser may restart the same `StreetScene` instance, so `create()` now opens a
+new cleanup cycle before its first allocation: it clears the prior ground
+reference and tile-report sentinel, resets the idempotence guard, and registers
+the scene's one-shot `shutdown` handler before construction begins. Cleanup
+destroys the resources reached in the current cycle and clears their ownership
+references, including room controllers/maps and active state, Studio state,
+input gate, room graphics and labels, remote avatars, door overlays and Studio
+figures. A successful restart, an early throw and a later partial throw can
+therefore each receive shutdown cleanup once, followed by another successful
+cycle on the same Scene instance, without re-destroying the completed prior
+cycle or exposing its destroyed ground layer and last tile.
+
+The regression harness must preserve that exact lifecycle. Constructing a new
+Scene for each cycle hides stale instance state; calling `cleanShutdown()`
+directly after a failed `create()` hides a handler that was armed too late; and
+counting only one listener after the remote-avatar layer exists mistakes its
+own shutdown listener for a duplicate. The tests therefore reuse one instance,
+emit the real shutdown event after both failure positions, expect the scene
+listener alone after the early throw and both legitimate listeners after the
+partial throw, then call cleanup directly only to prove idempotence.
+
+This does not catch or retry a thrown `create()`, and cleanup after failure
+still depends on Phaser delivering shutdown. It does not change authored
+geometry, movement, portals, event or presence payloads, wallet or financial
+behavior; rendered restart acceptance remains untested.
+
+*Verified:* the red same-instance cases either skipped later cleanup because
+the old guard stayed set, retained destroyed prior-cycle references, or had no
+scene cleanup listener when construction threw before the former end-of-create
+registration. Commit `1a415f8` makes two complete cycles clean each owned
+resource exactly once, delivers idempotent cleanup after the early failure,
+cleans resources reached before the partial failure, resets the ground and
+`lastTile` sentinel, and recovers with a later successful cycle. The focused
+StreetScene lifecycle tests and World typecheck, invariant scan and diff check
+passed.
+[GitHub Actions run 32311268181](https://github.com/Calcutatator/STRKWORLD/actions/runs/32311268181)
+also completed successfully. No Phaser runtime, browser, network, wallet or
+transaction was used.
+
 ### 2026-08-20 — The receipt ledger owns immutable session snapshots
 
 `ReceiptLedger.record()` now copies the building and transaction hash, clones

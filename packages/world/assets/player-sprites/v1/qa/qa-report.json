@@ -1,0 +1,2421 @@
+{
+  "status": "pass",
+  "contract": {
+    "sheetSize": [
+      192,
+      256
+    ],
+    "cellSize": [
+      64,
+      64
+    ],
+    "feet": [
+      32,
+      56
+    ],
+    "columns": [
+      "idle",
+      "walk-1",
+      "walk-2"
+    ],
+    "rows": [
+      "down",
+      "left",
+      "right",
+      "up"
+    ],
+    "binaryAlpha": true,
+    "maximumColorsPerFrame": 24,
+    "bakedShadows": false
+  },
+  "sheets": [
+    {
+      "key": "avatar-1",
+      "file": "avatar-1.png",
+      "sha256": "d4b8746a90d5b7ef36a406812d46573fa44bdf9de25998f2a5deaee67aa5b424"
+    },
+    {
+      "key": "avatar-2",
+      "file": "avatar-2.png",
+      "sha256": "c17d47e923710129206727bd5f46a1280750cf6fba746887c7715db234e6408c"
+    },
+    {
+      "key": "avatar-3",
+      "file": "avatar-3.png",
+      "sha256": "41de83698ddc136bd0005ecc5ed3e2a978f0900144be8aba75f8c45fde0b422b"
+    },
+    {
+      "key": "avatar-4",
+      "file": "avatar-4.png",
+      "sha256": "effb8c7d53f6bdbf70cf4d6f2ce4ab409a2e723879b7987813a9a499268188e7"
+    },
+    {
+      "key": "avatar-5",
+      "file": "avatar-5.png",
+      "sha256": "4af1f860cc4f108b48863858c5313b8fd0731cee9c649399fad2184c649fae49"
+    },
+    {
+      "key": "avatar-6",
+      "file": "avatar-6.png",
+      "sha256": "ab11c1044b092dd753ca62c3de8fe33808ee8ef1871c695133fed29e3c9e80e5"
+    },
+    {
+      "key": "avatar-7",
+      "file": "avatar-7.png",
+      "sha256": "5425c9a6172e26f954d38b8e7178b1fa77102c226fec8f9653cdbad2b4d16431"
+    },
+    {
+      "key": "avatar-8",
+      "file": "avatar-8.png",
+      "sha256": "29036be22f4e23f87f8f7b27e9060f4de4dadc690b79dfffe7c75a35a5ae5685"
+    },
+    {
+      "key": "avatar-9",
+      "file": "avatar-9.png",
+      "sha256": "ac375bd13245b4062dd51f654b7153d6400818128efe2bed57489927d73be16a"
+    },
+    {
+      "key": "avatar-10",
+      "file": "avatar-10.png",
+      "sha256": "8b4d74f820d80d6870a2d687374d006dd95ccd7805a55a877051037ac9d4c0b3"
+    },
+    {
+      "key": "avatar-11",
+      "file": "avatar-11.png",
+      "sha256": "1b86097ada9953283c5306885174a387e37d1057c88c0a9497bb6ca8d25a7017"
+    },
+    {
+      "key": "avatar-12",
+      "file": "avatar-12.png",
+      "sha256": "c931410c7ba1efe0a5cd23c600862815d86fc738b724d03f8d84bdb0c7cd3bf9"
+    },
+    {
+      "key": "avatar-13",
+      "file": "avatar-13.png",
+      "sha256": "300354e2521d83463d1a745a8cbed7a0069d8ee92d94ae78a8a64f7e3bc0b983"
+    },
+    {
+      "key": "avatar-14",
+      "file": "avatar-14.png",
+      "sha256": "2048c8d1af78c075d7395fd947a5fcb7e153c22d3c6fe4eeb92e14eb8d01dcd6"
+    },
+    {
+      "key": "avatar-15",
+      "file": "avatar-15.png",
+      "sha256": "59104aa8045891735739b775038a49553d824c7ca1e2dce827aa122721ba8fd5"
+    },
+    {
+      "key": "avatar-16",
+      "file": "avatar-16.png",
+      "sha256": "d932149db1d4edef35394aa69c9e030e7ecfd7ac3f7174c0d1f91734d4d7ab22"
+    }
+  ],
+  "framesChecked": 192,
+  "failures": [],
+  "frames": [
+    {
+      "frame": "avatar-1/down/idle",
+      "bbox": [
+        21,
+        21,
+        47,
+        57
+      ],
+      "colors": 24,
+      "components": 1,
+      "exposedBrightEdges": 0
+    },
+    {
+      "frame": "avatar-1/down/walk-1",
+      "bbox": [
+        21,
+        21,
+        47,
+        57
+      ],
+      "colors": 23,
+      "components": 1,
+      "exposedBrightEdges": 0
+    },
+    {
+      "frame": "avatar-1/down/walk-2",
+      "bbox": [
+        21,
+        21,
+        47,
+        57
+      ],
+      "colors": 23,
+      "components": 1,
+      "exposedBrightEdges": 0
+    },
+    {
+      "frame": "avatar-1/left/idle",
+      "bbox": [
+        24,
+        25,
+        42,
+        57
+      ],
+      "colors": 23,
+      "components": 1,
+      "exposedBrightEdges": 0
+    },
+    {
+      "frame": "avatar-1/left/walk-1",
+      "bbox": [
+        24,
+        25,
+        42,
+        57
+      ],
+      "colors": 23,
+      "components": 1,
+      "exposedBrightEdges": 0
+    },
+    {
+      "frame": "avatar-1/left/walk-2",
+      "bbox": [
+        24,
+        25,
+        42,
+        57
+      ],
+      "colors": 23,
+      "components": 1,
+      "exposedBrightEdges": 0
+    },
+    {
+      "frame": "avatar-1/right/idle",
+      "bbox": [
+        24,
+        26,
+        41,
+        57
+      ],
+      "colors": 23,
+      "components": 1,
+      "exposedBrightEdges": 0
+    },
+    {
+      "frame": "avatar-1/right/walk-1",
+      "bbox": [
+        24,
+        26,
+        41,
+        57
+      ],
+      "colors": 23,
+      "components": 1,
+      "exposedBrightEdges": 0
+    },
+    {
+      "frame": "avatar-1/right/walk-2",
+      "bbox": [
+        24,
+        26,
+        41,
+        57
+      ],
+      "colors": 23,
+      "components": 1,
+      "exposedBrightEdges": 0
+    },
+    {
+      "frame": "avatar-1/up/idle",
+      "bbox": [
+        23,
+        24,
+        43,
+        57
+      ],
+      "colors": 24,
+      "components": 1,
+      "exposedBrightEdges": 0
+    },
+    {
+      "frame": "avatar-1/up/walk-1",
+      "bbox": [
+        23,
+        24,
+        43,
+        57
+      ],
+      "colors": 23,
+      "components": 1,
+      "exposedBrightEdges": 0
+    },
+    {
+      "frame": "avatar-1/up/walk-2",
+      "bbox": [
+        23,
+        24,
+        43,
+        57
+      ],
+      "colors": 23,
+      "components": 1,
+      "exposedBrightEdges": 0
+    },
+    {
+      "frame": "avatar-2/down/idle",
+      "bbox": [
+        19,
+        21,
+        44,
+        57
+      ],
+      "colors": 24,
+      "components": 1,
+      "exposedBrightEdges": 0
+    },
+    {
+      "frame": "avatar-2/down/walk-1",
+      "bbox": [
+        19,
+        21,
+        44,
+        57
+      ],
+      "colors": 23,
+      "components": 1,
+      "exposedBrightEdges": 0
+    },
+    {
+      "frame": "avatar-2/down/walk-2",
+      "bbox": [
+        19,
+        21,
+        44,
+        57
+      ],
+      "colors": 23,
+      "components": 1,
+      "exposedBrightEdges": 0
+    },
+    {
+      "frame": "avatar-2/left/idle",
+      "bbox": [
+        19,
+        25,
+        46,
+        57
+      ],
+      "colors": 23,
+      "components": 1,
+      "exposedBrightEdges": 0
+    },
+    {
+      "frame": "avatar-2/left/walk-1",
+      "bbox": [
+        19,
+        25,
+        46,
+        57
+      ],
+      "colors": 23,
+      "components": 1,
+      "exposedBrightEdges": 0
+    },
+    {
+      "frame": "avatar-2/left/walk-2",
+      "bbox": [
+        19,
+        25,
+        46,
+        57
+      ],
+      "colors": 23,
+      "components": 1,
+      "exposedBrightEdges": 0
+    },
+    {
+      "frame": "avatar-2/right/idle",
+      "bbox": [
+        18,
+        25,
+        45,
+        57
+      ],
+      "colors": 23,
+      "components": 1,
+      "exposedBrightEdges": 0
+    },
+    {
+      "frame": "avatar-2/right/walk-1",
+      "bbox": [
+        18,
+        25,
+        45,
+        57
+      ],
+      "colors": 23,
+      "components": 1,
+      "exposedBrightEdges": 0
+    },
+    {
+      "frame": "avatar-2/right/walk-2",
+      "bbox": [
+        18,
+        25,
+        45,
+        57
+      ],
+      "colors": 23,
+      "components": 1,
+      "exposedBrightEdges": 0
+    },
+    {
+      "frame": "avatar-2/up/idle",
+      "bbox": [
+        19,
+        21,
+        44,
+        57
+      ],
+      "colors": 23,
+      "components": 1,
+      "exposedBrightEdges": 0
+    },
+    {
+      "frame": "avatar-2/up/walk-1",
+      "bbox": [
+        19,
+        21,
+        44,
+        57
+      ],
+      "colors": 23,
+      "components": 1,
+      "exposedBrightEdges": 0
+    },
+    {
+      "frame": "avatar-2/up/walk-2",
+      "bbox": [
+        19,
+        21,
+        44,
+        57
+      ],
+      "colors": 23,
+      "components": 1,
+      "exposedBrightEdges": 0
+    },
+    {
+      "frame": "avatar-3/down/idle",
+      "bbox": [
+        18,
+        19,
+        46,
+        57
+      ],
+      "colors": 24,
+      "components": 1,
+      "exposedBrightEdges": 0
+    },
+    {
+      "frame": "avatar-3/down/walk-1",
+      "bbox": [
+        18,
+        19,
+        46,
+        57
+      ],
+      "colors": 23,
+      "components": 1,
+      "exposedBrightEdges": 0
+    },
+    {
+      "frame": "avatar-3/down/walk-2",
+      "bbox": [
+        18,
+        19,
+        46,
+        57
+      ],
+      "colors": 23,
+      "components": 1,
+      "exposedBrightEdges": 0
+    },
+    {
+      "frame": "avatar-3/left/idle",
+      "bbox": [
+        20,
+        25,
+        48,
+        57
+      ],
+      "colors": 23,
+      "components": 1,
+      "exposedBrightEdges": 0
+    },
+    {
+      "frame": "avatar-3/left/walk-1",
+      "bbox": [
+        20,
+        25,
+        48,
+        57
+      ],
+      "colors": 23,
+      "components": 1,
+      "exposedBrightEdges": 0
+    },
+    {
+      "frame": "avatar-3/left/walk-2",
+      "bbox": [
+        20,
+        25,
+        48,
+        57
+      ],
+      "colors": 23,
+      "components": 1,
+      "exposedBrightEdges": 0
+    },
+    {
+      "frame": "avatar-3/right/idle",
+      "bbox": [
+        16,
+        25,
+        44,
+        57
+      ],
+      "colors": 23,
+      "components": 1,
+      "exposedBrightEdges": 0
+    },
+    {
+      "frame": "avatar-3/right/walk-1",
+      "bbox": [
+        16,
+        25,
+        44,
+        57
+      ],
+      "colors": 23,
+      "components": 1,
+      "exposedBrightEdges": 0
+    },
+    {
+      "frame": "avatar-3/right/walk-2",
+      "bbox": [
+        16,
+        25,
+        44,
+        57
+      ],
+      "colors": 23,
+      "components": 1,
+      "exposedBrightEdges": 0
+    },
+    {
+      "frame": "avatar-3/up/idle",
+      "bbox": [
+        18,
+        19,
+        46,
+        57
+      ],
+      "colors": 23,
+      "components": 1,
+      "exposedBrightEdges": 0
+    },
+    {
+      "frame": "avatar-3/up/walk-1",
+      "bbox": [
+        18,
+        19,
+        46,
+        57
+      ],
+      "colors": 23,
+      "components": 1,
+      "exposedBrightEdges": 0
+    },
+    {
+      "frame": "avatar-3/up/walk-2",
+      "bbox": [
+        18,
+        19,
+        46,
+        57
+      ],
+      "colors": 23,
+      "components": 1,
+      "exposedBrightEdges": 0
+    },
+    {
+      "frame": "avatar-4/down/idle",
+      "bbox": [
+        10,
+        9,
+        55,
+        57
+      ],
+      "colors": 24,
+      "components": 1,
+      "exposedBrightEdges": 0
+    },
+    {
+      "frame": "avatar-4/down/walk-1",
+      "bbox": [
+        10,
+        9,
+        55,
+        57
+      ],
+      "colors": 23,
+      "components": 1,
+      "exposedBrightEdges": 0
+    },
+    {
+      "frame": "avatar-4/down/walk-2",
+      "bbox": [
+        10,
+        9,
+        55,
+        57
+      ],
+      "colors": 23,
+      "components": 1,
+      "exposedBrightEdges": 0
+    },
+    {
+      "frame": "avatar-4/left/idle",
+      "bbox": [
+        22,
+        12,
+        48,
+        57
+      ],
+      "colors": 24,
+      "components": 1,
+      "exposedBrightEdges": 0
+    },
+    {
+      "frame": "avatar-4/left/walk-1",
+      "bbox": [
+        22,
+        12,
+        48,
+        57
+      ],
+      "colors": 23,
+      "components": 1,
+      "exposedBrightEdges": 0
+    },
+    {
+      "frame": "avatar-4/left/walk-2",
+      "bbox": [
+        21,
+        12,
+        49,
+        57
+      ],
+      "colors": 23,
+      "components": 1,
+      "exposedBrightEdges": 0
+    },
+    {
+      "frame": "avatar-4/right/idle",
+      "bbox": [
+        17,
+        13,
+        43,
+        57
+      ],
+      "colors": 24,
+      "components": 1,
+      "exposedBrightEdges": 0
+    },
+    {
+      "frame": "avatar-4/right/walk-1",
+      "bbox": [
+        17,
+        13,
+        43,
+        57
+      ],
+      "colors": 23,
+      "components": 1,
+      "exposedBrightEdges": 0
+    },
+    {
+      "frame": "avatar-4/right/walk-2",
+      "bbox": [
+        16,
+        13,
+        45,
+        57
+      ],
+      "colors": 23,
+      "components": 1,
+      "exposedBrightEdges": 0
+    },
+    {
+      "frame": "avatar-4/up/idle",
+      "bbox": [
+        13,
+        13,
+        51,
+        57
+      ],
+      "colors": 24,
+      "components": 1,
+      "exposedBrightEdges": 0
+    },
+    {
+      "frame": "avatar-4/up/walk-1",
+      "bbox": [
+        13,
+        13,
+        51,
+        57
+      ],
+      "colors": 23,
+      "components": 1,
+      "exposedBrightEdges": 0
+    },
+    {
+      "frame": "avatar-4/up/walk-2",
+      "bbox": [
+        13,
+        13,
+        51,
+        57
+      ],
+      "colors": 23,
+      "components": 1,
+      "exposedBrightEdges": 0
+    },
+    {
+      "frame": "avatar-5/down/idle",
+      "bbox": [
+        20,
+        19,
+        44,
+        57
+      ],
+      "colors": 24,
+      "components": 1,
+      "exposedBrightEdges": 0
+    },
+    {
+      "frame": "avatar-5/down/walk-1",
+      "bbox": [
+        20,
+        19,
+        44,
+        57
+      ],
+      "colors": 23,
+      "components": 1,
+      "exposedBrightEdges": 0
+    },
+    {
+      "frame": "avatar-5/down/walk-2",
+      "bbox": [
+        20,
+        19,
+        44,
+        57
+      ],
+      "colors": 23,
+      "components": 1,
+      "exposedBrightEdges": 0
+    },
+    {
+      "frame": "avatar-5/left/idle",
+      "bbox": [
+        21,
+        25,
+        45,
+        57
+      ],
+      "colors": 23,
+      "components": 1,
+      "exposedBrightEdges": 0
+    },
+    {
+      "frame": "avatar-5/left/walk-1",
+      "bbox": [
+        21,
+        25,
+        45,
+        57
+      ],
+      "colors": 23,
+      "components": 2,
+      "exposedBrightEdges": 0
+    },
+    {
+      "frame": "avatar-5/left/walk-2",
+      "bbox": [
+        20,
+        25,
+        45,
+        57
+      ],
+      "colors": 23,
+      "components": 1,
+      "exposedBrightEdges": 0
+    },
+    {
+      "frame": "avatar-5/right/idle",
+      "bbox": [
+        19,
+        25,
+        43,
+        57
+      ],
+      "colors": 23,
+      "components": 1,
+      "exposedBrightEdges": 0
+    },
+    {
+      "frame": "avatar-5/right/walk-1",
+      "bbox": [
+        19,
+        25,
+        43,
+        57
+      ],
+      "colors": 23,
+      "components": 1,
+      "exposedBrightEdges": 0
+    },
+    {
+      "frame": "avatar-5/right/walk-2",
+      "bbox": [
+        19,
+        25,
+        44,
+        57
+      ],
+      "colors": 23,
+      "components": 1,
+      "exposedBrightEdges": 0
+    },
+    {
+      "frame": "avatar-5/up/idle",
+      "bbox": [
+        20,
+        19,
+        44,
+        57
+      ],
+      "colors": 23,
+      "components": 1,
+      "exposedBrightEdges": 0
+    },
+    {
+      "frame": "avatar-5/up/walk-1",
+      "bbox": [
+        20,
+        19,
+        44,
+        57
+      ],
+      "colors": 23,
+      "components": 1,
+      "exposedBrightEdges": 0
+    },
+    {
+      "frame": "avatar-5/up/walk-2",
+      "bbox": [
+        20,
+        19,
+        44,
+        57
+      ],
+      "colors": 23,
+      "components": 1,
+      "exposedBrightEdges": 0
+    },
+    {
+      "frame": "avatar-6/down/idle",
+      "bbox": [
+        21,
+        27,
+        44,
+        57
+      ],
+      "colors": 23,
+      "components": 1,
+      "exposedBrightEdges": 0
+    },
+    {
+      "frame": "avatar-6/down/walk-1",
+      "bbox": [
+        21,
+        27,
+        44,
+        57
+      ],
+      "colors": 23,
+      "components": 1,
+      "exposedBrightEdges": 0
+    },
+    {
+      "frame": "avatar-6/down/walk-2",
+      "bbox": [
+        21,
+        27,
+        44,
+        57
+      ],
+      "colors": 23,
+      "components": 1,
+      "exposedBrightEdges": 0
+    },
+    {
+      "frame": "avatar-6/left/idle",
+      "bbox": [
+        25,
+        27,
+        43,
+        57
+      ],
+      "colors": 24,
+      "components": 1,
+      "exposedBrightEdges": 0
+    },
+    {
+      "frame": "avatar-6/left/walk-1",
+      "bbox": [
+        25,
+        27,
+        43,
+        57
+      ],
+      "colors": 23,
+      "components": 1,
+      "exposedBrightEdges": 0
+    },
+    {
+      "frame": "avatar-6/left/walk-2",
+      "bbox": [
+        25,
+        27,
+        43,
+        57
+      ],
+      "colors": 23,
+      "components": 1,
+      "exposedBrightEdges": 0
+    },
+    {
+      "frame": "avatar-6/right/idle",
+      "bbox": [
+        23,
+        27,
+        40,
+        57
+      ],
+      "colors": 24,
+      "components": 1,
+      "exposedBrightEdges": 0
+    },
+    {
+      "frame": "avatar-6/right/walk-1",
+      "bbox": [
+        23,
+        27,
+        40,
+        57
+      ],
+      "colors": 23,
+      "components": 1,
+      "exposedBrightEdges": 0
+    },
+    {
+      "frame": "avatar-6/right/walk-2",
+      "bbox": [
+        23,
+        27,
+        40,
+        57
+      ],
+      "colors": 23,
+      "components": 1,
+      "exposedBrightEdges": 0
+    },
+    {
+      "frame": "avatar-6/up/idle",
+      "bbox": [
+        19,
+        28,
+        40,
+        57
+      ],
+      "colors": 23,
+      "components": 1,
+      "exposedBrightEdges": 0
+    },
+    {
+      "frame": "avatar-6/up/walk-1",
+      "bbox": [
+        19,
+        28,
+        40,
+        57
+      ],
+      "colors": 23,
+      "components": 1,
+      "exposedBrightEdges": 0
+    },
+    {
+      "frame": "avatar-6/up/walk-2",
+      "bbox": [
+        19,
+        28,
+        40,
+        57
+      ],
+      "colors": 23,
+      "components": 1,
+      "exposedBrightEdges": 0
+    },
+    {
+      "frame": "avatar-7/down/idle",
+      "bbox": [
+        10,
+        10,
+        54,
+        57
+      ],
+      "colors": 24,
+      "components": 1,
+      "exposedBrightEdges": 0
+    },
+    {
+      "frame": "avatar-7/down/walk-1",
+      "bbox": [
+        10,
+        10,
+        54,
+        57
+      ],
+      "colors": 23,
+      "components": 1,
+      "exposedBrightEdges": 0
+    },
+    {
+      "frame": "avatar-7/down/walk-2",
+      "bbox": [
+        10,
+        10,
+        54,
+        57
+      ],
+      "colors": 23,
+      "components": 1,
+      "exposedBrightEdges": 0
+    },
+    {
+      "frame": "avatar-7/left/idle",
+      "bbox": [
+        23,
+        15,
+        52,
+        57
+      ],
+      "colors": 24,
+      "components": 1,
+      "exposedBrightEdges": 0
+    },
+    {
+      "frame": "avatar-7/left/walk-1",
+      "bbox": [
+        23,
+        15,
+        52,
+        57
+      ],
+      "colors": 23,
+      "components": 1,
+      "exposedBrightEdges": 0
+    },
+    {
+      "frame": "avatar-7/left/walk-2",
+      "bbox": [
+        21,
+        15,
+        52,
+        57
+      ],
+      "colors": 23,
+      "components": 1,
+      "exposedBrightEdges": 0
+    },
+    {
+      "frame": "avatar-7/right/idle",
+      "bbox": [
+        12,
+        15,
+        42,
+        57
+      ],
+      "colors": 24,
+      "components": 1,
+      "exposedBrightEdges": 0
+    },
+    {
+      "frame": "avatar-7/right/walk-1",
+      "bbox": [
+        12,
+        15,
+        41,
+        57
+      ],
+      "colors": 23,
+      "components": 1,
+      "exposedBrightEdges": 0
+    },
+    {
+      "frame": "avatar-7/right/walk-2",
+      "bbox": [
+        12,
+        15,
+        44,
+        57
+      ],
+      "colors": 23,
+      "components": 1,
+      "exposedBrightEdges": 0
+    },
+    {
+      "frame": "avatar-7/up/idle",
+      "bbox": [
+        12,
+        10,
+        52,
+        57
+      ],
+      "colors": 24,
+      "components": 1,
+      "exposedBrightEdges": 0
+    },
+    {
+      "frame": "avatar-7/up/walk-1",
+      "bbox": [
+        12,
+        10,
+        52,
+        57
+      ],
+      "colors": 23,
+      "components": 1,
+      "exposedBrightEdges": 0
+    },
+    {
+      "frame": "avatar-7/up/walk-2",
+      "bbox": [
+        12,
+        10,
+        52,
+        57
+      ],
+      "colors": 23,
+      "components": 1,
+      "exposedBrightEdges": 0
+    },
+    {
+      "frame": "avatar-8/down/idle",
+      "bbox": [
+        21,
+        17,
+        43,
+        57
+      ],
+      "colors": 24,
+      "components": 1,
+      "exposedBrightEdges": 0
+    },
+    {
+      "frame": "avatar-8/down/walk-1",
+      "bbox": [
+        21,
+        17,
+        43,
+        57
+      ],
+      "colors": 23,
+      "components": 1,
+      "exposedBrightEdges": 0
+    },
+    {
+      "frame": "avatar-8/down/walk-2",
+      "bbox": [
+        21,
+        17,
+        43,
+        57
+      ],
+      "colors": 23,
+      "components": 1,
+      "exposedBrightEdges": 0
+    },
+    {
+      "frame": "avatar-8/left/idle",
+      "bbox": [
+        21,
+        22,
+        45,
+        57
+      ],
+      "colors": 24,
+      "components": 1,
+      "exposedBrightEdges": 0
+    },
+    {
+      "frame": "avatar-8/left/walk-1",
+      "bbox": [
+        21,
+        22,
+        45,
+        57
+      ],
+      "colors": 23,
+      "components": 1,
+      "exposedBrightEdges": 0
+    },
+    {
+      "frame": "avatar-8/left/walk-2",
+      "bbox": [
+        21,
+        22,
+        45,
+        57
+      ],
+      "colors": 23,
+      "components": 1,
+      "exposedBrightEdges": 0
+    },
+    {
+      "frame": "avatar-8/right/idle",
+      "bbox": [
+        19,
+        22,
+        43,
+        57
+      ],
+      "colors": 24,
+      "components": 1,
+      "exposedBrightEdges": 0
+    },
+    {
+      "frame": "avatar-8/right/walk-1",
+      "bbox": [
+        19,
+        22,
+        43,
+        57
+      ],
+      "colors": 23,
+      "components": 1,
+      "exposedBrightEdges": 0
+    },
+    {
+      "frame": "avatar-8/right/walk-2",
+      "bbox": [
+        19,
+        22,
+        43,
+        57
+      ],
+      "colors": 23,
+      "components": 1,
+      "exposedBrightEdges": 0
+    },
+    {
+      "frame": "avatar-8/up/idle",
+      "bbox": [
+        21,
+        17,
+        43,
+        57
+      ],
+      "colors": 23,
+      "components": 1,
+      "exposedBrightEdges": 0
+    },
+    {
+      "frame": "avatar-8/up/walk-1",
+      "bbox": [
+        21,
+        17,
+        43,
+        57
+      ],
+      "colors": 23,
+      "components": 1,
+      "exposedBrightEdges": 0
+    },
+    {
+      "frame": "avatar-8/up/walk-2",
+      "bbox": [
+        21,
+        17,
+        43,
+        57
+      ],
+      "colors": 23,
+      "components": 1,
+      "exposedBrightEdges": 0
+    },
+    {
+      "frame": "avatar-9/down/idle",
+      "bbox": [
+        19,
+        21,
+        50,
+        57
+      ],
+      "colors": 24,
+      "components": 1,
+      "exposedBrightEdges": 0
+    },
+    {
+      "frame": "avatar-9/down/walk-1",
+      "bbox": [
+        19,
+        21,
+        50,
+        57
+      ],
+      "colors": 23,
+      "components": 1,
+      "exposedBrightEdges": 0
+    },
+    {
+      "frame": "avatar-9/down/walk-2",
+      "bbox": [
+        19,
+        21,
+        50,
+        57
+      ],
+      "colors": 23,
+      "components": 1,
+      "exposedBrightEdges": 0
+    },
+    {
+      "frame": "avatar-9/left/idle",
+      "bbox": [
+        19,
+        25,
+        43,
+        57
+      ],
+      "colors": 24,
+      "components": 1,
+      "exposedBrightEdges": 0
+    },
+    {
+      "frame": "avatar-9/left/walk-1",
+      "bbox": [
+        19,
+        25,
+        43,
+        57
+      ],
+      "colors": 23,
+      "components": 2,
+      "exposedBrightEdges": 0
+    },
+    {
+      "frame": "avatar-9/left/walk-2",
+      "bbox": [
+        19,
+        25,
+        43,
+        57
+      ],
+      "colors": 23,
+      "components": 1,
+      "exposedBrightEdges": 0
+    },
+    {
+      "frame": "avatar-9/right/idle",
+      "bbox": [
+        23,
+        26,
+        46,
+        57
+      ],
+      "colors": 24,
+      "components": 2,
+      "exposedBrightEdges": 0
+    },
+    {
+      "frame": "avatar-9/right/walk-1",
+      "bbox": [
+        23,
+        26,
+        46,
+        57
+      ],
+      "colors": 23,
+      "components": 3,
+      "exposedBrightEdges": 0
+    },
+    {
+      "frame": "avatar-9/right/walk-2",
+      "bbox": [
+        23,
+        26,
+        46,
+        57
+      ],
+      "colors": 23,
+      "components": 2,
+      "exposedBrightEdges": 0
+    },
+    {
+      "frame": "avatar-9/up/idle",
+      "bbox": [
+        20,
+        24,
+        55,
+        57
+      ],
+      "colors": 23,
+      "components": 4,
+      "exposedBrightEdges": 0
+    },
+    {
+      "frame": "avatar-9/up/walk-1",
+      "bbox": [
+        20,
+        24,
+        55,
+        57
+      ],
+      "colors": 23,
+      "components": 2,
+      "exposedBrightEdges": 0
+    },
+    {
+      "frame": "avatar-9/up/walk-2",
+      "bbox": [
+        20,
+        24,
+        55,
+        57
+      ],
+      "colors": 23,
+      "components": 4,
+      "exposedBrightEdges": 0
+    },
+    {
+      "frame": "avatar-10/down/idle",
+      "bbox": [
+        19,
+        21,
+        54,
+        57
+      ],
+      "colors": 24,
+      "components": 1,
+      "exposedBrightEdges": 0
+    },
+    {
+      "frame": "avatar-10/down/walk-1",
+      "bbox": [
+        19,
+        21,
+        54,
+        57
+      ],
+      "colors": 23,
+      "components": 1,
+      "exposedBrightEdges": 0
+    },
+    {
+      "frame": "avatar-10/down/walk-2",
+      "bbox": [
+        19,
+        21,
+        54,
+        57
+      ],
+      "colors": 23,
+      "components": 1,
+      "exposedBrightEdges": 0
+    },
+    {
+      "frame": "avatar-10/left/idle",
+      "bbox": [
+        12,
+        25,
+        52,
+        57
+      ],
+      "colors": 23,
+      "components": 1,
+      "exposedBrightEdges": 0
+    },
+    {
+      "frame": "avatar-10/left/walk-1",
+      "bbox": [
+        12,
+        25,
+        52,
+        57
+      ],
+      "colors": 23,
+      "components": 2,
+      "exposedBrightEdges": 0
+    },
+    {
+      "frame": "avatar-10/left/walk-2",
+      "bbox": [
+        12,
+        25,
+        52,
+        57
+      ],
+      "colors": 23,
+      "components": 1,
+      "exposedBrightEdges": 0
+    },
+    {
+      "frame": "avatar-10/right/idle",
+      "bbox": [
+        12,
+        25,
+        52,
+        57
+      ],
+      "colors": 23,
+      "components": 1,
+      "exposedBrightEdges": 0
+    },
+    {
+      "frame": "avatar-10/right/walk-1",
+      "bbox": [
+        12,
+        25,
+        52,
+        57
+      ],
+      "colors": 23,
+      "components": 2,
+      "exposedBrightEdges": 0
+    },
+    {
+      "frame": "avatar-10/right/walk-2",
+      "bbox": [
+        12,
+        25,
+        52,
+        57
+      ],
+      "colors": 23,
+      "components": 1,
+      "exposedBrightEdges": 0
+    },
+    {
+      "frame": "avatar-10/up/idle",
+      "bbox": [
+        19,
+        21,
+        54,
+        57
+      ],
+      "colors": 23,
+      "components": 1,
+      "exposedBrightEdges": 0
+    },
+    {
+      "frame": "avatar-10/up/walk-1",
+      "bbox": [
+        19,
+        21,
+        54,
+        57
+      ],
+      "colors": 23,
+      "components": 1,
+      "exposedBrightEdges": 0
+    },
+    {
+      "frame": "avatar-10/up/walk-2",
+      "bbox": [
+        19,
+        21,
+        54,
+        57
+      ],
+      "colors": 23,
+      "components": 1,
+      "exposedBrightEdges": 0
+    },
+    {
+      "frame": "avatar-11/down/idle",
+      "bbox": [
+        18,
+        19,
+        55,
+        57
+      ],
+      "colors": 24,
+      "components": 1,
+      "exposedBrightEdges": 0
+    },
+    {
+      "frame": "avatar-11/down/walk-1",
+      "bbox": [
+        18,
+        19,
+        55,
+        57
+      ],
+      "colors": 23,
+      "components": 1,
+      "exposedBrightEdges": 0
+    },
+    {
+      "frame": "avatar-11/down/walk-2",
+      "bbox": [
+        18,
+        19,
+        55,
+        57
+      ],
+      "colors": 23,
+      "components": 1,
+      "exposedBrightEdges": 0
+    },
+    {
+      "frame": "avatar-11/left/idle",
+      "bbox": [
+        13,
+        25,
+        54,
+        57
+      ],
+      "colors": 23,
+      "components": 1,
+      "exposedBrightEdges": 0
+    },
+    {
+      "frame": "avatar-11/left/walk-1",
+      "bbox": [
+        13,
+        25,
+        54,
+        57
+      ],
+      "colors": 23,
+      "components": 1,
+      "exposedBrightEdges": 0
+    },
+    {
+      "frame": "avatar-11/left/walk-2",
+      "bbox": [
+        13,
+        25,
+        54,
+        57
+      ],
+      "colors": 23,
+      "components": 1,
+      "exposedBrightEdges": 0
+    },
+    {
+      "frame": "avatar-11/right/idle",
+      "bbox": [
+        10,
+        25,
+        51,
+        57
+      ],
+      "colors": 23,
+      "components": 1,
+      "exposedBrightEdges": 0
+    },
+    {
+      "frame": "avatar-11/right/walk-1",
+      "bbox": [
+        10,
+        25,
+        51,
+        57
+      ],
+      "colors": 23,
+      "components": 1,
+      "exposedBrightEdges": 0
+    },
+    {
+      "frame": "avatar-11/right/walk-2",
+      "bbox": [
+        10,
+        25,
+        51,
+        57
+      ],
+      "colors": 23,
+      "components": 1,
+      "exposedBrightEdges": 0
+    },
+    {
+      "frame": "avatar-11/up/idle",
+      "bbox": [
+        18,
+        19,
+        55,
+        57
+      ],
+      "colors": 23,
+      "components": 1,
+      "exposedBrightEdges": 0
+    },
+    {
+      "frame": "avatar-11/up/walk-1",
+      "bbox": [
+        18,
+        19,
+        55,
+        57
+      ],
+      "colors": 23,
+      "components": 1,
+      "exposedBrightEdges": 0
+    },
+    {
+      "frame": "avatar-11/up/walk-2",
+      "bbox": [
+        18,
+        19,
+        55,
+        57
+      ],
+      "colors": 23,
+      "components": 1,
+      "exposedBrightEdges": 0
+    },
+    {
+      "frame": "avatar-12/down/idle",
+      "bbox": [
+        8,
+        9,
+        63,
+        57
+      ],
+      "colors": 24,
+      "components": 1,
+      "exposedBrightEdges": 0
+    },
+    {
+      "frame": "avatar-12/down/walk-1",
+      "bbox": [
+        8,
+        9,
+        63,
+        57
+      ],
+      "colors": 23,
+      "components": 1,
+      "exposedBrightEdges": 0
+    },
+    {
+      "frame": "avatar-12/down/walk-2",
+      "bbox": [
+        8,
+        9,
+        63,
+        57
+      ],
+      "colors": 23,
+      "components": 1,
+      "exposedBrightEdges": 0
+    },
+    {
+      "frame": "avatar-12/left/idle",
+      "bbox": [
+        18,
+        13,
+        52,
+        57
+      ],
+      "colors": 24,
+      "components": 1,
+      "exposedBrightEdges": 0
+    },
+    {
+      "frame": "avatar-12/left/walk-1",
+      "bbox": [
+        18,
+        13,
+        52,
+        57
+      ],
+      "colors": 23,
+      "components": 1,
+      "exposedBrightEdges": 0
+    },
+    {
+      "frame": "avatar-12/left/walk-2",
+      "bbox": [
+        18,
+        13,
+        52,
+        57
+      ],
+      "colors": 23,
+      "components": 1,
+      "exposedBrightEdges": 0
+    },
+    {
+      "frame": "avatar-12/right/idle",
+      "bbox": [
+        6,
+        13,
+        50,
+        57
+      ],
+      "colors": 23,
+      "components": 1,
+      "exposedBrightEdges": 0
+    },
+    {
+      "frame": "avatar-12/right/walk-1",
+      "bbox": [
+        6,
+        13,
+        50,
+        57
+      ],
+      "colors": 23,
+      "components": 1,
+      "exposedBrightEdges": 0
+    },
+    {
+      "frame": "avatar-12/right/walk-2",
+      "bbox": [
+        6,
+        13,
+        50,
+        57
+      ],
+      "colors": 23,
+      "components": 1,
+      "exposedBrightEdges": 0
+    },
+    {
+      "frame": "avatar-12/up/idle",
+      "bbox": [
+        13,
+        13,
+        58,
+        57
+      ],
+      "colors": 24,
+      "components": 1,
+      "exposedBrightEdges": 0
+    },
+    {
+      "frame": "avatar-12/up/walk-1",
+      "bbox": [
+        13,
+        13,
+        58,
+        57
+      ],
+      "colors": 23,
+      "components": 1,
+      "exposedBrightEdges": 0
+    },
+    {
+      "frame": "avatar-12/up/walk-2",
+      "bbox": [
+        13,
+        13,
+        58,
+        57
+      ],
+      "colors": 23,
+      "components": 1,
+      "exposedBrightEdges": 0
+    },
+    {
+      "frame": "avatar-13/down/idle",
+      "bbox": [
+        12,
+        19,
+        46,
+        57
+      ],
+      "colors": 24,
+      "components": 1,
+      "exposedBrightEdges": 0
+    },
+    {
+      "frame": "avatar-13/down/walk-1",
+      "bbox": [
+        12,
+        19,
+        46,
+        57
+      ],
+      "colors": 23,
+      "components": 1,
+      "exposedBrightEdges": 0
+    },
+    {
+      "frame": "avatar-13/down/walk-2",
+      "bbox": [
+        12,
+        19,
+        46,
+        57
+      ],
+      "colors": 23,
+      "components": 1,
+      "exposedBrightEdges": 0
+    },
+    {
+      "frame": "avatar-13/left/idle",
+      "bbox": [
+        13,
+        25,
+        51,
+        57
+      ],
+      "colors": 23,
+      "components": 1,
+      "exposedBrightEdges": 0
+    },
+    {
+      "frame": "avatar-13/left/walk-1",
+      "bbox": [
+        13,
+        25,
+        51,
+        57
+      ],
+      "colors": 23,
+      "components": 1,
+      "exposedBrightEdges": 0
+    },
+    {
+      "frame": "avatar-13/left/walk-2",
+      "bbox": [
+        13,
+        25,
+        51,
+        57
+      ],
+      "colors": 23,
+      "components": 1,
+      "exposedBrightEdges": 0
+    },
+    {
+      "frame": "avatar-13/right/idle",
+      "bbox": [
+        13,
+        25,
+        51,
+        57
+      ],
+      "colors": 23,
+      "components": 1,
+      "exposedBrightEdges": 0
+    },
+    {
+      "frame": "avatar-13/right/walk-1",
+      "bbox": [
+        13,
+        25,
+        51,
+        57
+      ],
+      "colors": 23,
+      "components": 1,
+      "exposedBrightEdges": 0
+    },
+    {
+      "frame": "avatar-13/right/walk-2",
+      "bbox": [
+        13,
+        25,
+        51,
+        57
+      ],
+      "colors": 23,
+      "components": 1,
+      "exposedBrightEdges": 0
+    },
+    {
+      "frame": "avatar-13/up/idle",
+      "bbox": [
+        12,
+        19,
+        46,
+        57
+      ],
+      "colors": 23,
+      "components": 1,
+      "exposedBrightEdges": 0
+    },
+    {
+      "frame": "avatar-13/up/walk-1",
+      "bbox": [
+        12,
+        19,
+        46,
+        57
+      ],
+      "colors": 23,
+      "components": 1,
+      "exposedBrightEdges": 0
+    },
+    {
+      "frame": "avatar-13/up/walk-2",
+      "bbox": [
+        12,
+        19,
+        46,
+        57
+      ],
+      "colors": 23,
+      "components": 1,
+      "exposedBrightEdges": 0
+    },
+    {
+      "frame": "avatar-14/down/idle",
+      "bbox": [
+        22,
+        27,
+        57,
+        57
+      ],
+      "colors": 24,
+      "components": 1,
+      "exposedBrightEdges": 0
+    },
+    {
+      "frame": "avatar-14/down/walk-1",
+      "bbox": [
+        22,
+        27,
+        57,
+        57
+      ],
+      "colors": 23,
+      "components": 2,
+      "exposedBrightEdges": 0
+    },
+    {
+      "frame": "avatar-14/down/walk-2",
+      "bbox": [
+        22,
+        27,
+        57,
+        57
+      ],
+      "colors": 23,
+      "components": 1,
+      "exposedBrightEdges": 0
+    },
+    {
+      "frame": "avatar-14/left/idle",
+      "bbox": [
+        11,
+        28,
+        42,
+        57
+      ],
+      "colors": 24,
+      "components": 1,
+      "exposedBrightEdges": 0
+    },
+    {
+      "frame": "avatar-14/left/walk-1",
+      "bbox": [
+        11,
+        28,
+        42,
+        57
+      ],
+      "colors": 23,
+      "components": 1,
+      "exposedBrightEdges": 0
+    },
+    {
+      "frame": "avatar-14/left/walk-2",
+      "bbox": [
+        11,
+        28,
+        42,
+        57
+      ],
+      "colors": 23,
+      "components": 1,
+      "exposedBrightEdges": 0
+    },
+    {
+      "frame": "avatar-14/right/idle",
+      "bbox": [
+        25,
+        28,
+        53,
+        57
+      ],
+      "colors": 24,
+      "components": 1,
+      "exposedBrightEdges": 0
+    },
+    {
+      "frame": "avatar-14/right/walk-1",
+      "bbox": [
+        25,
+        28,
+        53,
+        57
+      ],
+      "colors": 23,
+      "components": 1,
+      "exposedBrightEdges": 0
+    },
+    {
+      "frame": "avatar-14/right/walk-2",
+      "bbox": [
+        25,
+        28,
+        53,
+        57
+      ],
+      "colors": 23,
+      "components": 1,
+      "exposedBrightEdges": 0
+    },
+    {
+      "frame": "avatar-14/up/idle",
+      "bbox": [
+        22,
+        27,
+        48,
+        57
+      ],
+      "colors": 24,
+      "components": 1,
+      "exposedBrightEdges": 0
+    },
+    {
+      "frame": "avatar-14/up/walk-1",
+      "bbox": [
+        22,
+        27,
+        48,
+        57
+      ],
+      "colors": 23,
+      "components": 1,
+      "exposedBrightEdges": 0
+    },
+    {
+      "frame": "avatar-14/up/walk-2",
+      "bbox": [
+        22,
+        27,
+        48,
+        57
+      ],
+      "colors": 23,
+      "components": 1,
+      "exposedBrightEdges": 0
+    },
+    {
+      "frame": "avatar-15/down/idle",
+      "bbox": [
+        9,
+        9,
+        63,
+        57
+      ],
+      "colors": 24,
+      "components": 1,
+      "exposedBrightEdges": 0
+    },
+    {
+      "frame": "avatar-15/down/walk-1",
+      "bbox": [
+        9,
+        9,
+        63,
+        57
+      ],
+      "colors": 23,
+      "components": 1,
+      "exposedBrightEdges": 0
+    },
+    {
+      "frame": "avatar-15/down/walk-2",
+      "bbox": [
+        9,
+        9,
+        63,
+        57
+      ],
+      "colors": 23,
+      "components": 1,
+      "exposedBrightEdges": 0
+    },
+    {
+      "frame": "avatar-15/left/idle",
+      "bbox": [
+        2,
+        13,
+        49,
+        57
+      ],
+      "colors": 24,
+      "components": 1,
+      "exposedBrightEdges": 0
+    },
+    {
+      "frame": "avatar-15/left/walk-1",
+      "bbox": [
+        2,
+        13,
+        49,
+        57
+      ],
+      "colors": 23,
+      "components": 2,
+      "exposedBrightEdges": 0
+    },
+    {
+      "frame": "avatar-15/left/walk-2",
+      "bbox": [
+        2,
+        13,
+        49,
+        57
+      ],
+      "colors": 23,
+      "components": 1,
+      "exposedBrightEdges": 0
+    },
+    {
+      "frame": "avatar-15/right/idle",
+      "bbox": [
+        15,
+        13,
+        62,
+        57
+      ],
+      "colors": 24,
+      "components": 2,
+      "exposedBrightEdges": 0
+    },
+    {
+      "frame": "avatar-15/right/walk-1",
+      "bbox": [
+        15,
+        13,
+        62,
+        57
+      ],
+      "colors": 23,
+      "components": 3,
+      "exposedBrightEdges": 0
+    },
+    {
+      "frame": "avatar-15/right/walk-2",
+      "bbox": [
+        15,
+        13,
+        62,
+        57
+      ],
+      "colors": 23,
+      "components": 2,
+      "exposedBrightEdges": 0
+    },
+    {
+      "frame": "avatar-15/up/idle",
+      "bbox": [
+        1,
+        10,
+        50,
+        57
+      ],
+      "colors": 24,
+      "components": 1,
+      "exposedBrightEdges": 0
+    },
+    {
+      "frame": "avatar-15/up/walk-1",
+      "bbox": [
+        1,
+        10,
+        50,
+        57
+      ],
+      "colors": 23,
+      "components": 1,
+      "exposedBrightEdges": 0
+    },
+    {
+      "frame": "avatar-15/up/walk-2",
+      "bbox": [
+        1,
+        10,
+        50,
+        57
+      ],
+      "colors": 23,
+      "components": 1,
+      "exposedBrightEdges": 0
+    },
+    {
+      "frame": "avatar-16/down/idle",
+      "bbox": [
+        22,
+        17,
+        58,
+        57
+      ],
+      "colors": 24,
+      "components": 1,
+      "exposedBrightEdges": 0
+    },
+    {
+      "frame": "avatar-16/down/walk-1",
+      "bbox": [
+        22,
+        17,
+        58,
+        57
+      ],
+      "colors": 23,
+      "components": 1,
+      "exposedBrightEdges": 0
+    },
+    {
+      "frame": "avatar-16/down/walk-2",
+      "bbox": [
+        22,
+        17,
+        58,
+        57
+      ],
+      "colors": 23,
+      "components": 1,
+      "exposedBrightEdges": 0
+    },
+    {
+      "frame": "avatar-16/left/idle",
+      "bbox": [
+        6,
+        22,
+        52,
+        57
+      ],
+      "colors": 23,
+      "components": 1,
+      "exposedBrightEdges": 0
+    },
+    {
+      "frame": "avatar-16/left/walk-1",
+      "bbox": [
+        6,
+        22,
+        52,
+        57
+      ],
+      "colors": 23,
+      "components": 1,
+      "exposedBrightEdges": 0
+    },
+    {
+      "frame": "avatar-16/left/walk-2",
+      "bbox": [
+        6,
+        22,
+        52,
+        57
+      ],
+      "colors": 23,
+      "components": 1,
+      "exposedBrightEdges": 0
+    },
+    {
+      "frame": "avatar-16/right/idle",
+      "bbox": [
+        12,
+        22,
+        58,
+        57
+      ],
+      "colors": 23,
+      "components": 1,
+      "exposedBrightEdges": 0
+    },
+    {
+      "frame": "avatar-16/right/walk-1",
+      "bbox": [
+        12,
+        22,
+        58,
+        57
+      ],
+      "colors": 23,
+      "components": 1,
+      "exposedBrightEdges": 0
+    },
+    {
+      "frame": "avatar-16/right/walk-2",
+      "bbox": [
+        12,
+        22,
+        58,
+        57
+      ],
+      "colors": 23,
+      "components": 1,
+      "exposedBrightEdges": 0
+    },
+    {
+      "frame": "avatar-16/up/idle",
+      "bbox": [
+        22,
+        17,
+        58,
+        57
+      ],
+      "colors": 23,
+      "components": 1,
+      "exposedBrightEdges": 0
+    },
+    {
+      "frame": "avatar-16/up/walk-1",
+      "bbox": [
+        22,
+        17,
+        58,
+        57
+      ],
+      "colors": 23,
+      "components": 1,
+      "exposedBrightEdges": 0
+    },
+    {
+      "frame": "avatar-16/up/walk-2",
+      "bbox": [
+        22,
+        17,
+        58,
+        57
+      ],
+      "colors": 23,
+      "components": 1,
+      "exposedBrightEdges": 0
+    }
+  ]
+}

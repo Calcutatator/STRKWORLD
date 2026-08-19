@@ -1,0 +1,104 @@
+{
+  "status": "pass",
+  "source": "player-sprites.aseprite",
+  "sheetsCompared": 16,
+  "pixelIdentical": true,
+  "results": [
+    {
+      "key": "avatar-1",
+      "pixelIdentical": true,
+      "sourceSha256": "d4b8746a90d5b7ef36a406812d46573fa44bdf9de25998f2a5deaee67aa5b424",
+      "reexportSha256": "0737c3c3422049942f567f6993e35bdc15f947edd44bb294017b50f028c6ea8a"
+    },
+    {
+      "key": "avatar-2",
+      "pixelIdentical": true,
+      "sourceSha256": "c17d47e923710129206727bd5f46a1280750cf6fba746887c7715db234e6408c",
+      "reexportSha256": "608a3d79e344497190e63101c78a533cf3528ed5944adbbed162cc77f5e4fa6a"
+    },
+    {
+      "key": "avatar-3",
+      "pixelIdentical": true,
+      "sourceSha256": "41de83698ddc136bd0005ecc5ed3e2a978f0900144be8aba75f8c45fde0b422b",
+      "reexportSha256": "a24865c9baf7ca8e90c6b716f2f439dea22c0387b8a73041bdc55ae63684d179"
+    },
+    {
+      "key": "avatar-4",
+      "pixelIdentical": true,
+      "sourceSha256": "effb8c7d53f6bdbf70cf4d6f2ce4ab409a2e723879b7987813a9a499268188e7",
+      "reexportSha256": "3b2cb02f5a0cbab8edb082f23713ed85c6349e5bad521ca644508917e2410bd1"
+    },
+    {
+      "key": "avatar-5",
+      "pixelIdentical": true,
+      "sourceSha256": "4af1f860cc4f108b48863858c5313b8fd0731cee9c649399fad2184c649fae49",
+      "reexportSha256": "0da616b3360f7174505b766d481b66929c55523192aa151b96536c2bf66655a1"
+    },
+    {
+      "key": "avatar-6",
+      "pixelIdentical": true,
+      "sourceSha256": "ab11c1044b092dd753ca62c3de8fe33808ee8ef1871c695133fed29e3c9e80e5",
+      "reexportSha256": "196dc62b0eaf84f218622a3b49f232e0312c9e7cb9c4c73f082cb67e9726044f"
+    },
+    {
+      "key": "avatar-7",
+      "pixelIdentical": true,
+      "sourceSha256": "5425c9a6172e26f954d38b8e7178b1fa77102c226fec8f9653cdbad2b4d16431",
+      "reexportSha256": "b476c11344210bed4aa7634608a681a361ecb0307479354a8f064a239756b5bd"
+    },
+    {
+      "key": "avatar-8",
+      "pixelIdentical": true,
+      "sourceSha256": "29036be22f4e23f87f8f7b27e9060f4de4dadc690b79dfffe7c75a35a5ae5685",
+      "reexportSha256": "7264fb06dd339ad68084dc5198422a74db58f8d8085efb5c7abe8347a96ee63e"
+    },
+    {
+      "key": "avatar-9",
+      "pixelIdentical": true,
+      "sourceSha256": "ac375bd13245b4062dd51f654b7153d6400818128efe2bed57489927d73be16a",
+      "reexportSha256": "e6e83d178652852c87c40c341b656c10877d78a933b29f2b08cc7df3e9ea0aff"
+    },
+    {
+      "key": "avatar-10",
+      "pixelIdentical": true,
+      "sourceSha256": "8b4d74f820d80d6870a2d687374d006dd95ccd7805a55a877051037ac9d4c0b3",
+      "reexportSha256": "de9b8ef013235f849619b802e14f2330220ac01de11de39e4d7fdbec83b7f3d4"
+    },
+    {
+      "key": "avatar-11",
+      "pixelIdentical": true,
+      "sourceSha256": "1b86097ada9953283c5306885174a387e37d1057c88c0a9497bb6ca8d25a7017",
+      "reexportSha256": "2d09c94591a8211257b3391aee204afb3310953b72013c0c015ebc0968a0456f"
+    },
+    {
+      "key": "avatar-12",
+      "pixelIdentical": true,
+      "sourceSha256": "c931410c7ba1efe0a5cd23c600862815d86fc738b724d03f8d84bdb0c7cd3bf9",
+      "reexportSha256": "fb0329715fb0f3b639c6c9ba7695727547041ff0e7442572cbb1be1e51a067be"
+    },
+    {
+      "key": "avatar-13",
+      "pixelIdentical": true,
+      "sourceSha256": "300354e2521d83463d1a745a8cbed7a0069d8ee92d94ae78a8a64f7e3bc0b983",
+      "reexportSha256": "c159eac88e292de27facb8d267a26a1d3eadb38efd4b12640440386748cee8d5"
+    },
+    {
+      "key": "avatar-14",
+      "pixelIdentical": true,
+      "sourceSha256": "2048c8d1af78c075d7395fd947a5fcb7e153c22d3c6fe4eeb92e14eb8d01dcd6",
+      "reexportSha256": "ffd3d78a6f65649987f04052668778c64f1f37dab8a7455859cdaab731f4eeda"
+    },
+    {
+      "key": "avatar-15",
+      "pixelIdentical": true,
+      "sourceSha256": "59104aa8045891735739b775038a49553d824c7ca1e2dce827aa122721ba8fd5",
+      "reexportSha256": "5df503fdeffa190ec3d03d67d1c682bbb677e92b0941b44ee1ed6bbdc3be053b"
+    },
+    {
+      "key": "avatar-16",
+      "pixelIdentical": true,
+      "sourceSha256": "d932149db1d4edef35394aa69c9e030e7ecfd7ac3f7174c0d1f91734d4d7ab22",
+      "reexportSha256": "9811df7610d16e8f7fb8e863f0124ae279c71576a3eaaeaf72b8701dfcb1127a"
+    }
+  ]
+}

@@ -1,0 +1,13 @@
+{
+  "status": "pass",
+  "source": "player-sprites.aseprite",
+  "canvas": [64, 64],
+  "frames": 192,
+  "frameDurationMs": 125,
+  "layers": ["art"],
+  "tags": 80,
+  "slices": {
+    "logical-canvas": { "bounds": [0, 0, 64, 64], "pivot": [32, 56] },
+    "runtime-body-reference": { "bounds": [20, 32, 24, 24], "ownership": "runtime" }
+  }
+}

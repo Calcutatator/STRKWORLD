@@ -1,0 +1,94 @@
+{
+  "schemaVersion": 1,
+  "status": "final-art-handoff-awaiting-runtime-integration-and-rendered-acceptance",
+  "approvedContract": "D-049",
+  "sheet": {
+    "filePattern": "avatar-{key}.png",
+    "count": 16,
+    "dimensions": [192, 256],
+    "cellSize": [64, 64],
+    "columns": ["idle", "walk-1", "walk-2"],
+    "rows": ["down", "left", "right", "up"],
+    "alpha": "binary transparent RGBA",
+    "maximumColorsPerFrame": 24,
+    "megaAtlas": false
+  },
+  "anchor": {
+    "feetPixels": [32, 56],
+    "normalizedOrigin": [0.5, 0.875],
+    "policy": "fixed across every frame and key"
+  },
+  "gameplayBody": {
+    "size": [24, 24],
+    "ownership": "runtime",
+    "policy": "common contact and collision geometry; visual art may overhang inside the 64x64 canvas"
+  },
+  "rendering": {
+    "sampling": "nearest-neighbour",
+    "scaling": "integer",
+    "antiAliasing": false,
+    "bakedShadows": false,
+    "runtimeShadow": "optional single World-owned shadow applied consistently to all avatars"
+  },
+  "animation": {
+    "idle": {
+      "column": 0,
+      "fps": 0
+    },
+    "walk": {
+      "playbackColumns": [0, 1, 0, 2],
+      "normalFps": 8,
+      "sprintFps": 12
+    }
+  },
+  "keys": {
+    "range": "avatar-1..avatar-16",
+    "cosy": "avatar-1..avatar-8",
+    "fighting": "avatar-9..avatar-16",
+    "default": "avatar-1",
+    "wirePolicy": "opaque cosmetic key only; no size, feet, stance, wallet, account, protocol, route, or financial fields"
+  },
+  "pairs": [
+    { "character": 1, "cosy": "avatar-1", "fighting": "avatar-9" },
+    { "character": 2, "cosy": "avatar-2", "fighting": "avatar-10" },
+    { "character": 3, "cosy": "avatar-3", "fighting": "avatar-11" },
+    { "character": 4, "cosy": "avatar-4", "fighting": "avatar-12" },
+    { "character": 5, "cosy": "avatar-5", "fighting": "avatar-13" },
+    { "character": 6, "cosy": "avatar-6", "fighting": "avatar-14" },
+    { "character": 7, "cosy": "avatar-7", "fighting": "avatar-15" },
+    { "character": 8, "cosy": "avatar-8", "fighting": "avatar-16" }
+  ],
+  "roomDisplay": {
+    "keys": ["avatar-1", "avatar-2", "avatar-3", "avatar-4", "avatar-5", "avatar-6", "avatar-7", "avatar-8"],
+    "frame": { "row": "down", "column": "idle" }
+  },
+  "source": {
+    "file": "source/player-sprites.aseprite",
+    "canvas": [64, 64],
+    "frames": 192,
+    "frameDurationMs": 125,
+    "layer": "art",
+    "tags": "avatar-N plus avatar-N/{down,left,right,up}",
+    "slices": ["logical-canvas", "runtime-body-reference"]
+  },
+  "qa": {
+    "report": "qa/qa-report.json",
+    "asepriteRoundTrip": "qa/aseprite-roundtrip.json",
+    "sourceInspection": "qa/source-inspection.json",
+    "backgroundReadability": "qa/background-readability.png",
+    "movementContact": "qa/all-characters-movement.png",
+    "animatedPreviews": "qa/character-{1..8}-walk.gif"
+  },
+  "contentRestrictions": [
+    "no baked names, protocol logos, interface copy, balances, amounts, wallet cues, or route states",
+    "appearance never implies wallet, account, protocol, privacy, route, or financial identity"
+  ],
+  "provenance": {
+    "creator": "James Wilcock (art direction) and OpenAI Codex/ImageGen production workflow",
+    "license": "Project-owned original asset; use and modification controlled by the STRKWORLD project owner",
+    "thirdPartyPixels": false,
+    "thirdPartySourceUrl": null,
+    "allowedModifications": "Editable and modifiable by the project owner",
+    "verifiedOn": "2026-08-20"
+  }
+}
