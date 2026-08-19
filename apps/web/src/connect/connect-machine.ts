@@ -73,13 +73,13 @@ export function createConnectFlow(operations: PrivacyOperations): ConnectFlow {
         if (generation === attemptGeneration) {
           store.setState(next);
         }
-        return next;
+        return generation === attemptGeneration ? next : store.getState();
       } catch (error) {
         const next = fromError(error);
         if (generation === attemptGeneration) {
           store.setState(next);
         }
-        return next;
+        return generation === attemptGeneration ? next : store.getState();
       } finally {
         if (generation === attemptGeneration) {
           inFlight = null;

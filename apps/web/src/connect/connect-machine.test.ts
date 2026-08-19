@@ -132,7 +132,8 @@ describe('connect flow', () => {
     flow.disconnect();
     capability.resolve({ supportsStrk20: true, walletApiVersion: '0.10.3', registration: 'registered' });
 
-    await pending;
+    const result = await pending;
+    expect(result).toEqual({ name: 'disconnected' });
     expect(flow.store.getState()).toEqual({ name: 'disconnected' });
     expect(flow.status()).toBe('disconnected');
   });
@@ -147,7 +148,8 @@ describe('connect flow', () => {
     flow.disconnect();
     capability.reject(new PrivacyError('unreachable', 'stale network failure'));
 
-    await pending;
+    const result = await pending;
+    expect(result).toEqual({ name: 'disconnected' });
     expect(flow.store.getState()).toEqual({ name: 'disconnected' });
     expect(flow.status()).toBe('disconnected');
   });
@@ -168,14 +170,20 @@ describe('connect flow', () => {
     expect(capability).toHaveBeenCalledTimes(2);
 
     secondCapability.resolve({ supportsStrk20: true, walletApiVersion: '0.10.3', registration: 'registered' });
-    await second;
+    const secondResult = await second;
+    expect(secondResult).toEqual({
+      name: 'connected',
+      capability: { supportsStrk20: true, walletApiVersion: '0.10.3', registration: 'registered' },
+      registrationConfirmed: true,
+    });
     expect(flow.store.getState()).toMatchObject({
       name: 'connected',
       capability: { walletApiVersion: '0.10.3' },
     });
 
     firstCapability.reject(new PrivacyError('unreachable', 'stale network failure'));
-    await first;
+    const firstResult = await first;
+    expect(firstResult).toEqual(secondResult);
     expect(flow.store.getState()).toMatchObject({
       name: 'connected',
       capability: { walletApiVersion: '0.10.3' },
