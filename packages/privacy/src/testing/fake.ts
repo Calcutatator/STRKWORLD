@@ -84,7 +84,7 @@ const RELAY_FEE_PER_ACTION = 1_000000000000000n; // 1e15 — the single-spend ba
  * constant (`hasSpend ? 1e15 : 0`) was invariant to intent count, so it hid
  * exactly that class of bug — a stale gas quote reused across batch shapes.
  */
-function estimateRelayFee(intents: Intent[]): bigint {
+function estimateRelayFee(intents: readonly Intent[]): bigint {
   let units = 0n;
   for (const intent of intents) {
     if (intent.kind === 'shield') continue;
@@ -209,11 +209,19 @@ export class FakePrivacyOperations implements PrivacyOperations {
   }
 
   async prepare(intents: Intent[], signal?: AbortSignal): Promise<PreparedBatch> {
+    // Own the intents synchronously, before the first await, exactly as the
+    // Wallet API implementation does — its own capture sits after a sync
+    // `throwIfAborted` and before anything awaited. `tick()` is async, so
+    // awaiting it first would yield a microtask even at zero latency and let a
+    // caller mutate its array between the unawaited `prepare()` call and the
+    // settled promise. A double that captures later grants a freedom
+    // production does not.
+    const reviewed = freezeIntents(intents);
     await this.tick('prepare', signal);
-    if (intents.length === 0) {
+    if (reviewed.length === 0) {
       throw new PrivacyError('unknown', 'prepare called with no intents');
     }
-    for (const intent of intents) {
+    for (const intent of reviewed) {
       const amount = intent.kind === 'swap' ? intent.amountIn : intent.amount;
       if (amount <= 0n) throw new PrivacyError('unknown', 'Amounts must be positive.');
       if (intent.kind === 'swap' && intent.minAmountOut <= 0n) {
@@ -226,24 +234,24 @@ export class FakePrivacyOperations implements PrivacyOperations {
 
     // A shield cannot ride along with the transfer it funds: the deposit's
     // public leg names the depositor, so bundling publishes the link.
-    const hasShield = intents.some((i) => i.kind === 'shield');
-    const hasSpend = intents.some((i) => i.kind !== 'shield');
+    const hasShield = reviewed.some((i) => i.kind === 'shield');
+    const hasSpend = reviewed.some((i) => i.kind !== 'shield');
     if (hasShield && hasSpend) {
       throw new PrivacyError(
         'privacy-leak',
         'Shielding and private spending must be prepared as separate operations.',
       );
     }
-    const kinds = new Set(intents.map((intent) => intent.kind));
+    const kinds = new Set(reviewed.map((intent) => intent.kind));
     if (!hasShield && kinds.size > 1) {
       throw new PrivacyError('unknown', 'A private batch may contain only one approved route type.');
     }
-    if (kinds.has('swap') && intents.length > 1) {
+    if (kinds.has('swap') && reviewed.length > 1) {
       throw new PrivacyError('unknown', 'A private swap must be prepared one at a time.');
     }
     const promptCount = 1;
 
-    for (const intent of intents) {
+    for (const intent of reviewed) {
       if (intent.kind === 'shield') {
         warnings.push({
           kind: 'public-leg',
@@ -265,11 +273,11 @@ export class FakePrivacyOperations implements PrivacyOperations {
     }
 
     // Deterministic, and a function of the batch shape — not a constant.
-    const relayFee = estimateRelayFee(intents);
+    const relayFee = estimateRelayFee(reviewed);
 
     // Charge spends in their own token and both private fees in the fee token.
     const spendByToken = new Map<string, bigint>();
-    for (const intent of intents) {
+    for (const intent of reviewed) {
       if (intent.kind === 'shield') continue;
       const token = intent.kind === 'swap' ? intent.tokenIn : intent.token;
       const amount = intent.kind === 'swap' ? intent.amountIn : intent.amount;
@@ -307,13 +315,15 @@ export class FakePrivacyOperations implements PrivacyOperations {
     }
 
     const gasEstimate = relayFee;
-    const { intents: canonicalIntents, swapReview } = this.canonicalizeIntents(intents);
+    const { intents: canonicalIntents, swapReview } = this.canonicalizeIntents(reviewed);
     const self = this;
     let discarded = false;
     let confirmationAttempted = false;
 
     return {
-      intents: [...canonicalIntents],
+      // The frozen snapshot itself: one owner for the published view, the
+      // recorded submission and the balance arithmetic.
+      intents: canonicalIntents,
       poolFee: feeAtPrepare,
       gasEstimate,
       totalCost: feeAtPrepare + gasEstimate,
@@ -354,13 +364,13 @@ export class FakePrivacyOperations implements PrivacyOperations {
 
   // -- internals ------------------------------------------------------------
 
-  private canonicalizeIntents(intents: Intent[]): {
-    intents: Intent[];
+  private canonicalizeIntents(intents: readonly Intent[]): {
+    intents: readonly Intent[];
     swapReview?: SwapReview;
   } {
     const configured = this.configuredSwapReview;
     const intent = intents.length === 1 && intents[0]?.kind === 'swap' ? intents[0] : undefined;
-    if (!configured || !intent) return { intents: [...intents] };
+    if (!configured || !intent) return { intents };
     if (!Number.isSafeInteger(configured.expiresAt) || configured.expiresAt <= 0) {
       throw new PrivacyError('unknown', 'The deterministic swap review is invalid.');
     }
@@ -368,9 +378,9 @@ export class FakePrivacyOperations implements PrivacyOperations {
     if (protectedMinimum < intent.minAmountOut) {
       throw new PrivacyError('unknown', 'The requested swap floor exceeds the protected minimum.');
     }
-    const canonicalIntent = { ...intent, minAmountOut: protectedMinimum };
+    const canonicalIntent: Intent = Object.freeze({ ...intent, minAmountOut: protectedMinimum });
     return {
-      intents: [canonicalIntent],
+      intents: Object.freeze([canonicalIntent]),
       swapReview: {
         expectedAmountOut: configured.expectedAmountOut,
         minimumAmountOut: canonicalIntent.minAmountOut,
@@ -380,7 +390,7 @@ export class FakePrivacyOperations implements PrivacyOperations {
     };
   }
 
-  private applyIntents(intents: Intent[], fee: bigint): void {
+  private applyIntents(intents: readonly Intent[], fee: bigint): void {
     let feeCharged = false;
     for (const intent of intents) {
       switch (intent.kind) {
@@ -452,6 +462,15 @@ export class FakePrivacyOperations implements PrivacyOperations {
       throw new PrivacyError(fault.kind, fault.message ?? `injected fault: ${fault.kind}`);
     }
   }
+}
+
+/**
+ * Take ownership of the intents a caller asked for; see the identically named
+ * helper in `wallet-api/operations.ts`. `Intent` is flat, so one level of
+ * copy-and-freeze is a full deep freeze.
+ */
+function freezeIntents(intents: readonly Intent[]): readonly Intent[] {
+  return Object.freeze(intents.map((intent) => Object.freeze({ ...intent })));
 }
 
 /**
