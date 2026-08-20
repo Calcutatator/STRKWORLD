@@ -2205,6 +2205,12 @@ cells confined their changed pixels below the hip (`y=45..53`). The corrective
 art at `8e92cfa` passes the D-052 anatomy, edge, background, source-round-trip
 and whole-body gait gates: movement reaches `y=8..27`, with at least 243
 changed pixels and 60.8% of each cell's changed pixels above its hip gate.
+Subsequent rendered review exposed a separate source-art identity defect:
+character 5/13 changed style and construction in the side rows despite matching
+height bounds. Art commit `0051fce` rebuilds only those twenty left/right cells,
+preserves the approved down/up identities and direction-specific fighting
+staff, and passes independent cross-facing, anatomy, edge and Aseprite-cel
+reconstruction review. Hosted CI run 32374850224 passed all jobs.
 World commit `5c8c81a` loads all 20 frames per sheet and plays columns
 `0,1,2,3,4` at the approved 8/12 FPS cadences. Art and headless runtime
 integration are therefore complete and independently reviewed; only the

@@ -161,7 +161,9 @@ input scope with a pending single World-lifecycle F binding that follows the
 local avatar outdoors and through existing interiors. It remains a one-press,
 no-repeat cosy/fighting toggle through the existing opaque `avatar:selected`
 key; no stance or wire field exists. Background and a fresh user-run in-game
-review remain required; the failed recording is not a pass.
+review remain required; the failed recording is not a pass. Art commit
+`0051fce` corrects the later-reported character 5/13 side-facing identity drift
+without changing this resolver, sheet geometry or runtime frame mapping.
 
 ---
 

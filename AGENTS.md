@@ -250,6 +250,30 @@ without a verification method is a rumour.
 
 Format: `### YYYY-MM-DD — short title` then what, why it matters, how verified.
 
+### 2026-08-20 — Matching bounds do not prove cross-facing character identity
+
+The D-052 handoff had equal top, height and feet measurements across facings,
+but character 5/13 still changed from its long golden-haired robed identity in
+the vertical rows to a compact grey/brown character in the side rows. Runtime
+row/frame resolution was correct; the mismatch was baked into the source art.
+Cross-facing QA must therefore compare the actual hair, face, torso, clothing,
+palette and equipment construction, not only alpha bounds or size class.
+
+Commit `0051fce` rebuilds only the twenty left/right cells for `avatar-5` and
+`avatar-13` from their approved identity while preserving the authored
+direction-specific fighting staff. Down/up cells, every other sheet,
+`v1-review/`, runtime mapping, wire shape and the separate D-053 F-toggle todo
+are unchanged. This is independently reviewed source/art evidence, not user
+rendered in-game acceptance.
+
+*Verified:* nearest-neighbour before/after inspection of four idle facings and
+both five-pose side rows; independent cell diff showing exactly ten changed
+left/right cells per key; a second Pillow scan over all 320 frames for sheet,
+alpha, palette, feet, holes and motion bounds; and an independent decoder of
+all 320 compressed Aseprite cels, each pixel-identical to its PNG cell. GitHub
+Actions run 32374850224 passed all jobs for `0051fce`. No wallet, network,
+financial or runtime code was exercised by the correction review.
+
 ### 2026-08-20 — A moving foot is not evidence of a whole-body gait
 
 The first D-052 five-column art handoff passed frame dimensions, alpha, palette,

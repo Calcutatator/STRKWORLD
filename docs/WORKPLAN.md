@@ -21,7 +21,7 @@ the lane boundary — that is why the repo is shaped the way it is.
 | **Shell** | `apps/web` | Active, starts week 2 |
 | **Backend** | `apps/backend` | Active; D-050 and both hosted image smokes complete; host, domain, secrets, Alchemy controls, live staging and funded checks remain |
 | **Bridge** | `packages/bridge` | Active, fully independent |
-| **Art** | `packages/world/assets` | D-052 corrected art complete and independently reviewed at `8e92cfa`; only rendered in-game acceptance remains |
+| **Art** | `packages/world/assets` | D-052 gait correction `8e92cfa` plus independently reviewed 5/13 cross-facing correction `0051fce` complete; only rendered in-game acceptance remains |
 | ~~Contracts~~ | — | **Dormant until post-v1** |
 
 ### Why Contracts is dormant
@@ -262,11 +262,12 @@ failed to establish rendered acceptance, so it is not a pass. D-052
 originally authorized F only inside Avatar Studio; D-053 supersedes that scope
 and adds a pending World todo for one lifecycle-owned one-press, no-repeat
 cosy/fighting toggle outdoors and in existing interiors through the same opaque
-`avatar:selected` key. It adds no stance or wire field. Corrected art commit
-`8e92cfa` and five-column runtime commit `5c8c81a` are independently reviewed
-and headlessly complete. Fresh user-run in-game review remains open; the earlier
-localhost foundation acceptance covers neither this art replacement nor the
-rendered F behavior. D-053 is not implemented or rendered-accepted yet.
+`avatar:selected` key. It adds no stance or wire field. Gait correction
+`8e92cfa`, character 5/13 cross-facing correction `0051fce`, and five-column
+runtime commit `5c8c81a` are independently reviewed and headlessly complete.
+Fresh user-run in-game review remains open; the earlier localhost foundation
+acceptance covers neither this art replacement nor the rendered F behavior.
+D-053 is not implemented or rendered-accepted yet.
 
 **Next World tracer — D-053 global F toggle:** move keyboard ownership out of
 Avatar Studio activation and into one StreetScene lifecycle owner. Preserve the
