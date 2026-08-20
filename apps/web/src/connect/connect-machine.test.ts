@@ -103,6 +103,24 @@ describe('connect flow', () => {
     expect((await flow.recheck()).name).toBe('connected');
   });
 
+  it('retries after capability throws synchronously before returning a promise', async () => {
+    const operations = new FakePrivacyOperations();
+    const capability = vi.spyOn(operations, 'capability')
+      .mockImplementationOnce(() => {
+        throw new PrivacyError('unreachable', 'synchronous adapter failure');
+      })
+      .mockResolvedValueOnce({
+        supportsStrk20: true,
+        walletApiVersion: '0.10.3',
+        registration: 'registered',
+      });
+    const flow = createConnectFlow(operations);
+
+    expect((await flow.connect()).name).toBe('unreachable');
+    expect((await flow.recheck()).name).toBe('connected');
+    expect(capability).toHaveBeenCalledTimes(2);
+  });
+
   it('recheck moves a registered player out of the 118 room', async () => {
     const operations = new FakePrivacyOperations({ capability: { registration: 'unregistered' } });
     const flow = createConnectFlow(operations);
@@ -214,6 +232,47 @@ describe('connect flow', () => {
       expect(flow.store.getState()).toMatchObject({ name: expected });
     },
   );
+
+  it('does not let an older query release a recheck started after an operation verdict', async () => {
+    const firstCapability = deferred<Awaited<ReturnType<PrivacyOperations['capability']>>>();
+    const secondCapability = deferred<Awaited<ReturnType<PrivacyOperations['capability']>>>();
+    const unexpectedThird = deferred<Awaited<ReturnType<PrivacyOperations['capability']>>>();
+    const operations = new FakePrivacyOperations();
+    const capability = vi.spyOn(operations, 'capability')
+      .mockReturnValueOnce(firstCapability.promise)
+      .mockReturnValueOnce(secondCapability.promise)
+      .mockReturnValueOnce(unexpectedThird.promise);
+    const flow = createConnectFlow(operations);
+
+    const older = flow.connect();
+    flow.noteOperationError(new PrivacyError('not-registered', 'newer operation verdict'));
+    const recheck = flow.recheck();
+
+    firstCapability.resolve({
+      supportsStrk20: true,
+      walletApiVersion: '0.10.3',
+      registration: 'registered',
+    });
+    await older;
+
+    const shared = flow.connect();
+    expect(capability).toHaveBeenCalledTimes(2);
+
+    secondCapability.resolve({
+      supportsStrk20: true,
+      walletApiVersion: '0.10.3',
+      registration: 'registered',
+    });
+    unexpectedThird.resolve({
+      supportsStrk20: true,
+      walletApiVersion: '0.10.3',
+      registration: 'registered',
+    });
+    await expect(Promise.all([recheck, shared])).resolves.toEqual([
+      expect.objectContaining({ name: 'connected' }),
+      expect.objectContaining({ name: 'connected' }),
+    ]);
+  });
 
   it('passes detecting through to the world as connecting', () => {
     expect(toWalletStatus({ name: 'detecting' })).toBe('connecting');

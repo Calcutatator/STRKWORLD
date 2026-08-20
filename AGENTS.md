@@ -250,6 +250,41 @@ without a verification method is a rumour.
 
 Format: `### YYYY-MM-DD — short title` then what, why it matters, how verified.
 
+### 2026-08-20 — A settled Connect query must release ownership after it acquires it
+
+`createConnectFlow()` shares one in-flight wallet capability query so repeated
+Connect/Recheck actions cannot open duplicate wallet work. Its attempt body
+previously cleared that owner in an internal `finally`, then the caller assigned
+the attempt to `inFlight`. Normally the first `await` delayed `finally` until
+after assignment. A conforming adapter can also throw synchronously before it
+returns a promise; that path ran `catch` and `finally` before the assignment,
+then installed the already-settled promise permanently. The first Connect
+correctly reached `unreachable`, but every later Try again/Recheck returned that
+same stale result without asking the wallet again.
+
+Attempt release is now registered only after the promise has acquired
+`inFlight`. The existing generation guard still scopes release to its owner: an
+older capability query cannot clear a newer recheck started after a later
+operation established an account verdict. Concurrent callers still share one
+query; disconnect, stale success/failure and operation-verdict ownership are
+unchanged.
+
+*Verified:* a public `createConnectFlow()` regression makes the first
+`capability()` call throw synchronously and the second resolve registered. It
+was red with two `unreachable` results and one adapter call; green reaches
+`connected` on Recheck with exactly two calls. A second public-seam interleaving
+starts query A, publishes a newer `not-registered` operation verdict, starts
+recheck B, then settles A; B remains the shared owner. Removing the release
+generation check makes that test start an unexpected third capability query.
+The focused Connect suite passes 1 file / 20 tests and the Web suite passes 37
+files / 396 tests. A one-worker full workspace run passes 89 files / 1,267
+tests; workspace and Web typechecks, production build, all 13 invariants and
+diff hygiene pass. Standard parallel full runs on the shared development host
+also exposed unrelated timing-only failures in unchanged Fly/image-smoke and
+demo-Bridge tests; exact-head hosted CI remains the standard parallel gate.
+Local verification used no external network, wallet, RPC, proof, signature,
+funds or transaction.*
+
 ### 2026-08-20 — An in-word hash cannot hide an effective header directive
 
 The D-005 static header gate treated every unquoted `#` in hash-comment file
