@@ -290,8 +290,10 @@ unreadable nested dependencies still exit `1` with their original diagnostics;
 shaped errors independently pin the loader code and syscall. Removing the open
 guard revives the permission race; dropping its exact path, syscall or code
 clause hides the matching genuine failure. The focused launcher test passes
-four tests. Local verification opened no listener or external network and used
-no wallet, RPC, proof, signature, secret, funds or transaction.*
+four tests; the full workspace passes 90 files / 1,271 tests, workspace
+typecheck, production build, all 13 invariants, the tilemap check and diff
+hygiene pass. Local verification opened no listener or external network and
+used no wallet, RPC, proof, signature, secret, funds or transaction.*
 
 ### 2026-08-20 — A settled Connect query must release ownership after it acquires it
 
