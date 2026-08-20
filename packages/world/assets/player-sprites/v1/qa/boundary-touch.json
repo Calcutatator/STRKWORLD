@@ -1,0 +1,8 @@
+{
+  "gate": "opaque-pixel logical-cell boundary rejection across all 320 cells",
+  "cells": 320,
+  "touchingCells": 0,
+  "touches": [],
+  "whitelist": [],
+  "status": "pass"
+}
