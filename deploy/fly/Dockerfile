@@ -26,6 +26,7 @@ RUN VITE_LOBBY_URL="$VITE_LOBBY_URL" node deploy/fly/check-static.mjs --validate
  && VITE_LOBBY_URL="$VITE_LOBBY_URL" npm run build --workspace=@strkworld/web \
  && node deploy/fly/check-static.mjs apps/web/dist "$VITE_LOBBY_URL" \
  && npx tsc -p deploy/fly/tsconfig.build.json
+RUN printf '%s' "$VITE_LOBBY_URL" > /repo/.fly-built-lobby-url
 
 FROM ${NODE_IMAGE} AS runtime-deps
 WORKDIR /repo
@@ -49,6 +50,9 @@ ENV PORT=8080
 COPY --from=runtime-deps --chown=node:node /repo/node_modules ./node_modules
 COPY --from=build --chown=node:node /repo/.fly-build ./build
 COPY --from=build --chown=node:node /repo/apps/web/dist ./web-dist
+# Build-owned public metadata. Runtime environment injection cannot replace
+# this file, so startup can verify which lobby origin the browser actually has.
+COPY --from=build /repo/.fly-built-lobby-url ./build-metadata/lobby-url
 # npm workspaces install @strkworld/shared as a symlink to the source tree,
 # which is absent from this minimal runtime image. Replace that link with the
 # compiled, self-contained package so Node can resolve the production lobby's
