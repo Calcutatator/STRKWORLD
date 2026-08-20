@@ -35,6 +35,23 @@ export function visitLayerActions(
   };
 }
 
+/** Production keyboard filter shared with the public lifecycle regression. */
+export function handleVisitKeyDown(
+  event: Pick<KeyboardEvent, 'key' | 'preventDefault'>,
+  controller: Pick<VisitController, 'store' | 'handleEscape'>,
+): void {
+  if (event.key !== 'Escape') return;
+  const current = controller.store.getState();
+  if (
+    current.name === 'outside' ||
+    (current.name === 'visiting' && current.surface.name === 'room')
+  ) {
+    return;
+  }
+  event.preventDefault();
+  controller.handleEscape();
+}
+
 /**
  * React's half of one local building visit.
  *
@@ -65,13 +82,7 @@ export function VisitLayer({
   useEffect(() => controller.listen(world), [controller, world]);
 
   useEffect(() => {
-    const onKeyDown = (event: KeyboardEvent): void => {
-      if (event.key !== 'Escape') return;
-      const current = controller.store.getState();
-      if (current.name !== 'visiting' || current.surface.name === 'room') return;
-      event.preventDefault();
-      controller.handleEscape();
-    };
+    const onKeyDown = (event: KeyboardEvent): void => handleVisitKeyDown(event, controller);
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
   }, [controller]);

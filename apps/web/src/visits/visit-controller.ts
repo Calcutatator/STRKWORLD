@@ -143,6 +143,10 @@ export function createVisitController(
     },
 
     handleEscape(): void {
+      if (store.getState().name === 'locked') {
+        this.dismissLocked();
+        return;
+      }
       this.closeSurface();
     },
   };

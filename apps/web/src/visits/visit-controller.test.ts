@@ -286,6 +286,24 @@ describe('visit controller', () => {
     });
   });
 
+  it('React-owned Escape dismisses a locked door without sending World commands', () => {
+    const world = createEventBus<WorldEvents>();
+    const shell = createEventBus<ShellEvents>();
+    const exits = vi.fn();
+    const owners = vi.fn();
+    shell.on('world:exit-building', exits);
+    shell.on('world:control-owner', owners);
+    const controller = createVisitController(shell);
+    controller.listen(world);
+    world.emit('building:locked', { building: 'vault', reason: 'coming-soon' });
+
+    controller.handleEscape();
+
+    expect(controller.store.getState()).toEqual({ name: 'outside' });
+    expect(exits).not.toHaveBeenCalled();
+    expect(owners).not.toHaveBeenCalled();
+  });
+
   it('cleans up every World listener so a StrictMode remount cannot duplicate them', () => {
     const world = createEventBus<WorldEvents>();
     const shell = createEventBus<ShellEvents>();
