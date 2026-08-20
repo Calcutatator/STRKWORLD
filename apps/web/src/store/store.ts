@@ -12,10 +12,14 @@
 
 export type Listener<S> = (state: S) => void;
 
-export interface Store<S> {
-  getState(): S;
+export interface ReadableStore<S> {
+  readonly getState: () => S;
+  readonly getServerSnapshot: () => S;
+  readonly subscribe: (listener: Listener<S>) => () => void;
+}
+
+export interface Store<S> extends ReadableStore<S> {
   setState(update: S | ((previous: S) => S)): void;
-  subscribe(listener: Listener<S>): () => void;
 }
 
 export function createStore<S>(initial: S): Store<S> {
@@ -23,6 +27,7 @@ export function createStore<S>(initial: S): Store<S> {
   const listeners = new Set<Listener<S>>();
 
   const getState = (): S => state;
+  const getServerSnapshot = (): S => state;
 
   const subscribe = (listener: Listener<S>): (() => void) => {
     listeners.add(listener);
@@ -49,5 +54,5 @@ export function createStore<S>(initial: S): Store<S> {
     }
   };
 
-  return { getState, setState, subscribe };
+  return { getState, getServerSnapshot, setState, subscribe };
 }

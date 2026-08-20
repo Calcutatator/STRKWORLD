@@ -1,5 +1,5 @@
 import { useSyncExternalStore } from 'react';
-import type { Store } from './store.js';
+import type { ReadableStore } from './store.js';
 
 /**
  * Subscribe a component to a panel store.
@@ -8,6 +8,6 @@ import type { Store } from './store.js';
  * under concurrent rendering, and a panel that renders a stale balance next to
  * a fresh confirm button is exactly the class of bug that matters here.
  */
-export function useStore<S>(store: Store<S>): S {
-  return useSyncExternalStore(store.subscribe, store.getState, store.getState);
+export function useStore<S>(store: ReadableStore<S>): S {
+  return useSyncExternalStore(store.subscribe, store.getState, store.getServerSnapshot);
 }

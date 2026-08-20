@@ -1,8 +1,8 @@
-import { createStore, type Store } from '../store/store.js';
+import { createStore, type ReadableStore } from '../store/store.js';
 
 export interface SubmissionUncertaintyState {
-  active: boolean;
-  acknowledged: boolean;
+  readonly active: boolean;
+  readonly acknowledged: boolean;
 }
 
 /**
@@ -14,25 +14,37 @@ export interface SubmissionUncertaintyState {
  * method and no localStorage path. A reload starts a new browser session.
  */
 export interface SubmissionUncertainty {
-  readonly store: Store<SubmissionUncertaintyState>;
+  readonly store: ReadableStore<SubmissionUncertaintyState>;
   retain(): void;
   acknowledge(): void;
 }
 
+function uncertaintyState(
+  active: boolean,
+  acknowledged: boolean,
+): SubmissionUncertaintyState {
+  return Object.freeze({ active, acknowledged });
+}
+
 export function createSubmissionUncertainty(): SubmissionUncertainty {
-  const store = createStore<SubmissionUncertaintyState>({ active: false, acknowledged: false });
+  const ownerStore = createStore<SubmissionUncertaintyState>(uncertaintyState(false, false));
+  const store: ReadableStore<SubmissionUncertaintyState> = Object.freeze({
+    getState: ownerStore.getState,
+    getServerSnapshot: ownerStore.getServerSnapshot,
+    subscribe: ownerStore.subscribe,
+  });
 
   return {
     store,
     retain(): void {
-      const state = store.getState();
+      const state = ownerStore.getState();
       if (state.active && !state.acknowledged) return;
-      store.setState({ active: true, acknowledged: false });
+      ownerStore.setState(uncertaintyState(true, false));
     },
     acknowledge(): void {
-      const state = store.getState();
+      const state = ownerStore.getState();
       if (!state.active || state.acknowledged) return;
-      store.setState({ active: true, acknowledged: true });
+      ownerStore.setState(uncertaintyState(true, true));
     },
   };
 }
