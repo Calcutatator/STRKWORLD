@@ -172,7 +172,9 @@ every joined room by default. `LobbyClient` disables that room option before
 publishing the connection. D-037 gives reconnect ownership to the Shell's
 explicit player control; leaving the SDK default enabled would keep reporting
 `connected` after an established transport drop and would perform network I/O
-the player did not request.
+the player did not request. A code-less WebSocket error is left for its paired
+close event so the wrapper reports the real close code as `server-dropped`;
+numeric room/protocol errors remain `error`.
 
 `resume` throws if the client was never connected or has been disconnected.
 Reconnecting is the shell's decision to make explicitly, not a side effect of

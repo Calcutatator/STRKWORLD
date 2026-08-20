@@ -399,6 +399,12 @@ export class LobbyClient {
       });
       room.onError((code, _message) => {
         if (!this.#isCurrentRoom(generation, room)) return;
+        // A WebSocket transport loss reaches the pinned SDK as a code-less
+        // error immediately before its close event. Let onLeave own that pair
+        // so the real close code is reported as server-dropped. Numeric room
+        // and protocol errors do not carry that close signal and remain the
+        // explicit error path below.
+        if (code === undefined) return;
         this.#room = null;
         this.#gameId = null;
         this.#cancelReconcile();

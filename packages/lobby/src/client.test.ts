@@ -70,7 +70,6 @@ function fakeRoom(): {
   stateChange: () => void;
   error: (code: number, message?: string) => void;
   left: (code: number, reason?: string) => void;
-  drop: (code: number, reason?: string) => void;
 } {
   let welcome: ((payload: { gameId: string }) => void) | undefined;
   let stateChange: (() => void) | undefined;
@@ -110,11 +109,6 @@ function fakeRoom(): {
     stateChange: () => stateChange?.(),
     error: (code, message) => error?.(code, message),
     left: (code, reason) => left?.(code, reason),
-    // A transport drop is held inside the SDK's retry loop while automatic
-    // reconnection is enabled; disabling it turns the drop into onLeave.
-    drop: (code, reason) => {
-      if (!room.reconnection.enabled) left?.(code, reason);
-    },
   };
 }
 
@@ -238,7 +232,7 @@ describe('nothing connects by itself', () => {
 });
 
 describe('connect is idempotent', () => {
-  it('reports a transport drop instead of entering the SDK automatic retry loop', async () => {
+  it('disables the SDK automatic retry owner on the joined room', async () => {
     const joined = fakeRoom();
     const joinOrCreate = vi
       .spyOn(ColyseusClient.prototype, 'joinOrCreate')
@@ -254,14 +248,8 @@ describe('connect is idempotent', () => {
       joined.welcome({ gameId: 'manual-reconnect-only' });
       await connecting;
 
-      joined.drop(1006, 'transport lost');
-
-      expect(statuses.at(-1)).toMatchObject({
-        status: 'closed',
-        reason: 'server-dropped',
-        code: 1006,
-      });
-      expect(client.gameId).toBeNull();
+      expect(joined.room.reconnection.enabled).toBe(false);
+      expect(statuses.at(-1)).toEqual({ status: 'connected' });
     } finally {
       joinOrCreate.mockRestore();
     }
