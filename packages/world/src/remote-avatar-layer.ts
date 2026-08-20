@@ -82,6 +82,7 @@ export function createRemoteAvatarLayer({
   const destroy = (): void => {
     if (destroyed) return;
     destroyed = true;
+    scene.events.off('shutdown', destroy);
     unsubscribe?.();
     unsubscribe = undefined;
     for (const avatar of avatars.values()) destroyAvatar(avatar);

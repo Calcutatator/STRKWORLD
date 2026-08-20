@@ -25,6 +25,16 @@ class FakeEvents {
     return this;
   }
 
+  off(event: string, callback: () => void, context?: unknown): this {
+    const listeners = this.listeners.get(event) ?? [];
+    const retained = listeners.filter(
+      (listener) => listener.callback !== callback || listener.context !== context,
+    );
+    if (retained.length === 0) this.listeners.delete(event);
+    else this.listeners.set(event, retained);
+    return this;
+  }
+
   emit(event: string): void {
     const listeners = this.listeners.get(event) ?? [];
     this.listeners.delete(event);
@@ -386,21 +396,43 @@ describe('StreetScene lifecycle', () => {
     expect(harness.cycle(1).applied).toEqual(['avatar-9']);
   });
 
-  it('replaces the binding when create runs twice with no shutdown between', () => {
+  it('retires prior World ownership without broadcasting shutdown when create repeats', () => {
     // The mounting regression this file's header warns about: create() can run
-    // twice. The second one must replace the binding, not add a listener.
+    // twice. The second cycle must replace every listener-owning controller,
+    // not only the outfit binding.
     const harness = createWorldPlayHarness();
+    const frameworkShutdown = vi.fn();
+    harness.scene.events.once('shutdown', frameworkShutdown);
     harness.create();
+    const staleBank = harness.room('bank');
+    staleBank.enter();
+
+    expect(staleBank.state.inRoom).toBe(true);
+    expect(harness.shellListenerCount()).toBe(12);
+
     harness.create();
 
+    expect(frameworkShutdown).not.toHaveBeenCalled();
     expect(harness.cycles).toHaveLength(2);
     expect(harness.keyboard.listenerCount()).toBe(1);
+    expect(staleBank.state.inRoom).toBe(false);
+    expect(harness.shellListenerCount()).toBe(12);
+    expect(harness.scene.events.count('shutdown')).toBe(3);
+
+    // A late Shell exit reaches only the current, outside controller. The
+    // retired Bank must not move the new Scene or publish a stale exit.
+    harness.shellEmit('world:exit-building', { building: 'bank' });
+    expect(harness.eventCount('building:exited')).toBe(0);
+
     harness.press();
     expect(harness.cycle(1).applied).toEqual(['avatar-9']);
     expect(harness.cycle(0).applied).toEqual([]);
 
     harness.shutdown();
+    expect(frameworkShutdown).toHaveBeenCalledTimes(1);
     expect(harness.keyboard.listenerCount()).toBe(0);
+    expect(harness.shellListenerCount()).toBe(0);
+    expect(harness.scene.events.count('shutdown')).toBe(0);
   });
 
   it('cleans every same-instance restart once while repeated shutdown stays idempotent', () => {
@@ -610,6 +642,9 @@ function createWorldPlayHarness() {
     shellEmit: (event: string, payload: unknown) => {
       for (const handler of shellListeners.get(event) ?? []) handler(payload);
     },
+    shellListenerCount: () =>
+      [...shellListeners.values()].reduce((total, handlers) => total + handlers.size, 0),
+    eventCount: (event: string) => emitted.filter((entry) => entry.event === event).length,
     room: (building: string): FixedRoomController => {
       const controller = scene.roomControllers[building];
       if (!controller) throw new Error(`Missing room controller for ${building}`);
