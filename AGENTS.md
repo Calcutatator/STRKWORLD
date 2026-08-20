@@ -250,6 +250,28 @@ without a verification method is a rumour.
 
 Format: `### YYYY-MM-DD — short title` then what, why it matters, how verified.
 
+### 2026-08-20 — Fly startup requires the browser shell, not only its private listeners
+
+The Fly composition previously launched both private children, accepted their
+readiness messages and bound the public edge without checking that its static
+root contained a usable `index.html`. A missing artifact, a directory named
+`index.html`, or a link escaping the configured root therefore produced a
+nominally ready Machine whose first shell request returned 404.
+
+Startup now validates the shell file before spawning either private child. The
+resolved file must be a regular file inside the resolved static root; otherwise
+startup fails with one generic error and no public or private listener is
+opened. This does not change static routing, build output, image contents,
+ports, proxy behavior or shutdown ownership.
+
+*Verified:* a public composition-seam regression supplies each of the three
+unusable roots above and checks the generic startup failure plus closed public,
+backend and lobby ports. Before the validation call, the empty-root case
+returned a live composition and failed the test; restoring the call makes all
+48 Fly composition tests pass. The check is filesystem-only: no image build,
+container, deploy, registry, secret, external network, RPC, wallet, proof,
+signature, funds or transaction was used.*
+
 ### 2026-08-20 — An old Bridge watcher cannot adopt replacement evidence
 
 `BridgeService.refresh()` may validly return provider status for deposit A

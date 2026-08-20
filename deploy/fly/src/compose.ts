@@ -1,5 +1,7 @@
 import { spawn, type ChildProcess } from 'node:child_process';
+import { realpath, stat } from 'node:fs/promises';
 import type { Server } from 'node:http';
+import { isAbsolute, relative, resolve, sep } from 'node:path';
 import { closeEdgeServer, createEdgeServer } from './edge.js';
 
 export interface FlyCompositionOptions {
@@ -33,6 +35,7 @@ export class FlyStartupAbortError extends Error {
 
 /** Start private children, wait for their TCP listeners, then expose one edge. */
 export async function startFlyComposition(options: FlyCompositionOptions): Promise<FlyComposition> {
+  await assertStaticShell(options.staticRoot);
   const environment = options.environment ?? process.env;
   const children = [
     launchChild(options.backendEntry, { ...environment, PORT: String(options.backendPort) }),
@@ -108,6 +111,24 @@ export async function startFlyComposition(options: FlyCompositionOptions): Promi
       throw new Error('Fly composition startup cleanup failed.');
     }
     throw error;
+  }
+}
+
+async function assertStaticShell(staticRoot: string): Promise<void> {
+  try {
+    const root = await realpath(resolve(staticRoot));
+    const shell = await realpath(resolve(root, 'index.html'));
+    const location = relative(root, shell);
+    if (
+      location === '..' ||
+      location.startsWith(`..${sep}`) ||
+      isAbsolute(location) ||
+      !(await stat(shell)).isFile()
+    ) {
+      throw new Error('invalid shell');
+    }
+  } catch {
+    throw new Error('Fly static shell is unavailable.');
   }
 }
 
