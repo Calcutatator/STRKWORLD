@@ -250,6 +250,106 @@ without a verification method is a rumour.
 
 Format: `### YYYY-MM-DD — short title` then what, why it matters, how verified.
 
+### 2026-08-20 — The Shell accepts the financial seam; production still does not construct it
+
+`App` now accepts one exact `PrivacyOperations` instance and passes it directly
+to `PrivacyProvider`. Supplying the prop selects that instance; omitting it
+selects the explicit demo path. The checked-in `main.tsx` still omits the prop,
+and the demo provider still refuses a production build, so this merge creates a
+production-host injection seam without silently making the local entry point a
+real-money composition.
+
+The next gap is not another `App` change. There is no non-test construction of
+`WalletApiPrivacyOperations` anywhere in the repository, no concrete
+`WalletRoutePolicy` instance outside its tests, and the Shell connect machine
+only queries the already-constructed operations object. The production
+bootstrap therefore still lacks a Chain-owned adapter that retains the active
+wallet session/account across connect, disconnect and account changes, builds
+the wallet-backed operations dependencies and supplies the approved route
+policy. Ownership and policy are cross-lane product/architecture choices: this
+finding records the blocker but does **not** select or pre-authorize their
+design. It also does not change D-043: no production Ready public-shield
+planner is exported, and the fee-aware funded gate remains closed.
+
+*Verified:* source search at PR #21 merge `6f9dfa6` found the only
+`new WalletApiPrivacyOperations(...)` calls in
+`packages/privacy/src/wallet-api/wallet-api.test.ts`; `main.tsx` mounts `App`
+without `operations`, while the regression in `App.test.tsx` injects a
+`FakePrivacyOperations` through the public prop. The current focused App suite
+passes 2/2 tests. Commit `3753b39` and merge `6f9dfa6` passed all jobs in
+[GitHub Actions run 32383698923](https://github.com/Calcutatator/STRKWORLD/actions/runs/32383698923).
+No wallet, account session, network, proof, signature, funds or transaction was
+used.
+
+### 2026-08-20 — Fly readiness must be proven by the child, not by its occupied port
+
+The Fly occupied-private-port regression had a test expectation race rather
+than a production lifecycle defect. Under workspace parallel load, the
+parent's 500 ms readiness deadline could win before the backend child reached
+its already occupied listener and exited, changing the correct rejection from
+“exited before readiness” to “did not become ready.” The deterministic harness
+now delays only the occupied backend past the deadline; the lobby child reaches
+genuine IPC readiness normally. Startup still rejects and the public edge is
+asserted unreachable.
+
+This shape matters because a TCP-only readiness probe would accept the
+unrelated listener already holding the backend port. Mutating the composition
+to use that probe makes the public edge become reachable and exposes the
+regression. Production Fly code did not change; the test now pins the IPC
+ownership boundary without depending on scheduler ordering.
+
+*Verified:* PR #23 commit `c2f59f7` changes only
+`deploy/fly/src/compose.test.ts`; the current focused file passes 47/47 tests.
+Merge `02e78cc` passed all jobs in
+[GitHub Actions run 32386403965](https://github.com/Calcutatator/STRKWORLD/actions/runs/32386403965).
+No deployment, external network, secret, wallet, RPC, proof, signature, funds
+or transaction was used.
+
+### 2026-08-20 — A validated request deadline must not remain a mutable config alias
+
+Direct `BackendApi` construction now rejects `requestTimeoutMs` above Node's
+signed 32-bit timer ceiling and captures the validated value at construction.
+Without the capture, a caller could mutate the shared config afterwards to
+`2_147_483_648`, which Node reduces to an approximately one-millisecond timer,
+despite construction having validated a safe deadline.
+
+The capture is deliberately narrow. `BackendApi` retains the configuration
+alias for live fail-closed controls including `globalEnabled` and per-route
+policy/kill switches; a queued request must still observe a route being
+disabled. Do not generalize the deadline fix into freezing or snapshotting all
+route policy.
+
+*Verified:* the PR #22 constructor boundary accepts exactly `2_147_483_647` and
+rejects `2_147_483_648`; a fake-timer regression mutates the caller's config
+after construction and observes the original 30,000 ms timeout. Existing tests
+also disable a route while its submission is queued. The current Backend suite
+passes 5 files / 67 tests. Commits `cc58dee` and `7e36694`, merged as
+`a06145e`, passed all jobs in
+[GitHub Actions run 32385267570](https://github.com/Calcutatator/STRKWORLD/actions/runs/32385267570).
+No provider, credential, wallet, proof, signature, funds or transaction was
+used.
+
+### 2026-08-20 — Retained Bridge evidence is authoritative until explicit discard
+
+`BridgeService.importResumeRecord()` cannot replace any currently valid
+retained record. The guard runs before parsing or signature verification, so
+older, equally recent, later, malformed and tampered imports all receive the
+same discard-first refusal while `resume()` and `exportResumeRecord()` retain
+the exact existing evidence. This is an ownership rule, not timestamp conflict
+resolution: the player must explicitly discard the current record before a
+different import can be considered and reverified.
+
+Once the player discards, ordinary size, shape, route and quote-signature
+validation still applies; the change does not make imported evidence trusted
+or provider-settled by itself.
+
+*Verified:* the PR #20 table-driven public-seam regression covers all five import
+classes, checks the exact discard-first error, and proves both retained views
+are unchanged. The current Bridge suite passes 1 file / 55 tests. Commits
+`cf26d2b` and `d1a0517`, merged as `4dc27c4`, passed all jobs in
+[GitHub Actions run 32384585147](https://github.com/Calcutatator/STRKWORLD/actions/runs/32384585147).
+No provider request, wallet, proof, signature, funds or transaction was used.
+
 ### 2026-08-20 — A key binding owned by a room works only in that room
 
 D-052 gave `F` to the Avatar Studio controller, which owned both the selected
