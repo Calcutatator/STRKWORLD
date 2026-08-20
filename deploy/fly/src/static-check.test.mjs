@@ -15,6 +15,10 @@ describe('Fly static build gate', () => {
     expect(dockerfile).toContain('COPY --from=build --chown=node:node /repo/.fly-build/packages/shared ./node_modules/@strkworld/shared');
     expect(dockerfile).toContain('"main":"./src/index.js"');
     expect(dockerfile).toContain('RUN rm -f node_modules/@strkworld/shared');
+    expect(dockerfile).toContain(`RUN printf '%s' "$VITE_LOBBY_URL" > /repo/.fly-built-lobby-url`);
+    expect(dockerfile).toContain('COPY --from=build /repo/.fly-built-lobby-url ./build-metadata/lobby-url');
+    expect(dockerfile).not.toContain('--chown=node:node /repo/.fly-built-lobby-url');
+    expect(dockerfile).not.toContain('ENV FLY_BUILT_LOBBY_URL=');
   });
 
   it('accepts only a real wss origin', () => {

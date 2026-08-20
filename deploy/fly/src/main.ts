@@ -1,3 +1,4 @@
+import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { resolve } from 'node:path';
 import { isProductionHostname } from '../../../packages/lobby/src/production-origin.js';
@@ -18,12 +19,16 @@ interface FlyEnvironment {
   readonly lobbyEntry: string;
 }
 
-export function parseFlyEnvironment(environment: NodeJS.ProcessEnv = process.env): FlyEnvironment {
+export function parseFlyEnvironment(
+  environment: NodeJS.ProcessEnv,
+  builtLobbyOrigin: string | undefined,
+): FlyEnvironment {
   const publicOrigin = parsePublicOrigin(environment['FLY_PUBLIC_ORIGIN']);
   const allowedOrigins = parseAllowedOrigins(environment['LOBBY_ALLOWED_ORIGINS']);
   if (!allowedOrigins.includes(publicOrigin)) {
     throw new Error('FLY_PUBLIC_ORIGIN is not present in LOBBY_ALLOWED_ORIGINS.');
   }
+  assertBuiltLobbyOrigin(builtLobbyOrigin, publicOrigin);
   const publicPort = parsePort(environment['PORT'], 'PORT');
   const backendPort = parsePort(environment['FLY_BACKEND_PORT'] ?? '18080', 'FLY_BACKEND_PORT');
   const lobbyPort = parsePort(environment['FLY_LOBBY_PORT'] ?? '12567', 'FLY_LOBBY_PORT');
@@ -39,6 +44,21 @@ export function parseFlyEnvironment(environment: NodeJS.ProcessEnv = process.env
     backendEntry: environment['FLY_BACKEND_ENTRY'] ?? '/app/build/deploy/fly/src/backend-child.js',
     lobbyEntry: environment['FLY_LOBBY_ENTRY'] ?? '/app/build/deploy/fly/src/lobby-child.js',
   };
+}
+
+const BUILT_LOBBY_ORIGIN_PATH = '/app/build-metadata/lobby-url';
+
+function readBuiltLobbyOrigin(): string {
+  try {
+    return readFileSync(BUILT_LOBBY_ORIGIN_PATH, 'utf8');
+  } catch {
+    throw new Error('Invalid FLY_BUILT_LOBBY_URL.');
+  }
+}
+
+function assertBuiltLobbyOrigin(value: string | undefined, publicOrigin: string): void {
+  const expected = `wss:${publicOrigin.slice('https:'.length)}`;
+  if (value !== expected) throw new Error('Invalid FLY_BUILT_LOBBY_URL.');
 }
 
 function parsePublicOrigin(value: string | undefined): string {
@@ -94,7 +114,7 @@ function parsePort(value: string | undefined, name: string): number {
 }
 
 async function run(): Promise<void> {
-  const config = parseFlyEnvironment();
+  const config = parseFlyEnvironment(process.env, readBuiltLobbyOrigin());
   await runFlySupervisor({
     compositionOptions: {
       ...config,

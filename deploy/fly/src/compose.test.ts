@@ -95,13 +95,14 @@ describe('Fly composition process boundary', () => {
     const base = {
       PORT: '8080',
       FLY_PUBLIC_ORIGIN: 'https://game.example',
+      FLY_BUILT_LOBBY_URL: 'wss://runtime-override.example',
       LOBBY_ALLOWED_ORIGINS: 'https://other.example',
     };
-    expect(() => parseFlyEnvironment(base)).toThrow('LOBBY_ALLOWED_ORIGINS');
+    expect(() => parseFlyEnvironment(base, 'wss://game.example')).toThrow('LOBBY_ALLOWED_ORIGINS');
     expect(parseFlyEnvironment({
       ...base,
       LOBBY_ALLOWED_ORIGINS: 'https://other.example, https://game.example',
-    })).toMatchObject({ publicOrigin: 'https://game.example' });
+    }, 'wss://game.example')).toMatchObject({ publicOrigin: 'https://game.example' });
   });
 
   it.each([
@@ -112,8 +113,9 @@ describe('Fly composition process boundary', () => {
     expect(() => parseFlyEnvironment({
       ...ports,
       FLY_PUBLIC_ORIGIN: 'https://game.example',
+      FLY_BUILT_LOBBY_URL: 'wss://runtime-override.example',
       LOBBY_ALLOWED_ORIGINS: 'https://game.example',
-    })).toThrowError('Fly service ports must be distinct.');
+    }, 'wss://game.example')).toThrowError('Fly service ports must be distinct.');
   });
 
   it.each([
@@ -150,8 +152,9 @@ describe('Fly composition process boundary', () => {
     expect(() => parseFlyEnvironment({
       PORT: '8080',
       FLY_PUBLIC_ORIGIN: publicOrigin,
+      FLY_BUILT_LOBBY_URL: 'wss://runtime-override.example',
       LOBBY_ALLOWED_ORIGINS: publicOrigin,
-    })).toThrow('FLY_PUBLIC_ORIGIN');
+    }, 'wss://game.example')).toThrow('FLY_PUBLIC_ORIGIN');
   });
 
   it.each([
@@ -162,8 +165,9 @@ describe('Fly composition process boundary', () => {
     expect(parseFlyEnvironment({
       PORT: '8080',
       FLY_PUBLIC_ORIGIN: publicOrigin,
+      FLY_BUILT_LOBBY_URL: 'wss://runtime-override.example',
       LOBBY_ALLOWED_ORIGINS: publicOrigin,
-    })).toMatchObject({ publicOrigin });
+    }, publicOrigin.replace(/^https:/, 'wss:'))).toMatchObject({ publicOrigin });
   });
 
   it('waits for both private children before binding the public edge', async () => {

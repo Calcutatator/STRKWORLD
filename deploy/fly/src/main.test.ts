@@ -90,8 +90,9 @@ describe('Fly supervisor lifecycle', () => {
       parseFlyEnvironment({
         PORT: '8080',
         FLY_PUBLIC_ORIGIN: publicOrigin,
+        FLY_BUILT_LOBBY_URL: 'wss://runtime-override.example',
         LOBBY_ALLOWED_ORIGINS: publicOrigin,
-      });
+      }, 'wss://game.example');
     } catch (error) {
       thrown = error;
     }
@@ -105,8 +106,41 @@ describe('Fly supervisor lifecycle', () => {
     expect(parseFlyEnvironment({
       PORT: '8080',
       FLY_PUBLIC_ORIGIN: publicOrigin,
+      FLY_BUILT_LOBBY_URL: 'wss://runtime-override.example',
       LOBBY_ALLOWED_ORIGINS: publicOrigin,
-    })).toMatchObject({ publicOrigin });
+    }, publicOrigin.replace(/^https:/, 'wss:'))).toMatchObject({ publicOrigin });
+  });
+
+  it.each([
+    ['missing', undefined],
+    ['different-host', 'wss://other.example'],
+    ['different-port', 'wss://game.example:8443'],
+    ['wrong-scheme', 'https://game.example'],
+  ])('rejects a %s baked lobby endpoint without echoing it', (_case, builtLobbyUrl) => {
+    let thrown: unknown;
+    try {
+      parseFlyEnvironment({
+        PORT: '8080',
+        FLY_PUBLIC_ORIGIN: 'https://game.example',
+        FLY_BUILT_LOBBY_URL: 'wss://game.example',
+        LOBBY_ALLOWED_ORIGINS: 'https://game.example',
+      }, builtLobbyUrl);
+    } catch (error) {
+      thrown = error;
+    }
+    expect(thrown).toBeInstanceOf(Error);
+    const message = thrown instanceof Error ? thrown.message : String(thrown);
+    expect(message).toBe('Invalid FLY_BUILT_LOBBY_URL.');
+    if (builtLobbyUrl) expect(message).not.toContain(builtLobbyUrl);
+  });
+
+  it('binds an explicit public port to the same baked lobby port', () => {
+    expect(parseFlyEnvironment({
+      PORT: '8080',
+      FLY_PUBLIC_ORIGIN: 'https://game.example:8443',
+      FLY_BUILT_LOBBY_URL: 'wss://runtime-override.example',
+      LOBBY_ALLOWED_ORIGINS: 'https://game.example:8443',
+    }, 'wss://game.example:8443')).toMatchObject({ publicOrigin: 'https://game.example:8443' });
   });
 
   it('aborts deferred startup and exits orderly when a signal arrives', async () => {

@@ -52,8 +52,15 @@ closed unless it is a real `wss://` endpoint and verifies that the
 compiled web artifact contains it without an application-configured localhost
 endpoint. The pinned Colyseus SDK's exact unreachable `ws://127.0.0.1:2567`
 development fallback is allowed by the check and is not used by the shell.
-The runtime also fails closed unless `FLY_PUBLIC_ORIGIN` is present in the
-trimmed `LOBBY_ALLOWED_ORIGINS` list. The production edge contract is D-047's
+The final image retains that public value in the build-owned fixed file
+`/app/build-metadata/lobby-url`; startup reads that file independently of the
+runtime environment and fails closed unless it is the exact `wss://` equivalent of
+`FLY_PUBLIC_ORIGIN`, including any explicit port. This prevents a valid but
+different lobby endpoint from being compiled into the browser while the
+Machine starts under another origin, and a runtime environment override cannot
+substitute a different authority. Runtime also fails closed unless
+`FLY_PUBLIC_ORIGIN` is present in the trimmed `LOBBY_ALLOWED_ORIGINS` list. The
+production edge contract is D-047's
 fixed opaque key set `avatar-1` through `avatar-16`: keys 1–8 are the eight
 cosy/default characters and keys 9–16 are their paired fighting variants.
 That pairing remains cosmetic; no stance or action field enters lobby traffic.

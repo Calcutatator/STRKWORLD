@@ -28,18 +28,22 @@ if (args[0] === 'image' && args[1] === 'inspect') {
   output(process.env.FAKE_DOCKER_IMAGE_USER || 'node');
 } else if (args[0] === 'container' && args[1] === 'create') {
   const nameIndex = args.indexOf('--name');
-  writeFileSync(statePath, JSON.stringify({ name: args[nameIndex + 1] }));
+  writeFileSync(statePath, JSON.stringify({
+    name: args[nameIndex + 1],
+    adversarial: args.includes('FLY_BUILT_LOBBY_URL=wss://mismatch.example.com'),
+  }));
   output(id);
 } else if (args[0] === 'container' && args[1] === 'start') {
   // The fake container is immediately ready.
 } else if (args[0] === 'exec') {
   if (args.includes('/proc/1/status')) output(process.env.FAKE_DOCKER_UID || '1000');
+  else if (args.includes('/app/build-metadata/lobby-url')) output('0:0:644');
   else if (process.env.FAKE_DOCKER_PROBE_FAIL === '1') process.exit(1);
 } else if (args[0] === 'inspect') {
   const format = args[args.indexOf('--format') + 1];
   const state = readState();
-  if (format === '{{.State.Running}}') output('true');
-  else if (format === '{{.State.ExitCode}}') output(process.env.FAKE_DOCKER_EXIT_CODE || '0');
+  if (format === '{{.State.Running}}') output(state.adversarial ? 'false' : 'true');
+  else if (format === '{{.State.ExitCode}}') output(state.adversarial ? '1' : (process.env.FAKE_DOCKER_EXIT_CODE || '0'));
   else if (format === '{{.Id}} {{.Name}}') output(id + ' /' + (process.env.FAKE_DOCKER_INSPECT_NAME || state.name));
   else process.exit(65);
 } else if (args[0] === 'container' && args[1] === 'stop') {
@@ -197,7 +201,7 @@ describe('production image boot-smoke seam', () => {
     expect(smoke.error).toBeUndefined();
     expect(callStarting(smoke.calls, 'image', 'inspect').at(-1)).toBe(tag);
     expect(callStarting(smoke.calls, 'container', 'create').at(-1)).toBe(tag);
-  });
+  }, 10_000);
 
   it('boots the Fly composition in quarantine and probes only the exact public status trio', async () => {
     const smoke = await runSmoke(flyScript);
@@ -224,9 +228,23 @@ describe('production image boot-smoke seam', () => {
     expect(probeProgram).toContain('AbortSignal.timeout(');
     expect(probeProgram).not.toContain('/api');
     expect(smoke.calls.some((call) => call.includes('/proc/1/status'))).toBe(true);
+    expect(smoke.calls).toContainEqual([
+      'exec', containerId, 'stat', '-c', '%u:%g:%a', '/app/build-metadata/lobby-url',
+    ]);
     expectInertFinancialEnvironment(create);
     expectSafeLifecycle(smoke.calls, name, 10);
-  });
+
+    const creates = smoke.calls.filter((call) => call[0] === 'container' && call[1] === 'create');
+    expect(creates).toHaveLength(2);
+    const adversarial = creates[1];
+    expect(optionValue(adversarial, '--network')).toBe('none');
+    expect(environmentValues(adversarial)).toEqual(expect.arrayContaining([
+      'FLY_PUBLIC_ORIGIN=https://mismatch.example.com',
+      'LOBBY_ALLOWED_ORIGINS=https://mismatch.example.com',
+      'FLY_BUILT_LOBBY_URL=wss://mismatch.example.com',
+    ]));
+    expect(smoke.calls).toContainEqual(['inspect', '--type', 'container', '--format', '{{.State.Running}}', containerId]);
+  }, 10_000);
 
   it('boots the standalone backend in quarantine and performs only a TCP liveness probe', async () => {
     const smoke = await runSmoke(backendScript);
