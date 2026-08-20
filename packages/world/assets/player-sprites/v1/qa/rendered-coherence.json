@@ -1,0 +1,27 @@
+{
+  "status": "candidate-awaiting-independent-review",
+  "runtimeReady": false,
+  "renderedAcceptance": false,
+  "reviewBackgrounds": [
+    "muted-green-grass",
+    "slate-road",
+    "beige-paving",
+    "brick-facade"
+  ],
+  "visualGates": [
+    "same character model, head/body ratio, torso, hip line, limb thickness and palette across four facings",
+    "distinct contact/passing poses with opposing arm/leg weight transfer",
+    "weapons remain attached to hands and directionally coherent",
+    "no white/cyan matte fringe or accidental transparent holes/channels",
+    "feet remain fixed at y=56 while the silhouette remains inside the 64x64 logical canvas",
+    "repeated 125ms GIF loops read as a walk rather than a rocking idle"
+  ],
+  "evidence": [
+    "all-characters-movement.png",
+    "background-readability.png",
+    "edge-heatmap.png",
+    "avatar-1-walk.gif through avatar-16-walk.gif",
+    "character-1-walk.gif through character-8-walk.gif"
+  ],
+  "independentReview": "pending"
+}

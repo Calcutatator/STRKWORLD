@@ -1,12 +1,10 @@
 # STRKWORLD player sprites v1
 
-This directory is the D-052 art handoff for the eight paired player-character
-designs. The bounded character 5/13 cross-facing identity correction has
-passed independent orchestration review. Commit `5c8c81a` integrates the
-unchanged five-column contract into World. Rendered in-game acceptance remains
-user-owned and pending; this art handoff is not a runtime-ready or rendered
-acceptance claim. The older `v1-review/` directory remains the historical
-review and generation-provenance record.
+This directory is an isolated D-052 art-correction candidate for the eight
+paired player-character designs. It is awaiting independent orchestration
+review and is not runtime-ready or rendered acceptance. The older `v1-review/`
+directory remains unchanged as the historical review and generation-provenance
+record.
 
 ## Files
 
@@ -14,9 +12,9 @@ review and generation-provenance record.
 - `avatar-9.png` through `avatar-16.png` are the paired fighting states.
 - `source/player-sprites.aseprite` is the editable 320-frame source.
 - `manifest.json` is the runtime-neutral asset contract and pair mapping.
-- `qa/` contains mechanical reports, four-background evidence, a complete
-  movement contact, one animated preview per paired character, and the
-  cross-facing identity gate.
+- `qa/` contains mechanical reports, four-background evidence, enlarged
+  movement contacts, per-key and paired animated previews, explicit pixel
+  repair evidence, and the cross-facing identity gate.
 
 ## Sheet contract
 
@@ -41,11 +39,16 @@ consistent runtime-owned shadow behind every local, remote, and Studio avatar.
 
 ## Character checks
 
-The corrected character 5/13 side-facing cells are rebuilt from their shared
-approved down-facing models; the fighting staff remains a separate authored
-side prop and is connected to the hand. No runtime row or frame mapping was
-changed. The correction is not runtime-ready until orchestration independently
-reviews the complete handoff.
+The side-facing identities and movement cells were reconstructed per character
+from approved model references; they are not a mirrored or blanket zone copy.
+The fighting weapons remain direction-specific and hand-connected. The
+approved down/up identities remain intact except for sixteen reviewed scanline
+repairs in large-character passing cells. `qa/explicit-pixel-repairs.json`
+records the 133 enclosed-hole fills, four isolated-pixel removals, and scanline
+repairs by key, row, column, coordinate, and resulting RGBA value.
+
+No runtime row or frame mapping was changed. The correction is not runtime-ready
+until orchestration independently reviews the complete handoff.
 
 - Characters 4 and 7 remain the two deliberately large silhouettes in both
   states and all facings.
@@ -75,13 +78,14 @@ sprite slice or wire field.
 ## Provenance
 
 The character concepts and pixels are project-owned STRKWORLD work produced
-under James Wilcock's art direction. This D-052 pass applies deterministic
-nearest-neighbour pixel cleanup, cross-facing normalization, anatomy-gap
-repair, and source-preserving sheet assembly to the approved historical
-character pixels. No third-party source pixels or external asset packs are
-incorporated. The work is intentionally Chrono Trigger-adjacent in era and
-readability, but does not copy its characters, silhouettes, clothing, palettes,
-frames, or pixels.
+under James Wilcock's art direction. This D-052 pass applies character-specific
+pixel reconstruction guided by project-owned reference turnarounds,
+nearest-neighbour quantization, explicit anatomy-gap repair, and
+source-preserving sheet assembly. Generated imagery was used as visual
+guidance only; the final sheets contain controlled project-owned pixels. No
+third-party source pixels or external asset packs are incorporated. The work
+is intentionally Chrono Trigger-adjacent in era and readability, but does not
+copy its characters, silhouettes, clothing, palettes, frames, or pixels.
 
 Verified 2026-08-20. Project use and modification are controlled by the
 STRKWORLD project owner.

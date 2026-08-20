@@ -1,6 +1,6 @@
 {
   "status": "pass",
-  "source": "player-sprites.aseprite",
+  "source": "source/player-sprites.aseprite",
   "canvas": [
     64,
     64
@@ -35,5 +35,5 @@
     }
   },
   "verifiedWith": "deterministic binary inspection; independent Aseprite reopen remains orchestration review work",
-  "sourceSha256": "0e3096077036f03224bbe079777757f21ac218980741dcbea77d1d3928919ed7"
+  "sourceSha256": "84a6bacb20e177723618aaee00c7b23a70750dd419e6dd277d8b4c602cfb90f9"
 }

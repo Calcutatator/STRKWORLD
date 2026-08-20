@@ -1,0 +1,11197 @@
+{
+  "method": "explicit named-cell pixel repairs; no blanket transform, global despeckle, or automated hole-fill",
+  "count": 799,
+  "breakdown": {
+    "hole-fill": 133,
+    "seam-material-repair": 662,
+    "isolated-remove": 4
+  },
+  "repairs": [
+    {
+      "key": "avatar-1",
+      "row": "left",
+      "column": "idle",
+      "x": 24,
+      "y": 23,
+      "rgba": [
+        6,
+        3,
+        1,
+        255
+      ],
+      "kind": "hole-fill"
+    },
+    {
+      "key": "avatar-1",
+      "row": "left",
+      "column": "contact-left",
+      "x": 25,
+      "y": 23,
+      "rgba": [
+        6,
+        3,
+        1,
+        255
+      ],
+      "kind": "hole-fill"
+    },
+    {
+      "key": "avatar-1",
+      "row": "left",
+      "column": "passing-left",
+      "x": 24,
+      "y": 32,
+      "rgba": [
+        0,
+        0,
+        0,
+        255
+      ],
+      "kind": "hole-fill"
+    },
+    {
+      "key": "avatar-1",
+      "row": "left",
+      "column": "idle",
+      "x": 24,
+      "y": 41,
+      "rgba": [
+        0,
+        0,
+        0,
+        255
+      ],
+      "kind": "hole-fill"
+    },
+    {
+      "key": "avatar-1",
+      "row": "left",
+      "column": "idle",
+      "x": 23,
+      "y": 45,
+      "rgba": [
+        0,
+        1,
+        2,
+        255
+      ],
+      "kind": "hole-fill"
+    },
+    {
+      "key": "avatar-1",
+      "row": "left",
+      "column": "idle",
+      "x": 24,
+      "y": 45,
+      "rgba": [
+        0,
+        1,
+        2,
+        255
+      ],
+      "kind": "hole-fill"
+    },
+    {
+      "key": "avatar-1",
+      "row": "left",
+      "column": "idle",
+      "x": 23,
+      "y": 46,
+      "rgba": [
+        0,
+        1,
+        2,
+        255
+      ],
+      "kind": "hole-fill"
+    },
+    {
+      "key": "avatar-1",
+      "row": "left",
+      "column": "passing-left",
+      "x": 26,
+      "y": 47,
+      "rgba": [
+        0,
+        1,
+        2,
+        255
+      ],
+      "kind": "hole-fill"
+    },
+    {
+      "key": "avatar-1",
+      "row": "left",
+      "column": "contact-left",
+      "x": 27,
+      "y": 49,
+      "rgba": [
+        0,
+        1,
+        2,
+        255
+      ],
+      "kind": "hole-fill"
+    },
+    {
+      "key": "avatar-1",
+      "row": "left",
+      "column": "passing-left",
+      "x": 26,
+      "y": 53,
+      "rgba": [
+        6,
+        3,
+        1,
+        255
+      ],
+      "kind": "hole-fill"
+    },
+    {
+      "key": "avatar-1",
+      "row": "left",
+      "column": "passing-left",
+      "x": 26,
+      "y": 54,
+      "rgba": [
+        6,
+        3,
+        1,
+        255
+      ],
+      "kind": "hole-fill"
+    },
+    {
+      "key": "avatar-1",
+      "row": "right",
+      "column": "contact-right",
+      "x": 22,
+      "y": 41,
+      "rgba": [
+        0,
+        4,
+        5,
+        255
+      ],
+      "kind": "hole-fill"
+    },
+    {
+      "key": "avatar-1",
+      "row": "right",
+      "column": "contact-right",
+      "x": 23,
+      "y": 41,
+      "rgba": [
+        0,
+        4,
+        5,
+        255
+      ],
+      "kind": "hole-fill"
+    },
+    {
+      "key": "avatar-1",
+      "row": "right",
+      "column": "contact-left",
+      "x": 37,
+      "y": 43,
+      "rgba": [
+        0,
+        0,
+        1,
+        255
+      ],
+      "kind": "hole-fill"
+    },
+    {
+      "key": "avatar-1",
+      "row": "right",
+      "column": "passing-left",
+      "x": 37,
+      "y": 44,
+      "rgba": [
+        9,
+        4,
+        2,
+        255
+      ],
+      "kind": "hole-fill"
+    },
+    {
+      "key": "avatar-1",
+      "row": "right",
+      "column": "idle",
+      "x": 38,
+      "y": 45,
+      "rgba": [
+        0,
+        0,
+        0,
+        255
+      ],
+      "kind": "hole-fill"
+    },
+    {
+      "key": "avatar-1",
+      "row": "right",
+      "column": "passing-left",
+      "x": 38,
+      "y": 46,
+      "rgba": [
+        0,
+        0,
+        1,
+        255
+      ],
+      "kind": "hole-fill"
+    },
+    {
+      "key": "avatar-1",
+      "row": "right",
+      "column": "contact-right",
+      "x": 38,
+      "y": 46,
+      "rgba": [
+        0,
+        0,
+        0,
+        255
+      ],
+      "kind": "hole-fill"
+    },
+    {
+      "key": "avatar-3",
+      "row": "left",
+      "column": "idle",
+      "x": 22,
+      "y": 41,
+      "rgba": [
+        3,
+        0,
+        0,
+        255
+      ],
+      "kind": "hole-fill"
+    },
+    {
+      "key": "avatar-3",
+      "row": "left",
+      "column": "idle",
+      "x": 22,
+      "y": 44,
+      "rgba": [
+        13,
+        10,
+        7,
+        255
+      ],
+      "kind": "hole-fill"
+    },
+    {
+      "key": "avatar-3",
+      "row": "left",
+      "column": "idle",
+      "x": 22,
+      "y": 45,
+      "rgba": [
+        3,
+        0,
+        0,
+        255
+      ],
+      "kind": "hole-fill"
+    },
+    {
+      "key": "avatar-3",
+      "row": "left",
+      "column": "idle",
+      "x": 21,
+      "y": 47,
+      "rgba": [
+        3,
+        0,
+        0,
+        255
+      ],
+      "kind": "hole-fill"
+    },
+    {
+      "key": "avatar-3",
+      "row": "left",
+      "column": "idle",
+      "x": 21,
+      "y": 48,
+      "rgba": [
+        3,
+        0,
+        0,
+        255
+      ],
+      "kind": "hole-fill"
+    },
+    {
+      "key": "avatar-3",
+      "row": "left",
+      "column": "idle",
+      "x": 21,
+      "y": 49,
+      "rgba": [
+        3,
+        0,
+        0,
+        255
+      ],
+      "kind": "hole-fill"
+    },
+    {
+      "key": "avatar-4",
+      "row": "down",
+      "column": "passing-left",
+      "x": 12,
+      "y": 42,
+      "rgba": [
+        56,
+        27,
+        2,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-4",
+      "row": "down",
+      "column": "passing-left",
+      "x": 13,
+      "y": 42,
+      "rgba": [
+        83,
+        42,
+        3,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-4",
+      "row": "down",
+      "column": "passing-left",
+      "x": 14,
+      "y": 42,
+      "rgba": [
+        83,
+        42,
+        3,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-4",
+      "row": "down",
+      "column": "passing-left",
+      "x": 15,
+      "y": 42,
+      "rgba": [
+        56,
+        27,
+        2,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-4",
+      "row": "down",
+      "column": "passing-left",
+      "x": 16,
+      "y": 42,
+      "rgba": [
+        24,
+        16,
+        5,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-4",
+      "row": "down",
+      "column": "passing-left",
+      "x": 17,
+      "y": 42,
+      "rgba": [
+        107,
+        57,
+        5,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-4",
+      "row": "down",
+      "column": "passing-left",
+      "x": 18,
+      "y": 42,
+      "rgba": [
+        83,
+        42,
+        3,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-4",
+      "row": "down",
+      "column": "passing-left",
+      "x": 19,
+      "y": 42,
+      "rgba": [
+        179,
+        104,
+        16,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-4",
+      "row": "down",
+      "column": "passing-left",
+      "x": 20,
+      "y": 42,
+      "rgba": [
+        56,
+        27,
+        2,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-4",
+      "row": "down",
+      "column": "passing-left",
+      "x": 21,
+      "y": 42,
+      "rgba": [
+        179,
+        104,
+        16,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-4",
+      "row": "down",
+      "column": "passing-left",
+      "x": 22,
+      "y": 42,
+      "rgba": [
+        56,
+        27,
+        2,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-4",
+      "row": "down",
+      "column": "passing-left",
+      "x": 23,
+      "y": 42,
+      "rgba": [
+        107,
+        57,
+        5,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-4",
+      "row": "down",
+      "column": "passing-left",
+      "x": 24,
+      "y": 42,
+      "rgba": [
+        83,
+        42,
+        3,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-4",
+      "row": "down",
+      "column": "passing-left",
+      "x": 25,
+      "y": 42,
+      "rgba": [
+        7,
+        5,
+        2,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-4",
+      "row": "down",
+      "column": "passing-left",
+      "x": 26,
+      "y": 42,
+      "rgba": [
+        209,
+        138,
+        39,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-4",
+      "row": "down",
+      "column": "passing-left",
+      "x": 27,
+      "y": 42,
+      "rgba": [
+        7,
+        5,
+        2,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-4",
+      "row": "down",
+      "column": "passing-left",
+      "x": 28,
+      "y": 42,
+      "rgba": [
+        225,
+        160,
+        61,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-4",
+      "row": "down",
+      "column": "passing-left",
+      "x": 29,
+      "y": 42,
+      "rgba": [
+        41,
+        80,
+        64,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-4",
+      "row": "down",
+      "column": "passing-left",
+      "x": 30,
+      "y": 42,
+      "rgba": [
+        41,
+        80,
+        64,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-4",
+      "row": "down",
+      "column": "passing-left",
+      "x": 31,
+      "y": 42,
+      "rgba": [
+        41,
+        80,
+        64,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-4",
+      "row": "down",
+      "column": "passing-left",
+      "x": 32,
+      "y": 42,
+      "rgba": [
+        41,
+        80,
+        64,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-4",
+      "row": "down",
+      "column": "passing-left",
+      "x": 33,
+      "y": 42,
+      "rgba": [
+        41,
+        80,
+        64,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-4",
+      "row": "down",
+      "column": "passing-left",
+      "x": 34,
+      "y": 42,
+      "rgba": [
+        41,
+        80,
+        64,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-4",
+      "row": "down",
+      "column": "passing-left",
+      "x": 35,
+      "y": 42,
+      "rgba": [
+        144,
+        93,
+        27,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-4",
+      "row": "down",
+      "column": "passing-left",
+      "x": 36,
+      "y": 42,
+      "rgba": [
+        209,
+        138,
+        39,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-4",
+      "row": "down",
+      "column": "passing-left",
+      "x": 37,
+      "y": 42,
+      "rgba": [
+        0,
+        0,
+        0,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-4",
+      "row": "down",
+      "column": "passing-left",
+      "x": 38,
+      "y": 42,
+      "rgba": [
+        179,
+        104,
+        16,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-4",
+      "row": "down",
+      "column": "passing-left",
+      "x": 39,
+      "y": 42,
+      "rgba": [
+        20,
+        42,
+        34,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-4",
+      "row": "down",
+      "column": "passing-left",
+      "x": 40,
+      "y": 42,
+      "rgba": [
+        20,
+        42,
+        34,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-4",
+      "row": "down",
+      "column": "passing-left",
+      "x": 41,
+      "y": 42,
+      "rgba": [
+        247,
+        206,
+        139,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-4",
+      "row": "down",
+      "column": "passing-left",
+      "x": 42,
+      "y": 42,
+      "rgba": [
+        253,
+        225,
+        161,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-4",
+      "row": "down",
+      "column": "passing-left",
+      "x": 43,
+      "y": 42,
+      "rgba": [
+        244,
+        194,
+        101,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-4",
+      "row": "down",
+      "column": "passing-left",
+      "x": 44,
+      "y": 42,
+      "rgba": [
+        244,
+        194,
+        101,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-4",
+      "row": "down",
+      "column": "passing-left",
+      "x": 45,
+      "y": 42,
+      "rgba": [
+        253,
+        234,
+        185,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-4",
+      "row": "down",
+      "column": "passing-left",
+      "x": 46,
+      "y": 42,
+      "rgba": [
+        244,
+        194,
+        101,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-4",
+      "row": "down",
+      "column": "passing-left",
+      "x": 47,
+      "y": 42,
+      "rgba": [
+        183,
+        129,
+        57,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-4",
+      "row": "down",
+      "column": "passing-left",
+      "x": 48,
+      "y": 42,
+      "rgba": [
+        0,
+        0,
+        0,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-4",
+      "row": "down",
+      "column": "passing-left",
+      "x": 49,
+      "y": 42,
+      "rgba": [
+        56,
+        27,
+        2,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-4",
+      "row": "down",
+      "column": "passing-left",
+      "x": 50,
+      "y": 42,
+      "rgba": [
+        107,
+        57,
+        5,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-4",
+      "row": "down",
+      "column": "passing-left",
+      "x": 51,
+      "y": 42,
+      "rgba": [
+        83,
+        42,
+        3,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-4",
+      "row": "down",
+      "column": "passing-left",
+      "x": 52,
+      "y": 42,
+      "rgba": [
+        56,
+        27,
+        2,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-4",
+      "row": "down",
+      "column": "passing-right",
+      "x": 12,
+      "y": 42,
+      "rgba": [
+        56,
+        27,
+        2,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-4",
+      "row": "down",
+      "column": "passing-right",
+      "x": 13,
+      "y": 42,
+      "rgba": [
+        83,
+        42,
+        3,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-4",
+      "row": "down",
+      "column": "passing-right",
+      "x": 14,
+      "y": 42,
+      "rgba": [
+        83,
+        42,
+        3,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-4",
+      "row": "down",
+      "column": "passing-right",
+      "x": 15,
+      "y": 42,
+      "rgba": [
+        56,
+        27,
+        2,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-4",
+      "row": "down",
+      "column": "passing-right",
+      "x": 16,
+      "y": 42,
+      "rgba": [
+        24,
+        16,
+        5,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-4",
+      "row": "down",
+      "column": "passing-right",
+      "x": 17,
+      "y": 42,
+      "rgba": [
+        107,
+        57,
+        5,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-4",
+      "row": "down",
+      "column": "passing-right",
+      "x": 18,
+      "y": 42,
+      "rgba": [
+        83,
+        42,
+        3,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-4",
+      "row": "down",
+      "column": "passing-right",
+      "x": 19,
+      "y": 42,
+      "rgba": [
+        179,
+        104,
+        16,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-4",
+      "row": "down",
+      "column": "passing-right",
+      "x": 20,
+      "y": 42,
+      "rgba": [
+        56,
+        27,
+        2,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-4",
+      "row": "down",
+      "column": "passing-right",
+      "x": 21,
+      "y": 42,
+      "rgba": [
+        179,
+        104,
+        16,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-4",
+      "row": "down",
+      "column": "passing-right",
+      "x": 22,
+      "y": 42,
+      "rgba": [
+        56,
+        27,
+        2,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-4",
+      "row": "down",
+      "column": "passing-right",
+      "x": 23,
+      "y": 42,
+      "rgba": [
+        107,
+        57,
+        5,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-4",
+      "row": "down",
+      "column": "passing-right",
+      "x": 24,
+      "y": 42,
+      "rgba": [
+        83,
+        42,
+        3,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-4",
+      "row": "down",
+      "column": "passing-right",
+      "x": 25,
+      "y": 42,
+      "rgba": [
+        7,
+        5,
+        2,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-4",
+      "row": "down",
+      "column": "passing-right",
+      "x": 26,
+      "y": 42,
+      "rgba": [
+        209,
+        138,
+        39,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-4",
+      "row": "down",
+      "column": "passing-right",
+      "x": 27,
+      "y": 42,
+      "rgba": [
+        7,
+        5,
+        2,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-4",
+      "row": "down",
+      "column": "passing-right",
+      "x": 28,
+      "y": 42,
+      "rgba": [
+        225,
+        160,
+        61,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-4",
+      "row": "down",
+      "column": "passing-right",
+      "x": 29,
+      "y": 42,
+      "rgba": [
+        41,
+        80,
+        64,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-4",
+      "row": "down",
+      "column": "passing-right",
+      "x": 30,
+      "y": 42,
+      "rgba": [
+        41,
+        80,
+        64,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-4",
+      "row": "down",
+      "column": "passing-right",
+      "x": 31,
+      "y": 42,
+      "rgba": [
+        41,
+        80,
+        64,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-4",
+      "row": "down",
+      "column": "passing-right",
+      "x": 32,
+      "y": 42,
+      "rgba": [
+        41,
+        80,
+        64,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-4",
+      "row": "down",
+      "column": "passing-right",
+      "x": 33,
+      "y": 42,
+      "rgba": [
+        41,
+        80,
+        64,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-4",
+      "row": "down",
+      "column": "passing-right",
+      "x": 34,
+      "y": 42,
+      "rgba": [
+        41,
+        80,
+        64,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-4",
+      "row": "down",
+      "column": "passing-right",
+      "x": 35,
+      "y": 42,
+      "rgba": [
+        144,
+        93,
+        27,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-4",
+      "row": "down",
+      "column": "passing-right",
+      "x": 36,
+      "y": 42,
+      "rgba": [
+        209,
+        138,
+        39,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-4",
+      "row": "down",
+      "column": "passing-right",
+      "x": 37,
+      "y": 42,
+      "rgba": [
+        0,
+        0,
+        0,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-4",
+      "row": "down",
+      "column": "passing-right",
+      "x": 38,
+      "y": 42,
+      "rgba": [
+        179,
+        104,
+        16,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-4",
+      "row": "down",
+      "column": "passing-right",
+      "x": 39,
+      "y": 42,
+      "rgba": [
+        20,
+        42,
+        34,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-4",
+      "row": "down",
+      "column": "passing-right",
+      "x": 40,
+      "y": 42,
+      "rgba": [
+        20,
+        42,
+        34,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-4",
+      "row": "down",
+      "column": "passing-right",
+      "x": 41,
+      "y": 42,
+      "rgba": [
+        247,
+        206,
+        139,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-4",
+      "row": "down",
+      "column": "passing-right",
+      "x": 42,
+      "y": 42,
+      "rgba": [
+        253,
+        225,
+        161,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-4",
+      "row": "down",
+      "column": "passing-right",
+      "x": 43,
+      "y": 42,
+      "rgba": [
+        244,
+        194,
+        101,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-4",
+      "row": "down",
+      "column": "passing-right",
+      "x": 44,
+      "y": 42,
+      "rgba": [
+        244,
+        194,
+        101,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-4",
+      "row": "down",
+      "column": "passing-right",
+      "x": 45,
+      "y": 42,
+      "rgba": [
+        253,
+        234,
+        185,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-4",
+      "row": "down",
+      "column": "passing-right",
+      "x": 46,
+      "y": 42,
+      "rgba": [
+        244,
+        194,
+        101,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-4",
+      "row": "down",
+      "column": "passing-right",
+      "x": 47,
+      "y": 42,
+      "rgba": [
+        183,
+        129,
+        57,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-4",
+      "row": "down",
+      "column": "passing-right",
+      "x": 48,
+      "y": 42,
+      "rgba": [
+        0,
+        0,
+        0,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-4",
+      "row": "down",
+      "column": "passing-right",
+      "x": 49,
+      "y": 42,
+      "rgba": [
+        56,
+        27,
+        2,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-4",
+      "row": "down",
+      "column": "passing-right",
+      "x": 50,
+      "y": 42,
+      "rgba": [
+        107,
+        57,
+        5,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-4",
+      "row": "down",
+      "column": "passing-right",
+      "x": 51,
+      "y": 42,
+      "rgba": [
+        83,
+        42,
+        3,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-4",
+      "row": "down",
+      "column": "passing-right",
+      "x": 52,
+      "y": 42,
+      "rgba": [
+        56,
+        27,
+        2,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-4",
+      "row": "left",
+      "column": "contact-left",
+      "x": 24,
+      "y": 47,
+      "rgba": [
+        4,
+        0,
+        0,
+        255
+      ],
+      "kind": "hole-fill"
+    },
+    {
+      "key": "avatar-4",
+      "row": "left",
+      "column": "passing-right",
+      "x": 24,
+      "y": 47,
+      "rgba": [
+        0,
+        0,
+        2,
+        255
+      ],
+      "kind": "hole-fill"
+    },
+    {
+      "key": "avatar-4",
+      "row": "right",
+      "column": "idle",
+      "x": 19,
+      "y": 30,
+      "rgba": [
+        0,
+        0,
+        0,
+        255
+      ],
+      "kind": "hole-fill"
+    },
+    {
+      "key": "avatar-4",
+      "row": "right",
+      "column": "passing-left",
+      "x": 19,
+      "y": 30,
+      "rgba": [
+        0,
+        0,
+        0,
+        255
+      ],
+      "kind": "hole-fill"
+    },
+    {
+      "key": "avatar-4",
+      "row": "up",
+      "column": "passing-left",
+      "x": 14,
+      "y": 42,
+      "rgba": [
+        72,
+        36,
+        3,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-4",
+      "row": "up",
+      "column": "passing-left",
+      "x": 15,
+      "y": 42,
+      "rgba": [
+        143,
+        82,
+        13,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-4",
+      "row": "up",
+      "column": "passing-left",
+      "x": 16,
+      "y": 42,
+      "rgba": [
+        91,
+        47,
+        4,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-4",
+      "row": "up",
+      "column": "passing-left",
+      "x": 17,
+      "y": 42,
+      "rgba": [
+        8,
+        5,
+        2,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-4",
+      "row": "up",
+      "column": "passing-left",
+      "x": 18,
+      "y": 42,
+      "rgba": [
+        72,
+        36,
+        3,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-4",
+      "row": "up",
+      "column": "passing-left",
+      "x": 19,
+      "y": 42,
+      "rgba": [
+        8,
+        5,
+        2,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-4",
+      "row": "up",
+      "column": "passing-left",
+      "x": 20,
+      "y": 42,
+      "rgba": [
+        193,
+        133,
+        52,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-4",
+      "row": "up",
+      "column": "passing-left",
+      "x": 21,
+      "y": 42,
+      "rgba": [
+        241,
+        180,
+        86,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-4",
+      "row": "up",
+      "column": "passing-left",
+      "x": 22,
+      "y": 42,
+      "rgba": [
+        249,
+        196,
+        108,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-4",
+      "row": "up",
+      "column": "passing-left",
+      "x": 23,
+      "y": 42,
+      "rgba": [
+        252,
+        229,
+        171,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-4",
+      "row": "up",
+      "column": "passing-left",
+      "x": 24,
+      "y": 42,
+      "rgba": [
+        193,
+        133,
+        52,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-4",
+      "row": "up",
+      "column": "passing-left",
+      "x": 25,
+      "y": 42,
+      "rgba": [
+        229,
+        171,
+        82,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-4",
+      "row": "up",
+      "column": "passing-left",
+      "x": 26,
+      "y": 42,
+      "rgba": [
+        253,
+        235,
+        184,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-4",
+      "row": "up",
+      "column": "passing-left",
+      "x": 27,
+      "y": 42,
+      "rgba": [
+        253,
+        235,
+        184,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-4",
+      "row": "up",
+      "column": "passing-left",
+      "x": 28,
+      "y": 42,
+      "rgba": [
+        253,
+        235,
+        184,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-4",
+      "row": "up",
+      "column": "passing-left",
+      "x": 29,
+      "y": 42,
+      "rgba": [
+        241,
+        192,
+        109,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-4",
+      "row": "up",
+      "column": "passing-left",
+      "x": 30,
+      "y": 42,
+      "rgba": [
+        241,
+        180,
+        86,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-4",
+      "row": "up",
+      "column": "passing-left",
+      "x": 31,
+      "y": 42,
+      "rgba": [
+        229,
+        171,
+        82,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-4",
+      "row": "up",
+      "column": "passing-left",
+      "x": 32,
+      "y": 42,
+      "rgba": [
+        252,
+        216,
+        141,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-4",
+      "row": "up",
+      "column": "passing-left",
+      "x": 33,
+      "y": 42,
+      "rgba": [
+        253,
+        235,
+        184,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-4",
+      "row": "up",
+      "column": "passing-left",
+      "x": 34,
+      "y": 42,
+      "rgba": [
+        253,
+        235,
+        184,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-4",
+      "row": "up",
+      "column": "passing-left",
+      "x": 35,
+      "y": 42,
+      "rgba": [
+        249,
+        196,
+        108,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-4",
+      "row": "up",
+      "column": "passing-left",
+      "x": 36,
+      "y": 42,
+      "rgba": [
+        179,
+        113,
+        29,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-4",
+      "row": "up",
+      "column": "passing-left",
+      "x": 37,
+      "y": 42,
+      "rgba": [
+        8,
+        5,
+        2,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-4",
+      "row": "up",
+      "column": "passing-left",
+      "x": 38,
+      "y": 42,
+      "rgba": [
+        91,
+        47,
+        4,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-4",
+      "row": "up",
+      "column": "passing-left",
+      "x": 39,
+      "y": 42,
+      "rgba": [
+        72,
+        36,
+        3,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-4",
+      "row": "up",
+      "column": "passing-left",
+      "x": 40,
+      "y": 42,
+      "rgba": [
+        143,
+        82,
+        13,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-4",
+      "row": "up",
+      "column": "passing-left",
+      "x": 41,
+      "y": 42,
+      "rgba": [
+        91,
+        47,
+        4,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-4",
+      "row": "up",
+      "column": "passing-left",
+      "x": 42,
+      "y": 42,
+      "rgba": [
+        91,
+        47,
+        4,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-4",
+      "row": "up",
+      "column": "passing-left",
+      "x": 43,
+      "y": 42,
+      "rgba": [
+        45,
+        30,
+        10,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-4",
+      "row": "up",
+      "column": "passing-left",
+      "x": 44,
+      "y": 42,
+      "rgba": [
+        45,
+        30,
+        10,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-4",
+      "row": "up",
+      "column": "passing-left",
+      "x": 45,
+      "y": 42,
+      "rgba": [
+        45,
+        30,
+        10,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-4",
+      "row": "up",
+      "column": "passing-left",
+      "x": 46,
+      "y": 42,
+      "rgba": [
+        8,
+        5,
+        2,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-4",
+      "row": "up",
+      "column": "passing-left",
+      "x": 47,
+      "y": 42,
+      "rgba": [
+        91,
+        47,
+        4,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-4",
+      "row": "up",
+      "column": "passing-left",
+      "x": 48,
+      "y": 42,
+      "rgba": [
+        143,
+        82,
+        13,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-4",
+      "row": "up",
+      "column": "passing-left",
+      "x": 49,
+      "y": 42,
+      "rgba": [
+        72,
+        36,
+        3,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-4",
+      "row": "up",
+      "column": "passing-left",
+      "x": 50,
+      "y": 42,
+      "rgba": [
+        8,
+        5,
+        2,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-4",
+      "row": "up",
+      "column": "passing-right",
+      "x": 14,
+      "y": 42,
+      "rgba": [
+        72,
+        36,
+        3,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-4",
+      "row": "up",
+      "column": "passing-right",
+      "x": 15,
+      "y": 42,
+      "rgba": [
+        143,
+        82,
+        13,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-4",
+      "row": "up",
+      "column": "passing-right",
+      "x": 16,
+      "y": 42,
+      "rgba": [
+        91,
+        47,
+        4,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-4",
+      "row": "up",
+      "column": "passing-right",
+      "x": 17,
+      "y": 42,
+      "rgba": [
+        8,
+        5,
+        2,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-4",
+      "row": "up",
+      "column": "passing-right",
+      "x": 18,
+      "y": 42,
+      "rgba": [
+        72,
+        36,
+        3,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-4",
+      "row": "up",
+      "column": "passing-right",
+      "x": 19,
+      "y": 42,
+      "rgba": [
+        8,
+        5,
+        2,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-4",
+      "row": "up",
+      "column": "passing-right",
+      "x": 20,
+      "y": 42,
+      "rgba": [
+        193,
+        133,
+        52,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-4",
+      "row": "up",
+      "column": "passing-right",
+      "x": 21,
+      "y": 42,
+      "rgba": [
+        241,
+        180,
+        86,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-4",
+      "row": "up",
+      "column": "passing-right",
+      "x": 22,
+      "y": 42,
+      "rgba": [
+        249,
+        196,
+        108,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-4",
+      "row": "up",
+      "column": "passing-right",
+      "x": 23,
+      "y": 42,
+      "rgba": [
+        252,
+        229,
+        171,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-4",
+      "row": "up",
+      "column": "passing-right",
+      "x": 24,
+      "y": 42,
+      "rgba": [
+        193,
+        133,
+        52,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-4",
+      "row": "up",
+      "column": "passing-right",
+      "x": 25,
+      "y": 42,
+      "rgba": [
+        229,
+        171,
+        82,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-4",
+      "row": "up",
+      "column": "passing-right",
+      "x": 26,
+      "y": 42,
+      "rgba": [
+        253,
+        235,
+        184,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-4",
+      "row": "up",
+      "column": "passing-right",
+      "x": 27,
+      "y": 42,
+      "rgba": [
+        253,
+        235,
+        184,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-4",
+      "row": "up",
+      "column": "passing-right",
+      "x": 28,
+      "y": 42,
+      "rgba": [
+        253,
+        235,
+        184,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-4",
+      "row": "up",
+      "column": "passing-right",
+      "x": 29,
+      "y": 42,
+      "rgba": [
+        241,
+        192,
+        109,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-4",
+      "row": "up",
+      "column": "passing-right",
+      "x": 30,
+      "y": 42,
+      "rgba": [
+        241,
+        180,
+        86,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-4",
+      "row": "up",
+      "column": "passing-right",
+      "x": 31,
+      "y": 42,
+      "rgba": [
+        229,
+        171,
+        82,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-4",
+      "row": "up",
+      "column": "passing-right",
+      "x": 32,
+      "y": 42,
+      "rgba": [
+        252,
+        216,
+        141,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-4",
+      "row": "up",
+      "column": "passing-right",
+      "x": 33,
+      "y": 42,
+      "rgba": [
+        253,
+        235,
+        184,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-4",
+      "row": "up",
+      "column": "passing-right",
+      "x": 34,
+      "y": 42,
+      "rgba": [
+        253,
+        235,
+        184,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-4",
+      "row": "up",
+      "column": "passing-right",
+      "x": 35,
+      "y": 42,
+      "rgba": [
+        249,
+        196,
+        108,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-4",
+      "row": "up",
+      "column": "passing-right",
+      "x": 36,
+      "y": 42,
+      "rgba": [
+        179,
+        113,
+        29,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-4",
+      "row": "up",
+      "column": "passing-right",
+      "x": 37,
+      "y": 42,
+      "rgba": [
+        8,
+        5,
+        2,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-4",
+      "row": "up",
+      "column": "passing-right",
+      "x": 38,
+      "y": 42,
+      "rgba": [
+        91,
+        47,
+        4,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-4",
+      "row": "up",
+      "column": "passing-right",
+      "x": 39,
+      "y": 42,
+      "rgba": [
+        72,
+        36,
+        3,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-4",
+      "row": "up",
+      "column": "passing-right",
+      "x": 40,
+      "y": 42,
+      "rgba": [
+        143,
+        82,
+        13,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-4",
+      "row": "up",
+      "column": "passing-right",
+      "x": 41,
+      "y": 42,
+      "rgba": [
+        91,
+        47,
+        4,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-4",
+      "row": "up",
+      "column": "passing-right",
+      "x": 42,
+      "y": 42,
+      "rgba": [
+        91,
+        47,
+        4,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-4",
+      "row": "up",
+      "column": "passing-right",
+      "x": 43,
+      "y": 42,
+      "rgba": [
+        45,
+        30,
+        10,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-4",
+      "row": "up",
+      "column": "passing-right",
+      "x": 44,
+      "y": 42,
+      "rgba": [
+        45,
+        30,
+        10,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-4",
+      "row": "up",
+      "column": "passing-right",
+      "x": 45,
+      "y": 42,
+      "rgba": [
+        45,
+        30,
+        10,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-4",
+      "row": "up",
+      "column": "passing-right",
+      "x": 46,
+      "y": 42,
+      "rgba": [
+        8,
+        5,
+        2,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-4",
+      "row": "up",
+      "column": "passing-right",
+      "x": 47,
+      "y": 42,
+      "rgba": [
+        91,
+        47,
+        4,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-4",
+      "row": "up",
+      "column": "passing-right",
+      "x": 48,
+      "y": 42,
+      "rgba": [
+        143,
+        82,
+        13,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-4",
+      "row": "up",
+      "column": "passing-right",
+      "x": 49,
+      "y": 42,
+      "rgba": [
+        72,
+        36,
+        3,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-4",
+      "row": "up",
+      "column": "passing-right",
+      "x": 50,
+      "y": 42,
+      "rgba": [
+        8,
+        5,
+        2,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-6",
+      "row": "left",
+      "column": "contact-right",
+      "x": 25,
+      "y": 34,
+      "rgba": [
+        15,
+        14,
+        11,
+        255
+      ],
+      "kind": "hole-fill"
+    },
+    {
+      "key": "avatar-6",
+      "row": "left",
+      "column": "contact-left",
+      "x": 38,
+      "y": 40,
+      "rgba": [
+        0,
+        0,
+        0,
+        255
+      ],
+      "kind": "hole-fill"
+    },
+    {
+      "key": "avatar-6",
+      "row": "left",
+      "column": "contact-left",
+      "x": 20,
+      "y": 41,
+      "rgba": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "kind": "isolated-remove"
+    },
+    {
+      "key": "avatar-6",
+      "row": "left",
+      "column": "contact-left",
+      "x": 20,
+      "y": 42,
+      "rgba": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "kind": "isolated-remove"
+    },
+    {
+      "key": "avatar-6",
+      "row": "left",
+      "column": "idle",
+      "x": 23,
+      "y": 46,
+      "rgba": [
+        0,
+        0,
+        0,
+        255
+      ],
+      "kind": "hole-fill"
+    },
+    {
+      "key": "avatar-6",
+      "row": "left",
+      "column": "idle",
+      "x": 23,
+      "y": 47,
+      "rgba": [
+        0,
+        0,
+        0,
+        255
+      ],
+      "kind": "hole-fill"
+    },
+    {
+      "key": "avatar-6",
+      "row": "left",
+      "column": "passing-right",
+      "x": 24,
+      "y": 47,
+      "rgba": [
+        8,
+        4,
+        4,
+        255
+      ],
+      "kind": "hole-fill"
+    },
+    {
+      "key": "avatar-6",
+      "row": "left",
+      "column": "idle",
+      "x": 23,
+      "y": 48,
+      "rgba": [
+        0,
+        0,
+        0,
+        255
+      ],
+      "kind": "hole-fill"
+    },
+    {
+      "key": "avatar-6",
+      "row": "left",
+      "column": "contact-right",
+      "x": 25,
+      "y": 48,
+      "rgba": [
+        8,
+        4,
+        4,
+        255
+      ],
+      "kind": "hole-fill"
+    },
+    {
+      "key": "avatar-6",
+      "row": "left",
+      "column": "passing-right",
+      "x": 24,
+      "y": 48,
+      "rgba": [
+        8,
+        4,
+        4,
+        255
+      ],
+      "kind": "hole-fill"
+    },
+    {
+      "key": "avatar-6",
+      "row": "left",
+      "column": "passing-left",
+      "x": 26,
+      "y": 50,
+      "rgba": [
+        15,
+        14,
+        11,
+        255
+      ],
+      "kind": "hole-fill"
+    },
+    {
+      "key": "avatar-6",
+      "row": "left",
+      "column": "passing-right",
+      "x": 26,
+      "y": 50,
+      "rgba": [
+        0,
+        0,
+        0,
+        255
+      ],
+      "kind": "hole-fill"
+    },
+    {
+      "key": "avatar-6",
+      "row": "left",
+      "column": "contact-right",
+      "x": 28,
+      "y": 52,
+      "rgba": [
+        8,
+        4,
+        4,
+        255
+      ],
+      "kind": "hole-fill"
+    },
+    {
+      "key": "avatar-6",
+      "row": "right",
+      "column": "idle",
+      "x": 38,
+      "y": 44,
+      "rgba": [
+        0,
+        0,
+        1,
+        255
+      ],
+      "kind": "hole-fill"
+    },
+    {
+      "key": "avatar-6",
+      "row": "right",
+      "column": "idle",
+      "x": 37,
+      "y": 50,
+      "rgba": [
+        12,
+        6,
+        6,
+        255
+      ],
+      "kind": "hole-fill"
+    },
+    {
+      "key": "avatar-6",
+      "row": "right",
+      "column": "passing-left",
+      "x": 38,
+      "y": 51,
+      "rgba": [
+        0,
+        0,
+        0,
+        255
+      ],
+      "kind": "hole-fill"
+    },
+    {
+      "key": "avatar-6",
+      "row": "right",
+      "column": "contact-left",
+      "x": 36,
+      "y": 53,
+      "rgba": [
+        0,
+        0,
+        1,
+        255
+      ],
+      "kind": "hole-fill"
+    },
+    {
+      "key": "avatar-7",
+      "row": "down",
+      "column": "passing-left",
+      "x": 11,
+      "y": 42,
+      "rgba": [
+        15,
+        15,
+        7,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-7",
+      "row": "down",
+      "column": "passing-left",
+      "x": 12,
+      "y": 42,
+      "rgba": [
+        43,
+        74,
+        41,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-7",
+      "row": "down",
+      "column": "passing-left",
+      "x": 13,
+      "y": 42,
+      "rgba": [
+        77,
+        99,
+        37,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-7",
+      "row": "down",
+      "column": "passing-left",
+      "x": 14,
+      "y": 42,
+      "rgba": [
+        124,
+        82,
+        17,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-7",
+      "row": "down",
+      "column": "passing-left",
+      "x": 15,
+      "y": 42,
+      "rgba": [
+        63,
+        87,
+        38,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-7",
+      "row": "down",
+      "column": "passing-left",
+      "x": 16,
+      "y": 42,
+      "rgba": [
+        30,
+        60,
+        36,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-7",
+      "row": "down",
+      "column": "passing-left",
+      "x": 17,
+      "y": 42,
+      "rgba": [
+        43,
+        74,
+        41,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-7",
+      "row": "down",
+      "column": "passing-left",
+      "x": 18,
+      "y": 42,
+      "rgba": [
+        63,
+        87,
+        38,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-7",
+      "row": "down",
+      "column": "passing-left",
+      "x": 19,
+      "y": 42,
+      "rgba": [
+        41,
+        65,
+        37,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-7",
+      "row": "down",
+      "column": "passing-left",
+      "x": 20,
+      "y": 42,
+      "rgba": [
+        51,
+        38,
+        11,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-7",
+      "row": "down",
+      "column": "passing-left",
+      "x": 21,
+      "y": 42,
+      "rgba": [
+        82,
+        41,
+        3,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-7",
+      "row": "down",
+      "column": "passing-left",
+      "x": 22,
+      "y": 42,
+      "rgba": [
+        82,
+        41,
+        3,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-7",
+      "row": "down",
+      "column": "passing-left",
+      "x": 23,
+      "y": 42,
+      "rgba": [
+        4,
+        10,
+        5,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-7",
+      "row": "down",
+      "column": "passing-left",
+      "x": 24,
+      "y": 42,
+      "rgba": [
+        41,
+        65,
+        37,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-7",
+      "row": "down",
+      "column": "passing-left",
+      "x": 25,
+      "y": 42,
+      "rgba": [
+        160,
+        108,
+        20,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-7",
+      "row": "down",
+      "column": "passing-left",
+      "x": 26,
+      "y": 42,
+      "rgba": [
+        63,
+        87,
+        38,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-7",
+      "row": "down",
+      "column": "passing-left",
+      "x": 27,
+      "y": 42,
+      "rgba": [
+        41,
+        65,
+        37,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-7",
+      "row": "down",
+      "column": "passing-left",
+      "x": 28,
+      "y": 42,
+      "rgba": [
+        202,
+        148,
+        50,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-7",
+      "row": "down",
+      "column": "passing-left",
+      "x": 29,
+      "y": 42,
+      "rgba": [
+        2,
+        2,
+        0,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-7",
+      "row": "down",
+      "column": "passing-left",
+      "x": 30,
+      "y": 42,
+      "rgba": [
+        19,
+        40,
+        26,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-7",
+      "row": "down",
+      "column": "passing-left",
+      "x": 31,
+      "y": 42,
+      "rgba": [
+        19,
+        40,
+        26,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-7",
+      "row": "down",
+      "column": "passing-left",
+      "x": 32,
+      "y": 42,
+      "rgba": [
+        30,
+        60,
+        36,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-7",
+      "row": "down",
+      "column": "passing-left",
+      "x": 33,
+      "y": 42,
+      "rgba": [
+        30,
+        60,
+        36,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-7",
+      "row": "down",
+      "column": "passing-left",
+      "x": 34,
+      "y": 42,
+      "rgba": [
+        25,
+        50,
+        31,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-7",
+      "row": "down",
+      "column": "passing-left",
+      "x": 35,
+      "y": 42,
+      "rgba": [
+        4,
+        10,
+        5,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-7",
+      "row": "down",
+      "column": "passing-left",
+      "x": 36,
+      "y": 42,
+      "rgba": [
+        160,
+        108,
+        20,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-7",
+      "row": "down",
+      "column": "passing-left",
+      "x": 37,
+      "y": 42,
+      "rgba": [
+        30,
+        60,
+        36,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-7",
+      "row": "down",
+      "column": "passing-left",
+      "x": 38,
+      "y": 42,
+      "rgba": [
+        77,
+        99,
+        37,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-7",
+      "row": "down",
+      "column": "passing-left",
+      "x": 39,
+      "y": 42,
+      "rgba": [
+        124,
+        82,
+        17,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-7",
+      "row": "down",
+      "column": "passing-left",
+      "x": 40,
+      "y": 42,
+      "rgba": [
+        51,
+        38,
+        11,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-7",
+      "row": "down",
+      "column": "passing-left",
+      "x": 41,
+      "y": 42,
+      "rgba": [
+        4,
+        10,
+        5,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-7",
+      "row": "down",
+      "column": "passing-left",
+      "x": 42,
+      "y": 42,
+      "rgba": [
+        82,
+        41,
+        3,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-7",
+      "row": "down",
+      "column": "passing-left",
+      "x": 43,
+      "y": 42,
+      "rgba": [
+        82,
+        41,
+        3,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-7",
+      "row": "down",
+      "column": "passing-left",
+      "x": 44,
+      "y": 42,
+      "rgba": [
+        15,
+        15,
+        7,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-7",
+      "row": "down",
+      "column": "passing-left",
+      "x": 45,
+      "y": 42,
+      "rgba": [
+        63,
+        87,
+        38,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-7",
+      "row": "down",
+      "column": "passing-left",
+      "x": 46,
+      "y": 42,
+      "rgba": [
+        43,
+        74,
+        41,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-7",
+      "row": "down",
+      "column": "passing-left",
+      "x": 47,
+      "y": 42,
+      "rgba": [
+        30,
+        60,
+        36,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-7",
+      "row": "down",
+      "column": "passing-left",
+      "x": 48,
+      "y": 42,
+      "rgba": [
+        41,
+        65,
+        37,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-7",
+      "row": "down",
+      "column": "passing-left",
+      "x": 49,
+      "y": 42,
+      "rgba": [
+        124,
+        82,
+        17,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-7",
+      "row": "down",
+      "column": "passing-left",
+      "x": 50,
+      "y": 42,
+      "rgba": [
+        53,
+        79,
+        41,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-7",
+      "row": "down",
+      "column": "passing-left",
+      "x": 51,
+      "y": 42,
+      "rgba": [
+        160,
+        108,
+        20,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-7",
+      "row": "down",
+      "column": "passing-left",
+      "x": 52,
+      "y": 42,
+      "rgba": [
+        19,
+        40,
+        26,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-7",
+      "row": "down",
+      "column": "passing-right",
+      "x": 11,
+      "y": 42,
+      "rgba": [
+        15,
+        15,
+        7,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-7",
+      "row": "down",
+      "column": "passing-right",
+      "x": 12,
+      "y": 42,
+      "rgba": [
+        43,
+        74,
+        41,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-7",
+      "row": "down",
+      "column": "passing-right",
+      "x": 13,
+      "y": 42,
+      "rgba": [
+        77,
+        99,
+        37,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-7",
+      "row": "down",
+      "column": "passing-right",
+      "x": 14,
+      "y": 42,
+      "rgba": [
+        124,
+        82,
+        17,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-7",
+      "row": "down",
+      "column": "passing-right",
+      "x": 15,
+      "y": 42,
+      "rgba": [
+        63,
+        87,
+        38,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-7",
+      "row": "down",
+      "column": "passing-right",
+      "x": 16,
+      "y": 42,
+      "rgba": [
+        30,
+        60,
+        36,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-7",
+      "row": "down",
+      "column": "passing-right",
+      "x": 17,
+      "y": 42,
+      "rgba": [
+        43,
+        74,
+        41,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-7",
+      "row": "down",
+      "column": "passing-right",
+      "x": 18,
+      "y": 42,
+      "rgba": [
+        63,
+        87,
+        38,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-7",
+      "row": "down",
+      "column": "passing-right",
+      "x": 19,
+      "y": 42,
+      "rgba": [
+        41,
+        65,
+        37,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-7",
+      "row": "down",
+      "column": "passing-right",
+      "x": 20,
+      "y": 42,
+      "rgba": [
+        51,
+        38,
+        11,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-7",
+      "row": "down",
+      "column": "passing-right",
+      "x": 21,
+      "y": 42,
+      "rgba": [
+        82,
+        41,
+        3,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-7",
+      "row": "down",
+      "column": "passing-right",
+      "x": 22,
+      "y": 42,
+      "rgba": [
+        82,
+        41,
+        3,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-7",
+      "row": "down",
+      "column": "passing-right",
+      "x": 23,
+      "y": 42,
+      "rgba": [
+        4,
+        10,
+        5,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-7",
+      "row": "down",
+      "column": "passing-right",
+      "x": 24,
+      "y": 42,
+      "rgba": [
+        41,
+        65,
+        37,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-7",
+      "row": "down",
+      "column": "passing-right",
+      "x": 25,
+      "y": 42,
+      "rgba": [
+        160,
+        108,
+        20,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-7",
+      "row": "down",
+      "column": "passing-right",
+      "x": 26,
+      "y": 42,
+      "rgba": [
+        63,
+        87,
+        38,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-7",
+      "row": "down",
+      "column": "passing-right",
+      "x": 27,
+      "y": 42,
+      "rgba": [
+        41,
+        65,
+        37,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-7",
+      "row": "down",
+      "column": "passing-right",
+      "x": 28,
+      "y": 42,
+      "rgba": [
+        202,
+        148,
+        50,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-7",
+      "row": "down",
+      "column": "passing-right",
+      "x": 29,
+      "y": 42,
+      "rgba": [
+        2,
+        2,
+        0,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-7",
+      "row": "down",
+      "column": "passing-right",
+      "x": 30,
+      "y": 42,
+      "rgba": [
+        19,
+        40,
+        26,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-7",
+      "row": "down",
+      "column": "passing-right",
+      "x": 31,
+      "y": 42,
+      "rgba": [
+        19,
+        40,
+        26,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-7",
+      "row": "down",
+      "column": "passing-right",
+      "x": 32,
+      "y": 42,
+      "rgba": [
+        30,
+        60,
+        36,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-7",
+      "row": "down",
+      "column": "passing-right",
+      "x": 33,
+      "y": 42,
+      "rgba": [
+        30,
+        60,
+        36,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-7",
+      "row": "down",
+      "column": "passing-right",
+      "x": 34,
+      "y": 42,
+      "rgba": [
+        25,
+        50,
+        31,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-7",
+      "row": "down",
+      "column": "passing-right",
+      "x": 35,
+      "y": 42,
+      "rgba": [
+        4,
+        10,
+        5,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-7",
+      "row": "down",
+      "column": "passing-right",
+      "x": 36,
+      "y": 42,
+      "rgba": [
+        160,
+        108,
+        20,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-7",
+      "row": "down",
+      "column": "passing-right",
+      "x": 37,
+      "y": 42,
+      "rgba": [
+        30,
+        60,
+        36,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-7",
+      "row": "down",
+      "column": "passing-right",
+      "x": 38,
+      "y": 42,
+      "rgba": [
+        77,
+        99,
+        37,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-7",
+      "row": "down",
+      "column": "passing-right",
+      "x": 39,
+      "y": 42,
+      "rgba": [
+        124,
+        82,
+        17,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-7",
+      "row": "down",
+      "column": "passing-right",
+      "x": 40,
+      "y": 42,
+      "rgba": [
+        51,
+        38,
+        11,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-7",
+      "row": "down",
+      "column": "passing-right",
+      "x": 41,
+      "y": 42,
+      "rgba": [
+        4,
+        10,
+        5,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-7",
+      "row": "down",
+      "column": "passing-right",
+      "x": 42,
+      "y": 42,
+      "rgba": [
+        82,
+        41,
+        3,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-7",
+      "row": "down",
+      "column": "passing-right",
+      "x": 43,
+      "y": 42,
+      "rgba": [
+        82,
+        41,
+        3,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-7",
+      "row": "down",
+      "column": "passing-right",
+      "x": 44,
+      "y": 42,
+      "rgba": [
+        15,
+        15,
+        7,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-7",
+      "row": "down",
+      "column": "passing-right",
+      "x": 45,
+      "y": 42,
+      "rgba": [
+        63,
+        87,
+        38,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-7",
+      "row": "down",
+      "column": "passing-right",
+      "x": 46,
+      "y": 42,
+      "rgba": [
+        43,
+        74,
+        41,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-7",
+      "row": "down",
+      "column": "passing-right",
+      "x": 47,
+      "y": 42,
+      "rgba": [
+        30,
+        60,
+        36,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-7",
+      "row": "down",
+      "column": "passing-right",
+      "x": 48,
+      "y": 42,
+      "rgba": [
+        41,
+        65,
+        37,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-7",
+      "row": "down",
+      "column": "passing-right",
+      "x": 49,
+      "y": 42,
+      "rgba": [
+        124,
+        82,
+        17,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-7",
+      "row": "down",
+      "column": "passing-right",
+      "x": 50,
+      "y": 42,
+      "rgba": [
+        53,
+        79,
+        41,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-7",
+      "row": "down",
+      "column": "passing-right",
+      "x": 51,
+      "y": 42,
+      "rgba": [
+        160,
+        108,
+        20,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-7",
+      "row": "down",
+      "column": "passing-right",
+      "x": 52,
+      "y": 42,
+      "rgba": [
+        19,
+        40,
+        26,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-7",
+      "row": "right",
+      "column": "contact-left",
+      "x": 39,
+      "y": 44,
+      "rgba": [
+        3,
+        5,
+        5,
+        255
+      ],
+      "kind": "hole-fill"
+    },
+    {
+      "key": "avatar-7",
+      "row": "right",
+      "column": "passing-right",
+      "x": 39,
+      "y": 44,
+      "rgba": [
+        0,
+        0,
+        0,
+        255
+      ],
+      "kind": "hole-fill"
+    },
+    {
+      "key": "avatar-7",
+      "row": "right",
+      "column": "contact-right",
+      "x": 29,
+      "y": 54,
+      "rgba": [
+        10,
+        11,
+        9,
+        255
+      ],
+      "kind": "hole-fill"
+    },
+    {
+      "key": "avatar-7",
+      "row": "up",
+      "column": "passing-left",
+      "x": 14,
+      "y": 42,
+      "rgba": [
+        26,
+        44,
+        30,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-7",
+      "row": "up",
+      "column": "passing-left",
+      "x": 15,
+      "y": 42,
+      "rgba": [
+        42,
+        66,
+        37,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-7",
+      "row": "up",
+      "column": "passing-left",
+      "x": 16,
+      "y": 42,
+      "rgba": [
+        64,
+        89,
+        38,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-7",
+      "row": "up",
+      "column": "passing-left",
+      "x": 17,
+      "y": 42,
+      "rgba": [
+        48,
+        73,
+        37,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-7",
+      "row": "up",
+      "column": "passing-left",
+      "x": 18,
+      "y": 42,
+      "rgba": [
+        48,
+        73,
+        37,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-7",
+      "row": "up",
+      "column": "passing-left",
+      "x": 19,
+      "y": 42,
+      "rgba": [
+        64,
+        89,
+        38,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-7",
+      "row": "up",
+      "column": "passing-left",
+      "x": 20,
+      "y": 42,
+      "rgba": [
+        35,
+        55,
+        33,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-7",
+      "row": "up",
+      "column": "passing-left",
+      "x": 21,
+      "y": 42,
+      "rgba": [
+        26,
+        39,
+        27,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-7",
+      "row": "up",
+      "column": "passing-left",
+      "x": 22,
+      "y": 42,
+      "rgba": [
+        35,
+        55,
+        33,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-7",
+      "row": "up",
+      "column": "passing-left",
+      "x": 23,
+      "y": 42,
+      "rgba": [
+        53,
+        78,
+        37,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-7",
+      "row": "up",
+      "column": "passing-left",
+      "x": 24,
+      "y": 42,
+      "rgba": [
+        64,
+        89,
+        38,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-7",
+      "row": "up",
+      "column": "passing-left",
+      "x": 25,
+      "y": 42,
+      "rgba": [
+        60,
+        85,
+        37,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-7",
+      "row": "up",
+      "column": "passing-left",
+      "x": 26,
+      "y": 42,
+      "rgba": [
+        46,
+        67,
+        36,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-7",
+      "row": "up",
+      "column": "passing-left",
+      "x": 27,
+      "y": 42,
+      "rgba": [
+        64,
+        89,
+        38,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-7",
+      "row": "up",
+      "column": "passing-left",
+      "x": 28,
+      "y": 42,
+      "rgba": [
+        64,
+        89,
+        38,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-7",
+      "row": "up",
+      "column": "passing-left",
+      "x": 29,
+      "y": 42,
+      "rgba": [
+        64,
+        89,
+        38,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-7",
+      "row": "up",
+      "column": "passing-left",
+      "x": 30,
+      "y": 42,
+      "rgba": [
+        56,
+        81,
+        38,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-7",
+      "row": "up",
+      "column": "passing-left",
+      "x": 31,
+      "y": 42,
+      "rgba": [
+        48,
+        73,
+        37,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-7",
+      "row": "up",
+      "column": "passing-left",
+      "x": 32,
+      "y": 42,
+      "rgba": [
+        56,
+        81,
+        38,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-7",
+      "row": "up",
+      "column": "passing-left",
+      "x": 33,
+      "y": 42,
+      "rgba": [
+        53,
+        73,
+        36,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-7",
+      "row": "up",
+      "column": "passing-left",
+      "x": 34,
+      "y": 42,
+      "rgba": [
+        53,
+        78,
+        37,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-7",
+      "row": "up",
+      "column": "passing-left",
+      "x": 35,
+      "y": 42,
+      "rgba": [
+        56,
+        81,
+        38,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-7",
+      "row": "up",
+      "column": "passing-left",
+      "x": 36,
+      "y": 42,
+      "rgba": [
+        48,
+        73,
+        37,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-7",
+      "row": "up",
+      "column": "passing-left",
+      "x": 37,
+      "y": 42,
+      "rgba": [
+        56,
+        81,
+        38,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-7",
+      "row": "up",
+      "column": "passing-left",
+      "x": 38,
+      "y": 42,
+      "rgba": [
+        53,
+        78,
+        37,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-7",
+      "row": "up",
+      "column": "passing-left",
+      "x": 39,
+      "y": 42,
+      "rgba": [
+        53,
+        78,
+        37,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-7",
+      "row": "up",
+      "column": "passing-left",
+      "x": 40,
+      "y": 42,
+      "rgba": [
+        46,
+        67,
+        36,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-7",
+      "row": "up",
+      "column": "passing-left",
+      "x": 41,
+      "y": 42,
+      "rgba": [
+        26,
+        44,
+        30,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-7",
+      "row": "up",
+      "column": "passing-left",
+      "x": 42,
+      "y": 42,
+      "rgba": [
+        26,
+        39,
+        27,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-7",
+      "row": "up",
+      "column": "passing-left",
+      "x": 43,
+      "y": 42,
+      "rgba": [
+        46,
+        67,
+        36,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-7",
+      "row": "up",
+      "column": "passing-left",
+      "x": 44,
+      "y": 42,
+      "rgba": [
+        60,
+        85,
+        37,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-7",
+      "row": "up",
+      "column": "passing-left",
+      "x": 45,
+      "y": 42,
+      "rgba": [
+        35,
+        55,
+        33,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-7",
+      "row": "up",
+      "column": "passing-left",
+      "x": 46,
+      "y": 42,
+      "rgba": [
+        42,
+        66,
+        37,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-7",
+      "row": "up",
+      "column": "passing-left",
+      "x": 47,
+      "y": 42,
+      "rgba": [
+        60,
+        85,
+        37,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-7",
+      "row": "up",
+      "column": "passing-left",
+      "x": 48,
+      "y": 42,
+      "rgba": [
+        38,
+        60,
+        35,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-7",
+      "row": "up",
+      "column": "passing-left",
+      "x": 49,
+      "y": 42,
+      "rgba": [
+        26,
+        44,
+        30,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-7",
+      "row": "up",
+      "column": "passing-left",
+      "x": 50,
+      "y": 42,
+      "rgba": [
+        53,
+        73,
+        36,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-7",
+      "row": "up",
+      "column": "passing-right",
+      "x": 14,
+      "y": 42,
+      "rgba": [
+        26,
+        44,
+        30,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-7",
+      "row": "up",
+      "column": "passing-right",
+      "x": 15,
+      "y": 42,
+      "rgba": [
+        42,
+        66,
+        37,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-7",
+      "row": "up",
+      "column": "passing-right",
+      "x": 16,
+      "y": 42,
+      "rgba": [
+        64,
+        89,
+        38,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-7",
+      "row": "up",
+      "column": "passing-right",
+      "x": 17,
+      "y": 42,
+      "rgba": [
+        48,
+        73,
+        37,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-7",
+      "row": "up",
+      "column": "passing-right",
+      "x": 18,
+      "y": 42,
+      "rgba": [
+        48,
+        73,
+        37,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-7",
+      "row": "up",
+      "column": "passing-right",
+      "x": 19,
+      "y": 42,
+      "rgba": [
+        64,
+        89,
+        38,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-7",
+      "row": "up",
+      "column": "passing-right",
+      "x": 20,
+      "y": 42,
+      "rgba": [
+        35,
+        55,
+        33,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-7",
+      "row": "up",
+      "column": "passing-right",
+      "x": 21,
+      "y": 42,
+      "rgba": [
+        25,
+        39,
+        27,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-7",
+      "row": "up",
+      "column": "passing-right",
+      "x": 22,
+      "y": 42,
+      "rgba": [
+        35,
+        55,
+        33,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-7",
+      "row": "up",
+      "column": "passing-right",
+      "x": 23,
+      "y": 42,
+      "rgba": [
+        53,
+        78,
+        37,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-7",
+      "row": "up",
+      "column": "passing-right",
+      "x": 24,
+      "y": 42,
+      "rgba": [
+        64,
+        89,
+        38,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-7",
+      "row": "up",
+      "column": "passing-right",
+      "x": 25,
+      "y": 42,
+      "rgba": [
+        60,
+        85,
+        37,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-7",
+      "row": "up",
+      "column": "passing-right",
+      "x": 26,
+      "y": 42,
+      "rgba": [
+        46,
+        67,
+        36,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-7",
+      "row": "up",
+      "column": "passing-right",
+      "x": 27,
+      "y": 42,
+      "rgba": [
+        64,
+        89,
+        38,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-7",
+      "row": "up",
+      "column": "passing-right",
+      "x": 28,
+      "y": 42,
+      "rgba": [
+        64,
+        89,
+        38,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-7",
+      "row": "up",
+      "column": "passing-right",
+      "x": 29,
+      "y": 42,
+      "rgba": [
+        64,
+        89,
+        38,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-7",
+      "row": "up",
+      "column": "passing-right",
+      "x": 30,
+      "y": 42,
+      "rgba": [
+        56,
+        81,
+        38,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-7",
+      "row": "up",
+      "column": "passing-right",
+      "x": 31,
+      "y": 42,
+      "rgba": [
+        48,
+        73,
+        37,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-7",
+      "row": "up",
+      "column": "passing-right",
+      "x": 32,
+      "y": 42,
+      "rgba": [
+        56,
+        81,
+        38,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-7",
+      "row": "up",
+      "column": "passing-right",
+      "x": 33,
+      "y": 42,
+      "rgba": [
+        53,
+        73,
+        36,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-7",
+      "row": "up",
+      "column": "passing-right",
+      "x": 34,
+      "y": 42,
+      "rgba": [
+        53,
+        78,
+        37,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-7",
+      "row": "up",
+      "column": "passing-right",
+      "x": 35,
+      "y": 42,
+      "rgba": [
+        56,
+        81,
+        38,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-7",
+      "row": "up",
+      "column": "passing-right",
+      "x": 36,
+      "y": 42,
+      "rgba": [
+        48,
+        73,
+        37,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-7",
+      "row": "up",
+      "column": "passing-right",
+      "x": 37,
+      "y": 42,
+      "rgba": [
+        56,
+        81,
+        38,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-7",
+      "row": "up",
+      "column": "passing-right",
+      "x": 38,
+      "y": 42,
+      "rgba": [
+        53,
+        78,
+        37,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-7",
+      "row": "up",
+      "column": "passing-right",
+      "x": 39,
+      "y": 42,
+      "rgba": [
+        53,
+        78,
+        37,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-7",
+      "row": "up",
+      "column": "passing-right",
+      "x": 40,
+      "y": 42,
+      "rgba": [
+        46,
+        67,
+        36,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-7",
+      "row": "up",
+      "column": "passing-right",
+      "x": 41,
+      "y": 42,
+      "rgba": [
+        26,
+        44,
+        30,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-7",
+      "row": "up",
+      "column": "passing-right",
+      "x": 42,
+      "y": 42,
+      "rgba": [
+        25,
+        39,
+        27,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-7",
+      "row": "up",
+      "column": "passing-right",
+      "x": 43,
+      "y": 42,
+      "rgba": [
+        46,
+        67,
+        36,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-7",
+      "row": "up",
+      "column": "passing-right",
+      "x": 44,
+      "y": 42,
+      "rgba": [
+        60,
+        85,
+        37,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-7",
+      "row": "up",
+      "column": "passing-right",
+      "x": 45,
+      "y": 42,
+      "rgba": [
+        35,
+        55,
+        33,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-7",
+      "row": "up",
+      "column": "passing-right",
+      "x": 46,
+      "y": 42,
+      "rgba": [
+        42,
+        66,
+        37,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-7",
+      "row": "up",
+      "column": "passing-right",
+      "x": 47,
+      "y": 42,
+      "rgba": [
+        60,
+        85,
+        37,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-7",
+      "row": "up",
+      "column": "passing-right",
+      "x": 48,
+      "y": 42,
+      "rgba": [
+        38,
+        60,
+        35,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-7",
+      "row": "up",
+      "column": "passing-right",
+      "x": 49,
+      "y": 42,
+      "rgba": [
+        26,
+        44,
+        30,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-7",
+      "row": "up",
+      "column": "passing-right",
+      "x": 50,
+      "y": 42,
+      "rgba": [
+        53,
+        73,
+        36,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-9",
+      "row": "left",
+      "column": "idle",
+      "x": 24,
+      "y": 23,
+      "rgba": [
+        9,
+        3,
+        1,
+        255
+      ],
+      "kind": "hole-fill"
+    },
+    {
+      "key": "avatar-9",
+      "row": "left",
+      "column": "contact-left",
+      "x": 25,
+      "y": 23,
+      "rgba": [
+        9,
+        3,
+        1,
+        255
+      ],
+      "kind": "hole-fill"
+    },
+    {
+      "key": "avatar-9",
+      "row": "left",
+      "column": "passing-left",
+      "x": 24,
+      "y": 32,
+      "rgba": [
+        0,
+        0,
+        0,
+        255
+      ],
+      "kind": "hole-fill"
+    },
+    {
+      "key": "avatar-9",
+      "row": "left",
+      "column": "idle",
+      "x": 24,
+      "y": 41,
+      "rgba": [
+        0,
+        0,
+        0,
+        255
+      ],
+      "kind": "hole-fill"
+    },
+    {
+      "key": "avatar-9",
+      "row": "left",
+      "column": "idle",
+      "x": 23,
+      "y": 45,
+      "rgba": [
+        0,
+        1,
+        0,
+        255
+      ],
+      "kind": "hole-fill"
+    },
+    {
+      "key": "avatar-9",
+      "row": "left",
+      "column": "idle",
+      "x": 24,
+      "y": 45,
+      "rgba": [
+        0,
+        1,
+        0,
+        255
+      ],
+      "kind": "hole-fill"
+    },
+    {
+      "key": "avatar-9",
+      "row": "left",
+      "column": "idle",
+      "x": 23,
+      "y": 46,
+      "rgba": [
+        0,
+        1,
+        0,
+        255
+      ],
+      "kind": "hole-fill"
+    },
+    {
+      "key": "avatar-9",
+      "row": "right",
+      "column": "contact-right",
+      "x": 22,
+      "y": 41,
+      "rgba": [
+        5,
+        4,
+        3,
+        255
+      ],
+      "kind": "hole-fill"
+    },
+    {
+      "key": "avatar-9",
+      "row": "right",
+      "column": "contact-right",
+      "x": 23,
+      "y": 41,
+      "rgba": [
+        5,
+        4,
+        3,
+        255
+      ],
+      "kind": "hole-fill"
+    },
+    {
+      "key": "avatar-9",
+      "row": "right",
+      "column": "contact-left",
+      "x": 37,
+      "y": 43,
+      "rgba": [
+        0,
+        0,
+        1,
+        255
+      ],
+      "kind": "hole-fill"
+    },
+    {
+      "key": "avatar-9",
+      "row": "right",
+      "column": "passing-left",
+      "x": 37,
+      "y": 44,
+      "rgba": [
+        18,
+        6,
+        1,
+        255
+      ],
+      "kind": "hole-fill"
+    },
+    {
+      "key": "avatar-9",
+      "row": "right",
+      "column": "contact-right",
+      "x": 37,
+      "y": 44,
+      "rgba": [
+        0,
+        2,
+        2,
+        255
+      ],
+      "kind": "hole-fill"
+    },
+    {
+      "key": "avatar-9",
+      "row": "right",
+      "column": "idle",
+      "x": 38,
+      "y": 45,
+      "rgba": [
+        0,
+        0,
+        0,
+        255
+      ],
+      "kind": "hole-fill"
+    },
+    {
+      "key": "avatar-9",
+      "row": "right",
+      "column": "passing-left",
+      "x": 38,
+      "y": 46,
+      "rgba": [
+        0,
+        2,
+        2,
+        255
+      ],
+      "kind": "hole-fill"
+    },
+    {
+      "key": "avatar-9",
+      "row": "right",
+      "column": "contact-right",
+      "x": 38,
+      "y": 46,
+      "rgba": [
+        0,
+        0,
+        0,
+        255
+      ],
+      "kind": "hole-fill"
+    },
+    {
+      "key": "avatar-9",
+      "row": "right",
+      "column": "idle",
+      "x": 32,
+      "y": 53,
+      "rgba": [
+        5,
+        4,
+        3,
+        255
+      ],
+      "kind": "hole-fill"
+    },
+    {
+      "key": "avatar-10",
+      "row": "left",
+      "column": "passing-right",
+      "x": 23,
+      "y": 40,
+      "rgba": [
+        39,
+        10,
+        6,
+        255
+      ],
+      "kind": "hole-fill"
+    },
+    {
+      "key": "avatar-10",
+      "row": "left",
+      "column": "idle",
+      "x": 25,
+      "y": 42,
+      "rgba": [
+        0,
+        0,
+        0,
+        255
+      ],
+      "kind": "hole-fill"
+    },
+    {
+      "key": "avatar-10",
+      "row": "left",
+      "column": "passing-right",
+      "x": 26,
+      "y": 52,
+      "rgba": [
+        0,
+        0,
+        0,
+        255
+      ],
+      "kind": "hole-fill"
+    },
+    {
+      "key": "avatar-10",
+      "row": "left",
+      "column": "idle",
+      "x": 26,
+      "y": 53,
+      "rgba": [
+        9,
+        0,
+        1,
+        255
+      ],
+      "kind": "hole-fill"
+    },
+    {
+      "key": "avatar-10",
+      "row": "left",
+      "column": "idle",
+      "x": 27,
+      "y": 53,
+      "rgba": [
+        9,
+        0,
+        1,
+        255
+      ],
+      "kind": "hole-fill"
+    },
+    {
+      "key": "avatar-11",
+      "row": "left",
+      "column": "contact-left",
+      "x": 22,
+      "y": 29,
+      "rgba": [
+        0,
+        0,
+        0,
+        255
+      ],
+      "kind": "hole-fill"
+    },
+    {
+      "key": "avatar-11",
+      "row": "left",
+      "column": "idle",
+      "x": 21,
+      "y": 31,
+      "rgba": [
+        0,
+        0,
+        0,
+        255
+      ],
+      "kind": "hole-fill"
+    },
+    {
+      "key": "avatar-11",
+      "row": "left",
+      "column": "idle",
+      "x": 21,
+      "y": 32,
+      "rgba": [
+        0,
+        0,
+        0,
+        255
+      ],
+      "kind": "hole-fill"
+    },
+    {
+      "key": "avatar-11",
+      "row": "left",
+      "column": "passing-left",
+      "x": 23,
+      "y": 35,
+      "rgba": [
+        5,
+        0,
+        0,
+        255
+      ],
+      "kind": "hole-fill"
+    },
+    {
+      "key": "avatar-11",
+      "row": "left",
+      "column": "passing-left",
+      "x": 25,
+      "y": 35,
+      "rgba": [
+        5,
+        0,
+        0,
+        255
+      ],
+      "kind": "hole-fill"
+    },
+    {
+      "key": "avatar-11",
+      "row": "left",
+      "column": "idle",
+      "x": 23,
+      "y": 37,
+      "rgba": [
+        0,
+        0,
+        3,
+        255
+      ],
+      "kind": "hole-fill"
+    },
+    {
+      "key": "avatar-11",
+      "row": "left",
+      "column": "contact-right",
+      "x": 27,
+      "y": 38,
+      "rgba": [
+        5,
+        0,
+        0,
+        255
+      ],
+      "kind": "hole-fill"
+    },
+    {
+      "key": "avatar-11",
+      "row": "left",
+      "column": "contact-right",
+      "x": 27,
+      "y": 39,
+      "rgba": [
+        0,
+        0,
+        0,
+        255
+      ],
+      "kind": "hole-fill"
+    },
+    {
+      "key": "avatar-11",
+      "row": "left",
+      "column": "idle",
+      "x": 21,
+      "y": 49,
+      "rgba": [
+        0,
+        0,
+        3,
+        255
+      ],
+      "kind": "hole-fill"
+    },
+    {
+      "key": "avatar-11",
+      "row": "right",
+      "column": "passing-left",
+      "x": 38,
+      "y": 31,
+      "rgba": [
+        13,
+        16,
+        25,
+        255
+      ],
+      "kind": "hole-fill"
+    },
+    {
+      "key": "avatar-11",
+      "row": "right",
+      "column": "passing-left",
+      "x": 38,
+      "y": 34,
+      "rgba": [
+        0,
+        0,
+        3,
+        255
+      ],
+      "kind": "hole-fill"
+    },
+    {
+      "key": "avatar-11",
+      "row": "right",
+      "column": "idle",
+      "x": 38,
+      "y": 35,
+      "rgba": [
+        0,
+        0,
+        0,
+        255
+      ],
+      "kind": "hole-fill"
+    },
+    {
+      "key": "avatar-11",
+      "row": "right",
+      "column": "passing-right",
+      "x": 40,
+      "y": 36,
+      "rgba": [
+        0,
+        0,
+        0,
+        255
+      ],
+      "kind": "hole-fill"
+    },
+    {
+      "key": "avatar-11",
+      "row": "right",
+      "column": "idle",
+      "x": 38,
+      "y": 37,
+      "rgba": [
+        0,
+        0,
+        0,
+        255
+      ],
+      "kind": "hole-fill"
+    },
+    {
+      "key": "avatar-11",
+      "row": "right",
+      "column": "idle",
+      "x": 38,
+      "y": 39,
+      "rgba": [
+        0,
+        0,
+        3,
+        255
+      ],
+      "kind": "hole-fill"
+    },
+    {
+      "key": "avatar-11",
+      "row": "right",
+      "column": "idle",
+      "x": 36,
+      "y": 40,
+      "rgba": [
+        0,
+        0,
+        3,
+        255
+      ],
+      "kind": "hole-fill"
+    },
+    {
+      "key": "avatar-11",
+      "row": "right",
+      "column": "idle",
+      "x": 38,
+      "y": 40,
+      "rgba": [
+        0,
+        0,
+        0,
+        255
+      ],
+      "kind": "hole-fill"
+    },
+    {
+      "key": "avatar-12",
+      "row": "down",
+      "column": "passing-left",
+      "x": 9,
+      "y": 42,
+      "rgba": [
+        4,
+        2,
+        1,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-12",
+      "row": "down",
+      "column": "passing-left",
+      "x": 10,
+      "y": 42,
+      "rgba": [
+        49,
+        42,
+        32,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-12",
+      "row": "down",
+      "column": "passing-left",
+      "x": 11,
+      "y": 42,
+      "rgba": [
+        82,
+        71,
+        54,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-12",
+      "row": "down",
+      "column": "passing-left",
+      "x": 12,
+      "y": 42,
+      "rgba": [
+        132,
+        110,
+        76,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-12",
+      "row": "down",
+      "column": "passing-left",
+      "x": 13,
+      "y": 42,
+      "rgba": [
+        132,
+        110,
+        76,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-12",
+      "row": "down",
+      "column": "passing-left",
+      "x": 14,
+      "y": 42,
+      "rgba": [
+        132,
+        110,
+        76,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-12",
+      "row": "down",
+      "column": "passing-left",
+      "x": 15,
+      "y": 42,
+      "rgba": [
+        99,
+        97,
+        86,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-12",
+      "row": "down",
+      "column": "passing-left",
+      "x": 16,
+      "y": 42,
+      "rgba": [
+        99,
+        97,
+        86,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-12",
+      "row": "down",
+      "column": "passing-left",
+      "x": 17,
+      "y": 42,
+      "rgba": [
+        42,
+        56,
+        62,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-12",
+      "row": "down",
+      "column": "passing-left",
+      "x": 18,
+      "y": 42,
+      "rgba": [
+        4,
+        2,
+        1,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-12",
+      "row": "down",
+      "column": "passing-left",
+      "x": 19,
+      "y": 42,
+      "rgba": [
+        4,
+        2,
+        1,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-12",
+      "row": "down",
+      "column": "passing-left",
+      "x": 20,
+      "y": 42,
+      "rgba": [
+        40,
+        19,
+        3,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-12",
+      "row": "down",
+      "column": "passing-left",
+      "x": 21,
+      "y": 42,
+      "rgba": [
+        40,
+        19,
+        3,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-12",
+      "row": "down",
+      "column": "passing-left",
+      "x": 22,
+      "y": 42,
+      "rgba": [
+        4,
+        2,
+        1,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-12",
+      "row": "down",
+      "column": "passing-left",
+      "x": 23,
+      "y": 42,
+      "rgba": [
+        4,
+        2,
+        1,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-12",
+      "row": "down",
+      "column": "passing-left",
+      "x": 24,
+      "y": 42,
+      "rgba": [
+        112,
+        62,
+        8,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-12",
+      "row": "down",
+      "column": "passing-left",
+      "x": 25,
+      "y": 42,
+      "rgba": [
+        112,
+        62,
+        8,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-12",
+      "row": "down",
+      "column": "passing-left",
+      "x": 26,
+      "y": 42,
+      "rgba": [
+        4,
+        2,
+        1,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-12",
+      "row": "down",
+      "column": "passing-left",
+      "x": 27,
+      "y": 42,
+      "rgba": [
+        19,
+        41,
+        54,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-12",
+      "row": "down",
+      "column": "passing-left",
+      "x": 28,
+      "y": 42,
+      "rgba": [
+        44,
+        71,
+        84,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-12",
+      "row": "down",
+      "column": "passing-left",
+      "x": 29,
+      "y": 42,
+      "rgba": [
+        82,
+        71,
+        54,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-12",
+      "row": "down",
+      "column": "passing-left",
+      "x": 30,
+      "y": 42,
+      "rgba": [
+        132,
+        110,
+        76,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-12",
+      "row": "down",
+      "column": "passing-left",
+      "x": 31,
+      "y": 42,
+      "rgba": [
+        44,
+        71,
+        84,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-12",
+      "row": "down",
+      "column": "passing-left",
+      "x": 32,
+      "y": 42,
+      "rgba": [
+        44,
+        71,
+        84,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-12",
+      "row": "down",
+      "column": "passing-left",
+      "x": 33,
+      "y": 42,
+      "rgba": [
+        191,
+        122,
+        25,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-12",
+      "row": "down",
+      "column": "passing-left",
+      "x": 34,
+      "y": 42,
+      "rgba": [
+        0,
+        0,
+        2,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-12",
+      "row": "down",
+      "column": "passing-left",
+      "x": 35,
+      "y": 42,
+      "rgba": [
+        145,
+        76,
+        4,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-12",
+      "row": "down",
+      "column": "passing-left",
+      "x": 36,
+      "y": 42,
+      "rgba": [
+        19,
+        41,
+        54,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-12",
+      "row": "down",
+      "column": "passing-left",
+      "x": 37,
+      "y": 42,
+      "rgba": [
+        19,
+        41,
+        54,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-12",
+      "row": "down",
+      "column": "passing-left",
+      "x": 38,
+      "y": 42,
+      "rgba": [
+        19,
+        41,
+        54,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-12",
+      "row": "down",
+      "column": "passing-left",
+      "x": 39,
+      "y": 42,
+      "rgba": [
+        8,
+        14,
+        16,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-12",
+      "row": "down",
+      "column": "passing-left",
+      "x": 40,
+      "y": 42,
+      "rgba": [
+        112,
+        62,
+        8,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-12",
+      "row": "down",
+      "column": "passing-left",
+      "x": 41,
+      "y": 42,
+      "rgba": [
+        168,
+        97,
+        13,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-12",
+      "row": "down",
+      "column": "passing-left",
+      "x": 42,
+      "y": 42,
+      "rgba": [
+        112,
+        62,
+        8,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-12",
+      "row": "down",
+      "column": "passing-left",
+      "x": 43,
+      "y": 42,
+      "rgba": [
+        8,
+        14,
+        16,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-12",
+      "row": "down",
+      "column": "passing-left",
+      "x": 44,
+      "y": 42,
+      "rgba": [
+        145,
+        76,
+        4,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-12",
+      "row": "down",
+      "column": "passing-left",
+      "x": 45,
+      "y": 42,
+      "rgba": [
+        236,
+        160,
+        35,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-12",
+      "row": "down",
+      "column": "passing-left",
+      "x": 46,
+      "y": 42,
+      "rgba": [
+        19,
+        41,
+        54,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-12",
+      "row": "down",
+      "column": "passing-left",
+      "x": 47,
+      "y": 42,
+      "rgba": [
+        44,
+        71,
+        84,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-12",
+      "row": "down",
+      "column": "passing-left",
+      "x": 48,
+      "y": 42,
+      "rgba": [
+        44,
+        71,
+        84,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-12",
+      "row": "down",
+      "column": "passing-left",
+      "x": 49,
+      "y": 42,
+      "rgba": [
+        44,
+        71,
+        84,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-12",
+      "row": "down",
+      "column": "passing-left",
+      "x": 50,
+      "y": 42,
+      "rgba": [
+        227,
+        188,
+        108,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-12",
+      "row": "down",
+      "column": "passing-left",
+      "x": 51,
+      "y": 42,
+      "rgba": [
+        227,
+        188,
+        108,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-12",
+      "row": "down",
+      "column": "passing-left",
+      "x": 52,
+      "y": 42,
+      "rgba": [
+        227,
+        188,
+        108,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-12",
+      "row": "down",
+      "column": "passing-left",
+      "x": 53,
+      "y": 42,
+      "rgba": [
+        227,
+        188,
+        108,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-12",
+      "row": "down",
+      "column": "passing-left",
+      "x": 54,
+      "y": 42,
+      "rgba": [
+        112,
+        62,
+        8,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-12",
+      "row": "down",
+      "column": "passing-left",
+      "x": 55,
+      "y": 42,
+      "rgba": [
+        132,
+        110,
+        76,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-12",
+      "row": "down",
+      "column": "passing-left",
+      "x": 56,
+      "y": 42,
+      "rgba": [
+        132,
+        110,
+        76,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-12",
+      "row": "down",
+      "column": "passing-left",
+      "x": 57,
+      "y": 42,
+      "rgba": [
+        132,
+        110,
+        76,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-12",
+      "row": "down",
+      "column": "passing-left",
+      "x": 58,
+      "y": 42,
+      "rgba": [
+        19,
+        41,
+        54,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-12",
+      "row": "down",
+      "column": "passing-left",
+      "x": 59,
+      "y": 42,
+      "rgba": [
+        19,
+        41,
+        54,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-12",
+      "row": "down",
+      "column": "passing-left",
+      "x": 60,
+      "y": 42,
+      "rgba": [
+        8,
+        14,
+        16,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-12",
+      "row": "down",
+      "column": "passing-left",
+      "x": 61,
+      "y": 42,
+      "rgba": [
+        145,
+        76,
+        4,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-12",
+      "row": "down",
+      "column": "passing-right",
+      "x": 9,
+      "y": 42,
+      "rgba": [
+        4,
+        2,
+        1,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-12",
+      "row": "down",
+      "column": "passing-right",
+      "x": 10,
+      "y": 42,
+      "rgba": [
+        49,
+        42,
+        32,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-12",
+      "row": "down",
+      "column": "passing-right",
+      "x": 11,
+      "y": 42,
+      "rgba": [
+        82,
+        71,
+        54,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-12",
+      "row": "down",
+      "column": "passing-right",
+      "x": 12,
+      "y": 42,
+      "rgba": [
+        132,
+        110,
+        76,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-12",
+      "row": "down",
+      "column": "passing-right",
+      "x": 13,
+      "y": 42,
+      "rgba": [
+        132,
+        110,
+        76,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-12",
+      "row": "down",
+      "column": "passing-right",
+      "x": 14,
+      "y": 42,
+      "rgba": [
+        132,
+        110,
+        76,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-12",
+      "row": "down",
+      "column": "passing-right",
+      "x": 15,
+      "y": 42,
+      "rgba": [
+        99,
+        97,
+        86,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-12",
+      "row": "down",
+      "column": "passing-right",
+      "x": 16,
+      "y": 42,
+      "rgba": [
+        99,
+        97,
+        86,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-12",
+      "row": "down",
+      "column": "passing-right",
+      "x": 17,
+      "y": 42,
+      "rgba": [
+        42,
+        56,
+        62,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-12",
+      "row": "down",
+      "column": "passing-right",
+      "x": 18,
+      "y": 42,
+      "rgba": [
+        4,
+        2,
+        1,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-12",
+      "row": "down",
+      "column": "passing-right",
+      "x": 19,
+      "y": 42,
+      "rgba": [
+        4,
+        2,
+        1,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-12",
+      "row": "down",
+      "column": "passing-right",
+      "x": 20,
+      "y": 42,
+      "rgba": [
+        40,
+        19,
+        3,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-12",
+      "row": "down",
+      "column": "passing-right",
+      "x": 21,
+      "y": 42,
+      "rgba": [
+        40,
+        19,
+        3,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-12",
+      "row": "down",
+      "column": "passing-right",
+      "x": 22,
+      "y": 42,
+      "rgba": [
+        4,
+        2,
+        1,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-12",
+      "row": "down",
+      "column": "passing-right",
+      "x": 23,
+      "y": 42,
+      "rgba": [
+        4,
+        2,
+        1,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-12",
+      "row": "down",
+      "column": "passing-right",
+      "x": 24,
+      "y": 42,
+      "rgba": [
+        112,
+        62,
+        8,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-12",
+      "row": "down",
+      "column": "passing-right",
+      "x": 25,
+      "y": 42,
+      "rgba": [
+        112,
+        62,
+        8,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-12",
+      "row": "down",
+      "column": "passing-right",
+      "x": 26,
+      "y": 42,
+      "rgba": [
+        4,
+        2,
+        1,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-12",
+      "row": "down",
+      "column": "passing-right",
+      "x": 27,
+      "y": 42,
+      "rgba": [
+        19,
+        41,
+        54,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-12",
+      "row": "down",
+      "column": "passing-right",
+      "x": 28,
+      "y": 42,
+      "rgba": [
+        44,
+        71,
+        84,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-12",
+      "row": "down",
+      "column": "passing-right",
+      "x": 29,
+      "y": 42,
+      "rgba": [
+        82,
+        71,
+        54,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-12",
+      "row": "down",
+      "column": "passing-right",
+      "x": 30,
+      "y": 42,
+      "rgba": [
+        132,
+        110,
+        76,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-12",
+      "row": "down",
+      "column": "passing-right",
+      "x": 31,
+      "y": 42,
+      "rgba": [
+        44,
+        71,
+        84,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-12",
+      "row": "down",
+      "column": "passing-right",
+      "x": 32,
+      "y": 42,
+      "rgba": [
+        44,
+        71,
+        84,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-12",
+      "row": "down",
+      "column": "passing-right",
+      "x": 33,
+      "y": 42,
+      "rgba": [
+        191,
+        122,
+        25,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-12",
+      "row": "down",
+      "column": "passing-right",
+      "x": 34,
+      "y": 42,
+      "rgba": [
+        0,
+        0,
+        2,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-12",
+      "row": "down",
+      "column": "passing-right",
+      "x": 35,
+      "y": 42,
+      "rgba": [
+        145,
+        76,
+        4,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-12",
+      "row": "down",
+      "column": "passing-right",
+      "x": 36,
+      "y": 42,
+      "rgba": [
+        19,
+        41,
+        54,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-12",
+      "row": "down",
+      "column": "passing-right",
+      "x": 37,
+      "y": 42,
+      "rgba": [
+        19,
+        41,
+        54,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-12",
+      "row": "down",
+      "column": "passing-right",
+      "x": 38,
+      "y": 42,
+      "rgba": [
+        19,
+        41,
+        54,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-12",
+      "row": "down",
+      "column": "passing-right",
+      "x": 39,
+      "y": 42,
+      "rgba": [
+        8,
+        14,
+        16,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-12",
+      "row": "down",
+      "column": "passing-right",
+      "x": 40,
+      "y": 42,
+      "rgba": [
+        112,
+        62,
+        8,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-12",
+      "row": "down",
+      "column": "passing-right",
+      "x": 41,
+      "y": 42,
+      "rgba": [
+        168,
+        97,
+        13,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-12",
+      "row": "down",
+      "column": "passing-right",
+      "x": 42,
+      "y": 42,
+      "rgba": [
+        112,
+        62,
+        8,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-12",
+      "row": "down",
+      "column": "passing-right",
+      "x": 43,
+      "y": 42,
+      "rgba": [
+        8,
+        14,
+        16,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-12",
+      "row": "down",
+      "column": "passing-right",
+      "x": 44,
+      "y": 42,
+      "rgba": [
+        145,
+        76,
+        4,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-12",
+      "row": "down",
+      "column": "passing-right",
+      "x": 45,
+      "y": 42,
+      "rgba": [
+        236,
+        160,
+        35,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-12",
+      "row": "down",
+      "column": "passing-right",
+      "x": 46,
+      "y": 42,
+      "rgba": [
+        19,
+        41,
+        54,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-12",
+      "row": "down",
+      "column": "passing-right",
+      "x": 47,
+      "y": 42,
+      "rgba": [
+        44,
+        71,
+        84,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-12",
+      "row": "down",
+      "column": "passing-right",
+      "x": 48,
+      "y": 42,
+      "rgba": [
+        44,
+        71,
+        84,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-12",
+      "row": "down",
+      "column": "passing-right",
+      "x": 49,
+      "y": 42,
+      "rgba": [
+        44,
+        71,
+        84,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-12",
+      "row": "down",
+      "column": "passing-right",
+      "x": 50,
+      "y": 42,
+      "rgba": [
+        227,
+        188,
+        108,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-12",
+      "row": "down",
+      "column": "passing-right",
+      "x": 51,
+      "y": 42,
+      "rgba": [
+        227,
+        188,
+        108,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-12",
+      "row": "down",
+      "column": "passing-right",
+      "x": 52,
+      "y": 42,
+      "rgba": [
+        227,
+        188,
+        108,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-12",
+      "row": "down",
+      "column": "passing-right",
+      "x": 53,
+      "y": 42,
+      "rgba": [
+        227,
+        188,
+        108,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-12",
+      "row": "down",
+      "column": "passing-right",
+      "x": 54,
+      "y": 42,
+      "rgba": [
+        112,
+        62,
+        8,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-12",
+      "row": "down",
+      "column": "passing-right",
+      "x": 55,
+      "y": 42,
+      "rgba": [
+        132,
+        110,
+        76,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-12",
+      "row": "down",
+      "column": "passing-right",
+      "x": 56,
+      "y": 42,
+      "rgba": [
+        132,
+        110,
+        76,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-12",
+      "row": "down",
+      "column": "passing-right",
+      "x": 57,
+      "y": 42,
+      "rgba": [
+        132,
+        110,
+        76,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-12",
+      "row": "down",
+      "column": "passing-right",
+      "x": 58,
+      "y": 42,
+      "rgba": [
+        19,
+        41,
+        54,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-12",
+      "row": "down",
+      "column": "passing-right",
+      "x": 59,
+      "y": 42,
+      "rgba": [
+        19,
+        41,
+        54,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-12",
+      "row": "down",
+      "column": "passing-right",
+      "x": 60,
+      "y": 42,
+      "rgba": [
+        8,
+        14,
+        16,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-12",
+      "row": "down",
+      "column": "passing-right",
+      "x": 61,
+      "y": 42,
+      "rgba": [
+        145,
+        76,
+        4,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-12",
+      "row": "right",
+      "column": "passing-left",
+      "x": 23,
+      "y": 52,
+      "rgba": [
+        0,
+        0,
+        0,
+        255
+      ],
+      "kind": "hole-fill"
+    },
+    {
+      "key": "avatar-12",
+      "row": "right",
+      "column": "contact-right",
+      "x": 23,
+      "y": 52,
+      "rgba": [
+        3,
+        2,
+        2,
+        255
+      ],
+      "kind": "hole-fill"
+    },
+    {
+      "key": "avatar-12",
+      "row": "right",
+      "column": "contact-right",
+      "x": 25,
+      "y": 52,
+      "rgba": [
+        0,
+        0,
+        0,
+        255
+      ],
+      "kind": "hole-fill"
+    },
+    {
+      "key": "avatar-12",
+      "row": "right",
+      "column": "passing-right",
+      "x": 27,
+      "y": 52,
+      "rgba": [
+        3,
+        2,
+        2,
+        255
+      ],
+      "kind": "hole-fill"
+    },
+    {
+      "key": "avatar-12",
+      "row": "up",
+      "column": "passing-left",
+      "x": 13,
+      "y": 42,
+      "rgba": [
+        83,
+        45,
+        7,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-12",
+      "row": "up",
+      "column": "passing-left",
+      "x": 14,
+      "y": 42,
+      "rgba": [
+        184,
+        117,
+        27,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-12",
+      "row": "up",
+      "column": "passing-left",
+      "x": 15,
+      "y": 42,
+      "rgba": [
+        25,
+        32,
+        33,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-12",
+      "row": "up",
+      "column": "passing-left",
+      "x": 16,
+      "y": 42,
+      "rgba": [
+        25,
+        32,
+        33,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-12",
+      "row": "up",
+      "column": "passing-left",
+      "x": 17,
+      "y": 42,
+      "rgba": [
+        9,
+        17,
+        20,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-12",
+      "row": "up",
+      "column": "passing-left",
+      "x": 18,
+      "y": 42,
+      "rgba": [
+        9,
+        17,
+        20,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-12",
+      "row": "up",
+      "column": "passing-left",
+      "x": 19,
+      "y": 42,
+      "rgba": [
+        0,
+        0,
+        2,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-12",
+      "row": "up",
+      "column": "passing-left",
+      "x": 20,
+      "y": 42,
+      "rgba": [
+        9,
+        8,
+        6,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-12",
+      "row": "up",
+      "column": "passing-left",
+      "x": 21,
+      "y": 42,
+      "rgba": [
+        126,
+        72,
+        13,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-12",
+      "row": "up",
+      "column": "passing-left",
+      "x": 22,
+      "y": 42,
+      "rgba": [
+        45,
+        35,
+        22,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-12",
+      "row": "up",
+      "column": "passing-left",
+      "x": 23,
+      "y": 42,
+      "rgba": [
+        25,
+        32,
+        33,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-12",
+      "row": "up",
+      "column": "passing-left",
+      "x": 24,
+      "y": 42,
+      "rgba": [
+        25,
+        32,
+        33,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-12",
+      "row": "up",
+      "column": "passing-left",
+      "x": 25,
+      "y": 42,
+      "rgba": [
+        164,
+        93,
+        11,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-12",
+      "row": "up",
+      "column": "passing-left",
+      "x": 26,
+      "y": 42,
+      "rgba": [
+        9,
+        8,
+        6,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-12",
+      "row": "up",
+      "column": "passing-left",
+      "x": 27,
+      "y": 42,
+      "rgba": [
+        9,
+        8,
+        6,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-12",
+      "row": "up",
+      "column": "passing-left",
+      "x": 28,
+      "y": 42,
+      "rgba": [
+        92,
+        59,
+        22,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-12",
+      "row": "up",
+      "column": "passing-left",
+      "x": 29,
+      "y": 42,
+      "rgba": [
+        230,
+        154,
+        38,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-12",
+      "row": "up",
+      "column": "passing-left",
+      "x": 30,
+      "y": 42,
+      "rgba": [
+        130,
+        102,
+        62,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-12",
+      "row": "up",
+      "column": "passing-left",
+      "x": 31,
+      "y": 42,
+      "rgba": [
+        188,
+        145,
+        74,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-12",
+      "row": "up",
+      "column": "passing-left",
+      "x": 32,
+      "y": 42,
+      "rgba": [
+        188,
+        145,
+        74,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-12",
+      "row": "up",
+      "column": "passing-left",
+      "x": 33,
+      "y": 42,
+      "rgba": [
+        99,
+        90,
+        74,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-12",
+      "row": "up",
+      "column": "passing-left",
+      "x": 34,
+      "y": 42,
+      "rgba": [
+        80,
+        71,
+        56,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-12",
+      "row": "up",
+      "column": "passing-left",
+      "x": 35,
+      "y": 42,
+      "rgba": [
+        230,
+        154,
+        38,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-12",
+      "row": "up",
+      "column": "passing-left",
+      "x": 36,
+      "y": 42,
+      "rgba": [
+        184,
+        117,
+        27,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-12",
+      "row": "up",
+      "column": "passing-left",
+      "x": 37,
+      "y": 42,
+      "rgba": [
+        18,
+        16,
+        12,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-12",
+      "row": "up",
+      "column": "passing-left",
+      "x": 38,
+      "y": 42,
+      "rgba": [
+        4,
+        4,
+        3,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-12",
+      "row": "up",
+      "column": "passing-left",
+      "x": 39,
+      "y": 42,
+      "rgba": [
+        92,
+        59,
+        22,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-12",
+      "row": "up",
+      "column": "passing-left",
+      "x": 40,
+      "y": 42,
+      "rgba": [
+        25,
+        32,
+        33,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-12",
+      "row": "up",
+      "column": "passing-left",
+      "x": 41,
+      "y": 42,
+      "rgba": [
+        4,
+        4,
+        3,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-12",
+      "row": "up",
+      "column": "passing-left",
+      "x": 42,
+      "y": 42,
+      "rgba": [
+        18,
+        16,
+        12,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-12",
+      "row": "up",
+      "column": "passing-left",
+      "x": 43,
+      "y": 42,
+      "rgba": [
+        92,
+        59,
+        22,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-12",
+      "row": "up",
+      "column": "passing-left",
+      "x": 44,
+      "y": 42,
+      "rgba": [
+        9,
+        8,
+        6,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-12",
+      "row": "up",
+      "column": "passing-left",
+      "x": 45,
+      "y": 42,
+      "rgba": [
+        32,
+        22,
+        11,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-12",
+      "row": "up",
+      "column": "passing-left",
+      "x": 46,
+      "y": 42,
+      "rgba": [
+        32,
+        22,
+        11,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-12",
+      "row": "up",
+      "column": "passing-left",
+      "x": 47,
+      "y": 42,
+      "rgba": [
+        32,
+        22,
+        11,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-12",
+      "row": "up",
+      "column": "passing-left",
+      "x": 48,
+      "y": 42,
+      "rgba": [
+        18,
+        16,
+        12,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-12",
+      "row": "up",
+      "column": "passing-left",
+      "x": 49,
+      "y": 42,
+      "rgba": [
+        32,
+        22,
+        11,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-12",
+      "row": "up",
+      "column": "passing-left",
+      "x": 50,
+      "y": 42,
+      "rgba": [
+        99,
+        90,
+        74,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-12",
+      "row": "up",
+      "column": "passing-left",
+      "x": 51,
+      "y": 42,
+      "rgba": [
+        130,
+        102,
+        62,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-12",
+      "row": "up",
+      "column": "passing-left",
+      "x": 52,
+      "y": 42,
+      "rgba": [
+        188,
+        145,
+        74,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-12",
+      "row": "up",
+      "column": "passing-left",
+      "x": 53,
+      "y": 42,
+      "rgba": [
+        130,
+        102,
+        62,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-12",
+      "row": "up",
+      "column": "passing-left",
+      "x": 54,
+      "y": 42,
+      "rgba": [
+        99,
+        90,
+        74,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-12",
+      "row": "up",
+      "column": "passing-left",
+      "x": 55,
+      "y": 42,
+      "rgba": [
+        25,
+        32,
+        33,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-12",
+      "row": "up",
+      "column": "passing-right",
+      "x": 13,
+      "y": 42,
+      "rgba": [
+        83,
+        45,
+        7,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-12",
+      "row": "up",
+      "column": "passing-right",
+      "x": 14,
+      "y": 42,
+      "rgba": [
+        184,
+        117,
+        27,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-12",
+      "row": "up",
+      "column": "passing-right",
+      "x": 15,
+      "y": 42,
+      "rgba": [
+        25,
+        32,
+        33,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-12",
+      "row": "up",
+      "column": "passing-right",
+      "x": 16,
+      "y": 42,
+      "rgba": [
+        25,
+        32,
+        33,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-12",
+      "row": "up",
+      "column": "passing-right",
+      "x": 17,
+      "y": 42,
+      "rgba": [
+        9,
+        17,
+        20,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-12",
+      "row": "up",
+      "column": "passing-right",
+      "x": 18,
+      "y": 42,
+      "rgba": [
+        9,
+        17,
+        20,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-12",
+      "row": "up",
+      "column": "passing-right",
+      "x": 19,
+      "y": 42,
+      "rgba": [
+        0,
+        0,
+        2,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-12",
+      "row": "up",
+      "column": "passing-right",
+      "x": 20,
+      "y": 42,
+      "rgba": [
+        9,
+        8,
+        6,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-12",
+      "row": "up",
+      "column": "passing-right",
+      "x": 21,
+      "y": 42,
+      "rgba": [
+        126,
+        72,
+        13,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-12",
+      "row": "up",
+      "column": "passing-right",
+      "x": 22,
+      "y": 42,
+      "rgba": [
+        45,
+        35,
+        22,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-12",
+      "row": "up",
+      "column": "passing-right",
+      "x": 23,
+      "y": 42,
+      "rgba": [
+        25,
+        32,
+        33,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-12",
+      "row": "up",
+      "column": "passing-right",
+      "x": 24,
+      "y": 42,
+      "rgba": [
+        25,
+        32,
+        33,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-12",
+      "row": "up",
+      "column": "passing-right",
+      "x": 25,
+      "y": 42,
+      "rgba": [
+        164,
+        93,
+        11,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-12",
+      "row": "up",
+      "column": "passing-right",
+      "x": 26,
+      "y": 42,
+      "rgba": [
+        9,
+        8,
+        6,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-12",
+      "row": "up",
+      "column": "passing-right",
+      "x": 27,
+      "y": 42,
+      "rgba": [
+        9,
+        8,
+        6,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-12",
+      "row": "up",
+      "column": "passing-right",
+      "x": 28,
+      "y": 42,
+      "rgba": [
+        92,
+        59,
+        22,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-12",
+      "row": "up",
+      "column": "passing-right",
+      "x": 29,
+      "y": 42,
+      "rgba": [
+        230,
+        154,
+        38,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-12",
+      "row": "up",
+      "column": "passing-right",
+      "x": 30,
+      "y": 42,
+      "rgba": [
+        130,
+        102,
+        62,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-12",
+      "row": "up",
+      "column": "passing-right",
+      "x": 31,
+      "y": 42,
+      "rgba": [
+        188,
+        145,
+        74,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-12",
+      "row": "up",
+      "column": "passing-right",
+      "x": 32,
+      "y": 42,
+      "rgba": [
+        188,
+        145,
+        74,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-12",
+      "row": "up",
+      "column": "passing-right",
+      "x": 33,
+      "y": 42,
+      "rgba": [
+        99,
+        90,
+        74,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-12",
+      "row": "up",
+      "column": "passing-right",
+      "x": 34,
+      "y": 42,
+      "rgba": [
+        80,
+        71,
+        56,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-12",
+      "row": "up",
+      "column": "passing-right",
+      "x": 35,
+      "y": 42,
+      "rgba": [
+        230,
+        154,
+        38,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-12",
+      "row": "up",
+      "column": "passing-right",
+      "x": 36,
+      "y": 42,
+      "rgba": [
+        184,
+        117,
+        27,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-12",
+      "row": "up",
+      "column": "passing-right",
+      "x": 37,
+      "y": 42,
+      "rgba": [
+        18,
+        16,
+        12,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-12",
+      "row": "up",
+      "column": "passing-right",
+      "x": 38,
+      "y": 42,
+      "rgba": [
+        4,
+        4,
+        3,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-12",
+      "row": "up",
+      "column": "passing-right",
+      "x": 39,
+      "y": 42,
+      "rgba": [
+        92,
+        59,
+        22,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-12",
+      "row": "up",
+      "column": "passing-right",
+      "x": 40,
+      "y": 42,
+      "rgba": [
+        25,
+        32,
+        33,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-12",
+      "row": "up",
+      "column": "passing-right",
+      "x": 41,
+      "y": 42,
+      "rgba": [
+        4,
+        4,
+        3,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-12",
+      "row": "up",
+      "column": "passing-right",
+      "x": 42,
+      "y": 42,
+      "rgba": [
+        18,
+        16,
+        12,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-12",
+      "row": "up",
+      "column": "passing-right",
+      "x": 43,
+      "y": 42,
+      "rgba": [
+        92,
+        59,
+        22,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-12",
+      "row": "up",
+      "column": "passing-right",
+      "x": 44,
+      "y": 42,
+      "rgba": [
+        9,
+        8,
+        6,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-12",
+      "row": "up",
+      "column": "passing-right",
+      "x": 45,
+      "y": 42,
+      "rgba": [
+        32,
+        22,
+        11,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-12",
+      "row": "up",
+      "column": "passing-right",
+      "x": 46,
+      "y": 42,
+      "rgba": [
+        32,
+        22,
+        11,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-12",
+      "row": "up",
+      "column": "passing-right",
+      "x": 47,
+      "y": 42,
+      "rgba": [
+        32,
+        22,
+        11,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-12",
+      "row": "up",
+      "column": "passing-right",
+      "x": 48,
+      "y": 42,
+      "rgba": [
+        18,
+        16,
+        12,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-12",
+      "row": "up",
+      "column": "passing-right",
+      "x": 49,
+      "y": 42,
+      "rgba": [
+        32,
+        22,
+        11,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-12",
+      "row": "up",
+      "column": "passing-right",
+      "x": 50,
+      "y": 42,
+      "rgba": [
+        99,
+        90,
+        74,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-12",
+      "row": "up",
+      "column": "passing-right",
+      "x": 51,
+      "y": 42,
+      "rgba": [
+        130,
+        102,
+        62,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-12",
+      "row": "up",
+      "column": "passing-right",
+      "x": 52,
+      "y": 42,
+      "rgba": [
+        188,
+        145,
+        74,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-12",
+      "row": "up",
+      "column": "passing-right",
+      "x": 53,
+      "y": 42,
+      "rgba": [
+        130,
+        102,
+        62,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-12",
+      "row": "up",
+      "column": "passing-right",
+      "x": 54,
+      "y": 42,
+      "rgba": [
+        99,
+        90,
+        74,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-12",
+      "row": "up",
+      "column": "passing-right",
+      "x": 55,
+      "y": 42,
+      "rgba": [
+        25,
+        32,
+        33,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-13",
+      "row": "left",
+      "column": "passing-left",
+      "x": 23,
+      "y": 26,
+      "rgba": [
+        2,
+        1,
+        0,
+        255
+      ],
+      "kind": "hole-fill"
+    },
+    {
+      "key": "avatar-13",
+      "row": "left",
+      "column": "passing-left",
+      "x": 24,
+      "y": 26,
+      "rgba": [
+        2,
+        1,
+        0,
+        255
+      ],
+      "kind": "hole-fill"
+    },
+    {
+      "key": "avatar-13",
+      "row": "left",
+      "column": "contact-right",
+      "x": 24,
+      "y": 26,
+      "rgba": [
+        2,
+        1,
+        0,
+        255
+      ],
+      "kind": "hole-fill"
+    },
+    {
+      "key": "avatar-13",
+      "row": "left",
+      "column": "passing-right",
+      "x": 23,
+      "y": 26,
+      "rgba": [
+        0,
+        0,
+        0,
+        255
+      ],
+      "kind": "hole-fill"
+    },
+    {
+      "key": "avatar-13",
+      "row": "left",
+      "column": "passing-left",
+      "x": 23,
+      "y": 27,
+      "rgba": [
+        2,
+        1,
+        0,
+        255
+      ],
+      "kind": "hole-fill"
+    },
+    {
+      "key": "avatar-13",
+      "row": "left",
+      "column": "passing-left",
+      "x": 24,
+      "y": 27,
+      "rgba": [
+        2,
+        1,
+        0,
+        255
+      ],
+      "kind": "hole-fill"
+    },
+    {
+      "key": "avatar-13",
+      "row": "left",
+      "column": "contact-right",
+      "x": 24,
+      "y": 27,
+      "rgba": [
+        2,
+        1,
+        0,
+        255
+      ],
+      "kind": "hole-fill"
+    },
+    {
+      "key": "avatar-13",
+      "row": "left",
+      "column": "passing-right",
+      "x": 23,
+      "y": 27,
+      "rgba": [
+        0,
+        0,
+        0,
+        255
+      ],
+      "kind": "hole-fill"
+    },
+    {
+      "key": "avatar-13",
+      "row": "left",
+      "column": "passing-left",
+      "x": 23,
+      "y": 28,
+      "rgba": [
+        0,
+        0,
+        0,
+        255
+      ],
+      "kind": "hole-fill"
+    },
+    {
+      "key": "avatar-13",
+      "row": "left",
+      "column": "passing-left",
+      "x": 24,
+      "y": 28,
+      "rgba": [
+        0,
+        0,
+        0,
+        255
+      ],
+      "kind": "hole-fill"
+    },
+    {
+      "key": "avatar-13",
+      "row": "left",
+      "column": "passing-right",
+      "x": 23,
+      "y": 28,
+      "rgba": [
+        0,
+        0,
+        0,
+        255
+      ],
+      "kind": "hole-fill"
+    },
+    {
+      "key": "avatar-13",
+      "row": "left",
+      "column": "passing-right",
+      "x": 24,
+      "y": 28,
+      "rgba": [
+        0,
+        0,
+        0,
+        255
+      ],
+      "kind": "hole-fill"
+    },
+    {
+      "key": "avatar-13",
+      "row": "left",
+      "column": "passing-left",
+      "x": 22,
+      "y": 51,
+      "rgba": [
+        0,
+        0,
+        0,
+        255
+      ],
+      "kind": "hole-fill"
+    },
+    {
+      "key": "avatar-13",
+      "row": "left",
+      "column": "passing-right",
+      "x": 37,
+      "y": 53,
+      "rgba": [
+        0,
+        0,
+        0,
+        255
+      ],
+      "kind": "hole-fill"
+    },
+    {
+      "key": "avatar-14",
+      "row": "left",
+      "column": "contact-left",
+      "x": 20,
+      "y": 41,
+      "rgba": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "kind": "isolated-remove"
+    },
+    {
+      "key": "avatar-14",
+      "row": "left",
+      "column": "contact-left",
+      "x": 20,
+      "y": 42,
+      "rgba": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "kind": "isolated-remove"
+    },
+    {
+      "key": "avatar-14",
+      "row": "left",
+      "column": "idle",
+      "x": 23,
+      "y": 46,
+      "rgba": [
+        5,
+        2,
+        2,
+        255
+      ],
+      "kind": "hole-fill"
+    },
+    {
+      "key": "avatar-14",
+      "row": "left",
+      "column": "idle",
+      "x": 23,
+      "y": 47,
+      "rgba": [
+        5,
+        2,
+        2,
+        255
+      ],
+      "kind": "hole-fill"
+    },
+    {
+      "key": "avatar-14",
+      "row": "left",
+      "column": "passing-right",
+      "x": 24,
+      "y": 47,
+      "rgba": [
+        5,
+        2,
+        2,
+        255
+      ],
+      "kind": "hole-fill"
+    },
+    {
+      "key": "avatar-14",
+      "row": "left",
+      "column": "idle",
+      "x": 23,
+      "y": 48,
+      "rgba": [
+        5,
+        2,
+        2,
+        255
+      ],
+      "kind": "hole-fill"
+    },
+    {
+      "key": "avatar-14",
+      "row": "left",
+      "column": "contact-right",
+      "x": 25,
+      "y": 48,
+      "rgba": [
+        7,
+        6,
+        5,
+        255
+      ],
+      "kind": "hole-fill"
+    },
+    {
+      "key": "avatar-14",
+      "row": "left",
+      "column": "passing-right",
+      "x": 24,
+      "y": 48,
+      "rgba": [
+        5,
+        2,
+        2,
+        255
+      ],
+      "kind": "hole-fill"
+    },
+    {
+      "key": "avatar-14",
+      "row": "left",
+      "column": "passing-left",
+      "x": 26,
+      "y": 50,
+      "rgba": [
+        8,
+        8,
+        6,
+        255
+      ],
+      "kind": "hole-fill"
+    },
+    {
+      "key": "avatar-14",
+      "row": "left",
+      "column": "passing-right",
+      "x": 26,
+      "y": 50,
+      "rgba": [
+        5,
+        2,
+        2,
+        255
+      ],
+      "kind": "hole-fill"
+    },
+    {
+      "key": "avatar-14",
+      "row": "left",
+      "column": "contact-right",
+      "x": 28,
+      "y": 52,
+      "rgba": [
+        7,
+        6,
+        5,
+        255
+      ],
+      "kind": "hole-fill"
+    },
+    {
+      "key": "avatar-14",
+      "row": "left",
+      "column": "passing-left",
+      "x": 26,
+      "y": 53,
+      "rgba": [
+        8,
+        8,
+        6,
+        255
+      ],
+      "kind": "hole-fill"
+    },
+    {
+      "key": "avatar-14",
+      "row": "right",
+      "column": "passing-left",
+      "x": 26,
+      "y": 35,
+      "rgba": [
+        9,
+        6,
+        5,
+        255
+      ],
+      "kind": "hole-fill"
+    },
+    {
+      "key": "avatar-14",
+      "row": "right",
+      "column": "passing-right",
+      "x": 26,
+      "y": 35,
+      "rgba": [
+        9,
+        6,
+        5,
+        255
+      ],
+      "kind": "hole-fill"
+    },
+    {
+      "key": "avatar-14",
+      "row": "right",
+      "column": "passing-right",
+      "x": 28,
+      "y": 40,
+      "rgba": [
+        0,
+        0,
+        0,
+        255
+      ],
+      "kind": "hole-fill"
+    },
+    {
+      "key": "avatar-15",
+      "row": "down",
+      "column": "passing-left",
+      "x": 10,
+      "y": 42,
+      "rgba": [
+        17,
+        42,
+        25,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-15",
+      "row": "down",
+      "column": "passing-left",
+      "x": 11,
+      "y": 42,
+      "rgba": [
+        53,
+        68,
+        36,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-15",
+      "row": "down",
+      "column": "passing-left",
+      "x": 12,
+      "y": 42,
+      "rgba": [
+        63,
+        87,
+        35,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-15",
+      "row": "down",
+      "column": "passing-left",
+      "x": 13,
+      "y": 42,
+      "rgba": [
+        57,
+        78,
+        38,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-15",
+      "row": "down",
+      "column": "passing-left",
+      "x": 14,
+      "y": 42,
+      "rgba": [
+        63,
+        87,
+        35,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-15",
+      "row": "down",
+      "column": "passing-left",
+      "x": 15,
+      "y": 42,
+      "rgba": [
+        13,
+        29,
+        16,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-15",
+      "row": "down",
+      "column": "passing-left",
+      "x": 16,
+      "y": 42,
+      "rgba": [
+        17,
+        42,
+        25,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-15",
+      "row": "down",
+      "column": "passing-left",
+      "x": 17,
+      "y": 42,
+      "rgba": [
+        17,
+        42,
+        25,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-15",
+      "row": "down",
+      "column": "passing-left",
+      "x": 18,
+      "y": 42,
+      "rgba": [
+        17,
+        42,
+        25,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-15",
+      "row": "down",
+      "column": "passing-left",
+      "x": 19,
+      "y": 42,
+      "rgba": [
+        38,
+        23,
+        7,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-15",
+      "row": "down",
+      "column": "passing-left",
+      "x": 20,
+      "y": 42,
+      "rgba": [
+        12,
+        4,
+        1,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-15",
+      "row": "down",
+      "column": "passing-left",
+      "x": 21,
+      "y": 42,
+      "rgba": [
+        101,
+        53,
+        5,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-15",
+      "row": "down",
+      "column": "passing-left",
+      "x": 22,
+      "y": 42,
+      "rgba": [
+        141,
+        80,
+        11,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-15",
+      "row": "down",
+      "column": "passing-left",
+      "x": 23,
+      "y": 42,
+      "rgba": [
+        185,
+        117,
+        21,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-15",
+      "row": "down",
+      "column": "passing-left",
+      "x": 24,
+      "y": 42,
+      "rgba": [
+        38,
+        23,
+        7,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-15",
+      "row": "down",
+      "column": "passing-left",
+      "x": 25,
+      "y": 42,
+      "rgba": [
+        101,
+        53,
+        5,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-15",
+      "row": "down",
+      "column": "passing-left",
+      "x": 26,
+      "y": 42,
+      "rgba": [
+        0,
+        0,
+        0,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-15",
+      "row": "down",
+      "column": "passing-left",
+      "x": 27,
+      "y": 42,
+      "rgba": [
+        38,
+        23,
+        7,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-15",
+      "row": "down",
+      "column": "passing-left",
+      "x": 28,
+      "y": 42,
+      "rgba": [
+        12,
+        4,
+        1,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-15",
+      "row": "down",
+      "column": "passing-left",
+      "x": 29,
+      "y": 42,
+      "rgba": [
+        13,
+        29,
+        16,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-15",
+      "row": "down",
+      "column": "passing-left",
+      "x": 30,
+      "y": 42,
+      "rgba": [
+        37,
+        51,
+        27,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-15",
+      "row": "down",
+      "column": "passing-left",
+      "x": 31,
+      "y": 42,
+      "rgba": [
+        93,
+        80,
+        39,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-15",
+      "row": "down",
+      "column": "passing-left",
+      "x": 32,
+      "y": 42,
+      "rgba": [
+        70,
+        52,
+        20,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-15",
+      "row": "down",
+      "column": "passing-left",
+      "x": 33,
+      "y": 42,
+      "rgba": [
+        37,
+        51,
+        27,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-15",
+      "row": "down",
+      "column": "passing-left",
+      "x": 34,
+      "y": 42,
+      "rgba": [
+        17,
+        42,
+        25,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-15",
+      "row": "down",
+      "column": "passing-left",
+      "x": 35,
+      "y": 42,
+      "rgba": [
+        38,
+        23,
+        7,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-15",
+      "row": "down",
+      "column": "passing-left",
+      "x": 36,
+      "y": 42,
+      "rgba": [
+        141,
+        80,
+        11,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-15",
+      "row": "down",
+      "column": "passing-left",
+      "x": 37,
+      "y": 42,
+      "rgba": [
+        53,
+        68,
+        36,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-15",
+      "row": "down",
+      "column": "passing-left",
+      "x": 38,
+      "y": 42,
+      "rgba": [
+        63,
+        87,
+        35,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-15",
+      "row": "down",
+      "column": "passing-left",
+      "x": 39,
+      "y": 42,
+      "rgba": [
+        141,
+        80,
+        11,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-15",
+      "row": "down",
+      "column": "passing-left",
+      "x": 40,
+      "y": 42,
+      "rgba": [
+        13,
+        29,
+        16,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-15",
+      "row": "down",
+      "column": "passing-left",
+      "x": 41,
+      "y": 42,
+      "rgba": [
+        10,
+        9,
+        4,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-15",
+      "row": "down",
+      "column": "passing-left",
+      "x": 42,
+      "y": 42,
+      "rgba": [
+        12,
+        4,
+        1,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-15",
+      "row": "down",
+      "column": "passing-left",
+      "x": 43,
+      "y": 42,
+      "rgba": [
+        141,
+        80,
+        11,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-15",
+      "row": "down",
+      "column": "passing-left",
+      "x": 44,
+      "y": 42,
+      "rgba": [
+        70,
+        36,
+        3,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-15",
+      "row": "down",
+      "column": "passing-left",
+      "x": 45,
+      "y": 42,
+      "rgba": [
+        13,
+        15,
+        7,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-15",
+      "row": "down",
+      "column": "passing-left",
+      "x": 46,
+      "y": 42,
+      "rgba": [
+        1,
+        2,
+        1,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-15",
+      "row": "down",
+      "column": "passing-left",
+      "x": 47,
+      "y": 42,
+      "rgba": [
+        63,
+        87,
+        35,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-15",
+      "row": "down",
+      "column": "passing-left",
+      "x": 48,
+      "y": 42,
+      "rgba": [
+        63,
+        87,
+        35,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-15",
+      "row": "down",
+      "column": "passing-left",
+      "x": 49,
+      "y": 42,
+      "rgba": [
+        37,
+        51,
+        27,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-15",
+      "row": "down",
+      "column": "passing-left",
+      "x": 50,
+      "y": 42,
+      "rgba": [
+        13,
+        15,
+        7,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-15",
+      "row": "down",
+      "column": "passing-left",
+      "x": 51,
+      "y": 42,
+      "rgba": [
+        5,
+        4,
+        2,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-15",
+      "row": "down",
+      "column": "passing-right",
+      "x": 10,
+      "y": 42,
+      "rgba": [
+        17,
+        42,
+        25,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-15",
+      "row": "down",
+      "column": "passing-right",
+      "x": 11,
+      "y": 42,
+      "rgba": [
+        53,
+        68,
+        36,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-15",
+      "row": "down",
+      "column": "passing-right",
+      "x": 12,
+      "y": 42,
+      "rgba": [
+        63,
+        87,
+        35,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-15",
+      "row": "down",
+      "column": "passing-right",
+      "x": 13,
+      "y": 42,
+      "rgba": [
+        57,
+        78,
+        38,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-15",
+      "row": "down",
+      "column": "passing-right",
+      "x": 14,
+      "y": 42,
+      "rgba": [
+        63,
+        87,
+        35,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-15",
+      "row": "down",
+      "column": "passing-right",
+      "x": 15,
+      "y": 42,
+      "rgba": [
+        13,
+        29,
+        16,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-15",
+      "row": "down",
+      "column": "passing-right",
+      "x": 16,
+      "y": 42,
+      "rgba": [
+        17,
+        42,
+        25,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-15",
+      "row": "down",
+      "column": "passing-right",
+      "x": 17,
+      "y": 42,
+      "rgba": [
+        17,
+        42,
+        25,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-15",
+      "row": "down",
+      "column": "passing-right",
+      "x": 18,
+      "y": 42,
+      "rgba": [
+        17,
+        42,
+        25,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-15",
+      "row": "down",
+      "column": "passing-right",
+      "x": 19,
+      "y": 42,
+      "rgba": [
+        38,
+        23,
+        7,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-15",
+      "row": "down",
+      "column": "passing-right",
+      "x": 20,
+      "y": 42,
+      "rgba": [
+        12,
+        4,
+        1,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-15",
+      "row": "down",
+      "column": "passing-right",
+      "x": 21,
+      "y": 42,
+      "rgba": [
+        101,
+        53,
+        5,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-15",
+      "row": "down",
+      "column": "passing-right",
+      "x": 22,
+      "y": 42,
+      "rgba": [
+        141,
+        80,
+        11,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-15",
+      "row": "down",
+      "column": "passing-right",
+      "x": 23,
+      "y": 42,
+      "rgba": [
+        185,
+        117,
+        21,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-15",
+      "row": "down",
+      "column": "passing-right",
+      "x": 24,
+      "y": 42,
+      "rgba": [
+        38,
+        23,
+        7,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-15",
+      "row": "down",
+      "column": "passing-right",
+      "x": 25,
+      "y": 42,
+      "rgba": [
+        101,
+        53,
+        5,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-15",
+      "row": "down",
+      "column": "passing-right",
+      "x": 26,
+      "y": 42,
+      "rgba": [
+        0,
+        0,
+        0,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-15",
+      "row": "down",
+      "column": "passing-right",
+      "x": 27,
+      "y": 42,
+      "rgba": [
+        38,
+        23,
+        7,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-15",
+      "row": "down",
+      "column": "passing-right",
+      "x": 28,
+      "y": 42,
+      "rgba": [
+        12,
+        4,
+        1,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-15",
+      "row": "down",
+      "column": "passing-right",
+      "x": 29,
+      "y": 42,
+      "rgba": [
+        13,
+        29,
+        16,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-15",
+      "row": "down",
+      "column": "passing-right",
+      "x": 30,
+      "y": 42,
+      "rgba": [
+        37,
+        51,
+        27,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-15",
+      "row": "down",
+      "column": "passing-right",
+      "x": 31,
+      "y": 42,
+      "rgba": [
+        93,
+        80,
+        39,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-15",
+      "row": "down",
+      "column": "passing-right",
+      "x": 32,
+      "y": 42,
+      "rgba": [
+        70,
+        52,
+        20,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-15",
+      "row": "down",
+      "column": "passing-right",
+      "x": 33,
+      "y": 42,
+      "rgba": [
+        37,
+        51,
+        27,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-15",
+      "row": "down",
+      "column": "passing-right",
+      "x": 34,
+      "y": 42,
+      "rgba": [
+        17,
+        42,
+        25,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-15",
+      "row": "down",
+      "column": "passing-right",
+      "x": 35,
+      "y": 42,
+      "rgba": [
+        38,
+        23,
+        7,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-15",
+      "row": "down",
+      "column": "passing-right",
+      "x": 36,
+      "y": 42,
+      "rgba": [
+        141,
+        80,
+        11,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-15",
+      "row": "down",
+      "column": "passing-right",
+      "x": 37,
+      "y": 42,
+      "rgba": [
+        53,
+        68,
+        36,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-15",
+      "row": "down",
+      "column": "passing-right",
+      "x": 38,
+      "y": 42,
+      "rgba": [
+        63,
+        87,
+        35,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-15",
+      "row": "down",
+      "column": "passing-right",
+      "x": 39,
+      "y": 42,
+      "rgba": [
+        141,
+        80,
+        11,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-15",
+      "row": "down",
+      "column": "passing-right",
+      "x": 40,
+      "y": 42,
+      "rgba": [
+        13,
+        29,
+        16,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-15",
+      "row": "down",
+      "column": "passing-right",
+      "x": 41,
+      "y": 42,
+      "rgba": [
+        10,
+        9,
+        4,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-15",
+      "row": "down",
+      "column": "passing-right",
+      "x": 42,
+      "y": 42,
+      "rgba": [
+        12,
+        4,
+        1,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-15",
+      "row": "down",
+      "column": "passing-right",
+      "x": 43,
+      "y": 42,
+      "rgba": [
+        141,
+        80,
+        11,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-15",
+      "row": "down",
+      "column": "passing-right",
+      "x": 44,
+      "y": 42,
+      "rgba": [
+        70,
+        36,
+        3,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-15",
+      "row": "down",
+      "column": "passing-right",
+      "x": 45,
+      "y": 42,
+      "rgba": [
+        13,
+        15,
+        7,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-15",
+      "row": "down",
+      "column": "passing-right",
+      "x": 46,
+      "y": 42,
+      "rgba": [
+        1,
+        2,
+        1,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-15",
+      "row": "down",
+      "column": "passing-right",
+      "x": 47,
+      "y": 42,
+      "rgba": [
+        63,
+        87,
+        35,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-15",
+      "row": "down",
+      "column": "passing-right",
+      "x": 48,
+      "y": 42,
+      "rgba": [
+        63,
+        87,
+        35,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-15",
+      "row": "down",
+      "column": "passing-right",
+      "x": 49,
+      "y": 42,
+      "rgba": [
+        37,
+        51,
+        27,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-15",
+      "row": "down",
+      "column": "passing-right",
+      "x": 50,
+      "y": 42,
+      "rgba": [
+        13,
+        15,
+        7,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-15",
+      "row": "down",
+      "column": "passing-right",
+      "x": 51,
+      "y": 42,
+      "rgba": [
+        5,
+        4,
+        2,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-15",
+      "row": "left",
+      "column": "contact-right",
+      "x": 45,
+      "y": 40,
+      "rgba": [
+        0,
+        0,
+        0,
+        255
+      ],
+      "kind": "hole-fill"
+    },
+    {
+      "key": "avatar-15",
+      "row": "up",
+      "column": "passing-left",
+      "x": 12,
+      "y": 42,
+      "rgba": [
+        60,
+        85,
+        38,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-15",
+      "row": "up",
+      "column": "passing-left",
+      "x": 13,
+      "y": 42,
+      "rgba": [
+        47,
+        70,
+        37,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-15",
+      "row": "up",
+      "column": "passing-left",
+      "x": 14,
+      "y": 42,
+      "rgba": [
+        60,
+        85,
+        38,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-15",
+      "row": "up",
+      "column": "passing-left",
+      "x": 15,
+      "y": 42,
+      "rgba": [
+        94,
+        78,
+        35,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-15",
+      "row": "up",
+      "column": "passing-left",
+      "x": 16,
+      "y": 42,
+      "rgba": [
+        47,
+        70,
+        37,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-15",
+      "row": "up",
+      "column": "passing-left",
+      "x": 17,
+      "y": 42,
+      "rgba": [
+        30,
+        44,
+        29,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-15",
+      "row": "up",
+      "column": "passing-left",
+      "x": 18,
+      "y": 42,
+      "rgba": [
+        23,
+        40,
+        28,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-15",
+      "row": "up",
+      "column": "passing-left",
+      "x": 19,
+      "y": 42,
+      "rgba": [
+        38,
+        60,
+        34,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-15",
+      "row": "up",
+      "column": "passing-left",
+      "x": 20,
+      "y": 42,
+      "rgba": [
+        38,
+        60,
+        34,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-15",
+      "row": "up",
+      "column": "passing-left",
+      "x": 21,
+      "y": 42,
+      "rgba": [
+        59,
+        80,
+        38,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-15",
+      "row": "up",
+      "column": "passing-left",
+      "x": 22,
+      "y": 42,
+      "rgba": [
+        60,
+        85,
+        38,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-15",
+      "row": "up",
+      "column": "passing-left",
+      "x": 23,
+      "y": 42,
+      "rgba": [
+        60,
+        85,
+        38,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-15",
+      "row": "up",
+      "column": "passing-left",
+      "x": 24,
+      "y": 42,
+      "rgba": [
+        47,
+        70,
+        37,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-15",
+      "row": "up",
+      "column": "passing-left",
+      "x": 25,
+      "y": 42,
+      "rgba": [
+        51,
+        75,
+        37,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-15",
+      "row": "up",
+      "column": "passing-left",
+      "x": 26,
+      "y": 42,
+      "rgba": [
+        54,
+        79,
+        38,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-15",
+      "row": "up",
+      "column": "passing-left",
+      "x": 27,
+      "y": 42,
+      "rgba": [
+        47,
+        70,
+        37,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-15",
+      "row": "up",
+      "column": "passing-left",
+      "x": 28,
+      "y": 42,
+      "rgba": [
+        51,
+        75,
+        37,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-15",
+      "row": "up",
+      "column": "passing-left",
+      "x": 29,
+      "y": 42,
+      "rgba": [
+        59,
+        80,
+        38,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-15",
+      "row": "up",
+      "column": "passing-left",
+      "x": 30,
+      "y": 42,
+      "rgba": [
+        47,
+        70,
+        37,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-15",
+      "row": "up",
+      "column": "passing-left",
+      "x": 31,
+      "y": 42,
+      "rgba": [
+        51,
+        75,
+        37,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-15",
+      "row": "up",
+      "column": "passing-left",
+      "x": 32,
+      "y": 42,
+      "rgba": [
+        59,
+        80,
+        38,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-15",
+      "row": "up",
+      "column": "passing-left",
+      "x": 33,
+      "y": 42,
+      "rgba": [
+        47,
+        70,
+        37,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-15",
+      "row": "up",
+      "column": "passing-left",
+      "x": 34,
+      "y": 42,
+      "rgba": [
+        33,
+        52,
+        33,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-15",
+      "row": "up",
+      "column": "passing-left",
+      "x": 35,
+      "y": 42,
+      "rgba": [
+        59,
+        80,
+        38,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-15",
+      "row": "up",
+      "column": "passing-left",
+      "x": 36,
+      "y": 42,
+      "rgba": [
+        54,
+        79,
+        38,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-15",
+      "row": "up",
+      "column": "passing-left",
+      "x": 37,
+      "y": 42,
+      "rgba": [
+        51,
+        75,
+        37,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-15",
+      "row": "up",
+      "column": "passing-left",
+      "x": 38,
+      "y": 42,
+      "rgba": [
+        60,
+        85,
+        38,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-15",
+      "row": "up",
+      "column": "passing-left",
+      "x": 39,
+      "y": 42,
+      "rgba": [
+        54,
+        79,
+        38,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-15",
+      "row": "up",
+      "column": "passing-left",
+      "x": 40,
+      "y": 42,
+      "rgba": [
+        47,
+        70,
+        37,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-15",
+      "row": "up",
+      "column": "passing-left",
+      "x": 41,
+      "y": 42,
+      "rgba": [
+        23,
+        40,
+        28,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-15",
+      "row": "up",
+      "column": "passing-left",
+      "x": 42,
+      "y": 42,
+      "rgba": [
+        23,
+        40,
+        28,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-15",
+      "row": "up",
+      "column": "passing-left",
+      "x": 43,
+      "y": 42,
+      "rgba": [
+        47,
+        70,
+        37,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-15",
+      "row": "up",
+      "column": "passing-left",
+      "x": 44,
+      "y": 42,
+      "rgba": [
+        51,
+        75,
+        37,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-15",
+      "row": "up",
+      "column": "passing-left",
+      "x": 45,
+      "y": 42,
+      "rgba": [
+        51,
+        75,
+        37,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-15",
+      "row": "up",
+      "column": "passing-left",
+      "x": 46,
+      "y": 42,
+      "rgba": [
+        45,
+        59,
+        33,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-15",
+      "row": "up",
+      "column": "passing-left",
+      "x": 47,
+      "y": 42,
+      "rgba": [
+        16,
+        28,
+        20,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-15",
+      "row": "up",
+      "column": "passing-right",
+      "x": 12,
+      "y": 42,
+      "rgba": [
+        60,
+        85,
+        38,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-15",
+      "row": "up",
+      "column": "passing-right",
+      "x": 13,
+      "y": 42,
+      "rgba": [
+        47,
+        70,
+        37,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-15",
+      "row": "up",
+      "column": "passing-right",
+      "x": 14,
+      "y": 42,
+      "rgba": [
+        60,
+        85,
+        38,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-15",
+      "row": "up",
+      "column": "passing-right",
+      "x": 15,
+      "y": 42,
+      "rgba": [
+        94,
+        78,
+        35,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-15",
+      "row": "up",
+      "column": "passing-right",
+      "x": 16,
+      "y": 42,
+      "rgba": [
+        47,
+        70,
+        37,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-15",
+      "row": "up",
+      "column": "passing-right",
+      "x": 17,
+      "y": 42,
+      "rgba": [
+        30,
+        44,
+        29,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-15",
+      "row": "up",
+      "column": "passing-right",
+      "x": 18,
+      "y": 42,
+      "rgba": [
+        23,
+        40,
+        28,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-15",
+      "row": "up",
+      "column": "passing-right",
+      "x": 19,
+      "y": 42,
+      "rgba": [
+        38,
+        60,
+        34,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-15",
+      "row": "up",
+      "column": "passing-right",
+      "x": 20,
+      "y": 42,
+      "rgba": [
+        38,
+        60,
+        34,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-15",
+      "row": "up",
+      "column": "passing-right",
+      "x": 21,
+      "y": 42,
+      "rgba": [
+        59,
+        80,
+        38,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-15",
+      "row": "up",
+      "column": "passing-right",
+      "x": 22,
+      "y": 42,
+      "rgba": [
+        60,
+        85,
+        38,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-15",
+      "row": "up",
+      "column": "passing-right",
+      "x": 23,
+      "y": 42,
+      "rgba": [
+        60,
+        85,
+        38,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-15",
+      "row": "up",
+      "column": "passing-right",
+      "x": 24,
+      "y": 42,
+      "rgba": [
+        47,
+        70,
+        37,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-15",
+      "row": "up",
+      "column": "passing-right",
+      "x": 25,
+      "y": 42,
+      "rgba": [
+        51,
+        75,
+        37,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-15",
+      "row": "up",
+      "column": "passing-right",
+      "x": 26,
+      "y": 42,
+      "rgba": [
+        54,
+        79,
+        38,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-15",
+      "row": "up",
+      "column": "passing-right",
+      "x": 27,
+      "y": 42,
+      "rgba": [
+        47,
+        70,
+        37,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-15",
+      "row": "up",
+      "column": "passing-right",
+      "x": 28,
+      "y": 42,
+      "rgba": [
+        51,
+        75,
+        37,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-15",
+      "row": "up",
+      "column": "passing-right",
+      "x": 29,
+      "y": 42,
+      "rgba": [
+        59,
+        80,
+        38,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-15",
+      "row": "up",
+      "column": "passing-right",
+      "x": 30,
+      "y": 42,
+      "rgba": [
+        47,
+        70,
+        37,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-15",
+      "row": "up",
+      "column": "passing-right",
+      "x": 31,
+      "y": 42,
+      "rgba": [
+        51,
+        75,
+        37,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-15",
+      "row": "up",
+      "column": "passing-right",
+      "x": 32,
+      "y": 42,
+      "rgba": [
+        59,
+        80,
+        38,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-15",
+      "row": "up",
+      "column": "passing-right",
+      "x": 33,
+      "y": 42,
+      "rgba": [
+        47,
+        70,
+        37,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-15",
+      "row": "up",
+      "column": "passing-right",
+      "x": 34,
+      "y": 42,
+      "rgba": [
+        33,
+        52,
+        33,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-15",
+      "row": "up",
+      "column": "passing-right",
+      "x": 35,
+      "y": 42,
+      "rgba": [
+        59,
+        80,
+        38,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-15",
+      "row": "up",
+      "column": "passing-right",
+      "x": 36,
+      "y": 42,
+      "rgba": [
+        54,
+        79,
+        38,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-15",
+      "row": "up",
+      "column": "passing-right",
+      "x": 37,
+      "y": 42,
+      "rgba": [
+        51,
+        75,
+        37,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-15",
+      "row": "up",
+      "column": "passing-right",
+      "x": 38,
+      "y": 42,
+      "rgba": [
+        60,
+        85,
+        38,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-15",
+      "row": "up",
+      "column": "passing-right",
+      "x": 39,
+      "y": 42,
+      "rgba": [
+        54,
+        79,
+        38,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-15",
+      "row": "up",
+      "column": "passing-right",
+      "x": 40,
+      "y": 42,
+      "rgba": [
+        47,
+        70,
+        37,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-15",
+      "row": "up",
+      "column": "passing-right",
+      "x": 41,
+      "y": 42,
+      "rgba": [
+        23,
+        40,
+        28,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-15",
+      "row": "up",
+      "column": "passing-right",
+      "x": 42,
+      "y": 42,
+      "rgba": [
+        23,
+        40,
+        28,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-15",
+      "row": "up",
+      "column": "passing-right",
+      "x": 43,
+      "y": 42,
+      "rgba": [
+        47,
+        70,
+        37,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-15",
+      "row": "up",
+      "column": "passing-right",
+      "x": 44,
+      "y": 42,
+      "rgba": [
+        51,
+        75,
+        37,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-15",
+      "row": "up",
+      "column": "passing-right",
+      "x": 45,
+      "y": 42,
+      "rgba": [
+        51,
+        75,
+        37,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-15",
+      "row": "up",
+      "column": "passing-right",
+      "x": 46,
+      "y": 42,
+      "rgba": [
+        45,
+        59,
+        33,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-15",
+      "row": "up",
+      "column": "passing-right",
+      "x": 47,
+      "y": 42,
+      "rgba": [
+        16,
+        28,
+        20,
+        255
+      ],
+      "kind": "seam-material-repair"
+    },
+    {
+      "key": "avatar-16",
+      "row": "left",
+      "column": "passing-left",
+      "x": 27,
+      "y": 36,
+      "rgba": [
+        0,
+        0,
+        0,
+        255
+      ],
+      "kind": "hole-fill"
+    },
+    {
+      "key": "avatar-16",
+      "row": "left",
+      "column": "passing-left",
+      "x": 27,
+      "y": 37,
+      "rgba": [
+        0,
+        0,
+        0,
+        255
+      ],
+      "kind": "hole-fill"
+    },
+    {
+      "key": "avatar-16",
+      "row": "left",
+      "column": "contact-right",
+      "x": 27,
+      "y": 38,
+      "rgba": [
+        0,
+        0,
+        0,
+        255
+      ],
+      "kind": "hole-fill"
+    },
+    {
+      "key": "avatar-16",
+      "row": "left",
+      "column": "contact-left",
+      "x": 30,
+      "y": 52,
+      "rgba": [
+        11,
+        10,
+        11,
+        255
+      ],
+      "kind": "hole-fill"
+    },
+    {
+      "key": "avatar-16",
+      "row": "left",
+      "column": "passing-left",
+      "x": 28,
+      "y": 52,
+      "rgba": [
+        0,
+        0,
+        0,
+        255
+      ],
+      "kind": "hole-fill"
+    },
+    {
+      "key": "avatar-16",
+      "row": "left",
+      "column": "passing-right",
+      "x": 30,
+      "y": 52,
+      "rgba": [
+        0,
+        0,
+        3,
+        255
+      ],
+      "kind": "hole-fill"
+    },
+    {
+      "key": "avatar-16",
+      "row": "left",
+      "column": "contact-left",
+      "x": 30,
+      "y": 53,
+      "rgba": [
+        5,
+        5,
+        11,
+        255
+      ],
+      "kind": "hole-fill"
+    },
+    {
+      "key": "avatar-16",
+      "row": "left",
+      "column": "passing-left",
+      "x": 28,
+      "y": 53,
+      "rgba": [
+        0,
+        0,
+        0,
+        255
+      ],
+      "kind": "hole-fill"
+    },
+    {
+      "key": "avatar-16",
+      "row": "left",
+      "column": "contact-right",
+      "x": 28,
+      "y": 53,
+      "rgba": [
+        11,
+        10,
+        11,
+        255
+      ],
+      "kind": "hole-fill"
+    },
+    {
+      "key": "avatar-16",
+      "row": "left",
+      "column": "passing-right",
+      "x": 29,
+      "y": 53,
+      "rgba": [
+        0,
+        0,
+        3,
+        255
+      ],
+      "kind": "hole-fill"
+    },
+    {
+      "key": "avatar-16",
+      "row": "left",
+      "column": "passing-right",
+      "x": 30,
+      "y": 53,
+      "rgba": [
+        0,
+        0,
+        3,
+        255
+      ],
+      "kind": "hole-fill"
+    },
+    {
+      "key": "avatar-16",
+      "row": "right",
+      "column": "passing-left",
+      "x": 35,
+      "y": 35,
+      "rgba": [
+        0,
+        0,
+        0,
+        255
+      ],
+      "kind": "hole-fill"
+    },
+    {
+      "key": "avatar-16",
+      "row": "right",
+      "column": "contact-left",
+      "x": 33,
+      "y": 52,
+      "rgba": [
+        0,
+        0,
+        0,
+        255
+      ],
+      "kind": "hole-fill"
+    },
+    {
+      "key": "avatar-16",
+      "row": "right",
+      "column": "passing-right",
+      "x": 33,
+      "y": 52,
+      "rgba": [
+        5,
+        5,
+        11,
+        255
+      ],
+      "kind": "hole-fill"
+    },
+    {
+      "key": "avatar-16",
+      "row": "right",
+      "column": "contact-left",
+      "x": 33,
+      "y": 53,
+      "rgba": [
+        0,
+        0,
+        0,
+        255
+      ],
+      "kind": "hole-fill"
+    },
+    {
+      "key": "avatar-16",
+      "row": "right",
+      "column": "passing-right",
+      "x": 33,
+      "y": 53,
+      "rgba": [
+        5,
+        5,
+        11,
+        255
+      ],
+      "kind": "hole-fill"
+    },
+    {
+      "key": "avatar-16",
+      "row": "right",
+      "column": "passing-right",
+      "x": 34,
+      "y": 53,
+      "rgba": [
+        5,
+        5,
+        11,
+        255
+      ],
+      "kind": "hole-fill"
+    }
+  ]
+}

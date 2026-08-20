@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "status": "independently-reviewed-awaiting-rendered-acceptance",
+  "status": "art-correction-candidate-awaiting-independent-review",
   "approvedContract": "D-052",
   "sheet": {
     "filePattern": "avatar-{key}.png",
@@ -78,7 +78,11 @@
     "sourceInspection": "qa/source-inspection.json",
     "backgroundReadability": "qa/background-readability.png",
     "movementContact": "qa/all-characters-movement.png",
-    "animatedPreviews": "qa/character-{1..8}-walk.gif"
+    "animatedPreviews": [
+      "qa/avatar-1-walk.gif through qa/avatar-16-walk.gif",
+      "qa/character-1-walk.gif through qa/character-8-walk.gif"
+    ],
+    "explicitPixelRepairs": "qa/explicit-pixel-repairs.json"
   },
   "contentRestrictions": [
     "no baked names, protocol logos, interface copy, balances, amounts, wallet cues, or route states",
@@ -91,5 +95,11 @@
     "thirdPartySourceUrl": null,
     "allowedModifications": "Editable and modifiable by the project owner",
     "verifiedOn": "2026-08-20"
+  },
+  "reviewState": {
+    "runtimeReady": false,
+    "renderedAcceptance": false,
+    "independentReview": "pending",
+    "note": "Art-only correction candidate; do not merge or wire runtime until orchestration review passes."
   }
 }
