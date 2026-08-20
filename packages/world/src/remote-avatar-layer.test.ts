@@ -43,7 +43,7 @@ function fakeScene() {
         return timer;
       }),
     },
-    events: { once: vi.fn() },
+    events: { once: vi.fn(), off: vi.fn() },
   };
   return { scene, layer, objects, timers };
 }
@@ -204,6 +204,7 @@ describe('remote avatar layer', () => {
     const sourceController = createRemotePeerSource([peer()]);
     const fake = fakeScene();
     const layer = createRemoteAvatarLayer({ scene: fake.scene as never, source: sourceController.source });
+    const shutdown = fake.scene.events.once.mock.calls[0]?.[1];
 
     sourceController.publish([peer({ x: 500 })]);
     layer.destroy();
@@ -213,5 +214,6 @@ describe('remote avatar layer', () => {
     expect(fake.timers[0]?.remove).toHaveBeenCalledTimes(1);
     expect(fake.objects[0]?.destroy).toHaveBeenCalledTimes(1);
     expect(fake.layer.destroy).toHaveBeenCalledTimes(1);
+    expect(fake.scene.events.off).toHaveBeenCalledWith('shutdown', shutdown);
   });
 });

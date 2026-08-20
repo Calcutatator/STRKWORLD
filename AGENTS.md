@@ -354,6 +354,39 @@ mainnet state against the pool at `latest`: `starknet_call` of
 change adds or depends on, and it involves no key, viewing key, proof,
 signature, funds or transaction. Stating the local runs as "no RPC" without
 this distinction was wrong, and is corrected here.
+### 2026-08-20 — A late Bridge status response cannot overwrite a newer retained version
+
+`BridgeService.reportDepositTransaction()` and `refresh()` capture the complete
+retained record before awaiting 1Click. The player can explicitly discard that
+evidence, create a replacement, or receive newer progress for the same signed
+quote while either call is in flight. A late response still verifies and returns
+the provider status to its caller, but it persists that status only if the
+complete retained record remains byte-identical to the version the call began
+from. It cannot resurrect discarded evidence, replace a different quote, or
+regress newer same-evidence progress.
+
+Signed-evidence identity alone is not a persistence version: one quote can move
+from `awaiting-deposit` through `deposit-detected` to `settled`. The guard uses
+the package's serialized `BridgeRecord`, including status and local update time,
+as an optimistic compare-and-save token. The origin transaction hash,
+provider requests, returned statuses, record schema and wire behavior are
+unchanged.
+
+*Verified:* the discard and replacement regressions still prove a late report
+cannot resurrect A or replace B and that it still returns `deposit-detected`.
+Two additional deferred public-seam regressions cover the same quote in both
+orders: a refresh persists `settled` before a late report returns
+`deposit-detected`, and a report persists `deposit-detected` before a late
+refresh returns `awaiting-deposit`. In each case the late call returns its mapped
+status while `resume()` and the exact export preserve the newer record. Replacing
+the version comparison with unconditional ownership makes both same-evidence
+tests fail. The Bridge suite passes 1 file / 61 tests. Local verification used
+no live provider, external network, wallet, RPC, proof, signature, funds or
+transaction. Hosted CI also runs the repository's standard read-only drift
+canary: two `starknet_call` reads and one `starknet_getClassHashAt` against public
+pool state at `latest`; no key, signature, proof, funds or transaction is
+involved.
+
 ### 2026-08-20 — A failed Backend fan-out closes the whole request signal
 
 The Backend fee, swap-prepare and proof-freshness paths fan one request signal
@@ -383,7 +416,47 @@ Hosted CI subsequently ran the repository's standard read-only drift canary:
 two `starknet_call` reads and one `starknet_getClassHashAt` against public pool
 state at `latest`; no key, signature, proof, funds or transaction was involved.
 
+### 2026-08-20 — A repeated StreetScene create retires the prior ownership cycle
+
+`StreetScene.create()` may defensively run twice on one Scene instance without
+Phaser first delivering `shutdown`. Replacing only the Scene fields in that
+path leaves the prior fixed-room controllers subscribed to the Shell bus. A
+room entered in the old cycle can then consume a late `world:exit-building`,
+move the new Scene through its captured callbacks and publish a stale
+`building:exited`; final shutdown reaches only the current controller map and
+leaves the old subscriptions alive.
+
+Repeat creation now retires only the live World-owned cycle before opening the
+next one. The Scene removes its pending cleanup callback and invokes that
+cleanup directly; the remote-avatar layer's idempotent `destroy()` also removes
+its own pending callback. The Phaser `shutdown` event remains reserved for the
+actual framework lifecycle, so defensive recovery cannot tear down the live
+Scene's physics, cameras, input, timers or display list. Ordinary
+shutdown-to-create and failed-create recovery remain unchanged. This changes
+no room event payload, input rule, authored geometry, presence or financial
+behavior.
+
+*Verified:* the real-create headless regression first failed with the retained
+Bank controller still in-room. An independent probe also observed Shell
+listeners grow from 12 to 24, a stale exit publication and 12 listeners after
+final shutdown. A framework-sentinel regression then failed red because the
+first implementation broadcast `shutdown` during repeat creation. Green keeps
+that sentinel pending, retires the prior Bank, holds Shell listeners at 12 and
+World-owned shutdown listeners at two, emits no stale exit, then calls the
+sentinel exactly once on the later real shutdown and leaves every count at
+zero. Removing World retirement leaves the Bank live; removing remote callback
+detachment leaves one extra shutdown listener, so both clauses are independently
+load-bearing. The focused lifecycle and remote-layer files pass 17/17 tests and
+all World tests pass 22 files / 218 tests. The full workspace passes 87 files /
+1,215 tests; workspace typecheck, production build, all 13 invariants, the
+tilemap check and diff check pass. No browser, network, wallet, RPC, proof,
+signature, funds or transaction was used in the local verification.
+
 ### 2026-08-20 — A late Bridge refresh may report status, but it no longer owns persistence
+
+**Persistence identity is superseded by “A late Bridge status response cannot
+overwrite a newer retained version” above; the original discard/replacement
+verification remains valid.**
 
 `BridgeService.refresh()` captures the retained record before awaiting the
 provider, so the player can discard that evidence or retain a replacement while

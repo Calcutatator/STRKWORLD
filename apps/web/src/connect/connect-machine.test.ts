@@ -191,6 +191,30 @@ describe('connect flow', () => {
     expect(flow.status()).toBe('connected');
   });
 
+  it.each([
+    ['not-registered', new PrivacyError('not-registered', 'error 118')],
+    ['unsupported-wallet', new PrivacyError('unsupported-wallet', 'error 162')],
+  ] as const)(
+    'keeps a newer %s operation verdict when an older capability query settles',
+    async (expected, operationError) => {
+      const capability = deferred<Awaited<ReturnType<PrivacyOperations['capability']>>>();
+      const operations = new FakePrivacyOperations();
+      vi.spyOn(operations, 'capability').mockReturnValue(capability.promise);
+      const flow = createConnectFlow(operations);
+
+      const pending = flow.connect();
+      flow.noteOperationError(operationError);
+      capability.resolve({
+        supportsStrk20: true,
+        walletApiVersion: '0.10.3',
+        registration: 'registered',
+      });
+
+      expect(await pending).toMatchObject({ name: expected });
+      expect(flow.store.getState()).toMatchObject({ name: expected });
+    },
+  );
+
   it('passes detecting through to the world as connecting', () => {
     expect(toWalletStatus({ name: 'detecting' })).toBe('connecting');
   });
