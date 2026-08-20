@@ -104,7 +104,8 @@ The image now starts the strict composition root in
 `apps/backend/src/server.ts`: it parses the variables in
 `.env.production.example`, constructs `BackendApi` and its production ports,
 and binds a logging-free `node:http` listener on `0.0.0.0:$PORT`.
-`deploy/backend/launch.mjs` exits 78 only when the compiled entry is absent.
+`deploy/backend/launch.mjs` exits 78 only when the compiled entry is absent,
+is not a regular file, or becomes unresolvable during entry admission.
 
 Deploy steps once a host exists `[HOST]`: push image to a registry, inject
 secrets from the secret store as environment variables (never as build args),

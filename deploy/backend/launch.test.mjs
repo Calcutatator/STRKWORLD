@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it } from 'vitest';
-import { mkdir, mkdtemp, rm, symlink } from 'node:fs/promises';
+import { mkdir, mkdtemp, rm, symlink, writeFile } from 'node:fs/promises';
 import { spawnSync } from 'node:child_process';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -43,6 +43,71 @@ describe('standalone Backend launcher', () => {
       expect(result.stderr).not.toContain(process.cwd());
       expect(result.stderr).not.toMatch(/\bERR_[A-Z_]+\b/);
       expect(result.stderr).not.toContain('\n    at ');
+    }
+  });
+
+  it('keeps a regular-file admission race inside the generic configuration boundary', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'strkworld-backend-entry-race-'));
+    directories.push(root);
+    const entry = join(root, 'entry.mjs');
+    const raceHook = join(root, 'replace-entry-after-stat.mjs');
+    await writeFile(entry, 'process.stdout.write("backend imported");\n');
+    await writeFile(raceHook, [
+      "import fs from 'node:fs';",
+      "import { syncBuiltinESMExports } from 'node:module';",
+      'const originalStatSync = fs.statSync;',
+      'let replaced = false;',
+      'fs.statSync = function statThenReplace(path, ...args) {',
+      '  const result = originalStatSync(path, ...args);',
+      '  if (!replaced && path === process.env.BACKEND_ENTRY) {',
+      '    replaced = true;',
+      '    fs.rmSync(path);',
+      '    fs.mkdirSync(path);',
+      '  }',
+      '  return result;',
+      '};',
+      'syncBuiltinESMExports();',
+      '',
+    ].join('\n'));
+
+    const result = spawnSync(process.execPath, ['--import', raceHook, launcher], {
+      encoding: 'utf8',
+      env: { ...process.env, BACKEND_ENTRY: entry },
+    });
+
+    expect(result.status).toBe(78);
+    expect(result.signal).toBeNull();
+    expect(result.stdout).toBe('');
+    expect(result.stderr).toBe(configurationError);
+    expect(result.stderr).not.toContain(entry);
+    expect(result.stderr).not.toContain(root);
+    expect(result.stderr).not.toContain(process.cwd());
+    expect(result.stderr).not.toMatch(/\bERR_[A-Z_]+\b/);
+    expect(result.stderr).not.toContain('\n    at ');
+  });
+
+  it('leaves genuine Backend startup failures outside the configuration boundary', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'strkworld-backend-startup-'));
+    directories.push(root);
+    const thrownEntry = join(root, 'throws.mjs');
+    const missingDependencyEntry = join(root, 'missing-dependency.mjs');
+    await writeFile(thrownEntry, 'throw new Error("backend startup marker");\n');
+    await writeFile(missingDependencyEntry, 'await import("./absent-dependency.mjs");\n');
+
+    for (const [entry, marker] of [
+      [thrownEntry, 'backend startup marker'],
+      [missingDependencyEntry, 'ERR_MODULE_NOT_FOUND'],
+    ]) {
+      const result = spawnSync(process.execPath, [launcher], {
+        encoding: 'utf8',
+        env: { ...process.env, BACKEND_ENTRY: entry },
+      });
+
+      expect(result.status).toBe(1);
+      expect(result.signal).toBeNull();
+      expect(result.stdout).toBe('');
+      expect(result.stderr).toContain(marker);
+      expect(result.stderr).not.toBe(configurationError);
     }
   });
 });

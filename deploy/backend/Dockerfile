@@ -32,8 +32,9 @@
 #   2. `NODE_OPTIONS`, `NODE_DEBUG` and any APM/tracing agent are left unset
 #      on purpose. An injected agent is a per-request observer.
 # Successful startup and steady-state traffic are silent. The launcher writes
-# only a configuration error to stderr if the compiled entry is missing;
-# anything appearing on stdout during traffic is a defect.
+# only a configuration error to stderr if the compiled entry is missing, is
+# not a regular file, or becomes unresolvable during entry admission; anything
+# appearing on stdout during traffic is a defect.
 
 # Node 22.12 is the repository floor (D-025): AVNU SDK 4.2.0 requires Node 22,
 # and Vite supports Node 22 from 22.12. Overridable so the tag can be pinned to

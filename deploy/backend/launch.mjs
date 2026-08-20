@@ -12,9 +12,9 @@
  * is the compiled composition root used by the Dockerfile; an override exists
  * for an image layout change without changing this launcher.
  *
- * Logging: successful startup is silent. A missing or non-file entry emits one
- * configuration error to stderr and exits with EX_CONFIG; it must never gain
- * a per-request log line (D-014).
+ * Logging: successful startup is silent. A missing, non-file or concurrently
+ * invalidated entry emits one configuration error to stderr and exits with
+ * EX_CONFIG; it must never gain a per-request log line (D-014).
  */
 
 import { statSync } from 'node:fs';
@@ -23,6 +23,7 @@ import { pathToFileURL } from 'node:url';
 
 const entry = process.env.BACKEND_ENTRY ?? 'apps/backend/src/server.js';
 const absolute = resolve(process.cwd(), entry);
+const entryUrl = pathToFileURL(absolute).href;
 
 function isRegularFile(path) {
   try {
@@ -32,7 +33,7 @@ function isRegularFile(path) {
   }
 }
 
-if (!isRegularFile(absolute)) {
+function failEntryConfiguration() {
   process.stderr.write(
     [
       'strkworld-backend: cannot start — compiled entry is missing or invalid.',
@@ -47,4 +48,22 @@ if (!isRegularFile(absolute)) {
   process.exit(78);
 }
 
-await import(pathToFileURL(absolute).href);
+function isEntryResolutionFailure(error) {
+  return error instanceof Error
+    && (error.code === 'ERR_MODULE_NOT_FOUND' || error.code === 'ERR_UNSUPPORTED_DIR_IMPORT')
+    && error.url === entryUrl;
+}
+
+if (!isRegularFile(absolute)) {
+  failEntryConfiguration();
+}
+
+try {
+  await import(entryUrl);
+} catch (error) {
+  // The target can change after stat and before Node resolves the import. Keep
+  // only that entry-resolution race inside the same configuration boundary;
+  // failures thrown by the Backend or one of its dependencies remain crashes.
+  if (isEntryResolutionFailure(error)) failEntryConfiguration();
+  throw error;
+}
