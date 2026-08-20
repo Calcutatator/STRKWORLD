@@ -250,6 +250,55 @@ without a verification method is a rumour.
 
 Format: `### YYYY-MM-DD — short title` then what, why it matters, how verified.
 
+### 2026-08-20 — Submission uncertainty exposes observation, not mutation
+
+The D-034/D-035 browser-session uncertainty gate now separates observation
+from ownership. `createSubmissionUncertainty()` exposes a frozen
+`ReadableStore` facade with only `subscribe`, `getState` and
+`getServerSnapshot`; the writable store remains private to `retain()` and
+`acknowledge()`. Its two-field state snapshots are readonly and frozen as
+well. A consumer can therefore observe the gate for React rendering and
+financial guards, but cannot use the public store to clear or rewrite a
+retained uncertainty. A later `retain()` still re-locks an acknowledged gate.
+
+This remains session-only, hashless uncertainty: reload starts a fresh browser
+session, and the store retains no intent, recipient, timestamp, request handle
+or transaction hash. The change does not make the flag durable or authoritative
+transaction evidence, and changes no wallet operation, submission/retry rule,
+balance-check acknowledgement, player copy or financial policy.
+
+*Verified:* the red public-seam regression retained uncertainty and then used
+the exposed `store.setState()` to change `active` back to false. Commit
+`c75fa32` replaces that alias with the exact frozen read facade, proves the
+public type and runtime keys contain no `setState`, rejects snapshot mutation,
+and preserves idempotent retain/acknowledge behavior.
+[GitHub Actions run 32330527646](https://github.com/Calcutatator/STRKWORLD/actions/runs/32330527646)
+completed successfully at that commit. No browser, wallet, network, proof,
+signature or transaction was used.
+
+### 2026-08-20 — Deviation admission requires complete nonblank approval metadata
+
+D-020 route admission now fails closed unless every below-private deviation
+has nonblank string values for all four existing approval fields:
+`approvedBy`, `approvedOn`, `rationale` and player-facing `disclosure`.
+Previously `isRoutePlayable()` compared only `approvedBy` and `disclosure`
+with `null`, so missing values, empty or whitespace text, and absent approval
+date or rationale could be admitted. Complete canonical approvals remain
+playable, `private` routes still need no approval metadata, and an unapproved
+deviation remains locked.
+
+This validates completeness only. It does not invent a date format, judge the
+identity or quality of an approval/rationale, add fields, change route grades
+or disclosures, or alter any financial operation.
+
+*Verified:* fourteen of the sixteen missing/null/empty/whitespace field cases
+failed red through the public admission function under the prior two-field
+check. Commit `70a3941` makes all sixteen reject, while pinning the canonical,
+private and unapproved boundaries.
+[GitHub Actions run 32314240213](https://github.com/Calcutatator/STRKWORLD/actions/runs/32314240213)
+completed successfully at that commit. No wallet, network, proof, signature or
+transaction was used.
+
 ### 2026-08-20 — Pending World configuration changes retain one acquisition owner
 
 `WorldHost` now keys its lease by the current event buses and remote-peer
