@@ -221,6 +221,12 @@ async step may write what it learned — a newer attempt, a closed panel, or a
 newer balance read. One counter for all three would mean a balance read
 cancelling a submission, which is worse than the bug it fixes.
 
+**An operation verdict supersedes an older capability probe.** Wallet errors
+118 and 162 are current account/wallet facts, so the connect machine retires
+any capability query that was already in flight before publishing the
+not-registered or unsupported room. A late successful probe must not reopen a
+financial room after the wallet has supplied the newer refusal.
+
 **No runtime import of `@strkworld/privacy` in the shell.** Its entry point
 re-exports the wallet adapter, which pulls `starknet`; a single value import
 puts all of it in the entry chunk. Types are erased and free, failures are
