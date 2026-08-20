@@ -2254,9 +2254,26 @@ building field or financial meaning. Existing lobby suspension/resume behavior
 continues to publish only the selected opaque sprite key when presence resumes;
 no financial-room identity or action is disclosed.
 
-**Status and acceptance.** This is an authorized World implementation todo,
-not current behavior and not rendered acceptance. TDD must prove outdoor,
-Studio and fixed-room toggling; repeat/editable/inactive/destroy guards;
-single ownership across room transitions and same-Scene restarts; and no new
-shared/lobby/Fly or financial seam. The user will perform the final rendered
-and interactive check at `http://localhost:5173/` after implementation.
+**Status and acceptance.** Headlessly implemented and verified on branch
+`codex/global-outfit-toggle` (PR #19). `packages/world/src/avatar-outfit.ts`
+splits the two jobs D-052 had conflated: `createAvatarOutfitSelection` owns the
+selected key as one Scene-wide source of truth, injected into the Avatar Studio
+controller as a required option, and `createAvatarOutfitToggleBinding` owns one
+`keydown-F` listener for the Scene's lifetime, gated per press on
+`InputGate.suspended`. `AvatarStudioController.toggleSelectedState()` is
+removed; no building owns a binding.
+
+TDD covers outdoor, Studio and every `FIXED_ROOM_DEFINITIONS` interior;
+repeat/editable/suspended/destroy guards; single ownership across room
+transitions and same-Scene restarts driven through the real `create()` order;
+and an assertion that the only outbound addition is the existing
+`avatar:selected` with a `sprite`-only payload. Verified by 22 World files /
+218 tests, the full workspace, workspace typecheck, production build,
+invariants, drift and tilemap checks.
+
+**The rendered and interactive acceptance gate remains open and is not
+claimed.** These checks are headless: no browser, wallet, network, proof,
+signature or transaction was involved. The user will still perform the final
+rendered and interactive check at `http://localhost:5173/` — `F` outdoors, in
+Avatar Studio with and without standing on a figure, inside each fixed room,
+and confirmed silent while a station panel holds the keyboard.

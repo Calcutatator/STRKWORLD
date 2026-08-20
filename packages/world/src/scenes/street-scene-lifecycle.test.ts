@@ -1,5 +1,9 @@
 import { describe, expect, it, vi } from 'vitest';
+import type { AvatarSpriteKey } from '@strkworld/shared';
+import { DEFAULT_AVATAR_SPRITE, pairedAvatarSprite } from '../avatar-state.js';
 import type { AvatarStudioController } from '../avatar-studio.js';
+import { FIXED_ROOM_DEFINITIONS, type FixedRoomController } from '../fixed-room.js';
+import { createInputGate, type InputGate } from '../input-gate.js';
 import { createStreetMap } from '../map/street.js';
 import { createStreetScene } from './street-scene.js';
 
@@ -36,8 +40,8 @@ function destroyable() {
   return { destroy: vi.fn() };
 }
 
-function studioToggleBinding() {
-  return { setActive: vi.fn(), destroy: vi.fn() };
+function outfitToggleBinding() {
+  return { destroy: vi.fn() };
 }
 
 function cycleResources() {
@@ -48,7 +52,7 @@ function cycleResources() {
     controller: { destroy: vi.fn(() => unsubscribe()) },
     studio: { state: { inRoom: true }, ...destroyable() },
     studioPresentation: { enter: vi.fn(), exit: vi.fn(), destroy: vi.fn() },
-    studioToggle: studioToggleBinding(),
+    outfitToggle: outfitToggleBinding(),
     roomGraphics: destroyable(),
     stationGraphics: destroyable(),
     studioGraphics: destroyable(),
@@ -99,6 +103,7 @@ interface StreetSceneHarness extends FakeScene {
   createDoorOverlays(): void;
   createPlayer(): void;
   createInput(): void;
+  createAvatarOutfit(): void;
   createFixedRooms(): void;
   createAvatarStudio(): void;
   enterAvatarStudioRoom(): void;
@@ -110,7 +115,7 @@ interface StreetSceneHarness extends FakeScene {
   roomControllers: Record<string, { destroy(): void }>;
   avatarStudio: { readonly state: { readonly inRoom: boolean }; destroy(): void };
   avatarStudioPresentation: { enter(): void; exit(): void; destroy(): void };
-  avatarStudioToggleBinding?: { setActive(active: boolean): void; destroy(): void };
+  avatarOutfitToggle?: { destroy(): void };
   inputGate: { resume(): void };
   roomGraphics: { destroy(): void };
   roomStationGraphics: { destroy(): void };
@@ -139,12 +144,12 @@ function createHarness() {
   scene.createDoorTriggers = vi.fn();
   scene.createDoorOverlays = vi.fn(() => { scene.doorOverlays = [current.overlay]; });
   scene.createInput = vi.fn(() => { scene.inputGate = current.input; });
+  scene.createAvatarOutfit = vi.fn(() => { scene.avatarOutfitToggle = current.outfitToggle; });
   scene.createFixedRooms = vi.fn(() => { scene.roomControllers = { bank: current.controller }; });
   scene.createAvatarStudio = vi.fn(() => {
     if (failure === 'partial') throw new Error('partial create failure');
     scene.avatarStudio = current.studio;
     scene.avatarStudioPresentation = current.studioPresentation;
-    scene.avatarStudioToggleBinding = current.studioToggle;
   });
   scene.createRoomVisuals = vi.fn(() => {
     scene.roomGraphics = current.roomGraphics;
@@ -182,7 +187,7 @@ function expectCompleteCleanup(cycle: ReturnType<typeof cycleResources>): void {
   expect(cycle.controller.destroy).toHaveBeenCalledTimes(1);
   expect(cycle.unsubscribe).toHaveBeenCalledTimes(1);
   expect(cycle.studio.destroy).toHaveBeenCalledTimes(1);
-  expect(cycle.studioToggle.destroy).toHaveBeenCalledTimes(1);
+  expect(cycle.outfitToggle.destroy).toHaveBeenCalledTimes(1);
   expect(cycle.roomGraphics.destroy).toHaveBeenCalledTimes(1);
   expect(cycle.stationGraphics.destroy).toHaveBeenCalledTimes(1);
   expect(cycle.studioGraphics.destroy).toHaveBeenCalledTimes(1);
@@ -194,22 +199,207 @@ function expectCompleteCleanup(cycle: ReturnType<typeof cycleResources>): void {
 }
 
 describe('StreetScene lifecycle', () => {
-  it('drives F ownership through real Studio enter, exit and shutdown callbacks', () => {
-    const harness = createRealStudioHarness();
+  it('toggles the outfit outdoors, in the Studio and back, from one Scene-owned binding', () => {
+    const harness = createWorldPlayHarness();
+    harness.create();
 
-    expect(harness.keyboard.listenerCount()).toBe(0);
+    // D-053: the binding exists from create, not only while a room is active.
+    expect(harness.keyboard.listenerCount()).toBe(1);
+    expect(harness.selected()).toBe('avatar-1');
+
+    harness.press();
+    expect(harness.selected()).toBe('avatar-9');
+    harness.press();
+    expect(harness.selected()).toBe('avatar-1');
+    harness.press();
+    expect(harness.selected()).toBe('avatar-9');
+
+    // The Studio reads the same selection rather than owning a second one, so
+    // an outdoor toggle is still the current state on entry.
     harness.scene.avatarStudio.enter();
     expect(harness.keyboard.listenerCount()).toBe(1);
-    harness.keyboard.press({ repeat: false, target: null });
+    expect(harness.selected()).toBe('avatar-9');
+    harness.press();
+    expect(harness.selected()).toBe('avatar-1');
+
+    // Walking onto a figure still selects it, and F pairs that figure.
+    harness.scene.avatarStudio.update({ x: 14, y: 6 });
+    expect(harness.selected()).toBe('avatar-8');
+    harness.press();
+    expect(harness.selected()).toBe('avatar-16');
+
+    // Leaving the Studio does not take the binding with it.
+    harness.scene.avatarStudio.update({ x: 8, y: 0 });
+    expect(harness.scene.avatarStudio.state.inRoom).toBe(false);
+    expect(harness.keyboard.listenerCount()).toBe(1);
+    harness.press();
+    expect(harness.selected()).toBe('avatar-8');
+
+    harness.expectOnlySelectionOnTheWire([
+      'avatar-studio:entered',
+      'avatar-studio:exited',
+      'player:moved',
+    ]);
+  });
+
+  it('keeps toggling inside every fixed-room interior', () => {
+    const harness = createWorldPlayHarness();
+    harness.create();
+    const buildings = Object.values(FIXED_ROOM_DEFINITIONS).map(
+      (definition) => definition.building,
+    );
+    expect(buildings.length).toBeGreaterThan(0);
+
+    for (const building of buildings) {
+      const room = harness.room(building);
+      room.enter();
+      expect(room.state.inRoom).toBe(true);
+
+      const inside = harness.selected();
+      harness.press();
+      expect(harness.selected()).toBe(pairedAvatarSprite(inside));
+      harness.press();
+      expect(harness.selected()).toBe(inside);
+      // One Scene-owned binding; no building added its own.
+      expect(harness.keyboard.listenerCount()).toBe(1);
+
+      const exit = FIXED_ROOM_DEFINITIONS[building].exit;
+      room.update({ x: exit.x, y: exit.y });
+      expect(room.state.inRoom).toBe(false);
+      harness.press();
+      expect(harness.selected()).toBe(pairedAvatarSprite(inside));
+      harness.press();
+      expect(harness.selected()).toBe(inside);
+    }
+
+    harness.expectOnlySelectionOnTheWire(['building:exited', 'player:moved']);
+  });
+
+  it('is inactive while World gameplay input is suspended', () => {
+    const harness = createWorldPlayHarness();
+    harness.create();
+
+    // Menu mode: the Shell claims control and the gate hands over the keyboard.
+    const room = harness.room('bank');
+    room.enter();
+    const held = harness.selected();
+    harness.shellEmit('world:control-owner', { building: 'bank', owner: 'shell' });
+    expect(harness.scene.inputGate.suspended).toBe(true);
+    harness.press();
+    expect(harness.selected()).toBe(held);
+    // The listener is still the Scene's; it simply refuses to act.
+    expect(harness.keyboard.listenerCount()).toBe(1);
+
+    harness.shellEmit('world:control-owner', { building: 'bank', owner: 'world' });
+    expect(harness.scene.inputGate.suspended).toBe(false);
+    harness.press();
+    expect(harness.selected()).toBe(pairedAvatarSprite(held));
+
+    // The same rule holds outdoors, whatever suspended the gate.
+    room.update({ x: 8, y: 11 });
+    harness.scene.inputGate.suspend();
+    const outdoors = harness.selected();
+    harness.press();
+    expect(harness.selected()).toBe(outdoors);
+    harness.scene.inputGate.resume();
+    harness.press();
+    expect(harness.selected()).toBe(pairedAvatarSprite(outdoors));
+  });
+
+  it('ignores held repeats and keystrokes aimed at an editable target', () => {
+    const harness = createWorldPlayHarness();
+    harness.create();
+
+    harness.keyboard.press({ repeat: true, target: null });
+    for (const target of [
+      { tagName: 'INPUT' },
+      { tagName: 'textarea' },
+      { isContentEditable: true },
+      { tagName: 'SPAN', closest: () => ({}) },
+    ]) {
+      harness.keyboard.press({ repeat: false, target });
+    }
+    expect(harness.selected()).toBe('avatar-1');
+    expect(harness.cycle().applied).toEqual([]);
+
+    harness.press();
+    expect(harness.selected()).toBe('avatar-9');
+  });
+
+  it('stops toggling after shutdown, including through a retained stale handler', () => {
+    const harness = createWorldPlayHarness();
+    harness.create();
+    harness.press();
+    expect(harness.selected()).toBe('avatar-9');
+
+    const stale = harness.keyboard.snapshot();
+    harness.shutdown();
+    harness.scene.cleanShutdown();
+    expect(harness.keyboard.listenerCount()).toBe(0);
+
+    harness.press();
+    stale({ repeat: false, target: null });
+    expect(harness.cycle().applied).toEqual(['avatar-9']);
+  });
+
+  it('rebinds the outfit toggle through the production create order on a restart', () => {
+    // The ordering under test lives in create() itself: the Scene must make its
+    // selection *before* it builds the Studio. Stubbing create() would hide a
+    // swap, and after a restart the Studio would silently hold the no-op
+    // selection left behind by cleanShutdown.
+    const harness = createWorldPlayHarness();
+
+    harness.create();
+    expect(harness.cycles).toHaveLength(1);
+    expect(harness.keyboard.listenerCount()).toBe(1);
+    expect(harness.scene.avatarStudio.state.selected).toBe('avatar-1');
+    harness.press();
+    expect(harness.cycle(0).applied).toEqual(['avatar-9']);
     expect(harness.scene.avatarStudio.state.selected).toBe('avatar-9');
 
-    harness.scene.avatarStudio.update({ x: 8, y: 0 });
+    const stale = harness.keyboard.snapshot();
+    harness.shutdown();
     expect(harness.keyboard.listenerCount()).toBe(0);
-    harness.scene.avatarStudio.enter();
-    expect(harness.keyboard.listenerCount()).toBe(1);
 
-    harness.scene.cleanShutdown();
-    harness.scene.cleanShutdown();
+    // Same instance, real create order again.
+    harness.create();
+    expect(harness.cycles).toHaveLength(2);
+    expect(harness.keyboard.listenerCount()).toBe(1);
+    // A restarted Scene starts from the default, and its Studio must hold
+    // *this* cycle's selection — not the destroyed one, and not the no-op.
+    expect(harness.scene.avatarStudio.state.selected).toBe('avatar-1');
+
+    harness.press();
+    expect(harness.cycle(1).applied).toEqual(['avatar-9']);
+    expect(harness.scene.avatarStudio.state.selected).toBe('avatar-9');
+    // The previous cycle's avatar was not driven by the new binding.
+    expect(harness.cycle(0).applied).toEqual(['avatar-9']);
+
+    // The cycle-1 handler is inert even though it was captured while live.
+    stale({ repeat: false, target: null });
+    expect(harness.cycle(0).applied).toEqual(['avatar-9']);
+    expect(harness.cycle(1).applied).toEqual(['avatar-9']);
+
+    harness.shutdown();
+    expect(harness.keyboard.listenerCount()).toBe(0);
+    harness.press();
+    expect(harness.cycle(1).applied).toEqual(['avatar-9']);
+  });
+
+  it('replaces the binding when create runs twice with no shutdown between', () => {
+    // The mounting regression this file's header warns about: create() can run
+    // twice. The second one must replace the binding, not add a listener.
+    const harness = createWorldPlayHarness();
+    harness.create();
+    harness.create();
+
+    expect(harness.cycles).toHaveLength(2);
+    expect(harness.keyboard.listenerCount()).toBe(1);
+    harness.press();
+    expect(harness.cycle(1).applied).toEqual(['avatar-9']);
+    expect(harness.cycle(0).applied).toEqual([]);
+
+    harness.shutdown();
     expect(harness.keyboard.listenerCount()).toBe(0);
   });
 
@@ -285,6 +475,7 @@ describe('StreetScene lifecycle', () => {
     expect(partial.unsubscribe).toHaveBeenCalledTimes(1);
     expect(partial.input.resume).toHaveBeenCalledTimes(1);
     expect(partial.overlay.destroy).toHaveBeenCalledTimes(1);
+    expect(partial.outfitToggle.destroy).toHaveBeenCalledTimes(1);
     expect(partial.studio.destroy).not.toHaveBeenCalled();
     expect(harness.scene.remoteLayers).toHaveLength(2);
     expect(harness.scene.remoteLayers[1]?.destroy).toHaveBeenCalledTimes(1);
@@ -317,10 +508,36 @@ describe('StreetScene lifecycle', () => {
   });
 });
 
-function createRealStudioHarness() {
+/**
+ * A Scene driven through its real `create()`.
+ *
+ * Only the Phaser-heavy presentation steps are stubbed. `create()` itself and
+ * the seams under test — the outfit selection and binding, the fixed rooms, the
+ * door triggers and the Avatar Studio — all run for real, so the production
+ * *order* of those steps is covered too. That order is load-bearing: the Studio
+ * is handed the Scene's selection, and building it first would hand it the
+ * no-op selection instead, which changes nothing visible until someone presses
+ * F.
+ *
+ * `createPlayer` records one avatar per create, so a restart has to be shown
+ * driving the avatar it just built rather than the previous cycle's.
+ */
+function createWorldPlayHarness() {
   const SceneType = createStreetScene({ Phaser: { Scene: FakeScene } as never });
   const keyboard = new LifecycleKeyboard();
-  const map = createStreetMap();
+  const emitted: Array<{ event: string; payload: unknown }> = [];
+  const shellListeners = new Map<string, Set<(payload: unknown) => void>>();
+  const bus = {
+    out: { emit: (event: string, payload: unknown) => emitted.push({ event, payload }) },
+    in: {
+      on(event: string, handler: (payload: unknown) => void) {
+        const handlers = shellListeners.get(event) ?? new Set();
+        handlers.add(handler);
+        shellListeners.set(event, handlers);
+        return () => handlers.delete(handler);
+      },
+    },
+  };
   const player = {
     x: 0,
     y: 0,
@@ -331,31 +548,113 @@ function createRealStudioHarness() {
       player.y = y;
     }),
   };
-  const scene = new SceneType() as unknown as FakeScene & {
-    map: ReturnType<typeof createStreetMap>;
-    player: typeof player;
-    input: { keyboard: LifecycleKeyboard };
-    game: { registry: { get(key: string): undefined } };
-    physics: { world: { setBounds: ReturnType<typeof vi.fn> } };
-    cameras: { main: { setBounds: ReturnType<typeof vi.fn> } };
-    ground: { setVisible: ReturnType<typeof vi.fn> };
-    movement: { exit(position: { x: number; y: number }, report: () => void): void };
-    doors: { reset: ReturnType<typeof vi.fn>; update: ReturnType<typeof vi.fn> };
-    avatarStudio: AvatarStudioController;
-    createAvatarStudio(): void;
-    cleanShutdown(): void;
-  };
-  scene.map = map;
+  const cycles: Array<{ applied: AvatarSpriteKey[] }> = [];
+  const scene = new SceneType() as unknown as WorldPlayScene;
+
+  // preload() is what normally supplies the map.
+  scene.map = createStreetMap();
   scene.player = player;
   scene.input = { keyboard };
-  scene.game = { registry: { get: () => undefined } };
+  scene.game = { registry: { get: (key: string) => (key === 'bus' ? bus : undefined) } };
   scene.physics = { world: { setBounds: vi.fn() } };
   scene.cameras = { main: { setBounds: vi.fn() } };
-  scene.ground = { setVisible: vi.fn() };
-  scene.movement = { exit: (_position, report) => report() };
-  scene.doors = { reset: vi.fn(), update: vi.fn() };
-  scene.createAvatarStudio();
-  return { scene, keyboard };
+
+  scene.drawGround = vi.fn();
+  scene.createDoorOverlays = vi.fn(() => {
+    scene.doorOverlays = [];
+  });
+  scene.createPlayer = vi.fn(() => {
+    const cycle = { applied: [] as AvatarSpriteKey[] };
+    cycles.push(cycle);
+    scene.avatarVisual = { select: (sprite: AvatarSpriteKey) => cycle.applied.push(sprite) };
+  });
+  scene.createInput = vi.fn(() => {
+    scene.inputGate = createInputGate({
+      enabled: true,
+      disableGlobalCapture: vi.fn(),
+      enableGlobalCapture: vi.fn(),
+      resetKeys: vi.fn(),
+    });
+  });
+  scene.createCamera = vi.fn();
+  scene.createRoomVisuals = vi.fn();
+  scene.createExteriorLabels = vi.fn();
+
+  const cycle = (index = cycles.length - 1): { applied: AvatarSpriteKey[] } => {
+    const record = cycles[index];
+    if (!record) throw new Error(`No create cycle ${index}`);
+    return record;
+  };
+
+  return {
+    scene,
+    keyboard,
+    cycles,
+    cycle,
+    create: () => scene.create(),
+    shutdown: () => scene.events.emit('shutdown'),
+    press: () => keyboard.press({ repeat: false, target: null }),
+    /**
+     * What the local avatar is wearing.
+     *
+     * Both guards are load-bearing. A missing `avatarVisual` would make every
+     * "unchanged" assertion pass for the wrong reason, and a Studio reading a
+     * different key is exactly the divergence D-053 exists to prevent.
+     */
+    selected: (): AvatarSpriteKey => {
+      expect(scene.avatarVisual).toBeDefined();
+      const worn = cycle().applied.at(-1) ?? DEFAULT_AVATAR_SPRITE;
+      expect(scene.avatarStudio.state.selected).toBe(worn);
+      return worn;
+    },
+    shellEmit: (event: string, payload: unknown) => {
+      for (const handler of shellListeners.get(event) ?? []) handler(payload);
+    },
+    room: (building: string): FixedRoomController => {
+      const controller = scene.roomControllers[building];
+      if (!controller) throw new Error(`Missing room controller for ${building}`);
+      return controller;
+    },
+    /**
+     * The toggle is cosmetic. Its only outbound event is the existing
+     * `avatar:selected` carrying the opaque sprite key — no stance, outfit,
+     * wire, lobby, building or financial field, and no new event alongside the
+     * ones the transitions under test already emit.
+     */
+    expectOnlySelectionOnTheWire: (alsoExpected: readonly string[]) => {
+      const selections = emitted.filter((entry) => entry.event === 'avatar:selected');
+      expect(selections.length).toBeGreaterThan(0);
+      for (const entry of selections) {
+        expect(Object.keys(entry.payload as object)).toEqual(['sprite']);
+      }
+      expect(new Set(emitted.map((entry) => entry.event))).toEqual(
+        new Set(['avatar:selected', ...alsoExpected]),
+      );
+    },
+  };
+}
+
+interface WorldPlayScene extends FakeScene {
+  map: ReturnType<typeof createStreetMap>;
+  player: unknown;
+  input: { keyboard: LifecycleKeyboard };
+  game: { registry: { get(key: string): unknown } };
+  physics: { world: { setBounds: ReturnType<typeof vi.fn> } };
+  cameras: { main: { setBounds: ReturnType<typeof vi.fn> } };
+  doorOverlays: unknown[];
+  avatarVisual?: { select(sprite: AvatarSpriteKey): void };
+  inputGate: InputGate;
+  avatarStudio: AvatarStudioController;
+  roomControllers: Partial<Record<string, FixedRoomController>>;
+  create(): void;
+  cleanShutdown(): void;
+  drawGround(): void;
+  createDoorOverlays(): void;
+  createPlayer(): void;
+  createInput(): void;
+  createCamera(): void;
+  createRoomVisuals(): void;
+  createExteriorLabels(): void;
 }
 
 interface LifecycleKeyEvent {
@@ -378,6 +677,12 @@ class LifecycleKeyboard {
 
   listenerCount(): number {
     return this.handlers.size;
+  }
+
+  snapshot(): (event: LifecycleKeyEvent) => void {
+    const handler = this.handlers.values().next().value;
+    if (!handler) throw new Error('Missing keydown-F handler');
+    return handler;
   }
 
   press(event: LifecycleKeyEvent): void {

@@ -134,12 +134,15 @@ On room exit, World publishes the restored street placement before emitting
 coordinates. A selection made during an in-flight join invalidates that
 client's captured sprite: Shell replaces it once, defers replacement while
 inside and deduplicates reconnect requests. The presentation lifecycle is one
-adapter used by both `StreetScene` and its deterministic teardown tests. The
-currently implemented F binding is owned only by Avatar Studio. D-053
-supersedes that scope with a pending World-lifecycle owner so the same
-one-press, no-repeat cosy/fighting toggle follows the local avatar outdoors and
-through existing interiors. It continues to use the existing opaque
-`avatar:selected` key; no stance or wire field exists. Commit
+adapter used by both `StreetScene` and its deterministic teardown tests. Per
+D-053 the F binding is no longer owned by Avatar Studio: `StreetScene` creates
+one outfit selection and one `keydown-F` listener in `create()`, before the
+rooms and the Studio, and injects that selection into the Studio controller as
+a required option so there is a single source of truth. The same one-press,
+no-repeat cosy/fighting toggle therefore follows the local avatar outdoors and
+through existing interiors, and is silent while `InputGate` has suspended World
+input. It continues to use the existing opaque `avatar:selected` key; no stance
+or wire field exists. Commit
 `e5eaea9` contains review PNGs only. D-049 replaces their provisional 32×32
 target with one transparent 64×64 logical canvas for every opaque state, fixed
 feet at `(32, 56)` and the unchanged authoritative 24×24 gameplay/contact body.
@@ -157,11 +160,13 @@ Aseprite frames, while the 64×64 cell, `(32, 56)` feet, 24×24 bodies and
 no-baked-shadow rule remain. Vertical rows preserve hip/depth continuity and
 side rows move along x; each cycle keeps a planted baseline foot and introduces
 no new white or bright edge contamination. D-053 supersedes D-052's Studio-only
-input scope with a pending single World-lifecycle F binding that follows the
-local avatar outdoors and through existing interiors. It remains a one-press,
-no-repeat cosy/fighting toggle through the existing opaque `avatar:selected`
-key; no stance or wire field exists. Background and a fresh user-run in-game
-review remain required; the failed recording is not a pass. Art commit
+input scope with a single World-lifecycle F binding that follows the local
+avatar outdoors and through existing interiors; it is headlessly implemented
+and verified, while the user-run rendered and interactive acceptance remains
+open and unclaimed. It remains a one-press, no-repeat cosy/fighting toggle
+through the existing opaque `avatar:selected` key; no stance or wire field
+exists. Background and a fresh user-run in-game review remain required; the
+failed recording is not a pass. Art commit
 `0051fce` corrects the later-reported character 5/13 side-facing identity drift
 without changing this resolver, sheet geometry or runtime frame mapping.
 
