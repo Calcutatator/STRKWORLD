@@ -250,6 +250,32 @@ without a verification method is a rumour.
 
 Format: `### YYYY-MM-DD — short title` then what, why it matters, how verified.
 
+### 2026-08-20 — A private swap cannot authorize the zero executor
+
+`BackendApi` accepted a planner result whose `executorAddress` was `0x0`
+because zero is a syntactically valid Starknet felt. The production AVNU
+adapter's truthiness check also accepts the non-empty string `"0x0"`. A public
+swap-prepare request could therefore build a sponsor fee and issue an
+authorization binding both the sell withdrawal and the later invoke to the
+zero executor, even though no valid private executor had been admitted.
+
+Swap-plan admission now requires the executor felt to be nonzero before fee
+construction or authorization issuance. Quote selection, token/slippage
+policy, executor-call serialization, route schema and submission behavior are
+unchanged.
+
+*Verified:* public `BackendApi.handle()` regressions replace only the external
+planner result with otherwise valid mainnet private plans carrying `0x0` and
+two accepted leading-zero encodings, `0x00` and `0x00000000`. Before the guard,
+each request returned 200, called the paymaster fee builder and exposed an
+authorization whose decoded swap binding contained the zero executor. Green
+returns the existing generic 409 invalid-quote response and proves neither the
+paymaster nor authorization issuer was called. Removing the nonzero clause
+makes all three regressions fail; replacing its numeric felt comparison with a
+string-only `=== '0x0'` check makes the two leading-zero cases fail. Local
+verification used no live provider, external network, RPC, wallet, proof,
+signature, funds or transaction.*
+
 ### 2026-08-20 — A Bank batch edit owns work started from the older batch
 
 The Menu Mode Bank leaves its explicit Remove and Clear controls available

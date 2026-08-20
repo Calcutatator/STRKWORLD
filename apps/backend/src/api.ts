@@ -295,6 +295,7 @@ export class BackendApi {
       !plan.quoteId ||
       !plan.chainId ||
       !isFelt(plan.executorAddress) ||
+      BigInt(plan.executorAddress) === 0n ||
       plan.buyAmount < minAmountOut ||
       !Number.isSafeInteger(plan.expiresAt) ||
       plan.expiresAt <= this.clockNow() ||
