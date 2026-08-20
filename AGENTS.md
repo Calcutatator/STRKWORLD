@@ -285,7 +285,7 @@ Backend startup error and a missing nested dependency still exit `1` with their
 original diagnostics. Removing the resolution guard revives the race failure;
 broadening it to every import error hides one of those genuine failures. The
 focused launcher test passes three tests; the full workspace passes 90 files /
-1,263 tests, workspace typecheck, production build, all 13 invariants, the
+1,268 tests, workspace typecheck, production build, all 13 invariants, the
 tilemap check and diff hygiene pass. Local verification opened no listener or
 external network and used no wallet, RPC, proof, signature, secret, funds or
 transaction.*
