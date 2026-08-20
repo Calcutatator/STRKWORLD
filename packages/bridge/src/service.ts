@@ -154,7 +154,10 @@ export class BridgeService {
     });
     this.verifyStatusQuote(raw, record);
     const status = mapStatus(raw);
-    this.store.save({ ...record, status, updatedAt: this.now() });
+    const retained = this.resume();
+    if (retained && samePersistedVersion(retained, record)) {
+      this.store.save({ ...retained, status, updatedAt: this.now() });
+    }
     return status;
   }
 
@@ -214,7 +217,7 @@ export class BridgeService {
       };
     }
     const retained = this.resume();
-    if (retained && sameSignedEvidence(retained, record)) {
+    if (retained && samePersistedVersion(retained, record)) {
       this.store.save({ ...retained, status, updatedAt: this.now() });
     }
     return status;
@@ -300,10 +303,8 @@ export class BridgeService {
   }
 }
 
-function sameSignedEvidence(left: BridgeRecord, right: BridgeRecord): boolean {
-  return left.signedQuote.correlationId === right.signedQuote.correlationId &&
-    left.signedQuote.signature === right.signedQuote.signature &&
-    left.signedQuote.timestamp === right.signedQuote.timestamp;
+function samePersistedVersion(left: BridgeRecord, right: BridgeRecord): boolean {
+  return serializeBridgeRecord(left) === serializeBridgeRecord(right);
 }
 
 function validateInput(input: CreateDepositInput): void {

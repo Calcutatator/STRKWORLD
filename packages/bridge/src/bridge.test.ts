@@ -498,6 +498,145 @@ describe('BridgeService', () => {
     }]);
   });
 
+  it('does not resurrect discarded evidence when a transaction report settles late', async () => {
+    const client = new StubClient();
+    const store = new MemoryBridgeStore();
+    const service = new BridgeService({ client, store, quoteVerifier: () => true, now: () => NOW });
+    await service.createSignedDeposit({
+      source: { ...SOURCE, depositMode: 'signed' },
+      amountIn: 1_000_000n,
+      starknetRecipient: '0x123',
+      refundAddress: request.refundTo,
+    });
+    let releaseReport!: (value: SubmitDepositTxResponse) => void;
+    let markStarted!: () => void;
+    const started = new Promise<void>((resolve) => { markStarted = resolve; });
+    client.submitDepositTx = async () => {
+      markStarted();
+      return new Promise<SubmitDepositTxResponse>((resolve) => { releaseReport = resolve; });
+    };
+
+    const reporting = service.reportDepositTransaction('0xorigin-tx');
+    await started;
+    service.discard();
+    releaseReport(status('KNOWN_DEPOSIT_TX' as never) as unknown as SubmitDepositTxResponse);
+
+    await expect(reporting).resolves.toMatchObject({ leg: 'deposit-detected' });
+    expect(service.resume()).toBeNull();
+  });
+
+  it('does not let a late transaction report overwrite replacement evidence', async () => {
+    const client = new StubClient();
+    const store = new MemoryBridgeStore();
+    const service = new BridgeService({ client, store, quoteVerifier: () => true, now: () => NOW });
+    await service.createSignedDeposit({
+      source: { ...SOURCE, depositMode: 'signed' },
+      amountIn: 1_000_000n,
+      starknetRecipient: '0x123',
+      refundAddress: request.refundTo,
+    });
+    let releaseReport!: (value: SubmitDepositTxResponse) => void;
+    let markStarted!: () => void;
+    const started = new Promise<void>((resolve) => { markStarted = resolve; });
+    client.submitDepositTx = async () => {
+      markStarted();
+      return new Promise<SubmitDepositTxResponse>((resolve) => { releaseReport = resolve; });
+    };
+
+    const reporting = service.reportDepositTransaction('0xorigin-tx');
+    await started;
+    service.discard();
+    client.getQuote = async (value) => ({
+      ...signedQuote,
+      correlationId: 'corr-2',
+      signature: 'replacement-signed-by-one-click',
+      quoteRequest: value,
+      quote: {
+        ...signedQuote.quote,
+        depositAddress: '0xreplacement-deposit',
+        deadline: value.deadline,
+      },
+    });
+    const replacement = await service.createSignedDeposit({
+      source: { ...SOURCE, depositMode: 'signed' },
+      amountIn: 1_000_000n,
+      starknetRecipient: '0x123',
+      refundAddress: request.refundTo,
+    });
+    const replacementExport = service.exportResumeRecord();
+    releaseReport(status('KNOWN_DEPOSIT_TX' as never) as unknown as SubmitDepositTxResponse);
+
+    await expect(reporting).resolves.toMatchObject({ leg: 'deposit-detected' });
+    expect(service.resume()).toEqual(replacement);
+    expect(service.exportResumeRecord()).toBe(replacementExport);
+  });
+
+  it('does not let a late transaction report regress newer progress for the same evidence', async () => {
+    const client = new StubClient();
+    const store = new MemoryBridgeStore();
+    const service = new BridgeService({ client, store, quoteVerifier: () => true, now: () => NOW });
+    await service.createSignedDeposit({
+      source: { ...SOURCE, depositMode: 'signed' },
+      amountIn: 1_000_000n,
+      starknetRecipient: '0x123',
+      refundAddress: request.refundTo,
+    });
+    let releaseReport!: (value: SubmitDepositTxResponse) => void;
+    let markStarted!: () => void;
+    const started = new Promise<void>((resolve) => { markStarted = resolve; });
+    client.submitDepositTx = async () => {
+      markStarted();
+      return new Promise<SubmitDepositTxResponse>((resolve) => { releaseReport = resolve; });
+    };
+
+    const reporting = service.reportDepositTransaction('0xorigin-tx');
+    await started;
+    client.statuses.push(status('SUCCESS' as never, {
+      amountOut: '1980000000000000000',
+      destinationChainTxHashes: [{ hash: '0xsettled' as never, explorerUrl: 'https://example/tx' }],
+    }));
+    await expect(service.refresh()).resolves.toMatchObject({ leg: 'settled' });
+    const settled = service.resume();
+    const settledExport = service.exportResumeRecord();
+    releaseReport(status('KNOWN_DEPOSIT_TX' as never) as unknown as SubmitDepositTxResponse);
+
+    await expect(reporting).resolves.toMatchObject({ leg: 'deposit-detected' });
+    expect(service.resume()).toEqual(settled);
+    expect(service.exportResumeRecord()).toBe(settledExport);
+  });
+
+  it('does not let a late refresh regress newer transaction-report progress for the same evidence', async () => {
+    const client = new StubClient();
+    const store = new MemoryBridgeStore();
+    const service = new BridgeService({ client, store, quoteVerifier: () => true, now: () => NOW });
+    await service.createSignedDeposit({
+      source: { ...SOURCE, depositMode: 'signed' },
+      amountIn: 1_000_000n,
+      starknetRecipient: '0x123',
+      refundAddress: request.refundTo,
+    });
+    let releaseRefresh!: (value: GetExecutionStatusResponse) => void;
+    let markStarted!: () => void;
+    const started = new Promise<void>((resolve) => { markStarted = resolve; });
+    client.getExecutionStatus = async () => {
+      markStarted();
+      return new Promise<GetExecutionStatusResponse>((resolve) => { releaseRefresh = resolve; });
+    };
+
+    const refreshing = service.refresh();
+    await started;
+    await expect(service.reportDepositTransaction('0xorigin-tx')).resolves.toMatchObject({
+      leg: 'deposit-detected',
+    });
+    const detected = service.resume();
+    const detectedExport = service.exportResumeRecord();
+    releaseRefresh(status('PENDING_DEPOSIT' as never));
+
+    await expect(refreshing).resolves.toMatchObject({ leg: 'awaiting-deposit' });
+    expect(service.resume()).toEqual(detected);
+    expect(service.exportResumeRecord()).toBe(detectedExport);
+  });
+
   it('rejects a status response bound to a different signed quote', async () => {
     const client = new StubClient();
     const store = new MemoryBridgeStore();
