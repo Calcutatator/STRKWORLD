@@ -75,6 +75,14 @@ export function createExchangePanel(options: {
   const patch = (next: Partial<ExchangeState>) => store.setState((state) => ({ ...state, ...next }));
   const start = () => ++attempt;
   const live = (id: number) => attempt === id;
+  const editComposition = (next: Partial<ExchangeState>) => {
+    if (store.getState().flow.name === 'preparing') {
+      start();
+      patch({ ...next, flow: { name: 'composing' } });
+      return;
+    }
+    patch(next);
+  };
   const stageCopy = (stage: OperationStage) => ({ composing: COPY.flow.handingOver, 'awaiting-approval': COPY.flow.awaitingApproval, proving: COPY.flow.proving, submitting: COPY.flow.submitting, confirming: COPY.flow.confirming, done: COPY.flow.done, failed: COPY.errors.unknown }[stage]);
   const discard = () => { if (!signing) prepared?.discard(); prepared = null; };
   const gate = () => {
@@ -121,14 +129,14 @@ export function createExchangePanel(options: {
     setSell(token) {
       const sell = store.getState().sellChoices.find((asset) => sameAddress(asset.token, token)) ?? null;
       const buy = EXCHANGE_CATALOG.find((asset) => sell && !sameAddress(asset.token, sell.token)) ?? null;
-      patch({ sell, buy, amountText: '', notice: null });
+      editComposition({ sell, buy, amountText: '', notice: null });
     },
     setBuy(token) {
       const asset = catalogAsset(token); const sell = store.getState().sell;
       if (!asset || !sell || sameAddress(asset.token, sell.token)) return;
-      patch({ buy: asset, notice: null });
+      editComposition({ buy: asset, notice: null });
     },
-    setAmount(amountText) { patch({ amountText, notice: null }); },
+    setAmount(amountText) { editComposition({ amountText, notice: null }); },
     async prepare(signal) {
       if (!gate()) return;
       const state = store.getState();

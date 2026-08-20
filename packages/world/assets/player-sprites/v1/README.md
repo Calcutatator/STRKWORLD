@@ -1,12 +1,10 @@
 # STRKWORLD player sprites v1
 
-This directory is the D-052 art handoff for the eight paired player-character
-designs. The bounded character 5/13 cross-facing identity correction has
-passed independent orchestration review. Commit `5c8c81a` integrates the
-unchanged five-column contract into World. Rendered in-game acceptance remains
-user-owned and pending; this art handoff is not a runtime-ready or rendered
-acceptance claim. The older `v1-review/` directory remains the historical
-review and generation-provenance record.
+This directory is an isolated D-052 art-correction candidate for the eight
+paired player-character designs. It is awaiting independent orchestration
+review and is not runtime-ready or rendered acceptance. The older `v1-review/`
+directory remains unchanged as the historical review and generation-provenance
+record.
 
 ## Files
 
@@ -14,9 +12,9 @@ review and generation-provenance record.
 - `avatar-9.png` through `avatar-16.png` are the paired fighting states.
 - `source/player-sprites.aseprite` is the editable 320-frame source.
 - `manifest.json` is the runtime-neutral asset contract and pair mapping.
-- `qa/` contains mechanical reports, four-background evidence, a complete
-  movement contact, one animated preview per paired character, and the
-  cross-facing identity gate.
+- `qa/` contains mechanical reports, four-background evidence, enlarged
+  movement contacts, per-key and paired animated previews, explicit pixel
+  repair evidence, and the cross-facing identity gate.
 
 ## Sheet contract
 
@@ -41,11 +39,41 @@ consistent runtime-owned shadow behind every local, remote, and Studio avatar.
 
 ## Character checks
 
-The corrected character 5/13 side-facing cells are rebuilt from their shared
-approved down-facing models; the fighting staff remains a separate authored
-side prop and is connected to the hand. No runtime row or frame mapping was
-changed. The correction is not runtime-ready until orchestration independently
-reviews the complete handoff.
+The four-facing identities and movement cells were reconstructed per character
+from approved model references; they are not mirrored or blanket zone copies.
+The fighting weapons remain direction-specific and hand-connected. Down/up
+movement uses connected upper-silhouette, waist, hip and planted-foot changes
+so it reads as depth transfer rather than horizontal rocking. The approved
+size classes remain fixed: only 6/14 are small/chibi, only 4/7/12/15 are large,
+and all other keys use the standard class. `qa/explicit-pixel-repairs.json`
+records 642 enclosed-hole fills across the initial and cross-gate passes, 1,088
+transient channel repairs, 25 per-cell palette remaps, 662 seam-material
+repairs, four isolated-pixel removals, 64 D/U stride reconstructions, two
+D/U depth repairs, six weapon-boundary repairs, and six detached-component
+cell repairs. These 2,499 ledger entries are explicit cell/coordinate
+operations, not a blanket transform or global filter.
+
+Every cell also passes an 8-connected detached-opaque-component gate recorded
+in `qa/detached-components.json`. This rejects floating feet, weapon fragments,
+and other disconnected opaque islands; the whitelist is intentionally empty.
+`qa/verify-silhouette-holes.py` flood-fills exterior transparency in all 320
+cells and rejects every unreviewed enclosed transparent pixel. The current
+evidence has zero islands after the explicit coordinate repairs and an empty
+enclosed-hole whitelist. All original 864 narrow-channel
+candidates are classified: transient body channels are repaired and the 167
+stable negative-space runs that remain are explicitly whitelisted with exact
+coordinates and rationale.
+`qa/verify-edge-heatmap.py` requires a nonblank contour block for every key,
+facing, and pose; `qa/edge-heatmap.png` now covers all 320 cells, not only the
+down-facing rows.
+`qa/channel-review.json` classifies all 864 original 1-2px channel candidates.
+Transient movement-only body channels are explicitly repaired; each surviving
+negative-space run is whitelisted by exact cell, orientation, coordinate,
+length, and rationale. `qa/verify-narrow-channels.py` rejects unclassified
+current channels and includes an injected-channel negative test.
+
+No runtime row or frame mapping was changed. The correction is not runtime-ready
+until orchestration independently reviews the complete handoff.
 
 - Characters 4 and 7 remain the two deliberately large silhouettes in both
   states and all facings.
@@ -75,13 +103,14 @@ sprite slice or wire field.
 ## Provenance
 
 The character concepts and pixels are project-owned STRKWORLD work produced
-under James Wilcock's art direction. This D-052 pass applies deterministic
-nearest-neighbour pixel cleanup, cross-facing normalization, anatomy-gap
-repair, and source-preserving sheet assembly to the approved historical
-character pixels. No third-party source pixels or external asset packs are
-incorporated. The work is intentionally Chrono Trigger-adjacent in era and
-readability, but does not copy its characters, silhouettes, clothing, palettes,
-frames, or pixels.
+under James Wilcock's art direction. This D-052 pass applies character-specific
+pixel reconstruction guided by project-owned reference turnarounds,
+nearest-neighbour quantization, explicit anatomy-gap repair, and
+source-preserving sheet assembly. Generated imagery was used as visual
+guidance only; the final sheets contain controlled project-owned pixels. No
+third-party source pixels or external asset packs are incorporated. The work
+is intentionally Chrono Trigger-adjacent in era and readability, but does not
+copy its characters, silhouettes, clothing, palettes, frames, or pixels.
 
 Verified 2026-08-20. Project use and modification are controlled by the
 STRKWORLD project owner.

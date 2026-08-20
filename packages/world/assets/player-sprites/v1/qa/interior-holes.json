@@ -1,0 +1,18 @@
+{
+  "status": "pass",
+  "cellsScanned": 320,
+  "method": "4-connected flood-fill of exterior transparency followed by exact per-cell interior-island enumeration",
+  "interiorTransparentPixels": 0,
+  "failingCells": [],
+  "whitelist": [],
+  "repairLedger": "qa/explicit-pixel-repairs.json",
+  "repairPass": {
+    "initialPixels": 449,
+    "crossGateFollowupPixels": 60,
+    "totalExplicitHoleRepairs": 509,
+    "cells": 62,
+    "whitelist": [],
+    "reviewStatus": "awaiting independent review"
+  },
+  "gate": "reject any unreviewed enclosed transparency; no intentional negative-space whitelist is active"
+}
