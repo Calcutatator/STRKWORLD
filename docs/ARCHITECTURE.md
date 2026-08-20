@@ -135,7 +135,9 @@ coordinates. A selection made during an in-flight join invalidates that
 client's captured sprite: Shell replaces it once, defers replacement while
 inside and deduplicates reconnect requests. The presentation lifecycle is one
 adapter used by both `StreetScene` and its deterministic teardown tests. The
-keyboard toggle remains unbound pending the user's key choice. Commit
+F is authorized only inside Avatar Studio as a one-press, no-repeat toggle for
+the current editable target's cosy/fighting pair through the existing opaque
+`avatar:selected` key; no stance or wire field exists. Commit
 `e5eaea9` contains review PNGs only. D-049 replaces their provisional 32×32
 target with one transparent 64×64 logical canvas for every opaque state, fixed
 feet at `(32, 56)` and the unchanged authoritative 24×24 gameplay/contact body.
@@ -143,15 +145,20 @@ Smaller characters use transparent padding, while characters 4 and 7 may use
 more of the same canvas. Variable per-key canvases and layered weapons are not
 part of the initial runtime. Commit `86e8f5f` contains the complete sixteen-key
 `v1/` handoff and QA evidence; independent QA verified it, and James visually
-approved those committed assets for runtime integration. World sprite wiring
-is still open and must route local players, remote peers and Studio selectors
-through one World-local semantic resolver for the per-key sheet, fixed origin
-and three movement frames in four facings. It changes no lobby/wire field,
-shared type or Fly allowlist. Source art has no baked shadow; World may add one
-optional consistent presentation shadow. The accepted rendered foundation
-used placeholders; it did not exercise or accept the D-048 portal orientation,
-unbound fighting toggle or integrated final sprites. A fresh user-run rendered
-check remains required after implementation.
+approved those committed assets for runtime integration. World-local sprite
+wiring now routes local players, remote peers and Studio selectors through one
+semantic resolver in headless coverage, without changing any lobby/wire field,
+shared type or Fly allowlist. The browser recording failed to establish
+rendered acceptance. D-052 supersedes D-049's three-column movement geometry:
+the replacement sheets are 320×256 with five columns per facing and 320 total
+Aseprite frames, while the 64×64 cell, `(32, 56)` feet, 24×24 bodies and
+no-baked-shadow rule remain. Vertical rows preserve hip/depth continuity and
+side rows move along x; each cycle keeps a planted baseline foot and introduces
+no new white or bright edge contamination. F is authorized only inside Avatar
+Studio as a one-press, no-repeat cosy/fighting toggle through the existing
+opaque `avatar:selected` key; no stance or wire field exists. Background and a
+fresh user-run in-game review remain required; the failed recording is not a
+pass.
 
 ---
 

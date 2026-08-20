@@ -17,11 +17,11 @@ the lane boundary — that is why the repo is shaped the way it is.
 | Lane | Package | Status in v1 |
 |---|---|---|
 | **Chain** | `packages/privacy` | Active; private seam frozen, D-043 planner port/fake complete, production Ready planner blocked |
-| **World** | `packages/world` + `packages/lobby` | Active; Avatar Studio foundation accepted on localhost; D-049 final art approved for World-local integration; D-048 top-wall portal, sprite integration, rendered acceptance and keyboard toggle remain |
+| **World** | `packages/world` + `packages/lobby` | Active; Avatar Studio foundation, D-048 top-wall portal and World-local final-avatar wiring are headlessly complete; D-052 replacement animation handoff, F behavior and fresh rendered acceptance remain |
 | **Shell** | `apps/web` | Active, starts week 2 |
 | **Backend** | `apps/backend` | Active; D-050 and both hosted image smokes complete; host, domain, secrets, Alchemy controls, live staging and funded checks remain |
 | **Bridge** | `packages/bridge` | Active, fully independent |
-| **Art** | `packages/world/assets` | D-049 v1 handoff complete at `86e8f5f`, independently QA-verified and visually approved; runtime integration and rendered acceptance remain separate |
+| **Art** | `packages/world/assets` | D-049 v1 handoff complete at `86e8f5f`, independently QA-verified and visually approved; D-052 replacement animation art, background review and rendered acceptance remain separate |
 | ~~Contracts~~ | — | **Dormant until post-v1** |
 
 ### Why Contracts is dormant
@@ -240,30 +240,31 @@ highlight, activation, exit and teardown only; it gained no recipient, quote,
 deposit address, status or wallet concept. Rendered room and station acceptance
 remains user-run at `http://localhost:5173/`.
 
-**D-047 foundation complete and rendered-accepted locally; D-048 portal change
-pending:** the hidden south path and bottom-edge street trigger enter a
-non-financial 18×12 Avatar Studio outside `BuildingId`/`BUILDINGS`, with no
-facade, public label or `VisitLayer` route. Replace the provisional interior
-bottom opening with a centered 2×1 top-wall portal, spawn immediately inside
-it, and exit by walking back upward through that same opening. Preserve the
-existing restored-street-placement-before-exit-event ordering.
-Eight collision selectors choose the cosy/default states. The three dedicated
-`WorldEvents` are the only event-bus extension, and World, lobby and Fly now
-share the existing single `sprite` field across `avatar-1..16`; there is no
-stance field or message. Shell retains the selected allowlisted key for the
-page runtime, replaces an in-flight client that captured an older sprite,
-defers that replacement while inside and deduplicates reconnect intent. Exit
-publishes the restored street placement before `avatar-studio:exited` resumes
-presence, and remote peers use deterministic placeholder tints. Reload, tab
-close or a new session still resets to `avatar-1`. The exact keyboard toggle
-remains open and unbound pending the user's choice. D-049 final art is now
-visually approved for World integration, but runtime sprite wiring is not
-complete. On 2026-08-19 the user manually accepted the hard-refreshed
-localhost foundation: hidden entry, eight placeholder selectors, collision
-colour selection and two-tab presence hide/restore. No fighting-toggle or
-integrated-final-art acceptance is implied by that earlier foundation check;
-the later D-048 interior portal direction and D-049 sprite integration require
-a fresh rendered check.
+**D-047 foundation and D-048 portal complete; final-avatar wiring headlessly
+complete; D-052 art/render gate remains:** the hidden south path and bottom-edge
+street trigger enter a non-financial 18×12 Avatar Studio outside
+`BuildingId`/`BUILDINGS`, with no facade, public label or `VisitLayer` route.
+The centered 2×1 top-wall portal spawns immediately inside and exits by
+walking back upward through the same opening, preserving the existing
+restored-street-placement-before-exit-event ordering. Eight collision
+selectors choose the cosy/default states. The three dedicated `WorldEvents`
+are the only event-bus extension, and World, lobby and Fly share the existing
+single `sprite` field across `avatar-1..16`; there is no stance field or
+message. Shell retains the selected allowlisted key for the page runtime,
+replaces an in-flight client that captured an older sprite, defers that
+replacement while inside and deduplicates reconnect intent. Exit publishes
+the restored street placement before `avatar-studio:exited` resumes presence.
+Reload, tab close or a new session still resets to `avatar-1`.
+
+The D-049 final-avatar resolver now drives local players, remote peers and
+Studio selectors in headless World coverage. The earlier browser recording
+failed to establish rendered acceptance, so it is not a pass. D-052
+authorizes F only inside Avatar Studio as a one-press, no-repeat toggle for
+the current editable target's cosy/fighting pair through the existing opaque
+`avatar:selected` key; it adds no stance or wire field. The D-052 replacement
+animation contract, background review and fresh user-run in-game review remain
+open. The earlier localhost foundation acceptance covers neither this art
+replacement nor the rendered F behavior.
 
 **Must not:** import `starknet` or any wallet package. Put an address, balance,
 transaction hash, building name or entry event into lobby traffic. On local
@@ -502,16 +503,18 @@ must integrate the final `v1/` sheets, never the baked review sheets or
 intermediate prototypes. This approval is not a claim that integration exists
 or that the sprites have passed in-game rendered acceptance.
 
-The implementation slice is World-local. Add one semantic avatar-visual
-resolver keyed only by the existing allowlisted `avatar-1..avatar-16` values;
-it owns each per-key sheet, the 64×64 canvas, `(32, 56)` feet origin and
-`idle`/`walk-1`/`walk-2` frames in `down`/`left`/`right`/`up`. Local players,
-remote peers and Studio selectors must all use that resolver. Keep the existing
-24×24 local physics body and Studio contact body authoritative. Source sheets
-have no baked shadow; World may add one optional consistent runtime shadow.
-Do not change lobby/wire fields, shared types, Fly allowlists or financial
-seams. The fighting-state toggle key remains open and unbound until a newer
-decision approves it.
+The implementation slice is World-local. The D-049 semantic avatar-visual
+resolver is now wired to local players, remote peers and Studio selectors in
+headless coverage, keyed only by the existing allowlisted
+`avatar-1..avatar-16` values. It preserves the 64×64 logical canvas, `(32, 56)`
+feet origin and authoritative 24×24 local and Studio bodies. The browser
+recording failed to establish rendered acceptance. D-052 supersedes only the
+movement geometry and toggle status: replacement sheets are 320×256 with five
+columns per facing and 320 total Aseprite frames, and F is authorized only in
+Avatar Studio as a one-press, no-repeat cosy/fighting toggle through the
+existing opaque `avatar:selected` key. Do not change lobby/wire fields, shared
+types, Fly allowlists or financial seams; background and fresh in-game review
+remain required.
 
 **Licence audit is the real work here.** Popular "free" packs are frequently
 non-commercial only, and this is a public project handling real funds. Audit
@@ -522,15 +525,16 @@ grandfathered.
 their protocols, the eight-character/two-state sprite handoff from the
 separate studio, and the Aseprite → embedded-tileset export pipeline. D-033
 keeps the first Bank room procedural; final room/station art starts only after
-World freezes its footprints and asset names. Avatar visuals use D-049's fixed
-64×64 logical canvas and `(32, 56)` feet while the authoritative local body and
-Studio contact footprint remain 24×24. Atlas trimming is allowed only when
-logical `sourceSize` and pivot metadata preserve that contract exactly. Final
-source delivery remains one sheet per opaque key rather than a mega-atlas, and
-source pixels contain no shadow. The approved v1 manifest now fixes the style
-and state-to-key art mapping, while the sixteen-key wire seam remains fixed by
-D-047. Variable per-key canvases and layered body/weapon rendering are out of
-the initial slice.
+World freezes its footprints and asset names. Avatar visuals retain D-049's
+fixed 64×64 logical canvas and `(32, 56)` feet while the authoritative local
+body and Studio contact footprint remain 24×24. D-052 replaces the movement
+handoff with 320×256 sheets, five columns per facing and 320 total Aseprite
+frames; vertical rows preserve hip/depth continuity, side rows move along x,
+each cycle keeps a planted baseline foot and no new bright edge contamination.
+The final source remains one sheet per opaque key rather than a mega-atlas, and
+source pixels contain no shadow. F is a Studio-only one-press, no-repeat toggle
+through the existing opaque key. Background and fresh in-game review are
+required before acceptance.
 
 **Frozen first-room asset contract (D-033 tracer):** the procedural Bank is an
 18×12 grid of 32 px tiles (576×384 px), with a one-tile perimeter, spawn at

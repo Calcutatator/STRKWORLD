@@ -1909,8 +1909,11 @@ orientation; rendered acceptance is required again after implementation.
 
 ## D-049 — Avatar art uses one fixed 64x64 logical canvas
 
-**2026-08-19 · Accepted by the user; 2026-08-20 art-production amendment
-authorizes all eight characters through final handoff and supersedes the
+**2026-08-20 · PARTIALLY SUPERSEDED by
+[D-052](#d-052--avatar-animation-contract-and-avatar-studio-f-toggle) for
+animation geometry and the Avatar Studio fighting-toggle status; 2026-08-19
+accepted by the user; 2026-08-20 art-production amendment authorizes all eight
+characters through final handoff and supersedes the
 interim pause after characters 1/4/6/7 · supersedes D-047's provisional 32x32
 runtime-art assumption; final `v1/` handoff committed at `86e8f5f`, independently
 QA-verified and visually approved by James for runtime integration; World
@@ -2137,3 +2140,53 @@ one tested classification boundary without changing CORS, protocol schema,
 presence messages, financial routes, logging or browser behavior. The helper
 is a deployment guard, not proof of domain ownership, TLS, provider readiness
 or funded-route readiness.
+
+---
+
+## D-052 — Avatar animation contract and Avatar Studio F toggle
+
+**2026-08-20 · Accepted by the user · supersedes the animation-geometry and
+Avatar Studio toggle portions of [D-049](#d-049--avatar-art-uses-one-fixed-64x64-logical-canvas)**
+
+**Context.** The browser recording attempt failed to establish rendered
+acceptance. It is therefore not evidence that the integrated final art or its
+movement reads correctly in-game. Research confirms that each direction needs
+four unique walk poses in addition to its idle: contact-left, passing-left,
+contact-right and passing-right. The Aseprite MCP was evaluated but not
+adopted because it is unofficial and immature, and no local Aseprite
+executable is available. PixelOver and Pixelorama remain optional authoring
+candidates, not project dependencies.
+
+**Decision.** The replacement handoff uses the same sixteen opaque
+`avatar-1..avatar-16` keys and one transparent 64x64 cell per logical frame,
+but supersedes D-049's 3-column/192-frame animation geometry with five
+columns per direction: `idle`, `contact-left`, `passing-left`,
+`contact-right` and `passing-right`. Each sheet is therefore **320x256**
+(five columns by four facing rows), and the tagged Aseprite source contains
+**320 total frames** across the sixteen sheets (20 frames per sheet).
+
+The fixed feet point remains **(32, 56)** and the authoritative local and
+Studio contact bodies remain **24x24**. Vertical rows must move the legs along
+the depth/y axis with hip continuity; side rows must move them along the x
+axis. Every cycle keeps at least one foot planted on the baseline and may not
+introduce new white or bright edge contamination. Source frames still contain
+no baked shadow. The sixteen-key mapping, World-local resolver, wire shape,
+privacy boundary and financial semantics remain unchanged.
+The file topology also remains one sheet per opaque key with no mega-atlas;
+the existing `v1-review/` provenance is not overwritten.
+
+Inside Avatar Studio only, **F** is authorized as a one-press, no-repeat
+toggle for the current editable target's cosy/fighting pair. It emits the
+existing `avatar:selected` event with the paired opaque key; it adds no stance
+field, wire field or privacy meaning. F must not toggle the state outdoors,
+inside financial rooms or through any lobby behavior.
+
+**Acceptance and consequences.** The replacement art requires background
+review and fresh user-run in-game review. The failed browser recording remains
+an explicit failed rendered-acceptance result, not a pass. The existing
+192x256/3-column `v1/` handoff remains historical D-049 provenance until a
+replacement package satisfies this D-052 contract; it must not be described as
+D-052-compliant. All D-049 requirements not explicitly superseded here remain:
+transparent 64x64 logical cells, fixed feet, 24x24 bodies, sixteen opaque
+keys, no baked shadows, World-local integration and no new shared/lobby or
+financial fields.
