@@ -1,0 +1,8 @@
+{
+  "gate": "8-connected detached opaque components across all 320 cells",
+  "cells": 320,
+  "failingCells": [],
+  "detachedComponents": [],
+  "whitelist": [],
+  "status": "pass"
+}

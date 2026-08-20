@@ -1,6 +1,6 @@
 {
   "status": "pass",
-  "source": "player-sprites.aseprite",
+  "source": "source/player-sprites.aseprite",
   "canvas": [
     64,
     64
@@ -34,6 +34,9 @@
       ]
     }
   },
-  "verifiedWith": "deterministic binary inspection; independent Aseprite reopen remains orchestration review work",
-  "sourceSha256": "0e3096077036f03224bbe079777757f21ac218980741dcbea77d1d3928919ed7"
+  "verifiedWith": "official Aseprite compressed-cel parsing plus deterministic PNG parity; 320 frames, one cel per frame, mandatory 64x64 dimensions, and pixel-identical reconstruction",
+  "sourceSha256": "9bef42dcbb291458e51e8c65eb7b0bc50bedb0fd00537e01f5433cdd16190b7c",
+  "verificationStatus": "pass",
+  "decodedCels": 320,
+  "pixelIdentical": true
 }

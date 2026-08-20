@@ -276,7 +276,110 @@ passes 18 tests, the Web suite passes 36 files / 393 tests and the full
 workspace passes 89 files / 1,255 tests; workspace typecheck, production build,
 all 13 invariants and diff check pass. Local verification used no browser,
 external network, wallet, RPC, proof, signature, funds or transaction.*
+### 2026-08-20 — A private swap cannot authorize the zero executor
 
+`BackendApi` accepted a planner result whose `executorAddress` was `0x0`
+because zero is a syntactically valid Starknet felt. The production AVNU
+adapter's truthiness check also accepts the non-empty string `"0x0"`. A public
+swap-prepare request could therefore build a sponsor fee and issue an
+authorization binding both the sell withdrawal and the later invoke to the
+zero executor, even though no valid private executor had been admitted.
+
+Swap-plan admission now requires the executor felt to be nonzero before fee
+construction or authorization issuance. Quote selection, token/slippage
+policy, executor-call serialization, route schema and submission behavior are
+unchanged.
+
+*Verified:* public `BackendApi.handle()` regressions replace only the external
+planner result with otherwise valid mainnet private plans carrying `0x0` and
+two accepted leading-zero encodings, `0x00` and `0x00000000`. Before the guard,
+each request returned 200, called the paymaster fee builder and exposed an
+authorization whose decoded swap binding contained the zero executor. Green
+returns the existing generic 409 invalid-quote response and proves neither the
+paymaster nor authorization issuer was called. Removing the nonzero clause
+makes all three regressions fail; replacing its numeric felt comparison with a
+string-only `=== '0x0'` check makes the two leading-zero cases fail. Local
+verification used no live provider, external network, RPC, wallet, proof,
+signature, funds or transaction.*
+
+### 2026-08-20 — A Bank batch edit owns work started from the older batch
+
+The Menu Mode Bank leaves its explicit Remove and Clear controls available
+while recipient preflight or wallet preparation is pending. Those edits now
+own the batch immediately. A late recipient preflight cannot re-add its
+captured transfer after Clear/Remove, and a late prepared batch is discarded
+instead of reopening review for the pre-edit intent set.
+
+This ownership needs its own version. `attempt` identifies prepare/confirm
+work, `session` identifies the mounted room and `balanceRead` identifies the
+displayed balance; using any one of them for batch composition would cancel an
+unrelated owner. Clear/Remove advance the composition version and invalidate
+the active prepare attempt while leaving signing, unconditional receipt
+retention, panel-close invalidation and balance reads unchanged.
+
+*Verified:* deferred red/green tests use only the public Bank machine. Clear
+during pending registered-recipient preflight previously re-queued the captured
+transfer; Clear/Remove during pending prepare previously restored old review.
+The returned stale batches now reject confirmation as discarded, and late
+successful or rejected preflights after Remove/Clear cannot publish batch,
+form, notice or provider-error state. Three isolated mutations are killed:
+removing stale-batch `discard()`, removing the rejected-preflight composition
+guard, and removing Remove's composition increment. The focused Bank machine
+passes 74 tests, the Web suite passes 36 files / 390 tests and the full
+workspace passes 87 files / 1,226 tests; workspace typecheck, production build,
+all 13 invariants and diff check pass. The local verification used no browser,
+external network, wallet, RPC, proof, signature, funds or transaction.
+
+### 2026-08-20 — A replacement World must not inherit its first Shell bus
+
+The World runtime retains its ref-counting host after the current Phaser game
+has been completely destroyed. That host's `start` callback previously closed
+over the first `WorldConfig` passed to `ensureHost()`. A later acquisition with
+a different Shell bus therefore constructed a genuinely new game and scene but
+installed the first bus again. Its fixed-room controllers subscribed to stale
+Shell input, and its semantic output returned to the stale owner.
+
+Each fresh host start now consumes the config belonging to the acquisition that
+caused that start. The handoff is synchronous around `Host.acquire()` and is
+cleared afterwards; retaining or releasing an already-live game is unchanged.
+The singleton host still owns StrictMode-safe Phaser lifetime, but it no longer
+owns the first caller's bus forever.
+
+*Verified:* a public runtime regression acquires with bus A, releases it, runs
+the complete deferred teardown, then acquires with distinct bus B. Before the
+fix, the second scene's registry contained A and B received no fixed-room
+subscription; the failure reproduced identically in three isolated runs. Green
+records B at scene creation and observes B's `world:stations` subscription.
+Removing the per-acquisition config assignment makes both runtime tests fail.
+The focused runtime suite passes 1 file / 2 tests. No browser, network, lobby,
+wallet, RPC, proof, signature, funds or transaction was used.
+
+### 2026-08-20 — A local Lobby leave does not own its replacement room
+
+`LobbyClient.disconnect()` clears the current room before awaiting the SDK's
+`leave()`, and the client is deliberately reusable: an explicit `connect()` may
+therefore establish replacement room B while old room A is still leaving. A
+client-wide `leavingByRequest` flag previously remained true for that whole
+await. If B's transport dropped in the meantime, B's current `onLeave` mistook
+the drop for A's requested leave, cleared B and its identity but suppressed the
+`closed/server-dropped` transition. The public client then reported
+`connected` while owning no room, so the Shell could not offer truthful solo
+mode or its explicit reconnect control.
+
+Local-leave classification now follows room ownership instead of one mutable
+client-wide flag. `disconnect()` already removes A from `#room` synchronously,
+so A's eventual callback is stale under the existing complete
+generation-and-room check. Any callback that still owns the current room is an
+external close and publishes `closed/server-dropped` with its close code. Join
+payloads, presence state, automatic-reconnect policy and network behavior are
+unchanged.
+
+*Verified:* a public-seam regression connects A, defers A's `leave()`, connects
+B, then drops B with code 1006 before allowing A to finish. The old code leaves
+the client `connected`; green reports exactly `closed/server-dropped` with code
+1006. The current Lobby suite passes 9 files / 192 tests. Local verification
+used only fake rooms plus the suite's local loopback server; no browser, remote
+lobby, wallet, RPC, proof, signature, funds or transaction was used.
 ### 2026-08-20 — A prepared batch must own the intents it was admitted with
 
 `PrivacyOperations.prepare()` is where every admission check lives: the route
@@ -468,34 +571,6 @@ proof, signature, funds or transaction. Hosted CI's standard canary remains
 read-only and issues two public-mainnet `starknet_call` reads plus one
 `starknet_getClassHashAt` at `latest`; it uses no key, signature, proof, funds
 or transaction.*
-
-### 2026-08-20 — A Bank batch edit owns work started from the older batch
-
-The Menu Mode Bank leaves its explicit Remove and Clear controls available
-while recipient preflight or wallet preparation is pending. Those edits now
-own the batch immediately. A late recipient preflight cannot re-add its
-captured transfer after Clear/Remove, and a late prepared batch is discarded
-instead of reopening review for the pre-edit intent set.
-
-This ownership needs its own version. `attempt` identifies prepare/confirm
-work, `session` identifies the mounted room and `balanceRead` identifies the
-displayed balance; using any one of them for batch composition would cancel an
-unrelated owner. Clear/Remove advance the composition version and invalidate
-the active prepare attempt while leaving signing, unconditional receipt
-retention, panel-close invalidation and balance reads unchanged.
-
-*Verified:* deferred red/green tests use only the public Bank machine. Clear
-during pending registered-recipient preflight previously re-queued the captured
-transfer; Clear/Remove during pending prepare previously restored old review.
-The returned stale batches now reject confirmation as discarded, and late
-successful or rejected preflights after Remove/Clear cannot publish batch,
-form, notice or provider-error state. Three isolated mutations are killed:
-removing stale-batch `discard()`, removing the rejected-preflight composition
-guard, and removing Remove's composition increment. The focused Bank machine
-passes 74 tests, the Web suite passes 36 files / 390 tests and the full
-workspace passes 87 files / 1,226 tests; workspace typecheck, production build,
-all 13 invariants and diff check pass. The local verification used no browser,
-external network, wallet, RPC, proof, signature, funds or transaction.
 
 ### 2026-08-20 — A late Bridge status response cannot overwrite a newer retained version
 
