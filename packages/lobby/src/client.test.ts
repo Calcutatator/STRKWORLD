@@ -79,6 +79,9 @@ function fakeRoom(): {
   const send = vi.fn();
   const room = {
     state: { peers: new Map() },
+    // Matches @colyseus/sdk@0.17.43: automatic reconnection is enabled on
+    // every Room unless the consumer turns it off.
+    reconnection: { enabled: true },
     leave,
     send,
     onMessage: vi.fn((_type: unknown, callback: (payload: { gameId: string }) => void) => {
@@ -229,6 +232,29 @@ describe('nothing connects by itself', () => {
 });
 
 describe('connect is idempotent', () => {
+  it('disables the SDK automatic retry owner on the joined room', async () => {
+    const joined = fakeRoom();
+    const joinOrCreate = vi
+      .spyOn(ColyseusClient.prototype, 'joinOrCreate')
+      .mockImplementation(() => Promise.resolve(joined.room) as never);
+
+    try {
+      const client = makeClient(20, 0);
+      const statuses: LobbyStatusEvent[] = [];
+      client.onStatus((event) => statuses.push(event));
+
+      const connecting = client.connect();
+      await Promise.resolve();
+      joined.welcome({ gameId: 'manual-reconnect-only' });
+      await connecting;
+
+      expect(joined.room.reconnection.enabled).toBe(false);
+      expect(statuses.at(-1)).toEqual({ status: 'connected' });
+    } finally {
+      joinOrCreate.mockRestore();
+    }
+  });
+
   it('yields one presence entry for two sequential calls', async () => {
     const observer = makeClient(0, 0);
     await observer.connect();

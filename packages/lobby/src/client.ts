@@ -359,6 +359,14 @@ export class LobbyClient {
         },
       );
 
+      // D-037 gives reconnect ownership to the Shell's explicit player
+      // control. The pinned SDK enables a 15-attempt automatic retry loop on
+      // every Room by default; left enabled, an established transport drop
+      // stays locally "connected" until that hidden loop gives up. Disable it
+      // before publishing the room so the SDK turns a drop into onLeave and
+      // the existing status seam can truthfully enter unavailable/solo play.
+      room.reconnection.enabled = false;
+
       if (this.#joinGeneration !== generation) {
         await room.leave(true).catch(() => undefined);
         return;
@@ -391,6 +399,12 @@ export class LobbyClient {
       });
       room.onError((code, _message) => {
         if (!this.#isCurrentRoom(generation, room)) return;
+        // A WebSocket transport loss reaches the pinned SDK as a code-less
+        // error immediately before its close event. Let onLeave own that pair
+        // so the real close code is reported as server-dropped. Numeric room
+        // and protocol errors do not carry that close signal and remain the
+        // explicit error path below.
+        if (code === undefined) return;
         this.#room = null;
         this.#gameId = null;
         this.#cancelReconcile();
