@@ -4,11 +4,27 @@ import {
   type RemotePeerSnapshot,
   type RemotePeerSource,
 } from './remote-peer.js';
-import { avatarPlaceholderTint, validateAvatarSprite } from './avatar-state.js';
+import {
+  AVATAR_NORMAL_WALK_FPS,
+  AVATAR_WALK_COLUMNS,
+  createAvatarVisualController,
+  resolveAvatarSheet,
+  type AvatarVisualController,
+} from './avatar-visual.js';
 
 type Scene = PhaserTypes.Scene;
-type Image = PhaserTypes.GameObjects.Image;
+type Sprite = PhaserTypes.GameObjects.Sprite;
 type Layer = PhaserTypes.GameObjects.Layer;
+type TimerEvent = PhaserTypes.Time.TimerEvent;
+
+const REMOTE_MOVEMENT_IDLE_MS =
+  (AVATAR_WALK_COLUMNS.length / AVATAR_NORMAL_WALK_FPS) * 1_000;
+
+interface RemoteAvatar {
+  readonly sprite: Sprite;
+  readonly visual: AvatarVisualController;
+  idleTimer?: TimerEvent;
+}
 
 export interface RemoteAvatarLayerOptions {
   readonly scene: Scene;
@@ -20,22 +36,22 @@ export interface RemoteAvatarLayer {
   readonly peers: ReadonlyMap<string, RemotePeerSnapshot>;
   /** Hide/show all remote presentation objects as one layer. */
   setVisible(visible: boolean): void;
-  /** Unsubscribe and destroy the layer and all child images, once. */
+  /** Unsubscribe and destroy the layer and all child sprites, once. */
   destroy(): void;
 }
 
 /**
  * Phaser-only presentation adapter for the World-owned remote snapshot.
- * Images are deliberately not physics sprites and are never added to a
- * physics group. The scene's local player texture is the only texture key
- * accepted from the snapshot; lobby cosmetic keys only select a tint.
+ * Sprites are deliberately never given physics bodies or added to a physics
+ * group. Opaque lobby cosmetic keys are resolved only through the World-owned
+ * final-sheet catalog; directional animation stays presentation-only.
  */
 export function createRemoteAvatarLayer({
   scene,
   source,
 }: RemoteAvatarLayerOptions): RemoteAvatarLayer {
   const layer = scene.add.layer().setDepth(9);
-  const avatars = new Map<string, Image>();
+  const avatars = new Map<string, RemoteAvatar>();
   let peers: ReadonlyMap<string, RemotePeerSnapshot> = new Map();
   let destroyed = false;
   let unsubscribe: (() => void) | undefined;
@@ -46,13 +62,15 @@ export function createRemoteAvatarLayer({
 
     for (const [id, avatar] of avatars) {
       if (next.has(id)) continue;
-      avatar.destroy();
+      destroyAvatar(avatar);
       avatars.delete(id);
     }
 
     for (const [id, peer] of next) {
       const avatar = avatars.get(id) ?? createAvatar(scene, layer, peer);
-      updateAvatar(avatar, peer);
+      const previous = peers.get(id);
+      const moving = previous !== undefined && (previous.x !== peer.x || previous.y !== peer.y);
+      updateAvatar(scene, avatar, peer, moving);
       avatars.set(id, avatar);
     }
     peers = next;
@@ -66,7 +84,7 @@ export function createRemoteAvatarLayer({
     destroyed = true;
     unsubscribe?.();
     unsubscribe = undefined;
-    for (const avatar of avatars.values()) avatar.destroy();
+    for (const avatar of avatars.values()) destroyAvatar(avatar);
     avatars.clear();
     peers = new Map();
     layer.destroy();
@@ -87,34 +105,49 @@ export function createRemoteAvatarLayer({
   };
 }
 
-function createAvatar(scene: Scene, layer: Layer, peer: RemotePeerSnapshot): Image {
-  const avatar = scene.add.image(peer.x, peer.y, safeRemoteTexture(scene));
-  avatar.setOrigin(0.5, 0.5).setDepth(9);
+function createAvatar(scene: Scene, layer: Layer, peer: RemotePeerSnapshot): RemoteAvatar {
+  const sheet = resolveAvatarSheet(peer.sprite);
+  const avatar = scene.add.sprite(peer.x, peer.y, sheet.textureKey, 0);
+  avatar.setDepth(9);
   layer.add(avatar);
-  return avatar;
+  return {
+    sprite: avatar,
+    visual: createAvatarVisualController(avatar, peer.sprite),
+  };
 }
 
-function updateAvatar(avatar: Image, peer: RemotePeerSnapshot): void {
-  avatar.setPosition(peer.x, peer.y);
-  avatar.setFlipX(peer.facing === 'left');
-  avatar.setFlipY(peer.facing === 'up');
-  avatar.setTint(avatarPlaceholderTint(validateAvatarSprite(peer.sprite)));
-  avatar.setData('facing', peer.facing);
-  avatar.setData('sprite', peer.sprite);
+function updateAvatar(
+  scene: Scene,
+  avatar: RemoteAvatar,
+  peer: RemotePeerSnapshot,
+  moving: boolean,
+): void {
+  cancelIdle(avatar);
+  avatar.sprite.setPosition(peer.x, peer.y);
+  avatar.visual.present({
+    sprite: peer.sprite,
+    facing: peer.facing,
+    moving,
+    sprinting: false,
+  });
+  if (!moving) return;
+  avatar.idleTimer = scene.time.delayedCall(REMOTE_MOVEMENT_IDLE_MS, () => {
+    avatar.idleTimer = undefined;
+    avatar.visual.present({
+      sprite: peer.sprite,
+      facing: peer.facing,
+      moving: false,
+      sprinting: false,
+    });
+  });
 }
 
-/** Never turn the lobby cosmetic key into an arbitrary Phaser texture key. */
-function safeRemoteTexture(scene: Scene): string {
-  if (scene.textures.exists('player')) return 'player';
-  if (!scene.textures.exists('remote-avatar-fallback')) {
-    const graphics = scene.make.graphics({ x: 0, y: 0 }, false);
-    graphics.fillStyle(0xf2e8c9, 1);
-    graphics.fillRoundedRect(0, 0, 24, 24, 4);
-    graphics.fillStyle(0x2b2b33, 1);
-    graphics.fillRect(5, 7, 4, 4);
-    graphics.fillRect(15, 7, 4, 4);
-    graphics.generateTexture('remote-avatar-fallback', 24, 24);
-    graphics.destroy();
-  }
-  return 'remote-avatar-fallback';
+function cancelIdle(avatar: RemoteAvatar): void {
+  avatar.idleTimer?.remove(false);
+  avatar.idleTimer = undefined;
+}
+
+function destroyAvatar(avatar: RemoteAvatar): void {
+  cancelIdle(avatar);
+  avatar.sprite.destroy();
 }

@@ -158,6 +158,7 @@ export interface AvatarVisualControllerState {
 
 export interface AvatarVisualController {
   readonly state: AvatarVisualControllerState;
+  present(pose: AvatarVisualPose): void;
   select(sprite: unknown): void;
   update(pose: Omit<AvatarVisualPose, 'sprite'>): void;
 }
@@ -181,25 +182,27 @@ export function createAvatarVisualController(
     rendered = key;
   };
 
+  const present = (pose: AvatarVisualPose): void => {
+    state = {
+      sprite: validateAvatarSprite(pose.sprite),
+      facing: pose.facing,
+      moving: pose.moving,
+      sprinting: pose.moving && pose.sprinting === true,
+    };
+    render();
+  };
+
   render();
   return {
     get state() {
       return Object.freeze({ ...state });
     },
+    present,
     select(sprite) {
-      const resolved = validateAvatarSprite(sprite);
-      if (resolved === state.sprite) return;
-      state = { ...state, sprite: resolved };
-      render();
+      present({ ...state, sprite });
     },
     update(pose) {
-      state = {
-        ...state,
-        facing: pose.facing,
-        moving: pose.moving,
-        sprinting: pose.moving && pose.sprinting === true,
-      };
-      render();
+      present({ ...pose, sprite: state.sprite });
     },
   };
 }
