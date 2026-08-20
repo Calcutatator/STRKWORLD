@@ -60,6 +60,12 @@ import {
 import { createRemoteAvatarLayer, type RemoteAvatarLayer } from '../remote-avatar-layer.js';
 import type { RemotePeerSource } from '../remote-peer.js';
 import {
+  createLocalAvatarVisual,
+  preloadAvatarVisuals,
+  registerAvatarAnimations,
+  type LocalAvatarVisual,
+} from '../avatar-visual.js';
+import {
   createKenneyRuntimeTextures,
   KENNEY_ATLAS_KEY,
   KENNEY_ATLAS_URL,
@@ -71,8 +77,9 @@ import {
  * The street.
  *
  * Placeholder street art is sliced at runtime from the audited Kenney CC0
- * atlas; grass and the player remain procedural. The map data, collision and
- * door contracts do not change when the art treatment changes.
+ * atlas. The local player uses the final D-049 sheets; grass and the fallback
+ * avatar presentation remain procedural. Map data, collision and door
+ * contracts do not change when the art treatment changes.
  *
  * No network I/O happens in scene lifecycle. Under any future mounting
  * regression `create()` can run twice, and a lobby join here would produce two
@@ -100,6 +107,7 @@ export function createStreetScene({ Phaser, onTileChanged, remotePeers }: Street
     // Phaser 4 can return either renderer-backed layer type from createLayer.
     private ground?: PhaserTypes.Tilemaps.TilemapLayer | PhaserTypes.Tilemaps.TilemapGPULayer;
     private player!: Sprite;
+    private avatarVisual?: LocalAvatarVisual;
     private cursors!: PhaserTypes.Types.Input.Keyboard.CursorKeys;
     private wasd!: Record<'up' | 'down' | 'left' | 'right', PhaserTypes.Input.Keyboard.Key>;
     private lastTile = { x: -1, y: -1 };
@@ -130,6 +138,7 @@ export function createStreetScene({ Phaser, onTileChanged, remotePeers }: Street
     preload(): void {
       this.map = createStreetMap();
       this.load.image(KENNEY_ATLAS_KEY, KENNEY_ATLAS_URL);
+      preloadAvatarVisuals(this);
     }
 
     create(): void {
@@ -144,6 +153,7 @@ export function createStreetScene({ Phaser, onTileChanged, remotePeers }: Street
         grassColour: TILES.grass.colour,
       });
       makePlayerTexture(this);
+      registerAvatarAnimations(this);
       this.drawGround();
       this.createDoorOverlays();
       this.movement = createStreetMovementAdapter({
@@ -189,6 +199,7 @@ export function createStreetScene({ Phaser, onTileChanged, remotePeers }: Street
       this.activeRoom = undefined;
       this.avatarStudioActive = false;
       this.ground = undefined;
+      this.avatarVisual = undefined;
       this.avatarStudio?.destroy();
       this.avatarStudio = undefined;
       this.avatarStudioPresentation = undefined;
@@ -270,13 +281,13 @@ export function createStreetScene({ Phaser, onTileChanged, remotePeers }: Street
 
     private createPlayer(): void {
       const spawn = tileToWorld(this.map.spawn.x, this.map.spawn.y);
-      this.player = this.physics.add.sprite(spawn.x, spawn.y, 'player');
+      this.player = this.physics.add.sprite(spawn.x, spawn.y, DEFAULT_AVATAR_SPRITE, 0);
       this.player.setDepth(10);
       this.player.setCollideWorldBounds(true);
+      this.avatarVisual = createLocalAvatarVisual(this.player, DEFAULT_AVATAR_SPRITE);
       this.physics.world.setBounds(0, 0, this.map.width * TILE_SIZE, this.map.height * TILE_SIZE);
 
       if (this.ground) this.physics.add.collider(this.player, this.ground);
-      this.applyAvatarSprite(DEFAULT_AVATAR_SPRITE);
       this.movement.initial({ x: this.player.x, y: this.player.y });
     }
 
@@ -635,18 +646,25 @@ export function createStreetScene({ Phaser, onTileChanged, remotePeers }: Street
     private movePlayer(): MovementInput {
       if (!this.cursors) return NO_MOVEMENT;
       const held = this.heldDirections();
-      const velocity = calculateMovementVelocity(held, this.sprinting());
+      const sprinting = this.sprinting();
+      const velocity = calculateMovementVelocity(held, sprinting);
       const body = this.player.body as PhaserTypes.Physics.Arcade.Body;
       body.setVelocity(velocity.x, velocity.y);
+      this.avatarVisual?.update(held, sprinting);
       return held;
     }
 
     private moveRoomPlayer(delta: number): void {
       const controller = this.activeRoomController();
       const map = this.activeRoomMap();
-      if (!this.cursors || !controller || !map || controller.state.controlOwner !== 'world') return;
+      if (!this.cursors || !controller || !map || controller.state.controlOwner !== 'world') {
+        this.avatarVisual?.update(NO_MOVEMENT, false);
+        return;
+      }
       const held = this.heldDirections();
-      const velocity = calculateMovementVelocity(held, this.sprinting());
+      const sprinting = this.sprinting();
+      const velocity = calculateMovementVelocity(held, sprinting);
+      this.avatarVisual?.update(held, sprinting);
       if (velocity.x === 0 && velocity.y === 0) return;
       const position = moveWithCollisionSubsteps({
         position: { x: this.player.x, y: this.player.y },
@@ -660,9 +678,14 @@ export function createStreetScene({ Phaser, onTileChanged, remotePeers }: Street
     }
 
     private moveAvatarStudioPlayer(delta: number): void {
-      if (!this.cursors || !this.avatarStudio?.state.inRoom) return;
+      if (!this.cursors || !this.avatarStudio?.state.inRoom) {
+        this.avatarVisual?.update(NO_MOVEMENT, false);
+        return;
+      }
       const held = this.heldDirections();
-      const velocity = calculateMovementVelocity(held, this.sprinting());
+      const sprinting = this.sprinting();
+      const velocity = calculateMovementVelocity(held, sprinting);
+      this.avatarVisual?.update(held, sprinting);
       if (velocity.x === 0 && velocity.y === 0) return;
       const position = moveWithCollisionSubsteps({
         position: { x: this.player.x, y: this.player.y },
@@ -718,8 +741,7 @@ export function createStreetScene({ Phaser, onTileChanged, remotePeers }: Street
     }
 
     private applyAvatarSprite(sprite: AvatarSpriteKey): void {
-      this.player.setTint(avatarPlaceholderTint(sprite));
-      this.player.setData('sprite', sprite);
+      this.avatarVisual?.select(sprite);
     }
 
     private reportRoomTile(): void {
@@ -787,9 +809,10 @@ export const TILE_INDEX: Record<TileKind, number> = {
 };
 
 /**
- * Generate the procedural player texture. The street tiles are sourced by
- * createKenneyRuntimeTextures above; map data, collision, doors and camera
- * remain art-agnostic.
+ * Generate the procedural fallback texture still used by presentations that
+ * have not moved to the final D-049 sheets. The local player owns final-sheet
+ * registration separately; map data, collision, doors and camera stay
+ * art-agnostic.
  */
 function makePlayerTexture(scene: Scene): void {
   const graphics = scene.make.graphics({ x: 0, y: 0 }, false);

@@ -37,6 +37,7 @@ function destroyable() {
 function cycleResources() {
   const unsubscribe = vi.fn();
   return {
+    avatarVisual: { cycle: Symbol('avatar-visual') },
     unsubscribe,
     controller: { destroy: vi.fn(() => unsubscribe()) },
     studio: destroyable(),
@@ -54,6 +55,10 @@ function cycleResources() {
 class FakeScene {
   readonly events = new FakeEvents();
   readonly remoteLayers: ReturnType<typeof destroyable>[] = [];
+  readonly anims = {
+    exists: vi.fn(() => true),
+    create: vi.fn(),
+  };
   readonly add = {
     layer: vi.fn(() => {
       const layer = {
@@ -101,6 +106,7 @@ interface StreetSceneHarness extends FakeScene {
   exteriorLabels: Map<string, { destroy(): void }>;
   doorOverlays: Array<{ destroy(): void }>;
   ground?: { destroy(): void };
+  avatarVisual?: { cycle: symbol };
   lastTile: { x: number; y: number };
 }
 
@@ -114,7 +120,7 @@ function createHarness() {
     if (failure === 'early') throw new Error('early create failure');
     scene.ground = current.ground;
   });
-  scene.createPlayer = vi.fn();
+  scene.createPlayer = vi.fn(() => { scene.avatarVisual = current.avatarVisual; });
   scene.createCamera = vi.fn();
   scene.createDoorTriggers = vi.fn();
   scene.createDoorOverlays = vi.fn(() => { scene.doorOverlays = [current.overlay]; });
@@ -174,14 +180,18 @@ describe('StreetScene lifecycle', () => {
     const cycles = [harness.current];
 
     harness.create();
+    expect(harness.scene.avatarVisual).toBe(cycles[0]?.avatarVisual);
     expect(harness.scene.events.count('shutdown')).toBe(2);
     harness.shutdown();
+    expect(harness.scene.avatarVisual).toBeUndefined();
     harness.scene.cleanShutdown();
 
     cycles.push(harness.nextCycle());
     harness.create();
+    expect(harness.scene.avatarVisual).toBe(cycles[1]?.avatarVisual);
     expect(harness.scene.events.count('shutdown')).toBe(2);
     harness.shutdown();
+    expect(harness.scene.avatarVisual).toBeUndefined();
     harness.scene.cleanShutdown();
 
     expect(cycles).toHaveLength(2);

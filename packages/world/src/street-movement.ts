@@ -17,6 +17,14 @@ export interface MovementVelocity {
   readonly y: number;
 }
 
+export function resolveMovementFacing(input: MovementInput, current: Facing): Facing {
+  if (input.up) return 'up';
+  if (input.down) return 'down';
+  if (input.left) return 'left';
+  if (input.right) return 'right';
+  return current;
+}
+
 export interface CollisionSubstepOptions {
   readonly position: MovementPosition;
   readonly velocity: MovementVelocity;
@@ -136,10 +144,7 @@ export function createStreetMovementReporter(
     update(position, input) {
       // Vertical input wins when both axes are held. The important contract is
       // that a stopped player retains the last non-zero facing.
-      if (input.up) facing = 'up';
-      else if (input.down) facing = 'down';
-      else if (input.left) facing = 'left';
-      else if (input.right) facing = 'right';
+      facing = resolveMovementFacing(input, facing);
       publish(position);
     },
   };

@@ -13,6 +13,7 @@ import {
   createStreetMovementAdapter,
   createStreetMovementReporter,
   moveWithCollisionSubsteps,
+  resolveMovementFacing,
   type MovementInput,
 } from './street-movement.js';
 
@@ -25,6 +26,12 @@ function capture() {
 }
 
 describe('street movement seam', () => {
+  it('uses one facing rule for street and interior avatar animation', () => {
+    expect(resolveMovementFacing({ ...idle, left: true }, 'down')).toBe('left');
+    expect(resolveMovementFacing({ ...idle, left: true, up: true }, 'right')).toBe('up');
+    expect(resolveMovementFacing(idle, 'right')).toBe('right');
+  });
+
   it.each([
     ['right', { x: 160, y: 0 }, { x: 16, y: 0 }],
     ['left', { x: -160, y: 0 }, { x: -16, y: 0 }],
