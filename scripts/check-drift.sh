@@ -13,7 +13,7 @@ fail=0
 call() { # selector -> hex result
   curl -s --max-time 20 -X POST "$RPC" -H 'Content-Type: application/json' \
     -d "{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"starknet_call\",\"params\":[{\"contract_address\":\"$POOL\",\"entry_point_selector\":\"$1\",\"calldata\":[]},\"latest\"]}" \
-    | python3 -c 'import json,sys;d=json.load(sys.stdin);print(d.get("result",[""])[0] if "result" in d else "ERR")' 2>/dev/null
+    | python3 -c 'import json,re,sys;d=json.load(sys.stdin);r=d.get("result");v=r[0] if isinstance(r,list) and len(r)==1 else None;print(v if isinstance(v,str) and re.fullmatch(r"0x[0-9a-fA-F]+",v) and int(v,16) < 2**251 + 17*2**192 + 1 else "ERR")' 2>/dev/null
 }
 
 echo "STRK20 protocol drift canary"

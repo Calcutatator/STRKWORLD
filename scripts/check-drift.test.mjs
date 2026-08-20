@@ -48,7 +48,7 @@ process.stdout.write(JSON.stringify(response));
     child.stdout.on('data', (chunk) => stdout.push(chunk));
     child.stderr.on('data', (chunk) => stderr.push(chunk));
     child.once('error', reject);
-    child.once('exit', (code, signal) => resolve({
+    child.once('close', (code, signal) => resolve({
       code,
       signal,
       stdout: Buffer.concat(stdout).toString(),
@@ -88,6 +88,34 @@ describe('STRK20 protocol drift canary', () => {
     expect(run.stdout).toContain(output);
     expect(run.stdout).toContain('Drift detected.');
     expect(run.stdout).not.toContain('unavailable');
+    expect(run.stdout).not.toContain('No drift.');
+  });
+
+  it.each([
+    { label: 'a scalar string', target: 'paused', invalid: result('0x1') },
+    { label: 'an object', target: 'fee', invalid: result({ 0: '0x53444835ec580000' }) },
+    { label: 'an empty array', target: 'paused', invalid: result([]) },
+    { label: 'a multi-value array', target: 'fee', invalid: result(['0x53444835ec580000', '0x0']) },
+    { label: 'a non-felt string', target: 'paused', invalid: callResult('not-a-felt') },
+    { label: 'a numeric value', target: 'fee', invalid: result([0]) },
+    {
+      label: 'an out-of-range felt',
+      target: 'paused',
+      invalid: callResult('0x800000000000011000000000000000000000000000000000000000000000001'),
+    },
+  ])('fails closed when a starknet_call result is $label', async ({ target, invalid }) => {
+    const responses = {
+      fee: callResult('0x53444835ec580000'),
+      paused: callResult('0x0'),
+      classHash: result('0xabc'),
+    };
+    responses[target] = invalid;
+    const run = await runCanary(responses);
+
+    expect(run.code, run.stdout).toBe(1);
+    expect(run).toMatchObject({ signal: null, stderr: '' });
+    expect(run.stdout).toContain(target === 'fee' ? 'could not read the pool fee' : 'could not read is_paused');
+    expect(run.stdout).toContain('Drift detected.');
     expect(run.stdout).not.toContain('No drift.');
   });
 
