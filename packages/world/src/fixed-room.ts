@@ -324,19 +324,19 @@ export function normalizeFixedRoomStations(
   definition: FixedRoomDefinition,
   stations: readonly ShellEvents['world:stations']['stations'][number][] | undefined,
 ): readonly FixedRoomStationSnapshot[] {
-  return definition.stations.map((known) => {
+  return Object.freeze(definition.stations.map((known) => {
     const candidates = Array.isArray(stations)
       ? stations.filter((candidate) => candidate?.station === known.station)
       : [];
     const candidate = candidates.length === 1 ? candidates[0] : undefined;
     const validLabel = typeof candidate?.label === 'string' && candidate.label.trim().length > 0;
     const validStatus = candidate?.status === 'available' || candidate?.status === 'locked';
-    return {
+    return Object.freeze({
       station: known.station,
       label: validLabel && candidate ? candidate.label : known.label,
       status: candidate && validLabel && validStatus ? candidate.status : 'locked',
-    };
-  });
+    });
+  }));
 }
 
 export function createFixedRoomController(
