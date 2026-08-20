@@ -2268,7 +2268,7 @@ repeat/editable/suspended/destroy guards; single ownership across room
 transitions and same-Scene restarts driven through the real `create()` order;
 and an assertion that the only outbound addition is the existing
 `avatar:selected` with a `sprite`-only payload. Verified by 22 World files /
-216 tests, the full workspace, workspace typecheck, production build,
+218 tests, the full workspace, workspace typecheck, production build,
 invariants, drift and tilemap checks.
 
 **The rendered and interactive acceptance gate remains open and is not
