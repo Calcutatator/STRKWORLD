@@ -135,8 +135,10 @@ coordinates. A selection made during an in-flight join invalidates that
 client's captured sprite: Shell replaces it once, defers replacement while
 inside and deduplicates reconnect requests. The presentation lifecycle is one
 adapter used by both `StreetScene` and its deterministic teardown tests. The
-F is authorized only inside Avatar Studio as a one-press, no-repeat toggle for
-the current editable target's cosy/fighting pair through the existing opaque
+currently implemented F binding is owned only by Avatar Studio. D-053
+supersedes that scope with a pending World-lifecycle owner so the same
+one-press, no-repeat cosy/fighting toggle follows the local avatar outdoors and
+through existing interiors. It continues to use the existing opaque
 `avatar:selected` key; no stance or wire field exists. Commit
 `e5eaea9` contains review PNGs only. D-049 replaces their provisional 32×32
 target with one transparent 64×64 logical canvas for every opaque state, fixed
@@ -154,11 +156,12 @@ the replacement sheets are 320×256 with five columns per facing and 320 total
 Aseprite frames, while the 64×64 cell, `(32, 56)` feet, 24×24 bodies and
 no-baked-shadow rule remain. Vertical rows preserve hip/depth continuity and
 side rows move along x; each cycle keeps a planted baseline foot and introduces
-no new white or bright edge contamination. F is authorized only inside Avatar
-Studio as a one-press, no-repeat cosy/fighting toggle through the existing
-opaque `avatar:selected` key; no stance or wire field exists. Background and a
-fresh user-run in-game review remain required; the failed recording is not a
-pass.
+no new white or bright edge contamination. D-053 supersedes D-052's Studio-only
+input scope with a pending single World-lifecycle F binding that follows the
+local avatar outdoors and through existing interiors. It remains a one-press,
+no-repeat cosy/fighting toggle through the existing opaque `avatar:selected`
+key; no stance or wire field exists. Background and a fresh user-run in-game
+review remain required; the failed recording is not a pass.
 
 ---
 

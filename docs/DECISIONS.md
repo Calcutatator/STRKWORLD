@@ -2145,8 +2145,11 @@ or funded-route readiness.
 
 ## D-052 — Avatar animation contract and Avatar Studio F toggle
 
-**2026-08-20 · Accepted by the user · supersedes the animation-geometry and
-Avatar Studio toggle portions of [D-049](#d-049--avatar-art-uses-one-fixed-64x64-logical-canvas)**
+**2026-08-20 · PARTIALLY SUPERSEDED — the animation contract remains accepted;
+the Studio-only F scope is superseded by
+[D-053](#d-053--the-f-outfit-toggle-follows-the-local-avatar-throughout-world-play) ·
+supersedes the animation-geometry and Avatar Studio toggle portions of
+[D-049](#d-049--avatar-art-uses-one-fixed-64x64-logical-canvas)**
 
 **Context.** The browser recording attempt failed to establish rendered
 acceptance. It is therefore not evidence that the integrated final art or its
@@ -2217,3 +2220,37 @@ runtime are integrated, with a short user-run in-game acceptance script. This
 amendment removes repeated approval pauses; it does not waive D-052's final
 rendered-acceptance requirement or authorize a mechanically conforming but
 visually incoherent asset.
+
+---
+
+## D-053 — The F outfit toggle follows the local avatar throughout World play
+
+**2026-08-20 · Accepted by the user · supersedes only D-052's Studio-only F
+scope; D-052's art, animation, body and rendered-acceptance contracts remain**
+
+**Context.** The implemented `F` binding currently exists only while Avatar
+Studio is active. James reported that the outfit toggle therefore appears to
+work nowhere else and asked for the missing global behavior to be added to the
+World todo list.
+
+**Decision.** `F` is a World-local cosmetic toggle for the current local
+avatar's cosy/fighting pair wherever the local avatar is playable: outdoors,
+inside Avatar Studio and inside the existing fixed-room interiors. One
+Scene-lifecycle-owned binding must follow the avatar across those transitions;
+individual buildings must not own separate bindings. The key remains
+one-press/no-repeat, ignores editable DOM targets, and is inactive after Scene
+shutdown or while World gameplay input is not active.
+
+The toggle resolves only through the existing `pairedAvatarSprite` mapping and
+emits the existing `avatar:selected` event with the paired opaque
+`avatar-1..avatar-16` key. It adds no stance/outfit field, lobby message,
+building field or financial meaning. Existing lobby suspension/resume behavior
+continues to publish only the selected opaque sprite key when presence resumes;
+no financial-room identity or action is disclosed.
+
+**Status and acceptance.** This is an authorized World implementation todo,
+not current behavior and not rendered acceptance. TDD must prove outdoor,
+Studio and fixed-room toggling; repeat/editable/inactive/destroy guards;
+single ownership across room transitions and same-Scene restarts; and no new
+shared/lobby/Fly or financial seam. The user will perform the final rendered
+and interactive check at `http://localhost:5173/` after implementation.

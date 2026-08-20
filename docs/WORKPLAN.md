@@ -17,7 +17,7 @@ the lane boundary — that is why the repo is shaped the way it is.
 | Lane | Package | Status in v1 |
 |---|---|---|
 | **Chain** | `packages/privacy` | Active; private seam frozen, D-043 planner port/fake complete, production Ready planner blocked |
-| **World** | `packages/world` + `packages/lobby` | Active; Avatar Studio foundation, D-048 top-wall portal, D-052 five-column runtime and Studio-only F behavior are headlessly complete; fresh rendered acceptance remains |
+| **World** | `packages/world` + `packages/lobby` | Active; Avatar Studio foundation, D-048 top-wall portal and D-052 five-column runtime are headlessly complete; D-053 global World F toggle is authorized and pending; fresh rendered acceptance remains |
 | **Shell** | `apps/web` | Active, starts week 2 |
 | **Backend** | `apps/backend` | Active; D-050 and both hosted image smokes complete; host, domain, secrets, Alchemy controls, live staging and funded checks remain |
 | **Bridge** | `packages/bridge` | Active, fully independent |
@@ -259,13 +259,22 @@ Reload, tab close or a new session still resets to `avatar-1`.
 The D-049 final-avatar resolver now drives local players, remote peers and
 Studio selectors in headless World coverage. The earlier browser recording
 failed to establish rendered acceptance, so it is not a pass. D-052
-authorizes F only inside Avatar Studio as a one-press, no-repeat toggle for
-the current editable target's cosy/fighting pair through the existing opaque
-`avatar:selected` key; it adds no stance or wire field. Corrected art commit
+originally authorized F only inside Avatar Studio; D-053 supersedes that scope
+and adds a pending World todo for one lifecycle-owned one-press, no-repeat
+cosy/fighting toggle outdoors and in existing interiors through the same opaque
+`avatar:selected` key. It adds no stance or wire field. Corrected art commit
 `8e92cfa` and five-column runtime commit `5c8c81a` are independently reviewed
 and headlessly complete. Fresh user-run in-game review remains open; the earlier
 localhost foundation acceptance covers neither this art replacement nor the
-rendered F behavior.
+rendered F behavior. D-053 is not implemented or rendered-accepted yet.
+
+**Next World tracer — D-053 global F toggle:** move keyboard ownership out of
+Avatar Studio activation and into one StreetScene lifecycle owner. Preserve the
+existing `pairedAvatarSprite` resolver and `avatar:selected` event; prove the
+toggle outdoors, in Avatar Studio and in each existing fixed-room interior;
+prove repeat/editable/inactive/stale-handler guards, transition/restart
+single-ownership and cleanup; and keep shared, lobby, Fly and financial seams
+unchanged. Stop for the user's localhost rendered check after headless review.
 
 James has delegated the intermediate D-052 art gates to orchestration. The Art
 lane should continue through internal identity, edge, movement, source/export
@@ -518,11 +527,11 @@ headless coverage, keyed only by the existing allowlisted
 feet origin and authoritative 24×24 local and Studio bodies. The browser
 recording failed to establish rendered acceptance. D-052 supersedes only the
 movement geometry and toggle status: replacement sheets are 320×256 with five
-columns per facing and 320 total Aseprite frames, and F is authorized only in
-Avatar Studio as a one-press, no-repeat cosy/fighting toggle through the
-existing opaque `avatar:selected` key. Do not change lobby/wire fields, shared
-types, Fly allowlists or financial seams; background and fresh in-game review
-remain required.
+columns per facing and 320 total Aseprite frames. D-053 supersedes the
+Studio-only toggle scope: one World-lifecycle binding must toggle the existing
+opaque cosy/fighting pair outdoors and in the existing interiors without new
+lobby/wire fields, shared types, Fly allowlists or financial seams. That toggle
+is pending implementation; background and fresh in-game review remain required.
 
 Intermediate D-052 art approval is orchestration-owned: do not block the lane
 on user review of model sheets, contacts or QA artifacts. Present the user only
@@ -548,9 +557,10 @@ Reject accidental transparent pinholes or narrow channels through the expected
 body, pelvis, limbs, clothing, hair and weapon joins even when the remaining
 pixels form one connected component; only reviewed, anatomically readable
 negative space is allowed. The final source remains one sheet per opaque key
-rather than a mega-atlas, and source pixels contain no shadow. F is a
-Studio-only one-press, no-repeat toggle through the existing opaque key.
-Background and fresh in-game review are required before acceptance.
+rather than a mega-atlas, and source pixels contain no shadow. D-053 replaces
+the Studio-only F scope with a pending World-wide one-press, no-repeat toggle
+through the existing opaque key. Background and fresh in-game review are
+required before acceptance.
 
 **Frozen first-room asset contract (D-033 tracer):** the procedural Bank is an
 18×12 grid of 32 px tiles (576×384 px), with a one-tile perimeter, spawn at
