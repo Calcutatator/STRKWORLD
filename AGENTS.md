@@ -250,6 +250,52 @@ without a verification method is a rumour.
 
 Format: `### YYYY-MM-DD — short title` then what, why it matters, how verified.
 
+### 2026-08-20 — The swap executor is validated for shape, never for identity
+
+`buildStrk20Actions` is a validation-free array literal that puts the
+backend-supplied `executorAddress` in **two** places: the sell leg's `withdraw`
+recipient and the `invoke` target. `packages/privacy` checked only that it was a
+nonzero felt, so a well-formed but wrong executor was simultaneously a redirect
+of the whole sell amount and an arbitrary contract call. `apps/backend` has no
+executor allowlist either — the value comes straight from AVNU's
+`quoteToCalls({ private: true })` response, and the HMAC binding plus
+submission-time decode-and-match are operated by the same party that supplied
+it, so they are self-consistency rather than independent admission.
+
+Two adjacent facts that matter for anyone fixing this. `STRK20_INVOKE_ACTION` is
+`{ type, contract, calldata }` with **no selector field** — the entry point lives
+inside calldata — so a selector allowlist is not expressible against that action;
+admission has to be on `contract`. And `@avnu/avnu-sdk@4.2.0` exports
+`PRIVACY_POOL_ADDRESS` and `SEPOLIA_PRIVACY_POOL_ADDRESS` but **no executor
+constant**, so an allowlist's contents cannot be source-verified from the SDK.
+
+Whether the browser should pin executors is **an open decision, not a bug fix**:
+SPEC §4 and D-018 say every active route allowlists its exact contracts, while
+D-023 (which explicitly amends D-018) calls this executor *dynamic*, assigns the
+binding duty to the backend, and reads "changed executor/call" as changed
+relative to the authorized plan. D-042 restates the enforcement boundary as the
+wallet policy plus `BACKEND_ROUTE_SWAP_ALLOWED_TOKENS` — tokens only. Per §3
+that disagreement must be resolved and recorded, not picked silently. A worked
+option (a required `WalletRoutePolicy.swap.allowedExecutors`, empty-or-malformed
+locks the route, checked at prepare and confirm) was built and deliberately
+withheld pending that decision.
+
+What did land is the decision-free half: the action set is now verified against
+the validated plan before `strk20PrepareInvoke`. That closes an ordering gap —
+the relay's binding check cannot un-prove a proof — but it cannot detect a
+hostile plan, because a hostile plan's actions match it faithfully.
+
+*Verified:* read the installed `dist/index.mjs:1281-1309` and `dist/index.d.ts`
+of `@avnu/avnu-sdk@4.2.0` (version confirmed from its `package.json`, integrity
+matching `package-lock.json`), and the shipped `STRK20_ACTION` union in
+`@starknet-io/types-js@0.10.3` `wallet-api/components.d.ts:187-234`. Traced
+`apps/backend/src/avnu-swap-planner.ts:45-58`, `api.ts:291-350` and
+`server-actions.ts:132-153` for the backend side. Red/green: 13 corrupted action
+sets were each proven **and submitted** before the guard and all reject after it,
+with the real-SDK path still passing. `packages/privacy` is 107 tests, workspace
+typecheck and all 13 invariants pass. No wallet, network, RPC, proof, signature
+or transaction was used, and no funded or live claim is made.
+
 ### 2026-08-20 — A key binding owned by a room works only in that room
 
 D-052 gave `F` to the Avatar Studio controller, which owned both the selected
