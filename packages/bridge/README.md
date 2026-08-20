@@ -140,7 +140,10 @@ and `importResumeRecord()` provide an explicit cross-device path. The exported
 record contains addresses and timing and must be labelled sensitive; imports
 revalidate the route and quote signature and reset display state until the
 provider is checked again. An import cannot replace an existing valid record:
-the player must explicitly discard the retained evidence first.
+the player must explicitly discard the retained evidence first. A provider
+refresh that was already in flight likewise persists its status only while the
+same signed evidence remains retained; it cannot revive discarded evidence or
+overwrite a replacement record.
 
 Resume imports are capped at 256 kB before JSON parsing. This is both a browser
 resource bound and a reminder that import is signed evidence recovery, not an
