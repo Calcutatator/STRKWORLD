@@ -250,6 +250,33 @@ without a verification method is a rumour.
 
 Format: `### YYYY-MM-DD — short title` then what, why it matters, how verified.
 
+### 2026-08-20 — A local Lobby leave does not own its replacement room
+
+`LobbyClient.disconnect()` clears the current room before awaiting the SDK's
+`leave()`, and the client is deliberately reusable: an explicit `connect()` may
+therefore establish replacement room B while old room A is still leaving. A
+client-wide `leavingByRequest` flag previously remained true for that whole
+await. If B's transport dropped in the meantime, B's current `onLeave` mistook
+the drop for A's requested leave, cleared B and its identity but suppressed the
+`closed/server-dropped` transition. The public client then reported
+`connected` while owning no room, so the Shell could not offer truthful solo
+mode or its explicit reconnect control.
+
+Local-leave classification now follows room ownership instead of one mutable
+client-wide flag. `disconnect()` already removes A from `#room` synchronously,
+so A's eventual callback is stale under the existing complete
+generation-and-room check. Any callback that still owns the current room is an
+external close and publishes `closed/server-dropped` with its close code. Join
+payloads, presence state, automatic-reconnect policy and network behavior are
+unchanged.
+
+*Verified:* a public-seam regression connects A, defers A's `leave()`, connects
+B, then drops B with code 1006 before allowing A to finish. The old code leaves
+the client `connected`; green reports exactly `closed/server-dropped` with code
+1006. The current Lobby suite passes 9 files / 192 tests. Local verification
+used only fake rooms plus the suite's local loopback server; no browser, remote
+lobby, wallet, RPC, proof, signature, funds or transaction was used.
+
 ### 2026-08-20 — An old Bridge watcher cannot adopt replacement evidence
 
 `BridgeService.refresh()` may validly return provider status for deposit A
