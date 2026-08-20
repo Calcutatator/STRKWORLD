@@ -270,8 +270,11 @@ releasing the fake provider response. Both report calls return
 `deposit-detected`; the first leaves `resume()` null, and the second preserves B
 and its byte-identical export. Removing the ownership guard makes both tests
 fail by resurrecting A or overwriting B. The Bridge suite passes 1 file / 59
-tests. No live provider, external network, wallet, RPC, proof, signature, funds
-or transaction was used.
+tests. Local verification used no live provider, external network, wallet, RPC,
+proof, signature, funds or transaction. Hosted CI subsequently ran the
+repository's standard read-only drift canary: two `starknet_call` reads and one
+`starknet_getClassHashAt` against public pool state at `latest`; no key,
+signature, proof, funds or transaction was involved.
 
 ### 2026-08-20 — A failed Backend fan-out closes the whole request signal
 
