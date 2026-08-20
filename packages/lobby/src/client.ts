@@ -359,6 +359,14 @@ export class LobbyClient {
         },
       );
 
+      // D-037 gives reconnect ownership to the Shell's explicit player
+      // control. The pinned SDK enables a 15-attempt automatic retry loop on
+      // every Room by default; left enabled, an established transport drop
+      // stays locally "connected" until that hidden loop gives up. Disable it
+      // before publishing the room so the SDK turns a drop into onLeave and
+      // the existing status seam can truthfully enter unavailable/solo play.
+      room.reconnection.enabled = false;
+
       if (this.#joinGeneration !== generation) {
         await room.leave(true).catch(() => undefined);
         return;

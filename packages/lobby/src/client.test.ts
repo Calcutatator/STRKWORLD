@@ -70,6 +70,7 @@ function fakeRoom(): {
   stateChange: () => void;
   error: (code: number, message?: string) => void;
   left: (code: number, reason?: string) => void;
+  drop: (code: number, reason?: string) => void;
 } {
   let welcome: ((payload: { gameId: string }) => void) | undefined;
   let stateChange: (() => void) | undefined;
@@ -79,6 +80,9 @@ function fakeRoom(): {
   const send = vi.fn();
   const room = {
     state: { peers: new Map() },
+    // Matches @colyseus/sdk@0.17.43: automatic reconnection is enabled on
+    // every Room unless the consumer turns it off.
+    reconnection: { enabled: true },
     leave,
     send,
     onMessage: vi.fn((_type: unknown, callback: (payload: { gameId: string }) => void) => {
@@ -106,6 +110,11 @@ function fakeRoom(): {
     stateChange: () => stateChange?.(),
     error: (code, message) => error?.(code, message),
     left: (code, reason) => left?.(code, reason),
+    // A transport drop is held inside the SDK's retry loop while automatic
+    // reconnection is enabled; disabling it turns the drop into onLeave.
+    drop: (code, reason) => {
+      if (!room.reconnection.enabled) left?.(code, reason);
+    },
   };
 }
 
@@ -229,6 +238,35 @@ describe('nothing connects by itself', () => {
 });
 
 describe('connect is idempotent', () => {
+  it('reports a transport drop instead of entering the SDK automatic retry loop', async () => {
+    const joined = fakeRoom();
+    const joinOrCreate = vi
+      .spyOn(ColyseusClient.prototype, 'joinOrCreate')
+      .mockImplementation(() => Promise.resolve(joined.room) as never);
+
+    try {
+      const client = makeClient(20, 0);
+      const statuses: LobbyStatusEvent[] = [];
+      client.onStatus((event) => statuses.push(event));
+
+      const connecting = client.connect();
+      await Promise.resolve();
+      joined.welcome({ gameId: 'manual-reconnect-only' });
+      await connecting;
+
+      joined.drop(1006, 'transport lost');
+
+      expect(statuses.at(-1)).toMatchObject({
+        status: 'closed',
+        reason: 'server-dropped',
+        code: 1006,
+      });
+      expect(client.gameId).toBeNull();
+    } finally {
+      joinOrCreate.mockRestore();
+    }
+  });
+
   it('yields one presence entry for two sequential calls', async () => {
     const observer = makeClient(0, 0);
     await observer.connect();
