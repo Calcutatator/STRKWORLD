@@ -31,8 +31,11 @@ import {
   type AvatarStudioPresentation,
   type AvatarStudioController,
 } from '../avatar-studio.js';
-import { avatarPlaceholderTint, DEFAULT_AVATAR_SPRITE } from '../avatar-state.js';
-export { avatarPlaceholderTint } from '../avatar-state.js';
+import {
+  createAvatarStudioFigureLayer,
+  type AvatarStudioFigureLayer,
+} from '../avatar-studio-figure-layer.js';
+import { DEFAULT_AVATAR_SPRITE } from '../avatar-state.js';
 import { createDoorTrigger, type DoorTrigger } from '../door-trigger.js';
 import {
   FIXED_ROOM_DEFINITIONS,
@@ -77,16 +80,15 @@ import {
  * The street.
  *
  * Placeholder street art is sliced at runtime from the audited Kenney CC0
- * atlas. The local player uses the final D-049 sheets; grass and the fallback
- * avatar presentation remain procedural. Map data, collision and door
- * contracts do not change when the art treatment changes.
+ * atlas. Player and Studio avatar presentations use the final D-049 sheets;
+ * grass remains procedural. Map data, collision and door contracts do not
+ * change when the art treatment changes.
  *
  * No network I/O happens in scene lifecycle. Under any future mounting
  * regression `create()` can run twice, and a lobby join here would produce two
  * presence entries for one player. Joins are shell-driven and explicit.
  */
 
-const PLAYER_SIZE = 24;
 const ROOM_ORIGIN = { x: 2 * TILE_SIZE, y: 2 * TILE_SIZE };
 
 type Scene = PhaserTypes.Scene;
@@ -125,7 +127,7 @@ export function createStreetScene({ Phaser, onTileChanged, remotePeers }: Street
     private exteriorLabels = new Map<BuildingId, PhaserTypes.GameObjects.Text>();
     private roomStationGraphics?: PhaserTypes.GameObjects.Graphics;
     private avatarStudioGraphics?: PhaserTypes.GameObjects.Graphics;
-    private avatarStudioFigures = new Map<number, PhaserTypes.GameObjects.Image>();
+    private avatarStudioFigureLayer?: AvatarStudioFigureLayer;
     private doorOverlays: PhaserTypes.GameObjects.Image[] = [];
     private remoteAvatars?: RemoteAvatarLayer;
     private returnTile = { x: 0, y: 0 };
@@ -152,7 +154,6 @@ export function createStreetScene({ Phaser, onTileChanged, remotePeers }: Street
         tileIndex: TILE_INDEX,
         grassColour: TILES.grass.colour,
       });
-      makePlayerTexture(this);
       registerAvatarAnimations(this);
       this.drawGround();
       this.createDoorOverlays();
@@ -203,6 +204,8 @@ export function createStreetScene({ Phaser, onTileChanged, remotePeers }: Street
       this.avatarStudio?.destroy();
       this.avatarStudio = undefined;
       this.avatarStudioPresentation = undefined;
+      this.avatarStudioFigureLayer?.destroy();
+      this.avatarStudioFigureLayer = undefined;
       this.inputGate?.resume();
       this.inputGate = NOOP_INPUT_GATE;
       this.roomGraphics?.destroy();
@@ -219,7 +222,6 @@ export function createStreetScene({ Phaser, onTileChanged, remotePeers }: Street
       this.remoteAvatars = undefined;
       for (const overlay of this.doorOverlays) overlay.destroy();
       this.doorOverlays = [];
-      this.avatarStudioFigures.clear();
     }
 
     // -- construction --------------------------------------------------------
@@ -400,7 +402,12 @@ export function createStreetScene({ Phaser, onTileChanged, remotePeers }: Street
           },
           setStudioVisible: (visible) => {
             this.avatarStudioGraphics?.setVisible(visible);
-            if (!visible) this.avatarStudioFigures.forEach((figure) => figure.setVisible(false));
+            this.avatarStudioFigureLayer?.sync({
+              visible,
+              highlightedFigure: visible
+                ? this.avatarStudio?.state.highlightedFigure ?? null
+                : null,
+            });
           },
           setWorldBounds: (bounds) => this.physics.world.setBounds(bounds.x, bounds.y, bounds.width, bounds.height),
           setCameraBounds: (bounds) => this.cameras.main.setBounds(bounds.x, bounds.y, bounds.width, bounds.height),
@@ -409,8 +416,8 @@ export function createStreetScene({ Phaser, onTileChanged, remotePeers }: Street
           resumeStreet: (position, report) => this.movement.exit(position, report),
           destroyStudio: () => {
             this.avatarStudioGraphics?.clear();
-            for (const figure of this.avatarStudioFigures.values()) figure.destroy();
-            this.avatarStudioFigures.clear();
+            this.avatarStudioFigureLayer?.destroy();
+            this.avatarStudioFigureLayer = undefined;
           },
         },
         streetBounds,
@@ -449,6 +456,10 @@ export function createStreetScene({ Phaser, onTileChanged, remotePeers }: Street
       this.roomGraphics = this.add.graphics().setDepth(1);
       this.roomStationGraphics = this.add.graphics().setDepth(2);
       this.avatarStudioGraphics = this.add.graphics().setDepth(1);
+      this.avatarStudioFigureLayer = createAvatarStudioFigureLayer({
+        scene: this,
+        roomOrigin: ROOM_ORIGIN,
+      });
       this.roomGraphics.setVisible(false);
       this.roomStationGraphics.setVisible(false);
       this.avatarStudioGraphics.setVisible(false);
@@ -544,7 +555,10 @@ export function createStreetScene({ Phaser, onTileChanged, remotePeers }: Street
     private renderAvatarStudio(): void {
       if (!this.avatarStudioGraphics) return;
       this.avatarStudioGraphics.clear();
-      if (!this.avatarStudioActive) return;
+      if (!this.avatarStudioActive) {
+        this.avatarStudioFigureLayer?.sync({ visible: false, highlightedFigure: null });
+        return;
+      }
       for (let y = 0; y < AVATAR_STUDIO_HEIGHT; y += 1) {
         for (let x = 0; x < AVATAR_STUDIO_WIDTH; x += 1) {
           this.avatarStudioGraphics.fillStyle(
@@ -559,22 +573,10 @@ export function createStreetScene({ Phaser, onTileChanged, remotePeers }: Street
           );
         }
       }
-      const highlighted = this.avatarStudio?.state.highlightedFigure;
-      for (const figure of AVATAR_STUDIO_DEFINITION.figures) {
-        let image = this.avatarStudioFigures.get(figure.figure);
-        if (!image) {
-          image = this.add.image(0, 0, 'player').setDepth(2).setDisplaySize(24, 24);
-          image.setData('figure', figure.figure);
-          this.avatarStudioFigures.set(figure.figure, image);
-        }
-        image
-          .setVisible(true)
-          .setPosition(
-            ROOM_ORIGIN.x + (figure.x + 0.5) * AVATAR_STUDIO_TILE_SIZE,
-            ROOM_ORIGIN.y + (figure.y + 0.5) * AVATAR_STUDIO_TILE_SIZE,
-          )
-          .setTint(highlighted === figure.figure ? 0xffd66b : avatarPlaceholderTint(figure.sprite));
-      }
+      this.avatarStudioFigureLayer?.sync({
+        visible: true,
+        highlightedFigure: this.avatarStudio?.state.highlightedFigure ?? null,
+      });
     }
 
     private roomDoorReturnTile(building: BuildingId): { x: number; y: number } {
@@ -795,10 +797,6 @@ function worldToRoomTile(x: number, y: number): { x: number; y: number } {
   };
 }
 
-// ---------------------------------------------------------------------------
-// Placeholder art
-// ---------------------------------------------------------------------------
-
 /** Index of each tile kind within the generated tileset strip. */
 export const TILE_INDEX: Record<TileKind, number> = {
   grass: 0,
@@ -807,21 +805,3 @@ export const TILE_INDEX: Record<TileKind, number> = {
   wall: 3,
   facade: 4,
 };
-
-/**
- * Generate the procedural fallback texture still used by presentations that
- * have not moved to the final D-049 sheets. The local player owns final-sheet
- * registration separately; map data, collision, doors and camera stay
- * art-agnostic.
- */
-function makePlayerTexture(scene: Scene): void {
-  const graphics = scene.make.graphics({ x: 0, y: 0 }, false);
-  graphics.fillStyle(0xf2e8c9, 1);
-  graphics.fillRoundedRect(0, 0, PLAYER_SIZE, PLAYER_SIZE, 4);
-  graphics.fillStyle(0x2b2b33, 1);
-  graphics.fillRect(5, 7, 4, 4);
-  graphics.fillRect(PLAYER_SIZE - 9, 7, 4, 4);
-  graphics.generateTexture('player', PLAYER_SIZE, PLAYER_SIZE);
-
-  graphics.destroy();
-}

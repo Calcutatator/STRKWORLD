@@ -48,19 +48,3 @@ export function pairedAvatarSprite(value: AvatarSpriteKey): AvatarSpriteKey {
   }
   return `avatar-${number <= 8 ? number + 8 : number - 8}` as AvatarSpriteKey;
 }
-
-/** Stable procedural palette shared by local and remote placeholder avatars. */
-export function avatarPlaceholderTint(sprite: AvatarSpriteKey): number {
-  const number = Number(sprite.slice('avatar-'.length));
-  const palette = [
-    0xf2e8c9,
-    0xc7e8f2,
-    0xf2c7d5,
-    0xd9f2c7,
-    0xf2e0c7,
-    0xd3c7f2,
-    0xf2f0c7,
-    0xc7f2df,
-  ];
-  return palette[(number - 1) % palette.length] ?? palette[0]!;
-}

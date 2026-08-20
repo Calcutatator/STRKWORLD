@@ -14,7 +14,6 @@ import {
   type AvatarStudioPresentationPort,
   validateAvatarStudioDefinition,
 } from './avatar-studio.js';
-import { avatarPlaceholderTint } from './avatar-state.js';
 import { createStreetMap, tileToWorld } from './map/street.js';
 
 type Emitted = { [K in keyof WorldEvents]: { event: K; payload: WorldEvents[K] } }[keyof WorldEvents];
@@ -279,7 +278,6 @@ describe('hidden Avatar Studio', () => {
       destroyCalls: 0,
       selected: 'avatar-1',
       sprite: 'avatar-1',
-      tint: avatarPlaceholderTint('avatar-1'),
       resumed: 0,
       operations: [] as string[],
     };
@@ -359,7 +357,6 @@ describe('hidden Avatar Studio', () => {
           if (event === 'avatar:selected') {
             const selected = (payload as WorldEvents['avatar:selected']).sprite;
             lifecycle.sprite = selected;
-            lifecycle.tint = avatarPlaceholderTint(selected);
           }
         },
       },
@@ -423,7 +420,6 @@ describe('hidden Avatar Studio', () => {
 
     expect(lifecycle.selected).toBe('avatar-8');
     expect(lifecycle.sprite).toBe('avatar-8');
-    expect(lifecycle.tint).toBe(avatarPlaceholderTint('avatar-8'));
     expect(lifecycle.groundVisible).toBe(false);
     expect(lifecycle.doorsVisible).toBe(false);
     expect(lifecycle.labelsVisible).toBe(false);

@@ -44,6 +44,7 @@ function cycleResources() {
     roomGraphics: destroyable(),
     stationGraphics: destroyable(),
     studioGraphics: destroyable(),
+    studioFigureLayer: destroyable(),
     roomLabel: destroyable(),
     exteriorLabel: destroyable(),
     overlay: destroyable(),
@@ -102,6 +103,7 @@ interface StreetSceneHarness extends FakeScene {
   roomGraphics: { destroy(): void };
   roomStationGraphics: { destroy(): void };
   avatarStudioGraphics: { destroy(): void };
+  avatarStudioFigureLayer?: { destroy(): void };
   roomLabels: Map<string, { destroy(): void }>;
   exteriorLabels: Map<string, { destroy(): void }>;
   doorOverlays: Array<{ destroy(): void }>;
@@ -134,6 +136,7 @@ function createHarness() {
     scene.roomGraphics = current.roomGraphics;
     scene.roomStationGraphics = current.stationGraphics;
     scene.avatarStudioGraphics = current.studioGraphics;
+    scene.avatarStudioFigureLayer = current.studioFigureLayer;
     scene.roomLabels.set('bank:shielding', current.roomLabel);
   });
   scene.createExteriorLabels = vi.fn(() => {
@@ -168,6 +171,7 @@ function expectCompleteCleanup(cycle: ReturnType<typeof cycleResources>): void {
   expect(cycle.roomGraphics.destroy).toHaveBeenCalledTimes(1);
   expect(cycle.stationGraphics.destroy).toHaveBeenCalledTimes(1);
   expect(cycle.studioGraphics.destroy).toHaveBeenCalledTimes(1);
+  expect(cycle.studioFigureLayer.destroy).toHaveBeenCalledTimes(1);
   expect(cycle.roomLabel.destroy).toHaveBeenCalledTimes(1);
   expect(cycle.exteriorLabel.destroy).toHaveBeenCalledTimes(1);
   expect(cycle.overlay.destroy).toHaveBeenCalledTimes(1);
