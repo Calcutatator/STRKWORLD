@@ -15,6 +15,7 @@ import {
   STRK_ON_STARKNET_ASSET_ID,
   loadSourceAssets,
   deserializeBridgeRecord,
+  serializeBridgeRecord,
   validateSourceAddress,
   validateStarknetAddress,
   type OneClickClient,
@@ -792,7 +793,25 @@ describe('BridgeService', () => {
     )).toThrow(/signature/i);
   });
 
-  it('requires an explicit discard before import can replace newer signed evidence', async () => {
+  it.each([
+    ['older valid evidence', (raw: string) => {
+      const record = deserializeBridgeRecord(raw)!;
+      return serializeBridgeRecord({ ...record, updatedAt: NOW - 1 });
+    }],
+    ['equally recent valid evidence', (raw: string) => {
+      const record = deserializeBridgeRecord(raw)!;
+      return serializeBridgeRecord({ ...record, updatedAt: NOW });
+    }],
+    ['later valid evidence', (raw: string) => {
+      const record = deserializeBridgeRecord(raw)!;
+      return serializeBridgeRecord({ ...record, updatedAt: NOW + 1 });
+    }],
+    ['malformed evidence', () => '{not-json'],
+    ['tampered evidence', (raw: string) => raw.replace(
+      'signed-by-one-click',
+      'tampered-signature',
+    )],
+  ])('requires an explicit discard before importing %s', async (_label, importedEvidence) => {
     const client = new StubClient();
     const store = new MemoryBridgeStore();
     const service = new BridgeService({
@@ -813,13 +832,19 @@ describe('BridgeService', () => {
       destinationChainTxHashes: [{ hash: '0xsettled', explorerUrl: 'https://example/tx' }],
     }));
     await service.refresh();
+    const retainedRecord = service.resume();
+    const retainedExport = service.exportResumeRecord();
 
-    expect(() => service.importResumeRecord(staleExport)).toThrow(/discard/i);
+    expect(() => service.importResumeRecord(importedEvidence(staleExport))).toThrow(
+      'An existing bridge deposit is available. Discard it before importing another record.',
+    );
+    expect(service.resume()).toEqual(retainedRecord);
     expect(service.resume()?.status).toMatchObject({
       leg: 'settled',
       strkReceived: 999_000n,
       settlementTxHash: '0xsettled',
     });
+    expect(service.exportResumeRecord()).toBe(retainedExport);
   });
 });
 
