@@ -21,6 +21,23 @@ afterEach(async () => {
 });
 
 describe('standalone Backend launcher', () => {
+  it('imports a regular entry without launcher output', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'strkworld-backend-entry-success-'));
+    directories.push(root);
+    const entry = join(root, 'entry.mjs');
+    await writeFile(entry, 'process.stdout.write("backend startup marker");\n');
+
+    const result = spawnSync(process.execPath, [launcher], {
+      encoding: 'utf8',
+      env: { ...process.env, BACKEND_ENTRY: entry },
+    });
+
+    expect(result.status).toBe(0);
+    expect(result.signal).toBeNull();
+    expect(result.stdout).toBe('backend startup marker');
+    expect(result.stderr).toBe('');
+  });
+
   it('rejects missing and non-regular entries before importing the Backend', async () => {
     const root = await mkdtemp(join(tmpdir(), 'strkworld-backend-entry-'));
     directories.push(root);
@@ -138,6 +155,7 @@ describe('standalone Backend launcher', () => {
     const missingDependencyEntry = join(root, 'missing-dependency.mjs');
     const unreadableDependencyEntry = join(root, 'unreadable-dependency-entry.mjs');
     const unreadableDependency = join(root, 'unreadable-dependency.mjs');
+    const exactTupleEntry = join(root, 'exact-loader-tuple.mjs');
     const wrongSyscallEntry = join(root, 'wrong-syscall.mjs');
     const wrongCodeEntry = join(root, 'wrong-code.mjs');
     await writeFile(thrownEntry, 'throw new Error("backend startup marker");\n');
@@ -154,6 +172,7 @@ describe('standalone Backend launcher', () => {
       '});',
       '',
     ].join('\n');
+    await writeFile(exactTupleEntry, shapedFailure('backend exact loader tuple marker', 'EACCES', 'open'));
     await writeFile(wrongSyscallEntry, shapedFailure('backend wrong syscall marker', 'EACCES', 'read'));
     await writeFile(wrongCodeEntry, shapedFailure('backend wrong code marker', 'EPERM', 'open'));
 
@@ -161,6 +180,7 @@ describe('standalone Backend launcher', () => {
       [thrownEntry, 'backend startup marker'],
       [missingDependencyEntry, 'ERR_MODULE_NOT_FOUND'],
       [unreadableDependencyEntry, 'EACCES'],
+      [exactTupleEntry, 'backend exact loader tuple marker'],
       [wrongSyscallEntry, 'backend wrong syscall marker'],
       [wrongCodeEntry, 'backend wrong code marker'],
     ]) {
@@ -173,6 +193,7 @@ describe('standalone Backend launcher', () => {
       expect(result.signal).toBeNull();
       expect(result.stdout).toBe('');
       expect(result.stderr).toContain(marker);
+      expect(result.stderr).toContain('\n    at ');
       expect(result.stderr).not.toBe(configurationError);
     }
   });

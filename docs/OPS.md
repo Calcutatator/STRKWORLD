@@ -107,7 +107,9 @@ and binds a logging-free `node:http` listener on `0.0.0.0:$PORT`.
 `deploy/backend/launch.mjs` exits 78 only when the compiled entry is absent,
 is not a regular file, or its exact target becomes missing, a directory or
 unreadable during entry admission. Backend and nested-dependency failures remain
-ordinary startup crashes.
+ordinary startup crashes. The package-local `launch-loader.mjs` witnesses only
+resolver/loader failures before module evaluation, so a Backend-thrown error
+with identical public fields cannot be reclassified as deployment configuration.
 
 Deploy steps once a host exists `[HOST]`: push image to a registry, inject
 secrets from the secret store as environment variables (never as build args),

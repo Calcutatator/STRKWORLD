@@ -103,6 +103,7 @@ ENV PORT=8080
 COPY --from=runtime-deps --chown=node:node /repo/node_modules ./node_modules
 COPY --from=build --chown=node:node /repo/.docker-build ./
 COPY --chown=node:node deploy/backend/launch.mjs ./launch.mjs
+COPY --chown=node:node deploy/backend/launch-loader.mjs ./launch-loader.mjs
 
 USER node
 EXPOSE 8080
@@ -124,7 +125,7 @@ EXPOSE 8080
 HEALTHCHECK --interval=30s --timeout=3s --start-period=10s --retries=3 \
   CMD node -e "const net=require('node:net');const s=net.connect(Number(process.env.PORT),'127.0.0.1');s.on('connect',()=>{s.destroy();process.exit(0)});s.on('error',()=>process.exit(1));s.setTimeout(2500,()=>process.exit(1));"
 
-# launch.mjs verifies the compiled composition root exists and starts it. It
-# holds no configuration and no business logic — see the file for why that
-# deployment/runtime separation exists.
+# launch.mjs and launch-loader.mjs verify the compiled composition root and
+# start it. They hold no configuration and no business logic — see the files
+# for why that deployment/runtime separation exists.
 CMD ["node", "--disable-proto=throw", "launch.mjs"]

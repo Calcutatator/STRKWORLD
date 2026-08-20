@@ -270,11 +270,16 @@ path, directory or directory symlink returns the same path-free configuration
 message and EX_CONFIG `78`. If the admitted target becomes missing or a
 directory before Node resolves that exact entry URL, or becomes unreadable
 before Node opens its exact absolute or canonical path, the launcher returns
-the same result. The catch is limited to those Node resolution errors and the
-exact loader tuple `EACCES` / `open` / admitted-entry path. An exception thrown
-by the Backend or a missing or unreadable nested dependency remains an ordinary
-startup crash. Successful regular-file startup, Backend runtime configuration,
-request handling, logging and deployment layout are unchanged.
+the same result. Public Error fields are not phase ownership: Backend code can
+throw the exact loader tuple `EACCES` / `open` / admitted-entry path. A
+package-local ESM customization hook therefore wraps only Node's resolver and
+loader for the exact absolute/canonical entry URL and sets a private shared bit
+before rethrowing an admitted failure. Module evaluation begins only after that
+hook returns, so the launcher's catch trusts the bit rather than the Error
+shape. An exception thrown by the Backend or a missing or unreadable nested
+dependency remains an ordinary startup crash. Successful regular-file startup,
+Backend runtime configuration, request handling, logging and deployment layout
+are unchanged.
 
 *Verified:* public subprocess regressions cover a missing entry, a real
 directory, a symlink to that directory and deterministic admitted-file races.
@@ -287,13 +292,20 @@ empty stdout, exact generic stderr, no raw Node error code, stack or configured,
 absolute or canonical path, and exits `78` before the Backend can construct a
 listener. Separate real-entry cases prove a Backend-thrown error and missing or
 unreadable nested dependencies still exit `1` with their original diagnostics;
-shaped errors independently pin the loader code and syscall. Removing the open
-guard revives the permission race; dropping its exact path, syscall or code
-clause hides the matching genuine failure. The focused launcher test passes
-four tests; the full workspace passes 90 files / 1,271 tests, workspace
-typecheck, production build, all 13 invariants, the tilemap check and diff
-hygiene pass. Local verification opened no listener or external network and
-used no wallet, RPC, proof, signature, secret, funds or transaction.*
+one now throws the loader's exact public tuple from Backend evaluation and
+retains its marker, stack and exit `1`. Bypassing the private bit revives both
+entry races; restoring a field-tuple fallback hides that Backend marker;
+dropping exact URL scoping hides a nested resolution failure; and dropping
+canonical identity revives the symlinked-entry race. A regular entry also exits
+`0` with no launcher stderr. The focused launcher test passes five tests. The
+[official Node 22.12 module documentation](https://nodejs.org/download/release/v22.12.0/docs/api/module.html)
+confirms `module.register()` runs its asynchronous hooks on a separate loader
+thread and passes caller data into `initialize()`. The full workspace passes 90
+files / 1,274 tests; workspace typecheck, production build, all 13 invariants,
+the tilemap check and diff hygiene pass. Runtime/test verification opened no
+listener and used no wallet, RPC, proof, signature, secret, funds or
+transaction; that single read-only documentation fetch was the only external
+network access.*
 
 ### 2026-08-20 — A fixed-room station snapshot cannot grant itself admission
 
