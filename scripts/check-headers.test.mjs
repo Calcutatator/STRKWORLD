@@ -50,10 +50,26 @@ describe('violations that must be caught', () => {
     expect(scanText('deploy/smoke.sh', script).map((violation) => violation.line)).toEqual([1]);
   });
 
+  it('keeps a hash after an escaped shell operator inside the active word', () => {
+    const script = `echo safe\\;#still-word; curl --header "${COOP}: same-origin"`;
+    expect(scanText('deploy/smoke.sh', script).map((violation) => violation.line)).toEqual([1]);
+  });
+
   it('BYPASS: a shell line continuation keeps the next hash inside its word', () => {
     const script = [
       `echo safe\\`,
       `#still-word; curl --header "${COEP}: require-corp"`,
+    ].join('\n');
+    expect(scanText('deploy/smoke.sh', script).map((violation) => violation.line)).toEqual([2]);
+  });
+
+  it.each([
+    ['single', "'"],
+    ['double', '"'],
+  ])('BYPASS: a multiline shell %s quote keeps the next hash as data', (_label, quote) => {
+    const script = [
+      `printf '%s' ${quote}safe`,
+      `#still-quoted${quote}; curl --header "${COOP}: same-origin"`,
     ].join('\n');
     expect(scanText('deploy/smoke.sh', script).map((violation) => violation.line)).toEqual([2]);
   });
@@ -157,6 +173,10 @@ describe('real comments that must stay exempt', () => {
   it.each([
     ['shell start', 'deploy/smoke.sh', `# never set ${COOP}`],
     ['shell whitespace boundary', 'deploy/smoke.sh', `echo safe # never set ${COOP}`],
+    ['shell semicolon boundary', 'deploy/smoke.sh', `echo safe;# never set ${COOP}`],
+    ['shell ampersand boundary', 'deploy/smoke.sh', `echo safe &# never set ${COOP}`],
+    ['shell and-if boundary', 'deploy/smoke.sh', `echo safe &&# never set ${COOP}`],
+    ['shell or-if boundary', 'deploy/smoke.sh', `echo safe ||# never set ${COOP}`],
     ['workflow whitespace boundary', '.github/workflows/deploy.yml', `run: echo safe # never set ${COOP}`],
   ])('retains a real %s hash comment', (_label, file, source) => {
     expect(scanText(file, source)).toEqual([]);

@@ -150,18 +150,20 @@ export function syntaxFor(filePath) {
 
 /**
  * Returns one entry per input line holding only that line's NON-comment text.
- * Block-comment state carries across lines; quote state does not (an
- * unterminated quote must not silently blank the rest of the file).
+ * Block-comment state carries across lines. Shell quotes do too because a
+ * physical newline is valid inside them; other syntaxes remain line-local so
+ * an unterminated quote cannot silently blank the rest of the file.
  */
 export function stripComments(text, syntax) {
   const lines = text.split('\n');
   const stripped = [];
   let openBlockCloseToken = null;
   let shellContinuationInsideWord = false;
+  let shellQuote = null;
 
   for (const line of lines) {
     let code = '';
-    let quote = null;
+    let quote = syntax.shellHashComments ? shellQuote : null;
     let i = 0;
     let lineCommentStarted = false;
 
@@ -178,7 +180,11 @@ export function stripComments(text, syntax) {
 
       if (quote !== null) {
         code += char;
-        if (char === '\\') { code += line[i + 1] ?? ''; i += 2; continue; }
+        if (char === '\\' && !(syntax.shellHashComments && quote === "'")) {
+          code += line[i + 1] ?? '';
+          i += 2;
+          continue;
+        }
         if (char === quote) quote = null;
         i += 1;
         continue;
@@ -215,6 +221,7 @@ export function stripComments(text, syntax) {
     }
 
     stripped.push(code);
+    if (syntax.shellHashComments) shellQuote = quote;
     shellContinuationInsideWord = Boolean(
       syntax.shellHashComments
       && !lineCommentStarted
@@ -228,16 +235,11 @@ export function stripComments(text, syntax) {
 function isLineCommentAt(line, index, token, syntax, shellContinuationInsideWord) {
   if (!line.startsWith(token, index)) return false;
   if (token !== '#') return true;
-  if (syntax.shellHashComments && index === 0 && shellContinuationInsideWord) {
-    return false;
-  }
-  if (
-    syntax.shellHashComments
-    && index > 0
-    && /\s/.test(line[index - 1])
-    && isEscaped(line, index - 1)
-  ) {
-    return false;
+  if (syntax.shellHashComments) {
+    if (index === 0) return !shellContinuationInsideWord;
+    const boundary = line[index - 1];
+    if (/\s/.test(boundary)) return !isEscaped(line, index - 1);
+    return /[;&|()<>]/.test(boundary) && !isEscaped(line, index - 1);
   }
   // Hash comments begin at a token boundary. Treating an in-word hash as the
   // start of a comment can hide effective shell or workflow code after it.

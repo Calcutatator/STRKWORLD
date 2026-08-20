@@ -299,10 +299,19 @@ CI job reported the source clean.
 
 Shell files now have their own hash-comment mode. Escaped whitespace does not
 open a comment boundary, and an odd trailing backslash carries only whether the
-next physical line begins inside the same shell word. YAML and the other
-hash-comment formats retain their start/whitespace rule; genuine shell comments
-at line start or after ordinary whitespace remain exempt. Other comment
-syntaxes and the built-response phase are unchanged.
+next physical line begins inside the same shell word. A later review found two
+more shell-token gaps: quote state reset at every physical newline even though
+single and double quotes may span lines, and only whitespace or line start was
+treated as a comment boundary even though an unescaped control operator also
+ends the prior word. A multiline quote could therefore put a line-start hash
+inside data and hide an effective directive after its closing quote, while a
+real `;#` comment was falsely scanned as code.
+
+Shell quote state now follows physical lines until the matching quote, and an
+unescaped shell control operator opens a real hash-comment boundary. YAML and
+the other hash-comment formats retain their independent start/whitespace rule;
+genuine shell comments at line start or after ordinary whitespace remain
+exempt. Other comment syntaxes and the built-response phase are unchanged.
 
 *Verified:* Bash itself parsed `safe#still-word after` as two ordinary
 arguments. Through the exported `scanText` seam, red-first `.sh` fixtures put a
@@ -311,9 +320,13 @@ line-start hash; the original parser missed all three, and the first fix still
 missed the latter two. A `.yml` in-word case is also caught, while the same
 escaped-space source remains a YAML comment. Removing escaped-space handling
 fails only its line-1 case; removing continuation carry fails only its line-2
-case. Three adjacent fixtures preserve real hash comments at line start and
-after whitespace. The focused header suite passes 30/30 tests, and the full
-workspace passes 89 files / 1,275 tests with two workers. Workspace typecheck,
+case. Two further red-first fixtures span single and double shell quotes across
+lines, and four operator fixtures preserve real comments after `;`, `&`, `&&`
+and `||`; an escaped-operator fixture keeps the boundary rule honest.
+Quote-carry and operator-boundary mutations fail their own cases independently.
+Adjacent fixtures preserve real hash comments at line start and after
+whitespace. The focused header suite passes 37/37 tests, and the full workspace
+passes 89 files / 1,284 tests with two workers. Workspace typecheck,
 production build, the complete D-005 static/build/local-preview gate (305
 source files and 30 production responses), all 13 invariants, tilemap and diff
 checks pass. The local checks used only files, child processes and loopback
