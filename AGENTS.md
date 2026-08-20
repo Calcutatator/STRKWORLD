@@ -273,7 +273,7 @@ leaves no old review. Removing the attempt advance restores the stale review,
 and removing the flow transition leaves the edited panel stuck in preparing,
 so both clauses are independently observed. The focused Exchange machine
 passes 18 tests, the Web suite passes 36 files / 393 tests and the full
-workspace passes 88 files / 1,241 tests; workspace typecheck, production build,
+workspace passes 89 files / 1,255 tests; workspace typecheck, production build,
 all 13 invariants and diff check pass. Local verification used no browser,
 external network, wallet, RPC, proof, signature, funds or transaction.*
 
