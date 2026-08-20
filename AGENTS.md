@@ -264,15 +264,17 @@ construction or authorization issuance. Quote selection, token/slippage
 policy, executor-call serialization, route schema and submission behavior are
 unchanged.
 
-*Verified:* a public `BackendApi.handle()` regression replaces only the
-external planner result with an otherwise valid mainnet private plan carrying
-`executorAddress: '0x0'`. Before the guard, the request returned 200, called
-the paymaster fee builder and exposed an authorization whose decoded swap
-binding contained `executor: '0x0'`. Green returns the existing generic 409
-invalid-quote response and proves the paymaster was not called. Removing the
-single nonzero clause makes that exact regression fail. Local verification
-used no live provider, external network, RPC, wallet, proof, signature, funds
-or transaction.*
+*Verified:* public `BackendApi.handle()` regressions replace only the external
+planner result with otherwise valid mainnet private plans carrying `0x0` and
+two accepted leading-zero encodings, `0x00` and `0x00000000`. Before the guard,
+each request returned 200, called the paymaster fee builder and exposed an
+authorization whose decoded swap binding contained the zero executor. Green
+returns the existing generic 409 invalid-quote response and proves neither the
+paymaster nor authorization issuer was called. Removing the nonzero clause
+makes all three regressions fail; replacing its numeric felt comparison with a
+string-only `=== '0x0'` check makes the two leading-zero cases fail. Local
+verification used no live provider, external network, RPC, wallet, proof,
+signature, funds or transaction.*
 
 ### 2026-08-20 — An old Bridge watcher cannot adopt replacement evidence
 
