@@ -233,6 +233,69 @@ describe('BridgeService', () => {
     expect(service.exportResumeRecord()).toBe(replacementExport);
   });
 
+  it('does not let an older watch timeout graft its evidence onto a replacement deposit', async () => {
+    const client = new StubClient();
+    const store = new MemoryBridgeStore();
+    let now = NOW;
+    const service = new BridgeService({
+      client,
+      store,
+      quoteVerifier: () => true,
+      now: () => now,
+      sleep: async () => { throw new Error('watch should stop before sleeping'); },
+    });
+    const original = await service.createManualDeposit({
+      source: SOURCE,
+      amountIn: 1_000_000n,
+      starknetRecipient: '0x123',
+      refundAddress: request.refundTo,
+    });
+    let releaseStatus!: (value: GetExecutionStatusResponse) => void;
+    let markStarted!: () => void;
+    const started = new Promise<void>((resolve) => { markStarted = resolve; });
+    client.getExecutionStatus = async () => {
+      markStarted();
+      return new Promise<GetExecutionStatusResponse>((resolve) => { releaseStatus = resolve; });
+    };
+
+    const watching = service.watch({ intervalMs: 10, maxActiveMs: 1 });
+    await started;
+    service.discard();
+    now += 1;
+    client.getQuote = async (value) => ({
+      ...signedQuote,
+      correlationId: 'corr-2',
+      signature: 'replacement-signed-by-one-click',
+      quoteRequest: value,
+      quote: {
+        ...signedQuote.quote,
+        depositAddress: '0xreplacement-deposit',
+        deadline: value.deadline,
+      },
+    });
+    const replacement = await service.createManualDeposit({
+      source: SOURCE,
+      amountIn: 1_000_000n,
+      starknetRecipient: '0x123',
+      refundAddress: request.refundTo,
+    });
+    const replacementExport = service.exportResumeRecord();
+    releaseStatus({
+      ...status('PROCESSING' as never, {
+        originChainTxHashes: [{ hash: '0xold-deposit', explorerUrl: 'https://example/tx' }],
+      }),
+      quoteResponse: original.signedQuote,
+    });
+
+    await expect(watching).resolves.toMatchObject({
+      leg: 'solver-settling',
+      depositTxHash: '0xold-deposit',
+      pollingStopped: true,
+    });
+    expect(service.resume()).toEqual(replacement);
+    expect(service.exportResumeRecord()).toBe(replacementExport);
+  });
+
   it('creates only inbound exact-input quotes to Starknet STRK and retains the signed response', async () => {
     const client = new StubClient();
     const store = new MemoryBridgeStore();
