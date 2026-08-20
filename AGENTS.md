@@ -278,6 +278,30 @@ workspace passes 87 files / 1,226 tests; workspace typecheck, production build,
 all 13 invariants and diff check pass. The local verification used no browser,
 external network, wallet, RPC, proof, signature, funds or transaction.
 
+### 2026-08-20 — A replacement World must not inherit its first Shell bus
+
+The World runtime retains its ref-counting host after the current Phaser game
+has been completely destroyed. That host's `start` callback previously closed
+over the first `WorldConfig` passed to `ensureHost()`. A later acquisition with
+a different Shell bus therefore constructed a genuinely new game and scene but
+installed the first bus again. Its fixed-room controllers subscribed to stale
+Shell input, and its semantic output returned to the stale owner.
+
+Each fresh host start now consumes the config belonging to the acquisition that
+caused that start. The handoff is synchronous around `Host.acquire()` and is
+cleared afterwards; retaining or releasing an already-live game is unchanged.
+The singleton host still owns StrictMode-safe Phaser lifetime, but it no longer
+owns the first caller's bus forever.
+
+*Verified:* a public runtime regression acquires with bus A, releases it, runs
+the complete deferred teardown, then acquires with distinct bus B. Before the
+fix, the second scene's registry contained A and B received no fixed-room
+subscription; the failure reproduced identically in three isolated runs. Green
+records B at scene creation and observes B's `world:stations` subscription.
+Removing the per-acquisition config assignment makes both runtime tests fail.
+The focused runtime suite passes 1 file / 2 tests. No browser, network, lobby,
+wallet, RPC, proof, signature, funds or transaction was used.
+
 ### 2026-08-20 — A local Lobby leave does not own its replacement room
 
 `LobbyClient.disconnect()` clears the current room before awaiting the SDK's
