@@ -12,24 +12,30 @@
  * is the compiled composition root used by the Dockerfile; an override exists
  * for an image layout change without changing this launcher.
  *
- * Logging: successful startup is silent. A missing entry emits one
+ * Logging: successful startup is silent. A missing or non-file entry emits one
  * configuration error to stderr and exits with EX_CONFIG; it must never gain
  * a per-request log line (D-014).
  */
 
-import { existsSync } from 'node:fs';
+import { statSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
 
 const entry = process.env.BACKEND_ENTRY ?? 'apps/backend/src/server.js';
 const absolute = resolve(process.cwd(), entry);
 
-if (!existsSync(absolute)) {
+function isRegularFile(path) {
+  try {
+    return statSync(path).isFile();
+  } catch {
+    return false;
+  }
+}
+
+if (!isRegularFile(absolute)) {
   process.stderr.write(
     [
-      'strkworld-backend: cannot start — compiled entry is missing.',
-      '',
-      `  expected: ${entry}`,
+      'strkworld-backend: cannot start — compiled entry is missing or invalid.',
       '',
       '  Build the backend image from the repository root so the compiled',
       '  composition root is copied into the expected path.',
