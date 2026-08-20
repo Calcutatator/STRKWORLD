@@ -1,41 +1,26 @@
-# Avatar v1 QA evidence
+# Player sprite QA
 
-The final art handoff was checked at native resolution before repository
-staging. These checks validate the asset files, not World integration or
-rendered in-game behavior.
+This evidence covers the D-052 corrected art handoff. It is art QA only;
+runtime integration and rendered in-game acceptance remain separate gates.
 
-## Mechanical result
+Checks run over all 16 sheets and all 320 frames:
 
-`qa-report.json` records a passing scan of all 192 frames:
+- 320x256 sheet dimensions with 20 transparent 64x64 cells per sheet.
+- Binary alpha only, no baked shadow pixels, and fixed last opaque row `y=56`.
+- At most 24 visible RGB colours per frame.
+- Exterior flood-fill found zero enclosed transparent islands.
+- Body-corridor scan found zero missing upper-torso or pelvis-to-foot corridors.
+- Narrow 1-2px body-channel scan found zero unapproved channels. Stable lower-leg
+  separation and the large warrior's helmet-horn gap are explicitly whitelisted.
+- High-luma boundary scan found zero exposed white/cyan matte-fringe pixels.
+- Side-facing idle silhouettes are vertically normalized to each character's
+  approved down-facing model; characters 4 and 7 remain large and character 6
+  remains the deliberately small female mechanic.
+- Deterministic contrast contacts cover black, white, mid-grey, and muted grass.
+- Aseprite inspection verified one `art` layer, 320 frames at 125ms, 16 key tags,
+  two slices, and the `(32,56)` pivot. Re-export reconstruction matched all 16
+  PNG sheets pixel-for-pixel.
 
-- 16 sheets at exactly 192x256 pixels;
-- 3x4 cells at exactly 64x64 pixels;
-- binary transparent alpha;
-- no clipping on any canvas edge;
-- lowest opaque pixel fixed at y=56 in every frame;
-- no more than 24 RGB colors per frame;
-- zero exposed bright-edge pixels at alpha boundaries;
-- all idle, walk-1, and walk-2 frames distinct per direction;
-- all down-facing idle frames pixel-identical to the approved calibration;
-- art overlaps the fixed central gameplay-body reference;
-- no detached bottom component matching a baked oval shadow.
-
-`source-inspection.json` records the editable-source checks: 64x64 canvas, 192
-frames, one `art` layer, 80 tags, 125 ms timing, and the two expected slices.
-
-`aseprite-roundtrip.json` records a 16-sheet Aseprite round trip. Every PNG
-re-exported from `source/player-sprites.aseprite` was pixel-identical to its
-committed `avatar-N.png` counterpart.
-
-## Visual evidence
-
-- `all-characters-movement.png` shows every cosy and fighting frame on slate.
-- `background-readability.png` shows all 16 down-facing idles on muted green
-  grass, beige paving, slate road, and brick facade colors.
-- `character-N-walk.gif` animates the cosy and fighting states together through
-  all four facings at the recommended 8 FPS cadence.
-
-Visual review also confirmed that characters 4 and 7 remain large, character 6
-remains small, character 5 remains female, character 7 keeps the battle helmet,
-and each fighting facing has one coherent weapon set without a duplicate
-behind the character.
+The only permitted negative space is stable, anatomically readable leg
+separation or the reviewed horn gap. No gap is concealed by a background,
+shadow, scaling rule, or runtime collision geometry.

@@ -2,12 +2,14 @@
   "status": "pass",
   "source": "player-sprites.aseprite",
   "canvas": [64, 64],
-  "frames": 192,
+  "frames": 320,
   "frameDurationMs": 125,
   "layers": ["art"],
-  "tags": 80,
+  "tags": 16,
+  "tagRanges": "avatar-1..avatar-16, 20 frames per tag",
   "slices": {
-    "logical-canvas": { "bounds": [0, 0, 64, 64], "pivot": [32, 56] },
-    "runtime-body-reference": { "bounds": [20, 32, 24, 24], "ownership": "runtime" }
-  }
+    "logical-cell-64x64": { "bounds": [0, 0, 64, 64], "pivot": [32, 56] },
+    "feet-pivot-32-56": { "bounds": [32, 56, 1, 1] }
+  },
+  "verifiedWith": "Aseprite 1.x-04766e2-dev Lua inspection"
 }

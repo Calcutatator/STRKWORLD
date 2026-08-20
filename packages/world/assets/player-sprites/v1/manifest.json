@@ -1,13 +1,13 @@
 {
   "schemaVersion": 1,
-  "status": "final-art-handoff-awaiting-runtime-integration-and-rendered-acceptance",
-  "approvedContract": "D-049",
+  "status": "corrected-art-handoff-awaiting-orchestration-review",
+  "approvedContract": "D-052",
   "sheet": {
     "filePattern": "avatar-{key}.png",
     "count": 16,
-    "dimensions": [192, 256],
+    "dimensions": [320, 256],
     "cellSize": [64, 64],
-    "columns": ["idle", "walk-1", "walk-2"],
+    "columns": ["idle", "contact-left", "passing-left", "contact-right", "passing-right"],
     "rows": ["down", "left", "right", "up"],
     "alpha": "binary transparent RGBA",
     "maximumColorsPerFrame": 24,
@@ -36,7 +36,7 @@
       "fps": 0
     },
     "walk": {
-      "playbackColumns": [0, 1, 0, 2],
+      "playbackColumns": [0, 1, 2, 3, 4],
       "normalFps": 8,
       "sprintFps": 12
     }
@@ -65,11 +65,11 @@
   "source": {
     "file": "source/player-sprites.aseprite",
     "canvas": [64, 64],
-    "frames": 192,
+    "frames": 320,
     "frameDurationMs": 125,
     "layer": "art",
-    "tags": "avatar-N plus avatar-N/{down,left,right,up}",
-    "slices": ["logical-canvas", "runtime-body-reference"]
+    "tags": "avatar-1 through avatar-16, 20 frames per tag",
+    "slices": ["logical-cell-64x64 with feet pivot", "feet-pivot-32-56"]
   },
   "qa": {
     "report": "qa/qa-report.json",
