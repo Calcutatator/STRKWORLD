@@ -1,10 +1,20 @@
 {
   "method": "explicit named-cell pixel repairs; no blanket transform, global despeckle, or automated hole-fill",
-  "count": 799,
+  "count": 877,
   "breakdown": {
     "hole-fill": 133,
     "seam-material-repair": 662,
-    "isolated-remove": 4
+    "isolated-remove": 4,
+    "d052-down-up-stride-reconstruction": 64,
+    "detached-component-remove": 6,
+    "d052-down-depth-repair": 2,
+    "weapon-boundary-repair": 6
+  },
+  "newCorrectionPass": {
+    "movementCells": 64,
+    "detachedComponentCells": 6,
+    "detachedComponentPixels": 19,
+    "reviewStatus": "awaiting independent review"
   },
   "repairs": [
     {
@@ -11192,6 +11202,715 @@
         255
       ],
       "kind": "hole-fill"
+    },
+    {
+      "key": "avatar-1",
+      "row": "down",
+      "column": "contact-left",
+      "kind": "d052-down-up-stride-reconstruction",
+      "changedPixels": 160,
+      "note": "upper silhouette, waist and planted-foot corridor re-authored from the approved directional idle model"
+    },
+    {
+      "key": "avatar-1",
+      "row": "down",
+      "column": "passing-left",
+      "kind": "d052-down-up-stride-reconstruction",
+      "changedPixels": 640,
+      "note": "upper silhouette, waist and planted-foot corridor re-authored from the approved directional idle model"
+    },
+    {
+      "key": "avatar-1",
+      "row": "down",
+      "column": "contact-right",
+      "kind": "d052-down-up-stride-reconstruction",
+      "changedPixels": 148,
+      "note": "upper silhouette, waist and planted-foot corridor re-authored from the approved directional idle model"
+    },
+    {
+      "key": "avatar-1",
+      "row": "down",
+      "column": "passing-right",
+      "kind": "d052-down-up-stride-reconstruction",
+      "changedPixels": 630,
+      "note": "upper silhouette, waist and planted-foot corridor re-authored from the approved directional idle model"
+    },
+    {
+      "key": "avatar-1",
+      "row": "up",
+      "column": "contact-left",
+      "kind": "d052-down-up-stride-reconstruction",
+      "changedPixels": 118,
+      "note": "upper silhouette, waist and planted-foot corridor re-authored from the approved directional idle model"
+    },
+    {
+      "key": "avatar-1",
+      "row": "up",
+      "column": "passing-left",
+      "kind": "d052-down-up-stride-reconstruction",
+      "changedPixels": 489,
+      "note": "upper silhouette, waist and planted-foot corridor re-authored from the approved directional idle model"
+    },
+    {
+      "key": "avatar-1",
+      "row": "up",
+      "column": "contact-right",
+      "kind": "d052-down-up-stride-reconstruction",
+      "changedPixels": 107,
+      "note": "upper silhouette, waist and planted-foot corridor re-authored from the approved directional idle model"
+    },
+    {
+      "key": "avatar-1",
+      "row": "up",
+      "column": "passing-right",
+      "kind": "d052-down-up-stride-reconstruction",
+      "changedPixels": 478,
+      "note": "upper silhouette, waist and planted-foot corridor re-authored from the approved directional idle model"
+    },
+    {
+      "key": "avatar-2",
+      "row": "down",
+      "column": "contact-left",
+      "kind": "d052-down-up-stride-reconstruction",
+      "changedPixels": 129,
+      "note": "upper silhouette, waist and planted-foot corridor re-authored from the approved directional idle model"
+    },
+    {
+      "key": "avatar-2",
+      "row": "down",
+      "column": "passing-left",
+      "kind": "d052-down-up-stride-reconstruction",
+      "changedPixels": 612,
+      "note": "upper silhouette, waist and planted-foot corridor re-authored from the approved directional idle model"
+    },
+    {
+      "key": "avatar-2",
+      "row": "down",
+      "column": "contact-right",
+      "kind": "d052-down-up-stride-reconstruction",
+      "changedPixels": 134,
+      "note": "upper silhouette, waist and planted-foot corridor re-authored from the approved directional idle model"
+    },
+    {
+      "key": "avatar-2",
+      "row": "down",
+      "column": "passing-right",
+      "kind": "d052-down-up-stride-reconstruction",
+      "changedPixels": 637,
+      "note": "upper silhouette, waist and planted-foot corridor re-authored from the approved directional idle model"
+    },
+    {
+      "key": "avatar-2",
+      "row": "up",
+      "column": "contact-left",
+      "kind": "d052-down-up-stride-reconstruction",
+      "changedPixels": 133,
+      "note": "upper silhouette, waist and planted-foot corridor re-authored from the approved directional idle model"
+    },
+    {
+      "key": "avatar-2",
+      "row": "up",
+      "column": "passing-left",
+      "kind": "d052-down-up-stride-reconstruction",
+      "changedPixels": 553,
+      "note": "upper silhouette, waist and planted-foot corridor re-authored from the approved directional idle model"
+    },
+    {
+      "key": "avatar-2",
+      "row": "up",
+      "column": "contact-right",
+      "kind": "d052-down-up-stride-reconstruction",
+      "changedPixels": 110,
+      "note": "upper silhouette, waist and planted-foot corridor re-authored from the approved directional idle model"
+    },
+    {
+      "key": "avatar-2",
+      "row": "up",
+      "column": "passing-right",
+      "kind": "d052-down-up-stride-reconstruction",
+      "changedPixels": 559,
+      "note": "upper silhouette, waist and planted-foot corridor re-authored from the approved directional idle model"
+    },
+    {
+      "key": "avatar-4",
+      "row": "down",
+      "column": "contact-left",
+      "kind": "d052-down-up-stride-reconstruction",
+      "changedPixels": 448,
+      "note": "upper silhouette, waist and planted-foot corridor re-authored from the approved directional idle model"
+    },
+    {
+      "key": "avatar-4",
+      "row": "down",
+      "column": "passing-left",
+      "kind": "d052-down-up-stride-reconstruction",
+      "changedPixels": 1522,
+      "note": "upper silhouette, waist and planted-foot corridor re-authored from the approved directional idle model"
+    },
+    {
+      "key": "avatar-4",
+      "row": "down",
+      "column": "contact-right",
+      "kind": "d052-down-up-stride-reconstruction",
+      "changedPixels": 412,
+      "note": "upper silhouette, waist and planted-foot corridor re-authored from the approved directional idle model"
+    },
+    {
+      "key": "avatar-4",
+      "row": "down",
+      "column": "passing-right",
+      "kind": "d052-down-up-stride-reconstruction",
+      "changedPixels": 1500,
+      "note": "upper silhouette, waist and planted-foot corridor re-authored from the approved directional idle model"
+    },
+    {
+      "key": "avatar-4",
+      "row": "up",
+      "column": "contact-left",
+      "kind": "d052-down-up-stride-reconstruction",
+      "changedPixels": 391,
+      "note": "upper silhouette, waist and planted-foot corridor re-authored from the approved directional idle model"
+    },
+    {
+      "key": "avatar-4",
+      "row": "up",
+      "column": "passing-left",
+      "kind": "d052-down-up-stride-reconstruction",
+      "changedPixels": 1278,
+      "note": "upper silhouette, waist and planted-foot corridor re-authored from the approved directional idle model"
+    },
+    {
+      "key": "avatar-4",
+      "row": "up",
+      "column": "contact-right",
+      "kind": "d052-down-up-stride-reconstruction",
+      "changedPixels": 413,
+      "note": "upper silhouette, waist and planted-foot corridor re-authored from the approved directional idle model"
+    },
+    {
+      "key": "avatar-4",
+      "row": "up",
+      "column": "passing-right",
+      "kind": "d052-down-up-stride-reconstruction",
+      "changedPixels": 1273,
+      "note": "upper silhouette, waist and planted-foot corridor re-authored from the approved directional idle model"
+    },
+    {
+      "key": "avatar-6",
+      "row": "down",
+      "column": "contact-left",
+      "kind": "d052-down-up-stride-reconstruction",
+      "changedPixels": 134,
+      "note": "upper silhouette, waist and planted-foot corridor re-authored from the approved directional idle model"
+    },
+    {
+      "key": "avatar-6",
+      "row": "down",
+      "column": "passing-left",
+      "kind": "d052-down-up-stride-reconstruction",
+      "changedPixels": 481,
+      "note": "upper silhouette, waist and planted-foot corridor re-authored from the approved directional idle model"
+    },
+    {
+      "key": "avatar-6",
+      "row": "down",
+      "column": "contact-right",
+      "kind": "d052-down-up-stride-reconstruction",
+      "changedPixels": 119,
+      "note": "upper silhouette, waist and planted-foot corridor re-authored from the approved directional idle model"
+    },
+    {
+      "key": "avatar-6",
+      "row": "down",
+      "column": "passing-right",
+      "kind": "d052-down-up-stride-reconstruction",
+      "changedPixels": 500,
+      "note": "upper silhouette, waist and planted-foot corridor re-authored from the approved directional idle model"
+    },
+    {
+      "key": "avatar-6",
+      "row": "up",
+      "column": "contact-left",
+      "kind": "d052-down-up-stride-reconstruction",
+      "changedPixels": 142,
+      "note": "upper silhouette, waist and planted-foot corridor re-authored from the approved directional idle model"
+    },
+    {
+      "key": "avatar-6",
+      "row": "up",
+      "column": "passing-left",
+      "kind": "d052-down-up-stride-reconstruction",
+      "changedPixels": 464,
+      "note": "upper silhouette, waist and planted-foot corridor re-authored from the approved directional idle model"
+    },
+    {
+      "key": "avatar-6",
+      "row": "up",
+      "column": "contact-right",
+      "kind": "d052-down-up-stride-reconstruction",
+      "changedPixels": 134,
+      "note": "upper silhouette, waist and planted-foot corridor re-authored from the approved directional idle model"
+    },
+    {
+      "key": "avatar-6",
+      "row": "up",
+      "column": "passing-right",
+      "kind": "d052-down-up-stride-reconstruction",
+      "changedPixels": 465,
+      "note": "upper silhouette, waist and planted-foot corridor re-authored from the approved directional idle model"
+    },
+    {
+      "key": "avatar-7",
+      "row": "down",
+      "column": "contact-left",
+      "kind": "d052-down-up-stride-reconstruction",
+      "changedPixels": 497,
+      "note": "upper silhouette, waist and planted-foot corridor re-authored from the approved directional idle model"
+    },
+    {
+      "key": "avatar-7",
+      "row": "down",
+      "column": "passing-left",
+      "kind": "d052-down-up-stride-reconstruction",
+      "changedPixels": 1293,
+      "note": "upper silhouette, waist and planted-foot corridor re-authored from the approved directional idle model"
+    },
+    {
+      "key": "avatar-7",
+      "row": "down",
+      "column": "contact-right",
+      "kind": "d052-down-up-stride-reconstruction",
+      "changedPixels": 474,
+      "note": "upper silhouette, waist and planted-foot corridor re-authored from the approved directional idle model"
+    },
+    {
+      "key": "avatar-7",
+      "row": "down",
+      "column": "passing-right",
+      "kind": "d052-down-up-stride-reconstruction",
+      "changedPixels": 1325,
+      "note": "upper silhouette, waist and planted-foot corridor re-authored from the approved directional idle model"
+    },
+    {
+      "key": "avatar-7",
+      "row": "up",
+      "column": "contact-left",
+      "kind": "d052-down-up-stride-reconstruction",
+      "changedPixels": 469,
+      "note": "upper silhouette, waist and planted-foot corridor re-authored from the approved directional idle model"
+    },
+    {
+      "key": "avatar-7",
+      "row": "up",
+      "column": "passing-left",
+      "kind": "d052-down-up-stride-reconstruction",
+      "changedPixels": 1196,
+      "note": "upper silhouette, waist and planted-foot corridor re-authored from the approved directional idle model"
+    },
+    {
+      "key": "avatar-7",
+      "row": "up",
+      "column": "contact-right",
+      "kind": "d052-down-up-stride-reconstruction",
+      "changedPixels": 475,
+      "note": "upper silhouette, waist and planted-foot corridor re-authored from the approved directional idle model"
+    },
+    {
+      "key": "avatar-7",
+      "row": "up",
+      "column": "passing-right",
+      "kind": "d052-down-up-stride-reconstruction",
+      "changedPixels": 1165,
+      "note": "upper silhouette, waist and planted-foot corridor re-authored from the approved directional idle model"
+    },
+    {
+      "key": "avatar-8",
+      "row": "down",
+      "column": "contact-left",
+      "kind": "d052-down-up-stride-reconstruction",
+      "changedPixels": 176,
+      "note": "upper silhouette, waist and planted-foot corridor re-authored from the approved directional idle model"
+    },
+    {
+      "key": "avatar-8",
+      "row": "down",
+      "column": "passing-left",
+      "kind": "d052-down-up-stride-reconstruction",
+      "changedPixels": 625,
+      "note": "upper silhouette, waist and planted-foot corridor re-authored from the approved directional idle model"
+    },
+    {
+      "key": "avatar-8",
+      "row": "down",
+      "column": "contact-right",
+      "kind": "d052-down-up-stride-reconstruction",
+      "changedPixels": 169,
+      "note": "upper silhouette, waist and planted-foot corridor re-authored from the approved directional idle model"
+    },
+    {
+      "key": "avatar-8",
+      "row": "down",
+      "column": "passing-right",
+      "kind": "d052-down-up-stride-reconstruction",
+      "changedPixels": 637,
+      "note": "upper silhouette, waist and planted-foot corridor re-authored from the approved directional idle model"
+    },
+    {
+      "key": "avatar-8",
+      "row": "up",
+      "column": "contact-left",
+      "kind": "d052-down-up-stride-reconstruction",
+      "changedPixels": 135,
+      "note": "upper silhouette, waist and planted-foot corridor re-authored from the approved directional idle model"
+    },
+    {
+      "key": "avatar-8",
+      "row": "up",
+      "column": "passing-left",
+      "kind": "d052-down-up-stride-reconstruction",
+      "changedPixels": 585,
+      "note": "upper silhouette, waist and planted-foot corridor re-authored from the approved directional idle model"
+    },
+    {
+      "key": "avatar-8",
+      "row": "up",
+      "column": "contact-right",
+      "kind": "d052-down-up-stride-reconstruction",
+      "changedPixels": 103,
+      "note": "upper silhouette, waist and planted-foot corridor re-authored from the approved directional idle model"
+    },
+    {
+      "key": "avatar-8",
+      "row": "up",
+      "column": "passing-right",
+      "kind": "d052-down-up-stride-reconstruction",
+      "changedPixels": 584,
+      "note": "upper silhouette, waist and planted-foot corridor re-authored from the approved directional idle model"
+    },
+    {
+      "key": "avatar-12",
+      "row": "down",
+      "column": "contact-left",
+      "kind": "d052-down-up-stride-reconstruction",
+      "changedPixels": 468,
+      "note": "upper silhouette, waist and planted-foot corridor re-authored from the approved directional idle model"
+    },
+    {
+      "key": "avatar-12",
+      "row": "down",
+      "column": "passing-left",
+      "kind": "d052-down-up-stride-reconstruction",
+      "changedPixels": 1584,
+      "note": "upper silhouette, waist and planted-foot corridor re-authored from the approved directional idle model"
+    },
+    {
+      "key": "avatar-12",
+      "row": "down",
+      "column": "contact-right",
+      "kind": "d052-down-up-stride-reconstruction",
+      "changedPixels": 455,
+      "note": "upper silhouette, waist and planted-foot corridor re-authored from the approved directional idle model"
+    },
+    {
+      "key": "avatar-12",
+      "row": "down",
+      "column": "passing-right",
+      "kind": "d052-down-up-stride-reconstruction",
+      "changedPixels": 1595,
+      "note": "upper silhouette, waist and planted-foot corridor re-authored from the approved directional idle model"
+    },
+    {
+      "key": "avatar-12",
+      "row": "up",
+      "column": "contact-left",
+      "kind": "d052-down-up-stride-reconstruction",
+      "changedPixels": 424,
+      "note": "upper silhouette, waist and planted-foot corridor re-authored from the approved directional idle model"
+    },
+    {
+      "key": "avatar-12",
+      "row": "up",
+      "column": "passing-left",
+      "kind": "d052-down-up-stride-reconstruction",
+      "changedPixels": 1401,
+      "note": "upper silhouette, waist and planted-foot corridor re-authored from the approved directional idle model"
+    },
+    {
+      "key": "avatar-12",
+      "row": "up",
+      "column": "contact-right",
+      "kind": "d052-down-up-stride-reconstruction",
+      "changedPixels": 424,
+      "note": "upper silhouette, waist and planted-foot corridor re-authored from the approved directional idle model"
+    },
+    {
+      "key": "avatar-12",
+      "row": "up",
+      "column": "passing-right",
+      "kind": "d052-down-up-stride-reconstruction",
+      "changedPixels": 1401,
+      "note": "upper silhouette, waist and planted-foot corridor re-authored from the approved directional idle model"
+    },
+    {
+      "key": "avatar-15",
+      "row": "down",
+      "column": "contact-left",
+      "kind": "d052-down-up-stride-reconstruction",
+      "changedPixels": 468,
+      "note": "upper silhouette, waist and planted-foot corridor re-authored from the approved directional idle model"
+    },
+    {
+      "key": "avatar-15",
+      "row": "down",
+      "column": "passing-left",
+      "kind": "d052-down-up-stride-reconstruction",
+      "changedPixels": 1451,
+      "note": "upper silhouette, waist and planted-foot corridor re-authored from the approved directional idle model"
+    },
+    {
+      "key": "avatar-15",
+      "row": "down",
+      "column": "contact-right",
+      "kind": "d052-down-up-stride-reconstruction",
+      "changedPixels": 451,
+      "note": "upper silhouette, waist and planted-foot corridor re-authored from the approved directional idle model"
+    },
+    {
+      "key": "avatar-15",
+      "row": "down",
+      "column": "passing-right",
+      "kind": "d052-down-up-stride-reconstruction",
+      "changedPixels": 1511,
+      "note": "upper silhouette, waist and planted-foot corridor re-authored from the approved directional idle model"
+    },
+    {
+      "key": "avatar-15",
+      "row": "up",
+      "column": "contact-left",
+      "kind": "d052-down-up-stride-reconstruction",
+      "changedPixels": 459,
+      "note": "upper silhouette, waist and planted-foot corridor re-authored from the approved directional idle model"
+    },
+    {
+      "key": "avatar-15",
+      "row": "up",
+      "column": "passing-left",
+      "kind": "d052-down-up-stride-reconstruction",
+      "changedPixels": 1436,
+      "note": "upper silhouette, waist and planted-foot corridor re-authored from the approved directional idle model"
+    },
+    {
+      "key": "avatar-15",
+      "row": "up",
+      "column": "contact-right",
+      "kind": "d052-down-up-stride-reconstruction",
+      "changedPixels": 455,
+      "note": "upper silhouette, waist and planted-foot corridor re-authored from the approved directional idle model"
+    },
+    {
+      "key": "avatar-15",
+      "row": "up",
+      "column": "passing-right",
+      "kind": "d052-down-up-stride-reconstruction",
+      "changedPixels": 1398,
+      "note": "upper silhouette, waist and planted-foot corridor re-authored from the approved directional idle model"
+    },
+    {
+      "key": "avatar-15",
+      "row": "right",
+      "column": "passing-left",
+      "kind": "detached-component-remove",
+      "coordinates": [
+        [
+          31,
+          54
+        ],
+        [
+          32,
+          54
+        ],
+        [
+          33,
+          54
+        ],
+        [
+          31,
+          55
+        ],
+        [
+          32,
+          55
+        ],
+        [
+          33,
+          55
+        ]
+      ],
+      "removedPixels": 6,
+      "note": "reviewer-identified detached foot island"
+    },
+    {
+      "key": "avatar-8",
+      "row": "down",
+      "column": "passing-right",
+      "kind": "detached-component-remove",
+      "coordinates": [
+        [
+          40,
+          54
+        ],
+        [
+          40,
+          55
+        ]
+      ],
+      "removedPixels": 2,
+      "note": "detached-component gate repair"
+    },
+    {
+      "key": "avatar-8",
+      "row": "up",
+      "column": "passing-right",
+      "kind": "detached-component-remove",
+      "coordinates": [
+        [
+          40,
+          54
+        ],
+        [
+          40,
+          55
+        ]
+      ],
+      "removedPixels": 2,
+      "note": "detached-component gate repair"
+    },
+    {
+      "key": "avatar-15",
+      "row": "down",
+      "column": "contact-left",
+      "kind": "detached-component-remove",
+      "coordinates": [
+        [
+          43,
+          53
+        ],
+        [
+          43,
+          54
+        ],
+        [
+          43,
+          55
+        ]
+      ],
+      "removedPixels": 3,
+      "note": "detached-component gate repair"
+    },
+    {
+      "key": "avatar-15",
+      "row": "down",
+      "column": "passing-left",
+      "kind": "detached-component-remove",
+      "coordinates": [
+        [
+          43,
+          53
+        ],
+        [
+          43,
+          54
+        ],
+        [
+          43,
+          55
+        ]
+      ],
+      "removedPixels": 3,
+      "note": "detached-component gate repair"
+    },
+    {
+      "key": "avatar-15",
+      "row": "down",
+      "column": "passing-right",
+      "kind": "detached-component-remove",
+      "coordinates": [
+        [
+          43,
+          53
+        ],
+        [
+          43,
+          54
+        ],
+        [
+          43,
+          55
+        ]
+      ],
+      "removedPixels": 3,
+      "note": "detached-component gate repair"
+    },
+    {
+      "key": "avatar-12",
+      "row": "down",
+      "column": "contact-right",
+      "kind": "d052-down-depth-repair",
+      "note": "right boot lifted while left boot remains planted; explicit model redraw"
+    },
+    {
+      "key": "avatar-12",
+      "row": "down",
+      "column": "passing-right",
+      "kind": "d052-down-depth-repair",
+      "note": "right boot lifted while left boot remains planted; explicit model redraw"
+    },
+    {
+      "key": "avatar-12",
+      "row": "down",
+      "column": "contact-right",
+      "kind": "weapon-boundary-repair",
+      "note": "shield/weapon moved inside right canvas edge"
+    },
+    {
+      "key": "avatar-12",
+      "row": "down",
+      "column": "passing-right",
+      "kind": "weapon-boundary-repair",
+      "note": "shield/weapon moved inside right canvas edge"
+    },
+    {
+      "key": "avatar-15",
+      "row": "down",
+      "column": "contact-right",
+      "kind": "weapon-boundary-repair",
+      "note": "axe moved inside right canvas edge"
+    },
+    {
+      "key": "avatar-15",
+      "row": "down",
+      "column": "passing-right",
+      "kind": "weapon-boundary-repair",
+      "note": "axe moved inside right canvas edge"
+    },
+    {
+      "key": "avatar-15",
+      "row": "up",
+      "column": "contact-left",
+      "kind": "weapon-boundary-repair",
+      "note": "axe moved inside left canvas edge"
+    },
+    {
+      "key": "avatar-15",
+      "row": "up",
+      "column": "passing-left",
+      "kind": "weapon-boundary-repair",
+      "note": "axe moved inside left canvas edge"
     }
-  ]
+  ],
+  "newVisualCorrectionPass": {
+    "avatar12DownRightStrideCells": 2,
+    "weaponBoundaryCells": 6,
+    "reviewStatus": "awaiting independent review"
+  }
 }

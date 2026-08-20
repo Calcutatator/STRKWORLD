@@ -1,7 +1,7 @@
 {
   "status": "correction-candidate-awaiting-independent-review",
   "contract": "D-052",
-  "scope": "all 16 keys, 320 cells; side identities reconstructed from character-specific authored references while approved down/up identities were preserved",
+  "scope": "all 16 keys, 320 cells; character-specific four-facing identity and full five-pose gait correction",
   "dimensions": [
     320,
     256
@@ -29,22 +29,30 @@
   ],
   "alpha": "binary",
   "maxVisibleColorsPerCell": 24,
-  "interiorTransparentPixels": 0,
+  "interiorTransparentPixels": 449,
   "nonBinaryAlphaCells": [],
   "feetFailures": [],
+  "detachedComponents": {
+    "cells": 320,
+    "failingCells": 0,
+    "whitelist": [],
+    "report": "qa/detached-components.json"
+  },
   "wholeBodyMotion": {
     "nonIdleCells": 256,
-    "totalChangedPixels": 186789,
+    "totalChangedPixels": 189530,
     "duplicateMovementCells": [],
-    "gate": "changed pixels must reach the body above the hip gate; visual weight transfer remains an independent review gate"
+    "gate": "every non-idle cell must change above its directional hip gate; depth/weight transfer remains an independent visual review gate",
+    "minChangedPixelsAboveHip": 219,
+    "minUpperBodyShare": 0.555184
   },
-  "explicitRepairPixels": 799,
+  "explicitRepairPixels": 877,
   "visualReviewRequired": [
     "cross-facing identity and model continuity",
-    "opposing contact/passing stride",
+    "distinct down/up depth stride with hip-connected weight transfer",
     "weapon/hand continuity",
     "game-ground readability",
-    "repeated GIF cadence"
+    "repeated 120ms GIF preview of the 125ms / 8 FPS runtime cadence"
   ],
   "sourceRoundTrip": "qa/aseprite-roundtrip.json",
   "evidence": [
@@ -56,9 +64,206 @@
   ],
   "runtimeReady": false,
   "renderedAcceptance": false,
+  "explicitRepairBreakdown": {
+    "hole-fill": 133,
+    "seam-material-repair": 662,
+    "isolated-remove": 4,
+    "d052-down-up-stride-reconstruction": 64,
+    "detached-component-remove": 6,
+    "d052-down-depth-repair": 2,
+    "weapon-boundary-repair": 6
+  },
+  "narrowChannelScan": {
+    "candidateCount": 1305,
+    "scope": "1-2px transparent runs inside each body alpha bbox, bracketed by opaque pixels",
+    "samples": [
+      [
+        1,
+        0,
+        1,
+        "horizontal",
+        37,
+        42,
+        1
+      ],
+      [
+        1,
+        0,
+        1,
+        "horizontal",
+        37,
+        43,
+        1
+      ],
+      [
+        1,
+        0,
+        1,
+        "horizontal",
+        37,
+        44,
+        1
+      ],
+      [
+        1,
+        0,
+        1,
+        "horizontal",
+        37,
+        45,
+        1
+      ],
+      [
+        1,
+        0,
+        1,
+        "horizontal",
+        37,
+        46,
+        1
+      ],
+      [
+        1,
+        0,
+        1,
+        "horizontal",
+        37,
+        47,
+        1
+      ],
+      [
+        1,
+        0,
+        2,
+        "horizontal",
+        37,
+        42,
+        1
+      ],
+      [
+        1,
+        0,
+        2,
+        "horizontal",
+        37,
+        43,
+        1
+      ],
+      [
+        1,
+        0,
+        2,
+        "horizontal",
+        37,
+        44,
+        1
+      ],
+      [
+        1,
+        0,
+        2,
+        "horizontal",
+        37,
+        45,
+        1
+      ],
+      [
+        1,
+        0,
+        2,
+        "horizontal",
+        37,
+        46,
+        1
+      ],
+      [
+        1,
+        0,
+        2,
+        "horizontal",
+        37,
+        47,
+        1
+      ],
+      [
+        1,
+        0,
+        2,
+        "horizontal",
+        31,
+        49,
+        1
+      ],
+      [
+        1,
+        0,
+        2,
+        "horizontal",
+        31,
+        50,
+        1
+      ],
+      [
+        1,
+        0,
+        2,
+        "horizontal",
+        31,
+        51,
+        1
+      ],
+      [
+        1,
+        0,
+        2,
+        "horizontal",
+        30,
+        52,
+        2
+      ],
+      [
+        1,
+        0,
+        3,
+        "horizontal",
+        28,
+        42,
+        1
+      ],
+      [
+        1,
+        0,
+        3,
+        "horizontal",
+        28,
+        43,
+        1
+      ],
+      [
+        1,
+        0,
+        3,
+        "horizontal",
+        28,
+        44,
+        1
+      ],
+      [
+        1,
+        0,
+        3,
+        "horizontal",
+        28,
+        45,
+        1
+      ]
+    ],
+    "bodyCorridorReview": "alarm scan regenerated after correction; enlarged contrasting-background contacts and anatomy review remain mandatory",
+    "unapprovedChannels": "pending independent visual review; candidate list is an alarm, not acceptance"
+  },
   "cellReports": [
     {
-      "key": "avatar-1",
+      "key": 1,
       "row": "down",
       "column": "idle",
       "bbox": [
@@ -69,10 +274,10 @@
       ],
       "visibleColors": 24,
       "interiorTransparentPixels": 0,
-      "changedFromDirectionalIdle": null
+      "changedFromDirectionalIdle": 0
     },
     {
-      "key": "avatar-1",
+      "key": 1,
       "row": "down",
       "column": "contact-left",
       "bbox": [
@@ -82,35 +287,25 @@
         57
       ],
       "visibleColors": 24,
-      "interiorTransparentPixels": 0,
-      "changedFromDirectionalIdle": {
-        "pixels": 572,
-        "firstChangedY": 21,
-        "lastChangedY": 56,
-        "upperBodyShare": 0.6503
-      }
+      "interiorTransparentPixels": 6,
+      "changedFromDirectionalIdle": 549
     },
     {
-      "key": "avatar-1",
+      "key": 1,
       "row": "down",
       "column": "passing-left",
       "bbox": [
-        21,
         20,
-        47,
+        21,
+        46,
         57
       ],
       "visibleColors": 24,
-      "interiorTransparentPixels": 0,
-      "changedFromDirectionalIdle": {
-        "pixels": 585,
-        "firstChangedY": 20,
-        "lastChangedY": 56,
-        "upperBodyShare": 0.6513
-      }
+      "interiorTransparentPixels": 6,
+      "changedFromDirectionalIdle": 537
     },
     {
-      "key": "avatar-1",
+      "key": 1,
       "row": "down",
       "column": "contact-right",
       "bbox": [
@@ -120,35 +315,25 @@
         57
       ],
       "visibleColors": 24,
-      "interiorTransparentPixels": 0,
-      "changedFromDirectionalIdle": {
-        "pixels": 580,
-        "firstChangedY": 21,
-        "lastChangedY": 56,
-        "upperBodyShare": 0.6414
-      }
+      "interiorTransparentPixels": 6,
+      "changedFromDirectionalIdle": 554
     },
     {
-      "key": "avatar-1",
+      "key": 1,
       "row": "down",
       "column": "passing-right",
       "bbox": [
+        22,
         21,
-        20,
-        47,
+        48,
         57
       ],
       "visibleColors": 24,
-      "interiorTransparentPixels": 0,
-      "changedFromDirectionalIdle": {
-        "pixels": 577,
-        "firstChangedY": 20,
-        "lastChangedY": 56,
-        "upperBodyShare": 0.6603
-      }
+      "interiorTransparentPixels": 6,
+      "changedFromDirectionalIdle": 544
     },
     {
-      "key": "avatar-1",
+      "key": 1,
       "row": "left",
       "column": "idle",
       "bbox": [
@@ -159,10 +344,10 @@
       ],
       "visibleColors": 23,
       "interiorTransparentPixels": 0,
-      "changedFromDirectionalIdle": null
+      "changedFromDirectionalIdle": 0
     },
     {
-      "key": "avatar-1",
+      "key": 1,
       "row": "left",
       "column": "contact-left",
       "bbox": [
@@ -173,15 +358,10 @@
       ],
       "visibleColors": 24,
       "interiorTransparentPixels": 0,
-      "changedFromDirectionalIdle": {
-        "pixels": 480,
-        "firstChangedY": 21,
-        "lastChangedY": 56,
-        "upperBodyShare": 0.6396
-      }
+      "changedFromDirectionalIdle": 480
     },
     {
-      "key": "avatar-1",
+      "key": 1,
       "row": "left",
       "column": "passing-left",
       "bbox": [
@@ -192,15 +372,10 @@
       ],
       "visibleColors": 24,
       "interiorTransparentPixels": 0,
-      "changedFromDirectionalIdle": {
-        "pixels": 539,
-        "firstChangedY": 20,
-        "lastChangedY": 56,
-        "upperBodyShare": 0.6011
-      }
+      "changedFromDirectionalIdle": 539
     },
     {
-      "key": "avatar-1",
+      "key": 1,
       "row": "left",
       "column": "contact-right",
       "bbox": [
@@ -211,15 +386,10 @@
       ],
       "visibleColors": 24,
       "interiorTransparentPixels": 0,
-      "changedFromDirectionalIdle": {
-        "pixels": 526,
-        "firstChangedY": 20,
-        "lastChangedY": 56,
-        "upperBodyShare": 0.6407
-      }
+      "changedFromDirectionalIdle": 526
     },
     {
-      "key": "avatar-1",
+      "key": 1,
       "row": "left",
       "column": "passing-right",
       "bbox": [
@@ -230,15 +400,10 @@
       ],
       "visibleColors": 24,
       "interiorTransparentPixels": 0,
-      "changedFromDirectionalIdle": {
-        "pixels": 514,
-        "firstChangedY": 20,
-        "lastChangedY": 56,
-        "upperBodyShare": 0.6479
-      }
+      "changedFromDirectionalIdle": 514
     },
     {
-      "key": "avatar-1",
+      "key": 1,
       "row": "right",
       "column": "idle",
       "bbox": [
@@ -249,10 +414,10 @@
       ],
       "visibleColors": 23,
       "interiorTransparentPixels": 0,
-      "changedFromDirectionalIdle": null
+      "changedFromDirectionalIdle": 0
     },
     {
-      "key": "avatar-1",
+      "key": 1,
       "row": "right",
       "column": "contact-left",
       "bbox": [
@@ -263,15 +428,10 @@
       ],
       "visibleColors": 24,
       "interiorTransparentPixels": 0,
-      "changedFromDirectionalIdle": {
-        "pixels": 505,
-        "firstChangedY": 20,
-        "lastChangedY": 56,
-        "upperBodyShare": 0.6832
-      }
+      "changedFromDirectionalIdle": 505
     },
     {
-      "key": "avatar-1",
+      "key": 1,
       "row": "right",
       "column": "passing-left",
       "bbox": [
@@ -282,15 +442,10 @@
       ],
       "visibleColors": 24,
       "interiorTransparentPixels": 0,
-      "changedFromDirectionalIdle": {
-        "pixels": 473,
-        "firstChangedY": 20,
-        "lastChangedY": 56,
-        "upperBodyShare": 0.5941
-      }
+      "changedFromDirectionalIdle": 473
     },
     {
-      "key": "avatar-1",
+      "key": 1,
       "row": "right",
       "column": "contact-right",
       "bbox": [
@@ -301,15 +456,10 @@
       ],
       "visibleColors": 24,
       "interiorTransparentPixels": 0,
-      "changedFromDirectionalIdle": {
-        "pixels": 419,
-        "firstChangedY": 20,
-        "lastChangedY": 56,
-        "upperBodyShare": 0.6014
-      }
+      "changedFromDirectionalIdle": 419
     },
     {
-      "key": "avatar-1",
+      "key": 1,
       "row": "right",
       "column": "passing-right",
       "bbox": [
@@ -320,15 +470,10 @@
       ],
       "visibleColors": 23,
       "interiorTransparentPixels": 0,
-      "changedFromDirectionalIdle": {
-        "pixels": 496,
-        "firstChangedY": 20,
-        "lastChangedY": 56,
-        "upperBodyShare": 0.6774
-      }
+      "changedFromDirectionalIdle": 496
     },
     {
-      "key": "avatar-1",
+      "key": 1,
       "row": "up",
       "column": "idle",
       "bbox": [
@@ -339,12 +484,26 @@
       ],
       "visibleColors": 24,
       "interiorTransparentPixels": 0,
-      "changedFromDirectionalIdle": null
+      "changedFromDirectionalIdle": 0
     },
     {
-      "key": "avatar-1",
+      "key": 1,
       "row": "up",
       "column": "contact-left",
+      "bbox": [
+        22,
+        21,
+        43,
+        57
+      ],
+      "visibleColors": 24,
+      "interiorTransparentPixels": 5,
+      "changedFromDirectionalIdle": 430
+    },
+    {
+      "key": 1,
+      "row": "up",
+      "column": "passing-left",
       "bbox": [
         22,
         21,
@@ -352,35 +511,11 @@
         57
       ],
       "visibleColors": 24,
-      "interiorTransparentPixels": 0,
-      "changedFromDirectionalIdle": {
-        "pixels": 451,
-        "firstChangedY": 21,
-        "lastChangedY": 56,
-        "upperBodyShare": 0.6585
-      }
+      "interiorTransparentPixels": 4,
+      "changedFromDirectionalIdle": 431
     },
     {
-      "key": "avatar-1",
-      "row": "up",
-      "column": "passing-left",
-      "bbox": [
-        23,
-        20,
-        43,
-        57
-      ],
-      "visibleColors": 24,
-      "interiorTransparentPixels": 0,
-      "changedFromDirectionalIdle": {
-        "pixels": 450,
-        "firstChangedY": 20,
-        "lastChangedY": 56,
-        "upperBodyShare": 0.6111
-      }
-    },
-    {
-      "key": "avatar-1",
+      "key": 1,
       "row": "up",
       "column": "contact-right",
       "bbox": [
@@ -390,35 +525,25 @@
         57
       ],
       "visibleColors": 24,
-      "interiorTransparentPixels": 0,
-      "changedFromDirectionalIdle": {
-        "pixels": 464,
-        "firstChangedY": 21,
-        "lastChangedY": 56,
-        "upperBodyShare": 0.6401
-      }
+      "interiorTransparentPixels": 6,
+      "changedFromDirectionalIdle": 422
     },
     {
-      "key": "avatar-1",
+      "key": 1,
       "row": "up",
       "column": "passing-right",
       "bbox": [
-        23,
-        20,
-        43,
+        24,
+        21,
+        44,
         57
       ],
       "visibleColors": 24,
-      "interiorTransparentPixels": 0,
-      "changedFromDirectionalIdle": {
-        "pixels": 437,
-        "firstChangedY": 20,
-        "lastChangedY": 56,
-        "upperBodyShare": 0.6293
-      }
+      "interiorTransparentPixels": 6,
+      "changedFromDirectionalIdle": 425
     },
     {
-      "key": "avatar-2",
+      "key": 2,
       "row": "down",
       "column": "idle",
       "bbox": [
@@ -429,10 +554,10 @@
       ],
       "visibleColors": 24,
       "interiorTransparentPixels": 0,
-      "changedFromDirectionalIdle": null
+      "changedFromDirectionalIdle": 0
     },
     {
-      "key": "avatar-2",
+      "key": 2,
       "row": "down",
       "column": "contact-left",
       "bbox": [
@@ -442,35 +567,25 @@
         57
       ],
       "visibleColors": 24,
-      "interiorTransparentPixels": 0,
-      "changedFromDirectionalIdle": {
-        "pixels": 573,
-        "firstChangedY": 21,
-        "lastChangedY": 56,
-        "upperBodyShare": 0.6824
-      }
+      "interiorTransparentPixels": 6,
+      "changedFromDirectionalIdle": 552
     },
     {
-      "key": "avatar-2",
+      "key": 2,
       "row": "down",
       "column": "passing-left",
       "bbox": [
-        19,
-        20,
-        44,
+        18,
+        21,
+        43,
         57
       ],
       "visibleColors": 24,
-      "interiorTransparentPixels": 0,
-      "changedFromDirectionalIdle": {
-        "pixels": 542,
-        "firstChangedY": 20,
-        "lastChangedY": 56,
-        "upperBodyShare": 0.6771
-      }
+      "interiorTransparentPixels": 6,
+      "changedFromDirectionalIdle": 538
     },
     {
-      "key": "avatar-2",
+      "key": 2,
       "row": "down",
       "column": "contact-right",
       "bbox": [
@@ -480,35 +595,25 @@
         57
       ],
       "visibleColors": 24,
-      "interiorTransparentPixels": 0,
-      "changedFromDirectionalIdle": {
-        "pixels": 575,
-        "firstChangedY": 21,
-        "lastChangedY": 56,
-        "upperBodyShare": 0.68
-      }
+      "interiorTransparentPixels": 6,
+      "changedFromDirectionalIdle": 567
     },
     {
-      "key": "avatar-2",
+      "key": 2,
       "row": "down",
       "column": "passing-right",
       "bbox": [
-        19,
         20,
-        44,
+        21,
+        45,
         57
       ],
       "visibleColors": 24,
-      "interiorTransparentPixels": 0,
-      "changedFromDirectionalIdle": {
-        "pixels": 540,
-        "firstChangedY": 20,
-        "lastChangedY": 56,
-        "upperBodyShare": 0.6796
-      }
+      "interiorTransparentPixels": 6,
+      "changedFromDirectionalIdle": 553
     },
     {
-      "key": "avatar-2",
+      "key": 2,
       "row": "left",
       "column": "idle",
       "bbox": [
@@ -519,10 +624,10 @@
       ],
       "visibleColors": 24,
       "interiorTransparentPixels": 0,
-      "changedFromDirectionalIdle": null
+      "changedFromDirectionalIdle": 0
     },
     {
-      "key": "avatar-2",
+      "key": 2,
       "row": "left",
       "column": "contact-left",
       "bbox": [
@@ -533,15 +638,10 @@
       ],
       "visibleColors": 24,
       "interiorTransparentPixels": 0,
-      "changedFromDirectionalIdle": {
-        "pixels": 621,
-        "firstChangedY": 20,
-        "lastChangedY": 56,
-        "upperBodyShare": 0.6248
-      }
+      "changedFromDirectionalIdle": 621
     },
     {
-      "key": "avatar-2",
+      "key": 2,
       "row": "left",
       "column": "passing-left",
       "bbox": [
@@ -552,15 +652,10 @@
       ],
       "visibleColors": 24,
       "interiorTransparentPixels": 0,
-      "changedFromDirectionalIdle": {
-        "pixels": 737,
-        "firstChangedY": 20,
-        "lastChangedY": 56,
-        "upperBodyShare": 0.6418
-      }
+      "changedFromDirectionalIdle": 737
     },
     {
-      "key": "avatar-2",
+      "key": 2,
       "row": "left",
       "column": "contact-right",
       "bbox": [
@@ -571,15 +666,10 @@
       ],
       "visibleColors": 24,
       "interiorTransparentPixels": 0,
-      "changedFromDirectionalIdle": {
-        "pixels": 642,
-        "firstChangedY": 21,
-        "lastChangedY": 56,
-        "upperBodyShare": 0.609
-      }
+      "changedFromDirectionalIdle": 642
     },
     {
-      "key": "avatar-2",
+      "key": 2,
       "row": "left",
       "column": "passing-right",
       "bbox": [
@@ -590,15 +680,10 @@
       ],
       "visibleColors": 24,
       "interiorTransparentPixels": 0,
-      "changedFromDirectionalIdle": {
-        "pixels": 675,
-        "firstChangedY": 20,
-        "lastChangedY": 56,
-        "upperBodyShare": 0.643
-      }
+      "changedFromDirectionalIdle": 675
     },
     {
-      "key": "avatar-2",
+      "key": 2,
       "row": "right",
       "column": "idle",
       "bbox": [
@@ -609,10 +694,10 @@
       ],
       "visibleColors": 24,
       "interiorTransparentPixels": 0,
-      "changedFromDirectionalIdle": null
+      "changedFromDirectionalIdle": 0
     },
     {
-      "key": "avatar-2",
+      "key": 2,
       "row": "right",
       "column": "contact-left",
       "bbox": [
@@ -623,15 +708,10 @@
       ],
       "visibleColors": 24,
       "interiorTransparentPixels": 0,
-      "changedFromDirectionalIdle": {
-        "pixels": 688,
-        "firstChangedY": 20,
-        "lastChangedY": 56,
-        "upperBodyShare": 0.6541
-      }
+      "changedFromDirectionalIdle": 688
     },
     {
-      "key": "avatar-2",
+      "key": 2,
       "row": "right",
       "column": "passing-left",
       "bbox": [
@@ -642,15 +722,10 @@
       ],
       "visibleColors": 24,
       "interiorTransparentPixels": 0,
-      "changedFromDirectionalIdle": {
-        "pixels": 698,
-        "firstChangedY": 20,
-        "lastChangedY": 56,
-        "upperBodyShare": 0.6318
-      }
+      "changedFromDirectionalIdle": 698
     },
     {
-      "key": "avatar-2",
+      "key": 2,
       "row": "right",
       "column": "contact-right",
       "bbox": [
@@ -661,15 +736,10 @@
       ],
       "visibleColors": 24,
       "interiorTransparentPixels": 0,
-      "changedFromDirectionalIdle": {
-        "pixels": 617,
-        "firstChangedY": 20,
-        "lastChangedY": 56,
-        "upperBodyShare": 0.6094
-      }
+      "changedFromDirectionalIdle": 617
     },
     {
-      "key": "avatar-2",
+      "key": 2,
       "row": "right",
       "column": "passing-right",
       "bbox": [
@@ -680,15 +750,10 @@
       ],
       "visibleColors": 24,
       "interiorTransparentPixels": 0,
-      "changedFromDirectionalIdle": {
-        "pixels": 668,
-        "firstChangedY": 20,
-        "lastChangedY": 56,
-        "upperBodyShare": 0.6347
-      }
+      "changedFromDirectionalIdle": 668
     },
     {
-      "key": "avatar-2",
+      "key": 2,
       "row": "up",
       "column": "idle",
       "bbox": [
@@ -699,10 +764,10 @@
       ],
       "visibleColors": 24,
       "interiorTransparentPixels": 0,
-      "changedFromDirectionalIdle": null
+      "changedFromDirectionalIdle": 0
     },
     {
-      "key": "avatar-2",
+      "key": 2,
       "row": "up",
       "column": "contact-left",
       "bbox": [
@@ -712,35 +777,25 @@
         57
       ],
       "visibleColors": 24,
-      "interiorTransparentPixels": 0,
-      "changedFromDirectionalIdle": {
-        "pixels": 501,
-        "firstChangedY": 21,
-        "lastChangedY": 56,
-        "upperBodyShare": 0.6387
-      }
+      "interiorTransparentPixels": 5,
+      "changedFromDirectionalIdle": 485
     },
     {
-      "key": "avatar-2",
+      "key": 2,
       "row": "up",
       "column": "passing-left",
       "bbox": [
-        19,
-        20,
-        44,
+        18,
+        21,
+        43,
         57
       ],
       "visibleColors": 24,
-      "interiorTransparentPixels": 0,
-      "changedFromDirectionalIdle": {
-        "pixels": 477,
-        "firstChangedY": 20,
-        "lastChangedY": 56,
-        "upperBodyShare": 0.6352
-      }
+      "interiorTransparentPixels": 4,
+      "changedFromDirectionalIdle": 477
     },
     {
-      "key": "avatar-2",
+      "key": 2,
       "row": "up",
       "column": "contact-right",
       "bbox": [
@@ -750,35 +805,25 @@
         57
       ],
       "visibleColors": 24,
-      "interiorTransparentPixels": 0,
-      "changedFromDirectionalIdle": {
-        "pixels": 503,
-        "firstChangedY": 21,
-        "lastChangedY": 56,
-        "upperBodyShare": 0.6362
-      }
+      "interiorTransparentPixels": 6,
+      "changedFromDirectionalIdle": 481
     },
     {
-      "key": "avatar-2",
+      "key": 2,
       "row": "up",
       "column": "passing-right",
       "bbox": [
-        19,
         20,
-        44,
+        21,
+        45,
         57
       ],
       "visibleColors": 24,
-      "interiorTransparentPixels": 0,
-      "changedFromDirectionalIdle": {
-        "pixels": 475,
-        "firstChangedY": 20,
-        "lastChangedY": 56,
-        "upperBodyShare": 0.6379
-      }
+      "interiorTransparentPixels": 6,
+      "changedFromDirectionalIdle": 475
     },
     {
-      "key": "avatar-3",
+      "key": 3,
       "row": "down",
       "column": "idle",
       "bbox": [
@@ -789,10 +834,10 @@
       ],
       "visibleColors": 24,
       "interiorTransparentPixels": 0,
-      "changedFromDirectionalIdle": null
+      "changedFromDirectionalIdle": 0
     },
     {
-      "key": "avatar-3",
+      "key": 3,
       "row": "down",
       "column": "contact-left",
       "bbox": [
@@ -803,15 +848,10 @@
       ],
       "visibleColors": 24,
       "interiorTransparentPixels": 0,
-      "changedFromDirectionalIdle": {
-        "pixels": 684,
-        "firstChangedY": 19,
-        "lastChangedY": 56,
-        "upperBodyShare": 0.6564
-      }
+      "changedFromDirectionalIdle": 684
     },
     {
-      "key": "avatar-3",
+      "key": 3,
       "row": "down",
       "column": "passing-left",
       "bbox": [
@@ -822,15 +862,10 @@
       ],
       "visibleColors": 24,
       "interiorTransparentPixels": 0,
-      "changedFromDirectionalIdle": {
-        "pixels": 653,
-        "firstChangedY": 18,
-        "lastChangedY": 56,
-        "upperBodyShare": 0.6585
-      }
+      "changedFromDirectionalIdle": 653
     },
     {
-      "key": "avatar-3",
+      "key": 3,
       "row": "down",
       "column": "contact-right",
       "bbox": [
@@ -841,15 +876,10 @@
       ],
       "visibleColors": 24,
       "interiorTransparentPixels": 0,
-      "changedFromDirectionalIdle": {
-        "pixels": 682,
-        "firstChangedY": 19,
-        "lastChangedY": 56,
-        "upperBodyShare": 0.6584
-      }
+      "changedFromDirectionalIdle": 682
     },
     {
-      "key": "avatar-3",
+      "key": 3,
       "row": "down",
       "column": "passing-right",
       "bbox": [
@@ -860,15 +890,10 @@
       ],
       "visibleColors": 24,
       "interiorTransparentPixels": 0,
-      "changedFromDirectionalIdle": {
-        "pixels": 655,
-        "firstChangedY": 18,
-        "lastChangedY": 56,
-        "upperBodyShare": 0.6565
-      }
+      "changedFromDirectionalIdle": 655
     },
     {
-      "key": "avatar-3",
+      "key": 3,
       "row": "left",
       "column": "idle",
       "bbox": [
@@ -879,10 +904,10 @@
       ],
       "visibleColors": 24,
       "interiorTransparentPixels": 0,
-      "changedFromDirectionalIdle": null
+      "changedFromDirectionalIdle": 0
     },
     {
-      "key": "avatar-3",
+      "key": 3,
       "row": "left",
       "column": "contact-left",
       "bbox": [
@@ -893,15 +918,10 @@
       ],
       "visibleColors": 24,
       "interiorTransparentPixels": 0,
-      "changedFromDirectionalIdle": {
-        "pixels": 818,
-        "firstChangedY": 18,
-        "lastChangedY": 56,
-        "upperBodyShare": 0.6222
-      }
+      "changedFromDirectionalIdle": 818
     },
     {
-      "key": "avatar-3",
+      "key": 3,
       "row": "left",
       "column": "passing-left",
       "bbox": [
@@ -912,15 +932,10 @@
       ],
       "visibleColors": 24,
       "interiorTransparentPixels": 0,
-      "changedFromDirectionalIdle": {
-        "pixels": 822,
-        "firstChangedY": 18,
-        "lastChangedY": 56,
-        "upperBodyShare": 0.6277
-      }
+      "changedFromDirectionalIdle": 822
     },
     {
-      "key": "avatar-3",
+      "key": 3,
       "row": "left",
       "column": "contact-right",
       "bbox": [
@@ -931,15 +946,10 @@
       ],
       "visibleColors": 24,
       "interiorTransparentPixels": 0,
-      "changedFromDirectionalIdle": {
-        "pixels": 860,
-        "firstChangedY": 18,
-        "lastChangedY": 56,
-        "upperBodyShare": 0.6302
-      }
+      "changedFromDirectionalIdle": 860
     },
     {
-      "key": "avatar-3",
+      "key": 3,
       "row": "left",
       "column": "passing-right",
       "bbox": [
@@ -950,15 +960,10 @@
       ],
       "visibleColors": 24,
       "interiorTransparentPixels": 0,
-      "changedFromDirectionalIdle": {
-        "pixels": 817,
-        "firstChangedY": 18,
-        "lastChangedY": 56,
-        "upperBodyShare": 0.6291
-      }
+      "changedFromDirectionalIdle": 817
     },
     {
-      "key": "avatar-3",
+      "key": 3,
       "row": "right",
       "column": "idle",
       "bbox": [
@@ -969,10 +974,10 @@
       ],
       "visibleColors": 24,
       "interiorTransparentPixels": 0,
-      "changedFromDirectionalIdle": null
+      "changedFromDirectionalIdle": 0
     },
     {
-      "key": "avatar-3",
+      "key": 3,
       "row": "right",
       "column": "contact-left",
       "bbox": [
@@ -983,15 +988,10 @@
       ],
       "visibleColors": 24,
       "interiorTransparentPixels": 0,
-      "changedFromDirectionalIdle": {
-        "pixels": 679,
-        "firstChangedY": 18,
-        "lastChangedY": 56,
-        "upperBodyShare": 0.6244
-      }
+      "changedFromDirectionalIdle": 679
     },
     {
-      "key": "avatar-3",
+      "key": 3,
       "row": "right",
       "column": "passing-left",
       "bbox": [
@@ -1002,15 +1002,10 @@
       ],
       "visibleColors": 24,
       "interiorTransparentPixels": 0,
-      "changedFromDirectionalIdle": {
-        "pixels": 755,
-        "firstChangedY": 18,
-        "lastChangedY": 56,
-        "upperBodyShare": 0.6119
-      }
+      "changedFromDirectionalIdle": 755
     },
     {
-      "key": "avatar-3",
+      "key": 3,
       "row": "right",
       "column": "contact-right",
       "bbox": [
@@ -1021,15 +1016,10 @@
       ],
       "visibleColors": 24,
       "interiorTransparentPixels": 0,
-      "changedFromDirectionalIdle": {
-        "pixels": 774,
-        "firstChangedY": 18,
-        "lastChangedY": 56,
-        "upperBodyShare": 0.6189
-      }
+      "changedFromDirectionalIdle": 774
     },
     {
-      "key": "avatar-3",
+      "key": 3,
       "row": "right",
       "column": "passing-right",
       "bbox": [
@@ -1040,15 +1030,10 @@
       ],
       "visibleColors": 24,
       "interiorTransparentPixels": 0,
-      "changedFromDirectionalIdle": {
-        "pixels": 747,
-        "firstChangedY": 18,
-        "lastChangedY": 56,
-        "upperBodyShare": 0.6145
-      }
+      "changedFromDirectionalIdle": 747
     },
     {
-      "key": "avatar-3",
+      "key": 3,
       "row": "up",
       "column": "idle",
       "bbox": [
@@ -1059,10 +1044,10 @@
       ],
       "visibleColors": 24,
       "interiorTransparentPixels": 0,
-      "changedFromDirectionalIdle": null
+      "changedFromDirectionalIdle": 0
     },
     {
-      "key": "avatar-3",
+      "key": 3,
       "row": "up",
       "column": "contact-left",
       "bbox": [
@@ -1073,15 +1058,10 @@
       ],
       "visibleColors": 24,
       "interiorTransparentPixels": 0,
-      "changedFromDirectionalIdle": {
-        "pixels": 590,
-        "firstChangedY": 19,
-        "lastChangedY": 56,
-        "upperBodyShare": 0.6051
-      }
+      "changedFromDirectionalIdle": 590
     },
     {
-      "key": "avatar-3",
+      "key": 3,
       "row": "up",
       "column": "passing-left",
       "bbox": [
@@ -1092,15 +1072,10 @@
       ],
       "visibleColors": 24,
       "interiorTransparentPixels": 0,
-      "changedFromDirectionalIdle": {
-        "pixels": 557,
-        "firstChangedY": 18,
-        "lastChangedY": 56,
-        "upperBodyShare": 0.605
-      }
+      "changedFromDirectionalIdle": 557
     },
     {
-      "key": "avatar-3",
+      "key": 3,
       "row": "up",
       "column": "contact-right",
       "bbox": [
@@ -1111,15 +1086,10 @@
       ],
       "visibleColors": 24,
       "interiorTransparentPixels": 0,
-      "changedFromDirectionalIdle": {
-        "pixels": 588,
-        "firstChangedY": 19,
-        "lastChangedY": 56,
-        "upperBodyShare": 0.6071
-      }
+      "changedFromDirectionalIdle": 588
     },
     {
-      "key": "avatar-3",
+      "key": 3,
       "row": "up",
       "column": "passing-right",
       "bbox": [
@@ -1130,15 +1100,10 @@
       ],
       "visibleColors": 24,
       "interiorTransparentPixels": 0,
-      "changedFromDirectionalIdle": {
-        "pixels": 559,
-        "firstChangedY": 18,
-        "lastChangedY": 56,
-        "upperBodyShare": 0.6029
-      }
+      "changedFromDirectionalIdle": 559
     },
     {
-      "key": "avatar-4",
+      "key": 4,
       "row": "down",
       "column": "idle",
       "bbox": [
@@ -1149,10 +1114,10 @@
       ],
       "visibleColors": 24,
       "interiorTransparentPixels": 0,
-      "changedFromDirectionalIdle": null
+      "changedFromDirectionalIdle": 0
     },
     {
-      "key": "avatar-4",
+      "key": 4,
       "row": "down",
       "column": "contact-left",
       "bbox": [
@@ -1162,35 +1127,25 @@
         57
       ],
       "visibleColors": 24,
-      "interiorTransparentPixels": 0,
-      "changedFromDirectionalIdle": {
-        "pixels": 1311,
-        "firstChangedY": 9,
-        "lastChangedY": 56,
-        "upperBodyShare": 0.8261
-      }
+      "interiorTransparentPixels": 9,
+      "changedFromDirectionalIdle": 1373
     },
     {
-      "key": "avatar-4",
+      "key": 4,
       "row": "down",
       "column": "passing-left",
       "bbox": [
-        10,
-        8,
-        55,
+        9,
+        9,
+        54,
         57
       ],
       "visibleColors": 24,
-      "interiorTransparentPixels": 0,
-      "changedFromDirectionalIdle": {
-        "pixels": 1188,
-        "firstChangedY": 8,
-        "lastChangedY": 56,
-        "upperBodyShare": 0.819
-      }
+      "interiorTransparentPixels": 9,
+      "changedFromDirectionalIdle": 1359
     },
     {
-      "key": "avatar-4",
+      "key": 4,
       "row": "down",
       "column": "contact-right",
       "bbox": [
@@ -1200,35 +1155,25 @@
         57
       ],
       "visibleColors": 24,
-      "interiorTransparentPixels": 0,
-      "changedFromDirectionalIdle": {
-        "pixels": 1298,
-        "firstChangedY": 9,
-        "lastChangedY": 56,
-        "upperBodyShare": 0.8344
-      }
+      "interiorTransparentPixels": 9,
+      "changedFromDirectionalIdle": 1369
     },
     {
-      "key": "avatar-4",
+      "key": 4,
       "row": "down",
       "column": "passing-right",
       "bbox": [
-        10,
-        8,
-        55,
+        11,
+        9,
+        56,
         57
       ],
       "visibleColors": 24,
-      "interiorTransparentPixels": 0,
-      "changedFromDirectionalIdle": {
-        "pixels": 1201,
-        "firstChangedY": 8,
-        "lastChangedY": 56,
-        "upperBodyShare": 0.8102
-      }
+      "interiorTransparentPixels": 9,
+      "changedFromDirectionalIdle": 1356
     },
     {
-      "key": "avatar-4",
+      "key": 4,
       "row": "left",
       "column": "idle",
       "bbox": [
@@ -1239,10 +1184,10 @@
       ],
       "visibleColors": 24,
       "interiorTransparentPixels": 0,
-      "changedFromDirectionalIdle": null
+      "changedFromDirectionalIdle": 0
     },
     {
-      "key": "avatar-4",
+      "key": 4,
       "row": "left",
       "column": "contact-left",
       "bbox": [
@@ -1253,15 +1198,10 @@
       ],
       "visibleColors": 24,
       "interiorTransparentPixels": 0,
-      "changedFromDirectionalIdle": {
-        "pixels": 945,
-        "firstChangedY": 9,
-        "lastChangedY": 56,
-        "upperBodyShare": 0.709
-      }
+      "changedFromDirectionalIdle": 945
     },
     {
-      "key": "avatar-4",
+      "key": 4,
       "row": "left",
       "column": "passing-left",
       "bbox": [
@@ -1272,15 +1212,10 @@
       ],
       "visibleColors": 24,
       "interiorTransparentPixels": 0,
-      "changedFromDirectionalIdle": {
-        "pixels": 983,
-        "firstChangedY": 8,
-        "lastChangedY": 56,
-        "upperBodyShare": 0.6897
-      }
+      "changedFromDirectionalIdle": 983
     },
     {
-      "key": "avatar-4",
+      "key": 4,
       "row": "left",
       "column": "contact-right",
       "bbox": [
@@ -1291,15 +1226,10 @@
       ],
       "visibleColors": 24,
       "interiorTransparentPixels": 0,
-      "changedFromDirectionalIdle": {
-        "pixels": 999,
-        "firstChangedY": 9,
-        "lastChangedY": 56,
-        "upperBodyShare": 0.6897
-      }
+      "changedFromDirectionalIdle": 999
     },
     {
-      "key": "avatar-4",
+      "key": 4,
       "row": "left",
       "column": "passing-right",
       "bbox": [
@@ -1310,15 +1240,10 @@
       ],
       "visibleColors": 24,
       "interiorTransparentPixels": 0,
-      "changedFromDirectionalIdle": {
-        "pixels": 892,
-        "firstChangedY": 8,
-        "lastChangedY": 56,
-        "upperBodyShare": 0.6839
-      }
+      "changedFromDirectionalIdle": 892
     },
     {
-      "key": "avatar-4",
+      "key": 4,
       "row": "right",
       "column": "idle",
       "bbox": [
@@ -1329,10 +1254,10 @@
       ],
       "visibleColors": 24,
       "interiorTransparentPixels": 0,
-      "changedFromDirectionalIdle": null
+      "changedFromDirectionalIdle": 0
     },
     {
-      "key": "avatar-4",
+      "key": 4,
       "row": "right",
       "column": "contact-left",
       "bbox": [
@@ -1343,15 +1268,10 @@
       ],
       "visibleColors": 24,
       "interiorTransparentPixels": 0,
-      "changedFromDirectionalIdle": {
-        "pixels": 893,
-        "firstChangedY": 9,
-        "lastChangedY": 56,
-        "upperBodyShare": 0.6629
-      }
+      "changedFromDirectionalIdle": 893
     },
     {
-      "key": "avatar-4",
+      "key": 4,
       "row": "right",
       "column": "passing-left",
       "bbox": [
@@ -1362,15 +1282,10 @@
       ],
       "visibleColors": 24,
       "interiorTransparentPixels": 0,
-      "changedFromDirectionalIdle": {
-        "pixels": 897,
-        "firstChangedY": 8,
-        "lastChangedY": 56,
-        "upperBodyShare": 0.6433
-      }
+      "changedFromDirectionalIdle": 897
     },
     {
-      "key": "avatar-4",
+      "key": 4,
       "row": "right",
       "column": "contact-right",
       "bbox": [
@@ -1381,15 +1296,10 @@
       ],
       "visibleColors": 24,
       "interiorTransparentPixels": 0,
-      "changedFromDirectionalIdle": {
-        "pixels": 970,
-        "firstChangedY": 9,
-        "lastChangedY": 56,
-        "upperBodyShare": 0.6763
-      }
+      "changedFromDirectionalIdle": 970
     },
     {
-      "key": "avatar-4",
+      "key": 4,
       "row": "right",
       "column": "passing-right",
       "bbox": [
@@ -1400,15 +1310,10 @@
       ],
       "visibleColors": 24,
       "interiorTransparentPixels": 0,
-      "changedFromDirectionalIdle": {
-        "pixels": 903,
-        "firstChangedY": 8,
-        "lastChangedY": 56,
-        "upperBodyShare": 0.6966
-      }
+      "changedFromDirectionalIdle": 903
     },
     {
-      "key": "avatar-4",
+      "key": 4,
       "row": "up",
       "column": "idle",
       "bbox": [
@@ -1419,48 +1324,38 @@
       ],
       "visibleColors": 24,
       "interiorTransparentPixels": 0,
-      "changedFromDirectionalIdle": null
+      "changedFromDirectionalIdle": 0
     },
     {
-      "key": "avatar-4",
+      "key": 4,
       "row": "up",
       "column": "contact-left",
       "bbox": [
         12,
         9,
-        51,
+        50,
         57
       ],
       "visibleColors": 24,
-      "interiorTransparentPixels": 0,
-      "changedFromDirectionalIdle": {
-        "pixels": 1087,
-        "firstChangedY": 9,
-        "lastChangedY": 56,
-        "upperBodyShare": 0.8178
-      }
+      "interiorTransparentPixels": 8,
+      "changedFromDirectionalIdle": 1113
     },
     {
-      "key": "avatar-4",
+      "key": 4,
       "row": "up",
       "column": "passing-left",
       "bbox": [
-        13,
-        8,
-        51,
+        12,
+        9,
+        50,
         57
       ],
       "visibleColors": 24,
-      "interiorTransparentPixels": 0,
-      "changedFromDirectionalIdle": {
-        "pixels": 1025,
-        "firstChangedY": 8,
-        "lastChangedY": 56,
-        "upperBodyShare": 0.7746
-      }
+      "interiorTransparentPixels": 7,
+      "changedFromDirectionalIdle": 1112
     },
     {
-      "key": "avatar-4",
+      "key": 4,
       "row": "up",
       "column": "contact-right",
       "bbox": [
@@ -1470,35 +1365,25 @@
         57
       ],
       "visibleColors": 24,
-      "interiorTransparentPixels": 0,
-      "changedFromDirectionalIdle": {
-        "pixels": 1120,
-        "firstChangedY": 9,
-        "lastChangedY": 56,
-        "upperBodyShare": 0.7937
-      }
+      "interiorTransparentPixels": 9,
+      "changedFromDirectionalIdle": 1105
     },
     {
-      "key": "avatar-4",
+      "key": 4,
       "row": "up",
       "column": "passing-right",
       "bbox": [
-        13,
-        8,
-        51,
+        14,
+        9,
+        52,
         57
       ],
       "visibleColors": 24,
-      "interiorTransparentPixels": 0,
-      "changedFromDirectionalIdle": {
-        "pixels": 992,
-        "firstChangedY": 8,
-        "lastChangedY": 56,
-        "upperBodyShare": 0.8004
-      }
+      "interiorTransparentPixels": 9,
+      "changedFromDirectionalIdle": 1111
     },
     {
-      "key": "avatar-5",
+      "key": 5,
       "row": "down",
       "column": "idle",
       "bbox": [
@@ -1509,10 +1394,10 @@
       ],
       "visibleColors": 24,
       "interiorTransparentPixels": 0,
-      "changedFromDirectionalIdle": null
+      "changedFromDirectionalIdle": 0
     },
     {
-      "key": "avatar-5",
+      "key": 5,
       "row": "down",
       "column": "contact-left",
       "bbox": [
@@ -1523,15 +1408,10 @@
       ],
       "visibleColors": 24,
       "interiorTransparentPixels": 0,
-      "changedFromDirectionalIdle": {
-        "pixels": 607,
-        "firstChangedY": 19,
-        "lastChangedY": 56,
-        "upperBodyShare": 0.6639
-      }
+      "changedFromDirectionalIdle": 607
     },
     {
-      "key": "avatar-5",
+      "key": 5,
       "row": "down",
       "column": "passing-left",
       "bbox": [
@@ -1542,15 +1422,10 @@
       ],
       "visibleColors": 24,
       "interiorTransparentPixels": 0,
-      "changedFromDirectionalIdle": {
-        "pixels": 588,
-        "firstChangedY": 18,
-        "lastChangedY": 56,
-        "upperBodyShare": 0.6514
-      }
+      "changedFromDirectionalIdle": 588
     },
     {
-      "key": "avatar-5",
+      "key": 5,
       "row": "down",
       "column": "contact-right",
       "bbox": [
@@ -1561,15 +1436,10 @@
       ],
       "visibleColors": 24,
       "interiorTransparentPixels": 0,
-      "changedFromDirectionalIdle": {
-        "pixels": 618,
-        "firstChangedY": 19,
-        "lastChangedY": 56,
-        "upperBodyShare": 0.6521
-      }
+      "changedFromDirectionalIdle": 618
     },
     {
-      "key": "avatar-5",
+      "key": 5,
       "row": "down",
       "column": "passing-right",
       "bbox": [
@@ -1580,15 +1450,10 @@
       ],
       "visibleColors": 24,
       "interiorTransparentPixels": 0,
-      "changedFromDirectionalIdle": {
-        "pixels": 577,
-        "firstChangedY": 18,
-        "lastChangedY": 56,
-        "upperBodyShare": 0.6638
-      }
+      "changedFromDirectionalIdle": 577
     },
     {
-      "key": "avatar-5",
+      "key": 5,
       "row": "left",
       "column": "idle",
       "bbox": [
@@ -1599,10 +1464,10 @@
       ],
       "visibleColors": 24,
       "interiorTransparentPixels": 0,
-      "changedFromDirectionalIdle": null
+      "changedFromDirectionalIdle": 0
     },
     {
-      "key": "avatar-5",
+      "key": 5,
       "row": "left",
       "column": "contact-left",
       "bbox": [
@@ -1613,15 +1478,10 @@
       ],
       "visibleColors": 24,
       "interiorTransparentPixels": 0,
-      "changedFromDirectionalIdle": {
-        "pixels": 620,
-        "firstChangedY": 18,
-        "lastChangedY": 56,
-        "upperBodyShare": 0.5952
-      }
+      "changedFromDirectionalIdle": 620
     },
     {
-      "key": "avatar-5",
+      "key": 5,
       "row": "left",
       "column": "passing-left",
       "bbox": [
@@ -1632,15 +1492,10 @@
       ],
       "visibleColors": 24,
       "interiorTransparentPixels": 0,
-      "changedFromDirectionalIdle": {
-        "pixels": 607,
-        "firstChangedY": 18,
-        "lastChangedY": 56,
-        "upperBodyShare": 0.5815
-      }
+      "changedFromDirectionalIdle": 607
     },
     {
-      "key": "avatar-5",
+      "key": 5,
       "row": "left",
       "column": "contact-right",
       "bbox": [
@@ -1651,15 +1506,10 @@
       ],
       "visibleColors": 24,
       "interiorTransparentPixels": 0,
-      "changedFromDirectionalIdle": {
-        "pixels": 589,
-        "firstChangedY": 18,
-        "lastChangedY": 56,
-        "upperBodyShare": 0.5942
-      }
+      "changedFromDirectionalIdle": 589
     },
     {
-      "key": "avatar-5",
+      "key": 5,
       "row": "left",
       "column": "passing-right",
       "bbox": [
@@ -1670,15 +1520,10 @@
       ],
       "visibleColors": 24,
       "interiorTransparentPixels": 0,
-      "changedFromDirectionalIdle": {
-        "pixels": 620,
-        "firstChangedY": 18,
-        "lastChangedY": 56,
-        "upperBodyShare": 0.6113
-      }
+      "changedFromDirectionalIdle": 620
     },
     {
-      "key": "avatar-5",
+      "key": 5,
       "row": "right",
       "column": "idle",
       "bbox": [
@@ -1689,10 +1534,10 @@
       ],
       "visibleColors": 24,
       "interiorTransparentPixels": 0,
-      "changedFromDirectionalIdle": null
+      "changedFromDirectionalIdle": 0
     },
     {
-      "key": "avatar-5",
+      "key": 5,
       "row": "right",
       "column": "contact-left",
       "bbox": [
@@ -1703,15 +1548,10 @@
       ],
       "visibleColors": 24,
       "interiorTransparentPixels": 0,
-      "changedFromDirectionalIdle": {
-        "pixels": 606,
-        "firstChangedY": 18,
-        "lastChangedY": 56,
-        "upperBodyShare": 0.5809
-      }
+      "changedFromDirectionalIdle": 606
     },
     {
-      "key": "avatar-5",
+      "key": 5,
       "row": "right",
       "column": "passing-left",
       "bbox": [
@@ -1722,15 +1562,10 @@
       ],
       "visibleColors": 24,
       "interiorTransparentPixels": 0,
-      "changedFromDirectionalIdle": {
-        "pixels": 604,
-        "firstChangedY": 18,
-        "lastChangedY": 56,
-        "upperBodyShare": 0.5894
-      }
+      "changedFromDirectionalIdle": 604
     },
     {
-      "key": "avatar-5",
+      "key": 5,
       "row": "right",
       "column": "contact-right",
       "bbox": [
@@ -1741,15 +1576,10 @@
       ],
       "visibleColors": 24,
       "interiorTransparentPixels": 0,
-      "changedFromDirectionalIdle": {
-        "pixels": 651,
-        "firstChangedY": 18,
-        "lastChangedY": 56,
-        "upperBodyShare": 0.6068
-      }
+      "changedFromDirectionalIdle": 651
     },
     {
-      "key": "avatar-5",
+      "key": 5,
       "row": "right",
       "column": "passing-right",
       "bbox": [
@@ -1760,15 +1590,10 @@
       ],
       "visibleColors": 24,
       "interiorTransparentPixels": 0,
-      "changedFromDirectionalIdle": {
-        "pixels": 645,
-        "firstChangedY": 18,
-        "lastChangedY": 56,
-        "upperBodyShare": 0.6124
-      }
+      "changedFromDirectionalIdle": 645
     },
     {
-      "key": "avatar-5",
+      "key": 5,
       "row": "up",
       "column": "idle",
       "bbox": [
@@ -1779,10 +1604,10 @@
       ],
       "visibleColors": 24,
       "interiorTransparentPixels": 0,
-      "changedFromDirectionalIdle": null
+      "changedFromDirectionalIdle": 0
     },
     {
-      "key": "avatar-5",
+      "key": 5,
       "row": "up",
       "column": "contact-left",
       "bbox": [
@@ -1793,15 +1618,10 @@
       ],
       "visibleColors": 24,
       "interiorTransparentPixels": 0,
-      "changedFromDirectionalIdle": {
-        "pixels": 539,
-        "firstChangedY": 19,
-        "lastChangedY": 56,
-        "upperBodyShare": 0.6271
-      }
+      "changedFromDirectionalIdle": 539
     },
     {
-      "key": "avatar-5",
+      "key": 5,
       "row": "up",
       "column": "passing-left",
       "bbox": [
@@ -1812,15 +1632,10 @@
       ],
       "visibleColors": 24,
       "interiorTransparentPixels": 0,
-      "changedFromDirectionalIdle": {
-        "pixels": 504,
-        "firstChangedY": 18,
-        "lastChangedY": 56,
-        "upperBodyShare": 0.6012
-      }
+      "changedFromDirectionalIdle": 504
     },
     {
-      "key": "avatar-5",
+      "key": 5,
       "row": "up",
       "column": "contact-right",
       "bbox": [
@@ -1831,15 +1646,10 @@
       ],
       "visibleColors": 24,
       "interiorTransparentPixels": 0,
-      "changedFromDirectionalIdle": {
-        "pixels": 550,
-        "firstChangedY": 19,
-        "lastChangedY": 56,
-        "upperBodyShare": 0.6145
-      }
+      "changedFromDirectionalIdle": 550
     },
     {
-      "key": "avatar-5",
+      "key": 5,
       "row": "up",
       "column": "passing-right",
       "bbox": [
@@ -1850,15 +1660,10 @@
       ],
       "visibleColors": 24,
       "interiorTransparentPixels": 0,
-      "changedFromDirectionalIdle": {
-        "pixels": 493,
-        "firstChangedY": 18,
-        "lastChangedY": 56,
-        "upperBodyShare": 0.6146
-      }
+      "changedFromDirectionalIdle": 493
     },
     {
-      "key": "avatar-6",
+      "key": 6,
       "row": "down",
       "column": "idle",
       "bbox": [
@@ -1869,10 +1674,10 @@
       ],
       "visibleColors": 24,
       "interiorTransparentPixels": 0,
-      "changedFromDirectionalIdle": null
+      "changedFromDirectionalIdle": 0
     },
     {
-      "key": "avatar-6",
+      "key": 6,
       "row": "down",
       "column": "contact-left",
       "bbox": [
@@ -1882,35 +1687,25 @@
         57
       ],
       "visibleColors": 24,
-      "interiorTransparentPixels": 0,
-      "changedFromDirectionalIdle": {
-        "pixels": 449,
-        "firstChangedY": 27,
-        "lastChangedY": 56,
-        "upperBodyShare": 0.608
-      }
+      "interiorTransparentPixels": 6,
+      "changedFromDirectionalIdle": 412
     },
     {
-      "key": "avatar-6",
+      "key": 6,
       "row": "down",
       "column": "passing-left",
       "bbox": [
-        21,
-        26,
-        44,
+        20,
+        27,
+        43,
         57
       ],
       "visibleColors": 24,
-      "interiorTransparentPixels": 0,
-      "changedFromDirectionalIdle": {
-        "pixels": 459,
-        "firstChangedY": 26,
-        "lastChangedY": 56,
-        "upperBodyShare": 0.61
-      }
+      "interiorTransparentPixels": 6,
+      "changedFromDirectionalIdle": 402
     },
     {
-      "key": "avatar-6",
+      "key": 6,
       "row": "down",
       "column": "contact-right",
       "bbox": [
@@ -1920,35 +1715,25 @@
         57
       ],
       "visibleColors": 24,
-      "interiorTransparentPixels": 0,
-      "changedFromDirectionalIdle": {
-        "pixels": 455,
-        "firstChangedY": 27,
-        "lastChangedY": 56,
-        "upperBodyShare": 0.6
-      }
+      "interiorTransparentPixels": 6,
+      "changedFromDirectionalIdle": 420
     },
     {
-      "key": "avatar-6",
+      "key": 6,
       "row": "down",
       "column": "passing-right",
       "bbox": [
-        21,
-        26,
-        44,
+        22,
+        27,
+        45,
         57
       ],
       "visibleColors": 24,
-      "interiorTransparentPixels": 0,
-      "changedFromDirectionalIdle": {
-        "pixels": 453,
-        "firstChangedY": 26,
-        "lastChangedY": 56,
-        "upperBodyShare": 0.6181
-      }
+      "interiorTransparentPixels": 6,
+      "changedFromDirectionalIdle": 407
     },
     {
-      "key": "avatar-6",
+      "key": 6,
       "row": "left",
       "column": "idle",
       "bbox": [
@@ -1959,10 +1744,10 @@
       ],
       "visibleColors": 23,
       "interiorTransparentPixels": 0,
-      "changedFromDirectionalIdle": null
+      "changedFromDirectionalIdle": 0
     },
     {
-      "key": "avatar-6",
+      "key": 6,
       "row": "left",
       "column": "contact-left",
       "bbox": [
@@ -1973,15 +1758,10 @@
       ],
       "visibleColors": 24,
       "interiorTransparentPixels": 0,
-      "changedFromDirectionalIdle": {
-        "pixels": 512,
-        "firstChangedY": 26,
-        "lastChangedY": 56,
-        "upperBodyShare": 0.625
-      }
+      "changedFromDirectionalIdle": 512
     },
     {
-      "key": "avatar-6",
+      "key": 6,
       "row": "left",
       "column": "passing-left",
       "bbox": [
@@ -1992,15 +1772,10 @@
       ],
       "visibleColors": 24,
       "interiorTransparentPixels": 0,
-      "changedFromDirectionalIdle": {
-        "pixels": 447,
-        "firstChangedY": 26,
-        "lastChangedY": 56,
-        "upperBodyShare": 0.5973
-      }
+      "changedFromDirectionalIdle": 447
     },
     {
-      "key": "avatar-6",
+      "key": 6,
       "row": "left",
       "column": "contact-right",
       "bbox": [
@@ -2011,15 +1786,10 @@
       ],
       "visibleColors": 24,
       "interiorTransparentPixels": 0,
-      "changedFromDirectionalIdle": {
-        "pixels": 507,
-        "firstChangedY": 26,
-        "lastChangedY": 56,
-        "upperBodyShare": 0.6252
-      }
+      "changedFromDirectionalIdle": 507
     },
     {
-      "key": "avatar-6",
+      "key": 6,
       "row": "left",
       "column": "passing-right",
       "bbox": [
@@ -2030,15 +1800,10 @@
       ],
       "visibleColors": 24,
       "interiorTransparentPixels": 0,
-      "changedFromDirectionalIdle": {
-        "pixels": 418,
-        "firstChangedY": 26,
-        "lastChangedY": 56,
-        "upperBodyShare": 0.6053
-      }
+      "changedFromDirectionalIdle": 418
     },
     {
-      "key": "avatar-6",
+      "key": 6,
       "row": "right",
       "column": "idle",
       "bbox": [
@@ -2049,10 +1814,10 @@
       ],
       "visibleColors": 23,
       "interiorTransparentPixels": 0,
-      "changedFromDirectionalIdle": null
+      "changedFromDirectionalIdle": 0
     },
     {
-      "key": "avatar-6",
+      "key": 6,
       "row": "right",
       "column": "contact-left",
       "bbox": [
@@ -2063,15 +1828,10 @@
       ],
       "visibleColors": 23,
       "interiorTransparentPixels": 0,
-      "changedFromDirectionalIdle": {
-        "pixels": 323,
-        "firstChangedY": 26,
-        "lastChangedY": 56,
-        "upperBodyShare": 0.5604
-      }
+      "changedFromDirectionalIdle": 323
     },
     {
-      "key": "avatar-6",
+      "key": 6,
       "row": "right",
       "column": "passing-left",
       "bbox": [
@@ -2082,15 +1842,10 @@
       ],
       "visibleColors": 24,
       "interiorTransparentPixels": 0,
-      "changedFromDirectionalIdle": {
-        "pixels": 383,
-        "firstChangedY": 26,
-        "lastChangedY": 56,
-        "upperBodyShare": 0.577
-      }
+      "changedFromDirectionalIdle": 383
     },
     {
-      "key": "avatar-6",
+      "key": 6,
       "row": "right",
       "column": "contact-right",
       "bbox": [
@@ -2101,15 +1856,10 @@
       ],
       "visibleColors": 24,
       "interiorTransparentPixels": 0,
-      "changedFromDirectionalIdle": {
-        "pixels": 425,
-        "firstChangedY": 26,
-        "lastChangedY": 56,
-        "upperBodyShare": 0.6165
-      }
+      "changedFromDirectionalIdle": 425
     },
     {
-      "key": "avatar-6",
+      "key": 6,
       "row": "right",
       "column": "passing-right",
       "bbox": [
@@ -2120,15 +1870,10 @@
       ],
       "visibleColors": 24,
       "interiorTransparentPixels": 0,
-      "changedFromDirectionalIdle": {
-        "pixels": 395,
-        "firstChangedY": 26,
-        "lastChangedY": 56,
-        "upperBodyShare": 0.6354
-      }
+      "changedFromDirectionalIdle": 395
     },
     {
-      "key": "avatar-6",
+      "key": 6,
       "row": "up",
       "column": "idle",
       "bbox": [
@@ -2139,12 +1884,26 @@
       ],
       "visibleColors": 24,
       "interiorTransparentPixels": 0,
-      "changedFromDirectionalIdle": null
+      "changedFromDirectionalIdle": 0
     },
     {
-      "key": "avatar-6",
+      "key": 6,
       "row": "up",
       "column": "contact-left",
+      "bbox": [
+        18,
+        27,
+        41,
+        57
+      ],
+      "visibleColors": 24,
+      "interiorTransparentPixels": 0,
+      "changedFromDirectionalIdle": 391
+    },
+    {
+      "key": 6,
+      "row": "up",
+      "column": "passing-left",
       "bbox": [
         18,
         27,
@@ -2153,34 +1912,10 @@
       ],
       "visibleColors": 24,
       "interiorTransparentPixels": 0,
-      "changedFromDirectionalIdle": {
-        "pixels": 441,
-        "firstChangedY": 27,
-        "lastChangedY": 56,
-        "upperBodyShare": 0.5986
-      }
+      "changedFromDirectionalIdle": 387
     },
     {
-      "key": "avatar-6",
-      "row": "up",
-      "column": "passing-left",
-      "bbox": [
-        19,
-        26,
-        40,
-        57
-      ],
-      "visibleColors": 24,
-      "interiorTransparentPixels": 0,
-      "changedFromDirectionalIdle": {
-        "pixels": 420,
-        "firstChangedY": 26,
-        "lastChangedY": 56,
-        "upperBodyShare": 0.5881
-      }
-    },
-    {
-      "key": "avatar-6",
+      "key": 6,
       "row": "up",
       "column": "contact-right",
       "bbox": [
@@ -2190,35 +1925,25 @@
         57
       ],
       "visibleColors": 24,
-      "interiorTransparentPixels": 0,
-      "changedFromDirectionalIdle": {
-        "pixels": 448,
-        "firstChangedY": 27,
-        "lastChangedY": 56,
-        "upperBodyShare": 0.5893
-      }
+      "interiorTransparentPixels": 6,
+      "changedFromDirectionalIdle": 383
     },
     {
-      "key": "avatar-6",
+      "key": 6,
       "row": "up",
       "column": "passing-right",
       "bbox": [
-        19,
-        26,
-        40,
+        20,
+        27,
+        41,
         57
       ],
       "visibleColors": 24,
-      "interiorTransparentPixels": 0,
-      "changedFromDirectionalIdle": {
-        "pixels": 415,
-        "firstChangedY": 26,
-        "lastChangedY": 56,
-        "upperBodyShare": 0.5952
-      }
+      "interiorTransparentPixels": 6,
+      "changedFromDirectionalIdle": 388
     },
     {
-      "key": "avatar-7",
+      "key": 7,
       "row": "down",
       "column": "idle",
       "bbox": [
@@ -2229,86 +1954,66 @@
       ],
       "visibleColors": 24,
       "interiorTransparentPixels": 0,
-      "changedFromDirectionalIdle": null
+      "changedFromDirectionalIdle": 0
     },
     {
-      "key": "avatar-7",
+      "key": 7,
       "row": "down",
       "column": "contact-left",
       "bbox": [
+        9,
         10,
-        10,
-        54,
+        53,
         57
       ],
       "visibleColors": 24,
-      "interiorTransparentPixels": 0,
-      "changedFromDirectionalIdle": {
-        "pixels": 1076,
-        "firstChangedY": 10,
-        "lastChangedY": 56,
-        "upperBodyShare": 0.7965
-      }
+      "interiorTransparentPixels": 9,
+      "changedFromDirectionalIdle": 1172
     },
     {
-      "key": "avatar-7",
+      "key": 7,
       "row": "down",
       "column": "passing-left",
       "bbox": [
-        10,
         9,
-        54,
+        10,
+        53,
         57
       ],
       "visibleColors": 24,
-      "interiorTransparentPixels": 0,
-      "changedFromDirectionalIdle": {
-        "pixels": 1037,
-        "firstChangedY": 9,
-        "lastChangedY": 56,
-        "upperBodyShare": 0.785
-      }
+      "interiorTransparentPixels": 9,
+      "changedFromDirectionalIdle": 1156
     },
     {
-      "key": "avatar-7",
+      "key": 7,
       "row": "down",
       "column": "contact-right",
       "bbox": [
+        11,
         10,
-        10,
-        54,
+        55,
         57
       ],
       "visibleColors": 24,
-      "interiorTransparentPixels": 0,
-      "changedFromDirectionalIdle": {
-        "pixels": 1080,
-        "firstChangedY": 10,
-        "lastChangedY": 56,
-        "upperBodyShare": 0.7935
-      }
+      "interiorTransparentPixels": 9,
+      "changedFromDirectionalIdle": 1175
     },
     {
-      "key": "avatar-7",
+      "key": 7,
       "row": "down",
       "column": "passing-right",
       "bbox": [
+        11,
         10,
-        9,
-        54,
+        55,
         57
       ],
       "visibleColors": 24,
-      "interiorTransparentPixels": 0,
-      "changedFromDirectionalIdle": {
-        "pixels": 1033,
-        "firstChangedY": 9,
-        "lastChangedY": 56,
-        "upperBodyShare": 0.788
-      }
+      "interiorTransparentPixels": 9,
+      "changedFromDirectionalIdle": 1164
     },
     {
-      "key": "avatar-7",
+      "key": 7,
       "row": "left",
       "column": "idle",
       "bbox": [
@@ -2319,10 +2024,10 @@
       ],
       "visibleColors": 24,
       "interiorTransparentPixels": 0,
-      "changedFromDirectionalIdle": null
+      "changedFromDirectionalIdle": 0
     },
     {
-      "key": "avatar-7",
+      "key": 7,
       "row": "left",
       "column": "contact-left",
       "bbox": [
@@ -2333,15 +2038,10 @@
       ],
       "visibleColors": 24,
       "interiorTransparentPixels": 0,
-      "changedFromDirectionalIdle": {
-        "pixels": 955,
-        "firstChangedY": 10,
-        "lastChangedY": 56,
-        "upperBodyShare": 0.6607
-      }
+      "changedFromDirectionalIdle": 955
     },
     {
-      "key": "avatar-7",
+      "key": 7,
       "row": "left",
       "column": "passing-left",
       "bbox": [
@@ -2352,15 +2052,10 @@
       ],
       "visibleColors": 24,
       "interiorTransparentPixels": 0,
-      "changedFromDirectionalIdle": {
-        "pixels": 1021,
-        "firstChangedY": 9,
-        "lastChangedY": 56,
-        "upperBodyShare": 0.6533
-      }
+      "changedFromDirectionalIdle": 1021
     },
     {
-      "key": "avatar-7",
+      "key": 7,
       "row": "left",
       "column": "contact-right",
       "bbox": [
@@ -2371,15 +2066,10 @@
       ],
       "visibleColors": 24,
       "interiorTransparentPixels": 0,
-      "changedFromDirectionalIdle": {
-        "pixels": 1024,
-        "firstChangedY": 10,
-        "lastChangedY": 56,
-        "upperBodyShare": 0.6514
-      }
+      "changedFromDirectionalIdle": 1024
     },
     {
-      "key": "avatar-7",
+      "key": 7,
       "row": "left",
       "column": "passing-right",
       "bbox": [
@@ -2390,15 +2080,10 @@
       ],
       "visibleColors": 24,
       "interiorTransparentPixels": 0,
-      "changedFromDirectionalIdle": {
-        "pixels": 987,
-        "firstChangedY": 9,
-        "lastChangedY": 56,
-        "upperBodyShare": 0.6636
-      }
+      "changedFromDirectionalIdle": 987
     },
     {
-      "key": "avatar-7",
+      "key": 7,
       "row": "right",
       "column": "idle",
       "bbox": [
@@ -2409,10 +2094,10 @@
       ],
       "visibleColors": 24,
       "interiorTransparentPixels": 0,
-      "changedFromDirectionalIdle": null
+      "changedFromDirectionalIdle": 0
     },
     {
-      "key": "avatar-7",
+      "key": 7,
       "row": "right",
       "column": "contact-left",
       "bbox": [
@@ -2423,15 +2108,10 @@
       ],
       "visibleColors": 24,
       "interiorTransparentPixels": 0,
-      "changedFromDirectionalIdle": {
-        "pixels": 926,
-        "firstChangedY": 10,
-        "lastChangedY": 56,
-        "upperBodyShare": 0.6987
-      }
+      "changedFromDirectionalIdle": 926
     },
     {
-      "key": "avatar-7",
+      "key": 7,
       "row": "right",
       "column": "passing-left",
       "bbox": [
@@ -2442,15 +2122,10 @@
       ],
       "visibleColors": 24,
       "interiorTransparentPixels": 0,
-      "changedFromDirectionalIdle": {
-        "pixels": 978,
-        "firstChangedY": 9,
-        "lastChangedY": 56,
-        "upperBodyShare": 0.68
-      }
+      "changedFromDirectionalIdle": 978
     },
     {
-      "key": "avatar-7",
+      "key": 7,
       "row": "right",
       "column": "contact-right",
       "bbox": [
@@ -2461,15 +2136,10 @@
       ],
       "visibleColors": 24,
       "interiorTransparentPixels": 0,
-      "changedFromDirectionalIdle": {
-        "pixels": 965,
-        "firstChangedY": 10,
-        "lastChangedY": 56,
-        "upperBodyShare": 0.6725
-      }
+      "changedFromDirectionalIdle": 965
     },
     {
-      "key": "avatar-7",
+      "key": 7,
       "row": "right",
       "column": "passing-right",
       "bbox": [
@@ -2480,15 +2150,10 @@
       ],
       "visibleColors": 24,
       "interiorTransparentPixels": 0,
-      "changedFromDirectionalIdle": {
-        "pixels": 912,
-        "firstChangedY": 9,
-        "lastChangedY": 56,
-        "upperBodyShare": 0.6996
-      }
+      "changedFromDirectionalIdle": 912
     },
     {
-      "key": "avatar-7",
+      "key": 7,
       "row": "up",
       "column": "idle",
       "bbox": [
@@ -2499,86 +2164,66 @@
       ],
       "visibleColors": 24,
       "interiorTransparentPixels": 0,
-      "changedFromDirectionalIdle": null
+      "changedFromDirectionalIdle": 0
     },
     {
-      "key": "avatar-7",
+      "key": 7,
       "row": "up",
       "column": "contact-left",
       "bbox": [
-        12,
+        11,
         10,
         52,
         57
       ],
       "visibleColors": 24,
-      "interiorTransparentPixels": 0,
-      "changedFromDirectionalIdle": {
-        "pixels": 928,
-        "firstChangedY": 10,
-        "lastChangedY": 56,
-        "upperBodyShare": 0.7629
-      }
+      "interiorTransparentPixels": 8,
+      "changedFromDirectionalIdle": 998
     },
     {
-      "key": "avatar-7",
+      "key": 7,
       "row": "up",
       "column": "passing-left",
       "bbox": [
-        12,
-        9,
+        11,
+        10,
         52,
         57
       ],
       "visibleColors": 24,
-      "interiorTransparentPixels": 0,
-      "changedFromDirectionalIdle": {
-        "pixels": 938,
-        "firstChangedY": 9,
-        "lastChangedY": 56,
-        "upperBodyShare": 0.7409
-      }
+      "interiorTransparentPixels": 7,
+      "changedFromDirectionalIdle": 990
     },
     {
-      "key": "avatar-7",
+      "key": 7,
       "row": "up",
       "column": "contact-right",
       "bbox": [
         12,
         10,
-        52,
+        53,
         57
       ],
       "visibleColors": 24,
-      "interiorTransparentPixels": 0,
-      "changedFromDirectionalIdle": {
-        "pixels": 953,
-        "firstChangedY": 10,
-        "lastChangedY": 56,
-        "upperBodyShare": 0.744
-      }
+      "interiorTransparentPixels": 9,
+      "changedFromDirectionalIdle": 988
     },
     {
-      "key": "avatar-7",
+      "key": 7,
       "row": "up",
       "column": "passing-right",
       "bbox": [
         12,
-        9,
-        52,
+        10,
+        53,
         57
       ],
       "visibleColors": 24,
-      "interiorTransparentPixels": 0,
-      "changedFromDirectionalIdle": {
-        "pixels": 915,
-        "firstChangedY": 9,
-        "lastChangedY": 56,
-        "upperBodyShare": 0.7596
-      }
+      "interiorTransparentPixels": 9,
+      "changedFromDirectionalIdle": 992
     },
     {
-      "key": "avatar-8",
+      "key": 8,
       "row": "down",
       "column": "idle",
       "bbox": [
@@ -2589,10 +2234,10 @@
       ],
       "visibleColors": 24,
       "interiorTransparentPixels": 0,
-      "changedFromDirectionalIdle": null
+      "changedFromDirectionalIdle": 0
     },
     {
-      "key": "avatar-8",
+      "key": 8,
       "row": "down",
       "column": "contact-left",
       "bbox": [
@@ -2602,35 +2247,25 @@
         57
       ],
       "visibleColors": 24,
-      "interiorTransparentPixels": 0,
-      "changedFromDirectionalIdle": {
-        "pixels": 595,
-        "firstChangedY": 17,
-        "lastChangedY": 56,
-        "upperBodyShare": 0.6975
-      }
+      "interiorTransparentPixels": 6,
+      "changedFromDirectionalIdle": 569
     },
     {
-      "key": "avatar-8",
+      "key": 8,
       "row": "down",
       "column": "passing-left",
       "bbox": [
-        21,
-        16,
-        43,
+        20,
+        17,
+        42,
         57
       ],
       "visibleColors": 24,
-      "interiorTransparentPixels": 0,
-      "changedFromDirectionalIdle": {
-        "pixels": 546,
-        "firstChangedY": 16,
-        "lastChangedY": 56,
-        "upperBodyShare": 0.6923
-      }
+      "interiorTransparentPixels": 6,
+      "changedFromDirectionalIdle": 553
     },
     {
-      "key": "avatar-8",
+      "key": 8,
       "row": "down",
       "column": "contact-right",
       "bbox": [
@@ -2640,35 +2275,25 @@
         57
       ],
       "visibleColors": 24,
-      "interiorTransparentPixels": 0,
-      "changedFromDirectionalIdle": {
-        "pixels": 593,
-        "firstChangedY": 17,
-        "lastChangedY": 56,
-        "upperBodyShare": 0.6998
-      }
+      "interiorTransparentPixels": 6,
+      "changedFromDirectionalIdle": 573
     },
     {
-      "key": "avatar-8",
+      "key": 8,
       "row": "down",
       "column": "passing-right",
       "bbox": [
-        21,
-        16,
-        43,
+        22,
+        17,
+        44,
         57
       ],
       "visibleColors": 24,
-      "interiorTransparentPixels": 0,
-      "changedFromDirectionalIdle": {
-        "pixels": 548,
-        "firstChangedY": 16,
-        "lastChangedY": 56,
-        "upperBodyShare": 0.6898
-      }
+      "interiorTransparentPixels": 6,
+      "changedFromDirectionalIdle": 557
     },
     {
-      "key": "avatar-8",
+      "key": 8,
       "row": "left",
       "column": "idle",
       "bbox": [
@@ -2679,10 +2304,10 @@
       ],
       "visibleColors": 24,
       "interiorTransparentPixels": 0,
-      "changedFromDirectionalIdle": null
+      "changedFromDirectionalIdle": 0
     },
     {
-      "key": "avatar-8",
+      "key": 8,
       "row": "left",
       "column": "contact-left",
       "bbox": [
@@ -2693,15 +2318,10 @@
       ],
       "visibleColors": 24,
       "interiorTransparentPixels": 0,
-      "changedFromDirectionalIdle": {
-        "pixels": 647,
-        "firstChangedY": 16,
-        "lastChangedY": 56,
-        "upperBodyShare": 0.6584
-      }
+      "changedFromDirectionalIdle": 647
     },
     {
-      "key": "avatar-8",
+      "key": 8,
       "row": "left",
       "column": "passing-left",
       "bbox": [
@@ -2712,15 +2332,10 @@
       ],
       "visibleColors": 24,
       "interiorTransparentPixels": 0,
-      "changedFromDirectionalIdle": {
-        "pixels": 659,
-        "firstChangedY": 16,
-        "lastChangedY": 56,
-        "upperBodyShare": 0.6373
-      }
+      "changedFromDirectionalIdle": 659
     },
     {
-      "key": "avatar-8",
+      "key": 8,
       "row": "left",
       "column": "contact-right",
       "bbox": [
@@ -2731,15 +2346,10 @@
       ],
       "visibleColors": 24,
       "interiorTransparentPixels": 0,
-      "changedFromDirectionalIdle": {
-        "pixels": 666,
-        "firstChangedY": 16,
-        "lastChangedY": 56,
-        "upperBodyShare": 0.6231
-      }
+      "changedFromDirectionalIdle": 666
     },
     {
-      "key": "avatar-8",
+      "key": 8,
       "row": "left",
       "column": "passing-right",
       "bbox": [
@@ -2750,15 +2360,10 @@
       ],
       "visibleColors": 24,
       "interiorTransparentPixels": 0,
-      "changedFromDirectionalIdle": {
-        "pixels": 585,
-        "firstChangedY": 16,
-        "lastChangedY": 56,
-        "upperBodyShare": 0.641
-      }
+      "changedFromDirectionalIdle": 585
     },
     {
-      "key": "avatar-8",
+      "key": 8,
       "row": "right",
       "column": "idle",
       "bbox": [
@@ -2769,10 +2374,10 @@
       ],
       "visibleColors": 24,
       "interiorTransparentPixels": 0,
-      "changedFromDirectionalIdle": null
+      "changedFromDirectionalIdle": 0
     },
     {
-      "key": "avatar-8",
+      "key": 8,
       "row": "right",
       "column": "contact-left",
       "bbox": [
@@ -2783,15 +2388,10 @@
       ],
       "visibleColors": 24,
       "interiorTransparentPixels": 0,
-      "changedFromDirectionalIdle": {
-        "pixels": 653,
-        "firstChangedY": 16,
-        "lastChangedY": 56,
-        "upperBodyShare": 0.6417
-      }
+      "changedFromDirectionalIdle": 653
     },
     {
-      "key": "avatar-8",
+      "key": 8,
       "row": "right",
       "column": "passing-left",
       "bbox": [
@@ -2802,15 +2402,10 @@
       ],
       "visibleColors": 24,
       "interiorTransparentPixels": 0,
-      "changedFromDirectionalIdle": {
-        "pixels": 668,
-        "firstChangedY": 16,
-        "lastChangedY": 56,
-        "upperBodyShare": 0.6407
-      }
+      "changedFromDirectionalIdle": 668
     },
     {
-      "key": "avatar-8",
+      "key": 8,
       "row": "right",
       "column": "contact-right",
       "bbox": [
@@ -2821,15 +2416,10 @@
       ],
       "visibleColors": 24,
       "interiorTransparentPixels": 0,
-      "changedFromDirectionalIdle": {
-        "pixels": 693,
-        "firstChangedY": 16,
-        "lastChangedY": 56,
-        "upperBodyShare": 0.6248
-      }
+      "changedFromDirectionalIdle": 693
     },
     {
-      "key": "avatar-8",
+      "key": 8,
       "row": "right",
       "column": "passing-right",
       "bbox": [
@@ -2840,15 +2430,10 @@
       ],
       "visibleColors": 24,
       "interiorTransparentPixels": 0,
-      "changedFromDirectionalIdle": {
-        "pixels": 598,
-        "firstChangedY": 16,
-        "lastChangedY": 56,
-        "upperBodyShare": 0.6488
-      }
+      "changedFromDirectionalIdle": 598
     },
     {
-      "key": "avatar-8",
+      "key": 8,
       "row": "up",
       "column": "idle",
       "bbox": [
@@ -2859,12 +2444,26 @@
       ],
       "visibleColors": 24,
       "interiorTransparentPixels": 0,
-      "changedFromDirectionalIdle": null
+      "changedFromDirectionalIdle": 0
     },
     {
-      "key": "avatar-8",
+      "key": 8,
       "row": "up",
       "column": "contact-left",
+      "bbox": [
+        20,
+        17,
+        43,
+        57
+      ],
+      "visibleColors": 24,
+      "interiorTransparentPixels": 5,
+      "changedFromDirectionalIdle": 536
+    },
+    {
+      "key": 8,
+      "row": "up",
+      "column": "passing-left",
       "bbox": [
         20,
         17,
@@ -2872,35 +2471,11 @@
         57
       ],
       "visibleColors": 24,
-      "interiorTransparentPixels": 0,
-      "changedFromDirectionalIdle": {
-        "pixels": 557,
-        "firstChangedY": 17,
-        "lastChangedY": 56,
-        "upperBodyShare": 0.6822
-      }
+      "interiorTransparentPixels": 4,
+      "changedFromDirectionalIdle": 522
     },
     {
-      "key": "avatar-8",
-      "row": "up",
-      "column": "passing-left",
-      "bbox": [
-        21,
-        16,
-        43,
-        57
-      ],
-      "visibleColors": 24,
-      "interiorTransparentPixels": 0,
-      "changedFromDirectionalIdle": {
-        "pixels": 495,
-        "firstChangedY": 16,
-        "lastChangedY": 56,
-        "upperBodyShare": 0.6788
-      }
-    },
-    {
-      "key": "avatar-8",
+      "key": 8,
       "row": "up",
       "column": "contact-right",
       "bbox": [
@@ -2910,35 +2485,25 @@
         57
       ],
       "visibleColors": 24,
-      "interiorTransparentPixels": 0,
-      "changedFromDirectionalIdle": {
-        "pixels": 555,
-        "firstChangedY": 17,
-        "lastChangedY": 56,
-        "upperBodyShare": 0.6847
-      }
+      "interiorTransparentPixels": 6,
+      "changedFromDirectionalIdle": 522
     },
     {
-      "key": "avatar-8",
+      "key": 8,
       "row": "up",
       "column": "passing-right",
       "bbox": [
-        21,
-        16,
-        43,
+        22,
+        17,
+        44,
         57
       ],
       "visibleColors": 24,
-      "interiorTransparentPixels": 0,
-      "changedFromDirectionalIdle": {
-        "pixels": 497,
-        "firstChangedY": 16,
-        "lastChangedY": 56,
-        "upperBodyShare": 0.6761
-      }
+      "interiorTransparentPixels": 6,
+      "changedFromDirectionalIdle": 522
     },
     {
-      "key": "avatar-9",
+      "key": 9,
       "row": "down",
       "column": "idle",
       "bbox": [
@@ -2949,10 +2514,10 @@
       ],
       "visibleColors": 24,
       "interiorTransparentPixels": 0,
-      "changedFromDirectionalIdle": null
+      "changedFromDirectionalIdle": 0
     },
     {
-      "key": "avatar-9",
+      "key": 9,
       "row": "down",
       "column": "contact-left",
       "bbox": [
@@ -2963,15 +2528,10 @@
       ],
       "visibleColors": 24,
       "interiorTransparentPixels": 0,
-      "changedFromDirectionalIdle": {
-        "pixels": 600,
-        "firstChangedY": 21,
-        "lastChangedY": 56,
-        "upperBodyShare": 0.6533
-      }
+      "changedFromDirectionalIdle": 600
     },
     {
-      "key": "avatar-9",
+      "key": 9,
       "row": "down",
       "column": "passing-left",
       "bbox": [
@@ -2982,15 +2542,10 @@
       ],
       "visibleColors": 24,
       "interiorTransparentPixels": 0,
-      "changedFromDirectionalIdle": {
-        "pixels": 626,
-        "firstChangedY": 20,
-        "lastChangedY": 56,
-        "upperBodyShare": 0.6645
-      }
+      "changedFromDirectionalIdle": 626
     },
     {
-      "key": "avatar-9",
+      "key": 9,
       "row": "down",
       "column": "contact-right",
       "bbox": [
@@ -3001,15 +2556,10 @@
       ],
       "visibleColors": 24,
       "interiorTransparentPixels": 0,
-      "changedFromDirectionalIdle": {
-        "pixels": 600,
-        "firstChangedY": 21,
-        "lastChangedY": 56,
-        "upperBodyShare": 0.6533
-      }
+      "changedFromDirectionalIdle": 600
     },
     {
-      "key": "avatar-9",
+      "key": 9,
       "row": "down",
       "column": "passing-right",
       "bbox": [
@@ -3020,15 +2570,10 @@
       ],
       "visibleColors": 24,
       "interiorTransparentPixels": 0,
-      "changedFromDirectionalIdle": {
-        "pixels": 626,
-        "firstChangedY": 20,
-        "lastChangedY": 56,
-        "upperBodyShare": 0.6645
-      }
+      "changedFromDirectionalIdle": 626
     },
     {
-      "key": "avatar-9",
+      "key": 9,
       "row": "left",
       "column": "idle",
       "bbox": [
@@ -3039,10 +2584,10 @@
       ],
       "visibleColors": 24,
       "interiorTransparentPixels": 0,
-      "changedFromDirectionalIdle": null
+      "changedFromDirectionalIdle": 0
     },
     {
-      "key": "avatar-9",
+      "key": 9,
       "row": "left",
       "column": "contact-left",
       "bbox": [
@@ -3053,15 +2598,10 @@
       ],
       "visibleColors": 24,
       "interiorTransparentPixels": 0,
-      "changedFromDirectionalIdle": {
-        "pixels": 528,
-        "firstChangedY": 21,
-        "lastChangedY": 56,
-        "upperBodyShare": 0.6193
-      }
+      "changedFromDirectionalIdle": 528
     },
     {
-      "key": "avatar-9",
+      "key": 9,
       "row": "left",
       "column": "passing-left",
       "bbox": [
@@ -3072,15 +2612,10 @@
       ],
       "visibleColors": 24,
       "interiorTransparentPixels": 0,
-      "changedFromDirectionalIdle": {
-        "pixels": 570,
-        "firstChangedY": 20,
-        "lastChangedY": 56,
-        "upperBodyShare": 0.5895
-      }
+      "changedFromDirectionalIdle": 570
     },
     {
-      "key": "avatar-9",
+      "key": 9,
       "row": "left",
       "column": "contact-right",
       "bbox": [
@@ -3091,15 +2626,10 @@
       ],
       "visibleColors": 24,
       "interiorTransparentPixels": 0,
-      "changedFromDirectionalIdle": {
-        "pixels": 554,
-        "firstChangedY": 20,
-        "lastChangedY": 56,
-        "upperBodyShare": 0.6047
-      }
+      "changedFromDirectionalIdle": 554
     },
     {
-      "key": "avatar-9",
+      "key": 9,
       "row": "left",
       "column": "passing-right",
       "bbox": [
@@ -3110,15 +2640,10 @@
       ],
       "visibleColors": 24,
       "interiorTransparentPixels": 0,
-      "changedFromDirectionalIdle": {
-        "pixels": 553,
-        "firstChangedY": 20,
-        "lastChangedY": 56,
-        "upperBodyShare": 0.6166
-      }
+      "changedFromDirectionalIdle": 553
     },
     {
-      "key": "avatar-9",
+      "key": 9,
       "row": "right",
       "column": "idle",
       "bbox": [
@@ -3129,10 +2654,10 @@
       ],
       "visibleColors": 23,
       "interiorTransparentPixels": 0,
-      "changedFromDirectionalIdle": null
+      "changedFromDirectionalIdle": 0
     },
     {
-      "key": "avatar-9",
+      "key": 9,
       "row": "right",
       "column": "contact-left",
       "bbox": [
@@ -3143,15 +2668,10 @@
       ],
       "visibleColors": 24,
       "interiorTransparentPixels": 0,
-      "changedFromDirectionalIdle": {
-        "pixels": 559,
-        "firstChangedY": 20,
-        "lastChangedY": 56,
-        "upperBodyShare": 0.6279
-      }
+      "changedFromDirectionalIdle": 559
     },
     {
-      "key": "avatar-9",
+      "key": 9,
       "row": "right",
       "column": "passing-left",
       "bbox": [
@@ -3162,15 +2682,10 @@
       ],
       "visibleColors": 24,
       "interiorTransparentPixels": 0,
-      "changedFromDirectionalIdle": {
-        "pixels": 503,
-        "firstChangedY": 20,
-        "lastChangedY": 56,
-        "upperBodyShare": 0.5765
-      }
+      "changedFromDirectionalIdle": 503
     },
     {
-      "key": "avatar-9",
+      "key": 9,
       "row": "right",
       "column": "contact-right",
       "bbox": [
@@ -3181,15 +2696,10 @@
       ],
       "visibleColors": 24,
       "interiorTransparentPixels": 0,
-      "changedFromDirectionalIdle": {
-        "pixels": 457,
-        "firstChangedY": 20,
-        "lastChangedY": 56,
-        "upperBodyShare": 0.5667
-      }
+      "changedFromDirectionalIdle": 457
     },
     {
-      "key": "avatar-9",
+      "key": 9,
       "row": "right",
       "column": "passing-right",
       "bbox": [
@@ -3200,15 +2710,10 @@
       ],
       "visibleColors": 24,
       "interiorTransparentPixels": 0,
-      "changedFromDirectionalIdle": {
-        "pixels": 549,
-        "firstChangedY": 20,
-        "lastChangedY": 56,
-        "upperBodyShare": 0.6248
-      }
+      "changedFromDirectionalIdle": 549
     },
     {
-      "key": "avatar-9",
+      "key": 9,
       "row": "up",
       "column": "idle",
       "bbox": [
@@ -3219,10 +2724,10 @@
       ],
       "visibleColors": 24,
       "interiorTransparentPixels": 0,
-      "changedFromDirectionalIdle": null
+      "changedFromDirectionalIdle": 0
     },
     {
-      "key": "avatar-9",
+      "key": 9,
       "row": "up",
       "column": "contact-left",
       "bbox": [
@@ -3233,15 +2738,10 @@
       ],
       "visibleColors": 24,
       "interiorTransparentPixels": 0,
-      "changedFromDirectionalIdle": {
-        "pixels": 501,
-        "firstChangedY": 21,
-        "lastChangedY": 56,
-        "upperBodyShare": 0.6287
-      }
+      "changedFromDirectionalIdle": 501
     },
     {
-      "key": "avatar-9",
+      "key": 9,
       "row": "up",
       "column": "passing-left",
       "bbox": [
@@ -3252,15 +2752,10 @@
       ],
       "visibleColors": 24,
       "interiorTransparentPixels": 0,
-      "changedFromDirectionalIdle": {
-        "pixels": 503,
-        "firstChangedY": 20,
-        "lastChangedY": 56,
-        "upperBodyShare": 0.5984
-      }
+      "changedFromDirectionalIdle": 503
     },
     {
-      "key": "avatar-9",
+      "key": 9,
       "row": "up",
       "column": "contact-right",
       "bbox": [
@@ -3271,15 +2766,10 @@
       ],
       "visibleColors": 24,
       "interiorTransparentPixels": 0,
-      "changedFromDirectionalIdle": {
-        "pixels": 515,
-        "firstChangedY": 21,
-        "lastChangedY": 56,
-        "upperBodyShare": 0.6117
-      }
+      "changedFromDirectionalIdle": 515
     },
     {
-      "key": "avatar-9",
+      "key": 9,
       "row": "up",
       "column": "passing-right",
       "bbox": [
@@ -3290,15 +2780,10 @@
       ],
       "visibleColors": 24,
       "interiorTransparentPixels": 0,
-      "changedFromDirectionalIdle": {
-        "pixels": 491,
-        "firstChangedY": 20,
-        "lastChangedY": 56,
-        "upperBodyShare": 0.613
-      }
+      "changedFromDirectionalIdle": 491
     },
     {
-      "key": "avatar-10",
+      "key": 10,
       "row": "down",
       "column": "idle",
       "bbox": [
@@ -3309,10 +2794,10 @@
       ],
       "visibleColors": 24,
       "interiorTransparentPixels": 0,
-      "changedFromDirectionalIdle": null
+      "changedFromDirectionalIdle": 0
     },
     {
-      "key": "avatar-10",
+      "key": 10,
       "row": "down",
       "column": "contact-left",
       "bbox": [
@@ -3323,15 +2808,10 @@
       ],
       "visibleColors": 24,
       "interiorTransparentPixels": 0,
-      "changedFromDirectionalIdle": {
-        "pixels": 656,
-        "firstChangedY": 21,
-        "lastChangedY": 56,
-        "upperBodyShare": 0.689
-      }
+      "changedFromDirectionalIdle": 656
     },
     {
-      "key": "avatar-10",
+      "key": 10,
       "row": "down",
       "column": "passing-left",
       "bbox": [
@@ -3342,15 +2822,10 @@
       ],
       "visibleColors": 24,
       "interiorTransparentPixels": 0,
-      "changedFromDirectionalIdle": {
-        "pixels": 648,
-        "firstChangedY": 20,
-        "lastChangedY": 56,
-        "upperBodyShare": 0.6929
-      }
+      "changedFromDirectionalIdle": 648
     },
     {
-      "key": "avatar-10",
+      "key": 10,
       "row": "down",
       "column": "contact-right",
       "bbox": [
@@ -3361,15 +2836,10 @@
       ],
       "visibleColors": 24,
       "interiorTransparentPixels": 0,
-      "changedFromDirectionalIdle": {
-        "pixels": 656,
-        "firstChangedY": 21,
-        "lastChangedY": 56,
-        "upperBodyShare": 0.6921
-      }
+      "changedFromDirectionalIdle": 656
     },
     {
-      "key": "avatar-10",
+      "key": 10,
       "row": "down",
       "column": "passing-right",
       "bbox": [
@@ -3380,15 +2850,10 @@
       ],
       "visibleColors": 24,
       "interiorTransparentPixels": 0,
-      "changedFromDirectionalIdle": {
-        "pixels": 650,
-        "firstChangedY": 20,
-        "lastChangedY": 56,
-        "upperBodyShare": 0.6908
-      }
+      "changedFromDirectionalIdle": 650
     },
     {
-      "key": "avatar-10",
+      "key": 10,
       "row": "left",
       "column": "idle",
       "bbox": [
@@ -3399,10 +2864,10 @@
       ],
       "visibleColors": 24,
       "interiorTransparentPixels": 0,
-      "changedFromDirectionalIdle": null
+      "changedFromDirectionalIdle": 0
     },
     {
-      "key": "avatar-10",
+      "key": 10,
       "row": "left",
       "column": "contact-left",
       "bbox": [
@@ -3413,15 +2878,10 @@
       ],
       "visibleColors": 24,
       "interiorTransparentPixels": 0,
-      "changedFromDirectionalIdle": {
-        "pixels": 761,
-        "firstChangedY": 20,
-        "lastChangedY": 56,
-        "upperBodyShare": 0.6518
-      }
+      "changedFromDirectionalIdle": 761
     },
     {
-      "key": "avatar-10",
+      "key": 10,
       "row": "left",
       "column": "passing-left",
       "bbox": [
@@ -3432,15 +2892,10 @@
       ],
       "visibleColors": 24,
       "interiorTransparentPixels": 0,
-      "changedFromDirectionalIdle": {
-        "pixels": 865,
-        "firstChangedY": 20,
-        "lastChangedY": 56,
-        "upperBodyShare": 0.6439
-      }
+      "changedFromDirectionalIdle": 865
     },
     {
-      "key": "avatar-10",
+      "key": 10,
       "row": "left",
       "column": "contact-right",
       "bbox": [
@@ -3451,15 +2906,10 @@
       ],
       "visibleColors": 24,
       "interiorTransparentPixels": 0,
-      "changedFromDirectionalIdle": {
-        "pixels": 781,
-        "firstChangedY": 21,
-        "lastChangedY": 56,
-        "upperBodyShare": 0.6453
-      }
+      "changedFromDirectionalIdle": 781
     },
     {
-      "key": "avatar-10",
+      "key": 10,
       "row": "left",
       "column": "passing-right",
       "bbox": [
@@ -3470,15 +2920,10 @@
       ],
       "visibleColors": 24,
       "interiorTransparentPixels": 0,
-      "changedFromDirectionalIdle": {
-        "pixels": 828,
-        "firstChangedY": 20,
-        "lastChangedY": 56,
-        "upperBodyShare": 0.6534
-      }
+      "changedFromDirectionalIdle": 828
     },
     {
-      "key": "avatar-10",
+      "key": 10,
       "row": "right",
       "column": "idle",
       "bbox": [
@@ -3489,10 +2934,10 @@
       ],
       "visibleColors": 24,
       "interiorTransparentPixels": 0,
-      "changedFromDirectionalIdle": null
+      "changedFromDirectionalIdle": 0
     },
     {
-      "key": "avatar-10",
+      "key": 10,
       "row": "right",
       "column": "contact-left",
       "bbox": [
@@ -3503,15 +2948,10 @@
       ],
       "visibleColors": 24,
       "interiorTransparentPixels": 0,
-      "changedFromDirectionalIdle": {
-        "pixels": 836,
-        "firstChangedY": 20,
-        "lastChangedY": 56,
-        "upperBodyShare": 0.6806
-      }
+      "changedFromDirectionalIdle": 836
     },
     {
-      "key": "avatar-10",
+      "key": 10,
       "row": "right",
       "column": "passing-left",
       "bbox": [
@@ -3522,15 +2962,10 @@
       ],
       "visibleColors": 24,
       "interiorTransparentPixels": 0,
-      "changedFromDirectionalIdle": {
-        "pixels": 802,
-        "firstChangedY": 20,
-        "lastChangedY": 56,
-        "upperBodyShare": 0.6372
-      }
+      "changedFromDirectionalIdle": 802
     },
     {
-      "key": "avatar-10",
+      "key": 10,
       "row": "right",
       "column": "contact-right",
       "bbox": [
@@ -3541,15 +2976,10 @@
       ],
       "visibleColors": 24,
       "interiorTransparentPixels": 0,
-      "changedFromDirectionalIdle": {
-        "pixels": 755,
-        "firstChangedY": 20,
-        "lastChangedY": 56,
-        "upperBodyShare": 0.645
-      }
+      "changedFromDirectionalIdle": 755
     },
     {
-      "key": "avatar-10",
+      "key": 10,
       "row": "right",
       "column": "passing-right",
       "bbox": [
@@ -3560,15 +2990,10 @@
       ],
       "visibleColors": 24,
       "interiorTransparentPixels": 0,
-      "changedFromDirectionalIdle": {
-        "pixels": 805,
-        "firstChangedY": 20,
-        "lastChangedY": 56,
-        "upperBodyShare": 0.646
-      }
+      "changedFromDirectionalIdle": 805
     },
     {
-      "key": "avatar-10",
+      "key": 10,
       "row": "up",
       "column": "idle",
       "bbox": [
@@ -3579,10 +3004,10 @@
       ],
       "visibleColors": 24,
       "interiorTransparentPixels": 0,
-      "changedFromDirectionalIdle": null
+      "changedFromDirectionalIdle": 0
     },
     {
-      "key": "avatar-10",
+      "key": 10,
       "row": "up",
       "column": "contact-left",
       "bbox": [
@@ -3593,15 +3018,10 @@
       ],
       "visibleColors": 24,
       "interiorTransparentPixels": 0,
-      "changedFromDirectionalIdle": {
-        "pixels": 578,
-        "firstChangedY": 21,
-        "lastChangedY": 56,
-        "upperBodyShare": 0.6626
-      }
+      "changedFromDirectionalIdle": 578
     },
     {
-      "key": "avatar-10",
+      "key": 10,
       "row": "up",
       "column": "passing-left",
       "bbox": [
@@ -3612,15 +3032,10 @@
       ],
       "visibleColors": 24,
       "interiorTransparentPixels": 0,
-      "changedFromDirectionalIdle": {
-        "pixels": 572,
-        "firstChangedY": 20,
-        "lastChangedY": 56,
-        "upperBodyShare": 0.6643
-      }
+      "changedFromDirectionalIdle": 572
     },
     {
-      "key": "avatar-10",
+      "key": 10,
       "row": "up",
       "column": "contact-right",
       "bbox": [
@@ -3631,15 +3046,10 @@
       ],
       "visibleColors": 24,
       "interiorTransparentPixels": 0,
-      "changedFromDirectionalIdle": {
-        "pixels": 577,
-        "firstChangedY": 21,
-        "lastChangedY": 56,
-        "upperBodyShare": 0.6638
-      }
+      "changedFromDirectionalIdle": 577
     },
     {
-      "key": "avatar-10",
+      "key": 10,
       "row": "up",
       "column": "passing-right",
       "bbox": [
@@ -3650,15 +3060,10 @@
       ],
       "visibleColors": 24,
       "interiorTransparentPixels": 0,
-      "changedFromDirectionalIdle": {
-        "pixels": 573,
-        "firstChangedY": 20,
-        "lastChangedY": 56,
-        "upperBodyShare": 0.6632
-      }
+      "changedFromDirectionalIdle": 573
     },
     {
-      "key": "avatar-11",
+      "key": 11,
       "row": "down",
       "column": "idle",
       "bbox": [
@@ -3669,10 +3074,10 @@
       ],
       "visibleColors": 24,
       "interiorTransparentPixels": 0,
-      "changedFromDirectionalIdle": null
+      "changedFromDirectionalIdle": 0
     },
     {
-      "key": "avatar-11",
+      "key": 11,
       "row": "down",
       "column": "contact-left",
       "bbox": [
@@ -3683,15 +3088,10 @@
       ],
       "visibleColors": 24,
       "interiorTransparentPixels": 0,
-      "changedFromDirectionalIdle": {
-        "pixels": 714,
-        "firstChangedY": 19,
-        "lastChangedY": 56,
-        "upperBodyShare": 0.6765
-      }
+      "changedFromDirectionalIdle": 714
     },
     {
-      "key": "avatar-11",
+      "key": 11,
       "row": "down",
       "column": "passing-left",
       "bbox": [
@@ -3702,15 +3102,10 @@
       ],
       "visibleColors": 24,
       "interiorTransparentPixels": 0,
-      "changedFromDirectionalIdle": {
-        "pixels": 727,
-        "firstChangedY": 18,
-        "lastChangedY": 56,
-        "upperBodyShare": 0.6988
-      }
+      "changedFromDirectionalIdle": 727
     },
     {
-      "key": "avatar-11",
+      "key": 11,
       "row": "down",
       "column": "contact-right",
       "bbox": [
@@ -3721,15 +3116,10 @@
       ],
       "visibleColors": 24,
       "interiorTransparentPixels": 0,
-      "changedFromDirectionalIdle": {
-        "pixels": 710,
-        "firstChangedY": 19,
-        "lastChangedY": 56,
-        "upperBodyShare": 0.6803
-      }
+      "changedFromDirectionalIdle": 710
     },
     {
-      "key": "avatar-11",
+      "key": 11,
       "row": "down",
       "column": "passing-right",
       "bbox": [
@@ -3740,15 +3130,10 @@
       ],
       "visibleColors": 24,
       "interiorTransparentPixels": 0,
-      "changedFromDirectionalIdle": {
-        "pixels": 731,
-        "firstChangedY": 18,
-        "lastChangedY": 56,
-        "upperBodyShare": 0.6949
-      }
+      "changedFromDirectionalIdle": 731
     },
     {
-      "key": "avatar-11",
+      "key": 11,
       "row": "left",
       "column": "idle",
       "bbox": [
@@ -3759,10 +3144,10 @@
       ],
       "visibleColors": 24,
       "interiorTransparentPixels": 0,
-      "changedFromDirectionalIdle": null
+      "changedFromDirectionalIdle": 0
     },
     {
-      "key": "avatar-11",
+      "key": 11,
       "row": "left",
       "column": "contact-left",
       "bbox": [
@@ -3773,15 +3158,10 @@
       ],
       "visibleColors": 24,
       "interiorTransparentPixels": 0,
-      "changedFromDirectionalIdle": {
-        "pixels": 980,
-        "firstChangedY": 18,
-        "lastChangedY": 56,
-        "upperBodyShare": 0.6684
-      }
+      "changedFromDirectionalIdle": 980
     },
     {
-      "key": "avatar-11",
+      "key": 11,
       "row": "left",
       "column": "passing-left",
       "bbox": [
@@ -3792,15 +3172,10 @@
       ],
       "visibleColors": 24,
       "interiorTransparentPixels": 0,
-      "changedFromDirectionalIdle": {
-        "pixels": 939,
-        "firstChangedY": 18,
-        "lastChangedY": 56,
-        "upperBodyShare": 0.6613
-      }
+      "changedFromDirectionalIdle": 939
     },
     {
-      "key": "avatar-11",
+      "key": 11,
       "row": "left",
       "column": "contact-right",
       "bbox": [
@@ -3811,15 +3186,10 @@
       ],
       "visibleColors": 24,
       "interiorTransparentPixels": 0,
-      "changedFromDirectionalIdle": {
-        "pixels": 1014,
-        "firstChangedY": 18,
-        "lastChangedY": 56,
-        "upperBodyShare": 0.6706
-      }
+      "changedFromDirectionalIdle": 1014
     },
     {
-      "key": "avatar-11",
+      "key": 11,
       "row": "left",
       "column": "passing-right",
       "bbox": [
@@ -3830,15 +3200,10 @@
       ],
       "visibleColors": 24,
       "interiorTransparentPixels": 0,
-      "changedFromDirectionalIdle": {
-        "pixels": 936,
-        "firstChangedY": 18,
-        "lastChangedY": 56,
-        "upperBodyShare": 0.6613
-      }
+      "changedFromDirectionalIdle": 936
     },
     {
-      "key": "avatar-11",
+      "key": 11,
       "row": "right",
       "column": "idle",
       "bbox": [
@@ -3849,10 +3214,10 @@
       ],
       "visibleColors": 24,
       "interiorTransparentPixels": 0,
-      "changedFromDirectionalIdle": null
+      "changedFromDirectionalIdle": 0
     },
     {
-      "key": "avatar-11",
+      "key": 11,
       "row": "right",
       "column": "contact-left",
       "bbox": [
@@ -3863,15 +3228,10 @@
       ],
       "visibleColors": 24,
       "interiorTransparentPixels": 0,
-      "changedFromDirectionalIdle": {
-        "pixels": 818,
-        "firstChangedY": 18,
-        "lastChangedY": 56,
-        "upperBodyShare": 0.6687
-      }
+      "changedFromDirectionalIdle": 818
     },
     {
-      "key": "avatar-11",
+      "key": 11,
       "row": "right",
       "column": "passing-left",
       "bbox": [
@@ -3882,15 +3242,10 @@
       ],
       "visibleColors": 24,
       "interiorTransparentPixels": 0,
-      "changedFromDirectionalIdle": {
-        "pixels": 884,
-        "firstChangedY": 18,
-        "lastChangedY": 56,
-        "upperBodyShare": 0.655
-      }
+      "changedFromDirectionalIdle": 884
     },
     {
-      "key": "avatar-11",
+      "key": 11,
       "row": "right",
       "column": "contact-right",
       "bbox": [
@@ -3901,15 +3256,10 @@
       ],
       "visibleColors": 24,
       "interiorTransparentPixels": 0,
-      "changedFromDirectionalIdle": {
-        "pixels": 933,
-        "firstChangedY": 18,
-        "lastChangedY": 56,
-        "upperBodyShare": 0.6581
-      }
+      "changedFromDirectionalIdle": 933
     },
     {
-      "key": "avatar-11",
+      "key": 11,
       "row": "right",
       "column": "passing-right",
       "bbox": [
@@ -3920,15 +3270,10 @@
       ],
       "visibleColors": 24,
       "interiorTransparentPixels": 0,
-      "changedFromDirectionalIdle": {
-        "pixels": 873,
-        "firstChangedY": 18,
-        "lastChangedY": 56,
-        "upperBodyShare": 0.6644
-      }
+      "changedFromDirectionalIdle": 873
     },
     {
-      "key": "avatar-11",
+      "key": 11,
       "row": "up",
       "column": "idle",
       "bbox": [
@@ -3939,10 +3284,10 @@
       ],
       "visibleColors": 24,
       "interiorTransparentPixels": 0,
-      "changedFromDirectionalIdle": null
+      "changedFromDirectionalIdle": 0
     },
     {
-      "key": "avatar-11",
+      "key": 11,
       "row": "up",
       "column": "contact-left",
       "bbox": [
@@ -3953,15 +3298,10 @@
       ],
       "visibleColors": 24,
       "interiorTransparentPixels": 0,
-      "changedFromDirectionalIdle": {
-        "pixels": 629,
-        "firstChangedY": 19,
-        "lastChangedY": 56,
-        "upperBodyShare": 0.6359
-      }
+      "changedFromDirectionalIdle": 629
     },
     {
-      "key": "avatar-11",
+      "key": 11,
       "row": "up",
       "column": "passing-left",
       "bbox": [
@@ -3972,15 +3312,10 @@
       ],
       "visibleColors": 24,
       "interiorTransparentPixels": 0,
-      "changedFromDirectionalIdle": {
-        "pixels": 634,
-        "firstChangedY": 18,
-        "lastChangedY": 56,
-        "upperBodyShare": 0.6593
-      }
+      "changedFromDirectionalIdle": 634
     },
     {
-      "key": "avatar-11",
+      "key": 11,
       "row": "up",
       "column": "contact-right",
       "bbox": [
@@ -3991,15 +3326,10 @@
       ],
       "visibleColors": 24,
       "interiorTransparentPixels": 0,
-      "changedFromDirectionalIdle": {
-        "pixels": 625,
-        "firstChangedY": 19,
-        "lastChangedY": 56,
-        "upperBodyShare": 0.64
-      }
+      "changedFromDirectionalIdle": 625
     },
     {
-      "key": "avatar-11",
+      "key": 11,
       "row": "up",
       "column": "passing-right",
       "bbox": [
@@ -4010,15 +3340,10 @@
       ],
       "visibleColors": 24,
       "interiorTransparentPixels": 0,
-      "changedFromDirectionalIdle": {
-        "pixels": 638,
-        "firstChangedY": 18,
-        "lastChangedY": 56,
-        "upperBodyShare": 0.6552
-      }
+      "changedFromDirectionalIdle": 638
     },
     {
-      "key": "avatar-12",
+      "key": 12,
       "row": "down",
       "column": "idle",
       "bbox": [
@@ -4029,10 +3354,10 @@
       ],
       "visibleColors": 24,
       "interiorTransparentPixels": 0,
-      "changedFromDirectionalIdle": null
+      "changedFromDirectionalIdle": 0
     },
     {
-      "key": "avatar-12",
+      "key": 12,
       "row": "down",
       "column": "contact-left",
       "bbox": [
@@ -4042,73 +3367,53 @@
         57
       ],
       "visibleColors": 24,
-      "interiorTransparentPixels": 0,
-      "changedFromDirectionalIdle": {
-        "pixels": 1299,
-        "firstChangedY": 9,
-        "lastChangedY": 56,
-        "upperBodyShare": 0.8522
-      }
+      "interiorTransparentPixels": 9,
+      "changedFromDirectionalIdle": 1456
     },
     {
-      "key": "avatar-12",
+      "key": 12,
       "row": "down",
       "column": "passing-left",
       "bbox": [
-        8,
-        8,
+        7,
+        9,
         63,
         57
       ],
       "visibleColors": 24,
-      "interiorTransparentPixels": 0,
-      "changedFromDirectionalIdle": {
-        "pixels": 1220,
-        "firstChangedY": 8,
-        "lastChangedY": 56,
-        "upperBodyShare": 0.8238
-      }
+      "interiorTransparentPixels": 9,
+      "changedFromDirectionalIdle": 1448
     },
     {
-      "key": "avatar-12",
+      "key": 12,
       "row": "down",
       "column": "contact-right",
       "bbox": [
-        8,
         9,
-        64,
+        9,
+        62,
         57
       ],
       "visibleColors": 24,
-      "interiorTransparentPixels": 0,
-      "changedFromDirectionalIdle": {
-        "pixels": 1322,
-        "firstChangedY": 9,
-        "lastChangedY": 56,
-        "upperBodyShare": 0.8374
-      }
+      "interiorTransparentPixels": 9,
+      "changedFromDirectionalIdle": 1467
     },
     {
-      "key": "avatar-12",
+      "key": 12,
       "row": "down",
       "column": "passing-right",
       "bbox": [
-        8,
-        8,
-        63,
+        9,
+        9,
+        62,
         57
       ],
       "visibleColors": 24,
-      "interiorTransparentPixels": 0,
-      "changedFromDirectionalIdle": {
-        "pixels": 1197,
-        "firstChangedY": 8,
-        "lastChangedY": 56,
-        "upperBodyShare": 0.8396
-      }
+      "interiorTransparentPixels": 9,
+      "changedFromDirectionalIdle": 1463
     },
     {
-      "key": "avatar-12",
+      "key": 12,
       "row": "left",
       "column": "idle",
       "bbox": [
@@ -4119,10 +3424,10 @@
       ],
       "visibleColors": 23,
       "interiorTransparentPixels": 0,
-      "changedFromDirectionalIdle": null
+      "changedFromDirectionalIdle": 0
     },
     {
-      "key": "avatar-12",
+      "key": 12,
       "row": "left",
       "column": "contact-left",
       "bbox": [
@@ -4133,15 +3438,10 @@
       ],
       "visibleColors": 23,
       "interiorTransparentPixels": 0,
-      "changedFromDirectionalIdle": {
-        "pixels": 986,
-        "firstChangedY": 9,
-        "lastChangedY": 56,
-        "upperBodyShare": 0.6998
-      }
+      "changedFromDirectionalIdle": 986
     },
     {
-      "key": "avatar-12",
+      "key": 12,
       "row": "left",
       "column": "passing-left",
       "bbox": [
@@ -4152,15 +3452,10 @@
       ],
       "visibleColors": 24,
       "interiorTransparentPixels": 0,
-      "changedFromDirectionalIdle": {
-        "pixels": 1020,
-        "firstChangedY": 8,
-        "lastChangedY": 56,
-        "upperBodyShare": 0.6735
-      }
+      "changedFromDirectionalIdle": 1020
     },
     {
-      "key": "avatar-12",
+      "key": 12,
       "row": "left",
       "column": "contact-right",
       "bbox": [
@@ -4171,15 +3466,10 @@
       ],
       "visibleColors": 24,
       "interiorTransparentPixels": 0,
-      "changedFromDirectionalIdle": {
-        "pixels": 1053,
-        "firstChangedY": 9,
-        "lastChangedY": 56,
-        "upperBodyShare": 0.68
-      }
+      "changedFromDirectionalIdle": 1053
     },
     {
-      "key": "avatar-12",
+      "key": 12,
       "row": "left",
       "column": "passing-right",
       "bbox": [
@@ -4190,15 +3480,10 @@
       ],
       "visibleColors": 23,
       "interiorTransparentPixels": 0,
-      "changedFromDirectionalIdle": {
-        "pixels": 932,
-        "firstChangedY": 8,
-        "lastChangedY": 56,
-        "upperBodyShare": 0.6717
-      }
+      "changedFromDirectionalIdle": 932
     },
     {
-      "key": "avatar-12",
+      "key": 12,
       "row": "right",
       "column": "idle",
       "bbox": [
@@ -4209,10 +3494,10 @@
       ],
       "visibleColors": 24,
       "interiorTransparentPixels": 0,
-      "changedFromDirectionalIdle": null
+      "changedFromDirectionalIdle": 0
     },
     {
-      "key": "avatar-12",
+      "key": 12,
       "row": "right",
       "column": "contact-left",
       "bbox": [
@@ -4223,15 +3508,10 @@
       ],
       "visibleColors": 24,
       "interiorTransparentPixels": 0,
-      "changedFromDirectionalIdle": {
-        "pixels": 1079,
-        "firstChangedY": 9,
-        "lastChangedY": 56,
-        "upperBodyShare": 0.709
-      }
+      "changedFromDirectionalIdle": 1079
     },
     {
-      "key": "avatar-12",
+      "key": 12,
       "row": "right",
       "column": "passing-left",
       "bbox": [
@@ -4242,15 +3522,10 @@
       ],
       "visibleColors": 24,
       "interiorTransparentPixels": 0,
-      "changedFromDirectionalIdle": {
-        "pixels": 1050,
-        "firstChangedY": 8,
-        "lastChangedY": 56,
-        "upperBodyShare": 0.6667
-      }
+      "changedFromDirectionalIdle": 1050
     },
     {
-      "key": "avatar-12",
+      "key": 12,
       "row": "right",
       "column": "contact-right",
       "bbox": [
@@ -4261,15 +3536,10 @@
       ],
       "visibleColors": 24,
       "interiorTransparentPixels": 0,
-      "changedFromDirectionalIdle": {
-        "pixels": 1154,
-        "firstChangedY": 9,
-        "lastChangedY": 56,
-        "upperBodyShare": 0.6984
-      }
+      "changedFromDirectionalIdle": 1154
     },
     {
-      "key": "avatar-12",
+      "key": 12,
       "row": "right",
       "column": "passing-right",
       "bbox": [
@@ -4280,15 +3550,10 @@
       ],
       "visibleColors": 24,
       "interiorTransparentPixels": 0,
-      "changedFromDirectionalIdle": {
-        "pixels": 1075,
-        "firstChangedY": 8,
-        "lastChangedY": 56,
-        "upperBodyShare": 0.707
-      }
+      "changedFromDirectionalIdle": 1075
     },
     {
-      "key": "avatar-12",
+      "key": 12,
       "row": "up",
       "column": "idle",
       "bbox": [
@@ -4299,10 +3564,10 @@
       ],
       "visibleColors": 24,
       "interiorTransparentPixels": 0,
-      "changedFromDirectionalIdle": null
+      "changedFromDirectionalIdle": 0
     },
     {
-      "key": "avatar-12",
+      "key": 12,
       "row": "up",
       "column": "contact-left",
       "bbox": [
@@ -4312,73 +3577,53 @@
         57
       ],
       "visibleColors": 24,
-      "interiorTransparentPixels": 0,
-      "changedFromDirectionalIdle": {
-        "pixels": 1184,
-        "firstChangedY": 9,
-        "lastChangedY": 56,
-        "upperBodyShare": 0.8142
-      }
+      "interiorTransparentPixels": 8,
+      "changedFromDirectionalIdle": 1251
     },
     {
-      "key": "avatar-12",
+      "key": 12,
       "row": "up",
       "column": "passing-left",
       "bbox": [
-        13,
-        8,
-        58,
+        12,
+        9,
+        57,
         57
       ],
       "visibleColors": 24,
-      "interiorTransparentPixels": 0,
-      "changedFromDirectionalIdle": {
-        "pixels": 1095,
-        "firstChangedY": 8,
-        "lastChangedY": 56,
-        "upperBodyShare": 0.7799
-      }
+      "interiorTransparentPixels": 7,
+      "changedFromDirectionalIdle": 1246
     },
     {
-      "key": "avatar-12",
+      "key": 12,
       "row": "up",
       "column": "contact-right",
       "bbox": [
-        13,
+        14,
         9,
         59,
         57
       ],
       "visibleColors": 24,
-      "interiorTransparentPixels": 0,
-      "changedFromDirectionalIdle": {
-        "pixels": 1206,
-        "firstChangedY": 9,
-        "lastChangedY": 56,
-        "upperBodyShare": 0.8002
-      }
+      "interiorTransparentPixels": 9,
+      "changedFromDirectionalIdle": 1242
     },
     {
-      "key": "avatar-12",
+      "key": 12,
       "row": "up",
       "column": "passing-right",
       "bbox": [
-        13,
-        8,
-        58,
+        14,
+        9,
+        59,
         57
       ],
       "visibleColors": 24,
-      "interiorTransparentPixels": 0,
-      "changedFromDirectionalIdle": {
-        "pixels": 1074,
-        "firstChangedY": 8,
-        "lastChangedY": 56,
-        "upperBodyShare": 0.7952
-      }
+      "interiorTransparentPixels": 9,
+      "changedFromDirectionalIdle": 1245
     },
     {
-      "key": "avatar-13",
+      "key": 13,
       "row": "down",
       "column": "idle",
       "bbox": [
@@ -4389,10 +3634,10 @@
       ],
       "visibleColors": 24,
       "interiorTransparentPixels": 0,
-      "changedFromDirectionalIdle": null
+      "changedFromDirectionalIdle": 0
     },
     {
-      "key": "avatar-13",
+      "key": 13,
       "row": "down",
       "column": "contact-left",
       "bbox": [
@@ -4403,15 +3648,10 @@
       ],
       "visibleColors": 24,
       "interiorTransparentPixels": 0,
-      "changedFromDirectionalIdle": {
-        "pixels": 708,
-        "firstChangedY": 19,
-        "lastChangedY": 56,
-        "upperBodyShare": 0.7189
-      }
+      "changedFromDirectionalIdle": 708
     },
     {
-      "key": "avatar-13",
+      "key": 13,
       "row": "down",
       "column": "passing-left",
       "bbox": [
@@ -4422,15 +3662,10 @@
       ],
       "visibleColors": 24,
       "interiorTransparentPixels": 0,
-      "changedFromDirectionalIdle": {
-        "pixels": 662,
-        "firstChangedY": 18,
-        "lastChangedY": 56,
-        "upperBodyShare": 0.6994
-      }
+      "changedFromDirectionalIdle": 662
     },
     {
-      "key": "avatar-13",
+      "key": 13,
       "row": "down",
       "column": "contact-right",
       "bbox": [
@@ -4441,15 +3676,10 @@
       ],
       "visibleColors": 24,
       "interiorTransparentPixels": 0,
-      "changedFromDirectionalIdle": {
-        "pixels": 712,
-        "firstChangedY": 19,
-        "lastChangedY": 56,
-        "upperBodyShare": 0.7149
-      }
+      "changedFromDirectionalIdle": 712
     },
     {
-      "key": "avatar-13",
+      "key": 13,
       "row": "down",
       "column": "passing-right",
       "bbox": [
@@ -4460,15 +3690,10 @@
       ],
       "visibleColors": 24,
       "interiorTransparentPixels": 0,
-      "changedFromDirectionalIdle": {
-        "pixels": 658,
-        "firstChangedY": 18,
-        "lastChangedY": 56,
-        "upperBodyShare": 0.7036
-      }
+      "changedFromDirectionalIdle": 658
     },
     {
-      "key": "avatar-13",
+      "key": 13,
       "row": "left",
       "column": "idle",
       "bbox": [
@@ -4479,10 +3704,10 @@
       ],
       "visibleColors": 24,
       "interiorTransparentPixels": 0,
-      "changedFromDirectionalIdle": null
+      "changedFromDirectionalIdle": 0
     },
     {
-      "key": "avatar-13",
+      "key": 13,
       "row": "left",
       "column": "contact-left",
       "bbox": [
@@ -4493,15 +3718,10 @@
       ],
       "visibleColors": 24,
       "interiorTransparentPixels": 0,
-      "changedFromDirectionalIdle": {
-        "pixels": 697,
-        "firstChangedY": 18,
-        "lastChangedY": 56,
-        "upperBodyShare": 0.66
-      }
+      "changedFromDirectionalIdle": 697
     },
     {
-      "key": "avatar-13",
+      "key": 13,
       "row": "left",
       "column": "passing-left",
       "bbox": [
@@ -4512,15 +3732,10 @@
       ],
       "visibleColors": 24,
       "interiorTransparentPixels": 0,
-      "changedFromDirectionalIdle": {
-        "pixels": 675,
-        "firstChangedY": 18,
-        "lastChangedY": 56,
-        "upperBodyShare": 0.6385
-      }
+      "changedFromDirectionalIdle": 675
     },
     {
-      "key": "avatar-13",
+      "key": 13,
       "row": "left",
       "column": "contact-right",
       "bbox": [
@@ -4531,15 +3746,10 @@
       ],
       "visibleColors": 24,
       "interiorTransparentPixels": 0,
-      "changedFromDirectionalIdle": {
-        "pixels": 675,
-        "firstChangedY": 18,
-        "lastChangedY": 56,
-        "upperBodyShare": 0.6785
-      }
+      "changedFromDirectionalIdle": 675
     },
     {
-      "key": "avatar-13",
+      "key": 13,
       "row": "left",
       "column": "passing-right",
       "bbox": [
@@ -4550,15 +3760,10 @@
       ],
       "visibleColors": 24,
       "interiorTransparentPixels": 0,
-      "changedFromDirectionalIdle": {
-        "pixels": 705,
-        "firstChangedY": 18,
-        "lastChangedY": 56,
-        "upperBodyShare": 0.6766
-      }
+      "changedFromDirectionalIdle": 705
     },
     {
-      "key": "avatar-13",
+      "key": 13,
       "row": "right",
       "column": "idle",
       "bbox": [
@@ -4569,10 +3774,10 @@
       ],
       "visibleColors": 24,
       "interiorTransparentPixels": 0,
-      "changedFromDirectionalIdle": null
+      "changedFromDirectionalIdle": 0
     },
     {
-      "key": "avatar-13",
+      "key": 13,
       "row": "right",
       "column": "contact-left",
       "bbox": [
@@ -4583,15 +3788,10 @@
       ],
       "visibleColors": 24,
       "interiorTransparentPixels": 0,
-      "changedFromDirectionalIdle": {
-        "pixels": 697,
-        "firstChangedY": 18,
-        "lastChangedY": 56,
-        "upperBodyShare": 0.6442
-      }
+      "changedFromDirectionalIdle": 697
     },
     {
-      "key": "avatar-13",
+      "key": 13,
       "row": "right",
       "column": "passing-left",
       "bbox": [
@@ -4602,15 +3802,10 @@
       ],
       "visibleColors": 24,
       "interiorTransparentPixels": 0,
-      "changedFromDirectionalIdle": {
-        "pixels": 685,
-        "firstChangedY": 18,
-        "lastChangedY": 56,
-        "upperBodyShare": 0.6467
-      }
+      "changedFromDirectionalIdle": 685
     },
     {
-      "key": "avatar-13",
+      "key": 13,
       "row": "right",
       "column": "contact-right",
       "bbox": [
@@ -4621,15 +3816,10 @@
       ],
       "visibleColors": 24,
       "interiorTransparentPixels": 0,
-      "changedFromDirectionalIdle": {
-        "pixels": 749,
-        "firstChangedY": 18,
-        "lastChangedY": 56,
-        "upperBodyShare": 0.6609
-      }
+      "changedFromDirectionalIdle": 749
     },
     {
-      "key": "avatar-13",
+      "key": 13,
       "row": "right",
       "column": "passing-right",
       "bbox": [
@@ -4640,15 +3830,10 @@
       ],
       "visibleColors": 24,
       "interiorTransparentPixels": 0,
-      "changedFromDirectionalIdle": {
-        "pixels": 712,
-        "firstChangedY": 18,
-        "lastChangedY": 56,
-        "upperBodyShare": 0.6671
-      }
+      "changedFromDirectionalIdle": 712
     },
     {
-      "key": "avatar-13",
+      "key": 13,
       "row": "up",
       "column": "idle",
       "bbox": [
@@ -4659,10 +3844,10 @@
       ],
       "visibleColors": 24,
       "interiorTransparentPixels": 0,
-      "changedFromDirectionalIdle": null
+      "changedFromDirectionalIdle": 0
     },
     {
-      "key": "avatar-13",
+      "key": 13,
       "row": "up",
       "column": "contact-left",
       "bbox": [
@@ -4673,15 +3858,10 @@
       ],
       "visibleColors": 24,
       "interiorTransparentPixels": 0,
-      "changedFromDirectionalIdle": {
-        "pixels": 636,
-        "firstChangedY": 19,
-        "lastChangedY": 56,
-        "upperBodyShare": 0.6871
-      }
+      "changedFromDirectionalIdle": 636
     },
     {
-      "key": "avatar-13",
+      "key": 13,
       "row": "up",
       "column": "passing-left",
       "bbox": [
@@ -4692,15 +3872,10 @@
       ],
       "visibleColors": 24,
       "interiorTransparentPixels": 0,
-      "changedFromDirectionalIdle": {
-        "pixels": 597,
-        "firstChangedY": 18,
-        "lastChangedY": 56,
-        "upperBodyShare": 0.6667
-      }
+      "changedFromDirectionalIdle": 597
     },
     {
-      "key": "avatar-13",
+      "key": 13,
       "row": "up",
       "column": "contact-right",
       "bbox": [
@@ -4711,15 +3886,10 @@
       ],
       "visibleColors": 24,
       "interiorTransparentPixels": 0,
-      "changedFromDirectionalIdle": {
-        "pixels": 640,
-        "firstChangedY": 19,
-        "lastChangedY": 56,
-        "upperBodyShare": 0.6828
-      }
+      "changedFromDirectionalIdle": 640
     },
     {
-      "key": "avatar-13",
+      "key": 13,
       "row": "up",
       "column": "passing-right",
       "bbox": [
@@ -4730,15 +3900,10 @@
       ],
       "visibleColors": 24,
       "interiorTransparentPixels": 0,
-      "changedFromDirectionalIdle": {
-        "pixels": 593,
-        "firstChangedY": 18,
-        "lastChangedY": 56,
-        "upperBodyShare": 0.6712
-      }
+      "changedFromDirectionalIdle": 593
     },
     {
-      "key": "avatar-14",
+      "key": 14,
       "row": "down",
       "column": "idle",
       "bbox": [
@@ -4749,10 +3914,10 @@
       ],
       "visibleColors": 24,
       "interiorTransparentPixels": 0,
-      "changedFromDirectionalIdle": null
+      "changedFromDirectionalIdle": 0
     },
     {
-      "key": "avatar-14",
+      "key": 14,
       "row": "down",
       "column": "contact-left",
       "bbox": [
@@ -4763,15 +3928,10 @@
       ],
       "visibleColors": 24,
       "interiorTransparentPixels": 0,
-      "changedFromDirectionalIdle": {
-        "pixels": 559,
-        "firstChangedY": 27,
-        "lastChangedY": 56,
-        "upperBodyShare": 0.6744
-      }
+      "changedFromDirectionalIdle": 559
     },
     {
-      "key": "avatar-14",
+      "key": 14,
       "row": "down",
       "column": "passing-left",
       "bbox": [
@@ -4782,15 +3942,10 @@
       ],
       "visibleColors": 24,
       "interiorTransparentPixels": 0,
-      "changedFromDirectionalIdle": {
-        "pixels": 578,
-        "firstChangedY": 26,
-        "lastChangedY": 56,
-        "upperBodyShare": 0.6747
-      }
+      "changedFromDirectionalIdle": 578
     },
     {
-      "key": "avatar-14",
+      "key": 14,
       "row": "down",
       "column": "contact-right",
       "bbox": [
@@ -4801,15 +3956,10 @@
       ],
       "visibleColors": 24,
       "interiorTransparentPixels": 0,
-      "changedFromDirectionalIdle": {
-        "pixels": 558,
-        "firstChangedY": 27,
-        "lastChangedY": 56,
-        "upperBodyShare": 0.6756
-      }
+      "changedFromDirectionalIdle": 558
     },
     {
-      "key": "avatar-14",
+      "key": 14,
       "row": "down",
       "column": "passing-right",
       "bbox": [
@@ -4820,15 +3970,10 @@
       ],
       "visibleColors": 24,
       "interiorTransparentPixels": 0,
-      "changedFromDirectionalIdle": {
-        "pixels": 574,
-        "firstChangedY": 26,
-        "lastChangedY": 56,
-        "upperBodyShare": 0.6794
-      }
+      "changedFromDirectionalIdle": 574
     },
     {
-      "key": "avatar-14",
+      "key": 14,
       "row": "left",
       "column": "idle",
       "bbox": [
@@ -4839,10 +3984,10 @@
       ],
       "visibleColors": 24,
       "interiorTransparentPixels": 0,
-      "changedFromDirectionalIdle": null
+      "changedFromDirectionalIdle": 0
     },
     {
-      "key": "avatar-14",
+      "key": 14,
       "row": "left",
       "column": "contact-left",
       "bbox": [
@@ -4853,15 +3998,10 @@
       ],
       "visibleColors": 24,
       "interiorTransparentPixels": 0,
-      "changedFromDirectionalIdle": {
-        "pixels": 623,
-        "firstChangedY": 26,
-        "lastChangedY": 56,
-        "upperBodyShare": 0.6806
-      }
+      "changedFromDirectionalIdle": 623
     },
     {
-      "key": "avatar-14",
+      "key": 14,
       "row": "left",
       "column": "passing-left",
       "bbox": [
@@ -4872,15 +4012,10 @@
       ],
       "visibleColors": 24,
       "interiorTransparentPixels": 0,
-      "changedFromDirectionalIdle": {
-        "pixels": 560,
-        "firstChangedY": 26,
-        "lastChangedY": 56,
-        "upperBodyShare": 0.6411
-      }
+      "changedFromDirectionalIdle": 560
     },
     {
-      "key": "avatar-14",
+      "key": 14,
       "row": "left",
       "column": "contact-right",
       "bbox": [
@@ -4891,15 +4026,10 @@
       ],
       "visibleColors": 24,
       "interiorTransparentPixels": 0,
-      "changedFromDirectionalIdle": {
-        "pixels": 614,
-        "firstChangedY": 26,
-        "lastChangedY": 56,
-        "upperBodyShare": 0.6612
-      }
+      "changedFromDirectionalIdle": 614
     },
     {
-      "key": "avatar-14",
+      "key": 14,
       "row": "left",
       "column": "passing-right",
       "bbox": [
@@ -4910,15 +4040,10 @@
       ],
       "visibleColors": 24,
       "interiorTransparentPixels": 0,
-      "changedFromDirectionalIdle": {
-        "pixels": 509,
-        "firstChangedY": 26,
-        "lastChangedY": 56,
-        "upperBodyShare": 0.6523
-      }
+      "changedFromDirectionalIdle": 509
     },
     {
-      "key": "avatar-14",
+      "key": 14,
       "row": "right",
       "column": "idle",
       "bbox": [
@@ -4929,10 +4054,10 @@
       ],
       "visibleColors": 24,
       "interiorTransparentPixels": 0,
-      "changedFromDirectionalIdle": null
+      "changedFromDirectionalIdle": 0
     },
     {
-      "key": "avatar-14",
+      "key": 14,
       "row": "right",
       "column": "contact-left",
       "bbox": [
@@ -4943,15 +4068,10 @@
       ],
       "visibleColors": 24,
       "interiorTransparentPixels": 0,
-      "changedFromDirectionalIdle": {
-        "pixels": 415,
-        "firstChangedY": 26,
-        "lastChangedY": 56,
-        "upperBodyShare": 0.6819
-      }
+      "changedFromDirectionalIdle": 415
     },
     {
-      "key": "avatar-14",
+      "key": 14,
       "row": "right",
       "column": "passing-left",
       "bbox": [
@@ -4962,15 +4082,10 @@
       ],
       "visibleColors": 24,
       "interiorTransparentPixels": 0,
-      "changedFromDirectionalIdle": {
-        "pixels": 497,
-        "firstChangedY": 26,
-        "lastChangedY": 56,
-        "upperBodyShare": 0.6942
-      }
+      "changedFromDirectionalIdle": 497
     },
     {
-      "key": "avatar-14",
+      "key": 14,
       "row": "right",
       "column": "contact-right",
       "bbox": [
@@ -4981,15 +4096,10 @@
       ],
       "visibleColors": 24,
       "interiorTransparentPixels": 0,
-      "changedFromDirectionalIdle": {
-        "pixels": 549,
-        "firstChangedY": 26,
-        "lastChangedY": 56,
-        "upperBodyShare": 0.7122
-      }
+      "changedFromDirectionalIdle": 549
     },
     {
-      "key": "avatar-14",
+      "key": 14,
       "row": "right",
       "column": "passing-right",
       "bbox": [
@@ -5000,15 +4110,10 @@
       ],
       "visibleColors": 24,
       "interiorTransparentPixels": 0,
-      "changedFromDirectionalIdle": {
-        "pixels": 489,
-        "firstChangedY": 26,
-        "lastChangedY": 56,
-        "upperBodyShare": 0.7342
-      }
+      "changedFromDirectionalIdle": 489
     },
     {
-      "key": "avatar-14",
+      "key": 14,
       "row": "up",
       "column": "idle",
       "bbox": [
@@ -5019,10 +4124,10 @@
       ],
       "visibleColors": 24,
       "interiorTransparentPixels": 0,
-      "changedFromDirectionalIdle": null
+      "changedFromDirectionalIdle": 0
     },
     {
-      "key": "avatar-14",
+      "key": 14,
       "row": "up",
       "column": "contact-left",
       "bbox": [
@@ -5033,15 +4138,10 @@
       ],
       "visibleColors": 24,
       "interiorTransparentPixels": 0,
-      "changedFromDirectionalIdle": {
-        "pixels": 451,
-        "firstChangedY": 27,
-        "lastChangedY": 56,
-        "upperBodyShare": 0.6608
-      }
+      "changedFromDirectionalIdle": 451
     },
     {
-      "key": "avatar-14",
+      "key": 14,
       "row": "up",
       "column": "passing-left",
       "bbox": [
@@ -5052,15 +4152,10 @@
       ],
       "visibleColors": 24,
       "interiorTransparentPixels": 0,
-      "changedFromDirectionalIdle": {
-        "pixels": 470,
-        "firstChangedY": 26,
-        "lastChangedY": 56,
-        "upperBodyShare": 0.7043
-      }
+      "changedFromDirectionalIdle": 470
     },
     {
-      "key": "avatar-14",
+      "key": 14,
       "row": "up",
       "column": "contact-right",
       "bbox": [
@@ -5071,15 +4166,10 @@
       ],
       "visibleColors": 24,
       "interiorTransparentPixels": 0,
-      "changedFromDirectionalIdle": {
-        "pixels": 447,
-        "firstChangedY": 27,
-        "lastChangedY": 56,
-        "upperBodyShare": 0.6667
-      }
+      "changedFromDirectionalIdle": 447
     },
     {
-      "key": "avatar-14",
+      "key": 14,
       "row": "up",
       "column": "passing-right",
       "bbox": [
@@ -5090,15 +4180,10 @@
       ],
       "visibleColors": 24,
       "interiorTransparentPixels": 0,
-      "changedFromDirectionalIdle": {
-        "pixels": 473,
-        "firstChangedY": 26,
-        "lastChangedY": 56,
-        "upperBodyShare": 0.6998
-      }
+      "changedFromDirectionalIdle": 473
     },
     {
-      "key": "avatar-15",
+      "key": 15,
       "row": "down",
       "column": "idle",
       "bbox": [
@@ -5109,86 +4194,66 @@
       ],
       "visibleColors": 24,
       "interiorTransparentPixels": 0,
-      "changedFromDirectionalIdle": null
+      "changedFromDirectionalIdle": 0
     },
     {
-      "key": "avatar-15",
+      "key": 15,
       "row": "down",
       "column": "contact-left",
       "bbox": [
-        9,
+        8,
         9,
         62,
         57
       ],
       "visibleColors": 24,
-      "interiorTransparentPixels": 0,
-      "changedFromDirectionalIdle": {
-        "pixels": 1251,
-        "firstChangedY": 9,
-        "lastChangedY": 56,
-        "upperBodyShare": 0.8241
-      }
+      "interiorTransparentPixels": 9,
+      "changedFromDirectionalIdle": 1343
     },
     {
-      "key": "avatar-15",
+      "key": 15,
       "row": "down",
       "column": "passing-left",
       "bbox": [
-        9,
         8,
-        63,
+        9,
+        62,
         57
       ],
       "visibleColors": 24,
-      "interiorTransparentPixels": 0,
-      "changedFromDirectionalIdle": {
-        "pixels": 1161,
-        "firstChangedY": 8,
-        "lastChangedY": 56,
-        "upperBodyShare": 0.7984
-      }
+      "interiorTransparentPixels": 9,
+      "changedFromDirectionalIdle": 1328
     },
     {
-      "key": "avatar-15",
+      "key": 15,
       "row": "down",
       "column": "contact-right",
       "bbox": [
+        10,
         9,
-        9,
-        64,
+        62,
         57
       ],
       "visibleColors": 24,
-      "interiorTransparentPixels": 0,
-      "changedFromDirectionalIdle": {
-        "pixels": 1264,
-        "firstChangedY": 9,
-        "lastChangedY": 56,
-        "upperBodyShare": 0.8149
-      }
+      "interiorTransparentPixels": 10,
+      "changedFromDirectionalIdle": 1312
     },
     {
-      "key": "avatar-15",
+      "key": 15,
       "row": "down",
       "column": "passing-right",
       "bbox": [
+        10,
         9,
-        8,
-        63,
+        62,
         57
       ],
       "visibleColors": 24,
-      "interiorTransparentPixels": 0,
-      "changedFromDirectionalIdle": {
-        "pixels": 1147,
-        "firstChangedY": 8,
-        "lastChangedY": 56,
-        "upperBodyShare": 0.8082
-      }
+      "interiorTransparentPixels": 10,
+      "changedFromDirectionalIdle": 1301
     },
     {
-      "key": "avatar-15",
+      "key": 15,
       "row": "left",
       "column": "idle",
       "bbox": [
@@ -5199,10 +4264,10 @@
       ],
       "visibleColors": 24,
       "interiorTransparentPixels": 0,
-      "changedFromDirectionalIdle": null
+      "changedFromDirectionalIdle": 0
     },
     {
-      "key": "avatar-15",
+      "key": 15,
       "row": "left",
       "column": "contact-left",
       "bbox": [
@@ -5213,15 +4278,10 @@
       ],
       "visibleColors": 24,
       "interiorTransparentPixels": 0,
-      "changedFromDirectionalIdle": {
-        "pixels": 1166,
-        "firstChangedY": 9,
-        "lastChangedY": 56,
-        "upperBodyShare": 0.723
-      }
+      "changedFromDirectionalIdle": 1166
     },
     {
-      "key": "avatar-15",
+      "key": 15,
       "row": "left",
       "column": "passing-left",
       "bbox": [
@@ -5232,15 +4292,10 @@
       ],
       "visibleColors": 24,
       "interiorTransparentPixels": 0,
-      "changedFromDirectionalIdle": {
-        "pixels": 1162,
-        "firstChangedY": 8,
-        "lastChangedY": 56,
-        "upperBodyShare": 0.6997
-      }
+      "changedFromDirectionalIdle": 1162
     },
     {
-      "key": "avatar-15",
+      "key": 15,
       "row": "left",
       "column": "contact-right",
       "bbox": [
@@ -5251,15 +4306,10 @@
       ],
       "visibleColors": 24,
       "interiorTransparentPixels": 0,
-      "changedFromDirectionalIdle": {
-        "pixels": 1252,
-        "firstChangedY": 9,
-        "lastChangedY": 56,
-        "upperBodyShare": 0.7149
-      }
+      "changedFromDirectionalIdle": 1252
     },
     {
-      "key": "avatar-15",
+      "key": 15,
       "row": "left",
       "column": "passing-right",
       "bbox": [
@@ -5270,15 +4320,10 @@
       ],
       "visibleColors": 24,
       "interiorTransparentPixels": 0,
-      "changedFromDirectionalIdle": {
-        "pixels": 1163,
-        "firstChangedY": 8,
-        "lastChangedY": 56,
-        "upperBodyShare": 0.7197
-      }
+      "changedFromDirectionalIdle": 1163
     },
     {
-      "key": "avatar-15",
+      "key": 15,
       "row": "right",
       "column": "idle",
       "bbox": [
@@ -5289,10 +4334,10 @@
       ],
       "visibleColors": 24,
       "interiorTransparentPixels": 0,
-      "changedFromDirectionalIdle": null
+      "changedFromDirectionalIdle": 0
     },
     {
-      "key": "avatar-15",
+      "key": 15,
       "row": "right",
       "column": "contact-left",
       "bbox": [
@@ -5303,15 +4348,10 @@
       ],
       "visibleColors": 24,
       "interiorTransparentPixels": 0,
-      "changedFromDirectionalIdle": {
-        "pixels": 1080,
-        "firstChangedY": 9,
-        "lastChangedY": 56,
-        "upperBodyShare": 0.737
-      }
+      "changedFromDirectionalIdle": 1080
     },
     {
-      "key": "avatar-15",
+      "key": 15,
       "row": "right",
       "column": "passing-left",
       "bbox": [
@@ -5322,15 +4362,10 @@
       ],
       "visibleColors": 24,
       "interiorTransparentPixels": 0,
-      "changedFromDirectionalIdle": {
-        "pixels": 1098,
-        "firstChangedY": 8,
-        "lastChangedY": 56,
-        "upperBodyShare": 0.7067
-      }
+      "changedFromDirectionalIdle": 1098
     },
     {
-      "key": "avatar-15",
+      "key": 15,
       "row": "right",
       "column": "contact-right",
       "bbox": [
@@ -5341,15 +4376,10 @@
       ],
       "visibleColors": 24,
       "interiorTransparentPixels": 0,
-      "changedFromDirectionalIdle": {
-        "pixels": 1158,
-        "firstChangedY": 9,
-        "lastChangedY": 56,
-        "upperBodyShare": 0.7245
-      }
+      "changedFromDirectionalIdle": 1158
     },
     {
-      "key": "avatar-15",
+      "key": 15,
       "row": "right",
       "column": "passing-right",
       "bbox": [
@@ -5360,15 +4390,10 @@
       ],
       "visibleColors": 24,
       "interiorTransparentPixels": 0,
-      "changedFromDirectionalIdle": {
-        "pixels": 1055,
-        "firstChangedY": 8,
-        "lastChangedY": 56,
-        "upperBodyShare": 0.7327
-      }
+      "changedFromDirectionalIdle": 1055
     },
     {
-      "key": "avatar-15",
+      "key": 15,
       "row": "up",
       "column": "idle",
       "bbox": [
@@ -5379,50 +4404,12 @@
       ],
       "visibleColors": 24,
       "interiorTransparentPixels": 0,
-      "changedFromDirectionalIdle": null
+      "changedFromDirectionalIdle": 0
     },
     {
-      "key": "avatar-15",
+      "key": 15,
       "row": "up",
       "column": "contact-left",
-      "bbox": [
-        0,
-        9,
-        50,
-        57
-      ],
-      "visibleColors": 24,
-      "interiorTransparentPixels": 0,
-      "changedFromDirectionalIdle": {
-        "pixels": 1173,
-        "firstChangedY": 9,
-        "lastChangedY": 56,
-        "upperBodyShare": 0.8218
-      }
-    },
-    {
-      "key": "avatar-15",
-      "row": "up",
-      "column": "passing-left",
-      "bbox": [
-        1,
-        8,
-        50,
-        57
-      ],
-      "visibleColors": 24,
-      "interiorTransparentPixels": 0,
-      "changedFromDirectionalIdle": {
-        "pixels": 1080,
-        "firstChangedY": 8,
-        "lastChangedY": 56,
-        "upperBodyShare": 0.7944
-      }
-    },
-    {
-      "key": "avatar-15",
-      "row": "up",
-      "column": "contact-right",
       "bbox": [
         2,
         9,
@@ -5430,35 +4417,53 @@
         57
       ],
       "visibleColors": 24,
-      "interiorTransparentPixels": 0,
-      "changedFromDirectionalIdle": {
-        "pixels": 1188,
-        "firstChangedY": 9,
-        "lastChangedY": 56,
-        "upperBodyShare": 0.8131
-      }
+      "interiorTransparentPixels": 8,
+      "changedFromDirectionalIdle": 1209
     },
     {
-      "key": "avatar-15",
+      "key": 15,
       "row": "up",
-      "column": "passing-right",
+      "column": "passing-left",
       "bbox": [
-        1,
-        8,
+        2,
+        9,
         50,
         57
       ],
       "visibleColors": 24,
-      "interiorTransparentPixels": 0,
-      "changedFromDirectionalIdle": {
-        "pixels": 1067,
-        "firstChangedY": 8,
-        "lastChangedY": 56,
-        "upperBodyShare": 0.8041
-      }
+      "interiorTransparentPixels": 7,
+      "changedFromDirectionalIdle": 1211
     },
     {
-      "key": "avatar-16",
+      "key": 15,
+      "row": "up",
+      "column": "contact-right",
+      "bbox": [
+        2,
+        9,
+        51,
+        57
+      ],
+      "visibleColors": 24,
+      "interiorTransparentPixels": 9,
+      "changedFromDirectionalIdle": 1229
+    },
+    {
+      "key": 15,
+      "row": "up",
+      "column": "passing-right",
+      "bbox": [
+        2,
+        9,
+        51,
+        57
+      ],
+      "visibleColors": 24,
+      "interiorTransparentPixels": 9,
+      "changedFromDirectionalIdle": 1231
+    },
+    {
+      "key": 16,
       "row": "down",
       "column": "idle",
       "bbox": [
@@ -5469,10 +4474,10 @@
       ],
       "visibleColors": 24,
       "interiorTransparentPixels": 0,
-      "changedFromDirectionalIdle": null
+      "changedFromDirectionalIdle": 0
     },
     {
-      "key": "avatar-16",
+      "key": 16,
       "row": "down",
       "column": "contact-left",
       "bbox": [
@@ -5483,15 +4488,10 @@
       ],
       "visibleColors": 24,
       "interiorTransparentPixels": 0,
-      "changedFromDirectionalIdle": {
-        "pixels": 629,
-        "firstChangedY": 17,
-        "lastChangedY": 56,
-        "upperBodyShare": 0.6343
-      }
+      "changedFromDirectionalIdle": 629
     },
     {
-      "key": "avatar-16",
+      "key": 16,
       "row": "down",
       "column": "passing-left",
       "bbox": [
@@ -5502,15 +4502,10 @@
       ],
       "visibleColors": 24,
       "interiorTransparentPixels": 0,
-      "changedFromDirectionalIdle": {
-        "pixels": 622,
-        "firstChangedY": 16,
-        "lastChangedY": 56,
-        "upperBodyShare": 0.6399
-      }
+      "changedFromDirectionalIdle": 622
     },
     {
-      "key": "avatar-16",
+      "key": 16,
       "row": "down",
       "column": "contact-right",
       "bbox": [
@@ -5521,15 +4516,10 @@
       ],
       "visibleColors": 24,
       "interiorTransparentPixels": 0,
-      "changedFromDirectionalIdle": {
-        "pixels": 624,
-        "firstChangedY": 17,
-        "lastChangedY": 56,
-        "upperBodyShare": 0.6394
-      }
+      "changedFromDirectionalIdle": 624
     },
     {
-      "key": "avatar-16",
+      "key": 16,
       "row": "down",
       "column": "passing-right",
       "bbox": [
@@ -5540,15 +4530,10 @@
       ],
       "visibleColors": 24,
       "interiorTransparentPixels": 0,
-      "changedFromDirectionalIdle": {
-        "pixels": 626,
-        "firstChangedY": 16,
-        "lastChangedY": 56,
-        "upperBodyShare": 0.6358
-      }
+      "changedFromDirectionalIdle": 626
     },
     {
-      "key": "avatar-16",
+      "key": 16,
       "row": "left",
       "column": "idle",
       "bbox": [
@@ -5559,10 +4544,10 @@
       ],
       "visibleColors": 24,
       "interiorTransparentPixels": 0,
-      "changedFromDirectionalIdle": null
+      "changedFromDirectionalIdle": 0
     },
     {
-      "key": "avatar-16",
+      "key": 16,
       "row": "left",
       "column": "contact-left",
       "bbox": [
@@ -5573,15 +4558,10 @@
       ],
       "visibleColors": 24,
       "interiorTransparentPixels": 0,
-      "changedFromDirectionalIdle": {
-        "pixels": 791,
-        "firstChangedY": 16,
-        "lastChangedY": 56,
-        "upperBodyShare": 0.6511
-      }
+      "changedFromDirectionalIdle": 791
     },
     {
-      "key": "avatar-16",
+      "key": 16,
       "row": "left",
       "column": "passing-left",
       "bbox": [
@@ -5592,15 +4572,10 @@
       ],
       "visibleColors": 24,
       "interiorTransparentPixels": 0,
-      "changedFromDirectionalIdle": {
-        "pixels": 797,
-        "firstChangedY": 16,
-        "lastChangedY": 56,
-        "upperBodyShare": 0.6437
-      }
+      "changedFromDirectionalIdle": 797
     },
     {
-      "key": "avatar-16",
+      "key": 16,
       "row": "left",
       "column": "contact-right",
       "bbox": [
@@ -5611,15 +4586,10 @@
       ],
       "visibleColors": 24,
       "interiorTransparentPixels": 0,
-      "changedFromDirectionalIdle": {
-        "pixels": 820,
-        "firstChangedY": 16,
-        "lastChangedY": 56,
-        "upperBodyShare": 0.628
-      }
+      "changedFromDirectionalIdle": 820
     },
     {
-      "key": "avatar-16",
+      "key": 16,
       "row": "left",
       "column": "passing-right",
       "bbox": [
@@ -5630,15 +4600,10 @@
       ],
       "visibleColors": 24,
       "interiorTransparentPixels": 0,
-      "changedFromDirectionalIdle": {
-        "pixels": 758,
-        "firstChangedY": 16,
-        "lastChangedY": 56,
-        "upperBodyShare": 0.6491
-      }
+      "changedFromDirectionalIdle": 758
     },
     {
-      "key": "avatar-16",
+      "key": 16,
       "row": "right",
       "column": "idle",
       "bbox": [
@@ -5649,10 +4614,10 @@
       ],
       "visibleColors": 24,
       "interiorTransparentPixels": 0,
-      "changedFromDirectionalIdle": null
+      "changedFromDirectionalIdle": 0
     },
     {
-      "key": "avatar-16",
+      "key": 16,
       "row": "right",
       "column": "contact-left",
       "bbox": [
@@ -5663,15 +4628,10 @@
       ],
       "visibleColors": 24,
       "interiorTransparentPixels": 0,
-      "changedFromDirectionalIdle": {
-        "pixels": 787,
-        "firstChangedY": 16,
-        "lastChangedY": 56,
-        "upperBodyShare": 0.6404
-      }
+      "changedFromDirectionalIdle": 787
     },
     {
-      "key": "avatar-16",
+      "key": 16,
       "row": "right",
       "column": "passing-left",
       "bbox": [
@@ -5682,15 +4642,10 @@
       ],
       "visibleColors": 24,
       "interiorTransparentPixels": 0,
-      "changedFromDirectionalIdle": {
-        "pixels": 795,
-        "firstChangedY": 16,
-        "lastChangedY": 56,
-        "upperBodyShare": 0.6365
-      }
+      "changedFromDirectionalIdle": 795
     },
     {
-      "key": "avatar-16",
+      "key": 16,
       "row": "right",
       "column": "contact-right",
       "bbox": [
@@ -5701,15 +4656,10 @@
       ],
       "visibleColors": 24,
       "interiorTransparentPixels": 0,
-      "changedFromDirectionalIdle": {
-        "pixels": 808,
-        "firstChangedY": 16,
-        "lastChangedY": 56,
-        "upperBodyShare": 0.6188
-      }
+      "changedFromDirectionalIdle": 808
     },
     {
-      "key": "avatar-16",
+      "key": 16,
       "row": "right",
       "column": "passing-right",
       "bbox": [
@@ -5720,15 +4670,10 @@
       ],
       "visibleColors": 24,
       "interiorTransparentPixels": 0,
-      "changedFromDirectionalIdle": {
-        "pixels": 744,
-        "firstChangedY": 16,
-        "lastChangedY": 56,
-        "upperBodyShare": 0.6519
-      }
+      "changedFromDirectionalIdle": 744
     },
     {
-      "key": "avatar-16",
+      "key": 16,
       "row": "up",
       "column": "idle",
       "bbox": [
@@ -5739,10 +4684,10 @@
       ],
       "visibleColors": 24,
       "interiorTransparentPixels": 0,
-      "changedFromDirectionalIdle": null
+      "changedFromDirectionalIdle": 0
     },
     {
-      "key": "avatar-16",
+      "key": 16,
       "row": "up",
       "column": "contact-left",
       "bbox": [
@@ -5753,15 +4698,10 @@
       ],
       "visibleColors": 24,
       "interiorTransparentPixels": 0,
-      "changedFromDirectionalIdle": {
-        "pixels": 597,
-        "firstChangedY": 17,
-        "lastChangedY": 56,
-        "upperBodyShare": 0.6214
-      }
+      "changedFromDirectionalIdle": 597
     },
     {
-      "key": "avatar-16",
+      "key": 16,
       "row": "up",
       "column": "passing-left",
       "bbox": [
@@ -5772,15 +4712,10 @@
       ],
       "visibleColors": 24,
       "interiorTransparentPixels": 0,
-      "changedFromDirectionalIdle": {
-        "pixels": 580,
-        "firstChangedY": 16,
-        "lastChangedY": 56,
-        "upperBodyShare": 0.6224
-      }
+      "changedFromDirectionalIdle": 580
     },
     {
-      "key": "avatar-16",
+      "key": 16,
       "row": "up",
       "column": "contact-right",
       "bbox": [
@@ -5791,15 +4726,10 @@
       ],
       "visibleColors": 24,
       "interiorTransparentPixels": 0,
-      "changedFromDirectionalIdle": {
-        "pixels": 591,
-        "firstChangedY": 17,
-        "lastChangedY": 56,
-        "upperBodyShare": 0.6277
-      }
+      "changedFromDirectionalIdle": 591
     },
     {
-      "key": "avatar-16",
+      "key": 16,
       "row": "up",
       "column": "passing-right",
       "bbox": [
@@ -5810,23 +4740,13 @@
       ],
       "visibleColors": 24,
       "interiorTransparentPixels": 0,
-      "changedFromDirectionalIdle": {
-        "pixels": 584,
-        "firstChangedY": 16,
-        "lastChangedY": 56,
-        "upperBodyShare": 0.6182
-      }
+      "changedFromDirectionalIdle": 584
     }
   ],
-  "explicitRepairBreakdown": {
-    "hole-fill": 133,
-    "seam-material-repair": 662,
-    "isolated-remove": 4
-  },
-  "narrowChannelScan": {
-    "candidateCount": 692,
-    "scope": "1-2px transparent runs inside each body alpha bbox",
-    "bodyCorridorReview": "no visible corridor severance in enlarged contacts; independent review pending",
-    "unapprovedChannels": "pending independent visual review; candidate list is an alarm, not acceptance"
+  "boundaryTouch": {
+    "cells": 320,
+    "touchingCells": 0,
+    "whitelist": [],
+    "report": "qa/boundary-touch.json"
   }
 }

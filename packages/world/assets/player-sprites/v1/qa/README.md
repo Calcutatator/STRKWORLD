@@ -16,16 +16,28 @@ Mechanical gates recorded in `qa-report.json`:
 - Zero enclosed transparent islands after the explicit repair pass.
 - Zero non-binary alpha cells, feet failures, or duplicated movement cells.
 - All movement cells differ from their directional idle with changes reaching
-  the upper body; visual weight transfer remains an independent review gate.
+  the directional hip gate; down/up rows include connected upper-silhouette,
+  waist, hip and planted-foot changes so the walk is depth transfer rather than
+  a horizontal splay. Visual weight transfer remains an independent review
+  gate.
+- All 320 cells pass an 8-connected detached opaque-component gate. Any
+  disconnected island is rejected; `qa/detached-components.json` contains the
+  complete evidence and has an empty whitelist.
+- `verify-boundary-touch.py` rejects any opaque pixel on a logical-cell edge;
+  the current evidence is in `qa/boundary-touch.json` with no whitelist.
 - Per-key source reconstruction is pixel-identical across all 320 Aseprite
   cels in `aseprite-roundtrip.json`.
+- `verify-aseprite-format.py` is a regression gate for the official compressed
+  cel layout: it requires 64x64 WORD dimensions before zlib data and verifies
+  every decoded cel against its transparent PNG cell.
 - `rendered-coherence.json` records the visual gates that still require
   independent review; metrics alone do not accept identity or gait.
 
 `explicit-pixel-repairs.json` is the audit trail for the exact named repairs:
-133 enclosed-hole fills, four isolated-pixel removals, and sixteen reviewed
-large-character scanline repairs. These were authored by explicit cell/coordinate,
-not by an automated hole-fill or global filter.
+133 enclosed-hole fills, 662 seam-material repairs, four isolated-pixel
+removals, 64 D/U stride reconstructions, and six detached-component cell
+repairs. These were authored by explicit cell/model operations, not by an
+automated hole-fill or global filter.
 
 Visual evidence:
 

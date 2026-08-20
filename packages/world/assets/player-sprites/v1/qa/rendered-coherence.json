@@ -1,5 +1,5 @@
 {
-  "status": "candidate-awaiting-independent-review",
+  "status": "corrected-candidate-awaiting-independent-review",
   "runtimeReady": false,
   "renderedAcceptance": false,
   "reviewBackgrounds": [
@@ -14,7 +14,7 @@
     "weapons remain attached to hands and directionally coherent",
     "no white/cyan matte fringe or accidental transparent holes/channels",
     "feet remain fixed at y=56 while the silhouette remains inside the 64x64 logical canvas",
-    "repeated 125ms GIF loops read as a walk rather than a rocking idle"
+    "repeated 120ms GIF preview of the 125ms / 8 FPS runtime cadence reads as a walk rather than a rocking idle"
   ],
   "evidence": [
     "all-characters-movement.png",
@@ -23,5 +23,11 @@
     "avatar-1-walk.gif through avatar-16-walk.gif",
     "character-1-walk.gif through character-8-walk.gif"
   ],
+  "correctionEvidence": {
+    "downUpStride": "upper silhouette, waist, hip and planted-foot regions are re-authored per target cell from the approved directional idle model",
+    "detachedComponentGate": "qa/detached-components.json",
+    "transparentSourceSheets": "avatar-1.png through avatar-16.png",
+    "reviewNote": "Contacts and GIFs are regenerated from the exact transparent handoff sheets; checkerboard/background pixels are evidence-only and are not part of the PNG sheets."
+  },
   "independentReview": "pending"
 }

@@ -39,13 +39,19 @@ consistent runtime-owned shadow behind every local, remote, and Studio avatar.
 
 ## Character checks
 
-The side-facing identities and movement cells were reconstructed per character
-from approved model references; they are not a mirrored or blanket zone copy.
-The fighting weapons remain direction-specific and hand-connected. The
-approved down/up identities remain intact except for sixteen reviewed scanline
-repairs in large-character passing cells. `qa/explicit-pixel-repairs.json`
-records the 133 enclosed-hole fills, four isolated-pixel removals, and scanline
-repairs by key, row, column, coordinate, and resulting RGBA value.
+The four-facing identities and movement cells were reconstructed per character
+from approved model references; they are not mirrored or blanket zone copies.
+The fighting weapons remain direction-specific and hand-connected. Down/up
+movement uses connected upper-silhouette, waist, hip and planted-foot changes
+so it reads as depth transfer rather than horizontal rocking. The approved
+size classes remain fixed: only 6/14 are small/chibi, only 4/7/12/15 are large,
+and all other keys use the standard class. `qa/explicit-pixel-repairs.json`
+records the prior 799 named repairs plus the 64 D/U stride reconstructions and
+six detached-component cell repairs.
+
+Every cell also passes an 8-connected detached-opaque-component gate recorded
+in `qa/detached-components.json`. This rejects floating feet, weapon fragments,
+and other disconnected opaque islands; the whitelist is intentionally empty.
 
 No runtime row or frame mapping was changed. The correction is not runtime-ready
 until orchestration independently reviews the complete handoff.

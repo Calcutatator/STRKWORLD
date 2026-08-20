@@ -1,5 +1,6 @@
 {
   "status": "pass",
+  "source": "source/player-sprites.aseprite",
   "canvas": [
     64,
     64
@@ -7,103 +8,8 @@
   "frames": 320,
   "frameDurationMs": 125,
   "pixelIdentical": true,
-  "verification": "deterministic binary decode and reconstructed PNG comparison; Aseprite executable unavailable locally",
-  "results": [
-    {
-      "key": "avatar-1",
-      "pixelIdentical": true,
-      "sheetSha256": "adc0b1d46a989ef56fb17741c6e02b200e3747d913445c7d04594e8dd55b42c2",
-      "reconstructedSha256": "cb0a3b93cce110b27d1e24f234aa626f711b0a26822b9fd4d16c46ced5087fcb"
-    },
-    {
-      "key": "avatar-2",
-      "pixelIdentical": true,
-      "sheetSha256": "dc07252811cf2e1453533ecbab3f2e6c028b4ed19011a8348d71649cfd519a86",
-      "reconstructedSha256": "65f71231e37955b616d4c190d876868b90e99ce7d96cb1fd5aea064064260bf2"
-    },
-    {
-      "key": "avatar-3",
-      "pixelIdentical": true,
-      "sheetSha256": "8d4417541a0ca90ac4f0c284330e73ab5d9d174cf8df9abbf8799dba39c7fa60",
-      "reconstructedSha256": "3c4515c421de49224749a0708599b4a38063740c1e85b74376f8d16f675d6e86"
-    },
-    {
-      "key": "avatar-4",
-      "pixelIdentical": true,
-      "sheetSha256": "7b5d781df28db69b5d50b14e9c79e1e25b1e8518061139442d1173c27f0f8a8b",
-      "reconstructedSha256": "635ac01474125f97e3867c29b4cc1ae5e14c894c1e6854ab1b2ddcef046c2c27"
-    },
-    {
-      "key": "avatar-5",
-      "pixelIdentical": true,
-      "sheetSha256": "b0c5dbd73177fd5311c50a9bf8f516a6c6f636168d81be989aa1a13f208353ba",
-      "reconstructedSha256": "12b57e75360043d844a6558488f6092660f55955bd5f211dba3a020643dd73d3"
-    },
-    {
-      "key": "avatar-6",
-      "pixelIdentical": true,
-      "sheetSha256": "b8484bc6fee70f05b53823ebea2fe745f620654a9df26b0ffcee4178e87468ff",
-      "reconstructedSha256": "08ff76859a1d3f92f69731aa4c33baa457173f4598f149b85804835582f1f745"
-    },
-    {
-      "key": "avatar-7",
-      "pixelIdentical": true,
-      "sheetSha256": "e3429879e5490bc87775656b244f6f8fb38f7c01eb4f3e492ded1a5cc734e4fe",
-      "reconstructedSha256": "eecf7d12f4ad6aa3d39489927fe489840ff67ac0c67c2cee0488c44c87de81d3"
-    },
-    {
-      "key": "avatar-8",
-      "pixelIdentical": true,
-      "sheetSha256": "c8e66bfc0acbf5eb68d7170d0ab706f3285d3c8a42367281d99a939d9c9af9b4",
-      "reconstructedSha256": "46f48c58c8c62abd7b092c7c97ae9c9da7ac7e1ca968865c49d53e5aaedcbdeb"
-    },
-    {
-      "key": "avatar-9",
-      "pixelIdentical": true,
-      "sheetSha256": "d2ddebe14f7b5796cf55787b7a4163b81778311d7e83bb325c4084761389980c",
-      "reconstructedSha256": "d3b019725c18c730d7fea35597e9d8cb43269f275d09e9b00fe8788267f4b43c"
-    },
-    {
-      "key": "avatar-10",
-      "pixelIdentical": true,
-      "sheetSha256": "270ec99541cf98ce5dfbc76c2a90287f6a486c24f63b79533755fa26b73a4737",
-      "reconstructedSha256": "e19ee070bfd6c875534f0c3a8542a00f68715b425a68b12b0b4be5966750152e"
-    },
-    {
-      "key": "avatar-11",
-      "pixelIdentical": true,
-      "sheetSha256": "42051583b21359394a78cc35e2977d0d6b423d036dd15dc7cca17253ae9d7a8a",
-      "reconstructedSha256": "15357aea8485d6cbea7a4d5b642f76dc6062544051da581ec2b4a4504faea12e"
-    },
-    {
-      "key": "avatar-12",
-      "pixelIdentical": true,
-      "sheetSha256": "42e43ab5e09d4162fe87d31e1650e318697827aef4c8cd1b61d5e50b5c13cdbe",
-      "reconstructedSha256": "3bdc626d2c7f40494ee393b245293ed2d3c31f397e815da8a9b09294fbafc557"
-    },
-    {
-      "key": "avatar-13",
-      "pixelIdentical": true,
-      "sheetSha256": "bcd468a007e0a9b1ee58af71187d69b428973db57fb0e284227409f534cb2813",
-      "reconstructedSha256": "6cd93d25fef16489b673914edaf1f9df9bdfa49eb8be7132457e5edc268f846e"
-    },
-    {
-      "key": "avatar-14",
-      "pixelIdentical": true,
-      "sheetSha256": "3b365678747a50788e32a4c213ecaa1e37e7b69fb52d9d5567c8f8304f6e1d09",
-      "reconstructedSha256": "21f4ce07a9ef007e549161e387b1d08c60f214712d79dc03c8548e1343687393"
-    },
-    {
-      "key": "avatar-15",
-      "pixelIdentical": true,
-      "sheetSha256": "7171c2daf50e55c09b441929987efd1c71fe1f4a48503a195b15810ef36a1068",
-      "reconstructedSha256": "df7001a6ac0ed771173cce7761fe3c83847b5d721009dea001bcff10daddf853"
-    },
-    {
-      "key": "avatar-16",
-      "pixelIdentical": true,
-      "sheetSha256": "37245505a7233287abb5c1b54e890cf4ce2ef9397fbc9cc29afaecac258c2d3b",
-      "reconstructedSha256": "170856770fd7f9ef616fa6ae020e308705afba1376f9b29668f84a230806ab3a"
-    }
-  ]
+  "decodedCels": 320,
+  "failures": [],
+  "verification": "standards-aware Aseprite compressed-cel decode: every cel carries mandatory 64x64 dimensions before zlib RGBA bytes; all decoded cels match the transparent PNG sheets pixel-for-pixel",
+  "sourceSha256": "da25fede91825460de6561a4ea41e75c940c06167a44627e2d7ac03798ca579b"
 }

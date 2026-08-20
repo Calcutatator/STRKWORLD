@@ -76,6 +76,8 @@
     "crossFacingIdentity": "qa/cross-facing-identity.json",
     "asepriteRoundTrip": "qa/aseprite-roundtrip.json",
     "sourceInspection": "qa/source-inspection.json",
+    "detachedComponents": "qa/detached-components.json",
+    "boundaryTouch": "qa/boundary-touch.json",
     "backgroundReadability": "qa/background-readability.png",
     "movementContact": "qa/all-characters-movement.png",
     "animatedPreviews": [
