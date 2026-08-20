@@ -33,19 +33,22 @@ export interface WorldConfig {
 type Game = PhaserTypes.Game;
 
 let host: Host<Game, HTMLElement> | null = null;
+let startConfig: WorldConfig | null = null;
 
 /**
  * Build the host lazily so `phaser` is only fetched when a world is actually
  * requested. Created once and reused, because the ref counting is only correct
  * if every caller shares one host.
  */
-async function ensureHost(config: WorldConfig): Promise<Host<Game, HTMLElement>> {
+async function ensureHost(): Promise<Host<Game, HTMLElement>> {
   if (host) return host;
   const Phaser = await import('phaser');
 
   host = createHost<Game, HTMLElement>({
-    start: (parent) =>
-      new Phaser.Game({
+    start: (parent) => {
+      const config = startConfig;
+      if (!config) throw new Error('World start requires the current acquisition config');
+      return new Phaser.Game({
         type: Phaser.WEBGL,
         parent,
         // Phaser 4 flipped roundPixels to false. On a tilemap with a following
@@ -69,7 +72,8 @@ async function ensureHost(config: WorldConfig): Promise<Host<Game, HTMLElement>>
             game.registry.set('bus', config);
           },
         },
-      }),
+      });
+    },
     // Never destroy(true, true) — `noReturn` tears down the global plugin cache
     // and no further Game can be created on the page.
     stop: (game) => game.destroy(true),
@@ -83,8 +87,13 @@ export async function acquireWorld(
   parent: HTMLElement,
   config: WorldConfig,
 ): Promise<Game> {
-  const h = await ensureHost(config);
-  return h.acquire(parent);
+  const h = await ensureHost();
+  startConfig = config;
+  try {
+    return h.acquire(parent);
+  } finally {
+    startConfig = null;
+  }
 }
 
 /** Release it. Teardown is deferred, so a synchronous remount cancels it. */
