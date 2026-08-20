@@ -250,6 +250,35 @@ without a verification method is a rumour.
 
 Format: `### YYYY-MM-DD — short title` then what, why it matters, how verified.
 
+### 2026-08-20 — A failed Backend fan-out closes the whole request signal
+
+The Backend fee, swap-prepare and proof-freshness paths fan one request signal
+out to concurrent provider calls. `Promise.all` rejects as soon as one call
+fails, but clearing the request deadline alone did not abort a sibling that was
+still running. The public handler could therefore return its generic failure
+while an RPC or AVNU operation outlived the request with no remaining deadline.
+
+The error path now aborts the shared request controller with the fixed generic
+`AbortError` reason `Request failed.` before it maps the original error. The
+original public 502 response remains authoritative and contains no provider
+detail. Cancellation and deadline disposal are idempotent; an existing parent
+abort or timeout reason is not overwritten. Successful requests and all route,
+queue, budget, schema and provider behavior are unchanged.
+
+*Verified:* red first through `BackendApi.handle()` on the public fee seam: an
+immediate paymaster failure returned the expected generic 502 while a concurrent
+abort-aware RPC signal remained live. Green after the request-level cancel:
+the same RPC observed exactly one abort carrying only the generic reason. Two
+adjacent regressions retain the parent `AbortError` and the deadline
+`TimeoutError` plus their existing 504 mapping. The focused three cases pass;
+the Backend suite is 5 files / 69 tests, full workspace is 87 files / 1,209
+tests, workspace typecheck, production build, all 13 invariants and the tilemap
+check pass. The focused and local workspace verification used no deploy,
+external network, wallet, RPC, proof, signature, secret, funds or transaction.
+Hosted CI subsequently ran the repository's standard read-only drift canary:
+two `starknet_call` reads and one `starknet_getClassHashAt` against public pool
+state at `latest`; no key, signature, proof, funds or transaction was involved.
+
 ### 2026-08-20 — A repeated StreetScene create retires the prior ownership cycle
 
 `StreetScene.create()` may defensively run twice on one Scene instance without
@@ -276,7 +305,11 @@ nothing, and final shutdown leaves both counts at zero. The focused lifecycle
 file passes 11/11 tests, all World tests pass 22 files / 218 tests, the full
 workspace passes 87 files / 1,207 tests, all workspace typechecks, the
 production build, invariant scan and diff check pass. No browser, network,
-wallet, RPC, proof, signature, funds or transaction was used.
+wallet, RPC, proof, signature, funds or transaction was used in the focused and
+local workspace verification. Hosted CI subsequently ran the repository's
+standard read-only drift canary: two `starknet_call` reads and one
+`starknet_getClassHashAt` against public pool state at `latest`; no key,
+signature, proof, funds or transaction was involved.
 
 ### 2026-08-20 — A late Bridge refresh may report status, but it no longer owns persistence
 
