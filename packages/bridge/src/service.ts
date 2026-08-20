@@ -178,6 +178,9 @@ export class BridgeService {
 
   /** Import signed evidence, reverify it, and reset display state until refreshed. */
   importResumeRecord(serialized: string): BridgeRecord {
+    if (this.resume()) {
+      throw new Error('An existing bridge deposit is available. Discard it before importing another record.');
+    }
     const decoded = deserializeBridgeRecord(serialized);
     if (!decoded) throw new Error('The bridge resume record is invalid.');
     this.verifyRecord(decoded);

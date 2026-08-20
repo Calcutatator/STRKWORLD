@@ -74,6 +74,12 @@ createRoot(root).render(
 </PrivacyProvider>
 ```
 
+`App` also accepts the frozen `PrivacyOperations` seam as an `operations`
+prop. A production host supplies that dependency and the provider composes it
+directly; the checked-in local `main.tsx` deliberately omits it and therefore
+selects the explicit demo path. Omitting the prop never creates an implicit
+production fallback: both demo providers still refuse a production build.
+
 The buses are created **once, at module scope**, on purpose: StrictMode
 double-mounts `App`, and a bus made inside a component would hand the world a
 fresh instance on the second pass, stranding every subscription made against

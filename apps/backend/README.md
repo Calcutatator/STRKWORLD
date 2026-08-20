@@ -87,6 +87,12 @@ instance-local (D-026).
 deployment adapters; the in-memory defaults are for tests or a single
 admission-control instance only.
 
+Both the strict environment loader and direct `BackendApi` construction bound
+the request deadline to Node's maximum timer delay (`2_147_483_647` ms). The
+next integer would otherwise be reduced by Node to a one-millisecond timer.
+The validated deadline is captured at construction; the remaining configuration
+stays live so route-policy and kill-switch changes can still fail requests closed.
+
 The code deliberately does not choose an HTTP framework or deployment host.
 `createBackendFetchHandler()` is the deployable Fetch API edge: it performs
 bounded streaming body reads, accepts same-origin JSON without reflecting

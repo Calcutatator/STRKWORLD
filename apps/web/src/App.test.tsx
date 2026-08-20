@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { createEventBus } from './bus/event-bus.js';
 import type { ShellEvents, WorldEvents } from '@strkworld/shared';
+import { FakePrivacyOperations } from '@strkworld/privacy';
 import { COPY } from './copy.js';
 import { App } from './App.js';
 import { createPresenceController } from './presence/presence-controller.js';
@@ -32,5 +33,22 @@ describe('App', () => {
     // The injected unavailable controller does not replace the provider's
     // normal boot composition; it is inert until the real tree mounts.
     expect(markup).not.toContain('Multiplayer unavailable');
+  });
+
+  it('composes the supplied financial seam instead of the local demo', () => {
+    const worldOut = createEventBus<WorldEvents>();
+    const shellIn = createEventBus<ShellEvents>();
+    const markup = renderToStaticMarkup(
+      <App
+        worldOut={worldOut}
+        shellIn={shellIn}
+        presence={createPresenceController({})}
+        operations={new FakePrivacyOperations()}
+      />,
+    );
+
+    expect(markup).toContain('class="strkworld"');
+    expect(markup).toContain('data-testid="world-host"');
+    expect(markup).not.toContain(COPY.boot);
   });
 });

@@ -55,6 +55,7 @@ export class BackendApi {
   readonly metrics = new AggregateMetrics();
   private readonly limiter: RequestRateLimiterPort;
   private readonly config: BackendConfig;
+  private readonly requestTimeoutMs: number;
   private readonly paymaster: PaymasterPort;
   private readonly rpc: PoolRpcPort;
   private readonly authorizations: AuthorizationCodec;
@@ -68,6 +69,7 @@ export class BackendApi {
   constructor(options: BackendApiOptions) {
     validateBackendConfig(options.config);
     this.config = options.config;
+    this.requestTimeoutMs = options.config.requestTimeoutMs;
     this.paymaster = options.paymaster;
     this.rpc = options.rpc;
     this.authorizations = options.authorizations;
@@ -90,7 +92,7 @@ export class BackendApi {
 
   async handle(request: ApiRequest): Promise<ApiResponse> {
     this.metrics.request();
-    const deadline = createRequestDeadline(request.signal, this.config.requestTimeoutMs);
+    const deadline = createRequestDeadline(request.signal, this.requestTimeoutMs);
     try {
       if (!await abortable(Promise.resolve(this.limiter.take()), deadline.signal)) {
         this.metrics.limited();
@@ -491,6 +493,7 @@ function validateBackendConfig(config: BackendConfig): void {
     !Number.isSafeInteger(config.maxCalldataItems) || config.maxCalldataItems <= 0 ||
     !Number.isSafeInteger(config.maxProofBytes) || config.maxProofBytes <= 0 ||
     !Number.isSafeInteger(config.requestTimeoutMs) || config.requestTimeoutMs <= 0 ||
+    config.requestTimeoutMs > MAX_NODE_TIMEOUT_MS ||
     !Number.isSafeInteger(config.rateLimit.maxRequests) || config.rateLimit.maxRequests <= 0 ||
     !Number.isSafeInteger(config.rateLimit.windowMs) || config.rateLimit.windowMs <= 0
     || config.sponsorshipBudget.maxFeeAmount < 0n
