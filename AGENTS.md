@@ -250,6 +250,38 @@ without a verification method is a rumour.
 
 Format: `### YYYY-MM-DD — short title` then what, why it matters, how verified.
 
+### 2026-08-20 — Fighting-state input is owned only by the active Avatar Studio
+
+The approved `F` action is a World-local Studio control. The Studio controller
+switches its selected opaque key with `pairedAvatarSprite()` and emits the
+existing `avatar:selected` event; contacting one of the eight figures still
+selects its cosy `avatar-1..8` state. `StreetScene` installs the exact
+`keydown-F` listener only after the real controller enters the Studio, removes
+it on the controller's exit callback, and destroys it during same-instance
+shutdown/restart. Repeat events and input, textarea, select or content-editable
+targets are ignored. Inactive or destroyed bindings reject even an already-
+captured late handler. No stance field, new event, lobby/Fly/shared change or
+financial meaning was added, and the existing local visual selector retains
+the avatar's current facing and movement pose.
+
+The first lifecycle regression test was not sufficient: it stubbed
+`createAvatarStudio()` and called private Scene enter/exit methods directly, so
+it could stay green if the real controller callbacks stopped owning the
+listener. The corrected harness constructs the real controller/binding, calls
+public `enter()`, delivers `F`, exits through `update()` on the authored portal,
+re-enters, then performs idempotent Scene cleanup. Removing enter activation
+made the test fail red with zero rather than one listener; restoring that and
+removing exit deactivation made it fail red with one rather than zero.
+
+*Verified:* commit `8efc5a4` passed 22 World files / 206 tests and the full 85
+files / 1,129 tests locally, plus workspace typecheck, production build,
+invariants and diff checks. Independent re-review closed the lifecycle-test
+P2. [GitHub Actions run 32357641789](https://github.com/Calcutatator/STRKWORLD/actions/runs/32357641789)
+completed successfully at that commit. These checks prove input, state, event
+and lifecycle ownership only; they do not accept the fighting animation art,
+cadence, weapon extents or rendered in-game result. No browser, wallet,
+network, proof, signature or transaction was used by the focused tests.
+
 ### 2026-08-20 — Submission uncertainty exposes observation, not mutation
 
 The D-034/D-035 browser-session uncertainty gate now separates observation
