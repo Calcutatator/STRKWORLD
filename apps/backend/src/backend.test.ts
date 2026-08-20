@@ -689,6 +689,12 @@ describe('quote-bound swap withdrawal matching', () => {
 });
 
 describe('privacy-safe RPC and operations', () => {
+  it('bounds direct request deadlines to the Node timer ceiling', () => {
+    expect(() => fixture({ requestTimeoutMs: 2_147_483_647 })).not.toThrow();
+    expect(() => fixture({ requestTimeoutMs: 2_147_483_648 }))
+      .toThrow('Backend size and rate limits must be positive integers.');
+  });
+
   it('proxies only the fixed pool reads and keeps metrics aggregate', async () => {
     const { api } = fixture();
     await expect(api.handle({ method: 'POST', path: '/v1/rpc/public-key', body: { v: 1, address: '0x456' } }))

@@ -491,6 +491,7 @@ function validateBackendConfig(config: BackendConfig): void {
     !Number.isSafeInteger(config.maxCalldataItems) || config.maxCalldataItems <= 0 ||
     !Number.isSafeInteger(config.maxProofBytes) || config.maxProofBytes <= 0 ||
     !Number.isSafeInteger(config.requestTimeoutMs) || config.requestTimeoutMs <= 0 ||
+    config.requestTimeoutMs > MAX_NODE_TIMEOUT_MS ||
     !Number.isSafeInteger(config.rateLimit.maxRequests) || config.rateLimit.maxRequests <= 0 ||
     !Number.isSafeInteger(config.rateLimit.windowMs) || config.rateLimit.windowMs <= 0
     || config.sponsorshipBudget.maxFeeAmount < 0n
