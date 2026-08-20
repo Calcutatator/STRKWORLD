@@ -250,6 +250,37 @@ without a verification method is a rumour.
 
 Format: `### YYYY-MM-DD — short title` then what, why it matters, how verified.
 
+### 2026-08-20 — A fixed-room station snapshot cannot grant itself admission
+
+`createFixedRoomController()` publishes its current station presentation through
+both the public `state` getter and `onChange`. Those readonly types previously
+shared the controller's live, mutable station array and objects. Runtime
+`readonly` provides no protection: a consumer could replace an array entry or
+write its `status` from `locked` to `available`. The controller then trusted
+that mutated status on the next approach and emitted `station:activated` even
+though the Shell had never admitted the station.
+
+Normalized station snapshots now own and freeze both levels of that authority:
+the array and each flat station value. The controller may still replace the
+whole internal snapshot when a legitimate matching `world:stations` event
+arrives, while render projections, labels, control handoff and activation
+ordering are unchanged.
+
+*Verified:* two public controller regressions enter the Post Office with the
+default locked snapshot, then attempt the mutation through `controller.state`
+and through the value delivered to `onChange`. Before the fix, both object
+writes succeeded and a station approach emitted the forged activation. Green
+rejects item writes and array replacement, keeps the internal status locked and
+emits nothing. Removing the per-item freeze fails both public paths; removing
+the array freeze fails the replacement case, so both ownership levels are
+independently observed. The existing legitimate Shell-admission activation and
+station-presentation tests remain green. Local verification used no browser,
+network, lobby, wallet, RPC, proof, signature, funds or transaction. The
+focused fixed-room suite passes 33 tests, the World suite passes 22 files / 221
+tests and the full workspace passes 89 files / 1,269 tests with two workers;
+workspace typecheck, production build, all 13 invariants and diff hygiene
+pass.*
+
 ### 2026-08-20 — A settled Connect query must release ownership after it acquires it
 
 `createConnectFlow()` shares one in-flight wallet capability query so repeated
