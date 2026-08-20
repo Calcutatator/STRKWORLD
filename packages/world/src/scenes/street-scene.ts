@@ -35,6 +35,10 @@ import {
   createAvatarStudioFigureLayer,
   type AvatarStudioFigureLayer,
 } from '../avatar-studio-figure-layer.js';
+import {
+  createAvatarStudioToggleBinding,
+  type AvatarStudioToggleBinding,
+} from '../avatar-studio-input.js';
 import { DEFAULT_AVATAR_SPRITE } from '../avatar-state.js';
 import { createDoorTrigger, type DoorTrigger } from '../door-trigger.js';
 import {
@@ -120,6 +124,7 @@ export function createStreetScene({ Phaser, onTileChanged, remotePeers }: Street
     private activeRoom?: BuildingId;
     private avatarStudio?: AvatarStudioController;
     private avatarStudioPresentation?: AvatarStudioPresentation;
+    private avatarStudioToggleBinding?: AvatarStudioToggleBinding;
     private avatarStudioActive = false;
     private movement!: StreetMovementAdapter;
     private roomGraphics?: PhaserTypes.GameObjects.Graphics;
@@ -201,6 +206,8 @@ export function createStreetScene({ Phaser, onTileChanged, remotePeers }: Street
       this.avatarStudioActive = false;
       this.ground = undefined;
       this.avatarVisual = undefined;
+      this.avatarStudioToggleBinding?.destroy();
+      this.avatarStudioToggleBinding = undefined;
       this.avatarStudio?.destroy();
       this.avatarStudio = undefined;
       this.avatarStudioPresentation = undefined;
@@ -445,6 +452,12 @@ export function createStreetScene({ Phaser, onTileChanged, remotePeers }: Street
         onChange: () => this.renderAvatarStudio(),
         onDestroy: () => this.avatarStudioPresentation?.destroy(),
       });
+      if (this.input.keyboard) {
+        this.avatarStudioToggleBinding = createAvatarStudioToggleBinding({
+          keyboard: this.input.keyboard,
+          toggle: () => this.avatarStudio?.toggleSelectedState(),
+        });
+      }
     }
 
     private resolveBus(): { out: EventBus<WorldEvents>; in: EventBus<ShellEvents> } | undefined {
@@ -544,11 +557,15 @@ export function createStreetScene({ Phaser, onTileChanged, remotePeers }: Street
       this.activeRoom = undefined;
       this.lastTile = { x: -1, y: -1 };
       this.avatarStudioPresentation?.enter();
+      this.avatarStudioToggleBinding?.setActive(
+        this.avatarStudioActive && this.avatarStudio?.state.inRoom === true,
+      );
     }
 
     private exitAvatarStudioRoom(): void {
       this.avatarStudioActive = false;
       this.lastTile = { x: -1, y: -1 };
+      this.avatarStudioToggleBinding?.setActive(false);
       this.avatarStudioPresentation?.exit();
     }
 

@@ -1,5 +1,5 @@
 import type { AvatarSpriteKey, EventBus, WorldEvents } from '@strkworld/shared';
-import { avatarSpriteForFigure } from './avatar-state.js';
+import { avatarSpriteForFigure, pairedAvatarSprite } from './avatar-state.js';
 
 export const AVATAR_STUDIO_TILE_SIZE = 32;
 export const AVATAR_STUDIO_WIDTH = 18;
@@ -52,6 +52,7 @@ export interface AvatarStudioController {
   readonly state: AvatarStudioState;
   enter(): void;
   update(tile: { x: number; y: number }): void;
+  toggleSelectedState(): void;
   destroy(): void;
 }
 
@@ -284,6 +285,12 @@ export function createAvatarStudioController(
 
   const state = (): AvatarStudioState => ({ inRoom, selected, highlightedFigure });
   const publish = (): void => options.onChange?.(state());
+  const select = (sprite: AvatarSpriteKey): void => {
+    if (selected === sprite) return;
+    selected = sprite;
+    options.out.emit('avatar:selected', { sprite: selected });
+    publish();
+  };
 
   const leave = (): void => {
     if (!inRoom) return;
@@ -318,11 +325,11 @@ export function createAvatarStudioController(
         highlightedFigure = nextHighlight;
         publish();
       }
-      if (figure && selected !== figure.sprite) {
-        selected = figure.sprite;
-        options.out.emit('avatar:selected', { sprite: selected });
-        publish();
-      }
+      if (figure) select(figure.sprite);
+    },
+    toggleSelectedState(): void {
+      if (destroyed || !inRoom) return;
+      select(pairedAvatarSprite(selected));
     },
     destroy(): void {
       if (destroyed) return;

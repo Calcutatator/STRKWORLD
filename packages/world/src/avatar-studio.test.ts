@@ -152,6 +152,50 @@ describe('hidden Avatar Studio', () => {
     expect(events.at(-1)).toEqual({ event: 'avatar-studio:exited', payload: {} });
   });
 
+  it('toggles the selected cosy and fighting states only while the Studio is active', () => {
+    const events: Emitted[] = [];
+    const controller = createAvatarStudioController({
+      out: { emit: (event, payload) => events.push({ event, payload } as Emitted) },
+    });
+
+    controller.toggleSelectedState();
+    expect(controller.state.selected).toBe('avatar-1');
+
+    controller.enter();
+    controller.toggleSelectedState();
+    expect(controller.state.selected).toBe('avatar-9');
+    expect(events.at(-1)).toEqual({
+      event: 'avatar:selected',
+      payload: { sprite: 'avatar-9' },
+    });
+
+    controller.update({ x: 2, y: 3 });
+    expect(controller.state.selected).toBe('avatar-1');
+    expect(events.at(-1)).toEqual({
+      event: 'avatar:selected',
+      payload: { sprite: 'avatar-1' },
+    });
+
+    controller.toggleSelectedState();
+    expect(controller.state.selected).toBe('avatar-9');
+    controller.toggleSelectedState();
+    expect(controller.state.selected).toBe('avatar-1');
+    expect(events.at(-1)).toEqual({
+      event: 'avatar:selected',
+      payload: { sprite: 'avatar-1' },
+    });
+
+    controller.update({ x: 8, y: 0 });
+    const afterExit = events.length;
+    controller.toggleSelectedState();
+    expect(events).toHaveLength(afterExit);
+
+    controller.enter();
+    controller.destroy();
+    controller.toggleSelectedState();
+    expect(events).toHaveLength(afterExit + 1);
+  });
+
   it('moves down from the interior spawn and exits only after moving back up through the opening', () => {
     const operations: string[] = [];
     const playerPositions: Array<{ x: number; y: number }> = [];

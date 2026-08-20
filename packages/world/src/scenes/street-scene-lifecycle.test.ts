@@ -1,4 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
+import type { AvatarStudioController } from '../avatar-studio.js';
+import { createStreetMap } from '../map/street.js';
 import { createStreetScene } from './street-scene.js';
 
 vi.mock('../kenney-urban.js', () => ({
@@ -34,13 +36,19 @@ function destroyable() {
   return { destroy: vi.fn() };
 }
 
+function studioToggleBinding() {
+  return { setActive: vi.fn(), destroy: vi.fn() };
+}
+
 function cycleResources() {
   const unsubscribe = vi.fn();
   return {
     avatarVisual: { cycle: Symbol('avatar-visual') },
     unsubscribe,
     controller: { destroy: vi.fn(() => unsubscribe()) },
-    studio: destroyable(),
+    studio: { state: { inRoom: true }, ...destroyable() },
+    studioPresentation: { enter: vi.fn(), exit: vi.fn(), destroy: vi.fn() },
+    studioToggle: studioToggleBinding(),
     roomGraphics: destroyable(),
     stationGraphics: destroyable(),
     studioGraphics: destroyable(),
@@ -93,12 +101,16 @@ interface StreetSceneHarness extends FakeScene {
   createInput(): void;
   createFixedRooms(): void;
   createAvatarStudio(): void;
+  enterAvatarStudioRoom(): void;
+  exitAvatarStudioRoom(): void;
   createCamera(): void;
   createDoorTriggers(): void;
   createRoomVisuals(): void;
   createExteriorLabels(): void;
   roomControllers: Record<string, { destroy(): void }>;
-  avatarStudio: { destroy(): void };
+  avatarStudio: { readonly state: { readonly inRoom: boolean }; destroy(): void };
+  avatarStudioPresentation: { enter(): void; exit(): void; destroy(): void };
+  avatarStudioToggleBinding?: { setActive(active: boolean): void; destroy(): void };
   inputGate: { resume(): void };
   roomGraphics: { destroy(): void };
   roomStationGraphics: { destroy(): void };
@@ -131,6 +143,8 @@ function createHarness() {
   scene.createAvatarStudio = vi.fn(() => {
     if (failure === 'partial') throw new Error('partial create failure');
     scene.avatarStudio = current.studio;
+    scene.avatarStudioPresentation = current.studioPresentation;
+    scene.avatarStudioToggleBinding = current.studioToggle;
   });
   scene.createRoomVisuals = vi.fn(() => {
     scene.roomGraphics = current.roomGraphics;
@@ -168,6 +182,7 @@ function expectCompleteCleanup(cycle: ReturnType<typeof cycleResources>): void {
   expect(cycle.controller.destroy).toHaveBeenCalledTimes(1);
   expect(cycle.unsubscribe).toHaveBeenCalledTimes(1);
   expect(cycle.studio.destroy).toHaveBeenCalledTimes(1);
+  expect(cycle.studioToggle.destroy).toHaveBeenCalledTimes(1);
   expect(cycle.roomGraphics.destroy).toHaveBeenCalledTimes(1);
   expect(cycle.stationGraphics.destroy).toHaveBeenCalledTimes(1);
   expect(cycle.studioGraphics.destroy).toHaveBeenCalledTimes(1);
@@ -179,6 +194,25 @@ function expectCompleteCleanup(cycle: ReturnType<typeof cycleResources>): void {
 }
 
 describe('StreetScene lifecycle', () => {
+  it('drives F ownership through real Studio enter, exit and shutdown callbacks', () => {
+    const harness = createRealStudioHarness();
+
+    expect(harness.keyboard.listenerCount()).toBe(0);
+    harness.scene.avatarStudio.enter();
+    expect(harness.keyboard.listenerCount()).toBe(1);
+    harness.keyboard.press({ repeat: false, target: null });
+    expect(harness.scene.avatarStudio.state.selected).toBe('avatar-9');
+
+    harness.scene.avatarStudio.update({ x: 8, y: 0 });
+    expect(harness.keyboard.listenerCount()).toBe(0);
+    harness.scene.avatarStudio.enter();
+    expect(harness.keyboard.listenerCount()).toBe(1);
+
+    harness.scene.cleanShutdown();
+    harness.scene.cleanShutdown();
+    expect(harness.keyboard.listenerCount()).toBe(0);
+  });
+
   it('cleans every same-instance restart once while repeated shutdown stays idempotent', () => {
     const harness = createHarness();
     const cycles = [harness.current];
@@ -282,3 +316,71 @@ describe('StreetScene lifecycle', () => {
     expectCompleteCleanup(recovered);
   });
 });
+
+function createRealStudioHarness() {
+  const SceneType = createStreetScene({ Phaser: { Scene: FakeScene } as never });
+  const keyboard = new LifecycleKeyboard();
+  const map = createStreetMap();
+  const player = {
+    x: 0,
+    y: 0,
+    body: { setEnable: vi.fn() },
+    setVelocity: vi.fn(),
+    setPosition: vi.fn((x: number, y: number) => {
+      player.x = x;
+      player.y = y;
+    }),
+  };
+  const scene = new SceneType() as unknown as FakeScene & {
+    map: ReturnType<typeof createStreetMap>;
+    player: typeof player;
+    input: { keyboard: LifecycleKeyboard };
+    game: { registry: { get(key: string): undefined } };
+    physics: { world: { setBounds: ReturnType<typeof vi.fn> } };
+    cameras: { main: { setBounds: ReturnType<typeof vi.fn> } };
+    ground: { setVisible: ReturnType<typeof vi.fn> };
+    movement: { exit(position: { x: number; y: number }, report: () => void): void };
+    doors: { reset: ReturnType<typeof vi.fn>; update: ReturnType<typeof vi.fn> };
+    avatarStudio: AvatarStudioController;
+    createAvatarStudio(): void;
+    cleanShutdown(): void;
+  };
+  scene.map = map;
+  scene.player = player;
+  scene.input = { keyboard };
+  scene.game = { registry: { get: () => undefined } };
+  scene.physics = { world: { setBounds: vi.fn() } };
+  scene.cameras = { main: { setBounds: vi.fn() } };
+  scene.ground = { setVisible: vi.fn() };
+  scene.movement = { exit: (_position, report) => report() };
+  scene.doors = { reset: vi.fn(), update: vi.fn() };
+  scene.createAvatarStudio();
+  return { scene, keyboard };
+}
+
+interface LifecycleKeyEvent {
+  readonly repeat: boolean;
+  readonly target: unknown;
+}
+
+class LifecycleKeyboard {
+  private readonly handlers = new Set<(event: LifecycleKeyEvent) => void>();
+
+  on(event: string, handler: (event: LifecycleKeyEvent) => void): this {
+    if (event === 'keydown-F') this.handlers.add(handler);
+    return this;
+  }
+
+  off(event: string, handler: (event: LifecycleKeyEvent) => void): this {
+    if (event === 'keydown-F') this.handlers.delete(handler);
+    return this;
+  }
+
+  listenerCount(): number {
+    return this.handlers.size;
+  }
+
+  press(event: LifecycleKeyEvent): void {
+    for (const handler of this.handlers) handler(event);
+  }
+}
