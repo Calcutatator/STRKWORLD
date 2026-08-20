@@ -80,13 +80,17 @@ export function createConnectFlow(operations: PrivacyOperations): ConnectFlow {
           store.setState(next);
         }
         return generation === attemptGeneration ? next : store.getState();
-      } finally {
-        if (generation === attemptGeneration) {
-          inFlight = null;
-        }
       }
     })();
     inFlight = { generation: attemptGeneration, promise };
+    const release = (): void => {
+      if (generation === attemptGeneration) inFlight = null;
+    };
+    // Register release only after this attempt owns `inFlight`. A wallet
+    // adapter is allowed to throw before returning a promise; in that case the
+    // async body above settles synchronously, and an internal `finally` would
+    // run before the ownership assignment and leave the settled promise stuck.
+    void promise.then(release, release);
 
     return promise;
   }
