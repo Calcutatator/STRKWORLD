@@ -160,6 +160,79 @@ describe('BridgeService', () => {
     }
   });
 
+  it('does not resurrect discarded evidence when an older refresh settles late', async () => {
+    const client = new StubClient();
+    const store = new MemoryBridgeStore();
+    const service = new BridgeService({ client, store, quoteVerifier: () => true, now: () => NOW });
+    await service.createManualDeposit({
+      source: SOURCE,
+      amountIn: 1_000_000n,
+      starknetRecipient: '0x123',
+      refundAddress: request.refundTo,
+    });
+    let releaseStatus!: (value: GetExecutionStatusResponse) => void;
+    let markStarted!: () => void;
+    const started = new Promise<void>((resolve) => { markStarted = resolve; });
+    client.getExecutionStatus = async () => {
+      markStarted();
+      return new Promise<GetExecutionStatusResponse>((resolve) => { releaseStatus = resolve; });
+    };
+
+    const refreshing = service.refresh();
+    await started;
+    service.discard();
+    releaseStatus(status('PROCESSING' as never));
+
+    await expect(refreshing).resolves.toMatchObject({ leg: 'solver-settling' });
+    expect(service.resume()).toBeNull();
+  });
+
+  it('does not let an older refresh overwrite replacement evidence', async () => {
+    const client = new StubClient();
+    const store = new MemoryBridgeStore();
+    const service = new BridgeService({ client, store, quoteVerifier: () => true, now: () => NOW });
+    await service.createManualDeposit({
+      source: SOURCE,
+      amountIn: 1_000_000n,
+      starknetRecipient: '0x123',
+      refundAddress: request.refundTo,
+    });
+    let releaseStatus!: (value: GetExecutionStatusResponse) => void;
+    let markStarted!: () => void;
+    const started = new Promise<void>((resolve) => { markStarted = resolve; });
+    client.getExecutionStatus = async () => {
+      markStarted();
+      return new Promise<GetExecutionStatusResponse>((resolve) => { releaseStatus = resolve; });
+    };
+
+    const refreshing = service.refresh();
+    await started;
+    service.discard();
+    client.getQuote = async (value) => ({
+      ...signedQuote,
+      correlationId: 'corr-2',
+      signature: 'replacement-signed-by-one-click',
+      quoteRequest: value,
+      quote: {
+        ...signedQuote.quote,
+        depositAddress: '0xreplacement-deposit',
+        deadline: value.deadline,
+      },
+    });
+    const replacement = await service.createManualDeposit({
+      source: SOURCE,
+      amountIn: 1_000_000n,
+      starknetRecipient: '0x123',
+      refundAddress: request.refundTo,
+    });
+    const replacementExport = service.exportResumeRecord();
+    releaseStatus(status('PROCESSING' as never));
+
+    await expect(refreshing).resolves.toMatchObject({ leg: 'solver-settling' });
+    expect(service.resume()).toEqual(replacement);
+    expect(service.exportResumeRecord()).toBe(replacementExport);
+  });
+
   it('creates only inbound exact-input quotes to Starknet STRK and retains the signed response', async () => {
     const client = new StubClient();
     const store = new MemoryBridgeStore();

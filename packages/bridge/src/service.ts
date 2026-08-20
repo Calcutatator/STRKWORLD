@@ -213,7 +213,10 @@ export class BridgeService {
         pollingStopped: true,
       };
     }
-    this.store.save({ ...record, status, updatedAt: this.now() });
+    const retained = this.resume();
+    if (retained && sameSignedEvidence(retained, record)) {
+      this.store.save({ ...retained, status, updatedAt: this.now() });
+    }
     return status;
   }
 
@@ -295,6 +298,12 @@ export class BridgeService {
       throw new Error('1Click status quote signature verification failed.');
     }
   }
+}
+
+function sameSignedEvidence(left: BridgeRecord, right: BridgeRecord): boolean {
+  return left.signedQuote.correlationId === right.signedQuote.correlationId &&
+    left.signedQuote.signature === right.signedQuote.signature &&
+    left.signedQuote.timestamp === right.signedQuote.timestamp;
 }
 
 function validateInput(input: CreateDepositInput): void {
