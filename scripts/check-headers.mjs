@@ -188,7 +188,7 @@ export function stripComments(text, syntax) {
         continue;
       }
 
-      if (syntax.line.some((token) => line.startsWith(token, i))) {
+      if (syntax.line.some((token) => isLineCommentAt(line, i, token))) {
         i = line.length;
         break;
       }
@@ -208,6 +208,14 @@ export function stripComments(text, syntax) {
   }
 
   return stripped;
+}
+
+function isLineCommentAt(line, index, token) {
+  if (!line.startsWith(token, index)) return false;
+  if (token !== '#') return true;
+  // Hash comments begin at a token boundary. Treating an in-word hash as the
+  // start of a comment can hide effective shell or workflow code after it.
+  return index === 0 || /\s/.test(line[index - 1]);
 }
 
 /**

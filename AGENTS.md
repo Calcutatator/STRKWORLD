@@ -250,6 +250,32 @@ without a verification method is a rumour.
 
 Format: `### YYYY-MM-DD — short title` then what, why it matters, how verified.
 
+### 2026-08-20 — An in-word hash cannot hide an effective header directive
+
+The D-005 static header gate treated every unquoted `#` in hash-comment file
+types as the start of a comment. Bash and YAML both keep an in-word hash as
+data, so effective shell or workflow code later on the same line disappeared
+from the scan. A deploy command could therefore set one of the cross-origin
+isolation headers that break wallet popups while the dedicated CI job reported
+the source clean.
+
+Hash comment stripping now begins only at the start of a line or after
+whitespace. Start-of-line and whitespace-delimited hash comments remain
+exempt, while an in-word hash cannot suppress the rest of a shell or workflow
+line. Other comment syntaxes and the built-response phase are unchanged.
+
+*Verified:* Bash itself parsed `safe#still-word after` as two ordinary
+arguments. Through the exported `scanText` seam, red-first `.sh` and `.yml`
+fixtures each put a forbidden header flag after `safe#still-word`; the old
+parser returned no violations and the boundary-aware parser reports line 1.
+Three adjacent fixtures preserve real hash comments at line start and after
+whitespace. The focused header suite passes 27/27 tests, and the full workspace
+passes 89 files / 1,270 tests with two workers. Workspace typecheck, production
+build, the complete D-005 static/build/local-preview gate (305 source files and
+30 production responses), all 13 invariants, tilemap and diff checks pass. The
+local checks used only files, child processes and loopback HTTP; no external
+network, RPC, wallet, proof, signature, funds or transaction was used.*
+
 ### 2026-08-20 — An Exchange edit owns its pending preparation
 
 The Exchange amount and asset controls remain editable while wallet

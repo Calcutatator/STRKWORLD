@@ -40,6 +40,16 @@ describe('violations that must be caught', () => {
     expect(scanText('.github/workflows/deploy.yml', workflow)).toHaveLength(1);
   });
 
+  it('BYPASS: an in-word hash does not hide a later shell header flag', () => {
+    const script = `echo safe#still-word; curl --header "${COOP}: same-origin"`;
+    expect(scanText('deploy/smoke.sh', script).map((violation) => violation.line)).toEqual([1]);
+  });
+
+  it('BYPASS: an in-word hash does not hide a later workflow header flag', () => {
+    const workflow = `run: echo safe#still-word && curl --header "${COEP}: require-corp"`;
+    expect(scanText('.github/workflows/deploy.yml', workflow).map((violation) => violation.line)).toEqual([1]);
+  });
+
   it('catches a vite preview.headers entry', () => {
     const config = [
       "import { defineConfig } from 'vite';",
@@ -124,6 +134,14 @@ describe('real comments that must stay exempt', () => {
 
   it('exempts a hash comment in a YAML workflow', () => {
     expect(scanText('.github/workflows/ci.yml', `# asserts no ${COOP} is sent`)).toEqual([]);
+  });
+
+  it.each([
+    ['shell start', 'deploy/smoke.sh', `# never set ${COOP}`],
+    ['shell whitespace boundary', 'deploy/smoke.sh', `echo safe # never set ${COOP}`],
+    ['workflow whitespace boundary', '.github/workflows/deploy.yml', `run: echo safe # never set ${COOP}`],
+  ])('retains a real %s hash comment', (_label, file, source) => {
+    expect(scanText(file, source)).toEqual([]);
   });
 });
 
