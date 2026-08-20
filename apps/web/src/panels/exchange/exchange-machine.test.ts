@@ -33,6 +33,58 @@ describe('Exchange machine', () => {
     expect(machine.store.getState().sell).toBeNull();
   });
 
+  it.each([
+    {
+      field: 'amount',
+      edit: (machine: ReturnType<typeof createExchangePanel>) => machine.setAmount('2'),
+      expected: { amountText: '2', sell: strk, buy: eth },
+    },
+    {
+      field: 'sell asset',
+      edit: (machine: ReturnType<typeof createExchangePanel>) => machine.setSell(usdc!.token),
+      expected: { amountText: '', sell: usdc, buy: strk },
+    },
+    {
+      field: 'buy asset',
+      edit: (machine: ReturnType<typeof createExchangePanel>) => machine.setBuy(usdc!.token),
+      expected: { amountText: '1', sell: strk, buy: usdc },
+    },
+  ])('discards a prepared batch returned after the player edits the $field', async ({ edit, expected }) => {
+    const prepareEntered = deferred<void>();
+    const prepared = deferred<PreparedBatch>();
+    let discarded = 0;
+    const operations: PrivacyOperations = {
+      ...controlledOperations(Promise.resolve({ transactionHash: '0xnever' })),
+      balances: async () => [
+        { token: strk!.token, total: 100n * 10n ** 18n, spendable: 100n * 10n ** 18n, maturing: 0n, maturityKnown: true },
+        { token: usdc!.token, total: 100_000_000n, spendable: 100_000_000n, maturing: 0n, maturityKnown: true },
+      ],
+      prepare: async () => { prepareEntered.resolve(); return prepared.promise; },
+    };
+    const machine = createExchangePanel({ operations, receipts: createReceiptLedger(), canStartFinancialAction: () => true });
+    await machine.open(); await machine.refreshBalances(); machine.setAmount('1');
+
+    const preparing = machine.prepare();
+    await prepareEntered.promise;
+    edit(machine);
+    const canonical = { kind: 'swap' as const, tokenIn: strk!.token, tokenOut: eth!.token, amountIn: 10n ** 18n, minAmountOut: 1_990000000000000000n };
+    prepared.resolve({
+      intents: [canonical],
+      poolFee: 6n * 10n ** 18n,
+      gasEstimate: 2n * 10n ** 15n,
+      totalCost: 6_002000000000000000n,
+      warnings: [],
+      promptCount: 1,
+      swapReview: { expectedAmountOut: 2n * 10n ** 18n, minimumAmountOut: canonical.minAmountOut, slippageBps: 50, expiresAt: farFuture },
+      confirm: async () => ({ transactionHash: '0xnever' }),
+      discard: () => { discarded += 1; },
+    });
+    await preparing;
+
+    expect(discarded).toBe(1);
+    expect(machine.store.getState()).toMatchObject({ ...expected, flow: { name: 'composing' } });
+  });
+
   it('fails closed and discards when a prepared swap has no review', async () => {
     const machine = await ready(panel(false)); await machine.prepare();
     expect(machine.store.getState().flow).toMatchObject({ name: 'failed', recovery: 'prepare-again' });
