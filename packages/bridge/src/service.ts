@@ -203,6 +203,13 @@ export class BridgeService {
   async refresh(): Promise<BridgeStatus> {
     const record = this.resume();
     if (!record) throw new Error('No bridge deposit is available to resume.');
+    return (await this.refreshRecord(record)).status;
+  }
+
+  private async refreshRecord(record: BridgeRecord): Promise<{
+    status: BridgeStatus;
+    persisted: BridgeRecord | null;
+  }> {
     const raw = await this.client.getExecutionStatus(
       record.signedQuote.quote.depositAddress!,
       record.signedQuote.quote.depositMemo,
@@ -218,9 +225,11 @@ export class BridgeService {
     }
     const retained = this.resume();
     if (retained && samePersistedVersion(retained, record)) {
-      this.store.save({ ...retained, status, updatedAt: this.now() });
+      const persisted = { ...retained, status, updatedAt: this.now() };
+      this.store.save(persisted);
+      return { status, persisted };
     }
-    return status;
+    return { status, persisted: null };
   }
 
   /** Poll a resumable deposit without converting a local timeout into a failure. */
@@ -234,17 +243,31 @@ export class BridgeService {
       throw new Error('Bridge active-polling window must be a positive integer.');
     }
     const startedAt = this.now();
+    let owned = this.resume();
+    if (!owned) throw new Error('No bridge deposit is available to resume.');
     let maxWallElapsed = 0;
     let scheduledSleepMs = 0;
     for (;;) {
       throwIfAborted(options.signal);
-      const status = await this.refresh();
+      const retained = this.resume();
+      if (!retained || !samePersistedVersion(retained, owned)) {
+        return stoppedPollingStatus(owned.status);
+      }
+      const refreshed = await this.refreshRecord(owned);
+      const status = refreshed.status;
       options.onUpdate?.(status);
       if (status.pollingStopped) return status;
+      if (!refreshed.persisted) return stoppedPollingStatus(status);
+      owned = refreshed.persisted;
+
+      const current = this.resume();
+      if (!current || !samePersistedVersion(current, owned)) {
+        return stoppedPollingStatus(status);
+      }
 
       maxWallElapsed = Math.max(maxWallElapsed, this.now() - startedAt);
       const elapsed = Math.max(0, maxWallElapsed, scheduledSleepMs);
-      if (elapsed >= maxActiveMs) return this.stopActivePolling(status);
+      if (elapsed >= maxActiveMs) return this.stopActivePolling(status, owned);
       const delay = Math.min(intervalMs, maxActiveMs - elapsed, MAX_TIMER_DELAY_MS);
       scheduledSleepMs += delay;
       await this.sleep(delay, options.signal);
@@ -255,15 +278,12 @@ export class BridgeService {
     this.store.clear();
   }
 
-  private stopActivePolling(status: BridgeStatus): BridgeStatus {
-    const record = this.resume();
-    if (!record) throw new Error('No bridge deposit is available to resume.');
-    const stopped: BridgeStatus = {
-      ...status,
-      pollingStopped: true,
-      message: 'The deposit is still pending. Active polling stopped; you can leave and resume later.',
-    };
-    this.store.save({ ...record, status: stopped, updatedAt: this.now() });
+  private stopActivePolling(status: BridgeStatus, owned: BridgeRecord): BridgeStatus {
+    const stopped = stoppedPollingStatus(status);
+    const retained = this.resume();
+    if (retained && samePersistedVersion(retained, owned)) {
+      this.store.save({ ...retained, status: stopped, updatedAt: this.now() });
+    }
     return stopped;
   }
 
@@ -301,6 +321,14 @@ export class BridgeService {
       throw new Error('1Click status quote signature verification failed.');
     }
   }
+}
+
+function stoppedPollingStatus(status: BridgeStatus): BridgeStatus {
+  return {
+    ...status,
+    pollingStopped: true,
+    message: 'The deposit is still pending. Active polling stopped; you can leave and resume later.',
+  };
 }
 
 function samePersistedVersion(left: BridgeRecord, right: BridgeRecord): boolean {
