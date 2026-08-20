@@ -21,7 +21,11 @@ async function fakeChild(): Promise<string> {
   await writeFile(path, `
     import { createServer } from 'node:http';
     const port = Number(process.env.PORT ?? process.env.LOBBY_PORT);
-    const delay = Number(process.env.START_DELAY_MS ?? 0);
+    const delay = Number(
+      !process.env.START_DELAY_PORT || process.env.START_DELAY_PORT === String(port)
+        ? process.env.START_DELAY_MS ?? 0
+        : 0,
+    );
     const server = createServer((_request, response) => response.end('child'));
     if (process.env.EXIT_BEFORE_READY) setTimeout(() => process.exit(2), Number(process.env.EXIT_BEFORE_READY));
     if (!process.env.EXIT_BEFORE_READY) {
@@ -381,19 +385,35 @@ describe('Fly composition process boundary', () => {
     const { publicPort, backendPort, lobbyPort } = await ports();
     const occupied = createServer();
     await new Promise<void>((resolve) => occupied.listen(backendPort, '127.0.0.1', resolve));
+    expect(occupied.address()).toMatchObject({ port: backendPort });
     // A port probe would accept the occupied listener immediately. The real
-    // child cannot report IPC readiness before this deliberately earlier deadline.
-    await expect(startFlyComposition({
-      staticRoot: join(process.cwd(), 'apps/web/dist'),
-      backendEntry: child,
-      lobbyEntry: child,
-      publicPort,
-      backendPort,
-      lobbyPort,
-      publicOrigin: 'https://game.example',
-      environment: { ...process.env, START_DELAY_MS: '750' },
-      readinessTimeoutMs: 500,
-    })).rejects.toThrow('Private service did not become ready.');
+    // backend cannot report IPC readiness before this deliberately earlier
+    // deadline, while the lobby reports genuine readiness without delay.
+    let composition: FlyComposition | undefined;
+    let startupError: unknown;
+    try {
+      composition = await startFlyComposition({
+        staticRoot: join(process.cwd(), 'apps/web/dist'),
+        backendEntry: child,
+        lobbyEntry: child,
+        publicPort,
+        backendPort,
+        lobbyPort,
+        publicOrigin: 'https://game.example',
+        environment: {
+          ...process.env,
+          START_DELAY_MS: '750',
+          START_DELAY_PORT: String(backendPort),
+        },
+        readinessTimeoutMs: 500,
+      });
+    } catch (error) {
+      startupError = error;
+    }
+    if (composition) compositions.push(composition);
+
+    expect(startupError).toMatchObject({ message: 'Private service did not become ready.' });
+    await expect(fetch(`http://127.0.0.1:${publicPort}/`)).rejects.toThrow();
     await new Promise<void>((resolve, reject) => occupied.close((error) => error ? reject(error) : resolve()));
   });
 });
