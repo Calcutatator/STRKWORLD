@@ -155,9 +155,9 @@ export function createStreetScene({ Phaser, onTileChanged, remotePeers }: Street
       // Phaser restarts reuse this Scene instance. Each create owns a fresh set
       // of controllers, listeners and presentation objects to clean once.
       // A defensive repeated create can arrive without Phaser first delivering
-      // shutdown. Close that live cycle through the same event so every
-      // listener-owned resource retires before the new cycle takes ownership.
-      if (!this.cleanedUp) this.events.emit('shutdown');
+      // shutdown. Retire only the World-owned cycle: broadcasting Phaser's
+      // shutdown event here would also tear down its still-running plugins.
+      this.retireWorldOwnership();
       this.cleanedUp = false;
       this.ground = undefined;
       this.lastTile = { x: -1, y: -1 };
@@ -238,6 +238,12 @@ export function createStreetScene({ Phaser, onTileChanged, remotePeers }: Street
       this.remoteAvatars = undefined;
       for (const overlay of this.doorOverlays) overlay.destroy();
       this.doorOverlays = [];
+    }
+
+    private retireWorldOwnership(): void {
+      if (this.cleanedUp) return;
+      this.events.off('shutdown', this.cleanShutdown, this);
+      this.cleanShutdown();
     }
 
     // -- construction --------------------------------------------------------
