@@ -139,7 +139,8 @@ is not silently deleted after an arbitrary local TTL. `exportResumeRecord()`
 and `importResumeRecord()` provide an explicit cross-device path. The exported
 record contains addresses and timing and must be labelled sensitive; imports
 revalidate the route and quote signature and reset display state until the
-provider is checked again.
+provider is checked again. An import cannot replace an existing valid record:
+the player must explicitly discard the retained evidence first.
 
 Resume imports are capped at 256 kB before JSON parsing. This is both a browser
 resource bound and a reminder that import is signed evidence recovery, not an

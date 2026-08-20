@@ -786,9 +786,40 @@ describe('BridgeService', () => {
       status: { leg: 'awaiting-deposit', pollingStopped: true },
     });
     expect(second.resume()?.signedQuote).toEqual(signedQuote);
+    second.discard();
     expect(() => second.importResumeRecord(
       exported.replace('signed-by-one-click', 'tampered-signature'),
     )).toThrow(/signature/i);
+  });
+
+  it('requires an explicit discard before import can replace newer signed evidence', async () => {
+    const client = new StubClient();
+    const store = new MemoryBridgeStore();
+    const service = new BridgeService({
+      client,
+      store,
+      quoteVerifier: () => true,
+      now: () => NOW,
+    });
+    await service.createManualDeposit({
+      source: SOURCE,
+      amountIn: 1_000_000n,
+      starknetRecipient: '0x123',
+      refundAddress: request.refundTo,
+    });
+    const staleExport = service.exportResumeRecord();
+    client.statuses.push(status('SUCCESS' as never, {
+      amountOut: '999000',
+      destinationChainTxHashes: [{ hash: '0xsettled', explorerUrl: 'https://example/tx' }],
+    }));
+    await service.refresh();
+
+    expect(() => service.importResumeRecord(staleExport)).toThrow(/discard/i);
+    expect(service.resume()?.status).toMatchObject({
+      leg: 'settled',
+      strkReceived: 999_000n,
+      settlementTxHash: '0xsettled',
+    });
   });
 });
 
