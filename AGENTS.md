@@ -250,6 +250,37 @@ without a verification method is a rumour.
 
 Format: `### YYYY-MM-DD — short title` then what, why it matters, how verified.
 
+### 2026-08-20 — An old Bridge watcher cannot adopt replacement evidence
+
+`BridgeService.refresh()` may validly return provider status for deposit A
+after the player has discarded A and retained replacement deposit B. The
+refresh ownership guard correctly refuses to persist that late result, but
+`watch()` previously passed the returned A status into its active-timeout
+helper. That helper reloaded whichever record was current and unconditionally
+saved the old status onto it. A late A response could therefore graft A's
+origin transaction hash and progress onto B while leaving B's signed quote
+identity intact.
+
+Polling now owns the complete retained record version. Its internal refresh
+returns both the verified provider status and the exact successor version only
+when that version was persisted. The watcher advances only through those owned
+successors; losing ownership before, during or after a refresh stops the old
+watch without saving or adopting the replacement. The timeout save performs
+the same complete-version comparison. Public `refresh()` and `watch()` still
+return the verified provider status, and provider calls, record schemas and
+wire behavior are unchanged.
+
+*Verified:* a public-seam regression was observed red first: defer A's
+`PROCESSING` response, start a one-millisecond watch, discard A, create distinct
+B, then release A with origin hash `0xold-deposit`. The old code retained B's
+quote but replaced B's pending status with A's solver progress, hash and
+polling-stop copy. Green preserves B and its byte-identical export while the
+old watcher still returns A's verified stopped result. The Bridge suite passes
+1 file / 62 tests; the full workspace passes 87 files / 1,220 tests, workspace
+typecheck, all 13 invariants and diff hygiene pass. Local verification used no
+browser, live provider, external network, wallet, RPC, proof, signature, funds
+or transaction.
+
 ### 2026-08-20 — A late Bridge status response cannot overwrite a newer retained version
 
 `BridgeService.reportDepositTransaction()` and `refresh()` capture the complete
