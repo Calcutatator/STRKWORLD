@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   FakePrivacyOperations,
+  PrivacyError,
   type Address,
   type PrivacyOperations,
   type PrivateBalance,
@@ -948,6 +949,44 @@ describe('bank panel — one attempt at a time', () => {
     await inFlight;
 
     expect(panel.store.getState().flow.name).toBe('idle');
+  });
+
+  it('does not start a fee-classification read after the panel closes', async () => {
+    let entered!: () => void;
+    let reject!: (error: unknown) => void;
+    const insideConfirm = new Promise<void>((resolve) => {
+      entered = resolve;
+    });
+    const result = new Promise<never>((_resolve, fail) => {
+      reject = fail;
+    });
+    const operations = fake();
+    const poolConfig = vi.spyOn(operations, 'poolConfig');
+    const realPrepare = operations.prepare.bind(operations);
+    vi.spyOn(operations, 'prepare').mockImplementation(async (intents, signal) => {
+      const batch = await realPrepare(intents, signal);
+      return {
+        ...batch,
+        async confirm() {
+          entered();
+          return result;
+        },
+      };
+    });
+    const panel = await openPanel(operations);
+    panel.setAmount('1');
+    await panel.addToBatch();
+    await panel.prepare();
+
+    const confirming = panel.confirm();
+    await insideConfirm;
+    const readsBeforeClose = poolConfig.mock.calls.length;
+    panel.close();
+    reject(new PrivacyError('unknown', 'ceiling'));
+    await confirming;
+
+    expect(panel.store.getState().flow.name).toBe('idle');
+    expect(poolConfig).toHaveBeenCalledTimes(readsBeforeClose);
   });
 
   it('queues one intent when Add is double-clicked', async () => {

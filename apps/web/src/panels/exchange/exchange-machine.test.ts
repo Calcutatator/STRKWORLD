@@ -116,6 +116,39 @@ describe('Exchange machine', () => {
     await machine.confirm(); expect(machine.store.getState().flow.name).toBe('idle'); expect(confirms).toBe(1);
   });
 
+  it('does not start a fee-classification read after the panel closes', async () => {
+    const result = deferred<{ transactionHash: string }>();
+    const entered = deferred<void>();
+    const base = controlledOperations(result.promise, undefined, entered.resolve);
+    let poolReads = 0;
+    const operations: PrivacyOperations = {
+      ...base,
+      poolConfig: (signal) => {
+        poolReads += 1;
+        return base.poolConfig(signal);
+      },
+    };
+    const machine = createExchangePanel({
+      operations,
+      receipts: createReceiptLedger(),
+      canStartFinancialAction: () => true,
+    });
+    await machine.open();
+    await machine.refreshBalances();
+    machine.setAmount('1');
+    await machine.prepare();
+
+    const confirming = machine.confirm();
+    await entered.promise;
+    const readsBeforeClose = poolReads;
+    machine.close();
+    result.reject(new PrivacyError('unknown', 'ceiling'));
+    await confirming;
+
+    expect(machine.store.getState().flow.name).toBe('idle');
+    expect(poolReads).toBe(readsBeforeClose);
+  });
+
   it('does not submit when the financial gate flips while reading the live fee', async () => {
     const pool = deferred<ReturnType<FakePrivacyOperations['poolConfig']> extends Promise<infer T> ? T : never>(); let allowed = true;
     const operations = controlledOperations(Promise.resolve({ transactionHash: '0xnever' }), pool.promise);
