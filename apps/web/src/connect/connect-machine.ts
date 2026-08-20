@@ -105,8 +105,15 @@ export function createConnectFlow(operations: PrivacyOperations): ConnectFlow {
     noteOperationError(error: unknown): ConnectState {
       const { kind } = toFailure(error);
       if (kind === 'not-registered') {
+        // This verdict came from an operation after any capability query now
+        // in flight began. Retire that older query before publishing the
+        // account state, or its late success can reopen the financial rooms.
+        generation += 1;
+        inFlight = null;
         store.setState({ name: 'not-registered' });
       } else if (kind === 'unsupported-wallet') {
+        generation += 1;
+        inFlight = null;
         store.setState({ name: 'unsupported-wallet', walletApiVersion: versionOf(store.getState()) });
       }
       return store.getState();
