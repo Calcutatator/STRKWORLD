@@ -328,25 +328,39 @@ behaviour. Fixed by capturing synchronously, with a red-first timing
 regression; a mirror-isolated mutation moving the capture back below `tick()`
 kills that regression and nothing else.
 
-*Local, no external network:* `packages/privacy` 7 files / **130** tests (was
-6 / 117), workspace typecheck, production build, all 13 invariants, and the
-header gate's 30 live production responses. A seven-mutation pass killed 7 of
-7, each with a distinct failure set, so no clause is redundant: dropping the
+The real seam is now pinned the same way, closing the residual gap that the
+double's defect exposed: nothing had asserted that production captures
+*synchronously*, so an `await` inserted above its snapshot would have
+reintroduced the same race with every test still green. That pin was green on
+first run — production was already correct — so its teeth come from mutation
+rather than from a red observation: inserting `await Promise.resolve()` above
+the production snapshot fails exactly that one case.
+
+*Local, no external network:* `packages/privacy` 7 files / **131** tests (was
+6 / 117), full workspace 88 files / **1233** tests, workspace typecheck,
+production build, all 13 invariants, and the header gate's 30 live production
+responses, all at the merge `d675408`. An eight-mutation pass killed 8 of 8,
+each with a distinct failure set, so no clause is redundant: dropping the
 snapshot fails 7 cases; freezing only the array fails 4; freezing only the
 elements fails 2; unfreezing the swap canonical intent fails 3; unfreezing the
-swap published array fails 1; dropping the fake's snapshot fails 2; and moving
-the fake's snapshot below its first await fails exactly 1. The full-workspace
-figure of 88 files / **1219** tests was measured locally **pre-merge** at
-`e79f34e` and is superseded by the hosted exact-head run below. No wallet,
-account, provider, RPC, funds, proof, signature or submission was involved in
-any local run — the wallet, pool and gateway are in-memory doubles, and the
-only real code exercised is the pinned AVNU action builder and `starknet`
-serialization, both pure.
+swap published array fails 1; dropping the fake's snapshot fails 2; moving the
+fake's snapshot below its first await fails exactly 1; and delaying the
+production snapshot by one microtask fails exactly 1. Earlier full-workspace
+figures in this entry's history — 1219 pre-merge at `e79f34e`, 1226 at
+`c63c9f3` — were superseded as main advanced; each was true of the tree it was
+measured on. No wallet, account, provider, RPC, funds, proof, signature or
+submission was involved in any local run — the wallet, pool and gateway are
+in-memory doubles, and the only real code exercised is the pinned AVNU action
+builder and `starknet` serialization, both pure. The mutation passes ran in
+throwaway mirrors under a scratch path, never against the live branch files,
+which were checksum-verified unchanged after each.
 
-*Hosted, exact head:*
+*Hosted:*
 [GitHub Actions run 32401360829](https://github.com/Calcutatator/STRKWORLD/actions/runs/32401360829)
-succeeded at `8b4f274` — 88 files / **1225** tests, plus the headers, invariants
-and deployment jobs. That run also executes this repo's standard **Protocol
+succeeded at `8b4f274`, an earlier head of this branch — 88 files / **1225**
+tests, plus the headers, invariants and deployment jobs. Later heads are
+covered by their own PR runs rather than by this one. That run also executes
+this repo's standard **Protocol
 drift canary**, which issues **three read-only** JSON-RPC reads of public
 mainnet state against the pool at `latest`: `starknet_call` of
 `get_fee_amount`, `starknet_getClassHashAt`, and `starknet_call` of

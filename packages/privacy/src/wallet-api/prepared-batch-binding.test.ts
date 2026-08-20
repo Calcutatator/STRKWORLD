@@ -176,6 +176,41 @@ describe('a prepared batch does not read intent state the caller still owns', ()
     expect(prepared[0]?.[0]).toEqual({ type: 'transfer', token: TOKEN, amount: '0x14', recipient: BOB });
   });
 
+  /**
+   * Ownership has to be taken before the first `await`, not merely before the
+   * promise settles.
+   *
+   * `prepare()` is async, so everything up to its first suspension point runs
+   * in the caller's own tick: `throwIfAborted` is synchronous, the snapshot
+   * follows it, and only `poolConfig()` awaits. Capture the intents any later
+   * and a caller that mutates between the unawaited call and the settled
+   * promise wins the race — which is exactly how the test double got this
+   * wrong while looking correct, since awaiting anything yields a microtask
+   * even at zero latency.
+   */
+  it('E. captures the intents synchronously, before its first await', async () => {
+    const { ops, invoked } = seam();
+    // Held at the narrow variant so the write needs no `Intent`-union cast.
+    const shield: Extract<Intent, { kind: 'shield' }> = { kind: 'shield', token: TOKEN, amount: 1n };
+    const mine: Intent[] = [shield];
+
+    const preparing = ops.prepare(mine);
+    // Same tick as the call, before anything is awaited. Both leak shapes at
+    // once: a rewritten field and an appended intent.
+    shield.amount = HOSTILE;
+    mine.push({ kind: 'transfer', token: TOKEN, amount: 20n, recipient: BOB });
+    const batch = await preparing;
+
+    expect(batch.intents).toEqual([{ kind: 'shield', token: TOKEN, amount: 1n }]);
+    expect(batch.warnings).toEqual([{
+      kind: 'public-leg',
+      detail: 'Depositing 1 is public: the amount and your address are visible on-chain.',
+    }]);
+
+    await batch.confirm({ feeCeiling: POOL_FEE });
+    expect(invoked).toEqual([[{ type: 'deposit', token: TOKEN, amount: '0x1' }]]);
+  });
+
   it('F. keeps the reviewed sell amount when the published swap intent is written to', async () => {
     const { ops, prepared } = seam();
     const batch = await ops.prepare([{ ...SWAP }]);
