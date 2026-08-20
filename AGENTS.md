@@ -250,6 +250,52 @@ without a verification method is a rumour.
 
 Format: `### YYYY-MM-DD — short title` then what, why it matters, how verified.
 
+### 2026-08-20 — A key binding owned by a room works only in that room
+
+D-052 gave `F` to the Avatar Studio controller, which owned both the selected
+opaque key *and* the `keydown-F` listener. That is why the outfit toggle
+appeared to work nowhere else: outdoors and inside the fixed rooms there was no
+listener to press. The earlier finding "Fighting-state input is owned only by
+the active Avatar Studio" described that arrangement correctly and is now
+superseded by D-053 for scope; its guard behaviours (repeat, editable target,
+stale handler) still hold.
+
+Two separate mistakes are easy to make when widening such a binding, and both
+are silent:
+
+- **Two selections diverge.** Give the Studio its own copy and toggle outdoors,
+  and the Studio's copy is stale. The next press emits a key the avatar is
+  already wearing, the dedupe swallows it, and nothing changes. The fix is one
+  Scene-owned selection injected into the Studio — required, not defaulted, so
+  a caller cannot silently opt back into a second copy.
+- **Attach/detach per transition loses the listener.** Registering on room
+  entry and removing on exit reintroduces the same class of bug across
+  studio/room/outdoor transitions and same-instance restarts. One listener for
+  the Scene's lifetime, gated by an `isActive()` predicate asked at press time,
+  has no transition to get wrong. `InputGate.suspended` is the whole predicate:
+  a panel or a Shell control claim owns the keyboard, and reading a cached flag
+  instead would go stale on exactly the transition that matters.
+
+The toggle stays cosmetic. It resolves through the existing
+`pairedAvatarSprite` mapping and emits the existing `avatar:selected` with an
+opaque `avatar-1..avatar-16` key. Toggling inside a financial room adds no
+lobby traffic: `LobbyClient.updatePosition` carries no sprite, presence is
+suspended while inside, and only `resume()` republishes the selected key on
+exit. A consequence worth knowing rather than fixing here: an outdoor toggle
+also does not reach other players until the next suspend/resume or join, which
+is pre-existing D-047 wire behaviour, not something D-053 changed.
+
+*Verified:* red observed first on both public seams — `avatar-outfit.js` did
+not resolve, and all nine `street-scene-lifecycle` cases failed on a missing
+`createAvatarOutfit`. Green after implementation: 22 World files / 216 tests,
+full workspace 86 files / 1,141 tests, workspace typecheck, production build,
+invariants, drift and tilemap checks. Two mutations proved the tests have
+teeth: forcing `isActive` to `true` failed the suspension case, and handing the
+Studio its own selection failed the outdoor/Studio case. These checks prove
+input, selection, event and lifecycle ownership headlessly only. No browser,
+wallet, network, proof, signature or transaction was involved, and the rendered
+in-game acceptance at `http://localhost:5173/` remains open.
+
 ### 2026-08-20 — Matching bounds do not prove cross-facing character identity
 
 The D-052 handoff had equal top, height and feet measurements across facings,

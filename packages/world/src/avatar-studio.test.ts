@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import type { AvatarSpriteKey, WorldEvents } from '@strkworld/shared';
+import type { AvatarSpriteKey, EventBus, WorldEvents } from '@strkworld/shared';
+import { createAvatarOutfitSelection } from './avatar-outfit.js';
 import {
   AVATAR_STUDIO_DEFINITION,
   AVATAR_STUDIO_TILE_SIZE,
@@ -131,8 +132,12 @@ describe('hidden Avatar Studio', () => {
 
   it('selects a cosy figure on contact and exits upward through the top opening', () => {
     const events: Emitted[] = [];
+    const out: Pick<EventBus<WorldEvents>, 'emit'> = {
+      emit: (event, payload) => events.push({ event, payload } as Emitted),
+    };
     const controller = createAvatarStudioController({
-      out: { emit: (event, payload) => events.push({ event, payload } as Emitted) },
+      out,
+      selection: createAvatarOutfitSelection({ out }),
     });
 
     controller.enter();
@@ -152,48 +157,44 @@ describe('hidden Avatar Studio', () => {
     expect(events.at(-1)).toEqual({ event: 'avatar-studio:exited', payload: {} });
   });
 
-  it('toggles the selected cosy and fighting states only while the Studio is active', () => {
+  it('reads and writes the Scene\'s outfit selection rather than its own copy', () => {
+    // D-053: F is a Scene-owned binding. The Studio must therefore never hold
+    // a second copy of the selection — it would go stale the moment the outfit
+    // changed outdoors, and the next press would emit a state the avatar is
+    // already in.
     const events: Emitted[] = [];
-    const controller = createAvatarStudioController({
-      out: { emit: (event, payload) => events.push({ event, payload } as Emitted) },
-    });
+    const out: Pick<EventBus<WorldEvents>, 'emit'> = {
+      emit: (event, payload) => events.push({ event, payload } as Emitted),
+    };
+    const selection = createAvatarOutfitSelection({ out });
+    const controller = createAvatarStudioController({ out, selection });
 
-    controller.toggleSelectedState();
-    expect(controller.state.selected).toBe('avatar-1');
-
-    controller.enter();
-    controller.toggleSelectedState();
+    // A toggle before entry (outdoors) is visible to the Studio on entry.
+    selection.toggle();
     expect(controller.state.selected).toBe('avatar-9');
-    expect(events.at(-1)).toEqual({
-      event: 'avatar:selected',
-      payload: { sprite: 'avatar-9' },
-    });
+    controller.enter();
+    expect(controller.state.selected).toBe('avatar-9');
 
+    // Figure contact writes through to the shared selection.
     controller.update({ x: 2, y: 3 });
+    expect(selection.selected).toBe('avatar-1');
     expect(controller.state.selected).toBe('avatar-1');
     expect(events.at(-1)).toEqual({
       event: 'avatar:selected',
       payload: { sprite: 'avatar-1' },
     });
 
-    controller.toggleSelectedState();
-    expect(controller.state.selected).toBe('avatar-9');
-    controller.toggleSelectedState();
-    expect(controller.state.selected).toBe('avatar-1');
-    expect(events.at(-1)).toEqual({
-      event: 'avatar:selected',
-      payload: { sprite: 'avatar-1' },
-    });
+    // Standing on the same figure again is not a change and emits nothing.
+    const settled = events.length;
+    controller.update({ x: 2, y: 3 });
+    expect(events).toHaveLength(settled);
 
+    // The selection outlives the Studio: leaving, and even destroying it,
+    // leaves the local avatar's outfit intact and still changeable.
     controller.update({ x: 8, y: 0 });
-    const afterExit = events.length;
-    controller.toggleSelectedState();
-    expect(events).toHaveLength(afterExit);
-
-    controller.enter();
     controller.destroy();
-    controller.toggleSelectedState();
-    expect(events).toHaveLength(afterExit + 1);
+    selection.toggle();
+    expect(selection.selected).toBe('avatar-9');
   });
 
   it('moves down from the interior spawn and exits only after moving back up through the opening', () => {
@@ -238,8 +239,12 @@ describe('hidden Avatar Studio', () => {
       streetReturn,
       reportStreet: () => operations.push('street:reported'),
     });
+    const presentationOut: Pick<EventBus<WorldEvents>, 'emit'> = {
+      emit: (event) => operations.push(event),
+    };
     const controller = createAvatarStudioController({
-      out: { emit: (event) => operations.push(event) },
+      out: presentationOut,
+      selection: createAvatarOutfitSelection({ out: presentationOut }),
       onEnter: () => presentation.enter(),
       onExit: () => presentation.exit(),
     });
@@ -394,16 +399,18 @@ describe('hidden Avatar Studio', () => {
       streetReturn,
       reportStreet: () => lifecycle.operations.push('street:reported'),
     });
-    const controller = createAvatarStudioController({
-      out: {
-        emit: (event, payload) => {
-          lifecycle.operations.push(event);
-          if (event === 'avatar:selected') {
-            const selected = (payload as WorldEvents['avatar:selected']).sprite;
-            lifecycle.sprite = selected;
-          }
-        },
+    const lifecycleOut: Pick<EventBus<WorldEvents>, 'emit'> = {
+      emit: (event, payload) => {
+        lifecycle.operations.push(event);
+        if (event === 'avatar:selected') {
+          const selected = (payload as WorldEvents['avatar:selected']).sprite;
+          lifecycle.sprite = selected;
+        }
       },
+    };
+    const controller = createAvatarStudioController({
+      out: lifecycleOut,
+      selection: createAvatarOutfitSelection({ out: lifecycleOut }),
       onEnter: () => presentation.enter(),
       onChange: (state) => {
         lifecycle.selected = state.selected;

@@ -39,6 +39,15 @@ export {
   validateAvatarSprite,
 } from './avatar-state.js';
 export type { AvatarSpriteKey } from '@strkworld/shared';
+
+// D-053 World-local outfit toggle. One Scene-owned selection and one F
+// binding, shared by the Studio and every fixed room. Cosmetic only: it
+// resolves through pairedAvatarSprite and emits the existing avatar:selected.
+export {
+  createAvatarOutfitSelection,
+  createAvatarOutfitToggleBinding,
+} from './avatar-outfit.js';
+export type { AvatarOutfitSelection, AvatarOutfitToggleBinding } from './avatar-outfit.js';
 export {
   AVATAR_STUDIO_DEFINITION,
   AVATAR_STUDIO_HEIGHT,

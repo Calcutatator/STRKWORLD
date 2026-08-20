@@ -36,9 +36,11 @@ import {
   type AvatarStudioFigureLayer,
 } from '../avatar-studio-figure-layer.js';
 import {
-  createAvatarStudioToggleBinding,
-  type AvatarStudioToggleBinding,
-} from '../avatar-studio-input.js';
+  createAvatarOutfitSelection,
+  createAvatarOutfitToggleBinding,
+  type AvatarOutfitSelection,
+  type AvatarOutfitToggleBinding,
+} from '../avatar-outfit.js';
 import { DEFAULT_AVATAR_SPRITE } from '../avatar-state.js';
 import { createDoorTrigger, type DoorTrigger } from '../door-trigger.js';
 import {
@@ -124,7 +126,8 @@ export function createStreetScene({ Phaser, onTileChanged, remotePeers }: Street
     private activeRoom?: BuildingId;
     private avatarStudio?: AvatarStudioController;
     private avatarStudioPresentation?: AvatarStudioPresentation;
-    private avatarStudioToggleBinding?: AvatarStudioToggleBinding;
+    private avatarOutfit: AvatarOutfitSelection = NOOP_AVATAR_OUTFIT;
+    private avatarOutfitToggle?: AvatarOutfitToggleBinding;
     private avatarStudioActive = false;
     private movement!: StreetMovementAdapter;
     private roomGraphics?: PhaserTypes.GameObjects.Graphics;
@@ -171,6 +174,7 @@ export function createStreetScene({ Phaser, onTileChanged, remotePeers }: Street
         source: remotePeers,
       });
       this.createInput();
+      this.createAvatarOutfit();
       this.createFixedRooms();
       this.createAvatarStudio();
       this.createCamera();
@@ -206,8 +210,9 @@ export function createStreetScene({ Phaser, onTileChanged, remotePeers }: Street
       this.avatarStudioActive = false;
       this.ground = undefined;
       this.avatarVisual = undefined;
-      this.avatarStudioToggleBinding?.destroy();
-      this.avatarStudioToggleBinding = undefined;
+      this.avatarOutfitToggle?.destroy();
+      this.avatarOutfitToggle = undefined;
+      this.avatarOutfit = NOOP_AVATAR_OUTFIT;
       this.avatarStudio?.destroy();
       this.avatarStudio = undefined;
       this.avatarStudioPresentation = undefined;
@@ -316,6 +321,47 @@ export function createStreetScene({ Phaser, onTileChanged, remotePeers }: Street
         }),
       ) as typeof this.wasd;
       this.inputGate = createInputGate(keyboard);
+    }
+
+    /**
+     * One outfit selection and one F binding for the whole Scene (D-053).
+     *
+     * Both are created here, before the rooms and the Studio, because they
+     * share the selection. Buildings and the Studio never own a binding of
+     * their own; if they did, the toggle would work in whichever of them
+     * happened to be active and nowhere else — which is the D-052 behaviour
+     * D-053 replaces.
+     *
+     * Re-running this (a same-instance restart) replaces the binding rather
+     * than adding a second listener.
+     */
+    private createAvatarOutfit(): void {
+      this.avatarOutfitToggle?.destroy();
+      this.avatarOutfitToggle = undefined;
+      this.avatarOutfit = createAvatarOutfitSelection({
+        out: {
+          // The bus is resolved per emit for the reason given on
+          // createDoorTriggers: the registry entry is set in preBoot, and
+          // resolving late keeps this correct if that ordering ever shifts.
+          emit: (event, payload) => {
+            if (event === 'avatar:selected') {
+              this.applyAvatarSprite((payload as WorldEvents['avatar:selected']).sprite);
+            }
+            this.resolveBus()?.out?.emit(event, payload);
+          },
+        },
+      });
+      const keyboard = this.input.keyboard;
+      if (!keyboard) return;
+      this.avatarOutfitToggle = createAvatarOutfitToggleBinding({
+        keyboard,
+        // Playable everywhere the avatar is: outdoors, in the Studio and in a
+        // room. The one thing that silences F is the gate — a panel or a Shell
+        // control claim has the keyboard, and stealing a keystroke back from a
+        // focused input is exactly the bug input-gate.ts exists to prevent.
+        isActive: () => this.inputGate?.suspended !== true,
+        toggle: () => this.avatarOutfit.toggle(),
+      });
     }
 
     private createCamera(): void {
@@ -437,27 +483,14 @@ export function createStreetScene({ Phaser, onTileChanged, remotePeers }: Street
         streetReturn: tileToWorld(this.map.spawn.x, this.map.spawn.y),
         reportStreet: () => this.reportTile(),
       });
-      const out: Pick<EventBus<WorldEvents>, 'emit'> = {
-        emit: (event, payload) => {
-          if (event === 'avatar:selected') {
-            this.applyAvatarSprite((payload as WorldEvents['avatar:selected']).sprite);
-          }
-          bus?.out?.emit(event, payload);
-        },
-      };
       this.avatarStudio = createAvatarStudioController({
-        out,
+        out: { emit: (event, payload) => bus?.out?.emit(event, payload) },
+        selection: this.avatarOutfit,
         onEnter: () => this.enterAvatarStudioRoom(),
         onExit: () => this.exitAvatarStudioRoom(),
         onChange: () => this.renderAvatarStudio(),
         onDestroy: () => this.avatarStudioPresentation?.destroy(),
       });
-      if (this.input.keyboard) {
-        this.avatarStudioToggleBinding = createAvatarStudioToggleBinding({
-          keyboard: this.input.keyboard,
-          toggle: () => this.avatarStudio?.toggleSelectedState(),
-        });
-      }
     }
 
     private resolveBus(): { out: EventBus<WorldEvents>; in: EventBus<ShellEvents> } | undefined {
@@ -557,15 +590,11 @@ export function createStreetScene({ Phaser, onTileChanged, remotePeers }: Street
       this.activeRoom = undefined;
       this.lastTile = { x: -1, y: -1 };
       this.avatarStudioPresentation?.enter();
-      this.avatarStudioToggleBinding?.setActive(
-        this.avatarStudioActive && this.avatarStudio?.state.inRoom === true,
-      );
     }
 
     private exitAvatarStudioRoom(): void {
       this.avatarStudioActive = false;
       this.lastTile = { x: -1, y: -1 };
-      this.avatarStudioToggleBinding?.setActive(false);
       this.avatarStudioPresentation?.exit();
     }
 
@@ -779,6 +808,15 @@ export function createStreetScene({ Phaser, onTileChanged, remotePeers }: Street
     }
   };
 }
+
+/** A destroyed Scene has no outfit to change; keep the field non-optional. */
+const NOOP_AVATAR_OUTFIT: AvatarOutfitSelection = {
+  get selected() {
+    return DEFAULT_AVATAR_SPRITE;
+  },
+  select: () => false,
+  toggle: () => {},
+};
 
 const NOOP_INPUT_GATE: InputGate = {
   suspend: () => {},

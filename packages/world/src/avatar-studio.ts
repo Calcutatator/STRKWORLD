@@ -1,5 +1,6 @@
 import type { AvatarSpriteKey, EventBus, WorldEvents } from '@strkworld/shared';
-import { avatarSpriteForFigure, pairedAvatarSprite } from './avatar-state.js';
+import { avatarSpriteForFigure } from './avatar-state.js';
+import type { AvatarOutfitSelection } from './avatar-outfit.js';
 
 export const AVATAR_STUDIO_TILE_SIZE = 32;
 export const AVATAR_STUDIO_WIDTH = 18;
@@ -52,13 +53,18 @@ export interface AvatarStudioController {
   readonly state: AvatarStudioState;
   enter(): void;
   update(tile: { x: number; y: number }): void;
-  toggleSelectedState(): void;
   destroy(): void;
 }
 
 export interface AvatarStudioControllerOptions {
   readonly definition?: AvatarStudioDefinition;
   readonly out: Pick<EventBus<WorldEvents>, 'emit'>;
+  /**
+   * The Scene's outfit selection (D-053). Required, and deliberately not
+   * defaulted: a Studio that quietly created its own copy would diverge from
+   * the local avatar the moment F was pressed anywhere else.
+   */
+  readonly selection: AvatarOutfitSelection;
   readonly onEnter?: () => void;
   readonly onExit?: () => void;
   readonly onChange?: (state: AvatarStudioState) => void;
@@ -279,18 +285,15 @@ export function createAvatarStudioController(
   const definition = options.definition ?? AVATAR_STUDIO_DEFINITION;
   validateAvatarStudioDefinition(definition);
   let inRoom = false;
-  let selected: AvatarSpriteKey = 'avatar-1';
   let highlightedFigure: number | null = null;
   let destroyed = false;
 
-  const state = (): AvatarStudioState => ({ inRoom, selected, highlightedFigure });
+  const state = (): AvatarStudioState => ({
+    inRoom,
+    selected: options.selection.selected,
+    highlightedFigure,
+  });
   const publish = (): void => options.onChange?.(state());
-  const select = (sprite: AvatarSpriteKey): void => {
-    if (selected === sprite) return;
-    selected = sprite;
-    options.out.emit('avatar:selected', { sprite: selected });
-    publish();
-  };
 
   const leave = (): void => {
     if (!inRoom) return;
@@ -325,11 +328,7 @@ export function createAvatarStudioController(
         highlightedFigure = nextHighlight;
         publish();
       }
-      if (figure) select(figure.sprite);
-    },
-    toggleSelectedState(): void {
-      if (destroyed || !inRoom) return;
-      select(pairedAvatarSprite(selected));
+      if (figure && options.selection.select(figure.sprite)) publish();
     },
     destroy(): void {
       if (destroyed) return;
