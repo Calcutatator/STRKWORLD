@@ -250,6 +250,30 @@ without a verification method is a rumour.
 
 Format: `### YYYY-MM-DD — short title` then what, why it matters, how verified.
 
+### 2026-08-20 — A Bank batch edit owns work started from the older batch
+
+The Menu Mode Bank leaves its explicit Remove and Clear controls available
+while recipient preflight or wallet preparation is pending. Those edits now
+own the batch immediately. A late recipient preflight cannot re-add its
+captured transfer after Clear/Remove, and a late prepared batch is discarded
+instead of reopening review for the pre-edit intent set.
+
+This ownership needs its own version. `attempt` identifies prepare/confirm
+work, `session` identifies the mounted room and `balanceRead` identifies the
+displayed balance; using any one of them for batch composition would cancel an
+unrelated owner. Clear/Remove advance the composition version and invalidate
+the active prepare attempt while leaving signing, unconditional receipt
+retention, panel-close invalidation and balance reads unchanged.
+
+*Verified:* two deferred red/green boundaries use only the public Bank machine:
+Clear during a pending registered-recipient preflight previously re-queued the
+captured transfer, and Clear/Remove during pending prepare previously restored
+the old review after the edit. The focused Bank machine now passes 71 tests.
+The Web suite passes 36 files / 387 tests and the full workspace passes 87
+files / 1,222 tests; workspace typecheck, production build, all 13 invariants
+and diff check pass. The local verification used no browser, external network,
+wallet, RPC, proof, signature, funds or transaction.
+
 ### 2026-08-20 — A late Bridge status response cannot overwrite a newer retained version
 
 `BridgeService.reportDepositTransaction()` and `refresh()` capture the complete

@@ -57,6 +57,15 @@ function quotedCost(panel: BankPanel): bigint {
   return flow.summary.gasEstimate;
 }
 
+/** A promise the test releases, so async ownership is decided without timers. */
+function deferred<T>(): { promise: Promise<T>; resolve: (value: T) => void } {
+  let resolve!: (value: T) => void;
+  const promise = new Promise<T>((complete) => {
+    resolve = complete;
+  });
+  return { promise, resolve };
+}
+
 afterEach(() => {
   vi.useRealTimers();
 });
@@ -403,6 +412,37 @@ describe('bank panel — maturity-aware balance', () => {
 });
 
 describe('bank panel — composing a visit', () => {
+  it('keeps Clear authoritative when a transfer preflight finishes late', async () => {
+    const operations = fake();
+    const preflight = deferred<'registered'>();
+    vi.spyOn(operations, 'recipientStatus')
+      .mockResolvedValueOnce('registered')
+      .mockReturnValueOnce(preflight.promise);
+    const panel = await openPanel(operations);
+    panel.setMode('transfer');
+
+    panel.setRecipient(BOB);
+    panel.setAmount('1');
+    await panel.addToBatch();
+    expect(panel.store.getState().batch).toHaveLength(1);
+
+    panel.setRecipient(BOB);
+    panel.setAmount('2');
+    const adding = panel.addToBatch();
+    expect(panel.store.getState().adding).toBe(true);
+
+    panel.clearBatch();
+    expect(panel.store.getState().batch).toEqual([]);
+    preflight.resolve('registered');
+    await adding;
+
+    expect(panel.store.getState()).toMatchObject({
+      adding: false,
+      batch: [],
+      flow: { name: 'composing' },
+    });
+  });
+
   it('queues several transfers and settles them as one submission', async () => {
     const operations = fake();
     const panel = await openPanel(operations);
@@ -530,6 +570,59 @@ describe('bank panel — composing a visit', () => {
 });
 
 describe('bank panel — prepare and confirm', () => {
+  it('keeps Clear authoritative when preparation finishes late', async () => {
+    const operations = fake();
+    const preparation = deferred<void>();
+    const prepare = operations.prepare.bind(operations);
+    vi.spyOn(operations, 'prepare').mockImplementation(async (intents, signal) => {
+      await preparation.promise;
+      return prepare(intents, signal);
+    });
+    const panel = await openPanel(operations);
+    panel.setAmount('1');
+    await panel.addToBatch();
+
+    const preparing = panel.prepare();
+    expect(panel.store.getState().flow.name).toBe('preparing');
+    panel.clearBatch();
+    expect(panel.store.getState()).toMatchObject({ batch: [], flow: { name: 'composing' } });
+
+    preparation.resolve(undefined);
+    await preparing;
+    expect(panel.store.getState()).toMatchObject({ batch: [], flow: { name: 'composing' } });
+  });
+
+  it('keeps Remove authoritative when preparation finishes late', async () => {
+    const operations = fake();
+    const preparation = deferred<void>();
+    const prepare = operations.prepare.bind(operations);
+    vi.spyOn(operations, 'prepare').mockImplementation(async (intents, signal) => {
+      await preparation.promise;
+      return prepare(intents, signal);
+    });
+    const panel = await openPanel(operations);
+    panel.setMode('transfer');
+    for (const amount of ['1', '2']) {
+      panel.setRecipient(BOB);
+      panel.setAmount(amount);
+      await panel.addToBatch();
+    }
+
+    const preparing = panel.prepare();
+    panel.removeFromBatch(1);
+    expect(panel.store.getState()).toMatchObject({
+      batch: [{ amount: strk('1') }],
+      flow: { name: 'composing' },
+    });
+
+    preparation.resolve(undefined);
+    await preparing;
+    expect(panel.store.getState()).toMatchObject({
+      batch: [{ amount: strk('1') }],
+      flow: { name: 'composing' },
+    });
+  });
+
   it('shows a visible preparing state while the wallet is involved', async () => {
     const operations = fake({ latencyMs: 5 });
     const panel = await openPanel(operations);
