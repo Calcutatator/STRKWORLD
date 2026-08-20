@@ -695,6 +695,24 @@ describe('privacy-safe RPC and operations', () => {
       .toThrow('Backend size and rate limits must be positive integers.');
   });
 
+  it('keeps the validated request deadline when the caller mutates its config', async () => {
+    vi.useFakeTimers();
+    const schedule = vi.spyOn(globalThis, 'setTimeout');
+    try {
+      const { api, config } = fixture({ requestTimeoutMs: 30_000 });
+      config.requestTimeoutMs = 2_147_483_648;
+
+      await expect(api.handle({ method: 'GET', path: '/', body: null }))
+        .resolves.toMatchObject({ status: 405 });
+
+      expect(schedule).toHaveBeenCalledOnce();
+      expect(schedule).toHaveBeenCalledWith(expect.any(Function), 30_000);
+    } finally {
+      schedule.mockRestore();
+      vi.useRealTimers();
+    }
+  });
+
   it('proxies only the fixed pool reads and keeps metrics aggregate', async () => {
     const { api } = fixture();
     await expect(api.handle({ method: 'POST', path: '/v1/rpc/public-key', body: { v: 1, address: '0x456' } }))
