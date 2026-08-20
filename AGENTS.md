@@ -263,21 +263,26 @@ The next gap is not another `App` change. There is no non-test construction of
 `WalletApiPrivacyOperations` anywhere in the repository, no concrete
 `WalletRoutePolicy` instance outside its tests, and the Shell connect machine
 only queries the already-constructed operations object. The production
-bootstrap therefore still lacks a Chain-owned adapter that retains the active
-wallet session/account across connect, disconnect and account changes, builds
-the wallet-backed operations dependencies and supplies the approved route
-policy. Ownership and policy are cross-lane product/architecture choices: this
-finding records the blocker but does **not** select or pre-authorize their
-design. It also does not change D-043: no production Ready public-shield
-planner is exported, and the fee-aware funded gate remains closed.
+bootstrap also passes neither an account nor an account reader to the Bridge
+runtime. D-043 already decides the ownership: the real composition root retains
+the concrete connected Wallet API account alongside `PrivacyOperations`, and
+uses that account for the Bridge's recipient checks. The missing implementation
+must preserve that decision while constructing the wallet-backed operations
+dependencies and supplying the account to both existing seams. What remains
+gated is the cross-lane interface for that lifecycle and the concrete route
+policy, not account ownership. This finding records the blocker but does
+**not** select or pre-authorize either choice. It also does not change D-043:
+no production Ready public-shield planner is exported, and the fee-aware funded
+gate remains closed.
 
 *Verified:* source search at PR #21 merge `6f9dfa6` found the only
 `new WalletApiPrivacyOperations(...)` calls in
 `packages/privacy/src/wallet-api/wallet-api.test.ts`; `main.tsx` mounts `App`
 without `operations`, while the regression in `App.test.tsx` injects a
 `FakePrivacyOperations` through the public prop. The current focused App suite
-passes 2/2 tests. Commit `3753b39` and merge `6f9dfa6` passed all jobs in
-[GitHub Actions run 32383698923](https://github.com/Calcutatator/STRKWORLD/actions/runs/32383698923).
+passes 2/2 tests. PR #21 head `3753b39` passed
+[GitHub Actions run 32383698923](https://github.com/Calcutatator/STRKWORLD/actions/runs/32383698923)
+and was merged as `6f9dfa6`.
 No wallet, account session, network, proof, signature, funds or transaction was
 used.
 
@@ -298,10 +303,11 @@ to use that probe makes the public edge become reachable and exposes the
 regression. Production Fly code did not change; the test now pins the IPC
 ownership boundary without depending on scheduler ordering.
 
-*Verified:* PR #23 commit `c2f59f7` changes only
+*Verified:* PR #23 head `c2f59f7` changes only
 `deploy/fly/src/compose.test.ts`; the current focused file passes 47/47 tests.
-Merge `02e78cc` passed all jobs in
-[GitHub Actions run 32386403965](https://github.com/Calcutatator/STRKWORLD/actions/runs/32386403965).
+That head passed
+[GitHub Actions run 32386403965](https://github.com/Calcutatator/STRKWORLD/actions/runs/32386403965)
+and was merged as `02e78cc`.
 No deployment, external network, secret, wallet, RPC, proof, signature, funds
 or transaction was used.
 
@@ -323,9 +329,10 @@ route policy.
 rejects `2_147_483_648`; a fake-timer regression mutates the caller's config
 after construction and observes the original 30,000 ms timeout. Existing tests
 also disable a route while its submission is queued. The current Backend suite
-passes 5 files / 67 tests. Commits `cc58dee` and `7e36694`, merged as
-`a06145e`, passed all jobs in
-[GitHub Actions run 32385267570](https://github.com/Calcutatator/STRKWORLD/actions/runs/32385267570).
+passes 5 files / 67 tests. Commits `cc58dee` and `7e36694` contain the
+correction. PR #22 head `7e36694` passed
+[GitHub Actions run 32385267570](https://github.com/Calcutatator/STRKWORLD/actions/runs/32385267570)
+and was merged as `a06145e`.
 No provider, credential, wallet, proof, signature, funds or transaction was
 used.
 
@@ -346,8 +353,9 @@ or provider-settled by itself.
 *Verified:* the PR #20 table-driven public-seam regression covers all five import
 classes, checks the exact discard-first error, and proves both retained views
 are unchanged. The current Bridge suite passes 1 file / 55 tests. Commits
-`cf26d2b` and `d1a0517`, merged as `4dc27c4`, passed all jobs in
-[GitHub Actions run 32384585147](https://github.com/Calcutatator/STRKWORLD/actions/runs/32384585147).
+`cf26d2b` and `d1a0517` contain the correction. PR #20 head `d1a0517` passed
+[GitHub Actions run 32384585147](https://github.com/Calcutatator/STRKWORLD/actions/runs/32384585147)
+and was merged as `4dc27c4`.
 No provider request, wallet, proof, signature, funds or transaction was used.
 
 ### 2026-08-20 — A key binding owned by a room works only in that room
