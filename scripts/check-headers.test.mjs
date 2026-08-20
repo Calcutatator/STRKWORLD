@@ -74,6 +74,14 @@ describe('violations that must be caught', () => {
     expect(scanText('deploy/smoke.sh', script).map((violation) => violation.line)).toEqual([2]);
   });
 
+  it('BYPASS: an escaped quote keeps a multiline ANSI-C shell quote open', () => {
+    const script = [
+      `printf '%s' $'safe\\'`,
+      `#still-quoted'; curl --header "${COOP}: same-origin"`,
+    ].join('\n');
+    expect(scanText('deploy/smoke.sh', script).map((violation) => violation.line)).toEqual([2]);
+  });
+
   it('BYPASS: an in-word hash does not hide a later workflow header flag', () => {
     const workflow = `run: echo safe#still-word && curl --header "${COEP}: require-corp"`;
     expect(scanText('.github/workflows/deploy.yml', workflow).map((violation) => violation.line)).toEqual([1]);
@@ -180,6 +188,14 @@ describe('real comments that must stay exempt', () => {
     ['workflow whitespace boundary', '.github/workflows/deploy.yml', `run: echo safe # never set ${COOP}`],
   ])('retains a real %s hash comment', (_label, file, source) => {
     expect(scanText(file, source)).toEqual([]);
+  });
+
+  it('keeps backslashes literal inside an ordinary shell single quote', () => {
+    const script = [
+      `printf '%s' 'safe\\'`,
+      `# never set ${COOP}`,
+    ].join('\n');
+    expect(scanText('deploy/smoke.sh', script)).toEqual([]);
   });
 });
 

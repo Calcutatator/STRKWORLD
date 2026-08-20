@@ -338,11 +338,20 @@ ends the prior word. A multiline quote could therefore put a line-start hash
 inside data and hide an effective directive after its closing quote, while a
 real `;#` comment was falsely scanned as code.
 
+The next exact-head review found one remaining quote-mode collapse. Bash
+ANSI-C strings (`$'…'`) let a backslash escape an embedded single quote, while
+ordinary single quotes treat backslashes literally. The scanner treated both
+as ordinary single quotes, closed its quote at an ANSI-C escaped quote, then
+misread the next line's leading hash as a comment and hid effective code after
+the real closing quote.
+
 Shell quote state now follows physical lines until the matching quote, and an
 unescaped shell control operator opens a real hash-comment boundary. YAML and
 the other hash-comment formats retain their independent start/whitespace rule;
-genuine shell comments at line start or after ordinary whitespace remain
-exempt. Other comment syntaxes and the built-response phase are unchanged.
+ordinary single and ANSI-C quote modes are distinct, so only ANSI-C quoting
+consumes a backslash escape. Genuine shell comments at line start or after
+ordinary whitespace remain exempt. Other comment syntaxes and the
+built-response phase are unchanged.
 
 *Verified:* Bash itself parsed `safe#still-word after` as two ordinary
 arguments. Through the exported `scanText` seam, red-first `.sh` fixtures put a
@@ -356,8 +365,13 @@ lines, and four operator fixtures preserve real comments after `;`, `&`, `&&`
 and `||`; an escaped-operator fixture keeps the boundary rule honest.
 Quote-carry and operator-boundary mutations fail their own cases independently.
 Adjacent fixtures preserve real hash comments at line start and after
-whitespace. The focused header suite passes 37/37 tests, and the full workspace
-passes 89 files / 1,284 tests with two workers. Workspace typecheck,
+whitespace. A final red-first ANSI-C fixture keeps an escaped quote open across
+the physical newline and reports the effective directive on line 2; an
+ordinary-single-quote fixture proves the same backslash remains literal.
+Collapsing ANSI-C back into ordinary single mode fails only the bypass case,
+while giving ordinary single quotes ANSI-C escape behavior fails only the
+preservation case. The focused header suite passes 39/39 tests, and the full
+workspace passes 89 files / 1,286 tests with two workers. Workspace typecheck,
 production build, the complete D-005 static/build/local-preview gate (305
 source files and 30 production responses), all 13 invariants, tilemap and diff
 checks pass. The local checks used only files, child processes and loopback

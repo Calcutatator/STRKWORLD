@@ -185,13 +185,19 @@ export function stripComments(text, syntax) {
           i += 2;
           continue;
         }
-        if (char === quote) quote = null;
+        const closeQuote = quote === 'ansi-c' ? "'" : quote;
+        if (char === closeQuote) quote = null;
         i += 1;
         continue;
       }
 
       if (char === '"' || char === "'" || char === '`') {
-        quote = char;
+        quote = Boolean(
+          syntax.shellHashComments
+          && char === "'"
+          && line[i - 1] === '$'
+          && !isEscaped(line, i - 1)
+        ) ? 'ansi-c' : char;
         code += char;
         i += 1;
         continue;
