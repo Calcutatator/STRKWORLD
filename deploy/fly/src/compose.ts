@@ -1,8 +1,9 @@
 import { spawn, type ChildProcess } from 'node:child_process';
-import { realpath, stat } from 'node:fs/promises';
+import { realpath } from 'node:fs/promises';
 import type { Server } from 'node:http';
-import { isAbsolute, relative, resolve, sep } from 'node:path';
+import { resolve } from 'node:path';
 import { closeEdgeServer, createEdgeServer } from './edge.js';
+import { resolveContainedRegularFile } from './static-file.js';
 
 export interface FlyCompositionOptions {
   readonly staticRoot: string;
@@ -137,14 +138,7 @@ export async function startFlyComposition(
 async function assertStaticShell(staticRoot: string): Promise<void> {
   try {
     const root = await realpath(resolve(staticRoot));
-    const shell = await realpath(resolve(root, 'index.html'));
-    const location = relative(root, shell);
-    if (
-      location === '..' ||
-      location.startsWith(`..${sep}`) ||
-      isAbsolute(location) ||
-      !(await stat(shell)).isFile()
-    ) {
+    if (!(await resolveContainedRegularFile(resolve(root, 'index.html'), root))) {
       throw new Error('invalid shell');
     }
   } catch {

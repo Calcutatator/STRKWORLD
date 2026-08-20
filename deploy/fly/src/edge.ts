@@ -6,8 +6,9 @@ import {
   type ServerResponse,
 } from 'node:http';
 import { createConnection, type Socket } from 'node:net';
-import { realpath, readFile, stat } from 'node:fs/promises';
-import { extname, relative, resolve, sep } from 'node:path';
+import { realpath, readFile } from 'node:fs/promises';
+import { extname, resolve, sep } from 'node:path';
+import { resolveContainedRegularFile } from './static-file.js';
 
 export interface EdgeOptions {
   readonly staticRoot: string;
@@ -359,13 +360,13 @@ async function serveStatic(
 
   let file = resolve(rootReal, relativePath);
   let cacheControl = 'no-cache';
-  const candidate = await safeFile(file, rootReal);
+  const candidate = await resolveContainedRegularFile(file, rootReal);
   if (!candidate) {
     // A path with an extension is an asset request, not a client-side route.
     if (extname(relativePath) !== '') {
       return sendError(response, 404, 'NOT_FOUND', 'The requested resource was not found.');
     }
-    const fallback = await safeFile(resolve(rootReal, 'index.html'), rootReal);
+    const fallback = await resolveContainedRegularFile(resolve(rootReal, 'index.html'), rootReal);
     if (!fallback) return sendError(response, 404, 'NOT_FOUND', 'The requested resource was not found.');
     file = fallback;
   } else {
@@ -396,14 +397,6 @@ function safeRelativePath(pathname: string): string | null {
   const segments = decoded.split('/');
   if (segments.some((segment) => segment === '..')) return null;
   return segments.filter(Boolean).join(sep);
-}
-
-async function safeFile(file: string, root: string): Promise<string | null> {
-  const resolved = await realpath(file).catch(() => null);
-  if (!resolved) return null;
-  const within = resolved === root || resolved.startsWith(`${root}${sep}`);
-  if (!within || !(await stat(resolved).then((entry) => entry.isFile()).catch(() => false))) return null;
-  return resolved;
 }
 
 function proxyHttp(

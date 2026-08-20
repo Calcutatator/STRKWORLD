@@ -246,9 +246,8 @@ describe('Fly composition process boundary', () => {
     const controller = new AbortController();
     const { publicPort, backendPort, lobbyPort } = await ports();
     let childStarts = 0;
-    controller.abort();
 
-    await expect(startFlyComposition({
+    const starting = startFlyComposition({
       staticRoot,
       backendEntry: child,
       lobbyEntry: child,
@@ -261,7 +260,10 @@ describe('Fly composition process boundary', () => {
       startupSignal: controller.signal,
     }, {
       onChildStart: () => { childStarts += 1; },
-    })).rejects.toThrow('startup was aborted');
+    });
+    controller.abort();
+
+    await expect(starting).rejects.toThrow('startup was aborted');
 
     expect(childStarts).toBe(0);
   });
@@ -294,6 +296,54 @@ describe('Fly composition process boundary', () => {
     });
     await childrenStarted;
     await rm(join(staticRoot, 'index.html'));
+
+    try {
+      composition = await starting;
+    } catch (error) {
+      startupError = error;
+    }
+    if (composition) compositions.push(composition);
+
+    expect(childStarts).toBe(2);
+    expect(startupError).toMatchObject({ message: 'Fly static shell is unavailable.' });
+    await expect(fetch(`http://127.0.0.1:${publicPort}/`)).rejects.toThrow();
+    await expect(fetch(`http://127.0.0.1:${backendPort}/`)).rejects.toThrow();
+    await expect(fetch(`http://127.0.0.1:${lobbyPort}/`)).rejects.toThrow();
+  });
+
+  it('rejects a shell replaced by an escaping symlink during private readiness', async () => {
+    const child = await fakeChild();
+    const staticRoot = await fakeStaticRoot();
+    const outsideStaticRoot = await mkdtemp(join(tmpdir(), 'strkworld-replacement-outside-'));
+    const outsideIndex = join(outsideStaticRoot, 'index.html');
+    await writeFile(outsideIndex, '<html>replacement outside shell</html>');
+    directories.push(outsideStaticRoot);
+    const { publicPort, backendPort, lobbyPort } = await ports();
+    let childStarts = 0;
+    let resolveChildrenStarted: (() => void) | undefined;
+    const childrenStarted = new Promise<void>((resolve) => { resolveChildrenStarted = resolve; });
+    let composition: FlyComposition | undefined;
+    let startupError: unknown;
+
+    const starting = startFlyComposition({
+      staticRoot,
+      backendEntry: child,
+      lobbyEntry: child,
+      publicPort,
+      backendPort,
+      lobbyPort,
+      publicOrigin: 'https://game.example',
+      environment: { ...process.env, START_DELAY_MS: '300' },
+      readinessTimeoutMs: 2_000,
+    }, {
+      onChildStart: () => {
+        childStarts += 1;
+        if (childStarts === 2) resolveChildrenStarted?.();
+      },
+    });
+    await childrenStarted;
+    await rm(join(staticRoot, 'index.html'));
+    await symlink(outsideIndex, join(staticRoot, 'index.html'));
 
     try {
       composition = await starting;
