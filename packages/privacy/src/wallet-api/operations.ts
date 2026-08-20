@@ -120,8 +120,15 @@ export class WalletApiPrivacyOperations implements PrivacyOperations {
 
   async prepare(intents: Intent[], signal?: AbortSignal): Promise<PreparedBatch> {
     throwIfAborted(signal);
-    validateIntents(intents, this.policy);
-    const kinds = new Set(intents.map((intent) => intent.kind));
+    // Take ownership before validating, not after. Everything downstream — the
+    // admission checks, the costing, the warnings the player reads, the
+    // published batch and the actions `confirm()` finally proves — reads this
+    // one frozen graph, so there is no window in which the reviewed batch and
+    // the proved batch can differ, and no handle with which a caller could
+    // open one.
+    const reviewed = freezeIntents(intents);
+    validateIntents(reviewed, this.policy);
+    const kinds = new Set(reviewed.map((intent) => intent.kind));
     const hasShield = kinds.has('shield');
     if (hasShield && kinds.size > 1) {
       throw new PrivacyError(
@@ -134,19 +141,19 @@ export class WalletApiPrivacyOperations implements PrivacyOperations {
     }
 
     const config = await this.poolConfig(signal);
-    const warnings = await this.warningsFor(intents, signal);
-    if (hasShield) return this.prepareShield(intents, config, warnings);
+    const warnings = await this.warningsFor(reviewed, signal);
+    if (hasShield) return this.prepareShield(reviewed, config, warnings);
     if (kinds.has('swap')) {
-      if (intents.length !== 1 || intents[0]?.kind !== 'swap') {
+      if (reviewed.length !== 1 || reviewed[0]?.kind !== 'swap') {
         throw new PrivacyError('unknown', 'A private swap must be prepared one at a time.');
       }
-      return this.prepareSwap(intents[0], config, warnings, signal);
+      return this.prepareSwap(reviewed[0], config, warnings, signal);
     }
 
-    const route = intents[0]!.kind as PoolNativeRoute;
-    const operationToken = tokenFor(intents[0]!);
+    const route = reviewed[0]!.kind as PoolNativeRoute;
+    const operationToken = tokenFor(reviewed[0]!);
     const fee = await this.estimateRelay(route, operationToken, config, signal);
-    return this.preparePrivate(intents, route, operationToken, config, fee, warnings);
+    return this.preparePrivate(reviewed, route, operationToken, config, fee, warnings);
   }
 
   private async prepareSwap(
@@ -179,13 +186,21 @@ export class WalletApiPrivacyOperations implements PrivacyOperations {
         'The requested swap floor exceeds AVNU’s protected minimum.',
       );
     }
-    const canonicalIntent = { ...intent, minAmountOut: protectedMinimum };
+    // Frozen because this object is both published on the batch and the sole
+    // authority `assertPreparedSwapActions` recomputes the expected action set
+    // from. A writable published copy would let a caller move the guard's
+    // comparands and the action together, so the guard would confirm the
+    // corruption instead of catching it.
+    const canonicalIntent: Extract<Intent, { kind: 'swap' }> = Object.freeze({
+      ...intent,
+      minAmountOut: protectedMinimum,
+    });
 
     const owner = this;
     let discarded = false;
     let confirmationAttempted = false;
     return {
-      intents: [canonicalIntent],
+      intents: Object.freeze([canonicalIntent]),
       poolFee: config.feeAmount,
       gasEstimate: plan.fee.amount,
       totalCost: config.feeAmount + plan.fee.amount,
@@ -295,7 +310,7 @@ export class WalletApiPrivacyOperations implements PrivacyOperations {
   }
 
   private prepareShield(
-    intents: Intent[],
+    intents: readonly Intent[],
     config: PoolConfig,
     warnings: BatchWarning[],
   ): PreparedBatch {
@@ -304,7 +319,9 @@ export class WalletApiPrivacyOperations implements PrivacyOperations {
     let discarded = false;
     let confirmationAttempted = false;
     return {
-      intents: [...intents],
+      // The frozen snapshot itself, not a copy of it: one owner, so the
+      // published view and the actions built at confirmation cannot diverge.
+      intents,
       poolFee: config.feeAmount,
       gasEstimate: 0n,
       totalCost: config.feeAmount,
@@ -336,7 +353,7 @@ export class WalletApiPrivacyOperations implements PrivacyOperations {
   }
 
   private preparePrivate(
-    intents: Intent[],
+    intents: readonly Intent[],
     route: PoolNativeRoute,
     operationToken: string,
     config: PoolConfig,
@@ -347,7 +364,8 @@ export class WalletApiPrivacyOperations implements PrivacyOperations {
     let discarded = false;
     let confirmationAttempted = false;
     return {
-      intents: [...intents],
+      // The frozen snapshot itself — see prepareShield.
+      intents,
       poolFee: config.feeAmount,
       gasEstimate: feeAtPrepare.amount,
       totalCost: config.feeAmount + feeAtPrepare.amount,
@@ -429,7 +447,7 @@ export class WalletApiPrivacyOperations implements PrivacyOperations {
     }
   }
 
-  private async warningsFor(intents: Intent[], signal?: AbortSignal): Promise<BatchWarning[]> {
+  private async warningsFor(intents: readonly Intent[], signal?: AbortSignal): Promise<BatchWarning[]> {
     const warnings: BatchWarning[] = [];
     for (const intent of intents) {
       if (intent.kind === 'shield') {
@@ -462,7 +480,21 @@ export class WalletApiPrivacyOperations implements PrivacyOperations {
   }
 }
 
-function validateIntents(intents: Intent[], policy: WalletRoutePolicy): void {
+/**
+ * Take exclusive ownership of the intents a caller asked for.
+ *
+ * `Intent` is a flat union of strings and bigints, so freezing each copied
+ * object and the array around them is a full deep freeze — the same reasoning
+ * that makes `copyExecutorCalls` a deep copy at one level. `PreparedBatch`
+ * already declares `readonly Intent[]`, but that modifier is erased at
+ * runtime: without this, the published array held the caller's own objects and
+ * `confirm()` re-read the caller's own array.
+ */
+function freezeIntents(intents: readonly Intent[]): readonly Intent[] {
+  return Object.freeze(intents.map((intent) => Object.freeze({ ...intent })));
+}
+
+function validateIntents(intents: readonly Intent[], policy: WalletRoutePolicy): void {
   if (intents.length === 0) throw new PrivacyError('unknown', 'prepare called with no intents');
   if (intents.length > policy.maxIntents) throw new PrivacyError('unknown', 'Too many intents in one batch.');
   for (const intent of intents) {
@@ -646,7 +678,7 @@ function sameAmount(felt: string, amount: bigint): boolean {
   try { return BigInt(felt) === amount; } catch { return false; }
 }
 
-function toActions(intents: Intent[]): STRK20_ACTION[] {
+function toActions(intents: readonly Intent[]): STRK20_ACTION[] {
   return intents.map((intent): STRK20_ACTION => {
     switch (intent.kind) {
       case 'shield': return { type: 'deposit', token: intent.token, amount: toFelt(intent.amount) };

@@ -250,6 +250,131 @@ without a verification method is a rumour.
 
 Format: `### YYYY-MM-DD — short title` then what, why it matters, how verified.
 
+### 2026-08-20 — A prepared batch must own the intents it was admitted with
+
+`PrivacyOperations.prepare()` is where every admission check lives: the route
+policy and token allowlist, positive amounts, `maxIntents`, recipient
+registration, the D-004 shield/spend separation, and the warnings the player
+reads. All of it was reachable around, because `confirm()` did not own the
+intents it proved.
+
+Two independent leaks, one root cause. The **array**: `prepare(intents)` handed
+its own parameter down to the route builders, whose `confirm()` re-read it at
+confirmation time, so an intent the caller appended afterwards was proved and
+signed — including the shield+transfer pair `prepare` refuses outright, which is
+the exact public-leg link the pool exists to break. The **elements**:
+`intents: [...intents]` is a shallow copy, so the published `readonly Intent[]`
+held the caller's own objects; `readonly` is erased at runtime, so writing a
+field reached `confirm()`.
+
+The swap route was the worst case, not the protected one. Its action-binding
+guard from PR #31 recomputes the expected action set from the canonical intent,
+and that same object was published on the batch — so moving it moved the
+guard's authority and the action together and the guard confirmed the
+corruption. That is the tautology PR #31 avoided one level in, at
+`snapshotExecutorCalls`, reintroduced one level out. The general rule is
+stronger than "don't share an array with the SDK": **an expectation recomputed
+from a published mutable object is not independent of what it checks.** The
+input must be unreachable by anyone who could benefit from moving it, callers
+included.
+
+`prepare()` now takes one frozen snapshot *before* validating, and that snapshot
+is the sole authority for admission, costing, warnings, the published batch and
+the actions built at confirmation. There is no window in which the reviewed
+batch and the proved batch can differ, and no handle with which to open one.
+`FakePrivacyOperations` does the same: a double that grants a freedom
+production does not lets consumer suites go green against behaviour that cannot
+happen. `Intent` is a flat union of strings and bigints, so one level of
+copy-and-freeze is a full deep freeze.
+
+Scope, stated honestly: no exported type, signature or policy changed —
+`PreparedBatch.intents` already declared `readonly`. Today's two Shell call
+sites do not trigger this (`bank-machine.ts` spreads into a throwaway array,
+`exchange-machine.ts` passes an object literal, and every consumer of
+`batch.intents` only reads it), so this was a latent contract defect rather
+than a live exploit. It is still the seam's job: the financial boundary must not
+depend on callers in another package choosing not to write. The identical fix
+already existed one level up in `ReceiptLedger` and one level in at
+`snapshotExecutorCalls`; this was the unbound middle. It does **not** touch the
+open executor identity/admission decision (D-018 vs D-023 vs D-042), and it
+cannot detect a hostile plan — the swap guard remains self-consistency.
+
+*Verified:* red first, all through the public `prepare(...)`/`confirm(...)` seam
+against the package's existing fakes. Before the fix, an appended transfer made
+a prepared shield sign
+`[{deposit 0x1},{transfer 0x14→0x456}]`; an appended unshield made a prepared
+transfer prove an unallowlisted `0xdeadbeef` withdraw to an unchecked `0xbad`;
+writing `amount` on a published shield intent signed
+`0xc9f2c9cd04674edea40000000` instead of the reviewed `0x1`; and on the swap
+route, writing `amountIn` or `tokenIn` moved the sell leg to that amount or
+token with the binding guard passing, using the **real** pinned
+`@avnu/avnu-sdk@4.2.0` `buildStrk20Actions`. The fake recorded `90n` and
+debited 100→10 STRK instead of 100→80. 11 of the 12 new cases failed red; the
+twelfth (append against the fake) passed only because `canonicalizeIntents`
+happened to copy, and it is load-bearing now that the snapshot is the single
+authority.
+
+Independent review then found the fix incomplete in the double, and it was the
+same defect one turn later: `FakePrivacyOperations.prepare()` captured its
+snapshot *after* `await this.tick(...)`. `tick()` is async, so awaiting it
+yields a microtask even at zero latency, and a caller that mutated its own
+array between the unawaited `prepare()` call and the settled promise won that
+race — a shield reviewed at `1n` published `90000000000000000000n`. Production
+was never exposed, because its capture sits after a synchronous
+`throwIfAborted` and before anything awaited. **Taking the snapshot after the
+first await is not taking it at all**, and "the double does what production
+does" has to be checked against production's *ordering*, not just its
+behaviour. Fixed by capturing synchronously, with a red-first timing
+regression; a mirror-isolated mutation moving the capture back below `tick()`
+kills that regression and nothing else.
+
+The real seam is now pinned the same way, closing the residual gap that the
+double's defect exposed: nothing had asserted that production captures
+*synchronously*, so an `await` inserted above its snapshot would have
+reintroduced the same race with every test still green. That pin was green on
+first run — production was already correct — so its teeth come from mutation
+rather than from a red observation: inserting `await Promise.resolve()` above
+the production snapshot fails exactly that one case.
+
+*Local, and issuing no network request of any kind:* `packages/privacy` 7 files
+/ **131** tests (was 6 / 117), full workspace 89 files / **1252** tests,
+workspace typecheck, production build, all 13 invariants, and the header gate's
+30 live production responses, all re-run at the merge `ea25c16`, which contains
+`origin/main` `5be7fd5`. An eight-mutation pass killed 8 of 8,
+each with a distinct failure set, so no clause is redundant: dropping the
+snapshot fails 7 cases; freezing only the array fails 4; freezing only the
+elements fails 2; unfreezing the swap canonical intent fails 3; unfreezing the
+swap published array fails 1; dropping the fake's snapshot fails 2; moving the
+fake's snapshot below its first await fails exactly 1; and delaying the
+production snapshot by one microtask fails exactly 1. That pass carries across
+the syncs below because the four privacy source files are byte-identical from
+`c628150` through `ea25c16`, checked with `git diff`, not assumed. Earlier
+full-workspace figures in this entry's history — 1219 at `e79f34e`, 1226 at
+`c63c9f3`, 1233 at `d675408`, 1234 at `5818105` — were each true of the tree
+they were measured on and are superseded as `main` advanced; the privacy figure
+held at 131 throughout. No wallet, account, provider, RPC, funds, proof,
+signature or
+submission was involved in any local run — the wallet, pool and gateway are
+in-memory doubles, and the only real code exercised is the pinned AVNU action
+builder and `starknet` serialization, both pure. The mutation passes ran in
+throwaway mirrors under a scratch path, never against the live branch files,
+which were checksum-verified unchanged after each.
+
+*Hosted, and the only part of this evidence that touches the network:*
+[GitHub Actions run 32401360829](https://github.com/Calcutatator/STRKWORLD/actions/runs/32401360829)
+succeeded at `8b4f274`, an earlier head of this branch — 88 files / **1225**
+tests, plus the headers, invariants and deployment jobs. Later heads, `ea25c16`
+included, are covered by their own PR runs rather than by this one. Every
+hosted run also executes this repo's standard **Protocol drift canary**, which
+issues **three read-only** JSON-RPC reads of public mainnet state against the
+pool at `latest`: `starknet_call` of `get_fee_amount`,
+`starknet_getClassHashAt`, and `starknet_call` of `is_paused`. PR #41 later
+hardened that gate to fail closed on unknown protocol state and to validate
+each call's response shape; it did not change which three reads are issued, so
+this disclosure still describes them exactly. It is pre-existing CI behaviour
+on every PR, not something this change adds or depends on, and it involves no
+key, viewing key, proof, signature, funds or transaction. Stating the local
+runs as "no RPC" without this distinction was wrong, and is corrected here.
 ### 2026-08-20 — An old Bridge watcher cannot adopt replacement evidence
 
 `BridgeService.refresh()` may validly return provider status for deposit A
