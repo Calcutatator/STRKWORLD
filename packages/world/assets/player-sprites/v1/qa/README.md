@@ -1,8 +1,9 @@
 # Player sprite QA
 
-This evidence covers the independently reviewed D-052 corrected art handoff.
-World runtime integration is committed separately at `5c8c81a`; rendered
-in-game acceptance remains a separate user-owned gate.
+This evidence covers the D-052 corrected art handoff, including the bounded
+character 5/13 cross-facing identity correction. It has passed independent
+orchestration review. World runtime integration remains separately committed
+at `5c8c81a`; this is not a runtime-ready or rendered-acceptance claim.
 
 Checks run over all 16 sheets and all 320 frames:
 
@@ -23,6 +24,10 @@ Checks run over all 16 sheets and all 320 frames:
 - Side-facing idle silhouettes are vertically normalized to each character's
   approved down-facing model; characters 4 and 7 remain large and character 6
   remains the deliberately small female mechanic.
+- `cross-facing-identity.json` checks height, top line, feet line, size class,
+  and the shared down-facing model rule across all 16 keys. The character 5/13
+  side rows are rebuilt from that shared model while retaining the authored
+  direction-specific staff.
 - Deterministic contrast contacts cover black, white, mid-grey, and muted grass.
 - Aseprite inspection verified one `art` layer, 320 frames at 125ms, 16 key tags,
   two slices, and the `(32,56)` pivot. Re-export reconstruction matched all 16

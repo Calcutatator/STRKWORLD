@@ -1,0 +1,654 @@
+{
+  "status": "pass",
+  "gate": "cross-facing-idle-identity",
+  "method": [
+    "mechanical height/top/feet comparison across down, left, right and up idle cells",
+    "transparent contact inspection on mid-grey background",
+    "pair 5/13 side rows rebuilt from the approved down-facing model with the authored side staff retained separately"
+  ],
+  "intentionalSizeClasses": {
+    "small": [
+      "avatar-6",
+      "avatar-14"
+    ],
+    "large": [
+      "avatar-4",
+      "avatar-7",
+      "avatar-12",
+      "avatar-15"
+    ]
+  },
+  "affectedPair": {
+    "character": 5,
+    "cosy": "avatar-5",
+    "fighting": "avatar-13",
+    "sideSource": "shared down-facing model with direction-specific authored staff"
+  },
+  "failures": [],
+  "keys": [
+    {
+      "key": "avatar-1",
+      "character": 1,
+      "state": "cosy",
+      "sizeClass": "normal",
+      "idleBboxes": {
+        "down": [
+          21,
+          21,
+          47,
+          57
+        ],
+        "left": [
+          24,
+          21,
+          42,
+          57
+        ],
+        "right": [
+          24,
+          21,
+          41,
+          57
+        ],
+        "up": [
+          23,
+          21,
+          43,
+          57
+        ]
+      },
+      "idleHeights": {
+        "down": 36,
+        "left": 36,
+        "right": 36,
+        "up": 36
+      },
+      "bodyGuideRule": "vertical identity must remain stable across directions; weapons may widen only the outer contour"
+    },
+    {
+      "key": "avatar-2",
+      "character": 2,
+      "state": "cosy",
+      "sizeClass": "normal",
+      "idleBboxes": {
+        "down": [
+          19,
+          21,
+          44,
+          57
+        ],
+        "left": [
+          19,
+          21,
+          46,
+          57
+        ],
+        "right": [
+          18,
+          21,
+          45,
+          57
+        ],
+        "up": [
+          19,
+          21,
+          44,
+          57
+        ]
+      },
+      "idleHeights": {
+        "down": 36,
+        "left": 36,
+        "right": 36,
+        "up": 36
+      },
+      "bodyGuideRule": "vertical identity must remain stable across directions; weapons may widen only the outer contour"
+    },
+    {
+      "key": "avatar-3",
+      "character": 3,
+      "state": "cosy",
+      "sizeClass": "normal",
+      "idleBboxes": {
+        "down": [
+          18,
+          19,
+          46,
+          57
+        ],
+        "left": [
+          20,
+          19,
+          48,
+          57
+        ],
+        "right": [
+          16,
+          19,
+          44,
+          57
+        ],
+        "up": [
+          18,
+          19,
+          46,
+          57
+        ]
+      },
+      "idleHeights": {
+        "down": 38,
+        "left": 38,
+        "right": 38,
+        "up": 38
+      },
+      "bodyGuideRule": "vertical identity must remain stable across directions; weapons may widen only the outer contour"
+    },
+    {
+      "key": "avatar-4",
+      "character": 4,
+      "state": "cosy",
+      "sizeClass": "large",
+      "idleBboxes": {
+        "down": [
+          10,
+          9,
+          55,
+          57
+        ],
+        "left": [
+          22,
+          9,
+          48,
+          57
+        ],
+        "right": [
+          17,
+          9,
+          43,
+          57
+        ],
+        "up": [
+          13,
+          9,
+          51,
+          57
+        ]
+      },
+      "idleHeights": {
+        "down": 48,
+        "left": 48,
+        "right": 48,
+        "up": 48
+      },
+      "bodyGuideRule": "vertical identity must remain stable across directions; weapons may widen only the outer contour"
+    },
+    {
+      "key": "avatar-5",
+      "character": 5,
+      "state": "cosy",
+      "sizeClass": "normal",
+      "idleBboxes": {
+        "down": [
+          20,
+          19,
+          44,
+          57
+        ],
+        "left": [
+          21,
+          19,
+          40,
+          57
+        ],
+        "right": [
+          24,
+          19,
+          43,
+          57
+        ],
+        "up": [
+          20,
+          19,
+          44,
+          57
+        ]
+      },
+      "idleHeights": {
+        "down": 38,
+        "left": 38,
+        "right": 38,
+        "up": 38
+      },
+      "bodyGuideRule": "vertical identity must remain stable across directions; weapons may widen only the outer contour"
+    },
+    {
+      "key": "avatar-6",
+      "character": 6,
+      "state": "cosy",
+      "sizeClass": "small",
+      "idleBboxes": {
+        "down": [
+          21,
+          27,
+          44,
+          57
+        ],
+        "left": [
+          25,
+          27,
+          43,
+          57
+        ],
+        "right": [
+          23,
+          27,
+          40,
+          57
+        ],
+        "up": [
+          19,
+          27,
+          40,
+          57
+        ]
+      },
+      "idleHeights": {
+        "down": 30,
+        "left": 30,
+        "right": 30,
+        "up": 30
+      },
+      "bodyGuideRule": "vertical identity must remain stable across directions; weapons may widen only the outer contour"
+    },
+    {
+      "key": "avatar-7",
+      "character": 7,
+      "state": "cosy",
+      "sizeClass": "large",
+      "idleBboxes": {
+        "down": [
+          10,
+          10,
+          54,
+          57
+        ],
+        "left": [
+          23,
+          10,
+          52,
+          57
+        ],
+        "right": [
+          12,
+          10,
+          42,
+          57
+        ],
+        "up": [
+          12,
+          10,
+          52,
+          57
+        ]
+      },
+      "idleHeights": {
+        "down": 47,
+        "left": 47,
+        "right": 47,
+        "up": 47
+      },
+      "bodyGuideRule": "vertical identity must remain stable across directions; weapons may widen only the outer contour"
+    },
+    {
+      "key": "avatar-8",
+      "character": 8,
+      "state": "cosy",
+      "sizeClass": "normal",
+      "idleBboxes": {
+        "down": [
+          21,
+          17,
+          43,
+          57
+        ],
+        "left": [
+          21,
+          17,
+          45,
+          57
+        ],
+        "right": [
+          19,
+          17,
+          43,
+          57
+        ],
+        "up": [
+          21,
+          17,
+          43,
+          57
+        ]
+      },
+      "idleHeights": {
+        "down": 40,
+        "left": 40,
+        "right": 40,
+        "up": 40
+      },
+      "bodyGuideRule": "vertical identity must remain stable across directions; weapons may widen only the outer contour"
+    },
+    {
+      "key": "avatar-9",
+      "character": 1,
+      "state": "fighting",
+      "sizeClass": "normal",
+      "idleBboxes": {
+        "down": [
+          19,
+          21,
+          50,
+          57
+        ],
+        "left": [
+          19,
+          21,
+          43,
+          57
+        ],
+        "right": [
+          23,
+          21,
+          46,
+          57
+        ],
+        "up": [
+          20,
+          21,
+          55,
+          57
+        ]
+      },
+      "idleHeights": {
+        "down": 36,
+        "left": 36,
+        "right": 36,
+        "up": 36
+      },
+      "bodyGuideRule": "vertical identity must remain stable across directions; weapons may widen only the outer contour"
+    },
+    {
+      "key": "avatar-10",
+      "character": 2,
+      "state": "fighting",
+      "sizeClass": "normal",
+      "idleBboxes": {
+        "down": [
+          19,
+          21,
+          54,
+          57
+        ],
+        "left": [
+          12,
+          21,
+          52,
+          57
+        ],
+        "right": [
+          12,
+          21,
+          52,
+          57
+        ],
+        "up": [
+          19,
+          21,
+          54,
+          57
+        ]
+      },
+      "idleHeights": {
+        "down": 36,
+        "left": 36,
+        "right": 36,
+        "up": 36
+      },
+      "bodyGuideRule": "vertical identity must remain stable across directions; weapons may widen only the outer contour"
+    },
+    {
+      "key": "avatar-11",
+      "character": 3,
+      "state": "fighting",
+      "sizeClass": "normal",
+      "idleBboxes": {
+        "down": [
+          18,
+          19,
+          55,
+          57
+        ],
+        "left": [
+          13,
+          19,
+          54,
+          57
+        ],
+        "right": [
+          10,
+          19,
+          51,
+          57
+        ],
+        "up": [
+          18,
+          19,
+          55,
+          57
+        ]
+      },
+      "idleHeights": {
+        "down": 38,
+        "left": 38,
+        "right": 38,
+        "up": 38
+      },
+      "bodyGuideRule": "vertical identity must remain stable across directions; weapons may widen only the outer contour"
+    },
+    {
+      "key": "avatar-12",
+      "character": 4,
+      "state": "fighting",
+      "sizeClass": "large",
+      "idleBboxes": {
+        "down": [
+          8,
+          9,
+          63,
+          57
+        ],
+        "left": [
+          18,
+          9,
+          52,
+          57
+        ],
+        "right": [
+          6,
+          9,
+          50,
+          57
+        ],
+        "up": [
+          13,
+          9,
+          58,
+          57
+        ]
+      },
+      "idleHeights": {
+        "down": 48,
+        "left": 48,
+        "right": 48,
+        "up": 48
+      },
+      "bodyGuideRule": "vertical identity must remain stable across directions; weapons may widen only the outer contour"
+    },
+    {
+      "key": "avatar-13",
+      "character": 5,
+      "state": "fighting",
+      "sizeClass": "normal",
+      "idleBboxes": {
+        "down": [
+          12,
+          19,
+          46,
+          57
+        ],
+        "left": [
+          13,
+          19,
+          42,
+          57
+        ],
+        "right": [
+          25,
+          19,
+          51,
+          57
+        ],
+        "up": [
+          12,
+          19,
+          46,
+          57
+        ]
+      },
+      "idleHeights": {
+        "down": 38,
+        "left": 38,
+        "right": 38,
+        "up": 38
+      },
+      "bodyGuideRule": "vertical identity must remain stable across directions; weapons may widen only the outer contour"
+    },
+    {
+      "key": "avatar-14",
+      "character": 6,
+      "state": "fighting",
+      "sizeClass": "small",
+      "idleBboxes": {
+        "down": [
+          22,
+          27,
+          57,
+          57
+        ],
+        "left": [
+          11,
+          27,
+          42,
+          57
+        ],
+        "right": [
+          25,
+          27,
+          53,
+          57
+        ],
+        "up": [
+          22,
+          27,
+          48,
+          57
+        ]
+      },
+      "idleHeights": {
+        "down": 30,
+        "left": 30,
+        "right": 30,
+        "up": 30
+      },
+      "bodyGuideRule": "vertical identity must remain stable across directions; weapons may widen only the outer contour"
+    },
+    {
+      "key": "avatar-15",
+      "character": 7,
+      "state": "fighting",
+      "sizeClass": "large",
+      "idleBboxes": {
+        "down": [
+          9,
+          9,
+          63,
+          57
+        ],
+        "left": [
+          2,
+          9,
+          49,
+          57
+        ],
+        "right": [
+          15,
+          9,
+          62,
+          57
+        ],
+        "up": [
+          1,
+          9,
+          50,
+          57
+        ]
+      },
+      "idleHeights": {
+        "down": 48,
+        "left": 48,
+        "right": 48,
+        "up": 48
+      },
+      "bodyGuideRule": "vertical identity must remain stable across directions; weapons may widen only the outer contour"
+    },
+    {
+      "key": "avatar-16",
+      "character": 8,
+      "state": "fighting",
+      "sizeClass": "normal",
+      "idleBboxes": {
+        "down": [
+          22,
+          17,
+          58,
+          57
+        ],
+        "left": [
+          6,
+          17,
+          52,
+          57
+        ],
+        "right": [
+          12,
+          17,
+          58,
+          57
+        ],
+        "up": [
+          22,
+          17,
+          58,
+          57
+        ]
+      },
+      "idleHeights": {
+        "down": 40,
+        "left": 40,
+        "right": 40,
+        "up": 40
+      },
+      "bodyGuideRule": "vertical identity must remain stable across directions; weapons may widen only the outer contour"
+    }
+  ]
+}

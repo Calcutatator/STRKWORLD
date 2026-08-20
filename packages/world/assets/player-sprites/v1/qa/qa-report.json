@@ -1,6 +1,6 @@
 {
   "contract": "D-052",
-  "status": "integrated-and-independently-reviewed-awaiting-rendered-acceptance",
+  "status": "independently-reviewed-awaiting-rendered-acceptance",
   "frameSize": [
     64,
     64
@@ -1806,7 +1806,7 @@
           "highLumaBoundaryPixels": 0
         }
       ],
-      "sha256": "592cefdba83eddd32215ad40e8cc7b2aaf0fee47e7401eece5737192d45bd5ba"
+      "sha256": "39510a379b3c35486df27c335f7ad582f967c7f0636f9a1daeabbbaac2fb0866"
     },
     "avatar-6": {
       "dimensions": [
@@ -4638,7 +4638,7 @@
           "highLumaBoundaryPixels": 0
         }
       ],
-      "sha256": "facb037afa51c8617d070af556016d5ebba9d7639447216edc3c6201adcd165e"
+      "sha256": "c0f2a825c63e0f574de0d5bb5197bc2a21fe7e0d75f56b298e16dd58732150d9"
     },
     "avatar-14": {
       "dimensions": [

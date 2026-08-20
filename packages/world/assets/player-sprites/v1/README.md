@@ -1,10 +1,12 @@
 # STRKWORLD player sprites v1
 
 This directory is the D-052 art handoff for the eight paired player-character
-designs. Commit `8e92cfa` is independently reviewed and commit `5c8c81a`
-integrates its five-column contract into World. Rendered in-game acceptance
-remains user-owned and pending. The older `v1-review/` directory remains the
-historical review and generation-provenance record.
+designs. The bounded character 5/13 cross-facing identity correction has
+passed independent orchestration review. Commit `5c8c81a` integrates the
+unchanged five-column contract into World. Rendered in-game acceptance remains
+user-owned and pending; this art handoff is not a runtime-ready or rendered
+acceptance claim. The older `v1-review/` directory remains the historical
+review and generation-provenance record.
 
 ## Files
 
@@ -13,7 +15,8 @@ historical review and generation-provenance record.
 - `source/player-sprites.aseprite` is the editable 320-frame source.
 - `manifest.json` is the runtime-neutral asset contract and pair mapping.
 - `qa/` contains mechanical reports, four-background evidence, a complete
-  movement contact, and one animated preview per paired character.
+  movement contact, one animated preview per paired character, and the
+  cross-facing identity gate.
 
 ## Sheet contract
 
@@ -37,6 +40,12 @@ No frame contains a baked shadow. If World adds a shadow, it should render one
 consistent runtime-owned shadow behind every local, remote, and Studio avatar.
 
 ## Character checks
+
+The corrected character 5/13 side-facing cells are rebuilt from their shared
+approved down-facing models; the fighting staff remains a separate authored
+side prop and is connected to the hand. No runtime row or frame mapping was
+changed. The correction is not runtime-ready until orchestration independently
+reviews the complete handoff.
 
 - Characters 4 and 7 remain the two deliberately large silhouettes in both
   states and all facings.

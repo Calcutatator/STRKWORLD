@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "status": "integrated-and-independently-reviewed-awaiting-rendered-acceptance",
+  "status": "independently-reviewed-awaiting-rendered-acceptance",
   "approvedContract": "D-052",
   "sheet": {
     "filePattern": "avatar-{key}.png",
@@ -73,6 +73,7 @@
   },
   "qa": {
     "report": "qa/qa-report.json",
+    "crossFacingIdentity": "qa/cross-facing-identity.json",
     "asepriteRoundTrip": "qa/aseprite-roundtrip.json",
     "sourceInspection": "qa/source-inspection.json",
     "backgroundReadability": "qa/background-readability.png",
