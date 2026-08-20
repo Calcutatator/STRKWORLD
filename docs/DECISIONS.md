@@ -2169,9 +2169,14 @@ The fixed feet point remains **(32, 56)** and the authoritative local and
 Studio contact bodies remain **24x24**. Vertical rows must move the legs along
 the depth/y axis with hip continuity; side rows must move them along the x
 axis. Every cycle keeps at least one foot planted on the baseline and may not
-introduce new white or bright edge contamination. Source frames still contain
-no baked shadow. The sixteen-key mapping, World-local resolver, wire shape,
-privacy boundary and financial semantics remain unchanged.
+introduce new white or bright edge contamination. Every frame must also reject
+accidental transparent holes or narrow channels through the expected body,
+pelvis, limbs, clothing, hair or weapon joins; one connected opaque component
+is not sufficient evidence of anatomical continuity. Intentional negative
+space must remain stable, anatomically readable and explicitly reviewed.
+Source frames still contain no baked shadow. The sixteen-key mapping,
+World-local resolver, wire shape, privacy boundary and financial semantics
+remain unchanged.
 The file topology also remains one sheet per opaque key with no mega-atlas;
 the existing `v1-review/` provenance is not overwritten.
 

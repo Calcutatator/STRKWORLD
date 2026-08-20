@@ -250,6 +250,31 @@ without a verification method is a rumour.
 
 Format: `### YYYY-MM-DD — short title` then what, why it matters, how verified.
 
+### 2026-08-20 — A connected sprite mask can still contain an anatomy hole
+
+The rear-facing `avatar-1` art has a transparent channel through the middle of
+the legs/crotch that reads in-game as deleted pixels. Existing component,
+baseline and bounds checks did not reject it because the remaining body is one
+connected opaque component and the bad gap is connected to exterior
+transparency rather than forming an enclosed island.
+
+D-052 QA must therefore reject accidental transparent pinholes and narrow
+channels through hair, torso, coat/skirt, pelvis, limbs, boots, hands and
+weapon joins. Flood-filled interior-hole detection is necessary but not
+sufficient: compare body masks with the approved turnaround guides, preserve
+required shoulder-to-hand and pelvis-to-foot opaque corridors, scan 1–2 px
+channels through the expected body envelope, and inspect enlarged silhouettes
+plus repeated motion on contrasting backgrounds. Only stable, anatomically
+readable intentional negative space may be explicitly whitelisted.
+
+*Verified:* James supplied an in-game rear-view screenshot showing the missing
+leg pixels; direct inspection of the committed `avatar-1.png` up-facing cells
+reproduced the same transparent channel. World renders the authored alpha from
+that facing row without direction-specific scaling or masking. No runtime,
+wire, collision or privacy behavior is involved.
+
+---
+
 ### 2026-08-20 — Fighting-state input is owned only by the active Avatar Studio
 
 The approved `F` action is a World-local Studio control. The Studio controller

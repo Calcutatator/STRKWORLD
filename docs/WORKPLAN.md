@@ -543,10 +543,13 @@ body and Studio contact footprint remain 24×24. D-052 replaces the movement
 handoff with 320×256 sheets, five columns per facing and 320 total Aseprite
 frames; vertical rows preserve hip/depth continuity, side rows move along x,
 each cycle keeps a planted baseline foot and no new bright edge contamination.
-The final source remains one sheet per opaque key rather than a mega-atlas, and
-source pixels contain no shadow. F is a Studio-only one-press, no-repeat toggle
-through the existing opaque key. Background and fresh in-game review are
-required before acceptance.
+Reject accidental transparent pinholes or narrow channels through the expected
+body, pelvis, limbs, clothing, hair and weapon joins even when the remaining
+pixels form one connected component; only reviewed, anatomically readable
+negative space is allowed. The final source remains one sheet per opaque key
+rather than a mega-atlas, and source pixels contain no shadow. F is a
+Studio-only one-press, no-repeat toggle through the existing opaque key.
+Background and fresh in-game review are required before acceptance.
 
 **Frozen first-room asset contract (D-033 tracer):** the procedural Bank is an
 18×12 grid of 32 px tiles (576×384 px), with a one-tile perimeter, spawn at
