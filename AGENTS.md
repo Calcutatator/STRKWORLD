@@ -250,6 +250,61 @@ without a verification method is a rumour.
 
 Format: `### YYYY-MM-DD — short title` then what, why it matters, how verified.
 
+### 2026-08-20 — A Bank batch edit owns work started from the older batch
+
+The Menu Mode Bank leaves its explicit Remove and Clear controls available
+while recipient preflight or wallet preparation is pending. Those edits now
+own the batch immediately. A late recipient preflight cannot re-add its
+captured transfer after Clear/Remove, and a late prepared batch is discarded
+instead of reopening review for the pre-edit intent set.
+
+This ownership needs its own version. `attempt` identifies prepare/confirm
+work, `session` identifies the mounted room and `balanceRead` identifies the
+displayed balance; using any one of them for batch composition would cancel an
+unrelated owner. Clear/Remove advance the composition version and invalidate
+the active prepare attempt while leaving signing, unconditional receipt
+retention, panel-close invalidation and balance reads unchanged.
+
+*Verified:* deferred red/green tests use only the public Bank machine. Clear
+during pending registered-recipient preflight previously re-queued the captured
+transfer; Clear/Remove during pending prepare previously restored old review.
+The returned stale batches now reject confirmation as discarded, and late
+successful or rejected preflights after Remove/Clear cannot publish batch,
+form, notice or provider-error state. Three isolated mutations are killed:
+removing stale-batch `discard()`, removing the rejected-preflight composition
+guard, and removing Remove's composition increment. The focused Bank machine
+passes 74 tests, the Web suite passes 36 files / 390 tests and the full
+workspace passes 87 files / 1,226 tests; workspace typecheck, production build,
+all 13 invariants and diff check pass. The local verification used no browser,
+external network, wallet, RPC, proof, signature, funds or transaction.
+
+### 2026-08-20 — A local Lobby leave does not own its replacement room
+
+`LobbyClient.disconnect()` clears the current room before awaiting the SDK's
+`leave()`, and the client is deliberately reusable: an explicit `connect()` may
+therefore establish replacement room B while old room A is still leaving. A
+client-wide `leavingByRequest` flag previously remained true for that whole
+await. If B's transport dropped in the meantime, B's current `onLeave` mistook
+the drop for A's requested leave, cleared B and its identity but suppressed the
+`closed/server-dropped` transition. The public client then reported
+`connected` while owning no room, so the Shell could not offer truthful solo
+mode or its explicit reconnect control.
+
+Local-leave classification now follows room ownership instead of one mutable
+client-wide flag. `disconnect()` already removes A from `#room` synchronously,
+so A's eventual callback is stale under the existing complete
+generation-and-room check. Any callback that still owns the current room is an
+external close and publishes `closed/server-dropped` with its close code. Join
+payloads, presence state, automatic-reconnect policy and network behavior are
+unchanged.
+
+*Verified:* a public-seam regression connects A, defers A's `leave()`, connects
+B, then drops B with code 1006 before allowing A to finish. The old code leaves
+the client `connected`; green reports exactly `closed/server-dropped` with code
+1006. The current Lobby suite passes 9 files / 192 tests. Local verification
+used only fake rooms plus the suite's local loopback server; no browser, remote
+lobby, wallet, RPC, proof, signature, funds or transaction was used.
+
 ### 2026-08-20 — A prepared batch must own the intents it was admitted with
 
 `PrivacyOperations.prepare()` is where every admission check lives: the route
@@ -441,34 +496,6 @@ proof, signature, funds or transaction. Hosted CI's standard canary remains
 read-only and issues two public-mainnet `starknet_call` reads plus one
 `starknet_getClassHashAt` at `latest`; it uses no key, signature, proof, funds
 or transaction.*
-
-### 2026-08-20 — A Bank batch edit owns work started from the older batch
-
-The Menu Mode Bank leaves its explicit Remove and Clear controls available
-while recipient preflight or wallet preparation is pending. Those edits now
-own the batch immediately. A late recipient preflight cannot re-add its
-captured transfer after Clear/Remove, and a late prepared batch is discarded
-instead of reopening review for the pre-edit intent set.
-
-This ownership needs its own version. `attempt` identifies prepare/confirm
-work, `session` identifies the mounted room and `balanceRead` identifies the
-displayed balance; using any one of them for batch composition would cancel an
-unrelated owner. Clear/Remove advance the composition version and invalidate
-the active prepare attempt while leaving signing, unconditional receipt
-retention, panel-close invalidation and balance reads unchanged.
-
-*Verified:* deferred red/green tests use only the public Bank machine. Clear
-during pending registered-recipient preflight previously re-queued the captured
-transfer; Clear/Remove during pending prepare previously restored old review.
-The returned stale batches now reject confirmation as discarded, and late
-successful or rejected preflights after Remove/Clear cannot publish batch,
-form, notice or provider-error state. Three isolated mutations are killed:
-removing stale-batch `discard()`, removing the rejected-preflight composition
-guard, and removing Remove's composition increment. The focused Bank machine
-passes 74 tests, the Web suite passes 36 files / 390 tests and the full
-workspace passes 87 files / 1,226 tests; workspace typecheck, production build,
-all 13 invariants and diff check pass. The local verification used no browser,
-external network, wallet, RPC, proof, signature, funds or transaction.
 
 ### 2026-08-20 — A late Bridge status response cannot overwrite a newer retained version
 
