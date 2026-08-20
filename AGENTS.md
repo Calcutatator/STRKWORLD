@@ -385,6 +385,17 @@ wire, collision or privacy behavior is involved.
 
 ### 2026-08-20 — Fighting-state input is owned only by the active Avatar Studio
 
+**SUPERSEDED for scope by D-053 and by the newer 2026-08-20 finding "A key
+binding owned by a room works only in that room".** `F` is no longer owned by
+Avatar Studio: `StreetScene` owns one selection and one listener for the whole
+Scene. Read the paragraph below as the historical D-052 arrangement and the
+reason it had to change, not as current behavior. What still holds and is still
+enforced: the `pairedAvatarSprite()` resolution, the unchanged `avatar:selected`
+event, figure contact selecting a cosy `avatar-1..8` state, the repeat and
+input/textarea/select/content-editable guards, and a destroyed binding
+rejecting an already-captured late handler. The verification recorded at the
+end of this entry stands as of the commit it names.
+
 The approved `F` action is a World-local Studio control. The Studio controller
 switches its selected opaque key with `pairedAvatarSprite()` and emits the
 existing `avatar:selected` event; contacting one of the eight figures still
