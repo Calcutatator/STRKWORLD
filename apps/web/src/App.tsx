@@ -1,4 +1,5 @@
 import type { EventBus, ShellEvents, WorldEvents } from '@strkworld/shared';
+import type { PrivacyOperations } from '@strkworld/privacy';
 import { COPY } from './copy.js';
 import { ErrorBoundary } from './ErrorBoundary.js';
 import { PrivacyProvider } from './privacy/PrivacyProvider.js';
@@ -25,21 +26,24 @@ import { BridgeProvider, type BridgeProviderProps } from './bridge/BridgeProvide
  * direction each, which is the whole point of two buses rather than one
  * (D-010).
  *
- * `demo` is deliberate: v1 has no live wallet adapter wired yet, so the shell
- * runs against the deterministic fake. That path refuses to load in a
- * production build (`PrivacyProvider`, `build-context`), so a served production
- * bundle shows the "not wired yet" surface rather than a practice balance —
- * the bundle still builds, it just declines to invent money.
+ * The local entry point supplies no `operations`, so it runs against the
+ * deterministic fake. A production host injects its `PrivacyOperations` here;
+ * the demo remains explicit and refuses to load in a production build
+ * (`PrivacyProvider`, `build-context`). A mis-wired production bundle therefore
+ * shows the "not wired yet" surface rather than a practice balance.
  */
 export function App({
   worldOut,
   shellIn,
   presence,
   bridge,
+  operations,
 }: {
   worldOut: EventBus<WorldEvents>;
   shellIn: EventBus<ShellEvents>;
   presence: PresenceController;
+  /** Real composition supplies the frozen financial seam as one dependency. */
+  operations?: PrivacyOperations;
   /** Real composition supplies the service, account reader and planner together. */
   bridge?: Omit<BridgeProviderProps, 'children' | 'demo' | 'fallback' | 'build'>;
 }) {
@@ -47,7 +51,7 @@ export function App({
   // listeners; the controller is destroyed by the composition root's owner.
   return (
     <ErrorBoundary fallback={(message) => <BootFailure message={message} />}>
-      <PrivacyProvider demo shellBus={shellIn} fallback={<Boot />}>
+      <PrivacyProvider operations={operations} demo={!operations} shellBus={shellIn} fallback={<Boot />}>
         <BridgeProvider {...bridge} demo={!bridge}>
           <main className="strkworld">
             <WorldHost out={worldOut} in={shellIn} remotePeers={presence.remotePeers} />
