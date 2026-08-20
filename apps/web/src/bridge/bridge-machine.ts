@@ -454,6 +454,10 @@ export function createBridgePanel(options: BridgePanelOptions): BridgePanel {
         }
         if (!planValid(plan, review.minimumAmountOut, recipient)) throw new Error('invalid plan');
         const afterPlan = await account();
+        if (flight.cancelled || !live(id, currentSession)) {
+          cleanupCancelledQuote(record, flight);
+          return;
+        }
         const latest = recordAndReview();
         if (!afterPlan || !sameAddress(afterPlan, record.starknetRecipient)) {
           patch({ record: latest.record ?? record, quote: latest.review ?? review, preflightAvailable: false, account: afterPlan, accountMatchesRecord: false, instructionsVisible: false });

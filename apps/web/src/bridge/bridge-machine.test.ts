@@ -226,6 +226,39 @@ describe('Bridge shell machine', () => {
     expect(h.machine.store.getState().flow).toMatchObject({ name: 'failed', message: COPY.bridge.accountChanged });
   });
 
+  it('does not publish a quote after close while the final account check is pending', async () => {
+    let reads = 0;
+    let releaseFinalAccount!: (value: string | null) => void;
+    const finalAccountPending = new Promise<string | null>((resolve) => {
+      releaseFinalAccount = resolve;
+    });
+    const planner: PublicShieldPlanner = {
+      planMax: vi.fn(async ({ available }: PublicShieldPlanInput) => plan(available)),
+    };
+    const h = harness(null, planner, {
+      now: () => Date.parse('2030-01-01T00:00:00.000Z'),
+      readAccount: () => (++reads < 3 ? ACCOUNT : finalAccountPending),
+    });
+
+    const quoting = h.machine.createQuote({
+      source: SOURCE,
+      amountIn: 1_000_000n,
+      refundAddress: '0x1111111111111111111111111111111111111111',
+    });
+    await vi.waitFor(() => expect(reads).toBe(3));
+
+    h.machine.close();
+    const closedState = h.machine.store.getState();
+    releaseFinalAccount(ACCOUNT);
+    await quoting;
+
+    expect(h.machine.store.getState()).toEqual(closedState);
+    expect(h.machine.store.getState().instructionsVisible).toBe(false);
+    expect(h.machine.store.getState().plan).toBeNull();
+    expect(h.service.discard).toHaveBeenCalledOnce();
+    expect(h.saved).toBeNull();
+  });
+
   it('rechecks the active account after saved preflight planning', async () => {
     let reads = 0;
     let release!: () => void;

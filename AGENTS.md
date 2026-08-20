@@ -250,6 +250,35 @@ without a verification method is a rumour.
 
 Format: `### YYYY-MM-DD — short title` then what, why it matters, how verified.
 
+### 2026-08-20 — A closed Bridge panel owns its final account check
+
+Bridge quote creation checks the active account before requesting a signed
+provider quote, after that quote, and after planning the exact public shield.
+The third check previously had no ownership checkpoint after its `await`. If
+the panel closed while that read was pending, `close()` cancelled the quote
+flight and advanced both session and attempt, but the late continuation still
+published the shield plan, provider-fee notice and deposit instructions into
+the closed panel. It also skipped the existing cancelled-quote cleanup, leaving
+the just-saved signed record held by the service.
+
+The final account read now has the same flight/session ownership check as the
+earlier async boundaries. A cancelled or stale continuation runs the existing
+signed-evidence cleanup and returns before rereading service state or publishing
+instructions. Quote contents, planner policy, account validation, import and
+discard precedence, and the public Bridge interface are unchanged.
+
+*Verified:* a public `createBridgePanel()` regression returns the active account
+for the first two checks and defers the third. It closes the panel while that
+last read is pending, then resolves the same account. Red published
+`instructionsVisible: true`, the shield plan and provider-fee notice instead of
+preserving the closed snapshot; green preserves it, discards the cancelled
+signed quote exactly once and leaves no saved record. The focused Bridge suite
+passes 1 file / 37 tests, the Web suite passes 37 files / 397 tests and a
+one-worker full workspace run passes 89 files / 1,270 tests. Workspace
+typecheck, production build, all 13 invariants and diff hygiene pass. The
+behavioral checks use only in-memory test doubles: no browser, external
+network, wallet, RPC, proof, signature, funds or transaction was used.*
+
 ### 2026-08-20 — A fixed-room station snapshot cannot grant itself admission
 
 `createFixedRoomController()` publishes its current station presentation through
