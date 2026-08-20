@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import type { AvatarSpriteKey, WorldEvents } from '@strkworld/shared';
+import type { WorldEvents } from '@strkworld/shared';
 import {
   createAvatarOutfitSelection,
   createAvatarOutfitToggleBinding,
@@ -10,10 +10,8 @@ type Emitted = { event: keyof WorldEvents; payload: unknown };
 describe('World-local outfit selection', () => {
   it('starts on the default cosy state and only emits real changes', () => {
     const events: Emitted[] = [];
-    const changes: AvatarSpriteKey[] = [];
     const selection = createAvatarOutfitSelection({
       out: { emit: (event, payload) => events.push({ event, payload }) },
-      onChange: (selected) => changes.push(selected),
     });
 
     expect(selection.selected).toBe('avatar-1');
@@ -21,12 +19,10 @@ describe('World-local outfit selection', () => {
 
     expect(selection.select('avatar-1')).toBe(false);
     expect(events).toHaveLength(0);
-    expect(changes).toHaveLength(0);
 
     expect(selection.select('avatar-6')).toBe(true);
     expect(selection.selected).toBe('avatar-6');
     expect(events).toEqual([{ event: 'avatar:selected', payload: { sprite: 'avatar-6' } }]);
-    expect(changes).toEqual(['avatar-6']);
   });
 
   it('toggles through the existing pairedAvatarSprite mapping and back', () => {

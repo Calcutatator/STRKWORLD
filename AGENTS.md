@@ -285,16 +285,29 @@ exit. A consequence worth knowing rather than fixing here: an outdoor toggle
 also does not reach other players until the next suspend/resume or join, which
 is pre-existing D-047 wire behaviour, not something D-053 changed.
 
+A third mistake is available to the *test*, not the code: stubbing `create()`.
+The first restart test hand-rebuilt only the avatar visual and the binding, so
+it stayed green no matter what order `create()` used — and building the Studio
+before the Scene has a selection hands it the no-op left behind by
+`cleanShutdown`, which changes nothing until someone presses F. Restart
+coverage must therefore run the real generated `create()` twice on the same
+instance, stubbing only the Phaser-heavy presentation steps, and must record
+one avatar per cycle so "the new avatar changed" cannot be satisfied by an
+absent `avatarVisual`.
+
 *Verified:* red observed first on both public seams — `avatar-outfit.js` did
 not resolve, and all nine `street-scene-lifecycle` cases failed on a missing
-`createAvatarOutfit`. Green after implementation: 22 World files / 216 tests,
-full workspace 86 files / 1,141 tests, workspace typecheck, production build,
-invariants, drift and tilemap checks. Two mutations proved the tests have
-teeth: forcing `isActive` to `true` failed the suspension case, and handing the
-Studio its own selection failed the outdoor/Studio case. These checks prove
-input, selection, event and lifecycle ownership headlessly only. No browser,
-wallet, network, proof, signature or transaction was involved, and the rendered
-in-game acceptance at `http://localhost:5173/` remains open.
+`createAvatarOutfit`. Green after implementation: 22 World files / 218 tests,
+full workspace 86 files / 1,143 tests, workspace typecheck, production build,
+invariants, drift and tilemap checks. Three mutations proved the tests have
+teeth: forcing `isActive` to `true` failed the suspension case; handing the
+Studio its own selection failed the outdoor/Studio case; and swapping
+`createAvatarStudio` ahead of `createAvatarOutfit` in `create()` failed the
+restart case at its cycle-2 assertion with the cycle-1 assertions blinded, so
+the ordering is covered on the restart path and not only on first create. These
+checks prove input, selection, event and lifecycle ownership headlessly only.
+No browser, wallet, network, proof, signature or transaction was involved, and
+the rendered in-game acceptance at `http://localhost:5173/` remains open.
 
 ### 2026-08-20 — Matching bounds do not prove cross-facing character identity
 

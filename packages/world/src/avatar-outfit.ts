@@ -43,7 +43,6 @@ export interface AvatarOutfitSelection {
 export function createAvatarOutfitSelection(options: {
   readonly out: Pick<EventBus<WorldEvents>, 'emit'>;
   readonly initial?: AvatarSpriteKey;
-  readonly onChange?: (selected: AvatarSpriteKey) => void;
 }): AvatarOutfitSelection {
   let selected = options.initial ?? DEFAULT_AVATAR_SPRITE;
 
@@ -51,7 +50,6 @@ export function createAvatarOutfitSelection(options: {
     if (sprite === selected) return false;
     selected = sprite;
     options.out.emit('avatar:selected', { sprite: selected });
-    options.onChange?.(selected);
     return true;
   };
 
