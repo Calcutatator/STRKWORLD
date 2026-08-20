@@ -102,6 +102,7 @@ const INERT_EXTENSIONS = new Set(['.md', '.lock', '.png', '.jpg', '.svg', '.ico'
 const SYNTAXES = {
   none: { line: [], block: [] },
   hash: { line: ['#'], block: [] },
+  shell: { line: ['#'], block: [], shellHashComments: true },
   slash: { line: ['//'], block: [['/*', '*/']] },
   html: { line: [], block: [['<!--', '-->']] },
   sql: { line: ['--'], block: [['/*', '*/']] },
@@ -116,7 +117,7 @@ const SYNTAX_BY_EXTENSION = {
   // tsconfig and friends are JSON with comments in practice.
   '.json': 'slash', '.json5': 'slash', '.jsonc': 'slash',
   '.yml': 'hash', '.yaml': 'hash',
-  '.sh': 'hash', '.bash': 'hash', '.zsh': 'hash', '.ksh': 'hash',
+  '.sh': 'shell', '.bash': 'shell', '.zsh': 'shell', '.ksh': 'shell',
   '.toml': 'hash', '.conf': 'hash', '.cfg': 'hash', '.properties': 'hash',
   '.env': 'hash', '.example': 'hash', '.dockerfile': 'hash', '.nginx': 'hash',
   '.py': 'hash', '.rb': 'hash', '.pl': 'hash',
@@ -156,11 +157,13 @@ export function stripComments(text, syntax) {
   const lines = text.split('\n');
   const stripped = [];
   let openBlockCloseToken = null;
+  let shellContinuationInsideWord = false;
 
   for (const line of lines) {
     let code = '';
     let quote = null;
     let i = 0;
+    let lineCommentStarted = false;
 
     while (i < line.length) {
       if (openBlockCloseToken !== null) {
@@ -188,7 +191,14 @@ export function stripComments(text, syntax) {
         continue;
       }
 
-      if (syntax.line.some((token) => isLineCommentAt(line, i, token))) {
+      if (syntax.line.some((token) => isLineCommentAt(
+        line,
+        i,
+        token,
+        syntax,
+        shellContinuationInsideWord,
+      ))) {
+        lineCommentStarted = true;
         i = line.length;
         break;
       }
@@ -205,17 +215,51 @@ export function stripComments(text, syntax) {
     }
 
     stripped.push(code);
+    shellContinuationInsideWord = Boolean(
+      syntax.shellHashComments
+      && !lineCommentStarted
+      && continuesShellWord(line),
+    );
   }
 
   return stripped;
 }
 
-function isLineCommentAt(line, index, token) {
+function isLineCommentAt(line, index, token, syntax, shellContinuationInsideWord) {
   if (!line.startsWith(token, index)) return false;
   if (token !== '#') return true;
+  if (syntax.shellHashComments && index === 0 && shellContinuationInsideWord) {
+    return false;
+  }
+  if (
+    syntax.shellHashComments
+    && index > 0
+    && /\s/.test(line[index - 1])
+    && isEscaped(line, index - 1)
+  ) {
+    return false;
+  }
   // Hash comments begin at a token boundary. Treating an in-word hash as the
   // start of a comment can hide effective shell or workflow code after it.
   return index === 0 || /\s/.test(line[index - 1]);
+}
+
+function isEscaped(line, index) {
+  let backslashes = 0;
+  for (let cursor = index - 1; cursor >= 0 && line[cursor] === '\\'; cursor -= 1) {
+    backslashes += 1;
+  }
+  return backslashes % 2 === 1;
+}
+
+function continuesShellWord(line) {
+  let backslashes = 0;
+  for (let cursor = line.length - 1; cursor >= 0 && line[cursor] === '\\'; cursor -= 1) {
+    backslashes += 1;
+  }
+  if (backslashes % 2 === 0) return false;
+  const before = line[line.length - backslashes - 1];
+  return before !== undefined && !/[\s;&|()<>]/.test(before);
 }
 
 /**

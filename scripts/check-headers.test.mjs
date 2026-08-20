@@ -45,9 +45,27 @@ describe('violations that must be caught', () => {
     expect(scanText('deploy/smoke.sh', script).map((violation) => violation.line)).toEqual([1]);
   });
 
+  it('BYPASS: an escaped shell space does not create a hash comment boundary', () => {
+    const script = `echo safe\\ #still-word; curl --header "${COOP}: same-origin"`;
+    expect(scanText('deploy/smoke.sh', script).map((violation) => violation.line)).toEqual([1]);
+  });
+
+  it('BYPASS: a shell line continuation keeps the next hash inside its word', () => {
+    const script = [
+      `echo safe\\`,
+      `#still-word; curl --header "${COEP}: require-corp"`,
+    ].join('\n');
+    expect(scanText('deploy/smoke.sh', script).map((violation) => violation.line)).toEqual([2]);
+  });
+
   it('BYPASS: an in-word hash does not hide a later workflow header flag', () => {
     const workflow = `run: echo safe#still-word && curl --header "${COEP}: require-corp"`;
     expect(scanText('.github/workflows/deploy.yml', workflow).map((violation) => violation.line)).toEqual([1]);
+  });
+
+  it('keeps YAML hash boundaries independent from shell escaping', () => {
+    const workflow = `run: echo safe\\ # ${COOP}: same-origin`;
+    expect(scanText('.github/workflows/deploy.yml', workflow)).toEqual([]);
   });
 
   it('catches a vite preview.headers entry', () => {
