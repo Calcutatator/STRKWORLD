@@ -40,6 +40,58 @@ describe('violations that must be caught', () => {
     expect(scanText('.github/workflows/deploy.yml', workflow)).toHaveLength(1);
   });
 
+  it('BYPASS: an in-word hash does not hide a later shell header flag', () => {
+    const script = `echo safe#still-word; curl --header "${COOP}: same-origin"`;
+    expect(scanText('deploy/smoke.sh', script).map((violation) => violation.line)).toEqual([1]);
+  });
+
+  it('BYPASS: an escaped shell space does not create a hash comment boundary', () => {
+    const script = `echo safe\\ #still-word; curl --header "${COOP}: same-origin"`;
+    expect(scanText('deploy/smoke.sh', script).map((violation) => violation.line)).toEqual([1]);
+  });
+
+  it('keeps a hash after an escaped shell operator inside the active word', () => {
+    const script = `echo safe\\;#still-word; curl --header "${COOP}: same-origin"`;
+    expect(scanText('deploy/smoke.sh', script).map((violation) => violation.line)).toEqual([1]);
+  });
+
+  it('BYPASS: a shell line continuation keeps the next hash inside its word', () => {
+    const script = [
+      `echo safe\\`,
+      `#still-word; curl --header "${COEP}: require-corp"`,
+    ].join('\n');
+    expect(scanText('deploy/smoke.sh', script).map((violation) => violation.line)).toEqual([2]);
+  });
+
+  it.each([
+    ['single', "'"],
+    ['double', '"'],
+  ])('BYPASS: a multiline shell %s quote keeps the next hash as data', (_label, quote) => {
+    const script = [
+      `printf '%s' ${quote}safe`,
+      `#still-quoted${quote}; curl --header "${COOP}: same-origin"`,
+    ].join('\n');
+    expect(scanText('deploy/smoke.sh', script).map((violation) => violation.line)).toEqual([2]);
+  });
+
+  it('BYPASS: an escaped quote keeps a multiline ANSI-C shell quote open', () => {
+    const script = [
+      `printf '%s' $'safe\\'`,
+      `#still-quoted'; curl --header "${COOP}: same-origin"`,
+    ].join('\n');
+    expect(scanText('deploy/smoke.sh', script).map((violation) => violation.line)).toEqual([2]);
+  });
+
+  it('BYPASS: an in-word hash does not hide a later workflow header flag', () => {
+    const workflow = `run: echo safe#still-word && curl --header "${COEP}: require-corp"`;
+    expect(scanText('.github/workflows/deploy.yml', workflow).map((violation) => violation.line)).toEqual([1]);
+  });
+
+  it('keeps YAML hash boundaries independent from shell escaping', () => {
+    const workflow = `run: echo safe\\ # ${COOP}: same-origin`;
+    expect(scanText('.github/workflows/deploy.yml', workflow)).toEqual([]);
+  });
+
   it('catches a vite preview.headers entry', () => {
     const config = [
       "import { defineConfig } from 'vite';",
@@ -124,6 +176,26 @@ describe('real comments that must stay exempt', () => {
 
   it('exempts a hash comment in a YAML workflow', () => {
     expect(scanText('.github/workflows/ci.yml', `# asserts no ${COOP} is sent`)).toEqual([]);
+  });
+
+  it.each([
+    ['shell start', 'deploy/smoke.sh', `# never set ${COOP}`],
+    ['shell whitespace boundary', 'deploy/smoke.sh', `echo safe # never set ${COOP}`],
+    ['shell semicolon boundary', 'deploy/smoke.sh', `echo safe;# never set ${COOP}`],
+    ['shell ampersand boundary', 'deploy/smoke.sh', `echo safe &# never set ${COOP}`],
+    ['shell and-if boundary', 'deploy/smoke.sh', `echo safe &&# never set ${COOP}`],
+    ['shell or-if boundary', 'deploy/smoke.sh', `echo safe ||# never set ${COOP}`],
+    ['workflow whitespace boundary', '.github/workflows/deploy.yml', `run: echo safe # never set ${COOP}`],
+  ])('retains a real %s hash comment', (_label, file, source) => {
+    expect(scanText(file, source)).toEqual([]);
+  });
+
+  it('keeps backslashes literal inside an ordinary shell single quote', () => {
+    const script = [
+      `printf '%s' 'safe\\'`,
+      `# never set ${COOP}`,
+    ].join('\n');
+    expect(scanText('deploy/smoke.sh', script)).toEqual([]);
   });
 });
 

@@ -102,6 +102,7 @@ const INERT_EXTENSIONS = new Set(['.md', '.lock', '.png', '.jpg', '.svg', '.ico'
 const SYNTAXES = {
   none: { line: [], block: [] },
   hash: { line: ['#'], block: [] },
+  shell: { line: ['#'], block: [], shellHashComments: true },
   slash: { line: ['//'], block: [['/*', '*/']] },
   html: { line: [], block: [['<!--', '-->']] },
   sql: { line: ['--'], block: [['/*', '*/']] },
@@ -116,7 +117,7 @@ const SYNTAX_BY_EXTENSION = {
   // tsconfig and friends are JSON with comments in practice.
   '.json': 'slash', '.json5': 'slash', '.jsonc': 'slash',
   '.yml': 'hash', '.yaml': 'hash',
-  '.sh': 'hash', '.bash': 'hash', '.zsh': 'hash', '.ksh': 'hash',
+  '.sh': 'shell', '.bash': 'shell', '.zsh': 'shell', '.ksh': 'shell',
   '.toml': 'hash', '.conf': 'hash', '.cfg': 'hash', '.properties': 'hash',
   '.env': 'hash', '.example': 'hash', '.dockerfile': 'hash', '.nginx': 'hash',
   '.py': 'hash', '.rb': 'hash', '.pl': 'hash',
@@ -149,18 +150,22 @@ export function syntaxFor(filePath) {
 
 /**
  * Returns one entry per input line holding only that line's NON-comment text.
- * Block-comment state carries across lines; quote state does not (an
- * unterminated quote must not silently blank the rest of the file).
+ * Block-comment state carries across lines. Shell quotes do too because a
+ * physical newline is valid inside them; other syntaxes remain line-local so
+ * an unterminated quote cannot silently blank the rest of the file.
  */
 export function stripComments(text, syntax) {
   const lines = text.split('\n');
   const stripped = [];
   let openBlockCloseToken = null;
+  let shellContinuationInsideWord = false;
+  let shellQuote = null;
 
   for (const line of lines) {
     let code = '';
-    let quote = null;
+    let quote = syntax.shellHashComments ? shellQuote : null;
     let i = 0;
+    let lineCommentStarted = false;
 
     while (i < line.length) {
       if (openBlockCloseToken !== null) {
@@ -175,20 +180,37 @@ export function stripComments(text, syntax) {
 
       if (quote !== null) {
         code += char;
-        if (char === '\\') { code += line[i + 1] ?? ''; i += 2; continue; }
-        if (char === quote) quote = null;
+        if (char === '\\' && !(syntax.shellHashComments && quote === "'")) {
+          code += line[i + 1] ?? '';
+          i += 2;
+          continue;
+        }
+        const closeQuote = quote === 'ansi-c' ? "'" : quote;
+        if (char === closeQuote) quote = null;
         i += 1;
         continue;
       }
 
       if (char === '"' || char === "'" || char === '`') {
-        quote = char;
+        quote = Boolean(
+          syntax.shellHashComments
+          && char === "'"
+          && line[i - 1] === '$'
+          && !isEscaped(line, i - 1)
+        ) ? 'ansi-c' : char;
         code += char;
         i += 1;
         continue;
       }
 
-      if (syntax.line.some((token) => line.startsWith(token, i))) {
+      if (syntax.line.some((token) => isLineCommentAt(
+        line,
+        i,
+        token,
+        syntax,
+        shellContinuationInsideWord,
+      ))) {
+        lineCommentStarted = true;
         i = line.length;
         break;
       }
@@ -205,9 +227,47 @@ export function stripComments(text, syntax) {
     }
 
     stripped.push(code);
+    if (syntax.shellHashComments) shellQuote = quote;
+    shellContinuationInsideWord = Boolean(
+      syntax.shellHashComments
+      && !lineCommentStarted
+      && continuesShellWord(line),
+    );
   }
 
   return stripped;
+}
+
+function isLineCommentAt(line, index, token, syntax, shellContinuationInsideWord) {
+  if (!line.startsWith(token, index)) return false;
+  if (token !== '#') return true;
+  if (syntax.shellHashComments) {
+    if (index === 0) return !shellContinuationInsideWord;
+    const boundary = line[index - 1];
+    if (/\s/.test(boundary)) return !isEscaped(line, index - 1);
+    return /[;&|()<>]/.test(boundary) && !isEscaped(line, index - 1);
+  }
+  // Hash comments begin at a token boundary. Treating an in-word hash as the
+  // start of a comment can hide effective shell or workflow code after it.
+  return index === 0 || /\s/.test(line[index - 1]);
+}
+
+function isEscaped(line, index) {
+  let backslashes = 0;
+  for (let cursor = index - 1; cursor >= 0 && line[cursor] === '\\'; cursor -= 1) {
+    backslashes += 1;
+  }
+  return backslashes % 2 === 1;
+}
+
+function continuesShellWord(line) {
+  let backslashes = 0;
+  for (let cursor = line.length - 1; cursor >= 0 && line[cursor] === '\\'; cursor -= 1) {
+    backslashes += 1;
+  }
+  if (backslashes % 2 === 0) return false;
+  const before = line[line.length - backslashes - 1];
+  return before !== undefined && !/[\s;&|()<>]/.test(before);
 }
 
 /**
