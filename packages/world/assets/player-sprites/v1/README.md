@@ -46,12 +46,31 @@ movement uses connected upper-silhouette, waist, hip and planted-foot changes
 so it reads as depth transfer rather than horizontal rocking. The approved
 size classes remain fixed: only 6/14 are small/chibi, only 4/7/12/15 are large,
 and all other keys use the standard class. `qa/explicit-pixel-repairs.json`
-records the prior 799 named repairs plus the 64 D/U stride reconstructions and
-six detached-component cell repairs.
+records 642 enclosed-hole fills across the initial and cross-gate passes, 1,088
+transient channel repairs, 25 per-cell palette remaps, 662 seam-material
+repairs, four isolated-pixel removals, 64 D/U stride reconstructions, two
+D/U depth repairs, six weapon-boundary repairs, and six detached-component
+cell repairs. These 2,499 ledger entries are explicit cell/coordinate
+operations, not a blanket transform or global filter.
 
 Every cell also passes an 8-connected detached-opaque-component gate recorded
 in `qa/detached-components.json`. This rejects floating feet, weapon fragments,
 and other disconnected opaque islands; the whitelist is intentionally empty.
+`qa/verify-silhouette-holes.py` flood-fills exterior transparency in all 320
+cells and rejects every unreviewed enclosed transparent pixel. The current
+evidence has zero islands after the explicit coordinate repairs and an empty
+enclosed-hole whitelist. All original 864 narrow-channel
+candidates are classified: transient body channels are repaired and the 167
+stable negative-space runs that remain are explicitly whitelisted with exact
+coordinates and rationale.
+`qa/verify-edge-heatmap.py` requires a nonblank contour block for every key,
+facing, and pose; `qa/edge-heatmap.png` now covers all 320 cells, not only the
+down-facing rows.
+`qa/channel-review.json` classifies all 864 original 1-2px channel candidates.
+Transient movement-only body channels are explicitly repaired; each surviving
+negative-space run is whitelisted by exact cell, orientation, coordinate,
+length, and rationale. `qa/verify-narrow-channels.py` rejects unclassified
+current channels and includes an injected-channel negative test.
 
 No runtime row or frame mapping was changed. The correction is not runtime-ready
 until orchestration independently reviews the complete handoff.

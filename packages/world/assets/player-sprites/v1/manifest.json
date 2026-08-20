@@ -78,6 +78,13 @@
     "sourceInspection": "qa/source-inspection.json",
     "detachedComponents": "qa/detached-components.json",
     "boundaryTouch": "qa/boundary-touch.json",
+    "interiorHoles": "qa/interior-holes.json",
+    "edgeHeatmap": "qa/edge-heatmap.json",
+    "edgeHeatmapVerifier": "qa/verify-edge-heatmap.py",
+    "silhouetteHoleVerifier": "qa/verify-silhouette-holes.py",
+    "backgroundReadabilityVerifier": "qa/verify-background-readability.py",
+    "channelReview": "qa/channel-review.json",
+    "narrowChannelVerifier": "qa/verify-narrow-channels.py",
     "backgroundReadability": "qa/background-readability.png",
     "movementContact": "qa/all-characters-movement.png",
     "animatedPreviews": [

@@ -34,6 +34,9 @@
       ]
     }
   },
-  "verifiedWith": "standards-aware Aseprite compressed-cel parsing plus deterministic PNG parity; independent Aseprite reopen remains orchestration review work",
-  "sourceSha256": "da25fede91825460de6561a4ea41e75c940c06167a44627e2d7ac03798ca579b"
+  "verifiedWith": "official Aseprite compressed-cel parsing plus deterministic PNG parity; 320 frames, one cel per frame, mandatory 64x64 dimensions, and pixel-identical reconstruction",
+  "sourceSha256": "9bef42dcbb291458e51e8c65eb7b0bc50bedb0fd00537e01f5433cdd16190b7c",
+  "verificationStatus": "pass",
+  "decodedCels": 320,
+  "pixelIdentical": true
 }

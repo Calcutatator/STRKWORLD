@@ -29,7 +29,7 @@
   ],
   "alpha": "binary",
   "maxVisibleColorsPerCell": 24,
-  "interiorTransparentPixels": 449,
+  "interiorTransparentPixels": 0,
   "nonBinaryAlphaCells": [],
   "feetFailures": [],
   "detachedComponents": {
@@ -40,13 +40,13 @@
   },
   "wholeBodyMotion": {
     "nonIdleCells": 256,
-    "totalChangedPixels": 189530,
+    "totalChangedPixels": 188756,
     "duplicateMovementCells": [],
     "gate": "every non-idle cell must change above its directional hip gate; depth/weight transfer remains an independent visual review gate",
-    "minChangedPixelsAboveHip": 219,
-    "minUpperBodyShare": 0.555184
+    "minChangedPixelsAboveHip": 205,
+    "minUpperBodyShare": 0.525612
   },
-  "explicitRepairPixels": 877,
+  "explicitRepairPixels": 2499,
   "visualReviewRequired": [
     "cross-facing identity and model continuity",
     "distinct down/up depth stride with hip-connected weight transfer",
@@ -60,206 +60,39 @@
     "background-readability.png",
     "edge-heatmap.png",
     "avatar-1-walk.gif through avatar-16-walk.gif",
-    "character-1-walk.gif through character-8-walk.gif"
+    "character-1-walk.gif through character-8-walk.gif",
+    "interior-holes.json",
+    "edge-heatmap.json",
+    "verify-background-readability.py",
+    "channel-review.json",
+    "verify-narrow-channels.py",
+    "verify-qa-report.py"
   ],
   "runtimeReady": false,
   "renderedAcceptance": false,
   "explicitRepairBreakdown": {
-    "hole-fill": 133,
+    "hole-fill": 582,
     "seam-material-repair": 662,
     "isolated-remove": 4,
     "d052-down-up-stride-reconstruction": 64,
     "detached-component-remove": 6,
     "d052-down-depth-repair": 2,
-    "weapon-boundary-repair": 6
+    "weapon-boundary-repair": 6,
+    "channel-fill": 967,
+    "channel-fill-derived": 121,
+    "hole-fill-channel-followup": 60,
+    "channel-palette-repair": 25
   },
   "narrowChannelScan": {
-    "candidateCount": 1305,
+    "candidateCount": 167,
+    "originalCandidateCount": 864,
     "scope": "1-2px transparent runs inside each body alpha bbox, bracketed by opaque pixels",
-    "samples": [
-      [
-        1,
-        0,
-        1,
-        "horizontal",
-        37,
-        42,
-        1
-      ],
-      [
-        1,
-        0,
-        1,
-        "horizontal",
-        37,
-        43,
-        1
-      ],
-      [
-        1,
-        0,
-        1,
-        "horizontal",
-        37,
-        44,
-        1
-      ],
-      [
-        1,
-        0,
-        1,
-        "horizontal",
-        37,
-        45,
-        1
-      ],
-      [
-        1,
-        0,
-        1,
-        "horizontal",
-        37,
-        46,
-        1
-      ],
-      [
-        1,
-        0,
-        1,
-        "horizontal",
-        37,
-        47,
-        1
-      ],
-      [
-        1,
-        0,
-        2,
-        "horizontal",
-        37,
-        42,
-        1
-      ],
-      [
-        1,
-        0,
-        2,
-        "horizontal",
-        37,
-        43,
-        1
-      ],
-      [
-        1,
-        0,
-        2,
-        "horizontal",
-        37,
-        44,
-        1
-      ],
-      [
-        1,
-        0,
-        2,
-        "horizontal",
-        37,
-        45,
-        1
-      ],
-      [
-        1,
-        0,
-        2,
-        "horizontal",
-        37,
-        46,
-        1
-      ],
-      [
-        1,
-        0,
-        2,
-        "horizontal",
-        37,
-        47,
-        1
-      ],
-      [
-        1,
-        0,
-        2,
-        "horizontal",
-        31,
-        49,
-        1
-      ],
-      [
-        1,
-        0,
-        2,
-        "horizontal",
-        31,
-        50,
-        1
-      ],
-      [
-        1,
-        0,
-        2,
-        "horizontal",
-        31,
-        51,
-        1
-      ],
-      [
-        1,
-        0,
-        2,
-        "horizontal",
-        30,
-        52,
-        2
-      ],
-      [
-        1,
-        0,
-        3,
-        "horizontal",
-        28,
-        42,
-        1
-      ],
-      [
-        1,
-        0,
-        3,
-        "horizontal",
-        28,
-        43,
-        1
-      ],
-      [
-        1,
-        0,
-        3,
-        "horizontal",
-        28,
-        44,
-        1
-      ],
-      [
-        1,
-        0,
-        3,
-        "horizontal",
-        28,
-        45,
-        1
-      ]
-    ],
-    "bodyCorridorReview": "alarm scan regenerated after correction; enlarged contrasting-background contacts and anatomy review remain mandatory",
-    "unapprovedChannels": "pending independent visual review; candidate list is an alarm, not acceptance"
+    "reviewedNegativeSpaceWhitelist": 167,
+    "unapprovedChannels": 0,
+    "classificationReport": "qa/channel-review.json",
+    "verifier": "qa/verify-narrow-channels.py",
+    "negativeTest": "qa/verify-narrow-channels.py --self-test",
+    "reviewStatus": "all original candidates classified; transient body channels repaired; stable model negative space explicitly whitelisted"
   },
   "cellReports": [
     {
@@ -287,8 +120,8 @@
         57
       ],
       "visibleColors": 24,
-      "interiorTransparentPixels": 6,
-      "changedFromDirectionalIdle": 549
+      "interiorTransparentPixels": 0,
+      "changedFromDirectionalIdle": 543
     },
     {
       "key": 1,
@@ -301,8 +134,8 @@
         57
       ],
       "visibleColors": 24,
-      "interiorTransparentPixels": 6,
-      "changedFromDirectionalIdle": 537
+      "interiorTransparentPixels": 0,
+      "changedFromDirectionalIdle": 526
     },
     {
       "key": 1,
@@ -315,8 +148,8 @@
         57
       ],
       "visibleColors": 24,
-      "interiorTransparentPixels": 6,
-      "changedFromDirectionalIdle": 554
+      "interiorTransparentPixels": 0,
+      "changedFromDirectionalIdle": 548
     },
     {
       "key": 1,
@@ -329,8 +162,8 @@
         57
       ],
       "visibleColors": 24,
-      "interiorTransparentPixels": 6,
-      "changedFromDirectionalIdle": 544
+      "interiorTransparentPixels": 0,
+      "changedFromDirectionalIdle": 535
     },
     {
       "key": 1,
@@ -358,7 +191,7 @@
       ],
       "visibleColors": 24,
       "interiorTransparentPixels": 0,
-      "changedFromDirectionalIdle": 480
+      "changedFromDirectionalIdle": 475
     },
     {
       "key": 1,
@@ -372,7 +205,7 @@
       ],
       "visibleColors": 24,
       "interiorTransparentPixels": 0,
-      "changedFromDirectionalIdle": 539
+      "changedFromDirectionalIdle": 536
     },
     {
       "key": 1,
@@ -386,7 +219,7 @@
       ],
       "visibleColors": 24,
       "interiorTransparentPixels": 0,
-      "changedFromDirectionalIdle": 526
+      "changedFromDirectionalIdle": 523
     },
     {
       "key": 1,
@@ -400,7 +233,7 @@
       ],
       "visibleColors": 24,
       "interiorTransparentPixels": 0,
-      "changedFromDirectionalIdle": 514
+      "changedFromDirectionalIdle": 506
     },
     {
       "key": 1,
@@ -428,7 +261,7 @@
       ],
       "visibleColors": 24,
       "interiorTransparentPixels": 0,
-      "changedFromDirectionalIdle": 505
+      "changedFromDirectionalIdle": 500
     },
     {
       "key": 1,
@@ -442,7 +275,7 @@
       ],
       "visibleColors": 24,
       "interiorTransparentPixels": 0,
-      "changedFromDirectionalIdle": 473
+      "changedFromDirectionalIdle": 469
     },
     {
       "key": 1,
@@ -456,7 +289,7 @@
       ],
       "visibleColors": 24,
       "interiorTransparentPixels": 0,
-      "changedFromDirectionalIdle": 419
+      "changedFromDirectionalIdle": 420
     },
     {
       "key": 1,
@@ -470,7 +303,7 @@
       ],
       "visibleColors": 23,
       "interiorTransparentPixels": 0,
-      "changedFromDirectionalIdle": 496
+      "changedFromDirectionalIdle": 494
     },
     {
       "key": 1,
@@ -497,8 +330,8 @@
         57
       ],
       "visibleColors": 24,
-      "interiorTransparentPixels": 5,
-      "changedFromDirectionalIdle": 430
+      "interiorTransparentPixels": 0,
+      "changedFromDirectionalIdle": 417
     },
     {
       "key": 1,
@@ -511,38 +344,38 @@
         57
       ],
       "visibleColors": 24,
-      "interiorTransparentPixels": 4,
-      "changedFromDirectionalIdle": 431
-    },
-    {
-      "key": 1,
-      "row": "up",
-      "column": "contact-right",
-      "bbox": [
-        24,
-        21,
-        44,
-        57
-      ],
-      "visibleColors": 24,
-      "interiorTransparentPixels": 6,
-      "changedFromDirectionalIdle": 422
-    },
-    {
-      "key": 1,
-      "row": "up",
-      "column": "passing-right",
-      "bbox": [
-        24,
-        21,
-        44,
-        57
-      ],
-      "visibleColors": 24,
-      "interiorTransparentPixels": 6,
+      "interiorTransparentPixels": 0,
       "changedFromDirectionalIdle": 425
     },
     {
+      "key": 1,
+      "row": "up",
+      "column": "contact-right",
+      "bbox": [
+        24,
+        21,
+        44,
+        57
+      ],
+      "visibleColors": 24,
+      "interiorTransparentPixels": 0,
+      "changedFromDirectionalIdle": 411
+    },
+    {
+      "key": 1,
+      "row": "up",
+      "column": "passing-right",
+      "bbox": [
+        24,
+        21,
+        44,
+        57
+      ],
+      "visibleColors": 24,
+      "interiorTransparentPixels": 0,
+      "changedFromDirectionalIdle": 417
+    },
+    {
       "key": 2,
       "row": "down",
       "column": "idle",
@@ -567,8 +400,8 @@
         57
       ],
       "visibleColors": 24,
-      "interiorTransparentPixels": 6,
-      "changedFromDirectionalIdle": 552
+      "interiorTransparentPixels": 0,
+      "changedFromDirectionalIdle": 548
     },
     {
       "key": 2,
@@ -581,8 +414,8 @@
         57
       ],
       "visibleColors": 24,
-      "interiorTransparentPixels": 6,
-      "changedFromDirectionalIdle": 538
+      "interiorTransparentPixels": 0,
+      "changedFromDirectionalIdle": 525
     },
     {
       "key": 2,
@@ -595,8 +428,8 @@
         57
       ],
       "visibleColors": 24,
-      "interiorTransparentPixels": 6,
-      "changedFromDirectionalIdle": 567
+      "interiorTransparentPixels": 0,
+      "changedFromDirectionalIdle": 561
     },
     {
       "key": 2,
@@ -609,8 +442,8 @@
         57
       ],
       "visibleColors": 24,
-      "interiorTransparentPixels": 6,
-      "changedFromDirectionalIdle": 553
+      "interiorTransparentPixels": 0,
+      "changedFromDirectionalIdle": 546
     },
     {
       "key": 2,
@@ -638,7 +471,7 @@
       ],
       "visibleColors": 24,
       "interiorTransparentPixels": 0,
-      "changedFromDirectionalIdle": 621
+      "changedFromDirectionalIdle": 622
     },
     {
       "key": 2,
@@ -652,7 +485,7 @@
       ],
       "visibleColors": 24,
       "interiorTransparentPixels": 0,
-      "changedFromDirectionalIdle": 737
+      "changedFromDirectionalIdle": 740
     },
     {
       "key": 2,
@@ -666,7 +499,7 @@
       ],
       "visibleColors": 24,
       "interiorTransparentPixels": 0,
-      "changedFromDirectionalIdle": 642
+      "changedFromDirectionalIdle": 641
     },
     {
       "key": 2,
@@ -722,7 +555,7 @@
       ],
       "visibleColors": 24,
       "interiorTransparentPixels": 0,
-      "changedFromDirectionalIdle": 698
+      "changedFromDirectionalIdle": 702
     },
     {
       "key": 2,
@@ -777,8 +610,8 @@
         57
       ],
       "visibleColors": 24,
-      "interiorTransparentPixels": 5,
-      "changedFromDirectionalIdle": 485
+      "interiorTransparentPixels": 0,
+      "changedFromDirectionalIdle": 476
     },
     {
       "key": 2,
@@ -791,8 +624,8 @@
         57
       ],
       "visibleColors": 24,
-      "interiorTransparentPixels": 4,
-      "changedFromDirectionalIdle": 477
+      "interiorTransparentPixels": 0,
+      "changedFromDirectionalIdle": 468
     },
     {
       "key": 2,
@@ -805,8 +638,8 @@
         57
       ],
       "visibleColors": 24,
-      "interiorTransparentPixels": 6,
-      "changedFromDirectionalIdle": 481
+      "interiorTransparentPixels": 0,
+      "changedFromDirectionalIdle": 472
     },
     {
       "key": 2,
@@ -819,8 +652,8 @@
         57
       ],
       "visibleColors": 24,
-      "interiorTransparentPixels": 6,
-      "changedFromDirectionalIdle": 475
+      "interiorTransparentPixels": 0,
+      "changedFromDirectionalIdle": 464
     },
     {
       "key": 3,
@@ -918,7 +751,7 @@
       ],
       "visibleColors": 24,
       "interiorTransparentPixels": 0,
-      "changedFromDirectionalIdle": 818
+      "changedFromDirectionalIdle": 811
     },
     {
       "key": 3,
@@ -932,7 +765,7 @@
       ],
       "visibleColors": 24,
       "interiorTransparentPixels": 0,
-      "changedFromDirectionalIdle": 822
+      "changedFromDirectionalIdle": 812
     },
     {
       "key": 3,
@@ -946,7 +779,7 @@
       ],
       "visibleColors": 24,
       "interiorTransparentPixels": 0,
-      "changedFromDirectionalIdle": 860
+      "changedFromDirectionalIdle": 856
     },
     {
       "key": 3,
@@ -960,7 +793,7 @@
       ],
       "visibleColors": 24,
       "interiorTransparentPixels": 0,
-      "changedFromDirectionalIdle": 817
+      "changedFromDirectionalIdle": 808
     },
     {
       "key": 3,
@@ -988,7 +821,7 @@
       ],
       "visibleColors": 24,
       "interiorTransparentPixels": 0,
-      "changedFromDirectionalIdle": 679
+      "changedFromDirectionalIdle": 676
     },
     {
       "key": 3,
@@ -1002,7 +835,7 @@
       ],
       "visibleColors": 24,
       "interiorTransparentPixels": 0,
-      "changedFromDirectionalIdle": 755
+      "changedFromDirectionalIdle": 761
     },
     {
       "key": 3,
@@ -1016,7 +849,7 @@
       ],
       "visibleColors": 24,
       "interiorTransparentPixels": 0,
-      "changedFromDirectionalIdle": 774
+      "changedFromDirectionalIdle": 779
     },
     {
       "key": 3,
@@ -1030,7 +863,7 @@
       ],
       "visibleColors": 24,
       "interiorTransparentPixels": 0,
-      "changedFromDirectionalIdle": 747
+      "changedFromDirectionalIdle": 752
     },
     {
       "key": 3,
@@ -1127,8 +960,8 @@
         57
       ],
       "visibleColors": 24,
-      "interiorTransparentPixels": 9,
-      "changedFromDirectionalIdle": 1373
+      "interiorTransparentPixels": 0,
+      "changedFromDirectionalIdle": 1364
     },
     {
       "key": 4,
@@ -1141,8 +974,8 @@
         57
       ],
       "visibleColors": 24,
-      "interiorTransparentPixels": 9,
-      "changedFromDirectionalIdle": 1359
+      "interiorTransparentPixels": 0,
+      "changedFromDirectionalIdle": 1350
     },
     {
       "key": 4,
@@ -1155,8 +988,8 @@
         57
       ],
       "visibleColors": 24,
-      "interiorTransparentPixels": 9,
-      "changedFromDirectionalIdle": 1369
+      "interiorTransparentPixels": 0,
+      "changedFromDirectionalIdle": 1360
     },
     {
       "key": 4,
@@ -1169,8 +1002,8 @@
         57
       ],
       "visibleColors": 24,
-      "interiorTransparentPixels": 9,
-      "changedFromDirectionalIdle": 1356
+      "interiorTransparentPixels": 0,
+      "changedFromDirectionalIdle": 1347
     },
     {
       "key": 4,
@@ -1198,7 +1031,7 @@
       ],
       "visibleColors": 24,
       "interiorTransparentPixels": 0,
-      "changedFromDirectionalIdle": 945
+      "changedFromDirectionalIdle": 942
     },
     {
       "key": 4,
@@ -1212,7 +1045,7 @@
       ],
       "visibleColors": 24,
       "interiorTransparentPixels": 0,
-      "changedFromDirectionalIdle": 983
+      "changedFromDirectionalIdle": 981
     },
     {
       "key": 4,
@@ -1226,7 +1059,7 @@
       ],
       "visibleColors": 24,
       "interiorTransparentPixels": 0,
-      "changedFromDirectionalIdle": 999
+      "changedFromDirectionalIdle": 995
     },
     {
       "key": 4,
@@ -1240,7 +1073,7 @@
       ],
       "visibleColors": 24,
       "interiorTransparentPixels": 0,
-      "changedFromDirectionalIdle": 892
+      "changedFromDirectionalIdle": 891
     },
     {
       "key": 4,
@@ -1268,7 +1101,7 @@
       ],
       "visibleColors": 24,
       "interiorTransparentPixels": 0,
-      "changedFromDirectionalIdle": 893
+      "changedFromDirectionalIdle": 889
     },
     {
       "key": 4,
@@ -1282,7 +1115,7 @@
       ],
       "visibleColors": 24,
       "interiorTransparentPixels": 0,
-      "changedFromDirectionalIdle": 897
+      "changedFromDirectionalIdle": 898
     },
     {
       "key": 4,
@@ -1296,7 +1129,7 @@
       ],
       "visibleColors": 24,
       "interiorTransparentPixels": 0,
-      "changedFromDirectionalIdle": 970
+      "changedFromDirectionalIdle": 973
     },
     {
       "key": 4,
@@ -1310,7 +1143,7 @@
       ],
       "visibleColors": 24,
       "interiorTransparentPixels": 0,
-      "changedFromDirectionalIdle": 903
+      "changedFromDirectionalIdle": 898
     },
     {
       "key": 4,
@@ -1337,8 +1170,8 @@
         57
       ],
       "visibleColors": 24,
-      "interiorTransparentPixels": 8,
-      "changedFromDirectionalIdle": 1113
+      "interiorTransparentPixels": 0,
+      "changedFromDirectionalIdle": 1098
     },
     {
       "key": 4,
@@ -1351,8 +1184,8 @@
         57
       ],
       "visibleColors": 24,
-      "interiorTransparentPixels": 7,
-      "changedFromDirectionalIdle": 1112
+      "interiorTransparentPixels": 0,
+      "changedFromDirectionalIdle": 1104
     },
     {
       "key": 4,
@@ -1365,8 +1198,8 @@
         57
       ],
       "visibleColors": 24,
-      "interiorTransparentPixels": 9,
-      "changedFromDirectionalIdle": 1105
+      "interiorTransparentPixels": 0,
+      "changedFromDirectionalIdle": 1092
     },
     {
       "key": 4,
@@ -1379,8 +1212,8 @@
         57
       ],
       "visibleColors": 24,
-      "interiorTransparentPixels": 9,
-      "changedFromDirectionalIdle": 1111
+      "interiorTransparentPixels": 0,
+      "changedFromDirectionalIdle": 1100
     },
     {
       "key": 5,
@@ -1478,7 +1311,7 @@
       ],
       "visibleColors": 24,
       "interiorTransparentPixels": 0,
-      "changedFromDirectionalIdle": 620
+      "changedFromDirectionalIdle": 619
     },
     {
       "key": 5,
@@ -1492,7 +1325,7 @@
       ],
       "visibleColors": 24,
       "interiorTransparentPixels": 0,
-      "changedFromDirectionalIdle": 607
+      "changedFromDirectionalIdle": 610
     },
     {
       "key": 5,
@@ -1506,7 +1339,7 @@
       ],
       "visibleColors": 24,
       "interiorTransparentPixels": 0,
-      "changedFromDirectionalIdle": 589
+      "changedFromDirectionalIdle": 587
     },
     {
       "key": 5,
@@ -1548,7 +1381,7 @@
       ],
       "visibleColors": 24,
       "interiorTransparentPixels": 0,
-      "changedFromDirectionalIdle": 606
+      "changedFromDirectionalIdle": 605
     },
     {
       "key": 5,
@@ -1576,7 +1409,7 @@
       ],
       "visibleColors": 24,
       "interiorTransparentPixels": 0,
-      "changedFromDirectionalIdle": 651
+      "changedFromDirectionalIdle": 652
     },
     {
       "key": 5,
@@ -1590,7 +1423,7 @@
       ],
       "visibleColors": 24,
       "interiorTransparentPixels": 0,
-      "changedFromDirectionalIdle": 645
+      "changedFromDirectionalIdle": 651
     },
     {
       "key": 5,
@@ -1687,8 +1520,8 @@
         57
       ],
       "visibleColors": 24,
-      "interiorTransparentPixels": 6,
-      "changedFromDirectionalIdle": 412
+      "interiorTransparentPixels": 0,
+      "changedFromDirectionalIdle": 406
     },
     {
       "key": 6,
@@ -1701,8 +1534,8 @@
         57
       ],
       "visibleColors": 24,
-      "interiorTransparentPixels": 6,
-      "changedFromDirectionalIdle": 402
+      "interiorTransparentPixels": 0,
+      "changedFromDirectionalIdle": 391
     },
     {
       "key": 6,
@@ -1715,8 +1548,8 @@
         57
       ],
       "visibleColors": 24,
-      "interiorTransparentPixels": 6,
-      "changedFromDirectionalIdle": 420
+      "interiorTransparentPixels": 0,
+      "changedFromDirectionalIdle": 414
     },
     {
       "key": 6,
@@ -1729,8 +1562,8 @@
         57
       ],
       "visibleColors": 24,
-      "interiorTransparentPixels": 6,
-      "changedFromDirectionalIdle": 407
+      "interiorTransparentPixels": 0,
+      "changedFromDirectionalIdle": 398
     },
     {
       "key": 6,
@@ -1758,7 +1591,7 @@
       ],
       "visibleColors": 24,
       "interiorTransparentPixels": 0,
-      "changedFromDirectionalIdle": 512
+      "changedFromDirectionalIdle": 518
     },
     {
       "key": 6,
@@ -1786,7 +1619,7 @@
       ],
       "visibleColors": 24,
       "interiorTransparentPixels": 0,
-      "changedFromDirectionalIdle": 507
+      "changedFromDirectionalIdle": 500
     },
     {
       "key": 6,
@@ -1828,7 +1661,7 @@
       ],
       "visibleColors": 23,
       "interiorTransparentPixels": 0,
-      "changedFromDirectionalIdle": 323
+      "changedFromDirectionalIdle": 321
     },
     {
       "key": 6,
@@ -1842,7 +1675,7 @@
       ],
       "visibleColors": 24,
       "interiorTransparentPixels": 0,
-      "changedFromDirectionalIdle": 383
+      "changedFromDirectionalIdle": 387
     },
     {
       "key": 6,
@@ -1856,7 +1689,7 @@
       ],
       "visibleColors": 24,
       "interiorTransparentPixels": 0,
-      "changedFromDirectionalIdle": 425
+      "changedFromDirectionalIdle": 421
     },
     {
       "key": 6,
@@ -1870,7 +1703,7 @@
       ],
       "visibleColors": 24,
       "interiorTransparentPixels": 0,
-      "changedFromDirectionalIdle": 395
+      "changedFromDirectionalIdle": 394
     },
     {
       "key": 6,
@@ -1898,7 +1731,7 @@
       ],
       "visibleColors": 24,
       "interiorTransparentPixels": 0,
-      "changedFromDirectionalIdle": 391
+      "changedFromDirectionalIdle": 375
     },
     {
       "key": 6,
@@ -1912,7 +1745,7 @@
       ],
       "visibleColors": 24,
       "interiorTransparentPixels": 0,
-      "changedFromDirectionalIdle": 387
+      "changedFromDirectionalIdle": 384
     },
     {
       "key": 6,
@@ -1925,8 +1758,8 @@
         57
       ],
       "visibleColors": 24,
-      "interiorTransparentPixels": 6,
-      "changedFromDirectionalIdle": 383
+      "interiorTransparentPixels": 0,
+      "changedFromDirectionalIdle": 370
     },
     {
       "key": 6,
@@ -1939,8 +1772,8 @@
         57
       ],
       "visibleColors": 24,
-      "interiorTransparentPixels": 6,
-      "changedFromDirectionalIdle": 388
+      "interiorTransparentPixels": 0,
+      "changedFromDirectionalIdle": 382
     },
     {
       "key": 7,
@@ -1967,8 +1800,8 @@
         57
       ],
       "visibleColors": 24,
-      "interiorTransparentPixels": 9,
-      "changedFromDirectionalIdle": 1172
+      "interiorTransparentPixels": 0,
+      "changedFromDirectionalIdle": 1162
     },
     {
       "key": 7,
@@ -1981,8 +1814,8 @@
         57
       ],
       "visibleColors": 24,
-      "interiorTransparentPixels": 9,
-      "changedFromDirectionalIdle": 1156
+      "interiorTransparentPixels": 0,
+      "changedFromDirectionalIdle": 1146
     },
     {
       "key": 7,
@@ -1995,8 +1828,8 @@
         57
       ],
       "visibleColors": 24,
-      "interiorTransparentPixels": 9,
-      "changedFromDirectionalIdle": 1175
+      "interiorTransparentPixels": 0,
+      "changedFromDirectionalIdle": 1166
     },
     {
       "key": 7,
@@ -2009,8 +1842,8 @@
         57
       ],
       "visibleColors": 24,
-      "interiorTransparentPixels": 9,
-      "changedFromDirectionalIdle": 1164
+      "interiorTransparentPixels": 0,
+      "changedFromDirectionalIdle": 1152
     },
     {
       "key": 7,
@@ -2052,7 +1885,7 @@
       ],
       "visibleColors": 24,
       "interiorTransparentPixels": 0,
-      "changedFromDirectionalIdle": 1021
+      "changedFromDirectionalIdle": 1014
     },
     {
       "key": 7,
@@ -2066,7 +1899,7 @@
       ],
       "visibleColors": 24,
       "interiorTransparentPixels": 0,
-      "changedFromDirectionalIdle": 1024
+      "changedFromDirectionalIdle": 1017
     },
     {
       "key": 7,
@@ -2080,7 +1913,7 @@
       ],
       "visibleColors": 24,
       "interiorTransparentPixels": 0,
-      "changedFromDirectionalIdle": 987
+      "changedFromDirectionalIdle": 979
     },
     {
       "key": 7,
@@ -2122,7 +1955,7 @@
       ],
       "visibleColors": 24,
       "interiorTransparentPixels": 0,
-      "changedFromDirectionalIdle": 978
+      "changedFromDirectionalIdle": 947
     },
     {
       "key": 7,
@@ -2136,7 +1969,7 @@
       ],
       "visibleColors": 24,
       "interiorTransparentPixels": 0,
-      "changedFromDirectionalIdle": 965
+      "changedFromDirectionalIdle": 941
     },
     {
       "key": 7,
@@ -2177,8 +2010,8 @@
         57
       ],
       "visibleColors": 24,
-      "interiorTransparentPixels": 8,
-      "changedFromDirectionalIdle": 998
+      "interiorTransparentPixels": 0,
+      "changedFromDirectionalIdle": 985
     },
     {
       "key": 7,
@@ -2191,8 +2024,8 @@
         57
       ],
       "visibleColors": 24,
-      "interiorTransparentPixels": 7,
-      "changedFromDirectionalIdle": 990
+      "interiorTransparentPixels": 0,
+      "changedFromDirectionalIdle": 980
     },
     {
       "key": 7,
@@ -2205,8 +2038,8 @@
         57
       ],
       "visibleColors": 24,
-      "interiorTransparentPixels": 9,
-      "changedFromDirectionalIdle": 988
+      "interiorTransparentPixels": 0,
+      "changedFromDirectionalIdle": 976
     },
     {
       "key": 7,
@@ -2219,8 +2052,8 @@
         57
       ],
       "visibleColors": 24,
-      "interiorTransparentPixels": 9,
-      "changedFromDirectionalIdle": 992
+      "interiorTransparentPixels": 0,
+      "changedFromDirectionalIdle": 979
     },
     {
       "key": 8,
@@ -2247,8 +2080,8 @@
         57
       ],
       "visibleColors": 24,
-      "interiorTransparentPixels": 6,
-      "changedFromDirectionalIdle": 569
+      "interiorTransparentPixels": 0,
+      "changedFromDirectionalIdle": 564
     },
     {
       "key": 8,
@@ -2261,8 +2094,8 @@
         57
       ],
       "visibleColors": 24,
-      "interiorTransparentPixels": 6,
-      "changedFromDirectionalIdle": 553
+      "interiorTransparentPixels": 0,
+      "changedFromDirectionalIdle": 543
     },
     {
       "key": 8,
@@ -2275,8 +2108,8 @@
         57
       ],
       "visibleColors": 24,
-      "interiorTransparentPixels": 6,
-      "changedFromDirectionalIdle": 573
+      "interiorTransparentPixels": 0,
+      "changedFromDirectionalIdle": 565
     },
     {
       "key": 8,
@@ -2289,8 +2122,8 @@
         57
       ],
       "visibleColors": 24,
-      "interiorTransparentPixels": 6,
-      "changedFromDirectionalIdle": 557
+      "interiorTransparentPixels": 0,
+      "changedFromDirectionalIdle": 550
     },
     {
       "key": 8,
@@ -2318,7 +2151,7 @@
       ],
       "visibleColors": 24,
       "interiorTransparentPixels": 0,
-      "changedFromDirectionalIdle": 647
+      "changedFromDirectionalIdle": 644
     },
     {
       "key": 8,
@@ -2332,7 +2165,7 @@
       ],
       "visibleColors": 24,
       "interiorTransparentPixels": 0,
-      "changedFromDirectionalIdle": 659
+      "changedFromDirectionalIdle": 662
     },
     {
       "key": 8,
@@ -2360,7 +2193,7 @@
       ],
       "visibleColors": 24,
       "interiorTransparentPixels": 0,
-      "changedFromDirectionalIdle": 585
+      "changedFromDirectionalIdle": 583
     },
     {
       "key": 8,
@@ -2388,7 +2221,7 @@
       ],
       "visibleColors": 24,
       "interiorTransparentPixels": 0,
-      "changedFromDirectionalIdle": 653
+      "changedFromDirectionalIdle": 652
     },
     {
       "key": 8,
@@ -2402,7 +2235,7 @@
       ],
       "visibleColors": 24,
       "interiorTransparentPixels": 0,
-      "changedFromDirectionalIdle": 668
+      "changedFromDirectionalIdle": 674
     },
     {
       "key": 8,
@@ -2416,7 +2249,7 @@
       ],
       "visibleColors": 24,
       "interiorTransparentPixels": 0,
-      "changedFromDirectionalIdle": 693
+      "changedFromDirectionalIdle": 696
     },
     {
       "key": 8,
@@ -2430,7 +2263,7 @@
       ],
       "visibleColors": 24,
       "interiorTransparentPixels": 0,
-      "changedFromDirectionalIdle": 598
+      "changedFromDirectionalIdle": 596
     },
     {
       "key": 8,
@@ -2457,8 +2290,8 @@
         57
       ],
       "visibleColors": 24,
-      "interiorTransparentPixels": 5,
-      "changedFromDirectionalIdle": 536
+      "interiorTransparentPixels": 0,
+      "changedFromDirectionalIdle": 531
     },
     {
       "key": 8,
@@ -2471,8 +2304,8 @@
         57
       ],
       "visibleColors": 24,
-      "interiorTransparentPixels": 4,
-      "changedFromDirectionalIdle": 522
+      "interiorTransparentPixels": 0,
+      "changedFromDirectionalIdle": 515
     },
     {
       "key": 8,
@@ -2485,8 +2318,8 @@
         57
       ],
       "visibleColors": 24,
-      "interiorTransparentPixels": 6,
-      "changedFromDirectionalIdle": 522
+      "interiorTransparentPixels": 0,
+      "changedFromDirectionalIdle": 514
     },
     {
       "key": 8,
@@ -2499,8 +2332,8 @@
         57
       ],
       "visibleColors": 24,
-      "interiorTransparentPixels": 6,
-      "changedFromDirectionalIdle": 522
+      "interiorTransparentPixels": 0,
+      "changedFromDirectionalIdle": 512
     },
     {
       "key": 9,
@@ -2598,7 +2431,7 @@
       ],
       "visibleColors": 24,
       "interiorTransparentPixels": 0,
-      "changedFromDirectionalIdle": 528
+      "changedFromDirectionalIdle": 526
     },
     {
       "key": 9,
@@ -2612,7 +2445,7 @@
       ],
       "visibleColors": 24,
       "interiorTransparentPixels": 0,
-      "changedFromDirectionalIdle": 570
+      "changedFromDirectionalIdle": 564
     },
     {
       "key": 9,
@@ -2626,7 +2459,7 @@
       ],
       "visibleColors": 24,
       "interiorTransparentPixels": 0,
-      "changedFromDirectionalIdle": 554
+      "changedFromDirectionalIdle": 546
     },
     {
       "key": 9,
@@ -2640,7 +2473,7 @@
       ],
       "visibleColors": 24,
       "interiorTransparentPixels": 0,
-      "changedFromDirectionalIdle": 553
+      "changedFromDirectionalIdle": 546
     },
     {
       "key": 9,
@@ -2668,7 +2501,7 @@
       ],
       "visibleColors": 24,
       "interiorTransparentPixels": 0,
-      "changedFromDirectionalIdle": 559
+      "changedFromDirectionalIdle": 555
     },
     {
       "key": 9,
@@ -2682,7 +2515,7 @@
       ],
       "visibleColors": 24,
       "interiorTransparentPixels": 0,
-      "changedFromDirectionalIdle": 503
+      "changedFromDirectionalIdle": 499
     },
     {
       "key": 9,
@@ -2696,7 +2529,7 @@
       ],
       "visibleColors": 24,
       "interiorTransparentPixels": 0,
-      "changedFromDirectionalIdle": 457
+      "changedFromDirectionalIdle": 454
     },
     {
       "key": 9,
@@ -2710,7 +2543,7 @@
       ],
       "visibleColors": 24,
       "interiorTransparentPixels": 0,
-      "changedFromDirectionalIdle": 549
+      "changedFromDirectionalIdle": 548
     },
     {
       "key": 9,
@@ -2878,7 +2711,7 @@
       ],
       "visibleColors": 24,
       "interiorTransparentPixels": 0,
-      "changedFromDirectionalIdle": 761
+      "changedFromDirectionalIdle": 750
     },
     {
       "key": 10,
@@ -2892,7 +2725,7 @@
       ],
       "visibleColors": 24,
       "interiorTransparentPixels": 0,
-      "changedFromDirectionalIdle": 865
+      "changedFromDirectionalIdle": 859
     },
     {
       "key": 10,
@@ -2906,7 +2739,7 @@
       ],
       "visibleColors": 24,
       "interiorTransparentPixels": 0,
-      "changedFromDirectionalIdle": 781
+      "changedFromDirectionalIdle": 787
     },
     {
       "key": 10,
@@ -2920,7 +2753,7 @@
       ],
       "visibleColors": 24,
       "interiorTransparentPixels": 0,
-      "changedFromDirectionalIdle": 828
+      "changedFromDirectionalIdle": 840
     },
     {
       "key": 10,
@@ -2948,7 +2781,7 @@
       ],
       "visibleColors": 24,
       "interiorTransparentPixels": 0,
-      "changedFromDirectionalIdle": 836
+      "changedFromDirectionalIdle": 841
     },
     {
       "key": 10,
@@ -2962,7 +2795,7 @@
       ],
       "visibleColors": 24,
       "interiorTransparentPixels": 0,
-      "changedFromDirectionalIdle": 802
+      "changedFromDirectionalIdle": 794
     },
     {
       "key": 10,
@@ -2976,7 +2809,7 @@
       ],
       "visibleColors": 24,
       "interiorTransparentPixels": 0,
-      "changedFromDirectionalIdle": 755
+      "changedFromDirectionalIdle": 758
     },
     {
       "key": 10,
@@ -2990,7 +2823,7 @@
       ],
       "visibleColors": 24,
       "interiorTransparentPixels": 0,
-      "changedFromDirectionalIdle": 805
+      "changedFromDirectionalIdle": 806
     },
     {
       "key": 10,
@@ -3158,7 +2991,7 @@
       ],
       "visibleColors": 24,
       "interiorTransparentPixels": 0,
-      "changedFromDirectionalIdle": 980
+      "changedFromDirectionalIdle": 977
     },
     {
       "key": 11,
@@ -3172,7 +3005,7 @@
       ],
       "visibleColors": 24,
       "interiorTransparentPixels": 0,
-      "changedFromDirectionalIdle": 939
+      "changedFromDirectionalIdle": 931
     },
     {
       "key": 11,
@@ -3186,7 +3019,7 @@
       ],
       "visibleColors": 24,
       "interiorTransparentPixels": 0,
-      "changedFromDirectionalIdle": 1014
+      "changedFromDirectionalIdle": 1010
     },
     {
       "key": 11,
@@ -3200,7 +3033,7 @@
       ],
       "visibleColors": 24,
       "interiorTransparentPixels": 0,
-      "changedFromDirectionalIdle": 936
+      "changedFromDirectionalIdle": 930
     },
     {
       "key": 11,
@@ -3228,7 +3061,7 @@
       ],
       "visibleColors": 24,
       "interiorTransparentPixels": 0,
-      "changedFromDirectionalIdle": 818
+      "changedFromDirectionalIdle": 810
     },
     {
       "key": 11,
@@ -3242,7 +3075,7 @@
       ],
       "visibleColors": 24,
       "interiorTransparentPixels": 0,
-      "changedFromDirectionalIdle": 884
+      "changedFromDirectionalIdle": 886
     },
     {
       "key": 11,
@@ -3256,7 +3089,7 @@
       ],
       "visibleColors": 24,
       "interiorTransparentPixels": 0,
-      "changedFromDirectionalIdle": 933
+      "changedFromDirectionalIdle": 932
     },
     {
       "key": 11,
@@ -3270,7 +3103,7 @@
       ],
       "visibleColors": 24,
       "interiorTransparentPixels": 0,
-      "changedFromDirectionalIdle": 873
+      "changedFromDirectionalIdle": 874
     },
     {
       "key": 11,
@@ -3367,8 +3200,8 @@
         57
       ],
       "visibleColors": 24,
-      "interiorTransparentPixels": 9,
-      "changedFromDirectionalIdle": 1456
+      "interiorTransparentPixels": 0,
+      "changedFromDirectionalIdle": 1450
     },
     {
       "key": 12,
@@ -3381,8 +3214,8 @@
         57
       ],
       "visibleColors": 24,
-      "interiorTransparentPixels": 9,
-      "changedFromDirectionalIdle": 1448
+      "interiorTransparentPixels": 0,
+      "changedFromDirectionalIdle": 1433
     },
     {
       "key": 12,
@@ -3395,8 +3228,8 @@
         57
       ],
       "visibleColors": 24,
-      "interiorTransparentPixels": 9,
-      "changedFromDirectionalIdle": 1467
+      "interiorTransparentPixels": 0,
+      "changedFromDirectionalIdle": 1451
     },
     {
       "key": 12,
@@ -3409,8 +3242,8 @@
         57
       ],
       "visibleColors": 24,
-      "interiorTransparentPixels": 9,
-      "changedFromDirectionalIdle": 1463
+      "interiorTransparentPixels": 0,
+      "changedFromDirectionalIdle": 1443
     },
     {
       "key": 12,
@@ -3438,7 +3271,7 @@
       ],
       "visibleColors": 23,
       "interiorTransparentPixels": 0,
-      "changedFromDirectionalIdle": 986
+      "changedFromDirectionalIdle": 984
     },
     {
       "key": 12,
@@ -3452,7 +3285,7 @@
       ],
       "visibleColors": 24,
       "interiorTransparentPixels": 0,
-      "changedFromDirectionalIdle": 1020
+      "changedFromDirectionalIdle": 1023
     },
     {
       "key": 12,
@@ -3466,7 +3299,7 @@
       ],
       "visibleColors": 24,
       "interiorTransparentPixels": 0,
-      "changedFromDirectionalIdle": 1053
+      "changedFromDirectionalIdle": 1051
     },
     {
       "key": 12,
@@ -3480,7 +3313,7 @@
       ],
       "visibleColors": 23,
       "interiorTransparentPixels": 0,
-      "changedFromDirectionalIdle": 932
+      "changedFromDirectionalIdle": 930
     },
     {
       "key": 12,
@@ -3508,7 +3341,7 @@
       ],
       "visibleColors": 24,
       "interiorTransparentPixels": 0,
-      "changedFromDirectionalIdle": 1079
+      "changedFromDirectionalIdle": 1072
     },
     {
       "key": 12,
@@ -3522,7 +3355,7 @@
       ],
       "visibleColors": 24,
       "interiorTransparentPixels": 0,
-      "changedFromDirectionalIdle": 1050
+      "changedFromDirectionalIdle": 1045
     },
     {
       "key": 12,
@@ -3536,7 +3369,7 @@
       ],
       "visibleColors": 24,
       "interiorTransparentPixels": 0,
-      "changedFromDirectionalIdle": 1154
+      "changedFromDirectionalIdle": 1159
     },
     {
       "key": 12,
@@ -3550,7 +3383,7 @@
       ],
       "visibleColors": 24,
       "interiorTransparentPixels": 0,
-      "changedFromDirectionalIdle": 1075
+      "changedFromDirectionalIdle": 1074
     },
     {
       "key": 12,
@@ -3577,8 +3410,8 @@
         57
       ],
       "visibleColors": 24,
-      "interiorTransparentPixels": 8,
-      "changedFromDirectionalIdle": 1251
+      "interiorTransparentPixels": 0,
+      "changedFromDirectionalIdle": 1244
     },
     {
       "key": 12,
@@ -3591,8 +3424,8 @@
         57
       ],
       "visibleColors": 24,
-      "interiorTransparentPixels": 7,
-      "changedFromDirectionalIdle": 1246
+      "interiorTransparentPixels": 0,
+      "changedFromDirectionalIdle": 1230
     },
     {
       "key": 12,
@@ -3605,8 +3438,8 @@
         57
       ],
       "visibleColors": 24,
-      "interiorTransparentPixels": 9,
-      "changedFromDirectionalIdle": 1242
+      "interiorTransparentPixels": 0,
+      "changedFromDirectionalIdle": 1231
     },
     {
       "key": 12,
@@ -3619,8 +3452,8 @@
         57
       ],
       "visibleColors": 24,
-      "interiorTransparentPixels": 9,
-      "changedFromDirectionalIdle": 1245
+      "interiorTransparentPixels": 0,
+      "changedFromDirectionalIdle": 1232
     },
     {
       "key": 13,
@@ -3718,7 +3551,7 @@
       ],
       "visibleColors": 24,
       "interiorTransparentPixels": 0,
-      "changedFromDirectionalIdle": 697
+      "changedFromDirectionalIdle": 706
     },
     {
       "key": 13,
@@ -3732,7 +3565,7 @@
       ],
       "visibleColors": 24,
       "interiorTransparentPixels": 0,
-      "changedFromDirectionalIdle": 675
+      "changedFromDirectionalIdle": 680
     },
     {
       "key": 13,
@@ -3746,7 +3579,7 @@
       ],
       "visibleColors": 24,
       "interiorTransparentPixels": 0,
-      "changedFromDirectionalIdle": 675
+      "changedFromDirectionalIdle": 682
     },
     {
       "key": 13,
@@ -3760,7 +3593,7 @@
       ],
       "visibleColors": 24,
       "interiorTransparentPixels": 0,
-      "changedFromDirectionalIdle": 705
+      "changedFromDirectionalIdle": 708
     },
     {
       "key": 13,
@@ -3788,7 +3621,7 @@
       ],
       "visibleColors": 24,
       "interiorTransparentPixels": 0,
-      "changedFromDirectionalIdle": 697
+      "changedFromDirectionalIdle": 698
     },
     {
       "key": 13,
@@ -3802,7 +3635,7 @@
       ],
       "visibleColors": 24,
       "interiorTransparentPixels": 0,
-      "changedFromDirectionalIdle": 685
+      "changedFromDirectionalIdle": 683
     },
     {
       "key": 13,
@@ -3816,7 +3649,7 @@
       ],
       "visibleColors": 24,
       "interiorTransparentPixels": 0,
-      "changedFromDirectionalIdle": 749
+      "changedFromDirectionalIdle": 748
     },
     {
       "key": 13,
@@ -3830,7 +3663,7 @@
       ],
       "visibleColors": 24,
       "interiorTransparentPixels": 0,
-      "changedFromDirectionalIdle": 712
+      "changedFromDirectionalIdle": 715
     },
     {
       "key": 13,
@@ -4026,7 +3859,7 @@
       ],
       "visibleColors": 24,
       "interiorTransparentPixels": 0,
-      "changedFromDirectionalIdle": 614
+      "changedFromDirectionalIdle": 604
     },
     {
       "key": 14,
@@ -4040,7 +3873,7 @@
       ],
       "visibleColors": 24,
       "interiorTransparentPixels": 0,
-      "changedFromDirectionalIdle": 509
+      "changedFromDirectionalIdle": 507
     },
     {
       "key": 14,
@@ -4068,7 +3901,7 @@
       ],
       "visibleColors": 24,
       "interiorTransparentPixels": 0,
-      "changedFromDirectionalIdle": 415
+      "changedFromDirectionalIdle": 416
     },
     {
       "key": 14,
@@ -4082,7 +3915,7 @@
       ],
       "visibleColors": 24,
       "interiorTransparentPixels": 0,
-      "changedFromDirectionalIdle": 497
+      "changedFromDirectionalIdle": 502
     },
     {
       "key": 14,
@@ -4096,7 +3929,7 @@
       ],
       "visibleColors": 24,
       "interiorTransparentPixels": 0,
-      "changedFromDirectionalIdle": 549
+      "changedFromDirectionalIdle": 552
     },
     {
       "key": 14,
@@ -4110,7 +3943,7 @@
       ],
       "visibleColors": 24,
       "interiorTransparentPixels": 0,
-      "changedFromDirectionalIdle": 489
+      "changedFromDirectionalIdle": 490
     },
     {
       "key": 14,
@@ -4207,8 +4040,8 @@
         57
       ],
       "visibleColors": 24,
-      "interiorTransparentPixels": 9,
-      "changedFromDirectionalIdle": 1343
+      "interiorTransparentPixels": 0,
+      "changedFromDirectionalIdle": 1337
     },
     {
       "key": 15,
@@ -4221,8 +4054,8 @@
         57
       ],
       "visibleColors": 24,
-      "interiorTransparentPixels": 9,
-      "changedFromDirectionalIdle": 1328
+      "interiorTransparentPixels": 0,
+      "changedFromDirectionalIdle": 1319
     },
     {
       "key": 15,
@@ -4235,8 +4068,8 @@
         57
       ],
       "visibleColors": 24,
-      "interiorTransparentPixels": 10,
-      "changedFromDirectionalIdle": 1312
+      "interiorTransparentPixels": 0,
+      "changedFromDirectionalIdle": 1306
     },
     {
       "key": 15,
@@ -4249,8 +4082,8 @@
         57
       ],
       "visibleColors": 24,
-      "interiorTransparentPixels": 10,
-      "changedFromDirectionalIdle": 1301
+      "interiorTransparentPixels": 0,
+      "changedFromDirectionalIdle": 1297
     },
     {
       "key": 15,
@@ -4278,7 +4111,7 @@
       ],
       "visibleColors": 24,
       "interiorTransparentPixels": 0,
-      "changedFromDirectionalIdle": 1166
+      "changedFromDirectionalIdle": 1168
     },
     {
       "key": 15,
@@ -4292,7 +4125,7 @@
       ],
       "visibleColors": 24,
       "interiorTransparentPixels": 0,
-      "changedFromDirectionalIdle": 1162
+      "changedFromDirectionalIdle": 1161
     },
     {
       "key": 15,
@@ -4306,7 +4139,7 @@
       ],
       "visibleColors": 24,
       "interiorTransparentPixels": 0,
-      "changedFromDirectionalIdle": 1252
+      "changedFromDirectionalIdle": 1250
     },
     {
       "key": 15,
@@ -4320,7 +4153,7 @@
       ],
       "visibleColors": 24,
       "interiorTransparentPixels": 0,
-      "changedFromDirectionalIdle": 1163
+      "changedFromDirectionalIdle": 1157
     },
     {
       "key": 15,
@@ -4348,7 +4181,7 @@
       ],
       "visibleColors": 24,
       "interiorTransparentPixels": 0,
-      "changedFromDirectionalIdle": 1080
+      "changedFromDirectionalIdle": 1081
     },
     {
       "key": 15,
@@ -4362,7 +4195,7 @@
       ],
       "visibleColors": 24,
       "interiorTransparentPixels": 0,
-      "changedFromDirectionalIdle": 1098
+      "changedFromDirectionalIdle": 1110
     },
     {
       "key": 15,
@@ -4376,7 +4209,7 @@
       ],
       "visibleColors": 24,
       "interiorTransparentPixels": 0,
-      "changedFromDirectionalIdle": 1158
+      "changedFromDirectionalIdle": 1159
     },
     {
       "key": 15,
@@ -4390,7 +4223,7 @@
       ],
       "visibleColors": 24,
       "interiorTransparentPixels": 0,
-      "changedFromDirectionalIdle": 1055
+      "changedFromDirectionalIdle": 1059
     },
     {
       "key": 15,
@@ -4417,8 +4250,8 @@
         57
       ],
       "visibleColors": 24,
-      "interiorTransparentPixels": 8,
-      "changedFromDirectionalIdle": 1209
+      "interiorTransparentPixels": 0,
+      "changedFromDirectionalIdle": 1195
     },
     {
       "key": 15,
@@ -4431,8 +4264,8 @@
         57
       ],
       "visibleColors": 24,
-      "interiorTransparentPixels": 7,
-      "changedFromDirectionalIdle": 1211
+      "interiorTransparentPixels": 0,
+      "changedFromDirectionalIdle": 1200
     },
     {
       "key": 15,
@@ -4445,8 +4278,8 @@
         57
       ],
       "visibleColors": 24,
-      "interiorTransparentPixels": 9,
-      "changedFromDirectionalIdle": 1229
+      "interiorTransparentPixels": 0,
+      "changedFromDirectionalIdle": 1215
     },
     {
       "key": 15,
@@ -4459,8 +4292,8 @@
         57
       ],
       "visibleColors": 24,
-      "interiorTransparentPixels": 9,
-      "changedFromDirectionalIdle": 1231
+      "interiorTransparentPixels": 0,
+      "changedFromDirectionalIdle": 1217
     },
     {
       "key": 16,
@@ -4558,7 +4391,7 @@
       ],
       "visibleColors": 24,
       "interiorTransparentPixels": 0,
-      "changedFromDirectionalIdle": 791
+      "changedFromDirectionalIdle": 789
     },
     {
       "key": 16,
@@ -4572,7 +4405,7 @@
       ],
       "visibleColors": 24,
       "interiorTransparentPixels": 0,
-      "changedFromDirectionalIdle": 797
+      "changedFromDirectionalIdle": 799
     },
     {
       "key": 16,
@@ -4586,7 +4419,7 @@
       ],
       "visibleColors": 24,
       "interiorTransparentPixels": 0,
-      "changedFromDirectionalIdle": 820
+      "changedFromDirectionalIdle": 827
     },
     {
       "key": 16,
@@ -4600,7 +4433,7 @@
       ],
       "visibleColors": 24,
       "interiorTransparentPixels": 0,
-      "changedFromDirectionalIdle": 758
+      "changedFromDirectionalIdle": 755
     },
     {
       "key": 16,
@@ -4628,7 +4461,7 @@
       ],
       "visibleColors": 24,
       "interiorTransparentPixels": 0,
-      "changedFromDirectionalIdle": 787
+      "changedFromDirectionalIdle": 786
     },
     {
       "key": 16,
@@ -4656,7 +4489,7 @@
       ],
       "visibleColors": 24,
       "interiorTransparentPixels": 0,
-      "changedFromDirectionalIdle": 808
+      "changedFromDirectionalIdle": 817
     },
     {
       "key": 16,
@@ -4670,7 +4503,7 @@
       ],
       "visibleColors": 24,
       "interiorTransparentPixels": 0,
-      "changedFromDirectionalIdle": 744
+      "changedFromDirectionalIdle": 742
     },
     {
       "key": 16,
@@ -4748,5 +4581,14 @@
     "touchingCells": 0,
     "whitelist": [],
     "report": "qa/boundary-touch.json"
-  }
+  },
+  "holeGate": {
+    "status": "pass",
+    "report": "qa/interior-holes.json",
+    "unreviewedEnclosedTransparentPixels": 0,
+    "whitelist": [],
+    "verifier": "qa/verify-silhouette-holes.py"
+  },
+  "reportVerifier": "qa/verify-qa-report.py",
+  "reportNegativeTest": "qa/verify-qa-report.py --self-test"
 }

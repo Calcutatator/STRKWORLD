@@ -30,14 +30,40 @@ Mechanical gates recorded in `qa-report.json`:
 - `verify-aseprite-format.py` is a regression gate for the official compressed
   cel layout: it requires 64x64 WORD dimensions before zlib data and verifies
   every decoded cel against its transparent PNG cell.
+- `verify-silhouette-holes.py` performs a four-connected exterior flood fill
+  over all 320 cells and rejects unreviewed enclosed transparency. Its exact
+  zero-island evidence is `interior-holes.json`; the repair ledger records the
+  initial 449 plus 60 cross-gate follow-up coordinate repairs and has no
+  enclosed-hole whitelist.
+- `verify-edge-heatmap.py` rejects omitted or blank evidence blocks. The
+  heatmap uses a 4x4 key-panel grid and contains 320 nonblank contour blocks
+  covering every facing and pose. Its negative test rejects an injected blank
+  block.
+- `verify-background-readability.py` correlates every one of the 16 full
+  64x64 down-idle cells across four row-separated background boards; it
+  derives the occupied board geometry and rejects fragment, quarter-cell, or
+  blank-lower-canvas layouts.
+- `channel-review.json` classifies all 864 original narrow-channel candidates.
+  Transient movement-only body channels are explicitly repaired; the 167
+  stable negative-space runs that remain are listed by exact cell, orientation,
+  coordinate, length, anatomical cluster, and rationale. Follow-up-repaired
+  runs remain classified in the complete ledger but are not whitelisted.
+  `verify-narrow-channels.py` rejects any current channel outside that
+  whitelist, and its `--self-test` proves injected and stale whitelist entries
+  fail.
+- `verify-qa-report.py` recomputes all 320 per-cell metrics and recorded
+  whole-body aggregates from the exact PNG sheets. Its `--self-test` rejects
+  mutated per-cell and aggregate values.
 - `rendered-coherence.json` records the visual gates that still require
   independent review; metrics alone do not accept identity or gait.
 
 `explicit-pixel-repairs.json` is the audit trail for the exact named repairs:
-133 enclosed-hole fills, 662 seam-material repairs, four isolated-pixel
-removals, 64 D/U stride reconstructions, and six detached-component cell
-repairs. These were authored by explicit cell/model operations, not by an
-automated hole-fill or global filter.
+642 enclosed-hole fills across the initial and cross-gate passes, 1,088
+transient channel repairs, 25 per-cell palette remaps, 662 seam-material
+repairs, four isolated-pixel removals, 64 D/U stride reconstructions, two D/U
+depth repairs, six weapon-boundary repairs, and six detached-component cell
+repairs. These 2,499 ledger entries are explicit cell/coordinate operations,
+not a blanket filter.
 
 Visual evidence:
 
