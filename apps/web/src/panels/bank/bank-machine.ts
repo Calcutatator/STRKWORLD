@@ -778,7 +778,13 @@ export function createBankPanel(options: BankPanelOptions): BankPanel {
         signing = false;
         // The seam reports a ceiling breach as a generic failure, so ask the
         // pool whether that is what happened rather than matching on a string.
-        if (toFailure(error).kind === 'unknown' && (await feeMovedPast(summary, signal))) {
+        // Once this attempt is stale there is no panel state left to classify,
+        // so do not start a new pool read after close or cancellation.
+        if (
+          toFailure(error).kind === 'unknown' &&
+          current(id) &&
+          (await feeMovedPast(summary, signal))
+        ) {
           if (!current(id)) return;
           discardPrepared();
           patch({

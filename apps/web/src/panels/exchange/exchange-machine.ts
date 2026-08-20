@@ -192,7 +192,13 @@ export function createExchangePanel(options: {
         patch({ balances: 'unrequested', flow: { name: 'submitted', transactionHash: result.transactionHash }, notice: COPY.balance.changed });
       } catch (error) {
         signing = false;
-        if (toFailure(error).kind === 'unknown' && (await feeMovedPast(batch, signal))) {
+        // A stale attempt has no visible state left to classify. In particular,
+        // closing the panel must not start a new pool read after wallet handoff.
+        if (
+          toFailure(error).kind === 'unknown' &&
+          live(id) &&
+          (await feeMovedPast(batch, signal))
+        ) {
           if (!live(id)) return;
           discard(); patch({ flow: { name: 'failed', kind: 'unknown', message: COPY.notices.feeMoved, recovery: 'prepare-again' } }); return;
         }
