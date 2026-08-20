@@ -369,6 +369,37 @@ describe('the fake owns its prepared intents too', () => {
 
     expect(ops.submitted[0]).toHaveLength(1);
   });
+
+  /**
+   * Taking the snapshot after the first `await` is not taking it at all.
+   *
+   * `tick()` is async, so awaiting it yields a microtask even at zero latency,
+   * and a caller that mutates its own array between the unawaited `prepare()`
+   * call and the settled promise wins that race. The real implementation
+   * captures synchronously — `throwIfAborted` does not await — so a double
+   * that captures later grants a freedom production does not, which is the
+   * whole failure mode this suite exists to prevent.
+   */
+  it('snapshots synchronously, so a mutation cannot race the pending prepare', async () => {
+    const ops = fresh();
+    // Held at the narrow variant so the race writes the same object the caller
+    // handed to `prepare`, without an `Intent`-union cast to hide behind.
+    const shield: Extract<Intent, { kind: 'shield' }> = { kind: 'shield', token: STRK, amount: 1n };
+    const mine: Intent[] = [shield];
+
+    const preparing = ops.prepare(mine);
+    shield.amount = 90n * 10n ** 18n;
+    const batch = await preparing;
+
+    expect(batch.intents).toEqual([{ kind: 'shield', token: STRK, amount: 1n }]);
+    expect(batch.warnings).toEqual([{
+      kind: 'public-leg',
+      detail: 'Depositing 1 is public: the amount and your address are visible on-chain.',
+    }]);
+
+    await batch.confirm({ feeCeiling: CEILING });
+    expect(ops.submitted).toEqual([[{ kind: 'shield', token: STRK, amount: 1n }]]);
+  });
 });
 
 describe('determinism', () => {

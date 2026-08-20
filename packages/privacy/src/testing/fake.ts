@@ -209,11 +209,15 @@ export class FakePrivacyOperations implements PrivacyOperations {
   }
 
   async prepare(intents: Intent[], signal?: AbortSignal): Promise<PreparedBatch> {
-    await this.tick('prepare', signal);
-    // Own the intents before checking them, exactly as the Wallet API
-    // implementation does. A double that lets a caller change a prepared batch
-    // teaches consuming lanes a freedom production does not grant.
+    // Own the intents synchronously, before the first await, exactly as the
+    // Wallet API implementation does — its own capture sits after a sync
+    // `throwIfAborted` and before anything awaited. `tick()` is async, so
+    // awaiting it first would yield a microtask even at zero latency and let a
+    // caller mutate its array between the unawaited `prepare()` call and the
+    // settled promise. A double that captures later grants a freedom
+    // production does not.
     const reviewed = freezeIntents(intents);
+    await this.tick('prepare', signal);
     if (reviewed.length === 0) {
       throw new PrivacyError('unknown', 'prepare called with no intents');
     }

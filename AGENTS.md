@@ -312,17 +312,48 @@ token with the binding guard passing, using the **real** pinned
 debited 100→10 STRK instead of 100→80. 11 of the 12 new cases failed red; the
 twelfth (append against the fake) passed only because `canonicalizeIntents`
 happened to copy, and it is load-bearing now that the snapshot is the single
-authority. Green: `packages/privacy` 7 files / **129** tests (was 6 / 117),
-full workspace 88 files / **1219** tests, workspace typecheck, production
-build, all 13 invariants, and the header gate's 30 live production responses.
-A six-mutation pass killed 6 of 6, each with a distinct failure set, so no
-clause is redundant: dropping the snapshot fails 7 cases; freezing only the
-array fails 4; freezing only the elements fails 2; unfreezing the swap
-canonical intent fails 3; unfreezing the swap published array fails 1; dropping
-the fake's snapshot fails 2. No wallet, account, provider, RPC, network, funds,
-proof, signature or submission was involved — the wallet, pool and gateway are
-in-memory doubles, and the only real code exercised is the pinned AVNU action
-builder and `starknet` serialization, both pure.
+authority.
+
+Independent review then found the fix incomplete in the double, and it was the
+same defect one turn later: `FakePrivacyOperations.prepare()` captured its
+snapshot *after* `await this.tick(...)`. `tick()` is async, so awaiting it
+yields a microtask even at zero latency, and a caller that mutated its own
+array between the unawaited `prepare()` call and the settled promise won that
+race — a shield reviewed at `1n` published `90000000000000000000n`. Production
+was never exposed, because its capture sits after a synchronous
+`throwIfAborted` and before anything awaited. **Taking the snapshot after the
+first await is not taking it at all**, and "the double does what production
+does" has to be checked against production's *ordering*, not just its
+behaviour. Fixed by capturing synchronously, with a red-first timing
+regression; a mirror-isolated mutation moving the capture back below `tick()`
+kills that regression and nothing else.
+
+*Local, no external network:* `packages/privacy` 7 files / **130** tests (was
+6 / 117), workspace typecheck, production build, all 13 invariants, and the
+header gate's 30 live production responses. A seven-mutation pass killed 7 of
+7, each with a distinct failure set, so no clause is redundant: dropping the
+snapshot fails 7 cases; freezing only the array fails 4; freezing only the
+elements fails 2; unfreezing the swap canonical intent fails 3; unfreezing the
+swap published array fails 1; dropping the fake's snapshot fails 2; and moving
+the fake's snapshot below its first await fails exactly 1. The full-workspace
+figure of 88 files / **1219** tests was measured locally **pre-merge** at
+`e79f34e` and is superseded by the hosted exact-head run below. No wallet,
+account, provider, RPC, funds, proof, signature or submission was involved in
+any local run — the wallet, pool and gateway are in-memory doubles, and the
+only real code exercised is the pinned AVNU action builder and `starknet`
+serialization, both pure.
+
+*Hosted, exact head:*
+[GitHub Actions run 32401360829](https://github.com/Calcutatator/STRKWORLD/actions/runs/32401360829)
+succeeded at `8b4f274` — 88 files / **1225** tests, plus the headers, invariants
+and deployment jobs. That run also executes this repo's standard **Protocol
+drift canary**, which issues **three read-only** JSON-RPC reads of public
+mainnet state against the pool at `latest`: `starknet_call` of
+`get_fee_amount`, `starknet_getClassHashAt`, and `starknet_call` of
+`is_paused`. It is pre-existing CI behaviour on every PR, not something this
+change adds or depends on, and it involves no key, viewing key, proof,
+signature, funds or transaction. Stating the local runs as "no RPC" without
+this distinction was wrong, and is corrected here.
 ### 2026-08-20 — A failed Backend fan-out closes the whole request signal
 
 The Backend fee, swap-prepare and proof-freshness paths fan one request signal
