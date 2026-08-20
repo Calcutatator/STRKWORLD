@@ -250,6 +250,33 @@ without a verification method is a rumour.
 
 Format: `### YYYY-MM-DD — short title` then what, why it matters, how verified.
 
+### 2026-08-20 — The Backend launcher admits only a regular entry file
+
+The standalone Backend launcher previously checked only that `BACKEND_ENTRY`
+existed. A directory therefore passed deployment admission and reached Node's
+dynamic import, which exited as an ordinary crash and printed the raw
+`ERR_UNSUPPORTED_DIR_IMPORT` stack plus absolute host paths. The process no
+longer reported the bounded configuration failure that an orchestrator can
+classify without leaking its image layout.
+
+Launcher admission now requires the resolved entry to be a regular file before
+any import can construct the Backend composition root or listener. A missing
+path, directory or directory symlink returns the same path-free configuration
+message and EX_CONFIG `78`. Successful regular-file startup, Backend runtime
+configuration, request handling, logging and deployment layout are unchanged.
+
+*Verified:* one public subprocess regression covers a missing entry, a real
+directory and a symlink to that directory. Each has empty stdout, exact generic
+stderr, no raw Node error code, stack or configured/absolute path, and exits
+`78` before the Backend module can be imported. The pre-fix directory case
+exited `1` through Node's raw import error. Replacing the regular-file predicate
+with an existence-only check makes the regression fail at that same exit-code
+assertion. The focused launcher test passes one test over all three entry
+shapes; the full workspace passes 90 files / 1,261 tests, workspace typecheck,
+production build, all 13 invariants and diff hygiene pass. Local verification
+opened no listener or external network and used no wallet, RPC, proof,
+signature, secret, funds or transaction.*
+
 ### 2026-08-20 — An Exchange edit owns its pending preparation
 
 The Exchange amount and asset controls remain editable while wallet
