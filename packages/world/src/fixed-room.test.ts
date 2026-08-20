@@ -15,6 +15,7 @@ import {
   isFixedRoomSolidAt,
   normalizeFixedRoomStations,
   type FixedRoomDefinition,
+  type FixedRoomState,
 } from './fixed-room.js';
 
 function bus<Events extends Record<string, unknown>>(): EventBus<Events> {
@@ -48,7 +49,10 @@ function bus<Events extends Record<string, unknown>>(): EventBus<Events> {
   } as EventBus<Events>;
 }
 
-function harness(definition: FixedRoomDefinition = POST_OFFICE_ROOM_DEFINITION) {
+function harness(
+  definition: FixedRoomDefinition = POST_OFFICE_ROOM_DEFINITION,
+  onChange?: (state: FixedRoomState) => void,
+) {
   const out = bus<WorldEvents>();
   const inputCalls: string[] = [];
   const shell = bus<ShellEvents>();
@@ -63,6 +67,7 @@ function harness(definition: FixedRoomDefinition = POST_OFFICE_ROOM_DEFINITION) 
       suspend: () => inputCalls.push('suspend'),
       resume: () => inputCalls.push('resume'),
     },
+    onChange,
   });
   return { out, shell, inputCalls, events, controller };
 }
@@ -297,6 +302,38 @@ describe('fixed room station admission', () => {
 });
 
 describe('fixed room controller', () => {
+  it('does not expose station admission through the public state snapshot', () => {
+    const h = harness();
+    h.controller.enter();
+
+    const exposed = h.controller.state;
+    expect(exposed.stations[0]?.status).toBe('locked');
+    expect(Reflect.set(exposed.stations[0]!, 'status', 'available')).toBe(false);
+    expect(Reflect.set(exposed.stations, '0', {
+      ...exposed.stations[0]!,
+      status: 'available',
+    })).toBe(false);
+
+    h.controller.update({ x: 3, y: 4 });
+    expect(h.events).toEqual([]);
+    expect(h.controller.state.stations[0]?.status).toBe('locked');
+  });
+
+  it('does not expose station admission through an onChange snapshot', () => {
+    let published: FixedRoomState | undefined;
+    const h = harness(POST_OFFICE_ROOM_DEFINITION, (state) => {
+      published = state;
+    });
+    h.controller.enter();
+
+    expect(published?.stations[0]?.status).toBe('locked');
+    expect(Reflect.set(published!.stations[0]!, 'status', 'available')).toBe(false);
+
+    h.controller.update({ x: 3, y: 4 });
+    expect(h.events).toEqual([]);
+    expect(h.controller.state.stations[0]?.status).toBe('locked');
+  });
+
   it('activates the Post Office station once, suspending before the synchronous claim', () => {
     const h = harness();
     const order: string[] = [];
