@@ -216,10 +216,13 @@ hides the disclosure while leaving the deposit confirmable.
 
 **Move state before you await, and guard everything after one.** A guard that
 reads the flow, awaits, and then transitions is not a guard: two clicks in one
-tick both pass it. Past that, three separate clocks decide whether a finished
-async step may write what it learned — a newer attempt, a closed panel, or a
-newer balance read. One counter for all three would mean a balance read
-cancelling a submission, which is worse than the bug it fixes.
+tick both pass it. Past that, four separate clocks decide whether a finished
+async step may write what it learned: `attempt` for a newer prepare/confirm,
+`session` for a closed panel, `balanceRead` for a newer balance read or settled
+submission, and `composition` for a Clear/Remove edit that owns the batch over
+older recipient preflight or preparation. One counter for all four would make
+an unrelated balance read or batch edit cancel a submission, which is worse
+than the stale write it prevents.
 
 **An operation verdict supersedes an older capability probe.** Wallet errors
 118 and 162 are current account/wallet facts, so the connect machine retires

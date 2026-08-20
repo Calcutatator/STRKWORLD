@@ -303,6 +303,8 @@ export function createBankPanel(options: BankPanelOptions): BankPanel {
   let attempt = 0;
   let session = 0;
   let balanceRead = 0;
+  /** A Clear/Remove edit owns the batch over work started from an older shape. */
+  let composition = 0;
   /**
    * Network cost per batch shape, as reported by the seam.
    *
@@ -570,6 +572,7 @@ export function createBankPanel(options: BankPanelOptions): BankPanel {
       }
 
       const mySession = session;
+      const myComposition = composition;
       patch({ adding: true });
       try {
         let pending: BankNotice | null = null;
@@ -581,7 +584,7 @@ export function createBankPanel(options: BankPanelOptions): BankPanel {
             const status = await operations.recipientStatus(recipient, signal);
             // The room may have closed while the pool was answering. Queuing an
             // intent into a reset panel is a financial write nobody asked for.
-            if (!live(mySession)) return;
+            if (!live(mySession) || composition !== myComposition) return;
             if (!gateOpen()) return;
             if (status === 'unregistered') {
               notice('error', COPY.notices.recipientUnregistered);
@@ -591,7 +594,7 @@ export function createBankPanel(options: BankPanelOptions): BankPanel {
               pending = { tone: 'info', text: COPY.notices.recipientUnknown };
             }
           } catch (error) {
-            if (!live(mySession)) return;
+            if (!live(mySession) || composition !== myComposition) return;
             const failure = toFailure(error);
             onError?.(failure);
             notice('error', COPY.errors[failure.kind]);
@@ -620,10 +623,16 @@ export function createBankPanel(options: BankPanelOptions): BankPanel {
     },
 
     removeFromBatch(index: number): void {
+      begin();
+      composition += 1;
+      discardPrepared();
       setBatch(accumulator.remove(index));
+      patch({ notice: null, flow: { name: 'composing' } });
     },
 
     clearBatch(): void {
+      begin();
+      composition += 1;
       accumulator.clear();
       discardPrepared();
       setBatch(accumulator.intents);
