@@ -153,9 +153,6 @@ export class LobbyClient {
   /** The server-assigned identity. Null until the `welcome` message arrives. */
   #gameId: GameId | null = null;
 
-  /** True while a local `disconnect()` is in progress, so onLeave can tell. */
-  #leavingByRequest = false;
-
   /** The latest requested position not yet confirmed on the server. */
   #desired: Required<Placement> | null = null;
   #lastSentAt: number | null = null;
@@ -336,13 +333,8 @@ export class LobbyClient {
     const room = this.#room;
     this.#room = null;
     this.#gameId = null;
-    this.#leavingByRequest = true;
     this.#setStatus('closed', 'client-left');
-    try {
-      if (room !== null) await room.leave(true);
-    } finally {
-      this.#leavingByRequest = false;
-    }
+    if (room !== null) await room.leave(true);
     this.#emitPeers();
   }
 
@@ -421,9 +413,7 @@ export class LobbyClient {
         this.#room = null;
         this.#gameId = null;
         this.#cancelReconcile();
-        if (!this.#leavingByRequest) {
-          this.#setStatus('closed', 'server-dropped', code);
-        }
+        this.#setStatus('closed', 'server-dropped', code);
         this.#emitPeers();
         rejectWelcome(new Error('Lobby room left before welcome'));
       });

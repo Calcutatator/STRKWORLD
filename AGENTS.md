@@ -276,6 +276,210 @@ string-only `=== '0x0'` check makes the two leading-zero cases fail. Local
 verification used no live provider, external network, RPC, wallet, proof,
 signature, funds or transaction.*
 
+### 2026-08-20 — A Bank batch edit owns work started from the older batch
+
+The Menu Mode Bank leaves its explicit Remove and Clear controls available
+while recipient preflight or wallet preparation is pending. Those edits now
+own the batch immediately. A late recipient preflight cannot re-add its
+captured transfer after Clear/Remove, and a late prepared batch is discarded
+instead of reopening review for the pre-edit intent set.
+
+This ownership needs its own version. `attempt` identifies prepare/confirm
+work, `session` identifies the mounted room and `balanceRead` identifies the
+displayed balance; using any one of them for batch composition would cancel an
+unrelated owner. Clear/Remove advance the composition version and invalidate
+the active prepare attempt while leaving signing, unconditional receipt
+retention, panel-close invalidation and balance reads unchanged.
+
+*Verified:* deferred red/green tests use only the public Bank machine. Clear
+during pending registered-recipient preflight previously re-queued the captured
+transfer; Clear/Remove during pending prepare previously restored old review.
+The returned stale batches now reject confirmation as discarded, and late
+successful or rejected preflights after Remove/Clear cannot publish batch,
+form, notice or provider-error state. Three isolated mutations are killed:
+removing stale-batch `discard()`, removing the rejected-preflight composition
+guard, and removing Remove's composition increment. The focused Bank machine
+passes 74 tests, the Web suite passes 36 files / 390 tests and the full
+workspace passes 87 files / 1,226 tests; workspace typecheck, production build,
+all 13 invariants and diff check pass. The local verification used no browser,
+external network, wallet, RPC, proof, signature, funds or transaction.
+
+### 2026-08-20 — A replacement World must not inherit its first Shell bus
+
+The World runtime retains its ref-counting host after the current Phaser game
+has been completely destroyed. That host's `start` callback previously closed
+over the first `WorldConfig` passed to `ensureHost()`. A later acquisition with
+a different Shell bus therefore constructed a genuinely new game and scene but
+installed the first bus again. Its fixed-room controllers subscribed to stale
+Shell input, and its semantic output returned to the stale owner.
+
+Each fresh host start now consumes the config belonging to the acquisition that
+caused that start. The handoff is synchronous around `Host.acquire()` and is
+cleared afterwards; retaining or releasing an already-live game is unchanged.
+The singleton host still owns StrictMode-safe Phaser lifetime, but it no longer
+owns the first caller's bus forever.
+
+*Verified:* a public runtime regression acquires with bus A, releases it, runs
+the complete deferred teardown, then acquires with distinct bus B. Before the
+fix, the second scene's registry contained A and B received no fixed-room
+subscription; the failure reproduced identically in three isolated runs. Green
+records B at scene creation and observes B's `world:stations` subscription.
+Removing the per-acquisition config assignment makes both runtime tests fail.
+The focused runtime suite passes 1 file / 2 tests. No browser, network, lobby,
+wallet, RPC, proof, signature, funds or transaction was used.
+
+### 2026-08-20 — A local Lobby leave does not own its replacement room
+
+`LobbyClient.disconnect()` clears the current room before awaiting the SDK's
+`leave()`, and the client is deliberately reusable: an explicit `connect()` may
+therefore establish replacement room B while old room A is still leaving. A
+client-wide `leavingByRequest` flag previously remained true for that whole
+await. If B's transport dropped in the meantime, B's current `onLeave` mistook
+the drop for A's requested leave, cleared B and its identity but suppressed the
+`closed/server-dropped` transition. The public client then reported
+`connected` while owning no room, so the Shell could not offer truthful solo
+mode or its explicit reconnect control.
+
+Local-leave classification now follows room ownership instead of one mutable
+client-wide flag. `disconnect()` already removes A from `#room` synchronously,
+so A's eventual callback is stale under the existing complete
+generation-and-room check. Any callback that still owns the current room is an
+external close and publishes `closed/server-dropped` with its close code. Join
+payloads, presence state, automatic-reconnect policy and network behavior are
+unchanged.
+
+*Verified:* a public-seam regression connects A, defers A's `leave()`, connects
+B, then drops B with code 1006 before allowing A to finish. The old code leaves
+the client `connected`; green reports exactly `closed/server-dropped` with code
+1006. The current Lobby suite passes 9 files / 192 tests. Local verification
+used only fake rooms plus the suite's local loopback server; no browser, remote
+lobby, wallet, RPC, proof, signature, funds or transaction was used.
+
+### 2026-08-20 — A prepared batch must own the intents it was admitted with
+
+`PrivacyOperations.prepare()` is where every admission check lives: the route
+policy and token allowlist, positive amounts, `maxIntents`, recipient
+registration, the D-004 shield/spend separation, and the warnings the player
+reads. All of it was reachable around, because `confirm()` did not own the
+intents it proved.
+
+Two independent leaks, one root cause. The **array**: `prepare(intents)` handed
+its own parameter down to the route builders, whose `confirm()` re-read it at
+confirmation time, so an intent the caller appended afterwards was proved and
+signed — including the shield+transfer pair `prepare` refuses outright, which is
+the exact public-leg link the pool exists to break. The **elements**:
+`intents: [...intents]` is a shallow copy, so the published `readonly Intent[]`
+held the caller's own objects; `readonly` is erased at runtime, so writing a
+field reached `confirm()`.
+
+The swap route was the worst case, not the protected one. Its action-binding
+guard from PR #31 recomputes the expected action set from the canonical intent,
+and that same object was published on the batch — so moving it moved the
+guard's authority and the action together and the guard confirmed the
+corruption. That is the tautology PR #31 avoided one level in, at
+`snapshotExecutorCalls`, reintroduced one level out. The general rule is
+stronger than "don't share an array with the SDK": **an expectation recomputed
+from a published mutable object is not independent of what it checks.** The
+input must be unreachable by anyone who could benefit from moving it, callers
+included.
+
+`prepare()` now takes one frozen snapshot *before* validating, and that snapshot
+is the sole authority for admission, costing, warnings, the published batch and
+the actions built at confirmation. There is no window in which the reviewed
+batch and the proved batch can differ, and no handle with which to open one.
+`FakePrivacyOperations` does the same: a double that grants a freedom
+production does not lets consumer suites go green against behaviour that cannot
+happen. `Intent` is a flat union of strings and bigints, so one level of
+copy-and-freeze is a full deep freeze.
+
+Scope, stated honestly: no exported type, signature or policy changed —
+`PreparedBatch.intents` already declared `readonly`. Today's two Shell call
+sites do not trigger this (`bank-machine.ts` spreads into a throwaway array,
+`exchange-machine.ts` passes an object literal, and every consumer of
+`batch.intents` only reads it), so this was a latent contract defect rather
+than a live exploit. It is still the seam's job: the financial boundary must not
+depend on callers in another package choosing not to write. The identical fix
+already existed one level up in `ReceiptLedger` and one level in at
+`snapshotExecutorCalls`; this was the unbound middle. It does **not** touch the
+open executor identity/admission decision (D-018 vs D-023 vs D-042), and it
+cannot detect a hostile plan — the swap guard remains self-consistency.
+
+*Verified:* red first, all through the public `prepare(...)`/`confirm(...)` seam
+against the package's existing fakes. Before the fix, an appended transfer made
+a prepared shield sign
+`[{deposit 0x1},{transfer 0x14→0x456}]`; an appended unshield made a prepared
+transfer prove an unallowlisted `0xdeadbeef` withdraw to an unchecked `0xbad`;
+writing `amount` on a published shield intent signed
+`0xc9f2c9cd04674edea40000000` instead of the reviewed `0x1`; and on the swap
+route, writing `amountIn` or `tokenIn` moved the sell leg to that amount or
+token with the binding guard passing, using the **real** pinned
+`@avnu/avnu-sdk@4.2.0` `buildStrk20Actions`. The fake recorded `90n` and
+debited 100→10 STRK instead of 100→80. 11 of the 12 new cases failed red; the
+twelfth (append against the fake) passed only because `canonicalizeIntents`
+happened to copy, and it is load-bearing now that the snapshot is the single
+authority.
+
+Independent review then found the fix incomplete in the double, and it was the
+same defect one turn later: `FakePrivacyOperations.prepare()` captured its
+snapshot *after* `await this.tick(...)`. `tick()` is async, so awaiting it
+yields a microtask even at zero latency, and a caller that mutated its own
+array between the unawaited `prepare()` call and the settled promise won that
+race — a shield reviewed at `1n` published `90000000000000000000n`. Production
+was never exposed, because its capture sits after a synchronous
+`throwIfAborted` and before anything awaited. **Taking the snapshot after the
+first await is not taking it at all**, and "the double does what production
+does" has to be checked against production's *ordering*, not just its
+behaviour. Fixed by capturing synchronously, with a red-first timing
+regression; a mirror-isolated mutation moving the capture back below `tick()`
+kills that regression and nothing else.
+
+The real seam is now pinned the same way, closing the residual gap that the
+double's defect exposed: nothing had asserted that production captures
+*synchronously*, so an `await` inserted above its snapshot would have
+reintroduced the same race with every test still green. That pin was green on
+first run — production was already correct — so its teeth come from mutation
+rather than from a red observation: inserting `await Promise.resolve()` above
+the production snapshot fails exactly that one case.
+
+*Local, and issuing no network request of any kind:* `packages/privacy` 7 files
+/ **131** tests (was 6 / 117), full workspace 89 files / **1252** tests,
+workspace typecheck, production build, all 13 invariants, and the header gate's
+30 live production responses, all re-run at the merge `ea25c16`, which contains
+`origin/main` `5be7fd5`. An eight-mutation pass killed 8 of 8,
+each with a distinct failure set, so no clause is redundant: dropping the
+snapshot fails 7 cases; freezing only the array fails 4; freezing only the
+elements fails 2; unfreezing the swap canonical intent fails 3; unfreezing the
+swap published array fails 1; dropping the fake's snapshot fails 2; moving the
+fake's snapshot below its first await fails exactly 1; and delaying the
+production snapshot by one microtask fails exactly 1. That pass carries across
+the syncs below because the four privacy source files are byte-identical from
+`c628150` through `ea25c16`, checked with `git diff`, not assumed. Earlier
+full-workspace figures in this entry's history — 1219 at `e79f34e`, 1226 at
+`c63c9f3`, 1233 at `d675408`, 1234 at `5818105` — were each true of the tree
+they were measured on and are superseded as `main` advanced; the privacy figure
+held at 131 throughout. No wallet, account, provider, RPC, funds, proof,
+signature or
+submission was involved in any local run — the wallet, pool and gateway are
+in-memory doubles, and the only real code exercised is the pinned AVNU action
+builder and `starknet` serialization, both pure. The mutation passes ran in
+throwaway mirrors under a scratch path, never against the live branch files,
+which were checksum-verified unchanged after each.
+
+*Hosted, and the only part of this evidence that touches the network:*
+[GitHub Actions run 32401360829](https://github.com/Calcutatator/STRKWORLD/actions/runs/32401360829)
+succeeded at `8b4f274`, an earlier head of this branch — 88 files / **1225**
+tests, plus the headers, invariants and deployment jobs. Later heads, `ea25c16`
+included, are covered by their own PR runs rather than by this one. Every
+hosted run also executes this repo's standard **Protocol drift canary**, which
+issues **three read-only** JSON-RPC reads of public mainnet state against the
+pool at `latest`: `starknet_call` of `get_fee_amount`,
+`starknet_getClassHashAt`, and `starknet_call` of `is_paused`. PR #41 later
+hardened that gate to fail closed on unknown protocol state and to validate
+each call's response shape; it did not change which three reads are issued, so
+this disclosure still describes them exactly. It is pre-existing CI behaviour
+on every PR, not something this change adds or depends on, and it involves no
+key, viewing key, proof, signature, funds or transaction. Stating the local
+runs as "no RPC" without this distinction was wrong, and is corrected here.
 ### 2026-08-20 — An old Bridge watcher cannot adopt replacement evidence
 
 `BridgeService.refresh()` may validly return provider status for deposit A
@@ -342,34 +546,6 @@ proof, signature, funds or transaction. Hosted CI's standard canary remains
 read-only and issues two public-mainnet `starknet_call` reads plus one
 `starknet_getClassHashAt` at `latest`; it uses no key, signature, proof, funds
 or transaction.*
-
-### 2026-08-20 — A Bank batch edit owns work started from the older batch
-
-The Menu Mode Bank leaves its explicit Remove and Clear controls available
-while recipient preflight or wallet preparation is pending. Those edits now
-own the batch immediately. A late recipient preflight cannot re-add its
-captured transfer after Clear/Remove, and a late prepared batch is discarded
-instead of reopening review for the pre-edit intent set.
-
-This ownership needs its own version. `attempt` identifies prepare/confirm
-work, `session` identifies the mounted room and `balanceRead` identifies the
-displayed balance; using any one of them for batch composition would cancel an
-unrelated owner. Clear/Remove advance the composition version and invalidate
-the active prepare attempt while leaving signing, unconditional receipt
-retention, panel-close invalidation and balance reads unchanged.
-
-*Verified:* deferred red/green tests use only the public Bank machine. Clear
-during pending registered-recipient preflight previously re-queued the captured
-transfer; Clear/Remove during pending prepare previously restored old review.
-The returned stale batches now reject confirmation as discarded, and late
-successful or rejected preflights after Remove/Clear cannot publish batch,
-form, notice or provider-error state. Three isolated mutations are killed:
-removing stale-batch `discard()`, removing the rejected-preflight composition
-guard, and removing Remove's composition increment. The focused Bank machine
-passes 74 tests, the Web suite passes 36 files / 390 tests and the full
-workspace passes 87 files / 1,226 tests; workspace typecheck, production build,
-all 13 invariants and diff check pass. The local verification used no browser,
-external network, wallet, RPC, proof, signature, funds or transaction.
 
 ### 2026-08-20 — A late Bridge status response cannot overwrite a newer retained version
 

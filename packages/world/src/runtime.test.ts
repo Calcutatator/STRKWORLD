@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { EventBus, ShellEvents, WorldEvents } from '@strkworld/shared';
 
 const sceneBusAtCreate: Array<unknown> = [];
@@ -50,19 +50,50 @@ class MapRegistry {
   }
 }
 
-const fakeBus: { out: EventBus<WorldEvents>; in: EventBus<ShellEvents> } = {
-  out: { emit: vi.fn(), on: vi.fn(), once: vi.fn(), off: vi.fn(), clear: vi.fn() },
-  in: { emit: vi.fn(), on: vi.fn(), once: vi.fn(), off: vi.fn(), clear: vi.fn() },
-};
+function fakeBus(): { out: EventBus<WorldEvents>; in: EventBus<ShellEvents> } {
+  return {
+    out: { emit: vi.fn(), on: vi.fn(), once: vi.fn(), off: vi.fn(), clear: vi.fn() },
+    in: { emit: vi.fn(), on: vi.fn(), once: vi.fn(), off: vi.fn(), clear: vi.fn() },
+  };
+}
 
 describe('world runtime boot ordering', () => {
+  beforeEach(() => {
+    vi.resetModules();
+    vi.useFakeTimers();
+    sceneBusAtCreate.length = 0;
+  });
+
+  afterEach(async () => {
+    await vi.runAllTimersAsync();
+    vi.useRealTimers();
+  });
+
   it('installs the shell bus before a scene is created', async () => {
+    const bus = fakeBus();
     const { acquireWorld, releaseWorld } = await import('./runtime.js');
 
-    await acquireWorld({} as HTMLElement, fakeBus);
+    await acquireWorld({} as HTMLElement, bus);
 
-    expect(sceneBusAtCreate).toEqual([fakeBus]);
-    expect(fakeBus.in.on).toHaveBeenCalledWith('world:stations', expect.any(Function));
+    expect(sceneBusAtCreate).toEqual([bus]);
+    expect(bus.in.on).toHaveBeenCalledWith('world:stations', expect.any(Function));
     releaseWorld();
+  });
+
+  it('binds a replacement world to the current config after complete teardown', async () => {
+    const first = fakeBus();
+    const second = fakeBus();
+    const { acquireWorld, releaseWorld } = await import('./runtime.js');
+
+    await acquireWorld({} as HTMLElement, first);
+    releaseWorld();
+    await vi.runAllTimersAsync();
+    await acquireWorld({} as HTMLElement, second);
+
+    expect(sceneBusAtCreate.at(-1)).toBe(second);
+    expect(second.in.on).toHaveBeenCalledWith('world:stations', expect.any(Function));
+
+    releaseWorld();
+    await vi.runAllTimersAsync();
   });
 });
