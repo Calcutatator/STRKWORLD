@@ -250,6 +250,33 @@ without a verification method is a rumour.
 
 Format: `### YYYY-MM-DD — short title` then what, why it matters, how verified.
 
+### 2026-08-20 — An Exchange edit owns its pending preparation
+
+The Exchange amount and asset controls remain editable while wallet
+preparation is pending. Those edits now invalidate the preparation attempt
+that captured the older composition. When that attempt eventually returns,
+its prepared batch is discarded and cannot replace the edited form with an
+obsolete review.
+
+Exchange needs no additional ownership clock for this transition. Its
+existing attempt version already owns preparation and confirmation, and an
+edit is relevant to that owner only while the flow is `preparing`. The edit
+advances that version and returns to `composing`; edits outside preparation,
+signing, unconditional receipt retention, close invalidation and balance reads
+retain their prior behavior.
+
+*Verified:* one public-machine table defers `PrivacyOperations.prepare`, then
+edits the amount, sell asset or buy asset before releasing the old batch. All
+three cases were red with the old batch undiscarded and its review published;
+green discards each returned batch exactly once, preserves the newer form and
+leaves no old review. Removing the attempt advance restores the stale review,
+and removing the flow transition leaves the edited panel stuck in preparing,
+so both clauses are independently observed. The focused Exchange machine
+passes 18 tests, the Web suite passes 36 files / 393 tests and the full
+workspace passes 88 files / 1,241 tests; workspace typecheck, production build,
+all 13 invariants and diff check pass. Local verification used no browser,
+external network, wallet, RPC, proof, signature, funds or transaction.*
+
 ### 2026-08-20 — An old Bridge watcher cannot adopt replacement evidence
 
 `BridgeService.refresh()` may validly return provider status for deposit A
