@@ -505,6 +505,44 @@ this disclosure still describes them exactly. It is pre-existing CI behaviour
 on every PR, not something this change adds or depends on, and it involves no
 key, viewing key, proof, signature, funds or transaction. Stating the local
 runs as "no RPC" without this distinction was wrong, and is corrected here.
+
+### 2026-08-20 — Fly startup requires the browser shell, not only its private listeners
+
+The Fly composition previously launched both private children, accepted their
+readiness messages and bound the public edge without checking that its static
+root contained a usable `index.html`. A missing artifact, a directory named
+`index.html`, or a link escaping the configured root therefore produced a
+nominally ready Machine whose first shell request returned 404.
+
+Startup now validates the shell file before spawning either private child,
+rechecks an abort immediately after that awaited filesystem work, and validates
+the shell again at the public ownership handoff. The resolved file must be a
+regular file inside the resolved static root; otherwise startup fails with one
+generic error, closes anything it started, and hands no composition to its
+caller. Startup and request serving use the same package-local canonical-path,
+containment and regular-file resolver, so the readiness gate cannot drift from
+the edge's acceptance rule. This does not change static routing, build output,
+image contents, ports, proxy behavior or shutdown ownership.
+
+*Verified:* public composition-seam regressions supply each of the three
+unusable roots above and use child-start instrumentation to prove zero private
+children launch. Removing or moving that initial validation after child
+readiness makes the instrumentation observe starts. A separate red-first case
+waits until both children are launched, removes `index.html` while their
+readiness is pending, and proves startup closes all three ports instead of
+handing off the edge; before the handoff revalidation it returned a live
+composition. The same handoff replaces the shell with an escaping symlink and
+is rejected by the shared rule; weakening only the handoff check to a regular
+file `stat` makes that case return a composition. The abort regression calls
+startup, aborts while initial filesystem validation is pending and observes
+zero child starts; moving the abort check above that await makes it observe two.
+All 52 Fly composition tests pass; the Fly slice is 5 files / 143 tests and the
+full workspace is 89 files / 1,265 tests. Workspace typecheck, production
+build, all 13 invariants, tilemap and diff checks pass. The checks are
+filesystem/process-local: no image build, container, deploy, registry, secret,
+external network, RPC, wallet, proof, signature, funds or transaction was
+used.*
+
 ### 2026-08-20 — An old Bridge watcher cannot adopt replacement evidence
 
 `BridgeService.refresh()` may validly return provider status for deposit A
