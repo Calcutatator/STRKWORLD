@@ -226,7 +226,48 @@ describe('Bridge shell machine', () => {
     expect(h.machine.store.getState().flow).toMatchObject({ name: 'failed', message: COPY.bridge.accountChanged });
   });
 
-  it('does not publish a quote after close while the final account check is pending', async () => {
+  it.each(['close', 'discard', 'import'] as const)(
+    'does not publish a quote after %s while the final account check is pending',
+    async (action) => {
+      let reads = 0;
+      let releaseFinalAccount!: (value: string | null) => void;
+      const finalAccountPending = new Promise<string | null>((resolve) => {
+        releaseFinalAccount = resolve;
+      });
+      const planner: PublicShieldPlanner = {
+        planMax: vi.fn(async ({ available }: PublicShieldPlanInput) => plan(available)),
+      };
+      const h = harness(null, planner, {
+        now: () => Date.parse('2030-01-01T00:00:00.000Z'),
+        readAccount: () => (++reads < 3 ? ACCOUNT : finalAccountPending),
+      });
+
+      const quoting = h.machine.createQuote({
+        source: SOURCE,
+        amountIn: 1_000_000n,
+        refundAddress: '0x1111111111111111111111111111111111111111',
+      });
+      await vi.waitFor(() => expect(reads).toBe(3));
+
+      if (action === 'close') h.machine.close();
+      if (action === 'discard') h.machine.discardRecord();
+      if (action === 'import') h.machine.importRecord('sensitive-record');
+      const invalidatedState = h.machine.store.getState();
+      releaseFinalAccount(ACCOUNT);
+      await quoting;
+
+      expect(h.machine.store.getState()).toEqual(invalidatedState);
+      expect(h.machine.store.getState().instructionsVisible).toBe(false);
+      expect(h.machine.store.getState().plan).toBeNull();
+      expect(h.service.discard).toHaveBeenCalledOnce();
+      if (action === 'import') {
+        expect(h.service.importResumeRecord).toHaveBeenCalledTimes(2);
+        expect(h.saved).not.toBeNull();
+      } else expect(h.saved).toBeNull();
+    },
+  );
+
+  it('retains signed evidence when refresh supersedes the final account check', async () => {
     let reads = 0;
     let releaseFinalAccount!: (value: string | null) => void;
     const finalAccountPending = new Promise<string | null>((resolve) => {
@@ -247,16 +288,14 @@ describe('Bridge shell machine', () => {
     });
     await vi.waitFor(() => expect(reads).toBe(3));
 
-    h.machine.close();
-    const closedState = h.machine.store.getState();
+    await h.machine.refresh();
+    const refreshedState = h.machine.store.getState();
     releaseFinalAccount(ACCOUNT);
     await quoting;
 
-    expect(h.machine.store.getState()).toEqual(closedState);
-    expect(h.machine.store.getState().instructionsVisible).toBe(false);
-    expect(h.machine.store.getState().plan).toBeNull();
-    expect(h.service.discard).toHaveBeenCalledOnce();
-    expect(h.saved).toBeNull();
+    expect(h.machine.store.getState()).toEqual(refreshedState);
+    expect(h.service.discard).not.toHaveBeenCalled();
+    expect(h.saved).not.toBeNull();
   });
 
   it('rechecks the active account after saved preflight planning', async () => {

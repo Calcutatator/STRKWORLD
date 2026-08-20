@@ -250,7 +250,7 @@ without a verification method is a rumour.
 
 Format: `### YYYY-MM-DD — short title` then what, why it matters, how verified.
 
-### 2026-08-20 — A closed Bridge panel owns its final account check
+### 2026-08-20 — Bridge cancellation and supersession own different evidence
 
 Bridge quote creation checks the active account before requesting a signed
 provider quote, after that quote, and after planning the exact public shield.
@@ -261,20 +261,29 @@ published the shield plan, provider-fee notice and deposit instructions into
 the closed panel. It also skipped the existing cancelled-quote cleanup, leaving
 the just-saved signed record held by the service.
 
-The final account read now has the same flight/session ownership check as the
-earlier async boundaries. A cancelled or stale continuation runs the existing
-signed-evidence cleanup and returns before rereading service state or publishing
-instructions. Quote contents, planner policy, account validation, import and
-discard precedence, and the public Bridge interface are unchanged.
+The final account read now distinguishes two owners. An explicit cancellation
+(`close`, `discard` or a valid `import`) runs the existing signed-evidence
+cleanup and restoration before returning. A stale attempt or session created by
+a non-cancelling action such as Refresh returns without touching the signed
+record that action adopted. Both paths stop before rereading service state or
+publishing instructions. Quote contents, planner policy, account validation,
+import and discard precedence, and the public Bridge interface are unchanged.
 
 *Verified:* a public `createBridgePanel()` regression returns the active account
 for the first two checks and defers the third. It closes the panel while that
 last read is pending, then resolves the same account. Red published
 `instructionsVisible: true`, the shield plan and provider-fee notice instead of
 preserving the closed snapshot; green preserves it, discards the cancelled
-signed quote exactly once and leaves no saved record. The focused Bridge suite
-passes 1 file / 37 tests, the Web suite passes 37 files / 397 tests and a
-one-worker full workspace run passes 89 files / 1,270 tests. Workspace
+signed quote exactly once and leaves no saved record. The same third-read seam
+pins Discard and Import, including restoration of imported evidence after
+cleanup. Independent review exposed a second red: treating every stale attempt
+as cancelled made Refresh discard the signed evidence it had just adopted.
+Green retains that evidence without publishing the old continuation. Removing
+the explicit-cancellation branch fails Close and Import; removing the stale
+attempt return fails Refresh, so the two ownership clauses are independently
+observed. The focused Bridge suite passes 1 file / 40 tests, the Web suite
+passes 37 files / 400 tests and a one-worker full workspace run passes 89 files
+/ 1,273 tests. Workspace
 typecheck, production build, all 13 invariants and diff hygiene pass. The
 behavioral checks use only in-memory test doubles: no browser, external
 network, wallet, RPC, proof, signature, funds or transaction was used.*
