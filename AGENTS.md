@@ -336,38 +336,45 @@ first run — production was already correct — so its teeth come from mutation
 rather than from a red observation: inserting `await Promise.resolve()` above
 the production snapshot fails exactly that one case.
 
-*Local, no external network:* `packages/privacy` 7 files / **131** tests (was
-6 / 117), full workspace 88 files / **1233** tests, workspace typecheck,
-production build, all 13 invariants, and the header gate's 30 live production
-responses, all at the merge `d675408`. An eight-mutation pass killed 8 of 8,
+*Local, and issuing no network request of any kind:* `packages/privacy` 7 files
+/ **131** tests (was 6 / 117), full workspace 89 files / **1252** tests,
+workspace typecheck, production build, all 13 invariants, and the header gate's
+30 live production responses, all re-run at the merge `ea25c16`, which contains
+`origin/main` `5be7fd5`. An eight-mutation pass killed 8 of 8,
 each with a distinct failure set, so no clause is redundant: dropping the
 snapshot fails 7 cases; freezing only the array fails 4; freezing only the
 elements fails 2; unfreezing the swap canonical intent fails 3; unfreezing the
 swap published array fails 1; dropping the fake's snapshot fails 2; moving the
 fake's snapshot below its first await fails exactly 1; and delaying the
-production snapshot by one microtask fails exactly 1. Earlier full-workspace
-figures in this entry's history — 1219 pre-merge at `e79f34e`, 1226 at
-`c63c9f3` — were superseded as main advanced; each was true of the tree it was
-measured on. No wallet, account, provider, RPC, funds, proof, signature or
+production snapshot by one microtask fails exactly 1. That pass carries across
+the syncs below because the four privacy source files are byte-identical from
+`c628150` through `ea25c16`, checked with `git diff`, not assumed. Earlier
+full-workspace figures in this entry's history — 1219 at `e79f34e`, 1226 at
+`c63c9f3`, 1233 at `d675408`, 1234 at `5818105` — were each true of the tree
+they were measured on and are superseded as `main` advanced; the privacy figure
+held at 131 throughout. No wallet, account, provider, RPC, funds, proof,
+signature or
 submission was involved in any local run — the wallet, pool and gateway are
 in-memory doubles, and the only real code exercised is the pinned AVNU action
 builder and `starknet` serialization, both pure. The mutation passes ran in
 throwaway mirrors under a scratch path, never against the live branch files,
 which were checksum-verified unchanged after each.
 
-*Hosted:*
+*Hosted, and the only part of this evidence that touches the network:*
 [GitHub Actions run 32401360829](https://github.com/Calcutatator/STRKWORLD/actions/runs/32401360829)
 succeeded at `8b4f274`, an earlier head of this branch — 88 files / **1225**
-tests, plus the headers, invariants and deployment jobs. Later heads are
-covered by their own PR runs rather than by this one. That run also executes
-this repo's standard **Protocol
-drift canary**, which issues **three read-only** JSON-RPC reads of public
-mainnet state against the pool at `latest`: `starknet_call` of
-`get_fee_amount`, `starknet_getClassHashAt`, and `starknet_call` of
-`is_paused`. It is pre-existing CI behaviour on every PR, not something this
-change adds or depends on, and it involves no key, viewing key, proof,
-signature, funds or transaction. Stating the local runs as "no RPC" without
-this distinction was wrong, and is corrected here.
+tests, plus the headers, invariants and deployment jobs. Later heads, `ea25c16`
+included, are covered by their own PR runs rather than by this one. Every
+hosted run also executes this repo's standard **Protocol drift canary**, which
+issues **three read-only** JSON-RPC reads of public mainnet state against the
+pool at `latest`: `starknet_call` of `get_fee_amount`,
+`starknet_getClassHashAt`, and `starknet_call` of `is_paused`. PR #41 later
+hardened that gate to fail closed on unknown protocol state and to validate
+each call's response shape; it did not change which three reads are issued, so
+this disclosure still describes them exactly. It is pre-existing CI behaviour
+on every PR, not something this change adds or depends on, and it involves no
+key, viewing key, proof, signature, funds or transaction. Stating the local
+runs as "no RPC" without this distinction was wrong, and is corrected here.
 ### 2026-08-20 — An old Bridge watcher cannot adopt replacement evidence
 
 `BridgeService.refresh()` may validly return provider status for deposit A
