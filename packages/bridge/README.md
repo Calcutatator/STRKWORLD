@@ -142,8 +142,11 @@ revalidate the route and quote signature and reset display state until the
 provider is checked again. An import cannot replace an existing valid record:
 the player must explicitly discard the retained evidence first. A provider
 refresh or wallet-deposit report that was already in flight likewise persists
-its status only while the same signed evidence remains retained; it cannot
-revive discarded evidence or overwrite a replacement record.
+its status only while the complete retained record still matches the version
+captured before the provider call. It cannot revive discarded evidence,
+overwrite a replacement record or regress newer progress for the same signed
+evidence. The verified provider status is still returned to the caller when
+persistence ownership has moved on.
 
 Resume imports are capped at 256 kB before JSON parsing. This is both a browser
 resource bound and a reminder that import is signed evidence recovery, not an
