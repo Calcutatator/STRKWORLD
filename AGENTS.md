@@ -375,6 +375,7 @@ this disclosure still describes them exactly. It is pre-existing CI behaviour
 on every PR, not something this change adds or depends on, and it involves no
 key, viewing key, proof, signature, funds or transaction. Stating the local
 runs as "no RPC" without this distinction was wrong, and is corrected here.
+
 ### 2026-08-20 — Fly startup requires the browser shell, not only its private listeners
 
 The Fly composition previously launched both private children, accepted their
@@ -383,19 +384,25 @@ root contained a usable `index.html`. A missing artifact, a directory named
 `index.html`, or a link escaping the configured root therefore produced a
 nominally ready Machine whose first shell request returned 404.
 
-Startup now validates the shell file before spawning either private child. The
-resolved file must be a regular file inside the resolved static root; otherwise
-startup fails with one generic error and no public or private listener is
-opened. This does not change static routing, build output, image contents,
+Startup now validates the shell file before spawning either private child,
+rechecks an abort immediately after that awaited filesystem work, and validates
+the shell again at the public ownership handoff. The resolved file must be a
+regular file inside the resolved static root; otherwise startup fails with one
+generic error, closes anything it started, and hands no composition to its
+caller. This does not change static routing, build output, image contents,
 ports, proxy behavior or shutdown ownership.
 
-*Verified:* a public composition-seam regression supplies each of the three
-unusable roots above and checks the generic startup failure plus closed public,
-backend and lobby ports. Before the validation call, the empty-root case
-returned a live composition and failed the test; restoring the call makes all
-48 Fly composition tests pass. The check is filesystem-only: no image build,
-container, deploy, registry, secret, external network, RPC, wallet, proof,
-signature, funds or transaction was used.*
+*Verified:* public composition-seam regressions supply each of the three
+unusable roots above and use child-start instrumentation to prove zero private
+children launch. Removing or moving that initial validation after child
+readiness makes the instrumentation observe starts. A separate red-first case
+waits until both children are launched, removes `index.html` while their
+readiness is pending, and proves startup closes all three ports instead of
+handing off the edge; before the handoff revalidation it returned a live
+composition. An already-aborted startup similarly observes zero child starts.
+All 51 Fly composition tests pass. The checks are filesystem/process-local: no
+image build, container, deploy, registry, secret, external network, RPC,
+wallet, proof, signature, funds or transaction was used.*
 
 ### 2026-08-20 — An old Bridge watcher cannot adopt replacement evidence
 
