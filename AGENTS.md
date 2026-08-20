@@ -250,6 +250,31 @@ without a verification method is a rumour.
 
 Format: `### YYYY-MM-DD — short title` then what, why it matters, how verified.
 
+### 2026-08-20 — A moving foot is not evidence of a whole-body gait
+
+The first D-052 five-column art handoff passed frame dimensions, alpha, palette,
+feet, anatomy-gap, edge and Aseprite round-trip checks, yet all 256 movement
+cells changed only at `y=45..53`: the pelvis, torso and upper body were visibly
+frozen while the lower legs moved. Mechanical silhouette cleanliness therefore
+does not establish a readable walk cycle.
+
+Avatar movement QA must compare every contact/passing cell with its directional
+idle, require substantive changed-pixel coverage above the per-character hip
+gate, and inspect repeated loops at the runtime cadence. Checking only the first
+changed pixel is also insufficient because a token upper pixel could satisfy
+it. The accepted correction at `8e92cfa` changes at least 243 pixels above the
+hip in every movement cell, with at least 60.8% of each cell's total changed
+pixels above that gate; motion reaches `y=8..27`. Its 320-frame Aseprite
+round-trip is pixel-identical, and World commit `5c8c81a` plays all five columns
+at 8/12 FPS. Rendered browser acceptance remains user-owned.
+
+*Verified:* independent Pillow diff over all sixteen 320x256 sheets and all
+four facings; the rejected `0ccf5b9` failed 256/256 cells and the corrective
+`8e92cfa` passed 256/256. Independent review also confirmed fixed height and
+feet, zero reported holes/channels/fringe pixels, contrasting-background
+contacts, and regenerated ten-frame preview sequences. No runtime body, wire,
+lobby, privacy or financial behavior changed.
+
 ### 2026-08-20 — A connected sprite mask can still contain an anatomy hole
 
 The rear-facing `avatar-1` art has a transparent channel through the middle of

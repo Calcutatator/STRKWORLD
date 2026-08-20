@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "status": "corrected-art-handoff-awaiting-orchestration-review",
+  "status": "integrated-and-independently-reviewed-awaiting-rendered-acceptance",
   "approvedContract": "D-052",
   "sheet": {
     "filePattern": "avatar-{key}.png",

@@ -17,11 +17,11 @@ the lane boundary — that is why the repo is shaped the way it is.
 | Lane | Package | Status in v1 |
 |---|---|---|
 | **Chain** | `packages/privacy` | Active; private seam frozen, D-043 planner port/fake complete, production Ready planner blocked |
-| **World** | `packages/world` + `packages/lobby` | Active; Avatar Studio foundation, D-048 top-wall portal and World-local final-avatar wiring are headlessly complete; D-052 replacement animation handoff, F behavior and fresh rendered acceptance remain |
+| **World** | `packages/world` + `packages/lobby` | Active; Avatar Studio foundation, D-048 top-wall portal, D-052 five-column runtime and Studio-only F behavior are headlessly complete; fresh rendered acceptance remains |
 | **Shell** | `apps/web` | Active, starts week 2 |
 | **Backend** | `apps/backend` | Active; D-050 and both hosted image smokes complete; host, domain, secrets, Alchemy controls, live staging and funded checks remain |
 | **Bridge** | `packages/bridge` | Active, fully independent |
-| **Art** | `packages/world/assets` | D-049 v1 handoff complete at `86e8f5f`, independently QA-verified and visually approved; D-052 replacement animation art, background review and rendered acceptance remain separate |
+| **Art** | `packages/world/assets` | D-052 corrected art complete and independently reviewed at `8e92cfa`; only rendered in-game acceptance remains |
 | ~~Contracts~~ | — | **Dormant until post-v1** |
 
 ### Why Contracts is dormant
@@ -240,8 +240,8 @@ highlight, activation, exit and teardown only; it gained no recipient, quote,
 deposit address, status or wallet concept. Rendered room and station acceptance
 remains user-run at `http://localhost:5173/`.
 
-**D-047 foundation and D-048 portal complete; final-avatar wiring headlessly
-complete; D-052 art/render gate remains:** the hidden south path and bottom-edge
+**D-047 foundation, D-048 portal and D-052 art/runtime integration complete;
+rendered gate remains:** the hidden south path and bottom-edge
 street trigger enter a non-financial 18×12 Avatar Studio outside
 `BuildingId`/`BUILDINGS`, with no facade, public label or `VisitLayer` route.
 The centered 2×1 top-wall portal spawns immediately inside and exits by
@@ -261,10 +261,11 @@ Studio selectors in headless World coverage. The earlier browser recording
 failed to establish rendered acceptance, so it is not a pass. D-052
 authorizes F only inside Avatar Studio as a one-press, no-repeat toggle for
 the current editable target's cosy/fighting pair through the existing opaque
-`avatar:selected` key; it adds no stance or wire field. The D-052 replacement
-animation contract, background review and fresh user-run in-game review remain
-open. The earlier localhost foundation acceptance covers neither this art
-replacement nor the rendered F behavior.
+`avatar:selected` key; it adds no stance or wire field. Corrected art commit
+`8e92cfa` and five-column runtime commit `5c8c81a` are independently reviewed
+and headlessly complete. Fresh user-run in-game review remains open; the earlier
+localhost foundation acceptance covers neither this art replacement nor the
+rendered F behavior.
 
 James has delegated the intermediate D-052 art gates to orchestration. The Art
 lane should continue through internal identity, edge, movement, source/export

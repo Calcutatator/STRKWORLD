@@ -1,9 +1,10 @@
 # STRKWORLD player sprites v1
 
 This directory is the D-052 art handoff for the eight paired player-character
-designs. It is not yet integrated into World and has not passed rendered
-in-game acceptance. The older `v1-review/` directory remains the historical
-review and generation-provenance record.
+designs. Commit `8e92cfa` is independently reviewed and commit `5c8c81a`
+integrates its five-column contract into World. Rendered in-game acceptance
+remains user-owned and pending. The older `v1-review/` directory remains the
+historical review and generation-provenance record.
 
 ## Files
 

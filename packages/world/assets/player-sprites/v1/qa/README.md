@@ -1,7 +1,8 @@
 # Player sprite QA
 
-This evidence covers the D-052 corrected art handoff. It is art QA only;
-runtime integration and rendered in-game acceptance remain separate gates.
+This evidence covers the independently reviewed D-052 corrected art handoff.
+World runtime integration is committed separately at `5c8c81a`; rendered
+in-game acceptance remains a separate user-owned gate.
 
 Checks run over all 16 sheets and all 320 frames:
 
@@ -16,6 +17,9 @@ Checks run over all 16 sheets and all 320 frames:
 - Whole-body gait diff passed all 256 non-idle cells: every contact/passing frame
   changes from its directional idle at or above the 65% idle alpha-bbox hip gate;
   changed pixels range from `y=8..27`, so motion is not confined to feet.
+- Independent orchestration review additionally found at least 243 changed
+  pixels above each cell's hip gate and at least 60.8% of each cell's total
+  changed pixels above that gate, rejecting token upper-pixel changes.
 - Side-facing idle silhouettes are vertically normalized to each character's
   approved down-facing model; characters 4 and 7 remain large and character 6
   remains the deliberately small female mechanic.

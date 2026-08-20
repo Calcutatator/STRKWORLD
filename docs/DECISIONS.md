@@ -2196,6 +2196,17 @@ transparent 64x64 logical cells, fixed feet, 24x24 bodies, sixteen opaque
 keys, no baked shadows, World-local integration and no new shared/lobby or
 financial fields.
 
+**2026-08-20 implementation status.** The first five-column handoff at
+`0ccf5b9` was rejected during independent review because all 256 movement
+cells confined their changed pixels below the hip (`y=45..53`). The corrective
+art at `8e92cfa` passes the D-052 anatomy, edge, background, source-round-trip
+and whole-body gait gates: movement reaches `y=8..27`, with at least 243
+changed pixels and 60.8% of each cell's changed pixels above its hip gate.
+World commit `5c8c81a` loads all 20 frames per sheet and plays columns
+`0,1,2,3,4` at the approved 8/12 FPS cadences. Art and headless runtime
+integration are therefore complete and independently reviewed; only the
+user-run rendered in-game acceptance remains open.
+
 **2026-08-20 approval-flow amendment.** James delegated intermediate sprite
 direction and rejection to orchestration. Art may iterate through turnaround,
 edge, pose, movement and export gates without pausing for user approval at
