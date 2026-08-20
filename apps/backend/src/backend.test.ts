@@ -112,6 +112,7 @@ function fixture(overrides: Partial<BackendConfig> = {}) {
     config,
     paymaster,
     rpc,
+    swapPlanner,
     delays,
     submitted,
     setBlock(value: number) { block = value; },
@@ -416,6 +417,40 @@ describe('bounded private submission', () => {
     });
     expect(result.status).toBe(200);
     expect(delays).toEqual([]);
+  });
+
+  it('rejects a zero private-swap executor before building its sponsor fee', async () => {
+    const { api, paymaster, swapPlanner } = fixture();
+    vi.spyOn(swapPlanner, 'prepare').mockResolvedValue({
+      quoteId: 'quote-zero-executor',
+      buyAmount: 100n,
+      expiresAt: 2_000,
+      chainId: '0x534e5f4d41494e',
+      executorAddress: '0x0',
+      executorCalls: [{
+        contractAddress: '0x111',
+        entrypoint: 'swap',
+        selector: '0x555',
+        calldata: ['0xaaa'],
+      }],
+    });
+    const buildFee = vi.spyOn(paymaster, 'buildFee');
+
+    await expect(api.handle({
+      method: 'POST', path: '/v1/private/swaps/prepare',
+      body: {
+        v: 1,
+        sellToken: '0xabc',
+        buyToken: STRK,
+        sellAmount: '20',
+        minAmountOut: '90',
+        slippageBps: 100,
+      },
+    })).resolves.toEqual({
+      status: 409,
+      body: { code: 'HTTP_409', message: 'AVNU returned a stale or invalid private quote.' },
+    });
+    expect(buildFee).not.toHaveBeenCalled();
   });
 
   it('rejects a swap after its AVNU quote expiry even while the block authorization is live', async () => {
