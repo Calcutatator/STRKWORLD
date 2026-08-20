@@ -1,9 +1,10 @@
 import { describe, expect, it, vi } from 'vitest';
-import type { STRK20_ACTION, STRK20_CALL_AND_PROOF } from 'starknet';
+import { num, transaction, type STRK20_ACTION, type STRK20_CALL_AND_PROOF } from 'starknet';
 import {
   PrivacyError,
   WalletApiPrivacyOperations,
   mapWalletError,
+  type Intent,
   type PoolReadClient,
   type PrivateSubmissionGateway,
   type WalletStrk20Account,
@@ -297,15 +298,25 @@ describe('Wallet API action routes', () => {
     await expect(batch.confirm({ feeCeiling: POOL_FEE + 1n })).resolves.toEqual({
       transactionHash: '0xprivate',
     });
+    // Exact output of the real, unmocked SDK — no arrayContaining, no
+    // objectContaining. The invoke payload is recomputed here with the same
+    // pinned `starknet` helpers AVNU itself uses, so this pins the algorithm
+    // rather than a transcribed literal.
     expect(prepared[0]).toEqual([
       { type: 'withdraw', token: TOKEN, amount: '0x14', recipient: '0x999' },
       { type: 'withdraw', token: STRK, amount: '0x1', recipient: FEE_RECIPIENT },
       { type: 'transfer', token: STRK, amount: 'OPEN', recipient: wallet.address },
-      expect.objectContaining({
+      {
         type: 'invoke',
         contract: '0x999',
-        calldata: expect.arrayContaining([STRK, '0x111', '0xaaa', '${openNoteIds[0]}']),
-      }),
+        calldata: [
+          STRK,
+          ...transaction.fromCallsToExecuteCalldata_cairo1([
+            { contractAddress: '0x111', entrypoint: 'swap', calldata: ['0xaaa'] },
+          ]).map((felt) => num.toHex(felt)),
+          '${openNoteIds[0]}',
+        ],
+      },
     ]);
     expect(gateway.submit).toHaveBeenCalledWith(expect.objectContaining({
       route: 'swap',
@@ -558,6 +569,107 @@ describe('Wallet API action routes', () => {
     const { ops } = fixture();
     const batch = await ops.prepare([{ kind: 'transfer', token: TOKEN, amount: 20n, recipient: BOB }]);
     expect(batch.swapReview).toBeUndefined();
+  });
+});
+
+/**
+ * The swap route's remaining fail-closed guards.
+ *
+ * These branches were already implemented but carried no test, while the
+ * executor and its serialized calls end up inside proved calldata. WORKPLAN's
+ * "Done when" asks for a *tested* allowlisted private route, so each guard is
+ * pinned to reject before the wallet is asked to prove anything.
+ */
+describe('quote-bound swap plan admission', () => {
+  const CHAIN = '0x534e5f4d41494e';
+  const SWAP: Intent = { kind: 'swap', tokenIn: TOKEN, tokenOut: STRK, amountIn: 20n, minAmountOut: 90n };
+
+  function swapFixture(
+    swapPolicy: unknown = { expectedChainId: CHAIN, slippageBps: 100 },
+    planOverrides: Record<string, unknown> = {},
+  ) {
+    const base = fixture();
+    base.gateway.prepareSwap = vi.fn(async () => ({
+      quoteId: 'quote-1',
+      buyAmount: 95n,
+      expiresAt: 2_000,
+      chainId: CHAIN,
+      executorAddress: '0x999',
+      executorCalls: [{ contractAddress: '0x111', entrypoint: 'swap', calldata: ['0xaaa'] }],
+      fee: { token: STRK, recipient: FEE_RECIPIENT, amount: 1n, ...AUTH },
+      ...planOverrides,
+    }) as never);
+    const ops = new WalletApiPrivacyOperations({
+      wallet: base.wallet,
+      pool: base.pool,
+      submission: base.gateway,
+      supportedVersions: base.supportedVersions,
+      now: () => 1_000,
+      policy: {
+        maxIntents: 8,
+        maxRelayFee: 10n,
+        enabledRoutes: ['swap'],
+        allowedTokens: {
+          shield: [STRK, TOKEN], unshield: [STRK, TOKEN], transfer: [STRK, TOKEN], swap: [STRK, TOKEN],
+        },
+        ...(swapPolicy === null ? {} : { swap: swapPolicy }),
+      } as never,
+    });
+    return { ...base, ops };
+  }
+
+  it('locks the route when the swap policy is absent', async () => {
+    const { ops, gateway } = swapFixture(null);
+    await expect(ops.prepare([SWAP])).rejects.toThrow(/not configured/i);
+    expect(gateway.prepareSwap).not.toHaveBeenCalled();
+  });
+
+  it('locks the route when the gateway offers no swap preparation', async () => {
+    const { ops, gateway } = swapFixture();
+    delete (gateway as { prepareSwap?: unknown }).prepareSwap;
+    await expect(ops.prepare([SWAP])).rejects.toThrow(/not configured/i);
+  });
+
+  it.each([[0], [-100], [1.5]])(
+    'rejects a configured slippage of %s before requesting a quote',
+    async (slippageBps) => {
+      const { ops, gateway } = swapFixture({ expectedChainId: CHAIN, slippageBps });
+      await expect(ops.prepare([SWAP])).rejects.toThrow(/slippage/i);
+      expect(gateway.prepareSwap).not.toHaveBeenCalled();
+    },
+  );
+
+  it.each([
+    ['no executor calls', { executorCalls: [] }, /executor calls/i],
+    ['a zero call target', {
+      executorCalls: [{ contractAddress: '0x0', entrypoint: 'swap', calldata: [] }],
+    }, /call target/i],
+    ['an unnamed entry point', {
+      executorCalls: [{ contractAddress: '0x111', entrypoint: '', calldata: [] }],
+    }, /malformed executor calls/i],
+    ['non-felt call data', {
+      executorCalls: [{ contractAddress: '0x111', entrypoint: 'swap', calldata: ['not-a-felt'] }],
+    }, /malformed executor calls/i],
+    ['a relay fee above the route ceiling', {
+      fee: { token: STRK, recipient: FEE_RECIPIENT, amount: 11n, ...AUTH },
+    }, /route policy/i],
+    ['a nonpositive relay fee', {
+      fee: { token: STRK, recipient: FEE_RECIPIENT, amount: 0n, ...AUTH },
+    }, /route policy/i],
+    ['a zero fee recipient', {
+      fee: { token: STRK, recipient: '0x0', amount: 1n, ...AUTH },
+    }, /fee recipient/i],
+    ['an unsigned relay fee', {
+      fee: { token: STRK, recipient: FEE_RECIPIENT, amount: 1n, authorization: '', expiresAtBlock: 1_450 },
+    }, /fee authorization/i],
+    ['an unbounded relay fee', {
+      fee: { token: STRK, recipient: FEE_RECIPIENT, amount: 1n, authorization: 'fee-auth', expiresAtBlock: 0 },
+    }, /fee authorization/i],
+    ['a zero executor', { executorAddress: '0x0' }, /executor/i],
+  ])('rejects a quote-bound plan with %s before proving', async (_label, overrides, message) => {
+    const { ops, prepared } = swapFixture({ expectedChainId: CHAIN, slippageBps: 100 }, overrides);
+    await expect(ops.prepare([SWAP])).rejects.toThrow(message);
+    expect(prepared).toEqual([]);
   });
 });
 

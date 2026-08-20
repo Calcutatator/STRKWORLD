@@ -127,6 +127,37 @@ when its explicit deterministic `swapReview` configuration supplies the
 expected output, expiry and slippage; it never reads a clock or invents a
 market rate.
 
+`buildStrk20Actions` is a validation-free array literal, and the relay's own
+binding check runs only *after* the wallet has minted an irrevocable proof. So
+before `strk20PrepareInvoke`, this package verifies that the four actions it is
+about to submit still describe the plan it validated: the sell leg funds the
+quoted executor and nobody else, the fee leg matches the authorized quote, the
+bought asset lands in an `OPEN` note owned by this account, and the single
+external call carries exactly the reviewed payload to that same executor.
+
+Binding that payload matters more than binding the target. `STRK20_INVOKE_ACTION`
+has no selector field, so the entry point and its arguments live inside calldata:
+checking only `contract` would leave the call itself unconstrained. The expected
+calldata is therefore recomputed from the validated `executorCalls` with the same
+pinned helpers AVNU uses — `fromCallsToExecuteCalldata_cairo1(...).map(num.toHex)`,
+prefixed by the buy token and suffixed by `${openNoteIds[0]}` — and compared by
+exact length and order, with felt values normalized and the placeholder pinned to
+the final slot. A reordering, a dropped or extra action, a public deposit leg, a
+retargeted inner call, a substituted selector or a rewritten argument is a
+mismatch, not a variant, and fails closed.
+
+The validated calls are snapshotted before the SDK sees them, and the SDK gets a
+separate copy: sharing one array would let an input-mutating SDK corrupt both the
+action and the authority it is checked against, making the comparison
+tautological. Only the guard's snapshot is frozen — freezing the SDK's input
+would turn a mutating SDK into a thrown `TypeError` reported as an unreachable
+network, and a mutating SDK is a plan mismatch, not an outage. The four-action
+shape is
+source-derived from the exact pinned SDK — an approved upgrade that changes it
+must fail here rather than quietly prove a different transaction. This is
+self-consistency only: it cannot tell a hostile plan from an honest one, because
+a hostile plan's actions match it faithfully.
+
 The incoming swap minimum is only a quote floor. After validating the plan,
 Chain computes AVNU's protected minimum as exact bigint arithmetic:
 `expectedAmountOut - (expectedAmountOut * slippageBps / 10_000)`. A floor above
