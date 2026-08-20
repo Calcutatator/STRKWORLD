@@ -1,6 +1,9 @@
 import { spawn, type ChildProcess } from 'node:child_process';
+import { realpath } from 'node:fs/promises';
 import type { Server } from 'node:http';
+import { resolve } from 'node:path';
 import { closeEdgeServer, createEdgeServer } from './edge.js';
+import { resolveContainedRegularFile } from './static-file.js';
 
 export interface FlyCompositionOptions {
   readonly staticRoot: string;
@@ -23,6 +26,11 @@ export interface FlyComposition {
   shutdown(): Promise<void>;
 }
 
+interface FlyCompositionObserver {
+  /** Test-only observation; it cannot own or interrupt the child lifecycle. */
+  readonly onChildStart?: () => void;
+}
+
 /** Startup was cancelled before the public composition was handed off. */
 export class FlyStartupAbortError extends Error {
   constructor() {
@@ -32,11 +40,21 @@ export class FlyStartupAbortError extends Error {
 }
 
 /** Start private children, wait for their TCP listeners, then expose one edge. */
-export async function startFlyComposition(options: FlyCompositionOptions): Promise<FlyComposition> {
+export async function startFlyComposition(
+  options: FlyCompositionOptions,
+  observer: FlyCompositionObserver = {},
+): Promise<FlyComposition> {
+  await assertStaticShell(options.staticRoot);
+  assertStartupActive(options.startupSignal);
   const environment = options.environment ?? process.env;
+  const startChild = (entry: string, childEnvironment: NodeJS.ProcessEnv): ChildProcess => {
+    const child = launchChild(entry, childEnvironment);
+    try { observer.onChildStart?.(); } catch { /* Observation cannot interrupt startup. */ }
+    return child;
+  };
   const children = [
-    launchChild(options.backendEntry, { ...environment, PORT: String(options.backendPort) }),
-    launchChild(options.lobbyEntry, {
+    startChild(options.backendEntry, { ...environment, PORT: String(options.backendPort) }),
+    startChild(options.lobbyEntry, {
       ...environment,
       LOBBY_PORT: String(options.lobbyPort),
     }),
@@ -96,6 +114,12 @@ export async function startFlyComposition(options: FlyCompositionOptions): Promi
     await new Promise<void>((resolve) => setImmediate(resolve));
     assertStartupActive(options.startupSignal);
     if (startupChildDied) throw new Error('A private service exited before the public edge was ready.');
+    // The artifact can be removed or replaced while private readiness and the
+    // public bind are pending. Recheck at the ownership handoff so a Machine
+    // cannot be reported ready over a shell the edge would already reject.
+    await assertStaticShell(options.staticRoot);
+    assertStartupActive(options.startupSignal);
+    if (startupChildDied) throw new Error('A private service exited before the public edge was ready.');
     startup = false;
     return { address, shutdown };
   } catch (error) {
@@ -108,6 +132,17 @@ export async function startFlyComposition(options: FlyCompositionOptions): Promi
       throw new Error('Fly composition startup cleanup failed.');
     }
     throw error;
+  }
+}
+
+async function assertStaticShell(staticRoot: string): Promise<void> {
+  try {
+    const root = await realpath(resolve(staticRoot));
+    if (!(await resolveContainedRegularFile(resolve(root, 'index.html'), root))) {
+      throw new Error('invalid shell');
+    }
+  } catch {
+    throw new Error('Fly static shell is unavailable.');
   }
 }
 

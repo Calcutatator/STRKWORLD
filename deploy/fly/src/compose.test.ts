@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it } from 'vitest';
-import { mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, rm, symlink, writeFile } from 'node:fs/promises';
 import { createServer } from 'node:net';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -196,13 +196,176 @@ describe('Fly composition process boundary', () => {
     await expect(response.text()).resolves.toBe('<html>test shell</html>');
   });
 
+  it('refuses to expose the public edge without a usable shell artifact', async () => {
+    const emptyStaticRoot = await mkdtemp(join(tmpdir(), 'strkworld-empty-static-'));
+    const directoryIndexRoot = await mkdtemp(join(tmpdir(), 'strkworld-directory-index-'));
+    await mkdir(join(directoryIndexRoot, 'index.html'));
+    const escapedStaticRoot = await mkdtemp(join(tmpdir(), 'strkworld-escaped-static-'));
+    const outsideStaticRoot = await mkdtemp(join(tmpdir(), 'strkworld-outside-static-'));
+    const outsideIndex = join(outsideStaticRoot, 'index.html');
+    await writeFile(outsideIndex, '<html>outside shell</html>');
+    await symlink(outsideIndex, join(escapedStaticRoot, 'index.html'));
+    directories.push(emptyStaticRoot, directoryIndexRoot, escapedStaticRoot, outsideStaticRoot);
+
+    for (const staticRoot of [emptyStaticRoot, directoryIndexRoot, escapedStaticRoot]) {
+      const { publicPort, backendPort, lobbyPort } = await ports();
+      let childStarts = 0;
+      let composition: FlyComposition | undefined;
+      let startupError: unknown;
+
+      try {
+        composition = await startFlyComposition({
+          staticRoot,
+          backendEntry: '/not-started/backend.mjs',
+          lobbyEntry: '/not-started/lobby.mjs',
+          publicPort,
+          backendPort,
+          lobbyPort,
+          publicOrigin: 'https://game.example',
+          environment: process.env,
+          readinessTimeoutMs: 2_000,
+        }, {
+          onChildStart: () => { childStarts += 1; },
+        });
+      } catch (error) {
+        startupError = error;
+      }
+      if (composition) compositions.push(composition);
+
+      expect(startupError).toMatchObject({ message: 'Fly static shell is unavailable.' });
+      expect(childStarts).toBe(0);
+      await expect(fetch(`http://127.0.0.1:${publicPort}/`)).rejects.toThrow();
+      await expect(fetch(`http://127.0.0.1:${backendPort}/`)).rejects.toThrow();
+      await expect(fetch(`http://127.0.0.1:${lobbyPort}/`)).rejects.toThrow();
+    }
+  });
+
+  it('honours an abort after shell validation without starting private children', async () => {
+    const child = await fakeChild();
+    const staticRoot = await fakeStaticRoot();
+    const controller = new AbortController();
+    const { publicPort, backendPort, lobbyPort } = await ports();
+    let childStarts = 0;
+
+    const starting = startFlyComposition({
+      staticRoot,
+      backendEntry: child,
+      lobbyEntry: child,
+      publicPort,
+      backendPort,
+      lobbyPort,
+      publicOrigin: 'https://game.example',
+      environment: process.env,
+      readinessTimeoutMs: 2_000,
+      startupSignal: controller.signal,
+    }, {
+      onChildStart: () => { childStarts += 1; },
+    });
+    controller.abort();
+
+    await expect(starting).rejects.toThrow('startup was aborted');
+
+    expect(childStarts).toBe(0);
+  });
+
+  it('revalidates the shell after private readiness before handing off the public edge', async () => {
+    const child = await fakeChild();
+    const staticRoot = await fakeStaticRoot();
+    const { publicPort, backendPort, lobbyPort } = await ports();
+    let childStarts = 0;
+    let resolveChildrenStarted: (() => void) | undefined;
+    const childrenStarted = new Promise<void>((resolve) => { resolveChildrenStarted = resolve; });
+    let composition: FlyComposition | undefined;
+    let startupError: unknown;
+
+    const starting = startFlyComposition({
+      staticRoot,
+      backendEntry: child,
+      lobbyEntry: child,
+      publicPort,
+      backendPort,
+      lobbyPort,
+      publicOrigin: 'https://game.example',
+      environment: { ...process.env, START_DELAY_MS: '300' },
+      readinessTimeoutMs: 2_000,
+    }, {
+      onChildStart: () => {
+        childStarts += 1;
+        if (childStarts === 2) resolveChildrenStarted?.();
+      },
+    });
+    await childrenStarted;
+    await rm(join(staticRoot, 'index.html'));
+
+    try {
+      composition = await starting;
+    } catch (error) {
+      startupError = error;
+    }
+    if (composition) compositions.push(composition);
+
+    expect(childStarts).toBe(2);
+    expect(startupError).toMatchObject({ message: 'Fly static shell is unavailable.' });
+    await expect(fetch(`http://127.0.0.1:${publicPort}/`)).rejects.toThrow();
+    await expect(fetch(`http://127.0.0.1:${backendPort}/`)).rejects.toThrow();
+    await expect(fetch(`http://127.0.0.1:${lobbyPort}/`)).rejects.toThrow();
+  });
+
+  it('rejects a shell replaced by an escaping symlink during private readiness', async () => {
+    const child = await fakeChild();
+    const staticRoot = await fakeStaticRoot();
+    const outsideStaticRoot = await mkdtemp(join(tmpdir(), 'strkworld-replacement-outside-'));
+    const outsideIndex = join(outsideStaticRoot, 'index.html');
+    await writeFile(outsideIndex, '<html>replacement outside shell</html>');
+    directories.push(outsideStaticRoot);
+    const { publicPort, backendPort, lobbyPort } = await ports();
+    let childStarts = 0;
+    let resolveChildrenStarted: (() => void) | undefined;
+    const childrenStarted = new Promise<void>((resolve) => { resolveChildrenStarted = resolve; });
+    let composition: FlyComposition | undefined;
+    let startupError: unknown;
+
+    const starting = startFlyComposition({
+      staticRoot,
+      backendEntry: child,
+      lobbyEntry: child,
+      publicPort,
+      backendPort,
+      lobbyPort,
+      publicOrigin: 'https://game.example',
+      environment: { ...process.env, START_DELAY_MS: '300' },
+      readinessTimeoutMs: 2_000,
+    }, {
+      onChildStart: () => {
+        childStarts += 1;
+        if (childStarts === 2) resolveChildrenStarted?.();
+      },
+    });
+    await childrenStarted;
+    await rm(join(staticRoot, 'index.html'));
+    await symlink(outsideIndex, join(staticRoot, 'index.html'));
+
+    try {
+      composition = await starting;
+    } catch (error) {
+      startupError = error;
+    }
+    if (composition) compositions.push(composition);
+
+    expect(childStarts).toBe(2);
+    expect(startupError).toMatchObject({ message: 'Fly static shell is unavailable.' });
+    await expect(fetch(`http://127.0.0.1:${publicPort}/`)).rejects.toThrow();
+    await expect(fetch(`http://127.0.0.1:${backendPort}/`)).rejects.toThrow();
+    await expect(fetch(`http://127.0.0.1:${lobbyPort}/`)).rejects.toThrow();
+  });
+
   it('aborts pending readiness and stops private children before exposing the edge', async () => {
     const child = await fakeChild();
     const controller = new AbortController();
     const { publicPort, backendPort, lobbyPort } = await ports();
     const { signal: startupSignal, armed } = signalArmedAfterAbortListeners(controller, 2);
     const starting = startFlyComposition({
-      staticRoot: join(process.cwd(), 'apps/web/dist'),
+      staticRoot: await fakeStaticRoot(),
       backendEntry: child,
       lobbyEntry: child,
       publicPort,
@@ -230,7 +393,7 @@ describe('Fly composition process boundary', () => {
     const startupSignal = new Proxy(controller.signal, {
       get(target, property) {
         if (property === 'aborted') {
-          if (++abortedReads === 3) controller.abort();
+          if (++abortedReads === 4) controller.abort();
           return target.aborted;
         }
         const value: unknown = Reflect.get(target, property, target);
@@ -238,7 +401,7 @@ describe('Fly composition process boundary', () => {
       },
     });
     const starting = startFlyComposition({
-      staticRoot: join(process.cwd(), 'apps/web/dist'),
+      staticRoot: await fakeStaticRoot(),
       backendEntry: child,
       lobbyEntry: child,
       publicPort,
@@ -258,9 +421,10 @@ describe('Fly composition process boundary', () => {
   });
 
   it.each([
-    ['after readiness', 3],
-    ['after public bind', 4],
-    ['during the ownership handoff', 5],
+    ['after readiness', 4],
+    ['after public bind', 5],
+    ['during the ownership handoff', 6],
+    ['after handoff shell validation', 7],
   ] as const)('rechecks an abort %s before handing off the public edge', async (_phase, abortRead) => {
     const child = await fakeChild();
     const { publicPort, backendPort, lobbyPort } = await ports();
@@ -275,7 +439,7 @@ describe('Fly composition process boundary', () => {
     });
 
     await expect(startFlyComposition({
-      staticRoot: join(process.cwd(), 'apps/web/dist'),
+      staticRoot: await fakeStaticRoot(),
       backendEntry: child,
       lobbyEntry: child,
       publicPort,
@@ -319,7 +483,7 @@ describe('Fly composition process boundary', () => {
     let resolveFatal: (error: Error) => void = () => undefined;
     const fatalPromise = new Promise<Error>((resolve) => { resolveFatal = resolve; });
     const composition = await startFlyComposition({
-      staticRoot: join(process.cwd(), 'apps/web/dist'),
+      staticRoot: await fakeStaticRoot(),
       backendEntry: child,
       lobbyEntry: child,
       publicPort,
@@ -339,7 +503,7 @@ describe('Fly composition process boundary', () => {
     const child = await fakeChild();
     const { publicPort, backendPort, lobbyPort } = await ports();
     await expect(startFlyComposition({
-      staticRoot: join(process.cwd(), 'apps/web/dist'),
+      staticRoot: await fakeStaticRoot(),
       backendEntry: child,
       lobbyEntry: child,
       publicPort,
@@ -360,7 +524,7 @@ describe('Fly composition process boundary', () => {
     const fatalPromise = new Promise<Error>((resolve) => { resolveFatal = resolve; });
     try {
       composition = await startFlyComposition({
-        staticRoot: join(process.cwd(), 'apps/web/dist'),
+        staticRoot: await fakeStaticRoot(),
         backendEntry: child,
         lobbyEntry: child,
         publicPort,
@@ -397,7 +561,7 @@ describe('Fly composition process boundary', () => {
     let startupError: unknown;
     try {
       composition = await startFlyComposition({
-        staticRoot: join(process.cwd(), 'apps/web/dist'),
+        staticRoot: await fakeStaticRoot(),
         backendEntry: child,
         lobbyEntry: child,
         publicPort,

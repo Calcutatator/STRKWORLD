@@ -7,6 +7,14 @@ Child readiness is a constant IPC message sent only after each real listen
 promise resolves. A child exit terminates the Machine through the launcher;
 there is no public health or metrics route.
 
+Startup resolves the configured static root and requires `index.html` to be a
+regular file whose canonical path stays inside that root before either private
+child is spawned. It repeats the same package-owned containment check after
+private readiness and the public bind, immediately before handing the
+composition to its caller. A missing file, directory, or escaping symlink fails
+with the generic `Fly static shell is unavailable.` error; anything already
+started is closed before startup rejects.
+
 The repository does not create a Fly app, domain, secret or Machine. Before a
 real deployment, supply the account and domain deliberately, then keep exactly
 one Machine while the process-local aggregate controls remain in use:
