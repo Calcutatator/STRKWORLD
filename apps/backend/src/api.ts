@@ -117,6 +117,7 @@ export class BackendApi {
       this.metrics.success();
       return response;
     } catch (error) {
+      deadline.cancel();
       return this.failure(error);
     } finally {
       deadline.dispose();
@@ -539,7 +540,7 @@ function validateBackendConfig(config: BackendConfig): void {
 function createRequestDeadline(
   parent: AbortSignal | undefined,
   timeoutMs: number,
-): { signal: AbortSignal; dispose: () => void } {
+): { signal: AbortSignal; cancel: () => void; dispose: () => void } {
   const controller = new AbortController();
   const onParentAbort = () => controller.abort(
     parent?.reason ?? new DOMException('Request aborted.', 'AbortError'),
@@ -549,9 +550,16 @@ function createRequestDeadline(
   const timeout = setTimeout(() => {
     controller.abort(new DOMException('Request deadline exceeded.', 'TimeoutError'));
   }, timeoutMs);
+  let disposed = false;
   return {
     signal: controller.signal,
+    cancel: () => {
+      if (controller.signal.aborted) return;
+      controller.abort(new DOMException('Request failed.', 'AbortError'));
+    },
     dispose: () => {
+      if (disposed) return;
+      disposed = true;
       clearTimeout(timeout);
       parent?.removeEventListener('abort', onParentAbort);
     },
