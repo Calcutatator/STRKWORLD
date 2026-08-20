@@ -32,8 +32,10 @@
 #   2. `NODE_OPTIONS`, `NODE_DEBUG` and any APM/tracing agent are left unset
 #      on purpose. An injected agent is a per-request observer.
 # Successful startup and steady-state traffic are silent. The launcher writes
-# only a configuration error to stderr if the compiled entry is missing;
-# anything appearing on stdout during traffic is a defect.
+# only a configuration error to stderr if the compiled entry is missing, is
+# not a regular file, or its exact target becomes missing, a directory or
+# unreadable during entry admission. Backend and nested-dependency failures
+# remain startup crashes; anything appearing on stdout during traffic is a defect.
 
 # Node 22.12 is the repository floor (D-025): AVNU SDK 4.2.0 requires Node 22,
 # and Vite supports Node 22 from 22.12. Overridable so the tag can be pinned to
@@ -101,6 +103,7 @@ ENV PORT=8080
 COPY --from=runtime-deps --chown=node:node /repo/node_modules ./node_modules
 COPY --from=build --chown=node:node /repo/.docker-build ./
 COPY --chown=node:node deploy/backend/launch.mjs ./launch.mjs
+COPY --chown=node:node deploy/backend/launch-loader.mjs ./launch-loader.mjs
 
 USER node
 EXPOSE 8080
@@ -122,7 +125,7 @@ EXPOSE 8080
 HEALTHCHECK --interval=30s --timeout=3s --start-period=10s --retries=3 \
   CMD node -e "const net=require('node:net');const s=net.connect(Number(process.env.PORT),'127.0.0.1');s.on('connect',()=>{s.destroy();process.exit(0)});s.on('error',()=>process.exit(1));s.setTimeout(2500,()=>process.exit(1));"
 
-# launch.mjs verifies the compiled composition root exists and starts it. It
-# holds no configuration and no business logic — see the file for why that
-# deployment/runtime separation exists.
+# launch.mjs and launch-loader.mjs verify the compiled composition root and
+# start it. They hold no configuration and no business logic — see the files
+# for why that deployment/runtime separation exists.
 CMD ["node", "--disable-proto=throw", "launch.mjs"]
