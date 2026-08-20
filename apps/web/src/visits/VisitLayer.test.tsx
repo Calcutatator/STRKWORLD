@@ -9,7 +9,7 @@ import { PrivacyProvider } from '../privacy/PrivacyProvider.js';
 import { SessionNoticeLayer } from '../privacy/SessionNoticeLayer.js';
 import { createSubmissionUncertainty } from '../privacy/submission-uncertainty.js';
 import { PRIVACY_REGISTER, type RouteGrade } from '../privacy/register.js';
-import { VisitLayerView, visitLayerActions } from './VisitLayer.js';
+import { handleVisitKeyDown, VisitLayerView, visitLayerActions } from './VisitLayer.js';
 import { createVisitController } from './visit-controller.js';
 
 function render(node: React.ReactElement): string {
@@ -37,6 +37,55 @@ function findButton(node: ReactNode, label: string): ReactElement<{
 }
 
 describe('VisitLayerView', () => {
+  it('routes locked-door Escape through the production key filter', () => {
+    const world = createEventBus<WorldEvents>();
+    const shell = createEventBus<ShellEvents>();
+    const exits = vi.fn();
+    const owners = vi.fn();
+    const preventDefault = vi.fn();
+    shell.on('world:exit-building', exits);
+    shell.on('world:control-owner', owners);
+    const controller = createVisitController(shell);
+    controller.listen(world);
+    world.emit('building:locked', { building: 'vault', reason: 'coming-soon' });
+
+    handleVisitKeyDown({ key: 'Escape', preventDefault }, controller);
+
+    expect(preventDefault).toHaveBeenCalledOnce();
+    expect(controller.store.getState()).toEqual({ name: 'outside' });
+    expect(exits).not.toHaveBeenCalled();
+    expect(owners).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    {
+      name: 'Escape in the Game Mode room',
+      key: 'Escape',
+      event: 'building:entered' as const,
+      payload: { building: 'bank' } as const,
+      expected: { name: 'visiting', building: 'bank', surface: { name: 'room' } } as const,
+    },
+    {
+      name: 'a non-Escape key on a locked door',
+      key: 'Enter',
+      event: 'building:locked' as const,
+      payload: { building: 'vault', reason: 'coming-soon' } as const,
+      expected: { name: 'locked', building: 'vault', reason: 'coming-soon' } as const,
+    },
+  ])('keeps $name inert in the production key filter', ({ key, event, payload, expected }) => {
+    const world = createEventBus<WorldEvents>();
+    const shell = createEventBus<ShellEvents>();
+    const preventDefault = vi.fn();
+    const controller = createVisitController(shell);
+    controller.listen(world);
+    world.emit(event, payload);
+
+    handleVisitKeyDown({ key, preventDefault }, controller);
+
+    expect(preventDefault).not.toHaveBeenCalled();
+    expect(controller.store.getState()).toEqual(expected);
+  });
+
   it('sends the exact active building through the native Game Mode exit control', () => {
     const world = createEventBus<WorldEvents>();
     const shell = createEventBus<ShellEvents>();

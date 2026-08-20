@@ -221,6 +221,73 @@ describe('strict fee authorization', () => {
       body: { v: 1, route: 'transfer', feeToken: STRK, operationToken: '0xabc' },
     })).resolves.toMatchObject({ status: 504 });
     expect(observedSignal?.aborted).toBe(true);
+    expect(observedSignal?.reason).toMatchObject({
+      name: 'TimeoutError',
+      message: 'Request deadline exceeded.',
+    });
+  });
+
+  it('preserves the parent abort reason and timeout response', async () => {
+    const { api, paymaster } = fixture();
+    const parent = new AbortController();
+    const parentReason = new DOMException('Caller closed the request.', 'AbortError');
+    let observedSignal: AbortSignal | undefined;
+    let resolveStarted!: () => void;
+    const started = new Promise<void>((resolve) => { resolveStarted = resolve; });
+    vi.spyOn(paymaster, 'buildFee').mockImplementation((input) => {
+      observedSignal = input.signal;
+      resolveStarted();
+      return new Promise((_resolve, reject) => {
+        input.signal?.addEventListener('abort', () => reject(input.signal?.reason), { once: true });
+      });
+    });
+
+    const handling = api.handle({
+      method: 'POST', path: '/v1/private/fees',
+      body: { v: 1, route: 'transfer', feeToken: STRK, operationToken: '0xabc' },
+      signal: parent.signal,
+    });
+    await started;
+    parent.abort(parentReason);
+
+    await expect(handling).resolves.toEqual({
+      status: 504,
+      body: {
+        code: 'UPSTREAM_TIMEOUT',
+        message: 'A private service dependency timed out.',
+      },
+    });
+    expect(observedSignal?.reason).toBe(parentReason);
+  });
+
+  it('aborts concurrent upstream work before returning a provider failure', async () => {
+    const { api, paymaster, rpc } = fixture();
+    let siblingSignal: AbortSignal | undefined;
+    const siblingAborted = vi.fn();
+    vi.spyOn(paymaster, 'buildFee').mockRejectedValue(new Error('provider detail must stay private'));
+    vi.spyOn(rpc, 'getPoolConfig').mockImplementation((signal) => new Promise((_resolve, reject) => {
+      siblingSignal = signal;
+      const onAbort = () => {
+        siblingAborted();
+        reject(signal?.reason);
+      };
+      if (signal?.aborted) onAbort();
+      else signal?.addEventListener('abort', onAbort, { once: true });
+    }));
+
+    await expect(api.handle({
+      method: 'POST', path: '/v1/private/fees',
+      body: { v: 1, route: 'transfer', feeToken: STRK, operationToken: '0xabc' },
+    })).resolves.toEqual({
+      status: 502,
+      body: {
+        code: 'UPSTREAM_FAILURE',
+        message: 'A private service dependency failed.',
+      },
+    });
+    expect(siblingSignal?.aborted).toBe(true);
+    expect(siblingSignal?.reason).toMatchObject({ name: 'AbortError', message: 'Request failed.' });
+    expect(siblingAborted).toHaveBeenCalledOnce();
   });
 });
 
