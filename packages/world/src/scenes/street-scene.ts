@@ -139,7 +139,7 @@ export function createStreetScene({ Phaser, onTileChanged, remotePeers }: Street
     private doorOverlays: PhaserTypes.GameObjects.Image[] = [];
     private remoteAvatars?: RemoteAvatarLayer;
     private returnTile = { x: 0, y: 0 };
-    private cleanedUp = false;
+    private cleanedUp = true;
 
     constructor() {
       super({ key: 'street' });
@@ -154,6 +154,10 @@ export function createStreetScene({ Phaser, onTileChanged, remotePeers }: Street
     create(): void {
       // Phaser restarts reuse this Scene instance. Each create owns a fresh set
       // of controllers, listeners and presentation objects to clean once.
+      // A defensive repeated create can arrive without Phaser first delivering
+      // shutdown. Close that live cycle through the same event so every
+      // listener-owned resource retires before the new cycle takes ownership.
+      if (!this.cleanedUp) this.events.emit('shutdown');
       this.cleanedUp = false;
       this.ground = undefined;
       this.lastTile = { x: -1, y: -1 };

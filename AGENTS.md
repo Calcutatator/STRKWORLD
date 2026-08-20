@@ -250,6 +250,34 @@ without a verification method is a rumour.
 
 Format: `### YYYY-MM-DD — short title` then what, why it matters, how verified.
 
+### 2026-08-20 — A repeated StreetScene create retires the prior ownership cycle
+
+`StreetScene.create()` may defensively run twice on one Scene instance without
+Phaser first delivering `shutdown`. Replacing only the Scene fields in that
+path leaves the prior fixed-room controllers subscribed to the Shell bus. A
+room entered in the old cycle can then consume a late `world:exit-building`,
+move the new Scene through its captured callbacks and publish a stale
+`building:exited`; final shutdown reaches only the current controller map and
+leaves the old subscriptions alive.
+
+Repeat creation now closes any live cycle through its already-registered
+`shutdown` event before opening the next one. This gives the Scene cleanup,
+fixed-room controllers and remote-avatar layer the same lifecycle authority as
+an ordinary Phaser shutdown, while the existing shutdown-to-create and failed
+create recovery paths remain unchanged. It changes no room event payload,
+input rule, authored geometry, presence or financial behavior.
+
+*Verified:* the real-create headless regression first failed with the retained
+Bank controller still in-room. An independent probe also observed Shell
+listeners grow from 12 to 24, a stale exit publication and 12 listeners after
+final shutdown. Green asserts the prior controller is inactive, Shell and
+Scene listener counts stay at 12 and 2 for the new cycle, a late exit publishes
+nothing, and final shutdown leaves both counts at zero. The focused lifecycle
+file passes 11/11 tests, all World tests pass 22 files / 218 tests, the full
+workspace passes 87 files / 1,207 tests, all workspace typechecks, the
+production build, invariant scan and diff check pass. No browser, network,
+wallet, RPC, proof, signature, funds or transaction was used.
+
 ### 2026-08-20 — A late Bridge refresh may report status, but it no longer owns persistence
 
 `BridgeService.refresh()` captures the retained record before awaiting the
