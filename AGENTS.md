@@ -359,17 +359,24 @@ validated `executorCalls` with the same pinned helpers AVNU uses —
 `transaction.fromCallsToExecuteCalldata_cairo1(...).map(num.toHex)`, prefixed by
 the buy token and suffixed by `${openNoteIds[0]}` — and compared by exact length
 and order, felt values normalized, with the placeholder pinned to the final
-slot. Nine cases that keep exactly one placeholder in that final slot
-(substituted buy-token prefix, retargeted inner call, substituted selector,
-altered inner calldata, appended felt, reordered felts, placeholder moved off the
-end, a felt trailing a correctly placed placeholder, and a felt substituted into
-the placeholder slot) were each observed reaching the fake wallet-preparation
-seam before that binding existed.
+slot. Which cases were observed against which baseline, exactly. Seven reached
+the fake wallet-preparation seam under the placeholder-count-only check and are
+rejected once the payload is bound: substituted buy-token prefix, retargeted
+inner call, substituted selector, altered inner calldata, appended felt,
+reordered felts, and placeholder moved off the end. Six of those seven keep
+exactly one placeholder in the final slot, so nothing but payload binding can
+catch them. Two further cases — a felt trailing a correctly placed placeholder,
+and a felt substituted into the placeholder slot — came from the mutation pass
+below rather than that red run, and are the only cases that independently
+exercise the exact-length check and the final-slot pin. The pre-existing "no
+placeholder" case was already rejected by the count check it replaced.
 
 A 12-mutant pass over the guard's clauses killed 10 and left two survivors — the
-exact-length check and the final-slot placeholder pin — because every case then
-written was also caught by another clause. The last two of the nine above exist
-to make those clauses independently load-bearing; the pass now kills 12 of 12.
+exact-length check and the final-slot placeholder pin — because every case
+written at that point was also caught by another clause. The two extra cases
+named above exist to make those clauses independently load-bearing; the pass now
+kills 12 of 12. A guard clause no test can distinguish from its neighbours is
+untested, even when the suite is green.
 
 Recomputing an expectation is only worth anything if its input cannot be reached
 by the thing it checks. The validated calls are therefore snapshotted before the
