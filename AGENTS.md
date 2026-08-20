@@ -250,6 +250,80 @@ without a verification method is a rumour.
 
 Format: `### YYYY-MM-DD — short title` then what, why it matters, how verified.
 
+### 2026-08-20 — A prepared batch must own the intents it was admitted with
+
+`PrivacyOperations.prepare()` is where every admission check lives: the route
+policy and token allowlist, positive amounts, `maxIntents`, recipient
+registration, the D-004 shield/spend separation, and the warnings the player
+reads. All of it was reachable around, because `confirm()` did not own the
+intents it proved.
+
+Two independent leaks, one root cause. The **array**: `prepare(intents)` handed
+its own parameter down to the route builders, whose `confirm()` re-read it at
+confirmation time, so an intent the caller appended afterwards was proved and
+signed — including the shield+transfer pair `prepare` refuses outright, which is
+the exact public-leg link the pool exists to break. The **elements**:
+`intents: [...intents]` is a shallow copy, so the published `readonly Intent[]`
+held the caller's own objects; `readonly` is erased at runtime, so writing a
+field reached `confirm()`.
+
+The swap route was the worst case, not the protected one. Its action-binding
+guard from PR #31 recomputes the expected action set from the canonical intent,
+and that same object was published on the batch — so moving it moved the
+guard's authority and the action together and the guard confirmed the
+corruption. That is the tautology PR #31 avoided one level in, at
+`snapshotExecutorCalls`, reintroduced one level out. The general rule is
+stronger than "don't share an array with the SDK": **an expectation recomputed
+from a published mutable object is not independent of what it checks.** The
+input must be unreachable by anyone who could benefit from moving it, callers
+included.
+
+`prepare()` now takes one frozen snapshot *before* validating, and that snapshot
+is the sole authority for admission, costing, warnings, the published batch and
+the actions built at confirmation. There is no window in which the reviewed
+batch and the proved batch can differ, and no handle with which to open one.
+`FakePrivacyOperations` does the same: a double that grants a freedom
+production does not lets consumer suites go green against behaviour that cannot
+happen. `Intent` is a flat union of strings and bigints, so one level of
+copy-and-freeze is a full deep freeze.
+
+Scope, stated honestly: no exported type, signature or policy changed —
+`PreparedBatch.intents` already declared `readonly`. Today's two Shell call
+sites do not trigger this (`bank-machine.ts` spreads into a throwaway array,
+`exchange-machine.ts` passes an object literal, and every consumer of
+`batch.intents` only reads it), so this was a latent contract defect rather
+than a live exploit. It is still the seam's job: the financial boundary must not
+depend on callers in another package choosing not to write. The identical fix
+already existed one level up in `ReceiptLedger` and one level in at
+`snapshotExecutorCalls`; this was the unbound middle. It does **not** touch the
+open executor identity/admission decision (D-018 vs D-023 vs D-042), and it
+cannot detect a hostile plan — the swap guard remains self-consistency.
+
+*Verified:* red first, all through the public `prepare(...)`/`confirm(...)` seam
+against the package's existing fakes. Before the fix, an appended transfer made
+a prepared shield sign
+`[{deposit 0x1},{transfer 0x14→0x456}]`; an appended unshield made a prepared
+transfer prove an unallowlisted `0xdeadbeef` withdraw to an unchecked `0xbad`;
+writing `amount` on a published shield intent signed
+`0xc9f2c9cd04674edea40000000` instead of the reviewed `0x1`; and on the swap
+route, writing `amountIn` or `tokenIn` moved the sell leg to that amount or
+token with the binding guard passing, using the **real** pinned
+`@avnu/avnu-sdk@4.2.0` `buildStrk20Actions`. The fake recorded `90n` and
+debited 100→10 STRK instead of 100→80. 11 of the 12 new cases failed red; the
+twelfth (append against the fake) passed only because `canonicalizeIntents`
+happened to copy, and it is load-bearing now that the snapshot is the single
+authority. Green: `packages/privacy` 7 files / **129** tests (was 6 / 117),
+full workspace 88 files / **1219** tests, workspace typecheck, production
+build, all 13 invariants, and the header gate's 30 live production responses.
+A six-mutation pass killed 6 of 6, each with a distinct failure set, so no
+clause is redundant: dropping the snapshot fails 7 cases; freezing only the
+array fails 4; freezing only the elements fails 2; unfreezing the swap
+canonical intent fails 3; unfreezing the swap published array fails 1; dropping
+the fake's snapshot fails 2. No wallet, account, provider, RPC, network, funds,
+proof, signature or submission was involved — the wallet, pool and gateway are
+in-memory doubles, and the only real code exercised is the pinned AVNU action
+builder and `starknet` serialization, both pure.
+
 ### 2026-08-20 — A late Bridge refresh may report status, but it no longer owns persistence
 
 `BridgeService.refresh()` captures the retained record before awaiting the

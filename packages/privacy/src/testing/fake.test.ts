@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { FakePrivacyOperations } from './fake.js';
 import { PrivacyError } from '../types.js';
-import type { BatchWarning } from '../operations.js';
+import type { BatchWarning, Intent } from '../operations.js';
 
 const STRK = '0x04718f5a0fc34cc1af16a1cdee98ffb20c31f5cd61d6ab07201858f4287c938d';
 const ALICE = '0x0111';
@@ -327,6 +327,47 @@ describe('cancellation', () => {
     await expect(ops.balances(undefined, controller.signal)).rejects.toMatchObject({
       kind: 'user-rejected',
     });
+  });
+});
+
+describe('the fake owns its prepared intents too', () => {
+  /**
+   * The double is what the Shell and World lanes build against, so a
+   * permissiveness the real implementation does not share is worse than the
+   * defect itself: consumer suites go green against behaviour that cannot
+   * happen in production. See the matching real-seam cases in
+   * `wallet-api/prepared-batch-binding.test.ts`.
+   */
+  it('records and debits the reviewed amount after the published intent is written to', async () => {
+    const ops = fresh();
+    const batch = await ops.prepare([
+      { kind: 'transfer', token: STRK, amount: 10n ** 18n, recipient: BOB },
+    ]);
+
+    expect(Object.isFrozen(batch.intents)).toBe(true);
+    expect(Reflect.set(batch.intents[0]!, 'amount', 90n * 10n ** 18n)).toBe(false);
+    await batch.confirm({ feeCeiling: CEILING });
+
+    expect(ops.submitted).toEqual([[
+      { kind: 'transfer', token: STRK, amount: 10n ** 18n, recipient: BOB },
+    ]]);
+    await expect(ops.balances([STRK])).resolves.toEqual([
+      expect.objectContaining({
+        token: STRK,
+        spendable: 100n * 10n ** 18n - 10n ** 18n - SIX_STRK - RELAY_FEE,
+      }),
+    ]);
+  });
+
+  it('ignores an intent appended to the caller array after prepare', async () => {
+    const ops = fresh();
+    const mine: Intent[] = [{ kind: 'transfer', token: STRK, amount: 10n ** 18n, recipient: BOB }];
+    const batch = await ops.prepare(mine);
+
+    mine.push({ kind: 'unshield', token: STRK, amount: 5n, recipient: BOB });
+    await batch.confirm({ feeCeiling: CEILING });
+
+    expect(ops.submitted[0]).toHaveLength(1);
   });
 });
 
