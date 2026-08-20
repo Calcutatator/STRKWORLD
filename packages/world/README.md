@@ -68,6 +68,10 @@ channel.publish(peers);
 channel.clear();
 ```
 
+The ref-counted Phaser host may outlive one fully destroyed game. A later fresh
+game consumes that acquisition's current World config; it must not retain the
+first Shell bus or remote-peer source merely because the host factory survives.
+
 Each snapshot contains only `{ id, x, y, facing, sprite }`. The World drops
 invalid identity, position or facing data, replaces omitted IDs, and maps the
 approved cosmetic sprite key onto its safe local avatar texture.

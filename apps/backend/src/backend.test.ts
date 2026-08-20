@@ -97,11 +97,12 @@ function fixture(overrides: Partial<BackendConfig> = {}) {
       };
     },
   };
+  const authorizations = new MemoryAuthorizationCodec();
   const api = new BackendApi({
     config,
     paymaster,
     rpc,
-    authorizations: new MemoryAuthorizationCodec(),
+    authorizations,
     randomInt: () => 250,
     sleep: async (ms) => { delays.push(ms); },
     now: () => now,
@@ -112,6 +113,8 @@ function fixture(overrides: Partial<BackendConfig> = {}) {
     config,
     paymaster,
     rpc,
+    swapPlanner,
+    authorizations,
     delays,
     submitted,
     setBlock(value: number) { block = value; },
@@ -417,6 +420,45 @@ describe('bounded private submission', () => {
     expect(result.status).toBe(200);
     expect(delays).toEqual([]);
   });
+
+  it.each(['0x0', '0x00', '0x00000000'])(
+    'rejects zero private-swap executor %s before fee or authorization issuance',
+    async (executorAddress) => {
+      const { api, paymaster, swapPlanner, authorizations } = fixture();
+      vi.spyOn(swapPlanner, 'prepare').mockResolvedValue({
+        quoteId: 'quote-zero-executor',
+        buyAmount: 100n,
+        expiresAt: 2_000,
+        chainId: '0x534e5f4d41494e',
+        executorAddress,
+        executorCalls: [{
+          contractAddress: '0x111',
+          entrypoint: 'swap',
+          selector: '0x555',
+          calldata: ['0xaaa'],
+        }],
+      });
+      const buildFee = vi.spyOn(paymaster, 'buildFee');
+      const issueAuthorization = vi.spyOn(authorizations, 'issue');
+
+      await expect(api.handle({
+        method: 'POST', path: '/v1/private/swaps/prepare',
+        body: {
+          v: 1,
+          sellToken: '0xabc',
+          buyToken: STRK,
+          sellAmount: '20',
+          minAmountOut: '90',
+          slippageBps: 100,
+        },
+      })).resolves.toEqual({
+        status: 409,
+        body: { code: 'HTTP_409', message: 'AVNU returned a stale or invalid private quote.' },
+      });
+      expect(buildFee).not.toHaveBeenCalled();
+      expect(issueAuthorization).not.toHaveBeenCalled();
+    },
+  );
 
   it('rejects a swap after its AVNU quote expiry even while the block authorization is live', async () => {
     const { api, setNow, submitted } = fixture();

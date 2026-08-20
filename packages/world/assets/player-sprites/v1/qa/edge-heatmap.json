@@ -1,0 +1,18 @@
+{
+  "status": "pass",
+  "image": "qa/edge-heatmap.png",
+  "dimensions": [
+    2560,
+    2048
+  ],
+  "blockSize": [
+    128,
+    128
+  ],
+  "blocks": 320,
+  "blankBlocks": [],
+  "mapping": "4x4 key-panel grid; each panel is four facing rows by five pose columns",
+  "sourceCells": "all 16 PNG sheets, all 4 rows, all 5 columns",
+  "verifier": "qa/verify-edge-heatmap.py",
+  "verifierNegativeTest": "injected blank key-16/up/passing-right block rejected"
+}

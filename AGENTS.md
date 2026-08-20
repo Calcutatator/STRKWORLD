@@ -250,6 +250,58 @@ without a verification method is a rumour.
 
 Format: `### YYYY-MM-DD — short title` then what, why it matters, how verified.
 
+### 2026-08-20 — An Exchange edit owns its pending preparation
+
+The Exchange amount and asset controls remain editable while wallet
+preparation is pending. Those edits now invalidate the preparation attempt
+that captured the older composition. When that attempt eventually returns,
+its prepared batch is discarded and cannot replace the edited form with an
+obsolete review.
+
+Exchange needs no additional ownership clock for this transition. Its
+existing attempt version already owns preparation and confirmation, and an
+edit is relevant to that owner only while the flow is `preparing`. The edit
+advances that version and returns to `composing`; edits outside preparation,
+signing, unconditional receipt retention, close invalidation and balance reads
+retain their prior behavior.
+
+*Verified:* one public-machine table defers `PrivacyOperations.prepare`, then
+edits the amount, sell asset or buy asset before releasing the old batch. All
+three cases were red with the old batch undiscarded and its review published;
+green discards each returned batch exactly once, preserves the newer form and
+leaves no old review. Removing the attempt advance restores the stale review,
+and removing the flow transition leaves the edited panel stuck in preparing,
+so both clauses are independently observed. The focused Exchange machine
+passes 18 tests, the Web suite passes 36 files / 393 tests and the full
+workspace passes 89 files / 1,255 tests; workspace typecheck, production build,
+all 13 invariants and diff check pass. Local verification used no browser,
+external network, wallet, RPC, proof, signature, funds or transaction.*
+### 2026-08-20 — A private swap cannot authorize the zero executor
+
+`BackendApi` accepted a planner result whose `executorAddress` was `0x0`
+because zero is a syntactically valid Starknet felt. The production AVNU
+adapter's truthiness check also accepts the non-empty string `"0x0"`. A public
+swap-prepare request could therefore build a sponsor fee and issue an
+authorization binding both the sell withdrawal and the later invoke to the
+zero executor, even though no valid private executor had been admitted.
+
+Swap-plan admission now requires the executor felt to be nonzero before fee
+construction or authorization issuance. Quote selection, token/slippage
+policy, executor-call serialization, route schema and submission behavior are
+unchanged.
+
+*Verified:* public `BackendApi.handle()` regressions replace only the external
+planner result with otherwise valid mainnet private plans carrying `0x0` and
+two accepted leading-zero encodings, `0x00` and `0x00000000`. Before the guard,
+each request returned 200, called the paymaster fee builder and exposed an
+authorization whose decoded swap binding contained the zero executor. Green
+returns the existing generic 409 invalid-quote response and proves neither the
+paymaster nor authorization issuer was called. Removing the nonzero clause
+makes all three regressions fail; replacing its numeric felt comparison with a
+string-only `=== '0x0'` check makes the two leading-zero cases fail. Local
+verification used no live provider, external network, RPC, wallet, proof,
+signature, funds or transaction.*
+
 ### 2026-08-20 — A Bank batch edit owns work started from the older batch
 
 The Menu Mode Bank leaves its explicit Remove and Clear controls available
@@ -278,6 +330,30 @@ workspace passes 87 files / 1,226 tests; workspace typecheck, production build,
 all 13 invariants and diff check pass. The local verification used no browser,
 external network, wallet, RPC, proof, signature, funds or transaction.
 
+### 2026-08-20 — A replacement World must not inherit its first Shell bus
+
+The World runtime retains its ref-counting host after the current Phaser game
+has been completely destroyed. That host's `start` callback previously closed
+over the first `WorldConfig` passed to `ensureHost()`. A later acquisition with
+a different Shell bus therefore constructed a genuinely new game and scene but
+installed the first bus again. Its fixed-room controllers subscribed to stale
+Shell input, and its semantic output returned to the stale owner.
+
+Each fresh host start now consumes the config belonging to the acquisition that
+caused that start. The handoff is synchronous around `Host.acquire()` and is
+cleared afterwards; retaining or releasing an already-live game is unchanged.
+The singleton host still owns StrictMode-safe Phaser lifetime, but it no longer
+owns the first caller's bus forever.
+
+*Verified:* a public runtime regression acquires with bus A, releases it, runs
+the complete deferred teardown, then acquires with distinct bus B. Before the
+fix, the second scene's registry contained A and B received no fixed-room
+subscription; the failure reproduced identically in three isolated runs. Green
+records B at scene creation and observes B's `world:stations` subscription.
+Removing the per-acquisition config assignment makes both runtime tests fail.
+The focused runtime suite passes 1 file / 2 tests. No browser, network, lobby,
+wallet, RPC, proof, signature, funds or transaction was used.
+
 ### 2026-08-20 — A local Lobby leave does not own its replacement room
 
 `LobbyClient.disconnect()` clears the current room before awaiting the SDK's
@@ -304,7 +380,6 @@ the client `connected`; green reports exactly `closed/server-dropped` with code
 1006. The current Lobby suite passes 9 files / 192 tests. Local verification
 used only fake rooms plus the suite's local loopback server; no browser, remote
 lobby, wallet, RPC, proof, signature, funds or transaction was used.
-
 ### 2026-08-20 — A prepared batch must own the intents it was admitted with
 
 `PrivacyOperations.prepare()` is where every admission check lives: the route
