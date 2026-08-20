@@ -381,6 +381,8 @@ describe('Fly composition process boundary', () => {
     const { publicPort, backendPort, lobbyPort } = await ports();
     const occupied = createServer();
     await new Promise<void>((resolve) => occupied.listen(backendPort, '127.0.0.1', resolve));
+    // A port probe would accept the occupied listener immediately. The real
+    // child cannot report IPC readiness before this deliberately earlier deadline.
     await expect(startFlyComposition({
       staticRoot: join(process.cwd(), 'apps/web/dist'),
       backendEntry: child,
@@ -389,9 +391,9 @@ describe('Fly composition process boundary', () => {
       backendPort,
       lobbyPort,
       publicOrigin: 'https://game.example',
-      environment: process.env,
+      environment: { ...process.env, START_DELAY_MS: '750' },
       readinessTimeoutMs: 500,
-    })).rejects.toThrow('Private service exited before readiness.');
+    })).rejects.toThrow('Private service did not become ready.');
     await new Promise<void>((resolve, reject) => occupied.close((error) => error ? reject(error) : resolve()));
   });
 });
