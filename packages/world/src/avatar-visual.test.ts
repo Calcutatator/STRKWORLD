@@ -11,7 +11,7 @@ import {
   resolveAvatarSheet,
 } from './avatar-visual.js';
 
-describe('D-049 avatar visual catalog', () => {
+describe('D-052 avatar visual catalog', () => {
   it('maps every opaque key to one fixed final sheet contract', () => {
     expect(AVATAR_VISUAL_CATALOG.map((sheet) => ({
       sprite: sheet.sprite,
@@ -22,7 +22,7 @@ describe('D-049 avatar visual catalog', () => {
     }))).toEqual(Array.from({ length: 16 }, (_, index) => ({
       sprite: `avatar-${index + 1}`,
       file: `avatar-${index + 1}.png`,
-      sheet: [192, 256],
+      sheet: [320, 256],
       cell: [64, 64],
       origin: [0.5, 0.875],
     })));
@@ -47,12 +47,12 @@ describe('D-049 avatar visual catalog', () => {
     expect(queued[0]).toEqual([
       'avatar-1',
       expect.stringMatching(/player-sprites\/v1\/avatar-1\.png$/),
-      { frameWidth: 64, frameHeight: 64, startFrame: 0, endFrame: 11 },
+      { frameWidth: 64, frameHeight: 64, startFrame: 0, endFrame: 19 },
     ]);
     expect(queued.at(-1)).toEqual([
       'avatar-16',
       expect.stringMatching(/player-sprites\/v1\/avatar-16\.png$/),
-      { frameWidth: 64, frameHeight: 64, startFrame: 0, endFrame: 11 },
+      { frameWidth: 64, frameHeight: 64, startFrame: 0, endFrame: 19 },
     ]);
     expect(queued.some(([key]) => key === 'avatar-8')).toBe(false);
   });
@@ -61,13 +61,13 @@ describe('D-049 avatar visual catalog', () => {
     expect(resolveAvatarAnimation('avatar-7', 'left', false)).toEqual({
       key: 'avatar-7:left:walk',
       textureKey: 'avatar-7',
-      frames: [3, 4, 3, 5],
+      frames: [5, 6, 7, 8, 9],
       frameRate: 8,
     });
     expect(resolveAvatarAnimation('not-allowed', 'up', true)).toEqual({
       key: 'avatar-1:up:sprint',
       textureKey: 'avatar-1',
-      frames: [9, 10, 9, 11],
+      frames: [15, 16, 17, 18, 19],
       frameRate: 12,
     });
   });
@@ -89,8 +89,9 @@ describe('D-049 avatar visual catalog', () => {
       frames: [
         { key: 'avatar-1', frame: 0 },
         { key: 'avatar-1', frame: 1 },
-        { key: 'avatar-1', frame: 0 },
         { key: 'avatar-1', frame: 2 },
+        { key: 'avatar-1', frame: 3 },
+        { key: 'avatar-1', frame: 4 },
       ],
       frameRate: 12,
       repeat: -1,
@@ -98,10 +99,11 @@ describe('D-049 avatar visual catalog', () => {
     expect(created).toContainEqual({
       key: 'avatar-16:up:walk',
       frames: [
-        { key: 'avatar-16', frame: 9 },
-        { key: 'avatar-16', frame: 10 },
-        { key: 'avatar-16', frame: 9 },
-        { key: 'avatar-16', frame: 11 },
+        { key: 'avatar-16', frame: 15 },
+        { key: 'avatar-16', frame: 16 },
+        { key: 'avatar-16', frame: 17 },
+        { key: 'avatar-16', frame: 18 },
+        { key: 'avatar-16', frame: 19 },
       ],
       frameRate: 8,
       repeat: -1,
@@ -132,7 +134,7 @@ describe('D-049 avatar visual catalog', () => {
 
     expect(target.setTexture).toHaveBeenLastCalledWith('avatar-1');
     expect(target.stop).toHaveBeenCalledTimes(1);
-    expect(target.setFrame).toHaveBeenLastCalledWith(9);
+    expect(target.setFrame).toHaveBeenLastCalledWith(15);
   });
 
   it('keeps the local Arcade body at the prior 24px world-coordinate footprint', () => {
@@ -169,7 +171,7 @@ describe('D-049 avatar visual catalog', () => {
 
     controller.update({ facing: 'right', moving: false, sprinting: false });
     expect(target.stop).toHaveBeenCalledTimes(2);
-    expect(target.setFrame).toHaveBeenLastCalledWith(6);
+    expect(target.setFrame).toHaveBeenLastCalledWith(10);
     expect(controller.state).toEqual({
       sprite: 'avatar-7',
       facing: 'right',
@@ -196,7 +198,7 @@ describe('D-049 avatar visual catalog', () => {
 
     local.update({ left: false, right: false, up: false, down: false }, false);
     expect(target.setTexture).toHaveBeenLastCalledWith('avatar-7');
-    expect(target.setFrame).toHaveBeenLastCalledWith(9);
+    expect(target.setFrame).toHaveBeenLastCalledWith(15);
     expect(local.state).toEqual({
       sprite: 'avatar-7',
       facing: 'up',

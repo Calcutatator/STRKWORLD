@@ -124,7 +124,7 @@ describe('remote avatar layer', () => {
     expect(fake.scene.add.sprite).toHaveBeenCalledWith(40, 72, 'avatar-7', 0);
     const sprite = fake.objects[0]!;
     expect(sprite.setOrigin).toHaveBeenLastCalledWith(0.5, 0.875);
-    expect(sprite.setFrame).toHaveBeenLastCalledWith(6);
+    expect(sprite.setFrame).toHaveBeenLastCalledWith(10);
     expect(sprite).not.toHaveProperty('body');
   });
 
@@ -142,14 +142,14 @@ describe('remote avatar layer', () => {
     expect(image.play).toHaveBeenLastCalledWith('avatar-3:left:walk', true);
     expect(image.setData).toHaveBeenCalledWith('facing', 'left');
     expect(fake.scene.add.sprite).toHaveBeenCalledTimes(1);
-    expect(fake.scene.time.delayedCall).toHaveBeenLastCalledWith(500, expect.any(Function));
+    expect(fake.scene.time.delayedCall).toHaveBeenLastCalledWith(625, expect.any(Function));
 
     sourceController.publish([peer({ x: 120, y: 120, facing: 'left', sprite: 'avatar-3' })]);
     expect(fake.timers[0]?.remove).toHaveBeenCalledTimes(1);
     fake.timers[0]?.fire();
     expect(image.frame).toBe(0);
     fake.timers[1]?.fire();
-    expect(image.setFrame).toHaveBeenLastCalledWith(3);
+    expect(image.setFrame).toHaveBeenLastCalledWith(5);
     expect(layer.peers.size).toBe(1);
   });
 
@@ -163,7 +163,7 @@ describe('remote avatar layer', () => {
 
     expect(fake.scene.add.sprite).toHaveBeenCalledWith(40, 72, 'avatar-1', 0);
     expect(fake.objects[0]?.setData).toHaveBeenCalledWith('sprite', 'avatar-1');
-    expect(fake.objects[0]?.setFrame).toHaveBeenLastCalledWith(9);
+    expect(fake.objects[0]?.setFrame).toHaveBeenLastCalledWith(15);
   });
 
   it('renders authored directional frames without placeholder tint or mirroring', () => {
@@ -175,10 +175,10 @@ describe('remote avatar layer', () => {
     const sprite = fake.objects[0]!;
 
     expect(sprite.setTexture).toHaveBeenLastCalledWith('avatar-9');
-    expect(sprite.setFrame).toHaveBeenLastCalledWith(9);
+    expect(sprite.setFrame).toHaveBeenLastCalledWith(15);
     sourceController.publish([peer({ facing: 'left', sprite: 'avatar-16' })]);
     expect(sprite.setTexture).toHaveBeenLastCalledWith('avatar-16');
-    expect(sprite.setFrame).toHaveBeenLastCalledWith(3);
+    expect(sprite.setFrame).toHaveBeenLastCalledWith(5);
     expect(sprite.setTint).not.toHaveBeenCalled();
     expect(sprite.setFlipX).not.toHaveBeenCalled();
     expect(sprite.setFlipY).not.toHaveBeenCalled();
