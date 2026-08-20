@@ -250,6 +250,32 @@ without a verification method is a rumour.
 
 Format: `### YYYY-MM-DD — short title` then what, why it matters, how verified.
 
+### 2026-08-20 — Unknown protocol state fails the drift canary
+
+The protocol drift canary used to treat an unreadable pool fee or
+`is_paused()` result as a warning. If `starknet_getClassHashAt` still resolved,
+CI exited successfully and printed `No drift.` even though it had not learned
+the two operational values the job exists to protect. A selector change,
+method-specific provider failure or changed contract surface could therefore
+make the release gate green precisely when fee or pause state was unknown.
+
+Unreadable fee and pause-state responses now each fail the canary. The output
+remains generic and does not echo provider error detail or a response value.
+Known healthy state still passes; a changed fee, a paused pool or an
+unresolvable class continues to fail.
+
+*Verified:* a deterministic executable-seam test puts a fake `curl` first on
+`PATH` and returns JSON-RPC-shaped local fixtures. Before the fix, fee and
+pause errors plus a resolvable class printed both warnings and `No drift.` and
+exited 0. The retained test checks each unreadable value independently while
+the other two reads succeed; removing either new failure assignment makes its
+own case exit 0. Known fee `6000000000000000000`, not-paused and class success
+exit 0; changed-fee and paused fixtures exit 1. The local test opens no network,
+wallet, RPC, proof, signature, funds or transaction. Hosted CI's standard
+canary remains read-only and issues two public-mainnet `starknet_call` reads
+plus one `starknet_getClassHashAt` at `latest`; it uses no key, signature,
+proof, funds or transaction.*
+
 ### 2026-08-20 — A late Bridge status response cannot overwrite a newer retained version
 
 `BridgeService.reportDepositTransaction()` and `refresh()` capture the complete

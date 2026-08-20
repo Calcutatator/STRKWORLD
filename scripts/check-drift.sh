@@ -26,7 +26,8 @@ FEE_SELECTOR="0x3d323cd692ad43935b81ce230c47bfc57f69656249c5a33fe5223c17dd32ed2"
 PAUSED_SELECTOR="0x238d7ea31550fece8f0a8a601e3ae1a7c59cb3b6cc976ceb721e31ebd9c36f9"
 raw=$(call "$FEE_SELECTOR")
 if [ "$raw" = "ERR" ] || [ -z "$raw" ]; then
-  echo "warn  could not read the pool fee (selector or RPC changed) — check by hand"
+  echo "FAIL  could not read the pool fee (selector or RPC changed) — check by hand"
+  fail=1
 else
   dec=$(python3 -c "print(int('$raw',16))")
   echo "      pool fee reads $dec"
@@ -53,7 +54,8 @@ fi
 # before a player does.
 paused=$(call "$PAUSED_SELECTOR")
 if [ "$paused" = "ERR" ] || [ -z "$paused" ]; then
-  echo "warn  could not read is_paused"
+  echo "FAIL  could not read is_paused"
+  fail=1
 elif [ "$(python3 -c "print(int('$paused',16))")" != "0" ]; then
   echo "DRIFT pool is PAUSED — every shielded building is down"
   fail=1
