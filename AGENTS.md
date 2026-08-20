@@ -250,6 +250,58 @@ without a verification method is a rumour.
 
 Format: `### YYYY-MM-DD — short title` then what, why it matters, how verified.
 
+### 2026-08-20 — A late Bridge refresh may report status, but it no longer owns persistence
+
+`BridgeService.refresh()` captures the retained record before awaiting the
+provider, so the player can discard that evidence or retain a replacement while
+the request is in flight. A late response still maps and returns the provider
+status to its caller, but it persists that status only if the store still holds
+the same signed evidence, identified by correlation ID, signature and signed
+timestamp. A refresh for evidence A therefore cannot resurrect A after an
+explicit discard and cannot overwrite replacement evidence B or B's exact
+export.
+
+This extends the same ownership rule already applied to imports: the currently
+retained signed evidence is authoritative, and an asynchronous result owns no
+future store state merely because it started first. Provider calls, status
+mapping, record schema and wire behavior are unchanged; the guard only decides
+whether the mapped result may still be saved.
+
+*Verified:* two deferred regressions start a refresh for A, then respectively
+discard A or discard A and create B before releasing the provider response.
+Both refresh calls return `solver-settling`; the first leaves `resume()` null,
+and the second preserves both B and its byte-identical export. The current
+Bridge suite passes 1 file / 57 tests. PR #27 head `3452a55` passed
+[GitHub Actions run 32388660609](https://github.com/Calcutatator/STRKWORLD/actions/runs/32388660609)
+and was merged as `51eea51`. No live provider, external RPC, wallet, proof,
+signature, funds or transaction was used.
+
+### 2026-08-20 — Established lobby transport drops stay player-owned
+
+The pinned Colyseus SDK enables automatic room reconnection after an
+established connection. `LobbyClient` now disables that owner on the joined
+room before publishing it, so D-037's existing Shell control remains the only
+way to reconnect. A dropped transport can no longer leave the wrapper reporting
+`connected` while the SDK performs an unrequested hidden retry loop; the
+existing status seam instead reaches `closed/server-dropped` with the real
+WebSocket close code and truthful solo-mode fallback.
+
+The transport emits a code-less SDK error immediately before its close event.
+That error now defers to `onLeave`, which owns the paired close code; numeric
+room or protocol errors still take the explicit `error` path. This changes no
+presence payload, schema, identity, position, facing, sprite, origin policy or
+financial boundary.
+
+*Verified:* the real pinned SDK test keeps a local child-process lobby and
+WebSocket connected beyond the SDK's 5,000 ms minimum uptime, kills the child
+abruptly, and observes `closed/server-dropped` within 1,000 ms. Removing the
+`room.reconnection.enabled = false` assignment makes that regression time out
+inside the SDK retry loop. The current Lobby suite passes 9 files / 191 tests.
+PR #25 head `7472729` passed
+[GitHub Actions run 32388301046](https://github.com/Calcutatator/STRKWORLD/actions/runs/32388301046)
+and was merged as `a3fad68`. No browser, remote lobby, wallet, RPC, proof,
+signature, funds or transaction was used.
+
 ### 2026-08-20 — The Shell accepts the financial seam; production still does not construct it
 
 `App` now accepts one exact `PrivacyOperations` instance and passes it directly
