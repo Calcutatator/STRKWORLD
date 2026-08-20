@@ -273,8 +273,11 @@ adjacent regressions retain the parent `AbortError` and the deadline
 `TimeoutError` plus their existing 504 mapping. The focused three cases pass;
 the Backend suite is 5 files / 69 tests, full workspace is 87 files / 1,209
 tests, workspace typecheck, production build, all 13 invariants and the tilemap
-check pass. No deploy, external network, wallet, RPC, proof, signature, secret,
-funds or transaction was used.
+check pass. The focused and local workspace verification used no deploy,
+external network, wallet, RPC, proof, signature, secret, funds or transaction.
+Hosted CI subsequently ran the repository's standard read-only drift canary:
+two `starknet_call` reads and one `starknet_getClassHashAt` against public pool
+state at `latest`; no key, signature, proof, funds or transaction was involved.
 
 ### 2026-08-20 — A late Bridge refresh may report status, but it no longer owns persistence
 
