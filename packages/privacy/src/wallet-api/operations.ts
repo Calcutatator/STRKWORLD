@@ -10,6 +10,7 @@ import type {
 } from '../operations.js';
 import {
   PrivacyError,
+  type Address,
   type OperationProgress,
   type PrivateBalance,
   type ProgressCallback,
@@ -220,6 +221,14 @@ export class WalletApiPrivacyOperations implements PrivacyOperations {
             takerAddress: owner.wallet.address,
           };
           const actions = buildStrk20Actions(avnuPlan);
+          assertPreparedSwapActions(actions, {
+            sellToken: canonicalIntent.tokenIn,
+            sellAmount: canonicalIntent.amountIn,
+            buyToken: canonicalIntent.tokenOut,
+            taker: owner.wallet.address,
+            executor: plan.executorAddress,
+            fee: plan.fee,
+          });
           emitProgress(onProgress, { stage: 'awaiting-approval', message: 'Confirm the private swap in your wallet' });
           emitProgress(onProgress, { stage: 'proving', message: 'Your wallet is generating a proof' });
           const artifact = await owner.wallet.strk20PrepareInvoke(actions, false);
@@ -475,6 +484,82 @@ function validateIntents(intents: Intent[], policy: WalletRoutePolicy): void {
       assertAddress(intent.recipient, 'recipient');
     }
   }
+}
+
+/** Only the first open note is addressable, so AVNU emits exactly this literal. */
+const OPEN_NOTE_PLACEHOLDER = '${openNoteIds[0]}';
+
+/** What the wallet must be asked to prove, taken from validated sources only. */
+interface ReviewedSwap {
+  /** From the canonical intent, not from the object handed to the SDK. */
+  sellToken: Address;
+  sellAmount: bigint;
+  buyToken: Address;
+  /** The connected account, so the output note cannot be credited elsewhere. */
+  taker: Address;
+  /** From the validated plan. */
+  executor: Address;
+  fee: RelayFeeQuote;
+}
+
+/**
+ * Check that the actions about to be proved still describe the reviewed swap.
+ *
+ * `buildStrk20Actions` is a validation-free array literal, and the relay's
+ * binding check runs only after the wallet has already minted an irrevocable
+ * proof. Verifying here keeps a divergence cheap: the sell leg must fund the
+ * quoted executor and nobody else, the fee leg must match the authorized quote,
+ * the bought asset must land in an open note owned by this account, and the one
+ * external call must target that same executor. Anything else — a reordering, a
+ * dropped leg, an extra action, a public deposit — is a mismatch, not a variant.
+ *
+ * Comparands are the canonical intent, the validated plan and the connected
+ * account, never the intermediate plan object the SDK was fed, so a mistake in
+ * this package's own mapping fails closed too.
+ *
+ * The four-action shape is source-derived from the exact pinned SDK; an approved
+ * upgrade that changes it must fail closed here rather than silently prove a
+ * different transaction. This is self-consistency only — a hostile plan's
+ * actions match it faithfully.
+ */
+function assertPreparedSwapActions(
+  actions: readonly STRK20_ACTION[],
+  reviewed: ReviewedSwap,
+): void {
+  const [sell, feeLeg, openNote, invoke] = actions;
+  const faithful = actions.length === 4 &&
+    isWithdrawal(sell, reviewed.sellToken, reviewed.sellAmount, reviewed.executor) &&
+    isWithdrawal(feeLeg, reviewed.fee.token, reviewed.fee.amount, reviewed.fee.recipient) &&
+    openNote?.type === 'transfer' &&
+    openNote.amount === 'OPEN' &&
+    sameAddress(openNote.token, reviewed.buyToken) &&
+    sameAddress(openNote.recipient, reviewed.taker) &&
+    invoke?.type === 'invoke' &&
+    sameAddress(invoke.contract, reviewed.executor) &&
+    invoke.calldata.filter((item) => item === OPEN_NOTE_PLACEHOLDER).length === 1;
+  if (!faithful) {
+    throw new PrivacyError(
+      'unknown',
+      'The private swap action set does not match the reviewed plan.',
+    );
+  }
+}
+
+function isWithdrawal(
+  action: STRK20_ACTION | undefined,
+  token: string,
+  amount: bigint,
+  recipient: string,
+): boolean {
+  return action?.type === 'withdraw' &&
+    sameAddress(action.token, token) &&
+    sameAmount(action.amount, amount) &&
+    sameAddress(action.recipient, recipient);
+}
+
+/** Felt amounts differ in padding between producers; compare the values. */
+function sameAmount(felt: string, amount: bigint): boolean {
+  try { return BigInt(felt) === amount; } catch { return false; }
 }
 
 function toActions(intents: Intent[]): STRK20_ACTION[] {

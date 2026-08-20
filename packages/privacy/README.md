@@ -127,6 +127,20 @@ when its explicit deterministic `swapReview` configuration supplies the
 expected output, expiry and slippage; it never reads a clock or invents a
 market rate.
 
+`buildStrk20Actions` is a validation-free array literal, and the relay's own
+binding check runs only *after* the wallet has minted an irrevocable proof. So
+before `strk20PrepareInvoke`, this package verifies that the four actions it is
+about to submit still describe the plan it validated: the sell leg funds the
+quoted executor and nobody else, the fee leg matches the authorized quote, the
+bought asset lands in an `OPEN` note owned by this account, and the single
+external call targets that same executor with exactly one open-note
+placeholder. A reordering, a dropped or extra action, or a public deposit leg is
+a mismatch, not a variant, and fails closed. The four-action shape is
+source-derived from the exact pinned SDK — an approved upgrade that changes it
+must fail here rather than quietly prove a different transaction. This is
+self-consistency only: it cannot tell a hostile plan from an honest one, because
+a hostile plan's actions match it faithfully.
+
 The incoming swap minimum is only a quote floor. After validating the plan,
 Chain computes AVNU's protected minimum as exact bigint arithmetic:
 `expectedAmountOut - (expectedAmountOut * slippageBps / 10_000)`. A floor above
