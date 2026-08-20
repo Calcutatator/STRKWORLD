@@ -8,7 +8,8 @@ and the financial seam:
 
 - **Game Mode** — the default. A building entry starts a local visit in the
   World's instanced room; an admitted station opens one React interaction
-  window and confirms one typed action at a time.
+  window and confirms one typed action at a time. The top-right controls also
+  provide an explicit accessible exit from the room.
 - **Menu Mode** — the secondary path. Its top-right control opens the existing
   full building panel, where the batch accumulator collects player intent and
   emits one atomic `Intent[]` on confirm. This is the fee-amortising path.
@@ -90,12 +91,13 @@ the first. The world's own Phaser/WebGL lifecycle is ref-counted inside
 world-out bus in an effect with cleanup, so the StrictMode
 mount→cleanup→mount cycle leaves exactly one set of live handlers. A
 `building:entered` event starts in the room surface: Game Mode is the default,
-and only the top-right Menu Mode control is rendered over the World. The Shell
-publishes presentation-only station snapshots; an admitted
+and the top-right Menu Mode and Leave building controls are rendered over the
+World. The Shell publishes presentation-only station snapshots; an admitted
 `station:activated` event hands controls to React and opens that station's
-window. Closing a station or Menu Mode returns controls to the room. Only a
-matching `building:exited` ends the visit. Unknown or newly locked stations
-fail closed and return controls to the World.
+window. Closing a station or Menu Mode returns controls to the room. Leave
+building emits the active building through `world:exit-building`; the visit
+stays mounted until the World answers with the matching `building:exited`.
+Unknown or newly locked stations fail closed and return controls to the World.
 
 The first tracer maps the opaque `bank:shielding` station to the existing Bank
 machine, limited to Shield/Unshield and one intent. D-039 adds

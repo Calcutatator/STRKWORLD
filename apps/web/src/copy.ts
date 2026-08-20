@@ -174,6 +174,7 @@ export const COPY = {
 
   gameMode: {
     menu: 'Menu Mode',
+    exit: 'Leave building',
     singleAction: 'This station confirms one action at a time.',
     reviewAction: 'Review this action',
   },

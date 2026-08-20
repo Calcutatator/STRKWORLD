@@ -25,6 +25,8 @@ export interface VisitController {
   readonly store: Store<VisitState>;
   /** Attach World listeners. The returned cleanup owns every subscription. */
   listen(world: EventBus<WorldEvents>): () => void;
+  /** Ask the World to leave the active Game Mode room. World confirms exit. */
+  requestExit(): void;
   openMenu(): void;
   closeSurface(): void;
   dismissLocked(): void;
@@ -114,6 +116,12 @@ export function createVisitController(
           ownControls(state.building, 'world');
         }
       };
+    },
+
+    requestExit(): void {
+      const state = store.getState();
+      if (state.name !== 'visiting' || state.surface.name !== 'room') return;
+      shell.emit('world:exit-building', { building: state.building });
     },
 
     openMenu(): void {

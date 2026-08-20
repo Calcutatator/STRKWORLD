@@ -50,11 +50,13 @@ body {
   height: 100%;
 }
 
-.menu-mode-button {
+.game-mode-controls {
   position: absolute;
   top: 1rem;
   right: 1rem;
   z-index: 9;
+  display: flex;
+  gap: 0.5rem;
 }
 
 .session-notice {

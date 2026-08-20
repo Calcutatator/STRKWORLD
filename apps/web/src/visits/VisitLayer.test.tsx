@@ -1,11 +1,16 @@
-import { describe, expect, it } from 'vitest';
+import { Children, isValidElement, type ReactElement, type ReactNode } from 'react';
+import { describe, expect, it, vi } from 'vitest';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { FakePrivacyOperations } from '@strkworld/privacy';
+import type { ShellEvents, WorldEvents } from '@strkworld/shared';
+import { createEventBus } from '../bus/event-bus.js';
+import { COPY } from '../copy.js';
 import { PrivacyProvider } from '../privacy/PrivacyProvider.js';
 import { SessionNoticeLayer } from '../privacy/SessionNoticeLayer.js';
 import { createSubmissionUncertainty } from '../privacy/submission-uncertainty.js';
 import { PRIVACY_REGISTER, type RouteGrade } from '../privacy/register.js';
 import { VisitLayerView } from './VisitLayer.js';
+import { createVisitController } from './visit-controller.js';
 
 function render(node: React.ReactElement): string {
   return renderToStaticMarkup(
@@ -13,13 +18,62 @@ function render(node: React.ReactElement): string {
   );
 }
 
+function findButton(node: ReactNode, label: string): ReactElement<{
+  children?: ReactNode;
+  onClick?: () => void;
+}> {
+  let found: ReactElement<{ children?: ReactNode; onClick?: () => void }> | null = null;
+  const visit = (current: ReactNode): void => {
+    if (found || !isValidElement<{ children?: ReactNode; onClick?: () => void }>(current)) return;
+    if (current.type === 'button' && current.props.children === label) {
+      found = current;
+      return;
+    }
+    Children.forEach(current.props.children, visit);
+  };
+  visit(node);
+  if (!found) throw new Error(`Button not found: ${label}`);
+  return found;
+}
+
 describe('VisitLayerView', () => {
-  it('shows only the hovering Menu Mode control when a Bank visit starts', () => {
+  it('sends the exact active building through the native Game Mode exit control', () => {
+    const world = createEventBus<WorldEvents>();
+    const shell = createEventBus<ShellEvents>();
+    const exits = vi.fn();
+    shell.on('world:exit-building', exits);
+    const controller = createVisitController(shell);
+    controller.listen(world);
+    world.emit('building:entered', { building: 'bank' });
+
+    const view = VisitLayerView({
+      state: controller.store.getState(),
+      connected: true,
+      onOpenMenu: () => {},
+      onRequestExit: () => controller.requestExit(),
+      onCloseSurface: () => {},
+      onDismissLocked: () => {},
+    });
+    if (view === null) throw new Error('Visiting view did not render');
+    expect(render(view)).toContain(`class="exit-building-button"`);
+
+    findButton(view, COPY.gameMode.exit).props.onClick?.();
+
+    expect(exits).toHaveBeenCalledOnce();
+    expect(exits).toHaveBeenCalledWith({ building: 'bank' });
+    expect(controller.store.getState()).toMatchObject({ name: 'visiting', building: 'bank' });
+
+    world.emit('building:exited', { building: 'bank' });
+    expect(controller.store.getState()).toEqual({ name: 'outside' });
+  });
+
+  it('shows the native Game Mode controls without mounting a financial form', () => {
     const markup = render(
       <VisitLayerView
         state={{ name: 'visiting', building: 'bank', surface: { name: 'room' } }}
         connected
         onOpenMenu={() => {}}
+        onRequestExit={() => {}}
         onCloseSurface={() => {}}
         onDismissLocked={() => {}}
       />,
@@ -27,6 +81,7 @@ describe('VisitLayerView', () => {
 
     expect(markup).toContain('class="menu-mode-button"');
     expect(markup).toContain('Menu Mode');
+    expect(markup).toContain('Leave building');
     expect(markup).not.toContain('name="amount"');
   });
 
@@ -36,6 +91,7 @@ describe('VisitLayerView', () => {
         state={{ name: 'visiting', building: 'bank', surface: { name: 'menu' } }}
         connected
         onOpenMenu={() => {}}
+        onRequestExit={() => {}}
         onCloseSurface={() => {}}
         onDismissLocked={() => {}}
       />,
@@ -56,6 +112,7 @@ describe('VisitLayerView', () => {
         }}
         connected
         onOpenMenu={() => {}}
+        onRequestExit={() => {}}
         onCloseSurface={() => {}}
         onDismissLocked={() => {}}
       />,
@@ -81,6 +138,7 @@ describe('VisitLayerView', () => {
         }}
         connected
         onOpenMenu={() => {}}
+        onRequestExit={() => {}}
         onCloseSurface={() => {}}
         onDismissLocked={() => {}}
       />,
@@ -102,6 +160,7 @@ describe('VisitLayerView', () => {
         state={{ name: 'visiting', building: 'post-office', surface: { name: 'menu' } }}
         connected
         onOpenMenu={() => {}}
+        onRequestExit={() => {}}
         onCloseSurface={() => {}}
         onDismissLocked={() => {}}
       />,
@@ -137,6 +196,7 @@ describe('VisitLayerView', () => {
         connected
         register={register}
         onOpenMenu={() => {}}
+        onRequestExit={() => {}}
         onCloseSurface={() => {}}
         onDismissLocked={() => {}}
       />,
@@ -148,7 +208,7 @@ describe('VisitLayerView', () => {
 
   it('renders Exchange Menu and station as one-swap surfaces with no batch vocabulary', () => {
     for (const surface of [{ name: 'menu' }, { name: 'station', station: 'exchange:swap' }] as const) {
-      const markup = render(<VisitLayerView state={{ name: 'visiting', building: 'exchange', surface }} connected onOpenMenu={() => {}} onCloseSurface={() => {}} onDismissLocked={() => {}} />);
+      const markup = render(<VisitLayerView state={{ name: 'visiting', building: 'exchange', surface }} connected onOpenMenu={() => {}} onRequestExit={() => {}} onCloseSurface={() => {}} onDismissLocked={() => {}} />);
       expect(markup).toContain('This Exchange prepares and confirms one swap at a time.');
       expect(markup).not.toContain('Add to this visit');
       expect(markup).not.toContain('Nothing queued yet');
@@ -157,7 +217,7 @@ describe('VisitLayerView', () => {
 
   it('locks a disabled Exchange station without exposing a balance or amount form', () => {
     const disabled = PRIVACY_REGISTER.map((entry) => entry.route === 'exchange.swap' ? { ...entry, disclosure: null, approvedBy: null, approvedOn: null, rationale: null } : entry);
-    const markup = render(<VisitLayerView state={{ name: 'visiting', building: 'exchange', surface: { name: 'station', station: 'exchange:swap' } }} connected register={disabled} onOpenMenu={() => {}} onCloseSurface={() => {}} onDismissLocked={() => {}} />);
+    const markup = render(<VisitLayerView state={{ name: 'visiting', building: 'exchange', surface: { name: 'station', station: 'exchange:swap' } }} connected register={disabled} onOpenMenu={() => {}} onRequestExit={() => {}} onCloseSurface={() => {}} onDismissLocked={() => {}} />);
     expect(markup).toContain('data-lock-reason="unapproved-route"');
     expect(markup).not.toContain('name="amount"');
     expect(markup).not.toContain('Show my balance');
@@ -173,6 +233,7 @@ describe('VisitLayerView', () => {
         }}
         connected
         onOpenMenu={() => {}}
+        onRequestExit={() => {}}
         onCloseSurface={() => {}}
         onDismissLocked={() => {}}
       />,
@@ -206,6 +267,7 @@ describe('VisitLayerView', () => {
             state={state}
             connected
             onOpenMenu={() => {}}
+            onRequestExit={() => {}}
             onCloseSurface={() => {}}
             onDismissLocked={() => {}}
           />

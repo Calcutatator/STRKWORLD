@@ -67,6 +67,7 @@ export function VisitLayer({
       }}
       register={register}
       onOpenMenu={() => controller.openMenu()}
+      onRequestExit={() => controller.requestExit()}
       onCloseSurface={() => controller.closeSurface()}
       onDismissLocked={() => controller.dismissLocked()}
     />
@@ -81,6 +82,7 @@ export function VisitLayerView({
   register = PRIVACY_REGISTER,
   panels = BUILDING_PANELS,
   onOpenMenu,
+  onRequestExit,
   onCloseSurface,
   onDismissLocked,
 }: {
@@ -90,6 +92,7 @@ export function VisitLayerView({
   register?: readonly RouteGrade[];
   panels?: PanelRegistry<BuildingPanelDescriptor>;
   onOpenMenu: () => void;
+  onRequestExit: () => void;
   onCloseSurface: () => void;
   onDismissLocked: () => void;
 }): ReactElement | null {
@@ -108,9 +111,14 @@ export function VisitLayerView({
 
   if (state.surface.name === 'room') {
     return (
-      <button type="button" className="menu-mode-button" onClick={onOpenMenu}>
-        {COPY.gameMode.menu}
-      </button>
+      <div className="game-mode-controls">
+        <button type="button" className="menu-mode-button" onClick={onOpenMenu}>
+          {COPY.gameMode.menu}
+        </button>
+        <button type="button" className="exit-building-button" onClick={onRequestExit}>
+          {COPY.gameMode.exit}
+        </button>
+      </div>
     );
   }
 

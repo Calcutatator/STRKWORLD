@@ -91,6 +91,37 @@ describe('visit controller', () => {
     expect(exits).not.toHaveBeenCalled();
   });
 
+  it('requests the active room exit and waits for the matching World acknowledgement', () => {
+    const world = createEventBus<WorldEvents>();
+    const shell = createEventBus<ShellEvents>();
+    const exits = vi.fn();
+    shell.on('world:exit-building', exits);
+    const controller = createVisitController(shell);
+    controller.listen(world);
+    world.emit('building:entered', { building: 'bank' });
+
+    controller.requestExit();
+
+    expect(exits).toHaveBeenCalledOnce();
+    expect(exits).toHaveBeenCalledWith({ building: 'bank' });
+    expect(controller.store.getState()).toEqual({
+      name: 'visiting',
+      building: 'bank',
+      surface: { name: 'room' },
+    });
+
+    world.emit('building:exited', { building: 'exchange' });
+    expect(controller.store.getState()).toMatchObject({ name: 'visiting', building: 'bank' });
+
+    world.emit('building:exited', { building: 'bank' });
+    expect(controller.store.getState()).toEqual({ name: 'outside' });
+
+    controller.requestExit();
+    world.emit('building:exited', { building: 'bank' });
+    expect(exits).toHaveBeenCalledOnce();
+    expect(controller.store.getState()).toEqual({ name: 'outside' });
+  });
+
   it('opens the admitted shielding station and gives control back on close', () => {
     const world = createEventBus<WorldEvents>();
     const shell = createEventBus<ShellEvents>();
