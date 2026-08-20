@@ -2190,3 +2190,14 @@ D-052-compliant. All D-049 requirements not explicitly superseded here remain:
 transparent 64x64 logical cells, fixed feet, 24x24 bodies, sixteen opaque
 keys, no baked shadows, World-local integration and no new shared/lobby or
 financial fields.
+
+**2026-08-20 approval-flow amendment.** James delegated intermediate sprite
+direction and rejection to orchestration. Art may iterate through turnaround,
+edge, pose, movement and export gates without pausing for user approval at
+each contact sheet. Intermediate scaffolds and mechanical QA boards are not
+user-review deliverables. The next user checkpoint is the completed,
+independently reviewed correction after final assets and the five-column
+runtime are integrated, with a short user-run in-game acceptance script. This
+amendment removes repeated approval pauses; it does not waive D-052's final
+rendered-acceptance requirement or authorize a mechanically conforming but
+visually incoherent asset.

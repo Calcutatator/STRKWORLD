@@ -266,6 +266,13 @@ animation contract, background review and fresh user-run in-game review remain
 open. The earlier localhost foundation acceptance covers neither this art
 replacement nor the rendered F behavior.
 
+James has delegated the intermediate D-052 art gates to orchestration. The Art
+lane should continue through internal identity, edge, movement, source/export
+and independent-review gates without returning each scaffold or contact sheet
+for user approval. Orchestration owns rejection and rework until the corrected
+assets and five-column runtime are integrated. The next user-facing checkpoint
+is one completed in-game review; final rendered acceptance remains user-owned.
+
 **Must not:** import `starknet` or any wallet package. Put an address, balance,
 transaction hash, building name or entry event into lobby traffic. On local
 entry, the shell leaves or suspends lobby presence; other players seeing the
@@ -515,6 +522,11 @@ Avatar Studio as a one-press, no-repeat cosy/fighting toggle through the
 existing opaque `avatar:selected` key. Do not change lobby/wire fields, shared
 types, Fly allowlists or financial seams; background and fresh in-game review
 remain required.
+
+Intermediate D-052 art approval is orchestration-owned: do not block the lane
+on user review of model sheets, contacts or QA artifacts. Present the user only
+with the completed, independently reviewed, runtime-integrated correction for
+the required final localhost acceptance.
 
 **Licence audit is the real work here.** Popular "free" packs are frequently
 non-commercial only, and this is a public project handling real funds. Audit
