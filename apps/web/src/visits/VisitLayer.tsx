@@ -14,7 +14,26 @@ import { usePrivacy } from '../privacy/PrivacyProvider.js';
 import { useBridge } from '../bridge/BridgeProvider.js';
 import { useStore } from '../store/use-store.js';
 import { resolveStation } from './station-registry.js';
-import { createVisitController, type VisitState } from './visit-controller.js';
+import {
+  createVisitController,
+  type VisitController,
+  type VisitState,
+} from './visit-controller.js';
+
+/** Production wiring shared with the public view regression. */
+export function visitLayerActions(
+  controller: Pick<
+    VisitController,
+    'openMenu' | 'requestExit' | 'closeSurface' | 'dismissLocked'
+  >,
+) {
+  return {
+    onOpenMenu: () => controller.openMenu(),
+    onRequestExit: () => controller.requestExit(),
+    onCloseSurface: () => controller.closeSurface(),
+    onDismissLocked: () => controller.dismissLocked(),
+  };
+}
 
 /**
  * React's half of one local building visit.
@@ -66,10 +85,7 @@ export function VisitLayer({
         bridgePlannerAvailable: Boolean(bridge.planner),
       }}
       register={register}
-      onOpenMenu={() => controller.openMenu()}
-      onRequestExit={() => controller.requestExit()}
-      onCloseSurface={() => controller.closeSurface()}
-      onDismissLocked={() => controller.dismissLocked()}
+      {...visitLayerActions(controller)}
     />
   );
 }
@@ -109,36 +125,47 @@ export function VisitLayerView({
     );
   }
 
-  if (state.surface.name === 'room') {
-    return (
+  const withControls = (surface: ReactElement | null, showMenu = false): ReactElement => (
+    <>
       <div className="game-mode-controls">
-        <button type="button" className="menu-mode-button" onClick={onOpenMenu}>
-          {COPY.gameMode.menu}
-        </button>
+        {showMenu ? (
+          <button type="button" className="menu-mode-button" onClick={onOpenMenu}>
+            {COPY.gameMode.menu}
+          </button>
+        ) : null}
         <button type="button" className="exit-building-button" onClick={onRequestExit}>
           {COPY.gameMode.exit}
         </button>
       </div>
-    );
+      {surface}
+    </>
+  );
+
+  if (state.surface.name === 'room') {
+    return withControls(null, true);
   }
 
   if (state.surface.name === 'station') {
     const station = resolveStation(state.building, state.surface.station, register, bridgeCapabilities);
     if (station.status === 'locked') {
-      return (
+      return withControls(
         <LockedRoom
           building={state.building}
           reason={station.door.reason ?? 'unknown-route'}
           message={station.door.message}
           onClose={onCloseSurface}
-        />
+        />,
       );
     }
 
-    if (!connected && station.definition.view !== 'bridge') return <ConnectionSurface building={state.building} onClose={onCloseSurface} />;
+    if (!connected && station.definition.view !== 'bridge') {
+      return withControls(
+        <ConnectionSurface building={state.building} onClose={onCloseSurface} />,
+      );
+    }
 
     if (station.definition.view === 'bank') {
-      return (
+      return withControls(
         <BankPanel
           experience="station"
           building={station.definition.building}
@@ -146,38 +173,44 @@ export function VisitLayerView({
           initialMode={station.definition.initialMode}
           title={COPY.buildings[station.definition.building]}
           onClose={onCloseSurface}
-        />
+        />,
       );
     }
     if (station.definition.view === 'exchange') {
-      return <ExchangePanel experience="station" onClose={onCloseSurface} />;
+      return withControls(<ExchangePanel experience="station" onClose={onCloseSurface} />);
     }
     if (station.definition.view === 'bridge') {
-      return <BridgePanel experience="station" onClose={onCloseSurface} />;
+      return withControls(<BridgePanel experience="station" onClose={onCloseSurface} />);
     }
   }
 
   const room = resolveRoom(state.building, panels, register);
   if (room.kind === 'locked') {
-    return (
+    return withControls(
       <LockedRoom
         building={room.building}
         reason={room.reason}
         message={room.message}
         onClose={onCloseSurface}
-      />
+      />,
     );
   }
   if (room.kind === 'unbuilt') {
-    return <UnbuiltRoom building={room.building} message={room.message} onClose={onCloseSurface} />;
+    return withControls(
+      <UnbuiltRoom building={room.building} message={room.message} onClose={onCloseSurface} />,
+    );
   }
   if (state.building === 'bridge') {
-    return <BridgePanel experience="menu" onClose={onCloseSurface} />;
+    return withControls(<BridgePanel experience="menu" onClose={onCloseSurface} />);
   }
-  if (!connected) return <ConnectionSurface building={state.building} onClose={onCloseSurface} />;
+  if (!connected) {
+    return withControls(
+      <ConnectionSurface building={state.building} onClose={onCloseSurface} />,
+    );
+  }
 
   const { Component } = room.panel;
-  return <Component onClose={onCloseSurface} />;
+  return withControls(<Component onClose={onCloseSurface} />);
 }
 
 function ConnectionSurface({

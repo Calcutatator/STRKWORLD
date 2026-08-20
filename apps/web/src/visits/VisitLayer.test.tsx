@@ -9,7 +9,7 @@ import { PrivacyProvider } from '../privacy/PrivacyProvider.js';
 import { SessionNoticeLayer } from '../privacy/SessionNoticeLayer.js';
 import { createSubmissionUncertainty } from '../privacy/submission-uncertainty.js';
 import { PRIVACY_REGISTER, type RouteGrade } from '../privacy/register.js';
-import { VisitLayerView } from './VisitLayer.js';
+import { VisitLayerView, visitLayerActions } from './VisitLayer.js';
 import { createVisitController } from './visit-controller.js';
 
 function render(node: React.ReactElement): string {
@@ -49,10 +49,7 @@ describe('VisitLayerView', () => {
     const view = VisitLayerView({
       state: controller.store.getState(),
       connected: true,
-      onOpenMenu: () => {},
-      onRequestExit: () => controller.requestExit(),
-      onCloseSurface: () => {},
-      onDismissLocked: () => {},
+      ...visitLayerActions(controller),
     });
     if (view === null) throw new Error('Visiting view did not render');
     expect(render(view)).toContain(`class="exit-building-button"`);
@@ -65,6 +62,112 @@ describe('VisitLayerView', () => {
 
     world.emit('building:exited', { building: 'bank' });
     expect(controller.store.getState()).toEqual({ name: 'outside' });
+  });
+
+  it('keeps the Leave building action available over Menu Mode until World exits', () => {
+    const world = createEventBus<WorldEvents>();
+    const shell = createEventBus<ShellEvents>();
+    const exits = vi.fn();
+    shell.on('world:exit-building', exits);
+    const controller = createVisitController(shell);
+    controller.listen(world);
+    world.emit('building:entered', { building: 'post-office' });
+    controller.openMenu();
+
+    const view = VisitLayerView({
+      state: controller.store.getState(),
+      connected: true,
+      ...visitLayerActions(controller),
+    });
+    if (view === null) throw new Error('Menu visit did not render');
+    expect(render(view)).toContain(COPY.gameMode.exit);
+
+    findButton(view, COPY.gameMode.exit).props.onClick?.();
+
+    expect(exits).toHaveBeenCalledOnce();
+    expect(exits).toHaveBeenCalledWith({ building: 'post-office' });
+    expect(controller.store.getState()).toEqual({
+      name: 'visiting',
+      building: 'post-office',
+      surface: { name: 'menu' },
+    });
+
+    world.emit('building:exited', { building: 'bank' });
+    expect(controller.store.getState()).toMatchObject({
+      name: 'visiting',
+      building: 'post-office',
+      surface: { name: 'menu' },
+    });
+
+    world.emit('building:exited', { building: 'post-office' });
+    expect(controller.store.getState()).toEqual({ name: 'outside' });
+  });
+
+  it.each([
+    { surface: 'admitted station', connected: true, lockStation: false },
+    { surface: 'connection prompt', connected: false, lockStation: false },
+    { surface: 'locked station', connected: true, lockStation: true },
+  ])('keeps the Leave building action available over $surface', ({ connected, lockStation }) => {
+    const world = createEventBus<WorldEvents>();
+    const shell = createEventBus<ShellEvents>();
+    const exits = vi.fn();
+    const owners = vi.fn();
+    shell.on('world:exit-building', exits);
+    shell.on('world:control-owner', owners);
+    const controller = createVisitController(shell);
+    controller.listen(world);
+    world.emit('building:entered', { building: 'bank' });
+    world.emit('station:activated', { building: 'bank', station: 'bank:shielding' });
+    const ownerCallsBeforeExit = owners.mock.calls.length;
+    const register = lockStation
+      ? PRIVACY_REGISTER.map((entry) =>
+          entry.route === 'bank.shield'
+            ? {
+                ...entry,
+                disclosure: null,
+                approvedBy: null,
+                approvedOn: null,
+                rationale: null,
+              }
+            : entry,
+        )
+      : PRIVACY_REGISTER;
+
+    const view = VisitLayerView({
+      state: controller.store.getState(),
+      connected,
+      register,
+      ...visitLayerActions(controller),
+    });
+    if (view === null) throw new Error('Station visit did not render');
+    expect(render(view)).toContain(COPY.gameMode.exit);
+
+    findButton(view, COPY.gameMode.exit).props.onClick?.();
+
+    expect(exits).toHaveBeenCalledOnce();
+    expect(exits).toHaveBeenCalledWith({ building: 'bank' });
+    expect(controller.store.getState()).toEqual({
+      name: 'visiting',
+      building: 'bank',
+      surface: { name: 'station', station: 'bank:shielding' },
+    });
+    expect(owners).toHaveBeenCalledTimes(ownerCallsBeforeExit);
+
+    world.emit('building:exited', { building: 'exchange' });
+    expect(controller.store.getState()).toMatchObject({
+      name: 'visiting',
+      building: 'bank',
+      surface: { name: 'station' },
+    });
+    expect(owners).toHaveBeenCalledTimes(ownerCallsBeforeExit);
+
+    world.emit('building:exited', { building: 'bank' });
+    expect(controller.store.getState()).toEqual({ name: 'outside' });
+    expect(owners).toHaveBeenCalledTimes(ownerCallsBeforeExit + 1);
+    expect(owners).toHaveBeenLastCalledWith({ building: 'bank', owner: 'world' });
+
+    world.emit('building:exited', { building: 'bank' });
+    expect(owners).toHaveBeenCalledTimes(ownerCallsBeforeExit + 1);
   });
 
   it('shows the native Game Mode controls without mounting a financial form', () => {

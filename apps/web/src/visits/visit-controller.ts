@@ -120,7 +120,7 @@ export function createVisitController(
 
     requestExit(): void {
       const state = store.getState();
-      if (state.name !== 'visiting' || state.surface.name !== 'room') return;
+      if (state.name !== 'visiting') return;
       shell.emit('world:exit-building', { building: state.building });
     },
 

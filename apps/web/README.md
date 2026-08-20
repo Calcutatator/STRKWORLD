@@ -92,7 +92,9 @@ world-out bus in an effect with cleanup, so the StrictMode
 mount→cleanup→mount cycle leaves exactly one set of live handlers. A
 `building:entered` event starts in the room surface: Game Mode is the default,
 and the top-right Menu Mode and Leave building controls are rendered over the
-World. The Shell publishes presentation-only station snapshots; an admitted
+room. Leave building remains available above Menu Mode, station, connection and
+locked-station surfaces. The Shell publishes presentation-only station
+snapshots; an admitted
 `station:activated` event hands controls to React and opens that station's
 window. Closing a station or Menu Mode returns controls to the room. Leave
 building emits the active building through `world:exit-building`; the visit

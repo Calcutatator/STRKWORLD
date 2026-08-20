@@ -54,7 +54,7 @@ body {
   position: absolute;
   top: 1rem;
   right: 1rem;
-  z-index: 9;
+  z-index: 11;
   display: flex;
   gap: 0.5rem;
 }

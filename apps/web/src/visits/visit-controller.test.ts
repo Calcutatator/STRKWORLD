@@ -122,6 +122,47 @@ describe('visit controller', () => {
     expect(controller.store.getState()).toEqual({ name: 'outside' });
   });
 
+  it('keeps a station visit and Shell control until the matching requested exit completes', () => {
+    const world = createEventBus<WorldEvents>();
+    const shell = createEventBus<ShellEvents>();
+    const exits = vi.fn();
+    const owners = vi.fn();
+    shell.on('world:exit-building', exits);
+    shell.on('world:control-owner', owners);
+    const controller = createVisitController(shell);
+    controller.listen(world);
+    world.emit('building:entered', { building: 'bank' });
+    world.emit('station:activated', { building: 'bank', station: 'bank:shielding' });
+    const ownerCallsBeforeExit = owners.mock.calls.length;
+
+    controller.requestExit();
+
+    expect(exits).toHaveBeenCalledOnce();
+    expect(exits).toHaveBeenCalledWith({ building: 'bank' });
+    expect(controller.store.getState()).toEqual({
+      name: 'visiting',
+      building: 'bank',
+      surface: { name: 'station', station: 'bank:shielding' },
+    });
+    expect(owners).toHaveBeenCalledTimes(ownerCallsBeforeExit);
+
+    world.emit('building:exited', { building: 'exchange' });
+    expect(controller.store.getState()).toMatchObject({
+      name: 'visiting',
+      building: 'bank',
+      surface: { name: 'station' },
+    });
+    expect(owners).toHaveBeenCalledTimes(ownerCallsBeforeExit);
+
+    world.emit('building:exited', { building: 'bank' });
+    expect(controller.store.getState()).toEqual({ name: 'outside' });
+    expect(owners).toHaveBeenCalledTimes(ownerCallsBeforeExit + 1);
+    expect(owners).toHaveBeenLastCalledWith({ building: 'bank', owner: 'world' });
+
+    world.emit('building:exited', { building: 'bank' });
+    expect(owners).toHaveBeenCalledTimes(ownerCallsBeforeExit + 1);
+  });
+
   it('opens the admitted shielding station and gives control back on close', () => {
     const world = createEventBus<WorldEvents>();
     const shell = createEventBus<ShellEvents>();
