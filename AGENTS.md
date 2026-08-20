@@ -302,6 +302,105 @@ PR #25 head `7472729` passed
 and was merged as `a3fad68`. No browser, remote lobby, wallet, RPC, proof,
 signature, funds or transaction was used.
 
+### 2026-08-20 — The swap executor is validated for shape, never for identity
+
+`buildStrk20Actions` is a validation-free array literal that puts the
+backend-supplied `executorAddress` in **two** places: the sell leg's `withdraw`
+recipient and the `invoke` target. `packages/privacy` checked only that it was a
+nonzero felt, so a well-formed but wrong executor was simultaneously a redirect
+of the whole sell amount and an arbitrary contract call. `apps/backend` has no
+executor allowlist either — the value comes straight from AVNU's
+`quoteToCalls({ private: true })` response, and the HMAC binding plus
+submission-time decode-and-match are operated by the same party that supplied
+it, so they are self-consistency rather than independent admission.
+
+Two adjacent facts that matter for anyone fixing this. `STRK20_INVOKE_ACTION` is
+`{ type, contract, calldata }` with **no selector field** — the entry point lives
+inside calldata — so a selector allowlist is not expressible against that action;
+admission has to be on `contract`. And `@avnu/avnu-sdk@4.2.0` exports
+`PRIVACY_POOL_ADDRESS` and `SEPOLIA_PRIVACY_POOL_ADDRESS` but **no executor
+constant**, so an allowlist's contents cannot be source-verified from the SDK.
+
+Whether the browser should pin executors is **an open decision, not a bug fix**:
+SPEC §4 and D-018 say every active route allowlists its exact contracts, while
+D-023 (which explicitly amends D-018) calls this executor *dynamic*, assigns the
+binding duty to the backend, and reads "changed executor/call" as changed
+relative to the authorized plan. D-042 restates the enforcement boundary as the
+wallet policy plus `BACKEND_ROUTE_SWAP_ALLOWED_TOKENS` — tokens only. Per §3
+that disagreement must be resolved and recorded, not picked silently. A worked
+option (a required `WalletRoutePolicy.swap.allowedExecutors`, empty-or-malformed
+locks the route, checked at prepare and confirm) was built and deliberately
+withheld pending that decision.
+
+What did land is the decision-free half: the action set is now verified against
+the validated plan before `strk20PrepareInvoke`. That closes an ordering gap —
+the relay's binding check cannot un-prove a proof — but it cannot detect a
+hostile plan, because a hostile plan's actions match it faithfully.
+
+*Verified:* read the installed `dist/index.mjs:1281-1309` and `dist/index.d.ts`
+of `@avnu/avnu-sdk@4.2.0` (version confirmed from its `package.json`, integrity
+matching `package-lock.json`), and the shipped `STRK20_ACTION` union in
+`@starknet-io/types-js@0.10.3` `wallet-api/components.d.ts:187-234`. Traced
+`apps/backend/src/avnu-swap-planner.ts:45-58`, `api.ts:291-350` and
+`server-actions.ts:132-153` for the backend side. Red/green, all through the
+package's public `prepare(...)`/`confirm(...)` seam against fakes: **22** explicit
+corrupted action sets plus a separate mutating-SDK case. Before the guard existed
+each corruption reached the fake wallet-preparation seam and its result reached
+the fake submission port; after it, every one is rejected and neither fake is
+reached. Nothing was proved or submitted in any real sense — the wallet and
+gateway are test doubles, and the real-SDK path is pinned to exact output.
+`packages/privacy` is 117 tests; workspace typecheck and all 13 invariants pass.
+
+The guard binds the invoke payload, not just its target. `STRK20_INVOKE_ACTION`
+has no selector field, so the entry point and its arguments live inside
+calldata; checking only `contract` plus "a placeholder is present somewhere"
+left the whole payload free. It is now recomputed independently from the
+validated `executorCalls` with the same pinned helpers AVNU uses —
+`transaction.fromCallsToExecuteCalldata_cairo1(...).map(num.toHex)`, prefixed by
+the buy token and suffixed by `${openNoteIds[0]}` — and compared by exact length
+and order, felt values normalized, with the placeholder pinned to the final
+slot. Which cases were observed against which baseline, exactly. Seven reached
+the fake wallet-preparation seam under the placeholder-count-only check and are
+rejected once the payload is bound: substituted buy-token prefix, retargeted
+inner call, substituted selector, altered inner calldata, appended felt,
+reordered felts, and placeholder moved off the end. Six of those seven keep
+exactly one placeholder in the final slot, so nothing but payload binding can
+catch them. Two further cases — a felt trailing a correctly placed placeholder,
+and a felt substituted into the placeholder slot — came from the mutation pass
+below rather than that red run, and are the only cases that independently
+exercise the exact-length check and the final-slot pin. The pre-existing "no
+placeholder" case was already rejected by the count check it replaced.
+
+A 12-mutant pass over the guard's clauses killed 10 and left two survivors — the
+exact-length check and the final-slot placeholder pin — because every case
+written at that point was also caught by another clause. The two extra cases
+named above exist to make those clauses independently load-bearing; the pass now
+kills 12 of 12. A guard clause no test can distinguish from its neighbours is
+untested, even when the suite is green.
+
+Recomputing an expectation is only worth anything if its input cannot be reached
+by the thing it checks. The validated calls are therefore snapshotted before the
+SDK is called and the SDK receives a separate copy; sharing one array let a
+mutating SDK corrupt the action and the authority together, and that case was
+observed passing tautologically. Freeze the snapshot only — freezing the SDK's
+input made its mutation throw a `TypeError`, which `mapWalletError` classified as
+`unreachable`, reporting a plan mismatch as a network outage.
+
+Same shape, one level up, in the test fixture: a shared mutable `CALL` object let
+the mutation test corrupt the next test's expectation. Fixtures for a
+mutation-safety test must hand out fresh copies.
+
+*Network use, stated exactly:* no wallet was opened, no account connected, no
+proof generated, no signature produced and no transaction submitted; no funded
+or live claim is made. One read-only run of `scripts/check-drift.sh` issued
+**three** JSON-RPC reads against mainnet: `starknet_call` of `get_fee_amount`,
+`starknet_call` of `is_paused`, and `starknet_getClassHashAt`, all against the
+pool at `latest` via the script's default endpoint. They returned fee
+`6000000000000000000`, class
+`0x67dddd89d80fedadc06b6f160798f94800a4a70164e5a24301cd0d6076b554d`, not paused
+— no drift. Public contract state only, no key or funds involved. An earlier
+version of this entry claimed no RPC was used; that was wrong and is corrected
+here.
 ### 2026-08-20 — The Shell accepts the financial seam; production still does not construct it
 
 `App` now accepts one exact `PrivacyOperations` instance and passes it directly
