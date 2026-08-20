@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it } from 'vitest';
-import { mkdir, mkdtemp, rm, symlink, writeFile } from 'node:fs/promises';
+import { chmod, mkdir, mkdtemp, rm, symlink, writeFile } from 'node:fs/promises';
 import { spawnSync } from 'node:child_process';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -86,17 +86,83 @@ describe('standalone Backend launcher', () => {
     expect(result.stderr).not.toContain('\n    at ');
   });
 
+  it('keeps an entry permission race inside the generic configuration boundary', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'strkworld-backend-entry-permission-'));
+    directories.push(root);
+    const directEntry = join(root, 'direct-entry.mjs');
+    const linkedTarget = join(root, 'linked-target.mjs');
+    const linkedEntry = join(root, 'linked-entry.mjs');
+    const raceHook = join(root, 'revoke-entry-after-stat.mjs');
+    await writeFile(directEntry, 'process.stdout.write("backend imported");\n');
+    await writeFile(linkedTarget, 'process.stdout.write("backend imported");\n');
+    await symlink(linkedTarget, linkedEntry, 'file');
+    await writeFile(raceHook, [
+      "import fs from 'node:fs';",
+      "import { syncBuiltinESMExports } from 'node:module';",
+      'const originalStatSync = fs.statSync;',
+      'let revoked = false;',
+      'fs.statSync = function statThenRevoke(path, ...args) {',
+      '  const result = originalStatSync(path, ...args);',
+      '  if (!revoked && path === process.env.BACKEND_ENTRY) {',
+      '    revoked = true;',
+      '    fs.chmodSync(path, 0);',
+      '  }',
+      '  return result;',
+      '};',
+      'syncBuiltinESMExports();',
+      '',
+    ].join('\n'));
+
+    for (const entry of [directEntry, linkedEntry]) {
+      const result = spawnSync(process.execPath, ['--import', raceHook, launcher], {
+        encoding: 'utf8',
+        env: { ...process.env, BACKEND_ENTRY: entry },
+      });
+
+      expect(result.status).toBe(78);
+      expect(result.signal).toBeNull();
+      expect(result.stdout).toBe('');
+      expect(result.stderr).toBe(configurationError);
+      expect(result.stderr).not.toContain(entry);
+      expect(result.stderr).not.toContain(root);
+      expect(result.stderr).not.toContain(process.cwd());
+      expect(result.stderr).not.toMatch(/\b(?:EACCES|ERR_[A-Z_]+)\b/);
+      expect(result.stderr).not.toContain('\n    at ');
+    }
+  });
+
   it('leaves genuine Backend startup failures outside the configuration boundary', async () => {
     const root = await mkdtemp(join(tmpdir(), 'strkworld-backend-startup-'));
     directories.push(root);
     const thrownEntry = join(root, 'throws.mjs');
     const missingDependencyEntry = join(root, 'missing-dependency.mjs');
+    const unreadableDependencyEntry = join(root, 'unreadable-dependency-entry.mjs');
+    const unreadableDependency = join(root, 'unreadable-dependency.mjs');
+    const wrongSyscallEntry = join(root, 'wrong-syscall.mjs');
+    const wrongCodeEntry = join(root, 'wrong-code.mjs');
     await writeFile(thrownEntry, 'throw new Error("backend startup marker");\n');
     await writeFile(missingDependencyEntry, 'await import("./absent-dependency.mjs");\n');
+    await writeFile(unreadableDependencyEntry, 'await import("./unreadable-dependency.mjs");\n');
+    await writeFile(unreadableDependency, 'export {};\n');
+    await chmod(unreadableDependency, 0);
+    const shapedFailure = (marker, code, syscall) => [
+      "import { fileURLToPath } from 'node:url';",
+      `throw Object.assign(new Error(${JSON.stringify(marker)}), {`,
+      `  code: ${JSON.stringify(code)},`,
+      `  syscall: ${JSON.stringify(syscall)},`,
+      '  path: fileURLToPath(import.meta.url),',
+      '});',
+      '',
+    ].join('\n');
+    await writeFile(wrongSyscallEntry, shapedFailure('backend wrong syscall marker', 'EACCES', 'read'));
+    await writeFile(wrongCodeEntry, shapedFailure('backend wrong code marker', 'EPERM', 'open'));
 
     for (const [entry, marker] of [
       [thrownEntry, 'backend startup marker'],
       [missingDependencyEntry, 'ERR_MODULE_NOT_FOUND'],
+      [unreadableDependencyEntry, 'EACCES'],
+      [wrongSyscallEntry, 'backend wrong syscall marker'],
+      [wrongCodeEntry, 'backend wrong code marker'],
     ]) {
       const result = spawnSync(process.execPath, [launcher], {
         encoding: 'utf8',

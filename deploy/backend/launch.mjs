@@ -17,7 +17,7 @@
  * EX_CONFIG; it must never gain a per-request log line (D-014).
  */
 
-import { statSync } from 'node:fs';
+import { realpathSync, statSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
 
@@ -30,6 +30,14 @@ function isRegularFile(path) {
     return statSync(path).isFile();
   } catch {
     return false;
+  }
+}
+
+function canonicalPath(path) {
+  try {
+    return realpathSync.native(path);
+  } catch {
+    return null;
   }
 }
 
@@ -54,16 +62,29 @@ function isEntryResolutionFailure(error) {
     && error.url === entryUrl;
 }
 
+function isEntryOpenFailure(error) {
+  return error instanceof Error
+    && error.code === 'EACCES'
+    && error.syscall === 'open'
+    && (error.path === absolute || error.path === canonicalEntryPath);
+}
+
 if (!isRegularFile(absolute)) {
+  failEntryConfiguration();
+}
+const canonicalEntryPath = canonicalPath(absolute);
+if (canonicalEntryPath === null) {
   failEntryConfiguration();
 }
 
 try {
   await import(entryUrl);
 } catch (error) {
-  // The target can change after stat and before Node resolves the import. Keep
-  // only that entry-resolution race inside the same configuration boundary;
-  // failures thrown by the Backend or one of its dependencies remain crashes.
-  if (isEntryResolutionFailure(error)) failEntryConfiguration();
+  // The target can change after stat and before Node resolves or opens it. Keep
+  // only failures that still identify this exact entry inside the configuration
+  // boundary; failures thrown by the Backend or its dependencies remain crashes.
+  if (isEntryResolutionFailure(error) || isEntryOpenFailure(error)) {
+    failEntryConfiguration();
+  }
   throw error;
 }

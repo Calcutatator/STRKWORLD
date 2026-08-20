@@ -258,37 +258,40 @@ dynamic import, which exited as an ordinary crash and printed the raw
 `ERR_UNSUPPORTED_DIR_IMPORT` stack plus absolute host paths. Requiring a regular
 file closed that static case, but `statSync()` and dynamic import remained a
 time-of-check/time-of-use pair: replacing an admitted file with a directory in
-between reproduced the same raw crash. The process no longer reports either
-case outside the bounded configuration failure that an orchestrator can
-classify without leaking its image layout.
+between reproduced the same raw crash. Revoking the admitted file's read
+permission in that interval similarly escaped as `EACCES` with a stack and
+canonical host path. The process no longer reports any of those exact-entry
+admission cases outside the bounded configuration failure that an orchestrator
+can classify without leaking its image layout.
 
 Launcher admission now requires the resolved entry to be a regular file before
 any import can construct the Backend composition root or listener. A missing
 path, directory or directory symlink returns the same path-free configuration
 message and EX_CONFIG `78`. If the admitted target becomes missing or a
-directory before Node resolves that exact entry URL, the launcher returns the
-same result. The catch is limited to Node's resolution error for the configured
-entry itself: an exception thrown by the Backend or an unresolved nested
-dependency remains an ordinary startup crash. Successful regular-file startup,
-Backend runtime configuration, request handling, logging and deployment layout
-are unchanged.
+directory before Node resolves that exact entry URL, or becomes unreadable
+before Node opens its exact absolute or canonical path, the launcher returns
+the same result. The catch is limited to those Node resolution errors and the
+exact loader tuple `EACCES` / `open` / admitted-entry path. An exception thrown
+by the Backend or a missing or unreadable nested dependency remains an ordinary
+startup crash. Successful regular-file startup, Backend runtime configuration,
+request handling, logging and deployment layout are unchanged.
 
 *Verified:* public subprocess regressions cover a missing entry, a real
-directory, a symlink to that directory and a deterministic admitted-file race.
-The race uses a process preload to replace the entry immediately after the
-launcher's `statSync()` returns its regular-file result. Before the resolution
-guard it exited `1` with `ERR_UNSUPPORTED_DIR_IMPORT`, a stack and absolute
-paths; after the guard all four cases have empty stdout, exact generic stderr,
-no raw Node error code, stack or configured/absolute path, and exit `78` before
-the Backend can construct a listener. Separate real-entry cases prove a thrown
-Backend startup error and a missing nested dependency still exit `1` with their
-original diagnostics. Removing the resolution guard revives the race failure;
-broadening it to every import error hides one of those genuine failures. The
-focused launcher test passes three tests; the full workspace passes 90 files /
-1,268 tests, workspace typecheck, production build, all 13 invariants, the
-tilemap check and diff hygiene pass. Local verification opened no listener or
-external network and used no wallet, RPC, proof, signature, secret, funds or
-transaction.*
+directory, a symlink to that directory and deterministic admitted-file races.
+One process preload replaces the entry immediately after the launcher's
+`statSync()` returns its regular-file result; another removes read permission
+from both direct and symlinked regular-file entries at that same point. Before
+the guards those races exited `1` with raw `ERR_UNSUPPORTED_DIR_IMPORT` or
+`EACCES`, a stack and host paths. After the guards every admission case has
+empty stdout, exact generic stderr, no raw Node error code, stack or configured,
+absolute or canonical path, and exits `78` before the Backend can construct a
+listener. Separate real-entry cases prove a Backend-thrown error and missing or
+unreadable nested dependencies still exit `1` with their original diagnostics;
+shaped errors independently pin the loader code and syscall. Removing the open
+guard revives the permission race; dropping its exact path, syscall or code
+clause hides the matching genuine failure. The focused launcher test passes
+four tests. Local verification opened no listener or external network and used
+no wallet, RPC, proof, signature, secret, funds or transaction.*
 
 ### 2026-08-20 — An Exchange edit owns its pending preparation
 
