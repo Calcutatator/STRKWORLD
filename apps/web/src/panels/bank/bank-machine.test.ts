@@ -57,13 +57,19 @@ function quotedCost(panel: BankPanel): bigint {
   return flow.summary.gasEstimate;
 }
 
-/** A promise the test releases, so async ownership is decided without timers. */
-function deferred<T>(): { promise: Promise<T>; resolve: (value: T) => void } {
+/** A promise the test settles, so async ownership is decided without timers. */
+function deferred<T>(): {
+  promise: Promise<T>;
+  resolve: (value: T) => void;
+  reject: (reason: unknown) => void;
+} {
   let resolve!: (value: T) => void;
-  const promise = new Promise<T>((complete) => {
+  let reject!: (reason: unknown) => void;
+  const promise = new Promise<T>((complete, fail) => {
     resolve = complete;
+    reject = fail;
   });
-  return { promise, resolve };
+  return { promise, resolve, reject };
 }
 
 afterEach(() => {
@@ -443,6 +449,100 @@ describe('bank panel — composing a visit', () => {
     });
   });
 
+  it('suppresses a rejected transfer preflight after Clear owns the batch', async () => {
+    const operations = fake();
+    const preflight = deferred<'registered'>();
+    vi.spyOn(operations, 'recipientStatus')
+      .mockResolvedValueOnce('registered')
+      .mockReturnValueOnce(preflight.promise);
+    const onError = vi.fn();
+    const panel = await openPanel(operations, { onError });
+    panel.setMode('transfer');
+
+    panel.setRecipient(BOB);
+    panel.setAmount('1');
+    await panel.addToBatch();
+    panel.setRecipient(BOB);
+    panel.setAmount('2');
+    const adding = panel.addToBatch();
+
+    panel.clearBatch();
+    preflight.reject(new PrivacyError('unreachable', 'stale preflight failure'));
+    await adding;
+
+    expect(onError).not.toHaveBeenCalled();
+    expect(panel.store.getState()).toMatchObject({
+      adding: false,
+      amountText: '2',
+      recipientText: BOB,
+      batch: [],
+      notice: null,
+      flow: { name: 'composing' },
+    });
+  });
+
+  it('keeps Remove authoritative when a transfer preflight succeeds late', async () => {
+    const operations = fake();
+    const preflight = deferred<'registered'>();
+    vi.spyOn(operations, 'recipientStatus')
+      .mockResolvedValueOnce('registered')
+      .mockReturnValueOnce(preflight.promise);
+    const panel = await openPanel(operations);
+    panel.setMode('transfer');
+
+    panel.setRecipient(BOB);
+    panel.setAmount('1');
+    await panel.addToBatch();
+    panel.setRecipient(BOB);
+    panel.setAmount('2');
+    const adding = panel.addToBatch();
+
+    panel.removeFromBatch(0);
+    preflight.resolve('registered');
+    await adding;
+
+    expect(panel.store.getState()).toMatchObject({
+      adding: false,
+      amountText: '2',
+      recipientText: BOB,
+      batch: [],
+      notice: null,
+      flow: { name: 'composing' },
+    });
+  });
+
+  it('suppresses a rejected transfer preflight after Remove owns the batch', async () => {
+    const operations = fake();
+    const preflight = deferred<'registered'>();
+    vi.spyOn(operations, 'recipientStatus')
+      .mockResolvedValueOnce('registered')
+      .mockReturnValueOnce(preflight.promise);
+    const onError = vi.fn();
+    const panel = await openPanel(operations, { onError });
+    panel.setMode('transfer');
+
+    panel.setRecipient(BOB);
+    panel.setAmount('1');
+    await panel.addToBatch();
+    panel.setRecipient(BOB);
+    panel.setAmount('2');
+    const adding = panel.addToBatch();
+
+    panel.removeFromBatch(0);
+    preflight.reject(new PrivacyError('unreachable', 'stale preflight failure'));
+    await adding;
+
+    expect(onError).not.toHaveBeenCalled();
+    expect(panel.store.getState()).toMatchObject({
+      adding: false,
+      amountText: '2',
+      recipientText: BOB,
+      batch: [],
+      notice: null,
+      flow: { name: 'composing' },
+    });
+  });
+
   it('queues several transfers and settles them as one submission', async () => {
     const operations = fake();
     const panel = await openPanel(operations);
@@ -574,9 +674,11 @@ describe('bank panel — prepare and confirm', () => {
     const operations = fake();
     const preparation = deferred<void>();
     const prepare = operations.prepare.bind(operations);
+    let staleBatch!: Awaited<ReturnType<PrivacyOperations['prepare']>>;
     vi.spyOn(operations, 'prepare').mockImplementation(async (intents, signal) => {
       await preparation.promise;
-      return prepare(intents, signal);
+      staleBatch = await prepare(intents, signal);
+      return staleBatch;
     });
     const panel = await openPanel(operations);
     panel.setAmount('1');
@@ -590,15 +692,18 @@ describe('bank panel — prepare and confirm', () => {
     preparation.resolve(undefined);
     await preparing;
     expect(panel.store.getState()).toMatchObject({ batch: [], flow: { name: 'composing' } });
+    await expect(staleBatch.confirm({ feeCeiling: staleBatch.totalCost })).rejects.toThrow(/discarded/);
   });
 
   it('keeps Remove authoritative when preparation finishes late', async () => {
     const operations = fake();
     const preparation = deferred<void>();
     const prepare = operations.prepare.bind(operations);
+    let staleBatch!: Awaited<ReturnType<PrivacyOperations['prepare']>>;
     vi.spyOn(operations, 'prepare').mockImplementation(async (intents, signal) => {
       await preparation.promise;
-      return prepare(intents, signal);
+      staleBatch = await prepare(intents, signal);
+      return staleBatch;
     });
     const panel = await openPanel(operations);
     panel.setMode('transfer');
@@ -621,6 +726,7 @@ describe('bank panel — prepare and confirm', () => {
       batch: [{ amount: strk('1') }],
       flow: { name: 'composing' },
     });
+    await expect(staleBatch.confirm({ feeCeiling: staleBatch.totalCost })).rejects.toThrow(/discarded/);
   });
 
   it('shows a visible preparing state while the wallet is involved', async () => {

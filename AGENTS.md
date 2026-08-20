@@ -296,14 +296,18 @@ unrelated owner. Clear/Remove advance the composition version and invalidate
 the active prepare attempt while leaving signing, unconditional receipt
 retention, panel-close invalidation and balance reads unchanged.
 
-*Verified:* two deferred red/green boundaries use only the public Bank machine:
-Clear during a pending registered-recipient preflight previously re-queued the
-captured transfer, and Clear/Remove during pending prepare previously restored
-the old review after the edit. The focused Bank machine now passes 71 tests.
-The Web suite passes 36 files / 387 tests and the full workspace passes 87
-files / 1,222 tests; workspace typecheck, production build, all 13 invariants
-and diff check pass. The local verification used no browser, external network,
-wallet, RPC, proof, signature, funds or transaction.
+*Verified:* deferred red/green tests use only the public Bank machine. Clear
+during pending registered-recipient preflight previously re-queued the captured
+transfer; Clear/Remove during pending prepare previously restored old review.
+The returned stale batches now reject confirmation as discarded, and late
+successful or rejected preflights after Remove/Clear cannot publish batch,
+form, notice or provider-error state. Three isolated mutations are killed:
+removing stale-batch `discard()`, removing the rejected-preflight composition
+guard, and removing Remove's composition increment. The focused Bank machine
+passes 74 tests, the Web suite passes 36 files / 390 tests and the full
+workspace passes 87 files / 1,226 tests; workspace typecheck, production build,
+all 13 invariants and diff check pass. The local verification used no browser,
+external network, wallet, RPC, proof, signature, funds or transaction.
 
 ### 2026-08-20 — A late Bridge status response cannot overwrite a newer retained version
 
