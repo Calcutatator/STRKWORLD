@@ -250,6 +250,29 @@ without a verification method is a rumour.
 
 Format: `### YYYY-MM-DD — short title` then what, why it matters, how verified.
 
+### 2026-08-20 — A late Bridge transaction report does not own future persistence
+
+`BridgeService.reportDepositTransaction()` captures the retained record before
+awaiting 1Click, just like `refresh()`. The player can explicitly discard that
+evidence or create a replacement while the report is in flight. A late report
+still verifies and returns the provider status to its caller, but now persists
+that status only if the same signed evidence remains retained. It cannot
+resurrect a discarded record or replace newer evidence with the earlier quote.
+
+This is a local ownership guard only. The origin transaction hash, provider
+request and returned status are unchanged; current evidence is matched by the
+same correlation ID, signature and signed timestamp already used for refresh
+ownership.
+
+*Verified:* two deferred public-seam regressions start a transaction report for
+evidence A, then respectively discard A or discard A and create B before
+releasing the fake provider response. Both report calls return
+`deposit-detected`; the first leaves `resume()` null, and the second preserves B
+and its byte-identical export. Removing the ownership guard makes both tests
+fail by resurrecting A or overwriting B. The Bridge suite passes 1 file / 59
+tests. No live provider, external network, wallet, RPC, proof, signature, funds
+or transaction was used.
+
 ### 2026-08-20 — A failed Backend fan-out closes the whole request signal
 
 The Backend fee, swap-prepare and proof-freshness paths fan one request signal

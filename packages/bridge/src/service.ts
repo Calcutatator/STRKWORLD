@@ -154,7 +154,10 @@ export class BridgeService {
     });
     this.verifyStatusQuote(raw, record);
     const status = mapStatus(raw);
-    this.store.save({ ...record, status, updatedAt: this.now() });
+    const retained = this.resume();
+    if (retained && sameSignedEvidence(retained, record)) {
+      this.store.save({ ...retained, status, updatedAt: this.now() });
+    }
     return status;
   }
 
