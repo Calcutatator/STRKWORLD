@@ -27,6 +27,16 @@
     56
   ],
   "totalFrames": 320,
+  "wholeBodyMotion": {
+    "status": "pass",
+    "movementCells": 256,
+    "failures": [],
+    "changedPixelRangeY": [
+      8,
+      27
+    ],
+    "rule": "every non-idle cell must differ from its directional idle at or above 65% of the idle alpha-bbox height"
+  },
   "keys": {
     "avatar-1": {
       "dimensions": [
@@ -380,7 +390,7 @@
           "highLumaBoundaryPixels": 0
         }
       ],
-      "sha256": "605d49058a17fb26f6432fbdc438594db1ffafa4e61d29120afaf0d0747d6138"
+      "sha256": "9a207ba4d1778ab107b7ba6ec0d50342b0183b7e09b8455a7f223dd45c62a730"
     },
     "avatar-2": {
       "dimensions": [
@@ -734,7 +744,7 @@
           "highLumaBoundaryPixels": 0
         }
       ],
-      "sha256": "d076ed12a3230ab17a4fc6f31b69e250ff25ae70f6cac4b2b1ca73e85d18f864"
+      "sha256": "bb26faca63395ca24469c25199818796796e939b11ab1c6666f561a9fe2c2bac"
     },
     "avatar-3": {
       "dimensions": [
@@ -1088,7 +1098,7 @@
           "highLumaBoundaryPixels": 0
         }
       ],
-      "sha256": "f597d01d97ef4b09a7ad0e966facacc41da3bb058f266bda00bdc9a9e84de051"
+      "sha256": "7905f90258c885df7c84a332994a00a7f644f6eee1e0387723c4b4a055954bdd"
     },
     "avatar-4": {
       "dimensions": [
@@ -1442,7 +1452,7 @@
           "highLumaBoundaryPixels": 0
         }
       ],
-      "sha256": "584ec9f1d5ea97b154200866f061a16fc5d8afacf0374cd581f6754d2e1cb0fb"
+      "sha256": "16e61a49effa35653490e0ec34861251d40858ca2b38c8ecf23912760adb8832"
     },
     "avatar-5": {
       "dimensions": [
@@ -1796,7 +1806,7 @@
           "highLumaBoundaryPixels": 0
         }
       ],
-      "sha256": "e1d97772636f89f52c94c4b7f53d59018b352368f7042d698985d18a8ceb59d6"
+      "sha256": "592cefdba83eddd32215ad40e8cc7b2aaf0fee47e7401eece5737192d45bd5ba"
     },
     "avatar-6": {
       "dimensions": [
@@ -2150,7 +2160,7 @@
           "highLumaBoundaryPixels": 0
         }
       ],
-      "sha256": "424673617ec4c50a8069f7fcd169adbcb24b9555cf11b46911abd01f282cea9e"
+      "sha256": "98998d578aea40a715b6af0df03d8bba58c2cb346542140d197bf80c22edb738"
     },
     "avatar-7": {
       "dimensions": [
@@ -2504,7 +2514,7 @@
           "highLumaBoundaryPixels": 0
         }
       ],
-      "sha256": "aa1f82798bc996801ce4f2db5722347bd5d20fcdee83b3227010cc591409f524"
+      "sha256": "a9d8fc000dabd7700ae650a008b7a46f00048bd1b96ecbd52dbcffff7adf6399"
     },
     "avatar-8": {
       "dimensions": [
@@ -2858,7 +2868,7 @@
           "highLumaBoundaryPixels": 0
         }
       ],
-      "sha256": "71f4d91215fae2b05c84ce5dbaa38f442bfc89559fbaedceb330ef50dd991cdc"
+      "sha256": "24bfa530d883195fe9dbd7d4f15b2ce70dfb22ed2a13c20fc78f1fc1ebce7743"
     },
     "avatar-9": {
       "dimensions": [
@@ -3212,7 +3222,7 @@
           "highLumaBoundaryPixels": 0
         }
       ],
-      "sha256": "97fb0422b2771d35451e22538a66b5852011bdb090c9d619da1c4384ced9bb8a"
+      "sha256": "96419f85ef9d3fb87b470a759d509e1b291ef5c29fdba2c78a1c127489725a34"
     },
     "avatar-10": {
       "dimensions": [
@@ -3566,7 +3576,7 @@
           "highLumaBoundaryPixels": 0
         }
       ],
-      "sha256": "a0d8b5c203da010dee7b22e7c2e41776d0df6452b9c5ed7048974c2ad5da243a"
+      "sha256": "ba14392ba420f739ab8fee449db2d625ee3dd938f057607f1a508b0f64f625e1"
     },
     "avatar-11": {
       "dimensions": [
@@ -3920,7 +3930,7 @@
           "highLumaBoundaryPixels": 0
         }
       ],
-      "sha256": "915f0e1dd4c71afa0c593ba06b20e25320fc58a02e36b89a6f9885b6ed99b252"
+      "sha256": "480397e55aa1a475a913224b1b02cd478f6b4b23c1857c3578a4de3039c9c0ef"
     },
     "avatar-12": {
       "dimensions": [
@@ -4274,7 +4284,7 @@
           "highLumaBoundaryPixels": 0
         }
       ],
-      "sha256": "803331805432db54342965a8c242f7e822dc03279a27d7b0da8848231199242f"
+      "sha256": "e4a9a9dac9f31bbd72c458222951f25bf3ea34c40151bf3df91e87c2570d6f18"
     },
     "avatar-13": {
       "dimensions": [
@@ -4628,7 +4638,7 @@
           "highLumaBoundaryPixels": 0
         }
       ],
-      "sha256": "ffaa068cfbee2d15b9bfd933bb819b0dc75faaa1985803ce6195fcba3604ab34"
+      "sha256": "facb037afa51c8617d070af556016d5ebba9d7639447216edc3c6201adcd165e"
     },
     "avatar-14": {
       "dimensions": [
@@ -4982,7 +4992,7 @@
           "highLumaBoundaryPixels": 0
         }
       ],
-      "sha256": "4e598e5b1bb7df603d6634c44e9597b95290ad91059be8eb2c8bf6960c0ae497"
+      "sha256": "b5a776e246fb407897a5d75e4f0e18b90da6700c2b8079ed935ef10a091d0056"
     },
     "avatar-15": {
       "dimensions": [
@@ -5336,7 +5346,7 @@
           "highLumaBoundaryPixels": 0
         }
       ],
-      "sha256": "35e97a87f6dd96859f7af999f12e3a5afaf06dfec40380fdd96c1e94b5c26615"
+      "sha256": "3c95927d3e13eb02958277eafd1a3ebbbf84adcbdf64b2e0c1d1e1a3676def23"
     },
     "avatar-16": {
       "dimensions": [
@@ -5690,7 +5700,7 @@
           "highLumaBoundaryPixels": 0
         }
       ],
-      "sha256": "0460694938907be4e0f811b136efa0ac621fe9e6e2a9e6ba10d73b044faeedae"
+      "sha256": "3973de4a5a1cf064b2718d42764291be4dcbbcf6e107efb0e6aa533dfb36a27e"
     }
   },
   "anatomicalNegativeSpaceWhitelist": [
