@@ -310,6 +310,49 @@ describe('connect is idempotent', () => {
     expect(observer.peers()).toHaveLength(1);
   });
 
+  it('does not classify a replacement room drop as the prior local leave', async () => {
+    const firstRoom = fakeRoom();
+    const replacementRoom = fakeRoom();
+    const firstLeave = deferred<number>();
+    firstRoom.leave.mockImplementationOnce(() => firstLeave.promise);
+    const joinOrCreate = vi.spyOn(ColyseusClient.prototype, 'joinOrCreate');
+    joinOrCreate
+      .mockImplementationOnce(() => Promise.resolve(firstRoom.room) as never)
+      .mockImplementationOnce(() => Promise.resolve(replacementRoom.room) as never);
+
+    try {
+      const client = makeClient(20, 0);
+      const statuses: LobbyStatusEvent[] = [];
+      client.onStatus((event) => statuses.push(event));
+
+      const firstConnecting = client.connect();
+      await Promise.resolve();
+      firstRoom.welcome({ gameId: 'first-room' });
+      await firstConnecting;
+
+      const disconnecting = client.disconnect();
+      const replacementConnecting = client.connect();
+      await Promise.resolve();
+      replacementRoom.welcome({ gameId: 'replacement-room' });
+      await replacementConnecting;
+
+      replacementRoom.left(1006, 'replacement transport dropped');
+
+      expect(client.status).toBe('closed');
+      expect(statuses.at(-1)).toEqual({
+        status: 'closed',
+        reason: 'server-dropped',
+        code: 1006,
+      });
+
+      firstLeave.resolve(0);
+      await disconnecting;
+    } finally {
+      firstLeave.resolve(0);
+      joinOrCreate.mockRestore();
+    }
+  });
+
   it('invalidates a pending join before an explicit reconnect', async () => {
     const firstJoin = deferred<ColyseusRoom<unknown, LobbyState>>();
     const secondJoin = deferred<ColyseusRoom<unknown, LobbyState>>();
