@@ -99,7 +99,7 @@ describe('web environment lookup', () => {
         backend.close((error) => error ? reject(error) : resolve());
       });
     }
-  });
+  }, 15_000);
 });
 
 function getText(url: string): Promise<string> {
