@@ -107,6 +107,15 @@ automating Chrome or the in-app browser unless the user explicitly asks for
 browser automation. Headless/unit/integration checks remain agent-owned; this
 rule applies to visual and interactive browser acceptance of the game.
 
+### Merged work is live on the current local build
+
+The project lead owns the shared local runtime. After merging a runtime change,
+fast-forward the canonical checkout to `origin/main`, keep the web app and any
+required local services (including the lobby) running, and reload the browser
+against `http://localhost:5173/`. A merged PR is not complete while the shared
+checkout, dev server or browser still points at an older branch or build. Do
+not make the user discover or repair that drift.
+
 ### Questions for the user are explicit gates
 
 When the project lead needs an answer from the user, it must ping the user in
