@@ -97,6 +97,26 @@ describe('production wallet configuration', () => {
     expect(config.policy.allowedTokens.transfer).toEqual([]);
   });
 
+  it('rejects an uppercase 0X prefix while retaining uppercase hex digits', () => {
+    const base = {
+      VITE_STARKNET_CHAIN_ID: 'SN_MAIN',
+      VITE_STARKNET_RPC_URL: 'https://rpc.example/rpc',
+      VITE_BACKEND_BASE_URL: '/api',
+      VITE_STRK20_TRANSFER_ENABLED: 'true',
+      VITE_STRK20_TRANSFER_MAX_INTENTS: '1',
+      VITE_STRK20_TRANSFER_MAX_RELAY_FEE: '1',
+    };
+
+    expect(parseProductionWalletConfig({
+      ...base,
+      VITE_STRK20_TRANSFER_ALLOWED_TOKENS: '0XABCD',
+    }).policy.enabledRoutes).toEqual([]);
+    expect(parseProductionWalletConfig({
+      ...base,
+      VITE_STRK20_TRANSFER_ALLOWED_TOKENS: '0xABCD',
+    }).policy.allowedTokens.transfer).toEqual(['0xABCD']);
+  });
+
   it.each([
     ['missing enablement', { VITE_STRK20_TRANSFER_ENABLED: 'true' }],
     [

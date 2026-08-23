@@ -106,7 +106,7 @@ function parsePositiveBigint(value: string | boolean | undefined, maximum: bigin
 function parseAllowedTokens(value: string | boolean | undefined): string[] | null {
   if (typeof value !== 'string' || value.length === 0) return null;
   const tokens = value.split(',').map((token) => token.trim());
-  if (tokens.some((token) => !/^0x[0-9a-f]{1,64}$/i.test(token))) return null;
+  if (tokens.some((token) => !/^0x[0-9a-fA-F]{1,64}$/.test(token))) return null;
 
   try {
     const numeric = tokens.map((token) => BigInt(token));
