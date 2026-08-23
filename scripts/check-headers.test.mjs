@@ -1,11 +1,10 @@
 /**
  * Fixtures for the D-005 static scan (scripts/check-headers.mjs).
  *
- * Two of these pin real bypasses found in review rather than hypotheticals:
- * a `--header` CLI flag skipped as a SQL comment, and prose inside a block
- * comment being scanned. Both are marked BYPASS below. Do not delete them —
- * the whole point of D-005 is that the failure it guards against is silent,
- * so a hole in the guard is silent twice over.
+ * Executable/configuration syntaxes are scanned raw, including comments. The
+ * fixtures below pin the grammar cases that made the former hand-rolled shell
+ * and YAML parser unsafe: nested substitutions, odd continuations, heredocs,
+ * multiline scalars and ANSI-C quoting.
  *
  * This file is in SELF_REFERENTIAL in check-headers.mjs: it necessarily
  * contains the forbidden strings as test data.
@@ -18,7 +17,7 @@ const COOP = 'Cross-Origin-Opener-Policy';
 const COEP = 'Cross-Origin-Embedder-Policy';
 
 describe('violations that must be caught', () => {
-  it('BYPASS: a --header CLI flag in a shell script is not a SQL comment', () => {
+  it('catches a --header CLI flag in a shell script', () => {
     const script = [
       '#!/usr/bin/env bash',
       'curl -sSf https://example.test \\',
@@ -29,7 +28,7 @@ describe('violations that must be caught', () => {
     expect(violations.map((v) => v.line)).toEqual([3, 4]);
   });
 
-  it('BYPASS: the same flag inside a workflow YAML run block', () => {
+  it('catches a --header flag inside a workflow YAML run block', () => {
     const workflow = [
       'jobs:',
       '  serve:',
@@ -37,6 +36,61 @@ describe('violations that must be caught', () => {
       '      - run: |',
       `          npx serve --header "${COOP}: same-origin" ./dist`,
     ].join('\n');
+    expect(scanText('.github/workflows/deploy.yml', workflow)).toHaveLength(1);
+  });
+
+  it('catches a header nested in shell command substitutions', () => {
+    const script = [
+      'value=$(printf %s "$(printf %s safe)")',
+      `curl --header "${COOP}: same-origin" "$value"`,
+    ].join('\n');
+    expect(scanText('deploy/smoke.sh', script).map((violation) => violation.line)).toEqual([2]);
+  });
+
+  it('catches headers after odd three- and five-backslash continuations', () => {
+    const script = [
+      'printf %s safe\\\\\\',
+      `# continued data --header "${COOP}: same-origin"`,
+      'printf %s safe\\\\\\\\\\',
+      `# continued data --header "${COEP}: require-corp"`,
+    ].join('\n');
+    expect(scanText('deploy/smoke.sh', script).map((violation) => violation.line)).toEqual([2, 4]);
+  });
+
+  it('catches a header in an unquoted heredoc expansion', () => {
+    const script = [
+      'cat <<EOF',
+      `$(curl --header "${COOP}: same-origin")`,
+      'EOF',
+    ].join('\n');
+    expect(scanText('deploy/smoke.sh', script).map((violation) => violation.line)).toEqual([2]);
+  });
+
+  it('catches a header in a YAML multiline double-quoted scalar', () => {
+    const workflow = [
+      'env:',
+      '  note: "',
+      `    # ${COEP}: require-corp`,
+      '  "',
+    ].join('\n');
+    expect(scanText('.github/workflows/deploy.yml', workflow).map((violation) => violation.line)).toEqual([3]);
+  });
+
+  it('catches a header in ANSI-C shell quoting after an escaped quote', () => {
+    const script = [
+      `printf '%s' $'safe\\'`,
+      `#still-quoted'; curl --header "${COOP}: same-origin"`,
+    ].join('\n');
+    expect(scanText('deploy/smoke.sh', script).map((violation) => violation.line)).toEqual([2]);
+  });
+
+  it('catches a header after an in-word hash in a workflow command', () => {
+    const workflow = `run: echo safe#still-word && curl --header "${COEP}: require-corp"`;
+    expect(scanText('.github/workflows/deploy.yml', workflow).map((violation) => violation.line)).toEqual([1]);
+  });
+
+  it('catches a header after a YAML-escaped space', () => {
+    const workflow = `run: echo safe\\ # ${COOP}: same-origin`;
     expect(scanText('.github/workflows/deploy.yml', workflow)).toHaveLength(1);
   });
 
@@ -70,16 +124,12 @@ describe('violations that must be caught', () => {
   });
 
   it('scans unknown file types in full, exempting nothing', () => {
-    // No known comment syntax, so a `#` line is still scanned. A gate that
-    // cannot parse a file must not exempt text it does not understand.
     expect(scanText('deploy/Unknownfile', `# ${COOP}: same-origin`)).toHaveLength(1);
   });
 });
 
-describe('real comments that must stay exempt', () => {
-  it('BYPASS: prose inside an HTML block comment, across several lines', () => {
-    // The D-005 comment the decision itself asks for. Bare `require-corp` is
-    // in FORBIDDEN_PATTERNS, so an unexempted block body would fail here.
+describe('real comments that stay exempt only where syntax is owned', () => {
+  it('exempts prose inside an HTML block comment, across several lines', () => {
     const html = [
       '<!doctype html>',
       '<!--',
@@ -92,7 +142,7 @@ describe('real comments that must stay exempt', () => {
     expect(scanText('apps/web/index.html', html)).toEqual([]);
   });
 
-  it('BYPASS: prose inside a JS block comment, with and without leading stars', () => {
+  it('exempts prose inside a JS block comment, with and without leading stars', () => {
     const source = [
       '/**',
       ` * Never set ${COOP}: same-origin.`,
@@ -122,8 +172,11 @@ describe('real comments that must stay exempt', () => {
     expect(scanText('docs/DECISIONS.md', `Never set ${COOP}: same-origin.`)).toEqual([]);
   });
 
-  it('exempts a hash comment in a YAML workflow', () => {
-    expect(scanText('.github/workflows/ci.yml', `# asserts no ${COOP} is sent`)).toEqual([]);
+  it.each([
+    ['shell', 'deploy/smoke.sh'],
+    ['YAML', '.github/workflows/ci.yml'],
+  ])('raw-scans %s comments', (_label, file) => {
+    expect(scanText(file, `# explanatory comment: ${COOP}: same-origin`)).toHaveLength(1);
   });
 });
 
@@ -135,8 +188,6 @@ describe('stripComments safety properties', () => {
   });
 
   it('errs toward scanning more when a quote is unterminated', () => {
-    // An apostrophe in prose must not blank the rest of the line, or a
-    // violation after it would vanish. Scanning too much is the safe failure.
     const source = `it's fine; setHeader("${COOP}", "same-origin")`;
     expect(scanText('deploy/host.js', source)).toHaveLength(1);
   });
@@ -155,6 +206,17 @@ describe('stripComments safety properties', () => {
     const source = `  setHeader("${COOP}", "same-origin");  `;
     expect(scanText('deploy/host.js', source)[0].text).toBe(`setHeader("${COOP}", "same-origin");`);
   });
+
+  it.each(['deploy/smoke.sh', '.github/workflows/ci.yml'])('does not erase raw %s text', (file) => {
+    const source = [
+      `# comment ${COOP}: same-origin`,
+      'value=$(printf %s "$(nested)") # trailing',
+      'quoted: "',
+      `  ${COEP}: require-corp`,
+      '"',
+    ].join('\n');
+    expect(stripComments(source, syntaxFor(file))).toEqual(source.split('\n'));
+  });
 });
 
 describe('syntaxFor', () => {
@@ -164,6 +226,11 @@ describe('syntaxFor', () => {
     expect(syntaxFor('a.sh').line).not.toContain('--');
     expect(syntaxFor('a.yml').line).not.toContain('--');
     expect(syntaxFor('Dockerfile').line).not.toContain('--');
+  });
+
+  it('raw-scans shell and YAML rather than claiming comment grammar', () => {
+    expect(syntaxFor('a.sh')).toEqual({ line: [], block: [] });
+    expect(syntaxFor('a.yml')).toEqual({ line: [], block: [] });
   });
 
   it('recognises extensionless and dotfile config names', () => {

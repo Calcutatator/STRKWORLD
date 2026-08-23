@@ -250,6 +250,41 @@ without a verification method is a rumour.
 
 Format: `### YYYY-MM-DD — short title` then what, why it matters, how verified.
 
+### 2026-08-23 — D-005 raw-scans shell and YAML source
+
+The D-005 static header gate no longer tries to parse shell or YAML comments.
+Those syntaxes are executable/configuration grammars with nested `$()` scopes,
+odd backslash continuations, heredoc expansion, multiline quoted scalars and
+ANSI-C quoting; each new parser patch left another way to erase effective text
+before the forbidden-header patterns ran. Shell and YAML now use the scanner's
+`none` syntax, so `stripComments()` is an identity transform for those files
+and comments are scanned as source. The narrower comment parser remains for
+syntax the gate can own, such as JS block comments, HTML comments, SQL and
+Dockerfile hash comments.
+
+This is conservative for the actual repository. A raw inventory of every
+`.sh`, `.bash`, `.zsh`, `.ksh`, `.yml` and `.yaml` file found only the
+self-referential `scripts/check-invariants.sh` vocabulary; that file is already
+explicitly excluded from the static header scan. No accepted non-self-
+referential shell or YAML comment names a forbidden header, so raw scanning
+does not create a repository false positive. This does not claim that every
+future shell/YAML comment is inert: adding the forbidden vocabulary there is
+intentionally a failure that must be removed or moved to an owned comment
+syntax.
+
+*Verified:* red-first public `scanText()` fixtures cover nested command
+substitutions, three- and five-backslash continuations, an unquoted heredoc
+expansion, a YAML multiline double-quoted scalar and ANSI-C quoting; each
+reports the effective source line. Additional fixtures prove in-word and
+escaped hashes are scanned, shell/YAML comments are scanned, and raw source is
+not erased. The focused header suite passes 33 tests. A source inventory using
+`rg` found only the excluded self-referential shell hit, and the static phase
+scans 315 files with no violation. The exact head then passed the
+production build, D-005 built/live checks with 30 responses, all 13
+invariants, tilemap validation, workspace typecheck and 94 files / 1,314
+tests. No browser, network, wallet, RPC, proof, signature, funds or
+transaction was used.*
+
 ### 2026-08-23 — Exchange signing ownership follows the confirmation attempt
 
 The Exchange panel previously used one mutable `signing` boolean and one
@@ -271,7 +306,7 @@ is live, rejects B, and proves B is discarded once. The focused suite passes
 / 1,305 tests, and typecheck, production build, all 13 invariants and diff
 hygiene pass. Removing either owner guard makes its corresponding regression
 fail. No browser, wallet, provider, RPC, proof, signature, funds or
-transaction was used.
+transaction was used.*
 
 ### 2026-08-23 — Production wallet authority is one privacy-owned generation
 
@@ -326,21 +361,20 @@ provider quote, after that quote, and after planning the exact public shield.
 The third check previously had no ownership checkpoint after its `await`. If
 the panel closed while that read was pending, `close()` cancelled the quote
 flight and advanced both session and attempt, but the late continuation still
-published the shield plan, provider-fee notice and deposit instructions into
-the closed panel. It also skipped the existing cancelled-quote cleanup, leaving
-the just-saved signed record held by the service.
+published the shield plan, provider-fee notice and deposit instructions into the
+closed panel. It also skipped the existing cancelled-quote cleanup, leaving the
+just-saved signed record held by the service.
 
 The final account read now distinguishes two owners. An explicit cancellation
 (`close`, `discard` or a valid `import`) runs the existing signed-evidence
-cleanup and restoration before returning. A stale attempt or session created by
-a non-cancelling action such as Refresh returns without touching the signed
+cleanup and restoration before returning. A stale attempt or session created
+by a non-cancelling action such as Refresh returns without touching the signed
 record that action adopted. Both paths stop before rereading service state or
 publishing instructions. Quote contents, planner policy, account validation,
 import and discard precedence, and the public Bridge interface are unchanged.
 
 *Verified:* a public `createBridgePanel()` regression returns the active account
-for the first two checks and defers the third. It closes the panel while that
-last read is pending, then resolves the same account. Red published
+for the first two checks and defers the third. Red published
 `instructionsVisible: true`, the shield plan and provider-fee notice instead of
 preserving the closed snapshot; green preserves it, discards the cancelled
 signed quote exactly once and leaves no saved record. The same third-read seam
@@ -352,10 +386,11 @@ the explicit-cancellation branch fails Close and Import; removing the stale
 attempt return fails Refresh, so the two ownership clauses are independently
 observed. The focused Bridge suite passes 1 file / 40 tests, the Web suite
 passes 37 files / 400 tests and a one-worker full workspace run passes 89 files
-/ 1,273 tests. Workspace
-typecheck, production build, all 13 invariants and diff hygiene pass. The
-behavioral checks use only in-memory test doubles: no browser, external
-network, wallet, RPC, proof, signature, funds or transaction was used.*
+/ 1,273 tests. Workspace typecheck, production build, all 13 invariants and
+diff hygiene pass. The behavioral checks use only in-memory test doubles: no
+browser, external network, wallet, RPC, proof, signature, funds or transaction
+was used.*
+
 ### 2026-08-20 — The Backend launcher admits only a regular entry file
 
 The standalone Backend launcher previously checked only that `BACKEND_ENTRY`
@@ -478,6 +513,72 @@ also exposed unrelated timing-only failures in unchanged Fly/image-smoke and
 demo-Bridge tests; exact-head hosted CI remains the standard parallel gate.
 Local verification used no external network, wallet, RPC, proof, signature,
 funds or transaction.*
+
+### 2026-08-20 — An in-word hash cannot hide an effective header directive
+
+**Superseded by “D-005 raw-scans shell and YAML source” above. The earlier
+grammar-patch verification remains historical; shell/YAML comment exemptions
+are no longer part of the gate.**
+
+The D-005 static header gate treated every unquoted `#` in hash-comment file
+types as the start of a comment. Bash and YAML both keep an in-word hash as
+data, so effective shell or workflow code later on the same line disappeared
+from the scan. The first boundary fix still read raw source characters rather
+than shell tokens: an escaped space before `#`, or a backslash-newline before a
+line-start `#`, kept the hash inside the active word in Bash but looked like a
+comment boundary to the scanner. A deploy command could therefore set one of
+the cross-origin isolation headers that break wallet popups while the dedicated
+CI job reported the source clean.
+
+Shell files now have their own hash-comment mode. Escaped whitespace does not
+open a comment boundary, and an odd trailing backslash carries only whether the
+next physical line begins inside the same shell word. A later review found two
+more shell-token gaps: quote state reset at every physical newline even though
+single and double quotes may span lines, and only whitespace or line start was
+treated as a comment boundary even though an unescaped control operator also
+ends the prior word. A multiline quote could therefore put a line-start hash
+inside data and hide an effective directive after its closing quote, while a
+real `;#` comment was falsely scanned as code.
+
+The next exact-head review found one remaining quote-mode collapse. Bash
+ANSI-C strings (`$'…'`) let a backslash escape an embedded single quote, while
+ordinary single quotes treat backslashes literally. The scanner treated both
+as ordinary single quotes, closed its quote at an ANSI-C escaped quote, then
+misread the next line's leading hash as a comment and hid effective code after
+the real closing quote.
+
+Shell quote state now follows physical lines until the matching quote, and an
+unescaped shell control operator opens a real hash-comment boundary. YAML and
+the other hash-comment formats retain their independent start/whitespace rule;
+ordinary single and ANSI-C quote modes are distinct, so only ANSI-C quoting
+consumes a backslash escape. Genuine shell comments at line start or after
+ordinary whitespace remain exempt. Other comment syntaxes and the
+built-response phase are unchanged.
+
+*Verified:* Bash itself parsed `safe#still-word after` as two ordinary
+arguments. Through the exported `scanText` seam, red-first `.sh` fixtures put a
+forbidden header after an in-word hash, an escaped-space hash and a continued
+line-start hash; the original parser missed all three, and the first fix still
+missed the latter two. A `.yml` in-word case is also caught, while the same
+escaped-space source remains a YAML comment. Removing escaped-space handling
+fails only its line-1 case; removing continuation carry fails only its line-2
+case. Two further red-first fixtures span single and double shell quotes across
+lines, and four operator fixtures preserve real comments after `;`, `&`, `&&`
+and `||`; an escaped-operator fixture keeps the boundary rule honest.
+Quote-carry and operator-boundary mutations fail their own cases independently.
+Adjacent fixtures preserve real hash comments at line start and after
+whitespace. A final red-first ANSI-C fixture keeps an escaped quote open across
+the physical newline and reports the effective directive on line 2; an
+ordinary-single-quote fixture proves the same backslash remains literal.
+Collapsing ANSI-C back into ordinary single mode fails only the bypass case,
+while giving ordinary single quotes ANSI-C escape behavior fails only the
+preservation case. The focused header suite passes 39/39 tests, and the full
+workspace passes 89 files / 1,286 tests with two workers. Workspace typecheck,
+production build, the complete D-005 static/build/local-preview gate (305
+source files and 30 production responses), all 13 invariants, tilemap and diff
+checks pass. The local checks used only files, child processes and loopback
+HTTP; no external network, RPC, wallet, proof, signature, funds or transaction
+was used.*
 
 ### 2026-08-20 — An Exchange edit owns its pending preparation
 
