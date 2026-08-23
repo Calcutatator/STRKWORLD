@@ -250,6 +250,31 @@ without a verification method is a rumour.
 
 Format: `### YYYY-MM-DD — short title` then what, why it matters, how verified.
 
+### 2026-08-23 — Exchange signing ownership follows the confirmation attempt
+
+The Exchange panel previously used one mutable `signing` boolean and one
+mutable prepared-batch reference across panel sessions. A stale confirmation
+could therefore clear the guard for a newer wallet handoff, causing close to
+discard the newer batch while it was signing; a stale successful confirmation
+could also clear the newer reference, so that batch could not be released when
+its own confirmation failed. A newer prepared batch could also be silently
+dropped when an older batch was still signing, because disposal was suppressed
+for every active signing owner rather than only the batch in handoff.
+
+The panel now owns the signing guard by confirmation attempt and exact batch,
+and clears the prepared reference only when it still points to the settling
+batch. A newer batch that never enters wallet handoff is disposed normally.
+Receipt recording and stale-session behavior remain unchanged.
+
+*Verified:* three public Exchange-machine regressions use deferred, distinct
+batches. They cover stale A rejection while B is signing, stale A success
+while B is live, and A signing followed by B preparation and close before B
+handoff. The focused suite passes 21 tests, Web passes 39 files / 411 tests,
+the full workspace passes 94 files / 1,317 tests, and typecheck, production
+build, all 13 invariants and diff hygiene pass. Removing either attempt guard
+or the exact-batch guard makes its corresponding regression fail. No browser,
+wallet, provider, RPC, proof, signature, funds or transaction was used.*
+
 ### 2026-08-23 — D-005 raw-scans shell and YAML source
 
 The D-005 static header gate no longer tries to parse shell or YAML comments.
@@ -283,29 +308,6 @@ scans 315 files with no violation. The exact head then passed the
 production build, D-005 built/live checks with 30 responses, all 13
 invariants, tilemap validation, workspace typecheck and 94 files / 1,314
 tests. No browser, network, wallet, RPC, proof, signature, funds or
-transaction was used.*
-
-### 2026-08-23 — Exchange signing ownership follows the confirmation attempt
-
-The Exchange panel previously used one mutable `signing` boolean and one
-mutable prepared-batch reference across panel sessions. A stale confirmation
-could therefore clear the guard for a newer wallet handoff, causing close to
-discard the newer batch while it was signing; a stale successful confirmation
-could also clear the newer reference, so that batch could not be released when
-its own confirmation failed.
-
-The panel now owns the signing guard by confirmation attempt and clears the
-prepared reference only when it still points to the settling batch. Receipt
-recording and stale-session behavior remain unchanged.
-
-*Verified:* two public Exchange-machine regressions use deferred, distinct
-batches. One closes/remounts, starts B, rejects stale A, then closes while B
-is pending and proves B is not discarded; the other resolves stale A while B
-is live, rejects B, and proves B is discarded once. The focused suite passes
-20 tests, Web passes 39 files / 410 tests, the full workspace passes 94 files
-/ 1,305 tests, and typecheck, production build, all 13 invariants and diff
-hygiene pass. Removing either owner guard makes its corresponding regression
-fail. No browser, wallet, provider, RPC, proof, signature, funds or
 transaction was used.*
 
 ### 2026-08-23 — Production wallet authority is one privacy-owned generation

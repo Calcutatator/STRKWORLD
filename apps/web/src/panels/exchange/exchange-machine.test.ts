@@ -251,6 +251,32 @@ describe('Exchange machine', () => {
     expect(secondDiscarded).toBe(1);
   });
 
+  it('discards a newer prepared batch when it never enters wallet handoff', async () => {
+    const first = deferred<{ transactionHash: string }>();
+    const firstEntered = deferred<void>();
+    let secondDiscarded = 0;
+    const operations = controlledOperations(first.promise, undefined, firstEntered.resolve);
+    const firstBatch = (await operations.prepare([])) as PreparedBatch;
+    const secondBatch = {
+      ...firstBatch,
+      discard: () => { secondDiscarded += 1; },
+    } satisfies PreparedBatch;
+    let preparedCount = 0;
+    operations.prepare = async () => preparedCount++ === 0 ? firstBatch : secondBatch;
+    const machine = createExchangePanel({ operations, receipts: createReceiptLedger(), canStartFinancialAction: () => true });
+    await machine.open(); await machine.refreshBalances(); machine.setAmount('1'); await machine.prepare();
+
+    const confirmingFirst = machine.confirm();
+    await firstEntered.promise;
+    machine.close();
+    await machine.open(); await machine.refreshBalances(); machine.setAmount('1'); await machine.prepare();
+    machine.close();
+
+    expect(secondDiscarded).toBe(1);
+    first.reject(new PrivacyError('unknown', 'stale failure'));
+    await confirmingFirst;
+  });
+
   it('promotes a late hashless uncertainty after close and never permits a blind second confirm', async () => {
     const result = deferred<{ transactionHash: string }>(); const errors: string[] = [];
     const entered = deferred<void>(); let confirms = 0;
