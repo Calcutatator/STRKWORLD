@@ -111,10 +111,12 @@ rule applies to visual and interactive browser acceptance of the game.
 
 The project lead owns the shared local runtime. After merging a runtime change,
 fast-forward the canonical checkout to `origin/main`, keep the web app and any
-required local services (including the lobby) running, and reload the browser
-against `http://localhost:5173/`. A merged PR is not complete while the shared
-checkout, dev server or browser still points at an older branch or build. Do
-not make the user discover or repair that drift.
+required local services (including the lobby) running, and make the current
+build available at `http://localhost:5173/`. When the user has explicitly
+authorized browser automation, reload that browser against the current build;
+otherwise give the user the immediate reload/test handoff. A merged PR is not
+complete while the shared checkout or dev server still points at an older
+branch or build. Do not make the user discover or repair that drift.
 
 ### Questions for the user are explicit gates
 
