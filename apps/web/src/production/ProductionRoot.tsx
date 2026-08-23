@@ -100,6 +100,7 @@ function WalletCapabilityGate({
     return (
       <ConnectedProductionApp
         session={session}
+        initialConnectState={state}
         worldOut={worldOut}
         shellIn={shellIn}
         presence={presence}
@@ -113,12 +114,14 @@ function WalletCapabilityGate({
 
 function ConnectedProductionApp({
   session,
+  initialConnectState,
   worldOut,
   shellIn,
   presence,
   createPresence,
 }: {
   session: WalletSession;
+  initialConnectState: ConnectState;
   worldOut: EventBus<WorldEvents>;
   shellIn: EventBus<ShellEvents>;
   presence?: PresenceController;
@@ -158,6 +161,7 @@ function ConnectedProductionApp({
       presence={activePresence}
       operations={session.operations}
       walletSession={session}
+      initialConnectState={initialConnectState}
       bridge={{
         account: session.getSnapshot().account,
         readAccount: session.readAccount,

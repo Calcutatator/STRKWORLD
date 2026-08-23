@@ -56,8 +56,11 @@ export interface ConnectFlow {
   status(): WalletStatus;
 }
 
-export function createConnectFlow(operations: PrivacyOperations): ConnectFlow {
-  const store = createStore<ConnectState>({ name: 'disconnected' });
+export function createConnectFlow(
+  operations: PrivacyOperations,
+  initialState: ConnectState = { name: 'disconnected' },
+): ConnectFlow {
+  const store = createStore<ConnectState>(initialState);
   let generation = 0;
   let inFlight: { generation: number; promise: Promise<ConnectState> } | null = null;
 

@@ -106,6 +106,48 @@ describe('ProductionRoot', () => {
     container.remove();
   });
 
+  it('passes the already-admitted capability into the financial composition', async () => {
+    captured.current = null;
+    const createPresence = vi.fn(() => createPresenceController({}));
+    const session = sessionAt('connected', '0xabc', new FakePrivacyOperations({
+      capability: {
+        supportsStrk20: true,
+        walletApiVersion: '0.10.3',
+        registration: 'unknown',
+      },
+    }));
+    const container = document.createElement('div');
+    document.body.appendChild(container);
+    const root = createRoot(container);
+
+    await act(async () => {
+      root.render(
+        <StrictMode>
+          <ProductionRoot
+            session={session}
+            worldOut={createEventBus<WorldEvents>()}
+            shellIn={createEventBus<ShellEvents>()}
+            createPresence={createPresence}
+          />
+        </StrictMode>,
+      );
+      await flushReact();
+    });
+
+    expect(captured.current).toMatchObject({
+      initialConnectState: {
+        name: 'connected',
+        capability: {
+          supportsStrk20: true,
+          walletApiVersion: '0.10.3',
+          registration: 'unknown',
+        },
+      },
+    });
+    root.unmount();
+    container.remove();
+  });
+
   it('keeps a rejected capability check at the gate with an explicit retry', async () => {
     const createPresence = vi.fn(() => createPresenceController({}));
     const operations = new FakePrivacyOperations();
