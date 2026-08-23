@@ -189,6 +189,7 @@ describe('WalletSession', () => {
   });
 
   it('connects the selected Wallet Standard provider through WalletAccountV6', async () => {
+    let emitChange!: (change: { features?: object }) => void;
     const standardConnect = vi.fn(async () => ({
       accounts: [{
         address: '0x123',
@@ -211,7 +212,13 @@ describe('WalletSession', () => {
       features: {
         'standard:connect': { version: '1.0.0', connect: standardConnect },
         'standard:disconnect': { version: '1.0.0', disconnect: vi.fn(async () => undefined) },
-        'standard:events': { version: '1.0.0', on: vi.fn(() => () => undefined) },
+        'standard:events': {
+          version: '1.0.0',
+          on: vi.fn((_event: string, listener: (change: { features?: object }) => void) => {
+            emitChange = listener;
+            return () => undefined;
+          }),
+        },
         'starknet:walletApi': { version: '1.0.0', walletVersion: '5.33.8', id: 'ready', request },
       },
     };
@@ -226,6 +233,13 @@ describe('WalletSession', () => {
       walletApiVersion: '0.10.3',
       registration: 'unknown',
     });
+
+    const generation = session.getSnapshot().generation;
+    emitChange({ features: wallet.features });
+
+    expect(session.getSnapshot()).toMatchObject({ phase: 'connected', account: '0x123' });
+    expect(session.getSnapshot().generation).toBe(generation);
+    await expect(session.operations.capability()).resolves.toMatchObject({ supportsStrk20: true });
     expect(request.mock.calls.map(([input]) => input.type)).toContain('wallet_supportedWalletApi');
   });
 

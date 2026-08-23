@@ -326,7 +326,8 @@ export function createProductionWalletSession(
       };
       const portListeners = new Set<() => void>();
       connected.onChange((change) => {
-        const account = change.accounts?.[0];
+        if (change.accounts === undefined) return;
+        const account = change.accounts[0];
         current = {
           account: account?.address ?? '',
           chainId: chainIdOf(account?.chains[0]) ?? current.chainId,

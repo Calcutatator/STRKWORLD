@@ -277,7 +277,8 @@ submission or funds movement.
 
 *Verified:* public session regressions cover explicit selection, concurrent
 connect ownership, wallet disappearance, wrong-network recovery, empty and
-invalid accounts, disconnect, account changes before and during preparation,
+invalid accounts, disconnect, partial Wallet Standard change events that omit
+accounts, account changes before and during preparation,
 old-result and old-error suppression, replacement-adapter failure, immutable
 policy ownership and an account event arriving during the initial chain read.
 The production composition test pins the same operations/session/account
