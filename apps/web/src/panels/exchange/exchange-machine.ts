@@ -68,7 +68,8 @@ export function createExchangePanel(options: {
   const register = options.register ?? PRIVACY_REGISTER;
   const store = createStore<ExchangeState>(initialState(register));
   let prepared: PreparedBatch | null = null;
-  let signing = false;
+  let signingOwner: number | null = null;
+  let signingBatch: PreparedBatch | null = null;
   let attempt = 0;
   let session = 0;
   let balanceRead = 0;
@@ -84,7 +85,17 @@ export function createExchangePanel(options: {
     patch(next);
   };
   const stageCopy = (stage: OperationStage) => ({ composing: COPY.flow.handingOver, 'awaiting-approval': COPY.flow.awaitingApproval, proving: COPY.flow.proving, submitting: COPY.flow.submitting, confirming: COPY.flow.confirming, done: COPY.flow.done, failed: COPY.errors.unknown }[stage]);
-  const discard = () => { if (!signing) prepared?.discard(); prepared = null; };
+  const discard = () => {
+    // A batch the wallet is already signing is not ours to release. The
+    // owner token and batch identity matter because a stale confirmation may
+    // settle after a newer batch has been prepared or entered the handoff.
+    if (prepared !== null && prepared === signingBatch) {
+      prepared = null;
+      return;
+    }
+    prepared?.discard();
+    prepared = null;
+  };
   const gate = () => {
     if (options.canStartFinancialAction()) return true;
     patch({ notice: COPY.errors['submission-uncertain'] });
@@ -191,15 +202,23 @@ export function createExchangePanel(options: {
           patch({ flow: { name: 'review', summary }, notice: COPY.errors['submission-uncertain'] });
           return;
         }
-        signing = true;
+        signingOwner = id;
+        signingBatch = batch;
         const result = await batch.confirm({ feeCeiling: batch.totalCost + feeTolerance, signal, onProgress: ({ stage }) => { if (live(id)) patch({ flow: { name: 'submitting', stage, message: stageCopy(stage), summary } }); } });
-        signing = false; prepared = null;
+        if (signingOwner === id) {
+          signingOwner = null;
+          signingBatch = null;
+        }
+        if (prepared === batch) prepared = null;
         receipts.record({ building: 'exchange', transactionHash: result.transactionHash, intents: batch.intents });
         ++balanceRead;
         if (!live(id)) return;
         patch({ balances: 'unrequested', flow: { name: 'submitted', transactionHash: result.transactionHash }, notice: COPY.balance.changed });
       } catch (error) {
-        signing = false;
+        if (signingOwner === id) {
+          signingOwner = null;
+          signingBatch = null;
+        }
         // A stale attempt has no visible state left to classify. In particular,
         // closing the panel must not start a new pool read after wallet handoff.
         if (
