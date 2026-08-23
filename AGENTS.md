@@ -260,24 +260,32 @@ B while it was signing, losing the receipt path; conversely, a newer prepared B
 that had not entered wallet handoff could be left undisposed because the broad
 signing flag suppressed every disposal.
 
+The same stale-success path also cleared the shared accumulator before checking
+attempt liveness. After close/reopen and a newer B was prepared, the review
+still showed B while the underlying queue was empty; cancelling and preparing
+again then reported nothing queued.
+
 The panel now records the owning confirmation attempt and exact prepared batch.
 Disposal is suppressed only when the current prepared batch is that signing
 batch. A settling attempt clears the owner and prepared reference only when it
-still owns them. Receipt recording remains unconditional, uncertainty remains
-single-attempt with no blind retry, and the existing attempt, session,
-composition and balance-read clocks are unchanged.
+still owns them, and it clears the accumulator only while that attempt still
+owns the live panel session. Receipt recording remains unconditional,
+uncertainty remains single-attempt with no blind retry, and the existing
+attempt, session, composition and balance-read clocks are otherwise unchanged.
 
-*Verified:* three public `createBankPanel()` regressions use deferred distinct
+*Verified:* four public `createBankPanel()` regressions use deferred distinct
 batches. They cover stale A resolution followed by B failure, stale A rejection
-while B is signing followed by close, and A signing followed by preparation and
-close of unconfirmed B. The focused Bank suite passes 77 tests, Web passes 40
-files / 415 tests, the full workspace passes 94 files / 1,320 tests, and all
-workspace typechecks, production build, 13 invariants and diff hygiene pass.
-Replacing exact-batch disposal with broad signing suppression fails the
-unconfirmed-B regression; removing owner-generation guards fails the stale-A
-rejection regression; and unconditionally clearing `prepared` fails stale-A
-resolution. No browser, wallet, provider, RPC, proof, signature, funds or
-transaction was used.*
+while B is signing followed by close, A signing followed by preparation and
+close of unconfirmed B, and stale A success after close/reopen while B remains
+authoritative through cancel/reprepare. The focused Bank suite passes 78 tests,
+Web passes 40 files / 416 tests, the full workspace passes 94 files / 1,321
+tests, and all workspace typechecks, production build, 13 invariants and diff
+hygiene pass. Replacing exact-batch disposal with broad signing suppression
+fails the unconfirmed-B regression; removing owner-generation guards fails the
+stale-A rejection regression; unconditionally clearing `prepared` fails
+stale-A resolution; and unconditionally clearing the accumulator fails the
+close/reopen composition regression. No browser, wallet, provider, RPC, proof,
+signature, funds or transaction was used.*
 
 ### 2026-08-23 — Exchange signing ownership follows the confirmation attempt
 

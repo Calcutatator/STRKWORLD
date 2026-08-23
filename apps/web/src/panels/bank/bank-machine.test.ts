@@ -11,6 +11,7 @@ import { PRIVACY_REGISTER } from '../../privacy/register.js';
 import { COPY } from '../../copy.js';
 import { formatTokenAmountExact, parseTokenAmount } from '../../format.js';
 import { createConnectFlow } from '../../connect/connect-machine.js';
+import { createBatchAccumulator } from '../../accumulator/batch-accumulator.js';
 import { createReceiptLedger } from '../../receipts/receipt-ledger.js';
 import { createSubmissionUncertainty } from '../../privacy/submission-uncertainty.js';
 import {
@@ -1461,6 +1462,51 @@ describe('bank panel — a receipt outlives the room', () => {
     expect(receipts.pending('bank')[0]?.intents).toHaveLength(1);
     // And the closed panel was not written into.
     expect(panel.store.getState().flow.name).toBe('idle');
+  });
+
+  it('keeps a remounted newer composition authoritative after a stale success', async () => {
+    const receipts = createReceiptLedger();
+    const operations = fake();
+    const accumulator = createBatchAccumulator();
+    const gate = gateSigning(operations);
+    const panel = createBankPanel({
+      operations,
+      receipts,
+      accumulator,
+      canStartFinancialAction: allowFinancialActions,
+    });
+    await panel.open();
+    panel.setAmount('1');
+    await panel.addToBatch();
+    await panel.prepare();
+
+    const stale = panel.confirm();
+    await gate.entered;
+    panel.close();
+
+    await panel.open();
+    panel.setAmount('2');
+    await panel.addToBatch();
+    await panel.prepare();
+    expect(accumulator.intents).toHaveLength(1);
+    expect(accumulator.intents[0]).toMatchObject({ kind: 'shield', amount: strk('2') });
+
+    gate.release();
+    await stale;
+
+    expect(receipts.pending('bank')).toHaveLength(1);
+    expect(panel.store.getState().flow.name).toBe('review');
+    expect(accumulator.intents).toHaveLength(1);
+    expect(accumulator.intents[0]).toMatchObject({ kind: 'shield', amount: strk('2') });
+
+    panel.cancelPrepared();
+    await panel.prepare();
+    const flow = panel.store.getState().flow;
+    expect(flow.name).toBe('review');
+    expect(flow.name === 'review' && flow.summary.intents[0]).toMatchObject({
+      kind: 'shield',
+      amount: strk('2'),
+    });
   });
 
   it('owns Post Office pending and submitted receipts by building, while Bank stays Bank', async () => {

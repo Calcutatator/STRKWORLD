@@ -704,6 +704,7 @@ export function createBankPanel(options: BankPanelOptions): BankPanel {
       // Leave `review` synchronously, before the first await. Two clicks in one
       // tick both reach here; the second finds the flow already moved on. The
       // disabled button is the courtesy, this is the guard.
+      const mySession = session;
       const id = begin();
       patch({ flow: { name: 'submitting', stage: 'composing', message: COPY.flow.handingOver, summary } });
 
@@ -780,7 +781,7 @@ export function createBankPanel(options: BankPanelOptions): BankPanel {
           intents: summary.intents,
         });
         if (prepared === batch) prepared = null;
-        accumulator.clear();
+        if (current(id) && live(mySession)) accumulator.clear();
         // Any balance read still in flight predates this submission.
         invalidateReads();
         if (!current(id)) return;
