@@ -110,6 +110,9 @@ export class BridgeService {
     if (!this.quoteVerifier(signedQuote)) {
       throw new Error('1Click quote signature verification failed.');
     }
+    if (this.resume()) {
+      throw new Error('An existing bridge deposit is available. Discard it before creating a new deposit.');
+    }
     const now = this.now();
     const record: BridgeRecord = {
       v: 1,
