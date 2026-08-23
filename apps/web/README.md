@@ -66,7 +66,8 @@ The browser keeps every financial route denied unless the build supplies one
 complete public transfer tuple: `VITE_STRK20_TRANSFER_ENABLED=true`, a
 positive `VITE_STRK20_TRANSFER_MAX_INTENTS`, a positive
 `VITE_STRK20_TRANSFER_MAX_RELAY_FEE`, and one or more exact felt values in
-`VITE_STRK20_TRANSFER_ALLOWED_TOKENS`. Missing, zero, malformed, duplicate or
+`VITE_STRK20_TRANSFER_ALLOWED_TOKENS`, written as `0x`-prefixed hex addresses
+strictly below the Stark field prime. Missing, zero, malformed, duplicate or
 disabled values fail closed to the deny-all policy without exposing the
 rejected value. This is browser-side admission only; the backend must apply
 its own route, token, queue and sponsorship checks. Shield, unshield and swap

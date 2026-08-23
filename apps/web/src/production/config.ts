@@ -3,7 +3,7 @@ import type { WalletSessionOptions } from '@strkworld/privacy';
 const MAINNET_NAME = 'SN_MAIN';
 const MAINNET_CHAIN_ID = '0x534e5f4d41494e';
 const MAX_U128 = (1n << 128n) - 1n;
-const MAX_FELT = 1n << 252n;
+const STARK_FIELD_PRIME = (1n << 251n) + 17n * (1n << 192n) + 1n;
 
 type WalletEnvironment = Record<string, string | boolean | undefined>;
 
@@ -106,11 +106,11 @@ function parsePositiveBigint(value: string | boolean | undefined, maximum: bigin
 function parseAllowedTokens(value: string | boolean | undefined): string[] | null {
   if (typeof value !== 'string' || value.length === 0) return null;
   const tokens = value.split(',').map((token) => token.trim());
-  if (tokens.some((token) => !/^(?:0x[0-9a-f]+|[0-9]+)$/i.test(token))) return null;
+  if (tokens.some((token) => !/^0x[0-9a-f]{1,64}$/i.test(token))) return null;
 
   try {
     const numeric = tokens.map((token) => BigInt(token));
-    if (numeric.some((token) => token <= 0n || token >= MAX_FELT)) return null;
+    if (numeric.some((token) => token <= 0n || token >= STARK_FIELD_PRIME)) return null;
     const identities = numeric.map((token) => token.toString(16));
     if (new Set(identities).size !== identities.length) return null;
     return tokens;
