@@ -30,6 +30,10 @@ export const COPY = {
     connecting: 'Waiting for your wallet…',
     retry: 'Try again',
     disconnect: 'Disconnect',
+    choose: 'Choose a wallet',
+    none: 'No compatible wallet was discovered.',
+    refreshWallets: 'Look again',
+    wrongNetwork: 'Switch this wallet to Starknet mainnet, then try again.',
   },
 
   unsupported: {

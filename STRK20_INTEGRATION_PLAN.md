@@ -39,7 +39,9 @@ The Bank's private transfer can hide who paid whom, but a Bridge deposit and any
 
 ## 5. Phase 1 — real wallet session in the game, no money movement
 
-Status: approved 2026-08-23; implementation in progress under D-054.
+Status: headless implementation complete 2026-08-23 under D-054; awaiting the
+manual Ready discovery/connection/capability gate below. No funded route is
+enabled.
 
 1. Record a decision approving a privacy-owned `WalletSession` port. Web may import that port, but it must not import wallet libraries or implement wallet capability/business logic.
 2. Add `packages/privacy/src/wallet-api/session.ts` and tests. The session owns:

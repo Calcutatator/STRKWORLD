@@ -2321,3 +2321,10 @@ Headless tests own discovery, selection, stale-event, account/network and
 prepared-work behavior. The user owns rendered wallet-prompt acceptance. Any
 funded mainnet action remains a separate explicit gate naming the exact account,
 recipient, token, amount and live fee ceiling immediately before handoff.
+
+**Status.** Headless Phase 1 implementation is complete on
+`codex/wallet-integration`. The real-wallet path is production-default and an
+explicit local-development opt-in, but every transaction route remains denied.
+Rendered Ready discovery, connection, rejection, network/account change and
+capability behavior remain the next manual gate; no live wallet or funded claim
+is accepted by this status.
