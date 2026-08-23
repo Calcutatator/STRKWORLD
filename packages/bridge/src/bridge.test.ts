@@ -111,7 +111,110 @@ class StubClient implements OneClickClient {
   }
 }
 
+function deferred<T>(): {
+  promise: Promise<T>;
+  resolve: (value: T) => void;
+} {
+  let resolve!: (value: T) => void;
+  const promise = new Promise<T>((settle) => { resolve = settle; });
+  return { promise, resolve };
+}
+
 describe('BridgeService', () => {
+  it('does not overwrite an imported record while its quote is pending', async () => {
+    const quote = deferred<QuoteResponse>();
+    const client = new StubClient();
+    client.getQuote = async () => quote.promise;
+    const service = new BridgeService({
+      client,
+      store: new MemoryBridgeStore(),
+      quoteVerifier: () => true,
+      now: () => NOW,
+    });
+    const evidenceSource = new BridgeService({
+      client: new StubClient(),
+      store: new MemoryBridgeStore(),
+      quoteVerifier: () => true,
+      now: () => NOW,
+    });
+    await evidenceSource.createManualDeposit({
+      source: SOURCE,
+      amountIn: 1_000_000n,
+      starknetRecipient: '0x123',
+      refundAddress: request.refundTo,
+    });
+    const importedEvidence = evidenceSource.exportResumeRecord();
+
+    const creating = service.createManualDeposit({
+      source: SOURCE,
+      amountIn: 1_000_000n,
+      starknetRecipient: '0x123',
+      refundAddress: request.refundTo,
+    });
+    await Promise.resolve();
+    service.importResumeRecord(importedEvidence);
+    const importedExport = service.exportResumeRecord();
+    quote.resolve(signedQuote);
+
+    await expect(creating).rejects.toThrow(
+      'An existing bridge deposit is available. Discard it before creating a new deposit.',
+    );
+    expect(service.exportResumeRecord()).toBe(importedExport);
+  });
+
+  it('allows only one concurrent manual or signed create to retain a record', async () => {
+    const firstQuote = deferred<QuoteResponse>();
+    const secondQuote = deferred<QuoteResponse>();
+    const client = new StubClient();
+    let quoteCall = 0;
+    client.getQuote = async () => {
+      quoteCall += 1;
+      const next = quoteCall === 1 ? firstQuote : secondQuote;
+      return next.promise;
+    };
+    const service = new BridgeService({
+      client,
+      store: new MemoryBridgeStore(),
+      quoteVerifier: () => true,
+      now: () => NOW,
+    });
+
+    const manual = service.createManualDeposit({
+      source: { ...SOURCE, depositMode: 'manual' },
+      amountIn: 1_000_000n,
+      starknetRecipient: '0x123',
+      refundAddress: request.refundTo,
+    });
+    const signed = service.createSignedDeposit({
+      source: { ...SOURCE, depositMode: 'signed' },
+      amountIn: 2_000_000n,
+      starknetRecipient: '0x123',
+      refundAddress: request.refundTo,
+    });
+    await Promise.resolve();
+    firstQuote.resolve(signedQuote);
+    await expect(manual).resolves.toMatchObject({ amountIn: 1_000_000n });
+    secondQuote.resolve({
+      ...signedQuote,
+      quoteRequest: {
+        ...signedQuote.quoteRequest,
+        amount: '2000000',
+      },
+      quote: {
+        ...signedQuote.quote,
+        amountIn: '2000000',
+      },
+    });
+
+    await expect(signed).rejects.toThrow(
+      'An existing bridge deposit is available. Discard it before creating a new deposit.',
+    );
+    expect(service.resume()).toMatchObject({
+      amountIn: 1_000_000n,
+      source: { depositMode: 'manual' },
+    });
+  });
+
   it('preserves an existing resumable deposit until it is explicitly discarded', async () => {
     for (const [existingMode, replacementMode] of [
       ['manual', 'signed'],
