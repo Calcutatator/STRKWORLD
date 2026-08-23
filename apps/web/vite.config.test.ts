@@ -1,3 +1,5 @@
+import { createServer as createHttpServer } from 'node:http';
+import { createServer as createViteServer } from 'vite';
 import { describe, expect, it } from 'vitest';
 import config, { createLocalBackendProxy, createViteConfig } from './vite.config';
 
@@ -50,7 +52,49 @@ describe('web environment lookup', () => {
     const development = createViteConfig('serve', 'http://127.0.0.1:8080');
     const production = createViteConfig('build', 'http://127.0.0.1:8080');
 
-    expect(development.server?.proxy).toHaveProperty('/api');
+    expect(development.server?.proxy).toHaveProperty('^/api(?:/|$)');
     expect(production.server).toBeUndefined();
+  });
+
+  it('proxies the exact /api boundary without sending /apis to the backend', async () => {
+    const received: string[] = [];
+    const backend = createHttpServer((request, response) => {
+      received.push(request.url ?? '');
+      response.end('fake-backend');
+    });
+    await new Promise<void>((resolve) => backend.listen(0, '127.0.0.1', resolve));
+    const backendAddress = backend.address();
+    if (!backendAddress || typeof backendAddress === 'string') throw new Error('Backend did not bind.');
+
+    const development = createViteConfig(
+      'serve',
+      `http://127.0.0.1:${backendAddress.port}`,
+    );
+    const vite = await createViteServer({
+      configFile: false,
+      root: new URL('.', import.meta.url).pathname,
+      logLevel: 'silent',
+      server: {
+        host: '127.0.0.1',
+        port: 0,
+        ...development.server,
+      },
+    });
+
+    try {
+      await vite.listen();
+      const viteAddress = vite.httpServer?.address();
+      if (!viteAddress || typeof viteAddress === 'string') throw new Error('Vite did not bind.');
+      const origin = `http://127.0.0.1:${viteAddress.port}`;
+
+      expect(await fetch(`${origin}/api`).then((response) => response.text())).toBe('fake-backend');
+      expect(await fetch(`${origin}/apis`).then((response) => response.text())).not.toBe('fake-backend');
+      expect(received).toEqual(['/']);
+    } finally {
+      await vite.close();
+      await new Promise<void>((resolve, reject) => {
+        backend.close((error) => error ? reject(error) : resolve());
+      });
+    }
   });
 });

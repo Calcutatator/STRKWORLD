@@ -2,6 +2,7 @@ import react from '@vitejs/plugin-react';
 import { defineConfig, loadEnv, type UserConfig } from 'vite';
 
 const REPOSITORY_ROOT = new URL('../../', import.meta.url);
+const LOCAL_API_PROXY_CONTEXT = '^/api(?:/|$)';
 
 /**
  * Resolve the development-only same-origin API proxy.
@@ -59,7 +60,7 @@ export function createViteConfig(command: 'serve' | 'build', backendOrigin?: str
     // the copied root .env.local file.
     envDir: '../..',
     plugins: [react()],
-    ...(localProxy ? { server: { proxy: { '/api': localProxy } } } : {}),
+    ...(localProxy ? { server: { proxy: { [LOCAL_API_PROXY_CONTEXT]: localProxy } } } : {}),
   };
 }
 
