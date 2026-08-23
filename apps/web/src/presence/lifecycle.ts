@@ -1,4 +1,6 @@
-import type { PresenceController } from './presence-controller.js';
+export interface PresenceDestroyer {
+  destroy(): Promise<void>;
+}
 
 export interface PageLifecycleHost {
   addEventListener(type: 'pagehide', listener: (event?: { persisted?: boolean }) => void, options?: { once?: boolean }): void;
@@ -11,7 +13,7 @@ export interface HotLifecycleHost {
 
 /** Explicit production teardown; React StrictMode never calls this helper. */
 export function installPresenceTeardown(
-  presence: PresenceController,
+  presence: PresenceDestroyer,
   page?: PageLifecycleHost,
   hot?: HotLifecycleHost,
 ): () => void {

@@ -208,12 +208,19 @@ instance for each generation. Web sees only frozen wallet choices, phase,
 account, and generation plus the stable operations facade. Before an older
 generation can confirm, its wrapped prepared batch is discarded and rejected.
 
-`apps/web/src/production/ProductionRoot.tsx` composes this session into `App`
-and supplies the same reactive account authority to Bridge. Production
-configuration is public, mainnet-only, same-origin for Backend calls, and starts
-with every transaction route denied. Bridge planning stays null. The real
-browser route therefore supports connection/capability acceptance before it
-authorizes any proof, signature, submission, or funds movement.
+`apps/web/src/production/ProductionRoot.tsx` composes this session into an
+entry gate. Until the snapshot reports a connected mainnet account and the
+existing STRK20 capability flow admits the wallet, the root renders only
+discovery, explicit wallet selection and connection/recovery UI;
+`App`, Phaser, presence and building panels do not mount. Once admitted, it
+creates a fresh presence owner, composes `App` and supplies the same reactive
+account authority to Bridge. Losing the account, disconnecting or entering a
+wrong-network state unmounts that connected tree and tears down its World and
+lobby owner. Production configuration is public, mainnet-only, same-origin
+for Backend calls, and starts with every transaction route denied. Bridge
+planning stays null. The real browser route therefore supports
+connection/capability acceptance before it authorizes any proof, signature,
+submission, or funds movement (D-054/D-055).
 
 ### `packages/bridge`
 
@@ -241,9 +248,11 @@ with its own Bank-owned receipt, never an automatic Bridge action.
 No production Ready planner exists today: the visible Ready route does not
 prove the fee allowance consumed separately by the pool. Production therefore
 locks new quotes, deposit instructions and the Bridge-to-Bank handoff. The
-offline demo supplies only a deterministic fake. Saved/imported signed evidence
-remains inspectable, refreshable and exportable without a wallet or planner,
-and no Bridge-to-shield correlation is stored.
+offline demo supplies only a deterministic fake. `BridgeStore` retains
+saved/imported signed evidence for later recovery, but production access to
+that UI remains behind D-055's wallet gate; only explicit demo/test
+compositions may inspect it without a wallet or planner. No Bridge-to-shield
+correlation is stored.
 
 **Must not:** import `@strkworld/privacy`, offer an OUT direction or a
 destination-token choice, or present arrival as private — bridging is a
@@ -316,8 +325,10 @@ One-directional by design.
 - Phaser emits semantic events back; it never reads React state and never
   calls Starknet.
 
-This means the game can run with no wallet connected — which is exactly what
-Phase 1 builds, and what makes the world independently testable.
+The explicit demo and injected test compositions can run with no wallet
+connected, which keeps the World independently testable. The production root
+is different: a supported connected wallet is its entry gate, so no World or
+lobby surface exists before wallet admission (D-055).
 
 Remote peers are retained state rather than one-shot commands. D-038 gives
 them a separate World-owned replaying source so a snapshot cannot be lost

@@ -230,7 +230,16 @@ function WalletSessionConnectSync({
     session.getSnapshot,
   );
   const previous = useRef(snapshot);
+  const mounted = useRef(false);
   useEffect(() => {
+    if (!mounted.current) {
+      mounted.current = true;
+      if (snapshot.phase === 'connected') {
+        void connect.connect();
+        previous.current = snapshot;
+        return;
+      }
+    }
     const prior = previous.current;
     switch (walletSessionConnectAction(prior, snapshot)) {
       case 'disconnect':

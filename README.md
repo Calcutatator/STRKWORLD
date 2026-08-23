@@ -130,6 +130,10 @@ STRKWORLD needs a wallet implementing the STRK20 Wallet API (`>= 0.10.3`).
 Today that means a browser extension. The code is written against the wallet
 standard interface rather than any specific wallet, so email/social login
 works the moment a web wallet ships the methods — with no code change here.
+In the production composition, connecting a Starknet mainnet wallet and
+passing its STRK20 capability check is the app entry gate: before admission the
+World, lobby and building panels are not mounted. Local demo/test compositions
+remain explicit non-production seams.
 
 See **Forward compatibility** in [`docs/SPEC.md`](docs/SPEC.md) for the rules
 that keep that true, and the CI test that enforces them.
