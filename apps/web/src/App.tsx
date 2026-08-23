@@ -1,5 +1,6 @@
 import type { EventBus, ShellEvents, WorldEvents } from '@strkworld/shared';
 import type { PrivacyOperations, WalletSession } from '@strkworld/privacy';
+import type { ConnectState } from './connect/connect-machine.js';
 import { COPY } from './copy.js';
 import { ErrorBoundary } from './ErrorBoundary.js';
 import { PrivacyProvider } from './privacy/PrivacyProvider.js';
@@ -39,6 +40,7 @@ export function App({
   bridge,
   operations,
   walletSession,
+  initialConnectState,
 }: {
   worldOut: EventBus<WorldEvents>;
   shellIn: EventBus<ShellEvents>;
@@ -47,6 +49,8 @@ export function App({
   operations?: PrivacyOperations;
   /** Production-only wallet lifecycle; demo composition leaves it absent. */
   walletSession?: WalletSession;
+  /** Capability verdict already established before the production tree mounted. */
+  initialConnectState?: ConnectState;
   /** Real composition supplies the service, account reader and planner together. */
   bridge?: Omit<BridgeProviderProps, 'children' | 'demo' | 'fallback' | 'build'>;
 }) {
@@ -57,6 +61,7 @@ export function App({
       <PrivacyProvider
         operations={operations}
         walletSession={walletSession}
+        initialConnectState={initialConnectState}
         demo={!operations}
         shellBus={shellIn}
         fallback={<Boot />}

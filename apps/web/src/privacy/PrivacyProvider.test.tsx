@@ -66,6 +66,27 @@ describe('PrivacyProvider', () => {
     expect(markup).toContain('disconnected');
   });
 
+  it('preserves an already-admitted production wallet capability on first render', () => {
+    const markup = renderToStaticMarkup(
+      <PrivacyProvider
+        operations={new FakePrivacyOperations()}
+        initialConnectState={{
+          name: 'connected',
+          capability: {
+            supportsStrk20: true,
+            walletApiVersion: '0.10.3',
+            registration: 'unknown',
+          },
+          registrationConfirmed: false,
+        }}
+      >
+        <Probe />
+      </PrivacyProvider>,
+    );
+
+    expect(markup).toBe('<p>connected</p>');
+  });
+
   it('refuses the demo seam in a production build', () => {
     const error = vi.spyOn(console, 'error').mockImplementation(() => {});
     expect(() =>

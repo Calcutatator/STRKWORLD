@@ -73,6 +73,8 @@ export interface PrivacyProviderProps {
   operations?: PrivacyOperations;
   /** Optional production account/network owner; never present in demo mode. */
   walletSession?: WalletSession;
+  /** Capability verdict already established by the production wallet gate. */
+  initialConnectState?: ConnectState;
   /**
    * Use the deterministic fake. Never true in a production build; this is for
    * local development, demos and stories.
@@ -95,6 +97,7 @@ export interface PrivacyProviderProps {
 export function PrivacyProvider({
   operations,
   walletSession,
+  initialConnectState,
   demo = false,
   shellBus = null,
   fallback = null,
@@ -144,6 +147,7 @@ export function PrivacyProvider({
     <PrivacyRuntime
       operations={resolved}
       walletSession={walletSession}
+      initialConnectState={initialConnectState}
       shellBus={shellBus}
       injectedSubmissionUncertainty={submissionUncertainty}
     >
@@ -155,17 +159,22 @@ export function PrivacyProvider({
 function PrivacyRuntime({
   operations,
   walletSession,
+  initialConnectState,
   shellBus,
   injectedSubmissionUncertainty,
   children,
 }: {
   operations: PrivacyOperations;
   walletSession?: WalletSession;
+  initialConnectState?: ConnectState;
   shellBus: EventBus<ShellEvents> | null;
   injectedSubmissionUncertainty?: SubmissionUncertainty;
   children: ReactNode;
 }) {
-  const connect = useMemo(() => createConnectFlow(operations), [operations]);
+  const connect = useMemo(
+    () => createConnectFlow(operations, initialConnectState),
+    [operations, initialConnectState],
+  );
   const connectState = useStore(connect.store);
   // Deliberately not keyed to `operations`: a receipt is evidence about the
   // chain, and it must not be discarded because the shell swapped seams.
@@ -235,7 +244,10 @@ function WalletSessionConnectSync({
     if (!mounted.current) {
       mounted.current = true;
       if (snapshot.phase === 'connected') {
-        void connect.connect();
+        const state = connect.store.getState();
+        if (state.name !== 'connected' && state.name !== 'not-registered') {
+          void connect.connect();
+        }
         previous.current = snapshot;
         return;
       }
