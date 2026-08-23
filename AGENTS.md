@@ -279,9 +279,11 @@ reports the effective source line. Additional fixtures prove in-word and
 escaped hashes are scanned, shell/YAML comments are scanned, and raw source is
 not erased. The focused header suite passes 33 tests. A source inventory using
 `rg` found only the excluded self-referential shell hit, and the static phase
-scans 305 files with no violation. The built/live phase still needs to run on
-the merged exact head. No browser, network, wallet, RPC, proof, signature,
-funds or transaction was used.*
+scans 315 files with no violation. The exact merged head then passed the
+production build, D-005 built/live checks with 30 responses, all 13
+invariants, tilemap validation, workspace typecheck and 94 files / 1,314
+tests. No browser, network, wallet, RPC, proof, signature, funds or
+transaction was used.*
 
 ### 2026-08-23 — Production wallet authority is one privacy-owned generation
 
