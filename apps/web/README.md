@@ -61,6 +61,13 @@ connection gets a fresh presence controller; disconnect, account loss or a
 wrong network tears that connected tree down and returns to the gate. Invalid
 production wallet configuration renders a generic failure and never falls
 through to practice balances.
+
+When testing the real-wallet path locally, set the non-secret
+`STRKWORLD_DEV_BACKEND_ORIGIN=http://127.0.0.1:8080` in the root `.env.local`
+after starting a local Backend listener. The Vite dev server keeps browser
+requests same-origin at `/api` and proxies them only to that explicit
+loopback origin. This proxy is not present in production builds and never
+accepts a cross-origin or credential-bearing target.
 `App` wires the pieces together and takes those seams as props, so a test can
 drive it against instances it controls:
 

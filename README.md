@@ -103,6 +103,14 @@ npm run dev --workspace=@strkworld/lobby
 npm run dev
 ```
 
+For local real-wallet work, start the Backend separately and set the
+non-secret `STRKWORLD_DEV_BACKEND_ORIGIN=http://127.0.0.1:8080` in
+`.env.local`. Vite then proxies the browser's same-origin `/api` calls to that
+explicit loopback listener and strips only the `/api` prefix. The dev proxy
+refuses cross-origin, credential-bearing and non-HTTP origins; it is absent
+from production builds. A missing listener remains a normal unavailable
+Backend, not a fallback to demo money or a direct browser call.
+
 ### Environment
 
 The web workspace is configured to load the repository-root `.env.local`.
