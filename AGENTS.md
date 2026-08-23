@@ -276,6 +276,27 @@ without a verification method is a rumour.
 
 Format: `### YYYY-MM-DD — short title` then what, why it matters, how verified.
 
+### 2026-08-23 — Browser fetch must retain its global receiver
+
+`BackendPrivacyClient` previously captured the browser's `fetch` method as a
+bare function and invoked it through the client instance. Window's Web IDL
+fetch rejects that receiver before a request is sent, so a live pool-config
+read surfaced the generic unreachable message even though the same endpoint
+returned 200 through the Vite proxy.
+
+The client now preserves injected test fetchers and binds its default fetcher
+to `globalThis` at construction. This changes no URL, payload, response
+schema, backend route, or financial behavior.
+
+*Verified:* a public `BackendPrivacyClient.config()` regression uses a
+receiver-sensitive browser-fetch double. It fails before the fix with
+`TypeError: Illegal invocation` and passes after binding; the live Chrome
+diagnostic captured the same pre-network failure from the Post Office pool
+read. Privacy tests pass 8 files / 146 tests; the full workspace passes 94
+files / 1,344 tests, all workspace typechecks, production build, 13
+invariants and diff hygiene. No wallet prompt, RPC, proof, signature, funds
+or transaction was used by the fix verification.
+
 ### 2026-08-23 — Bank signing ownership follows the confirmation attempt
 
 The Bank panel used one mutable `signing` boolean and unconditionally cleared
