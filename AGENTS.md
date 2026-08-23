@@ -250,6 +250,39 @@ without a verification method is a rumour.
 
 Format: `### YYYY-MM-DD — short title` then what, why it matters, how verified.
 
+### 2026-08-23 — D-005 raw-scans shell and YAML source
+
+The D-005 static header gate no longer tries to parse shell or YAML comments.
+Those syntaxes are executable/configuration grammars with nested `$()` scopes,
+odd backslash continuations, heredoc expansion, multiline quoted scalars and
+ANSI-C quoting; each new parser patch left another way to erase effective text
+before the forbidden-header patterns ran. Shell and YAML now use the scanner's
+`none` syntax, so `stripComments()` is an identity transform for those files
+and comments are scanned as source. The narrower comment parser remains for
+syntax the gate can own, such as JS block comments, HTML comments, SQL and
+Dockerfile hash comments.
+
+This is conservative for the actual repository. A raw inventory of every
+`.sh`, `.bash`, `.zsh`, `.ksh`, `.yml` and `.yaml` file found only the
+self-referential `scripts/check-invariants.sh` vocabulary; that file is already
+explicitly excluded from the static header scan. No accepted non-self-
+referential shell or YAML comment names a forbidden header, so raw scanning
+does not create a repository false positive. This does not claim that every
+future shell/YAML comment is inert: adding the forbidden vocabulary there is
+intentionally a failure that must be removed or moved to an owned comment
+syntax.
+
+*Verified:* red-first public `scanText()` fixtures cover nested command
+substitutions, three- and five-backslash continuations, an unquoted heredoc
+expansion, a YAML multiline double-quoted scalar and ANSI-C quoting; each
+reports the effective source line. Additional fixtures prove in-word and
+escaped hashes are scanned, shell/YAML comments are scanned, and raw source is
+not erased. The focused header suite passes 33 tests. A source inventory using
+`rg` found only the excluded self-referential shell hit, and the static phase
+scans 305 files with no violation. The built/live phase still needs to run on
+the merged exact head. No browser, network, wallet, RPC, proof, signature,
+funds or transaction was used.*
+
 ### 2026-08-20 — A fixed-room station snapshot cannot grant itself admission
 
 `createFixedRoomController()` publishes its current station presentation through
@@ -317,6 +350,10 @@ Local verification used no external network, wallet, RPC, proof, signature,
 funds or transaction.*
 
 ### 2026-08-20 — An in-word hash cannot hide an effective header directive
+
+**Superseded by “D-005 raw-scans shell and YAML source” above. The earlier
+grammar-patch verification remains historical; shell/YAML comment exemptions
+are no longer part of the gate.**
 
 The D-005 static header gate treated every unquoted `#` in hash-comment file
 types as the start of a comment. Bash and YAML both keep an in-word hash as

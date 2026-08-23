@@ -15,8 +15,10 @@
  * Two phases:
  *
  *   1. STATIC — no file that can take effect at runtime may *set* one of these
- *      headers. Real comments and markdown are exempt: the repo has to be able
- *      to talk about the rule in order to state it.
+ *      headers. Markdown and comments in syntaxes this gate understands are
+ *      exempt so the repo can talk about the rule in order to state it. Shell
+ *      and YAML are scanned raw, including comments, because this gate does
+ *      not own their expansion and scalar grammars.
  *
  *   2. LIVE — build apps/web for production, serve the real artifact with
  *      `vite preview`, and assert the actual responses carry neither header,
@@ -24,8 +26,8 @@
  *
  * COMMENT DETECTION IS FILE-TYPE AWARE, and that is load-bearing rather than
  * tidiness. An earlier version treated any line starting with one of a fixed
- * set of prefixes as a comment, which produced two defects, both now covered
- * by fixtures in scripts/check-headers.test.mjs:
+ * set of prefixes as a comment, which produced two defects, both covered by
+ * fixtures in scripts/check-headers.test.mjs:
  *
  *   - `--` was treated as a comment everywhere, so a shell or workflow line
  *     reading `--header "Cross-Origin-Opener-Policy: same-origin"` was skipped
@@ -36,8 +38,8 @@
  *
  * The stripper below tracks block-comment state across lines and quoted
  * strings within a line. Where it is unsure it errs toward scanning MORE text,
- * never less: an unknown file type gets no comment syntax at all, and an
- * unterminated quote leaves the rest of the line scanned.
+ * never less: an unknown file type gets no comment syntax at all, and shell and
+ * YAML get that same raw-scan treatment rather than a partial grammar.
  *
  * WHAT THIS DOES NOT PROVE. `vite preview` is not the production host. It
  * exercises this repo's own serving config (`preview.headers` / `server.headers`
@@ -102,7 +104,6 @@ const INERT_EXTENSIONS = new Set(['.md', '.lock', '.png', '.jpg', '.svg', '.ico'
 const SYNTAXES = {
   none: { line: [], block: [] },
   hash: { line: ['#'], block: [] },
-  shell: { line: ['#'], block: [], shellHashComments: true },
   slash: { line: ['//'], block: [['/*', '*/']] },
   html: { line: [], block: [['<!--', '-->']] },
   sql: { line: ['--'], block: [['/*', '*/']] },
@@ -116,8 +117,11 @@ const SYNTAX_BY_EXTENSION = {
   '.css': 'slash', '.scss': 'slash', '.less': 'slash',
   // tsconfig and friends are JSON with comments in practice.
   '.json': 'slash', '.json5': 'slash', '.jsonc': 'slash',
-  '.yml': 'hash', '.yaml': 'hash',
-  '.sh': 'shell', '.bash': 'shell', '.zsh': 'shell', '.ksh': 'shell',
+  // Shell and YAML are executable/configuration syntaxes with grammars this
+  // gate does not own. Scan them raw, including comments, rather than trying
+  // to model quote, expansion, heredoc and scalar rules here.
+  '.yml': 'none', '.yaml': 'none',
+  '.sh': 'none', '.bash': 'none', '.zsh': 'none', '.ksh': 'none',
   '.toml': 'hash', '.conf': 'hash', '.cfg': 'hash', '.properties': 'hash',
   '.env': 'hash', '.example': 'hash', '.dockerfile': 'hash', '.nginx': 'hash',
   '.py': 'hash', '.rb': 'hash', '.pl': 'hash',
@@ -150,22 +154,20 @@ export function syntaxFor(filePath) {
 
 /**
  * Returns one entry per input line holding only that line's NON-comment text.
- * Block-comment state carries across lines. Shell quotes do too because a
- * physical newline is valid inside them; other syntaxes remain line-local so
- * an unterminated quote cannot silently blank the rest of the file.
+ * Block-comment state carries across lines. Quote state is line-local so an
+ * unterminated quote cannot silently blank the rest of the file. Syntaxes
+ * whose grammar is not owned by this gate (currently shell and YAML) use
+ * `none`, which makes this function an identity transform for those files.
  */
 export function stripComments(text, syntax) {
   const lines = text.split('\n');
   const stripped = [];
   let openBlockCloseToken = null;
-  let shellContinuationInsideWord = false;
-  let shellQuote = null;
 
   for (const line of lines) {
     let code = '';
-    let quote = syntax.shellHashComments ? shellQuote : null;
+    let quote = null;
     let i = 0;
-    let lineCommentStarted = false;
 
     while (i < line.length) {
       if (openBlockCloseToken !== null) {
@@ -180,37 +182,24 @@ export function stripComments(text, syntax) {
 
       if (quote !== null) {
         code += char;
-        if (char === '\\' && !(syntax.shellHashComments && quote === "'")) {
+        if (char === '\\') {
           code += line[i + 1] ?? '';
           i += 2;
           continue;
         }
-        const closeQuote = quote === 'ansi-c' ? "'" : quote;
-        if (char === closeQuote) quote = null;
+        if (char === quote) quote = null;
         i += 1;
         continue;
       }
 
       if (char === '"' || char === "'" || char === '`') {
-        quote = Boolean(
-          syntax.shellHashComments
-          && char === "'"
-          && line[i - 1] === '$'
-          && !isEscaped(line, i - 1)
-        ) ? 'ansi-c' : char;
+        quote = char;
         code += char;
         i += 1;
         continue;
       }
 
-      if (syntax.line.some((token) => isLineCommentAt(
-        line,
-        i,
-        token,
-        syntax,
-        shellContinuationInsideWord,
-      ))) {
-        lineCommentStarted = true;
+      if (syntax.line.some((token) => isLineCommentAt(line, i, token))) {
         i = line.length;
         break;
       }
@@ -227,47 +216,17 @@ export function stripComments(text, syntax) {
     }
 
     stripped.push(code);
-    if (syntax.shellHashComments) shellQuote = quote;
-    shellContinuationInsideWord = Boolean(
-      syntax.shellHashComments
-      && !lineCommentStarted
-      && continuesShellWord(line),
-    );
   }
 
   return stripped;
 }
 
-function isLineCommentAt(line, index, token, syntax, shellContinuationInsideWord) {
+function isLineCommentAt(line, index, token) {
   if (!line.startsWith(token, index)) return false;
   if (token !== '#') return true;
-  if (syntax.shellHashComments) {
-    if (index === 0) return !shellContinuationInsideWord;
-    const boundary = line[index - 1];
-    if (/\s/.test(boundary)) return !isEscaped(line, index - 1);
-    return /[;&|()<>]/.test(boundary) && !isEscaped(line, index - 1);
-  }
   // Hash comments begin at a token boundary. Treating an in-word hash as the
-  // start of a comment can hide effective shell or workflow code after it.
+  // start of a comment can hide effective code after it.
   return index === 0 || /\s/.test(line[index - 1]);
-}
-
-function isEscaped(line, index) {
-  let backslashes = 0;
-  for (let cursor = index - 1; cursor >= 0 && line[cursor] === '\\'; cursor -= 1) {
-    backslashes += 1;
-  }
-  return backslashes % 2 === 1;
-}
-
-function continuesShellWord(line) {
-  let backslashes = 0;
-  for (let cursor = line.length - 1; cursor >= 0 && line[cursor] === '\\'; cursor -= 1) {
-    backslashes += 1;
-  }
-  if (backslashes % 2 === 0) return false;
-  const before = line[line.length - backslashes - 1];
-  return before !== undefined && !/[\s;&|()<>]/.test(before);
 }
 
 /**
