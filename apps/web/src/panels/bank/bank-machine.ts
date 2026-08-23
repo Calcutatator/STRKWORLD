@@ -282,8 +282,10 @@ export function createBankPanel(options: BankPanelOptions): BankPanel {
 
   const store = createStore<BankState>(initialState(initialMode, register));
   let prepared: PreparedBatch | null = null;
-  /** True from the moment the batch is handed to the wallet until it answers. */
-  let signing = false;
+  /** The confirmation attempt that currently owns the wallet handoff. */
+  let signingOwner: number | null = null;
+  /** The exact prepared batch owned by that confirmation attempt. */
+  let signingBatch: PreparedBatch | null = null;
   let readCount = 0;
 
   /**
@@ -385,8 +387,10 @@ export function createBankPanel(options: BankPanelOptions): BankPanel {
     // it cannot unring that bell, and the seam is entitled to treat a discarded
     // batch as unsubmittable — which would turn "the player left the room" into
     // "the transaction never happened", losing a settling payment. Drop the
-    // reference and let the submission finish into the receipt ledger.
-    if (signing) {
+    // reference and let the submission finish into the receipt ledger. The
+    // owner token and batch identity matter because a stale confirmation may
+    // settle after a newer batch has been prepared or entered the handoff.
+    if (prepared !== null && prepared === signingBatch) {
       prepared = null;
       return;
     }
@@ -753,7 +757,8 @@ export function createBankPanel(options: BankPanelOptions): BankPanel {
           });
           return;
         }
-        signing = true;
+        signingOwner = id;
+        signingBatch = batch;
         const result = await batch.confirm({
           feeCeiling: summary.feeCeiling,
           signal,
@@ -762,7 +767,10 @@ export function createBankPanel(options: BankPanelOptions): BankPanel {
             patch({ flow: { name: 'submitting', stage, message: stageCopy(stage), summary } });
           },
         });
-        signing = false;
+        if (signingOwner === id) {
+          signingOwner = null;
+          signingBatch = null;
+        }
         // Record first, unconditionally. The transaction has settled; the hash
         // is the only proof the player has, and whether their panel is still
         // mounted is not their decision — the world can unmount it mid-signing.
@@ -771,7 +779,7 @@ export function createBankPanel(options: BankPanelOptions): BankPanel {
           transactionHash: result.transactionHash,
           intents: summary.intents,
         });
-        prepared = null;
+        if (prepared === batch) prepared = null;
         accumulator.clear();
         // Any balance read still in flight predates this submission.
         invalidateReads();
@@ -784,7 +792,10 @@ export function createBankPanel(options: BankPanelOptions): BankPanel {
           notice: { tone: 'info', text: COPY.balance.changed },
         });
       } catch (error) {
-        signing = false;
+        if (signingOwner === id) {
+          signingOwner = null;
+          signingBatch = null;
+        }
         // The seam reports a ceiling breach as a generic failure, so ask the
         // pool whether that is what happened rather than matching on a string.
         // Once this attempt is stale there is no panel state left to classify,

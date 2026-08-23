@@ -72,6 +72,48 @@ function deferred<T>(): {
   return { promise, resolve, reject };
 }
 
+type ConfirmationGate = {
+  readonly entered: ReturnType<typeof deferred<void>>;
+  readonly settled: ReturnType<typeof deferred<void>>;
+};
+
+function confirmationGate(): ConfirmationGate {
+  return { entered: deferred<void>(), settled: deferred<void>() };
+}
+
+function gatePreparedConfirmations(operations: FakePrivacyOperations): {
+  readonly first: ConfirmationGate;
+  readonly second: ConfirmationGate;
+  readonly discardCounts: number[];
+} {
+  const first = confirmationGate();
+  const second = confirmationGate();
+  const discardCounts: number[] = [];
+  const gates = [first, second];
+  let preparedCount = 0;
+  const prepare = operations.prepare.bind(operations);
+  vi.spyOn(operations, 'prepare').mockImplementation(async (intents, signal) => {
+    const batch = await prepare(intents, signal);
+    const index = preparedCount++;
+    discardCounts.push(0);
+    const gate = gates[index];
+    if (!gate) return batch;
+    return {
+      ...batch,
+      async confirm(options) {
+        gate.entered.resolve(undefined);
+        await gate.settled.promise;
+        return batch.confirm(options);
+      },
+      discard() {
+        discardCounts[index] = (discardCounts[index] ?? 0) + 1;
+        batch.discard();
+      },
+    };
+  });
+  return { first, second, discardCounts };
+}
+
 afterEach(() => {
   vi.useRealTimers();
 });
@@ -1198,6 +1240,73 @@ describe('bank panel — one attempt at a time', () => {
 
     expect(panel.store.getState().batch).toHaveLength(1);
     expect(panel.store.getState().adding).toBe(false);
+  });
+});
+
+describe('bank panel — confirmation ownership', () => {
+  async function startTwoConfirmations() {
+    const receipts = createReceiptLedger();
+    const operations = fake();
+    const gates = gatePreparedConfirmations(operations);
+    const panel = await openPanel(operations, { receipts });
+    panel.setAmount('1');
+    await panel.addToBatch();
+    await panel.prepare();
+    const first = panel.confirm();
+    await gates.first.entered.promise;
+    panel.cancelPrepared();
+    await panel.prepare();
+    const second = panel.confirm();
+    await gates.second.entered.promise;
+    return { first, second, gates, operations, panel, receipts };
+  }
+
+  it('keeps a newer batch owned when an older confirmation resolves', async () => {
+    const { first, second, gates, operations, panel, receipts } = await startTwoConfirmations();
+
+    gates.first.settled.resolve(undefined);
+    await first;
+    gates.second.settled.reject(new PrivacyError('unknown', 'new confirmation failed'));
+    await second;
+
+    expect(gates.discardCounts[1]).toBe(1);
+    expect(operations.submitted).toHaveLength(1);
+    expect(receipts.pending('bank')).toHaveLength(1);
+  });
+
+  it('keeps a newer signing batch alive when an older confirmation rejects', async () => {
+    const { first, second, gates, operations, panel, receipts } = await startTwoConfirmations();
+
+    gates.first.settled.reject(new PrivacyError('unreachable', 'stale confirmation failed'));
+    await first;
+    panel.close();
+    gates.second.settled.resolve(undefined);
+    await second;
+
+    expect(operations.submitted).toHaveLength(1);
+    expect(receipts.pending('bank')).toHaveLength(1);
+  });
+
+  it('disposes a newer prepared batch that never enters wallet handoff', async () => {
+    const receipts = createReceiptLedger();
+    const operations = fake();
+    const gates = gatePreparedConfirmations(operations);
+    const panel = await openPanel(operations, { receipts });
+    panel.setAmount('1');
+    await panel.addToBatch();
+    await panel.prepare();
+    const first = panel.confirm();
+    await gates.first.entered.promise;
+
+    panel.cancelPrepared();
+    await panel.prepare();
+    panel.close();
+    gates.first.settled.resolve(undefined);
+    await first;
+
+    expect(gates.discardCounts[1]).toBe(1);
+    expect(operations.submitted).toHaveLength(1);
+    expect(receipts.pending('bank')).toHaveLength(1);
   });
 });
 
