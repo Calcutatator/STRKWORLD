@@ -5,4 +5,8 @@ describe('web environment lookup', () => {
   it('sets the repository root as the env directory named by the setup guide', () => {
     expect(config).toMatchObject({ envDir: '../..' });
   });
+
+  it('prebundles Phaser before the WorldHost lazy import can run', () => {
+    expect(config.optimizeDeps?.include).toContain('phaser');
+  });
 });

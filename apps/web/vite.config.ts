@@ -24,4 +24,12 @@ export default defineConfig({
   // copied root .env.local file.
   envDir: '../..',
   plugins: [react()],
+  // WorldHost loads Phaser through a lazy runtime boundary. Prebundling the
+  // large dependency at dev-server startup prevents Vite's on-demand
+  // optimizer from invalidating that boundary after the browser has already
+  // received its module URL (which otherwise leaves the WorldHost empty with
+  // a 504 Outdated Optimize Dep response).
+  optimizeDeps: {
+    include: ['phaser'],
+  },
 });
