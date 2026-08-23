@@ -41,7 +41,9 @@ The Bank's private transfer can hide who paid whom, but a Bridge deposit and any
 
 Status: headless implementation complete 2026-08-23 under D-054; awaiting the
 manual Ready discovery/connection/capability gate below. No funded route is
-enabled.
+enabled. A first Chrome preflight reached the live in-game picker in the Post
+Office and discovered MetaMask only; Ready was absent, so no provider was
+selected and the manual gate stopped before sharing an account.
 
 1. Record a decision approving a privacy-owned `WalletSession` port. Web may import that port, but it must not import wallet libraries or implement wallet capability/business logic.
 2. Add `packages/privacy/src/wallet-api/session.ts` and tests. The session owns:

@@ -286,10 +286,14 @@ pin every deny-all and fail-closed clause; the Shell architecture test caught
 and then rejected an eager Starknet import. The complete workspace passes 94
 files / 1,297 tests with two workers; every workspace typecheck, the production
 build, all 13 invariants, the D-005 static/live header gate, tilemap check and
-diff hygiene pass. Local verification used no browser, external network, live
-wallet, RPC, private-balance read, proof, signature, submission, funds or
-transaction. Rendered Ready behavior and every funded route remain explicit
-later gates.*
+diff hygiene pass. That headless verification used no browser, external
+network, live wallet, RPC, private-balance read, proof, signature, submission,
+funds or transaction. A later Chrome preflight loaded the local real-wallet
+build, entered the Post Office and rendered the explicit discovered-wallet
+picker; the connected profile exposed MetaMask only and no Ready choice. No
+provider was selected, account shared, wallet prompt opened, capability queried,
+balance read, proof, signature, submission, funds or transaction used. Rendered
+Ready behavior and every funded route remain explicit later gates.*
 
 ### 2026-08-20 — The Backend launcher admits only a regular entry file
 
