@@ -15,6 +15,16 @@ describe('web environment lookup', () => {
     expect(resolved).toMatchObject({ envDir: '../..' });
   });
 
+  it('prebundles Phaser before the WorldHost lazy import can run', async () => {
+    const resolved = await config({
+      command: 'serve',
+      mode: 'development',
+      isSsrBuild: false,
+      isPreview: false,
+    });
+
+    expect(resolved.optimizeDeps?.include).toContain('phaser');
+  });
   it('does not configure a development backend proxy for production builds', async () => {
     const resolved = await config({
       command: 'build',
