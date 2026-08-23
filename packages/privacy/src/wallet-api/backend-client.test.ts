@@ -9,6 +9,27 @@ function response(body: unknown, status = 200): Response {
 }
 
 describe('BackendPrivacyClient', () => {
+  it('calls the default browser fetch with its required global receiver', async () => {
+    const browserFetch = vi.fn(function (this: unknown, _url: string, _init?: RequestInit) {
+      if (this !== globalThis) throw new TypeError('Illegal invocation');
+      return Promise.resolve(response({
+        feeAmount: '6',
+        feeToken: '0x4718',
+        proofValidityBlocks: 450,
+        noteMaturityBlocks: 10,
+      }));
+    });
+    vi.stubGlobal('fetch', browserFetch);
+
+    try {
+      const client = new BackendPrivacyClient('/api');
+      await expect(client.config()).resolves.toMatchObject({ feeAmount: 6n });
+      expect(browserFetch).toHaveBeenCalledWith('/api/v1/rpc/pool-config', expect.anything());
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
   it('maps the JSON wire format into bigint privacy ports', async () => {
     const fetcher = vi.fn(async (url: string) => {
       if (url.endsWith('/v1/rpc/pool-config')) {

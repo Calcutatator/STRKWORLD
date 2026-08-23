@@ -11,10 +11,20 @@ type FetchLike = (input: string, init?: RequestInit) => Promise<Response>;
 
 /** Browser client for the narrow, no-logging backend API. */
 export class BackendPrivacyClient implements PoolReadClient, PrivateSubmissionGateway {
+  private readonly baseUrl: string;
+  private readonly fetcher: FetchLike;
+
   constructor(
-    private readonly baseUrl: string,
-    private readonly fetcher: FetchLike = fetch,
-  ) {}
+    baseUrl: string,
+    fetcher?: FetchLike,
+  ) {
+    this.baseUrl = baseUrl;
+    // Window fetch is a Web IDL method and rejects a non-Window receiver.
+    // Calling it through this object's property would bind `this` to the
+    // client, so retain injected fakes unchanged and bind the browser default
+    // to the global receiver at the boundary.
+    this.fetcher = fetcher ?? globalThis.fetch.bind(globalThis);
+  }
 
   async config(signal?: AbortSignal): Promise<PoolConfig> {
     const value = await this.post('/v1/rpc/pool-config', { v: 1 }, signal);
