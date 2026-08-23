@@ -117,6 +117,10 @@ put on hold in 2025 and ships in no browser.
 
 **Decision.** Never set them. Enforce with a header test in CI.
 
+The static half of that test scans shell and YAML source raw, including
+comments. It deliberately does not attempt to model their expansion and
+scalar grammars; comment exemptions are limited to syntaxes the gate can own.
+
 **Consequences.** We forgo in-browser multithreaded WASM, which we do not
 need because we do no proving. If anyone later adds a WASM dependency wanting
 threads, it becomes threads *or* web wallets — permanently, and silently.
