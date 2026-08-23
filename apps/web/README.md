@@ -61,6 +61,16 @@ connection gets a fresh presence controller; disconnect, account loss or a
 wrong network tears that connected tree down and returns to the gate. Invalid
 production wallet configuration renders a generic failure and never falls
 through to practice balances.
+
+The browser keeps every financial route denied unless the build supplies one
+complete public transfer tuple: `VITE_STRK20_TRANSFER_ENABLED=true`, a
+positive `VITE_STRK20_TRANSFER_MAX_INTENTS`, a positive
+`VITE_STRK20_TRANSFER_MAX_RELAY_FEE`, and one or more exact felt values in
+`VITE_STRK20_TRANSFER_ALLOWED_TOKENS`. Missing, zero, malformed, duplicate or
+disabled values fail closed to the deny-all policy without exposing the
+rejected value. This is browser-side admission only; the backend must apply
+its own route, token, queue and sponsorship checks. Shield, unshield and swap
+remain denied by this composition.
 `App` wires the pieces together and takes those seams as props, so a test can
 drive it against instances it controls:
 
