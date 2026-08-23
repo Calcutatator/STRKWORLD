@@ -110,13 +110,15 @@ rule applies to visual and interactive browser acceptance of the game.
 ### Merged work is live on the current local build
 
 The project lead owns the shared local runtime. After merging a runtime change,
-fast-forward the canonical checkout to `origin/main`, keep the web app and any
-required local services (including the lobby) running, and make the current
-build available at `http://localhost:5173/`. When the user has explicitly
-authorized browser automation, reload that browser against the current build;
-otherwise give the user the immediate reload/test handoff. A merged PR is not
-complete while the shared checkout or dev server still points at an older
-branch or build. Do not make the user discover or repair that drift.
+fast-forward the canonical checkout to `origin/main`, restart the affected dev
+server(s) from that checkout (do not rely on HMR surviving the fast-forward),
+keep the web app and any required local services (including the lobby) running,
+and verify the served module/current behavior before making the build available
+at `http://localhost:5173/`. When the user has explicitly authorized browser
+automation, reload that browser against the current build; otherwise give the
+user the immediate reload/test handoff. A merged PR is not complete while the
+shared checkout or dev server still points at an older branch or build. Do not
+make the user discover or repair that drift.
 
 ### Questions for the user are explicit gates
 
@@ -255,6 +257,19 @@ empty shell to fetchers, so a 200 there means nothing.
 ---
 
 ## 6. Findings log
+
+### 2026-08-23 — A fast-forward can leave Vite serving pre-merge modules
+
+Fast-forwarding the canonical checkout while its Vite process remains alive
+can leave the browser receiving transformed modules from before the merge;
+HMR is not a sufficient post-merge freshness guarantee. After a fast-forward,
+restart the affected dev server from the canonical checkout and verify a
+served module or other current-build behavior before browser acceptance.
+
+*Verified:* after the checkout advanced, the existing local Vite process still
+served the pre-merge `main.tsx`; restarting Vite from the canonical checkout
+then served the current source and the wallet-gated application rendered the
+expected current behavior.
 
 Append what you learn. Newest first. Include how you verified it — a finding
 without a verification method is a rumour.
