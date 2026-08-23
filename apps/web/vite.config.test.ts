@@ -1,4 +1,4 @@
-import { createServer as createHttpServer } from 'node:http';
+import { createServer as createHttpServer, get as httpGet } from 'node:http';
 import { createServer as createViteServer } from 'vite';
 import { describe, expect, it } from 'vitest';
 import config, { createLocalBackendProxy, createViteConfig } from './vite.config';
@@ -45,6 +45,7 @@ describe('web environment lookup', () => {
     expect(proxy).toBeDefined();
     expect(proxy?.rewrite?.('/api/v1/private/fees')).toBe('/v1/private/fees');
     expect(proxy?.rewrite?.('/api')).toBe('/');
+    expect(proxy?.rewrite?.('/api?x=1')).toBe('/?x=1');
     expect(proxy?.rewrite?.('/apis/private/fees')).toBe('/apis/private/fees');
   });
 
@@ -52,7 +53,7 @@ describe('web environment lookup', () => {
     const development = createViteConfig('serve', 'http://127.0.0.1:8080');
     const production = createViteConfig('build', 'http://127.0.0.1:8080');
 
-    expect(development.server?.proxy).toHaveProperty('^/api(?:/|$)');
+    expect(development.server?.proxy).toHaveProperty('^/api(?:[/?]|$)');
     expect(production.server).toBeUndefined();
   });
 
@@ -60,6 +61,7 @@ describe('web environment lookup', () => {
     const received: string[] = [];
     const backend = createHttpServer((request, response) => {
       received.push(request.url ?? '');
+      response.setHeader('connection', 'close');
       response.end('fake-backend');
     });
     await new Promise<void>((resolve) => backend.listen(0, '127.0.0.1', resolve));
@@ -87,9 +89,10 @@ describe('web environment lookup', () => {
       if (!viteAddress || typeof viteAddress === 'string') throw new Error('Vite did not bind.');
       const origin = `http://127.0.0.1:${viteAddress.port}`;
 
-      expect(await fetch(`${origin}/api`).then((response) => response.text())).toBe('fake-backend');
-      expect(await fetch(`${origin}/apis`).then((response) => response.text())).not.toBe('fake-backend');
-      expect(received).toEqual(['/']);
+      expect(await getText(`${origin}/api?x=1`)).toBe('fake-backend');
+      expect(await getText(`${origin}/apis`)).not.toBe('fake-backend');
+      expect(await getText(`${origin}/api2`)).not.toBe('fake-backend');
+      expect(received).toEqual(['/?x=1']);
     } finally {
       await vite.close();
       await new Promise<void>((resolve, reject) => {
@@ -98,3 +101,17 @@ describe('web environment lookup', () => {
     }
   });
 });
+
+function getText(url: string): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const request = httpGet(url, { agent: false }, (response) => {
+      let body = '';
+      response.setEncoding('utf8');
+      response.on('data', (chunk: string) => {
+        body += chunk;
+      });
+      response.on('end', () => resolve(body));
+    });
+    request.on('error', reject);
+  });
+}

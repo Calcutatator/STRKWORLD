@@ -2,7 +2,7 @@ import react from '@vitejs/plugin-react';
 import { defineConfig, loadEnv, type UserConfig } from 'vite';
 
 const REPOSITORY_ROOT = new URL('../../', import.meta.url);
-const LOCAL_API_PROXY_CONTEXT = '^/api(?:/|$)';
+const LOCAL_API_PROXY_CONTEXT = '^/api(?:[/?]|$)';
 
 /**
  * Resolve the development-only same-origin API proxy.
@@ -38,7 +38,11 @@ export function createLocalBackendProxy(origin: string | undefined) {
   return {
     target: parsed.origin,
     changeOrigin: false,
-    rewrite: (path: string) => path.replace(/^\/api(?=\/|$)/, '') || '/',
+    rewrite: (path: string) => {
+      const rewritten = path.replace(/^\/api(?=\/|\?|$)/, '');
+      if (rewritten === '') return '/';
+      return rewritten.startsWith('?') ? `/${rewritten}` : rewritten;
+    },
   };
 }
 
