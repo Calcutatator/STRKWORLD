@@ -158,6 +158,99 @@ describe('Exchange machine', () => {
     expect(remount.store.getState().flow).toEqual({ name: 'submitted', transactionHash: '0xlate' });
   });
 
+  it('does not let a stale rejected confirmation discard a newer signing batch', async () => {
+    const first = deferred<{ transactionHash: string }>();
+    const second = deferred<{ transactionHash: string }>();
+    const firstEntered = deferred<void>();
+    const secondEntered = deferred<void>();
+    let preparedCount = 0;
+    let secondDiscarded = 0;
+    const canonical = {
+      kind: 'swap' as const,
+      tokenIn: strk!.token,
+      tokenOut: eth!.token,
+      amountIn: 10n ** 18n,
+      minAmountOut: 1_990000000000000000n,
+    };
+    const batch = (
+      result: ReturnType<typeof deferred<{ transactionHash: string }>>,
+      entered: ReturnType<typeof deferred<void>>,
+      discard: () => void,
+    ): PreparedBatch => ({
+      intents: [canonical],
+      poolFee: 6n * 10n ** 18n,
+      gasEstimate: 2n * 10n ** 15n,
+      totalCost: 6_002000000000000000n,
+      warnings: [],
+      promptCount: 1,
+      swapReview: {
+        expectedAmountOut: 2n * 10n ** 18n,
+        minimumAmountOut: canonical.minAmountOut,
+        slippageBps: 50,
+        expiresAt: farFuture,
+      },
+      confirm: async () => {
+        entered.resolve();
+        return result.promise;
+      },
+      discard,
+    });
+    const firstBatch = batch(first, firstEntered, () => {});
+    const secondBatch = batch(second, secondEntered, () => { secondDiscarded += 1; });
+    const operations: PrivacyOperations = {
+      capability: async () => ({ supportsStrk20: true, walletApiVersion: '0.10.3', registration: 'registered' }),
+      poolConfig: async () => ({ feeAmount: 6n * 10n ** 18n, feeToken: strk!.token, proofValidityBlocks: 450, noteMaturityBlocks: 10 }),
+      balances: async () => [{ token: strk!.token, total: 100n * 10n ** 18n, spendable: 100n * 10n ** 18n, maturing: 0n, maturityKnown: true }],
+      recipientStatus: async () => 'registered',
+      prepare: async () => preparedCount++ === 0 ? firstBatch : secondBatch,
+    };
+    const machine = createExchangePanel({ operations, receipts: createReceiptLedger(), canStartFinancialAction: () => true });
+    await machine.open(); await machine.refreshBalances(); machine.setAmount('1'); await machine.prepare();
+
+    const confirmingFirst = machine.confirm();
+    await firstEntered.promise;
+    machine.close();
+    await machine.open(); await machine.refreshBalances(); machine.setAmount('1'); await machine.prepare();
+    const confirmingSecond = machine.confirm();
+    await secondEntered.promise;
+
+    first.reject(new PrivacyError('unknown', 'stale failure'));
+    await confirmingFirst;
+    machine.close();
+
+    expect(secondDiscarded).toBe(0);
+    second.resolve({ transactionHash: '0xsecond' });
+    await confirmingSecond;
+  });
+
+  it('keeps a newer prepared batch releasable after a stale confirmation resolves', async () => {
+    const first = deferred<{ transactionHash: string }>();
+    const second = deferred<{ transactionHash: string }>();
+    const firstEntered = deferred<void>();
+    const secondEntered = deferred<void>();
+    let preparedCount = 0;
+    let secondDiscarded = 0;
+    const operations = controlledOperations(first.promise, undefined, firstEntered.resolve);
+    const firstBatch = (await operations.prepare([])) as PreparedBatch;
+    const secondBatch = { ...firstBatch, confirm: async () => { secondEntered.resolve(); return second.promise; }, discard: () => { secondDiscarded += 1; } } satisfies PreparedBatch;
+    operations.prepare = async () => preparedCount++ === 0 ? firstBatch : secondBatch;
+    const machine = createExchangePanel({ operations, receipts: createReceiptLedger(), canStartFinancialAction: () => true });
+    await machine.open(); await machine.refreshBalances(); machine.setAmount('1'); await machine.prepare();
+    const confirmingFirst = machine.confirm();
+    await firstEntered.promise;
+    machine.close();
+    await machine.open(); await machine.refreshBalances(); machine.setAmount('1'); await machine.prepare();
+    const confirmingSecond = machine.confirm();
+    await secondEntered.promise;
+
+    first.resolve({ transactionHash: '0xfirst' });
+    await confirmingFirst;
+    second.reject(new PrivacyError('unknown', 'new failure'));
+    await confirmingSecond;
+
+    expect(secondDiscarded).toBe(1);
+  });
+
   it('promotes a late hashless uncertainty after close and never permits a blind second confirm', async () => {
     const result = deferred<{ transactionHash: string }>(); const errors: string[] = [];
     const entered = deferred<void>(); let confirms = 0;
