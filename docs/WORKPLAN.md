@@ -312,11 +312,17 @@ something to mount.
 **Completed baseline:** the event bus, connect/capability rooms, route gate,
 Bank panel, batch accumulator, canonical disclosures, `ConfirmGate`, stale
 write guards, session receipt ledger, and D-037's explicit lobby lifecycle with
-truthful solo fallback. React owns wallet and financial state; Phaser receives
-presentation data and never reads back.
+truthful solo fallback. D-055 now puts a production wallet-entry gate above
+that composition: before a connected mainnet account passes the STRK20
+capability check, `App`, Phaser, presence and building panels do not mount.
+React owns wallet and financial state; Phaser receives presentation data and
+never reads back.
 
-**Current frontier:** D-019/D-037 Shell composition and the D-038 adapter are
-complete. The retained source clears on drop/replacement/destroy and suppresses
+**Current frontier:** D-055's production gate is headlessly complete: explicit
+wallet selection is required, the connected tree owns a fresh presence
+controller, and account loss, disconnect or wrong-network state tears it down
+and returns to the gate. D-019/D-037 behavior remains in force once admitted.
+The retained source clears on drop/replacement/destroy and suppresses
 pre-welcome self snapshots until the server-minted ID permits filtering. The
 remaining D-038 gate is the user-run two-browser acceptance described in the
 World lane. Do not widen `ShellEvents`, expose the LobbyClient to Phaser, or
@@ -342,7 +348,9 @@ acceptance remains user-run at `http://localhost:5173/`.
 **D-043 complete offline:** the manual-only Bridge machine and room retain the
 concrete connected account beside the privacy seam, bind every new quote to its
 address, keep the signed Bridge record in browser-local Bridge storage, and
-allow recovery inspection without a wallet. New quotes require both a matching
+retain BridgeStore evidence for later recovery, but production access to the
+Bridge UI is behind D-055's wallet gate; only explicit demo/test compositions
+may inspect it without a wallet. New quotes require both a matching
 account and the separately injected public-shield planner
 capability; before deposit instructions, preflight it against the signed
 minimum output. Settlement uses provider-reported `strkReceived`, rechecks

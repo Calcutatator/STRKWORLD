@@ -50,12 +50,17 @@ disappear is accepted for v1 (D-019).
 
 ## Composition
 
-`main.tsx` is the composition root. It creates the two buses and the explicit
-presence controller once, at module scope, and mounts `App` inside `StrictMode`.
-Production always constructs the privacy-owned real-wallet session; local
-development uses it only when `VITE_WALLET_MODE=real`, otherwise retaining the
-explicit deterministic demo. Invalid production wallet configuration renders a
-generic failure and never falls through to practice balances.
+`main.tsx` is the composition root. It creates the two buses once, at module
+scope, and mounts the production wallet gate inside `StrictMode`. Production
+always constructs the privacy-owned real-wallet session; local development
+uses it only when `VITE_WALLET_MODE=real`, otherwise retaining the explicit
+deterministic demo. Before a mainnet wallet is connected and passes the STRK20
+capability check, production does not mount `App`, Phaser, presence or
+building panels. Each admitted
+connection gets a fresh presence controller; disconnect, account loss or a
+wrong network tears that connected tree down and returns to the gate. Invalid
+production wallet configuration renders a generic failure and never falls
+through to practice balances.
 `App` wires the pieces together and takes those seams as props, so a test can
 drive it against instances it controls:
 
@@ -63,7 +68,6 @@ drive it against instances it controls:
 // main.tsx — the two buses, created once and never again.
 const worldOut = createEventBus<WorldEvents>();   // world emits, shell listens
 const shellIn = createEventBus<ShellEvents>();    // shell emits, world listens
-const presence = createPresenceController({ endpoint: lobbyEndpoint() });
 const walletSession = createProductionWalletSession(parseProductionWalletConfig(import.meta.env));
 createRoot(root).render(
   <StrictMode>
@@ -71,13 +75,14 @@ createRoot(root).render(
       session={walletSession}
       worldOut={worldOut}
       shellIn={shellIn}
-      presence={presence}
+      createPresence={() => createPresenceController({ endpoint: lobbyEndpoint() })}
     />
   </StrictMode>,
 );
 
 // ProductionRoot/App.tsx — the tree.
 <WalletSessionProvider session={walletSession}>
+{/* ProductionRoot renders only this gate until the snapshot is connected. */}
 <PrivacyProvider operations={walletSession.operations} walletSession={walletSession} shellBus={shellIn}>
   <BridgeProvider account={snapshot.account} readAccount={walletSession.readAccount} planner={null}>
     <main className="strkworld">

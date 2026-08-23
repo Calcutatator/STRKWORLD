@@ -1266,7 +1266,9 @@ storage.
 
 ## D-037 — Lobby failure degrades to explicit solo play
 
-**2026-08-18 · Accepted · completes D-019's unavailable-path behavior**
+**2026-08-18 · Accepted · SUPERSEDED in part by D-055 for the production
+entry path; connected-app behavior remains · completes D-019's unavailable-
+path behavior**
 
 **Context.** D-019 removes an avatar from lobby presence while the player is
 inside a building, and D-030 assigns the `LobbyClient` lifecycle to the Shell.
@@ -1280,11 +1282,13 @@ non-financial presence outage into an outage for navigation, private balance
 access and financial actions. Silently continuing would be worse: the player
 would reasonably believe multiplayer presence was active when it was not.
 
-**Decision.** Lobby availability is independent of wallet and financial
-availability. If the lobby is missing or unreachable, STRKWORLD remains fully
-playable in **solo mode** and shows a clear multiplayer-unavailable status. It
-never invents peers or claims a connection exists. A configured endpoint gets
-an explicit manual reconnect control; there is no automatic retry loop.
+**Decision.** Once the production wallet entry gate admits the player, lobby
+availability is independent of financial availability. If the lobby is missing
+or unreachable, STRKWORLD remains fully playable in **solo mode** and shows a
+clear multiplayer-unavailable status. It never invents peers or claims a
+connection exists. A configured endpoint gets an explicit manual reconnect
+control; there is no automatic retry loop. D-055 supersedes only the earlier
+claim that this solo-capable World could mount before wallet admission.
 
 The presence lifecycle has only the states needed to make that truthful:
 connecting, connected, suspended and unavailable. The Shell connects only
@@ -1599,7 +1603,10 @@ unchanged Bank/Post Office behavior. Rendered acceptance remains user-owned.
 
 ## D-043 — Bridge v1 is manual, direct and wallet-bound; exact shielding fails closed
 
-**2026-08-18 · Accepted and implemented offline; production fee-aware planning remains a D-028 funded gate · completes D-009/D-012's v1 composition choice and adds no method to the D-036-frozen `PrivacyOperations` seam**
+**2026-08-18 · Accepted and implemented offline · SUPERSEDED in part by D-055
+for production no-wallet entry; production fee-aware planning remains a D-028
+funded gate · completes D-009/D-012's v1 composition choice and adds no method
+to the D-036-frozen `PrivacyOperations` seam**
 
 **Context.** The independent Bridge package already owns a signed, resumable
 1Click deposit record, but the game has no Bridge room or Shell controller.
@@ -1631,13 +1638,16 @@ explicit player action under D-004.
 The real composition root retains the concrete connected Wallet API account
 alongside `PrivacyOperations`. A new quote binds its Starknet recipient to that
 account's validated address; the player cannot edit it. Address comparisons use
-validated Starknet field-element equality, not display spelling. A recovered
-or imported record may still be refreshed, exported and inspected without a
-wallet, but no new quote or shield continuation is allowed unless the active
-account matches the signed recipient. An account switch blocks new quotes and
-shielding immediately, but preserves the old recipient-bound record for status
-refresh, inspection and export. It never retargets or silently discards that
-evidence.
+validated Starknet field-element equality, not display spelling. A recovered or
+imported record remains structurally refreshable, exportable and inspectable
+without a wallet in the BridgeStore and explicit offline/test composition, but
+D-055 keeps the production UI behind the wallet entry gate. No production
+screen is reachable to exercise that record without an admitted wallet. No new
+quote or shield continuation is allowed unless the active account matches the
+signed recipient. An account switch blocks new quotes and shielding
+immediately, but preserves the old recipient-bound record for status refresh,
+inspection and export when the production gate is later re-admitted. It never
+retargets or silently discards that evidence.
 
 `BridgeRecord` in the browser-local `BridgeStore` is the authoritative bridge
 progress and dispute-evidence record. It is sensitive, survives reload, may be
@@ -1668,8 +1678,10 @@ There are two deliberate phases. Before a real new provider quote or its
 deposit instructions, Shell requires a matching active account and an injected
 production planner that preflights the signed minimum output; a missing, failed
 or non-positive plan keeps that real handoff locked. Saved or imported signed
-evidence remains inspectable, refreshable and exportable without that planner
-or an active account. After 1Click
+evidence remains structurally retained without that planner or an active
+account, but production access to its UI still requires the D-055 wallet gate;
+explicit offline/test compositions may inspect it without a wallet. After
+1Click
 reports `SUCCESS`, Shell uses the actual validated `strkReceived`, rechecks the
 active account and requests a fresh maximum-shield plan. It revalidates that
 plan at the Bank commit point, and the ordinary Bank fee ceiling and
@@ -2332,3 +2344,52 @@ explicit local-development opt-in, but every transaction route remains denied.
 Rendered Ready discovery, connection, rejection, network/account change and
 capability behavior remain the next manual gate; no live wallet or funded claim
 is accepted by this status.
+
+---
+
+## D-055 — A supported connected wallet is the app entry gate
+
+**2026-08-23 · Accepted by the user · supersedes D-037's wallet-independent
+lobby availability and qualifies D-043's production no-wallet recovery claim
+for the production app entry path**
+
+**Context.** D-054 gave the Shell a privacy-owned production wallet session,
+but `ProductionRoot` still mounted the complete `App` before that session had
+an account. The World therefore booted Phaser, and its first street movement
+could create a lobby client, while the wallet picker appeared only inside a
+building or panel. That made wallet connection an in-game capability prompt
+instead of the access gate the product requires.
+
+**Decision.** In the production composition, a connected wallet on the
+expected Starknet mainnet must also pass the existing STRK20 capability
+check before it is admitted as a supported wallet and before STRKWORLD opens.
+Before the session reports `phase: 'connected'` with a valid account and the
+capability flow reports support, the root renders only wallet discovery,
+explicit wallet selection and connection/recovery UI.
+The World/Phaser tree, lobby/presence controller and building panels are not
+mounted and no lobby connection can start. A player must explicitly choose a
+discovered wallet; discovery order never authorizes a connection.
+
+When the session loses its account, disconnects, disappears, or reports the
+wrong network, the connected app is unmounted and its current World and lobby
+owners are torn down. A later valid connection creates a fresh presence owner
+and mounts a fresh app. The existing demo and injected test compositions may
+still mount without a wallet because they are explicit non-production seams;
+this decision changes only the production root. D-043's BridgeStore retention
+and offline/test inspection semantics remain valid, but its no-wallet UI-
+recovery language is not a production promise while this gate is in force.
+
+**Consequences.** The initial browser surface is a wallet gate rather than a
+walkable solo city. The lobby remains independently privacy-minimal once the
+player has entered the connected app, but it is no longer available before
+wallet admission. Account/network generations continue to be owned by
+`packages/privacy`; Web consumes only its sanitized snapshot. No wallet key,
+note, proof, signature, balance, RPC result or transaction is introduced into
+the gate. Rendered wallet-prompt acceptance and funded mainnet actions remain
+separate explicit gates under D-028 and D-054.
+
+**Status.** Implemented in `apps/web/src/production/ProductionRoot.tsx` with
+public root/snapshot and client lifecycle regressions. Unsupported capability,
+unreachable and rejected capability results remain at the entry gate; only a
+supported result admits the connected tree. No browser wallet, RPC, proof,
+signature, funds or transaction was used by this implementation.

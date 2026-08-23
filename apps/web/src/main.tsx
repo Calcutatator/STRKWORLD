@@ -5,7 +5,7 @@ import type { ShellEvents, WorldEvents } from '@strkworld/shared';
 import { createEventBus } from './bus/event-bus.js';
 import { App } from './App.js';
 import './styles.css';
-import { createPresenceController } from './presence/presence-controller.js';
+import { createPresenceController, type PresenceController } from './presence/presence-controller.js';
 import { lobbyEndpoint } from './presence/config.js';
 import { installPresenceTeardown } from './presence/lifecycle.js';
 import { parseProductionWalletConfig, usesProductionWallet } from './production/config.js';
@@ -27,12 +27,22 @@ import { ProductionRoot } from './production/ProductionRoot.js';
  */
 const worldOut = createEventBus<WorldEvents>();
 const shellIn = createEventBus<ShellEvents>();
-const presence = createPresenceController({ endpoint: lobbyEndpoint() });
 const hot = (import.meta as ImportMeta & { hot?: { dispose(callback: () => void): void } }).hot;
 const environment = (import.meta as ImportMeta & {
   env: Record<string, string | boolean | undefined>;
 }).env;
-installPresenceTeardown(presence, typeof window === 'undefined' ? undefined : window, hot);
+let activePresence: PresenceController | null = null;
+const createPresence = (): PresenceController => {
+  const next = createPresenceController({ endpoint: lobbyEndpoint() });
+  activePresence = next;
+  return next;
+};
+const presenceLifecycle = {
+  destroy: async () => {
+    await activePresence?.destroy();
+  },
+};
+installPresenceTeardown(presenceLifecycle, typeof window === 'undefined' ? undefined : window, hot);
 
 let walletSession: WalletSession | null = null;
 const container = document.getElementById('root');
@@ -73,7 +83,7 @@ if (usesProductionWallet(environment)) {
               session={walletSession}
               worldOut={worldOut}
               shellIn={shellIn}
-              presence={presence}
+              createPresence={createPresence}
             />
           </StrictMode>,
         );
@@ -85,6 +95,7 @@ if (usesProductionWallet(environment)) {
     renderWalletFailure();
   }
 } else {
+  const presence = createPresence();
   root.render(
     <StrictMode>
       <App worldOut={worldOut} shellIn={shellIn} presence={presence} />
