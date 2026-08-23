@@ -84,6 +84,26 @@ express atomic batches, fee validation before proving, cancellation, or
 backend-delayed submission. D-028 keeps rendered prompt sequence, latency and
 live-paymaster artifact acceptance on the mandatory pre-launch checklist.
 
+### Production wallet session
+
+`WalletSession` is the privacy-owned production lifecycle around that adapter.
+It discovers Wallet Standard providers dynamically, requires an explicit
+provider choice, connects with `WalletAccountV6`, and publishes only a frozen
+choice/account/network snapshot to Web. It never branches on provider identity.
+
+One generation owns each connected account and its operations. Account,
+network, disconnect, wallet-removal, and newer-connect events retire the old
+generation. A prepared batch is wrapped so it is discarded and rejected before
+an old account can begin confirmation. The stable operations facade means Web
+does not recreate its financial composition or import wallet libraries when a
+provider changes.
+
+Production currently constructs the session with a deny-all route policy:
+zero intents, zero relay fee, no enabled routes, and empty token allowlists.
+That permits discovery, connection, capability and deliberate read acceptance
+without authorizing a proof, signature or submission. Enabling even the first
+transfer route remains a separate live-fee and user-approval gate.
+
 ### Optional public-shield planning port
 
 `PublicShieldPlanner` is a separate optional capability; it is not another

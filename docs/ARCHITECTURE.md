@@ -201,6 +201,20 @@ they cannot supply arbitrary protocol calls.
 **Must not:** import from `world` or `lobby`, contain UI, or branch on wallet
 identity.
 
+The production `WalletSession` also lives in this package. It owns dynamic
+Wallet Standard discovery, explicit selection, `WalletAccountV6` connection,
+account/network/disconnect generations, and the fresh wallet-backed operations
+instance for each generation. Web sees only frozen wallet choices, phase,
+account, and generation plus the stable operations facade. Before an older
+generation can confirm, its wrapped prepared batch is discarded and rejected.
+
+`apps/web/src/production/ProductionRoot.tsx` composes this session into `App`
+and supplies the same reactive account authority to Bridge. Production
+configuration is public, mainnet-only, same-origin for Backend calls, and starts
+with every transaction route denied. Bridge planning stays null. The real
+browser route therefore supports connection/capability acceptance before it
+authorizes any proof, signature, submission, or funds movement.
+
 ### `packages/bridge`
 
 One-way funding: any asset on any chain → STRK on Starknet, then an optional,

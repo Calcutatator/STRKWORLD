@@ -38,6 +38,8 @@ disappear is accepted for v1 (D-019).
 | `src/connect/` | Capability detection, and the rooms for a wallet that cannot help |
 | `src/panels/` | The building-window framework, privacy gate, and locked/unbuilt surfaces |
 | `src/privacy/` | The seam context, failure classification, session uncertainty, build context, and register import |
+| `src/production/` | Fail-closed public config and the real wallet composition root |
+| `src/wallet/` | React projection of the privacy-owned `WalletSession`; no wallet libraries |
 | `src/receipts/` | The receipt ledger — receipts outlive the panel that made them |
 | `src/bridge/` | The manual Bridge machine, service-scoped quote coordinator, runtime provider, and offline demo |
 | `src/panels/bank/` | The Bank: shield, unshield, private transfer |
@@ -50,6 +52,10 @@ disappear is accepted for v1 (D-019).
 
 `main.tsx` is the composition root. It creates the two buses and the explicit
 presence controller once, at module scope, and mounts `App` inside `StrictMode`.
+Production always constructs the privacy-owned real-wallet session; local
+development uses it only when `VITE_WALLET_MODE=real`, otherwise retaining the
+explicit deterministic demo. Invalid production wallet configuration renders a
+generic failure and never falls through to practice balances.
 `App` wires the pieces together and takes those seams as props, so a test can
 drive it against instances it controls:
 
@@ -58,13 +64,22 @@ drive it against instances it controls:
 const worldOut = createEventBus<WorldEvents>();   // world emits, shell listens
 const shellIn = createEventBus<ShellEvents>();    // shell emits, world listens
 const presence = createPresenceController({ endpoint: lobbyEndpoint() });
+const walletSession = createProductionWalletSession(parseProductionWalletConfig(import.meta.env));
 createRoot(root).render(
-  <StrictMode><App worldOut={worldOut} shellIn={shellIn} presence={presence} /></StrictMode>,
+  <StrictMode>
+    <ProductionRoot
+      session={walletSession}
+      worldOut={worldOut}
+      shellIn={shellIn}
+      presence={presence}
+    />
+  </StrictMode>,
 );
 
-// App.tsx — the tree.
-<PrivacyProvider demo shellBus={shellIn} fallback={<Boot/>}>
-  <BridgeProvider demo>
+// ProductionRoot/App.tsx — the tree.
+<WalletSessionProvider session={walletSession}>
+<PrivacyProvider operations={walletSession.operations} walletSession={walletSession} shellBus={shellIn}>
+  <BridgeProvider account={snapshot.account} readAccount={walletSession.readAccount} planner={null}>
     <main className="strkworld">
       <WorldHost out={worldOut} in={shellIn} remotePeers={presence.remotePeers} />
       <VisitLayer world={worldOut} shell={shellIn} /> {/* Game Mode first; stations or Menu above */}
@@ -73,13 +88,16 @@ createRoot(root).render(
     </main>
   </BridgeProvider>
 </PrivacyProvider>
+</WalletSessionProvider>
 ```
 
-`App` also accepts the frozen `PrivacyOperations` seam as an `operations`
-prop. A production host supplies that dependency and the provider composes it
-directly; the checked-in local `main.tsx` deliberately omits it and therefore
-selects the explicit demo path. Omitting the prop never creates an implicit
-production fallback: both demo providers still refuse a production build.
+`App` accepts the stable `PrivacyOperations` seam and the sanitized
+`WalletSession` port. Web renders explicit discovered-wallet choices, but the
+privacy package owns provider connection, account/network generations and
+prepared-work invalidation. The same reactive account authority is supplied to
+Bridge; its production planner remains null, so it cannot manufacture a public
+funding action. Omitting the operations prop is only the explicit development
+demo path, and both demo providers still refuse a production build.
 
 The buses are created **once, at module scope**, on purpose: StrictMode
 double-mounts `App`, and a bus made inside a component would hand the world a

@@ -1,5 +1,6 @@
 import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
+import type { WalletSession } from '@strkworld/privacy';
 import type { ShellEvents, WorldEvents } from '@strkworld/shared';
 import { createEventBus } from './bus/event-bus.js';
 import { App } from './App.js';
@@ -7,6 +8,8 @@ import './styles.css';
 import { createPresenceController } from './presence/presence-controller.js';
 import { lobbyEndpoint } from './presence/config.js';
 import { installPresenceTeardown } from './presence/lifecycle.js';
+import { parseProductionWalletConfig, usesProductionWallet } from './production/config.js';
+import { ProductionRoot } from './production/ProductionRoot.js';
 
 /**
  * STRKWORLD shell entry point.
@@ -26,15 +29,65 @@ const worldOut = createEventBus<WorldEvents>();
 const shellIn = createEventBus<ShellEvents>();
 const presence = createPresenceController({ endpoint: lobbyEndpoint() });
 const hot = (import.meta as ImportMeta & { hot?: { dispose(callback: () => void): void } }).hot;
+const environment = (import.meta as ImportMeta & {
+  env: Record<string, string | boolean | undefined>;
+}).env;
 installPresenceTeardown(presence, typeof window === 'undefined' ? undefined : window, hot);
 
+let walletSession: WalletSession | null = null;
 const container = document.getElementById('root');
 if (!container) {
   throw new Error('STRKWORLD: no #root element to mount into — check index.html.');
 }
+const root = createRoot(container);
 
-createRoot(container).render(
-  <StrictMode>
-    <App worldOut={worldOut} shellIn={shellIn} presence={presence} />
-  </StrictMode>,
-);
+function renderWalletFailure(): void {
+  root.render(
+    <StrictMode>
+      <div className="shell-crashed" role="alert">
+        The production wallet configuration is invalid.
+      </div>
+    </StrictMode>,
+  );
+}
+
+if (usesProductionWallet(environment)) {
+  root.render(
+    <StrictMode>
+      <div className="shell-boot" role="status">Loading the wallet connection…</div>
+    </StrictMode>,
+  );
+  try {
+    const config = parseProductionWalletConfig(environment);
+    // Keep the Starknet/Wallet API implementation out of the initial shell
+    // graph. Production still always takes this path; the dynamic boundary only
+    // lets the city render its honest loading surface before chain code arrives.
+    void (async () => {
+      try {
+        const { createProductionWalletSession } = await import('@strkworld/privacy');
+        walletSession = createProductionWalletSession(config);
+        hot?.dispose(() => walletSession?.destroy());
+        root.render(
+          <StrictMode>
+            <ProductionRoot
+              session={walletSession}
+              worldOut={worldOut}
+              shellIn={shellIn}
+              presence={presence}
+            />
+          </StrictMode>,
+        );
+      } catch {
+        renderWalletFailure();
+      }
+    })();
+  } catch {
+    renderWalletFailure();
+  }
+} else {
+  root.render(
+    <StrictMode>
+      <App worldOut={worldOut} shellIn={shellIn} presence={presence} />
+    </StrictMode>,
+  );
+}
