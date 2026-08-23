@@ -4,10 +4,16 @@ import {
   useContext,
   useEffect,
   useMemo,
+  useRef,
   useState,
+  useSyncExternalStore,
   type ReactNode,
 } from 'react';
-import type { PrivacyOperations } from '@strkworld/privacy';
+import type {
+  PrivacyOperations,
+  WalletSession,
+  WalletSessionSnapshot,
+} from '@strkworld/privacy';
 import type { EventBus, ShellEvents } from '@strkworld/shared';
 import { createConnectFlow, toWalletStatus, type ConnectFlow, type ConnectState } from '../connect/connect-machine.js';
 import { createReceiptLedger, type ReceiptLedger } from '../receipts/receipt-ledger.js';
@@ -65,6 +71,8 @@ export function usePrivacy(): ShellPrivacy {
 export interface PrivacyProviderProps {
   /** The financial seam. Required unless `demo` is explicitly set. */
   operations?: PrivacyOperations;
+  /** Optional production account/network owner; never present in demo mode. */
+  walletSession?: WalletSession;
   /**
    * Use the deterministic fake. Never true in a production build; this is for
    * local development, demos and stories.
@@ -86,6 +94,7 @@ export interface PrivacyProviderProps {
 
 export function PrivacyProvider({
   operations,
+  walletSession,
   demo = false,
   shellBus = null,
   fallback = null,
@@ -134,6 +143,7 @@ export function PrivacyProvider({
   return (
     <PrivacyRuntime
       operations={resolved}
+      walletSession={walletSession}
       shellBus={shellBus}
       injectedSubmissionUncertainty={submissionUncertainty}
     >
@@ -144,11 +154,13 @@ export function PrivacyProvider({
 
 function PrivacyRuntime({
   operations,
+  walletSession,
   shellBus,
   injectedSubmissionUncertainty,
   children,
 }: {
   operations: PrivacyOperations;
+  walletSession?: WalletSession;
   shellBus: EventBus<ShellEvents> | null;
   injectedSubmissionUncertainty?: SubmissionUncertainty;
   children: ReactNode;
@@ -199,5 +211,61 @@ function PrivacyRuntime({
     ],
   );
 
-  return <PrivacyContext.Provider value={value}>{children}</PrivacyContext.Provider>;
+  return <PrivacyContext.Provider value={value}>
+    {walletSession ? <WalletSessionConnectSync session={walletSession} connect={connect} /> : null}
+    {children}
+  </PrivacyContext.Provider>;
+}
+
+function WalletSessionConnectSync({
+  session,
+  connect,
+}: {
+  session: WalletSession;
+  connect: ConnectFlow;
+}) {
+  const snapshot = useSyncExternalStore(
+    session.subscribe,
+    session.getSnapshot,
+    session.getSnapshot,
+  );
+  const previous = useRef(snapshot);
+  useEffect(() => {
+    const prior = previous.current;
+    switch (walletSessionConnectAction(prior, snapshot)) {
+      case 'disconnect':
+        connect.disconnect();
+        break;
+      case 'recheck':
+        connect.disconnect();
+        void connect.connect();
+        break;
+      case 'none':
+        break;
+    }
+    previous.current = snapshot;
+  }, [snapshot, connect]);
+  return null;
+}
+
+export type WalletSessionConnectAction = 'none' | 'disconnect' | 'recheck';
+
+/**
+ * Translate wallet-session authority changes into the coarser Connect flow.
+ * Kept pure so the production effect's account/network ownership is directly
+ * regression-tested without pretending server rendering runs React effects.
+ */
+export function walletSessionConnectAction(
+  previous: WalletSessionSnapshot,
+  current: WalletSessionSnapshot,
+): WalletSessionConnectAction {
+  if (current.phase !== 'connected') return 'disconnect';
+  if (
+    previous.phase !== 'connected' ||
+    previous.generation !== current.generation ||
+    previous.account !== current.account
+  ) {
+    return 'recheck';
+  }
+  return 'none';
 }

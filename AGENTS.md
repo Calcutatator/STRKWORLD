@@ -283,6 +283,89 @@ scans 305 files with no violation. The built/live phase still needs to run on
 the merged exact head. No browser, network, wallet, RPC, proof, signature,
 funds or transaction was used.*
 
+### 2026-08-23 — Production wallet authority is one privacy-owned generation
+
+The production browser composition previously had no real wallet lifecycle: it
+mounted the explicit demo path during development and refused that practice
+seam in production. `packages/privacy` now owns a `WalletSession` around
+dynamic Wallet Standard discovery, explicit provider selection and
+`WalletAccountV6`. Web receives only frozen choices plus the current phase,
+account and generation, and imports no wallet library or wallet-specific branch.
+
+One generation owns its concrete account and wallet-backed operations. A newer
+connect, account/network change, disconnect or wallet removal retires the old
+authority. Results and failures from old reads are replaced with the generic
+changed-account outcome; a batch returned after retirement is discarded, and a
+previously returned batch rechecks ownership before confirmation. The production
+composition gives Bridge that same reactive account authority while retaining a
+null public-shield planner.
+
+Production and explicit real-wallet development dynamically load this path;
+the initial Shell graph remains free of the Starknet wallet implementation.
+Public configuration accepts only `SN_MAIN`, an HTTPS credential-free browser
+RPC and same-origin `/api`. Its frozen route policy has zero intents, zero
+relay fee, no enabled routes and empty token lists, so Phase 1 can discover,
+connect and query capability without authorizing preparation, proof, signature,
+submission or funds movement.
+
+*Verified:* public session regressions cover explicit selection, concurrent
+connect ownership, wallet disappearance, wrong-network recovery, empty and
+invalid accounts, disconnect, partial Wallet Standard change events that omit
+accounts, account changes before and during preparation, old-result and
+old-error suppression, replacement-adapter failure, immutable policy ownership
+and an account event arriving during the initial chain read. The production
+composition test pins the same operations/session/account authority; Connect UI
+tests pin selection by opaque discovery key; config tests pin every deny-all and
+fail-closed clause; the Shell architecture test caught and then rejected an
+eager Starknet import. The complete workspace passes 94 files / 1,297 tests
+with two workers; every workspace typecheck, the production build, all 13
+invariants, the D-005 static/live header gate, tilemap check and diff hygiene
+pass. That headless verification used no browser, external network, live
+wallet, RPC, private-balance read, proof, signature, submission, funds or
+transaction. A later Chrome preflight loaded the local real-wallet build,
+entered the Post Office and rendered the explicit discovered-wallet picker; the
+connected profile exposed MetaMask only and no Ready choice. No provider was
+selected, account shared, wallet prompt opened, capability queried, balance
+read, proof, signature, submission, funds or transaction used. Rendered Ready
+behavior and every funded route remain explicit later gates.*
+
+### 2026-08-20 — Bridge cancellation and supersession own different evidence
+
+Bridge quote creation checks the active account before requesting a signed
+provider quote, after that quote, and after planning the exact public shield.
+The third check previously had no ownership checkpoint after its `await`. If
+the panel closed while that read was pending, `close()` cancelled the quote
+flight and advanced both session and attempt, but the late continuation still
+published the shield plan, provider-fee notice and deposit instructions into the
+closed panel. It also skipped the existing cancelled-quote cleanup, leaving the
+just-saved signed record held by the service.
+
+The final account read now distinguishes two owners. An explicit cancellation
+(`close`, `discard` or a valid `import`) runs the existing signed-evidence
+cleanup and restoration before returning. A stale attempt or session created
+by a non-cancelling action such as Refresh returns without touching the signed
+record that action adopted. Both paths stop before rereading service state or
+publishing instructions. Quote contents, planner policy, account validation,
+import and discard precedence, and the public Bridge interface are unchanged.
+
+*Verified:* a public `createBridgePanel()` regression returns the active account
+for the first two checks and defers the third. Red published
+`instructionsVisible: true`, the shield plan and provider-fee notice instead of
+preserving the closed snapshot; green preserves it, discards the cancelled
+signed quote exactly once and leaves no saved record. The same third-read seam
+pins Discard and Import, including restoration of imported evidence after
+cleanup. Independent review exposed a second red: treating every stale attempt
+as cancelled made Refresh discard the signed evidence it had just adopted.
+Green retains that evidence without publishing the old continuation. Removing
+the explicit-cancellation branch fails Close and Import; removing the stale
+attempt return fails Refresh, so the two ownership clauses are independently
+observed. The focused Bridge suite passes 1 file / 40 tests, the Web suite
+passes 37 files / 400 tests and a one-worker full workspace run passes 89 files
+/ 1,273 tests. Workspace typecheck, production build, all 13 invariants and
+diff hygiene pass. The behavioral checks use only in-memory test doubles: no
+browser, external network, wallet, RPC, proof, signature, funds or transaction
+was used.*
+
 ### 2026-08-20 — A fixed-room station snapshot cannot grant itself admission
 
 `createFixedRoomController()` publishes its current station presentation through

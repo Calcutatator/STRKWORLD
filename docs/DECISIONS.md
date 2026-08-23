@@ -2281,3 +2281,54 @@ signature or transaction was involved. The user will still perform the final
 rendered and interactive check at `http://localhost:5173/` — `F` outdoors, in
 Avatar Studio with and without standing on a figure, inside each fixed room,
 and confirmed silent while a station panel holds the keyboard.
+
+---
+
+## D-054 — Production wallet lifecycle belongs to a privacy-owned session
+
+**2026-08-23 · Accepted by the user · Phase 1 execution authorized**
+
+**Context.** `WalletApiPrivacyOperations`, dynamic Wallet Standard discovery
+and the Backend privacy client already exist, while the browser composition
+still mounts `App` without real operations. Putting connection logic directly
+in Web would make the Shell own wallet APIs and account generations; creating a
+CLI wallet would instead move keys, registration, notes and proving into a
+STRKWORLD-controlled trust boundary. Both contradict the established package
+boundary and D-002.
+
+**Decision.** `packages/privacy` owns one `WalletSession` facade around dynamic
+Wallet Standard discovery, explicit wallet selection, `WalletAccountV6`,
+account/network/disconnect generations and a stable `PrivacyOperations`
+delegate. Web may subscribe to the session's sanitized snapshot and render its
+wallet choices, but it never imports a wallet library, sees keys or notes, or
+branches financial behavior on wallet identity. A selected wallet is always a
+user choice; the first discovered wallet is never silently connected.
+
+Every account or network generation owns the operations created for it. Work
+prepared by an older generation is discarded before it can be handed back for
+confirmation, and an old prepared batch cannot begin signing after an account
+change or disconnect. Accepted receipts remain evidence and are not erased by
+session replacement. The same concrete mainnet account authority is supplied
+reactively to the Bridge composition and through its stable account reader, as
+D-043 requires.
+
+Phase 1 uses a deliberately deny-all route policy: zero intents, zero relay-fee
+ceiling, no enabled routes and empty token allowlists. This permits real wallet
+discovery, connection and Wallet API capability checks without authorizing any
+financial preparation. Bridge planning remains null. A later transfer-only
+policy requires a live fee read and a separately approved global relay-fee
+ceiling; swap remains disabled until its executor authority is resolved.
+
+**Consequences.** The first live acceptance uses the user's Ready wallet in the
+browser on `SN_MAIN`; STRKWORLD does not create, fund or custody a CLI wallet.
+Headless tests own discovery, selection, stale-event, account/network and
+prepared-work behavior. The user owns rendered wallet-prompt acceptance. Any
+funded mainnet action remains a separate explicit gate naming the exact account,
+recipient, token, amount and live fee ceiling immediately before handoff.
+
+**Status.** Headless Phase 1 implementation is complete on
+`codex/wallet-integration`. The real-wallet path is production-default and an
+explicit local-development opt-in, but every transaction route remains denied.
+Rendered Ready discovery, connection, rejection, network/account change and
+capability behavior remain the next manual gate; no live wallet or funded claim
+is accepted by this status.
