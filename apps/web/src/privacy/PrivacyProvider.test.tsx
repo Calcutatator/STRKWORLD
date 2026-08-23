@@ -1,7 +1,12 @@
 import { describe, expect, it, vi } from 'vitest';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { FakePrivacyOperations } from '@strkworld/privacy';
-import { PrivacyProvider, usePrivacy, type ShellPrivacy } from './PrivacyProvider.js';
+import {
+  PrivacyProvider,
+  usePrivacy,
+  walletSessionConnectAction,
+  type ShellPrivacy,
+} from './PrivacyProvider.js';
 import { createSubmissionUncertainty } from './submission-uncertainty.js';
 
 function Probe() {
@@ -10,6 +15,34 @@ function Probe() {
 }
 
 describe('PrivacyProvider', () => {
+  it('retires and rechecks capability only when the connected wallet authority changes', () => {
+    const connected = {
+      phase: 'connected' as const,
+      wallets: [],
+      selectedKey: 'wallet-1',
+      account: '0x111' as const,
+      generation: 1,
+    };
+
+    expect(walletSessionConnectAction(connected, connected)).toBe('none');
+    expect(walletSessionConnectAction(connected, {
+      ...connected,
+      account: '0x222',
+      generation: 2,
+    })).toBe('recheck');
+    expect(walletSessionConnectAction(connected, {
+      ...connected,
+      phase: 'wrong-network',
+      account: null,
+      generation: 2,
+    })).toBe('disconnect');
+    expect(walletSessionConnectAction({
+      ...connected,
+      phase: 'selection-required',
+      account: null,
+    }, connected)).toBe('recheck');
+  });
+
   it('refuses to invent a financial seam', () => {
     // The earlier version fell back to the deterministic fake, so a mis-wired
     // build would have shown a working Bank holding 250 STRK nobody owns.

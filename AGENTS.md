@@ -250,6 +250,52 @@ without a verification method is a rumour.
 
 Format: `### YYYY-MM-DD — short title` then what, why it matters, how verified.
 
+### 2026-08-23 — Production wallet authority is one privacy-owned generation
+
+The production browser composition previously had no real wallet lifecycle: it
+mounted the explicit demo path during development and refused that practice
+seam in production. `packages/privacy` now owns a `WalletSession` around
+dynamic Wallet Standard discovery, explicit provider selection and
+`WalletAccountV6`. Web receives only frozen choices plus the current phase,
+account and generation, and imports no wallet library or wallet-specific branch.
+
+One generation owns its concrete account and wallet-backed operations. A newer
+connect, account/network change, disconnect or wallet removal retires the old
+authority. Results and failures from old reads are replaced with the generic
+changed-account outcome; a batch returned after retirement is discarded, and a
+previously returned batch rechecks ownership before confirmation. The production
+composition gives Bridge that same reactive account authority while retaining a
+null public-shield planner.
+
+Production and explicit real-wallet development dynamically load this path;
+the initial Shell graph remains free of the Starknet wallet implementation.
+Public configuration accepts only `SN_MAIN`, an HTTPS credential-free browser
+RPC and same-origin `/api`. Its frozen route policy has zero intents, zero
+relay fee, no enabled routes and empty token lists, so Phase 1 can discover,
+connect and query capability without authorizing preparation, proof, signature,
+submission or funds movement.
+
+*Verified:* public session regressions cover explicit selection, concurrent
+connect ownership, wallet disappearance, wrong-network recovery, empty and
+invalid accounts, disconnect, partial Wallet Standard change events that omit
+accounts, account changes before and during preparation, old-result and
+old-error suppression, replacement-adapter failure, immutable policy ownership
+and an account event arriving during the initial chain read. The production
+composition test pins the same operations/session/account authority; Connect UI
+tests pin selection by opaque discovery key; config tests pin every deny-all and
+fail-closed clause; the Shell architecture test caught and then rejected an
+eager Starknet import. The complete workspace passes 94 files / 1,297 tests
+with two workers; every workspace typecheck, the production build, all 13
+invariants, the D-005 static/live header gate, tilemap check and diff hygiene
+pass. That headless verification used no browser, external network, live
+wallet, RPC, private-balance read, proof, signature, submission, funds or
+transaction. A later Chrome preflight loaded the local real-wallet build,
+entered the Post Office and rendered the explicit discovered-wallet picker; the
+connected profile exposed MetaMask only and no Ready choice. No provider was
+selected, account shared, wallet prompt opened, capability queried, balance
+read, proof, signature, submission, funds or transaction used. Rendered Ready
+behavior and every funded route remain explicit later gates.*
+
 ### 2026-08-20 — Bridge cancellation and supersession own different evidence
 
 Bridge quote creation checks the active account before requesting a signed
@@ -287,6 +333,62 @@ passes 37 files / 400 tests and a one-worker full workspace run passes 89 files
 typecheck, production build, all 13 invariants and diff hygiene pass. The
 behavioral checks use only in-memory test doubles: no browser, external
 network, wallet, RPC, proof, signature, funds or transaction was used.*
+### 2026-08-20 — The Backend launcher admits only a regular entry file
+
+The standalone Backend launcher previously checked only that `BACKEND_ENTRY`
+existed. A directory therefore passed deployment admission and reached Node's
+dynamic import, which exited as an ordinary crash and printed the raw
+`ERR_UNSUPPORTED_DIR_IMPORT` stack plus absolute host paths. Requiring a regular
+file closed that static case, but `statSync()` and dynamic import remained a
+time-of-check/time-of-use pair: replacing an admitted file with a directory in
+between reproduced the same raw crash. Revoking the admitted file's read
+permission in that interval similarly escaped as `EACCES` with a stack and
+canonical host path. The process no longer reports any of those exact-entry
+admission cases outside the bounded configuration failure that an orchestrator
+can classify without leaking its image layout.
+
+Launcher admission now requires the resolved entry to be a regular file before
+any import can construct the Backend composition root or listener. A missing
+path, directory or directory symlink returns the same path-free configuration
+message and EX_CONFIG `78`. If the admitted target becomes missing or a
+directory before Node resolves that exact entry URL, or becomes unreadable
+before Node opens its exact absolute or canonical path, the launcher returns
+the same result. Public Error fields are not phase ownership: Backend code can
+throw the exact loader tuple `EACCES` / `open` / admitted-entry path. A
+package-local ESM customization hook therefore wraps only Node's resolver and
+loader for the exact absolute/canonical entry URL and sets a private shared bit
+before rethrowing an admitted failure. Module evaluation begins only after that
+hook returns, so the launcher's catch trusts the bit rather than the Error
+shape. An exception thrown by the Backend or a missing or unreadable nested
+dependency remains an ordinary startup crash. Successful regular-file startup,
+Backend runtime configuration, request handling, logging and deployment layout
+are unchanged.
+
+*Verified:* public subprocess regressions cover a missing entry, a real
+directory, a symlink to that directory and deterministic admitted-file races.
+One process preload replaces the entry immediately after the launcher's
+`statSync()` returns its regular-file result; another removes read permission
+from both direct and symlinked regular-file entries at that same point. Before
+the guards those races exited `1` with raw `ERR_UNSUPPORTED_DIR_IMPORT` or
+`EACCES`, a stack and host paths. After the guards every admission case has
+empty stdout, exact generic stderr, no raw Node error code, stack or configured,
+absolute or canonical path, and exits `78` before the Backend can construct a
+listener. Separate real-entry cases prove a Backend-thrown error and missing or
+unreadable nested dependencies still exit `1` with their original diagnostics;
+one now throws the loader's exact public tuple from Backend evaluation and
+retains its marker, stack and exit `1`. Bypassing the private bit revives both
+entry races; restoring a field-tuple fallback hides that Backend marker;
+dropping exact URL scoping hides a nested resolution failure; and dropping
+canonical identity revives the symlinked-entry race. A regular entry also exits
+`0` with no launcher stderr. The focused launcher test passes five tests. The
+[official Node 22.12 module documentation](https://nodejs.org/download/release/v22.12.0/docs/api/module.html)
+confirms `module.register()` runs its asynchronous hooks on a separate loader
+thread and passes caller data into `initialize()`. The full workspace passes 90
+files / 1,274 tests; workspace typecheck, production build, all 13 invariants,
+the tilemap check and diff hygiene pass. Runtime/test verification opened no
+listener and used no wallet, RPC, proof, signature, secret, funds or
+transaction; that single read-only documentation fetch was the only external
+network access.*
 
 ### 2026-08-20 — A fixed-room station snapshot cannot grant itself admission
 
