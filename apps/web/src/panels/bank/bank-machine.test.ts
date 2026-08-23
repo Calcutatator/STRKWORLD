@@ -11,6 +11,7 @@ import { PRIVACY_REGISTER } from '../../privacy/register.js';
 import { COPY } from '../../copy.js';
 import { formatTokenAmountExact, parseTokenAmount } from '../../format.js';
 import { createConnectFlow } from '../../connect/connect-machine.js';
+import { createBatchAccumulator } from '../../accumulator/batch-accumulator.js';
 import { createReceiptLedger } from '../../receipts/receipt-ledger.js';
 import { createSubmissionUncertainty } from '../../privacy/submission-uncertainty.js';
 import {
@@ -70,6 +71,48 @@ function deferred<T>(): {
     reject = fail;
   });
   return { promise, resolve, reject };
+}
+
+type ConfirmationGate = {
+  readonly entered: ReturnType<typeof deferred<void>>;
+  readonly settled: ReturnType<typeof deferred<void>>;
+};
+
+function confirmationGate(): ConfirmationGate {
+  return { entered: deferred<void>(), settled: deferred<void>() };
+}
+
+function gatePreparedConfirmations(operations: FakePrivacyOperations): {
+  readonly first: ConfirmationGate;
+  readonly second: ConfirmationGate;
+  readonly discardCounts: number[];
+} {
+  const first = confirmationGate();
+  const second = confirmationGate();
+  const discardCounts: number[] = [];
+  const gates = [first, second];
+  let preparedCount = 0;
+  const prepare = operations.prepare.bind(operations);
+  vi.spyOn(operations, 'prepare').mockImplementation(async (intents, signal) => {
+    const batch = await prepare(intents, signal);
+    const index = preparedCount++;
+    discardCounts.push(0);
+    const gate = gates[index];
+    if (!gate) return batch;
+    return {
+      ...batch,
+      async confirm(options) {
+        gate.entered.resolve(undefined);
+        await gate.settled.promise;
+        return batch.confirm(options);
+      },
+      discard() {
+        discardCounts[index] = (discardCounts[index] ?? 0) + 1;
+        batch.discard();
+      },
+    };
+  });
+  return { first, second, discardCounts };
 }
 
 afterEach(() => {
@@ -1201,6 +1244,73 @@ describe('bank panel — one attempt at a time', () => {
   });
 });
 
+describe('bank panel — confirmation ownership', () => {
+  async function startTwoConfirmations() {
+    const receipts = createReceiptLedger();
+    const operations = fake();
+    const gates = gatePreparedConfirmations(operations);
+    const panel = await openPanel(operations, { receipts });
+    panel.setAmount('1');
+    await panel.addToBatch();
+    await panel.prepare();
+    const first = panel.confirm();
+    await gates.first.entered.promise;
+    panel.cancelPrepared();
+    await panel.prepare();
+    const second = panel.confirm();
+    await gates.second.entered.promise;
+    return { first, second, gates, operations, panel, receipts };
+  }
+
+  it('keeps a newer batch owned when an older confirmation resolves', async () => {
+    const { first, second, gates, operations, panel, receipts } = await startTwoConfirmations();
+
+    gates.first.settled.resolve(undefined);
+    await first;
+    gates.second.settled.reject(new PrivacyError('unknown', 'new confirmation failed'));
+    await second;
+
+    expect(gates.discardCounts[1]).toBe(1);
+    expect(operations.submitted).toHaveLength(1);
+    expect(receipts.pending('bank')).toHaveLength(1);
+  });
+
+  it('keeps a newer signing batch alive when an older confirmation rejects', async () => {
+    const { first, second, gates, operations, panel, receipts } = await startTwoConfirmations();
+
+    gates.first.settled.reject(new PrivacyError('unreachable', 'stale confirmation failed'));
+    await first;
+    panel.close();
+    gates.second.settled.resolve(undefined);
+    await second;
+
+    expect(operations.submitted).toHaveLength(1);
+    expect(receipts.pending('bank')).toHaveLength(1);
+  });
+
+  it('disposes a newer prepared batch that never enters wallet handoff', async () => {
+    const receipts = createReceiptLedger();
+    const operations = fake();
+    const gates = gatePreparedConfirmations(operations);
+    const panel = await openPanel(operations, { receipts });
+    panel.setAmount('1');
+    await panel.addToBatch();
+    await panel.prepare();
+    const first = panel.confirm();
+    await gates.first.entered.promise;
+
+    panel.cancelPrepared();
+    await panel.prepare();
+    panel.close();
+    gates.first.settled.resolve(undefined);
+    await first;
+
+    expect(gates.discardCounts[1]).toBe(1);
+    expect(operations.submitted).toHaveLength(1);
+    expect(receipts.pending('bank')).toHaveLength(1);
+  });
+});
+
 describe('bank panel — after a submission', () => {
   it('offers the way back to the counter', async () => {
     const panel = await openPanel(fake());
@@ -1352,6 +1462,51 @@ describe('bank panel — a receipt outlives the room', () => {
     expect(receipts.pending('bank')[0]?.intents).toHaveLength(1);
     // And the closed panel was not written into.
     expect(panel.store.getState().flow.name).toBe('idle');
+  });
+
+  it('keeps a remounted newer composition authoritative after a stale success', async () => {
+    const receipts = createReceiptLedger();
+    const operations = fake();
+    const accumulator = createBatchAccumulator();
+    const gate = gateSigning(operations);
+    const panel = createBankPanel({
+      operations,
+      receipts,
+      accumulator,
+      canStartFinancialAction: allowFinancialActions,
+    });
+    await panel.open();
+    panel.setAmount('1');
+    await panel.addToBatch();
+    await panel.prepare();
+
+    const stale = panel.confirm();
+    await gate.entered;
+    panel.close();
+
+    await panel.open();
+    panel.setAmount('2');
+    await panel.addToBatch();
+    await panel.prepare();
+    expect(accumulator.intents).toHaveLength(1);
+    expect(accumulator.intents[0]).toMatchObject({ kind: 'shield', amount: strk('2') });
+
+    gate.release();
+    await stale;
+
+    expect(receipts.pending('bank')).toHaveLength(1);
+    expect(panel.store.getState().flow.name).toBe('review');
+    expect(accumulator.intents).toHaveLength(1);
+    expect(accumulator.intents[0]).toMatchObject({ kind: 'shield', amount: strk('2') });
+
+    panel.cancelPrepared();
+    await panel.prepare();
+    const flow = panel.store.getState().flow;
+    expect(flow.name).toBe('review');
+    expect(flow.name === 'review' && flow.summary.intents[0]).toMatchObject({
+      kind: 'shield',
+      amount: strk('2'),
+    });
   });
 
   it('owns Post Office pending and submitted receipts by building, while Bank stays Bank', async () => {
