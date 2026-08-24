@@ -2340,10 +2340,13 @@ recipient, token, amount and live fee ceiling immediately before handoff.
 
 **Status.** Headless Phase 1 implementation is complete on
 `codex/wallet-integration`. The real-wallet path is production-default and an
-explicit local-development opt-in, but every transaction route remains denied.
-Rendered Ready discovery, connection, rejection, network/account change and
-capability behavior remain the next manual gate; no live wallet or funded claim
-is accepted by this status.
+explicit local-development opt-in; every transaction route remains denied by
+default. The accepted funded-tester shield exception is defined by
+[D-056](#d-056--the-funded-tester-may-enable-the-pool-native-strk-shield-route),
+which supersedes this status only for its explicit three-variable
+canonical-STRK tuple. Rendered Ready discovery, connection, rejection,
+network/account change and capability behavior remain the next manual gate; no
+live wallet or funded claim is accepted by this status.
 
 ---
 

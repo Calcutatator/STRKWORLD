@@ -36,17 +36,17 @@ export function parseProductionWalletConfig(
     rpcUrl: rpc.toString().replace(/\/$/, ''),
     backendBaseUrl,
     expectedChainId: MAINNET_CHAIN_ID,
-    policy: parseTransferPolicy(environment),
+    policy: parseRoutePolicy(environment),
   });
 }
 
 /**
- * A browser build may opt into the first route only as a complete tuple. Any
- * missing, malformed, zero or disabled value keeps every route denied. The
- * backend has an independent allowlist and fee ceiling; these values are
- * public admission policy, never credentials.
+ * A browser build may opt into explicitly approved route tuples. Any missing,
+ * malformed, zero or disabled value keeps that route denied. The backend has
+ * an independent allowlist and fee ceiling; these values are public admission
+ * policy, never credentials.
  */
-function parseTransferPolicy(environment: WalletEnvironment): WalletSessionOptions['policy'] {
+function parseRoutePolicy(environment: WalletEnvironment): WalletSessionOptions['policy'] {
   const transfer = parseTransferRoute(environment);
   const shield = parseShieldRoute(environment);
   const enabledRoutes: Array<'shield' | 'transfer'> = [];

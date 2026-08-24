@@ -69,16 +69,24 @@ requests same-origin at `/api` and proxies them only to that explicit
 loopback origin. This proxy is not present in production builds and never
 accepts a cross-origin or credential-bearing target.
 
-The browser keeps every financial route denied unless the build supplies one
-complete public transfer tuple: `VITE_STRK20_TRANSFER_ENABLED=true`, a
-positive `VITE_STRK20_TRANSFER_MAX_INTENTS`, a positive
+The browser defaults every financial route to deny-all. The existing transfer
+route requires one complete public tuple: `VITE_STRK20_TRANSFER_ENABLED=true`,
+a positive `VITE_STRK20_TRANSFER_MAX_INTENTS`, a positive
 `VITE_STRK20_TRANSFER_MAX_RELAY_FEE`, and one or more exact felt values in
 `VITE_STRK20_TRANSFER_ALLOWED_TOKENS`, written as `0x`-prefixed hex addresses
-strictly below the Stark field prime. Missing, zero, malformed, duplicate or
-disabled values fail closed to the deny-all policy without exposing the
-rejected value. This is browser-side admission only; the backend must apply
-its own route, token, queue and sponsorship checks. Shield, unshield and swap
-remain denied by this composition.
+strictly below the Stark field prime. D-056 adds a separate, explicit
+pool-native shield opt-in for the funded Ready tester:
+`VITE_STRK20_SHIELD_ENABLED=true`, a positive
+`VITE_STRK20_SHIELD_MAX_INTENTS`, and exactly one canonical mainnet STRK value
+in `VITE_STRK20_SHIELD_ALLOWED_TOKENS`:
+`0x04718f5a0fc34cc1af16a1cdee98ffb20c31f5cd61d6ab07201858f4287c938d`.
+Shield has no relay-fee variable or relay-fee authority; its live pool fee is
+checked by the existing Bank review. Missing, zero, malformed, duplicate or
+disabled values fail closed for that route without exposing the rejected value.
+Enabling shield does not enable transfer, unshield or swap. This is
+browser-side admission only; the backend remains unchanged and must apply its
+own independent route, token, queue and sponsorship checks. Ready owns the
+wallet prompt, proof, account execution and final confirmation.
 `App` wires the pieces together and takes those seams as props, so a test can
 drive it against instances it controls:
 
