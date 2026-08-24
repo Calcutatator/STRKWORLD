@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { parseProductionWalletConfig, usesProductionWallet } from './config.js';
 
 const STARK_FIELD_PRIME = (1n << 251n) + 17n * (1n << 192n) + 1n;
+const STRK_TOKEN = '0x04718f5a0fc34cc1af16a1cdee98ffb20c31f5cd61d6ab07201858f4287c938d';
 
 describe('production wallet configuration', () => {
   it('builds a mainnet same-origin session with every transaction route denied', () => {
@@ -58,6 +59,85 @@ describe('production wallet configuration', () => {
     expect(Object.isFrozen(config.policy.enabledRoutes)).toBe(true);
     expect(Object.isFrozen(config.policy.allowedTokens)).toBe(true);
     expect(Object.isFrozen(config.policy.allowedTokens.transfer)).toBe(true);
+  });
+
+  it('opts into a frozen STRK-only shield policy without relay-fee authority', () => {
+    const config = parseProductionWalletConfig({
+      VITE_STARKNET_CHAIN_ID: 'SN_MAIN',
+      VITE_STARKNET_RPC_URL: 'https://rpc.example/rpc',
+      VITE_BACKEND_BASE_URL: '/api',
+      VITE_STRK20_SHIELD_ENABLED: 'true',
+      VITE_STRK20_SHIELD_MAX_INTENTS: '1',
+      VITE_STRK20_SHIELD_ALLOWED_TOKENS: STRK_TOKEN,
+      VITE_STRK20_SHIELD_MAX_RELAY_FEE: '999999999999999999',
+    });
+
+    expect(config.policy).toEqual({
+      maxIntents: 1,
+      maxRelayFee: 0n,
+      enabledRoutes: ['shield'],
+      allowedTokens: {
+        shield: [STRK_TOKEN],
+        unshield: [],
+        transfer: [],
+        swap: [],
+      },
+    });
+    expect(Object.isFrozen(config.policy)).toBe(true);
+    expect(Object.isFrozen(config.policy.enabledRoutes)).toBe(true);
+    expect(Object.isFrozen(config.policy.allowedTokens)).toBe(true);
+    expect(Object.isFrozen(config.policy.allowedTokens.shield)).toBe(true);
+  });
+
+  it.each([
+    ['missing enablement', { VITE_STRK20_SHIELD_MAX_INTENTS: '1', VITE_STRK20_SHIELD_ALLOWED_TOKENS: STRK_TOKEN }],
+    ['zero intent bound', { VITE_STRK20_SHIELD_ENABLED: 'true', VITE_STRK20_SHIELD_MAX_INTENTS: '0', VITE_STRK20_SHIELD_ALLOWED_TOKENS: STRK_TOKEN }],
+    ['malformed token', { VITE_STRK20_SHIELD_ENABLED: 'true', VITE_STRK20_SHIELD_MAX_INTENTS: '1', VITE_STRK20_SHIELD_ALLOWED_TOKENS: '0x1234' }],
+    ['multiple tokens', { VITE_STRK20_SHIELD_ENABLED: 'true', VITE_STRK20_SHIELD_MAX_INTENTS: '1', VITE_STRK20_SHIELD_ALLOWED_TOKENS: `${STRK_TOKEN},${STRK_TOKEN}` }],
+  ])('denies the shield route for %s without widening a valid transfer policy', (_name, shield) => {
+    const config = parseProductionWalletConfig({
+      VITE_STARKNET_CHAIN_ID: 'SN_MAIN',
+      VITE_STARKNET_RPC_URL: 'https://rpc.example/rpc',
+      VITE_BACKEND_BASE_URL: '/api',
+      VITE_STRK20_TRANSFER_ENABLED: 'true',
+      VITE_STRK20_TRANSFER_MAX_INTENTS: '2',
+      VITE_STRK20_TRANSFER_MAX_RELAY_FEE: '7',
+      VITE_STRK20_TRANSFER_ALLOWED_TOKENS: '0x1234',
+      ...shield,
+    });
+
+    expect(config.policy.enabledRoutes).toEqual(['transfer']);
+    expect(config.policy.allowedTokens.shield).toEqual([]);
+    expect(config.policy.allowedTokens.transfer).toEqual(['0x1234']);
+    expect(config.policy.maxIntents).toBe(2);
+    expect(config.policy.maxRelayFee).toBe(7n);
+  });
+
+  it('composes shield and transfer conservatively using the lower intent bound', () => {
+    const config = parseProductionWalletConfig({
+      VITE_STARKNET_CHAIN_ID: 'SN_MAIN',
+      VITE_STARKNET_RPC_URL: 'https://rpc.example/rpc',
+      VITE_BACKEND_BASE_URL: '/api',
+      VITE_STRK20_SHIELD_ENABLED: 'true',
+      VITE_STRK20_SHIELD_MAX_INTENTS: '1',
+      VITE_STRK20_SHIELD_ALLOWED_TOKENS: STRK_TOKEN,
+      VITE_STRK20_TRANSFER_ENABLED: 'true',
+      VITE_STRK20_TRANSFER_MAX_INTENTS: '2',
+      VITE_STRK20_TRANSFER_MAX_RELAY_FEE: '7',
+      VITE_STRK20_TRANSFER_ALLOWED_TOKENS: '0x1234',
+    });
+
+    expect(config.policy).toEqual({
+      maxIntents: 1,
+      maxRelayFee: 7n,
+      enabledRoutes: ['shield', 'transfer'],
+      allowedTokens: {
+        shield: [STRK_TOKEN],
+        unshield: [],
+        transfer: ['0x1234'],
+        swap: [],
+      },
+    });
   });
 
   it('admits the largest Stark felt token and rejects the field prime itself', () => {

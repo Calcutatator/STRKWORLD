@@ -218,9 +218,15 @@ account authority to Bridge. Losing the account, disconnecting or entering a
 wrong-network state unmounts that connected tree and tears down its World and
 lobby owner. Production configuration is public, mainnet-only, same-origin
 for Backend calls, and starts with every transaction route denied. Bridge
-planning stays null. The real browser route therefore supports
+planning stays null. The default browser route therefore supports
 connection/capability acceptance before it authorizes any proof, signature,
-submission, or funds movement (D-054/D-055).
+submission, or funds movement (D-054/D-055). D-056 is the narrow, explicit
+funded-tester exception: a build may supply the complete three-variable
+canonical-STRK shield tuple, with a positive intent bound, while transfer,
+unshield and swap remain denied. The shield is pool-native and has no backend
+relay or relay-fee authority; Ready owns proving, account execution and the
+final wallet confirmation. This opt-in is not a general deployment claim until
+the rendered funded receipt and deliberate private-balance refresh are seen.
 
 ### `packages/bridge`
 
