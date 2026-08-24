@@ -2393,3 +2393,42 @@ public root/snapshot and client lifecycle regressions. Unsupported capability,
 unreachable and rejected capability results remain at the entry gate; only a
 supported result admits the connected tree. No browser wallet, RPC, proof,
 signature, funds or transaction was used by this implementation.
+
+---
+
+## D-056 — The funded tester may enable the pool-native STRK shield route
+
+**2026-08-24 · Accepted by the user · narrows D-054's funded-action gate for
+the disposable Ready tester; transfer, unshield and swap remain separately
+gated**
+
+**Context.** The disposable Ready mainnet account is now deployed, registered
+with the STRK20 pool and able to share its private balance with STRKWORLD. Its
+public balance is funded while its private balance is zero. The accepted Bank
+implementation already submits a shield directly through
+`wallet_strk20InvokeTransaction`; it does not generate a proof in STRKWORLD,
+use the private-submission backend, or move viewing keys or note ownership out
+of Ready. Production composition nevertheless has no explicit shield-policy
+input, so the game cannot ask Ready to open that already-built route.
+
+**Decision.** Production wallet policy may expose an explicit, fail-closed
+pool-native shield configuration. It is disabled by default and admits only
+the configured STRK token, a positive bounded intent count and the existing
+live pool-fee ceiling check. Enabling shield does not enable transfer,
+unshield or swap, does not create a relay-fee authority, and does not alter the
+Backend. Malformed, partial or empty shield configuration resolves to deny-all
+rather than a partially open route.
+
+The current local tester checkout may enable this route for one small funded
+mainnet shield so the prompt originates in STRKWORLD. Ready remains the only
+owner of account execution and the final wallet confirmation remains a human
+handoff. This acceptance does not make the route generally deployed or prove
+rendered/funded behavior before the live receipt and refreshed private balance
+are observed.
+
+**Consequences.** The public seam is production environment parsing plus the
+existing Bank route projection. Tests must pin disabled/malformed deny-all,
+STRK-only enablement, immutable policy ownership and the absence of every
+other route. After merge, the canonical local checkout is restarted and the
+funded tester performs the final Ready confirmation; the resulting receipt and
+deliberate balance refresh are the live acceptance evidence.
