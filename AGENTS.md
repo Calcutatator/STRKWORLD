@@ -270,18 +270,19 @@ provider callback after operations were nulled while the public snapshot could
 still claim the session was connected.
 
 The connection snapshot is now read before retirement. A live connected
-session whose strictly valid hexadecimal account and chain are felt-equivalent
-to its current authority treats the event as a semantic no-op. Validation runs
-before equivalence, so a decimal or otherwise malformed numeric equivalent
-fails closed instead of inheriting signing authority. A genuinely changed
-account/network still advances the generation and reconstructs or rejects
-authority exactly as before. An unreadable snapshot advances the generation,
-clears operations and publishes `failed` without escaping the callback. Route
-policy, Wallet API actions and the public session shape are unchanged.
+session whose strictly valid hexadecimal account and felt-equivalent mainnet
+chain match its current authority treats the event as a semantic no-op.
+Account validation runs before equivalence, so a decimal or otherwise malformed
+numeric equivalent fails closed instead of inheriting signing authority. A
+genuinely changed account/network still advances the generation and
+reconstructs or rejects authority exactly as before. An unreadable snapshot
+advances the generation, clears operations and publishes `failed` without
+escaping the callback. Route policy, Wallet API actions and the public session
+shape are unchanged.
 
 *Verified:* deterministic public `createWalletSession()` regressions connect a
-mainnet account, prepare reviewed work and then emit an identical connection
-notification, a throwing snapshot, or decimal `273` in place of current
+mainnet account, prepare reviewed work and then emit a felt-equivalent padded
+connection notification, a throwing snapshot, or decimal `273` in place of current
 `0x111`. The duplicate keeps the same generation, constructs operations once
 and confirms without discard. The unreadable and malformed snapshots publish
 `failed`, reject further operations and discard the old prepared batch before
