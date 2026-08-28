@@ -61,6 +61,146 @@ describe('RemotePeerSource', () => {
 
     expect(listener).toHaveBeenCalledTimes(1); // the synchronous replay only
   });
+
+  it('does not redeliver a publication to a listener added during publish', () => {
+    const controller = createRemotePeerSource();
+    const source = controller.source;
+    const first = vi.fn();
+    const second = vi.fn();
+    let publishing = false;
+
+    first.mockImplementation(() => {
+      if (publishing) source.subscribe(second);
+    });
+    source.subscribe(first);
+
+    first.mockClear();
+    publishing = true;
+    controller.publish([peer()]);
+
+    expect(first).toHaveBeenCalledTimes(1);
+    expect(second).toHaveBeenCalledTimes(1);
+    expect(second).toHaveBeenCalledWith([peer()]);
+  });
+
+  it('does not deliver a publication to a listener unsubscribed during publish', () => {
+    const controller = createRemotePeerSource();
+    const source = controller.source;
+    const first = vi.fn();
+    const second = vi.fn();
+    let unsubscribeSecond: (() => void) | undefined;
+
+    first.mockImplementation(() => {
+      unsubscribeSecond?.();
+    });
+    source.subscribe(first);
+    unsubscribeSecond = source.subscribe(second);
+
+    first.mockClear();
+    controller.publish([peer()]);
+
+    expect(first).toHaveBeenCalledTimes(1);
+    expect(second).toHaveBeenCalledTimes(1); // the synchronous replay only
+  });
+
+  it('does not redeliver to a listener resubscribed during publish', () => {
+    const controller = createRemotePeerSource();
+    const source = controller.source;
+    const first = vi.fn();
+    const second = vi.fn();
+    let unsubscribeSecond: (() => void) | undefined;
+    let resubscribed = false;
+
+    first.mockImplementation((snapshot: readonly RemotePeerSnapshot[]) => {
+      if (!resubscribed && snapshot[0]?.x === 1) {
+        resubscribed = true;
+        unsubscribeSecond?.();
+        source.subscribe(second);
+      }
+    });
+    source.subscribe(first);
+    unsubscribeSecond = source.subscribe(second);
+    first.mockClear();
+    second.mockClear();
+
+    controller.publish([peer({ x: 1 })]);
+
+    expect(first).toHaveBeenCalledTimes(1);
+    expect(second).toHaveBeenCalledTimes(1);
+    expect(second).toHaveBeenCalledWith([peer({ x: 1 })]);
+  });
+
+  it('does not let a stale unsubscribe remove a replacement subscription', () => {
+    const controller = createRemotePeerSource();
+    const source = controller.source;
+    const listener = vi.fn();
+    const unsubscribeFirst = source.subscribe(listener);
+    const unsubscribeSecond = source.subscribe(listener);
+
+    listener.mockClear();
+    unsubscribeFirst();
+    controller.publish([peer()]);
+
+    expect(listener).toHaveBeenCalledTimes(1);
+    unsubscribeSecond();
+  });
+
+  it('delivers reentrant publications in arrival order', () => {
+    const controller = createRemotePeerSource();
+    const source = controller.source;
+    const first = vi.fn();
+    const second = vi.fn();
+    const third = vi.fn();
+    let reentered = false;
+
+    first.mockImplementation((snapshot: readonly RemotePeerSnapshot[]) => {
+      if (!reentered && snapshot[0]?.x === 1) {
+        reentered = true;
+        controller.publish([peer({ x: 2 })]);
+        source.subscribe(third);
+      }
+    });
+    source.subscribe(first);
+    source.subscribe(second);
+    first.mockClear();
+    second.mockClear();
+
+    controller.publish([peer({ x: 1 })]);
+
+    expect(first.mock.calls.map(([snapshot]) => snapshot)).toEqual([
+      [peer({ x: 1 })],
+      [peer({ x: 2 })],
+    ]);
+    expect(second.mock.calls.map(([snapshot]) => snapshot)).toEqual([
+      [peer({ x: 1 })],
+      [peer({ x: 2 })],
+    ]);
+    expect(third.mock.calls.map(([snapshot]) => snapshot)).toEqual([
+      [peer({ x: 1 })],
+      [peer({ x: 2 })],
+    ]);
+  });
+
+  it('preserves listener errors and stops the current publication', () => {
+    const controller = createRemotePeerSource();
+    const source = controller.source;
+    const error = new Error('listener failed');
+    let shouldThrow = false;
+    const first = vi.fn(() => {
+      if (shouldThrow) throw error;
+    });
+    const second = vi.fn();
+
+    source.subscribe(first);
+    source.subscribe(second);
+    first.mockClear();
+    second.mockClear();
+    shouldThrow = true;
+
+    expect(() => controller.publish([peer()])).toThrow(error);
+    expect(first).toHaveBeenCalledTimes(1);
+    expect(second).not.toHaveBeenCalled();
+  });
 });
 
 describe('remote peer reconciliation', () => {

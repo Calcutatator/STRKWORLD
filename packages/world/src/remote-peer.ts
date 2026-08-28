@@ -129,17 +129,38 @@ export function createRemotePeerSource(
   initial: readonly RemotePeerSnapshot[] = [],
 ): RemotePeerSourceController {
   let current = immutableSnapshot(initial);
-  const listeners = new Set<RemotePeerListener>();
+  const listeners = new Map<RemotePeerListener, symbol>();
+  const pending: Array<readonly RemotePeerSnapshot[]> = [];
+  let publishing = false;
+
+  function drain(): void {
+    if (publishing) return;
+    publishing = true;
+    try {
+      while (pending.length > 0) {
+        current = pending.shift()!;
+        for (const [listener, token] of [...listeners]) {
+          if (listeners.get(listener) === token) listener(current);
+        }
+      }
+    } catch (error) {
+      pending.length = 0;
+      throw error;
+    } finally {
+      publishing = false;
+    }
+  }
 
   const source: RemotePeerSource = {
     subscribe(listener) {
-      listeners.add(listener);
-      listener(current);
+      const token = Symbol();
+      listeners.set(listener, token);
       let active = true;
+      listener(current);
       return () => {
         if (!active) return;
         active = false;
-        listeners.delete(listener);
+        if (listeners.get(listener) === token) listeners.delete(listener);
       };
     },
   };
@@ -148,8 +169,8 @@ export function createRemotePeerSource(
     source,
 
     publish(snapshot) {
-      current = immutableSnapshot(snapshot);
-      for (const listener of listeners) listener(current);
+      pending.push(immutableSnapshot(snapshot));
+      drain();
     },
 
     clear() {
