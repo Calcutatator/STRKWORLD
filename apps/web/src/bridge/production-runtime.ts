@@ -39,7 +39,7 @@ export function createProductionBridgeRuntime({
   });
 }
 
-const STORAGE_PROBE_KEY = 'strkworld.bridge.storage-probe.v1';
+const STORAGE_PROBE_PREFIX = 'strkworld.bridge.storage-probe.v1';
 const STORAGE_PROBE_VALUE = 'available';
 
 /**
@@ -48,17 +48,18 @@ const STORAGE_PROBE_VALUE = 'available';
  * for the optional runtime and never contacts the provider.
  */
 function usablePersistentStorage(storage: Storage): boolean {
+  const probeKey = `${STORAGE_PROBE_PREFIX}.${Date.now()}.${Math.random().toString(36).slice(2)}`;
   try {
-    if (!storage || storage.getItem(STORAGE_PROBE_KEY) !== null) return false;
-    storage.setItem(STORAGE_PROBE_KEY, STORAGE_PROBE_VALUE);
-    if (storage.getItem(STORAGE_PROBE_KEY) !== STORAGE_PROBE_VALUE) {
-      storage.removeItem(STORAGE_PROBE_KEY);
+    if (!storage || storage.getItem(probeKey) !== null) return false;
+    storage.setItem(probeKey, STORAGE_PROBE_VALUE);
+    if (storage.getItem(probeKey) !== STORAGE_PROBE_VALUE) {
+      storage.removeItem(probeKey);
       return false;
     }
-    storage.removeItem(STORAGE_PROBE_KEY);
-    return storage.getItem(STORAGE_PROBE_KEY) === null;
+    storage.removeItem(probeKey);
+    return storage.getItem(probeKey) === null;
   } catch {
-    try { storage?.removeItem(STORAGE_PROBE_KEY); } catch { /* already unavailable */ }
+    try { storage?.removeItem(probeKey); } catch { /* already unavailable */ }
     return false;
   }
 }
