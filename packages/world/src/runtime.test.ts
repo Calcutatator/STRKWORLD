@@ -3,6 +3,11 @@ import type { EventBus, ShellEvents, WorldEvents } from '@strkworld/shared';
 
 const sceneBusAtCreate: Array<unknown> = [];
 const sceneBusAtRestart: Array<unknown> = [];
+const gameConfigs: Array<{
+  type?: number;
+  pixelArt?: boolean;
+  scale?: { mode?: number; autoCenter?: number };
+}> = [];
 const gameInstances: Array<{
   canvas: { parentNode: unknown };
   domContainer: { parentNode: unknown };
@@ -42,10 +47,18 @@ vi.mock('phaser', () => {
 
     constructor(config: {
       parent?: FakeElement;
+      type?: number;
+      pixelArt?: boolean;
+      scale?: { mode?: number; autoCenter?: number };
       callbacks?: { preBoot?: (game: Game) => void; postBoot?: (game: Game) => void };
       scene?: unknown[];
     }) {
       if (!config.parent) throw new Error('missing Phaser parent');
+      gameConfigs.push({
+        type: config.type,
+        pixelArt: config.pixelArt,
+        scale: config.scale ? { ...config.scale } : undefined,
+      });
       const initialBounds = config.parent.getBoundingClientRect();
       this.scale = {
         parent: config.parent,
@@ -167,6 +180,7 @@ describe('world runtime boot ordering', () => {
     vi.useFakeTimers();
     sceneBusAtCreate.length = 0;
     sceneBusAtRestart.length = 0;
+    gameConfigs.length = 0;
     gameInstances.length = 0;
   });
 
@@ -183,6 +197,21 @@ describe('world runtime boot ordering', () => {
 
     expect(sceneBusAtCreate).toEqual([bus]);
     expect(bus.in.on).toHaveBeenCalledWith('world:stations', expect.any(Function));
+    releaseWorld();
+  });
+
+  it('boots the WebGL canvas with crisp pixel-art rendering and one-to-one resize', async () => {
+    const { acquireWorld, releaseWorld } = await import('./runtime.js');
+
+    await acquireWorld(fakeParent('pixel-grid'), fakeBus());
+
+    expect(gameConfigs).toEqual([
+      {
+        type: 1,
+        pixelArt: true,
+        scale: { mode: 1, autoCenter: 1 },
+      },
+    ]);
     releaseWorld();
   });
 
