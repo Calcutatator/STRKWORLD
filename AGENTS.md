@@ -292,6 +292,28 @@ typechecks, the production build, all 13 invariants and diff hygiene pass. No
 browser, wallet, provider, RPC, proof, signature, funds or transaction was
 used.*
 
+### 2026-08-28 — Avatar PNG filters are validated once per decoded row
+
+The Avatar 1 source-parity test previously ran a Vitest assertion for every
+decoded RGBA byte while reconstructing the 384x256 PNG: 393,216 assertion-
+framework calls for data whose PNG filter is constant across each row. Under
+hosted full-suite load that otherwise-correct evidence crossed Vitest's five-
+second default timeout. The decoder now rejects filter bytes outside `0..4`
+once before each row's byte loop and computes the same predictors without an
+assertion-framework call per byte. The timeout is unchanged, and the exact PNG
+SHA, decoded cell coordinates, crop hashes and parity evidence remain intact.
+
+*Verified:* CI run 33209879035 attempt 1 recorded the exact parity test at
+5,138 ms and rejected it at the 5,000 ms timeout. Five local baseline runs put
+the test body at 1.28-1.35 seconds; five optimized runs put the complete file
+at 131-138 ms with the test body at 9 ms. A new negative regression passes an
+unsupported row filter through the unfiltering seam and observes the exact
+error; removing the row guard makes that regression fail. The focused file
+passes 3 tests, World passes 24 files / 233 tests, the full workspace passes
+96 files / 1,369 tests, all workspace typechecks, the production build, all 13
+invariants and `git diff --check`. No browser, wallet, provider, RPC, proof,
+signature, funds or transaction was used.*
+
 ### 2026-08-28 — Horizontal camera follow is immediate for sharp pixel motion
 
 The street camera previously eased toward the player on both axes with a
