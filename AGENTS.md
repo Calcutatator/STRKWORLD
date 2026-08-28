@@ -258,6 +258,20 @@ empty shell to fetchers, so a 200 there means nothing.
 
 ## 6. Findings log
 
+### 2026-08-28 — One outdoor outfit transition is rendered evidence, not the full F matrix
+
+The D-057 Chrome gateway at `http://127.0.0.1:5173/` admitted through the
+wallet gate and mounted the World and lobby. While the local avatar was
+outdoors on the street, one `F` press visibly changed it from the cosy outfit
+to the fighting outfit with its weapon. This is evidence for that single
+rendered transition only. The reverse fighting-to-cosy transition, Avatar
+Studio, fixed-room interiors and subjective final-art quality remain open.
+
+*Verified:* observed directly in the live Chrome D-057 session on the current
+local build: wallet-gated World/lobby mounted, then one outdoor `F` press
+changed the local avatar from cosy to fighting with the weapon visible. No
+live wallet, proof, signature, submission, transaction or funds were used.
+
 ### 2026-08-23 — A fast-forward can leave Vite serving pre-merge modules
 
 Fast-forwarding the canonical checkout while its Vite process remains alive
