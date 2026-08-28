@@ -96,7 +96,10 @@ network, disconnect, wallet-removal, and newer-connect events retire the old
 generation. A prepared batch is wrapped so it is discarded and rejected before
 an old account can begin confirmation. The stable operations facade means Web
 does not recreate its financial composition or import wallet libraries when a
-provider changes.
+provider changes. A repeated Wallet Standard notification for the same account
+and mainnet authority is a semantic no-op: it does not retire reviewed work.
+If the replacement snapshot cannot be read, the session instead fails closed
+and retires that authority without throwing through the provider callback.
 
 Production currently constructs the session with a deny-all route policy:
 zero intents, zero relay fee, no enabled routes, and empty token allowlists.

@@ -242,9 +242,36 @@ export function createWalletSession(
         connection = connected;
         connectionCleanup = connected.subscribe(() => {
           if (destroyed || connection !== connected) return;
+          let changed: WalletConnectionSnapshot;
+          try {
+            changed = connected.getSnapshot();
+          } catch {
+            generation += 1;
+            operations = null;
+            publish('failed', null);
+            return;
+          }
+          if (changed.account) {
+            try {
+              assertAddress(changed.account);
+            } catch {
+              generation += 1;
+              operations = null;
+              publish('failed', null);
+              return;
+            }
+          }
+          if (
+            operations &&
+            snapshot.phase === 'connected' &&
+            snapshot.account &&
+            sameFelt(changed.account, snapshot.account) &&
+            sameFelt(changed.chainId, expectedChainId)
+          ) {
+            return;
+          }
           generation += 1;
           operations = null;
-          const changed = connected.getSnapshot();
           if (!changed.account) {
             selectedKey = null;
             retireConnection();
@@ -252,7 +279,6 @@ export function createWalletSession(
             return;
           }
           try {
-            assertAddress(changed.account);
             if (!sameFelt(changed.chainId, expectedChainId)) {
               publish('wrong-network', null);
               return;
