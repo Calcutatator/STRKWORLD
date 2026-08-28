@@ -98,8 +98,8 @@ vi.mock('phaser', () => {
   return {
     Game,
     Scene,
-    WEBGL: 1,
-    Scale: { RESIZE: 1, CENTER_BOTH: 1 },
+    WEBGL: 2,
+    Scale: { RESIZE: 5, CENTER_BOTH: 1 },
   };
 });
 
@@ -207,9 +207,9 @@ describe('world runtime boot ordering', () => {
 
     expect(gameConfigs).toEqual([
       {
-        type: 1,
+        type: 2,
         pixelArt: true,
-        scale: { mode: 1, autoCenter: 1 },
+        scale: { mode: 5, autoCenter: 1 },
       },
     ]);
     releaseWorld();
