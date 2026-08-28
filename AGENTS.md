@@ -276,11 +276,14 @@ empties the per-event maps before dropping them so it suppresses the remainder
 of an in-flight snapshot. Existing synchronous reentrant emission, `once`
 semantics and exception isolation remain unchanged.
 
-*Verified:* four public event-bus regressions cover unsubscribe-before-turn,
-stale same-handler cleanup, same-handler resubscription during emit, and
-clear-during-emit. The unpatched `origin/main` failed three of the four; the
-focused suite passes 11/11 after the change. No browser, wallet, provider,
-RPC, proof, signature, funds or transaction was used.
+*Verified:* five public event-bus regressions cover unsubscribe-before-turn,
+stale same-handler cleanup, replacement by another handler before its
+captured turn, same-handler resubscription during emit, and clear-during-emit.
+The unpatched `origin/main` failed four of the five; the focused suite passes
+12/12 after the change. The replacement-before-turn regression fails if token
+equality is weakened to handler-presence (`Map.has`), proving the captured
+generation—not merely the handler—is authoritative. No browser, wallet,
+provider, RPC, proof, signature, funds or transaction was used.
 
 ### 2026-08-28 — Horizontal camera follow is immediate for sharp pixel motion
 

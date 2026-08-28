@@ -83,6 +83,26 @@ describe('event bus', () => {
     expect(handler).toHaveBeenCalledTimes(2);
   });
 
+  it('does not deliver a replacement before the captured handler turn', () => {
+    const bus = createEventBus<WorldEvents>();
+    const second = vi.fn();
+    let stopSecond!: () => void;
+    let replaced = false;
+    bus.on('world:ready', () => {
+      if (replaced) return;
+      replaced = true;
+      stopSecond();
+      stopSecond = bus.on('world:ready', second);
+    });
+    stopSecond = bus.on('world:ready', second);
+
+    bus.emit('world:ready', {});
+    expect(second).not.toHaveBeenCalled();
+
+    bus.emit('world:ready', {});
+    expect(second).toHaveBeenCalledOnce();
+  });
+
   it('does not deliver remaining handlers after clear() during an emit', () => {
     const bus = createEventBus<WorldEvents>();
     const remaining = vi.fn();
