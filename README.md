@@ -14,18 +14,25 @@ token standard.
 
 ## Status
 
-Pre-build. The world and the financial layer are specified but not yet
-implemented. See [`docs/SPEC.md`](docs/SPEC.md) for the full technical
-specification and [`docs/DECISIONS.md`](docs/DECISIONS.md) for why things are
-the way they are.
+Working v1 implementation. The wallet-gated World, privacy-minimal multiplayer,
+four fixed building rooms, financial state machines, Backend and offline Bridge
+recovery path are implemented and covered headlessly. D-057's separate
+loopback tester has also passed one rendered mock Bank shield through the
+production Wallet Standard seam without a browser extension.
 
-| Building | Protocol | v1 | Cairo needed |
+That evidence is deliberately not a funded-mainnet claim: Ready/Xverse prompt
+behavior, real receipts and balances, the production Bridge shield planner and
+live deployment operations remain open. See [`docs/SPEC.md`](docs/SPEC.md) for
+the full technical specification and [`docs/DECISIONS.md`](docs/DECISIONS.md)
+for the accepted boundaries.
+
+| Building | Protocol | v1 status | Live boundary |
 |---|---|---|---|
-| The Bank | STRK20 pool — shield, unshield, private transfer | ✅ | No |
-| The Exchange | AVNU private swaps | ✅ | No |
-| The Post Office | Private address-to-address transfer | ✅ | No |
-| The Bridge | Deposit from any chain → STRK → the pool. Arrival is **public** | ✅ | No |
-| The Vault | Vesu lending | After v1 | Yes |
+| The Bank | STRK20 pool — shield, unshield, private transfer | Room, Game/Menu surfaces and Wallet API path implemented | Mock shield accepted; funded Ready/Xverse actions remain live gates |
+| The Exchange | AVNU private swaps | Room and machine covered by headless/offline tests | No rendered or financial acceptance; production swap policy remains disabled |
+| The Post Office | Private address-to-address transfer | Room and transfer surfaces implemented | Production activation still needs an approved live relay-fee tuple |
+| The Bridge | Any chain → STRK → the pool. Arrival is **public** | Manual recovery/deposit flow implemented offline | New production quotes stay locked without the fee-aware public-shield planner |
+| The Vault | Vesu lending | Locked until after v1 | Requires a project-owned reviewed and audited Cairo anonymizer |
 
 ---
 
@@ -60,7 +67,7 @@ apps/
   web/          The application shell. Composes everything. Owns routing,
                 layout, and the event bus.
 
-  backend/      Planned paymaster/RPC proxy and bounded submission queue.
+  backend/      Paymaster/RPC proxy and bounded submission queue.
                 No per-request financial or network-identity logs.
 
 packages/
@@ -135,9 +142,12 @@ VITE_LOBBY_URL=ws://localhost:2567
 ## Wallet requirement
 
 STRKWORLD needs a wallet implementing the STRK20 Wallet API (`>= 0.10.3`).
-Today that means a browser extension. The code is written against the wallet
-standard interface rather than any specific wallet, so email/social login
-works the moment a web wallet ships the methods — with no code change here.
+For player funds today that means a compatible browser wallet. The code is
+written against the wallet standard interface rather than any specific wallet,
+so email/social login works the moment a web wallet ships the methods — with no
+code change here. D-057 separately permits an extension-free, mock-only
+loopback provider for autonomous local regression; it holds no player keys and
+proves nothing about live wallet or funded behavior.
 In the production composition, connecting a Starknet mainnet wallet and
 passing its STRK20 capability check is the app entry gate: before admission the
 World, lobby and building panels are not mounted. Local demo/test compositions

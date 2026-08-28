@@ -16,12 +16,12 @@ the lane boundary — that is why the repo is shaped the way it is.
 
 | Lane | Package | Status in v1 |
 |---|---|---|
-| **Chain** | `packages/privacy` | Active; private seam frozen, D-043 planner port/fake complete, production Ready planner blocked |
-| **World** | `packages/world` + `packages/lobby` | Active; Avatar Studio foundation, D-048 top-wall portal and D-052 five-column runtime are headlessly complete; the D-053 global World F toggle is headlessly implemented and verified (PR #19); fresh rendered acceptance remains |
-| **Shell** | `apps/web` | Active, starts week 2 |
-| **Backend** | `apps/backend` | Active; D-050 and both hosted image smokes complete; host, domain, secrets, Alchemy controls, live staging and funded checks remain |
-| **Bridge** | `packages/bridge` | Active, fully independent |
-| **Art** | `packages/world/assets` | D-052 gait correction `8e92cfa` plus independently reviewed 5/13 cross-facing correction `0051fce` complete; only rendered in-game acceptance remains |
+| **Chain** | `packages/privacy` | Active; private seam and D-054 production WalletSession complete, D-043 planner port/fake complete, production Bridge planner and funded wallet validation remain open |
+| **World** | `packages/world` + `packages/lobby` | Active; four fixed rooms, multiplayer, Avatar Studio, D-052 five-column runtime and D-053 global F toggle are headlessly complete; D-057 has accepted the rendered mock Bank path and a later localhost review verified one outdoor cosy-to-fighting transition, while the remaining functional/visual browser matrix is open |
+| **Shell** | `apps/web` | Active; production wallet gate, transfer/shield policy parsing, all v1 room surfaces and D-057's mock Bank acceptance complete; remaining live-route and rendered-room gates are open |
+| **Backend** | `apps/backend` | Active; bounded APIs, same-origin local proxy, D-050 and hosted image smokes complete; host, domain, secrets, Alchemy controls, live staging and funded checks remain |
+| **Bridge** | `packages/bridge` | Active; offline manual/recovery flow complete, production planner and funded-provider acceptance open |
+| **Art** | `packages/world/assets` | D-052 final source/runtime corrections are merged through PR #33 and mechanically reviewed; rendered in-game visual acceptance remains |
 | ~~Contracts~~ | — | **Dormant until post-v1** |
 
 ### Why Contracts is dormant
@@ -94,7 +94,8 @@ deliberate act rather than a convenient one.
 
 ## Sequencing
 
-Lanes do not all start usefully at the same time.
+The schedule below is the historical dependency plan, not current status; the
+table and lane briefs above/below own the current frontiers.
 
 ```
 Week 0   ├── FREEZE SEAMS ──────────────────────────────────┐
@@ -159,6 +160,16 @@ minimum without changing the public shape. A lost submit response must never
 become a blind retry; funded Wallet API/paymaster validation remains on the
 pre-launch checklist.
 
+**D-054/D-056/D-057 current wallet boundary:** the privacy-owned production
+`WalletSession`, dynamic explicit Wallet Standard selection, account/network
+generations and stable operations facade are implemented. Web's public config
+defaults every route to deny-all, can parse an explicit transfer tuple, and may
+enable only D-056's three-variable canonical-STRK shield exception; neither
+implementation is funded acceptance. D-057's independent sibling gateway has
+passed a mock Bank shield through the production public seams with no key, RPC,
+proof, signature, submission or funds. Ready/Xverse behavior and every live
+receipt remain separate gates.
+
 **D-043 complete offline:** a separate optional public-shield planner port and
 deterministic fake are implemented. It is not a method on the frozen
 `PrivacyOperations` interface. The port defines `amountToShield` as the
@@ -216,29 +227,29 @@ with manual reconnect.
 The D-038 remote-avatar implementation is complete and headlessly verified.
 The Shell adapts privacy-minimal lobby snapshots into a replaying World-owned
 source; Phaser reconciles the full snapshot without importing the lobby or
-widening the frozen shared event bus. Its remaining acceptance is manual:
-two browsers must see one another move, then see the other avatar disappear on
-Bank entry and return at the restored street placement on exit.
+widening the frozen shared event bus. Its remaining functional acceptance is
+the two-browser matrix: both players see movement, then see the other avatar
+disappear on Bank entry and return at the restored street placement on exit.
 
 The D-039 implementation is complete and headlessly verified. The accepted
 Bank behavior now runs through one validated, data-driven fixed-room core, and
 the Post Office is the second room with one opaque
 `post-office:transfer` station. Bank geometry and behavior remain unchanged;
-the shared buses and privacy seam remain frozen. Its remaining acceptance is
-manual: enter and physically exit both rooms, and confirm that each station
-highlights and opens only its admitted surface.
+the shared buses and privacy seam remain frozen. Its remaining functional
+acceptance is to enter and physically exit both rooms and confirm that each
+station highlights and opens only its admitted surface.
 
 **D-042 complete offline:** the Exchange is the third definition in the same
 fixed-room core, with one opaque `exchange:swap` station. No new scene, shared
 event, lobby field or financial meaning entered World. Headless tests pin its
 geometry, station presentation and boot-order snapshot. Rendered room and
-station acceptance remains user-run at `http://localhost:5173/`.
+station acceptance remains open at `http://localhost:5173/`.
 
 **D-043 complete offline:** the Bridge is another definition of the same
 fixed-room core with one opaque `bridge:deposit` station. World owns geometry,
 highlight, activation, exit and teardown only; it gained no recipient, quote,
 deposit address, status or wallet concept. Rendered room and station acceptance
-remains user-run at `http://localhost:5173/`.
+remains open at `http://localhost:5173/`.
 
 **D-047 foundation, D-048 portal and D-052 art/runtime integration complete;
 rendered gate remains:** the hidden south path and bottom-edge
@@ -264,9 +275,10 @@ with one lifecycle-owned one-press, no-repeat cosy/fighting toggle outdoors and
 in existing interiors through the same opaque `avatar:selected` key. It adds no
 stance or wire field. Gait correction `8e92cfa`, character 5/13 cross-facing
 correction `0051fce`, and five-column runtime commit `5c8c81a` are
-independently reviewed and headlessly complete. Fresh user-run in-game review
-remains open; the earlier localhost foundation acceptance covers neither this
-art replacement nor the rendered F behavior.
+independently reviewed and headlessly complete. A later localhost review
+verified one outdoor/street cosy-to-fighting transition after one `F` press.
+The reverse transition, Avatar Studio and fixed-room interior F behavior, the
+full art replacement and subjective visual quality remain open.
 
 **D-053 global F toggle — headlessly implemented and verified, rendered
 acceptance still open.** Branch `codex/global-outfit-toggle` (PR #19) moves
@@ -278,8 +290,20 @@ The existing `pairedAvatarSprite` resolver and `avatar:selected` event are
 preserved; the toggle is proven outdoors, in Avatar Studio and in each existing
 fixed-room interior, along with repeat/editable/suspended/stale-handler guards
 and transition/restart single-ownership through the real `create()` order.
-Shared, lobby, Fly and financial seams are unchanged. **The user's localhost
-rendered and interactive check has not happened and is not claimed.**
+Shared, lobby, Fly and financial seams are unchanged. **Only one rendered
+outdoor/street cosy-to-fighting transition has been verified; the reverse,
+Avatar Studio, fixed-room interiors and the complete visual matrix have not and
+are not claimed.**
+
+D-057 now supplies an extension-free, mock-only production-seam gateway for
+repeatable agent-run functional checks. The accepted rendered evidence covers
+wallet admission, World/lobby mount, the Bank, one deliberate balance read, a
+fixed mock shield receipt and multiplayer restoration after Bank exit. The
+separate later localhost review covers only one outdoor/street
+cosy-to-fighting transition. These checks do not yet cover the D-038
+two-browser matrix, every room/station, the reverse transition, Avatar Studio
+or interior F behavior, or subjective final-art acceptance, and they prove no
+live-wallet or funded behavior.
 
 James has delegated the intermediate D-052 art gates to orchestration. The Art
 lane should continue through internal identity, edge, movement, source/export
@@ -324,17 +348,24 @@ controller, and account loss, disconnect or wrong-network state tears it down
 and returns to the gate. D-019/D-037 behavior remains in force once admitted.
 The retained source clears on drop/replacement/destroy and suppresses
 pre-welcome self snapshots until the server-minted ID permits filtering. The
-remaining D-038 gate is the user-run two-browser acceptance described in the
+remaining D-038 gate is the two-browser acceptance described in the
 World lane. Do not widen `ShellEvents`, expose the LobbyClient to Phaser, or
 change the completed D-033–D-036 Game Mode, uncertainty and financial-seam
 behavior.
+
+D-054/D-055 production composition is live in source, PR #59 implements the
+disabled-by-default transfer tuple, and D-056/PR #65 implements the independent
+disabled-by-default canonical-STRK shield tuple. D-057 then passed the wallet
+gate, World/lobby mount and one complete mock Bank shield without an extension
+or popup. That is the only rendered production-seam financial flow accepted so
+far; it is mock-only and does not accept a live wallet, real receipt or funds.
 
 D-039 is complete and headlessly verified: the opaque Post Office station is
 admitted and the existing financial machine is configured for one transfer
 mode and one intent. Game Mode reuses recipient preflight, route admission,
 `ConfirmGate`, receipts and uncertainty handling. D-040 completes Post Office
 Menu Mode with the same transfer-only machine and Menu Mode's compatible
-multi-transfer batching. The remaining rendered gate is user-run acceptance
+multi-transfer batching. The remaining rendered gate is functional acceptance
 recorded in the World lane.
 
 **D-042 complete offline:** the dedicated Exchange machine and panel use the
@@ -343,7 +374,7 @@ time. The player explicitly requests balances; the prepared review carries the
 canonical D-024 disclosure, expected and protected outputs, slippage, absolute
 expiry and exact fees at `ConfirmGate`; receipts are owned by `exchange` and
 outlive the room. Catalog metadata is never route authority. Rendered
-acceptance remains user-run at `http://localhost:5173/`.
+acceptance remains open at `http://localhost:5173/`.
 
 **D-043 complete offline:** the manual-only Bridge machine and room retain the
 concrete connected account beside the privacy seam, bind every new quote to its
@@ -627,11 +658,14 @@ cross-lane decisions on the user's behalf.
 **Keep the current world live while orchestrating.** While the project-lead
 task is active, serve the current working tree at `http://localhost:5173/`.
 After an integrated World or Shell change, give the user a concise visual and
-interactive test script against that URL and wait for their result. Do not
-automate Chrome or the in-app browser unless the user explicitly requests it;
-browser automation has proved slow and unreliable for game testing. Agents
-still own headless, unit, integration, type, build and invariant checks. The
-live preview is a collaboration surface, not acceptance evidence by itself.
+interactive test script against that URL and wait for their result unless they
+have explicitly authorized browser automation. Under that authorization,
+D-057's extension-free sibling gateway at `http://127.0.0.1:5173/` may drive
+repeatable agent-run mock functional checks through the production public seams.
+It never substitutes for Ready/Xverse prompts, funded/onchain evidence or the
+user's subjective visual approval. Agents still own headless, unit, integration,
+type, build and invariant checks. The live preview is a collaboration surface,
+not acceptance evidence by itself.
 
 **`packages/shared` is frozen.** A change there needs a decision entry, because
 it breaks three lanes simultaneously.
