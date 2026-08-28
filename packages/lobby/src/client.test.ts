@@ -852,6 +852,79 @@ describe('presence', () => {
     expect(peers[0]?.facing).toBe('up');
   });
 
+  it('delivers a reentrant suspend after the resume transition to every subscriber', async () => {
+    const walker = makeClient(20, 0);
+    await walker.connect();
+    walker.suspend();
+
+    const first: LobbyStatusEvent[] = [];
+    const second: LobbyStatusEvent[] = [];
+    walker.onStatus((event) => {
+      first.push(event);
+      if (event.status === 'connected') walker.suspend();
+    });
+    walker.onStatus((event) => second.push(event));
+    first.length = 0;
+    second.length = 0;
+
+    walker.resume({ x: 40, y: 40, facing: 'up' });
+
+    expect(walker.status).toBe('suspended');
+    expect(first).toEqual([{ status: 'connected' }, { status: 'suspended' }]);
+    expect(second).toEqual([{ status: 'connected' }, { status: 'suspended' }]);
+  });
+
+  it('delivers reentrant peer snapshots in order to every subscriber', async () => {
+    const joined = fakeRoom();
+    const joinOrCreate = vi
+      .spyOn(ColyseusClient.prototype, 'joinOrCreate')
+      .mockImplementation(() => Promise.resolve(joined.room) as never);
+
+    try {
+      const walker = makeClient(20, 0);
+      const first: string[][] = [];
+      const second: string[][] = [];
+      walker.onPeers((peers) => {
+        first.push(peers.map(({ gameId }) => gameId));
+        if (peers.length !== 1 || peers[0]?.gameId !== 'peer-a') return;
+        joined.room.state.peers.set(
+          'peer-b',
+          {
+            gameId: 'peer-b',
+            position: { x: 40, y: 40 },
+            facing: 'up',
+            sprite: 'avatar-3',
+          } as never,
+        );
+        joined.stateChange();
+      });
+      walker.onPeers((peers) => second.push(peers.map(({ gameId }) => gameId)));
+
+      const connecting = walker.connect();
+      await Promise.resolve();
+      joined.welcome({ gameId: 'self' });
+      await connecting;
+      first.length = 0;
+      second.length = 0;
+
+      joined.room.state.peers.set(
+        'peer-a',
+        {
+          gameId: 'peer-a',
+          position: { x: 30, y: 30 },
+          facing: 'down',
+          sprite: 'avatar-2',
+        } as never,
+      );
+      joined.stateChange();
+
+      expect(first).toEqual([['peer-a'], ['peer-a', 'peer-b']]);
+      expect(second).toEqual([['peer-a'], ['peer-a', 'peer-b']]);
+    } finally {
+      joinOrCreate.mockRestore();
+    }
+  });
+
   it('resumes with an explicitly selected approved sprite', async () => {
     const observer = makeClient(0, 0);
     await observer.connect();
