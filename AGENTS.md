@@ -258,6 +258,30 @@ empty shell to fetchers, so a 200 there means nothing.
 
 ## 6. Findings log
 
+### 2026-08-28 — Event-bus subscriptions retain generation ownership during synchronous emit
+
+The Web event bus previously stored one `Set` per event and iterated a
+snapshot without checking whether each snapshot entry was still current. A
+handler unsubscribed before its turn, or all handlers cleared during an emit,
+could still receive that in-flight event. Because cleanup called
+`off(event, handler)` by function identity, an older unsubscribe could also
+remove a newer subscription of the same handler. A same-handler
+unsubscribe/resubscribe during an emit must not inherit the old snapshot, but
+must receive later emits.
+
+The bus now stores a per-event `Map<handler, token>`. Each subscription owns a
+token; returned cleanup removes only its token, explicit `off` removes the
+current generation, and emit checks token liveness before delivery. `clear()`
+empties the per-event maps before dropping them so it suppresses the remainder
+of an in-flight snapshot. Existing synchronous reentrant emission, `once`
+semantics and exception isolation remain unchanged.
+
+*Verified:* four public event-bus regressions cover unsubscribe-before-turn,
+stale same-handler cleanup, same-handler resubscription during emit, and
+clear-during-emit. The unpatched `origin/main` failed three of the four; the
+focused suite passes 11/11 after the change. No browser, wallet, provider,
+RPC, proof, signature, funds or transaction was used.
+
 ### 2026-08-28 — Horizontal camera follow is immediate for sharp pixel motion
 
 The street camera previously eased toward the player on both axes with a
