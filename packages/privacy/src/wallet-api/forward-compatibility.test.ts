@@ -168,12 +168,16 @@ describe('Wallet Standard forward compatibility', () => {
       if (wallet.name.includes('Ready')) admit();
       switch (provider['name']) { case 'Ready': admit(); }
       const supported = wallet.features['starknet:walletApi'].id === 'ready';
+      const { name: providerName } = wallet;
+      const { ['id']: featureId } = wallet.features['starknet:walletApi'];
     `);
     expect(walletIdentityReads([hostile])).toEqual([
       'fixture.ts:2:11 handle.name',
       'fixture.ts:3:11 wallet.name',
       "fixture.ts:4:15 provider['name']",
       "fixture.ts:5:25 wallet.features['starknet:walletApi'].id",
+      'fixture.ts:6:15 name: providerName',
+      "fixture.ts:7:15 ['id']: featureId",
     ]);
   });
 });
@@ -324,15 +328,26 @@ function walletIdentityReads(sources: SourceFixture[]): string[] {
   });
 }
 
-function isIdentityRead(node: ts.Node): node is ts.PropertyAccessExpression | ts.ElementAccessExpression {
+function isIdentityRead(
+  node: ts.Node,
+): node is ts.PropertyAccessExpression | ts.ElementAccessExpression | ts.BindingElement {
   if (ts.isPropertyAccessExpression(node)) return node.name.text === 'id' || node.name.text === 'name';
-  if (!ts.isElementAccessExpression(node) || !node.argumentExpression) return false;
-  return ts.isStringLiteralLike(node.argumentExpression)
-    && (node.argumentExpression.text === 'id' || node.argumentExpression.text === 'name');
+  if (ts.isElementAccessExpression(node) && node.argumentExpression) {
+    return ts.isStringLiteralLike(node.argumentExpression)
+      && (node.argumentExpression.text === 'id' || node.argumentExpression.text === 'name');
+  }
+  if (!ts.isBindingElement(node)) return false;
+  const property = node.propertyName ?? node.name;
+  if (ts.isComputedPropertyName(property)) {
+    return ts.isStringLiteralLike(property.expression)
+      && (property.expression.text === 'id' || property.expression.text === 'name');
+  }
+  return (ts.isIdentifier(property) || ts.isStringLiteralLike(property))
+    && (property.text === 'id' || property.text === 'name');
 }
 
 function isAllowedDisplayOrErrorName(
-  node: ts.PropertyAccessExpression | ts.ElementAccessExpression,
+  node: ts.PropertyAccessExpression | ts.ElementAccessExpression | ts.BindingElement,
   path: string,
 ): boolean {
   if (!ts.isPropertyAccessExpression(node) || node.name.text !== 'name') return false;
