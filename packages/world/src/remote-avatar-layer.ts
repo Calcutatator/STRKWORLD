@@ -5,9 +5,8 @@ import {
   type RemotePeerSource,
 } from './remote-peer.js';
 import {
-  AVATAR_NORMAL_WALK_FPS,
-  AVATAR_WALK_COLUMNS,
   createAvatarVisualController,
+  resolveAvatarAnimation,
   resolveAvatarSheet,
   type AvatarVisualController,
 } from './avatar-visual.js';
@@ -16,9 +15,6 @@ type Scene = PhaserTypes.Scene;
 type Sprite = PhaserTypes.GameObjects.Sprite;
 type Layer = PhaserTypes.GameObjects.Layer;
 type TimerEvent = PhaserTypes.Time.TimerEvent;
-
-const REMOTE_MOVEMENT_IDLE_MS =
-  (AVATAR_WALK_COLUMNS.length / AVATAR_NORMAL_WALK_FPS) * 1_000;
 
 interface RemoteAvatar {
   readonly sprite: Sprite;
@@ -132,7 +128,9 @@ function updateAvatar(
     sprinting: false,
   });
   if (!moving) return;
-  avatar.idleTimer = scene.time.delayedCall(REMOTE_MOVEMENT_IDLE_MS, () => {
+  const animation = resolveAvatarAnimation(peer.sprite, peer.facing, false);
+  const movementIdleMs = (animation.frames.length / animation.frameRate) * 1_000;
+  avatar.idleTimer = scene.time.delayedCall(movementIdleMs, () => {
     avatar.idleTimer = undefined;
     avatar.visual.present({
       sprite: peer.sprite,

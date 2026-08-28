@@ -2246,6 +2246,34 @@ amendment removes repeated approval pauses; it does not waive D-052's final
 rendered-acceptance requirement or authorize a mechanically conforming but
 visually incoherent asset.
 
+**2026-08-28 Avatar 1 cosy six-column amendment.** James explicitly approved
+only the exact Avatar 1 cosy PNG with SHA-256
+`f0ea738353723abc18070210bf169002ede62003b03508b1e326ff9ae72e87bb`.
+For that opaque key only, the sheet is 384x256 and each facing row uses six
+64x64 columns: `idle`, `contact-left`, `passing-left`, `contact-right`,
+`passing-right`, `settle`. Its normal runtime cycle is all six columns at 8
+FPS. Avatar 1 fighting and avatars 2-16 retain the existing five-column sheets
+and were not approved or altered by this amendment. World must own geometry
+per sheet so the opaque key and lobby wire shape remain unchanged. The common
+feet point, gameplay body, binary alpha, no-shadow rule and nearest-neighbour
+rendering remain unchanged.
+
+The exact approved pixels use up to 29 visible RGB colours per frame: 21 of
+24 cells exceed the prior 24-colour cap and the maximum is 29. Exact-binary
+approval plus James's instruction to continue authorizes a scoped Avatar 1
+cosy exception of 29. The default cap remains 24 for Avatar 2-16, including
+Avatar 1's paired fighting key `avatar-9`; no palette remap or broader palette
+relaxation is authorized.
+
+The approved down-eye correction remains in the exact PNG. A later attempted
+left/right eye-lock pass was rejected and fully reverted; its artifact and
+ledger are quarantined outside the repository and must not be used. The
+approved PNG's left and right rows are pixel-identical to their pre-eye-pass
+versions and its up row is unchanged. The prior Aseprite source does not encode
+this new sixth column, so it remains historical source for the five-column set
+and must not overwrite the source-authoritative hashed Avatar 1 PNG. Fresh
+live-browser rendered acceptance of this replacement remains required.
+
 ---
 
 ## D-053 — The F outfit toggle follows the local avatar throughout World play

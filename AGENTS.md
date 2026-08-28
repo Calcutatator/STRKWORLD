@@ -258,6 +258,36 @@ empty shell to fetchers, so a 200 there means nothing.
 
 ## 6. Findings log
 
+### 2026-08-28 — Avatar 1 cosy owns a six-column per-sheet contract
+
+Avatar 1 cosy now uses the exact user-approved 384x256 production PNG with
+SHA-256 `f0ea738353723abc18070210bf169002ede62003b03508b1e326ff9ae72e87bb`.
+Its four 64x64 facing rows contain `idle`, `contact-left`, `passing-left`,
+`contact-right`, `passing-right` and `settle`. World therefore owns width, row
+stride, playback columns and remote-cycle duration per sheet instead of using
+one global five-column assumption. Avatar 1 fighting and Avatar 2-16 retain
+their prior five-column geometry and pixels; the lobby still carries only the
+opaque cosmetic key.
+
+The exact PNG preserves the approved down-eye correction. The rejected
+left/right eye-lock pass remains excluded: the approved side rows are restored
+pixel-identically and the up row is unchanged. The historical Aseprite source
+does not encode the sixth column and must not overwrite this source-authoritative
+PNG. Its 21 cells above the prior 24-colour cap are also intentional: Avatar 1
+cosy alone has a maximum of 29 colours per frame, while Avatar 2-16 retain the
+24-colour default. No palette remap or broader exception is authorized.
+
+*Verified:* the source SHA and 384x256 PNG header were checked before and after
+the copy. Dedicated public tests pin that exact hash, geometry, 24/24 passing
+cell reports, binary alpha, all 24 decoded sheet-crop hashes, down-eye evidence,
+side-row reversion, frozen nested playback authority, six-column preload/row
+offsets and per-sheet remote idle duration while retaining the five-column
+Avatar 2-16 contract. The focused suite passes 3 files / 20 tests; the exact
+reviewed branch passes 95 files / 1,362 tests, all workspace typechecks,
+the production build, all 13 invariants and diff hygiene. No browser, lobby,
+wallet, RPC, proof, signature, funds or transaction was used; fresh rendered
+acceptance remains the project-lead handoff after merge and local restart.*
+
 ### 2026-08-28 — Presence status subscribers retain transition ownership
 
 `PresenceController` now snapshots status subscribers as listener/generation

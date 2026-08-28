@@ -1,6 +1,8 @@
 import { describe, expect, it, vi } from 'vitest';
 import {
+  AVATAR_ONE_WALK_COLUMNS,
   AVATAR_VISUAL_CATALOG,
+  AVATAR_WALK_COLUMNS,
   applyAvatarVisual,
   configureLocalAvatarBody,
   createAvatarVisualController,
@@ -18,14 +20,21 @@ describe('D-052 avatar visual catalog', () => {
       file: new URL(sheet.url).pathname.split('/').at(-1),
       sheet: [sheet.width, sheet.height],
       cell: [sheet.frameWidth, sheet.frameHeight],
+      columns: sheet.columns,
+      walkColumns: sheet.walkColumns,
       origin: [sheet.originX, sheet.originY],
-    }))).toEqual(Array.from({ length: 16 }, (_, index) => ({
-      sprite: `avatar-${index + 1}`,
-      file: `avatar-${index + 1}.png`,
-      sheet: [320, 256],
-      cell: [64, 64],
-      origin: [0.5, 0.875],
-    })));
+    }))).toEqual(Array.from({ length: 16 }, (_, index) => {
+      const avatarOne = index === 0;
+      return {
+        sprite: `avatar-${index + 1}`,
+        file: `avatar-${index + 1}.png`,
+        sheet: [avatarOne ? 384 : 320, 256],
+        cell: [64, 64],
+        columns: avatarOne ? 6 : 5,
+        walkColumns: avatarOne ? [0, 1, 2, 3, 4, 5] : [0, 1, 2, 3, 4],
+        origin: [0.5, 0.875],
+      };
+    }));
   });
 
   it('resolves an unknown runtime key to the safe avatar-1 sheet', () => {
@@ -47,7 +56,7 @@ describe('D-052 avatar visual catalog', () => {
     expect(queued[0]).toEqual([
       'avatar-1',
       expect.stringMatching(/player-sprites\/v1\/avatar-1\.png$/),
-      { frameWidth: 64, frameHeight: 64, startFrame: 0, endFrame: 19 },
+      { frameWidth: 64, frameHeight: 64, startFrame: 0, endFrame: 23 },
     ]);
     expect(queued.at(-1)).toEqual([
       'avatar-16',
@@ -67,9 +76,24 @@ describe('D-052 avatar visual catalog', () => {
     expect(resolveAvatarAnimation('not-allowed', 'up', true)).toEqual({
       key: 'avatar-1:up:sprint',
       textureKey: 'avatar-1',
-      frames: [15, 16, 17, 18, 19],
+      frames: [18, 19, 20, 21, 22, 23],
       frameRate: 12,
     });
+  });
+
+  it('freezes public per-sheet playback columns against runtime contract mutation', () => {
+    const avatarOne = AVATAR_VISUAL_CATALOG[0]!;
+    const avatarTwo = AVATAR_VISUAL_CATALOG[1]!;
+
+    expect(Object.isFrozen(AVATAR_ONE_WALK_COLUMNS)).toBe(true);
+    expect(Object.isFrozen(AVATAR_WALK_COLUMNS)).toBe(true);
+    expect(Object.isFrozen(avatarOne.walkColumns)).toBe(true);
+    expect(Object.isFrozen(avatarTwo.walkColumns)).toBe(true);
+    expect(() => {
+      (avatarOne.walkColumns as number[])[0] = 5;
+    }).toThrow(TypeError);
+    expect(resolveAvatarAnimation('avatar-1', 'down', false).frames).toEqual([0, 1, 2, 3, 4, 5]);
+    expect(resolveAvatarAnimation('avatar-2', 'down', false).frames).toEqual([0, 1, 2, 3, 4]);
   });
 
   it('registers missing global animations once with their resolved sheet frames', () => {
@@ -92,6 +116,7 @@ describe('D-052 avatar visual catalog', () => {
         { key: 'avatar-1', frame: 2 },
         { key: 'avatar-1', frame: 3 },
         { key: 'avatar-1', frame: 4 },
+        { key: 'avatar-1', frame: 5 },
       ],
       frameRate: 12,
       repeat: -1,
@@ -134,7 +159,7 @@ describe('D-052 avatar visual catalog', () => {
 
     expect(target.setTexture).toHaveBeenLastCalledWith('avatar-1');
     expect(target.stop).toHaveBeenCalledTimes(1);
-    expect(target.setFrame).toHaveBeenLastCalledWith(15);
+    expect(target.setFrame).toHaveBeenLastCalledWith(18);
   });
 
   it('keeps the local Arcade body at the prior 24px world-coordinate footprint', () => {

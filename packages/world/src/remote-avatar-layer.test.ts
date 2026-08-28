@@ -163,7 +163,17 @@ describe('remote avatar layer', () => {
 
     expect(fake.scene.add.sprite).toHaveBeenCalledWith(40, 72, 'avatar-1', 0);
     expect(fake.objects[0]?.setData).toHaveBeenCalledWith('sprite', 'avatar-1');
-    expect(fake.objects[0]?.setFrame).toHaveBeenLastCalledWith(15);
+    expect(fake.objects[0]?.setFrame).toHaveBeenLastCalledWith(18);
+  });
+
+  it('holds remote movement for the active sheet cycle before returning to idle', () => {
+    const sourceController = createRemotePeerSource([peer({ sprite: 'avatar-1' })]);
+    const fake = fakeScene();
+
+    createRemoteAvatarLayer({ scene: fake.scene as never, source: sourceController.source });
+    sourceController.publish([peer({ x: 48, sprite: 'avatar-1' })]);
+
+    expect(fake.scene.time.delayedCall).toHaveBeenLastCalledWith(750, expect.any(Function));
   });
 
   it('renders authored directional frames without placeholder tint or mirroring', () => {

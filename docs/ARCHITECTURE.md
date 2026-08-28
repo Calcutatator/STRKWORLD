@@ -155,8 +155,12 @@ wiring now routes local players, remote peers and Studio selectors through one
 semantic resolver in headless coverage, without changing any lobby/wire field,
 shared type or Fly allowlist. The browser recording failed to establish
 rendered acceptance. D-052 supersedes D-049's three-column movement geometry:
-the replacement sheets are 320×256 with five columns per facing and 320 total
-Aseprite frames, while the 64×64 cell, `(32, 56)` feet, 24×24 bodies and
+the default replacement sheets are 320×256 with five columns per facing. The
+approved Avatar 1 cosy override is 384×256 with a sixth `settle` column; World
+therefore resolves sheet width, row stride and playback columns per opaque key
+rather than assuming one global atlas geometry. The historical editable source
+still contains the prior 320 Aseprite frames, while the 64×64 cell, `(32, 56)`
+feet, 24×24 bodies and
 no-baked-shadow rule remain. Vertical rows preserve hip/depth continuity and
 side rows move along x; each cycle keeps a planted baseline foot and introduces
 no new white or bright edge contamination. D-053 supersedes D-052's Studio-only

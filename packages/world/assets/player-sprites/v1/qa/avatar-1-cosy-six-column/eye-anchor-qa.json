@@ -1,0 +1,619 @@
+{
+  "status": "pass",
+  "scope": "avatar-1 cosy down-eye lock; left/right pass reverted",
+  "upRowPixelIdentical": true,
+  "sideRowsRestoredPixelIdentical": true,
+  "nonFacePixelsPixelIdentical": true,
+  "idleCellsPixelIdentical": true,
+  "eyeSignatures": {
+    "down": {
+      "coordinates": [
+        [
+          27,
+          21
+        ],
+        [
+          32,
+          21
+        ]
+      ],
+      "rgba": [
+        24,
+        13,
+        15,
+        255
+      ],
+      "poses": [
+        {
+          "pose": "idle",
+          "status": "pass",
+          "mismatches": []
+        },
+        {
+          "pose": "contact-left",
+          "status": "pass",
+          "mismatches": []
+        },
+        {
+          "pose": "passing-left",
+          "status": "pass",
+          "mismatches": []
+        },
+        {
+          "pose": "contact-right",
+          "status": "pass",
+          "mismatches": []
+        },
+        {
+          "pose": "passing-right",
+          "status": "pass",
+          "mismatches": []
+        },
+        {
+          "pose": "settle",
+          "status": "pass",
+          "mismatches": []
+        }
+      ]
+    }
+  },
+  "cells": [
+    {
+      "cell": "down-idle.png",
+      "changedPixelCount": 0,
+      "changedCoordinates": [],
+      "changedOutsideFaceLock": [],
+      "faceLockMismatches": [],
+      "sha256": "a5a3f6e5286c3f497ecb90e77fce05e49c224e9b56fdfbe9a48623e2340f71fd"
+    },
+    {
+      "cell": "down-contact-left.png",
+      "changedPixelCount": 24,
+      "changedCoordinates": [
+        [
+          26,
+          20
+        ],
+        [
+          27,
+          20
+        ],
+        [
+          28,
+          20
+        ],
+        [
+          29,
+          20
+        ],
+        [
+          30,
+          20
+        ],
+        [
+          31,
+          20
+        ],
+        [
+          33,
+          20
+        ],
+        [
+          26,
+          21
+        ],
+        [
+          28,
+          21
+        ],
+        [
+          29,
+          21
+        ],
+        [
+          30,
+          21
+        ],
+        [
+          31,
+          21
+        ],
+        [
+          33,
+          21
+        ],
+        [
+          26,
+          22
+        ],
+        [
+          27,
+          22
+        ],
+        [
+          31,
+          22
+        ],
+        [
+          32,
+          22
+        ],
+        [
+          33,
+          22
+        ],
+        [
+          26,
+          23
+        ],
+        [
+          27,
+          23
+        ],
+        [
+          28,
+          23
+        ],
+        [
+          31,
+          23
+        ],
+        [
+          32,
+          23
+        ],
+        [
+          33,
+          23
+        ]
+      ],
+      "changedOutsideFaceLock": [],
+      "faceLockMismatches": [],
+      "sha256": "6e5ff73077c2721b7dd5b8ed5dd2865d9fdadca3a76dd03e4f00f62d7451da01"
+    },
+    {
+      "cell": "down-passing-left.png",
+      "changedPixelCount": 22,
+      "changedCoordinates": [
+        [
+          26,
+          20
+        ],
+        [
+          27,
+          20
+        ],
+        [
+          28,
+          20
+        ],
+        [
+          29,
+          20
+        ],
+        [
+          30,
+          20
+        ],
+        [
+          31,
+          20
+        ],
+        [
+          32,
+          20
+        ],
+        [
+          33,
+          20
+        ],
+        [
+          26,
+          21
+        ],
+        [
+          29,
+          21
+        ],
+        [
+          30,
+          21
+        ],
+        [
+          31,
+          21
+        ],
+        [
+          26,
+          22
+        ],
+        [
+          27,
+          22
+        ],
+        [
+          31,
+          22
+        ],
+        [
+          32,
+          22
+        ],
+        [
+          33,
+          22
+        ],
+        [
+          26,
+          23
+        ],
+        [
+          27,
+          23
+        ],
+        [
+          28,
+          23
+        ],
+        [
+          32,
+          23
+        ],
+        [
+          33,
+          23
+        ]
+      ],
+      "changedOutsideFaceLock": [],
+      "faceLockMismatches": [],
+      "sha256": "e3c347a89608162f35cfa7d0641880aa045c1144e814cf76386df50c49dd2638"
+    },
+    {
+      "cell": "down-contact-right.png",
+      "changedPixelCount": 26,
+      "changedCoordinates": [
+        [
+          27,
+          20
+        ],
+        [
+          28,
+          20
+        ],
+        [
+          29,
+          20
+        ],
+        [
+          30,
+          20
+        ],
+        [
+          31,
+          20
+        ],
+        [
+          32,
+          20
+        ],
+        [
+          33,
+          20
+        ],
+        [
+          26,
+          21
+        ],
+        [
+          28,
+          21
+        ],
+        [
+          29,
+          21
+        ],
+        [
+          30,
+          21
+        ],
+        [
+          31,
+          21
+        ],
+        [
+          32,
+          21
+        ],
+        [
+          33,
+          21
+        ],
+        [
+          27,
+          22
+        ],
+        [
+          31,
+          22
+        ],
+        [
+          32,
+          22
+        ],
+        [
+          33,
+          22
+        ],
+        [
+          26,
+          23
+        ],
+        [
+          27,
+          23
+        ],
+        [
+          28,
+          23
+        ],
+        [
+          29,
+          23
+        ],
+        [
+          30,
+          23
+        ],
+        [
+          31,
+          23
+        ],
+        [
+          32,
+          23
+        ],
+        [
+          33,
+          23
+        ]
+      ],
+      "changedOutsideFaceLock": [],
+      "faceLockMismatches": [],
+      "sha256": "9b05ae3686f65b67711e40cf5002632cc46ac20cc6c25efb9e5d42a1face3df0"
+    },
+    {
+      "cell": "down-passing-right.png",
+      "changedPixelCount": 28,
+      "changedCoordinates": [
+        [
+          26,
+          20
+        ],
+        [
+          27,
+          20
+        ],
+        [
+          28,
+          20
+        ],
+        [
+          29,
+          20
+        ],
+        [
+          30,
+          20
+        ],
+        [
+          32,
+          20
+        ],
+        [
+          33,
+          20
+        ],
+        [
+          26,
+          21
+        ],
+        [
+          27,
+          21
+        ],
+        [
+          28,
+          21
+        ],
+        [
+          29,
+          21
+        ],
+        [
+          30,
+          21
+        ],
+        [
+          31,
+          21
+        ],
+        [
+          32,
+          21
+        ],
+        [
+          33,
+          21
+        ],
+        [
+          26,
+          22
+        ],
+        [
+          27,
+          22
+        ],
+        [
+          29,
+          22
+        ],
+        [
+          32,
+          22
+        ],
+        [
+          33,
+          22
+        ],
+        [
+          26,
+          23
+        ],
+        [
+          27,
+          23
+        ],
+        [
+          28,
+          23
+        ],
+        [
+          29,
+          23
+        ],
+        [
+          30,
+          23
+        ],
+        [
+          31,
+          23
+        ],
+        [
+          32,
+          23
+        ],
+        [
+          33,
+          23
+        ]
+      ],
+      "changedOutsideFaceLock": [],
+      "faceLockMismatches": [],
+      "sha256": "8e6f19a14dd5abcf91f6d62efb80e92d52bd22c8d58d3232a87ef1a0c0c548bf"
+    },
+    {
+      "cell": "down-settle.png",
+      "changedPixelCount": 26,
+      "changedCoordinates": [
+        [
+          26,
+          20
+        ],
+        [
+          27,
+          20
+        ],
+        [
+          28,
+          20
+        ],
+        [
+          29,
+          20
+        ],
+        [
+          30,
+          20
+        ],
+        [
+          32,
+          20
+        ],
+        [
+          33,
+          20
+        ],
+        [
+          27,
+          21
+        ],
+        [
+          28,
+          21
+        ],
+        [
+          29,
+          21
+        ],
+        [
+          30,
+          21
+        ],
+        [
+          31,
+          21
+        ],
+        [
+          32,
+          21
+        ],
+        [
+          33,
+          21
+        ],
+        [
+          26,
+          22
+        ],
+        [
+          27,
+          22
+        ],
+        [
+          29,
+          22
+        ],
+        [
+          31,
+          22
+        ],
+        [
+          32,
+          22
+        ],
+        [
+          33,
+          22
+        ],
+        [
+          26,
+          23
+        ],
+        [
+          27,
+          23
+        ],
+        [
+          30,
+          23
+        ],
+        [
+          31,
+          23
+        ],
+        [
+          32,
+          23
+        ],
+        [
+          33,
+          23
+        ]
+      ],
+      "changedOutsideFaceLock": [],
+      "faceLockMismatches": [],
+      "sha256": "3cce86c327a76fd6e02e49667e554be36446f021365554948c03a432a71af5a7"
+    }
+  ]
+}

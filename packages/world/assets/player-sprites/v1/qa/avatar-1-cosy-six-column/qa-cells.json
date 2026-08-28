@@ -1,0 +1,674 @@
+[
+  {
+    "file": "down-contact-left.png",
+    "size": [
+      64,
+      64
+    ],
+    "bbox": [
+      19,
+      6,
+      44,
+      56
+    ],
+    "alphaValues": [
+      0,
+      255
+    ],
+    "paletteColors": 28,
+    "components8": [
+      808
+    ],
+    "enclosedTransparentPixels": 0,
+    "enclosedTransparentCoordinates": [],
+    "edgePixels": 0,
+    "neutralWhitePixels": 0,
+    "badContourPixels": 0,
+    "status": "pass",
+    "failures": []
+  },
+  {
+    "file": "down-contact-right.png",
+    "size": [
+      64,
+      64
+    ],
+    "bbox": [
+      19,
+      6,
+      44,
+      56
+    ],
+    "alphaValues": [
+      0,
+      255
+    ],
+    "paletteColors": 29,
+    "components8": [
+      778
+    ],
+    "enclosedTransparentPixels": 0,
+    "enclosedTransparentCoordinates": [],
+    "edgePixels": 0,
+    "neutralWhitePixels": 0,
+    "badContourPixels": 0,
+    "status": "pass",
+    "failures": []
+  },
+  {
+    "file": "down-idle.png",
+    "size": [
+      64,
+      64
+    ],
+    "bbox": [
+      19,
+      6,
+      45,
+      56
+    ],
+    "alphaValues": [
+      0,
+      255
+    ],
+    "paletteColors": 28,
+    "components8": [
+      952
+    ],
+    "enclosedTransparentPixels": 0,
+    "enclosedTransparentCoordinates": [],
+    "edgePixels": 0,
+    "neutralWhitePixels": 0,
+    "badContourPixels": 0,
+    "status": "pass",
+    "failures": []
+  },
+  {
+    "file": "down-passing-left.png",
+    "size": [
+      64,
+      64
+    ],
+    "bbox": [
+      18,
+      6,
+      45,
+      56
+    ],
+    "alphaValues": [
+      0,
+      255
+    ],
+    "paletteColors": 29,
+    "components8": [
+      820
+    ],
+    "enclosedTransparentPixels": 0,
+    "enclosedTransparentCoordinates": [],
+    "edgePixels": 0,
+    "neutralWhitePixels": 0,
+    "badContourPixels": 0,
+    "status": "pass",
+    "failures": []
+  },
+  {
+    "file": "down-passing-right.png",
+    "size": [
+      64,
+      64
+    ],
+    "bbox": [
+      20,
+      6,
+      44,
+      56
+    ],
+    "alphaValues": [
+      0,
+      255
+    ],
+    "paletteColors": 28,
+    "components8": [
+      752
+    ],
+    "enclosedTransparentPixels": 0,
+    "enclosedTransparentCoordinates": [],
+    "edgePixels": 0,
+    "neutralWhitePixels": 0,
+    "badContourPixels": 0,
+    "status": "pass",
+    "failures": []
+  },
+  {
+    "file": "down-settle.png",
+    "size": [
+      64,
+      64
+    ],
+    "bbox": [
+      19,
+      6,
+      44,
+      56
+    ],
+    "alphaValues": [
+      0,
+      255
+    ],
+    "paletteColors": 28,
+    "components8": [
+      888
+    ],
+    "enclosedTransparentPixels": 0,
+    "enclosedTransparentCoordinates": [],
+    "edgePixels": 0,
+    "neutralWhitePixels": 0,
+    "badContourPixels": 0,
+    "status": "pass",
+    "failures": []
+  },
+  {
+    "file": "left-contact-left.png",
+    "size": [
+      64,
+      64
+    ],
+    "bbox": [
+      17,
+      6,
+      47,
+      56
+    ],
+    "alphaValues": [
+      0,
+      255
+    ],
+    "paletteColors": 27,
+    "components8": [
+      885
+    ],
+    "enclosedTransparentPixels": 0,
+    "enclosedTransparentCoordinates": [],
+    "edgePixels": 0,
+    "neutralWhitePixels": 0,
+    "badContourPixels": 0,
+    "status": "pass",
+    "failures": []
+  },
+  {
+    "file": "left-contact-right.png",
+    "size": [
+      64,
+      64
+    ],
+    "bbox": [
+      17,
+      6,
+      47,
+      56
+    ],
+    "alphaValues": [
+      0,
+      255
+    ],
+    "paletteColors": 26,
+    "components8": [
+      877
+    ],
+    "enclosedTransparentPixels": 0,
+    "enclosedTransparentCoordinates": [],
+    "edgePixels": 0,
+    "neutralWhitePixels": 0,
+    "badContourPixels": 0,
+    "status": "pass",
+    "failures": []
+  },
+  {
+    "file": "left-idle.png",
+    "size": [
+      64,
+      64
+    ],
+    "bbox": [
+      21,
+      6,
+      43,
+      56
+    ],
+    "alphaValues": [
+      0,
+      255
+    ],
+    "paletteColors": 27,
+    "components8": [
+      681
+    ],
+    "enclosedTransparentPixels": 0,
+    "enclosedTransparentCoordinates": [],
+    "edgePixels": 0,
+    "neutralWhitePixels": 0,
+    "badContourPixels": 0,
+    "status": "pass",
+    "failures": []
+  },
+  {
+    "file": "left-passing-left.png",
+    "size": [
+      64,
+      64
+    ],
+    "bbox": [
+      19,
+      6,
+      44,
+      56
+    ],
+    "alphaValues": [
+      0,
+      255
+    ],
+    "paletteColors": 26,
+    "components8": [
+      732
+    ],
+    "enclosedTransparentPixels": 0,
+    "enclosedTransparentCoordinates": [],
+    "edgePixels": 0,
+    "neutralWhitePixels": 0,
+    "badContourPixels": 0,
+    "status": "pass",
+    "failures": []
+  },
+  {
+    "file": "left-passing-right.png",
+    "size": [
+      64,
+      64
+    ],
+    "bbox": [
+      18,
+      6,
+      46,
+      56
+    ],
+    "alphaValues": [
+      0,
+      255
+    ],
+    "paletteColors": 27,
+    "components8": [
+      774
+    ],
+    "enclosedTransparentPixels": 0,
+    "enclosedTransparentCoordinates": [],
+    "edgePixels": 0,
+    "neutralWhitePixels": 0,
+    "badContourPixels": 0,
+    "status": "pass",
+    "failures": []
+  },
+  {
+    "file": "left-settle.png",
+    "size": [
+      64,
+      64
+    ],
+    "bbox": [
+      19,
+      6,
+      45,
+      56
+    ],
+    "alphaValues": [
+      0,
+      255
+    ],
+    "paletteColors": 27,
+    "components8": [
+      734
+    ],
+    "enclosedTransparentPixels": 0,
+    "enclosedTransparentCoordinates": [],
+    "edgePixels": 0,
+    "neutralWhitePixels": 0,
+    "badContourPixels": 0,
+    "status": "pass",
+    "failures": []
+  },
+  {
+    "file": "right-contact-left.png",
+    "size": [
+      64,
+      64
+    ],
+    "bbox": [
+      17,
+      6,
+      47,
+      56
+    ],
+    "alphaValues": [
+      0,
+      255
+    ],
+    "paletteColors": 28,
+    "components8": [
+      855
+    ],
+    "enclosedTransparentPixels": 0,
+    "enclosedTransparentCoordinates": [],
+    "edgePixels": 0,
+    "neutralWhitePixels": 0,
+    "badContourPixels": 0,
+    "status": "pass",
+    "failures": []
+  },
+  {
+    "file": "right-contact-right.png",
+    "size": [
+      64,
+      64
+    ],
+    "bbox": [
+      18,
+      6,
+      45,
+      56
+    ],
+    "alphaValues": [
+      0,
+      255
+    ],
+    "paletteColors": 28,
+    "components8": [
+      757
+    ],
+    "enclosedTransparentPixels": 0,
+    "enclosedTransparentCoordinates": [],
+    "edgePixels": 0,
+    "neutralWhitePixels": 0,
+    "badContourPixels": 0,
+    "status": "pass",
+    "failures": []
+  },
+  {
+    "file": "right-idle.png",
+    "size": [
+      64,
+      64
+    ],
+    "bbox": [
+      21,
+      6,
+      42,
+      56
+    ],
+    "alphaValues": [
+      0,
+      255
+    ],
+    "paletteColors": 27,
+    "components8": [
+      697
+    ],
+    "enclosedTransparentPixels": 0,
+    "enclosedTransparentCoordinates": [],
+    "edgePixels": 0,
+    "neutralWhitePixels": 0,
+    "badContourPixels": 0,
+    "status": "pass",
+    "failures": []
+  },
+  {
+    "file": "right-passing-left.png",
+    "size": [
+      64,
+      64
+    ],
+    "bbox": [
+      19,
+      6,
+      44,
+      56
+    ],
+    "alphaValues": [
+      0,
+      255
+    ],
+    "paletteColors": 28,
+    "components8": [
+      678
+    ],
+    "enclosedTransparentPixels": 0,
+    "enclosedTransparentCoordinates": [],
+    "edgePixels": 0,
+    "neutralWhitePixels": 0,
+    "badContourPixels": 0,
+    "status": "pass",
+    "failures": []
+  },
+  {
+    "file": "right-passing-right.png",
+    "size": [
+      64,
+      64
+    ],
+    "bbox": [
+      18,
+      6,
+      46,
+      56
+    ],
+    "alphaValues": [
+      0,
+      255
+    ],
+    "paletteColors": 28,
+    "components8": [
+      730
+    ],
+    "enclosedTransparentPixels": 0,
+    "enclosedTransparentCoordinates": [],
+    "edgePixels": 0,
+    "neutralWhitePixels": 0,
+    "badContourPixels": 0,
+    "status": "pass",
+    "failures": []
+  },
+  {
+    "file": "right-settle.png",
+    "size": [
+      64,
+      64
+    ],
+    "bbox": [
+      21,
+      6,
+      43,
+      56
+    ],
+    "alphaValues": [
+      0,
+      255
+    ],
+    "paletteColors": 28,
+    "components8": [
+      625
+    ],
+    "enclosedTransparentPixels": 0,
+    "enclosedTransparentCoordinates": [],
+    "edgePixels": 0,
+    "neutralWhitePixels": 0,
+    "badContourPixels": 0,
+    "status": "pass",
+    "failures": []
+  },
+  {
+    "file": "up-contact-left.png",
+    "size": [
+      64,
+      64
+    ],
+    "bbox": [
+      21,
+      6,
+      42,
+      56
+    ],
+    "alphaValues": [
+      0,
+      255
+    ],
+    "paletteColors": 27,
+    "components8": [
+      686
+    ],
+    "enclosedTransparentPixels": 0,
+    "enclosedTransparentCoordinates": [],
+    "edgePixels": 0,
+    "neutralWhitePixels": 0,
+    "badContourPixels": 0,
+    "status": "pass",
+    "failures": []
+  },
+  {
+    "file": "up-contact-right.png",
+    "size": [
+      64,
+      64
+    ],
+    "bbox": [
+      21,
+      6,
+      42,
+      56
+    ],
+    "alphaValues": [
+      0,
+      255
+    ],
+    "paletteColors": 26,
+    "components8": [
+      658
+    ],
+    "enclosedTransparentPixels": 0,
+    "enclosedTransparentCoordinates": [],
+    "edgePixels": 0,
+    "neutralWhitePixels": 0,
+    "badContourPixels": 0,
+    "status": "pass",
+    "failures": []
+  },
+  {
+    "file": "up-idle.png",
+    "size": [
+      64,
+      64
+    ],
+    "bbox": [
+      20,
+      6,
+      43,
+      56
+    ],
+    "alphaValues": [
+      0,
+      255
+    ],
+    "paletteColors": 24,
+    "components8": [
+      846
+    ],
+    "enclosedTransparentPixels": 0,
+    "enclosedTransparentCoordinates": [],
+    "edgePixels": 0,
+    "neutralWhitePixels": 0,
+    "badContourPixels": 0,
+    "status": "pass",
+    "failures": []
+  },
+  {
+    "file": "up-passing-left.png",
+    "size": [
+      64,
+      64
+    ],
+    "bbox": [
+      21,
+      6,
+      43,
+      56
+    ],
+    "alphaValues": [
+      0,
+      255
+    ],
+    "paletteColors": 27,
+    "components8": [
+      704
+    ],
+    "enclosedTransparentPixels": 0,
+    "enclosedTransparentCoordinates": [],
+    "edgePixels": 0,
+    "neutralWhitePixels": 0,
+    "badContourPixels": 0,
+    "status": "pass",
+    "failures": []
+  },
+  {
+    "file": "up-passing-right.png",
+    "size": [
+      64,
+      64
+    ],
+    "bbox": [
+      21,
+      6,
+      43,
+      56
+    ],
+    "alphaValues": [
+      0,
+      255
+    ],
+    "paletteColors": 24,
+    "components8": [
+      719
+    ],
+    "enclosedTransparentPixels": 0,
+    "enclosedTransparentCoordinates": [],
+    "edgePixels": 0,
+    "neutralWhitePixels": 0,
+    "badContourPixels": 0,
+    "status": "pass",
+    "failures": []
+  },
+  {
+    "file": "up-settle.png",
+    "size": [
+      64,
+      64
+    ],
+    "bbox": [
+      20,
+      6,
+      43,
+      56
+    ],
+    "alphaValues": [
+      0,
+      255
+    ],
+    "paletteColors": 24,
+    "components8": [
+      764
+    ],
+    "enclosedTransparentPixels": 0,
+    "enclosedTransparentCoordinates": [],
+    "edgePixels": 0,
+    "neutralWhitePixels": 0,
+    "badContourPixels": 0,
+    "status": "pass",
+    "failures": []
+  }
+]
