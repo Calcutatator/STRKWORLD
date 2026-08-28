@@ -47,7 +47,7 @@ export function createPresenceController({ endpoint, factory = (options) => new 
   let destroying: Promise<void> | null = null;
   let replacing: Promise<void> | null = null;
   let replacementDeferred = false;
-  const listeners = new Set<() => void>();
+  const listeners = new Map<() => void, symbol>();
   const peerChannel = createRemotePeerSource();
   const peerSource = peerChannel.source;
   const clearPeers = () => peerChannel.clear();
@@ -59,7 +59,11 @@ export function createPresenceController({ endpoint, factory = (options) => new 
   const setState = (next: PresenceState) => {
     if (destroyed) return;
     state = next;
-    for (const listener of listeners) listener();
+    // Deliver one transition to the subscriptions that owned its snapshot.
+    // A replacement of the same function is a new subscription generation.
+    for (const [listener, token] of [...listeners]) {
+      if (listeners.get(listener) === token) listener();
+    }
   };
   const unavailable = () => {
     if (destroyed) return;
@@ -213,7 +217,13 @@ export function createPresenceController({ endpoint, factory = (options) => new 
       ];
       return () => stops.forEach((stop) => stop());
     },
-    subscribe(listener) { listeners.add(listener); return () => listeners.delete(listener); },
+    subscribe(listener) {
+      const token = Symbol();
+      listeners.set(listener, token);
+      return () => {
+        if (listeners.get(listener) === token) listeners.delete(listener);
+      };
+    },
     remotePeers: peerSource,
     getState: () => state,
     reconnect() {
