@@ -258,6 +258,42 @@ empty shell to fetchers, so a 200 there means nothing.
 
 ## 6. Findings log
 
+### 2026-08-29 — WalletSession subscribers own captured delivery generations
+
+`WalletSession.subscribe()` is an exported package boundary even though its two
+current production consumers are React `useSyncExternalStore` callbacks. Its
+mutable `Set` previously used live `forEach` delivery. A custom subscriber that
+added or unsubscribed and resubscribed a listener during publish could give the
+new generation a transition captured before it existed. Reusing the same
+function for a later subscription also let an older cleanup delete the current
+subscription. A thrown subscriber escaped the wallet/discovery callback and
+blocked every later listener; during a connection transition that could turn an
+already accepted state change into the surrounding connection failure path.
+
+Subscriptions now own generation tokens in a `Map`. Publish captures
+listener/token pairs at its start and delivers only pairs that remain current.
+Cleanup is idempotent and removes only its own generation. Subscriber errors
+are reported and isolated so the accepted snapshot and remaining notifications
+survive. Delivery remains synchronous, payloadless and non-replaying;
+`getSnapshot()` is authoritative and no transition queue was added.
+
+This is defensive exported-seam hardening, not a reproduced player incident.
+The shipped React 19 consumers use distinct callbacks whose effect cleanup and
+setup occur after the synchronous publish stack; a StrictMode harness found no
+listener mutation during ordinary connect/disconnect delivery.
+
+*Verified:* public `createWalletSession()` regressions cover no replay,
+add-during-publish, unsubscribe/resubscribe during publish, unsubscribe before a
+captured turn, stale cleanup after same-function replacement, a throwing
+listener followed by a healthy one, and synchronous reentrant delivery reading
+the latest authoritative snapshot. The focused WalletSession suite passes 24
+tests, Privacy passes 8 files / 156 tests and the full workspace passes 97 files
+/ 1,394 tests. Every workspace typecheck, the production build, all 13
+invariants and diff hygiene pass. Removing token liveness revives in-flight
+replacement delivery; using identity-only cleanup removes the replacement;
+removing error isolation throws and blocks the later subscriber. No browser,
+wallet, provider, RPC, proof, signature, funds or transaction was used.*
+
 ### 2026-08-29 — Duplicate wallet account events preserve reviewed authority
 
 `WalletSession` previously treated every connection notification as a new

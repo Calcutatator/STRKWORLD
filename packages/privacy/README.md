@@ -101,6 +101,13 @@ and mainnet authority is a semantic no-op: it does not retire reviewed work.
 If the replacement snapshot cannot be read, the session instead fails closed
 and retires that authority without throwing through the provider callback.
 
+The exported snapshot subscription is synchronous and has no replay; callers
+read the current frozen value with `getSnapshot()`. Each subscription owns a
+generation token. A listener added or replaced while one publish is in flight
+begins with the next publish, stale cleanup cannot remove that replacement, and
+one throwing subscriber is reported without blocking the remaining snapshot
+notifications or rolling back an already accepted session transition.
+
 Production currently constructs the session with a deny-all route policy:
 zero intents, zero relay fee, no enabled routes, and empty token allowlists.
 That permits discovery, connection, capability and deliberate read acceptance

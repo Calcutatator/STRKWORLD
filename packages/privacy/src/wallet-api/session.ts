@@ -85,7 +85,7 @@ export function createWalletSession(
 ): WalletSession {
   const expectedChainId = options.expectedChainId ?? MAINNET_CHAIN_ID;
   const policy = ownPolicy(options.policy);
-  const listeners = new Set<() => void>();
+  const listeners = new Map<() => void, symbol>();
   const keys = new WeakMap<object, string>();
   let nextKey = 0;
   let wallets = [...dependencies.discovery.getWallets()];
@@ -129,7 +129,14 @@ export function createWalletSession(
 
   function publish(phase: WalletSessionPhase, account: Address | null): void {
     snapshot = buildSnapshot(phase, account);
-    listeners.forEach((listener) => listener());
+    for (const [listener, token] of [...listeners]) {
+      if (listeners.get(listener) !== token) continue;
+      try {
+        listener();
+      } catch (error) {
+        console.error('wallet session: subscriber threw', error);
+      }
+    }
   }
 
   function currentOperations(): PrivacyOperations {
@@ -217,8 +224,11 @@ export function createWalletSession(
     operations: stableOperations,
     getSnapshot: () => snapshot,
     subscribe(listener) {
-      listeners.add(listener);
-      return () => listeners.delete(listener);
+      const token = Symbol();
+      listeners.set(listener, token);
+      return () => {
+        if (listeners.get(listener) === token) listeners.delete(listener);
+      };
     },
     async connect(key) {
       if (destroyed) throw new PrivacyError('unknown', 'The wallet session has ended.');
