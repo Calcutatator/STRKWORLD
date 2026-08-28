@@ -258,6 +258,40 @@ empty shell to fetchers, so a 200 there means nothing.
 
 ## 6. Findings log
 
+### 2026-08-28 — Store subscriptions own captured transition generations
+
+`createStore()` previously represented subscribers with a `Set` and read its
+mutable global state while delivering each callback. Subscribing the same
+function again therefore had no independent owner: an older unsubscribe could
+remove the replacement, and an unsubscribe/resubscribe during publication
+could make the replacement inherit a transition it did not own. A reentrant
+`setState()` also delivered the newer transition before later subscribers saw
+the older one, after which those subscribers received the newer global state a
+second time instead of the captured older value.
+
+Each subscription now has a generation token. Each accepted state transition
+captures both its state and subscriber generations, then a single synchronous
+queue drains those transitions in order. Delivery checks that the captured
+generation is still live, so unsubscribe remains idempotent and a replacement
+cannot inherit or revoke another generation. Existing `Object.is` suppression
+and per-subscriber exception isolation are unchanged.
+
+*Verified:* three public red-first `createStore()` regressions cover stale
+unsubscribe after same-function resubscription, replacement during publication
+and reentrant state delivery order. Additional public cases pin the captured
+subscriber set for a queued transition, exact `Object.is` behavior and
+subscriber-exception isolation. Removing the unsubscribe token check fails the
+stale-owner case; removing delivery-time token equality fails replacement
+liveness; removing the queue gate or using mutable global state fails ordered
+delivery; using the live subscriber map fails captured transition ownership;
+replacing `Object.is` with `===` fails the equality case; and rethrowing a
+subscriber failure prevents the later subscriber from receiving the accepted
+transition. The focused suite passes 1 file / 6 tests, Web passes 41 files /
+460 tests, and the full workspace passes 97 files / 1,380 tests. All workspace
+typechecks, the production build, all 13 invariants and diff hygiene pass. No
+browser, wallet, provider, RPC, proof, signature, funds or transaction was
+used.*
+
 ### 2026-08-28 — Event-bus subscriptions retain generation ownership during synchronous emit
 
 The Web event bus previously stored one `Set` per event and iterated a
