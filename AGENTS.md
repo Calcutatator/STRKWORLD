@@ -258,6 +258,34 @@ empty shell to fetchers, so a 200 there means nothing.
 
 ## 6. Findings log
 
+### 2026-08-28 — Presence status subscribers retain transition ownership
+
+`PresenceController` now snapshots status subscribers as listener/generation
+pairs, checks that the generation is still current before delivery, and makes
+each unsubscribe closure remove only its own generation. Before the fix, the
+live `Set` could notify a listener added by an earlier callback during the
+same status transition; an unsubscribe followed by resubscription of the
+same function could revive the old recipient; and an older unsubscribe could
+remove a newer replacement. A snapshot without a liveness check would also
+call a listener that was unsubscribed before its turn. These cases could make
+the Web shell observe extra or stale presence updates.
+
+*Verified:* public `PresenceController` regressions drive transitions through
+`listen(world)` and a controlled public client. Against origin/main, the
+focused file had 34 tests with three failures: add-during-transition,
+same-function unsubscribe/resubscribe, and stale-unsubscribe ownership. The
+plain unsubscribe-before-turn test passes origin/main because native live
+`Set` iteration skips a deleted listener. Removing the liveness check from
+the fixed snapshot makes both unsubscribe-before-turn and resubscribe fail;
+using `Map.has()` instead of generation equality makes resubscribe fail; and
+unconditional deletion makes stale-unsubscribe fail. A reentrant status test
+pins the existing synchronous current-state behavior: callbacks carry no
+payload and read the latest `getState()` value, so no queue was introduced.
+The focused file passes 34 tests, Web passes 40 files / 449 tests, the full
+workspace passes 94 files / 1,363 tests, all workspace typechecks, the
+production build, all 13 invariants and `git diff --check`. No browser,
+wallet, provider, RPC, proof, signature, funds or transaction was used.
+
 ### 2026-08-28 — Remote peer publication snapshots listeners
 
 `RemotePeerSource.publish()` now snapshots its subscribers before synchronous
