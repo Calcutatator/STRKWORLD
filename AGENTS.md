@@ -258,6 +258,49 @@ empty shell to fetchers, so a 200 there means nothing.
 
 ## 6. Findings log
 
+### 2026-08-29 — Lobby transitions own FIFO subscriber generations
+
+`LobbyClient` previously published status and peer changes through live mutable
+`Set` iteration. During a normal resume, status listener A could react to the
+`connected` event by calling the public `suspend()` method. The nested
+`suspended` transition reached listener B before the outer iteration later
+delivered stale `connected`, so B ended with a state opposite to the client's
+authoritative `suspended` status. A listener added or unsubscribed and
+resubscribed during delivery could also inherit a transition captured before
+that subscription existed, and an older cleanup could remove the replacement.
+A subscriber exception escaped the lifecycle method; a throwing immediate
+status replay remained registered without returning cleanup and could make the
+next `connect()` reject before joining while leaving status at `connecting`.
+
+Both channels now own listener generations in maps and capture listener/token
+pairs with each payload. Status and peer payloads drain synchronously in FIFO
+order, while only the still-current captured generation receives a delivery.
+Immediate replay remains synchronous, but a new generation is not delivered
+the older in-flight payload a second time. Cleanup removes only its generation,
+and callback errors emit only a fixed content-free diagnostic before being
+isolated from the lifecycle and remaining subscribers. The thrown value is not
+forwarded into Lobby logs. Lobby traffic, room state and the synchronous public
+API are unchanged.
+
+*Verified:* a real-server regression connects and suspends a client, then has
+the first of two subscribers suspend again during resume; both now observe
+`connected` followed by `suspended`, and the authoritative status is
+`suspended`. A transport-double regression publishes a one-peer snapshot whose
+first subscriber synchronously publishes a distinct two-peer snapshot; both
+subscribers now observe the one-peer payload before the two-peer payload.
+Twelve no-network public regressions cover throwing immediate and transition
+callbacks on both channels without forwarding the thrown value, add and
+same-function replacement during delivery, unsubscribe before a captured turn,
+and stale cleanup ownership for status and peers. Before the fix the ten
+ownership/error cases failed, the real-server status case left the second
+observer with stale `connected`, and the peer FIFO case delivered the newer
+snapshot before the older one to its second observer; the two
+unsubscribe-before-turn cases pin the captured-generation contract. The
+focused pair passes 55 tests, and the full workspace passes 98 files / 1,408
+tests. Every workspace typecheck,
+the production build, all 13 invariants and diff hygiene pass. No wallet,
+provider, RPC, proof, signature, funds or transaction was used.*
+
 ### 2026-08-29 — WalletSession subscribers own captured delivery generations
 
 `WalletSession.subscribe()` is an exported package boundary even though its two

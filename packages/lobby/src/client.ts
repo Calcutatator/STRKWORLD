@@ -128,6 +128,17 @@ export interface LobbyClientOptions {
 
 type PeersListener = (peers: readonly PeerSnapshot[]) => void;
 type StatusListener = (event: LobbyStatusEvent) => void;
+type ListenerOwner<T> = readonly [listener: T, owner: symbol];
+
+interface PeerDelivery {
+  readonly listeners: readonly ListenerOwner<PeersListener>[];
+  readonly snapshot: readonly PeerSnapshot[];
+}
+
+interface StatusDelivery {
+  readonly listeners: readonly ListenerOwner<StatusListener>[];
+  readonly event: LobbyStatusEvent;
+}
 
 interface WelcomePayload {
   gameId: string;
@@ -143,8 +154,13 @@ export class LobbyClient {
   readonly #options: LobbyClientOptions;
   readonly #minSendIntervalMs: number;
   readonly #welcomeTimeoutMs: number;
-  readonly #peerListeners = new Set<PeersListener>();
-  readonly #statusListeners = new Set<StatusListener>();
+  readonly #peerListeners = new Map<PeersListener, symbol>();
+  readonly #statusListeners = new Map<StatusListener, symbol>();
+  readonly #peerDeliveries: PeerDelivery[] = [];
+  readonly #statusDeliveries: StatusDelivery[] = [];
+
+  #deliveringPeers = false;
+  #deliveringStatus = false;
 
   #room: ColyseusRoom<unknown, LobbyState> | null = null;
   #joinAttempt: JoinAttempt | null = null;
@@ -282,10 +298,13 @@ export class LobbyClient {
    * state change until it is removed.
    */
   onPeers(listener: PeersListener): () => void {
-    this.#peerListeners.add(listener);
-    listener(this.peers());
+    const owner = Symbol('peer listener');
+    this.#peerListeners.set(listener, owner);
+    this.#notifyPeer(listener, this.peers());
     return () => {
-      this.#peerListeners.delete(listener);
+      if (this.#peerListeners.get(listener) === owner) {
+        this.#peerListeners.delete(listener);
+      }
     };
   }
 
@@ -300,10 +319,13 @@ export class LobbyClient {
    * empty peer list.
    */
   onStatus(listener: StatusListener): () => void {
-    this.#statusListeners.add(listener);
-    listener({ status: this.#status });
+    const owner = Symbol('status listener');
+    this.#statusListeners.set(listener, owner);
+    this.#notifyStatus(listener, { status: this.#status });
     return () => {
-      this.#statusListeners.delete(listener);
+      if (this.#statusListeners.get(listener) === owner) {
+        this.#statusListeners.delete(listener);
+      }
     };
   }
 
@@ -520,14 +542,66 @@ export class LobbyClient {
   #setStatus(status: LobbyStatus, reason?: LobbyStatusReason, code?: number): void {
     this.#status = status;
     if (this.#statusListeners.size === 0) return;
-    const event: LobbyStatusEvent = { status, ...(reason ? { reason } : {}), ...(code !== undefined ? { code } : {}) };
-    for (const listener of this.#statusListeners) listener(event);
+    const event: LobbyStatusEvent = {
+      status,
+      ...(reason ? { reason } : {}),
+      ...(code !== undefined ? { code } : {}),
+    };
+    this.#statusDeliveries.push({ listeners: [...this.#statusListeners], event });
+    if (this.#deliveringStatus) return;
+
+    this.#deliveringStatus = true;
+    try {
+      for (;;) {
+        const delivery = this.#statusDeliveries.shift();
+        if (delivery === undefined) return;
+        for (const [listener, owner] of delivery.listeners) {
+          if (this.#statusListeners.get(listener) !== owner) continue;
+          this.#notifyStatus(listener, delivery.event);
+        }
+      }
+    } finally {
+      this.#deliveringStatus = false;
+    }
   }
 
   #emitPeers(): void {
     if (this.#peerListeners.size === 0) return;
-    const snapshot = this.peers();
-    for (const listener of this.#peerListeners) listener(snapshot);
+    this.#peerDeliveries.push({
+      listeners: [...this.#peerListeners],
+      snapshot: this.peers(),
+    });
+    if (this.#deliveringPeers) return;
+
+    this.#deliveringPeers = true;
+    try {
+      for (;;) {
+        const delivery = this.#peerDeliveries.shift();
+        if (delivery === undefined) return;
+        for (const [listener, owner] of delivery.listeners) {
+          if (this.#peerListeners.get(listener) !== owner) continue;
+          this.#notifyPeer(listener, delivery.snapshot);
+        }
+      }
+    } finally {
+      this.#deliveringPeers = false;
+    }
+  }
+
+  #notifyPeer(listener: PeersListener, snapshot: readonly PeerSnapshot[]): void {
+    try {
+      listener(snapshot);
+    } catch {
+      console.error('lobby client: peer subscriber threw');
+    }
+  }
+
+  #notifyStatus(listener: StatusListener, event: LobbyStatusEvent): void {
+    try {
+      listener(event);
+    } catch {
+      console.error('lobby client: status subscriber threw');
+    }
   }
 }
 

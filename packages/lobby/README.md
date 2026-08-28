@@ -167,6 +167,15 @@ carries a `reason`: `client-left` for a local `disconnect()`, `server-dropped`
 how the consumer tells "the player left" from "the connection died" rather than
 inferring it from an empty peer list.
 
+Both subscription methods replay the current value synchronously, then deliver
+captured transitions in FIFO order. A listener added or replaced during a
+delivery receives its one immediate replay but cannot inherit the older
+in-flight transition; an older cleanup cannot remove that replacement. A
+subscriber exception emits only a fixed content-free diagnostic and is isolated
+from the client lifecycle and the other subscribers; the thrown value is never
+logged across the Lobby privacy boundary. `status` and `peers()` remain the
+authoritative current snapshots during any reentrant callback.
+
 The pinned Colyseus SDK enables a 15-attempt automatic reconnection loop on
 every joined room by default. `LobbyClient` disables that room option before
 publishing the connection. D-037 gives reconnect ownership to the Shell's
@@ -283,7 +292,8 @@ nothing in this package uses it.
 | `policy.test.ts` | Normalisers, throttle, interest selection |
 | `presence.test.ts` | Admission, server-minted id, movement, suspend/resume, counters |
 | `privacy.test.ts` | Schema field set, **attacker-config model**, suspend, randomised leak hunt |
-| `client.test.ts` | The wrapper against a real server — idempotent connect, attacker-config over the wire, send-rate floor, status |
+| `client.test.ts` | The wrapper against a real server or transport double — idempotent connect, attacker-config over the wire, send-rate floor, FIFO status/peer transitions |
+| `client-listener.test.ts` | Listener generation ownership and callback isolation without network I/O |
 | `client-reconcile.test.ts` | The final position lands despite a server-dropped move |
 | `client-drop.test.ts` | A server drop is reported as `server-dropped` |
 
