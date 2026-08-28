@@ -258,6 +258,37 @@ empty shell to fetchers, so a 200 there means nothing.
 
 ## 6. Findings log
 
+### 2026-08-28 — Remote peer publication snapshots listeners
+
+`RemotePeerSource.publish()` now snapshots its subscribers before synchronous
+delivery and checks that each snapshot listener is still subscribed before
+calling it, with a generation token preventing an old subscription from
+matching a same-function replacement. Before the fix, a listener added by an
+earlier listener during a publication received the retained snapshot once
+from `subscribe()`'s synchronous replay and again when the live `Set`
+iteration reached it. A snapshot-only intermediate fix also called a
+listener that an earlier listener had unsubscribed and then resubscribed.
+These paths could duplicate or revive a World-side remote-avatar
+reconciliation for one lobby snapshot.
+
+*Verified:* add-during-publish and reentrant-publication regressions failed on
+the origin/main baseline. The plain unsubscribe regression passes origin/main
+because the live `Set` skips a listener deleted before its turn, but fails
+when the snapshot iteration has no liveness check. The same-function
+resubscribe regression fails without generation-token matching, and the
+stale-unsubscribe regression fails when an old closure can delete a
+replacement. All pass after the queued snapshot drain, liveness check and
+generation ownership fix. Removing the reentrancy gate reproduces the
+ordering failure; removing token matching reproduces the resubscribe
+failure; and removing token ownership from unsubscribe removes the replacement
+subscription. An additional regression pins the existing synchronous
+listener error propagation and stop behavior, while the existing clear/replay
+tests remain green. The focused World suite passes 22 files / 227 tests; the
+full workspace passes 94 files / 1,358 tests, all workspace
+typechecks, the production build, all 13 invariants and `git diff --check`.
+No browser, wallet, provider, RPC, proof, signature, funds or transaction
+was used.
+
 ### 2026-08-28 — Lobby resume validates placement before claiming presence
 
 `LobbyClient.resume()` previously sent a resumed placement and immediately
