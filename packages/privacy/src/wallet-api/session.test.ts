@@ -115,7 +115,7 @@ describe('WalletSession', () => {
     const prepared = await session.operations.prepare([]);
     const generation = session.getSnapshot().generation;
 
-    connected.notify();
+    connected.changeAccount('0x0111');
 
     expect(session.getSnapshot()).toMatchObject({
       phase: 'connected',
@@ -149,6 +149,31 @@ describe('WalletSession', () => {
     await expect(session.operations.capability()).rejects.toMatchObject({ kind: 'user-rejected' });
     await expect(prepared.confirm({ feeCeiling: 0n })).rejects.toMatchObject({ kind: 'user-rejected' });
     expect(discard).toHaveBeenCalledOnce();
+  });
+
+  it('rejects a malformed account that is numerically equal to current authority', async () => {
+    const selected = wallet('Ready');
+    const confirm = vi.fn(async () => ({ transactionHash: '0x1' }));
+    const discard = vi.fn();
+    const connected = controllableConnection(
+      '0x111',
+      operationsWithBatch(batch(confirm, discard), '0.10.3'),
+      operationsWithBatch(batch(), '0.10.4'),
+    );
+    const session = createWalletSession(
+      denyAllOptions(),
+      { discovery: discoveryWith(selected), connectWallet: async () => connected.port },
+    );
+    await session.connect(session.getSnapshot().wallets[0]!.key);
+    const prepared = await session.operations.prepare([]);
+
+    connected.changeAccount('273');
+
+    expect(session.getSnapshot()).toMatchObject({ phase: 'failed', account: null });
+    await expect(session.operations.capability()).rejects.toMatchObject({ kind: 'user-rejected' });
+    await expect(prepared.confirm({ feeCeiling: 0n })).rejects.toMatchObject({ kind: 'user-rejected' });
+    expect(discard).toHaveBeenCalledOnce();
+    expect(confirm).not.toHaveBeenCalled();
   });
 
   it('discards a batch that finishes preparing after its account generation changed', async () => {
@@ -409,11 +434,14 @@ describe('WalletSession', () => {
       new FakePrivacyOperations(),
       new FakePrivacyOperations(),
     );
-    connected.port.createOperations = vi.fn()
+    const recoveredOperations = operationsWithBatch(batch(), '0.10.5');
+    const createOperations = vi.fn()
       .mockReturnValueOnce(new FakePrivacyOperations())
       .mockImplementationOnce(() => {
         throw new Error('adapter construction failed');
-      });
+      })
+      .mockReturnValue(recoveredOperations);
+    connected.port.createOperations = createOperations;
     const session = createWalletSession(
       denyAllOptions(),
       { discovery: discoveryWith(selected), connectWallet: async () => connected.port },
@@ -423,6 +451,12 @@ describe('WalletSession', () => {
     expect(() => connected.changeAccount('0x222')).not.toThrow();
     expect(session.getSnapshot()).toMatchObject({ phase: 'failed', account: null });
     await expect(session.operations.capability()).rejects.toMatchObject({ kind: 'user-rejected' });
+
+    connected.notify();
+
+    expect(session.getSnapshot()).toMatchObject({ phase: 'connected', account: '0x222' });
+    await expect(session.operations.capability()).resolves.toMatchObject({ walletApiVersion: '0.10.5' });
+    expect(createOperations).toHaveBeenCalledTimes(3);
   });
 
   it('retires the financial session when the selected wallet disappears', async () => {

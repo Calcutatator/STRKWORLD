@@ -251,6 +251,16 @@ export function createWalletSession(
             publish('failed', null);
             return;
           }
+          if (changed.account) {
+            try {
+              assertAddress(changed.account);
+            } catch {
+              generation += 1;
+              operations = null;
+              publish('failed', null);
+              return;
+            }
+          }
           if (
             operations &&
             snapshot.phase === 'connected' &&
@@ -269,7 +279,6 @@ export function createWalletSession(
             return;
           }
           try {
-            assertAddress(changed.account);
             if (!sameFelt(changed.chainId, expectedChainId)) {
               publish('wrong-network', null);
               return;
