@@ -17,7 +17,7 @@ the lane boundary — that is why the repo is shaped the way it is.
 | Lane | Package | Status in v1 |
 |---|---|---|
 | **Chain** | `packages/privacy` | Active; private seam and D-054 production WalletSession complete, D-043 planner port/fake complete, production Bridge planner and funded wallet validation remain open |
-| **World** | `packages/world` + `packages/lobby` | Active; four fixed rooms, multiplayer, Avatar Studio, D-052 five-column runtime and D-053 global F toggle are headlessly complete; D-057 has accepted the rendered mock Bank path and a later localhost review verified one outdoor cosy-to-fighting transition, while the remaining functional/visual browser matrix is open |
+| **World** | `packages/world` + `packages/lobby` | Active; four fixed rooms, multiplayer, Avatar Studio, D-052 five-column runtime and D-053 global F toggle are headlessly complete; D-057 has accepted the exact Bank two-client matrix, rendered mock Bank path, complete rendered functional/interactive D-053 matrix, Studio exit restoration and Post Office two-client lifecycle; room/station and subjective-visual gates stay open |
 | **Shell** | `apps/web` | Active; production wallet gate, transfer/shield policy parsing, all v1 room surfaces and D-057's mock Bank acceptance complete; remaining live-route and rendered-room gates are open |
 | **Backend** | `apps/backend` | Active; bounded APIs, same-origin local proxy, D-050 and hosted image smokes complete; host, domain, secrets, Alchemy controls, live staging and funded checks remain |
 | **Bridge** | `packages/bridge` | Active; offline manual/recovery flow complete, production planner and funded-provider acceptance open |
@@ -227,9 +227,14 @@ with manual reconnect.
 The D-038 remote-avatar implementation is complete and headlessly verified.
 The Shell adapts privacy-minimal lobby snapshots into a replaying World-owned
 source; Phaser reconciles the full snapshot without importing the lobby or
-widening the frozen shared event bus. Its remaining functional acceptance is
-the two-browser matrix: both players see movement, then see the other avatar
-disappear on Bank entry and return at the restored street placement on exit.
+widening the frozen shared event bus. A D-057 run first accepted the partial
+Post Office two-client matrix: both players saw each other and bidirectional
+movement, then one disappeared on Post Office entry and reappeared at the
+restored Post Office street placement after exit. It then accepted D-038's
+exact Bank matrix: B visibly rendered A at the Bank doorway, A disappeared from
+B on Bank entry, and A reappeared in B at the restored Bank doorway after Leave
+building. With the earlier reciprocal movement result, D-038's rendered
+functional gate is complete.
 
 The D-039 implementation is complete and headlessly verified. The accepted
 Bank behavior now runs through one validated, data-driven fixed-room core, and
@@ -276,12 +281,24 @@ in existing interiors through the same opaque `avatar:selected` key. It adds no
 stance or wire field. Gait correction `8e92cfa`, character 5/13 cross-facing
 correction `0051fce`, and five-column runtime commit `5c8c81a` are
 independently reviewed and headlessly complete. A later localhost review
-verified one outdoor/street cosy-to-fighting transition after one `F` press.
-The reverse transition, Avatar Studio and fixed-room interior F behavior, the
-full art replacement and subjective visual quality remain open.
+verified the complete pair outdoors, inside the Post Office and inside Avatar
+Studio: one `F` press changed cosy to fighting with the weapon visible, and a
+second returned fighting to cosy. The Studio check crossed the hidden south
+portal and rendered its figures; its top exit then restored the street spawn,
+`Multiplayer connected` status and the other rendered client. The complete
+pair also passed inside Bank, Exchange and Bridge. Both directions are therefore
+rendered and verified outdoors, in Avatar Studio and in all four fixed rooms;
+the positive outfit-pair location matrix is complete. D-053's Studio checks
+while standing on a figure also passed: both transitions worked while the local
+avatar visibly overlapped the central green figure. Its generic station-panel
+suppression gate passed in Bridge: the visibly cosy avatar remained cosy
+without a weapon after `F` was pressed while the Menu Mode station panel owned
+input and was then closed. D-053's rendered functional/interactive matrix is
+complete. Subjective visual quality remains open.
 
-**D-053 global F toggle — headlessly implemented and verified, rendered
-acceptance still open.** Branch `codex/global-outfit-toggle` (PR #19) moves
+**D-053 global F toggle — rendered functional/interactive matrix complete;
+subjective art stays open.** Branch
+`codex/global-outfit-toggle` (PR #19) moves
 keyboard ownership out of Avatar Studio activation into one StreetScene
 lifecycle owner: `createAvatarOutfitSelection` is the Scene-wide source of
 truth injected into the Studio controller, and `createAvatarOutfitToggleBinding`
@@ -290,20 +307,29 @@ The existing `pairedAvatarSprite` resolver and `avatar:selected` event are
 preserved; the toggle is proven outdoors, in Avatar Studio and in each existing
 fixed-room interior, along with repeat/editable/suspended/stale-handler guards
 and transition/restart single-ownership through the real `create()` order.
-Shared, lobby, Fly and financial seams are unchanged. **Only one rendered
-outdoor/street cosy-to-fighting transition has been verified; the reverse,
-Avatar Studio, fixed-room interiors and the complete visual matrix have not and
-are not claimed.**
+Shared, lobby, Fly and financial seams are unchanged. **The rendered
+cosy-to-fighting and fighting-to-cosy pair has been verified outdoors and in
+Avatar Studio and all four fixed rooms: Bank, Post Office, Exchange and Bridge.
+The positive location matrix and generic station-panel suppression are
+accepted, as are both transitions while overlapping the central Studio figure.
+The functional/interactive matrix is complete; subjective final-art quality is
+not.**
 
 D-057 now supplies an extension-free, mock-only production-seam gateway for
 repeatable agent-run functional checks. The accepted rendered evidence covers
 wallet admission, World/lobby mount, the Bank, one deliberate balance read, a
 fixed mock shield receipt and multiplayer restoration after Bank exit. The
-separate later localhost review covers only one outdoor/street
-cosy-to-fighting transition. These checks do not yet cover the D-038
-two-browser matrix, every room/station, the reverse transition, Avatar Studio
-or interior F behavior, or subjective final-art acceptance, and they prove no
-live-wallet or funded behavior.
+same live gateway later verified the complete outfit pair outdoors and inside
+Avatar Studio and all four fixed rooms, plus the two-client
+movement/disappear/reappear lifecycle through Post Office and Bank entry/exit.
+These checks also verified that Studio's top exit restored the street spawn,
+connected multiplayer status and the other rendered client. D-038's exact Bank
+matrix and the positive outfit-pair location matrix are accepted. D-053's
+generic station-panel keyboard control is also accepted from the Bridge panel
+check, and both transitions while overlapping the central Studio figure are
+accepted. D-053's rendered functional/interactive matrix is complete. Every
+room/station and subjective final-art acceptance stay open. These checks prove
+no live-wallet or funded behavior.
 
 James has delegated the intermediate D-052 art gates to orchestration. The Art
 lane should continue through internal identity, edge, movement, source/export
@@ -347,10 +373,10 @@ wallet selection is required, the connected tree owns a fresh presence
 controller, and account loss, disconnect or wrong-network state tears it down
 and returns to the gate. D-019/D-037 behavior remains in force once admitted.
 The retained source clears on drop/replacement/destroy and suppresses
-pre-welcome self snapshots until the server-minted ID permits filtering. The
-remaining D-038 gate is the two-browser acceptance described in the
-World lane. Do not widen `ShellEvents`, expose the LobbyClient to Phaser, or
-change the completed D-033–D-036 Game Mode, uncertainty and financial-seam
+pre-welcome self snapshots until the server-minted ID permits filtering.
+D-038's exact two-browser Bank matrix is now rendered and accepted as described
+in the World lane. Do not widen `ShellEvents`, expose the LobbyClient to Phaser,
+or change the completed D-033–D-036 Game Mode, uncertainty and financial-seam
 behavior.
 
 D-054/D-055 production composition is live in source, PR #59 implements the
@@ -575,8 +601,9 @@ columns per facing and 320 total Aseprite frames. D-053 supersedes the
 Studio-only toggle scope: one World-lifecycle binding toggles the existing
 opaque cosy/fighting pair outdoors and in the existing interiors without new
 lobby/wire fields, shared types, Fly allowlists or financial seams. That toggle
-is headlessly implemented and verified; the rendered in-game review remains
-required and is not claimed.
+is headlessly implemented and verified. Its rendered functional/interactive
+matrix was accepted on 2026-08-28; only subjective final-art review remains
+open.
 
 Intermediate D-052 art approval is orchestration-owned: do not block the lane
 on user review of model sheets, contacts or QA artifacts. Present the user only
@@ -604,8 +631,9 @@ pixels form one connected component; only reviewed, anatomically readable
 negative space is allowed. The final source remains one sheet per opaque key
 rather than a mega-atlas, and source pixels contain no shadow. D-053 replaces
 the Studio-only F scope with a World-wide one-press, no-repeat toggle through
-the existing opaque key; it is headlessly implemented and verified. Background
-and fresh in-game review are still required before acceptance.
+the existing opaque key; it is headlessly implemented and verified, and its
+rendered functional/interactive matrix was accepted on 2026-08-28. Background
+and subjective final-art review remain open.
 
 **Frozen first-room asset contract (D-033 tracer):** the procedural Bank is an
 18×12 grid of 32 px tiles (576×384 px), with a one-tile perimeter, spawn at

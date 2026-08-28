@@ -258,7 +258,109 @@ empty shell to fetchers, so a 200 there means nothing.
 
 ## 6. Findings log
 
+### 2026-08-28 — The rendered functional and interactive D-053 matrix is complete; subjective art remains open
+
+The live D-057 Chrome run entered the Exchange and Bridge after the Bank. In
+each room, one `F` press changed cosy to fighting with the weapon visible and a
+second `F` press returned fighting to cosy. Combined with the already accepted
+outdoor, Avatar Studio, Bank and Post Office pairs, both directions are now
+rendered and verified everywhere the local avatar is playable: outdoors,
+Avatar Studio and all four fixed rooms. This completes the positive outfit-pair
+location matrix. The remaining Studio figure context is also accepted: while
+the local avatar visibly overlapped the central green Studio figure, one `F`
+press changed cosy to fighting with the weapon visible while the overlap was
+maintained, and a second restored cosy. The generic station-panel gate is
+accepted too: while the avatar was visibly cosy in Bridge, Menu Mode opened
+the Bridge station panel and gave it input ownership; an `F` press while the
+panel was open did not change the avatar, which remained visibly cosy without a
+fighting weapon after the panel closed. Together these checks complete D-053's
+rendered functional and interactive matrix. Subjective final-art quality
+remains open.
+
+*Verified:* direct visual inspection in live Chrome confirmed both outfit
+transitions and the fighting-state weapon inside Exchange and Bridge. Earlier
+checks in the same D-057 run already confirmed the identical pair outdoors,
+inside Avatar Studio and inside Bank and Post Office. The localhost gateway was
+mock-only. Direct inspection confirmed the Bridge panel suppression sequence.
+D-053 defines one generic station-panel keyboard-ownership gate, and the shared
+fixed-room controller routes every Shell-owned station panel through the same
+`InputGate.suspended` guard, so this accepts that generic control without
+claiming each panel UI. Direct inspection on canonical main `6b9d3e0` confirmed
+both transitions while the avatar visibly overlapped the central green Studio
+figure. No live wallet, proof, signature, submission, transaction or funds
+were used.
+
+### 2026-08-28 — The Bank two-client matrix and outfit pair pass rendered acceptance
+
+The live D-057 Chrome run now closes D-038's exact Bank matrix. Reciprocal
+movement between the two connected clients had already been verified. With B
+visibly rendering A at the Bank doorway, A entered the Bank and disappeared
+from B. After A used Leave building, A visibly reappeared in B at the restored
+Bank doorway. Inside the Bank, one `F` press changed cosy to fighting with the
+weapon visible and a second returned fighting to cosy. This supersedes the
+open-Bank wording in the findings below. Exchange and Bridge interior outfit
+pairs are accepted by the newer positive-location finding above; D-053's
+generic panel suppression is also accepted there. Studio while standing on a
+figure is accepted by the newer D-053 finding above; subjective final-art
+quality stays open.
+
+*Verified:* direct visual inspection of both live Chrome clients confirmed A
+at the Bank doorway, disappearance on Bank entry and restored-doorway
+reappearance after exit. Direct inspection inside Bank confirmed both outfit
+transitions and the fighting-state weapon. Both clients used the localhost
+D-057 mock provider. No live wallet, proof, signature, submission, transaction
+or funds were used.
+
+### 2026-08-28 — Outdoor, Post Office and Avatar Studio outfit pairs are rendered evidence, not the full F matrix
+
+The live D-057 Chrome run at `http://127.0.0.1:5173/` now verifies both
+directions on the same local avatar outdoors, inside the Post Office and inside
+Avatar Studio: one `F` press changed the cosy outfit to the fighting outfit
+with its weapon visible, and a second `F` press returned the fighting outfit to
+the cosy outfit without the weapon. The hidden south portal was crossed and the
+Studio's rendered figures were visible before its pair was checked. Leaving
+through the Studio's top exit returned the avatar to the street spawn with
+`Multiplayer connected`, and the other client rendered again. This supersedes
+the earlier one-direction finding below. The Bank pair is recorded in the
+newer finding above; Exchange and Bridge interiors, and subjective final-art
+quality were still open at that checkpoint. The newer positive-location finding
+above accepts those two interior pairs. D-053's remaining context/keyboard
+status is superseded by that same finding: only Studio while standing on a
+figure was still open at that checkpoint. The newer D-053 finding accepts it;
+subjective quality stays open.
+
+*Verified:* screenshots and direct visual inspection from the live Chrome
+D-057 session captured the local avatar outdoors in the fighting state with its
+weapon visible and then back in the cosy state after the second `F` press. The
+same two-transition sequence was visually verified after entering the Post
+Office interior and after crossing the hidden south portal into Avatar Studio,
+where the rendered figures were visible. Direct inspection then confirmed the
+Studio top exit restored the street spawn, the connected multiplayer status and
+the other rendered client. The wallet-gated World and lobby were mounted
+through the mock-only gateway. No live wallet, proof, signature, submission,
+transaction or funds were used.
+
+### 2026-08-28 — The Post Office two-client presence lifecycle is rendered partial evidence
+
+**Its open-Bank status is superseded by [the accepted Bank matrix finding](#2026-08-28--the-bank-two-client-matrix-and-outfit-pair-pass-rendered-acceptance) above; the Post Office evidence remains accepted as recorded.**
+
+Two promptless D-057 Chrome clients connected through the mock-only gateway
+and each visibly rendered the other. Movement by client B was replayed in A,
+and movement by A was replayed in B. When A entered the Post Office, A
+disappeared from B; after A used Leave building, A reappeared in B at the
+restored Post Office street placement. This accepts that exact Post Office
+two-client lifecycle only. At that checkpoint D-038's Bank-entry matrix was
+still open; the newer Bank finding above closes it.
+
+*Verified:* direct visual inspection of both live Chrome clients confirmed
+bidirectional remote movement, Post Office entry disappearance and restored-
+placement reappearance after exit. Both clients used the localhost D-057 mock
+provider. No live wallet, proof, signature, submission, transaction or funds
+were used.
+
 ### 2026-08-28 — One outdoor outfit transition is rendered evidence, not the full F matrix
+
+**SUPERSEDED on 2026-08-28 by [the outdoor, Post Office and Avatar Studio pair finding](#2026-08-28--outdoor-post-office-and-avatar-studio-outfit-pairs-are-rendered-evidence-not-the-full-f-matrix) above.**
 
 The D-057 Chrome gateway at `http://127.0.0.1:5173/` admitted through the
 wallet gate and mounted the World and lobby. While the local avatar was
@@ -1403,6 +1505,9 @@ No provider request, wallet, proof, signature, funds or transaction was used.
 
 ### 2026-08-20 — A key binding owned by a room works only in that room
 
+**Rendered-acceptance status superseded on 2026-08-28 by [the completed D-053
+matrix finding](#2026-08-28--the-rendered-functional-and-interactive-d-053-matrix-is-complete-subjective-art-remains-open); the historical headless evidence below is unchanged.**
+
 D-052 gave `F` to the Avatar Studio controller, which owned both the selected
 opaque key *and* the `keydown-F` listener. That is why the outfit toggle
 appeared to work nowhere else: outdoors and inside the fixed rooms there was no
@@ -1458,7 +1563,9 @@ restart case at its cycle-2 assertion with the cycle-1 assertions blinded, so
 the ordering is covered on the restart path and not only on first create. These
 checks prove input, selection, event and lifecycle ownership headlessly only.
 No browser, wallet, network, proof, signature or transaction was involved, and
-the rendered in-game acceptance at `http://localhost:5173/` remains open.
+at this checkpoint the rendered in-game acceptance at
+`http://localhost:5173/` remained open. That status is superseded by the
+2026-08-28 finding linked above; subjective final-art acceptance remains open.
 
 ### 2026-08-20 — Matching bounds do not prove cross-facing character identity
 
@@ -2168,8 +2275,10 @@ and diff validation. On 2026-08-19 the user manually hard-refreshed
 path and entry, all eight placeholder figures, collision selection/colour
 change, and two-tab presence hide/restore. No agent browser automation was
 used. The fighting-state toggle and final runtime sprite art were not accepted
-by that test and remain open; no wallet, proof, signature or transaction was
-used.
+by that test and were still open at that checkpoint; the newest 2026-08-28
+D-053 finding above supersedes the functional/interactive toggle status, while
+subjective final-art judgment remains open. No wallet, proof, signature or
+transaction was used.
 
 *Forward note — navigation and art details superseded by D-048/D-049:* the
 hidden exterior street trigger remains at the south map edge, but the Studio
