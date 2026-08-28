@@ -39,6 +39,81 @@ describe('event bus', () => {
     expect(second).toHaveBeenCalledTimes(1);
   });
 
+  it('does not deliver to a handler unsubscribed before its snapshot turn', () => {
+    const bus = createEventBus<WorldEvents>();
+    const second = vi.fn();
+    let stopSecond!: () => void;
+    bus.on('world:ready', () => stopSecond());
+    stopSecond = bus.on('world:ready', second);
+
+    bus.emit('world:ready', {});
+
+    expect(second).not.toHaveBeenCalled();
+  });
+
+  it('does not let stale cleanup remove a newer subscription for the same handler', () => {
+    const bus = createEventBus<WorldEvents>();
+    const handler = vi.fn();
+    const staleStop = bus.on('world:ready', handler);
+    bus.on('world:ready', handler);
+
+    staleStop();
+    bus.emit('world:ready', {});
+
+    expect(handler).toHaveBeenCalledOnce();
+  });
+
+  it('does not deliver a same-handler resubscription during the in-flight emit', () => {
+    const bus = createEventBus<WorldEvents>();
+    let stop!: () => void;
+    let resubscribed = false;
+    const handler = vi.fn(() => {
+      if (!resubscribed) {
+        resubscribed = true;
+        stop();
+        stop = bus.on('world:ready', handler);
+      }
+    });
+    stop = bus.on('world:ready', handler);
+
+    bus.emit('world:ready', {});
+    expect(handler).toHaveBeenCalledOnce();
+
+    bus.emit('world:ready', {});
+    expect(handler).toHaveBeenCalledTimes(2);
+  });
+
+  it('does not deliver a replacement before the captured handler turn', () => {
+    const bus = createEventBus<WorldEvents>();
+    const second = vi.fn();
+    let stopSecond!: () => void;
+    let replaced = false;
+    bus.on('world:ready', () => {
+      if (replaced) return;
+      replaced = true;
+      stopSecond();
+      stopSecond = bus.on('world:ready', second);
+    });
+    stopSecond = bus.on('world:ready', second);
+
+    bus.emit('world:ready', {});
+    expect(second).not.toHaveBeenCalled();
+
+    bus.emit('world:ready', {});
+    expect(second).toHaveBeenCalledOnce();
+  });
+
+  it('does not deliver remaining handlers after clear() during an emit', () => {
+    const bus = createEventBus<WorldEvents>();
+    const remaining = vi.fn();
+    bus.on('world:ready', () => bus.clear());
+    bus.on('world:ready', remaining);
+
+    bus.emit('world:ready', {});
+
+    expect(remaining).not.toHaveBeenCalled();
+  });
+
   it('keeps delivering after a handler throws', () => {
     const bus = createEventBus<ShellEvents>();
     const spy = vi.spyOn(console, 'error').mockImplementation(() => {});

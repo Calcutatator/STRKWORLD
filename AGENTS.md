@@ -292,6 +292,33 @@ typechecks, the production build, all 13 invariants and diff hygiene pass. No
 browser, wallet, provider, RPC, proof, signature, funds or transaction was
 used.*
 
+### 2026-08-28 — Event-bus subscriptions retain generation ownership during synchronous emit
+
+The Web event bus previously stored one `Set` per event and iterated a
+snapshot without checking whether each snapshot entry was still current. A
+handler unsubscribed before its turn, or all handlers cleared during an emit,
+could still receive that in-flight event. Because cleanup called
+`off(event, handler)` by function identity, an older unsubscribe could also
+remove a newer subscription of the same handler. A same-handler
+unsubscribe/resubscribe during an emit must not inherit the old snapshot, but
+must receive later emits.
+
+The bus now stores a per-event `Map<handler, token>`. Each subscription owns a
+token; returned cleanup removes only its token, explicit `off` removes the
+current generation, and emit checks token liveness before delivery. `clear()`
+empties the per-event maps before dropping them so it suppresses the remainder
+of an in-flight snapshot. Existing synchronous reentrant emission, `once`
+semantics and exception isolation remain unchanged.
+
+*Verified:* five public event-bus regressions cover unsubscribe-before-turn,
+stale same-handler cleanup, replacement by another handler before its
+captured turn, same-handler resubscription during emit, and clear-during-emit.
+The unpatched `origin/main` failed four of the five; the focused suite passes
+12/12 after the change. The replacement-before-turn regression fails if token
+equality is weakened to handler-presence (`Map.has`), proving the captured
+generation—not merely the handler—is authoritative. No browser, wallet,
+provider, RPC, proof, signature, funds or transaction was used.
+
 ### 2026-08-28 — Avatar PNG filters are validated once per decoded row
 
 The Avatar 1 source-parity test previously ran a Vitest assertion for every
