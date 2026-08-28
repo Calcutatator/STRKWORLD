@@ -102,7 +102,7 @@ describe('ProductionRoot', () => {
     expect(container.textContent).toContain(COPY.unsupported.title);
     expect(captured.current).toBeNull();
     expect(createPresence).not.toHaveBeenCalled();
-    root.unmount();
+    await unmountReactRoot(root);
     container.remove();
   });
 
@@ -144,7 +144,7 @@ describe('ProductionRoot', () => {
         },
       },
     });
-    root.unmount();
+    await unmountReactRoot(root);
     container.remove();
   });
 
@@ -172,7 +172,7 @@ describe('ProductionRoot', () => {
 
     expect(container.textContent).toContain(COPY.connect.retry);
     expect(createPresence).not.toHaveBeenCalled();
-    root.unmount();
+    await unmountReactRoot(root);
     container.remove();
   });
 
@@ -225,8 +225,7 @@ describe('ProductionRoot', () => {
     expect(createPresence).toHaveBeenCalledTimes(2);
     expect(second.destroy).not.toHaveBeenCalled();
 
-    root.unmount();
-    await flushReact();
+    await unmountReactRoot(root);
     expect(second.destroy).toHaveBeenCalledOnce();
     container.remove();
   });
@@ -292,4 +291,11 @@ async function flushReact(): Promise<void> {
   await Promise.resolve();
   await Promise.resolve();
   await new Promise<void>((resolve) => setTimeout(resolve, 0));
+}
+
+async function unmountReactRoot(root: ReturnType<typeof createRoot>): Promise<void> {
+  await act(async () => {
+    root.unmount();
+    await flushReact();
+  });
 }
