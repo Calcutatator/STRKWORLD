@@ -1370,7 +1370,7 @@ for v1.
 
 ## D-039 — Fixed Game Mode rooms share one data-driven core; Post Office is the second tracer
 
-**2026-08-18 · Accepted · technical direction delegated to the project lead · extends D-030–D-033**
+**2026-08-18 · Accepted · technical direction delegated to the project lead · extends D-030–D-033 · rendered Bank/Post Office room-and-station status updated by [the 2026-08-28 finding](../AGENTS.md#2026-08-28--room-navigation-and-three-admitted-stations-pass-bridge-deposit-stays-locked)**
 
 **Context.** The accepted Game Mode target gives every v1 building a fixed,
 walkable, client-local room with opaque stations. The Bank tracer proves the
@@ -1536,7 +1536,7 @@ new decision.
 
 ## D-042 — The Exchange reviews AVNU's protected minimum over a six-asset display catalog
 
-**2026-08-18 · Accepted · technical direction delegated to the project lead · implements D-030–D-032, completes D-040's Exchange deferral and amends D-041's minimum mapping**
+**2026-08-18 · Accepted · technical direction delegated to the project lead · implements D-030–D-032, completes D-040's Exchange deferral and amends D-041's minimum mapping · rendered Exchange room/station status updated by [the 2026-08-28 finding](../AGENTS.md#2026-08-28--room-navigation-and-three-admitted-stations-pass-bridge-deposit-stays-locked)**
 
 **Context.** D-041 exposed the expected output, the typed intent's minimum,
 the configured slippage and quote expiry. Tracing the installed AVNU 4.2.0
@@ -1606,8 +1606,10 @@ unchanged Bank/Post Office behavior. Rendered acceptance remains user-owned.
 
 **2026-08-18 · Accepted and implemented offline · SUPERSEDED in part by D-055
 for production no-wallet entry; production fee-aware planning remains a D-028
-funded gate · completes D-009/D-012's v1 composition choice and adds no method
-to the D-036-frozen `PrivacyOperations` seam**
+funded gate · rendered Bridge navigation/exit status updated, with physical
+station admission still open/locked, by [the 2026-08-28 finding](../AGENTS.md#2026-08-28--room-navigation-and-three-admitted-stations-pass-bridge-deposit-stays-locked)
+· completes D-009/D-012's v1 composition choice and adds no method to the
+D-036-frozen `PrivacyOperations` seam**
 
 **Context.** The independent Bridge package already owns a signed, resumable
 1Click deposit record, but the game has no Bridge room or Shell controller.

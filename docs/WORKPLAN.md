@@ -17,8 +17,8 @@ the lane boundary — that is why the repo is shaped the way it is.
 | Lane | Package | Status in v1 |
 |---|---|---|
 | **Chain** | `packages/privacy` | Active; private seam and D-054 production WalletSession complete, D-043 planner port/fake complete, production Bridge planner and funded wallet validation remain open |
-| **World** | `packages/world` + `packages/lobby` | Active; four fixed rooms, multiplayer, Avatar Studio, D-052 five-column runtime and D-053 global F toggle are headlessly complete; D-057 has accepted the exact Bank two-client matrix, rendered mock Bank path, complete rendered functional/interactive D-053 matrix, Studio exit restoration and Post Office two-client lifecycle; room/station and subjective-visual gates stay open |
-| **Shell** | `apps/web` | Active; production wallet gate, transfer/shield policy parsing, all v1 room surfaces and D-057's mock Bank acceptance complete; remaining live-route and rendered-room gates are open |
+| **World** | `packages/world` + `packages/lobby` | Active; four fixed rooms, multiplayer, Avatar Studio, D-052 five-column runtime and D-053 global F toggle are headlessly complete; D-057 has accepted every room's rendered navigation/physical exit, the exact Bank two-client matrix, the complete rendered functional/interactive D-053 matrix, and Bank/Post Office/Exchange station integration; Bridge station integration and subjective visuals stay open |
+| **Shell** | `apps/web` | Active; production wallet gate, transfer/shield policy parsing and all v1 room surfaces are complete; D-057 has accepted rendered Bank/Post Office/Exchange station integration, while the production Bridge planner/station, live routes and funded validation remain open |
 | **Backend** | `apps/backend` | Active; bounded APIs, same-origin local proxy, D-050 and hosted image smokes complete; host, domain, secrets, Alchemy controls, live staging and funded checks remain |
 | **Bridge** | `packages/bridge` | Active; offline manual/recovery flow complete, production planner and funded-provider acceptance open |
 | **Art** | `packages/world/assets` | D-052 final source/runtime corrections are merged through PR #33 and mechanically reviewed; rendered in-game visual acceptance remains |
@@ -241,20 +241,28 @@ Bank behavior now runs through one validated, data-driven fixed-room core, and
 the Post Office is the second room with one opaque
 `post-office:transfer` station. Bank geometry and behavior remain unchanged;
 the shared buses and privacy seam remain frozen. Its remaining functional
-acceptance is to enter and physically exit both rooms and confirm that each
-station highlights and opens only its admitted surface.
+acceptance is complete: the rendered D-057 mock run physically entered and
+exited both rooms, and each gold/highlighted station automatically opened only
+its admitted surface (**The Bank** and **Private transfer**).
 
 **D-042 complete offline:** the Exchange is the third definition in the same
 fixed-room core, with one opaque `exchange:swap` station. No new scene, shared
 event, lobby field or financial meaning entered World. Headless tests pin its
-geometry, station presentation and boot-order snapshot. Rendered room and
-station acceptance remains open at `http://localhost:5173/`.
+geometry, station presentation and boot-order snapshot. Its rendered room and
+station integration is accepted: the D-057 mock run physically entered and
+exited Exchange, and approaching the gold/highlighted station automatically
+opened **The Exchange** panel.
 
 **D-043 complete offline:** the Bridge is another definition of the same
 fixed-room core with one opaque `bridge:deposit` station. World owns geometry,
 highlight, activation, exit and teardown only; it gained no recipient, quote,
-deposit address, status or wallet concept. Rendered room and station acceptance
-remains open at `http://localhost:5173/`.
+deposit address, status or wallet concept. Rendered Bridge navigation and its
+physical floor exit are accepted. Its station integration remains open/locked:
+repeated physical approach showed the **DEPOSIT** label but no highlight,
+activation or panel, consistent with Shell requiring the still-missing
+production public-shield planner before admitting `bridge:deposit`. World
+renders the locked snapshot grey with its label and activates only available
+stations; independently opening Menu Mode does not change that admission.
 
 **D-047 foundation, D-048 portal and D-052 art/runtime integration complete;
 rendered gate remains:** the hidden south path and bottom-edge
@@ -328,8 +336,14 @@ matrix and the positive outfit-pair location matrix are accepted. D-053's
 generic station-panel keyboard control is also accepted from the Bridge panel
 check, and both transitions while overlapping the central Studio figure are
 accepted. D-053's rendered functional/interactive matrix is complete. Every
-room/station and subjective final-art acceptance stay open. These checks prove
-no live-wallet or funded behavior.
+fixed-room navigation/exit path is now accepted, as are the Bank, Post Office
+and Exchange station integrations: each admitted station highlighted and
+opened its correct panel, panel-owned `F` was suppressed, and closing returned
+to the unchanged cosy avatar. Bridge navigation/exit is accepted, but its
+`bridge:deposit` station remains open/locked with only the **DEPOSIT** label
+visible because the production planner capability is still absent. Subjective
+final-art acceptance remains open. These checks prove no live-wallet or funded
+behavior.
 
 James has delegated the intermediate D-052 art gates to orchestration. The Art
 lane should continue through internal identity, edge, movement, source/export
@@ -391,8 +405,9 @@ admitted and the existing financial machine is configured for one transfer
 mode and one intent. Game Mode reuses recipient preflight, route admission,
 `ConfirmGate`, receipts and uncertainty handling. D-040 completes Post Office
 Menu Mode with the same transfer-only machine and Menu Mode's compatible
-multi-transfer batching. The remaining rendered gate is functional acceptance
-recorded in the World lane.
+multi-transfer batching. Rendered room/station integration is accepted in the
+World lane; live-wallet and funded transfer behavior remain separate open
+gates.
 
 **D-042 complete offline:** the dedicated Exchange machine and panel use the
 checked-in six-asset display catalog in both Menu and Game Mode, one swap at a
@@ -400,7 +415,8 @@ time. The player explicitly requests balances; the prepared review carries the
 canonical D-024 disclosure, expected and protected outputs, slippage, absolute
 expiry and exact fees at `ConfirmGate`; receipts are owned by `exchange` and
 outlive the room. Catalog metadata is never route authority. Rendered
-acceptance remains open at `http://localhost:5173/`.
+room/station integration is accepted in the D-057 mock run; live-wallet and
+funded Exchange behavior remain open.
 
 **D-043 complete offline:** the manual-only Bridge machine and room retain the
 concrete connected account beside the privacy seam, bind every new quote to its
