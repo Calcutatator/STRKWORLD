@@ -52,9 +52,10 @@ The rejected artifact and its ledger are not part of this repository.
 
 The scoped approval evidence is under `qa/avatar-1-cosy-six-column/`: 24/24
 cells pass, all cells use binary alpha, the sheet crops reproduce all 24 cells,
-and the eye-anchor report records the exact side-row reversion. The runtime
-uses the common `(32,56)` feet point, 24x24 body and no baked shadow. This
-approval is Avatar 1 cosy only.
+the repo-owned raw-RGBA parity record correlates every named 64x64 crop to the
+committed sheet, and the eye-anchor report records the exact side-row
+reversion. The runtime uses the common `(32,56)` feet point, 24x24 body and no
+baked shadow. This approval is Avatar 1 cosy only.
 
 The prior 24-colour-per-frame cap remains the default for Avatar 2-16. The
 exact approved Avatar 1 cosy sheet has a scoped maximum of 29 colours per

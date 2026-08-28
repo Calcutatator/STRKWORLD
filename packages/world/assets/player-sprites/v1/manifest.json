@@ -21,7 +21,8 @@
         "maximumColorsPerFrame": 29,
         "approvalEvidence": [
           "qa/avatar-1-cosy-six-column/qa-cells.json",
-          "qa/avatar-1-cosy-six-column/eye-anchor-qa.json"
+          "qa/avatar-1-cosy-six-column/eye-anchor-qa.json",
+          "qa/avatar-1-cosy-six-column/sheet-crop-parity.json"
         ],
         "scope": "approved Avatar 1 cosy replacement only; Avatar 1 fighting and avatars 2-16 are unchanged",
         "sourceAuthority": "this exact hashed PNG; the historical five-column Aseprite source must not overwrite it",

@@ -3,7 +3,9 @@
 > **Avatar 1 cosy override.** The aggregate evidence below describes the prior
 > five-column complete set. The current approved six-column `avatar-1.png` is
 > governed by `avatar-1-cosy-six-column/qa-cells.json` and
-> `avatar-1-cosy-six-column/eye-anchor-qa.json`; the exact PNG hash is pinned by
+> `avatar-1-cosy-six-column/eye-anchor-qa.json`, with all 24 committed sheet
+> crops pinned by `avatar-1-cosy-six-column/sheet-crop-parity.json`; the exact
+> PNG and decoded crop hashes are verified by
 > `packages/world/src/avatar-asset.test.ts`. Do not use the historical Avatar 1
 > Aseprite cels or aggregate reports to overwrite that approved PNG.
 > The historical 24-colour aggregate cap remains the default for Avatar 2-16;

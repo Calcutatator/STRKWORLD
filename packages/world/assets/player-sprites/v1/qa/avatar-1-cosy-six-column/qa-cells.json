@@ -1,6 +1,6 @@
 [
   {
-    "file": "/Users/james.wilcock/.codex/visualizations/2026/08/19/01a01a58-1f53-7320-bbe2-4dd7fbb92615/avatar-1-exact-review/cells/down-contact-left.png",
+    "file": "down-contact-left.png",
     "size": [
       64,
       64
@@ -28,7 +28,7 @@
     "failures": []
   },
   {
-    "file": "/Users/james.wilcock/.codex/visualizations/2026/08/19/01a01a58-1f53-7320-bbe2-4dd7fbb92615/avatar-1-exact-review/cells/down-contact-right.png",
+    "file": "down-contact-right.png",
     "size": [
       64,
       64
@@ -56,7 +56,7 @@
     "failures": []
   },
   {
-    "file": "/Users/james.wilcock/.codex/visualizations/2026/08/19/01a01a58-1f53-7320-bbe2-4dd7fbb92615/avatar-1-exact-review/cells/down-idle.png",
+    "file": "down-idle.png",
     "size": [
       64,
       64
@@ -84,7 +84,7 @@
     "failures": []
   },
   {
-    "file": "/Users/james.wilcock/.codex/visualizations/2026/08/19/01a01a58-1f53-7320-bbe2-4dd7fbb92615/avatar-1-exact-review/cells/down-passing-left.png",
+    "file": "down-passing-left.png",
     "size": [
       64,
       64
@@ -112,7 +112,7 @@
     "failures": []
   },
   {
-    "file": "/Users/james.wilcock/.codex/visualizations/2026/08/19/01a01a58-1f53-7320-bbe2-4dd7fbb92615/avatar-1-exact-review/cells/down-passing-right.png",
+    "file": "down-passing-right.png",
     "size": [
       64,
       64
@@ -140,7 +140,7 @@
     "failures": []
   },
   {
-    "file": "/Users/james.wilcock/.codex/visualizations/2026/08/19/01a01a58-1f53-7320-bbe2-4dd7fbb92615/avatar-1-exact-review/cells/down-settle.png",
+    "file": "down-settle.png",
     "size": [
       64,
       64
@@ -168,7 +168,7 @@
     "failures": []
   },
   {
-    "file": "/Users/james.wilcock/.codex/visualizations/2026/08/19/01a01a58-1f53-7320-bbe2-4dd7fbb92615/avatar-1-exact-review/cells/left-contact-left.png",
+    "file": "left-contact-left.png",
     "size": [
       64,
       64
@@ -196,7 +196,7 @@
     "failures": []
   },
   {
-    "file": "/Users/james.wilcock/.codex/visualizations/2026/08/19/01a01a58-1f53-7320-bbe2-4dd7fbb92615/avatar-1-exact-review/cells/left-contact-right.png",
+    "file": "left-contact-right.png",
     "size": [
       64,
       64
@@ -224,7 +224,7 @@
     "failures": []
   },
   {
-    "file": "/Users/james.wilcock/.codex/visualizations/2026/08/19/01a01a58-1f53-7320-bbe2-4dd7fbb92615/avatar-1-exact-review/cells/left-idle.png",
+    "file": "left-idle.png",
     "size": [
       64,
       64
@@ -252,7 +252,7 @@
     "failures": []
   },
   {
-    "file": "/Users/james.wilcock/.codex/visualizations/2026/08/19/01a01a58-1f53-7320-bbe2-4dd7fbb92615/avatar-1-exact-review/cells/left-passing-left.png",
+    "file": "left-passing-left.png",
     "size": [
       64,
       64
@@ -280,7 +280,7 @@
     "failures": []
   },
   {
-    "file": "/Users/james.wilcock/.codex/visualizations/2026/08/19/01a01a58-1f53-7320-bbe2-4dd7fbb92615/avatar-1-exact-review/cells/left-passing-right.png",
+    "file": "left-passing-right.png",
     "size": [
       64,
       64
@@ -308,7 +308,7 @@
     "failures": []
   },
   {
-    "file": "/Users/james.wilcock/.codex/visualizations/2026/08/19/01a01a58-1f53-7320-bbe2-4dd7fbb92615/avatar-1-exact-review/cells/left-settle.png",
+    "file": "left-settle.png",
     "size": [
       64,
       64
@@ -336,7 +336,7 @@
     "failures": []
   },
   {
-    "file": "/Users/james.wilcock/.codex/visualizations/2026/08/19/01a01a58-1f53-7320-bbe2-4dd7fbb92615/avatar-1-exact-review/cells/right-contact-left.png",
+    "file": "right-contact-left.png",
     "size": [
       64,
       64
@@ -364,7 +364,7 @@
     "failures": []
   },
   {
-    "file": "/Users/james.wilcock/.codex/visualizations/2026/08/19/01a01a58-1f53-7320-bbe2-4dd7fbb92615/avatar-1-exact-review/cells/right-contact-right.png",
+    "file": "right-contact-right.png",
     "size": [
       64,
       64
@@ -392,7 +392,7 @@
     "failures": []
   },
   {
-    "file": "/Users/james.wilcock/.codex/visualizations/2026/08/19/01a01a58-1f53-7320-bbe2-4dd7fbb92615/avatar-1-exact-review/cells/right-idle.png",
+    "file": "right-idle.png",
     "size": [
       64,
       64
@@ -420,7 +420,7 @@
     "failures": []
   },
   {
-    "file": "/Users/james.wilcock/.codex/visualizations/2026/08/19/01a01a58-1f53-7320-bbe2-4dd7fbb92615/avatar-1-exact-review/cells/right-passing-left.png",
+    "file": "right-passing-left.png",
     "size": [
       64,
       64
@@ -448,7 +448,7 @@
     "failures": []
   },
   {
-    "file": "/Users/james.wilcock/.codex/visualizations/2026/08/19/01a01a58-1f53-7320-bbe2-4dd7fbb92615/avatar-1-exact-review/cells/right-passing-right.png",
+    "file": "right-passing-right.png",
     "size": [
       64,
       64
@@ -476,7 +476,7 @@
     "failures": []
   },
   {
-    "file": "/Users/james.wilcock/.codex/visualizations/2026/08/19/01a01a58-1f53-7320-bbe2-4dd7fbb92615/avatar-1-exact-review/cells/right-settle.png",
+    "file": "right-settle.png",
     "size": [
       64,
       64
@@ -504,7 +504,7 @@
     "failures": []
   },
   {
-    "file": "/Users/james.wilcock/.codex/visualizations/2026/08/19/01a01a58-1f53-7320-bbe2-4dd7fbb92615/avatar-1-exact-review/cells/up-contact-left.png",
+    "file": "up-contact-left.png",
     "size": [
       64,
       64
@@ -532,7 +532,7 @@
     "failures": []
   },
   {
-    "file": "/Users/james.wilcock/.codex/visualizations/2026/08/19/01a01a58-1f53-7320-bbe2-4dd7fbb92615/avatar-1-exact-review/cells/up-contact-right.png",
+    "file": "up-contact-right.png",
     "size": [
       64,
       64
@@ -560,7 +560,7 @@
     "failures": []
   },
   {
-    "file": "/Users/james.wilcock/.codex/visualizations/2026/08/19/01a01a58-1f53-7320-bbe2-4dd7fbb92615/avatar-1-exact-review/cells/up-idle.png",
+    "file": "up-idle.png",
     "size": [
       64,
       64
@@ -588,7 +588,7 @@
     "failures": []
   },
   {
-    "file": "/Users/james.wilcock/.codex/visualizations/2026/08/19/01a01a58-1f53-7320-bbe2-4dd7fbb92615/avatar-1-exact-review/cells/up-passing-left.png",
+    "file": "up-passing-left.png",
     "size": [
       64,
       64
@@ -616,7 +616,7 @@
     "failures": []
   },
   {
-    "file": "/Users/james.wilcock/.codex/visualizations/2026/08/19/01a01a58-1f53-7320-bbe2-4dd7fbb92615/avatar-1-exact-review/cells/up-passing-right.png",
+    "file": "up-passing-right.png",
     "size": [
       64,
       64
@@ -644,7 +644,7 @@
     "failures": []
   },
   {
-    "file": "/Users/james.wilcock/.codex/visualizations/2026/08/19/01a01a58-1f53-7320-bbe2-4dd7fbb92615/avatar-1-exact-review/cells/up-settle.png",
+    "file": "up-settle.png",
     "size": [
       64,
       64

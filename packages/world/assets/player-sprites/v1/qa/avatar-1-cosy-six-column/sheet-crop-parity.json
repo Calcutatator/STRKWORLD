@@ -1,0 +1,32 @@
+{
+  "schemaVersion": 1,
+  "source": "avatar-1.png",
+  "sourceSha256": "f0ea738353723abc18070210bf169002ede62003b03508b1e326ff9ae72e87bb",
+  "encoding": "sha256 of decoded 64x64 RGBA bytes in row-major order",
+  "cells": [
+    { "cell": "down-idle.png", "row": "down", "column": "idle", "rgbaSha256": "98083c10e0039c9c9b2b663d625b489aa27cc31a8b5e0b258e21247bd3eb4fbc" },
+    { "cell": "down-contact-left.png", "row": "down", "column": "contact-left", "rgbaSha256": "7465bbeac986b75bdc64417b2349a1fd40c0b729bf069fe8a47606a074ce52bf" },
+    { "cell": "down-passing-left.png", "row": "down", "column": "passing-left", "rgbaSha256": "4e5d22299738e26ca3ced784548a83c1d6b820b1d912ee535b747d1d4cc1ab5c" },
+    { "cell": "down-contact-right.png", "row": "down", "column": "contact-right", "rgbaSha256": "b40a3a64efb3d633f045e312da294d949dd1d82143ddeed312b74b13c2fda4a0" },
+    { "cell": "down-passing-right.png", "row": "down", "column": "passing-right", "rgbaSha256": "ae3b416d7bb874825691828e1204bcfb0941fe0af5e3d884634af5569e8c7e3c" },
+    { "cell": "down-settle.png", "row": "down", "column": "settle", "rgbaSha256": "671b711746862c4e4d4bdd47261818de628ab43b67d63f7fac999446e5c71514" },
+    { "cell": "left-idle.png", "row": "left", "column": "idle", "rgbaSha256": "8a970baa0d57312df860cdb399ced752e03a8603005f6cb1d2cae77fb2991499" },
+    { "cell": "left-contact-left.png", "row": "left", "column": "contact-left", "rgbaSha256": "815c13a69ca1380cda5b46b712152c14eb83ea2f8ced8d81c785c40b97bbf335" },
+    { "cell": "left-passing-left.png", "row": "left", "column": "passing-left", "rgbaSha256": "2cd91eb54a9dd2900a56a68f25f7eb0fa8a95cf6a7a5591e2db73fe57733add1" },
+    { "cell": "left-contact-right.png", "row": "left", "column": "contact-right", "rgbaSha256": "1d40d436284332f689e3d7cf836b06407d7f9cb3a606f346fa544fe963d37b8a" },
+    { "cell": "left-passing-right.png", "row": "left", "column": "passing-right", "rgbaSha256": "18be878f797edd8da23748df267aa375e6d110766a90712da83521654ac11c81" },
+    { "cell": "left-settle.png", "row": "left", "column": "settle", "rgbaSha256": "10d5b4df76d938d48f42e78d7c92d81ffa98ae34f422417007a0492a3ac2b54c" },
+    { "cell": "right-idle.png", "row": "right", "column": "idle", "rgbaSha256": "ff2965d5e1d8fc8ab64582a8059e68247613de5a0cbe81c34bb7204ea86a1163" },
+    { "cell": "right-contact-left.png", "row": "right", "column": "contact-left", "rgbaSha256": "c6fbc6c120ce7dcbe220ae17f695b22c141f7385a0002084b00e0ed41f44aca9" },
+    { "cell": "right-passing-left.png", "row": "right", "column": "passing-left", "rgbaSha256": "85014184cba8c925561a7aa70c382fb42069634935e1e2af9228a7b285824460" },
+    { "cell": "right-contact-right.png", "row": "right", "column": "contact-right", "rgbaSha256": "b6a0108dc82050b981d855efe2be6dd1db9f6c8b3ba5fe73e126a6176e21f7b8" },
+    { "cell": "right-passing-right.png", "row": "right", "column": "passing-right", "rgbaSha256": "0b6ae615e92b6e626c1b03379add562d86dda676be95c0a0e1ad6965c4caef05" },
+    { "cell": "right-settle.png", "row": "right", "column": "settle", "rgbaSha256": "0e5306f868edf0e8fa5103345796b78c049ad53fc59b82d25c38fc0085765f42" },
+    { "cell": "up-idle.png", "row": "up", "column": "idle", "rgbaSha256": "e37b157f88adc7d6103f704c245bf6e9a6b8c7a41cd03b47732a11b32a963af3" },
+    { "cell": "up-contact-left.png", "row": "up", "column": "contact-left", "rgbaSha256": "dcab959c57501a493fcd9ac05aeb01bc28693d80e6fd8a0f815a9cf11e8e8179" },
+    { "cell": "up-passing-left.png", "row": "up", "column": "passing-left", "rgbaSha256": "06ec9e1838c759819214cfb7d2fe7224c4198508c8479448c48746a575465cca" },
+    { "cell": "up-contact-right.png", "row": "up", "column": "contact-right", "rgbaSha256": "6ff86570c35756c0f645e73962c2091316bb5edecd071e2ca15df502ec370a0a" },
+    { "cell": "up-passing-right.png", "row": "up", "column": "passing-right", "rgbaSha256": "f8224733ce3c268cd9f58a4eb52cf1ecd7c2a8f7e0ac5b94045a6e07a74e5590" },
+    { "cell": "up-settle.png", "row": "up", "column": "settle", "rgbaSha256": "8c81492e4ab2243ba4ba9b83d32450b26c80ca16eb2b61e3a460c49281ac57c0" }
+  ]
+}

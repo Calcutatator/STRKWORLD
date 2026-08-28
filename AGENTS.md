@@ -279,10 +279,11 @@ cosy alone has a maximum of 29 colours per frame, while Avatar 2-16 retain the
 
 *Verified:* the source SHA and 384x256 PNG header were checked before and after
 the copy. Dedicated public tests pin that exact hash, geometry, 24/24 passing
-cell reports, binary alpha, down-eye evidence, side-row reversion, six-column
-preload/row offsets and per-sheet remote idle duration while retaining the
-five-column Avatar 2-16 contract. The focused suite passes 3 files / 19 tests;
-the exact merged tree passes 95 files / 1,361 tests, all workspace typechecks,
+cell reports, binary alpha, all 24 decoded sheet-crop hashes, down-eye evidence,
+side-row reversion, frozen nested playback authority, six-column preload/row
+offsets and per-sheet remote idle duration while retaining the five-column
+Avatar 2-16 contract. The focused suite passes 3 files / 20 tests; the exact
+reviewed branch passes 95 files / 1,362 tests, all workspace typechecks,
 the production build, all 13 invariants and diff hygiene. No browser, lobby,
 wallet, RPC, proof, signature, funds or transaction was used; fresh rendered
 acceptance remains the project-lead handoff after merge and local restart.*
