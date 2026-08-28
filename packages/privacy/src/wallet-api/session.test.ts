@@ -70,6 +70,112 @@ describe('WalletSession', () => {
     await expect(session.operations.capability()).resolves.toMatchObject({ supportsStrk20: true });
   });
 
+  it('does not deliver an in-flight snapshot to a listener added during publish', () => {
+    const selected = wallet('Ready');
+    const discovery = controllableDiscovery(selected);
+    const session = createWalletSession(
+      denyAllOptions(),
+      { discovery: discovery.port, connectWallet: async () => connection('0x111') },
+    );
+    const late = vi.fn();
+    let added = false;
+    session.subscribe(() => {
+      if (added) return;
+      added = true;
+      session.subscribe(late);
+    });
+
+    discovery.replace(selected);
+
+    expect(late).not.toHaveBeenCalled();
+    discovery.replace(selected);
+    expect(late).toHaveBeenCalledOnce();
+  });
+
+  it('does not deliver an in-flight snapshot to a replacement listener generation', () => {
+    const selected = wallet('Ready');
+    const discovery = controllableDiscovery(selected);
+    const session = createWalletSession(
+      denyAllOptions(),
+      { discovery: discovery.port, connectWallet: async () => connection('0x111') },
+    );
+    const second = vi.fn();
+    let replaced = false;
+    let stopSecond!: () => void;
+    session.subscribe(() => {
+      if (replaced) return;
+      replaced = true;
+      stopSecond();
+      stopSecond = session.subscribe(second);
+    });
+    stopSecond = session.subscribe(second);
+
+    discovery.replace(selected);
+
+    expect(second).not.toHaveBeenCalled();
+    discovery.replace(selected);
+    expect(second).toHaveBeenCalledOnce();
+  });
+
+  it('does not deliver an in-flight snapshot after unsubscribe before its turn', () => {
+    const selected = wallet('Ready');
+    const discovery = controllableDiscovery(selected);
+    const session = createWalletSession(
+      denyAllOptions(),
+      { discovery: discovery.port, connectWallet: async () => connection('0x111') },
+    );
+    const second = vi.fn();
+    let stopSecond!: () => void;
+    session.subscribe(() => stopSecond());
+    stopSecond = session.subscribe(second);
+
+    discovery.replace(selected);
+
+    expect(second).not.toHaveBeenCalled();
+  });
+
+  it('keeps a replacement subscription when stale cleanup settles later', () => {
+    const selected = wallet('Ready');
+    const discovery = controllableDiscovery(selected);
+    const session = createWalletSession(
+      denyAllOptions(),
+      { discovery: discovery.port, connectWallet: async () => connection('0x111') },
+    );
+    const listener = vi.fn();
+    const staleStop = session.subscribe(listener);
+    session.subscribe(listener);
+
+    staleStop();
+    staleStop();
+    discovery.replace(selected);
+
+    expect(listener).toHaveBeenCalledOnce();
+  });
+
+  it('isolates a throwing subscriber from the transition and later subscribers', () => {
+    const selected = wallet('Ready');
+    const discovery = controllableDiscovery(selected);
+    const session = createWalletSession(
+      denyAllOptions(),
+      { discovery: discovery.port, connectWallet: async () => connection('0x111') },
+    );
+    const error = new Error('subscriber failed');
+    const consoleError = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    const later = vi.fn();
+    session.subscribe(() => {
+      throw error;
+    });
+    session.subscribe(later);
+
+    try {
+      expect(() => discovery.replace(selected)).not.toThrow();
+      expect(later).toHaveBeenCalledOnce();
+      expect(consoleError).toHaveBeenCalledWith('wallet session: subscriber threw', error);
+    } finally {
+      consoleError.mockRestore();
+    }
+  });
+
   it('retires prepared work before a changed account can sign it', async () => {
     const selected = wallet('Ready');
     const oldConfirm = vi.fn(async () => ({ transactionHash: '0xold' }));
