@@ -259,10 +259,15 @@ No production Ready planner exists today: the visible Ready route does not
 prove the fee allowance consumed separately by the pool. Production therefore
 locks new quotes, deposit instructions and the Bridge-to-Bank handoff. The
 offline demo supplies only a deterministic fake. `BridgeStore` retains
-saved/imported signed evidence for later recovery, but production access to
-that UI remains behind D-055's wallet gate; only explicit demo/test
-compositions may inspect it without a wallet or planner. No Bridge-to-shield
-correlation is stored.
+saved/imported signed evidence for later recovery. The D-055 wallet-gated
+production composition gives `BridgeProvider` a dormant loader for the shipped
+1Click service and browser-local store. The loader runs only when the Bridge
+panel mounts, verifies persistence before exposing recovery, and isolates a
+chunk/storage failure from wallet admission and the city. It performs no
+provider request, and opening the recovery-only panel does not fetch
+new-deposit source metadata. Only an explicit status refresh or watch contacts 1Click. Explicit demo/test
+compositions may inspect the evidence without a wallet.
+No Bridge-to-shield correlation is stored.
 
 **Must not:** import `@strkworld/privacy`, offer an OUT direction or a
 destination-token choice, or present arrival as private — bridging is a

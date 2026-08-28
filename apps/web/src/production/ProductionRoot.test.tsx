@@ -30,6 +30,7 @@ describe('ProductionRoot', () => {
         worldOut={createEventBus<WorldEvents>()}
         shellIn={createEventBus<ShellEvents>()}
         presence={createPresenceController({})}
+        bridge={recoveryBridge()}
       />,
     );
 
@@ -49,6 +50,7 @@ describe('ProductionRoot', () => {
         worldOut={createEventBus<WorldEvents>()}
         shellIn={createEventBus<ShellEvents>()}
         createPresence={createPresence}
+        bridge={recoveryBridge()}
       />,
     );
 
@@ -68,6 +70,7 @@ describe('ProductionRoot', () => {
         worldOut={createEventBus<WorldEvents>()}
         shellIn={createEventBus<ShellEvents>()}
         presence={createPresenceController({})}
+        bridge={recoveryBridge()}
       />,
     );
 
@@ -93,6 +96,7 @@ describe('ProductionRoot', () => {
             worldOut={createEventBus<WorldEvents>()}
             shellIn={createEventBus<ShellEvents>()}
             createPresence={createPresence}
+            bridge={recoveryBridge()}
           />
         </StrictMode>,
       );
@@ -128,6 +132,7 @@ describe('ProductionRoot', () => {
             worldOut={createEventBus<WorldEvents>()}
             shellIn={createEventBus<ShellEvents>()}
             createPresence={createPresence}
+            bridge={recoveryBridge()}
           />
         </StrictMode>,
       );
@@ -148,6 +153,48 @@ describe('ProductionRoot', () => {
     container.remove();
   });
 
+  it('composes production Bridge recovery while keeping new financial continuation locked', async () => {
+    captured.current = null;
+    const service = {} as never;
+    const loadSources = vi.fn(async () => []);
+    const loadRuntime = vi.fn(async () => ({ service, loadSources }));
+    const bridge = { loadRuntime };
+    const session = sessionAt('connected', '0xabc', new FakePrivacyOperations({
+      capability: {
+        supportsStrk20: true,
+        walletApiVersion: '0.10.3',
+        registration: 'unknown',
+      },
+    }));
+    const container = document.createElement('div');
+    document.body.appendChild(container);
+    const root = createRoot(container);
+
+    await act(async () => {
+      root.render(
+        <ProductionRoot
+          session={session}
+          worldOut={createEventBus<WorldEvents>()}
+          shellIn={createEventBus<ShellEvents>()}
+          createPresence={() => createPresenceController({})}
+          bridge={bridge}
+        />,
+      );
+      await flushReact();
+    });
+
+    expect((captured.current as Record<string, unknown> | null)?.bridge).toEqual({
+      loadRuntime,
+      account: '0xabc',
+      readAccount: session.readAccount,
+      planner: null,
+    });
+    expect(loadRuntime).not.toHaveBeenCalled();
+    expect(loadSources).not.toHaveBeenCalled();
+    await unmountReactRoot(root);
+    container.remove();
+  });
+
   it('keeps a rejected capability check at the gate with an explicit retry', async () => {
     const createPresence = vi.fn(() => createPresenceController({}));
     const operations = new FakePrivacyOperations();
@@ -164,6 +211,7 @@ describe('ProductionRoot', () => {
             worldOut={createEventBus<WorldEvents>()}
             shellIn={createEventBus<ShellEvents>()}
             createPresence={createPresence}
+            bridge={recoveryBridge()}
           />
         </StrictMode>,
       );
@@ -196,6 +244,7 @@ describe('ProductionRoot', () => {
             worldOut={createEventBus<WorldEvents>()}
             shellIn={createEventBus<ShellEvents>()}
             createPresence={createPresence}
+            bridge={recoveryBridge()}
           />
         </StrictMode>,
       );
@@ -284,6 +333,12 @@ function fakePresence(): PresenceController {
     remotePeers: { subscribe: () => () => undefined },
     reconnect: vi.fn(),
     destroy: vi.fn(async () => undefined),
+  };
+}
+
+function recoveryBridge() {
+  return {
+    loadRuntime: async () => ({ service: {} as never, loadSources: async () => [] }),
   };
 }
 

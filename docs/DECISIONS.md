@@ -1604,8 +1604,9 @@ unchanged Bank/Post Office behavior. Rendered acceptance remains user-owned.
 
 ## D-043 — Bridge v1 is manual, direct and wallet-bound; exact shielding fails closed
 
-**2026-08-18 · Accepted and implemented offline · SUPERSEDED in part by D-055
-for production no-wallet entry; production fee-aware planning remains a D-028
+**2026-08-18 · Accepted and implemented through production recovery; new
+financial continuation remains locked · SUPERSEDED in part by D-055 for
+production no-wallet entry; production fee-aware planning remains a D-028
 funded gate · rendered Bridge navigation/exit status updated, with physical
 station admission still open/locked, by [the 2026-08-28 finding](../AGENTS.md#2026-08-28--room-navigation-and-three-admitted-stations-pass-bridge-deposit-stays-locked)
 · completes D-009/D-012's v1 composition choice and adds no method to the

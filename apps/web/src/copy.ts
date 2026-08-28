@@ -135,6 +135,7 @@ export const COPY = {
     deposit: 'Deposit',
     unavailable: 'The Bridge planner is unavailable, so this route stays locked.',
     plannerUnavailable: 'Shield planning is not available in this build, so funding instructions stay hidden.',
+    recoveryUnavailable: 'Saved Bridge recovery is unavailable in this browser. Your wallet and the rest of the city are unaffected.',
     accountRequired: 'Connect the account that should receive this deposit before creating a quote.',
     accountChanged: 'The active account changed. This record remains bound to its original recipient; reconnect that account before continuing.',
     noRecord: 'No bridge deposit is saved on this device.',

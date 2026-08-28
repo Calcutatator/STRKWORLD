@@ -95,6 +95,10 @@ drive it against instances it controls:
 const worldOut = createEventBus<WorldEvents>();   // world emits, shell listens
 const shellIn = createEventBus<ShellEvents>();    // shell emits, world listens
 const walletSession = createProductionWalletSession(parseProductionWalletConfig(import.meta.env));
+const loadBridgeRuntime = async () => {
+  const { createProductionBridgeRuntime } = await import('./bridge/production-runtime.js');
+  return createProductionBridgeRuntime({ storage: globalThis.localStorage });
+};
 createRoot(root).render(
   <StrictMode>
     <ProductionRoot
@@ -102,6 +106,7 @@ createRoot(root).render(
       worldOut={worldOut}
       shellIn={shellIn}
       createPresence={() => createPresenceController({ endpoint: lobbyEndpoint() })}
+      bridge={{ loadRuntime: loadBridgeRuntime }}
     />
   </StrictMode>,
 );
@@ -110,7 +115,12 @@ createRoot(root).render(
 <WalletSessionProvider session={walletSession}>
 {/* ProductionRoot renders only this gate until the snapshot is connected. */}
 <PrivacyProvider operations={walletSession.operations} walletSession={walletSession} shellBus={shellIn}>
-  <BridgeProvider account={snapshot.account} readAccount={walletSession.readAccount} planner={null}>
+  <BridgeProvider
+    loadRuntime={loadBridgeRuntime}
+    account={snapshot.account}
+    readAccount={walletSession.readAccount}
+    planner={null}
+  >
     <main className="strkworld">
       <WorldHost out={worldOut} in={shellIn} remotePeers={presence.remotePeers} />
       <VisitLayer world={worldOut} shell={shellIn} /> {/* Game Mode first; stations or Menu above */}
@@ -126,9 +136,18 @@ createRoot(root).render(
 `WalletSession` port. Web renders explicit discovered-wallet choices, but the
 privacy package owns provider connection, account/network generations and
 prepared-work invalidation. The same reactive account authority is supplied to
-Bridge; its production planner remains null, so it cannot manufacture a public
-funding action. Omitting the operations prop is only the explicit development
-demo path, and both demo providers still refuse a production build.
+Bridge. Production leaves the 1Click/viem chunk dormant through wallet and
+capability admission. Only mounting the Bridge panel asks a guarded loader to
+verify browser-local persistence and construct `BridgeService`; chunk or
+storage failure leaves that route unavailable without replacing the wallet
+gate or city. That makes saved-record import, inspection, refresh and export
+real production recovery paths. Opening the recovery-only panel reads local
+evidence but does not request unusable new-deposit source metadata; only an
+explicit status refresh or watch contacts 1Click. Its production planner
+remains null, so it cannot create a new quote, reveal deposit instructions or
+manufacture a public funding action. Omitting the operations prop is only the
+explicit development demo path, and both demo providers still refuse a
+production build.
 
 The buses are created **once, at module scope**, on purpose: StrictMode
 double-mounts `App`, and a bus made inside a component would hand the world a

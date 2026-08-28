@@ -58,7 +58,7 @@ Implemented scope:
    - account, network, disconnect, wallet-removal, and stale-connect generations;
    - a stable `PrivacyOperations` facade that constructs a fresh wallet-backed implementation per connected-account generation;
    - wrappers that reject/discard prepared work before an old account can sign after a switch or disconnect.
-3. The production Web composition subscribes to the session, injects its stable operations and already-admitted capability into `App`, and supplies the same connected-account authority to Bridge. `planner: null` still locks new production Bridge deposit instructions.
+3. The production Web composition subscribes to the session, injects its stable operations and already-admitted capability into `App`, and supplies the same connected-account authority plus a dormant recovery-only 1Click service/browser-store loader to Bridge. It loads only when the Bridge panel mounts and fails unavailable without replacing wallet admission or the city. `planner: null` still locks the physical station, new quotes, production deposit instructions and Bridge-to-Bank continuation; opening recovery performs only a local record read until the player explicitly refreshes or watches status.
 4. The explicit wallet picker and Connect/Recheck/Disconnect states fail closed for unsupported API versions, rejection, wrong network, disconnect, empty or malformed accounts, and missing discovery.
 5. Production still defaults to the frozen deny-all financial policy. D-056 adds only its separately configured canonical-STRK shield exception; transfer, unshield and swap remain denied by default.
 6. The production demo refusal remains: a failed real session shows a real connection/configuration failure, never practice balances.

@@ -36,6 +36,11 @@ export function BridgePanel({
   const [sourceIndex, setSourceIndex] = useState(0);
   const [importText, setImportText] = useState('');
   const [showShieldBank, setShowShieldBank] = useState(false);
+
+  useEffect(() => {
+    runtime.load();
+  }, [runtime.load]);
+
   const shieldMachine = useMemo<BankMachine | null>(() => {
     if (!showShieldBank || !owned || !state.plan || state.flow.name !== 'ready-to-shield') return null;
     return createBankPanel({
@@ -73,7 +78,7 @@ export function BridgePanel({
   if (!owned || !runtime.service) {
     return (
       <PanelFrame title={COPY.bridge.title} disclosure={routeDisclosure('bridge.deposit')} onClose={onClose}>
-        <p className="room-locked" role="note">{COPY.bridge.plannerUnavailable}</p>
+        <p className="room-locked" role="note">{COPY.bridge.recoveryUnavailable}</p>
       </PanelFrame>
     );
   }

@@ -18,9 +18,9 @@ the lane boundary — that is why the repo is shaped the way it is.
 |---|---|---|
 | **Chain** | `packages/privacy` | Active; private seam and D-054 production WalletSession complete, D-043 planner port/fake complete, production Bridge planner and funded wallet validation remain open |
 | **World** | `packages/world` + `packages/lobby` | Active; four fixed rooms, multiplayer, Avatar Studio, D-052 five-column runtime and D-053 global F toggle are headlessly complete; D-057 has accepted every room's rendered navigation/physical exit, the exact Bank two-client matrix, the complete rendered functional/interactive D-053 matrix, and Bank/Post Office/Exchange station integration; Bridge station integration and subjective visuals stay open |
-| **Shell** | `apps/web` | Active; production wallet gate, transfer/shield policy parsing and all v1 room surfaces are complete; D-057 has accepted rendered Bank/Post Office/Exchange station integration, while the production Bridge planner/station, live routes and funded validation remain open |
+| **Shell** | `apps/web` | Active; production wallet gate, transfer/shield policy parsing, recovery-only production Bridge runtime and all v1 room surfaces are complete; D-057 has accepted rendered Bank/Post Office/Exchange station integration, while the production Bridge planner/station, live routes and funded validation remain open |
 | **Backend** | `apps/backend` | Active; bounded APIs, same-origin local proxy, D-050 and hosted image smokes complete; host, domain, secrets, Alchemy controls, live staging and funded checks remain |
-| **Bridge** | `packages/bridge` | Active; offline manual/recovery flow complete, production planner and funded-provider acceptance open |
+| **Bridge** | `packages/bridge` | Active; manual/recovery flow and production saved-record runtime complete, production planner and funded-provider acceptance open |
 | **Art** | `packages/world/assets` | D-052 final source/runtime corrections are merged through PR #33 and mechanically reviewed; rendered in-game visual acceptance remains |
 | ~~Contracts~~ | — | **Dormant until post-v1** |
 
@@ -446,6 +446,19 @@ Saved evidence remains inspectable, refreshable and exportable even when a
 production planner is unavailable; only real new quotes and deposit
 instructions remain locked.
 
+Production now owns that recovery path rather than merely documenting it. The
+wallet-gated entry supplies a dormant loader beside the current account
+authority while retaining `planner: null`. Only mounting the Bridge panel asks
+that loader to verify persistent Web Storage and construct one stable
+`BridgeService` over the shipped 1Click client and browser-local store. A
+chunk/storage failure locks recovery only; it cannot replace wallet admission
+or the city. Loading performs no provider request. Menu Mode can therefore
+import, inspect, refresh and export signed evidence; opening that recovery-only
+panel remains a local read and does not fetch new-deposit source metadata,
+while explicit refresh or watch may contact 1Click;
+the physical `bridge:deposit` station, new quote creation, deposit instructions
+and Bridge-to-Bank shielding remain locked.
+
 The **batch accumulator is Menu Mode only** under D-032. It collects typed
 intent during a building visit and emits one atomic batch on confirmation. Game
 Mode prepares and confirms each station function separately. Neither path ever
@@ -533,14 +546,17 @@ a public call.
 **Fully independent** — no dependency on the Phase 0 spike or the STRK20 seam.
 Can start immediately at full speed.
 
-**Completed offline baseline:** the deposit-only 1Click wrapper, manual-first
+**Completed recovery baseline:** the deposit-only 1Click wrapper, manual-first
 resumable pipeline, persistence/export/import, source-token/address validation
 and refund/failure states are implemented behind a network/storage boundary.
 The OUT path and AVNU leg do not exist (D-012). Runtime status data is now
 validated before it can settle a record. D-043 chooses direct unauthenticated
-1Click for v1; the Shell room/composition is complete offline, while a real new
-quote and Bridge-to-Bank handoff remain locked behind the missing production
-planner and live funded provider acceptance.
+1Click for v1. Production now defers the shipped
+client/service/browser-store runtime until the Bridge panel opens, with no
+provider work during loading and failure isolated to recovery, so signed-record
+recovery is available behind the wallet gate. A real new quote
+and Bridge-to-Bank handoff remain locked behind the missing production planner
+and live funded provider acceptance.
 
 **Build manual deposit mode first.** A player funding from a centralised
 exchange leaves the tab, goes to a withdrawal screen, and comes back minutes
