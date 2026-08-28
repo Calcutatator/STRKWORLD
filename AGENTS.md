@@ -258,6 +258,32 @@ empty shell to fetchers, so a 200 there means nothing.
 
 ## 6. Findings log
 
+### 2026-08-28 — Lobby resume validates placement before claiming presence
+
+`LobbyClient.resume()` previously sent a resumed placement and immediately
+marked the wrapper `connected`, even when the placement contained a non-finite
+coordinate. The server's `LobbyPresence.#place()` rejects that request, so the
+connection remains suspended and absent from every peer view while the client
+reports connected. That leaves the Shell with false presence state and no
+future resume or move path to repair it.
+
+The client now rejects a non-finite resume placement before sending
+the message or changing status. Valid resume, explicit suspend and disconnect
+ownership are unchanged; this is a local synchronous guard, so it cannot race
+or overwrite a concurrent disconnect.
+
+*Verified:* the table-driven public real-server regression first failed
+against the unpatched client because both `resume({ x: NaN, y: 0 })` and
+`resume({ x: 0, y: Infinity })` returned without throwing. It now observes the
+walker appear, suspend and disappear from a second client, then proves each
+invalid resume leaves the wrapper suspended and the server-side peer absent
+after settlement. Removing either the x or y finite-coordinate clause makes
+its corresponding case fail. The focused lobby drop/reconcile/presence suites
+pass 33 tests, the full workspace passes 94 files / 1,352 tests, all workspace
+typechecks, production build, all 13 invariants and `git diff --check` pass.
+Verification used only a local lobby server; no browser, wallet, RPC, proof,
+signature, funds or transaction was used.
+
 ### 2026-08-28 — Room navigation and three admitted stations pass; Bridge deposit stays locked
 
 The live D-057 mock Chrome run now accepts physical entry and exit for every

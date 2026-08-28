@@ -57,6 +57,7 @@ export type { LobbySprite } from './config';
 
 const MAX_TIMER_DELAY_MS = 2_147_483_647;
 const INVALID_CLIENT_SEND_INTERVAL_ERROR = 'Lobby client send interval is invalid.';
+const INVALID_RESUME_PLACEMENT_ERROR = 'Lobby resume placement is invalid.';
 
 export type LobbyStatus =
   /** Constructed, never connected. */
@@ -250,6 +251,12 @@ export class LobbyClient {
     if (this.#status === 'connected') return;
     if (this.#status !== 'suspended' || this.#room === null) {
       throw new Error(`resume() requires a suspended client, not "${this.#status}"`);
+    }
+    // The server rejects non-finite coordinates. Validate before claiming the
+    // client is connected, otherwise a failed resume leaves this wrapper in a
+    // false connected state while its server session remains suspended.
+    if (!Number.isFinite(placement.x) || !Number.isFinite(placement.y)) {
+      throw new Error(INVALID_RESUME_PLACEMENT_ERROR);
     }
     const next: Required<Placement> = {
       x: Math.round(placement.x),
