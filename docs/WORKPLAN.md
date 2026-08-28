@@ -16,7 +16,7 @@ the lane boundary — that is why the repo is shaped the way it is.
 
 | Lane | Package | Status in v1 |
 |---|---|---|
-| **Chain** | `packages/privacy` | Active; private seam and D-054 production WalletSession complete, D-043 planner port/fake complete, production Bridge planner and funded wallet validation remain open |
+| **Chain** | `packages/privacy` | Active; private seam, D-054 production WalletSession and SPEC §5 non-extension forward-compatibility CI are complete; D-043 planner port/fake complete, production Bridge planner and funded wallet validation remain open |
 | **World** | `packages/world` + `packages/lobby` | Active; four fixed rooms, multiplayer, Avatar Studio, D-052 five-column runtime and D-053 global F toggle are headlessly complete; D-057 has accepted every room's rendered navigation/physical exit, the exact Bank two-client matrix, the complete rendered functional/interactive D-053 matrix, and Bank/Post Office/Exchange station integration; Bridge station integration and subjective visuals stay open |
 | **Shell** | `apps/web` | Active; production wallet gate, transfer/shield policy parsing, recovery-only production Bridge runtime and all v1 room surfaces are complete; D-057 has accepted rendered Bank/Post Office/Exchange station integration, while the production Bridge planner/station, live routes and funded validation remain open |
 | **Backend** | `apps/backend` | Active; bounded APIs, same-origin local proxy, D-050 and hosted image smokes complete; host, domain, secrets, Alchemy controls, live staging and funded checks remain |
@@ -169,6 +169,16 @@ implementation is funded acceptance. D-057's independent sibling gateway has
 passed a mock Bank shield through the production public seams with no key, RPC,
 proof, signature, submission or funds. Ready/Xverse behavior and every live
 receipt remain separate gates.
+
+**SPEC §5 forward compatibility complete in CI:** one package-public regression
+dynamically registers an arbitrarily named, non-injected Wallet Standard
+provider and drives capability, pool reads, balances, recipient preflight and
+all four shield/unshield/transfer/swap prepare-confirm routes through the real
+production session. It also pins the absence of the static connector registry
+and wallet-identity branches. The installed Starknet Start MockWallet supplies
+the standard features and STRK20 handlers; the test adds only its missing
+`wallet_supportedWalletApi` response. This is structural compatibility, not
+live Ready/Xverse acceptance.
 
 **D-043 complete offline:** a separate optional public-shield planner port and
 deterministic fake are implemented. It is not a method on the frozen

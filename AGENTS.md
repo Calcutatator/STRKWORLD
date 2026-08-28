@@ -258,6 +258,33 @@ empty shell to fetchers, so a 200 there means nothing.
 
 ## 6. Findings log
 
+### 2026-08-29 — Starknet Start's MockWallet omits the Wallet API capability RPC
+
+`@starknetfoundation/starknet-start-react@2.0.1` supplies the four Wallet
+Standard features and handlers for `wallet_strk20Balances`,
+`wallet_strk20PrepareInvoke` and `wallet_strk20InvokeTransaction`, but its
+request switch does not implement `wallet_supportedWalletApi`. It therefore
+cannot drive STRKWORLD's complete production session unchanged: capability
+detection correctly fails rather than probing a private balance or inferring
+support from wallet identity.
+
+The forward-compatibility regression uses that installed MockWallet for
+connection and all three STRK20 handlers, and wraps only its generic Wallet API
+request to answer the required `0.10.3` capability query. It then dynamically
+registers the arbitrarily named provider and drives every `PrivacyOperations`
+route through `WalletAccountV6`, the stable production session and the
+same-origin backend client. This is a test-fixture correction, not a production
+wallet exception or permission to weaken version-based capability detection.
+
+*Verified:* an unmodified public-seam test failed red with exact upstream error
+`Unknown request type: wallet_supportedWalletApi`. Inspection of the installed
+`src/connectors/mock.ts` found the three STRK20 switch cases and no capability
+case. Adding only the wrapper made capability, config, balances, recipient
+preflight and shield/unshield/transfer/swap prepare-confirm paths green while
+the request ledger proved no balance read occurred during capability detection.
+No browser, external network, live wallet, RPC, proof, signature, funds or
+transaction was used.
+
 ### 2026-08-29 — Production Bridge recovery does not require a shield planner
 
 The production composition previously supplied Bridge only the connected
