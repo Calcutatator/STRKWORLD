@@ -115,13 +115,29 @@ export function BridgeProvider({
 }: BridgeProviderProps) {
   const demoRejected = demo && (build ?? detectBuildContext()).production;
 
-  const [loadedRuntime, setLoadedRuntime] = useState<BridgeRuntimeSource | null>(null);
-  const loadOwner = useRef<{ generation: number; pending: boolean }>({ generation: 0, pending: false });
+  const [loadedRuntime, setLoadedRuntime] = useState<{
+    loader: BridgeRuntimeLoader;
+    source: BridgeRuntimeSource;
+  } | null>(null);
+  const loadOwner = useRef<{
+    loader: BridgeRuntimeLoader | undefined;
+    generation: number;
+    pending: boolean;
+  }>({ loader: loadRuntime, generation: 1, pending: false });
+
+  // Props are authoritative during render. Do not initialize this owner in an
+  // effect: React mounts child effects before parent effects, and BridgePanel
+  // is the child that legitimately starts the first load.
+  if (loadOwner.current.loader !== loadRuntime) {
+    loadOwner.current = {
+      loader: loadRuntime,
+      generation: loadOwner.current.generation + 1,
+      pending: false,
+    };
+  }
 
   useEffect(() => {
-    const generation = ++loadOwner.current.generation;
-    loadOwner.current.pending = false;
-    setLoadedRuntime(null);
+    const generation = loadOwner.current.generation;
     return () => {
       if (loadOwner.current.generation !== generation) return;
       loadOwner.current.generation += 1;
@@ -130,11 +146,14 @@ export function BridgeProvider({
   }, [loadRuntime]);
 
   const load = useCallback(() => {
-    if (!loadRuntime || service || loadedRuntime || demoRejected || loadOwner.current.pending) return;
+    const currentRuntime = loadedRuntime && loadedRuntime.loader === loadRuntime ? loadedRuntime.source : null;
+    if (!loadRuntime || service || currentRuntime || demoRejected || loadOwner.current.pending) return;
     const generation = loadOwner.current.generation;
     loadOwner.current.pending = true;
     void loadRuntime().then((runtime) => {
-      if (runtime && generation === loadOwner.current.generation) setLoadedRuntime(runtime);
+      if (runtime && generation === loadOwner.current.generation) {
+        setLoadedRuntime({ loader: loadRuntime, source: runtime });
+      }
     }).catch(() => {
       // Optional Bridge recovery is isolated from wallet/app admission. A
       // missing chunk or restricted storage leaves only this route unavailable.
@@ -143,8 +162,9 @@ export function BridgeProvider({
     });
   }, [loadRuntime, service, loadedRuntime, demoRejected]);
 
-  const resolvedService = service ?? loadedRuntime?.service;
-  const resolvedSources = loadSources ?? loadedRuntime?.loadSources;
+  const currentRuntime = loadedRuntime && loadedRuntime.loader === loadRuntime ? loadedRuntime.source : null;
+  const resolvedService = service ?? currentRuntime?.service;
+  const resolvedSources = loadSources ?? currentRuntime?.loadSources;
   const directRuntime = useMemo(
     () => resolvedService && !demoRejected
       ? createRuntime({ service: resolvedService, loadSources: resolvedSources, readAccount, planner, now, account })

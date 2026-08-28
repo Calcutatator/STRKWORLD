@@ -288,10 +288,12 @@ did not exist, while the connected `ProductionRoot` regression received only
 account/read/planner and lacked recovery ownership. Independent review then
 caught that the first candidate imported Bridge during wallet bootstrap and
 let restricted storage replace the whole app. New public regressions prove the
-loader remains dormant until a Bridge surface asks for it, rejected loaders
-leave the mounted app alive, read/write/remove-denied storage exposes no
-runtime, and a storage failure during panel open resolves into a bounded failed
-state rather than an unhandled rejection. Green also proves loading makes zero
+loader remains dormant until a Bridge surface asks for it, first-mount and
+StrictMode child-effect loads retain their owned result, replacement loaders
+discard stale deferred results, rejected loaders leave the mounted app alive,
+read/write/remove-denied storage exposes no runtime, and a storage failure
+during panel open resolves into a bounded failed state rather than an unhandled
+rejection. Green also proves loading makes zero
 1Click calls, source loading is explicit, separate factories own separate
 services, and production composes the exact loader with the current account
 and null planner. `BridgeProvider` separately proves a loaded service
@@ -299,8 +301,8 @@ is exposed while capability remains false; the existing Bridge panel suite
 proves planner-null saved evidence retains refresh/export without exposing
 deposit instructions. A red-first machine regression also proves opening the
 planner-null recovery panel does not load source assets or refresh provider
-status. The Web suite passes 41 files / 465 tests and the full workspace passes
-99 files / 1,420 tests. Every workspace typecheck, the production build, all
+status. The Web suite passes 41 files / 468 tests and the full workspace passes
+99 files / 1,423 tests. Every workspace typecheck, the production build, all
 13 invariants and diff hygiene pass. No provider request,
 wallet prompt, RPC, proof, signature, submission, funds or transaction was
 used.*

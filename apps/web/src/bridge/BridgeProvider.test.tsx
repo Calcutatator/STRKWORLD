@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { act, useEffect } from 'react';
+import { act, StrictMode, useEffect } from 'react';
 import { createRoot } from 'react-dom/client';
 import { describe, expect, it, vi } from 'vitest';
 import { renderToStaticMarkup } from 'react-dom/server';
@@ -10,6 +10,7 @@ function Probe() {
   return <p
     data-available={bridge.available() ? 'yes' : 'no'}
     data-service={bridge.service ? 'yes' : 'no'}
+    data-owner={(bridge.service as { owner?: string } | null)?.owner ?? 'none'}
   >{bridge.account ?? 'none'}</p>;
 }
 
@@ -79,8 +80,7 @@ describe('BridgeProvider', () => {
   });
 
   it('keeps the production loader dormant until the Bridge surface asks for it', async () => {
-    const service = {} as never;
-    const loadRuntime = vi.fn(async () => ({ service, loadSources: async () => [] }));
+    const loadRuntime = vi.fn(async () => ({ service: {} as never, loadSources: async () => [] }));
     const container = document.createElement('div');
     const root = createRoot(container);
 
@@ -91,6 +91,15 @@ describe('BridgeProvider', () => {
     expect(loadRuntime).not.toHaveBeenCalled();
     expect(container.innerHTML).toContain('data-service="no"');
 
+    await act(async () => root.unmount());
+  });
+
+  it('publishes a successful loader result on the first Bridge surface mount', async () => {
+    const service = { owner: 'first' } as never;
+    const loadRuntime = vi.fn(async () => ({ service, loadSources: async () => [] }));
+    const container = document.createElement('div');
+    const root = createRoot(container);
+
     await act(async () => {
       root.render(<BridgeProvider loadRuntime={loadRuntime}><LoadProbe start /></BridgeProvider>);
       await Promise.resolve();
@@ -98,6 +107,64 @@ describe('BridgeProvider', () => {
     });
     expect(loadRuntime).toHaveBeenCalledOnce();
     expect(container.innerHTML).toContain('data-service="yes"');
+
+    await act(async () => root.unmount());
+  });
+
+  it('publishes the owned first-mount result after the StrictMode effect probe', async () => {
+    const loadRuntime = vi.fn(async () => ({
+      service: { owner: 'strict' } as never,
+      loadSources: async () => [],
+    }));
+    const container = document.createElement('div');
+    const root = createRoot(container);
+
+    await act(async () => {
+      root.render(
+        <StrictMode>
+          <BridgeProvider loadRuntime={loadRuntime}><LoadProbe start /></BridgeProvider>
+        </StrictMode>,
+      );
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(loadRuntime).toHaveBeenCalled();
+    expect(container.innerHTML).toContain('data-owner="strict"');
+    await act(async () => root.unmount());
+  });
+
+  it('ignores a deferred result after a replacement loader owns the provider', async () => {
+    let resolveFirst!: (value: { service: never; loadSources: () => Promise<never[]> }) => void;
+    const first = vi.fn(() => new Promise<{ service: never; loadSources: () => Promise<never[]> }>((resolve) => {
+      resolveFirst = resolve;
+    }));
+    const second = vi.fn(async () => ({
+      service: { owner: 'second' } as never,
+      loadSources: async () => [],
+    }));
+    const container = document.createElement('div');
+    const root = createRoot(container);
+
+    await act(async () => {
+      root.render(<BridgeProvider loadRuntime={first}><LoadProbe start /></BridgeProvider>);
+      await Promise.resolve();
+    });
+    expect(first).toHaveBeenCalledOnce();
+
+    await act(async () => {
+      root.render(<BridgeProvider loadRuntime={second}><LoadProbe start /></BridgeProvider>);
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    expect(second).toHaveBeenCalledOnce();
+    expect(container.innerHTML).toContain('data-owner="second"');
+
+    await act(async () => {
+      resolveFirst({ service: { owner: 'first' } as never, loadSources: async () => [] });
+      await Promise.resolve();
+    });
+    expect(container.innerHTML).toContain('data-owner="second"');
 
     await act(async () => root.unmount());
   });
