@@ -3,7 +3,7 @@
  *
  * Panel logic is written as a plain state machine over one of these rather
  * than as React state, for two reasons. It can be tested in Node with no DOM
- * and no renderer — which is what `vitest.config.ts` actually runs — and the
+ * and no renderer — which is what `vitest.config.mts` actually runs — and the
  * financial state machine stays legible when the panel around it is rewritten.
  *
  * React reads it through `useStore`, which is a `useSyncExternalStore` wrapper
