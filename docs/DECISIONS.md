@@ -2168,7 +2168,9 @@ or funded-route readiness.
 the Studio-only F scope is superseded by
 [D-053](#d-053--the-f-outfit-toggle-follows-the-local-avatar-throughout-world-play) ·
 supersedes the animation-geometry and Avatar Studio toggle portions of
-[D-049](#d-049--avatar-art-uses-one-fixed-64x64-logical-canvas)**
+[D-049](#d-049--avatar-art-uses-one-fixed-64x64-logical-canvas) · Avatar 1
+cosy rendered acceptance accepted 2026-08-28 by the status amendment below;
+Avatar 1 fighting and avatars 2-16 remain open**
 
 **Context.** The browser recording attempt failed to establish rendered
 acceptance. It is therefore not evidence that the integrated final art or its
@@ -2273,6 +2275,11 @@ versions and its up row is unchanged. The prior Aseprite source does not encode
 this new sixth column, so it remains historical source for the five-column set
 and must not overwrite the source-authoritative hashed Avatar 1 PNG. Fresh
 live-browser rendered acceptance of this replacement remains required.
+
+**2026-08-28 Avatar 1 cosy rendered-acceptance status.** James accepted this
+exact Avatar 1 cosy replacement in the live game. This supersedes only the
+historical pending status in the six-column amendment above; it does not alter
+that amendment's reasoning or accept Avatar 1 fighting or avatars 2-16.
 
 ---
 

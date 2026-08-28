@@ -258,6 +258,41 @@ empty shell to fetchers, so a 200 there means nothing.
 
 ## 6. Findings log
 
+### 2026-08-28 — Horizontal camera follow is immediate for sharp pixel motion
+
+The street camera previously eased toward the player on both axes with a
+`0.12` lerp. During east/west movement, that fractional horizontal follow
+softened otherwise hard sprite edges even though the renderer already used
+pixel-art filtering, rounded pixels and integer zoom. Horizontal follow is now
+immediate (`lerpX = 1`) while vertical follow retains its `0.12` ease. Movement
+speed, physics body, collision, camera bounds and zoom are unchanged.
+
+*Verified:* a live-browser screenshot loop reproduced horizontal hard-edge loss
+independently of the active sprite. Source inspection confirmed `pixelArt:
+true`, rounded camera pixels and zoom `2`, leaving the symmetric follow lerp as
+the remaining horizontal smoothing. A public StreetScene camera regression
+then failed on the previous `startFollow(player, true, 0.12, 0.12)` call and
+passes with exact axis ownership `startFollow(player, true, 1, 0.12)` while
+also pinning the unchanged `1536x896` bounds and zoom `2`. Fresh post-merge
+rendered verification remains the project-lead handoff after the canonical
+localhost restart.*
+
+### 2026-08-28 — Avatar 1 cosy passes live rendered acceptance
+
+James accepted the exact Avatar 1 cosy replacement as looking good in the live
+game. This closes rendered acceptance only for the six-column `avatar-1.png`
+with SHA-256
+`f0ea738353723abc18070210bf169002ede62003b03508b1e326ff9ae72e87bb`.
+Avatar 1 fighting and avatars 2-16 remain outside that acceptance, so the
+aggregate remaining-sheets rendered gate stays open.
+
+*Verified:* James reported the Avatar looked good after loading the exact
+source-authoritative sheet in the live game. The per-key manifest records
+`renderedAcceptance: true` for Avatar 1 cosy while the aggregate review state
+remains false and names the remaining sheets as pending. The horizontal blur
+James reported in the same review happened regardless of sprite and is tracked
+separately by the camera finding above.*
+
 ### 2026-08-28 — Avatar 1 cosy owns a six-column per-sheet contract
 
 Avatar 1 cosy now uses the exact user-approved 384x256 production PNG with
@@ -285,8 +320,9 @@ offsets and per-sheet remote idle duration while retaining the five-column
 Avatar 2-16 contract. The focused suite passes 3 files / 20 tests; the exact
 reviewed branch passes 95 files / 1,362 tests, all workspace typechecks,
 the production build, all 13 invariants and diff hygiene. No browser, lobby,
-wallet, RPC, proof, signature, funds or transaction was used; fresh rendered
-acceptance remains the project-lead handoff after merge and local restart.*
+wallet, RPC, proof, signature, funds or transaction was used at that checkpoint.
+Its open Avatar 1 cosy rendered status is superseded by the rendered-acceptance
+finding above; the remaining sheets stay open.*
 
 ### 2026-08-28 — Presence status subscribers retain transition ownership
 
