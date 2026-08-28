@@ -29,7 +29,7 @@ for the accepted boundaries.
 | Building | Protocol | v1 status | Live boundary |
 |---|---|---|---|
 | The Bank | STRK20 pool — shield, unshield, private transfer | Room, Game/Menu surfaces and Wallet API path implemented | Mock shield accepted; funded Ready/Xverse actions remain live gates |
-| The Exchange | AVNU private swaps | Room and machine covered by headless/offline tests | No rendered or financial acceptance; production swap policy remains disabled |
+| The Exchange | AVNU private swaps | Room and machine covered by headless/offline tests | D-057 mock rendered room/station integration accepted; live/funded swap behavior remains open; production swap policy remains disabled |
 | The Post Office | Private address-to-address transfer | Room and transfer surfaces implemented | Production activation still needs an approved live relay-fee tuple |
 | The Bridge | Any chain → STRK → the pool. Arrival is **public** | Manual recovery/deposit flow implemented offline | New production quotes stay locked without the fee-aware public-shield planner |
 | The Vault | Vesu lending | Locked until after v1 | Requires a project-owned reviewed and audited Cairo anonymizer |
