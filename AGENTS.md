@@ -287,7 +287,7 @@ delivery; using the live subscriber map fails captured transition ownership;
 replacing `Object.is` with `===` fails the equality case; and rethrowing a
 subscriber failure prevents the later subscriber from receiving the accepted
 transition. The focused suite passes 1 file / 6 tests, Web passes 41 files /
-455 tests, and the full workspace passes 97 files / 1,374 tests. All workspace
+455 tests, and the full workspace passes 97 files / 1,375 tests. All workspace
 typechecks, the production build, all 13 invariants and diff hygiene pass. No
 browser, wallet, provider, RPC, proof, signature, funds or transaction was
 used.*
