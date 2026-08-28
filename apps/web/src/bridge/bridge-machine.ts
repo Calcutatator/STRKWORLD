@@ -316,6 +316,13 @@ export function createBridgePanel(options: BridgePanelOptions): BridgePanel {
         instructionsVisible: false,
         plan: null,
       });
+      // Source assets exist only to create a new quote. Recovery-only
+      // production has no planner, so opening its panel must remain a local
+      // record read rather than contacting 1Click for unusable picker data.
+      if (!options.planner) {
+        patch({ flow: { name: 'idle' } });
+        return;
+      }
       try {
         const assets = await options.loadSources();
         if (!live(id, currentSession)) return;

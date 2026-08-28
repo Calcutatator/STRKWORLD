@@ -50,6 +50,18 @@ describe('Bridge shell machine', () => {
     expect(h.machine.store.getState().record).toBeNull();
   });
 
+  it('opens recovery-only local evidence without requesting new-deposit sources', async () => {
+    const h = harness(record(), null);
+
+    await h.machine.open();
+
+    expect(h.machine.store.getState().record).not.toBeNull();
+    expect(h.machine.store.getState().sources).toEqual({ status: 'unrequested', assets: [] });
+    expect(h.machine.store.getState().flow).toEqual({ name: 'idle' });
+    expect(h.calls.sources).toBe(0);
+    expect(h.calls.refresh).toBe(0);
+  });
+
   it('binds a quote to the normalized active account and preflights signed minimum before instructions', async () => {
     const h = harness();
     await h.machine.createQuote({ source: SOURCE, amountIn: 1_000_000n, refundAddress: '0x1111111111111111111111111111111111111111' });

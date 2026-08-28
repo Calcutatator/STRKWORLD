@@ -258,6 +258,45 @@ empty shell to fetchers, so a 200 there means nothing.
 
 ## 6. Findings log
 
+### 2026-08-29 — Production Bridge recovery does not require a shield planner
+
+The production composition previously supplied Bridge only the connected
+account reader and an intentionally null public-shield planner. With no service
+or source loader, `BridgeProvider` resolved to its unavailable runtime. This
+correctly locked the physical deposit station, but it also removed D-043's
+independent recovery path: a wallet-admitted player could not import, inspect,
+refresh or export an already signed 1Click record. The Bridge package and Web
+documentation claimed production browser storage/recovery that the composition
+did not actually own.
+
+Production now lazily constructs one `BridgeService` over the shipped
+`OneClickSdkClient` and `LocalBridgeStore`, then passes that exact service and
+source loader through `ProductionRoot` beside the current account authority.
+Construction performs no provider request and no storage read. The public
+shield planner remains exactly null, so `available()` remains false: the World
+station, new quotes, deposit instructions and Bridge-to-Bank continuation stay
+locked. Opening the recovery-only Menu panel reads local evidence without
+fetching unusable new-deposit source metadata; only an explicit status refresh
+may contact 1Click. Saved-record recovery becomes real without an implicit
+provider call.
+
+*Verified:* the public production-runtime test failed red because the module
+did not exist, while the connected `ProductionRoot` regression received only
+account/read/planner and lacked the injected service/loader. Green proves
+construction makes zero 1Click or storage calls, the first explicit recovery
+read uses browser storage, source loading is explicit, separate factories own
+separate services, and production composes the exact service/loader with the
+current account and null planner. `BridgeProvider` separately proves a service
+is exposed while capability remains false; the existing Bridge panel suite
+proves planner-null saved evidence retains refresh/export without exposing
+deposit instructions. A red-first machine regression also proves opening the
+planner-null recovery panel does not load source assets or refresh provider
+status. The Web suite passes 41 files / 459 tests and the full workspace passes
+99 files / 1,414 tests. Every workspace typecheck, the
+production build, all 13 invariants and diff hygiene pass. No provider request,
+wallet prompt, RPC, proof, signature, submission, funds or transaction was
+used.*
+
 ### 2026-08-29 — Lobby transitions own FIFO subscriber generations
 
 `LobbyClient` previously published status and peer changes through live mutable

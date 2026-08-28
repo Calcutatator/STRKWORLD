@@ -84,7 +84,8 @@ export function useBridge(): BridgeRuntime {
 
 /**
  * Bridge composition is explicit like PrivacyProvider. Demo code is lazy and
- * refused in production; a real runtime without a planner remains locked.
+ * refused in production. A real runtime without a planner exposes saved-record
+ * recovery while keeping new deposits and shield continuation locked.
  */
 export function BridgeProvider({
   service,

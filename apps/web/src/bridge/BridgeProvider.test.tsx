@@ -4,7 +4,10 @@ import { BridgeProvider, useBridge } from './BridgeProvider.js';
 
 function Probe() {
   const bridge = useBridge();
-  return <p data-available={bridge.available() ? 'yes' : 'no'}>{bridge.account ?? 'none'}</p>;
+  return <p
+    data-available={bridge.available() ? 'yes' : 'no'}
+    data-service={bridge.service ? 'yes' : 'no'}
+  >{bridge.account ?? 'none'}</p>;
 }
 
 describe('BridgeProvider', () => {
@@ -53,5 +56,14 @@ describe('BridgeProvider', () => {
 
     expect(absent).toContain('data-available="no"');
     expect(live).toContain('data-available="yes"');
+  });
+
+  it('exposes a recovery service without claiming new-deposit capability', () => {
+    const markup = renderToStaticMarkup(
+      <BridgeProvider service={{} as never} planner={null} account="0x123"><Probe /></BridgeProvider>,
+    );
+
+    expect(markup).toContain('data-service="yes"');
+    expect(markup).toContain('data-available="no"');
   });
 });

@@ -94,7 +94,7 @@ exists only for deterministic offline demo and tests.
   reload, a tab close and a crash
 - The signed, browser-local Bridge record used as progress and dispute evidence
 
-## Implemented offline boundary
+## Implemented recovery boundary
 
 `BridgeService` now owns the manual inbound quote and resume state machine. It
 constructs only exact-input quotes whose destination is Starknet STRK,
@@ -103,11 +103,15 @@ persists the complete signed response as dispute evidence. `refresh()` maps
 solver states into the small `BridgeStatus` vocabulary without leaking raw
 provider states into the shell.
 
-The browser runtime uses `LocalBridgeStore`, so the signed record survives a
-reload or a new runtime instance. Reopening exposes a concise resume action
-that refreshes provider status before presenting the next safe step. This is
-recovery of saved evidence, not permission to issue a new quote: real new
-quotes and deposit instructions remain gated on the reviewed production
+The production browser now lazily constructs one `BridgeService` over the
+shipped 1Click client and `LocalBridgeStore`, so the signed record survives a
+reload or a new runtime instance. Construction performs no provider request or
+storage read. Reopening exposes a concise resume action that refreshes provider
+status before presenting the next safe step. Merely opening the recovery-only
+panel reads local evidence and does not fetch new-deposit source metadata; only
+the player's explicit refresh contacts 1Click. This is recovery of saved
+evidence, not permission to issue a new quote: the production planner remains
+null, and real new quotes and deposit instructions remain gated on the reviewed
 planner described by D-043.
 
 The live registry loader currently maps every non-Starknet blockchain label

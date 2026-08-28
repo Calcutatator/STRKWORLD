@@ -2,6 +2,7 @@ import type { EventBus, ShellEvents, WorldEvents } from '@strkworld/shared';
 import type { WalletSession, WalletSessionSnapshot } from '@strkworld/privacy';
 import { useEffect, useMemo, useState, useRef } from 'react';
 import { App } from '../App.js';
+import type { ProductionBridgeRuntime } from '../bridge/production-runtime.js';
 import { createConnectFlow, type ConnectState } from '../connect/connect-machine.js';
 import { COPY } from '../copy.js';
 import type { PresenceController } from '../presence/presence-controller.js';
@@ -17,6 +18,7 @@ export function ProductionRoot({
   shellIn,
   presence,
   createPresence,
+  bridge,
 }: {
   session: WalletSession;
   worldOut: EventBus<WorldEvents>;
@@ -25,6 +27,8 @@ export function ProductionRoot({
   presence?: PresenceController;
   /** Creates a fresh lobby owner for each connected app lifetime. */
   createPresence?: () => PresenceController;
+  /** Main-owned public Bridge recovery runtime; no shield planner capability. */
+  bridge: ProductionBridgeRuntime;
 }) {
   return (
     <WalletSessionProvider session={session}>
@@ -34,6 +38,7 @@ export function ProductionRoot({
         shellIn={shellIn}
         presence={presence}
         createPresence={createPresence}
+        bridge={bridge}
       />
     </WalletSessionProvider>
   );
@@ -45,12 +50,14 @@ function ProductionApp({
   shellIn,
   presence,
   createPresence,
+  bridge,
 }: {
   session: WalletSession;
   worldOut: EventBus<WorldEvents>;
   shellIn: EventBus<ShellEvents>;
   presence?: PresenceController;
   createPresence?: () => PresenceController;
+  bridge: ProductionBridgeRuntime;
 }) {
   const wallet = useWalletSessionOptional();
   if (!wallet) throw new Error('ProductionApp needs a WalletSessionProvider.');
@@ -67,6 +74,7 @@ function ProductionApp({
       shellIn={shellIn}
       presence={presence}
       createPresence={createPresence}
+      bridge={bridge}
     />
   );
 }
@@ -78,6 +86,7 @@ function WalletCapabilityGate({
   shellIn,
   presence,
   createPresence,
+  bridge,
 }: {
   session: WalletSession;
   snapshot: WalletSessionSnapshot;
@@ -85,6 +94,7 @@ function WalletCapabilityGate({
   shellIn: EventBus<ShellEvents>;
   presence?: PresenceController;
   createPresence?: () => PresenceController;
+  bridge: ProductionBridgeRuntime;
 }) {
   const connect = useMemo(
     () => createConnectFlow(session.operations),
@@ -105,6 +115,7 @@ function WalletCapabilityGate({
         shellIn={shellIn}
         presence={presence}
         createPresence={createPresence}
+        bridge={bridge}
       />
     );
   }
@@ -119,6 +130,7 @@ function ConnectedProductionApp({
   shellIn,
   presence,
   createPresence,
+  bridge,
 }: {
   session: WalletSession;
   initialConnectState: ConnectState;
@@ -126,6 +138,7 @@ function ConnectedProductionApp({
   shellIn: EventBus<ShellEvents>;
   presence?: PresenceController;
   createPresence?: () => PresenceController;
+  bridge: ProductionBridgeRuntime;
 }) {
   const [activePresence, setActivePresence] = useState<PresenceController | null>(presence ?? null);
   const owner = useRef<PresenceController | null>(presence ?? null);
@@ -163,6 +176,8 @@ function ConnectedProductionApp({
       walletSession={session}
       initialConnectState={initialConnectState}
       bridge={{
+        service: bridge.service,
+        loadSources: bridge.loadSources,
         account: session.getSnapshot().account,
         readAccount: session.readAccount,
         planner: null,

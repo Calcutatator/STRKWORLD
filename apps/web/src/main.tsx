@@ -74,8 +74,15 @@ if (usesProductionWallet(environment)) {
     // lets the city render its honest loading surface before chain code arrives.
     void (async () => {
       try {
-        const { createProductionWalletSession } = await import('@strkworld/privacy');
+        const [
+          { createProductionWalletSession },
+          { createProductionBridgeRuntime },
+        ] = await Promise.all([
+          import('@strkworld/privacy'),
+          import('./bridge/production-runtime.js'),
+        ]);
         walletSession = createProductionWalletSession(config);
+        const bridge = createProductionBridgeRuntime({ storage: globalThis.localStorage });
         hot?.dispose(() => walletSession?.destroy());
         root.render(
           <StrictMode>
@@ -84,6 +91,7 @@ if (usesProductionWallet(environment)) {
               worldOut={worldOut}
               shellIn={shellIn}
               createPresence={createPresence}
+              bridge={bridge}
             />
           </StrictMode>,
         );

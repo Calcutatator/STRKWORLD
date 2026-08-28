@@ -147,4 +147,12 @@ describe('shell boundaries', () => {
     const runtime = readFileSync(join(SRC, 'bridge/demo-runtime.ts'), 'utf8');
     expect(runtime).toContain("import('@strkworld/privacy')");
   });
+
+  it('loads the production Bridge runtime only behind the wallet boundary', () => {
+    const main = readFileSync(join(SRC, 'main.tsx'), 'utf8');
+    expect(main).toContain("import('./bridge/production-runtime.js')");
+    expect(imports(main).map((entry) => entry.specifier)).not.toContain(
+      './bridge/production-runtime.js',
+    );
+  });
 });
