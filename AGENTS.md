@@ -258,6 +258,38 @@ empty shell to fetchers, so a 200 there means nothing.
 
 ## 6. Findings log
 
+### 2026-08-28 — Duplicate wallet account events preserve reviewed authority
+
+`WalletSession` previously treated every connection notification as a new
+financial generation. Wallet Standard providers may re-announce the current
+accounts array after unlock or another full-state event. Even when the account
+and mainnet chain were unchanged, that duplicate retired the operations facade
+and made an already reviewed `PreparedBatch` reject and discard before
+confirmation. A notification whose connection snapshot threw also escaped the
+provider callback after operations were nulled while the public snapshot could
+still claim the session was connected.
+
+The connection snapshot is now read before retirement. A live connected
+session whose account and chain are felt-equivalent to its current authority
+treats the event as a semantic no-op. A genuinely changed account/network still
+advances the generation and reconstructs or rejects authority exactly as
+before. An unreadable snapshot advances the generation, clears operations and
+publishes `failed` without escaping the callback. Route policy, Wallet API
+actions and the public session shape are unchanged.
+
+*Verified:* deterministic public `createWalletSession()` regressions connect a
+mainnet account, prepare reviewed work and then emit either an identical
+connection notification or a throwing snapshot. The duplicate keeps the same
+generation, constructs operations once and confirms without discard. The
+unreadable snapshot does not throw, publishes `failed`, rejects further
+operations and discards the old prepared batch before confirmation. The
+focused suite passes 16 tests, Privacy passes 8 files / 148 tests and the full
+workspace passes 97 files / 1,386 tests. Every workspace typecheck, the
+production build, all 13 invariants and diff hygiene pass. Removing the
+semantic no-op guard revives the generation change; bypassing snapshot-failure
+handling makes the provider callback throw. No browser, wallet, provider, RPC,
+proof, signature, funds or transaction was used.*
+
 ### 2026-08-28 — A retained Phaser Game must rebind to its current React owner
 
 The ref-counted World host deliberately defers teardown so React 19 StrictMode

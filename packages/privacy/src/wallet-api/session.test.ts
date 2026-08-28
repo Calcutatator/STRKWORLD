@@ -97,6 +97,60 @@ describe('WalletSession', () => {
     await expect(session.operations.capability()).resolves.toMatchObject({ walletApiVersion: '0.10.4' });
   });
 
+  it('keeps reviewed work owned across a duplicate account notification', async () => {
+    const selected = wallet('Ready');
+    const confirm = vi.fn(async () => ({ transactionHash: '0x1' }));
+    const discard = vi.fn();
+    const connected = controllableConnection(
+      '0x111',
+      operationsWithBatch(batch(confirm, discard), '0.10.3'),
+      operationsWithBatch(batch(), '0.10.4'),
+    );
+    const createOperations = vi.spyOn(connected.port, 'createOperations');
+    const session = createWalletSession(
+      denyAllOptions(),
+      { discovery: discoveryWith(selected), connectWallet: async () => connected.port },
+    );
+    await session.connect(session.getSnapshot().wallets[0]!.key);
+    const prepared = await session.operations.prepare([]);
+    const generation = session.getSnapshot().generation;
+
+    connected.notify();
+
+    expect(session.getSnapshot()).toMatchObject({
+      phase: 'connected',
+      account: '0x111',
+      generation,
+    });
+    expect(createOperations).toHaveBeenCalledOnce();
+    await expect(prepared.confirm({ feeCeiling: 0n })).resolves.toEqual({ transactionHash: '0x1' });
+    expect(confirm).toHaveBeenCalledOnce();
+    expect(discard).not.toHaveBeenCalled();
+  });
+
+  it('fails closed when a connection notification cannot be read', async () => {
+    const selected = wallet('Ready');
+    const discard = vi.fn();
+    const connected = controllableConnection(
+      '0x111',
+      operationsWithBatch(batch(undefined, discard), '0.10.3'),
+      operationsWithBatch(batch(), '0.10.4'),
+    );
+    const session = createWalletSession(
+      denyAllOptions(),
+      { discovery: discoveryWith(selected), connectWallet: async () => connected.port },
+    );
+    await session.connect(session.getSnapshot().wallets[0]!.key);
+    const prepared = await session.operations.prepare([]);
+
+    expect(() => connected.failSnapshot(new Error('wallet snapshot unavailable'))).not.toThrow();
+
+    expect(session.getSnapshot()).toMatchObject({ phase: 'failed', account: null });
+    await expect(session.operations.capability()).rejects.toMatchObject({ kind: 'user-rejected' });
+    await expect(prepared.confirm({ feeCeiling: 0n })).rejects.toMatchObject({ kind: 'user-rejected' });
+    expect(discard).toHaveBeenCalledOnce();
+  });
+
   it('discards a batch that finishes preparing after its account generation changed', async () => {
     const selected = wallet('Ready');
     let release!: (prepared: PreparedBatch) => void;
@@ -496,9 +550,13 @@ function controllableConnection(
   let account = initialAccount;
   let chainId = initialChainId;
   let operations = initialOperations;
+  let snapshotError: unknown = null;
   const listeners = new Set<() => void>();
   const port: WalletConnectionPort = {
-    getSnapshot: () => ({ account, chainId }),
+    getSnapshot: () => {
+      if (snapshotError) throw snapshotError;
+      return { account, chainId };
+    },
     createOperations: () => operations,
     subscribe(listener) {
       listeners.add(listener);
@@ -509,6 +567,13 @@ function controllableConnection(
   };
   return {
     port,
+    notify() {
+      listeners.forEach((listener) => listener());
+    },
+    failSnapshot(error: unknown) {
+      snapshotError = error;
+      listeners.forEach((listener) => listener());
+    },
     changeAccount(next: string) {
       account = next;
       operations = replacementOperations;
