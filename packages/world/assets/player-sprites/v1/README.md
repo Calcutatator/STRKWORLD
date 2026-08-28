@@ -3,10 +3,10 @@
 This directory contains the World-owned runtime sheets for the eight paired
 player-character designs. Avatar 1 cosy has an explicitly approved production
 override described below. That approval does not extend to Avatar 1 fighting
-or avatars 2-16, whose existing files remain unchanged. Subjective rendered
-acceptance of the new Avatar 1 cosy sheet remains a live-browser gate. The
-older `v1-review/` directory remains unchanged as historical review and
-generation provenance.
+or avatars 2-16, whose existing files remain unchanged. James accepted the new
+Avatar 1 cosy sheet in the live game on 2026-08-28; rendered acceptance of
+Avatar 1 fighting and avatars 2-16 remains pending. The older `v1-review/`
+directory remains unchanged as historical review and generation provenance.
 
 ## Files
 
@@ -102,9 +102,11 @@ length, and rationale. `qa/verify-narrow-channels.py` rejects unclassified
 current channels and includes an injected-channel negative test.
 
 The aggregate evidence in this section predates the Avatar 1 override and did
-not change the then-current row or frame mapping. The current six-column
-Avatar 1 mapping and its scoped evidence are documented above; runtime
-integration is complete while fresh rendered acceptance remains pending.
+not change the then-current row or frame mapping. The current six-column Avatar
+1 mapping and its scoped evidence are documented above; runtime integration is
+complete and James accepted Avatar 1 cosy in the live game on 2026-08-28. That
+acceptance does not extend to Avatar 1 fighting or avatars 2-16, whose rendered
+gate remains pending.
 
 - Characters 4 and 7 remain the two deliberately large silhouettes in both
   states and all facings.
