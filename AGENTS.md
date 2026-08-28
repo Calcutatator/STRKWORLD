@@ -258,7 +258,53 @@ empty shell to fetchers, so a 200 there means nothing.
 
 ## 6. Findings log
 
+### 2026-08-28 — Room navigation and three admitted stations pass; Bridge deposit stays locked
+
+The live D-057 mock Chrome run now accepts physical entry and exit for every
+fixed room. The avatar entered the Post Office, Exchange and Bank through each
+street door, physically approached the gold/highlighted admitted station, and
+automatically opened the correct panel: **Private transfer**, **The Exchange**
+and **The Bank**, respectively. In each panel an `F` press while Shell owned
+input was suppressed; after the panel closed, the avatar was still visibly
+cosy without a fighting weapon. The avatar then walked through each room's
+floor exit and returned to the connected multiplayer street.
+
+The Bridge room's navigation is accepted separately: the avatar entered from
+the street and physically exited back to multiplayer. Repeated physical
+approach at `bridge:deposit` showed the **DEPOSIT** label but did not highlight
+or activate an admitted station or open its panel. That result keeps the
+Bridge station integration explicitly open/locked; it is not classified as a
+defect. Current source intentionally requires both an account and an injected
+public-shield planner before admitting that station, while the production
+composition still supplies `planner: null`. World renders that locked station
+in its grey state with the label visible and emits station activation only for
+an available snapshot; the separately opened Menu Mode surface does not grant
+physical-station admission. The production planner, live route and funded
+Bridge handoff therefore remain their existing later gates.
+
+Together with the previously accepted Avatar Studio flow, all room navigation
+and physical exits are accepted. Bank, Post Office and Exchange rendered
+station integration is accepted. Bridge station integration, subjective
+final-art quality, live-wallet behavior and funded validation remain open.
+
+*Verified:* direct visual inspection in live Chrome on canonical main
+`8c892d0` confirmed the four fixed-room entry/exit paths, the three named
+station panels, their highlighted approach state, panel-owned `F` suppression
+and the unchanged cosy avatar after close. Direct inspection in Bridge
+confirmed the visible **DEPOSIT** label without highlight, activation or panel
+after repeated approach, followed by its physical exit. Source inspection of
+`apps/web/src/visits/station-registry.ts`, `VisitLayer.tsx` and
+`production/ProductionRoot.tsx`, plus `packages/world/src/fixed-room.ts` and
+`scenes/street-scene.ts`, confirmed that Bridge admission requires both runtime
+capabilities, production currently supplies no planner, and the locked World
+presentation cannot activate. The gateway was mock-only. No real wallet or
+live/private balance read, proof, signature, submission, transaction or funds
+were used.
+
 ### 2026-08-28 — The rendered functional and interactive D-053 matrix is complete; subjective art remains open
+
+**Room/station status superseded by [the rendered room and admitted-station
+finding](#2026-08-28--room-navigation-and-three-admitted-stations-pass-bridge-deposit-stays-locked) above: Bank, Post Office and Exchange panel-specific integration is now accepted; Bridge remains open/locked. The generic D-053 evidence below remains accepted.**
 
 The live D-057 Chrome run entered the Exchange and Bridge after the Bank. In
 each room, one `F` press changed cosy to fighting with the weapon visible and a
