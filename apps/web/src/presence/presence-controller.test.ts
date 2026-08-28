@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 import type { AvatarSpriteKey, Facing, WorldEvents } from '@strkworld/shared';
 import type { RemotePeerSnapshot } from '@strkworld/world';
 import { createEventBus } from '../bus/event-bus.js';
-import { createPresenceController, type PresenceClient } from './presence-controller.js';
+import { createPresenceController, type PresenceClient, type PresenceAvailability } from './presence-controller.js';
 
 function fakeClient() {
   const statuses = new Set<(event: { status: string; reason?: string }) => void>();
@@ -29,6 +29,25 @@ function fakeClient() {
   };
 }
 
+type StatusListener = Parameters<PresenceClient['onStatus']>[0];
+type StatusEvent = Parameters<StatusListener>[0];
+
+function controlledClient() {
+  const made = fakeClient();
+  let statusListener: StatusListener | undefined;
+  made.client.onStatus = vi.fn((listener: StatusListener) => {
+    statusListener = listener;
+    return () => {
+      if (statusListener === listener) statusListener = undefined;
+    };
+  });
+  made.client.connect = vi.fn(() => new Promise<void>(() => {}));
+  return {
+    ...made,
+    emitStatus: (event: StatusEvent) => statusListener?.(event),
+  };
+}
+
 const moved = { position: { x: 40, y: 72 }, facing: 'left' as const };
 
 async function drainAsyncWork() {
@@ -36,6 +55,117 @@ async function drainAsyncWork() {
 }
 
 describe('presence controller', () => {
+  it('does not notify a listener added during a transition until the next transition', () => {
+    const world = createEventBus<WorldEvents>();
+    const made = controlledClient();
+    const presence = createPresenceController({ endpoint: 'ws://example', factory: () => made.client });
+    const first = vi.fn();
+    const second = vi.fn();
+    let added = false;
+    first.mockImplementation(() => {
+      if (!added) {
+        added = true;
+        presence.subscribe(second);
+      }
+    });
+    presence.subscribe(first);
+    const stopWorld = presence.listen(world);
+
+    world.emit('player:moved', moved);
+
+    expect(first).toHaveBeenCalledTimes(1);
+    expect(second).not.toHaveBeenCalled();
+    made.emitStatus({ status: 'connected' });
+    expect(second).toHaveBeenCalledTimes(1);
+    stopWorld();
+  });
+
+  it('skips a listener unsubscribed before its turn in the same transition', () => {
+    const world = createEventBus<WorldEvents>();
+    const made = controlledClient();
+    const presence = createPresenceController({ endpoint: 'ws://example', factory: () => made.client });
+    const first = vi.fn();
+    const second = vi.fn();
+    let stopSecond!: () => void;
+    first.mockImplementation(() => stopSecond());
+    presence.subscribe(first);
+    stopSecond = presence.subscribe(second);
+    const stopWorld = presence.listen(world);
+
+    world.emit('player:moved', moved);
+
+    expect(first).toHaveBeenCalledTimes(1);
+    expect(second).not.toHaveBeenCalled();
+    stopWorld();
+  });
+
+  it('does not revive an old recipient when the same function is resubscribed', () => {
+    const world = createEventBus<WorldEvents>();
+    const made = controlledClient();
+    const presence = createPresenceController({ endpoint: 'ws://example', factory: () => made.client });
+    const first = vi.fn();
+    const second = vi.fn();
+    let stopSecond!: () => void;
+    let replaced = false;
+    first.mockImplementation(() => {
+      if (!replaced) {
+        replaced = true;
+        stopSecond();
+        presence.subscribe(second);
+      }
+    });
+    presence.subscribe(first);
+    stopSecond = presence.subscribe(second);
+    const stopWorld = presence.listen(world);
+
+    world.emit('player:moved', moved);
+
+    expect(second).not.toHaveBeenCalled();
+    stopWorld();
+  });
+
+  it('keeps a replacement owned when an older unsubscribe settles later', () => {
+    const world = createEventBus<WorldEvents>();
+    const made = controlledClient();
+    const presence = createPresenceController({ endpoint: 'ws://example', factory: () => made.client });
+    const listener = vi.fn();
+    const staleStop = presence.subscribe(listener);
+    presence.subscribe(listener);
+    staleStop();
+    const stopWorld = presence.listen(world);
+
+    world.emit('player:moved', moved);
+
+    expect(listener).toHaveBeenCalledTimes(1);
+    stopWorld();
+  });
+
+  it('keeps reentrant public status transitions synchronous with current state', () => {
+    const world = createEventBus<WorldEvents>();
+    const made = controlledClient();
+    const presence = createPresenceController({ endpoint: 'ws://example', factory: () => made.client });
+    const seen: PresenceAvailability[] = [];
+    let reentered = false;
+    const first = vi.fn(() => {
+      if (!reentered) {
+        reentered = true;
+        made.emitStatus({ status: 'connected' });
+      }
+      seen.push(presence.getState().status);
+    });
+    const second = vi.fn(() => seen.push(presence.getState().status));
+    presence.subscribe(first);
+    presence.subscribe(second);
+    const stopWorld = presence.listen(world);
+
+    world.emit('player:moved', moved);
+
+    expect(first).toHaveBeenCalledTimes(2);
+    expect(second).toHaveBeenCalledTimes(2);
+    expect(seen).toEqual(['connected', 'connected', 'connected', 'connected']);
+    stopWorld();
+  });
+
   it('exposes a replaying opaque remote-peer source adapted from lobby snapshots', async () => {
     const world = createEventBus<WorldEvents>();
     const made = fakeClient();
