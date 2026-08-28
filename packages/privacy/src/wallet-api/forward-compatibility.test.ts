@@ -7,6 +7,7 @@ import type { WalletWithStarknetFeatures } from '@starknet-io/get-starknet-walle
 import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import type { AccountInterface } from 'starknet';
+import ts from 'typescript';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { createProductionWalletSession, type Intent } from '../index.js';
 
@@ -125,16 +126,20 @@ describe('Wallet Standard forward compatibility', () => {
         const batch = await session.operations.prepare([operation.intent]);
         await expect(batch.confirm({ feeCeiling: POOL_FEE + RELAY_FEE }))
           .resolves.toEqual({ transactionHash: operation.receipt });
-        const handoff = walletRequests.slice(before)
-          .find(({ type }) => type === operation.walletMethod);
-        expect(handoff, operation.name).toBeDefined();
-        expect(actionTypesOf(handoff!), operation.name).toEqual(operation.actionTypes);
+        const handoff = walletRequests.slice(before);
+        expect(handoff.map(({ type }) => type), operation.name).toEqual([operation.walletMethod]);
+        expect(actionTypesOf(handoff[0]!), operation.name).toEqual(operation.actionTypes);
       }
 
-      expect(walletRequests.map(({ type }) => type).filter((type) => type === 'wallet_strk20Balances'))
-        .toHaveLength(1);
-      expect(walletRequests.map(({ type }) => type).filter((type) => type === 'wallet_strk20PrepareInvoke'))
-        .toHaveLength(3);
+      expect(walletRequests.map(({ type }) => type)).toEqual([
+        'wallet_requestChainId',
+        'wallet_supportedWalletApi',
+        'wallet_strk20Balances',
+        'wallet_strk20InvokeTransaction',
+        'wallet_strk20PrepareInvoke',
+        'wallet_strk20PrepareInvoke',
+        'wallet_strk20PrepareInvoke',
+      ]);
       expect(backendRequests.map(({ path }) => path)).toEqual(expect.arrayContaining([
         '/api/v1/rpc/pool-config',
         '/api/v1/rpc/public-key',
@@ -147,13 +152,29 @@ describe('Wallet Standard forward compatibility', () => {
         .map(({ body }) => body['route']))
         .toEqual(['unshield', 'transfer', 'swap']);
 
-      const source = productionPrivacySource();
-      expect(source).not.toContain(['get', 'starknet', 'wallets'].join('-'));
-      expect(source).not.toMatch(/wallet\.(?:id|name)\s*[!=]==|walletId\s*[!=]==/);
+      const source = productionPrivacySources();
+      const sourceText = source.map(({ text }) => text).join('\n');
+      expect(sourceText).not.toContain(['get', 'starknet', 'wallets'].join('-'));
+      expect(walletIdentityReads(source)).toEqual([]);
     } finally {
       unregister();
       session.destroy();
     }
+  });
+
+  it('rejects provider identity reads outside the display-only name projection', () => {
+    const hostile = sourceFixture(`
+      if (handle.name === 'Hosted frame signer') admit();
+      if (wallet.name.includes('Ready')) admit();
+      switch (provider['name']) { case 'Ready': admit(); }
+      const supported = wallet.features['starknet:walletApi'].id === 'ready';
+    `);
+    expect(walletIdentityReads([hostile])).toEqual([
+      'fixture.ts:2:11 handle.name',
+      'fixture.ts:3:11 wallet.name',
+      "fixture.ts:4:15 provider['name']",
+      "fixture.ts:5:25 wallet.features['starknet:walletApi'].id",
+    ]);
   });
 });
 
@@ -186,8 +207,17 @@ function completeWalletApi(mock: MockWallet): {
   const requests: WalletRequest[] = [];
   const request = (async (input: { type: string; params?: unknown }) => {
     requests.push(input);
-    if (input.type === 'wallet_supportedWalletApi') return ['0.10.3'];
-    return walletApi.request(input as never);
+    switch (input.type) {
+      case 'wallet_supportedWalletApi':
+        return ['0.10.3'];
+      case 'wallet_requestChainId':
+      case 'wallet_strk20Balances':
+      case 'wallet_strk20PrepareInvoke':
+      case 'wallet_strk20InvokeTransaction':
+        return walletApi.request(input as never);
+      default:
+        throw new Error(`Unexpected wallet request: ${input.type}`);
+    }
   }) as typeof walletApi.request;
   const wallet = {
     version: mock.version,
@@ -262,12 +292,67 @@ function actionTypesOf(request: WalletRequest): string[] {
   return (params?.actions ?? []).map(({ type }) => String(type));
 }
 
-function productionPrivacySource(): string {
+interface SourceFixture {
+  readonly path: string;
+  readonly text: string;
+}
+
+function productionPrivacySources(): SourceFixture[] {
   const root = resolve(repositoryRoot(), 'packages/privacy/src');
   return sourceFiles(root)
     .filter((path) => !path.endsWith('.test.ts'))
-    .map((path) => readFileSync(path, 'utf8'))
-    .join('\n');
+    .map((path) => ({ path, text: readFileSync(path, 'utf8') }));
+}
+
+function sourceFixture(text: string): SourceFixture {
+  return { path: 'fixture.ts', text };
+}
+
+function walletIdentityReads(sources: SourceFixture[]): string[] {
+  return sources.flatMap(({ path, text }) => {
+    const source = ts.createSourceFile(path, text, ts.ScriptTarget.Latest, true, ts.ScriptKind.TS);
+    const violations: string[] = [];
+    const visit = (node: ts.Node): void => {
+      if (isIdentityRead(node) && !isAllowedDisplayOrErrorName(node, path)) {
+        const start = source.getLineAndCharacterOfPosition(node.getStart(source));
+        violations.push(`${path.split('/').at(-1)}:${start.line + 1}:${start.character + 1} ${node.getText(source)}`);
+      }
+      ts.forEachChild(node, visit);
+    };
+    visit(source);
+    return violations;
+  });
+}
+
+function isIdentityRead(node: ts.Node): node is ts.PropertyAccessExpression | ts.ElementAccessExpression {
+  if (ts.isPropertyAccessExpression(node)) return node.name.text === 'id' || node.name.text === 'name';
+  if (!ts.isElementAccessExpression(node) || !node.argumentExpression) return false;
+  return ts.isStringLiteralLike(node.argumentExpression)
+    && (node.argumentExpression.text === 'id' || node.argumentExpression.text === 'name');
+}
+
+function isAllowedDisplayOrErrorName(
+  node: ts.PropertyAccessExpression | ts.ElementAccessExpression,
+  path: string,
+): boolean {
+  if (!ts.isPropertyAccessExpression(node) || node.name.text !== 'name') return false;
+  if (path.endsWith('/wallet-api/session.ts')) {
+    return ts.isIdentifier(node.expression)
+      && node.expression.text === 'wallet'
+      && ts.isPropertyAssignment(node.parent)
+      && node.parent.initializer === node
+      && node.parent.name.getText() === 'name';
+  }
+  if (path.endsWith('/wallet-api/errors.ts')) {
+    return ts.isIdentifier(node.expression) && node.expression.text === 'error';
+  }
+  if (path.endsWith('/types.ts')) {
+    return node.expression.kind === ts.SyntaxKind.ThisKeyword
+      && ts.isBinaryExpression(node.parent)
+      && node.parent.left === node
+      && node.parent.operatorToken.kind === ts.SyntaxKind.EqualsToken;
+  }
+  return false;
 }
 
 function repositoryRoot(): string {

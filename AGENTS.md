@@ -270,18 +270,26 @@ support from wallet identity.
 
 The forward-compatibility regression uses that installed MockWallet for
 connection and all three STRK20 handlers, and wraps only its generic Wallet API
-request to answer the required `0.10.3` capability query. It then dynamically
+request to answer the required `0.10.3` capability query. Its exact dispatcher
+permits only chain-id, capability and the three STRK20 methods, and the request
+ledger rejects extras and duplicate route handoffs. It then dynamically
 registers the arbitrarily named provider and drives every `PrivacyOperations`
 route through `WalletAccountV6`, the stable production session and the
-same-origin backend client. This is a test-fixture correction, not a production
-wallet exception or permission to weaken version-based capability detection.
+same-origin backend client. A parsed production-source gate rejects every
+provider `id`/`name` read except the display-only wallet-name projection; its
+hostile fixtures cover aliases, membership, switch and nested feature IDs.
+This is a test-fixture correction, not a production wallet exception or
+permission to weaken version-based capability detection.
 
 *Verified:* an unmodified public-seam test failed red with exact upstream error
 `Unknown request type: wallet_supportedWalletApi`. Inspection of the installed
 `src/connectors/mock.ts` found the three STRK20 switch cases and no capability
 case. Adding only the wrapper made capability, config, balances, recipient
 preflight and shield/unshield/transfer/swap prepare-confirm paths green while
-the request ledger proved no balance read occurred during capability detection.
+the exact request ledger proved no balance read occurred during capability
+detection and no extra or duplicate wallet RPC was used. Hostile parsed-source
+fixtures and production mutations proved both alias-name and nested feature-ID
+identity branches fail the gate.
 No browser, external network, live wallet, RPC, proof, signature, funds or
 transaction was used.
 

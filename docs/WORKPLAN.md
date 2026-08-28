@@ -175,10 +175,12 @@ dynamically registers an arbitrarily named, non-injected Wallet Standard
 provider and drives capability, pool reads, balances, recipient preflight and
 all four shield/unshield/transfer/swap prepare-confirm routes through the real
 production session. It also pins the absence of the static connector registry
-and wallet-identity branches. The installed Starknet Start MockWallet supplies
-the standard features and STRK20 handlers; the test adds only its missing
-`wallet_supportedWalletApi` response. This is structural compatibility, not
-live Ready/Xverse acceptance.
+and provider-identity reads outside the display-only name projection. The
+installed Starknet Start MockWallet supplies the standard features, chain-id
+response and three STRK20 handlers; an exact dispatcher adds only its missing
+`wallet_supportedWalletApi` response and rejects every extra or duplicate
+wallet handoff. This is structural compatibility, not live Ready/Xverse
+acceptance.
 
 **D-043 complete offline:** a separate optional public-shield planner port and
 deterministic fake are implemented. It is not a method on the frozen
