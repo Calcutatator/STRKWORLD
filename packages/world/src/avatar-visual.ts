@@ -25,6 +25,24 @@ export const AVATAR_ONE_WALK_COLUMNS = [0, 1, 2, 3, 4, 5] as const;
 export const AVATAR_NORMAL_WALK_FPS = 8;
 export const AVATAR_SPRINT_WALK_FPS = 12;
 
+interface AvatarSheetGeometry {
+  readonly width: number;
+  readonly columns: number;
+  readonly walkColumns: readonly number[];
+}
+
+const DEFAULT_AVATAR_SHEET_GEOMETRY: AvatarSheetGeometry = Object.freeze({
+  width: AVATAR_SHEET_WIDTH,
+  columns: AVATAR_CELL_COLUMNS,
+  walkColumns: AVATAR_WALK_COLUMNS,
+});
+
+const AVATAR_ONE_SHEET_GEOMETRY: AvatarSheetGeometry = Object.freeze({
+  width: AVATAR_ONE_SHEET_WIDTH,
+  columns: AVATAR_ONE_CELL_COLUMNS,
+  walkColumns: AVATAR_ONE_WALK_COLUMNS,
+});
+
 export const AVATAR_SPRITE_ASSET_URLS: Readonly<Record<AvatarSpriteKey, string>> =
   Object.fromEntries(
     AVATAR_SPRITE_KEYS.map((key) => [
@@ -49,17 +67,19 @@ export interface AvatarVisualSheet {
 
 export const AVATAR_VISUAL_CATALOG: readonly AvatarVisualSheet[] = Object.freeze(
   AVATAR_SPRITE_KEYS.map((sprite) => {
-    const avatarOne = sprite === 'avatar-1';
+    const geometry = sprite === 'avatar-1'
+      ? AVATAR_ONE_SHEET_GEOMETRY
+      : DEFAULT_AVATAR_SHEET_GEOMETRY;
     return Object.freeze({
       sprite,
       textureKey: sprite,
       url: AVATAR_SPRITE_ASSET_URLS[sprite],
-      width: avatarOne ? AVATAR_ONE_SHEET_WIDTH : AVATAR_SHEET_WIDTH,
+      width: geometry.width,
       height: AVATAR_SHEET_HEIGHT,
       frameWidth: AVATAR_CELL_SIZE,
       frameHeight: AVATAR_CELL_SIZE,
-      columns: avatarOne ? AVATAR_ONE_CELL_COLUMNS : AVATAR_CELL_COLUMNS,
-      walkColumns: avatarOne ? AVATAR_ONE_WALK_COLUMNS : AVATAR_WALK_COLUMNS,
+      columns: geometry.columns,
+      walkColumns: geometry.walkColumns,
       originX: AVATAR_ORIGIN_X,
       originY: AVATAR_ORIGIN_Y,
     });

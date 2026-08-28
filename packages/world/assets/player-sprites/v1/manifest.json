@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "status": "art-correction-candidate-awaiting-independent-review",
+  "status": "runtime-integrated-rendered-acceptance-pending",
   "approvedContract": "D-052",
   "sheet": {
     "filePattern": "avatar-{key}.png",
@@ -129,9 +129,9 @@
     "verifiedOn": "2026-08-20"
   },
   "reviewState": {
-    "runtimeReady": false,
+    "runtimeReady": true,
     "renderedAcceptance": false,
-    "independentReview": "pending",
-    "note": "Art-only correction candidate; do not merge or wire runtime until orchestration review passes."
+    "independentReview": "pending-on-draft-pr",
+    "note": "Runtime contract and approved Avatar 1 cosy override are integrated; fresh live-browser rendered acceptance remains pending."
   }
 }

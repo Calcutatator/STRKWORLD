@@ -9,9 +9,11 @@
 > The historical 24-colour aggregate cap remains the default for Avatar 2-16;
 > Avatar 1 cosy has an explicit per-key maximum of 29 recorded in the manifest.
 
-This directory contains the isolated D-052 correction candidate for all 16
-opaque avatar keys. It is awaiting independent orchestration review. It is not
-a runtime-ready or rendered-acceptance claim.
+The aggregate files in this directory preserve the historical D-052
+five-column correction evidence for all 16 opaque avatar keys. They are not
+current evidence for the six-column Avatar 1 override and do not claim its
+rendered acceptance. The runtime-integrated override is governed by the scoped
+evidence above and still requires fresh live-browser acceptance.
 
 The candidate covers all 16 sheets, 320 64x64 cells, four facings, and the
 five-column idle/contact-left/passing-left/contact-right/passing-right contract.

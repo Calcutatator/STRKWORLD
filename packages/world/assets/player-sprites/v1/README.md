@@ -100,8 +100,10 @@ negative-space run is whitelisted by exact cell, orientation, coordinate,
 length, and rationale. `qa/verify-narrow-channels.py` rejects unclassified
 current channels and includes an injected-channel negative test.
 
-No runtime row or frame mapping was changed. The correction is not runtime-ready
-until orchestration independently reviews the complete handoff.
+The aggregate evidence in this section predates the Avatar 1 override and did
+not change the then-current row or frame mapping. The current six-column
+Avatar 1 mapping and its scoped evidence are documented above; runtime
+integration is complete while fresh rendered acceptance remains pending.
 
 - Characters 4 and 7 remain the two deliberately large silhouettes in both
   states and all facings.

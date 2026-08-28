@@ -29,10 +29,12 @@ describe('approved Avatar 1 cosy production sheet', () => {
 
   it('records the exact approved column order and scoped QA evidence', () => {
     const manifest = JSON.parse(readFileSync(manifestPath, 'utf8')) as {
+      status?: string;
       sheet: {
         defaultMaximumColorsPerFrame?: number;
         perKeyOverrides?: Record<string, unknown>;
       };
+      reviewState?: { runtimeReady?: boolean; renderedAcceptance?: boolean };
     };
     const cells = JSON.parse(readFileSync(cellQaPath, 'utf8')) as Array<{
       alphaValues: number[];
@@ -45,6 +47,10 @@ describe('approved Avatar 1 cosy production sheet', () => {
       sideRowsRestoredPixelIdentical: boolean;
     };
 
+    expect(manifest).toMatchObject({
+      status: 'runtime-integrated-rendered-acceptance-pending',
+      reviewState: { runtimeReady: true, renderedAcceptance: false },
+    });
     expect(manifest.sheet.defaultMaximumColorsPerFrame).toBe(24);
     expect(manifest.sheet.perKeyOverrides?.['avatar-1']).toMatchObject({
       dimensions: [384, 256],
