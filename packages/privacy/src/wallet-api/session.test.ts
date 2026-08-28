@@ -92,6 +92,47 @@ describe('WalletSession', () => {
     expect(late).toHaveBeenCalledOnce();
   });
 
+  it('does not replay the current snapshot when a listener subscribes', () => {
+    const selected = wallet('Ready');
+    const discovery = controllableDiscovery(selected);
+    const session = createWalletSession(
+      denyAllOptions(),
+      { discovery: discovery.port, connectWallet: async () => connection('0x111') },
+    );
+    const listener = vi.fn();
+
+    session.subscribe(listener);
+
+    expect(listener).not.toHaveBeenCalled();
+    discovery.replace(selected);
+    expect(listener).toHaveBeenCalledOnce();
+  });
+
+  it('keeps reentrant publish synchronous with the latest authoritative snapshot', () => {
+    const firstWallet = wallet('First');
+    const secondWallet = wallet('Second');
+    const discovery = controllableDiscovery(firstWallet);
+    const session = createWalletSession(
+      denyAllOptions(),
+      { discovery: discovery.port, connectWallet: async () => connection('0x111') },
+    );
+    const seen: string[] = [];
+    let reentered = false;
+    session.subscribe(() => {
+      seen.push(`first:${session.getSnapshot().wallets.length}`);
+      if (reentered) return;
+      reentered = true;
+      discovery.replace(firstWallet, secondWallet);
+    });
+    session.subscribe(() => {
+      seen.push(`second:${session.getSnapshot().wallets.length}`);
+    });
+
+    discovery.replace(firstWallet);
+
+    expect(seen).toEqual(['first:1', 'first:2', 'second:2', 'second:2']);
+  });
+
   it('does not deliver an in-flight snapshot to a replacement listener generation', () => {
     const selected = wallet('Ready');
     const discovery = controllableDiscovery(selected);

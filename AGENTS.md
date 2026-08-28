@@ -282,16 +282,17 @@ The shipped React 19 consumers use distinct callbacks whose effect cleanup and
 setup occur after the synchronous publish stack; a StrictMode harness found no
 listener mutation during ordinary connect/disconnect delivery.
 
-*Verified:* public `createWalletSession()` regressions cover add-during-publish,
-unsubscribe/resubscribe during publish, unsubscribe before a captured turn,
-stale cleanup after same-function replacement and a throwing listener followed
-by a healthy one. The focused WalletSession suite passes 22 tests, Privacy
-passes 8 files / 154 tests and the full workspace passes 97 files / 1,392
-tests. Every workspace typecheck, the production build, all 13 invariants and
-diff hygiene pass. Removing token liveness revives in-flight replacement
-delivery; using identity-only cleanup removes the replacement; removing error
-isolation throws and blocks the later subscriber. No browser, wallet, provider,
-RPC, proof, signature, funds or transaction was used.*
+*Verified:* public `createWalletSession()` regressions cover no replay,
+add-during-publish, unsubscribe/resubscribe during publish, unsubscribe before a
+captured turn, stale cleanup after same-function replacement, a throwing
+listener followed by a healthy one, and synchronous reentrant delivery reading
+the latest authoritative snapshot. The focused WalletSession suite passes 24
+tests, Privacy passes 8 files / 156 tests and the full workspace passes 97 files
+/ 1,394 tests. Every workspace typecheck, the production build, all 13
+invariants and diff hygiene pass. Removing token liveness revives in-flight
+replacement delivery; using identity-only cleanup removes the replacement;
+removing error isolation throws and blocks the later subscriber. No browser,
+wallet, provider, RPC, proof, signature, funds or transaction was used.*
 
 ### 2026-08-29 — Duplicate wallet account events preserve reviewed authority
 
