@@ -5,13 +5,32 @@
   "sheet": {
     "filePattern": "avatar-{key}.png",
     "count": 16,
-    "dimensions": [320, 256],
+    "defaultDimensions": [320, 256],
     "cellSize": [64, 64],
-    "columns": ["idle", "contact-left", "passing-left", "contact-right", "passing-right"],
+    "defaultColumns": ["idle", "contact-left", "passing-left", "contact-right", "passing-right"],
     "rows": ["down", "left", "right", "up"],
     "alpha": "binary transparent RGBA",
-    "maximumColorsPerFrame": 24,
-    "megaAtlas": false
+    "defaultMaximumColorsPerFrame": 24,
+    "megaAtlas": false,
+    "perKeyOverrides": {
+      "avatar-1": {
+        "dimensions": [384, 256],
+        "columns": ["idle", "contact-left", "passing-left", "contact-right", "passing-right", "settle"],
+        "rows": ["down", "left", "right", "up"],
+        "sha256": "f0ea738353723abc18070210bf169002ede62003b03508b1e326ff9ae72e87bb",
+        "maximumColorsPerFrame": 29,
+        "approvalEvidence": [
+          "qa/avatar-1-cosy-six-column/qa-cells.json",
+          "qa/avatar-1-cosy-six-column/eye-anchor-qa.json"
+        ],
+        "scope": "approved Avatar 1 cosy replacement only; Avatar 1 fighting and avatars 2-16 are unchanged",
+        "sourceAuthority": "this exact hashed PNG; the historical five-column Aseprite source must not overwrite it",
+        "reviewState": {
+          "userApprovedForRuntimeIntegration": true,
+          "renderedAcceptance": false
+        }
+      }
+    }
   },
   "anchor": {
     "feetPixels": [32, 56],
@@ -38,7 +57,10 @@
     "walk": {
       "playbackColumns": [0, 1, 2, 3, 4],
       "normalFps": 8,
-      "sprintFps": 12
+      "sprintFps": 12,
+      "perKeyPlaybackColumns": {
+        "avatar-1": [0, 1, 2, 3, 4, 5]
+      }
     }
   },
   "keys": {
@@ -68,10 +90,11 @@
     "frames": 320,
     "frameDurationMs": 125,
     "layer": "art",
-    "tags": "avatar-1 through avatar-16, 20 frames per tag",
+    "tags": "historical five-column avatar-1 through avatar-16 source, 20 frames per tag; the approved six-column avatar-1 PNG is source-authoritative and is not represented by this Aseprite file",
     "slices": ["logical-cell-64x64 with feet pivot", "feet-pivot-32-56"]
   },
   "qa": {
+    "aggregateEvidenceScope": "historical five-column complete set; the current Avatar 1 cosy override is governed by its per-key approvalEvidence",
     "report": "qa/qa-report.json",
     "crossFacingIdentity": "qa/cross-facing-identity.json",
     "asepriteRoundTrip": "qa/aseprite-roundtrip.json",

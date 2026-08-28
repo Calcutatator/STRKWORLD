@@ -19,6 +19,9 @@ export const AVATAR_BODY_SIZE = 24;
 export const AVATAR_ORIGIN_X = AVATAR_FEET_X / AVATAR_CELL_SIZE;
 export const AVATAR_ORIGIN_Y = AVATAR_FEET_Y / AVATAR_CELL_SIZE;
 export const AVATAR_WALK_COLUMNS = [0, 1, 2, 3, 4] as const;
+export const AVATAR_ONE_SHEET_WIDTH = 384;
+export const AVATAR_ONE_CELL_COLUMNS = 6;
+export const AVATAR_ONE_WALK_COLUMNS = [0, 1, 2, 3, 4, 5] as const;
 export const AVATAR_NORMAL_WALK_FPS = 8;
 export const AVATAR_SPRINT_WALK_FPS = 12;
 
@@ -38,22 +41,29 @@ export interface AvatarVisualSheet {
   readonly height: number;
   readonly frameWidth: number;
   readonly frameHeight: number;
+  readonly columns: number;
+  readonly walkColumns: readonly number[];
   readonly originX: number;
   readonly originY: number;
 }
 
 export const AVATAR_VISUAL_CATALOG: readonly AvatarVisualSheet[] = Object.freeze(
-  AVATAR_SPRITE_KEYS.map((sprite) => Object.freeze({
-    sprite,
-    textureKey: sprite,
-    url: AVATAR_SPRITE_ASSET_URLS[sprite],
-    width: AVATAR_SHEET_WIDTH,
-    height: AVATAR_SHEET_HEIGHT,
-    frameWidth: AVATAR_CELL_SIZE,
-    frameHeight: AVATAR_CELL_SIZE,
-    originX: AVATAR_ORIGIN_X,
-    originY: AVATAR_ORIGIN_Y,
-  })),
+  AVATAR_SPRITE_KEYS.map((sprite) => {
+    const avatarOne = sprite === 'avatar-1';
+    return Object.freeze({
+      sprite,
+      textureKey: sprite,
+      url: AVATAR_SPRITE_ASSET_URLS[sprite],
+      width: avatarOne ? AVATAR_ONE_SHEET_WIDTH : AVATAR_SHEET_WIDTH,
+      height: AVATAR_SHEET_HEIGHT,
+      frameWidth: AVATAR_CELL_SIZE,
+      frameHeight: AVATAR_CELL_SIZE,
+      columns: avatarOne ? AVATAR_ONE_CELL_COLUMNS : AVATAR_CELL_COLUMNS,
+      walkColumns: avatarOne ? AVATAR_ONE_WALK_COLUMNS : AVATAR_WALK_COLUMNS,
+      originX: AVATAR_ORIGIN_X,
+      originY: AVATAR_ORIGIN_Y,
+    });
+  }),
 );
 
 export function resolveAvatarSheet(sprite: unknown): AvatarVisualSheet {
@@ -70,7 +80,7 @@ export function preloadAvatarVisuals(
       frameWidth: sheet.frameWidth,
       frameHeight: sheet.frameHeight,
       startFrame: 0,
-      endFrame: AVATAR_CELL_COLUMNS * AVATAR_CELL_ROWS - 1,
+      endFrame: sheet.columns * AVATAR_CELL_ROWS - 1,
     });
   }
 }
@@ -103,11 +113,11 @@ export function resolveAvatarAnimation(
   sprinting: boolean,
 ): AvatarAnimationPlan {
   const sheet = resolveAvatarSheet(sprite);
-  const rowOffset = FACING_ROW[facing] * AVATAR_CELL_COLUMNS;
+  const rowOffset = FACING_ROW[facing] * sheet.columns;
   return Object.freeze({
     key: `${sheet.sprite}:${facing}:${sprinting ? 'sprint' : 'walk'}`,
     textureKey: sheet.textureKey,
-    frames: Object.freeze(AVATAR_WALK_COLUMNS.map((column) => rowOffset + column)),
+    frames: Object.freeze(sheet.walkColumns.map((column) => rowOffset + column)),
     frameRate: sprinting ? AVATAR_SPRINT_WALK_FPS : AVATAR_NORMAL_WALK_FPS,
   });
 }
@@ -142,7 +152,7 @@ export function applyAvatarVisual(
     target.play(resolveAvatarAnimation(sheet.sprite, pose.facing, pose.sprinting === true).key, true);
   } else {
     target.stop();
-    target.setFrame(FACING_ROW[pose.facing] * AVATAR_CELL_COLUMNS);
+    target.setFrame(FACING_ROW[pose.facing] * sheet.columns);
   }
   target.setData('sprite', sheet.sprite);
   target.setData('facing', pose.facing);

@@ -1,5 +1,14 @@
 # Player sprite QA
 
+> **Avatar 1 cosy override.** The aggregate evidence below describes the prior
+> five-column complete set. The current approved six-column `avatar-1.png` is
+> governed by `avatar-1-cosy-six-column/qa-cells.json` and
+> `avatar-1-cosy-six-column/eye-anchor-qa.json`; the exact PNG hash is pinned by
+> `packages/world/src/avatar-asset.test.ts`. Do not use the historical Avatar 1
+> Aseprite cels or aggregate reports to overwrite that approved PNG.
+> The historical 24-colour aggregate cap remains the default for Avatar 2-16;
+> Avatar 1 cosy has an explicit per-key maximum of 29 recorded in the manifest.
+
 This directory contains the isolated D-052 correction candidate for all 16
 opaque avatar keys. It is awaiting independent orchestration review. It is not
 a runtime-ready or rendered-acceptance claim.
@@ -12,7 +21,7 @@ blanket zone copy, scale normalization, or global despeckle was used.
 Mechanical gates recorded in `qa-report.json`:
 
 - 320x256 RGBA sheets with binary alpha and fixed feet at `(32,56)`.
-- At most 24 visible RGB colours per cell.
+- At most 24 visible RGB colours per cell in the historical five-column set.
 - Zero enclosed transparent islands after the explicit repair pass.
 - Zero non-binary alpha cells, feet failures, or duplicated movement cells.
 - All movement cells differ from their directional idle with changes reaching
