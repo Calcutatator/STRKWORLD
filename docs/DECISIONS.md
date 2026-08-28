@@ -2271,8 +2271,10 @@ ledger are quarantined outside the repository and must not be used. The
 approved PNG's left and right rows are pixel-identical to their pre-eye-pass
 versions and its up row is unchanged. The prior Aseprite source does not encode
 this new sixth column, so it remains historical source for the five-column set
-and must not overwrite the source-authoritative hashed Avatar 1 PNG. Fresh
-live-browser rendered acceptance of this replacement remains required.
+and must not overwrite the source-authoritative hashed Avatar 1 PNG. James
+accepted this exact Avatar 1 cosy replacement in the live game on
+2026-08-28. That acceptance is scoped to this replacement only; it does not
+accept Avatar 1 fighting or avatars 2-16.
 
 ---
 

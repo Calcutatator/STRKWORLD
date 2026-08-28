@@ -258,6 +258,29 @@ empty shell to fetchers, so a 200 there means nothing.
 
 ## 6. Findings log
 
+### 2026-08-28 — Horizontal camera follow is immediate for sharp pixel motion
+
+The street camera previously eased toward the player on both axes with a
+`0.12` lerp. During east/west movement, that fractional horizontal follow
+softened otherwise hard sprite edges even though the renderer already used
+pixel-art filtering, rounded pixels and integer zoom. Horizontal follow is now
+immediate (`lerpX = 1`) while vertical follow retains its `0.12` ease. Movement
+speed, physics body, collision, camera bounds and zoom are unchanged.
+
+James separately accepted the exact Avatar 1 cosy replacement as looking good
+in the live game. That rendered acceptance is recorded only for Avatar 1 cosy;
+Avatar 1 fighting and avatars 2-16 remain outside that approval.
+
+*Verified:* a live-browser screenshot loop reproduced horizontal hard-edge loss
+independently of the active sprite. Source inspection confirmed `pixelArt:
+true`, rounded camera pixels and zoom `2`, leaving the symmetric follow lerp as
+the remaining horizontal smoothing. A public StreetScene camera regression
+then failed on the previous `startFollow(player, true, 0.12, 0.12)` call and
+passes with exact axis ownership `startFollow(player, true, 1, 0.12)` while
+also pinning the unchanged `1536x896` bounds and zoom `2`. Fresh post-merge
+rendered verification remains the project-lead handoff after the canonical
+localhost restart.*
+
 ### 2026-08-28 — Avatar 1 cosy owns a six-column per-sheet contract
 
 Avatar 1 cosy now uses the exact user-approved 384x256 production PNG with

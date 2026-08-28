@@ -377,8 +377,9 @@ export function createStreetScene({ Phaser, onTileChanged, remotePeers }: Street
     private createCamera(): void {
       const camera = this.cameras.main;
       camera.setBounds(0, 0, this.map.width * TILE_SIZE, this.map.height * TILE_SIZE);
-      // Slight lerp so the camera feels attached rather than welded.
-      camera.startFollow(this.player, true, 0.12, 0.12);
+      // Horizontal follow is immediate so pixel-art edges stay stable while
+      // moving east/west. Keep the slight vertical ease for camera feel.
+      camera.startFollow(this.player, true, 1, 0.12);
       camera.setZoom(2);
     }
 

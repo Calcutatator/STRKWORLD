@@ -28,7 +28,7 @@
         "sourceAuthority": "this exact hashed PNG; the historical five-column Aseprite source must not overwrite it",
         "reviewState": {
           "userApprovedForRuntimeIntegration": true,
-          "renderedAcceptance": false
+          "renderedAcceptance": true
         }
       }
     }
@@ -133,6 +133,6 @@
     "runtimeReady": true,
     "renderedAcceptance": false,
     "independentReview": "passed",
-    "note": "Runtime contract and approved Avatar 1 cosy override passed independent standards and spec review; fresh live-browser rendered acceptance remains pending."
+    "note": "Avatar 1 cosy passed user-run live-browser rendered acceptance on 2026-08-28; rendered acceptance for the remaining sheets remains pending."
   }
 }

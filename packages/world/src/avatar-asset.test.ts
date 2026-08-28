@@ -82,6 +82,10 @@ describe('approved Avatar 1 cosy production sheet', () => {
       rows: ['down', 'left', 'right', 'up'],
       sha256: 'f0ea738353723abc18070210bf169002ede62003b03508b1e326ff9ae72e87bb',
       maximumColorsPerFrame: 29,
+      reviewState: {
+        userApprovedForRuntimeIntegration: true,
+        renderedAcceptance: true,
+      },
     });
     expect(cells).toHaveLength(24);
     expect(cells.every((cell) => cell.status === 'pass')).toBe(true);
