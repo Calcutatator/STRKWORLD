@@ -24,15 +24,21 @@ export interface Store<S> extends ReadableStore<S> {
 
 export function createStore<S>(initial: S): Store<S> {
   let state = initial;
-  const listeners = new Set<Listener<S>>();
+  const listeners = new Map<Listener<S>, symbol>();
+  const pending: Array<{
+    readonly state: S;
+    readonly listeners: ReadonlyArray<readonly [Listener<S>, symbol]>;
+  }> = [];
+  let delivering = false;
 
   const getState = (): S => state;
   const getServerSnapshot = (): S => state;
 
   const subscribe = (listener: Listener<S>): (() => void) => {
-    listeners.add(listener);
+    const token = Symbol();
+    listeners.set(listener, token);
     return () => {
-      listeners.delete(listener);
+      if (listeners.get(listener) === token) listeners.delete(listener);
     };
   };
 
@@ -41,16 +47,25 @@ export function createStore<S>(initial: S): Store<S> {
       typeof update === 'function' ? (update as (previous: S) => S)(state) : update;
     if (Object.is(next, state)) return;
     state = next;
-    // Copy before iterating: a listener that unsubscribes itself would
-    // otherwise mutate the set mid-iteration.
-    for (const listener of [...listeners]) {
-      try {
-        listener(state);
-      } catch (error) {
-        // One bad subscriber must not stop the others, and must never abort a
-        // financial state transition that has already happened.
-        console.error('store: subscriber threw', error);
+    pending.push({ state: next, listeners: [...listeners] });
+    if (delivering) return;
+    delivering = true;
+    try {
+      while (pending.length > 0) {
+        const transition = pending.shift()!;
+        for (const [listener, token] of transition.listeners) {
+          if (listeners.get(listener) !== token) continue;
+          try {
+            listener(transition.state);
+          } catch (error) {
+            // One bad subscriber must not stop the others, and must never abort a
+            // financial state transition that has already happened.
+            console.error('store: subscriber threw', error);
+          }
+        }
       }
+    } finally {
+      delivering = false;
     }
   };
 
