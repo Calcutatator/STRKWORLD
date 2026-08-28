@@ -132,6 +132,12 @@ describe('approved Avatar 1 cosy production sheet', () => {
       sideRowsRestoredPixelIdentical: true,
     });
   });
+
+  it('rejects unsupported PNG row filters', () => {
+    expect(() => unfilterRgbaRows(Buffer.from([5, 0, 0, 0, 0]), 1, 1)).toThrow(
+      'unsupported PNG filter 5',
+    );
+  });
 });
 
 function decodeRgbaPng(bytes: Buffer): { width: number; height: number; pixels: Buffer } {
@@ -156,11 +162,17 @@ function decodeRgbaPng(bytes: Buffer): { width: number; height: number; pixels: 
     offset += 12 + length;
   }
   const filtered = inflateSync(Buffer.concat(data));
+  const pixels = unfilterRgbaRows(filtered, width, height);
+  return { width, height, pixels };
+}
+
+function unfilterRgbaRows(filtered: Buffer, width: number, height: number): Buffer {
   const stride = width * 4;
   expect(filtered).toHaveLength((stride + 1) * height);
   const pixels = Buffer.alloc(stride * height);
   for (let y = 0; y < height; y += 1) {
     const filter = filtered[y * (stride + 1)]!;
+    if (filter < 0 || filter > 4) throw new Error(`unsupported PNG filter ${filter}`);
     for (let x = 0; x < stride; x += 1) {
       const raw = filtered[y * (stride + 1) + x + 1]!;
       const left = x >= 4 ? pixels[y * stride + x - 4]! : 0;
@@ -170,13 +182,11 @@ function decodeRgbaPng(bytes: Buffer): { width: number; height: number; pixels: 
         : filter === 1 ? left
         : filter === 2 ? up
         : filter === 3 ? Math.floor((left + up) / 2)
-        : filter === 4 ? paeth(left, up, upLeft)
-        : -1;
-      expect(predictor, `unsupported PNG filter ${filter}`).toBeGreaterThanOrEqual(0);
+        : paeth(left, up, upLeft);
       pixels[y * stride + x] = (raw + predictor) & 0xff;
     }
   }
-  return { width, height, pixels };
+  return pixels;
 }
 
 function cropRgba(
