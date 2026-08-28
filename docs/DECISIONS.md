@@ -2486,3 +2486,20 @@ and never bypasses protocol screening. Production STRKWORLD remains zero-custody
 and runs no privacy infrastructure. The sibling workspace has an independent
 threat model, tests, journal and kill procedure; its existence is not production
 readiness or permission to raise a cap.
+
+**2026-08-28 Phase 1 status.** The sibling now serves a mock-only loopback
+gateway at `127.0.0.1:5173` in front of the canonical Vite server on
+`127.0.0.1:5175`. It injects a deterministic Wallet Standard provider before
+Vite's module entry without entering STRKWORLD source or bundles. The gateway
+constructs its mock adapter and policy internally, refuses live environment
+configuration, uses exact loopback/Host/Origin/fetch-metadata gates and a
+per-process HttpOnly SameSite cookie, and has no key, RPC, prover, proof,
+signature, submission or funds path.
+
+Rendered Chrome acceptance passed through the production public seams: the
+tester was discovered, Wallet API 0.10.3 on SN_MAIN admitted the world,
+multiplayer connected, the Bank opened through a deterministic mock pool read,
+one deliberate balance read returned zero, and a one-wei canonical STRK shield
+returned the fixed mock receipt without a popup, dialog or new tab. Leaving the
+Bank restored multiplayer. This is autonomous mock acceptance only; Ready or
+Xverse and every funded/onchain claim remain separate production gates.
