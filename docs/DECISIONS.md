@@ -29,7 +29,8 @@ a real mistake, so the smoke-amount discipline is load-bearing.
 
 ## D-002 — Wallet API route; the game runs no privacy infrastructure
 
-**2026-08-16 · Accepted**
+**2026-08-16 · Accepted · production boundary unchanged; D-057 defines an
+external sibling tester without creating an exception inside STRKWORLD**
 
 **Context.** Two integration routes exist. The low-level Privacy SDK route
 means holding viewing keys, running note discovery, building proof-carrying
@@ -2298,7 +2299,7 @@ and confirmed silent while a station panel holds the keyboard.
 
 ## D-054 — Production wallet lifecycle belongs to a privacy-owned session
 
-**2026-08-23 · Accepted by the user · Phase 1 execution authorized**
+**2026-08-23 · Accepted · autonomous tester prompting superseded by D-057**
 
 **Context.** `WalletApiPrivacyOperations`, dynamic Wallet Standard discovery
 and the Backend privacy client already exist, while the browser composition
@@ -2401,9 +2402,7 @@ signature, funds or transaction was used by this implementation.
 
 ## D-056 — The funded tester may enable the pool-native STRK shield route
 
-**2026-08-24 · Accepted by the user · narrows D-054's funded-action gate for
-the disposable Ready tester; transfer, unshield and swap remain separately
-gated**
+**2026-08-24 · Accepted · autonomous tester handoff superseded by D-057**
 
 **Context.** The disposable Ready mainnet account is now deployed, registered
 with the STRK20 pool and able to share its private balance with STRKWORLD. Its
@@ -2435,3 +2434,55 @@ STRK-only enablement, immutable policy ownership and the absence of every
 other route. After merge, the canonical local checkout is restarted and the
 funded tester performs the final Ready confirmation; the resulting receipt and
 deliberate balance refresh are the live acceptance evidence.
+
+---
+
+## D-057 — Autonomous testing uses a separate capped tester wallet
+
+**2026-08-28 · Accepted by the user · supersedes D-054 and D-056 only for
+agent-owned local testing; production player custody remains unchanged**
+
+**Context.** Ready correctly asks the player to approve private-balance access,
+proof generation and transaction submission. STRK20 pool calls cannot use the
+ordinary account session-key path, so repeated end-to-end testing through Ready
+turns the user into a manual test runner. James explicitly requires the project
+lead to run repeated tests without asking him to approve every wallet action.
+
+Moving a tester private key, viewing key, notes or prover into STRKWORLD would
+break D-002. Faking the wallet only exercises UI state and cannot establish a
+funded mainnet result. The testing route therefore needs its own deliberately
+custodial boundary while the production app continues to use Wallet Standard.
+
+**Decision.** Build a separate sibling workspace named
+`strkworld-tester-wallet`. It owns exactly one disposable tester account and
+may use the low-level STRK20 Privacy SDK for that account only. It must never be
+imported by STRKWORLD, bundled by `apps/web`, deployed as a player service or
+receive a player's key. Signing and viewing secrets live in macOS Keychain,
+never source, environment files, chat, logs or journals.
+
+The sibling exposes a localhost-only Wallet Standard test provider so the
+current local game can exercise its real wallet seam. Admission is fail-closed:
+mainnet and canonical pool/STRK addresses only; a hard kill switch; shield-only
+initially; one invocation per run; exact amount and fee ceilings; dry-run by
+default; no arbitrary calldata, recipient or route; and no automatic retry
+after an uncertain submission. An append-only journal stores request IDs,
+policy decisions and redacted receipt digests, not raw secrets, notes, proofs,
+viewing keys or private transaction material.
+
+Mock mode may run unlimited UI/state-machine regression loops without funds.
+Live mode is a separate command requiring the kill switch, the explicit
+mainnet acknowledgement flag and a configured disposable account. Registration
+and shielding are live chain operations; discovery and proving are external
+services; shielding also requires protocol screening. Every unavailable or
+unverified dependency fails closed. Funding the disposable address does not
+expand the allowlist or caps.
+
+**Consequences.** The project lead can repeat mock wallet-seam and rendered UI
+loops without Ready prompts. Capped, shield-only funded smoke becomes possible
+only after the disposable account, RPC, discovery, proving and screening paths
+are explicitly configured and verified. The harness assumes custody and exposes
+its own requests to those services; it is not a privacy guarantee for players
+and never bypasses protocol screening. Production STRKWORLD remains zero-custody
+and runs no privacy infrastructure. The sibling workspace has an independent
+threat model, tests, journal and kill procedure; its existence is not production
+readiness or permission to raise a cap.
