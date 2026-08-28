@@ -33,17 +33,20 @@ The Bank's private transfer can hide who paid whom, but a Bridge deposit and any
 
 - Retain the tested direct pins for Phase 1: `starknet@10.4.0`, discovery and wallet-standard `6.0.3`, types-js `0.10.3`, AVNU `4.2.0`.
 - Freshness check on 2026-08-21 found newer `next` tags for discovery (`6.0.4`) and wallet-standard (`6.0.5`). They are not silently adopted; a separate upgrade must compile-probe and regression-test them.
-- Test wallet: Ready. Record the actually installed extension version before live testing; the current Ready `5.33.8` behavior is source-derived, not yet observed in this browser.
+- Production wallet acceptance: Ready or Xverse. Record the installed wallet
+  version before funded testing. D-057's sibling gateway separately owns
+  unlimited autonomous mock acceptance through the same public Wallet Standard
+  seam; it is not evidence about live wallet behavior.
 - Browser config: `VITE_STARKNET_CHAIN_ID=SN_MAIN`, canonical `VITE_STRK20_POOL_ADDRESS`, same-origin `VITE_BACKEND_BASE_URL=/api`, and a domain-allowlisted public browser RPC URL only where needed. No secret may use a `VITE_` variable.
 - Backend config and secrets remain server-only: mainnet RPC, pool address, fee token, fee-authorization secret, paymaster key/credits, queue/rate/budget limits, and per-route admission.
 
 ## 5. Phase 1 — real wallet session in the game, no money movement
 
-Status: headless implementation complete 2026-08-23 under D-054; awaiting the
-manual Ready discovery/connection/capability gate below. No funded route is
-enabled. A first Chrome preflight reached the live in-game picker in the Post
-Office and discovered MetaMask only; Ready was absent, so no provider was
-selected and the manual gate stopped before sharing an account.
+Status: headless implementation complete 2026-08-23 under D-054. D-057's
+autonomous rendered mock gate passed on 2026-08-28 through the production
+Wallet Standard, WalletAccountV6, world, lobby and Bank seams. Production Ready
+or Xverse discovery, connection and funded behavior remain the manual gate
+below; the mock result does not satisfy them.
 
 1. Record a decision approving a privacy-owned `WalletSession` port. Web may import that port, but it must not import wallet libraries or implement wallet capability/business logic.
 2. Add `packages/privacy/src/wallet-api/session.ts` and tests. The session owns:
@@ -58,7 +61,7 @@ selected and the manual gate stopped before sharing an account.
 5. Start with a deliberately deny-all financial policy: `maxIntents: 0`, `maxRelayFee: 0n`, `enabledRoutes: []`, and empty per-route token lists. This is not a fee guess; it makes every preparation impossible while allowing real discovery, connection, Wallet API version capability, pool config, and deliberate balance/recipient reads.
 6. Keep the existing production demo refusal. A failed production session must show a real connection/configuration failure, never practice balances.
 
-Manual gate after Phase 1 at `http://localhost:5173/`:
+Production-wallet gate after Phase 1 at `http://localhost:5173/`:
 
 - Ready appears only through dynamic discovery and requires an explicit click.
 - Approving connection yields the selected mainnet account; rejection remains disconnected.
@@ -111,7 +114,9 @@ If submission dispatch occurs but a validated hash does not reach the browser, t
 
 - Unit and integration: discovery, explicit selection, connection single-flight, capability versions, wrong-chain/account/disconnect ownership, stale-event rejection, old prepared-batch invalidation, policy immutability, production demo refusal, account-to-Bridge consistency, and route denial.
 - Headless gates: package/Web/full tests, workspace typecheck, production build, invariants, D-005 header scan, and diff hygiene.
-- Browser acceptance is user-run at `http://localhost:5173/`; automation is not substituted for the actual wallet prompts.
+- Browser acceptance is split: D-057's sibling gateway owns repeatable agent-run
+  mock acceptance at `http://127.0.0.1:5173/`; a human still owns actual Ready
+  or Xverse prompts and every funded/onchain production claim.
 - Mainnet ladder: connect/capability first, deliberate reads second, preparation without submission third, and one explicitly approved funded transfer last.
 
 ## 10. Compliance and security notes
