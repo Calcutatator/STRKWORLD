@@ -132,7 +132,7 @@
   "reviewState": {
     "runtimeReady": true,
     "renderedAcceptance": false,
-    "independentReview": "pending-on-draft-pr",
-    "note": "Runtime contract and approved Avatar 1 cosy override are integrated; fresh live-browser rendered acceptance remains pending."
+    "independentReview": "passed",
+    "note": "Runtime contract and approved Avatar 1 cosy override passed independent standards and spec review; fresh live-browser rendered acceptance remains pending."
   }
 }

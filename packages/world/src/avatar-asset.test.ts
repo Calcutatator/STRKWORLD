@@ -38,7 +38,11 @@ describe('approved Avatar 1 cosy production sheet', () => {
         defaultMaximumColorsPerFrame?: number;
         perKeyOverrides?: Record<string, unknown>;
       };
-      reviewState?: { runtimeReady?: boolean; renderedAcceptance?: boolean };
+      reviewState?: {
+        runtimeReady?: boolean;
+        renderedAcceptance?: boolean;
+        independentReview?: string;
+      };
     };
     const cells = JSON.parse(readFileSync(cellQaPath, 'utf8')) as Array<{
       file: string;
@@ -58,7 +62,11 @@ describe('approved Avatar 1 cosy production sheet', () => {
 
     expect(manifest).toMatchObject({
       status: 'runtime-integrated-rendered-acceptance-pending',
-      reviewState: { runtimeReady: true, renderedAcceptance: false },
+      reviewState: {
+        runtimeReady: true,
+        renderedAcceptance: false,
+        independentReview: 'passed',
+      },
     });
     expect(manifest.sheet.defaultMaximumColorsPerFrame).toBe(24);
     expect(manifest.sheet.perKeyOverrides?.['avatar-1']).toMatchObject({
@@ -85,19 +93,28 @@ describe('approved Avatar 1 cosy production sheet', () => {
     const decoded = decodeRgbaPng(readFileSync(assetPath));
     expect(decoded).toMatchObject({ width: 384, height: 256 });
     expect(parity.cells).toHaveLength(24);
+    const rows = ['down', 'left', 'right', 'up'] as const;
+    const columns = [
+      'idle',
+      'contact-left',
+      'passing-left',
+      'contact-right',
+      'passing-right',
+      'settle',
+    ] as const;
+    const expectedCoordinates = rows.flatMap((row) =>
+      columns.map((column) => `${row}/${column}`),
+    );
+    const recordedCoordinates = parity.cells.map(({ row, column }) => `${row}/${column}`);
+    expect(new Set(recordedCoordinates).size).toBe(24);
+    expect([...recordedCoordinates].sort()).toEqual([...expectedCoordinates].sort());
     expect(new Set(parity.cells.map(({ cell }) => cell))).toEqual(
       new Set(cells.map(({ file }) => file)),
     );
     for (const record of parity.cells) {
-      const row = ['down', 'left', 'right', 'up'].indexOf(record.row);
-      const column = [
-        'idle',
-        'contact-left',
-        'passing-left',
-        'contact-right',
-        'passing-right',
-        'settle',
-      ].indexOf(record.column);
+      expect(record.cell).toBe(`${record.row}-${record.column}.png`);
+      const row = rows.indexOf(record.row as typeof rows[number]);
+      const column = columns.indexOf(record.column as typeof columns[number]);
       expect(row, record.cell).toBeGreaterThanOrEqual(0);
       expect(column, record.cell).toBeGreaterThanOrEqual(0);
       expect(createHash('sha256').update(cropRgba(decoded, column, row)).digest('hex')).toBe(
