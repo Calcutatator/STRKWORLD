@@ -258,6 +258,43 @@ empty shell to fetchers, so a 200 there means nothing.
 
 ## 6. Findings log
 
+### 2026-08-28 — A retained Phaser Game must rebind to its current React owner
+
+The ref-counted World host deliberately defers teardown so React 19 StrictMode
+does not create two Phaser Games and two WebGL contexts. That same retention
+previously ignored the parent passed by a later acquisition. During rapid
+wallet capability or account-tree replacement, a fresh `WorldHost` could
+therefore acquire the still-live Game while its canvas remained under the
+detached old DOM node. The Scene also retained the old Shell buses and
+remote-peer source captured by the first wallet tree.
+
+Host acquisition now distinguishes same-owner retention from a changed owner.
+A same host/config remount cancels teardown without restarting. A changed host
+or World config reuses the single Game but moves its stable World-owned Phaser
+parent to the new React host. ScaleManager's own parent remains unchanged; its
+public bounds read runs before refresh so the replacement dimensions apply in
+that cycle. The runtime updates the registry and restarts the Street Scene.
+Remote avatars resolve their source from that current registry on every Scene
+create, so restart retires the old subscription before the replacement becomes
+active. No wallet, financial or lobby wire field enters World.
+
+*Verified:* deterministic public `createHost()` and `acquireWorld()`
+regressions perform acquire A, release, then acquire B before deferred teardown.
+The unpatched host returns the same instance still owned by A; the corrected
+path keeps exactly one Game, moves both rendered DOM nodes to B, refreshes
+the stable mount from a 640x480 A to a 960x540 B, reads B's bounds before
+refresh, restarts with config B and leaves same-owner StrictMode remounts on
+the existing Scene cycle. A real StreetScene lifecycle regression proves source A
+is unsubscribed exactly once, source B is subscribed, and final shutdown
+unsubscribes B. The focused set passes 4 files / 42 tests, World passes 24
+files / 237 tests, and the full workspace passes 97 files / 1,384 tests. Every
+workspace typecheck, the production build, all 13 invariants and diff hygiene
+pass. Removing the runtime retarget hook revives the detached-parent failure;
+restoring the Scene's first-construction source instead of resolving the
+current registry fails the replacement-source regression. No browser, wallet,
+provider, RPC, proof, signature, funds or transaction was used in the
+red-green loop.*
+
 ### 2026-08-28 — Store subscriptions own captured transition generations
 
 `createStore()` previously represented subscribers with a `Set` and read its

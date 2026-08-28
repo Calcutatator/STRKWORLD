@@ -1,4 +1,10 @@
 import type * as PhaserTypes from 'phaser';
+
+interface CurrentWorldConfig {
+  out: EventBus<WorldEvents>;
+  in: EventBus<ShellEvents>;
+  remotePeers?: RemotePeerSource;
+}
 import type {
   AvatarSpriteKey,
   BuildingId,
@@ -170,12 +176,13 @@ export function createStreetScene({ Phaser, onTileChanged, remotePeers }: Street
       this.drawGround();
       this.createDoorOverlays();
       this.movement = createStreetMovementAdapter({
-        emit: (event, payload) => this.resolveBus()?.out.emit(event, payload),
+        emit: (event, payload) => this.resolveWorldConfig()?.out.emit(event, payload),
       });
       this.createPlayer();
+      const currentConfig = this.resolveWorldConfig();
       this.remoteAvatars = createRemoteAvatarLayer({
         scene: this,
-        source: remotePeers,
+        source: currentConfig ? currentConfig.remotePeers : remotePeers,
       });
       this.createInput();
       this.createAvatarOutfit();
@@ -357,7 +364,7 @@ export function createStreetScene({ Phaser, onTileChanged, remotePeers }: Street
             if (event === 'avatar:selected') {
               this.applyAvatarSprite((payload as WorldEvents['avatar:selected']).sprite);
             }
-            this.resolveBus()?.out?.emit(event, payload);
+            this.resolveWorldConfig()?.out?.emit(event, payload);
           },
         },
       });
@@ -409,7 +416,7 @@ export function createStreetScene({ Phaser, onTileChanged, remotePeers }: Street
           } else if (event === 'building:exited') {
             this.inputGate.resume();
           }
-          this.resolveBus()?.out?.emit(event, payload);
+          this.resolveWorldConfig()?.out?.emit(event, payload);
         },
       };
       this.doors = createDoorTrigger(this.map, out);
@@ -419,7 +426,7 @@ export function createStreetScene({ Phaser, onTileChanged, remotePeers }: Street
     private createFixedRooms(): void {
       this.roomMaps = {};
       this.roomControllers = {};
-      const bus = this.resolveBus();
+      const bus = this.resolveWorldConfig();
       const out: Pick<EventBus<WorldEvents>, 'emit'> = {
         emit: (event, payload) => bus?.out?.emit(event, payload),
       };
@@ -439,7 +446,7 @@ export function createStreetScene({ Phaser, onTileChanged, remotePeers }: Street
     }
 
     private createAvatarStudio(): void {
-      const bus = this.resolveBus();
+      const bus = this.resolveWorldConfig();
       const streetBounds = {
         x: 0,
         y: 0,
@@ -504,9 +511,9 @@ export function createStreetScene({ Phaser, onTileChanged, remotePeers }: Street
       });
     }
 
-    private resolveBus(): { out: EventBus<WorldEvents>; in: EventBus<ShellEvents> } | undefined {
-      return this.game.registry.get('bus') as
-        { out: EventBus<WorldEvents>; in: EventBus<ShellEvents> } | undefined;
+    private resolveWorldConfig(): CurrentWorldConfig | undefined {
+      const game = this.game as PhaserTypes.Game | undefined;
+      return game?.registry.get('bus') as CurrentWorldConfig | undefined;
     }
 
     private createRoomVisuals(): void {

@@ -68,6 +68,35 @@ describe('StrictMode double-mount', () => {
     h.flush();
     expect(second).toBe(first);
   });
+
+  it('retargets a retained instance when the remount has a different owner', () => {
+    const queue: Array<() => void> = [];
+    const retarget = vi.fn((instance: { parent: string }, parent: string) => {
+      instance.parent = parent;
+    });
+    const host = createHost<{ parent: string }, string>({
+      start: (parent) => ({ parent }),
+      retarget,
+      stop: vi.fn(),
+      defer: (fn) => {
+        queue.push(fn);
+        return queue.length - 1;
+      },
+      cancel: (handle) => {
+        queue[handle as number] = () => {};
+      },
+    });
+
+    const first = host.acquire('old-wallet-tree');
+    host.release();
+    const second = host.acquire('new-wallet-tree');
+    for (const fn of queue.splice(0, queue.length)) fn();
+
+    expect(second).toBe(first);
+    expect(second.parent).toBe('new-wallet-tree');
+    expect(retarget).toHaveBeenCalledOnce();
+    expect(retarget).toHaveBeenCalledWith(first, 'new-wallet-tree', 'old-wallet-tree');
+  });
 });
 
 describe('teardown', () => {

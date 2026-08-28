@@ -32,51 +32,87 @@ export interface WorldConfig {
 
 type Game = PhaserTypes.Game;
 
-let host: Host<Game, HTMLElement> | null = null;
-let startConfig: WorldConfig | null = null;
+interface WorldBinding {
+  readonly parent: HTMLElement;
+  readonly config: WorldConfig;
+}
+
+interface WorldRuntime {
+  readonly game: Game;
+  /** Stable Phaser parent; React owners may change while the Game survives. */
+  readonly mount: HTMLElement;
+}
+
+let host: Host<WorldRuntime, WorldBinding> | null = null;
+let activeBinding: WorldBinding | null = null;
 
 /**
  * Build the host lazily so `phaser` is only fetched when a world is actually
  * requested. Created once and reused, because the ref counting is only correct
  * if every caller shares one host.
  */
-async function ensureHost(): Promise<Host<Game, HTMLElement>> {
+async function ensureHost(): Promise<Host<WorldRuntime, WorldBinding>> {
   if (host) return host;
   const Phaser = await import('phaser');
 
-  host = createHost<Game, HTMLElement>({
-    start: (parent) => {
-      const config = startConfig;
-      if (!config) throw new Error('World start requires the current acquisition config');
-      return new Phaser.Game({
-        type: Phaser.WEBGL,
-        parent,
-        // Phaser 4 flipped roundPixels to false. On a tilemap with a following
-        // camera that reads as shimmering seams and gets misdiagnosed as
-        // tileset spacing. pixelArt sets it back.
-        pixelArt: true,
-        scale: {
-          mode: Phaser.Scale.RESIZE,
-          autoCenter: Phaser.Scale.CENTER_BOTH,
-        },
-        physics: { default: 'arcade', arcade: { debug: false } },
-        // Nothing in scene lifecycle does network I/O: under a mounting
-        // regression create() runs twice, and a lobby join here would produce
-        // two presence entries for one player. Joins are shell-driven.
-        scene: [createStreetScene({ Phaser, remotePeers: config.remotePeers })],
-        callbacks: {
-          // Phaser creates and boots scenes after `preBoot` but before
-          // `postBoot`. The street scene captures the shell bus while it
-          // creates its room controller, so it must be present at preBoot.
-          preBoot: (game) => {
-            game.registry.set('bus', config);
+  host = createHost<WorldRuntime, WorldBinding>({
+    start: (binding) => {
+      const mount = createWorldMount(binding.parent);
+      binding.parent.appendChild(mount);
+      try {
+        const game = new Phaser.Game({
+          type: Phaser.WEBGL,
+          parent: mount,
+          // Phaser 4 flipped roundPixels to false. On a tilemap with a following
+          // camera that reads as shimmering seams and gets misdiagnosed as
+          // tileset spacing. pixelArt sets it back.
+          pixelArt: true,
+          scale: {
+            mode: Phaser.Scale.RESIZE,
+            autoCenter: Phaser.Scale.CENTER_BOTH,
           },
-        },
-      });
+          physics: { default: 'arcade', arcade: { debug: false } },
+          // Nothing in scene lifecycle does network I/O: under a mounting
+          // regression create() runs twice, and a lobby join here would produce
+          // two presence entries for one player. Joins are shell-driven.
+          scene: [createStreetScene({ Phaser, remotePeers: binding.config.remotePeers })],
+          callbacks: {
+            // Phaser creates and boots scenes after `preBoot` but before
+            // `postBoot`. The street scene captures the shell bus while it
+            // creates its room controller, so it must be present at preBoot.
+            preBoot: (game) => {
+              game.registry.set('bus', binding.config);
+            },
+          },
+        });
+        activeBinding = binding;
+        return { game, mount };
+      } catch (error) {
+        mount.parentNode?.removeChild(mount);
+        throw error;
+      }
+    },
+    retarget: (runtime, binding) => {
+      const { game, mount } = runtime;
+      game.registry.set('bus', binding.config);
+      binding.parent.appendChild(mount);
+      // `parent` remains the stable World-owned mount. Sample its new layout
+      // before refresh so RESIZE consumes the replacement host dimensions.
+      game.scale.getParentBounds();
+      game.scale.refresh();
+      game.scene.getScene('street').scene.restart();
+      activeBinding = binding;
     },
     // Never destroy(true, true) — `noReturn` tears down the global plugin cache
     // and no further Game can be created on the page.
-    stop: (game) => game.destroy(true),
+    stop: ({ game, mount }) => {
+      activeBinding = null;
+      try {
+        game.destroy(true);
+      } finally {
+        mount.parentNode?.removeChild(mount);
+      }
+    },
   });
 
   return host;
@@ -88,12 +124,18 @@ export async function acquireWorld(
   config: WorldConfig,
 ): Promise<Game> {
   const h = await ensureHost();
-  startConfig = config;
-  try {
-    return h.acquire(parent);
-  } finally {
-    startConfig = null;
-  }
+  const binding = activeBinding && sameBinding(activeBinding, parent, config)
+    ? activeBinding
+    : { parent, config };
+  return h.acquire(binding).game;
+}
+
+function createWorldMount(parent: HTMLElement): HTMLElement {
+  const mount = parent.ownerDocument.createElement('div');
+  mount.style.position = 'absolute';
+  mount.style.inset = '0';
+  mount.style.overflow = 'hidden';
+  return mount;
 }
 
 /** Release it. Teardown is deferred, so a synchronous remount cancels it. */
@@ -104,4 +146,15 @@ export function releaseWorld(): void {
 /** For assertions and debugging only. */
 export function worldDebugState(): { refCount: number; alive: boolean } {
   return { refCount: host?.refCount ?? 0, alive: host?.current != null };
+}
+
+function sameBinding(
+  current: WorldBinding,
+  parent: HTMLElement,
+  config: WorldConfig,
+): boolean {
+  return current.parent === parent &&
+    current.config.out === config.out &&
+    current.config.in === config.in &&
+    current.config.remotePeers === config.remotePeers;
 }
