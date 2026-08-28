@@ -224,6 +224,34 @@ describe('nothing connects by itself', () => {
     expect(() => quiet.resume({ x: 0, y: 0 })).toThrow(/suspended/);
   });
 
+  it.each([
+    ['x', { x: Number.NaN, y: 0 }],
+    ['y', { x: 0, y: Number.POSITIVE_INFINITY }],
+  ] as const)('does not claim connected when the server rejects a non-finite %s coordinate', async (_axis, placement) => {
+    const observer = makeClient(0, 0);
+    const walker = makeClient(10, 0);
+    await observer.connect();
+    await walker.connect();
+
+    await waitFor(
+      () => observer.peers(),
+      (list) => list.length === 1,
+      'the walker to appear',
+    );
+    walker.suspend();
+
+    await waitFor(
+      () => observer.peers(),
+      (list) => list.length === 0,
+      'the walker to disappear',
+    );
+
+    expect(() => walker.resume(placement)).toThrow(/placement is invalid/);
+    expect(walker.status).toBe('suspended');
+    await settle();
+    expect(observer.peers()).toEqual([]);
+  });
+
   it('ignores a position report before connecting', () => {
     const quiet = makeClient(10, 0);
     expect(() => quiet.updatePosition(5, 5, 'up')).not.toThrow();
