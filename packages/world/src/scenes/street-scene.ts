@@ -173,9 +173,10 @@ export function createStreetScene({ Phaser, onTileChanged, remotePeers }: Street
         emit: (event, payload) => this.resolveBus()?.out.emit(event, payload),
       });
       this.createPlayer();
+      const currentBus = this.resolveBus();
       this.remoteAvatars = createRemoteAvatarLayer({
         scene: this,
-        source: remotePeers,
+        source: currentBus ? currentBus.remotePeers : remotePeers,
       });
       this.createInput();
       this.createAvatarOutfit();
@@ -504,9 +505,18 @@ export function createStreetScene({ Phaser, onTileChanged, remotePeers }: Street
       });
     }
 
-    private resolveBus(): { out: EventBus<WorldEvents>; in: EventBus<ShellEvents> } | undefined {
-      return this.game.registry.get('bus') as
-        { out: EventBus<WorldEvents>; in: EventBus<ShellEvents> } | undefined;
+    private resolveBus(): {
+      out: EventBus<WorldEvents>;
+      in: EventBus<ShellEvents>;
+      remotePeers?: RemotePeerSource;
+    } | undefined {
+      const game = this.game as PhaserTypes.Game | undefined;
+      return game?.registry.get('bus') as
+        {
+          out: EventBus<WorldEvents>;
+          in: EventBus<ShellEvents>;
+          remotePeers?: RemotePeerSource;
+        } | undefined;
     }
 
     private createRoomVisuals(): void {

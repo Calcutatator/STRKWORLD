@@ -30,6 +30,11 @@ export interface HostOptions<T, P> {
    */
   stop: (instance: T) => void | Promise<void>;
   /**
+   * Rebind a retained instance when a synchronous remount supplies a different
+   * owner. Omit when the instance is independent of its start parent.
+   */
+  retarget?: (instance: T, parent: P, previousParent: P) => void;
+  /**
    * Defer teardown so a synchronous remount can cancel it. Injectable for
    * tests; defaults to a macrotask, which is what makes the StrictMode
    * double-invoke harmless. The deferrer owns any returned promise and must
@@ -66,6 +71,8 @@ export function createHost<T, P>(options: HostOptions<T, P>): Host<T, P> {
   const cancel = options.cancel ?? ((handle: unknown) => clearTimeout(handle as never));
 
   let instance: T | null = null;
+  let activeParent: P | null = null;
+  let hasActiveParent = false;
   let refs = 0;
   let pending: unknown = null;
   let starting = false;
@@ -76,6 +83,15 @@ export function createHost<T, P>(options: HostOptions<T, P>): Host<T, P> {
     if (stopping) throw new Error(lifecycleDuringStopError);
     const previousRefs = refs;
     const previousPending = pending;
+    if (
+      instance !== null &&
+      hasActiveParent &&
+      !Object.is(activeParent, parent) &&
+      options.retarget
+    ) {
+      options.retarget(instance, parent, activeParent as P);
+      activeParent = parent;
+    }
     refs++;
     // A remount arriving before the deferred teardown ran: keep what we have.
     if (pending !== null) {
@@ -86,6 +102,8 @@ export function createHost<T, P>(options: HostOptions<T, P>): Host<T, P> {
       starting = true;
       try {
         instance = options.start(parent);
+        activeParent = parent;
+        hasActiveParent = true;
       } catch (error) {
         refs = previousRefs;
         pending = previousPending;
@@ -110,6 +128,8 @@ export function createHost<T, P>(options: HostOptions<T, P>): Host<T, P> {
       stopping = true;
       const finish = () => {
         instance = null;
+        activeParent = null;
+        hasActiveParent = false;
         stopping = false;
       };
       try {

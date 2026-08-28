@@ -68,9 +68,13 @@ channel.publish(peers);
 channel.clear();
 ```
 
-The ref-counted Phaser host may outlive one fully destroyed game. A later fresh
-game consumes that acquisition's current World config; it must not retain the
-first Shell bus or remote-peer source merely because the host factory survives.
+The ref-counted Phaser host survives React's synchronous StrictMode remount.
+A same-owner remount keeps the current Scene cycle and WebGL context. If the
+host element or injected buses/remote-peer source change before deferred
+teardown, the retained Game moves its canvas and DOM container to the new host,
+refreshes ScaleManager and restarts the Street Scene against the new registry
+config. It must not retain a detached React node, first Shell bus or stale
+remote-peer source merely because the WebGL context survives.
 
 Each snapshot contains only `{ id, x, y, facing, sprite }`. The World drops
 invalid identity, position or facing data, replaces omitted IDs, and maps the

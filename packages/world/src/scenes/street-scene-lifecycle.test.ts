@@ -5,6 +5,7 @@ import type { AvatarStudioController } from '../avatar-studio.js';
 import { FIXED_ROOM_DEFINITIONS, type FixedRoomController } from '../fixed-room.js';
 import { createInputGate, type InputGate } from '../input-gate.js';
 import { createStreetMap } from '../map/street.js';
+import type { RemotePeerSource } from '../remote-peer.js';
 import { createStreetScene } from './street-scene.js';
 
 vi.mock('../kenney-urban.js', () => ({
@@ -107,6 +108,7 @@ class FakeScene {
 }
 
 interface StreetSceneHarness extends FakeScene {
+  game?: { registry: { get(key: string): unknown } };
   create(): void;
   cleanShutdown(): void;
   drawGround(): void;
@@ -139,11 +141,22 @@ interface StreetSceneHarness extends FakeScene {
   lastTile: { x: number; y: number };
 }
 
-function createHarness() {
+function createHarness(initialBus?: {
+  out: { emit(event: string, payload: unknown): void };
+  in: { on(event: string, handler: (payload: unknown) => void): () => void };
+  remotePeers?: RemotePeerSource;
+}) {
   const SceneType = createStreetScene({ Phaser: { Scene: FakeScene } as never });
   const scene = new SceneType() as unknown as StreetSceneHarness;
   let current = cycleResources();
+  let currentBus = initialBus;
   let failure: 'early' | 'partial' | null = null;
+
+  if (initialBus) {
+    scene.game = {
+      registry: { get: (key: string) => (key === 'bus' ? currentBus : undefined) },
+    };
+  }
 
   scene.drawGround = vi.fn(() => {
     if (failure === 'early') throw new Error('early create failure');
@@ -180,6 +193,9 @@ function createHarness() {
     nextCycle() {
       current = cycleResources();
       return current;
+    },
+    setBus(next: typeof initialBus) {
+      currentBus = next;
     },
     failAt(next: typeof failure) {
       failure = next;
@@ -460,6 +476,36 @@ describe('StreetScene lifecycle', () => {
     expect(harness.scene.remoteLayers[0]?.destroy).toHaveBeenCalledTimes(1);
     expect(harness.scene.remoteLayers[1]?.destroy).toHaveBeenCalledTimes(1);
     expect(harness.scene.events.count('shutdown')).toBe(0);
+  });
+
+  it('replaces the registry-owned remote peer source on a retained Scene restart', () => {
+    const firstStop = vi.fn();
+    const secondStop = vi.fn();
+    const firstSource: RemotePeerSource = {
+      subscribe: vi.fn(() => firstStop),
+    };
+    const secondSource: RemotePeerSource = {
+      subscribe: vi.fn(() => secondStop),
+    };
+    const bus = (remotePeers: RemotePeerSource) => ({
+      out: { emit: vi.fn() },
+      in: { on: vi.fn(() => vi.fn()) },
+      remotePeers,
+    });
+    const harness = createHarness(bus(firstSource));
+
+    harness.create();
+    harness.setBus(bus(secondSource));
+    harness.nextCycle();
+    harness.create();
+
+    expect(firstSource.subscribe).toHaveBeenCalledOnce();
+    expect(firstStop).toHaveBeenCalledOnce();
+    expect(secondSource.subscribe).toHaveBeenCalledOnce();
+    expect(secondStop).not.toHaveBeenCalled();
+
+    harness.shutdown();
+    expect(secondStop).toHaveBeenCalledOnce();
   });
 
   it('does not expose cleaned prior-cycle resources to an early restart failure', () => {
