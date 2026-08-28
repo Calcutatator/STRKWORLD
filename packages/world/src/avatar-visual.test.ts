@@ -1,6 +1,8 @@
 import { describe, expect, it, vi } from 'vitest';
 import {
+  AVATAR_ONE_WALK_COLUMNS,
   AVATAR_VISUAL_CATALOG,
+  AVATAR_WALK_COLUMNS,
   applyAvatarVisual,
   configureLocalAvatarBody,
   createAvatarVisualController,
@@ -77,6 +79,21 @@ describe('D-052 avatar visual catalog', () => {
       frames: [18, 19, 20, 21, 22, 23],
       frameRate: 12,
     });
+  });
+
+  it('freezes public per-sheet playback columns against runtime contract mutation', () => {
+    const avatarOne = AVATAR_VISUAL_CATALOG[0]!;
+    const avatarTwo = AVATAR_VISUAL_CATALOG[1]!;
+
+    expect(Object.isFrozen(AVATAR_ONE_WALK_COLUMNS)).toBe(true);
+    expect(Object.isFrozen(AVATAR_WALK_COLUMNS)).toBe(true);
+    expect(Object.isFrozen(avatarOne.walkColumns)).toBe(true);
+    expect(Object.isFrozen(avatarTwo.walkColumns)).toBe(true);
+    expect(() => {
+      (avatarOne.walkColumns as number[])[0] = 5;
+    }).toThrow(TypeError);
+    expect(resolveAvatarAnimation('avatar-1', 'down', false).frames).toEqual([0, 1, 2, 3, 4, 5]);
+    expect(resolveAvatarAnimation('avatar-2', 'down', false).frames).toEqual([0, 1, 2, 3, 4]);
   });
 
   it('registers missing global animations once with their resolved sheet frames', () => {
