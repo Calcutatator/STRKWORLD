@@ -2249,7 +2249,9 @@ visually incoherent asset.
 ## D-053 — The F outfit toggle follows the local avatar throughout World play
 
 **2026-08-20 · Accepted by the user · supersedes only D-052's Studio-only F
-scope; D-052's art, animation, body and rendered-acceptance contracts remain**
+scope; D-052's art, animation and body contracts remain; rendered
+functional/interactive gate accepted 2026-08-28 by [the verified D-053
+finding](../AGENTS.md#2026-08-28--the-rendered-functional-and-interactive-d-053-matrix-is-complete-subjective-art-remains-open), while subjective final-art acceptance remains open**
 
 **Context.** The implemented `F` binding currently exists only while Avatar
 Studio is active. James reported that the outfit toggle therefore appears to
@@ -2288,12 +2290,15 @@ and an assertion that the only outbound addition is the existing
 218 tests, the full workspace, workspace typecheck, production build,
 invariants, drift and tilemap checks.
 
-**The rendered and interactive acceptance gate remains open and is not
-claimed.** These checks are headless: no browser, wallet, network, proof,
-signature or transaction was involved. The user will still perform the final
-rendered and interactive check at `http://localhost:5173/` — `F` outdoors, in
-Avatar Studio with and without standing on a figure, inside each fixed room,
-and confirmed silent while a station panel holds the keyboard.
+**Rendered functional and interactive acceptance completed on 2026-08-28; the
+previous open status is superseded by [the verified D-053
+finding](../AGENTS.md#2026-08-28--the-rendered-functional-and-interactive-d-053-matrix-is-complete-subjective-art-remains-open).** The implementation checks
+above remain headless. A later D-057 mock-only Chrome run on canonical main
+`6b9d3e0` verified `F` outdoors, in Avatar Studio both ordinarily and while
+visibly overlapping its central figure, inside each fixed room, and silent
+while a station panel held the keyboard. No live wallet, proof, signature,
+submission, transaction or funds were used. Subjective final-art acceptance is
+a separate gate and remains open.
 
 ---
 
