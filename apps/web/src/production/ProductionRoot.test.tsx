@@ -157,7 +157,8 @@ describe('ProductionRoot', () => {
     captured.current = null;
     const service = {} as never;
     const loadSources = vi.fn(async () => []);
-    const bridge = { service, loadSources };
+    const loadRuntime = vi.fn(async () => ({ service, loadSources }));
+    const bridge = { loadRuntime };
     const session = sessionAt('connected', '0xabc', new FakePrivacyOperations({
       capability: {
         supportsStrk20: true,
@@ -183,12 +184,12 @@ describe('ProductionRoot', () => {
     });
 
     expect((captured.current as Record<string, unknown> | null)?.bridge).toEqual({
-      service,
-      loadSources,
+      loadRuntime,
       account: '0xabc',
       readAccount: session.readAccount,
       planner: null,
     });
+    expect(loadRuntime).not.toHaveBeenCalled();
     expect(loadSources).not.toHaveBeenCalled();
     await unmountReactRoot(root);
     container.remove();
@@ -337,8 +338,7 @@ function fakePresence(): PresenceController {
 
 function recoveryBridge() {
   return {
-    service: {} as never,
-    loadSources: async () => [],
+    loadRuntime: async () => ({ service: {} as never, loadSources: async () => [] }),
   };
 }
 

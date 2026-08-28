@@ -2,7 +2,7 @@ import type { EventBus, ShellEvents, WorldEvents } from '@strkworld/shared';
 import type { WalletSession, WalletSessionSnapshot } from '@strkworld/privacy';
 import { useEffect, useMemo, useState, useRef } from 'react';
 import { App } from '../App.js';
-import type { ProductionBridgeRuntime } from '../bridge/production-runtime.js';
+import type { BridgeRuntimeLoader } from '../bridge/BridgeProvider.js';
 import { createConnectFlow, type ConnectState } from '../connect/connect-machine.js';
 import { COPY } from '../copy.js';
 import type { PresenceController } from '../presence/presence-controller.js';
@@ -27,8 +27,8 @@ export function ProductionRoot({
   presence?: PresenceController;
   /** Creates a fresh lobby owner for each connected app lifetime. */
   createPresence?: () => PresenceController;
-  /** Main-owned public Bridge recovery runtime; no shield planner capability. */
-  bridge: ProductionBridgeRuntime;
+  /** Main-owned lazy Bridge recovery loader; no shield planner capability. */
+  bridge: { loadRuntime: BridgeRuntimeLoader };
 }) {
   return (
     <WalletSessionProvider session={session}>
@@ -57,7 +57,7 @@ function ProductionApp({
   shellIn: EventBus<ShellEvents>;
   presence?: PresenceController;
   createPresence?: () => PresenceController;
-  bridge: ProductionBridgeRuntime;
+  bridge: { loadRuntime: BridgeRuntimeLoader };
 }) {
   const wallet = useWalletSessionOptional();
   if (!wallet) throw new Error('ProductionApp needs a WalletSessionProvider.');
@@ -94,7 +94,7 @@ function WalletCapabilityGate({
   shellIn: EventBus<ShellEvents>;
   presence?: PresenceController;
   createPresence?: () => PresenceController;
-  bridge: ProductionBridgeRuntime;
+  bridge: { loadRuntime: BridgeRuntimeLoader };
 }) {
   const connect = useMemo(
     () => createConnectFlow(session.operations),
@@ -138,7 +138,7 @@ function ConnectedProductionApp({
   shellIn: EventBus<ShellEvents>;
   presence?: PresenceController;
   createPresence?: () => PresenceController;
-  bridge: ProductionBridgeRuntime;
+  bridge: { loadRuntime: BridgeRuntimeLoader };
 }) {
   const [activePresence, setActivePresence] = useState<PresenceController | null>(presence ?? null);
   const owner = useRef<PresenceController | null>(presence ?? null);
@@ -176,8 +176,7 @@ function ConnectedProductionApp({
       walletSession={session}
       initialConnectState={initialConnectState}
       bridge={{
-        service: bridge.service,
-        loadSources: bridge.loadSources,
+        loadRuntime: bridge.loadRuntime,
         account: session.getSnapshot().account,
         readAccount: session.readAccount,
         planner: null,

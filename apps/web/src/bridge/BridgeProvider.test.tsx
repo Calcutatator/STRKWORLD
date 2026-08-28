@@ -1,4 +1,7 @@
-import { describe, expect, it } from 'vitest';
+// @vitest-environment jsdom
+import { act, useEffect } from 'react';
+import { createRoot } from 'react-dom/client';
+import { describe, expect, it, vi } from 'vitest';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { BridgeProvider, useBridge } from './BridgeProvider.js';
 
@@ -8,6 +11,14 @@ function Probe() {
     data-available={bridge.available() ? 'yes' : 'no'}
     data-service={bridge.service ? 'yes' : 'no'}
   >{bridge.account ?? 'none'}</p>;
+}
+
+function LoadProbe({ start }: { start: boolean }) {
+  const bridge = useBridge();
+  useEffect(() => {
+    if (start) bridge.load();
+  }, [start, bridge.load]);
+  return <Probe />;
 }
 
 describe('BridgeProvider', () => {
@@ -65,5 +76,45 @@ describe('BridgeProvider', () => {
 
     expect(markup).toContain('data-service="yes"');
     expect(markup).toContain('data-available="no"');
+  });
+
+  it('keeps the production loader dormant until the Bridge surface asks for it', async () => {
+    const service = {} as never;
+    const loadRuntime = vi.fn(async () => ({ service, loadSources: async () => [] }));
+    const container = document.createElement('div');
+    const root = createRoot(container);
+
+    await act(async () => {
+      root.render(<BridgeProvider loadRuntime={loadRuntime}><LoadProbe start={false} /></BridgeProvider>);
+      await Promise.resolve();
+    });
+    expect(loadRuntime).not.toHaveBeenCalled();
+    expect(container.innerHTML).toContain('data-service="no"');
+
+    await act(async () => {
+      root.render(<BridgeProvider loadRuntime={loadRuntime}><LoadProbe start /></BridgeProvider>);
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    expect(loadRuntime).toHaveBeenCalledOnce();
+    expect(container.innerHTML).toContain('data-service="yes"');
+
+    await act(async () => root.unmount());
+  });
+
+  it('isolates a rejected optional runtime loader from the mounted app', async () => {
+    const loadRuntime = vi.fn(async () => { throw new Error('Bridge chunk unavailable'); });
+    const container = document.createElement('div');
+    const root = createRoot(container);
+
+    await act(async () => {
+      root.render(<BridgeProvider loadRuntime={loadRuntime}><LoadProbe start /></BridgeProvider>);
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(loadRuntime).toHaveBeenCalledOnce();
+    expect(container.innerHTML).toContain('data-service="no"');
+    await act(async () => root.unmount());
   });
 });

@@ -308,7 +308,13 @@ export function createBridgePanel(options: BridgePanelOptions): BridgePanel {
       const currentSession = session;
       patch({ flow: { name: 'loading' }, notice: null });
       // Resume is local evidence. It intentionally does not refresh status.
-      const record = options.service.resume();
+      let record: BridgeRecord | null;
+      try {
+        record = options.service.resume();
+      } catch {
+        if (live(id, currentSession)) fail(COPY.bridge.recoveryUnavailable, 'none');
+        return;
+      }
       patch({
         record,
         quote: record ? quoteReview(record) : null,

@@ -447,13 +447,15 @@ production planner is unavailable; only real new quotes and deposit
 instructions remain locked.
 
 Production now owns that recovery path rather than merely documenting it. The
-wallet-gated entry lazily constructs one stable `BridgeService` over the
-shipped 1Click client and browser-local store, then supplies the exact service
-and source loader with the current account authority while retaining
-`planner: null`. Construction performs no provider request or storage read.
-Menu Mode can therefore import, inspect, refresh and export signed evidence;
-opening that recovery-only panel remains a local read and does not fetch
-new-deposit source metadata, while explicit refresh may contact 1Click;
+wallet-gated entry supplies a dormant loader beside the current account
+authority while retaining `planner: null`. Only mounting the Bridge panel asks
+that loader to verify persistent Web Storage and construct one stable
+`BridgeService` over the shipped 1Click client and browser-local store. A
+chunk/storage failure locks recovery only; it cannot replace wallet admission
+or the city. Loading performs no provider request. Menu Mode can therefore
+import, inspect, refresh and export signed evidence; opening that recovery-only
+panel remains a local read and does not fetch new-deposit source metadata,
+while explicit refresh or watch may contact 1Click;
 the physical `bridge:deposit` station, new quote creation, deposit instructions
 and Bridge-to-Bank shielding remain locked.
 
@@ -549,9 +551,10 @@ resumable pipeline, persistence/export/import, source-token/address validation
 and refund/failure states are implemented behind a network/storage boundary.
 The OUT path and AVNU leg do not exist (D-012). Runtime status data is now
 validated before it can settle a record. D-043 chooses direct unauthenticated
-1Click for v1. Production now constructs the shipped
-client/service/browser-store runtime without provider work at startup, so
-signed-record recovery is available behind the wallet gate. A real new quote
+1Click for v1. Production now defers the shipped
+client/service/browser-store runtime until the Bridge panel opens, with no
+provider work during loading and failure isolated to recovery, so signed-record
+recovery is available behind the wallet gate. A real new quote
 and Bridge-to-Bank handoff remain locked behind the missing production planner
 and live funded provider acceptance.
 

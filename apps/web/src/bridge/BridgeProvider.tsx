@@ -1,4 +1,4 @@
-import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import type { BridgeService } from '@strkworld/bridge';
 import type { Address, PublicShieldPlanner } from '@strkworld/privacy';
 import { detectBuildContext, type BuildContext } from '../privacy/build-context.js';
@@ -13,7 +13,16 @@ export interface BridgeRuntime {
   /** Synchronous capability snapshot; null means no currently bound account. */
   account: Address | null;
   available(): boolean;
+  /** Begin optional runtime acquisition. BridgePanel is the only production caller. */
+  load(): void;
 }
+
+export interface BridgeRuntimeSource {
+  service: BridgeServicePort | BridgeService;
+  loadSources: BridgeSourceLoader;
+}
+
+export type BridgeRuntimeLoader = () => Promise<BridgeRuntimeSource | null>;
 
 export interface BridgeProviderProps {
   service?: BridgeServicePort | BridgeService;
@@ -23,6 +32,8 @@ export interface BridgeProviderProps {
   planner?: PublicShieldPlanner | null;
   now?: () => number;
   account?: Address | null;
+  /** Recovery runtime loader; remains dormant until BridgePanel mounts. */
+  loadRuntime?: BridgeRuntimeLoader;
   demo?: boolean;
   build?: BuildContext;
   fallback?: ReactNode;
@@ -36,6 +47,7 @@ const unavailable: BridgeRuntime = {
   planner: null,
   account: null,
   available: () => false,
+  load: () => {},
 };
 
 const BridgeContext = createContext<BridgeRuntime>(unavailable);
@@ -75,6 +87,7 @@ function createRuntime({
     now,
     account: account ?? null,
     available: () => Boolean(account && planner),
+    load: () => {},
   };
 }
 
@@ -93,6 +106,7 @@ export function BridgeProvider({
   readAccount,
   planner = null,
   account = null,
+  loadRuntime,
   demo = false,
   build,
   fallback = null,
@@ -101,11 +115,41 @@ export function BridgeProvider({
 }: BridgeProviderProps) {
   const demoRejected = demo && (build ?? detectBuildContext()).production;
 
+  const [loadedRuntime, setLoadedRuntime] = useState<BridgeRuntimeSource | null>(null);
+  const loadOwner = useRef<{ generation: number; pending: boolean }>({ generation: 0, pending: false });
+
+  useEffect(() => {
+    const generation = ++loadOwner.current.generation;
+    loadOwner.current.pending = false;
+    setLoadedRuntime(null);
+    return () => {
+      if (loadOwner.current.generation !== generation) return;
+      loadOwner.current.generation += 1;
+      loadOwner.current.pending = false;
+    };
+  }, [loadRuntime]);
+
+  const load = useCallback(() => {
+    if (!loadRuntime || service || loadedRuntime || demoRejected || loadOwner.current.pending) return;
+    const generation = loadOwner.current.generation;
+    loadOwner.current.pending = true;
+    void loadRuntime().then((runtime) => {
+      if (runtime && generation === loadOwner.current.generation) setLoadedRuntime(runtime);
+    }).catch(() => {
+      // Optional Bridge recovery is isolated from wallet/app admission. A
+      // missing chunk or restricted storage leaves only this route unavailable.
+    }).finally(() => {
+      if (generation === loadOwner.current.generation) loadOwner.current.pending = false;
+    });
+  }, [loadRuntime, service, loadedRuntime, demoRejected]);
+
+  const resolvedService = service ?? loadedRuntime?.service;
+  const resolvedSources = loadSources ?? loadedRuntime?.loadSources;
   const directRuntime = useMemo(
-    () => service && !demoRejected
-      ? createRuntime({ service, loadSources, readAccount, planner, now, account })
+    () => resolvedService && !demoRejected
+      ? createRuntime({ service: resolvedService, loadSources: resolvedSources, readAccount, planner, now, account })
       : null,
-    [service, loadSources, readAccount, planner, now, account, demoRejected],
+    [resolvedService, resolvedSources, readAccount, planner, now, account, demoRejected],
   );
   const [resolved, setResolved] = useState<BridgeRuntime | null>(null);
   const generation = useMemo(createBridgeRuntimeGenerationGuard, []);
@@ -136,7 +180,8 @@ export function BridgeProvider({
   // Direct runtimes are derived from the current props during render. This
   // makes a live -> absent/rejected transition immediately unavailable, even
   // before React flushes the effect that cancels an in-flight demo import.
-  const runtime = directRuntime ?? (demo && !demoRejected ? resolved : null) ?? unavailable;
+  const dormantRuntime = useMemo<BridgeRuntime>(() => ({ ...unavailable, load }), [load]);
+  const runtime = directRuntime ?? (demo && !demoRejected ? resolved : null) ?? dormantRuntime;
   if (demoRejected) {
     throw new Error('<BridgeProvider demo> reached a production build. Demo bridge funding is disabled.');
   }

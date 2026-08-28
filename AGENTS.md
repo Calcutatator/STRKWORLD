@@ -269,31 +269,39 @@ refresh or export an already signed 1Click record. The Bridge package and Web
 documentation claimed production browser storage/recovery that the composition
 did not actually own.
 
-Production now lazily constructs one `BridgeService` over the shipped
-`OneClickSdkClient` and `LocalBridgeStore`, then passes that exact service and
-source loader through `ProductionRoot` beside the current account authority.
-Construction performs no provider request and no storage read. The public
+Production now gives `BridgeProvider` a dormant loader beside the current
+account authority. Wallet discovery, capability admission and ordinary city
+play do not import the 1Click/viem runtime. Only mounting the Bridge panel asks
+the loader to verify persistent Web Storage and construct `BridgeService` over
+`OneClickSdkClient` and `LocalBridgeStore`. A chunk or storage failure leaves
+only Bridge recovery unavailable; it cannot replace the wallet gate or city.
+Loading performs no provider request. The public
 shield planner remains exactly null, so `available()` remains false: the World
 station, new quotes, deposit instructions and Bridge-to-Bank continuation stay
 locked. Opening the recovery-only Menu panel reads local evidence without
 fetching unusable new-deposit source metadata; only an explicit status refresh
-may contact 1Click. Saved-record recovery becomes real without an implicit
+or watch may contact 1Click. Saved-record recovery becomes real without an implicit
 provider call.
 
 *Verified:* the public production-runtime test failed red because the module
 did not exist, while the connected `ProductionRoot` regression received only
-account/read/planner and lacked the injected service/loader. Green proves
-construction makes zero 1Click or storage calls, the first explicit recovery
-read uses browser storage, source loading is explicit, separate factories own
-separate services, and production composes the exact service/loader with the
-current account and null planner. `BridgeProvider` separately proves a service
+account/read/planner and lacked recovery ownership. Independent review then
+caught that the first candidate imported Bridge during wallet bootstrap and
+let restricted storage replace the whole app. New public regressions prove the
+loader remains dormant until a Bridge surface asks for it, rejected loaders
+leave the mounted app alive, read/write/remove-denied storage exposes no
+runtime, and a storage failure during panel open resolves into a bounded failed
+state rather than an unhandled rejection. Green also proves loading makes zero
+1Click calls, source loading is explicit, separate factories own separate
+services, and production composes the exact loader with the current account
+and null planner. `BridgeProvider` separately proves a loaded service
 is exposed while capability remains false; the existing Bridge panel suite
 proves planner-null saved evidence retains refresh/export without exposing
 deposit instructions. A red-first machine regression also proves opening the
 planner-null recovery panel does not load source assets or refresh provider
-status. The Web suite passes 41 files / 459 tests and the full workspace passes
-99 files / 1,414 tests. Every workspace typecheck, the
-production build, all 13 invariants and diff hygiene pass. No provider request,
+status. The Web suite passes 41 files / 465 tests and the full workspace passes
+99 files / 1,420 tests. Every workspace typecheck, the production build, all
+13 invariants and diff hygiene pass. No provider request,
 wallet prompt, RPC, proof, signature, submission, funds or transaction was
 used.*
 

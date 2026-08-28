@@ -103,13 +103,14 @@ persists the complete signed response as dispute evidence. `refresh()` maps
 solver states into the small `BridgeStatus` vocabulary without leaking raw
 provider states into the shell.
 
-The production browser now lazily constructs one `BridgeService` over the
-shipped 1Click client and `LocalBridgeStore`, so the signed record survives a
-reload or a new runtime instance. Construction performs no provider request or
-storage read. Reopening exposes a concise resume action that refreshes provider
-status before presenting the next safe step. Merely opening the recovery-only
-panel reads local evidence and does not fetch new-deposit source metadata; only
-the player's explicit refresh contacts 1Click. This is recovery of saved
+The production browser keeps the 1Click/viem chunk dormant until the Bridge
+panel mounts. Its guarded loader verifies usable persistent Web Storage before
+constructing `BridgeService` with `LocalBridgeStore`, so a restricted browser
+locks only recovery rather than wallet admission or the city. Loading performs
+no provider request. Reopening exposes a concise resume action that refreshes
+provider status before presenting the next safe step. Merely opening the
+recovery-only panel reads local evidence and does not fetch new-deposit source
+metadata; only the player's explicit refresh or watch contacts 1Click. This is recovery of saved
 evidence, not permission to issue a new quote: the production planner remains
 null, and real new quotes and deposit instructions remain gated on the reviewed
 planner described by D-043.

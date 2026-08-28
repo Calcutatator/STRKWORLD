@@ -111,6 +111,7 @@ export async function createDemoBridgeRuntime(storage?: Storage): Promise<Bridge
     now: () => DEMO_NOW,
     account: DEMO_ACCOUNT,
     available: () => true,
+    load: () => {},
   };
 }
 

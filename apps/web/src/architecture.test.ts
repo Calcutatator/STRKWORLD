@@ -148,11 +148,14 @@ describe('shell boundaries', () => {
     expect(runtime).toContain("import('@strkworld/privacy')");
   });
 
-  it('loads the production Bridge runtime only behind the wallet boundary', () => {
+  it('hands the production Bridge a dormant loader rather than importing it during wallet bootstrap', () => {
     const main = readFileSync(join(SRC, 'main.tsx'), 'utf8');
     expect(main).toContain("import('./bridge/production-runtime.js')");
     expect(imports(main).map((entry) => entry.specifier)).not.toContain(
       './bridge/production-runtime.js',
     );
+    expect(main).toContain('async function loadProductionBridgeRuntime()');
+    expect(main).toContain('bridge={{ loadRuntime: loadProductionBridgeRuntime }}');
+    expect(main).not.toMatch(/Promise\.all\([\s\S]*production-runtime/);
   });
 });

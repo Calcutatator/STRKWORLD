@@ -260,11 +260,12 @@ prove the fee allowance consumed separately by the pool. Production therefore
 locks new quotes, deposit instructions and the Bridge-to-Bank handoff. The
 offline demo supplies only a deterministic fake. `BridgeStore` retains
 saved/imported signed evidence for later recovery. The D-055 wallet-gated
-production composition lazily owns the shipped 1Click service and
-browser-local store, so it can import, inspect, refresh and export that
-evidence with no planner; construction performs no provider request or storage
-read, and opening the recovery-only panel does not fetch new-deposit source
-metadata. Only an explicit status refresh contacts 1Click. Explicit demo/test
+production composition gives `BridgeProvider` a dormant loader for the shipped
+1Click service and browser-local store. The loader runs only when the Bridge
+panel mounts, verifies persistence before exposing recovery, and isolates a
+chunk/storage failure from wallet admission and the city. It performs no
+provider request, and opening the recovery-only panel does not fetch
+new-deposit source metadata. Only an explicit status refresh or watch contacts 1Click. Explicit demo/test
 compositions may inspect the evidence without a wallet.
 No Bridge-to-shield correlation is stored.
 

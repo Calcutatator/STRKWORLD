@@ -61,6 +61,17 @@ function renderWalletFailure(): void {
   );
 }
 
+async function loadProductionBridgeRuntime() {
+  try {
+    const { createProductionBridgeRuntime } = await import('./bridge/production-runtime.js');
+    return createProductionBridgeRuntime({ storage: globalThis.localStorage });
+  } catch {
+    // Optional public-funding recovery must never replace wallet admission or
+    // the city. The BridgeProvider keeps this one route unavailable instead.
+    return null;
+  }
+}
+
 if (usesProductionWallet(environment)) {
   root.render(
     <StrictMode>
@@ -74,15 +85,8 @@ if (usesProductionWallet(environment)) {
     // lets the city render its honest loading surface before chain code arrives.
     void (async () => {
       try {
-        const [
-          { createProductionWalletSession },
-          { createProductionBridgeRuntime },
-        ] = await Promise.all([
-          import('@strkworld/privacy'),
-          import('./bridge/production-runtime.js'),
-        ]);
+        const { createProductionWalletSession } = await import('@strkworld/privacy');
         walletSession = createProductionWalletSession(config);
-        const bridge = createProductionBridgeRuntime({ storage: globalThis.localStorage });
         hot?.dispose(() => walletSession?.destroy());
         root.render(
           <StrictMode>
@@ -91,7 +95,7 @@ if (usesProductionWallet(environment)) {
               worldOut={worldOut}
               shellIn={shellIn}
               createPresence={createPresence}
-              bridge={bridge}
+              bridge={{ loadRuntime: loadProductionBridgeRuntime }}
             />
           </StrictMode>,
         );
