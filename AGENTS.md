@@ -277,7 +277,7 @@ privacy boundary changed.
 words `-1`, decimal `123`, and `2^128` instead of rejecting them, and a
 decimal proof-validity result also passed. The corrected adapter rejects all
 four cases while the existing valid pool/public-key/block fixture remains
-green. Focused adapter tests pass 10 tests. No wallet, provider, RPC, proof,
+green. Focused adapter tests pass 17 tests. No wallet, provider, RPC, proof,
 signature, funds or transaction was used.
 
 ### 2026-08-29 — Exchange quote expiry is rechecked after the live pool read
