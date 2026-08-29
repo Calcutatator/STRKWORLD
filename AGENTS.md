@@ -291,10 +291,41 @@ references with comments and repository-local actions. Separate regressions
 pin flow mappings, quoted/escaped and explicit keys, aliases, invalid YAML,
 benign non-key text and schema-position ownership. The pinned workflow
 passes the scanner, and the current production dependency audit reports zero
-known advisories. The full workspace passes 101 files / 1,436 tests, all
+known advisories. The full workspace passes 101 files / 1,438 tests, all
 workspace typechecks, the production build, all 13 invariants, the tilemap gate
 and `git diff --check`. No product code, wallet, provider, RPC, proof,
 signature, funds or transaction was used.
+
+### 2026-08-29 — Failed remote-peer replays relinquish subscription ownership
+
+`RemotePeerSource.subscribe()` replays its retained snapshot synchronously. It
+previously registered the listener before that replay but left the generation
+registered if the callback threw. Because the failed call never returned its
+unsubscribe closure, the listener became permanently unremovable; every later
+publication called it again, rethrew, and stopped healthy remote-avatar
+subscribers from receiving that transition.
+
+Replay failure now invokes the same token-owned, idempotent unsubscribe used by
+a successful subscription before preserving the original error. If the
+callback replaced itself with a new same-function subscription during replay,
+the failed outer generation cannot delete that replacement. Errors from an
+already-owned listener during a later publication retain their existing
+propagation and stop semantics.
+
+*Verified:* the first public `RemotePeerSource` regression failed red because a
+later publish rethrew `replay failed`, called the failed listener twice and
+left a healthy listener at its initial replay. A deliberately unconditional
+rollback made that regression green but failed the second red regression by
+deleting a same-function replacement created during the outer replay. The
+token-owned cleanup makes both green; removing replay rollback reproduces the
+first failure, removing generation ownership reproduces the second, and
+wrapping the replay error in a fresh same-message `Error` fails both strict
+identity assertions. The focused file passes 15 tests, the World package
+passes 24 files / 240 tests,
+the full workspace passes 100 files / 1,428 tests, all workspace typechecks,
+the production build, all 13 invariants, the tilemap check and diff hygiene.
+No browser, wallet, provider, RPC, proof, signature, funds or transaction was
+used.
 
 ### 2026-08-29 — Starknet Start's MockWallet omits the Wallet API capability RPC
 
