@@ -258,6 +258,28 @@ empty shell to fetchers, so a 200 there means nothing.
 
 ## 6. Findings log
 
+### 2026-08-29 — Exchange composition edits retire reviewed batches
+
+The Exchange machine invalidated a pending prepare while the panel was in
+`preparing`, but once a batch reached `review`, changing the amount or asset
+only patched the visible composition. The old prepared batch and its review
+therefore remained live, so a subsequent confirm could submit the quote for
+the pre-edit amount or pair. This was a financial-action ownership defect:
+the review must describe the exact composition that confirm will submit.
+
+Composition edits now advance the attempt, discard the reviewed batch, and
+return the flow to `composing`. The existing preparing, signing-owner,
+receipt, submission-uncertainty, close/remount and stale-result behavior is
+unchanged. No edit is allowed to release a batch already in wallet handoff.
+
+*Verified:* a public deterministic regression first failed on `origin/main`
+because a reviewed 1 STRK batch was confirmed after changing the amount to 2;
+the stale batch entered confirm. The corrected path leaves confirmation at
+zero and returns to composing. Removing the reviewed-edit ownership branch
+reproduces the failure. Focused Exchange tests and the workspace gates are
+recorded with the final candidate. No browser, wallet, provider, RPC, proof,
+signature, funds or transaction was used.
+
 ### 2026-08-29 — Prepare-time quote and fee reads honor cancellation
 
 `WalletApiPrivacyOperations.prepare()` already passed its caller signal into

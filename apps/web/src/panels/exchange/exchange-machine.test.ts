@@ -90,6 +90,21 @@ describe('Exchange machine', () => {
     expect(machine.store.getState().flow).toMatchObject({ name: 'failed', recovery: 'prepare-again' });
   });
 
+  it('does not confirm a reviewed batch after the player edits the amount', async () => {
+    let confirms = 0;
+    const machine = await ready(createExchangePanel({
+      operations: controlledOperations(Promise.resolve({ transactionHash: '0xstale' }), undefined, () => { confirms += 1; }),
+      receipts: createReceiptLedger(), canStartFinancialAction: () => true,
+    }));
+    await machine.prepare();
+
+    machine.setAmount('2');
+    await machine.confirm();
+
+    expect(confirms).toBe(0);
+    expect(machine.store.getState().flow).toMatchObject({ name: 'composing' });
+  });
+
   it('rejects a malformed zero-slippage review at the Shell boundary', async () => {
     const machine = await ready(createExchangePanel({
       operations: controlledOperations(Promise.resolve({ transactionHash: '0xnever' }), undefined, undefined, undefined, 0),
