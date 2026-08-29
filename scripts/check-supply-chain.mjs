@@ -29,7 +29,11 @@ export function scanWorkflowText(file, text) {
   }
 
   const violations = [];
-  for (const jobsPair of mapPairs(document.contents, 'jobs', document)) {
+  const root = resolveNode(document.contents, document);
+  if (isMap(root)) {
+    validateMergeKeys(root, document, lineCounter, file, violations);
+  }
+  for (const jobsPair of mapPairs(root, 'jobs', document)) {
     const jobs = resolveNode(jobsPair.value, document);
     if (!isMap(jobs)) continue;
     validateMergeKeys(jobs, document, lineCounter, file, violations);

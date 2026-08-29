@@ -274,11 +274,11 @@ parses workflow YAML structurally at `jobs.<id>.uses` and
 `jobs.<id>.steps[*].uses`: flow mappings, quoted or escaped keys, explicit keys
 and aliases cannot bypass validation, while comments, command text and literal
 `uses` inputs under `env` or `with` are not mistaken for action references.
-Invalid YAML, YAML `<<` merge keys in the jobs collection, job maps or step
-maps, and non-string action references fail closed. GitHub currently rejects
-those merge keys; denying them explicitly prevents a future syntax change from
-creating an unscanned action seam. The structural parser is the exact dev-only
-`yaml@2.9.0` lockfile dependency.
+Invalid YAML, YAML `<<` merge keys in the workflow root, jobs collection, job
+maps or step maps, and non-string action references fail closed. GitHub
+currently rejects those merge keys; denying them explicitly prevents a future
+syntax change from creating an unscanned action seam. The structural parser is
+the exact dev-only `yaml@2.9.0` lockfile dependency.
 
 The Verify job separately runs a production-only high-severity `npm audit`
 after the lockfile install. This is a recurring registry-advisory gate, not an
@@ -294,10 +294,10 @@ references. Its focused fixtures reject tag/branch and malformed pseudo-action
 references while accepting exact remote pins, nested action paths, quoted
 references with comments and repository-local actions. Separate regressions
 pin flow mappings, quoted/escaped and explicit keys, aliases, invalid YAML,
-benign non-key text, schema-position ownership, job/step merge-key denial,
-Docker tag/digest denial and query/hash/backslash path rejection. The pinned
-workflow passes the scanner, and the current production dependency audit
-reports zero known advisories. The full workspace passes 102 files / 1,451
+benign non-key text, schema-position ownership, root/jobs/job/step merge-key
+denial, Docker tag/digest denial and query/hash/backslash path rejection. The
+pinned workflow passes the scanner, and the current production dependency
+audit reports zero known advisories. The full workspace passes 102 files / 1,451
 tests, all workspace typechecks, the production build, all 13 invariants, the
 tilemap gate and `git diff --check`. No product code, wallet, provider, RPC,
 proof, signature, funds or transaction was used.

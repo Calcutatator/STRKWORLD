@@ -71,12 +71,12 @@ It parses workflow YAML structurally at GitHub's action-reference positions —
 `jobs.<id>.uses` and `jobs.<id>.steps[*].uses` — so flow mappings, quoted or
 escaped keys, explicit keys and aliases cannot bypass validation. Comments,
 command text and literal `uses` inputs under `env` or `with` remain inert.
-Invalid YAML, YAML `<<` merge keys in the jobs collection, job maps or step
-maps, and non-string action references fail closed. GitHub currently rejects
-those merge keys; the explicit denial also prevents a future syntax change from
-silently bypassing this scanner. The Invariants job installs the committed
-tooling lockfile with lifecycle scripts disabled before running the exact
-dev-only `yaml@2.9.0` parser.
+Invalid YAML, YAML `<<` merge keys in the workflow root, jobs collection, job
+maps or step maps, and non-string action references fail closed. GitHub
+currently rejects those merge keys; the explicit denial also prevents a future
+syntax change from silently bypassing this scanner. The Invariants job installs
+the committed tooling lockfile with lifecycle scripts disabled before running
+the exact dev-only `yaml@2.9.0` parser.
 
 The Verify job also runs `npm audit --omit=dev --audit-level=high` immediately
 after `npm ci`. That is a recurring registry-advisory gate over production

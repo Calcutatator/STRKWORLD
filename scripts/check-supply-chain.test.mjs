@@ -133,9 +133,14 @@ describe('GitHub Actions supply-chain pins', () => {
     ]);
   });
 
-  it('rejects YAML merge keys in the jobs collection, job maps, and step maps', () => {
+  it('rejects YAML merge keys in the root, jobs collection, job maps, and step maps', () => {
     const sha = '3d3c42e5aac5ba805825da76410c181273ba90b1';
     const workflow = [
+      'workflow-template: &workflow-template',
+      '  jobs:',
+      '    root-inherited:',
+      `      uses: owner/repository/.github/workflows/reusable.yml@${sha}`,
+      '<<: *workflow-template',
       'jobs-template: &jobs-template',
       '  inherited:',
       `    uses: owner/repository/.github/workflows/reusable.yml@${sha}`,
@@ -154,17 +159,22 @@ describe('GitHub Actions supply-chain pins', () => {
     expect(scanWorkflowText('.github/workflows/merge-keys.yml', workflow)).toEqual([
       {
         file: '.github/workflows/merge-keys.yml',
-        line: 9,
+        line: 5,
         reference: '<yaml merge key>',
       },
       {
         file: '.github/workflows/merge-keys.yml',
-        line: 11,
+        line: 14,
         reference: '<yaml merge key>',
       },
       {
         file: '.github/workflows/merge-keys.yml',
-        line: 13,
+        line: 16,
+        reference: '<yaml merge key>',
+      },
+      {
+        file: '.github/workflows/merge-keys.yml',
+        line: 18,
         reference: '<yaml merge key>',
       },
     ]);
