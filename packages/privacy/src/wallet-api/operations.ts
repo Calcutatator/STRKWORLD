@@ -111,6 +111,7 @@ export class WalletApiPrivacyOperations implements PrivacyOperations {
     try {
       const key = await this.pool.publicKey(address, signal);
       throwIfAborted(signal);
+      if (!isFelt(key)) return 'unknown';
       return BigInt(key) === 0n ? 'unregistered' : 'registered';
     } catch (error) {
       if (error instanceof PrivacyError) throw error;

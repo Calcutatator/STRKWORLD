@@ -16,6 +16,7 @@ const BOB = '0x456';
 const FEE_RECIPIENT = '0x789';
 const POOL_FEE = 6n * 10n ** 18n;
 const AUTH = { authorization: 'fee-auth', expiresAtBlock: 1_450 };
+const STARK_FIELD_PRIME = (1n << 251n) + 17n * (1n << 192n) + 1n;
 
 function fixture() {
   const invoked: STRK20_ACTION[][] = [];
@@ -112,6 +113,37 @@ describe('WalletApiPrivacyOperations capability and reads', () => {
       { kind: 'transfer', token: TOKEN, amount: 20n, recipient: '0x999' },
     ])).rejects.toMatchObject({ kind: 'not-registered' });
     expect(prepared).toHaveLength(0);
+  });
+
+  it.each([
+    ['a negative decimal key', '-1'],
+    ['a non-0x decimal key', '123'],
+    ['a malformed hex string', '0xnot-a-felt'],
+    ['a whitespace-padded key', ' 0x1'],
+    ['an uppercase 0X-prefixed key', '0X1'],
+    ['the field prime', `0x${STARK_FIELD_PRIME.toString(16)}`],
+    ['a value above the field', `0x${(STARK_FIELD_PRIME + 1n).toString(16)}`],
+  ])('fails closed for %s and blocks transfer preparation', async (_label, key) => {
+    const { ops, pool, gateway, prepared } = fixture();
+    vi.spyOn(pool, 'publicKey').mockResolvedValue(key);
+    const estimate = vi.spyOn(gateway, 'estimate');
+
+    await expect(ops.recipientStatus(BOB)).resolves.toBe('unknown');
+    await expect(ops.prepare([
+      { kind: 'transfer', token: TOKEN, amount: 20n, recipient: BOB },
+    ])).rejects.toMatchObject({ kind: 'unreachable' });
+    expect(estimate).not.toHaveBeenCalled();
+    expect(prepared).toHaveLength(0);
+  });
+
+  it('preserves zero and leading-zero semantics from the existing felt validator', async () => {
+    const zero = fixture();
+    vi.spyOn(zero.pool, 'publicKey').mockResolvedValue('0x00');
+    await expect(zero.ops.recipientStatus(BOB)).resolves.toBe('unregistered');
+
+    const nonzero = fixture();
+    vi.spyOn(nonzero.pool, 'publicKey').mockResolvedValue('0x0001');
+    await expect(nonzero.ops.recipientStatus(BOB)).resolves.toBe('registered');
   });
 });
 
