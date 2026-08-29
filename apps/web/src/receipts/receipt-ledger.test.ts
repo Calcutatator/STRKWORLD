@@ -31,6 +31,38 @@ describe('receipt ledger', () => {
     expect(ledger.pending('bank')).toHaveLength(1);
   });
 
+  it('uses felt identity for duplicate recording and acknowledgement', () => {
+    const ledger = createReceiptLedger();
+    ledger.record({ building: 'bank', transactionHash: '0x000Ab', intents });
+    ledger.record({ building: 'bank', transactionHash: '0xab', intents });
+
+    expect(ledger.pending('bank')).toEqual([{
+      building: 'bank',
+      transactionHash: '0x000Ab',
+      intents,
+    }]);
+    ledger.acknowledge('0x00AB');
+    expect(ledger.pending('bank')).toEqual([]);
+  });
+
+  it('keeps out-of-field hashes on their exact raw identity', () => {
+    const ledger = createReceiptLedger();
+    const outOfField = (1n << 251n) + (17n << 192n) + 0xabn;
+    const lowercase = `0x${outOfField.toString(16)}`;
+    const uppercase = `0x${outOfField.toString(16).toUpperCase()}`;
+
+    ledger.record({ building: 'bank', transactionHash: lowercase, intents });
+    ledger.record({ building: 'bank', transactionHash: uppercase, intents });
+
+    expect(ledger.pending('bank')).toHaveLength(2);
+    ledger.acknowledge(lowercase);
+    expect(ledger.pending('bank')).toEqual([{
+      building: 'bank',
+      transactionHash: uppercase,
+      intents,
+    }]);
+  });
+
   it('owns a receipt snapshot after recording it', () => {
     const sourceIntents: Intent[] = [{ kind: 'shield', token: TOKEN, amount: 1n }];
     const source: Receipt = {

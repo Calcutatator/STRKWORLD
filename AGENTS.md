@@ -258,6 +258,27 @@ empty shell to fetchers, so a 200 there means nothing.
 
 ## 6. Findings log
 
+### 2026-08-30 — Receipt identity follows the Starknet transaction felt
+
+The application receipt ledger claimed idempotence by transaction hash but
+compared raw strings. Equivalent Starknet hashes with different casing or
+leading-zero padding therefore produced duplicate receipts and required
+duplicate acknowledgement. Record and acknowledge now compare canonical
+nonzero felt identity while preserving the first exact string as displayed
+evidence. Malformed, zero or field-prime-and-above strings retain exact raw
+identity rather than being silently folded into a valid transaction.
+
+*Verified:* a public ledger regression records `0x000Ab` then `0xab`, proves
+only the first exact receipt remains, and acknowledges it through `0x00AB`.
+Raw-string comparison creates two receipts and fails the regression. The
+same suite proves case-distinct values above the Stark field prime remain two
+raw receipts and acknowledge independently; removing the prime bound folds
+them together. The focused ledger suite passes 9 tests; the full workspace passes 102 files /
+1,589 tests. Every workspace typecheck, the production build, all 13 invariants
+and diff hygiene pass. No browser, network, wallet, RPC, proof, signature,
+funds or transaction was used.*
+
+
 ### 2026-08-30 — Browser submission receipts require a nonzero Stark felt
 
 The Backend validates paymaster submission hashes, but the browser privacy

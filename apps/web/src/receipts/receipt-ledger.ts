@@ -51,7 +51,8 @@ export function createReceiptLedger(): ReceiptLedger {
     record(receipt: Receipt): void {
       // Idempotent on hash: a retry that resolves twice must not produce two
       // receipts for one transaction.
-      if (store.getState().some((held) => held.transactionHash === receipt.transactionHash)) return;
+      const identity = receiptIdentity(receipt.transactionHash);
+      if (store.getState().some((held) => receiptIdentity(held.transactionHash) === identity)) return;
       const snapshot: Receipt = Object.freeze({
         building: receipt.building,
         transactionHash: receipt.transactionHash,
@@ -65,9 +66,19 @@ export function createReceiptLedger(): ReceiptLedger {
     },
 
     acknowledge(transactionHash: string): void {
+      const identity = receiptIdentity(transactionHash);
       store.setState((held) => Object.freeze(
-        held.filter((receipt) => receipt.transactionHash !== transactionHash),
+        held.filter((receipt) => receiptIdentity(receipt.transactionHash) !== identity),
       ));
     },
   };
+}
+
+function receiptIdentity(transactionHash: string): string {
+  if (!/^0x[0-9a-fA-F]{1,64}$/.test(transactionHash)) return `raw:${transactionHash}`;
+  const value = BigInt(transactionHash);
+  const starkFieldPrime = (1n << 251n) + (17n << 192n) + 1n;
+  return value === 0n || value >= starkFieldPrime
+    ? `raw:${transactionHash}`
+    : `felt:${value.toString(16)}`;
 }
