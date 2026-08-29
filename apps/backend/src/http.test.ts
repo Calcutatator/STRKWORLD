@@ -34,6 +34,36 @@ describe('privacy-safe Fetch edge', () => {
     expect(api.handle).not.toHaveBeenCalled();
   });
 
+  it.each(['gzip', 'br', 'deflate', 'gzip, identity'])('rejects unsupported content encoding %s before the core', async (contentEncoding) => {
+    const api = { handle: vi.fn(async () => ({ status: 200, body: {} })) };
+    const handler = createBackendFetchHandler(api);
+    const response = await handler(new Request('https://private.example/v1/rpc/pool-config', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', 'content-encoding': contentEncoding },
+      body: JSON.stringify({ v: 1 }),
+    }));
+
+    expect(response.status).toBe(415);
+    await expect(response.json()).resolves.toEqual({
+      code: 'ENCODING_NOT_ALLOWED',
+      message: 'Content-Encoding must be identity or omitted.',
+    });
+    expect(api.handle).not.toHaveBeenCalled();
+  });
+
+  it('accepts an explicit identity content encoding', async () => {
+    const api = { handle: vi.fn(async () => ({ status: 200, body: {} })) };
+    const handler = createBackendFetchHandler(api);
+    const response = await handler(new Request('https://private.example/v1/rpc/pool-config', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', 'content-encoding': 'Identity' },
+      body: JSON.stringify({ v: 1 }),
+    }));
+
+    expect(response.status).toBe(200);
+    expect(api.handle).toHaveBeenCalledOnce();
+  });
+
   it('keeps an oversized request authoritative when stream cancellation rejects', async () => {
     const api = { handle: vi.fn(async () => ({ status: 200, body: {} })) };
     const cancel = vi.fn(async () => {

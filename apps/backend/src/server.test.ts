@@ -181,6 +181,13 @@ describe('production backend composition and HTTP listener', () => {
       expect(response.headers.get(['cross-origin', 'opener-policy'].join('-'))).toBeNull();
       expect(response.headers.get(['cross-origin', 'embedder-policy'].join('-'))).toBeNull();
 
+      const encoded = await fetch(`${base}/v1/rpc/pool-config`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json', 'content-encoding': 'gzip' },
+        body: JSON.stringify({ v: 1 }),
+      });
+      expect(encoded.status).toBe(415);
+
       const health = await fetch(`${base}/health`, {
         method: 'POST',
         headers: { 'content-type': 'application/json' },

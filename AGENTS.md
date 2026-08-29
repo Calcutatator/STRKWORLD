@@ -258,6 +258,33 @@ empty shell to fetchers, so a 200 there means nothing.
 
 ## 6. Findings log
 
+### 2026-08-29 — HTTP edge rejects unsupported content encodings
+
+The Fetch edge parsed request bytes as UTF-8 JSON but ignored
+`Content-Encoding`. A request labelled `gzip`, `br` or `deflate` while carrying
+an uncompressed JSON body therefore reached the backend core, whereas an
+actually compressed body failed later as invalid UTF-8. That disagreement let
+an intermediary and the core assign different meanings to the same HTTP
+message and left the production Node adapter unable to enforce the boundary
+because it did not forward the header.
+
+The edge now accepts only an omitted or case-insensitive `identity`
+`Content-Encoding` and returns a generic `415` before reading or forwarding the
+body for every other encoding, including encoding lists. The Node HTTP adapter
+passes the incoming header through to the Fetch boundary. Content length is
+still measured in decoded request bytes before UTF-8 decoding, with fatal
+UTF-8 handling, no decompression and no body echo.
+
+*Verified:* deterministic Fetch tests first sent plain JSON labelled `gzip`,
+`br` and `deflate`; each reached the fake core with `200`. The corrected edge
+returns `415 ENCODING_NOT_ALLOWED` for those encodings and mixed lists,
+accepts explicit `Identity`, and the raw Node listener test rejects a gzip
+label before the core. Existing charset, BOM, invalid UTF-8, empty-body,
+stream-byte-cap, malformed-JSON and no-echo behavior remains fail-closed.
+Focused HTTP/server tests and the backend gates are recorded with the final
+candidate. No external provider, RPC, wallet, proof, signature, funds or
+transaction was used.
+
 ### 2026-08-29 — HTTP JSON rejects ambiguous and prototype-sensitive object keys
 
 The Backend Fetch edge previously passed request text directly to
