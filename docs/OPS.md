@@ -55,6 +55,35 @@ one Colyseus server per process because its matchmaker is process-global.
 
 ## Deploy
 
+### Supply-chain gates
+
+Every remote GitHub Action in `.github/workflows/*.yml` is pinned to a full
+lowercase 40-character commit SHA. The readable release comment beside each pin
+is for humans; the SHA is the authority. Remote references must use slash-
+separated ASCII letters, digits, `_`, `.`, or `-` for the owner, repository and
+optional action subdirectories. `node scripts/check-supply-chain.mjs` runs in
+the Invariants job and fails any tag, branch, abbreviated SHA or malformed
+remote `uses:` reference while allowing repository-local `./` actions.
+`docker://` steps are outside this repository policy and fail even when the
+image uses a digest.
+
+It parses workflow YAML structurally at GitHub's action-reference positions —
+`jobs.<id>.uses` and `jobs.<id>.steps[*].uses` — so flow mappings, quoted or
+escaped keys, explicit keys and aliases cannot bypass validation. Comments,
+command text and literal `uses` inputs under `env` or `with` remain inert.
+Invalid YAML, YAML `<<` merge keys in the workflow root, jobs collection, job
+maps or step maps, and non-string action references fail closed. GitHub
+currently rejects those merge keys; the explicit denial also prevents a future
+syntax change from silently bypassing this scanner. The Invariants job installs
+the committed tooling lockfile with lifecycle scripts disabled before running
+the exact dev-only `yaml@2.9.0` parser.
+
+The Verify job also runs `npm audit --omit=dev --audit-level=high` immediately
+after `npm ci`. That is a recurring registry-advisory gate over production
+dependencies only. It is not an application security review, an SBOM,
+provenance evidence or a claim that development-only tooling has no advisory.
+Those broader launch controls remain separate work.
+
 ### web
 
 1. `npm ci` — reproducible from the committed lockfile.
