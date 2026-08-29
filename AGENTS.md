@@ -258,6 +258,21 @@ empty shell to fetchers, so a 200 there means nothing.
 
 ## 6. Findings log
 
+### 2026-08-29 — Starknet block numbers must be nonnegative
+
+`StarknetRpcPoolPort.getBlockNumber()` previously accepted any safe integer
+returned by `starknet_blockNumber`, including `-1`. That is not a valid
+Starknet block number and could make downstream freshness and authorization
+windows operate on an impossible chain position. The adapter now requires a
+safe integer greater than or equal to zero. Response mapping, request
+parameters, receipt handling and submission behavior are unchanged.
+
+*Verified:* a deterministic RPC fake first made a public adapter regression
+resolve `-1` on the current base; the corrected adapter rejects it with the
+existing generic invalid-block-number error. Removing the nonnegative guard
+reproduces the failure. Focused adapter tests pass 18 tests. No wallet,
+provider, RPC, proof, signature, funds or transaction was used.
+
 ### 2026-08-29 — Starknet pool fee words require exact felt u128 validation
 
 `StarknetRpcPoolPort.getPoolConfig()` previously converted the two raw fee

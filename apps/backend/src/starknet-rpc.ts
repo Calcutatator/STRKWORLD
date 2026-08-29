@@ -60,7 +60,7 @@ export class StarknetRpcPoolPort implements PoolRpcPort {
 
   async getBlockNumber(signal?: AbortSignal): Promise<number> {
     const value = await this.rpc('starknet_blockNumber', [], signal);
-    if (typeof value !== 'number' || !Number.isSafeInteger(value)) {
+    if (typeof value !== 'number' || !Number.isSafeInteger(value) || value < 0) {
       throw new Error('Starknet RPC returned an invalid block number.');
     }
     return value;
