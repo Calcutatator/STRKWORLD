@@ -29,6 +29,10 @@ const HOP_BY_HOP = new Set([
   'upgrade',
 ]);
 
+const PUBLIC_PROXY_RESPONSE_HEADERS = new Set([
+  'content-type',
+]);
+
 const CONTENT_TYPES: Record<string, string> = {
   '.css': 'text/css; charset=utf-8',
   '.gif': 'image/gif',
@@ -432,8 +436,10 @@ function proxyHttp(
     { hostname: '127.0.0.1', port, method: request.method, path, headers },
     (upstreamResponse) => {
       response.statusCode = upstreamResponse.statusCode ?? 502;
+      response.setHeader('cache-control', 'no-store');
+      response.setHeader('x-content-type-options', 'nosniff');
       for (const [name, value] of Object.entries(upstreamResponse.headers)) {
-        if (value !== undefined && !HOP_BY_HOP.has(name)) response.setHeader(name, value);
+        if (value !== undefined && PUBLIC_PROXY_RESPONSE_HEADERS.has(name)) response.setHeader(name, value);
       }
       upstreamResponse.pipe(response);
     },

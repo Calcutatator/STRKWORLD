@@ -258,6 +258,37 @@ empty shell to fetchers, so a 200 there means nothing.
 
 ## 6. Findings log
 
+### 2026-08-29 — Fly sanitizes private-child response headers
+
+The Fly public edge previously copied every non-hop-by-hop response header
+from the private child to the browser. A child response could therefore set
+cookies, redirects, public caching, CORS permissions, content encoding,
+cross-origin isolation, or arbitrary private metadata at the public origin.
+That was an unnecessary response-boundary escape: the Backend JSON contract
+only needs its content type and content-type protection marker, and dynamic
+API/lobby responses must not be publicly cached.
+
+The edge now projects proxied responses onto the positive allowlist of
+`content-type`, emits its own exact `x-content-type-options: nosniff`, and
+forces `cache-control: no-store`. It does not forward `Set-Cookie`, `Location`,
+`ETag`, `Vary`, `Server`, `Content-Encoding`, CORS, cross-origin isolation,
+content length, or arbitrary child headers. Request bodies, status codes and
+allowed response bodies remain unchanged; static responses and the explicit
+WebSocket handshake path retain their own contracts.
+
+*Verified:* a deterministic private-child fake first exposed each forbidden
+header to a public API client, including an unsafe child `x-content-type-options`
+value. The corrected regression confirms the allowed content type, edge-owned
+`nosniff`, exactly `no-store`, absence of all forbidden headers, and
+unchanged `200`/body behavior. Focused Fly edge tests pass 38 tests; all Fly
+tests pass 4 files / 144 tests. The full local workspace run executes 102
+files / 1,588 tests; 1,587 pass and the unrelated
+`apps/web/vite.config.test.ts` exact-boundary test times out under this local
+Node environment (twice); excluding that test, 101 files / 1,581 tests pass.
+Fly/workspace typechecks, production build, 13 invariants, tilemap gate and
+diff hygiene pass. No browser, external provider, RPC, wallet, proof,
+signature, funds or transaction was used.
+
 ### 2026-08-29 — Fly rejects ambiguous private-API request targets
 
 The Fly public edge previously classified raw request targets with a literal
