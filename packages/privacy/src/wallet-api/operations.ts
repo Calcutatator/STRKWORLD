@@ -223,6 +223,7 @@ export class WalletApiPrivacyOperations implements PrivacyOperations {
         let acceptedResult: TxResult | undefined;
         try {
           const current = await owner.pool.config(confirmSignal);
+          throwIfAborted(confirmSignal);
           owner.validateSwapPlan(canonicalIntent, current, plan, swapPolicy.expectedChainId);
           assertFeeCeiling(current.feeAmount + plan.fee.amount, feeCeiling);
           // Snapshot the freshly validated calls, then hand the SDK its own
@@ -337,6 +338,7 @@ export class WalletApiPrivacyOperations implements PrivacyOperations {
         throwIfAborted(signal);
         try {
           const current = await pool.config(signal);
+          throwIfAborted(signal);
           assertFeeCeiling(current.feeAmount, feeCeiling);
           emitProgress(onProgress, { stage: 'awaiting-approval', message: 'Confirm the shield in your wallet' });
           const result = await wallet.strk20InvokeTransaction(toActions(intents));
@@ -382,6 +384,7 @@ export class WalletApiPrivacyOperations implements PrivacyOperations {
         let acceptedResult: TxResult | undefined;
         try {
           const current = await owner.pool.config(signal);
+          throwIfAborted(signal);
           const relayFee = await owner.estimateRelay(route, operationToken, current, signal);
           assertFeeCeiling(current.feeAmount + relayFee.amount, feeCeiling);
           const actions = [
