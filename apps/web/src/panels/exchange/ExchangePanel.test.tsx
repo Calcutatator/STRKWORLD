@@ -10,6 +10,7 @@ import { ExchangePanel } from './ExchangePanel.js';
 import { createExchangePanel } from './exchange-machine.js';
 
 const [strk] = EXCHANGE_CATALOG;
+
 async function reviewed() {
   const operations = new FakePrivacyOperations({ balances: { [strk!.token]: 100n * 10n ** 18n }, swapReview: { expectedAmountOut: 2n * 10n ** 18n, slippageBps: 50, expiresAt: 4_102_444_800_000 } });
   const panel = createExchangePanel({ operations, receipts: createReceiptLedger(), canStartFinancialAction: () => true });
@@ -18,6 +19,36 @@ async function reviewed() {
 }
 
 describe('ExchangePanel review render', () => {
+  it('shows the avatar attention cue while a requested private balance waits on the wallet', async () => {
+    const operations = new FakePrivacyOperations({
+      balances: { [strk!.token]: 100n * 10n ** 18n },
+      latencyMs: 2,
+    });
+    const panel = createExchangePanel({
+      operations,
+      receipts: createReceiptLedger(),
+      canStartFinancialAction: () => true,
+    });
+    await panel.open();
+
+    const loading = panel.refreshBalances();
+    const markup = renderToStaticMarkup(
+      <PrivacyProvider operations={operations}>
+        <ExchangePanel panel={panel} onClose={() => {}} />
+      </PrivacyProvider>,
+    );
+    expect(markup).toContain('data-wallet-attention="balance"');
+    expect(markup).toMatch(/<img[^>]+avatar-1\.png/);
+    await loading;
+
+    const loaded = renderToStaticMarkup(
+      <PrivacyProvider operations={operations}>
+        <ExchangePanel panel={panel} onClose={() => {}} />
+      </PrivacyProvider>,
+    );
+    expect(loaded).not.toContain('data-wallet-attention');
+  });
+
   it('puts canonical review figures and the D-024 disclosure inside ConfirmGate', async () => {
     const { operations, panel } = await reviewed();
     const markup = renderToStaticMarkup(<PrivacyProvider operations={operations}><ExchangePanel panel={panel} onClose={() => {}} /></PrivacyProvider>);

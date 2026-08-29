@@ -79,6 +79,31 @@ describe('ProductionRoot', () => {
     expect(captured.current).toBeNull();
   });
 
+  it('shows the avatar attention cue only while the selected wallet connection is pending', () => {
+    const connecting = renderToStaticMarkup(
+      <ProductionRoot
+        session={sessionAt('connecting', null)}
+        worldOut={createEventBus<WorldEvents>()}
+        shellIn={createEventBus<ShellEvents>()}
+        presence={createPresenceController({})}
+        bridge={recoveryBridge()}
+      />,
+    );
+    const choosing = renderToStaticMarkup(
+      <ProductionRoot
+        session={sessionAt('selection-required', null)}
+        worldOut={createEventBus<WorldEvents>()}
+        shellIn={createEventBus<ShellEvents>()}
+        presence={createPresenceController({})}
+        bridge={recoveryBridge()}
+      />,
+    );
+
+    expect(connecting).toContain('data-wallet-attention="connect"');
+    expect(connecting).toMatch(/<img[^>]+avatar-1\.png/);
+    expect(choosing).not.toContain('data-wallet-attention');
+  });
+
   it('does not mount or create presence for an unsupported connected wallet', async () => {
     captured.current = null;
     const createPresence = vi.fn(() => createPresenceController({}));
@@ -282,7 +307,7 @@ describe('ProductionRoot', () => {
 });
 
 function sessionAt(
-  phase: 'connected' | 'selection-required' | 'wrong-network',
+  phase: 'connected' | 'selection-required' | 'connecting' | 'wrong-network',
   account: string | null,
   operations = new FakePrivacyOperations(),
 ): WalletSession {

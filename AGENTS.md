@@ -258,6 +258,44 @@ empty shell to fetchers, so a 200 there means nothing.
 
 ## 6. Findings log
 
+### 2026-08-29 — Wallet attention follows human-owned operation stages
+
+The inline pending sentence was not a reliable handoff when a wallet prompt
+opened outside the game or took long enough for the player to look elsewhere.
+Web now renders one fixed Avatar 1 attention cue while the production session
+is connecting, a requested private-balance read is loading, or an operation
+reports `awaiting-approval`. It deliberately stays absent during capability
+detection, composition, proving, submission and network confirmation. The cue
+also marks the browser tab and emits one best-effort local signal without
+requesting notification permission; it contains no wallet identity, account,
+balance, amount, route, transaction hash or lobby data.
+
+World exposes only the approved sheet's cosmetic URL and frame geometry. It
+does not learn why Web renders the image, and Web receives no Phaser object or
+movement authority. React defers the local signal so StrictMode's effect probe
+cannot sound twice for one handoff, and restores the prior tab title only while
+it still owns the marker.
+
+*Verified:* public render regressions hold connection and Bank/Exchange balance
+reads open and find the exact Avatar 1 cue; a controlled Bank confirmation holds
+`awaiting-approval` and proves the cue clears after settlement. A typed stage
+matrix rejects every non-human operation stage, while a StrictMode lifecycle
+regression records one signal and exact title restoration. A device-policy
+regression makes `navigator.vibrate()` throw and proves that failure cannot
+escape the best-effort signal or disturb the visual cue. Further lifecycle
+regressions make audio close reject and replace the injected callback during
+one active handoff; neither an unhandled rejection nor a second signal escapes.
+The focused four files pass 39 tests; the full workspace passes 101 files /
+1,438 tests, all
+workspace typechecks, production build, 13 invariants and diff hygiene. In the
+local browser, the mock gateway process was temporarily paused after explicit
+wallet selection: the live page exposed one assertive cue and tab title
+`● Wallet needs you — STRKWORLD`; resuming the same request removed the cue,
+restored `STRKWORLD` and admitted the game. The canonical main Vite server was
+then restored and multiplayer reverified connected. The browser check used no
+real wallet, RPC, proof, signature, funds or transaction. Audibility remains a
+device-dependent best-effort behavior, not a rendered acceptance claim.*
+
 ### 2026-08-29 — Failed remote-peer replays relinquish subscription ownership
 
 `RemotePeerSource.subscribe()` replays its retained snapshot synchronously. It
@@ -287,7 +325,7 @@ passes 24 files / 240 tests,
 the full workspace passes 100 files / 1,428 tests, all workspace typechecks,
 the production build, all 13 invariants, the tilemap check and diff hygiene.
 No browser, wallet, provider, RPC, proof, signature, funds or transaction was
-used.
+ used.
 
 ### 2026-08-29 — Starknet Start's MockWallet omits the Wallet API capability RPC
 

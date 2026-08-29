@@ -2546,3 +2546,38 @@ one deliberate balance read returned zero, and a one-wei canonical STRK shield
 returned the fixed mock receipt without a popup, dialog or new tab. Leaving the
 Bank restored multiplayer. This is autonomous mock acceptance only; Ready or
 Xverse and every funded/onchain claim remain separate production gates.
+
+---
+
+## D-058 — Manual wallet handoffs use one visible in-game attention cue
+
+**2026-08-29 · Accepted by the user**
+
+**Context.** Mock mode can exercise the complete production wallet seam without
+interrupting the user, but a real wallet still owns connection, private-balance
+sharing and transaction approval. Those handoffs can appear outside the game
+window or take long enough that the existing inline pending sentence is easy to
+miss. The user asked for the approved mini character to ping them only when they
+actually need to do something.
+
+**Decision.** Web renders one fixed wallet-attention cue only while an explicit
+manual handoff owns the current UI state: the production session is connecting,
+a requested private-balance read is loading, or a submitted operation reports
+the wallet-owned `awaiting-approval` stage. Capability detection, preparation,
+proof generation, submission and network confirmation do not show the cue.
+
+The cue uses World's approved Avatar 1 idle frame through a narrow public visual
+projection. This is a deliberate World-to-Web presentation seam: it carries
+only the cosmetic asset URL and frame geometry, never movement authority,
+wallet state, financial data or lobby data. Web owns the cue state, copy and
+accessibility. While active it is a prominent visual alert, marks the browser
+tab and emits one best-effort local chime/vibration without asking for browser
+notification permission. Re-renders of the same handoff do not repeat the
+signal, and the original tab title is restored when the handoff ends.
+
+**Consequences.** This makes human handoffs conspicuous without inventing a
+prompt count or claiming unattended real-wallet signing. The cue contains no
+account, balance, amount, route, transaction hash or wallet identity. Mock mode
+continues to complete without the cue lingering because it never waits on a
+human-owned prompt. Browser rendering and audibility remain local acceptance
+checks after the headless state and lifecycle regressions pass.

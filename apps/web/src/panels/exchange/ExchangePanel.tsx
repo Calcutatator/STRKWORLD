@@ -7,6 +7,7 @@ import { LockedNotice } from '../LockedRoom.js';
 import { PanelFrame } from '../PanelFrame.js';
 import { EXCHANGE_CATALOG } from './catalog.js';
 import { createExchangePanel, type ExchangePanel as ExchangeMachine, type ExchangeState } from './exchange-machine.js';
+import { WalletAttentionCue, walletOperationAttention } from '../../wallet/WalletAttentionCue.js';
 
 /** Dedicated one-swap view; this deliberately has no batch/add vocabulary. */
 export function ExchangePanel({ onClose, panel: injected, experience = 'menu' }: { onClose: () => void; panel?: ExchangeMachine; experience?: 'menu' | 'station' }) {
@@ -21,7 +22,12 @@ export function ExchangePanel({ onClose, panel: injected, experience = 'menu' }:
   useEffect(() => { if (!owned) return; void owned.open(); return () => owned.close(); }, [owned]);
   const committing = state.flow.name === 'review' || state.flow.name === 'submitting';
   const blocked = uncertainty.active && !uncertainty.acknowledged;
+  const walletAttention = walletOperationAttention(
+    state.balances === 'loading',
+    state.flow.name === 'submitting' ? state.flow.stage : null,
+  );
   return <div className="exchange-experience" data-experience={experience}>
+    <WalletAttentionCue active={walletAttention !== null} kind={walletAttention ?? 'confirm'} />
     <PanelFrame title={COPY.buildings.exchange} disclosure={null} closingNote={state.flow.name === 'submitting' ? COPY.flow.closingWillNotCancel : null} onClose={onClose}>
       <p className="panel-hint">{COPY.exchange.oneSwap}</p>
       {!state.door.open ? <LockedNotice reason={state.door.reason ?? 'unknown-route'} message={state.door.message} /> :
