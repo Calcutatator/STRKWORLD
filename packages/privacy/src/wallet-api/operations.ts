@@ -181,6 +181,7 @@ export class WalletApiPrivacyOperations implements PrivacyOperations {
       slippageBps: swapPolicy.slippageBps,
       signal,
     });
+    throwIfAborted(signal);
     this.validateSwapPlan(intent, config, plan, swapPolicy.expectedChainId);
     const protectedMinimum = protectedMinimumOut(plan.buyAmount, swapPolicy.slippageBps);
     if (protectedMinimum < intent.minAmountOut) {
@@ -436,6 +437,7 @@ export class WalletApiPrivacyOperations implements PrivacyOperations {
       operationToken,
       signal,
     });
+    throwIfAborted(signal);
     this.validateRelayFee(fee, config);
     return fee;
   }
