@@ -11,6 +11,53 @@ import {
 } from './session.js';
 
 describe('WalletSession', () => {
+  it('shares same-key connection attempts instead of opening duplicate wallet workflows', async () => {
+    const selected = wallet('Ready');
+    let release!: (connection: WalletConnectionPort) => void;
+    const pending = new Promise<WalletConnectionPort>((resolve) => { release = resolve; });
+    const connectWallet = vi.fn(() => pending);
+    const session = createWalletSession(denyAllOptions(), {
+      discovery: discoveryWith(selected),
+      connectWallet,
+    });
+    const choice = session.getSnapshot().wallets[0]!;
+
+    const first = session.connect(choice.key);
+    const second = session.connect(choice.key);
+
+    expect(connectWallet).toHaveBeenCalledOnce();
+    release(connection('0x111'));
+    await expect(Promise.all([first, second])).resolves.toHaveLength(2);
+    expect(session.getSnapshot()).toMatchObject({ phase: 'connected', account: '0x111' });
+  });
+
+  it('starts a fresh same-key connection after disconnect retires a pending one', async () => {
+    const selected = wallet('Ready');
+    let releaseFirst!: (connection: WalletConnectionPort) => void;
+    let releaseSecond!: (connection: WalletConnectionPort) => void;
+    const first = new Promise<WalletConnectionPort>((resolve) => { releaseFirst = resolve; });
+    const second = new Promise<WalletConnectionPort>((resolve) => { releaseSecond = resolve; });
+    const connectWallet = vi.fn()
+      .mockReturnValueOnce(first)
+      .mockReturnValueOnce(second);
+    const session = createWalletSession(denyAllOptions(), {
+      discovery: discoveryWith(selected),
+      connectWallet,
+    });
+    const choice = session.getSnapshot().wallets[0]!;
+
+    const stale = session.connect(choice.key);
+    const disconnecting = session.disconnect();
+    const current = session.connect(choice.key);
+    releaseFirst(connection('0x111'));
+    releaseSecond(connection('0x222'));
+
+    await disconnecting;
+    await stale;
+    await expect(current).resolves.toMatchObject({ phase: 'connected', account: '0x222' });
+    expect(connectWallet).toHaveBeenCalledTimes(2);
+  });
+
   it('lets only the newest connection attempt publish financial authority', async () => {
     const first = wallet('First wallet');
     const second = wallet('Second wallet');

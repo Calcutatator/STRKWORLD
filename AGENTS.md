@@ -516,6 +516,29 @@ tests, all workspace typechecks,
 production build, all 13 invariants and diff hygiene. No browser, lobby server,
 wallet, provider, RPC, proof, signature, funds or transaction was used.*
 
+### 2026-08-29 — Same-wallet connection requests share one authority flight
+
+Wallet session generation correctly allowed only the newest connection attempt
+to publish authority, but two same-key calls still started two wallet workflows
+before the older result was retired. A rapid double-click could therefore open
+duplicate connection prompts for one selection. The session now shares the
+in-flight promise only for the same opaque wallet key; a different selection
+still supersedes the old attempt under the existing generation rules.
+
+*Verified:* public session regressions call `connect()` twice for the same
+discovered key while the adapter is deferred, and disconnect that pending
+attempt before reconnecting the same key. The first failed red with two
+adapter calls and now passes with one call and one connected authority; the
+second failed red by reusing the retired promise and now passes with two calls
+and the replacement connected authority. Discovery removal and terminal
+destroy also invalidate the pending flight. The existing different-wallet
+concurrency regression remains green. The focused session suite passes 26
+tests and the full workspace passes 102 files / 1,590 tests. All workspace
+typechecks, the production build, all 13 invariants and diff hygiene pass. No
+browser, live wallet, provider, RPC, proof, signature, funds or transaction was
+used. Removing the same-key flight owner or lifecycle invalidation each
+reproduces its matching regression.*
+
 ### 2026-08-29 — Fly sanitizes private-child response headers
 
 The Fly public edge previously copied every non-hop-by-hop response header

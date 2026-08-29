@@ -94,6 +94,7 @@ export function createWalletSession(
   let connection: WalletConnectionPort | null = null;
   let operations: PrivacyOperations | null = null;
   let connectionCleanup: (() => void) | null = null;
+  let connectFlight: { key: string; promise: Promise<WalletSessionSnapshot> } | null = null;
   let destroyed = false;
   let snapshot = buildSnapshot('selection-required', null);
 
@@ -216,6 +217,7 @@ export function createWalletSession(
     wallets = [...nextWallets];
     if (selectedKey && !selectedWallet()) {
       generation += 1;
+      connectFlight = null;
       selectedKey = null;
       retireConnection();
       publish('selection-required', null);
@@ -234,7 +236,40 @@ export function createWalletSession(
         if (listeners.get(listener) === token) listeners.delete(listener);
       };
     },
-    async connect(key) {
+    connect(key) {
+      if (connectFlight?.key === key) return connectFlight.promise;
+      const promise = connectOwned(key);
+      connectFlight = { key, promise };
+      void promise.finally(() => {
+        if (connectFlight?.promise === promise) connectFlight = null;
+      }).catch(() => undefined);
+      return promise;
+    },
+    refreshDiscovery: () => dependencies.discovery.refresh(),
+    readAccount: () => snapshot.account,
+    async disconnect() {
+      generation += 1;
+      connectFlight = null;
+      const owned = connection;
+      retireConnection();
+      selectedKey = null;
+      publish('selection-required', null);
+      await owned?.disconnect();
+    },
+    destroy() {
+      if (destroyed) return;
+      destroyed = true;
+      generation += 1;
+      connectFlight = null;
+      discoveryCleanup();
+      retireConnection();
+      selectedKey = null;
+      publish('selection-required', null);
+      listeners.clear();
+    },
+  };
+
+  async function connectOwned(key: string): Promise<WalletSessionSnapshot> {
       if (destroyed) throw new PrivacyError('unknown', 'The wallet session has ended.');
       const wallet = wallets.find((candidate) => keyFor(candidate) === key);
       if (!wallet) throw new PrivacyError('unreachable', 'The selected wallet is no longer available.');
@@ -319,28 +354,7 @@ export function createWalletSession(
         }
         throw mapWalletError(error);
       }
-    },
-    refreshDiscovery: () => dependencies.discovery.refresh(),
-    readAccount: () => snapshot.account,
-    async disconnect() {
-      generation += 1;
-      const owned = connection;
-      retireConnection();
-      selectedKey = null;
-      publish('selection-required', null);
-      await owned?.disconnect();
-    },
-    destroy() {
-      if (destroyed) return;
-      destroyed = true;
-      generation += 1;
-      discoveryCleanup();
-      retireConnection();
-      selectedKey = null;
-      publish('selection-required', null);
-      listeners.clear();
-    },
-  };
+  }
 }
 
 /** Build the real browser session without exposing wallet libraries to Web. */
