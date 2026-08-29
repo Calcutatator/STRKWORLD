@@ -1,4 +1,5 @@
 import type { PoolRpcPort } from './types.js';
+import { isFelt } from './validation.js';
 
 const FEE_SELECTOR = '0x3d323cd692ad43935b81ce230c47bfc57f69656249c5a33fe5223c17dd32ed2';
 const PUBLIC_KEY_SELECTOR = '0x1a35984e05126dbecb7c3bb9929e7dd9106d460c59b1633739a5c733a5fb13b';
@@ -28,8 +29,14 @@ export class StarknetRpcPoolPort implements PoolRpcPort {
       this.callPool(FEE_SELECTOR, [], signal),
       this.callPool(PROOF_VALIDITY_SELECTOR, [], signal),
     ]);
-    const low = BigInt(feeResult[0] ?? '0x0');
-    const high = BigInt(feeResult[1] ?? '0x0');
+    if (feeResult.length !== 2) {
+      throw new Error('Starknet RPC returned an invalid fee amount.');
+    }
+    const low = feltToU128(feeResult[0], 'fee amount low word');
+    const high = feltToU128(feeResult[1], 'fee amount high word');
+    if (validityResult.length !== 1) {
+      throw new Error('Starknet RPC returned an invalid proof-validity window.');
+    }
     const proofValidityBlocks = feltToPositiveSafeInteger(
       validityResult[0],
       'proof-validity window',
@@ -86,10 +93,21 @@ export class StarknetRpcPoolPort implements PoolRpcPort {
 }
 
 function feltToPositiveSafeInteger(value: string | undefined, label: string): number {
-  if (!value) throw new Error(`Starknet RPC returned no ${label}.`);
+  if (!value || !isFelt(value)) throw new Error(`Starknet RPC returned an invalid ${label}.`);
   const parsed = BigInt(value);
   if (parsed <= 0n || parsed > BigInt(Number.MAX_SAFE_INTEGER)) {
     throw new Error(`Starknet RPC returned an invalid ${label}.`);
   }
   return Number(parsed);
+}
+
+function feltToU128(value: string | undefined, label: string): bigint {
+  if (!value || !isFelt(value)) {
+    throw new Error(`Starknet RPC returned an invalid ${label}.`);
+  }
+  const parsed = BigInt(value);
+  if (parsed >= (1n << 128n)) {
+    throw new Error(`Starknet RPC returned an invalid ${label}.`);
+  }
+  return parsed;
 }

@@ -4,6 +4,8 @@ import { AvnuSwapPlanner } from './avnu-swap-planner.js';
 import { StarknetRpcPoolPort } from './starknet-rpc.js';
 import type { PreparedArtifact } from './types.js';
 
+const STARK_FIELD_PRIME = (1n << 251n) + 17n * (1n << 192n) + 1n;
+
 const artifact: PreparedArtifact = {
   call: { contract_address: '0x123', entry_point: 'apply_actions', calldata: ['0x1'] },
   proof: { data: 'proof', output: ['0x2', '0x1'], proof_facts: ['0x3'] },
@@ -200,5 +202,69 @@ describe('fixed Starknet RPC adapter', () => {
     expect(requests.map((request) => request.method)).toEqual([
       'starknet_call', 'starknet_call', 'starknet_call', 'starknet_blockNumber',
     ]);
+  });
+
+  it.each([
+    ['negative', '-1'],
+    ['decimal', '123'],
+    ['outside u128', `0x1${'0'.repeat(32)}`],
+    ['field prime', `0x${STARK_FIELD_PRIME.toString(16)}`],
+  ])('rejects a malformed %s pool fee word', async (_label, malformed) => {
+    let call = 0;
+    const fetcher = vi.fn(async () => {
+      call += 1;
+      const result = call === 1 ? [malformed, '0x0'] : ['0x1c2'];
+      return new Response(JSON.stringify({ jsonrpc: '2.0', id: call, result }));
+    });
+    const rpc = new StarknetRpcPoolPort({
+      rpcUrl: 'https://rpc.example',
+      poolAddress: '0x123',
+      feeToken: '0x4718',
+      fetcher,
+    });
+
+    await expect(rpc.getPoolConfig()).rejects.toThrow(/invalid fee amount/i);
+  });
+
+  it.each([
+    ['decimal', '123'],
+    ['negative', '-1'],
+    ['field prime', `0x${STARK_FIELD_PRIME.toString(16)}`],
+    ['above the field', `0x${(STARK_FIELD_PRIME + 1n).toString(16)}`],
+    ['above the safe integer bound', `0x${(BigInt(Number.MAX_SAFE_INTEGER) + 1n).toString(16)}`],
+  ])('rejects a malformed %s proof-validity result', async (_label, malformed) => {
+    let call = 0;
+    const fetcher = vi.fn(async () => {
+      call += 1;
+      const result = call === 1 ? ['0x6', '0x0'] : [malformed];
+      return new Response(JSON.stringify({ jsonrpc: '2.0', id: call, result }));
+    });
+    const rpc = new StarknetRpcPoolPort({
+      rpcUrl: 'https://rpc.example',
+      poolAddress: '0x123',
+      feeToken: '0x4718',
+      fetcher,
+    });
+
+    await expect(rpc.getPoolConfig()).rejects.toThrow(/invalid proof-validity/i);
+  });
+
+  it.each([
+    ['missing', []],
+    ['extra', ['0x1c2', '0x0']],
+  ])('rejects a %s proof-validity result', async (_label, malformed) => {
+    let call = 0;
+    const fetcher = vi.fn(async () => {
+      const result = call++ === 0 ? ['0x6', '0x0'] : malformed;
+      return new Response(JSON.stringify({ jsonrpc: '2.0', id: call, result }));
+    });
+    const rpc = new StarknetRpcPoolPort({
+      rpcUrl: 'https://rpc.example',
+      poolAddress: '0x123',
+      feeToken: '0x4718',
+      fetcher,
+    });
+
+    await expect(rpc.getPoolConfig()).rejects.toThrow(/invalid proof-validity/i);
   });
 });

@@ -258,6 +258,28 @@ empty shell to fetchers, so a 200 there means nothing.
 
 ## 6. Findings log
 
+### 2026-08-29 — Starknet pool fee words require exact felt u128 validation
+
+`StarknetRpcPoolPort.getPoolConfig()` previously converted the two raw fee
+words with `BigInt()` alone. The adapter therefore accepted negative and
+decimal strings, and values wider than the contract's `u128` limbs, returning
+malformed pool configuration to the backend API. Its proof-validity parser
+also accepted positive decimal strings even though Starknet RPC felts are
+hex-encoded and the shared felt rule is strict.
+
+The adapter now requires exactly two valid felt fee words, bounds each to
+`u128`, and applies the same felt validation before accepting the positive
+proof-validity window. Provider details remain mapped by the API's existing
+generic upstream-failure response; no retry, transaction, receipt, logging or
+privacy boundary changed.
+
+*Verified:* deterministic adapter regressions first resolved malformed fee
+words `-1`, decimal `123`, and `2^128` instead of rejecting them, and a
+decimal proof-validity result also passed. The corrected adapter rejects all
+four cases while the existing valid pool/public-key/block fixture remains
+green. Focused adapter tests pass 10 tests. No wallet, provider, RPC, proof,
+signature, funds or transaction was used.
+
 ### 2026-08-29 — Exchange quote expiry is rechecked after the live pool read
 
 The Exchange confirm path checked a private-swap quote's `expiresAt` before
