@@ -94,6 +94,32 @@ describe('WalletApiPrivacyOperations capability and reads', () => {
     ]);
   });
 
+  it('does not return pool config after its read is aborted', async () => {
+    const { ops, pool } = fixture();
+    let release!: () => void;
+    let started!: () => void;
+    const readStarted = new Promise<void>((resolve) => { started = resolve; });
+    const pending = new Promise<void>((resolve) => { release = resolve; });
+    vi.spyOn(pool, 'config').mockImplementation(async () => {
+      started();
+      await pending;
+      return {
+        feeAmount: POOL_FEE,
+        feeToken: STRK,
+        proofValidityBlocks: 450,
+        noteMaturityBlocks: 10,
+      };
+    });
+    const controller = new AbortController();
+    const reading = ops.poolConfig(controller.signal);
+
+    await readStarted;
+    controller.abort(new DOMException('Caller disconnected.', 'AbortError'));
+    release();
+
+    await expect(reading).rejects.toMatchObject({ kind: 'user-rejected' });
+  });
+
   it('preflights recipient registration through the pool read port', async () => {
     const { ops } = fixture();
     await expect(ops.recipientStatus(BOB)).resolves.toBe('registered');
