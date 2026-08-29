@@ -290,6 +290,58 @@ describe('strict fee authorization', () => {
     }
   });
 
+  it('rejects an oversized submission before consuming rate-limit admission', async () => {
+    const { api, paymaster } = fixture({
+      rateLimit: { maxRequests: 1, windowMs: 60_000 },
+    });
+    const submit = vi.spyOn(paymaster, 'submit');
+    const oversizedArtifact = {
+      ...artifact,
+      proof: { ...artifact.proof, data: 'x'.repeat(2_000_001) },
+    };
+
+    await expect(api.handle({
+      method: 'POST',
+      path: '/v1/private/submissions',
+      body: {
+        v: 1,
+        route: 'transfer',
+        artifact: oversizedArtifact,
+        feeAuthorization: 'not-needed-for-size-rejection',
+        proofValidityBlocks: 450,
+      },
+    })).resolves.toMatchObject({ status: 413 });
+    expect(submit).not.toHaveBeenCalled();
+
+    await expect(api.handle({
+      method: 'POST',
+      path: '/v1/rpc/pool-config',
+      body: { v: 1 },
+    })).resolves.toMatchObject({ status: 200 });
+    expect(api.metrics.snapshot()).toMatchObject({ rateLimited: 0 });
+  });
+
+  it('rejects a malformed submission before consuming rate-limit admission', async () => {
+    const { api, paymaster } = fixture({
+      rateLimit: { maxRequests: 1, windowMs: 60_000 },
+    });
+    const submit = vi.spyOn(paymaster, 'submit');
+
+    await expect(api.handle({
+      method: 'POST',
+      path: '/v1/private/submissions',
+      body: { v: 1, route: 'transfer', unexpected: true },
+    })).resolves.toMatchObject({ status: 400 });
+    expect(submit).not.toHaveBeenCalled();
+
+    await expect(api.handle({
+      method: 'POST',
+      path: '/v1/rpc/pool-config',
+      body: { v: 1 },
+    })).resolves.toMatchObject({ status: 200 });
+    expect(api.metrics.snapshot()).toMatchObject({ rateLimited: 0 });
+  });
+
   it('preserves the parent abort reason and timeout response', async () => {
     const { api, paymaster } = fixture();
     const parent = new AbortController();

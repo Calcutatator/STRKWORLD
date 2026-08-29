@@ -258,6 +258,26 @@ empty shell to fetchers, so a 200 there means nothing.
 
 ## 6. Findings log
 
+### 2026-08-29 — Oversized submissions must not consume global admission
+
+`BackendApi.handle()` previously took aggregate rate-limit admission before
+validating the prepared-submission body. A proof string above the configured
+`maxProofBytes` therefore returned the existing `413` only after consuming a
+rate-limit slot; with a one-request window, the next valid request got `429`.
+The HTTP edge still owns bounded streaming body reads. The API now performs a
+cheap submission-specific schema and artifact-size preflight after the
+existing pre-abort check and before the limiter. It preserves the global
+kill-switch, valid-request rate limiting, generic errors, and all queue,
+paymaster, proof, receipt and retry behavior.
+
+*Verified:* a deterministic public regression first returned `429` for the
+following valid pool-config request on the base; the corrected path returns
+`413`, leaves `rateLimited` at zero, returns the next request at `200`, and
+never calls the paymaster. Removing the pre-admission preflight reproduces the
+failure. The full workspace passes 102 files / 1,518 tests. No browser,
+wallet, external provider, RPC, proof, signature, funds or transaction was
+used.
+
 ### 2026-08-29 — Receipt lookups require a nonzero transaction hash
 
 The receipt endpoint previously reused the generic felt validator, which
