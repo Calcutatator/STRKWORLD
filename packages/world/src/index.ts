@@ -40,6 +40,12 @@ export {
 } from './avatar-state.js';
 export type { AvatarSpriteKey } from '@strkworld/shared';
 
+// D-058 presentational projection for Web's manual-wallet attention cue. The
+// resolved sheet carries only the approved cosmetic asset and frame geometry;
+// Web does not receive a Phaser object or any movement authority.
+export { resolveAvatarSheet } from './avatar-visual.js';
+export type { AvatarVisualSheet } from './avatar-visual.js';
+
 // D-053 World-local outfit toggle. One Scene-owned selection and one F
 // binding, shared by the Studio and every fixed room. Cosmetic only: it
 // resolves through pairedAvatarSprite and emits the existing avatar:selected.
