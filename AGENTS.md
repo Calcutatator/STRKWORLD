@@ -277,7 +277,7 @@ limits, axis ordering, speed, and total-travel bounds are unchanged.
 *Verified:* a public movement regression first failed on current `origin/main`,
 allowing the 24px body to reach center `y=128` against a station whose solid
 tile began at `y=96..128`; the corrected body-aware path stops at `y=144` with
-the 16px substep cadence. The focused World suite passes 24 files / 241 tests,
+the 16px substep cadence. The focused World suite passes 24 files / 242 tests,
 the full workspace passes 102 files / 1,466 tests, all workspace typechecks,
 the production build, all 13 invariants, the tilemap gate and `git diff
 --check`. No browser, lobby, wallet, provider, RPC, proof, signature, funds
