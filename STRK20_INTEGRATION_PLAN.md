@@ -119,6 +119,7 @@ If submission dispatch occurs but a validated hash does not reach the browser, t
 ## 9. Testing
 
 - Unit and integration: discovery, explicit selection, connection single-flight, capability versions, wrong-chain/account/disconnect ownership, stale-event rejection, old prepared-batch invalidation, policy immutability, production demo refusal, account-to-Bridge consistency, and route denial.
+- SPEC §5 forward compatibility: a dynamically registered, arbitrarily named non-extension provider now drives the production `WalletSession`, `WalletAccountV6`, same-origin backend client and every shield/unshield/transfer/swap route in CI. The pinned Starknet Start MockWallet's chain-id response and three STRK20 handlers are reused; the exact dispatcher supplies only its missing `wallet_supportedWalletApi` response and rejects any extra or duplicate wallet handoff. A parsed source gate rejects direct or destructured provider `id`/`name` property keys outside the display-only name projection and rejects unapproved non-literal computed property reads. This proves structural provider neutrality, not live-wallet behavior.
 - Headless gates: package/Web/full tests, workspace typecheck, production build, invariants, D-005 header scan, and diff hygiene.
 - Browser acceptance is split: D-057's sibling gateway owns repeatable agent-run
   mock acceptance at `http://127.0.0.1:5173/`; a human still owns actual Ready

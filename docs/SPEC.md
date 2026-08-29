@@ -283,9 +283,9 @@ Prompt counts, latency and connection persistence differ by wallet. Drive the UI
 
 ### The forward-compatibility test
 
-One test, run in CI, that fails if any rule is violated: assert the STRK20 module's imports contain no reference to `get-starknet-wallets`, no wallet-id string literals, and that a **mock wallet** implementing only the four required features plus the three `strk20*` methods can drive every game operation end to end. `@starknetfoundation/starknet-start-react` ships `MockWallet` for exactly this.
+One CI regression pins the testable structural rules: the STRK20 module contains no reference to `get-starknet-wallets`; a parsed source invariant rejects direct or destructured provider `id`/`name` property keys except the display-only wallet-name projection and unrelated Error-name handling, and rejects every non-literal computed property read outside a short exact allowlist of non-identity indexes; and a **mock wallet** implementing the four required features can drive every game operation end to end through an exact request seam. That seam permits only the standard chain-id request, the version capability request and the three `strk20*` methods, and its ledger rejects extras or duplicate handoffs. The pinned `@starknetfoundation/starknet-start-react@2.0.1` `MockWallet` supplies the features, chain-id response and STRK20 handlers but omits `wallet_supportedWalletApi`; the test adds only that capability response and delegates the other four permitted methods unchanged.
 
-If a mock that is neither extension nor web wallet can play the game, a real web wallet will work on the day it ships.
+If a dynamically registered mock that is neither an extension nor an injected wallet can play the game, the app remains structurally open to future standards-compliant providers without an identity-specific rewrite. Live provider behavior remains a separate acceptance gate.
 
 ---
 

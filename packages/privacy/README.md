@@ -76,7 +76,14 @@ that:
 
 1. the whole financial layer can be driven by a mock in tests,
 2. a second implementation can be added without touching callers,
-3. the forward-compatibility test can prove a non-extension wallet works.
+3. the forward-compatibility test proves an arbitrary dynamically registered,
+   non-extension Wallet Standard provider can drive every game operation
+   through the production public seams without an identity-specific rewrite;
+   its parsed source gate rejects direct or destructured provider `id`/`name`
+   property keys outside the sole display-name projection and unapproved
+   non-literal computed property reads;
+   its exact request ledger rejects extra wallet RPC dependencies or duplicate
+   financial handoffs.
 
 The D-036 freeze is contract stability for development, not a live-wallet
 claim. D-015 replaced the earlier one-shot methods because they could not
