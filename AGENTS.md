@@ -274,8 +274,9 @@ paymaster, proof, receipt and retry behavior.
 following valid pool-config request on the base; the corrected path returns
 `413`, leaves `rateLimited` at zero, returns the next request at `200`, and
 never calls the paymaster. Removing the pre-admission preflight reproduces the
-failure. Focused backend tests pass 109 tests. No browser, wallet, external
-provider, RPC, proof, signature, funds or transaction was used.
+failure. The full workspace passes 102 files / 1,518 tests. No browser,
+wallet, external provider, RPC, proof, signature, funds or transaction was
+used.
 
 ### 2026-08-29 — Receipt lookups require a nonzero transaction hash
 
