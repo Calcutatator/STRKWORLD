@@ -75,6 +75,7 @@ import {
 import { createRemoteAvatarLayer, type RemoteAvatarLayer } from '../remote-avatar-layer.js';
 import type { RemotePeerSource } from '../remote-peer.js';
 import {
+  AVATAR_BODY_SIZE,
   createLocalAvatarVisual,
   preloadAvatarVisuals,
   registerAvatarAnimations,
@@ -737,6 +738,7 @@ export function createStreetScene({ Phaser, onTileChanged, remotePeers }: Street
         velocity,
         delta,
         tileSize: FIXED_ROOM_TILE_SIZE,
+        collisionHalfSize: AVATAR_BODY_SIZE / 2,
         toTile: worldToRoomTile,
         isSolidAt: (x, y) => isFixedRoomSolidAt(map, x, y),
       });
@@ -758,6 +760,7 @@ export function createStreetScene({ Phaser, onTileChanged, remotePeers }: Street
         velocity,
         delta,
         tileSize: AVATAR_STUDIO_TILE_SIZE,
+        collisionHalfSize: AVATAR_BODY_SIZE / 2,
         toTile: worldToRoomTile,
         isSolidAt: (x, y) => isAvatarStudioSolidAt(AVATAR_STUDIO_DEFINITION, x, y),
       });

@@ -258,6 +258,31 @@ empty shell to fetchers, so a 200 there means nothing.
 
 ## 6. Findings log
 
+### 2026-08-29 — Interior movement must respect the authoritative avatar body
+
+The fixed-room and Avatar Studio movement paths bypass Arcade collision and
+previously tested only the avatar's anchor tile. The local player and Studio
+contact contract is a centered 24x24 body, so the anchor could enter the tile
+beside a wall or station while 12 pixels of that body overlapped solid space.
+This made the custom interior collision semantics disagree with the body's
+authoritative footprint; the outdoor Arcade collider did not cover these
+manual interior moves.
+
+The bounded movement helper now accepts an optional collision half-size and
+rejects each axis candidate when any tile overlapped by that axis-aligned body
+is solid. Fixed rooms and Avatar Studio pass the existing 12px half-size;
+callers without a body size retain the prior anchor-only behavior. Substep
+limits, axis ordering, speed, and total-travel bounds are unchanged.
+
+*Verified:* a public movement regression first failed on current `origin/main`,
+allowing the 24px body to reach center `y=128` against a station whose solid
+tile began at `y=96..128`; the corrected body-aware path stops at `y=144` with
+the 16px substep cadence. The focused World suite passes 24 files / 241 tests,
+the full workspace passes 102 files / 1,466 tests, all workspace typechecks,
+the production build, all 13 invariants, the tilemap gate and `git diff
+--check`. No browser, lobby, wallet, provider, RPC, proof, signature, funds
+or transaction was used.
+
 ### 2026-08-29 — Pre-aborted Backend requests do not consume aggregate rate admission
 
 `BackendApi.handle()` previously evaluated `this.limiter.take()` while building

@@ -129,6 +129,44 @@ describe('street movement seam', () => {
     expect(position).toEqual({ x: 9 * 32 + 16, y: 4 * 32 });
   });
 
+  it('keeps the authoritative 24px body clear of a solid tile, not only its anchor', () => {
+    const room = createFixedRoom(BANK_ROOM_DEFINITION);
+    const position = moveWithCollisionSubsteps({
+      position: { x: 9 * 32 + 16, y: 5 * 32 + 16 },
+      velocity: { x: 0, y: -160 },
+      delta: 1_000,
+      tileSize: 32,
+      // The local player and Studio contact body are both 24x24.
+      collisionHalfSize: 12,
+      toTile: (x: number, y: number) => ({ x: Math.floor(x / 32), y: Math.floor(y / 32) }),
+      isSolidAt: (x: number, y: number) => isFixedRoomSolidAt(room, x, y),
+    });
+
+    // The station occupies row 3 (world y 96..128 in this origin-free map).
+    // With 16px collision substeps, the body must stop at center y=144 rather
+    // than entering row 4's lower edge-adjacent position at y=128.
+    expect(position).toEqual({ x: 9 * 32 + 16, y: 144 });
+  });
+
+  it('uses the supplied world-to-tile transform for body collision checks', () => {
+    const room = createFixedRoom(BANK_ROOM_DEFINITION);
+    const origin = 64;
+    const position = moveWithCollisionSubsteps({
+      position: { x: origin + 9 * 32 + 16, y: origin + 5 * 32 + 16 },
+      velocity: { x: 0, y: -160 },
+      delta: 1_000,
+      tileSize: 32,
+      collisionHalfSize: 12,
+      toTile: (x: number, y: number) => ({
+        x: Math.floor((x - origin) / 32),
+        y: Math.floor((y - origin) / 32),
+      }),
+      isSolidAt: (x: number, y: number) => isFixedRoomSolidAt(room, x, y),
+    });
+
+    expect(position).toEqual({ x: origin + 9 * 32 + 16, y: origin + 144 });
+  });
+
   it('uses the same bounded collision seam for Avatar Studio movement', () => {
     const position = moveWithCollisionSubsteps({
       position: { x: 5 * 32 + 16, y: 9 * 32 + 16 },
