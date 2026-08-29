@@ -52,6 +52,10 @@ export function createVisitController(
   }
 
   function enter(building: BuildingId): void {
+    // DoorTrigger emits the prior room's exit before a legitimate new enter.
+    // Ignore any re-entrant or stale enter while React still owns an active
+    // visit; only the authoritative matching exit may reset this state.
+    if (store.getState().name === 'visiting') return;
     store.setState({ name: 'visiting', building, surface: { name: 'room' } });
     shell.emit('world:stations', { building, stations: stationSnapshot(building, register, currentCapabilities()) });
   }
