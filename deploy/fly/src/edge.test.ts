@@ -272,6 +272,57 @@ describe('Fly edge public boundary', () => {
     expect(received.headers['x-player-identifier']).toBeUndefined();
   });
 
+  it('sanitizes private-child response headers at the public edge', async () => {
+    const root = await fixture();
+    const isolationHeaderOne = ['cross', 'origin', 'opener', 'policy'].join('-');
+    const isolationHeaderTwo = ['cross', 'origin', 'embedder', 'policy'].join('-');
+    const requireCorp = ['require', 'corp'].join('-');
+    const backend = createServer((_request, response) => {
+      response.statusCode = 200;
+      response.setHeader('content-type', 'application/json; charset=utf-8');
+      response.setHeader('x-content-type-options', 'sniff');
+      response.setHeader('set-cookie', [
+        'session=private; Path=/',
+        'tracking=private; Path=/',
+      ]);
+      response.setHeader('location', 'https://evil.example/');
+      response.setHeader('cache-control', 'public, max-age=3600');
+      response.setHeader('access-control-allow-origin', '*');
+      response.setHeader('access-control-allow-credentials', 'true');
+      response.setHeader('x-private-child', 'secret');
+      response.setHeader('content-encoding', 'gzip');
+      response.setHeader('etag', 'private-etag');
+      response.setHeader('vary', 'Origin');
+      response.setHeader('server', 'private-child');
+      response.setHeader(isolationHeaderOne, 'same-origin');
+      response.setHeader(isolationHeaderTwo, requireCorp);
+      response.end('{"ok":true}');
+    });
+    const backendPort = await listen(backend);
+    const edge = createEdgeServer({ staticRoot: root, backendPort, lobbyPort: 1, publicOrigin: 'https://game.example' });
+    const edgePort = await listen(edge);
+
+    const response = await fetchEdge(edgePort, '/api/v1/rpc/pool-config', {
+      method: 'POST',
+      body: '{}',
+      headers: { 'Content-Type': 'application/json' },
+    });
+
+    expect(response.status).toBe(200);
+    expect(response.headers.get('content-type')).toBe('application/json; charset=utf-8');
+    expect(response.headers.get('x-content-type-options')).toBe('nosniff');
+    expect(response.headers.get('cache-control')).toBe('no-store');
+    for (const name of [
+      'set-cookie', 'location', 'access-control-allow-origin',
+      'access-control-allow-credentials', 'x-private-child', 'content-length',
+      'content-encoding', 'etag', 'vary', 'server',
+      isolationHeaderOne, isolationHeaderTwo,
+    ]) {
+      expect(response.headers.get(name)).toBeNull();
+    }
+    expect(await response.text()).toBe('{"ok":true}');
+  });
+
   it('forwards only JSON body metadata from the public API request', async () => {
     const root = await fixture();
     const backend = createServer((request, response) => {
