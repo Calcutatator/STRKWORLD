@@ -199,6 +199,11 @@ export function createExchangePanel(options: {
       try {
         const pool = await operations.poolConfig(signal);
         if (!live(id)) return;
+        if (!batch.swapReview || !Number.isSafeInteger(batch.swapReview.expiresAt) || batch.swapReview.expiresAt <= now()) {
+          discard();
+          patch({ flow: { name: 'failed', kind: 'unknown', message: COPY.errors.unknown, recovery: 'prepare-again' } });
+          return;
+        }
         if (!options.canStartFinancialAction()) {
           patch({ flow: { name: 'review', summary }, notice: COPY.errors['submission-uncertain'] });
           return;

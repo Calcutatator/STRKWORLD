@@ -258,6 +258,29 @@ empty shell to fetchers, so a 200 there means nothing.
 
 ## 6. Findings log
 
+### 2026-08-29 — Exchange quote expiry is rechecked after the live pool read
+
+The Exchange confirm path checked a private-swap quote's `expiresAt` before
+awaiting the live pool configuration read, but did not check it again after
+that await. A quote could therefore expire while the fee and pool-validity
+read was pending and still cross into the prepared batch's wallet handoff.
+That would make the review stale at the commit point even though the initial
+expiry check had passed.
+
+Confirm now rechecks the same quote expiry immediately after the live pool
+read and before any fee gate or wallet handoff. An expired quote is discarded
+and returns to the existing `prepare-again` failure; a stale or closed attempt
+still returns before touching the current batch. No accepted wallet handoff,
+receipt, submission or uncertainty behavior changes.
+
+*Verified:* a public deterministic regression advances a controlled clock
+while the live pool read is deferred. On the old path the expired review
+entered `batch.confirm`; the corrected path discards it exactly once, calls no
+confirm and returns `prepare-again`. A separate close/reopen regression keeps
+the replacement review authoritative when the old pool read settles. No
+browser, wallet, provider, RPC, proof, signature, funds or transaction was
+used.
+
 ### 2026-08-29 — Exchange composition edits retire reviewed batches
 
 The Exchange machine invalidated a pending prepare while the panel was in
