@@ -7,6 +7,8 @@ const PROOF_VALIDITY_SELECTOR = '0x11d6d65b366023adbdaeaa04008285431f4509d78e78c
 
 type FetchLike = (input: string, init?: RequestInit) => Promise<Response>;
 
+const MAX_RPC_ID = Number.MAX_SAFE_INTEGER;
+
 export interface StarknetRpcOptions {
   rpcUrl: string;
   poolAddress: string;
@@ -18,6 +20,7 @@ export interface StarknetRpcOptions {
 /** Minimal raw JSON-RPC port; it cannot relay arbitrary client calls. */
 export class StarknetRpcPoolPort implements PoolRpcPort {
   private id = 0;
+  private readonly activeIds = new Set<number>();
   private readonly fetcher: FetchLike;
 
   constructor(private readonly options: StarknetRpcOptions) {
@@ -83,17 +86,79 @@ export class StarknetRpcPoolPort implements PoolRpcPort {
   }
 
   private async rpc(method: string, params: unknown[], signal?: AbortSignal): Promise<unknown> {
-    const response = await this.fetcher(this.options.rpcUrl, {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ jsonrpc: '2.0', id: ++this.id, method, params }),
-      signal,
-    });
-    if (!response.ok) throw new Error('Starknet RPC request failed.');
-    const payload = await response.json() as { result?: unknown; error?: unknown };
-    if (payload.error || !('result' in payload)) throw new Error('Starknet RPC returned an error.');
-    return payload.result;
+    const id = this.allocateId();
+    try {
+      const response = await this.fetcher(this.options.rpcUrl, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ jsonrpc: '2.0', id, method, params }),
+        signal,
+      });
+      if (!response.ok) throw new Error('Starknet RPC request failed.');
+      let payload: unknown;
+      try {
+        payload = await response.json();
+      } catch (error) {
+        if (!(error instanceof SyntaxError)) throw error;
+        throw new Error('Starknet RPC returned an invalid response.');
+      }
+      const envelope = parseRpcEnvelope(payload, id);
+      if (envelope.kind === 'error') throw new Error('Starknet RPC returned an error.');
+      return envelope.result;
+    } finally {
+      this.activeIds.delete(id);
+    }
   }
+
+  private allocateId(): number {
+    const first = this.id >= MAX_RPC_ID ? 1 : this.id + 1;
+    let candidate = first;
+    for (;;) {
+      if (!this.activeIds.has(candidate)) {
+        this.activeIds.add(candidate);
+        this.id = candidate;
+        return candidate;
+      }
+      candidate = candidate === MAX_RPC_ID ? 1 : candidate + 1;
+      if (candidate === first) {
+        throw new Error('Starknet RPC request-id space is exhausted.');
+      }
+    }
+  }
+}
+
+function parseRpcEnvelope(
+  payload: unknown,
+  requestId: number,
+): { kind: 'result'; result: unknown } | { kind: 'error' } {
+  if (!payload || typeof payload !== 'object' || Array.isArray(payload)) {
+    throw new Error('Starknet RPC returned an invalid response.');
+  }
+  const record = payload as Record<string, unknown>;
+  // JSON-RPC permits extension members; this narrow port consumes only the
+  // required envelope fields and never reflects provider extensions.
+  const jsonrpc = Object.getOwnPropertyDescriptor(record, 'jsonrpc');
+  const id = Object.getOwnPropertyDescriptor(record, 'id');
+  const result = Object.getOwnPropertyDescriptor(record, 'result');
+  const error = Object.getOwnPropertyDescriptor(record, 'error');
+  if (
+    !jsonrpc || !('value' in jsonrpc) ||
+    !id || !('value' in id)
+  ) {
+    throw new Error('Starknet RPC returned an invalid response.');
+  }
+  const hasResult = Boolean(result);
+  const hasError = Boolean(error);
+  if (
+    hasResult === hasError ||
+    (result !== undefined && !('value' in result)) ||
+    (error !== undefined && !('value' in error)) ||
+    jsonrpc.value !== '2.0' ||
+    id.value !== requestId
+  ) {
+    throw new Error('Starknet RPC returned an invalid response.');
+  }
+  return hasError ? { kind: 'error' } : { kind: 'result', result: result!.value };
 }
 
 function feltToPositiveSafeInteger(value: string | undefined, label: string): number {
