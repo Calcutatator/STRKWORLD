@@ -30,6 +30,8 @@ export interface CollisionSubstepOptions {
   readonly velocity: MovementVelocity;
   readonly delta: number;
   readonly tileSize: number;
+  /** Half of the axis-aligned gameplay body; zero preserves anchor-only checks. */
+  readonly collisionHalfSize?: number;
   readonly toTile: (x: number, y: number) => { x: number; y: number };
   readonly isSolidAt: (x: number, y: number) => boolean;
 }
@@ -63,6 +65,10 @@ export function moveWithCollisionSubsteps(options: CollisionSubstepOptions): Mov
     options.delta < 0 ||
     !Number.isFinite(options.tileSize) ||
     options.tileSize <= 0 ||
+    (options.collisionHalfSize !== undefined &&
+      (!Number.isFinite(options.collisionHalfSize) ||
+        options.collisionHalfSize < 0 ||
+        options.collisionHalfSize > options.tileSize)) ||
     typeof options.toTile !== 'function' ||
     typeof options.isSolidAt !== 'function'
   ) {
@@ -89,16 +95,45 @@ export function moveWithCollisionSubsteps(options: CollisionSubstepOptions): Mov
   const steps = Math.max(1, Math.ceil(travel / maxStep));
   const stepX = (velocity.x * effectiveDuration) / (1000 * steps);
   const stepY = (velocity.y * effectiveDuration) / (1000 * steps);
+  const collisionHalfSize = options.collisionHalfSize ?? 0;
+
+  const canOccupy = (x: number, y: number): boolean => {
+    if (collisionHalfSize === 0) {
+      const tile = options.toTile(x, y);
+      return !options.isSolidAt(tile.x, tile.y);
+    }
+    // Derive every occupied tile through the caller's transform. Interior
+    // coordinates are world-space (the fixed rooms are offset from the street
+    // origin), so dividing by tileSize directly would shift their collision
+    // grid. Inset the far edge so merely touching a tile boundary is allowed.
+    const edgeInset = Math.min(
+      collisionHalfSize / 2,
+      Number.EPSILON * Math.max(1, Math.abs(x), Math.abs(y), options.tileSize) * 4,
+    );
+    const corners = [
+      options.toTile(x - collisionHalfSize + edgeInset, y - collisionHalfSize + edgeInset),
+      options.toTile(x + collisionHalfSize - edgeInset, y - collisionHalfSize + edgeInset),
+      options.toTile(x - collisionHalfSize + edgeInset, y + collisionHalfSize - edgeInset),
+      options.toTile(x + collisionHalfSize - edgeInset, y + collisionHalfSize - edgeInset),
+    ];
+    const minX = Math.min(...corners.map((tile) => tile.x));
+    const maxX = Math.max(...corners.map((tile) => tile.x));
+    const minY = Math.min(...corners.map((tile) => tile.y));
+    const maxY = Math.max(...corners.map((tile) => tile.y));
+    for (let tileY = minY; tileY <= maxY; tileY++) {
+      for (let tileX = minX; tileX <= maxX; tileX++) {
+        if (options.isSolidAt(tileX, tileY)) return false;
+      }
+    }
+    return true;
+  };
 
   for (let step = 0; step < steps; step++) {
-    const currentTile = options.toTile(current.x, current.y);
     const nextX = current.x + stepX;
-    const horizontalTile = options.toTile(nextX, current.y);
-    if (!options.isSolidAt(horizontalTile.x, currentTile.y)) current.x = nextX;
+    if (canOccupy(nextX, current.y)) current.x = nextX;
 
     const nextY = current.y + stepY;
-    const verticalTile = options.toTile(current.x, nextY);
-    if (!options.isSolidAt(verticalTile.x, verticalTile.y)) current.y = nextY;
+    if (canOccupy(current.x, nextY)) current.y = nextY;
   }
 
   return current;
