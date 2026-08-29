@@ -258,6 +258,30 @@ empty shell to fetchers, so a 200 there means nothing.
 
 ## 6. Findings log
 
+### 2026-08-29 — Visit ownership ignores re-entrant building enters
+
+`VisitController` previously accepted every `building:entered` event, even
+while the Shell was already inside a room or station. The World door contract
+emits `building:exited` before a legitimate new `building:entered`; therefore
+an enter arriving during an active visit is stale or re-entrant. Accepting it
+replaced the active station/window with a new room, republished station
+metadata, and could leave the Shell describing a different building from the
+World's fixed-room controller. This was especially unsafe during lifecycle
+rebinds or duplicate event delivery because no exit had reset ownership.
+
+`VisitController` now ignores `building:entered` while visiting. A matching
+authoritative `building:exited` still resets the visit, after which a new enter
+is accepted normally. Locked-door handling, station activation, close/exit
+semantics and control ownership are unchanged.
+
+*Verified:* a public regression first failed on current `origin/main` when a
+duplicate same-building enter followed by a conflicting enter changed an
+active Bank station visit into an Exchange room and published a second station
+snapshot. The corrected focused Web visit-controller suite passes; the same
+regression proves an exit followed by a new enter still transitions normally.
+No browser, wallet, provider, RPC, proof, signature, funds or transaction was
+used.
+
 ### 2026-08-29 — Lobby must validate the server-minted welcome identity
 
 `LobbyClient` previously trusted every `welcome` payload and cast its

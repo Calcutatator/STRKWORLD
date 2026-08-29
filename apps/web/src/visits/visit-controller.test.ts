@@ -240,6 +240,37 @@ describe('visit controller', () => {
     expect(owners).not.toHaveBeenCalled();
   });
 
+  it('ignores duplicate or conflicting building-entered events during an active visit', () => {
+    const world = createEventBus<WorldEvents>();
+    const shell = createEventBus<ShellEvents>();
+    const stations = vi.fn();
+    shell.on('world:stations', stations);
+    const controller = createVisitController(shell);
+    controller.listen(world);
+    world.emit('building:entered', { building: 'bank' });
+    world.emit('station:activated', { building: 'bank', station: 'bank:shielding' });
+    const activeVisit = controller.store.getState();
+
+    // DoorTrigger emits exit before enter for a real room transition. An enter
+    // delivered while already visiting is therefore stale/re-entrant and must
+    // not replace the active station visit or publish a second room snapshot.
+    world.emit('building:entered', { building: 'bank' });
+    world.emit('building:entered', { building: 'exchange' });
+
+    expect(controller.store.getState()).toBe(activeVisit);
+    expect(stations).toHaveBeenCalledOnce();
+
+    // A real room transition still works once World has acknowledged the exit.
+    world.emit('building:exited', { building: 'bank' });
+    world.emit('building:entered', { building: 'exchange' });
+    expect(controller.store.getState()).toEqual({
+      name: 'visiting',
+      building: 'exchange',
+      surface: { name: 'room' },
+    });
+    expect(stations).toHaveBeenCalledTimes(2);
+  });
+
   it('only a matching building exit tears down a visit', () => {
     const world = createEventBus<WorldEvents>();
     const shell = createEventBus<ShellEvents>();
