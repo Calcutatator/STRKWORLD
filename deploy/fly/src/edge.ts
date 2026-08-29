@@ -98,6 +98,10 @@ async function handleRequest(
     return sendError(response, 404, 'NOT_FOUND', 'The requested resource was not found.');
   }
   if (pathname === '/api' || pathname.startsWith('/api/')) {
+    if (!isCanonicalApiTarget(request.url)) {
+      request.resume();
+      return sendError(response, 400, 'BAD_REQUEST', 'The request is invalid.');
+    }
     const headers = apiHeaders(request);
     if (headers === null) {
       request.resume();
@@ -114,6 +118,19 @@ async function handleRequest(
     return sendError(response, 405, 'METHOD_NOT_ALLOWED', 'The method is not allowed.');
   }
   return serveStatic(request, response, options.staticRoot, pathname);
+}
+
+function isCanonicalApiTarget(target: string | undefined): boolean {
+  if (!target) return false;
+  if (!target.startsWith('/')) return false;
+  const query = target.indexOf('?');
+  const pathname = query < 0 ? target : target.slice(0, query);
+  if (pathname !== '/api' && !pathname.startsWith('/api/')) return false;
+  // Every admitted Backend route is fixed literal ASCII. Percent escapes in
+  // the path add only downstream re-decoding ambiguity; query bytes are kept.
+  if (pathname.includes('%') || pathname.includes('\\') || pathname.includes('//') || pathname.includes(';') || pathname.includes('#')) return false;
+  const segments = pathname.split('/');
+  return !segments.some((segment) => segment === '.' || segment === '..');
 }
 
 function pathnameOf(url: string | undefined): string | null {

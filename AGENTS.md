@@ -258,6 +258,38 @@ empty shell to fetchers, so a 200 there means nothing.
 
 ## 6. Findings log
 
+### 2026-08-29 — Fly rejects ambiguous private-API request targets
+
+The Fly public edge previously classified raw request targets with a literal
+`/api/` prefix and forwarded the remaining bytes unchanged. Targets such as
+`/api/../health`, single- or double-encoded delimiters, duplicate slashes and
+semicolon path parameters therefore crossed into the private
+Backend child. A downstream HTTP parser or proxy could normalize those bytes
+differently, and the traversal shape bypassed the public edge's explicit
+concealment of health and metrics routes.
+
+The edge now validates the exact raw API target before reading or proxying the
+body. It accepts origin-form `/api`, `/api/` and canonical fixed-ASCII
+`/api/v1/...` paths, preserving queries unchanged, while rejecting every
+percent escape in the path, literal dot segments, backslash, duplicate slash,
+semicolon parameters, fragments and non-origin-form targets. Backend routes
+contain no dynamic or percent-encoded path components, so encoded path bytes
+add only downstream re-decoding ambiguity. Nearby `/apis` and `/api2`
+static-shell routing remains outside the private namespace. Rejections are the
+existing generic public `400`, do not echo the target and never reach the
+private child.
+
+*Verified:* deterministic raw-edge regressions first forwarded sixteen ambiguous
+API targets to a private-child fake, including both literal and encoded health
+traversals. The corrected edge rejects them with zero child calls and forwards
+four canonical API/query targets byte-for-byte after stripping only `/api`.
+The adversarial matrix includes mixed-case and mixed single/double-encoded dot,
+slash, backslash and semicolon shapes. The focused Fly edge suite passes 37
+tests and all Fly tests pass 4 files / 143 tests. The full workspace passes 102
+files / 1,587 tests; Fly/workspace typechecks, production build, 13 invariants,
+tilemap gate and diff hygiene pass. No browser, external provider, RPC, wallet,
+proof, signature, funds or transaction was used.
+
 ### 2026-08-29 — HTTP edge rejects unsupported content encodings
 
 The Fetch edge parsed request bytes as UTF-8 JSON but ignored
