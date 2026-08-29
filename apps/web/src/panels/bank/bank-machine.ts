@@ -329,6 +329,16 @@ export function createBankPanel(options: BankPanelOptions): BankPanel {
     store.setState((previous) => ({ ...previous, ...next }));
   }
 
+  /**
+   * A form edit supersedes any recipient preflight that read the previous
+   * shape. Keep the ownership bump beside the public form writes so every
+   * caller, including MAX, uses the same stale-result guard.
+   */
+  function editComposition(next: Partial<BankState>, changed = true): void {
+    if (changed) composition += 1;
+    patch(next);
+  }
+
   function notice(tone: BankNotice['tone'], text: string): void {
     patch({ notice: { tone, text } });
   }
@@ -467,7 +477,11 @@ export function createBankPanel(options: BankPanelOptions): BankPanel {
     setMode(mode: BankMode): void {
       if (!allowedModes.includes(mode)) return;
       const routeId = ROUTE_BY_MODE[mode];
-      patch({
+      // Selecting a mode has always reset both form fields and the notice,
+      // even when the selected tab is already active. That is a composition
+      // transition in the public API, so invalidate pending work on every
+      // accepted mode selection.
+      editComposition({
         mode,
         routeId,
         door: routeDoor(routeId, register),
@@ -482,11 +496,11 @@ export function createBankPanel(options: BankPanelOptions): BankPanel {
     },
 
     setAmount(text: string): void {
-      patch({ amountText: text });
+      editComposition({ amountText: text }, store.getState().amountText !== text);
     },
 
     setRecipient(text: string): void {
-      patch({ recipientText: text });
+      editComposition({ recipientText: text }, store.getState().recipientText !== text);
     },
 
     /** Only ever called from a player action. There is no timer in this file. */
@@ -531,10 +545,11 @@ export function createBankPanel(options: BankPanelOptions): BankPanel {
     applyMax(): void {
       const max = computeMax();
       if (max !== null) {
-        patch({
-          amountText: formatTokenAmountExact(max),
+        const maxText = formatTokenAmountExact(max);
+        editComposition({
+          amountText: maxText,
           notice: { tone: 'info', text: COPY.balance.feeReserved },
-        });
+        }, store.getState().amountText !== maxText);
         return;
       }
       const state = store.getState();

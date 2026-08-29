@@ -258,6 +258,35 @@ empty shell to fetchers, so a 200 there means nothing.
 
 ## 6. Findings log
 
+### 2026-08-29 — Bank form edits retire stale recipient preflights
+
+The Bank's transfer Add captures the recipient and amount before awaiting the
+pool recipient preflight. Editing the form while that request is pending used
+to let the old result queue the captured intent and clear the newer form. The
+same stale write was reachable through the public MAX control, which remained
+available while Add was resolving. Clear and Remove already advanced the
+existing composition clock, but ordinary form writes did not.
+
+The public form writers now share one small composition-edit helper. A changed
+amount or recipient advances the preflight ownership generation; an accepted
+mode selection advances it on every call because that public operation resets
+both form fields and the notice; MAX advances it only when it changes the
+displayed amount. Invalid mode selections and same-value amount/recipient
+writes retain their previous no-data-change semantics. The prepare/confirm
+attempt clock and the existing Clear/Remove composition behavior are otherwise
+unchanged.
+
+*Verified:* public `createBankPanel()` regressions first failed on current
+`origin/main` for a deferred BOB/1 preflight followed by a BOB-to-ALICE/1-to-2
+edit and for the same sequence through MAX. Green also covers recipient-only,
+amount-only and active-mode reselection edits, while preserving the edited
+fields and leaving the batch empty. Removing each of the amount, recipient,
+mode and MAX ownership bumps makes its focused regression fail. The focused
+Bank suite passes 83 tests; the full workspace passes 102 files / 1,456
+tests, all workspace typechecks, the production build, all 13 invariants and
+diff hygiene. No browser, wallet, provider, RPC, proof, signature, funds or
+transaction was used.
+
 ### 2026-08-29 — GitHub Actions references are immutable supply-chain inputs
 
 The CI workflow previously selected `actions/checkout@v7` and
