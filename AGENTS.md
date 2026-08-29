@@ -258,6 +258,34 @@ empty shell to fetchers, so a 200 there means nothing.
 
 ## 6. Findings log
 
+### 2026-08-29 — Pre-aborted Backend requests do not consume aggregate rate admission
+
+`BackendApi.handle()` previously evaluated `this.limiter.take()` while building
+the promise passed to `abortable()`. An `ApiRequest` whose signal was already
+aborted therefore consumed the process-wide aggregate rate-limit slot before
+`abortable()` observed cancellation. With a one-request window, a canceled
+request could deny the next live request with `RATE_LIMITED` without touching a
+provider. This is an admission-control denial path, not a provider or request
+identity feature.
+
+The handler now checks the derived deadline signal before invoking the limiter.
+It preserves the existing generic timeout response, request/failure metrics,
+deadline disposal, provider non-invocation and all async limiter behavior. No
+abort-reason classification, route policy, queue, response shape or logging
+behavior changed.
+
+*Verified:* the public BackendApi regression first failed on current
+`origin/main` because the pre-aborted fee request was followed by `429` instead
+of a successful pool-config read. Green proves the first request returns the
+existing generic `504`, calls neither fee nor RPC providers, clears its one
+deadline timer, records one request and one failure with no rate-limit count,
+and leaves the following live request at `200` with `rateLimited: 0`. Removing
+the single pre-admission guard reproduces the `429` failure. The focused
+Backend suite passes 73 tests; the full workspace passes 102 files / 1,465
+tests, all workspace typechecks, the production build, all 13 invariants, the
+tilemap gate and `git diff --check`. No browser, wallet, provider, RPC, proof,
+signature, funds or transaction was used.
+
 ### 2026-08-29 — Recipient preflight rejects malformed pool keys
 
 `WalletApiPrivacyOperations.recipientStatus()` previously treated every

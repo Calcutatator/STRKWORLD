@@ -94,6 +94,7 @@ export class BackendApi {
     this.metrics.request();
     const deadline = createRequestDeadline(request.signal, this.requestTimeoutMs);
     try {
+      if (deadline.signal.aborted) throw abortReason(deadline.signal);
       if (!await abortable(Promise.resolve(this.limiter.take()), deadline.signal)) {
         this.metrics.limited();
         return { status: 429, body: { code: 'RATE_LIMITED', message: 'Service is busy. Try again shortly.' } };

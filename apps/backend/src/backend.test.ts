@@ -230,6 +230,61 @@ describe('strict fee authorization', () => {
     });
   });
 
+  it('does not consume rate-limit admission for a request aborted before entry', async () => {
+    vi.useFakeTimers();
+    const clearTimeoutSpy = vi.spyOn(globalThis, 'clearTimeout');
+    try {
+      const { api, paymaster, rpc } = fixture({
+        rateLimit: { maxRequests: 1, windowMs: 60_000 },
+      });
+      const buildFee = vi.spyOn(paymaster, 'buildFee');
+      const poolConfig = vi.spyOn(rpc, 'getPoolConfig');
+      const controller = new AbortController();
+      controller.abort(new DOMException('Caller closed the request.', 'AbortError'));
+
+      await expect(api.handle({
+        method: 'POST',
+        path: '/v1/private/fees',
+        body: { v: 1, route: 'transfer', feeToken: STRK, operationToken: '0xabc' },
+        signal: controller.signal,
+      })).resolves.toEqual({
+        status: 504,
+        body: {
+          code: 'UPSTREAM_TIMEOUT',
+          message: 'A private service dependency timed out.',
+        },
+      });
+
+      expect(buildFee).not.toHaveBeenCalled();
+      expect(poolConfig).not.toHaveBeenCalled();
+      expect(clearTimeoutSpy).toHaveBeenCalledTimes(1);
+      expect(api.metrics.snapshot()).toMatchObject({
+        requests: 1,
+        successes: 0,
+        failures: 1,
+        rateLimited: 0,
+      });
+
+      await expect(api.handle({
+        method: 'POST',
+        path: '/v1/rpc/pool-config',
+        body: { v: 1 },
+      })).resolves.toMatchObject({ status: 200 });
+
+      expect(poolConfig).toHaveBeenCalledOnce();
+      expect(buildFee).not.toHaveBeenCalled();
+      expect(api.metrics.snapshot()).toMatchObject({
+        requests: 2,
+        successes: 1,
+        failures: 1,
+        rateLimited: 0,
+      });
+    } finally {
+      clearTimeoutSpy.mockRestore();
+      vi.useRealTimers();
+    }
+  });
+
   it('preserves the parent abort reason and timeout response', async () => {
     const { api, paymaster } = fixture();
     const parent = new AbortController();
