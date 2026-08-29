@@ -27,6 +27,7 @@ import {
   ApiFailure,
   isFelt,
   requireFelt,
+  requireNonzeroFelt,
   requirePositiveInteger,
   requireRecord,
   requireRoute,
@@ -386,7 +387,7 @@ export class BackendApi {
   private async receipt(body: unknown, signal: AbortSignal): Promise<ApiResponse> {
     const value = requireRecord(body, ['v', 'transactionHash']);
     requireVersion(value);
-    const hash = requireFelt(value.transactionHash, 'transaction hash');
+    const hash = requireNonzeroFelt(value.transactionHash, 'transaction hash');
     return { status: 200, body: await this.rpc.getReceipt(hash, signal) };
   }
 

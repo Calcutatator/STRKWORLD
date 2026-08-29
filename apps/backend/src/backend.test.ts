@@ -966,6 +966,74 @@ describe('privacy-safe RPC and operations', () => {
     expect(JSON.stringify(api.metrics.snapshot())).not.toMatch(/0x456|0xaaa|publicKey|artifact/);
   });
 
+  it.each([
+    ['zero', '0x0'],
+    ['leading-zero zero', '0x00'],
+    ['negative', '-1'],
+    ['decimal', '123'],
+    ['uppercase prefix', '0X1'],
+    ['malformed hex', '0xnot-a-hash'],
+    ['field prime', `0x${((1n << 251n) + 17n * (1n << 192n) + 1n).toString(16)}`],
+    ['above field', `0x${((1n << 251n) + 17n * (1n << 192n) + 2n).toString(16)}`],
+  ])('rejects %s receipt transaction hash before the RPC read', async (_label, transactionHash) => {
+    const { api, rpc } = fixture();
+    const getReceipt = vi.spyOn(rpc, 'getReceipt');
+
+    await expect(api.handle({
+      method: 'POST',
+      path: '/v1/rpc/receipt',
+      body: { v: 1, transactionHash },
+    })).resolves.toMatchObject({ status: 400 });
+    expect(getReceipt).not.toHaveBeenCalled();
+  });
+
+  it('preserves valid nonzero transaction hashes, including leading zeroes and uppercase digits', async () => {
+    const { api, rpc } = fixture();
+    const getReceipt = vi.spyOn(rpc, 'getReceipt');
+
+    await expect(api.handle({
+      method: 'POST',
+      path: '/v1/rpc/receipt',
+      body: { v: 1, transactionHash: '0x00Ab' },
+    })).resolves.toMatchObject({ status: 200 });
+    expect(getReceipt).toHaveBeenCalledWith('0x00Ab', expect.any(AbortSignal));
+  });
+
+  it('maps a receipt provider failure to a generic response without echoing receipt data', async () => {
+    const { api, rpc } = fixture();
+    vi.spyOn(rpc, 'getReceipt').mockRejectedValue(
+      new Error('provider detail includes 0x00Ab and ACCEPTED_ON_L2'),
+    );
+
+    const response = await api.handle({
+      method: 'POST',
+      path: '/v1/rpc/receipt',
+      body: { v: 1, transactionHash: '0x00Ab' },
+    });
+
+    expect(response).toEqual({
+      status: 502,
+      body: {
+        code: 'UPSTREAM_FAILURE',
+        message: 'A private service dependency failed.',
+      },
+    });
+    expect(JSON.stringify(response)).not.toMatch(/0x00Ab|ACCEPTED_ON_L2|provider detail/);
+  });
+
+  it.each([
+    ['wrong version', { v: 2, transactionHash: '0xabc' }],
+    ['extra address', { v: 1, transactionHash: '0xabc', address: '0xdef' }],
+    ['extra proof', { v: 1, transactionHash: '0xabc', proof: 'secret' }],
+  ])('rejects receipt body with %s before the RPC read', async (_label, body) => {
+    const { api, rpc } = fixture();
+    const getReceipt = vi.spyOn(rpc, 'getReceipt');
+
+    await expect(api.handle({ method: 'POST', path: '/v1/rpc/receipt', body }))
+      .resolves.toMatchObject({ status: 400 });
+    expect(getReceipt).not.toHaveBeenCalled();
+  });
+
   it('rejects out-of-field Starknet values before touching RPC', async () => {
     const { api, rpc } = fixture();
     const publicKey = vi.spyOn(rpc, 'getPublicKey');

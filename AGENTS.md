@@ -258,6 +258,27 @@ empty shell to fetchers, so a 200 there means nothing.
 
 ## 6. Findings log
 
+### 2026-08-29 — Receipt lookups require a nonzero transaction hash
+
+The receipt endpoint previously reused the generic felt validator, which
+accepts zero and therefore forwarded `0x0` and leading-zero zero encodings to
+the RPC as if they were transaction hashes. A transaction hash is an
+identifier, not the zero sentinel used by pool public-key reads; accepting the
+sentinel wastes an upstream read and makes a nonexistent receipt look like a
+valid lookup. The endpoint now uses a nonzero felt validator while preserving
+leading-zero nonzero hashes and uppercase hex digits. Its exact `{v,
+transactionHash}` body contract, opaque receipt response, and no-retry
+semantics are unchanged.
+
+*Verified:* a public BackendApi regression first forwarded `0x0` and `0x00`
+to a deterministic receipt fake; after the guard both return generic `400`
+without touching the RPC. Negative, decimal, invalid-prefix, malformed,
+field-prime and above-field values are also rejected; `0x00Ab` is preserved.
+Wrong versions and extra address/proof fields are rejected, and a provider
+failure returns only the generic `502` response. The focused backend suite
+passes 51 tests, with typecheck, invariants and diff hygiene green. No
+external RPC, wallet, proof, signature, funds or transaction was used.
+
 ### 2026-08-29 — Public-key reads require one valid felt
 
 `StarknetRpcPoolPort.getPublicKey()` previously accepted any string array from

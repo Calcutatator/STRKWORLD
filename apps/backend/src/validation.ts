@@ -31,6 +31,12 @@ export function requireFelt(value: unknown, label: string): string {
   return value;
 }
 
+export function requireNonzeroFelt(value: unknown, label: string): string {
+  const felt = requireFelt(value, label);
+  if (BigInt(felt) === 0n) throw new ApiFailure(400, `Invalid ${label}.`);
+  return felt;
+}
+
 export function isFelt(value: string): boolean {
   return /^0x[0-9a-fA-F]{1,64}$/.test(value) && BigInt(value) < STARK_FIELD_PRIME;
 }
