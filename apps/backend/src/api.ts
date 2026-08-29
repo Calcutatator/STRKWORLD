@@ -96,6 +96,9 @@ export class BackendApi {
     const deadline = createRequestDeadline(request.signal, this.requestTimeoutMs);
     try {
       if (deadline.signal.aborted) throw abortReason(deadline.signal);
+      if (this.config.globalEnabled && request.method === 'POST' && request.path === '/v1/private/submissions') {
+        preflightSubmission(request.body, this.config);
+      }
       if (!await abortable(Promise.resolve(this.limiter.take()), deadline.signal)) {
         this.metrics.limited();
         return { status: 429, body: { code: 'RATE_LIMITED', message: 'Service is busy. Try again shortly.' } };
@@ -490,6 +493,54 @@ function toFelt(value: bigint): string {
 function clamp(value: number, min: number, max: number): number {
   if (!Number.isFinite(value)) return min;
   return Math.max(min, Math.min(max, Math.floor(value)));
+}
+
+function preflightSubmission(body: unknown, config: BackendConfig): void {
+  const value = requireRecord(
+    body,
+    ['v', 'route', 'artifact', 'feeAuthorization', 'proofValidityBlocks'],
+  );
+  requireVersion(value);
+  requireRoute(value.route);
+  if (typeof value.feeAuthorization !== 'string' || value.feeAuthorization.length === 0) {
+    throw new ApiFailure(400, 'Fee authorization is required.');
+  }
+  requirePositiveInteger(value.proofValidityBlocks, 'proof validity');
+  const artifact = requireRecord(value.artifact, ['call', 'proof']);
+  const call = requireRecord(artifact.call, ['contract_address', 'entry_point', 'calldata']);
+  const proof = requireRecord(artifact.proof, ['data', 'output', 'proof_facts']);
+  const contractAddress = requireFelt(call.contract_address, 'submission target');
+  if (!sameAddress(contractAddress, config.poolAddress)) {
+    throw new ApiFailure(400, 'Submission target is not the configured privacy pool.');
+  }
+  if (call.entry_point !== 'apply_actions') {
+    throw new ApiFailure(400, 'Submission entry point is not allowlisted.');
+  }
+
+  if (!Array.isArray(call.calldata) || call.calldata.length === 0) {
+    throw new ApiFailure(400, 'Invalid call calldata.');
+  }
+  if (call.calldata.length > config.maxCalldataItems) {
+    throw new ApiFailure(400, 'Invalid call calldata.');
+  }
+  call.calldata.forEach((item) => requireFelt(item, 'call calldata'));
+  if (typeof proof.data !== 'string' || proof.data.length === 0) {
+    throw new ApiFailure(400, 'Prepared proof is empty.');
+  }
+  if (
+    proof.data.length > config.maxProofBytes ||
+    new TextEncoder().encode(proof.data).byteLength > config.maxProofBytes
+  ) {
+    throw new ApiFailure(413, 'Prepared proof is too large.');
+  }
+  if (!Array.isArray(proof.output) || proof.output.length === 0 || proof.output.length > config.maxCalldataItems + 1) {
+    throw new ApiFailure(400, 'Invalid proof output.');
+  }
+  proof.output.forEach((item) => requireFelt(item, 'proof output'));
+  if (!Array.isArray(proof.proof_facts) || proof.proof_facts.length === 0 || proof.proof_facts.length > 64) {
+    throw new ApiFailure(400, 'Invalid proof facts.');
+  }
+  proof.proof_facts.forEach((item) => requireFelt(item, 'proof facts'));
 }
 
 function validateBackendConfig(config: BackendConfig): void {
