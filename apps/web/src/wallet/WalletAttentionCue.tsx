@@ -82,8 +82,12 @@ export function WalletAttentionCue({
 
 /** Best-effort local signal; it never asks for notification permission. */
 export function signalWalletAttention(): void {
-  if (typeof navigator !== 'undefined') {
-    navigator.vibrate?.([90, 50, 90]);
+  try {
+    if (typeof navigator !== 'undefined') {
+      navigator.vibrate?.([90, 50, 90]);
+    }
+  } catch {
+    // Device-policy failures do not own the visual handoff.
   }
   if (typeof AudioContext === 'undefined') return;
 

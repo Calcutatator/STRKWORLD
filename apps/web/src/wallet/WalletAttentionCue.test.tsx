@@ -4,7 +4,11 @@ import { createRoot } from 'react-dom/client';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { COPY } from '../copy.js';
-import { WalletAttentionCue, walletOperationAttention } from './WalletAttentionCue.js';
+import {
+  WalletAttentionCue,
+  signalWalletAttention,
+  walletOperationAttention,
+} from './WalletAttentionCue.js';
 
 Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true });
 
@@ -44,6 +48,21 @@ describe('WalletAttentionCue', () => {
       expect(walletOperationAttention(false, stage)).toBeNull();
     }
     expect(walletOperationAttention(false, null)).toBeNull();
+  });
+
+  it('contains device-signal failures so the visual handoff remains authoritative', () => {
+    const original = navigator.vibrate;
+    Object.defineProperty(navigator, 'vibrate', {
+      configurable: true,
+      value: () => { throw new DOMException('denied', 'NotAllowedError'); },
+    });
+
+    expect(() => signalWalletAttention()).not.toThrow();
+
+    Object.defineProperty(navigator, 'vibrate', {
+      configurable: true,
+      value: original,
+    });
   });
 
   it('signals once for one owned handoff, survives StrictMode, and restores the tab title', async () => {

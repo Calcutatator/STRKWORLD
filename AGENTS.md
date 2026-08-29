@@ -280,8 +280,10 @@ it still owns the marker.
 reads open and find the exact Avatar 1 cue; a controlled Bank confirmation holds
 `awaiting-approval` and proves the cue clears after settlement. A typed stage
 matrix rejects every non-human operation stage, while a StrictMode lifecycle
-regression records one signal and exact title restoration. The focused four
-files pass 37 tests; the full workspace passes 101 files / 1,434 tests, all
+regression records one signal and exact title restoration. A device-policy
+regression makes `navigator.vibrate()` throw and proves that failure cannot
+escape the best-effort signal or disturb the visual cue. The focused four
+files pass 38 tests; the full workspace passes 101 files / 1,437 tests, all
 workspace typechecks, production build, 13 invariants and diff hygiene. In the
 local browser, the mock gateway process was temporarily paused after explicit
 wallet selection: the live page exposed one assertive cue and tab title
