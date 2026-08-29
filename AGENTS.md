@@ -280,10 +280,15 @@ the Backend core and do not echo request content.
 root/nested keys and prototype-sensitive members to a fake core. The corrected
 edge rejects all of them, including `\\u0076` as a duplicate of `v` and an
 escaped `__proto__`, while accepting the same key in separate objects and
-strings containing JSON punctuation. Removing duplicate detection fails three
+strings containing JSON punctuation. A correction after independent review
+replaced the initial global key-state scanner, which rejected string values
+after array commas, with per-container object/array state. The differential
+valid-JSON matrix now covers strings, numbers, booleans, nulls, nested arrays,
+separate objects, punctuation/escapes and realistic multiword calldata, proof
+output and proof-fact arrays. Removing duplicate detection fails three
 regressions; removing the reserved-key guard fails four. The focused HTTP suite
-passes 14 tests, Backend passes 5 files / 145 tests and the full workspace
-passes 102 files / 1,554 tests. All workspace typechecks, production build, 13
+passes 22 tests, Backend passes 5 files / 153 tests and the full workspace
+passes 102 files / 1,562 tests. All workspace typechecks, production build, 13
 invariants, tilemap gate and diff hygiene pass. No listener, browser, external
 provider, RPC, wallet, proof, signature, funds or transaction was used.
 

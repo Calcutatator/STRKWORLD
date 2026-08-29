@@ -115,6 +115,26 @@ describe('privacy-safe Fetch edge', () => {
     }));
   });
 
+  it.each([
+    '{"v":1,"values":["x","y"]}',
+    '{"v":1,"values":[1,2,3]}',
+    '{"v":1,"values":[true,false,null]}',
+    '{"v":1,"values":[{"x":1},{"x":2}]}',
+    '{"v":1,"values":[["x","y"],["z"]]}',
+    '{"v":1,"values":["a,b","c:d","{x}","[y]","quote: \\\" and slash: \\\\"]}',
+    '{"v":1,"left":{"value":1},"right":{"value":2}}',
+    '{"v":1,"artifact":{"call":{"calldata":["0x1","0x2"]},"proof":{"output":["0x3","0x4"],"proof_facts":["0x5","0x6"]}}}',
+  ])('passes valid JSON arrays to the backend core: %s', async (body) => {
+    const api = { handle: vi.fn(async () => ({ status: 200, body: {} })) };
+    const handler = createBackendFetchHandler(api);
+    const response = await handler(new Request('https://private.example/v1/private/submissions', {
+      method: 'POST', headers: { 'content-type': 'application/json' }, body,
+    }));
+
+    expect(response.status).toBe(200);
+    expect(api.handle).toHaveBeenCalledWith(expect.objectContaining({ body: JSON.parse(body) }));
+  });
+
   it('cancels a hanging request body when the client aborts before parsing', async () => {
     const api = { handle: vi.fn(async () => ({ status: 200, body: {} })) };
     const controller = new AbortController();

@@ -132,43 +132,41 @@ class RequestTooLargeError extends Error {}
 const RESERVED_JSON_KEYS = new Set(['__proto__', 'constructor', 'prototype']);
 
 function rejectAmbiguousJsonKeys(raw: string): void {
-  const objectKeys: Set<string>[] = [];
-  let expectingKey = false;
+  const stack: Array<{ kind: 'object'; keys: Set<string> } | { kind: 'array' }> = [];
   let index = 0;
   while (index < raw.length) {
     const character = raw[index]!;
-    if (/\s/.test(character)) {
-      index += 1;
-      continue;
-    }
     if (character === '{') {
-      objectKeys.push(new Set());
-      expectingKey = true;
+      stack.push({ kind: 'object', keys: new Set() });
       index += 1;
       continue;
     }
     if (character === '}') {
-      objectKeys.pop();
-      expectingKey = false;
+      stack.pop();
       index += 1;
       continue;
     }
-    if (character === ',') {
-      expectingKey = objectKeys.length > 0;
+    if (character === '[') {
+      stack.push({ kind: 'array' });
+      index += 1;
+      continue;
+    }
+    if (character === ']') {
+      stack.pop();
       index += 1;
       continue;
     }
     if (character === '"') {
       const end = scanJsonString(raw, index);
-      if (expectingKey && objectKeys.length > 0) {
+      let after = end;
+      while (/\s/.test(raw[after] ?? '')) after += 1;
+      const container = stack[stack.length - 1];
+      if (container?.kind === 'object' && raw[after] === ':') {
         const key = JSON.parse(raw.slice(index, end)) as string;
-        const keys = objectKeys[objectKeys.length - 1]!;
-        if (keys.has(key) || RESERVED_JSON_KEYS.has(key)) throw new SyntaxError('Ambiguous JSON key.');
-        keys.add(key);
-        let colon = end;
-        while (/\s/.test(raw[colon] ?? '')) colon += 1;
-        if (raw[colon] !== ':') throw new SyntaxError('Invalid JSON object key.');
-        expectingKey = false;
+        if (container.keys.has(key) || RESERVED_JSON_KEYS.has(key)) {
+          throw new SyntaxError('Ambiguous JSON key.');
+        }
+        container.keys.add(key);
       }
       index = end;
       continue;
