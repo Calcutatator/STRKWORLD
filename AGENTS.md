@@ -258,6 +258,40 @@ empty shell to fetchers, so a 200 there means nothing.
 
 ## 6. Findings log
 
+### 2026-08-29 — HTTP JSON rejects ambiguous and prototype-sensitive object keys
+
+The Backend Fetch edge previously passed request text directly to
+`JSON.parse()`. Duplicate object members therefore used JavaScript's last-key
+wins behavior: `{"v":2,"v":1}` reached the core as version 1, and duplicate
+nested financial fields could likewise be interpreted differently by another
+parser or request-signing layer. Prototype-sensitive `__proto__`, `constructor`
+and `prototype` members also crossed the HTTP boundary before exact-record
+validation, creating an unnecessary future pollution surface.
+
+The bounded HTTP body reader now performs a deterministic object-key pass over
+the same decoded text before parsing. It rejects duplicate keys within each
+object and all three reserved prototype keys at any depth, including equivalent
+JSON escape encodings. Separate objects may reuse ordinary names; arrays,
+escaped strings and JSON extension-free value semantics remain handled by the
+native parser. Rejections keep the existing generic `400` response, never call
+the Backend core and do not echo request content.
+
+*Verified:* public deterministic HTTP regressions first forwarded duplicate
+root/nested keys and prototype-sensitive members to a fake core. The corrected
+edge rejects all of them, including `\\u0076` as a duplicate of `v` and an
+escaped `__proto__`, while accepting the same key in separate objects and
+strings containing JSON punctuation. A correction after independent review
+replaced the initial global key-state scanner, which rejected string values
+after array commas, with per-container object/array state. The differential
+valid-JSON matrix now covers strings, numbers, booleans, nulls, nested arrays,
+separate objects, punctuation/escapes and realistic multiword calldata, proof
+output and proof-fact arrays. Removing duplicate detection fails three
+regressions; removing the reserved-key guard fails four. The focused HTTP suite
+passes 22 tests, Backend passes 5 files / 153 tests and the full workspace
+passes 102 files / 1,562 tests. All workspace typechecks, production build, 13
+invariants, tilemap gate and diff hygiene pass. No listener, browser, external
+provider, RPC, wallet, proof, signature, funds or transaction was used.
+
 ### 2026-08-29 — Raw Starknet RPC responses require a correlated JSON-RPC envelope
 
 `StarknetRpcPoolPort.rpc()` previously trusted any truthy `error` check and a

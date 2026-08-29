@@ -77,6 +77,64 @@ describe('privacy-safe Fetch edge', () => {
     expect(api.handle).not.toHaveBeenCalled();
   });
 
+  it.each([
+    ['duplicate root keys', '{"v":2,"v":1}'],
+    ['duplicate nested keys', '{"v":1,"artifact":{"call":{"entry_point":"evil","entry_point":"apply_actions"}}}'],
+    ['escaped duplicate keys', '{"v":1,"\\u0076":2}'],
+    ['a prototype key', '{"v":1,"__proto__":{"polluted":true}}'],
+    ['an escaped prototype key', '{"v":1,"__pro\\u0074o__":{"polluted":true}}'],
+    ['a constructor key', '{"v":1,"constructor":{"prototype":{"polluted":true}}}'],
+    ['a nested prototype key', '{"v":1,"artifact":{"prototype":{"polluted":true}}}'],
+  ])('rejects JSON with %s before the backend core', async (_label, body) => {
+    const api = { handle: vi.fn(async () => ({ status: 200, body: {} })) };
+    const handler = createBackendFetchHandler(api);
+    const response = await handler(new Request('https://private.example/v1/private/submissions', {
+      method: 'POST', headers: { 'content-type': 'application/json' }, body,
+    }));
+
+    expect(response.status).toBe(400);
+    await expect(response.json()).resolves.toEqual({
+      code: 'INVALID_JSON',
+      message: 'Request body must be valid JSON.',
+    });
+    expect(api.handle).not.toHaveBeenCalled();
+    expect(({} as { polluted?: boolean }).polluted).toBeUndefined();
+  });
+
+  it('allows the same key in separate objects and strings containing object punctuation', async () => {
+    const api = { handle: vi.fn(async () => ({ status: 200, body: {} })) };
+    const handler = createBackendFetchHandler(api);
+    const body = '{"v":1,"left":{"value":"{\\\"value\\\":1}"},"right":{"value":2}}';
+    const response = await handler(new Request('https://private.example/v1/private/submissions', {
+      method: 'POST', headers: { 'content-type': 'application/json' }, body,
+    }));
+
+    expect(response.status).toBe(200);
+    expect(api.handle).toHaveBeenCalledWith(expect.objectContaining({
+      body: { v: 1, left: { value: '{"value":1}' }, right: { value: 2 } },
+    }));
+  });
+
+  it.each([
+    '{"v":1,"values":["x","y"]}',
+    '{"v":1,"values":[1,2,3]}',
+    '{"v":1,"values":[true,false,null]}',
+    '{"v":1,"values":[{"x":1},{"x":2}]}',
+    '{"v":1,"values":[["x","y"],["z"]]}',
+    '{"v":1,"values":["a,b","c:d","{x}","[y]","quote: \\\" and slash: \\\\"]}',
+    '{"v":1,"left":{"value":1},"right":{"value":2}}',
+    '{"v":1,"artifact":{"call":{"calldata":["0x1","0x2"]},"proof":{"output":["0x3","0x4"],"proof_facts":["0x5","0x6"]}}}',
+  ])('passes valid JSON arrays to the backend core: %s', async (body) => {
+    const api = { handle: vi.fn(async () => ({ status: 200, body: {} })) };
+    const handler = createBackendFetchHandler(api);
+    const response = await handler(new Request('https://private.example/v1/private/submissions', {
+      method: 'POST', headers: { 'content-type': 'application/json' }, body,
+    }));
+
+    expect(response.status).toBe(200);
+    expect(api.handle).toHaveBeenCalledWith(expect.objectContaining({ body: JSON.parse(body) }));
+  });
+
   it('cancels a hanging request body when the client aborts before parsing', async () => {
     const api = { handle: vi.fn(async () => ({ status: 200, body: {} })) };
     const controller = new AbortController();
