@@ -120,6 +120,93 @@ describe('WalletApiPrivacyOperations capability and reads', () => {
     await expect(reading).rejects.toMatchObject({ kind: 'user-rejected' });
   });
 
+  it('does not hand an aborted shield confirmation to the wallet after its fee read', async () => {
+    const { ops, pool, wallet } = fixture();
+    let configCalls = 0;
+    let release!: () => void;
+    let started!: () => void;
+    const readStarted = new Promise<void>((resolve) => { started = resolve; });
+    const pending = new Promise<void>((resolve) => { release = resolve; });
+    vi.spyOn(pool, 'config').mockImplementation(async () => {
+      configCalls += 1;
+      if (configCalls === 1) {
+        return {
+          feeAmount: POOL_FEE,
+          feeToken: STRK,
+          proofValidityBlocks: 450,
+          noteMaturityBlocks: 10,
+        };
+      }
+      started();
+      await pending;
+      return {
+        feeAmount: POOL_FEE,
+        feeToken: STRK,
+        proofValidityBlocks: 450,
+        noteMaturityBlocks: 10,
+      };
+    });
+    const invoke = vi.spyOn(wallet, 'strk20InvokeTransaction');
+    const batch = await ops.prepare([{ kind: 'shield', token: TOKEN, amount: 20n }]);
+    const controller = new AbortController();
+    const progress: string[] = [];
+    const confirming = batch.confirm({
+      feeCeiling: POOL_FEE,
+      signal: controller.signal,
+      onProgress: ({ stage }) => progress.push(stage),
+    });
+
+    await readStarted;
+    controller.abort(new DOMException('Caller disconnected.', 'AbortError'));
+    release();
+
+    await expect(confirming).rejects.toMatchObject({ kind: 'user-rejected' });
+    expect(invoke).not.toHaveBeenCalled();
+    expect(progress).not.toContain('awaiting-approval');
+  });
+
+  it('does not hand an aborted private confirmation to the wallet after its fee read', async () => {
+    const { ops, pool, wallet, prepared, gateway } = fixture();
+    let configCalls = 0;
+    let release!: () => void;
+    let started!: () => void;
+    const readStarted = new Promise<void>((resolve) => { started = resolve; });
+    const pending = new Promise<void>((resolve) => { release = resolve; });
+    vi.spyOn(pool, 'config').mockImplementation(async () => {
+      configCalls += 1;
+      const config = {
+        feeAmount: POOL_FEE,
+        feeToken: STRK,
+        proofValidityBlocks: 450,
+        noteMaturityBlocks: 10,
+      };
+      if (configCalls === 1) return config;
+      started();
+      await pending;
+      return config;
+    });
+    const walletPrepare = vi.spyOn(wallet, 'strk20PrepareInvoke');
+    const submit = vi.spyOn(gateway, 'submit');
+    const batch = await ops.prepare([{ kind: 'transfer', token: TOKEN, amount: 20n, recipient: BOB }]);
+    const controller = new AbortController();
+    const progress: string[] = [];
+    const confirming = batch.confirm({
+      feeCeiling: POOL_FEE + 1n,
+      signal: controller.signal,
+      onProgress: ({ stage }) => progress.push(stage),
+    });
+
+    await readStarted;
+    controller.abort(new DOMException('Caller disconnected.', 'AbortError'));
+    release();
+
+    await expect(confirming).rejects.toMatchObject({ kind: 'user-rejected' });
+    expect(walletPrepare).not.toHaveBeenCalled();
+    expect(submit).not.toHaveBeenCalled();
+    expect(prepared).toHaveLength(0);
+    expect(progress).not.toContain('awaiting-approval');
+  });
+
   it('preflights recipient registration through the pool read port', async () => {
     const { ops } = fixture();
     await expect(ops.recipientStatus(BOB)).resolves.toBe('registered');
@@ -675,6 +762,42 @@ describe('quote-bound swap plan admission', () => {
     });
     return { ...base, ops };
   }
+
+  it('does not hand an aborted swap confirmation to the wallet after its fee read', async () => {
+    const { ops, pool, wallet, gateway } = swapFixture();
+    const originalConfig = pool.config;
+    let configCalls = 0;
+    let release!: () => void;
+    let started!: () => void;
+    const readStarted = new Promise<void>((resolve) => { started = resolve; });
+    const pending = new Promise<void>((resolve) => { release = resolve; });
+    vi.spyOn(pool, 'config').mockImplementation(async (signal) => {
+      configCalls += 1;
+      if (configCalls === 1) return originalConfig(signal);
+      started();
+      await pending;
+      return originalConfig(signal);
+    });
+    const walletPrepare = vi.spyOn(wallet, 'strk20PrepareInvoke');
+    const submit = vi.spyOn(gateway, 'submit');
+    const batch = await ops.prepare([SWAP]);
+    const controller = new AbortController();
+    const progress: string[] = [];
+    const confirming = batch.confirm({
+      feeCeiling: POOL_FEE + 1n,
+      signal: controller.signal,
+      onProgress: ({ stage }) => progress.push(stage),
+    });
+
+    await readStarted;
+    controller.abort(new DOMException('Caller disconnected.', 'AbortError'));
+    release();
+
+    await expect(confirming).rejects.toMatchObject({ kind: 'user-rejected' });
+    expect(walletPrepare).not.toHaveBeenCalled();
+    expect(submit).not.toHaveBeenCalled();
+    expect(progress).not.toContain('awaiting-approval');
+  });
 
   it('locks the route when the swap policy is absent', async () => {
     const { ops, gateway } = swapFixture(null);

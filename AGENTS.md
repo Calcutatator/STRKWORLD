@@ -258,6 +258,31 @@ empty shell to fetchers, so a 200 there means nothing.
 
 ## 6. Findings log
 
+### 2026-08-29 — Confirm-time pool reads stop before wallet handoff
+
+Prepared shield, pool-native and private-swap confirmations re-read the pool
+configuration immediately before wallet proof/signing or relay preparation.
+Those reads previously trusted only the collaborator's `AbortSignal`: a
+collaborator that ignored cancellation could settle after the caller closed or
+changed authority, and confirmation would still cross into wallet handoff.
+Each confirm-time pool read now checks the same signal after its await and maps
+that cancellation through the existing `user-rejected` taxonomy. No guard is
+placed after an accepted wallet or relay submission, so an existing receipt or
+submission uncertainty remains authoritative and no retry is introduced.
+
+*Verified:* public shield, pool-native and private-swap confirmation regressions
+first failed on the current base: each deferred config read settled after
+cancellation and crossed into wallet preparation or invocation. The corrected
+paths return `user-rejected` with zero wallet preparation/invocation/submission;
+removing each guard independently reproduces its failure, and none emits
+`awaiting-approval`. Existing accepted-receipt, submission-uncertain and
+single-confirmation tests remain green. The focused wallet API suite passes 61
+tests; privacy passes 9 files / 170 tests and the full workspace passes 102
+files / 1477 tests, all workspace typechecks, production build, all 13
+invariants, tilemap check and `git diff --check`. Deterministic fakes only: no
+browser, wallet, provider, RPC, proof, signature, funds or transaction was
+used.
+
 ### 2026-08-29 — Pool configuration reads honor cancellation after the await
 
 `WalletApiPrivacyOperations` already checked the caller's signal before and
