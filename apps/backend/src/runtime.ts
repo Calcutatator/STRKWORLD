@@ -205,6 +205,7 @@ function toFetchRequest(incoming: IncomingMessage, signal: AbortSignal): Request
   const headers = new Headers();
   copyHeader(incoming, headers, 'content-type');
   copyHeader(incoming, headers, 'content-length');
+  copyHeader(incoming, headers, 'content-encoding');
   const init: RequestInit & { duplex?: 'half' } = { method, headers, signal };
   if (method !== 'GET' && method !== 'HEAD') {
     init.body = Readable.toWeb(incoming) as ReadableStream<Uint8Array>;

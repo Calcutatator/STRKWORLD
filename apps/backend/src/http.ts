@@ -24,6 +24,10 @@ export function createBackendFetchHandler(
   return async (request: Request): Promise<Response> => {
     const url = new URL(request.url);
     if (url.search) return json(400, { code: 'QUERY_NOT_ALLOWED', message: 'Query parameters are not accepted.' });
+    const contentEncoding = request.headers.get('content-encoding');
+    if (contentEncoding !== null && contentEncoding.trim().toLowerCase() !== 'identity') {
+      return json(415, { code: 'ENCODING_NOT_ALLOWED', message: 'Content-Encoding must be identity or omitted.' });
+    }
 
     let body: unknown = null;
     if (request.method === 'POST') {
