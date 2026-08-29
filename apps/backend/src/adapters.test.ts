@@ -204,6 +204,22 @@ describe('fixed Starknet RPC adapter', () => {
     ]);
   });
 
+  it('rejects a negative Starknet block number', async () => {
+    const fetcher = vi.fn(async () => new Response(JSON.stringify({
+      jsonrpc: '2.0',
+      id: 1,
+      result: -1,
+    })));
+    const rpc = new StarknetRpcPoolPort({
+      rpcUrl: 'https://rpc.example',
+      poolAddress: '0x123',
+      feeToken: '0x4718',
+      fetcher,
+    });
+
+    await expect(rpc.getBlockNumber()).rejects.toThrow(/invalid block number/i);
+  });
+
   it.each([
     ['negative', '-1'],
     ['decimal', '123'],
