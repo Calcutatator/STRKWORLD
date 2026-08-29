@@ -1,6 +1,6 @@
 import { resolveAvatarSheet } from '@strkworld/world';
 import type { OperationStage } from '@strkworld/privacy';
-import { useEffect } from 'react';
+import { useEffect, useRef } from 'react';
 import { COPY } from '../copy.js';
 
 export type WalletAttentionKind = 'connect' | 'balance' | 'confirm';
@@ -36,6 +36,9 @@ export function WalletAttentionCue({
   kind: WalletAttentionKind;
   signal?: () => void;
 }) {
+  const signalOwner = useRef(signal);
+  signalOwner.current = signal;
+
   useEffect(() => {
     if (!active || typeof document === 'undefined') return;
 
@@ -43,7 +46,7 @@ export function WalletAttentionCue({
     document.title = COPY.walletAttention.tabTitle;
     // Deferral collapses React StrictMode's setup/cleanup probe into the live
     // owner and avoids sounding twice for one handoff.
-    const timer = globalThis.setTimeout(signal, 0);
+    const timer = globalThis.setTimeout(() => signalOwner.current(), 0);
 
     return () => {
       globalThis.clearTimeout(timer);
@@ -51,7 +54,7 @@ export function WalletAttentionCue({
         document.title = previousTitle;
       }
     };
-  }, [active, kind, signal]);
+  }, [active, kind]);
 
   if (!active) return null;
 
@@ -91,8 +94,9 @@ export function signalWalletAttention(): void {
   }
   if (typeof AudioContext === 'undefined') return;
 
+  let context: AudioContext | null = null;
   try {
-    const context = new AudioContext();
+    context = new AudioContext();
     const oscillator = context.createOscillator();
     const gain = context.createGain();
     const start = context.currentTime;
@@ -105,14 +109,24 @@ export function signalWalletAttention(): void {
     gain.gain.exponentialRampToValueAtTime(0.0001, start + 0.2);
     oscillator.connect(gain);
     gain.connect(context.destination);
-    oscillator.addEventListener('ended', () => void context.close(), { once: true });
+    oscillator.addEventListener('ended', () => closeAudioContext(context), { once: true });
     oscillator.start(start);
     oscillator.stop(start + 0.21);
     if (context.state === 'suspended') {
-      void context.resume().catch(() => void context.close());
+      void context.resume().catch(() => closeAudioContext(context));
     }
   } catch {
     // The fixed visual and tab marker remain authoritative when audio is
     // unavailable or blocked by the browser/device.
+    closeAudioContext(context);
+  }
+}
+
+function closeAudioContext(context: AudioContext | null): void {
+  if (!context) return;
+  try {
+    void context.close().catch(() => undefined);
+  } catch {
+    // Some implementations can fail synchronously as well as by rejection.
   }
 }

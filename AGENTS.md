@@ -282,8 +282,11 @@ reads open and find the exact Avatar 1 cue; a controlled Bank confirmation holds
 matrix rejects every non-human operation stage, while a StrictMode lifecycle
 regression records one signal and exact title restoration. A device-policy
 regression makes `navigator.vibrate()` throw and proves that failure cannot
-escape the best-effort signal or disturb the visual cue. The focused four
-files pass 38 tests; the full workspace passes 101 files / 1,437 tests, all
+escape the best-effort signal or disturb the visual cue. Further lifecycle
+regressions make audio close reject and replace the injected callback during
+one active handoff; neither an unhandled rejection nor a second signal escapes.
+The focused four files pass 39 tests; the full workspace passes 101 files /
+1,438 tests, all
 workspace typechecks, production build, 13 invariants and diff hygiene. In the
 local browser, the mock gateway process was temporarily paused after explicit
 wallet selection: the live page exposed one assertive cue and tab title

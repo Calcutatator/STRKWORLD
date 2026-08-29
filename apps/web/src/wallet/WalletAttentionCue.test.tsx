@@ -65,6 +65,42 @@ describe('WalletAttentionCue', () => {
     });
   });
 
+  it('handles a rejected audio close instead of leaking an unhandled rejection', () => {
+    let finish: (() => void) | undefined;
+    const handled = vi.fn();
+    class RejectingCloseAudioContext {
+      currentTime = 0;
+      state = 'running';
+      destination = {};
+      createOscillator() {
+        return {
+          type: 'sine',
+          frequency: { setValueAtTime: vi.fn(), exponentialRampToValueAtTime: vi.fn() },
+          connect: vi.fn(),
+          addEventListener: (_event: string, listener: () => void) => { finish = listener; },
+          start: vi.fn(),
+          stop: vi.fn(),
+        };
+      }
+      createGain() {
+        return {
+          gain: { setValueAtTime: vi.fn(), exponentialRampToValueAtTime: vi.fn() },
+          connect: vi.fn(),
+        };
+      }
+      close() {
+        return { catch: handled };
+      }
+    }
+    vi.stubGlobal('AudioContext', RejectingCloseAudioContext);
+
+    signalWalletAttention();
+    finish?.();
+
+    expect(handled).toHaveBeenCalledOnce();
+    vi.unstubAllGlobals();
+  });
+
   it('signals once for one owned handoff, survives StrictMode, and restores the tab title', async () => {
     const signal = vi.fn();
     const container = document.createElement('div');
@@ -85,15 +121,19 @@ describe('WalletAttentionCue', () => {
     });
     expect(signal).toHaveBeenCalledOnce();
 
+    const replacementSignal = vi.fn();
     await act(async () => {
       root.render(
         <StrictMode>
-          <WalletAttentionCue active kind="connect" signal={signal} />
+          <WalletAttentionCue active kind="connect" signal={replacementSignal} />
         </StrictMode>,
       );
+    });
+    await act(async () => {
       vi.runAllTimers();
     });
     expect(signal).toHaveBeenCalledOnce();
+    expect(replacementSignal).not.toHaveBeenCalled();
 
     await act(async () => {
       root.render(
