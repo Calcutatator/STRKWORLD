@@ -221,6 +221,43 @@ describe('fixed Starknet RPC adapter', () => {
   });
 
   it.each([
+    ['empty', []],
+    ['multiple', ['0x0', '0x1']],
+    ['non-felt', ['123']],
+    ['field-prime', [`0x${STARK_FIELD_PRIME.toString(16)}`]],
+  ])('rejects a malformed get_public_key %s result', async (_label, result) => {
+    const fetcher = vi.fn(async () => new Response(JSON.stringify({
+      jsonrpc: '2.0',
+      id: 1,
+      result,
+    })));
+    const rpc = new StarknetRpcPoolPort({
+      rpcUrl: 'https://rpc.example',
+      poolAddress: '0x123',
+      feeToken: '0x4718',
+      fetcher,
+    });
+
+    await expect(rpc.getPublicKey('0x456')).rejects.toThrow(/invalid public key/i);
+  });
+
+  it.each(['0x0', '0x00', '0x0001'])('preserves valid get_public_key felt %s', async (key) => {
+    const fetcher = vi.fn(async () => new Response(JSON.stringify({
+      jsonrpc: '2.0',
+      id: 1,
+      result: [key],
+    })));
+    const rpc = new StarknetRpcPoolPort({
+      rpcUrl: 'https://rpc.example',
+      poolAddress: '0x123',
+      feeToken: '0x4718',
+      fetcher,
+    });
+
+    await expect(rpc.getPublicKey('0x456')).resolves.toBe(key);
+  });
+
+  it.each([
     ['negative', '-1'],
     ['decimal', '123'],
     ['outside u128', `0x1${'0'.repeat(32)}`],
