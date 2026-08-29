@@ -258,6 +258,32 @@ empty shell to fetchers, so a 200 there means nothing.
 
 ## 6. Findings log
 
+### 2026-08-29 — Prepare-time quote and fee reads honor cancellation
+
+`WalletApiPrivacyOperations.prepare()` already passed its caller signal into
+the pool configuration and recipient reads, but the two remaining external
+prepare collaborators could settle after cancellation without a final
+ownership check. A cancellation-ignoring relay-fee estimate could therefore
+return a usable pool-native batch, and a cancellation-ignoring AVNU quote
+planner could return a quote-bound private-swap batch after the caller had
+closed or changed authority. Either result retained a later confirmation
+handle despite the canceled prepare request.
+
+The prepare paths now check the same signal immediately after the awaited
+relay estimate and quote planner. This changes no fee, quote, action,
+submission, receipt, uncertainty or retry behavior; it only rejects the
+canceled prepare before a batch is published.
+
+*Verified:* public deferred-collaborator regressions first failed on
+`origin/main` (`fa8851f`) because the aborted relay estimate and swap quote
+each resolved to a prepared batch. The corrected paths return
+`user-rejected`; removing either guard independently reproduces its matching
+failure. The focused Wallet API suite passes 63 tests; Privacy passes 9 files
+/ 172 tests; the full workspace passes 102 files / 1479 tests. Workspace
+typechecks, production build, all 13 invariants, tilemap check and diff
+hygiene pass. Deterministic fakes only: no browser, wallet, provider, RPC,
+proof, signature, funds or transaction was used.
+
 ### 2026-08-29 — Confirm-time pool reads stop before wallet handoff
 
 Prepared shield, pool-native and private-swap confirmations re-read the pool

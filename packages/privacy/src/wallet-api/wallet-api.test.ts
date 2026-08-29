@@ -207,6 +207,30 @@ describe('WalletApiPrivacyOperations capability and reads', () => {
     expect(progress).not.toContain('awaiting-approval');
   });
 
+  it('does not publish a private batch after its relay estimate is aborted', async () => {
+    const { ops, gateway } = fixture();
+    let release!: () => void;
+    let started!: () => void;
+    const estimateStarted = new Promise<void>((resolve) => { started = resolve; });
+    const pending = new Promise<void>((resolve) => { release = resolve; });
+    vi.mocked(gateway.estimate).mockImplementation(async () => {
+      started();
+      await pending;
+      return { token: STRK, recipient: FEE_RECIPIENT, amount: 1n, ...AUTH };
+    });
+    const controller = new AbortController();
+    const preparing = ops.prepare(
+      [{ kind: 'transfer', token: TOKEN, amount: 20n, recipient: BOB }],
+      controller.signal,
+    );
+
+    await estimateStarted;
+    controller.abort(new DOMException('Caller disconnected.', 'AbortError'));
+    release();
+
+    await expect(preparing).rejects.toMatchObject({ kind: 'user-rejected' });
+  });
+
   it('preflights recipient registration through the pool read port', async () => {
     const { ops } = fixture();
     await expect(ops.recipientStatus(BOB)).resolves.toBe('registered');
@@ -797,6 +821,28 @@ describe('quote-bound swap plan admission', () => {
     expect(walletPrepare).not.toHaveBeenCalled();
     expect(submit).not.toHaveBeenCalled();
     expect(progress).not.toContain('awaiting-approval');
+  });
+
+  it('does not publish a swap batch after its quote read is aborted', async () => {
+    const { ops, gateway } = swapFixture();
+    const originalPrepareSwap = gateway.prepareSwap!;
+    let release!: () => void;
+    let started!: () => void;
+    const quoteStarted = new Promise<void>((resolve) => { started = resolve; });
+    const pending = new Promise<void>((resolve) => { release = resolve; });
+    gateway.prepareSwap = vi.fn(async (input) => {
+      started();
+      await pending;
+      return originalPrepareSwap(input);
+    });
+    const controller = new AbortController();
+    const preparing = ops.prepare([SWAP], controller.signal);
+
+    await quoteStarted;
+    controller.abort(new DOMException('Caller disconnected.', 'AbortError'));
+    release();
+
+    await expect(preparing).rejects.toMatchObject({ kind: 'user-rejected' });
   });
 
   it('locks the route when the swap policy is absent', async () => {
