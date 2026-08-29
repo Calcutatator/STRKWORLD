@@ -14,7 +14,13 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: '22.12'
+          cache: npm
+      - run: npm ci --ignore-scripts
+      - run: node scripts/check-supply-chain.mjs
       - run: ./scripts/check-invariants.sh
       - run: ./scripts/check-tilemaps.sh
 
@@ -23,8 +29,8 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
-      - uses: actions/checkout@v7
-      - uses: actions/setup-node@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
           # 22.12 is the repository floor (D-025). CI said 20, which is the
           # exact mismatch D-025 was written to stop: AVNU SDK 4.2.0 requires
@@ -33,6 +39,7 @@ jobs:
           cache: npm
       # ci, not install — reproducible from the committed lockfile.
       - run: npm ci
+      - run: npm audit --omit=dev --audit-level=high
       - run: npm run typecheck
       - run: npm test
 
@@ -41,8 +48,8 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
-      - uses: actions/checkout@v7
-      - uses: actions/setup-node@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
           node-version: '22.12'
           cache: npm
@@ -83,8 +90,8 @@ jobs:
     # this gate is the only thing that would catch it before players do.
     # D-005 asks for exactly this: "a comment and a header test".
     steps:
-      - uses: actions/checkout@v7
-      - uses: actions/setup-node@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
           node-version: '22.12'
           cache: npm
@@ -98,5 +105,5 @@ jobs:
     # Read-only mainnet asserts. The pool fee has already moved once (4 -> 6
     # STRK) and the docs did not follow; this catches the next one.
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - run: ./scripts/check-drift.sh

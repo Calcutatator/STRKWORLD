@@ -258,6 +258,44 @@ empty shell to fetchers, so a 200 there means nothing.
 
 ## 6. Findings log
 
+### 2026-08-29 — GitHub Actions references are immutable supply-chain inputs
+
+The CI workflow previously selected `actions/checkout@v7` and
+`actions/setup-node@v7`. Those readable major tags are mutable upstream
+references, so a later tag move could change code executed with the repository
+workflow's authority without changing this repository. Every remote workflow
+`uses:` reference is now pinned to a full commit SHA, with the reviewed release
+version retained only as a comment. A repository-owned scanner rejects tags,
+branches, abbreviated or malformed remote references while allowing local
+`./` actions, and the Invariants job runs that scanner on every change. It
+parses workflow YAML structurally at `jobs.<id>.uses` and
+`jobs.<id>.steps[*].uses`: flow mappings, quoted or escaped keys, explicit keys
+and aliases cannot bypass validation, while comments, command text and literal
+`uses` inputs under `env` or `with` are not mistaken for action references.
+Invalid YAML and non-string action references fail closed. The structural
+parser is the exact dev-only `yaml@2.9.0` lockfile dependency.
+
+The Verify job separately runs a production-only high-severity `npm audit`
+after the lockfile install. This is a recurring registry-advisory gate, not an
+SBOM, provenance record, application security review or assertion about
+development-only dependencies.
+
+*Verified:* the official GitHub tag-ref API resolved `actions/checkout@v7` to
+`3d3c42e5aac5ba805825da76410c181273ba90b1`; the action's `package.json` at
+that commit reports `7.0.1`. It resolved `actions/setup-node@v7` to
+`820762786026740c76f36085b0efc47a31fe5020`; that commit reports `7.0.0`.
+Before the pins, the repository scanner failed red on all eight mutable
+references. Its focused fixtures reject tag/branch and malformed pseudo-action
+references while accepting exact remote pins, nested action paths, quoted
+references with comments and repository-local actions. Separate regressions
+pin flow mappings, quoted/escaped and explicit keys, aliases, invalid YAML,
+benign non-key text and schema-position ownership. The pinned workflow
+passes the scanner, and the current production dependency audit reports zero
+known advisories. The full workspace passes 101 files / 1,436 tests, all
+workspace typechecks, the production build, all 13 invariants, the tilemap gate
+and `git diff --check`. No product code, wallet, provider, RPC, proof,
+signature, funds or transaction was used.
+
 ### 2026-08-29 — Starknet Start's MockWallet omits the Wallet API capability RPC
 
 `@starknetfoundation/starknet-start-react@2.0.1` supplies the four Wallet
