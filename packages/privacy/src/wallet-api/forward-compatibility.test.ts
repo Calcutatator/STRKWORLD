@@ -180,6 +180,8 @@ describe('Wallet Standard forward compatibility', () => {
       ({ [identityId]: assignedFeatureId } = wallet.features['starknet:walletApi']);
       let nestedProviderId;
       ({ features: { ['starknet:walletApi']: { id: nestedProviderId } } } = wallet);
+      let arrayNestedName;
+      ([{ provider: { name: arrayNestedName } }] = [wallet]);
     `);
     expect(walletIdentityReads([hostile])).toEqual([
       'fixture.ts:2:11 handle.name',
@@ -193,6 +195,7 @@ describe('Wallet Standard forward compatibility', () => {
       'fixture.ts:13:10 name: assignedName',
       'fixture.ts:15:10 [identityId]: assignedFeatureId',
       'fixture.ts:17:48 id: nestedProviderId',
+      'fixture.ts:19:23 name: arrayNestedName',
     ]);
   });
 });
@@ -397,6 +400,10 @@ function isObjectAssignmentPattern(node: ts.ObjectLiteralExpression): boolean {
       continue;
     }
     if (ts.isObjectLiteralExpression(current.parent)) {
+      current = current.parent;
+      continue;
+    }
+    if (ts.isArrayLiteralExpression(current.parent)) {
       current = current.parent;
       continue;
     }
