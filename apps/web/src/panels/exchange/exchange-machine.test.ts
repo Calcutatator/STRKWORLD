@@ -416,6 +416,40 @@ describe('Exchange machine', () => {
     await machine.open(); await machine.refreshBalances(); machine.setAmount('1'); await machine.prepare(); current = farFuture; await machine.confirm();
     expect(confirms).toBe(0); expect(machine.store.getState().flow).toMatchObject({ name: 'failed', recovery: 'prepare-again' });
   });
+
+  it('rejects a review that expires while reading live pool validity before wallet handoff', async () => {
+    let current = farFuture - 1; let confirms = 0; let discards = 0;
+    const pool = deferred<ReturnType<FakePrivacyOperations['poolConfig']> extends Promise<infer T> ? T : never>();
+    const operations = controlledOperations(Promise.resolve({ transactionHash: '0xnever' }), pool.promise, () => { confirms += 1; }, undefined, 50, () => { discards += 1; });
+    const machine = createExchangePanel({ operations, receipts: createReceiptLedger(), canStartFinancialAction: () => true, now: () => current });
+    await machine.open(); await machine.refreshBalances(); machine.setAmount('1'); await machine.prepare();
+
+    const confirming = machine.confirm();
+    current = farFuture;
+    pool.resolve({ feeAmount: 6n * 10n ** 18n, feeToken: strk!.token, proofValidityBlocks: 450, noteMaturityBlocks: 10 });
+    await confirming;
+
+    expect(confirms).toBe(0);
+    expect(discards).toBe(1);
+    expect(machine.store.getState().flow).toMatchObject({ name: 'failed', recovery: 'prepare-again' });
+  });
+
+  it('does not hand off a confirmation that closes before its live pool read settles', async () => {
+    let confirms = 0;
+    const pool = deferred<ReturnType<FakePrivacyOperations['poolConfig']> extends Promise<infer T> ? T : never>();
+    const operations = controlledOperations(Promise.resolve({ transactionHash: '0xnever' }), pool.promise, () => { confirms += 1; });
+    const machine = createExchangePanel({ operations, receipts: createReceiptLedger(), canStartFinancialAction: () => true });
+    await machine.open(); await machine.refreshBalances(); machine.setAmount('1'); await machine.prepare();
+
+    const confirming = machine.confirm();
+    machine.close();
+    await machine.open(); await machine.refreshBalances(); machine.setAmount('1'); await machine.prepare();
+    pool.resolve({ feeAmount: 6n * 10n ** 18n, feeToken: strk!.token, proofValidityBlocks: 450, noteMaturityBlocks: 10 });
+    await confirming;
+
+    expect(confirms).toBe(0);
+    expect(machine.store.getState().flow.name).toBe('review');
+  });
 });
 
 function controlledOperations(confirmResult: Promise<{ transactionHash: string }>, secondPool?: Promise<{ feeAmount: bigint; feeToken: string; proofValidityBlocks: number; noteMaturityBlocks: number }>, onConfirmEntered?: () => void, thirdPool?: Promise<{ feeAmount: bigint; feeToken: string; proofValidityBlocks: number; noteMaturityBlocks: number }>, slippageBps = 50, onDiscard?: () => void): PrivacyOperations {
