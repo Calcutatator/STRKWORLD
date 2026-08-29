@@ -51,6 +51,7 @@ import {
   SERVER_MESSAGE,
   type LobbySprite,
 } from './config';
+import { normalizeGameId } from './policy';
 import type { LobbyState } from './state';
 
 export type { LobbySprite } from './config';
@@ -58,6 +59,7 @@ export type { LobbySprite } from './config';
 const MAX_TIMER_DELAY_MS = 2_147_483_647;
 const INVALID_CLIENT_SEND_INTERVAL_ERROR = 'Lobby client send interval is invalid.';
 const INVALID_RESUME_PLACEMENT_ERROR = 'Lobby resume placement is invalid.';
+const INVALID_WELCOME_ERROR = 'Lobby welcome identity is invalid.';
 
 export type LobbyStatus =
   /** Constructed, never connected. */
@@ -394,11 +396,28 @@ export class LobbyClient {
       }
 
       let rejectWelcome!: (error: Error) => void;
+      let welcomeAccepted = false;
       const welcomed = new Promise<void>((resolve, reject) => {
         rejectWelcome = reject;
         room.onMessage(SERVER_MESSAGE.welcome, (payload: WelcomePayload) => {
           if (!this.#isCurrentRoom(generation, room)) return;
-          this.#gameId = payload.gameId as GameId;
+          // The server sends one identity for a room generation. Keep the
+          // first valid identity stable so a duplicate or conflicting replay
+          // cannot make the client publish its own state as a peer.
+          if (welcomeAccepted) return;
+          const gameId = normalizeGameId(payload?.gameId);
+          if (gameId === null) {
+            this.#room = null;
+            this.#gameId = null;
+            this.#cancelReconcile();
+            this.#setStatus('closed', 'error');
+            this.#emitPeers();
+            rejectWelcome(new Error(INVALID_WELCOME_ERROR));
+            void room.leave(true).catch(() => undefined);
+            return;
+          }
+          welcomeAccepted = true;
+          this.#gameId = gameId;
           this.#emitPeers();
           resolve();
         });

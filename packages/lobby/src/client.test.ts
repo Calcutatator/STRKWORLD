@@ -164,6 +164,76 @@ describe('identity is server-assigned', () => {
     expect(client.gameId).not.toBeNull();
     expect(seen.flat().some((peer) => peer.gameId === client.gameId)).toBe(false);
   });
+
+  it.each(['', 'not-a-game-id'])('fails closed when the welcome identity is malformed (%j)', async (gameId) => {
+    const joined = fakeRoom();
+    const joinOrCreate = vi
+      .spyOn(ColyseusClient.prototype, 'joinOrCreate')
+      .mockImplementation(() => Promise.resolve(joined.room) as never);
+
+    try {
+      const client = makeClient(20, 0);
+      const leakedSelf = '0123456789abcdef';
+      joined.room.state.peers.set(leakedSelf, {
+        gameId: leakedSelf,
+        position: { x: 20, y: 0 },
+        facing: 'down',
+        sprite: 'avatar-1',
+      } as never);
+
+      const connecting = client.connect();
+      await Promise.resolve();
+      joined.welcome({ gameId });
+
+      await expect(connecting).rejects.toThrow(/welcome/i);
+      expect(client.status).toBe('closed');
+      expect(client.gameId).toBeNull();
+      expect(client.peers()).toEqual([]);
+      expect(joined.leave).toHaveBeenCalledWith(true);
+    } finally {
+      joinOrCreate.mockRestore();
+    }
+  });
+
+  it('keeps the first welcome identity across duplicate messages', async () => {
+    const joined = fakeRoom();
+    const joinOrCreate = vi
+      .spyOn(ColyseusClient.prototype, 'joinOrCreate')
+      .mockImplementation(() => Promise.resolve(joined.room) as never);
+
+    try {
+      const client = makeClient(20, 0);
+      const ownId = '0123456789abcdef';
+      const peerId = 'fedcba9876543210';
+      joined.room.state.peers.set(ownId, {
+        gameId: ownId,
+        position: { x: 20, y: 0 },
+        facing: 'down',
+        sprite: 'avatar-1',
+      } as never);
+      joined.room.state.peers.set(peerId, {
+        gameId: peerId,
+        position: { x: 30, y: 0 },
+        facing: 'left',
+        sprite: 'avatar-2',
+      } as never);
+
+      const connecting = client.connect();
+      await Promise.resolve();
+      joined.welcome({ gameId: ownId });
+      await connecting;
+
+      expect(client.gameId).toBe(ownId);
+      expect(client.peers().map((peer) => peer.gameId)).toEqual([peerId]);
+      joined.welcome({ gameId: peerId });
+      joined.welcome({ gameId: ownId });
+      expect(client.gameId).toBe(ownId);
+      expect(client.peers().map((peer) => peer.gameId)).toEqual([peerId]);
+      expect(joined.leave).not.toHaveBeenCalled();
+    } finally {
+      joinOrCreate.mockRestore();
+    }
+  });
 });
 
 describe('client send interval configuration', () => {
@@ -273,7 +343,7 @@ describe('connect is idempotent', () => {
 
       const connecting = client.connect();
       await Promise.resolve();
-      joined.welcome({ gameId: 'manual-reconnect-only' });
+      joined.welcome({ gameId: '0000000000000001' });
       await connecting;
 
       expect(joined.room.reconnection.enabled).toBe(false);
@@ -355,13 +425,13 @@ describe('connect is idempotent', () => {
 
       const firstConnecting = client.connect();
       await Promise.resolve();
-      firstRoom.welcome({ gameId: 'first-room' });
+      firstRoom.welcome({ gameId: '0000000000000002' });
       await firstConnecting;
 
       const disconnecting = client.disconnect();
       const replacementConnecting = client.connect();
       await Promise.resolve();
-      replacementRoom.welcome({ gameId: 'replacement-room' });
+      replacementRoom.welcome({ gameId: '0000000000000003' });
       await replacementConnecting;
 
       replacementRoom.left(1006, 'replacement transport dropped');
@@ -417,12 +487,12 @@ describe('connect is idempotent', () => {
 
       secondJoin.resolve(freshRoom.room);
       await Promise.resolve();
-      freshRoom.welcome({ gameId: 'fresh-game-id' });
+      freshRoom.welcome({ gameId: '0000000000000004' });
       await reconnecting;
 
       expect(freshRoom.leave).not.toHaveBeenCalled();
       expect(client.status).toBe('connected');
-      expect(client.gameId).toBe('fresh-game-id');
+      expect(client.gameId).toBe('0000000000000004');
     } finally {
       joinOrCreate.mockRestore();
     }
@@ -449,14 +519,14 @@ describe('connect is idempotent', () => {
       const firstConnecting = client.connect();
       firstJoin.resolve(staleRoom.room);
       await Promise.resolve();
-      staleRoom.welcome({ gameId: 'stale-game-id' });
+      staleRoom.welcome({ gameId: '0000000000000005' });
       await firstConnecting;
 
       await client.disconnect();
       const reconnecting = client.connect();
       secondJoin.resolve(freshRoom.room);
       await Promise.resolve();
-      freshRoom.welcome({ gameId: 'fresh-game-id' });
+      freshRoom.welcome({ gameId: '0000000000000004' });
       await reconnecting;
 
       const statusCount = statuses.length;
@@ -464,13 +534,13 @@ describe('connect is idempotent', () => {
       client.updatePosition(99, 0, 'right');
       const sentCount = freshRoom.send.mock.calls.length;
 
-      staleRoom.welcome({ gameId: 'late-stale-game-id' });
+      staleRoom.welcome({ gameId: '0000000000000006' });
       staleRoom.stateChange();
       staleRoom.error(500, 'stale error');
       staleRoom.left(400, 'stale leave');
 
       expect(client.status).toBe('connected');
-      expect(client.gameId).toBe('fresh-game-id');
+      expect(client.gameId).toBe('0000000000000004');
       expect(statuses).toHaveLength(statusCount);
       expect(peerSnapshots).toHaveLength(peerSnapshotCount);
 
@@ -510,7 +580,7 @@ describe('connect is idempotent', () => {
       expect(client.gameId).toBeNull();
       expect(statuses.map((event) => event.status)).toEqual(['idle', 'connecting', 'connected', 'closed']);
 
-      failedRoom.welcome({ gameId: 'late-error-game-id' });
+      failedRoom.welcome({ gameId: '0000000000000007' });
       failedRoom.stateChange();
       failedRoom.left(1006, 'leave after error cleanup');
       expect(client.status).toBe('closed');
@@ -576,12 +646,12 @@ describe('connect is idempotent', () => {
       const reconnecting = client.connect();
       secondJoin.resolve(freshRoom.room);
       await Promise.resolve();
-      freshRoom.welcome({ gameId: 'fresh-after-leave' });
+      freshRoom.welcome({ gameId: '0000000000000008' });
       await reconnecting;
 
       expect(freshRoom.leave).not.toHaveBeenCalled();
       expect(client.status).toBe('connected');
-      expect(client.gameId).toBe('fresh-after-leave');
+      expect(client.gameId).toBe('0000000000000008');
     } finally {
       joinOrCreate.mockRestore();
     }
@@ -623,7 +693,7 @@ describe('connect is idempotent', () => {
       expect(pendingRoom.leave).toHaveBeenCalledTimes(1);
       expect(pendingRoom.leave).toHaveBeenCalledWith(true);
 
-      pendingRoom.welcome({ gameId: 'late-disconnected-id' });
+      pendingRoom.welcome({ gameId: '0000000000000009' });
       pendingRoom.stateChange();
       expect(client.status).toBe('closed');
       expect(client.gameId).toBeNull();
@@ -649,7 +719,7 @@ describe('connect is idempotent', () => {
         joined.resolve(terminalRoom.room);
         await Promise.resolve();
 
-        terminalRoom.welcome({ gameId: 'same-turn-id' });
+        terminalRoom.welcome({ gameId: '000000000000000a' });
         terminate(terminalRoom);
 
         await expect(connecting).rejects.toThrow(/before connect completed/i);
@@ -681,7 +751,7 @@ describe('presence', () => {
     try {
       const connecting = client.connect();
       await Promise.resolve();
-      joined.welcome({ gameId: 'max-floor-client' });
+      joined.welcome({ gameId: '000000000000000b' });
       await connecting;
       timer.mockClear();
 
@@ -725,7 +795,7 @@ describe('presence', () => {
     try {
       const connecting = client.connect();
       await Promise.resolve();
-      joined.welcome({ gameId: 'clock-client' });
+      joined.welcome({ gameId: '000000000000000c' });
       await connecting;
 
       client.updatePosition(10, 0, 'right');
@@ -902,7 +972,7 @@ describe('presence', () => {
 
       const connecting = walker.connect();
       await Promise.resolve();
-      joined.welcome({ gameId: 'self' });
+      joined.welcome({ gameId: '000000000000000d' });
       await connecting;
       first.length = 0;
       second.length = 0;

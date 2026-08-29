@@ -258,6 +258,34 @@ empty shell to fetchers, so a 200 there means nothing.
 
 ## 6. Findings log
 
+### 2026-08-29 — Lobby must validate the server-minted welcome identity
+
+`LobbyClient` previously trusted every `welcome` payload and cast its
+`gameId` directly to the branded `GameId` type. The authoritative lobby
+protocol mints a 16-character lowercase hexadecimal identifier, but a
+malformed or empty payload could therefore become the client's identity. If
+the room state already contained the actual local entry, self-filtering then
+failed and published that entry as a remote avatar. A second welcome could
+also replace a valid identity mid-session and create the same leak.
+
+The client now validates the payload with the existing exact `normalizeGameId`
+rule. A malformed welcome clears the room and identity, emits the empty peer
+snapshot, rejects the pending connect, and leaves that room once; it never
+enters a usable connected state. After the first valid welcome, duplicate or
+conflicting welcome messages are ignored for that room generation, preserving
+the first server-assigned identity. A new explicit reconnect gets a fresh
+generation and accepts its own valid welcome normally. No lobby message or
+state field changed.
+
+*Verified:* the public malformed-welcome regression first failed on current
+`origin/main`, resolving connect while adopting `not-a-game-id` and exposing
+the local entry through `peers()`. The duplicate-welcome regression also
+demonstrated that a later valid identity changed the self-filter. Green is 46
+LobbyClient tests and 211 tests across the lobby package; the full workspace
+passes 102 files / 1,470 tests, all workspace typechecks, the production
+build, all 13 invariants, the tilemap gate and `git diff --check`. No browser,
+wallet, provider, RPC, proof, signature, funds or transaction was used.
+
 ### 2026-08-29 — Interior movement must respect the authoritative avatar body
 
 The fixed-room and Avatar Studio movement paths bypass Arcade collision and
