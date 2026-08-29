@@ -258,6 +258,31 @@ empty shell to fetchers, so a 200 there means nothing.
 
 ## 6. Findings log
 
+### 2026-08-29 — Pool configuration reads honor cancellation after the await
+
+`WalletApiPrivacyOperations` already checked the caller's signal before and
+after capability, private-balance and recipient-status reads, but
+`poolConfig()` returned the backend result immediately after its awaited read.
+If a caller disconnected while that read was in flight and the collaborator
+ignored the signal, the public privacy seam could therefore publish stale pool
+fee, validity or maturity configuration as a successful result. A caller that
+uses that configuration to prepare or display a route would observe data from
+an authority that had already been canceled.
+
+`poolConfig()` now checks the same signal after the read and maps cancellation
+through the existing `user-rejected` error taxonomy. The pool request remains
+the same, and no wallet, proof, signing, submission, retry or transaction
+behavior changes.
+
+*Verified:* a public `WalletApiPrivacyOperations.poolConfig()` regression uses
+a deferred deterministic pool read. It first fails on the current base because
+an abort followed by read settlement resolves the stale config, then passes
+after the post-await guard with `user-rejected`. The privacy package passes 9
+files / 167 tests; the full workspace passes 102 files / 1,474 tests, all
+workspace typechecks, the production build, all 13 invariants, the tilemap
+check and `git diff --check`. No browser, wallet, provider, RPC, proof,
+signature, funds or transaction was used.
+
 ### 2026-08-29 — Canceled submissions stop before asynchronous relay admission
 
 `BackendApi.handle()` races the caller/deadline signal against its bounded

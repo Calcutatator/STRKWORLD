@@ -82,7 +82,9 @@ export class WalletApiPrivacyOperations implements PrivacyOperations {
   async poolConfig(signal?: AbortSignal): Promise<PoolConfig> {
     throwIfAborted(signal);
     try {
-      return await this.pool.config(signal);
+      const config = await this.pool.config(signal);
+      throwIfAborted(signal);
+      return config;
     } catch (error) {
       throw mapWalletError(error);
     }
