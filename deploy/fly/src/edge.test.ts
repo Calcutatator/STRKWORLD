@@ -155,6 +155,63 @@ describe('Fly edge public boundary', () => {
     expect(matchmakeBody.body).toBe('{"x":1,"y":2,"facing":"down","sprite":"avatar-1"}');
   });
 
+  it.each([
+    '/api/../health',
+    '/api/%2e%2e/health',
+    '/api/%2E%2E/health',
+    '/api/%2fhealth',
+    '/api/%5chealth',
+    '/api//health',
+    '/api/./health',
+    '/api/v1;private/health',
+    '/api/v1%3bprivate/health',
+    '/api/v1/%zz',
+  ])('rejects ambiguous API target %s before the private backend', async (target) => {
+    const root = await fixture();
+    let backendCalls = 0;
+    const backend = createServer((_request, response) => {
+      backendCalls += 1;
+      response.end('private child');
+    });
+    const backendPort = await listen(backend);
+    const edge = createEdgeServer({ staticRoot: root, backendPort, lobbyPort: 1, publicOrigin: 'https://game.example' });
+    const edgePort = await listen(edge);
+
+    const raw = await rawHttpRequest(
+      edgePort,
+      `POST ${target} HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\nContent-Type: application/json\r\nContent-Length: 2\r\n\r\n{}`,
+    );
+
+    expect(raw).toContain('HTTP/1.1 400 Bad Request');
+    expect(raw).not.toContain('private child');
+    expect(backendCalls).toBe(0);
+  });
+
+  it.each([
+    '/api',
+    '/api/',
+    '/api/v1/rpc/pool-config',
+    '/api/v1/rpc/pool-config?x=1&y=%2E',
+  ])('forwards canonical API target %s unchanged', async (target) => {
+    const root = await fixture();
+    let upstreamTarget = '';
+    const backend = createServer((request, response) => {
+      upstreamTarget = request.url ?? '';
+      response.end('ok');
+    });
+    const backendPort = await listen(backend);
+    const edge = createEdgeServer({ staticRoot: root, backendPort, lobbyPort: 1, publicOrigin: 'https://game.example' });
+    const edgePort = await listen(edge);
+
+    const raw = await rawHttpRequest(
+      edgePort,
+      `POST ${target} HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\nContent-Type: application/json\r\nContent-Length: 2\r\n\r\n{}`,
+    );
+
+    expect(raw).toContain('HTTP/1.1 200 OK');
+    expect(upstreamTarget).toBe(target.slice('/api'.length) || '/');
+  });
+
   it('forwards the documented pool-config staging smoke without credentials', async () => {
     const root = await fixture();
     const backend = createServer((request, response) => {
