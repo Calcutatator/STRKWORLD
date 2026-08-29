@@ -170,6 +170,10 @@ describe('Wallet Standard forward compatibility', () => {
       const supported = wallet.features['starknet:walletApi'].id === 'ready';
       const { name: providerName } = wallet;
       const { ['id']: featureId } = wallet.features['starknet:walletApi'];
+      const identityName = 'name';
+      wallet[identityName];
+      const identityId = 'id';
+      const { [identityId]: providerId } = wallet.features['starknet:walletApi'];
     `);
     expect(walletIdentityReads([hostile])).toEqual([
       'fixture.ts:2:11 handle.name',
@@ -178,6 +182,8 @@ describe('Wallet Standard forward compatibility', () => {
       "fixture.ts:5:25 wallet.features['starknet:walletApi'].id",
       'fixture.ts:6:15 name: providerName',
       "fixture.ts:7:15 ['id']: featureId",
+      'fixture.ts:9:7 wallet[identityName]',
+      'fixture.ts:11:15 [identityId]: providerId',
     ]);
   });
 });
@@ -317,7 +323,9 @@ function walletIdentityReads(sources: SourceFixture[]): string[] {
     const source = ts.createSourceFile(path, text, ts.ScriptTarget.Latest, true, ts.ScriptKind.TS);
     const violations: string[] = [];
     const visit = (node: ts.Node): void => {
-      if (isIdentityRead(node) && !isAllowedDisplayOrErrorName(node, path)) {
+      if (isIdentityRead(node)
+        && !isAllowedDisplayOrErrorName(node, path)
+        && !isAllowedProductionDynamicRead(node, path, source)) {
         const start = source.getLineAndCharacterOfPosition(node.getStart(source));
         violations.push(`${path.split('/').at(-1)}:${start.line + 1}:${start.character + 1} ${node.getText(source)}`);
       }
@@ -333,14 +341,18 @@ function isIdentityRead(
 ): node is ts.PropertyAccessExpression | ts.ElementAccessExpression | ts.BindingElement {
   if (ts.isPropertyAccessExpression(node)) return node.name.text === 'id' || node.name.text === 'name';
   if (ts.isElementAccessExpression(node) && node.argumentExpression) {
-    return ts.isStringLiteralLike(node.argumentExpression)
-      && (node.argumentExpression.text === 'id' || node.argumentExpression.text === 'name');
+    if (ts.isStringLiteralLike(node.argumentExpression)) {
+      return node.argumentExpression.text === 'id' || node.argumentExpression.text === 'name';
+    }
+    return !ts.isNumericLiteral(node.argumentExpression);
   }
   if (!ts.isBindingElement(node)) return false;
   const property = node.propertyName ?? node.name;
   if (ts.isComputedPropertyName(property)) {
-    return ts.isStringLiteralLike(property.expression)
-      && (property.expression.text === 'id' || property.expression.text === 'name');
+    if (ts.isStringLiteralLike(property.expression)) {
+      return property.expression.text === 'id' || property.expression.text === 'name';
+    }
+    return !ts.isNumericLiteral(property.expression);
   }
   return (ts.isIdentifier(property) || ts.isStringLiteralLike(property))
     && (property.text === 'id' || property.text === 'name');
@@ -368,6 +380,32 @@ function isAllowedDisplayOrErrorName(
       && node.parent.operatorToken.kind === ts.SyntaxKind.EqualsToken;
   }
   return false;
+}
+
+const ALLOWED_DYNAMIC_PROPERTY_READS = new Set([
+  'testing/fake.ts:this.faults[index]',
+  'testing/public-shield.ts:this.estimates[Math.min(this.calls++, this.estimates.length - 1)]',
+  'wallet-api/errors.ts:CODE_TO_KIND[code as keyof typeof CODE_TO_KIND]',
+  'wallet-api/operations.ts:policy.allowedTokens[intent.kind]',
+  'wallet-api/operations.ts:actual[index]',
+  'wallet-api/operations.ts:left.core[index]',
+  'wallet-api/operations.ts:right.core[index]',
+  'wallet-api/operations.ts:left.prerelease[index]',
+  'wallet-api/operations.ts:right.prerelease[index]',
+]);
+
+function isAllowedProductionDynamicRead(
+  node: ts.PropertyAccessExpression | ts.ElementAccessExpression | ts.BindingElement,
+  path: string,
+  source: ts.SourceFile,
+): boolean {
+  if (!ts.isElementAccessExpression(node) || !node.argumentExpression) return false;
+  if (ts.isStringLiteralLike(node.argumentExpression) || ts.isNumericLiteral(node.argumentExpression)) {
+    return false;
+  }
+  const relative = path.split('/packages/privacy/src/').at(-1);
+  return relative !== undefined
+    && ALLOWED_DYNAMIC_PROPERTY_READS.has(`${relative}:${node.getText(source)}`);
 }
 
 function repositoryRoot(): string {

@@ -175,7 +175,10 @@ dynamically registers an arbitrarily named, non-injected Wallet Standard
 provider and drives capability, pool reads, balances, recipient preflight and
 all four shield/unshield/transfer/swap prepare-confirm routes through the real
 production session. It also pins the absence of the static connector registry
-and provider-identity reads outside the display-only name projection. The
+and direct or destructured provider `id`/`name` property keys outside the
+display-only name projection; every non-literal computed property read is
+rejected unless it matches a short exact allowlist of non-identity production
+indexes. The
 installed Starknet Start MockWallet supplies the standard features, chain-id
 response and three STRK20 handlers; an exact dispatcher adds only its missing
 `wallet_supportedWalletApi` response and rejects every extra or duplicate

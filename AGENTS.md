@@ -275,10 +275,14 @@ permits only chain-id, capability and the three STRK20 methods, and the request
 ledger rejects extras and duplicate route handoffs. It then dynamically
 registers the arbitrarily named provider and drives every `PrivacyOperations`
 route through `WalletAccountV6`, the stable production session and the
-same-origin backend client. A parsed production-source gate rejects every
-provider `id`/`name` read except the display-only wallet-name projection; its
-hostile fixtures cover aliases, membership, switch, nested feature IDs and
-direct, aliased or computed-key destructuring.
+same-origin backend client. A parsed production-source gate rejects direct or
+destructured provider `id`/`name` property keys except the display-only
+wallet-name projection. It
+also rejects every non-literal computed property read outside an exact
+allowlist of the package's existing non-identity indexes, closing indirect key
+aliases rather than trying to constant-fold them. Its hostile fixtures cover
+aliases, membership, switch, nested feature IDs and direct, aliased, literal-
+computed or identifier-computed access and destructuring.
 This is a test-fixture correction, not a production wallet exception or
 permission to weaken version-based capability detection.
 
