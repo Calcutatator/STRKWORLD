@@ -272,13 +272,15 @@ return the flow to `composing`. The existing preparing, signing-owner,
 receipt, submission-uncertainty, close/remount and stale-result behavior is
 unchanged. No edit is allowed to release a batch already in wallet handoff.
 
-*Verified:* a public deterministic regression first failed on `origin/main`
-because a reviewed 1 STRK batch was confirmed after changing the amount to 2;
-the stale batch entered confirm. The corrected path leaves confirmation at
-zero and returns to composing. Removing the reviewed-edit ownership branch
-reproduces the failure. Focused Exchange tests and the workspace gates are
-recorded with the final candidate. No browser, wallet, provider, RPC, proof,
-signature, funds or transaction was used.
+*Verified:* public deterministic regressions first failed on `origin/main`
+because a reviewed 1 STRK batch was confirmed after changing the amount to 2,
+or after changing either selected asset; the corrected path discards the exact
+reviewed batch, leaves confirmation at zero and returns to composing. Removing
+the reviewed-edit ownership branch reproduces all three failures. The focused
+Exchange machine suite passes 24 tests (22 at the initial candidate checkpoint
+plus the two asset-edit regressions), with the workspace gates recorded on the
+final candidate. No browser, wallet, provider, RPC, proof, signature, funds or
+transaction was used.
 
 ### 2026-08-29 — Prepare-time quote and fee reads honor cancellation
 

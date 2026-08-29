@@ -105,6 +105,56 @@ describe('Exchange machine', () => {
     expect(machine.store.getState().flow).toMatchObject({ name: 'composing' });
   });
 
+  it('retires a reviewed batch when the player changes the sell asset', async () => {
+    let confirms = 0;
+    let discards = 0;
+    const operations = controlledOperations(
+      Promise.resolve({ transactionHash: '0xstale-sell' }),
+      undefined,
+      () => { confirms += 1; },
+      undefined,
+      50,
+      () => { discards += 1; },
+    );
+    operations.balances = async () => [
+      { token: strk!.token, total: 100n * 10n ** 18n, spendable: 100n * 10n ** 18n, maturing: 0n, maturityKnown: true },
+      { token: usdc!.token, total: 100_000_000n, spendable: 100_000_000n, maturing: 0n, maturityKnown: true },
+    ];
+    const machine = createExchangePanel({ operations, receipts: createReceiptLedger(), canStartFinancialAction: () => true });
+    await machine.open(); await machine.refreshBalances(); machine.setAmount('1'); await machine.prepare();
+
+    machine.setSell(usdc!.token);
+    await machine.confirm();
+
+    expect(discards).toBe(1);
+    expect(confirms).toBe(0);
+    expect(machine.store.getState()).toMatchObject({ sell: usdc, amountText: '', flow: { name: 'composing' } });
+  });
+
+  it('retires a reviewed batch when the player changes the buy asset', async () => {
+    let confirms = 0;
+    let discards = 0;
+    const machine = await ready(createExchangePanel({
+      operations: controlledOperations(
+        Promise.resolve({ transactionHash: '0xstale-buy' }),
+        undefined,
+        () => { confirms += 1; },
+        undefined,
+        50,
+        () => { discards += 1; },
+      ),
+      receipts: createReceiptLedger(), canStartFinancialAction: () => true,
+    }));
+    await machine.prepare();
+
+    machine.setBuy(usdc!.token);
+    await machine.confirm();
+
+    expect(discards).toBe(1);
+    expect(confirms).toBe(0);
+    expect(machine.store.getState()).toMatchObject({ buy: usdc, flow: { name: 'composing' } });
+  });
+
   it('rejects a malformed zero-slippage review at the Shell boundary', async () => {
     const machine = await ready(createExchangePanel({
       operations: controlledOperations(Promise.resolve({ transactionHash: '0xnever' }), undefined, undefined, undefined, 0),
@@ -368,10 +418,10 @@ describe('Exchange machine', () => {
   });
 });
 
-function controlledOperations(confirmResult: Promise<{ transactionHash: string }>, secondPool?: Promise<{ feeAmount: bigint; feeToken: string; proofValidityBlocks: number; noteMaturityBlocks: number }>, onConfirmEntered?: () => void, thirdPool?: Promise<{ feeAmount: bigint; feeToken: string; proofValidityBlocks: number; noteMaturityBlocks: number }>, slippageBps = 50): PrivacyOperations {
+function controlledOperations(confirmResult: Promise<{ transactionHash: string }>, secondPool?: Promise<{ feeAmount: bigint; feeToken: string; proofValidityBlocks: number; noteMaturityBlocks: number }>, onConfirmEntered?: () => void, thirdPool?: Promise<{ feeAmount: bigint; feeToken: string; proofValidityBlocks: number; noteMaturityBlocks: number }>, slippageBps = 50, onDiscard?: () => void): PrivacyOperations {
   let poolCalls = 0;
   const canonical = { kind: 'swap' as const, tokenIn: strk!.token, tokenOut: eth!.token, amountIn: 10n ** 18n, minAmountOut: 1_990000000000000000n };
-  const batch: PreparedBatch = { intents: [canonical], poolFee: 6n * 10n ** 18n, gasEstimate: 2n * 10n ** 15n, totalCost: 6_002000000000000000n, warnings: [], promptCount: 1, swapReview: { expectedAmountOut: 2n * 10n ** 18n, minimumAmountOut: canonical.minAmountOut, slippageBps, expiresAt: farFuture }, confirm: async () => { onConfirmEntered?.(); return confirmResult; }, discard() {} };
+  const batch: PreparedBatch = { intents: [canonical], poolFee: 6n * 10n ** 18n, gasEstimate: 2n * 10n ** 15n, totalCost: 6_002000000000000000n, warnings: [], promptCount: 1, swapReview: { expectedAmountOut: 2n * 10n ** 18n, minimumAmountOut: canonical.minAmountOut, slippageBps, expiresAt: farFuture }, confirm: async () => { onConfirmEntered?.(); return confirmResult; }, discard() { onDiscard?.(); } };
   return {
     capability: async () => ({ supportsStrk20: true, walletApiVersion: '0.10.3', registration: 'registered' }),
     poolConfig: async () => { ++poolCalls; if (poolCalls === 1) return { feeAmount: 6n * 10n ** 18n, feeToken: strk!.token, proofValidityBlocks: 450, noteMaturityBlocks: 10 }; if (poolCalls === 2 && secondPool) return secondPool; if (poolCalls > 2 && thirdPool) return thirdPool; return { feeAmount: 6n * 10n ** 18n, feeToken: strk!.token, proofValidityBlocks: 450, noteMaturityBlocks: 10 }; },
