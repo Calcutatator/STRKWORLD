@@ -258,6 +258,33 @@ empty shell to fetchers, so a 200 there means nothing.
 
 ## 6. Findings log
 
+### 2026-08-29 — Canceled submissions stop before asynchronous relay admission
+
+`BackendApi.handle()` races the caller/deadline signal against its bounded
+submission task, so a disconnected caller can receive the existing generic
+`504` while the task continues until an awaited collaborator settles. The
+submission path previously had no ownership checkpoint after its in-queue
+proof-freshness read or after the public asynchronous
+`SponsorshipBudgetPort.take()` seam. A late freshness or budget resolution
+could therefore continue into `paymaster.submit()` with an already-aborted
+request, spending sponsorship after the caller had been retired.
+
+The API now rechecks the request signal after each of those awaits and before
+any relay dispatch. This preserves the existing generic abort classification,
+queue capacity until a provider settles, budget and request metrics, and the
+existing uncertainty behavior once `paymaster.submit()` has begun. It does not
+add request-id state or retry behavior; D-034 still governs hashless
+post-dispatch uncertainty.
+
+*Verified:* two public BackendApi regressions first failed on current
+`origin/main`: a deferred budget admission reached `paymaster.submit()` after
+caller cancellation, and cancellation during the queued freshness read still
+entered budget admission. Each failure is independently reproduced when its
+corresponding post-await guard is removed. The corrected Backend suite passes;
+full workspace gates, typechecks, build, invariants, tilemap and diff hygiene
+are recorded with the final candidate. No browser, wallet, provider, RPC,
+proof, signature, funds or transaction was used.
+
 ### 2026-08-29 — Visit ownership ignores re-entrant building enters
 
 `VisitController` previously accepted every `building:entered` event, even
