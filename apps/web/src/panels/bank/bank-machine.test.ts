@@ -22,6 +22,7 @@ import {
 
 const STRK: Address = '0x04718f5a0fc34cc1af16a1cdee98ffb20c31f5cd61d6ab07201858f4287c938d';
 const BOB: Address = '0x02b4c7d1a1f8f39e0e6e8b9a2c7d0e3f4a5b6c7d8e9f0a1b2c3d4e5f60718293';
+const ALICE: Address = '0x03c5d8e2b2f9a40f1f7f9c0b3d8e1f4a6b7c8d9e0f1a2b3c4d5e6f708192a3b4';
 const STRANGER: Address = '0x0111111111111111111111111111111111111111111111111111111111111111';
 
 const POOL_FEE = 6_000000000000000000n;
@@ -461,6 +462,131 @@ describe('bank panel — maturity-aware balance', () => {
 });
 
 describe('bank panel — composing a visit', () => {
+  it('preserves an edited form when a transfer preflight finishes after the edit', async () => {
+    const operations = fake();
+    const preflight = deferred<'registered'>();
+    vi.spyOn(operations, 'recipientStatus').mockReturnValue(preflight.promise);
+    const panel = await openPanel(operations);
+    panel.setMode('transfer');
+    panel.setRecipient(BOB);
+    panel.setAmount('1');
+
+    const adding = panel.addToBatch();
+    panel.setRecipient(ALICE);
+    panel.setAmount('2');
+
+    preflight.resolve('registered');
+    await adding;
+
+    expect(panel.store.getState()).toMatchObject({
+      adding: false,
+      amountText: '2',
+      recipientText: ALICE,
+      batch: [],
+      flow: { name: 'composing' },
+    });
+  });
+
+  it('preserves MAX when a transfer preflight finishes after the MAX edit', async () => {
+    const operations = fake();
+    const preflight = deferred<'registered'>();
+    vi.spyOn(operations, 'recipientStatus')
+      .mockResolvedValueOnce('registered')
+      .mockReturnValueOnce(preflight.promise);
+    const panel = await openPanel(operations);
+    panel.setMode('transfer');
+    panel.setRecipient(BOB);
+    panel.setAmount('1');
+    await panel.addToBatch();
+    await panel.prepare();
+    panel.cancelPrepared();
+    panel.clearBatch();
+    await panel.refreshBalance();
+
+    const max = panel.maxSpendable();
+    expect(max).not.toBeNull();
+    panel.setRecipient(BOB);
+    panel.setAmount('1');
+    const adding = panel.addToBatch();
+    panel.applyMax();
+
+    expect(panel.store.getState().amountText).toBe(formatTokenAmountExact(max!));
+    preflight.resolve('registered');
+    await adding;
+
+    expect(panel.store.getState()).toMatchObject({
+      adding: false,
+      amountText: formatTokenAmountExact(max!),
+      recipientText: BOB,
+      batch: [],
+      flow: { name: 'composing' },
+    });
+  });
+
+  it('retires a preflight when only the recipient changes', async () => {
+    const operations = fake();
+    const preflight = deferred<'registered'>();
+    vi.spyOn(operations, 'recipientStatus').mockReturnValue(preflight.promise);
+    const panel = await openPanel(operations);
+    panel.setMode('transfer');
+    panel.setRecipient(BOB);
+    panel.setAmount('1');
+
+    const adding = panel.addToBatch();
+    panel.setRecipient(ALICE);
+    preflight.resolve('registered');
+    await adding;
+
+    expect(panel.store.getState()).toMatchObject({
+      amountText: '1',
+      recipientText: ALICE,
+      batch: [],
+    });
+  });
+
+  it('retires a preflight when only the amount changes', async () => {
+    const operations = fake();
+    const preflight = deferred<'registered'>();
+    vi.spyOn(operations, 'recipientStatus').mockReturnValue(preflight.promise);
+    const panel = await openPanel(operations);
+    panel.setMode('transfer');
+    panel.setRecipient(BOB);
+    panel.setAmount('1');
+
+    const adding = panel.addToBatch();
+    panel.setAmount('2');
+    preflight.resolve('registered');
+    await adding;
+
+    expect(panel.store.getState()).toMatchObject({
+      amountText: '2',
+      recipientText: BOB,
+      batch: [],
+    });
+  });
+
+  it('retires a preflight when the active mode is selected again', async () => {
+    const operations = fake();
+    const preflight = deferred<'registered'>();
+    vi.spyOn(operations, 'recipientStatus').mockReturnValue(preflight.promise);
+    const panel = await openPanel(operations);
+    panel.setMode('transfer');
+    panel.setRecipient(BOB);
+    panel.setAmount('1');
+
+    const adding = panel.addToBatch();
+    panel.setMode('transfer');
+    preflight.resolve('registered');
+    await adding;
+
+    expect(panel.store.getState()).toMatchObject({
+      mode: 'transfer',
+      amountText: '',
+      recipientText: '',
+      batch: [],
+    });
+  });
+
   it('keeps Clear authoritative when a transfer preflight finishes late', async () => {
     const operations = fake();
     const preflight = deferred<'registered'>();
