@@ -126,12 +126,10 @@ function isCanonicalApiTarget(target: string | undefined): boolean {
   const query = target.indexOf('?');
   const pathname = query < 0 ? target : target.slice(0, query);
   if (pathname !== '/api' && !pathname.startsWith('/api/')) return false;
-  if (pathname.includes('\\') || pathname.includes('//') || pathname.includes(';') || pathname.includes('#')) return false;
-  let decoded: string;
-  try { decoded = decodeURIComponent(pathname); } catch { return false; }
-  if (decoded.includes('/') && /%2f/i.test(pathname)) return false;
-  if (decoded.includes('\\') || decoded.includes(';')) return false;
-  const segments = decoded.split('/');
+  // Every admitted Backend route is fixed literal ASCII. Percent escapes in
+  // the path add only downstream re-decoding ambiguity; query bytes are kept.
+  if (pathname.includes('%') || pathname.includes('\\') || pathname.includes('//') || pathname.includes(';') || pathname.includes('#')) return false;
+  const segments = pathname.split('/');
   return !segments.some((segment) => segment === '.' || segment === '..');
 }
 

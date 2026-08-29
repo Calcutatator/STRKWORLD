@@ -166,6 +166,12 @@ describe('Fly edge public boundary', () => {
     '/api/v1;private/health',
     '/api/v1%3bprivate/health',
     '/api/v1/%zz',
+    '/api/%252e%252e/health',
+    '/api/%252E%252e/health',
+    '/api/%252fhealth',
+    '/api/%255chealth',
+    '/api/%253bprivate/health',
+    '/api/%2e%2e/%252fhealth',
   ])('rejects ambiguous API target %s before the private backend', async (target) => {
     const root = await fixture();
     let backendCalls = 0;
