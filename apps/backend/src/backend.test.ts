@@ -8,6 +8,7 @@ import {
   type PaymasterPort,
   type PoolRpcPort,
   type PreparedArtifact,
+  type SponsorshipBudgetPort,
   type SwapPlannerPort,
 } from './index.js';
 
@@ -21,7 +22,10 @@ const artifact: PreparedArtifact = {
   proof: { data: 'proof-data', output: ['0xc1', ...transferCalldata], proof_facts: ['0x4'] },
 };
 
-function fixture(overrides: Partial<BackendConfig> = {}) {
+function fixture(
+  overrides: Partial<BackendConfig> = {},
+  dependencies: { sponsorshipBudget?: SponsorshipBudgetPort } = {},
+) {
   let block = 1_000;
   let now = 1_000;
   let proofValidityBlocks = 450;
@@ -107,6 +111,7 @@ function fixture(overrides: Partial<BackendConfig> = {}) {
     sleep: async (ms) => { delays.push(ms); },
     now: () => now,
     swapPlanner,
+    sponsorshipBudget: dependencies.sponsorshipBudget,
   });
   return {
     api,
@@ -716,6 +721,79 @@ describe('bounded private submission', () => {
     await expect(first).resolves.toMatchObject({ status: 200 });
     await expect(queued).resolves.toMatchObject({ status: 503 });
     expect(submitCalls).toBe(1);
+  });
+
+  it('does not relay after the caller aborts during budget admission', async () => {
+    let releaseBudget!: (allowed: boolean) => void;
+    let budgetStarted!: () => void;
+    const started = new Promise<void>((resolve) => { budgetStarted = resolve; });
+    const budget: SponsorshipBudgetPort = {
+      take: async () => {
+        budgetStarted();
+        return new Promise<boolean>((resolve) => { releaseBudget = resolve; });
+      },
+    };
+    const { api, paymaster } = fixture({}, { sponsorshipBudget: budget });
+    const submit = vi.spyOn(paymaster, 'submit');
+    const quote = await fee(api);
+    const caller = new AbortController();
+    const handling = api.handle({
+      method: 'POST',
+      path: '/v1/private/submissions',
+      body: {
+        v: 1,
+        route: 'transfer',
+        artifact,
+        feeAuthorization: quote.authorization,
+        proofValidityBlocks: 450,
+      },
+      signal: caller.signal,
+    });
+
+    await started;
+    caller.abort(new DOMException('Caller disconnected.', 'AbortError'));
+    await expect(handling).resolves.toMatchObject({ status: 504 });
+
+    // The async budget port settles after the request has been retired. The
+    // paymaster must remain undispatched; otherwise a disconnect can still
+    // spend sponsorship after the caller has received cancellation.
+    releaseBudget(true);
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(submit).not.toHaveBeenCalled();
+  });
+
+  it('does not enter budget admission after cancellation during queued freshness recheck', async () => {
+    const budget: SponsorshipBudgetPort = { take: vi.fn().mockResolvedValue(true) };
+    const { api, paymaster, rpc } = fixture({}, { sponsorshipBudget: budget });
+    const quote = await fee(api);
+    const submit = vi.spyOn(paymaster, 'submit');
+    const caller = new AbortController();
+    let freshnessReads = 0;
+    vi.spyOn(rpc, 'getPoolConfig').mockImplementation(async () => {
+      freshnessReads += 1;
+      if (freshnessReads === 3) caller.abort(new DOMException('Caller disconnected.', 'AbortError'));
+      return { feeAmount: 6n, feeToken: STRK, proofValidityBlocks: 450, noteMaturityBlocks: 10 };
+    });
+    const handling = api.handle({
+      method: 'POST',
+      path: '/v1/private/submissions',
+      body: {
+        v: 1,
+        route: 'transfer',
+        artifact,
+        feeAuthorization: quote.authorization,
+        proofValidityBlocks: 450,
+      },
+      signal: caller.signal,
+    });
+
+    await expect(handling).resolves.toMatchObject({ status: 504 });
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(freshnessReads).toBe(3);
+    expect(budget.take).not.toHaveBeenCalled();
+    expect(submit).not.toHaveBeenCalled();
   });
 });
 

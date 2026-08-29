@@ -223,10 +223,13 @@ export class BackendApi {
           signal,
           'Prepared proof expired in the submission queue.',
         );
+        throwIfAborted(signal);
         if (claims.swap && claims.swap.quoteExpiresAt <= this.clockNow()) {
           throw new ApiFailure(409, 'The private swap quote expired before submission.');
         }
-        if (!await this.budget.take(claims.amount)) {
+        const budgetAvailable = await this.budget.take(claims.amount);
+        throwIfAborted(signal);
+        if (!budgetAvailable) {
           this.metrics.budgetLimited();
           throw new ApiFailure(503, 'The private sponsorship budget is temporarily exhausted.');
         }
@@ -586,6 +589,10 @@ function abortable<T>(promise: Promise<T>, signal: AbortSignal): Promise<T> {
 
 function abortReason(signal: AbortSignal): unknown {
   return signal.reason ?? new DOMException('Request aborted.', 'AbortError');
+}
+
+function throwIfAborted(signal: AbortSignal): void {
+  if (signal.aborted) throw abortReason(signal);
 }
 
 function isAbortFailure(error: unknown): boolean {
