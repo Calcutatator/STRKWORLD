@@ -258,6 +258,34 @@ empty shell to fetchers, so a 200 there means nothing.
 
 ## 6. Findings log
 
+### 2026-08-29 — Paymaster submission success requires one nonzero transaction hash
+
+`BackendApi` previously applied a client-input felt validator to the runtime
+result of `PaymasterPort.submit()` and returned that provider object unchanged.
+A provider response containing `0x0` was therefore reported as a successful
+private submission, while missing, decimal or above-field hashes were
+misclassified as client `400` errors after relay dispatch. Runtime-only extra
+provider fields were also echoed across the public response boundary.
+
+The submission boundary now requires an own data property containing one
+nonzero Stark field felt, preserves its exact leading-zero and hex-case
+encoding, and returns only `{transactionHash}`. A malformed provider success is
+the existing opaque upstream `502`; it does not claim acceptance, expose raw
+provider details, retry, or alter D-034's existing browser classification of a
+lost response before a validated hash reaches the browser.
+
+*Verified:* public deterministic BackendApi regressions first accepted `0x0`,
+echoed provider status/correlation fields, and returned client `400` for a
+missing, decimal or field-prime hash. The corrected boundary rejects those
+values, leading-zero zero, and inherited/accessor hashes with the generic
+upstream response, while preserving valid `0x00Ab`. Removing the nonzero guard
+fails both zero cases; replacing own-property extraction with normal property
+access fails the inherited/accessor cases. Backend passes 5 files / 117 tests;
+the full workspace passes 102 files / 1,526 tests. All workspace typechecks,
+the production build, 13 invariants, tilemap gate and diff hygiene pass.
+Deterministic fakes only: no browser, wallet, provider, RPC, proof, signature,
+funds or transaction was used.
+
 ### 2026-08-29 — Oversized submissions must not consume global admission
 
 `BackendApi.handle()` previously took aggregate rate-limit admission before

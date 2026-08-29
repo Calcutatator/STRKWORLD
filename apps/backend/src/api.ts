@@ -243,8 +243,8 @@ export class BackendApi {
           fee: { token: claims.token, recipient: claims.recipient, amount: claims.amount },
           signal,
         });
-        requireFelt(result.transactionHash, 'submitted transaction hash');
-        return { status: 200, body: result };
+        const transactionHash = requireProviderTransactionHash(result);
+        return { status: 200, body: { transactionHash } };
       }, { allowQueue: !policy.quoteBound, signal });
     } catch (error) {
       if (error instanceof SubmissionQueueFullError) {
@@ -463,6 +463,18 @@ export class BackendApi {
     }
     return { status: 502, body: { code: 'UPSTREAM_FAILURE', message: 'A private service dependency failed.' } };
   }
+}
+
+function requireProviderTransactionHash(result: unknown): string {
+  if (!result || typeof result !== 'object' || Array.isArray(result)) {
+    throw new Error('Paymaster returned an invalid transaction hash.');
+  }
+  const descriptor = Object.getOwnPropertyDescriptor(result, 'transactionHash');
+  const value = descriptor?.value;
+  if (typeof value !== 'string' || !isFelt(value) || BigInt(value) === 0n) {
+    throw new Error('Paymaster returned an invalid transaction hash.');
+  }
+  return value;
 }
 
 function requireBigintString(value: unknown, label: string): bigint {
