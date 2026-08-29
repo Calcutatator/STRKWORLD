@@ -425,6 +425,81 @@ describe('bounded private submission', () => {
     expect(submitted).toEqual([artifact]);
   });
 
+  it.each([
+    ['missing', {}],
+    ['zero', { transactionHash: '0x0' }],
+    ['leading-zero zero', { transactionHash: '0x000' }],
+    ['decimal', { transactionHash: '123' }],
+    ['field-prime', {
+      transactionHash: `0x${((1n << 251n) + 17n * (1n << 192n) + 1n).toString(16)}`,
+    }],
+  ])('rejects a provider success with a %s transaction hash as an opaque upstream failure', async (_label, result) => {
+    const { api, paymaster } = fixture();
+    vi.spyOn(paymaster, 'submit').mockResolvedValue(result as never);
+    const quote = await fee(api);
+
+    await expect(api.handle({
+      method: 'POST', path: '/v1/private/submissions',
+      body: {
+        v: 1,
+        route: 'transfer',
+        artifact,
+        feeAuthorization: quote.authorization,
+        proofValidityBlocks: 450,
+      },
+    })).resolves.toEqual({
+      status: 502,
+      body: { code: 'UPSTREAM_FAILURE', message: 'A private service dependency failed.' },
+    });
+  });
+
+  it('returns only the validated provider transaction hash after submission', async () => {
+    const { api, paymaster } = fixture();
+    vi.spyOn(paymaster, 'submit').mockResolvedValue({
+      transactionHash: '0x00Ab',
+      providerStatus: 'accepted',
+      raw: { requestId: 'provider-correlator' },
+    } as never);
+    const quote = await fee(api);
+
+    await expect(api.handle({
+      method: 'POST', path: '/v1/private/submissions',
+      body: {
+        v: 1,
+        route: 'transfer',
+        artifact,
+        feeAuthorization: quote.authorization,
+        proofValidityBlocks: 450,
+      },
+    })).resolves.toEqual({ status: 200, body: { transactionHash: '0x00Ab' } });
+  });
+
+  it.each([
+    ['an inherited transaction hash', Object.assign(Object.create({ transactionHash: '0xabc' }), {})],
+    ['an accessor transaction hash', Object.defineProperty({}, 'transactionHash', {
+      enumerable: true,
+      get: () => '0xabc',
+    })],
+  ])('rejects provider success with %s as an opaque upstream failure', async (_label, result) => {
+    const { api, paymaster } = fixture();
+    vi.spyOn(paymaster, 'submit').mockResolvedValue(result as never);
+    const quote = await fee(api);
+
+    await expect(api.handle({
+      method: 'POST', path: '/v1/private/submissions',
+      body: {
+        v: 1,
+        route: 'transfer',
+        artifact,
+        feeAuthorization: quote.authorization,
+        proofValidityBlocks: 450,
+      },
+    })).resolves.toEqual({
+      status: 502,
+      body: { code: 'UPSTREAM_FAILURE', message: 'A private service dependency failed.' },
+    });
+  });
+
   it('binds an unshield public withdrawal to the authorized token allowlist', async () => {
     const { api, submitted } = fixture();
     const quote = await fee(api, 'unshield');
