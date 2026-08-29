@@ -178,6 +178,8 @@ describe('Wallet Standard forward compatibility', () => {
       ({ name: assignedName } = wallet);
       let assignedFeatureId;
       ({ [identityId]: assignedFeatureId } = wallet.features['starknet:walletApi']);
+      let nestedProviderId;
+      ({ features: { ['starknet:walletApi']: { id: nestedProviderId } } } = wallet);
     `);
     expect(walletIdentityReads([hostile])).toEqual([
       'fixture.ts:2:11 handle.name',
@@ -190,6 +192,7 @@ describe('Wallet Standard forward compatibility', () => {
       'fixture.ts:11:15 [identityId]: providerId',
       'fixture.ts:13:10 name: assignedName',
       'fixture.ts:15:10 [identityId]: assignedFeatureId',
+      'fixture.ts:17:48 id: nestedProviderId',
     ]);
   });
 });
@@ -384,7 +387,21 @@ function isIdentityPropertyName(property: ts.PropertyName | ts.BindingName, fail
 
 function isObjectAssignmentPattern(node: ts.ObjectLiteralExpression): boolean {
   let current: ts.Node = node;
-  while (ts.isParenthesizedExpression(current.parent)) current = current.parent;
+  while (true) {
+    if (ts.isParenthesizedExpression(current.parent)) {
+      current = current.parent;
+      continue;
+    }
+    if (ts.isPropertyAssignment(current.parent) && current.parent.initializer === current) {
+      current = current.parent;
+      continue;
+    }
+    if (ts.isObjectLiteralExpression(current.parent)) {
+      current = current.parent;
+      continue;
+    }
+    break;
+  }
   return ts.isBinaryExpression(current.parent)
     && current.parent.left === current
     && current.parent.operatorToken.kind === ts.SyntaxKind.EqualsToken;

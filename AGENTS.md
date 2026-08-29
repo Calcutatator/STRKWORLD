@@ -283,7 +283,7 @@ allowlist of the package's existing non-identity indexes, closing indirect key
 aliases rather than trying to constant-fold them. Its hostile fixtures cover
 aliases, membership, switch, nested feature IDs and direct, aliased, literal-
 computed or identifier-computed access, declaration destructuring and
-assignment destructuring.
+arbitrarily nested assignment destructuring.
 This is a test-fixture correction, not a production wallet exception or
 permission to weaken version-based capability detection.
 
