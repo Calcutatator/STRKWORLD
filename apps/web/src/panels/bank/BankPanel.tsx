@@ -10,6 +10,7 @@ import { PanelFrame } from '../PanelFrame.js';
 import { routeDoor } from '../routes.js';
 import { createBankPanel, ROUTE_BY_MODE, type BankMode, type BankPanel as BankPanelMachine, type BankState } from './bank-machine.js';
 import { describeIntent, describeWarning } from './summary-copy.js';
+import { WalletAttentionCue, walletOperationAttention } from '../../wallet/WalletAttentionCue.js';
 
 const BANK_MENU_MODES: readonly BankMode[] = ['shield', 'unshield', 'transfer'];
 const BANK_STATION_MODES: readonly BankMode[] = ['shield', 'unshield'];
@@ -108,6 +109,10 @@ export function BankPanel({
     state.flow.name === 'failed' &&
     state.flow.recovery === 'close' &&
     (state.flow.kind !== 'submission-uncertain' || !uncertaintyState.acknowledged);
+  const walletAttention = walletOperationAttention(
+    state.balance.status === 'loading',
+    state.flow.name === 'submitting' ? state.flow.stage : null,
+  );
 
   // The header disclosure previews the mode being composed. At the commit
   // point it is withdrawn, so ConfirmGate's batch-derived set is the only
@@ -115,6 +120,10 @@ export function BankPanel({
   // shows public-deposit copy over a private transfer.
   return (
     <div className="bank-experience" data-experience={experience}>
+      <WalletAttentionCue
+        active={walletAttention !== null}
+        kind={walletAttention ?? 'confirm'}
+      />
       <PanelFrame
         title={title}
         disclosure={committing ? null : state.disclosure}

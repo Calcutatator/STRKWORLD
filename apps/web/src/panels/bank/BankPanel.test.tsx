@@ -33,6 +33,12 @@ const BOB: Address = '0x02b4c7d1a1f8f39e0e6e8b9a2c7d0e3f4a5b6c7d8e9f0a1b2c3d4e5f
 const SHIELD_DISCLOSURE = PRIVACY_REGISTER.find((entry) => entry.route === 'bank.shield')!.disclosure!;
 const allowFinancialActions = () => true;
 
+function deferred<T>() {
+  let resolve!: (value: T) => void;
+  const promise = new Promise<T>((done) => { resolve = done; });
+  return { promise, resolve };
+}
+
 function createAllowedBankPanel(options: Omit<BankPanelOptions, 'canStartFinancialAction'>) {
   return createBankPanel({ ...options, canStartFinancialAction: allowFinancialActions });
 }
@@ -72,6 +78,55 @@ function confirmButton(markup: string): string | null {
 }
 
 describe('BankPanel rendering', () => {
+  it('shows the avatar attention cue while a requested private balance waits on the wallet', async () => {
+    const seam = operations();
+    const panel = createAllowedBankPanel({ operations: seam, receipts: createReceiptLedger() });
+    await panel.open();
+
+    const loading = panel.refreshBalance();
+    const markup = render(panel, seam);
+    expect(markup).toContain('data-wallet-attention="balance"');
+    expect(markup).toMatch(/<img[^>]+avatar-1\.png/);
+    await loading;
+
+    expect(render(panel, seam)).not.toContain('data-wallet-attention');
+  });
+
+  it('shows the avatar attention cue only for the wallet-owned approval stage', async () => {
+    const seam = new FakePrivacyOperations({
+      balances: { [STRK]: parseTokenAmount('100')! },
+      registered: [BOB],
+    });
+    const approval = deferred<void>();
+    const approvalEntered = deferred<void>();
+    const originalPrepare = seam.prepare.bind(seam);
+    seam.prepare = async (...args) => {
+      const batch = await originalPrepare(...args);
+      return {
+        ...batch,
+        confirm: async (options: Parameters<typeof batch.confirm>[0]) => {
+          options.onProgress?.({ stage: 'awaiting-approval', message: COPY.flow.awaitingApproval });
+          approvalEntered.resolve();
+          await approval.promise;
+          return { transactionHash: '0xattention' };
+        },
+      };
+    };
+    const panel = createAllowedBankPanel({ operations: seam, receipts: createReceiptLedger() });
+    await panel.open();
+    panel.setAmount('1');
+    await panel.addToBatch();
+    await panel.prepare();
+
+    const confirming = panel.confirm();
+    await approvalEntered.promise;
+    expect(render(panel, seam)).toContain('data-wallet-attention="confirm"');
+
+    approval.resolve();
+    await confirming;
+    expect(render(panel, seam)).not.toContain('data-wallet-attention');
+  });
+
   it('keeps the approved disclosure inside the station commit gate', async () => {
     const seam = operations();
     const panel = createAllowedBankPanel({

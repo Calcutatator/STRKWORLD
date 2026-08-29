@@ -11,6 +11,7 @@ import {
   WalletSessionProvider,
   useWalletSessionOptional,
 } from '../wallet/WalletSessionProvider.js';
+import { WalletAttentionCue } from '../wallet/WalletAttentionCue.js';
 
 export function ProductionRoot({
   session,
@@ -204,10 +205,13 @@ function WalletEntryGate({
 }) {
   if (snapshot.phase === 'connecting') {
     return (
-      <section className="room room-connect" aria-busy="true">
-        <h2>{COPY.connect.title}</h2>
-        <p>{COPY.connect.connecting}</p>
-      </section>
+      <>
+        <WalletAttentionCue active kind="connect" />
+        <section className="room room-connect" aria-busy="true">
+          <h2>{COPY.connect.title}</h2>
+          <p>{COPY.connect.connecting}</p>
+        </section>
+      </>
     );
   }
 

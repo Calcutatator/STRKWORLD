@@ -36,6 +36,14 @@ export const COPY = {
     wrongNetwork: 'Switch this wallet to Starknet mainnet, then try again.',
   },
 
+  walletAttention: {
+    connectTitle: 'Your wallet needs you',
+    balanceTitle: 'Approve the balance read',
+    confirmTitle: 'Confirm in your wallet',
+    body: 'Finish this step in your wallet, then come back to the game.',
+    tabTitle: '● Wallet needs you — STRKWORLD',
+  },
+
   unsupported: {
     title: 'This wallet cannot open the pool',
     body: 'Your wallet is connected but does not offer the STRK20 privacy methods this city runs on. Your funds are fine — the doors that need the pool stay shut until you connect a wallet that supports it.',
