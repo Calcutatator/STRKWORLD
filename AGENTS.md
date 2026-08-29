@@ -258,6 +258,24 @@ empty shell to fetchers, so a 200 there means nothing.
 
 ## 6. Findings log
 
+### 2026-08-29 — Public-key reads require one valid felt
+
+`StarknetRpcPoolPort.getPublicKey()` previously accepted any string array from
+the pool call, returned `0x0` for an empty array, and silently ignored trailing
+words. A malformed `get_public_key(address)` response could therefore be
+treated as an unregistered recipient or have an arbitrary first word reach the
+privacy registration preflight. The adapter now requires exactly one valid
+Stark field felt and returns it unchanged, preserving `0x0` and leading-zero
+encodings for the privacy mapper. The backend and receipt path are unchanged.
+
+*Verified:* deterministic adapter fakes first accepted empty, multiword,
+decimal and field-prime results; the corrected adapter rejects them with the
+generic invalid-public-key error while accepting `0x0`, `0x00` and `0x0001`.
+The privacy mapper continues to classify valid zero as `unregistered`, valid
+nonzero as `registered`, and malformed values as `unknown`. Adapter tests pass
+25 tests and the backend typecheck passes. No external RPC, wallet, proof,
+signature, funds or transaction was used.
+
 ### 2026-08-29 — Starknet block numbers must be nonnegative
 
 `StarknetRpcPoolPort.getBlockNumber()` previously accepted any safe integer

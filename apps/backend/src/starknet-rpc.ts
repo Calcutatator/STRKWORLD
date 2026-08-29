@@ -51,7 +51,11 @@ export class StarknetRpcPoolPort implements PoolRpcPort {
 
   async getPublicKey(address: string, signal?: AbortSignal): Promise<string> {
     const result = await this.callPool(PUBLIC_KEY_SELECTOR, [address], signal);
-    return result[0] ?? '0x0';
+    const key = result[0];
+    if (result.length !== 1 || !key || !isFelt(key)) {
+      throw new Error('Starknet RPC returned an invalid public key.');
+    }
+    return key;
   }
 
   async getReceipt(transactionHash: string, signal?: AbortSignal): Promise<unknown> {
