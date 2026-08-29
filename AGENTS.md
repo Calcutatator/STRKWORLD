@@ -279,7 +279,7 @@ static-shell routing remains outside the private namespace. Rejections are the
 existing generic public `400`, do not echo the target and never reach the
 private child.
 
-*Verified:* deterministic raw-edge regressions first forwarded fifteen ambiguous
+*Verified:* deterministic raw-edge regressions first forwarded sixteen ambiguous
 API targets to a private-child fake, including both literal and encoded health
 traversals. The corrected edge rejects them with zero child calls and forwards
 four canonical API/query targets byte-for-byte after stripping only `/api`.
