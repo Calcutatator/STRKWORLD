@@ -156,12 +156,18 @@ export function createRemotePeerSource(
       const token = Symbol();
       listeners.set(listener, token);
       let active = true;
-      listener(current);
-      return () => {
+      const unsubscribe = (): void => {
         if (!active) return;
         active = false;
         if (listeners.get(listener) === token) listeners.delete(listener);
       };
+      try {
+        listener(current);
+      } catch (error) {
+        unsubscribe();
+        throw error;
+      }
+      return unsubscribe;
     },
   };
 
