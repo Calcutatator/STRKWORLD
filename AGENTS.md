@@ -258,6 +258,35 @@ empty shell to fetchers, so a 200 there means nothing.
 
 ## 6. Findings log
 
+### 2026-08-29 — Recipient preflight rejects malformed pool keys
+
+`WalletApiPrivacyOperations.recipientStatus()` previously treated every
+nonzero value returned by the pool `get_public_key` read as a registered
+recipient. The Wallet API seam therefore admitted negative decimal values,
+decimal strings without the `0x` prefix, and values at or above the Stark
+field prime. A malformed RPC/backend response could pass the recipient
+preflight and reach relay estimation and eventual wallet preparation instead
+of failing closed. A non-hex string happened to return `unknown` only because
+`BigInt()` threw; that accidental behavior did not validate the full felt
+contract.
+
+The preflight now applies the existing `isFelt` rule before interpreting the
+sentinel: malformed values return the existing `unknown` status, valid `0x0`
+and leading-zero zero encodings remain `unregistered`, and valid nonzero
+leading-zero felts remain `registered`. No public type or route changed.
+
+*Verified:* the public `wallet-api.test.ts` matrix first failed red on current
+`origin/main` for `-1`, `123`, the field prime and field-prime-plus-one, with
+each incorrectly reported as `registered`; `0xnot-a-felt` already returned
+`unknown`. The same public transfer-prepare path then proved malformed keys do
+not call relay estimation or wallet preparation. Green is 57 focused Wallet
+API tests and 166 tests across the privacy package. Replacing the guard with
+an unconditional false branch reproduces the same four failures. The full
+workspace passes 102 files / 1,464 tests, all workspace typechecks, the
+production build, all 13 invariants, the tilemap gate and `git diff --check`.
+No browser, wallet, provider, RPC, proof, signature, funds or transaction was
+used.
+
 ### 2026-08-29 — Bank form edits retire stale recipient preflights
 
 The Bank's transfer Add captures the recipient and amount before awaiting the
