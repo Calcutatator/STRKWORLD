@@ -258,6 +258,73 @@ describe('fixed Starknet RPC adapter', () => {
     await expect(rpc.getBlockNumber()).rejects.toBe(abort);
   });
 
+  it('wraps safe numeric request ids without colliding with an in-flight request', async () => {
+    const ids: number[] = [];
+    let started!: () => void;
+    const firstStarted = new Promise<void>((resolve) => { started = resolve; });
+    let release!: () => void;
+    const firstRelease = new Promise<void>((resolve) => { release = resolve; });
+    const fetcher = vi.fn(async (_url: string, init?: RequestInit) => {
+      const id = (JSON.parse(String(init?.body)) as { id: number }).id;
+      ids.push(id);
+      if (ids.length === 1) {
+        started();
+        await firstRelease;
+      }
+      return new Response(JSON.stringify({ jsonrpc: '2.0', id, result: 1000 }));
+    });
+    const rpc = new StarknetRpcPoolPort({
+      rpcUrl: 'https://rpc.example',
+      poolAddress: '0x123',
+      feeToken: '0x4718',
+      fetcher,
+    });
+    Reflect.set(rpc, 'id', Number.MAX_SAFE_INTEGER);
+    const first = rpc.getBlockNumber();
+    await firstStarted;
+    Reflect.set(rpc, 'id', Number.MAX_SAFE_INTEGER);
+    await expect(rpc.getBlockNumber()).resolves.toBe(1000);
+    release();
+    await expect(first).resolves.toBe(1000);
+    expect(ids).toEqual([1, 2]);
+    expect(ids.every((id) => Number.isSafeInteger(id) && id > 0)).toBe(true);
+  });
+
+  it('releases allocated ids after fetch, response-read, and successful completion', async () => {
+    const ids: number[] = [];
+    let calls = 0;
+    const fetcher = vi.fn(async (_url: string, init?: RequestInit) => {
+      const id = (JSON.parse(String(init?.body)) as { id: number }).id;
+      ids.push(id);
+      calls += 1;
+      if (calls === 1) throw new Error('fetch failed');
+      if (calls === 3) {
+        const abort = new DOMException('response aborted', 'AbortError');
+        return {
+          ok: true,
+          json: async () => { throw abort; },
+        } as unknown as Response;
+      }
+      return new Response(JSON.stringify({ jsonrpc: '2.0', id, result: 1000 }));
+    });
+    const rpc = new StarknetRpcPoolPort({
+      rpcUrl: 'https://rpc.example',
+      poolAddress: '0x123',
+      feeToken: '0x4718',
+      fetcher,
+    });
+
+    Reflect.set(rpc, 'id', Number.MAX_SAFE_INTEGER);
+    await expect(rpc.getBlockNumber()).rejects.toThrow('fetch failed');
+    Reflect.set(rpc, 'id', Number.MAX_SAFE_INTEGER);
+    await expect(rpc.getBlockNumber()).resolves.toBe(1000);
+    Reflect.set(rpc, 'id', Number.MAX_SAFE_INTEGER);
+    await expect(rpc.getBlockNumber()).rejects.toMatchObject({ name: 'AbortError' });
+    Reflect.set(rpc, 'id', Number.MAX_SAFE_INTEGER);
+    await expect(rpc.getBlockNumber()).resolves.toBe(1000);
+    expect(ids).toEqual([1, 1, 1, 1]);
+  });
+
   it.each([
     ['null', 'null'],
     ['malformed JSON', '{not-json'],

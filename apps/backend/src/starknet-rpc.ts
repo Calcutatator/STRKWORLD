@@ -7,6 +7,8 @@ const PROOF_VALIDITY_SELECTOR = '0x11d6d65b366023adbdaeaa04008285431f4509d78e78c
 
 type FetchLike = (input: string, init?: RequestInit) => Promise<Response>;
 
+const MAX_RPC_ID = Number.MAX_SAFE_INTEGER;
+
 export interface StarknetRpcOptions {
   rpcUrl: string;
   poolAddress: string;
@@ -18,6 +20,7 @@ export interface StarknetRpcOptions {
 /** Minimal raw JSON-RPC port; it cannot relay arbitrary client calls. */
 export class StarknetRpcPoolPort implements PoolRpcPort {
   private id = 0;
+  private readonly activeIds = new Set<number>();
   private readonly fetcher: FetchLike;
 
   constructor(private readonly options: StarknetRpcOptions) {
@@ -83,24 +86,44 @@ export class StarknetRpcPoolPort implements PoolRpcPort {
   }
 
   private async rpc(method: string, params: unknown[], signal?: AbortSignal): Promise<unknown> {
-    const id = ++this.id;
-    const response = await this.fetcher(this.options.rpcUrl, {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ jsonrpc: '2.0', id, method, params }),
-      signal,
-    });
-    if (!response.ok) throw new Error('Starknet RPC request failed.');
-    let payload: unknown;
+    const id = this.allocateId();
     try {
-      payload = await response.json();
-    } catch (error) {
-      if (!(error instanceof SyntaxError)) throw error;
-      throw new Error('Starknet RPC returned an invalid response.');
+      const response = await this.fetcher(this.options.rpcUrl, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ jsonrpc: '2.0', id, method, params }),
+        signal,
+      });
+      if (!response.ok) throw new Error('Starknet RPC request failed.');
+      let payload: unknown;
+      try {
+        payload = await response.json();
+      } catch (error) {
+        if (!(error instanceof SyntaxError)) throw error;
+        throw new Error('Starknet RPC returned an invalid response.');
+      }
+      const envelope = parseRpcEnvelope(payload, id);
+      if (envelope.kind === 'error') throw new Error('Starknet RPC returned an error.');
+      return envelope.result;
+    } finally {
+      this.activeIds.delete(id);
     }
-    const envelope = parseRpcEnvelope(payload, id);
-    if (envelope.kind === 'error') throw new Error('Starknet RPC returned an error.');
-    return envelope.result;
+  }
+
+  private allocateId(): number {
+    const first = this.id >= MAX_RPC_ID ? 1 : this.id + 1;
+    let candidate = first;
+    for (;;) {
+      if (!this.activeIds.has(candidate)) {
+        this.activeIds.add(candidate);
+        this.id = candidate;
+        return candidate;
+      }
+      candidate = candidate === MAX_RPC_ID ? 1 : candidate + 1;
+      if (candidate === first) {
+        throw new Error('Starknet RPC request-id space is exhausted.');
+      }
+    }
   }
 }
 

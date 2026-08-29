@@ -266,21 +266,26 @@ response for another request id, and a response containing both `result` and a
 falsy `error` value. Arrays, nonobjects and malformed JSON either reached
 downstream result parsing or leaked parser/runtime errors from the adapter.
 
-The adapter now requires a JSON-RPC 2.0 object with an own data `jsonrpc`
-property equal to `2.0`, an own data numeric id matching the request, and
-exactly one own data `result` or `error` property. Error presence is based on
-property presence rather than truthiness, and malformed JSON is mapped to a
-generic invalid-response error. JSON-RPC extension members are intentionally
-ignored: the standard and installed Starknet v10.4 response type do not
-forbid them, and this narrow adapter has no extension-specific behavior;
-arrays/batches and conflicting standard members remain rejected.
+The adapter now allocates positive safe numeric request IDs, wrapping at
+`Number.MAX_SAFE_INTEGER` while skipping IDs owned by concurrent in-flight
+calls and releasing each ID in `finally` on success, error or abort. It
+requires a JSON-RPC 2.0 object with an own data `jsonrpc` property equal to
+`2.0`, an own data numeric id matching the request, and exactly one own data
+`result` or `error` property. Error presence is based on property presence
+rather than truthiness, and malformed JSON is mapped to a generic
+invalid-response error. JSON-RPC extension members are intentionally ignored:
+the standard and installed Starknet v10.4 response type do not forbid them,
+and this narrow adapter has no extension-specific behavior; arrays/batches and
+conflicting standard members remain rejected.
 
 *Verified:* deterministic adapter fakes first accepted wrong version/id,
 result-plus-falsy-error envelopes, and leaked malformed/nonobject failures.
-The focused adapter suite passes 41 tests; removing the version, id, exclusive
-result/error, or data-property guards independently fails its public
-regression. Backend passes 5 files / 135 tests; the full workspace passes 102
-files / 1,544 tests. All workspace typechecks, production build, 13
+The focused adapter suite passes 45 tests; removing the version, id, exclusive
+result/error, data-property, active-ID, or release guards independently fails
+its public regression. The request-ID boundary regressions cover wraparound,
+active-ID collision avoidance, and release after fetch, response-read, and
+successful completion. Backend passes 5 files / 137 tests; the full workspace
+passes 102 files / 1,546 tests. All workspace typechecks, production build, 13
 invariants, tilemap gate and diff hygiene pass. Deterministic fakes only: no
 external RPC, wallet, provider, proof, signature, funds or transaction was
 used.
