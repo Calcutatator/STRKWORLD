@@ -82,6 +82,12 @@ export function createExchangePanel(options: {
       patch({ ...next, flow: { name: 'composing' } });
       return;
     }
+    if (store.getState().flow.name === 'review') {
+      start();
+      discard();
+      patch({ ...next, flow: { name: 'composing' } });
+      return;
+    }
     patch(next);
   };
   const stageCopy = (stage: OperationStage) => ({ composing: COPY.flow.handingOver, 'awaiting-approval': COPY.flow.awaitingApproval, proving: COPY.flow.proving, submitting: COPY.flow.submitting, confirming: COPY.flow.confirming, done: COPY.flow.done, failed: COPY.errors.unknown }[stage]);
