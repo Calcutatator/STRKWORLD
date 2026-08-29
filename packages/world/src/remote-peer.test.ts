@@ -62,6 +62,63 @@ describe('RemotePeerSource', () => {
     expect(listener).toHaveBeenCalledTimes(1); // the synchronous replay only
   });
 
+  it('rolls back a subscription whose synchronous replay throws', () => {
+    const controller = createRemotePeerSource();
+    const source = controller.source;
+    const error = new Error('replay failed');
+    const failed = vi.fn(() => {
+      throw error;
+    });
+
+    let thrown: unknown;
+    try {
+      source.subscribe(failed);
+    } catch (caught) {
+      thrown = caught;
+    }
+    expect(thrown).toBe(error);
+
+    const healthy = vi.fn();
+    source.subscribe(healthy);
+    healthy.mockClear();
+
+    expect(() => controller.publish([peer({ x: 96 })])).not.toThrow();
+    expect(failed).toHaveBeenCalledTimes(1);
+    expect(healthy).toHaveBeenCalledOnce();
+    expect(healthy).toHaveBeenCalledWith([peer({ x: 96 })]);
+  });
+
+  it('keeps a same-function replacement created during a failed replay', () => {
+    const controller = createRemotePeerSource();
+    const source = controller.source;
+    const error = new Error('outer replay failed');
+    let replaceDuringReplay = true;
+    let stopReplacement: (() => void) | undefined;
+    const listener = vi.fn(() => {
+      if (!replaceDuringReplay) return;
+      replaceDuringReplay = false;
+      stopReplacement = source.subscribe(listener);
+      throw error;
+    });
+
+    let thrown: unknown;
+    try {
+      source.subscribe(listener);
+    } catch (caught) {
+      thrown = caught;
+    }
+    expect(thrown).toBe(error);
+    listener.mockClear();
+
+    controller.publish([peer({ x: 96 })]);
+    expect(listener).toHaveBeenCalledOnce();
+    expect(listener).toHaveBeenCalledWith([peer({ x: 96 })]);
+
+    stopReplacement?.();
+    controller.publish([peer({ x: 128 })]);
+    expect(listener).toHaveBeenCalledTimes(1);
+  });
+
   it('does not redeliver a publication to a listener added during publish', () => {
     const controller = createRemotePeerSource();
     const source = controller.source;
