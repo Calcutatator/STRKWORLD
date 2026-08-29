@@ -182,6 +182,10 @@ describe('Wallet Standard forward compatibility', () => {
       ({ features: { ['starknet:walletApi']: { id: nestedProviderId } } } = wallet);
       let arrayNestedName;
       ([{ provider: { name: arrayNestedName } }] = [wallet]);
+      let arrayNestedFeatureId;
+      ({ wallets: [{ [identityId]: arrayNestedFeatureId }] } = { wallets: [wallet] });
+      for ({ provider: { name: assignedName } } of [wallet]) {}
+      for ({ [identityId]: assignedFeatureId } of [wallet.features['starknet:walletApi']]) {}
     `);
     expect(walletIdentityReads([hostile])).toEqual([
       'fixture.ts:2:11 handle.name',
@@ -196,6 +200,9 @@ describe('Wallet Standard forward compatibility', () => {
       'fixture.ts:15:10 [identityId]: assignedFeatureId',
       'fixture.ts:17:48 id: nestedProviderId',
       'fixture.ts:19:23 name: arrayNestedName',
+      'fixture.ts:21:22 [identityId]: arrayNestedFeatureId',
+      'fixture.ts:22:26 name: assignedName',
+      'fixture.ts:23:14 [identityId]: assignedFeatureId',
     ]);
   });
 });
@@ -371,7 +378,7 @@ function isIdentityRead(node: ts.Node): node is IdentityRead {
 function isIdentityAssignmentRead(node: ts.Node): node is ts.PropertyAssignment | ts.ShorthandPropertyAssignment {
   if ((!ts.isPropertyAssignment(node) && !ts.isShorthandPropertyAssignment(node))
     || !ts.isObjectLiteralExpression(node.parent)
-    || !isObjectAssignmentPattern(node.parent)) {
+    || !isObjectAssignmentTarget(node.parent)) {
     return false;
   }
   return isIdentityPropertyName(node.name, true);
@@ -388,7 +395,7 @@ function isIdentityPropertyName(property: ts.PropertyName | ts.BindingName, fail
     && (property.text === 'id' || property.text === 'name');
 }
 
-function isObjectAssignmentPattern(node: ts.ObjectLiteralExpression): boolean {
+function isObjectAssignmentTarget(node: ts.ObjectLiteralExpression): boolean {
   let current: ts.Node = node;
   while (true) {
     if (ts.isParenthesizedExpression(current.parent)) {
@@ -409,9 +416,12 @@ function isObjectAssignmentPattern(node: ts.ObjectLiteralExpression): boolean {
     }
     break;
   }
-  return ts.isBinaryExpression(current.parent)
-    && current.parent.left === current
-    && current.parent.operatorToken.kind === ts.SyntaxKind.EqualsToken;
+  if (ts.isBinaryExpression(current.parent)) {
+    return current.parent.left === current
+      && current.parent.operatorToken.kind === ts.SyntaxKind.EqualsToken;
+  }
+  return (ts.isForOfStatement(current.parent) || ts.isForInStatement(current.parent))
+    && current.parent.initializer === current;
 }
 
 function isAllowedDisplayOrErrorName(
