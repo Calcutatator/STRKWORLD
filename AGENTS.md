@@ -258,6 +258,33 @@ empty shell to fetchers, so a 200 there means nothing.
 
 ## 6. Findings log
 
+### 2026-08-29 — Raw Starknet RPC responses require a correlated JSON-RPC envelope
+
+`StarknetRpcPoolPort.rpc()` previously trusted any truthy `error` check and a
+present `result` key. It therefore accepted a wrong JSON-RPC version, a
+response for another request id, and a response containing both `result` and a
+falsy `error` value. Arrays, nonobjects and malformed JSON either reached
+downstream result parsing or leaked parser/runtime errors from the adapter.
+
+The adapter now requires a JSON-RPC 2.0 object with an own data `jsonrpc`
+property equal to `2.0`, an own data numeric id matching the request, and
+exactly one own data `result` or `error` property. Error presence is based on
+property presence rather than truthiness, and malformed JSON is mapped to a
+generic invalid-response error. JSON-RPC extension members are intentionally
+ignored: the standard and installed Starknet v10.4 response type do not
+forbid them, and this narrow adapter has no extension-specific behavior;
+arrays/batches and conflicting standard members remain rejected.
+
+*Verified:* deterministic adapter fakes first accepted wrong version/id,
+result-plus-falsy-error envelopes, and leaked malformed/nonobject failures.
+The focused adapter suite passes 41 tests; removing the version, id, exclusive
+result/error, or data-property guards independently fails its public
+regression. Backend passes 5 files / 135 tests; the full workspace passes 102
+files / 1,544 tests. All workspace typechecks, production build, 13
+invariants, tilemap gate and diff hygiene pass. Deterministic fakes only: no
+external RPC, wallet, provider, proof, signature, funds or transaction was
+used.
+
 ### 2026-08-29 — Paymaster submission success requires one nonzero transaction hash
 
 `BackendApi` previously applied a client-input felt validator to the runtime
