@@ -36,6 +36,7 @@ export function createBackendFetchHandler(
       }
       try {
         const raw = await readBoundedText(request, maxRequestBytes);
+        rejectAmbiguousJsonKeys(raw);
         body = JSON.parse(raw);
       } catch (error) {
         if (error instanceof RequestTooLargeError) {
@@ -127,3 +128,62 @@ function json(status: number, body: unknown): Response {
 }
 
 class RequestTooLargeError extends Error {}
+
+const RESERVED_JSON_KEYS = new Set(['__proto__', 'constructor', 'prototype']);
+
+function rejectAmbiguousJsonKeys(raw: string): void {
+  const objectKeys: Set<string>[] = [];
+  let expectingKey = false;
+  let index = 0;
+  while (index < raw.length) {
+    const character = raw[index]!;
+    if (/\s/.test(character)) {
+      index += 1;
+      continue;
+    }
+    if (character === '{') {
+      objectKeys.push(new Set());
+      expectingKey = true;
+      index += 1;
+      continue;
+    }
+    if (character === '}') {
+      objectKeys.pop();
+      expectingKey = false;
+      index += 1;
+      continue;
+    }
+    if (character === ',') {
+      expectingKey = objectKeys.length > 0;
+      index += 1;
+      continue;
+    }
+    if (character === '"') {
+      const end = scanJsonString(raw, index);
+      if (expectingKey && objectKeys.length > 0) {
+        const key = JSON.parse(raw.slice(index, end)) as string;
+        const keys = objectKeys[objectKeys.length - 1]!;
+        if (keys.has(key) || RESERVED_JSON_KEYS.has(key)) throw new SyntaxError('Ambiguous JSON key.');
+        keys.add(key);
+        let colon = end;
+        while (/\s/.test(raw[colon] ?? '')) colon += 1;
+        if (raw[colon] !== ':') throw new SyntaxError('Invalid JSON object key.');
+        expectingKey = false;
+      }
+      index = end;
+      continue;
+    }
+    index += 1;
+  }
+}
+
+function scanJsonString(raw: string, start: number): number {
+  let escaped = false;
+  for (let index = start + 1; index < raw.length; index += 1) {
+    const character = raw[index]!;
+    if (!escaped && character === '"') return index + 1;
+    if (!escaped && character === '\\') escaped = true;
+    else escaped = false;
+  }
+  throw new SyntaxError('Unterminated JSON string.');
+}
