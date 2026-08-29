@@ -264,16 +264,21 @@ The CI workflow previously selected `actions/checkout@v7` and
 `actions/setup-node@v7`. Those readable major tags are mutable upstream
 references, so a later tag move could change code executed with the repository
 workflow's authority without changing this repository. Every remote workflow
-`uses:` reference is now pinned to a full commit SHA, with the reviewed release
-version retained only as a comment. A repository-owned scanner rejects tags,
-branches, abbreviated or malformed remote references while allowing local
-`./` actions, and the Invariants job runs that scanner on every change. It
+`uses:` reference is now pinned to a full lowercase commit SHA, with the
+reviewed release version retained only as a comment. A repository-owned scanner
+allows only slash-separated ASCII letter, digit, `_`, `.`, or `-` path segments
+before that SHA. It rejects tags, branches, abbreviated or malformed remote
+references and all `docker://` steps, including digest pins, while allowing
+local `./` actions; the Invariants job runs that scanner on every change. It
 parses workflow YAML structurally at `jobs.<id>.uses` and
 `jobs.<id>.steps[*].uses`: flow mappings, quoted or escaped keys, explicit keys
 and aliases cannot bypass validation, while comments, command text and literal
 `uses` inputs under `env` or `with` are not mistaken for action references.
-Invalid YAML and non-string action references fail closed. The structural
-parser is the exact dev-only `yaml@2.9.0` lockfile dependency.
+Invalid YAML, YAML `<<` merge keys in the jobs collection, job maps or step
+maps, and non-string action references fail closed. GitHub currently rejects
+those merge keys; denying them explicitly prevents a future syntax change from
+creating an unscanned action seam. The structural parser is the exact dev-only
+`yaml@2.9.0` lockfile dependency.
 
 The Verify job separately runs a production-only high-severity `npm audit`
 after the lockfile install. This is a recurring registry-advisory gate, not an
@@ -289,12 +294,13 @@ references. Its focused fixtures reject tag/branch and malformed pseudo-action
 references while accepting exact remote pins, nested action paths, quoted
 references with comments and repository-local actions. Separate regressions
 pin flow mappings, quoted/escaped and explicit keys, aliases, invalid YAML,
-benign non-key text and schema-position ownership. The pinned workflow
-passes the scanner, and the current production dependency audit reports zero
-known advisories. The full workspace passes 102 files / 1,448 tests, all
-workspace typechecks, the production build, all 13 invariants, the tilemap gate
-and `git diff --check`. No product code, wallet, provider, RPC, proof,
-signature, funds or transaction was used.
+benign non-key text, schema-position ownership, job/step merge-key denial,
+Docker tag/digest denial and query/hash/backslash path rejection. The pinned
+workflow passes the scanner, and the current production dependency audit
+reports zero known advisories. The full workspace passes 102 files / 1,451
+tests, all workspace typechecks, the production build, all 13 invariants, the
+tilemap gate and `git diff --check`. No product code, wallet, provider, RPC,
+proof, signature, funds or transaction was used.
 
 ### 2026-08-29 — Wallet attention follows human-owned operation stages
 

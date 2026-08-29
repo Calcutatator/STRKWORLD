@@ -79,6 +79,97 @@ describe('GitHub Actions supply-chain pins', () => {
     ]);
   });
 
+  it('rejects malformed remote action path characters before the commit SHA', () => {
+    const sha = '3d3c42e5aac5ba805825da76410c181273ba90b1';
+    const workflow = [
+      'jobs:',
+      '  build:',
+      '    steps:',
+      `      - uses: "owner/repository?query@${sha}"`,
+      `      - uses: "owner/repository#fragment@${sha}"`,
+      `      - uses: "owner\\\\repository/action@${sha}"`,
+    ].join('\n');
+
+    expect(scanWorkflowText('.github/workflows/malformed-paths.yml', workflow)).toEqual([
+      {
+        file: '.github/workflows/malformed-paths.yml',
+        line: 4,
+        reference: `owner/repository?query@${sha}`,
+      },
+      {
+        file: '.github/workflows/malformed-paths.yml',
+        line: 5,
+        reference: `owner/repository#fragment@${sha}`,
+      },
+      {
+        file: '.github/workflows/malformed-paths.yml',
+        line: 6,
+        reference: `owner\\repository/action@${sha}`,
+      },
+    ]);
+  });
+
+  it('rejects every docker step reference, including digest pins', () => {
+    const digest = 'a'.repeat(64);
+    const workflow = [
+      'jobs:',
+      '  build:',
+      '    steps:',
+      '      - uses: docker://alpine:3.20',
+      `      - uses: docker://alpine@sha256:${digest}`,
+    ].join('\n');
+
+    expect(scanWorkflowText('.github/workflows/docker.yml', workflow)).toEqual([
+      {
+        file: '.github/workflows/docker.yml',
+        line: 4,
+        reference: 'docker://alpine:3.20',
+      },
+      {
+        file: '.github/workflows/docker.yml',
+        line: 5,
+        reference: `docker://alpine@sha256:${digest}`,
+      },
+    ]);
+  });
+
+  it('rejects YAML merge keys in the jobs collection, job maps, and step maps', () => {
+    const sha = '3d3c42e5aac5ba805825da76410c181273ba90b1';
+    const workflow = [
+      'jobs-template: &jobs-template',
+      '  inherited:',
+      `    uses: owner/repository/.github/workflows/reusable.yml@${sha}`,
+      'job-template: &job-template',
+      `  uses: owner/repository/.github/workflows/reusable.yml@${sha}`,
+      'step-template: &step-template',
+      `  uses: owner/repository/action@${sha}`,
+      'jobs:',
+      '  <<: *jobs-template',
+      '  build:',
+      '    <<: *job-template',
+      '    steps:',
+      '      - <<: *step-template',
+    ].join('\n');
+
+    expect(scanWorkflowText('.github/workflows/merge-keys.yml', workflow)).toEqual([
+      {
+        file: '.github/workflows/merge-keys.yml',
+        line: 9,
+        reference: '<yaml merge key>',
+      },
+      {
+        file: '.github/workflows/merge-keys.yml',
+        line: 11,
+        reference: '<yaml merge key>',
+      },
+      {
+        file: '.github/workflows/merge-keys.yml',
+        line: 13,
+        reference: '<yaml merge key>',
+      },
+    ]);
+  });
+
   it('inspects alternate YAML uses-key syntax structurally', () => {
     const sha = '3d3c42e5aac5ba805825da76410c181273ba90b1';
     const workflow = [
