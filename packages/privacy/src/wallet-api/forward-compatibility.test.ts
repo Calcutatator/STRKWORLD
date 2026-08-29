@@ -174,6 +174,10 @@ describe('Wallet Standard forward compatibility', () => {
       wallet[identityName];
       const identityId = 'id';
       const { [identityId]: providerId } = wallet.features['starknet:walletApi'];
+      let assignedName;
+      ({ name: assignedName } = wallet);
+      let assignedFeatureId;
+      ({ [identityId]: assignedFeatureId } = wallet.features['starknet:walletApi']);
     `);
     expect(walletIdentityReads([hostile])).toEqual([
       'fixture.ts:2:11 handle.name',
@@ -184,6 +188,8 @@ describe('Wallet Standard forward compatibility', () => {
       "fixture.ts:7:15 ['id']: featureId",
       'fixture.ts:9:7 wallet[identityName]',
       'fixture.ts:11:15 [identityId]: providerId',
+      'fixture.ts:13:10 name: assignedName',
+      'fixture.ts:15:10 [identityId]: assignedFeatureId',
     ]);
   });
 });
@@ -336,9 +342,13 @@ function walletIdentityReads(sources: SourceFixture[]): string[] {
   });
 }
 
-function isIdentityRead(
-  node: ts.Node,
-): node is ts.PropertyAccessExpression | ts.ElementAccessExpression | ts.BindingElement {
+type IdentityRead = ts.PropertyAccessExpression
+  | ts.ElementAccessExpression
+  | ts.BindingElement
+  | ts.PropertyAssignment
+  | ts.ShorthandPropertyAssignment;
+
+function isIdentityRead(node: ts.Node): node is IdentityRead {
   if (ts.isPropertyAccessExpression(node)) return node.name.text === 'id' || node.name.text === 'name';
   if (ts.isElementAccessExpression(node) && node.argumentExpression) {
     if (ts.isStringLiteralLike(node.argumentExpression)) {
@@ -346,20 +356,42 @@ function isIdentityRead(
     }
     return !ts.isNumericLiteral(node.argumentExpression);
   }
-  if (!ts.isBindingElement(node)) return false;
-  const property = node.propertyName ?? node.name;
+  if (ts.isBindingElement(node)) {
+    return isIdentityPropertyName(node.propertyName ?? node.name, true);
+  }
+  return isIdentityAssignmentRead(node);
+}
+
+function isIdentityAssignmentRead(node: ts.Node): node is ts.PropertyAssignment | ts.ShorthandPropertyAssignment {
+  if ((!ts.isPropertyAssignment(node) && !ts.isShorthandPropertyAssignment(node))
+    || !ts.isObjectLiteralExpression(node.parent)
+    || !isObjectAssignmentPattern(node.parent)) {
+    return false;
+  }
+  return isIdentityPropertyName(node.name, true);
+}
+
+function isIdentityPropertyName(property: ts.PropertyName | ts.BindingName, failClosedComputed: boolean): boolean {
   if (ts.isComputedPropertyName(property)) {
     if (ts.isStringLiteralLike(property.expression)) {
       return property.expression.text === 'id' || property.expression.text === 'name';
     }
-    return !ts.isNumericLiteral(property.expression);
+    return failClosedComputed && !ts.isNumericLiteral(property.expression);
   }
   return (ts.isIdentifier(property) || ts.isStringLiteralLike(property))
     && (property.text === 'id' || property.text === 'name');
 }
 
+function isObjectAssignmentPattern(node: ts.ObjectLiteralExpression): boolean {
+  let current: ts.Node = node;
+  while (ts.isParenthesizedExpression(current.parent)) current = current.parent;
+  return ts.isBinaryExpression(current.parent)
+    && current.parent.left === current
+    && current.parent.operatorToken.kind === ts.SyntaxKind.EqualsToken;
+}
+
 function isAllowedDisplayOrErrorName(
-  node: ts.PropertyAccessExpression | ts.ElementAccessExpression | ts.BindingElement,
+  node: IdentityRead,
   path: string,
 ): boolean {
   if (!ts.isPropertyAccessExpression(node) || node.name.text !== 'name') return false;
@@ -395,7 +427,7 @@ const ALLOWED_DYNAMIC_PROPERTY_READS = new Set([
 ]);
 
 function isAllowedProductionDynamicRead(
-  node: ts.PropertyAccessExpression | ts.ElementAccessExpression | ts.BindingElement,
+  node: IdentityRead,
   path: string,
   source: ts.SourceFile,
 ): boolean {
