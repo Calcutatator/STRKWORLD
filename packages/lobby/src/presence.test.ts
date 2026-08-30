@@ -22,6 +22,18 @@ function join(
 }
 
 describe('admission', () => {
+  it('snapshots a configured sprite allowlist at construction', () => {
+    const spriteKeys = ['avatar-1', 'avatar-2'];
+    const registry = new LobbyPresence({ spriteKeys });
+    spriteKeys.push('avatar-3');
+
+    const outcome = registry.admit('s1', { x: 0, y: 0, sprite: 'avatar-3' });
+    expect(outcome.ok).toBe(true);
+    if (!outcome.ok) throw new Error('unreachable');
+    const gameId = outcome.gameId;
+    expect(registry.peers.get(gameId)?.sprite).toBe('avatar-1');
+  });
+
   it('publishes exactly D-047\'s sixteen opaque sprite keys', () => {
     expect(DEFAULT_SPRITE_KEYS).toEqual([
       'avatar-1',

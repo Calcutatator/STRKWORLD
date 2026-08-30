@@ -144,7 +144,7 @@ export class LobbyPresence {
 
   constructor(options: LobbyPresenceOptions = {}) {
     this.state = new LobbyState();
-    this.#spriteKeys = options.spriteKeys ?? DEFAULT_SPRITE_KEYS;
+    this.#spriteKeys = Object.freeze([...(options.spriteKeys ?? DEFAULT_SPRITE_KEYS)]);
     this.#defaultSprite = options.defaultSprite ?? DEFAULT_SPRITE;
     this.#interestRadius = options.interestRadius ?? INTEREST_RADIUS;
     this.#maxVisiblePeers = options.maxVisiblePeers ?? MAX_VISIBLE_PEERS;
