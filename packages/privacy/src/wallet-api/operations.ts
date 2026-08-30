@@ -214,7 +214,7 @@ export class WalletApiPrivacyOperations implements PrivacyOperations {
     if (!Number.isSafeInteger(swapPolicy.slippageBps) || swapPolicy.slippageBps <= 0) {
       throw new PrivacyError('unknown', 'The private swap slippage policy is invalid.');
     }
-    const plan = await prepareSwap({
+    const rawPlan = await prepareSwap({
       sellToken: intent.tokenIn,
       buyToken: intent.tokenOut,
       sellAmount: intent.amountIn,
@@ -223,7 +223,8 @@ export class WalletApiPrivacyOperations implements PrivacyOperations {
       signal,
     });
     throwIfAborted(signal);
-    this.validateSwapPlan(intent, config, plan, swapPolicy.expectedChainId);
+    this.validateSwapPlan(intent, config, rawPlan, swapPolicy.expectedChainId);
+    const plan = snapshotSwapPlan(rawPlan);
     const protectedMinimum = protectedMinimumOut(plan.buyAmount, swapPolicy.slippageBps);
     if (protectedMinimum < intent.minAmountOut) {
       throw new PrivacyError(
@@ -803,6 +804,18 @@ function assertMatchingAcceptedResult(accepted: TxResult | undefined, settled: T
   if (accepted && accepted.transactionHash !== settled.transactionHash) {
     throw new PrivacyError('unknown', 'The private service returned conflicting transaction receipts.');
   }
+}
+
+function snapshotSwapPlan(plan: PreparedPrivateSwap): PreparedPrivateSwap {
+  return Object.freeze({
+    quoteId: plan.quoteId,
+    buyAmount: plan.buyAmount,
+    expiresAt: plan.expiresAt,
+    chainId: plan.chainId,
+    executorAddress: plan.executorAddress,
+    executorCalls: snapshotExecutorCalls(plan.executorCalls),
+    fee: Object.freeze({ ...plan.fee }),
+  });
 }
 
 function tokenFor(intent: Intent): string {

@@ -1296,6 +1296,47 @@ describe('quote-bound swap plan admission', () => {
   const MAX_U256 = (1n << 256n) - 1n;
   const SWAP: Intent = { kind: 'swap', tokenIn: TOKEN, tokenOut: STRK, amountIn: 20n, minAmountOut: 90n };
 
+  it('owns the gateway swap plan before publishing its review', async () => {
+    const base = fixture();
+    const plan = {
+      quoteId: 'quote-owned',
+      buyAmount: 95n,
+      expiresAt: 2_000,
+      chainId: CHAIN,
+      executorAddress: '0x999',
+      executorCalls: [{ contractAddress: '0x111', entrypoint: 'swap', calldata: ['0xaaa'] }],
+      fee: { token: STRK, recipient: FEE_RECIPIENT, amount: 1n, ...AUTH },
+    };
+    base.gateway.prepareSwap = vi.fn(async () => plan);
+    const ops = new WalletApiPrivacyOperations({
+      wallet: base.wallet,
+      pool: base.pool,
+      submission: base.gateway,
+      supportedVersions: base.supportedVersions,
+      now: () => 1_000,
+      policy: {
+        maxIntents: 8,
+        maxRelayFee: 10n,
+        enabledRoutes: ['swap'],
+        allowedTokens: {
+          shield: [STRK, TOKEN], unshield: [STRK, TOKEN], transfer: [STRK, TOKEN], swap: [STRK, TOKEN],
+        },
+        swap: { expectedChainId: CHAIN, slippageBps: 100 },
+      },
+    });
+    const batch = await ops.prepare([SWAP]);
+    plan.executorAddress = '0x888';
+    plan.executorCalls[0]!.contractAddress = '0x777';
+    plan.fee.authorization = 'mutated-auth';
+
+    await batch.confirm({ feeCeiling: POOL_FEE + 1n });
+
+    expect(base.gateway.submit).toHaveBeenCalledWith(expect.objectContaining({
+      feeAuthorization: AUTH.authorization,
+    }));
+    expect(base.prepared[0]?.[0]).toMatchObject({ recipient: '0x999' });
+  });
+
   function swapFixture(
     swapPolicy: unknown = { expectedChainId: CHAIN, slippageBps: 100 },
     planOverrides: Record<string, unknown> = {},
