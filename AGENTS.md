@@ -258,6 +258,25 @@ empty shell to fetchers, so a 200 there means nothing.
 
 ## 6. Findings log
 
+### 2026-08-30 — Financial HUD pending state retains every mounted owner
+
+`BankPanel` and `ExchangePanel` each wrote the global `hud:pending` count as
+a last-writer boolean. When one panel was busy and another mounted panel
+unmounted, the idle panel's cleanup published `0` and hid the still-active
+wallet handoff.
+
+Financial panels now own one pending marker per Shell bus. The HUD count is
+the number of currently busy mounted panels; changing a panel's stage keeps
+its marker, and unmounting removes only that panel's marker. Single-panel
+cleanup and wallet-operation state semantics are unchanged.
+
+*Verified:* a public jsdom regression mounts two Bank panels on one Shell bus,
+enters wallet approval in one, then unmounts the idle one. The old last-writer
+path reports `0`; the corrected path retains `1` until the signing panel
+settles or unmounts. The focused Bank/Exchange lifecycle files pass 3/3 tests.
+No browser, wallet, provider, RPC, proof, signature, funds or transaction was
+used.
+
 ### 2026-08-30 — Avatar Studio entry rolls back failed state publication
 
 `createAvatarStudioController.enter()` committed `inRoom = true` and ran the

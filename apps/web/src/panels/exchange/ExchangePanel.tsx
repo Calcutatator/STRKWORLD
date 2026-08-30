@@ -8,6 +8,7 @@ import { PanelFrame } from '../PanelFrame.js';
 import { EXCHANGE_CATALOG } from './catalog.js';
 import { createExchangePanel, type ExchangePanel as ExchangeMachine, type ExchangeState } from './exchange-machine.js';
 import { WalletAttentionCue, walletOperationAttention } from '../../wallet/WalletAttentionCue.js';
+import { createPendingHudOwner } from '../pending-hud.js';
 
 /** Dedicated one-swap view; this deliberately has no batch/add vocabulary. */
 export function ExchangePanel({ onClose, panel: injected, experience = 'menu' }: { onClose: () => void; panel?: ExchangeMachine; experience?: 'menu' | 'station' }) {
@@ -19,14 +20,13 @@ export function ExchangePanel({ onClose, panel: injected, experience = 'menu' }:
   const panel = injected ?? owned!;
   const state = useStore(panel.store);
   const uncertainty = useStore(submissionUncertainty.store);
+  const pendingHud = useMemo(() => createPendingHudOwner(shellBus), [shellBus]);
   useEffect(() => { if (!owned) return; void owned.open(); return () => owned.close(); }, [owned]);
+  const pending = state.flow.name === 'preparing' || state.flow.name === 'submitting';
   useEffect(() => {
-    const busy = state.flow.name === 'preparing' || state.flow.name === 'submitting';
-    shellBus?.emit('hud:pending', { count: busy ? 1 : 0 });
-  }, [shellBus, state.flow]);
-  useEffect(() => () => {
-    shellBus?.emit('hud:pending', { count: 0 });
-  }, [shellBus]);
+    pendingHud.setBusy(pending);
+  }, [pendingHud, pending]);
+  useEffect(() => () => pendingHud.release(), [pendingHud]);
   const committing = state.flow.name === 'review' || state.flow.name === 'submitting';
   const blocked = uncertainty.active && !uncertainty.acknowledged;
   const walletAttention = walletOperationAttention(

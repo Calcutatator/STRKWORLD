@@ -12,6 +12,7 @@ import { routeDoor } from '../routes.js';
 import { createBankPanel, ROUTE_BY_MODE, type BankMode, type BankPanel as BankPanelMachine, type BankState } from './bank-machine.js';
 import { describeIntent, describeWarning } from './summary-copy.js';
 import { WalletAttentionCue, walletOperationAttention } from '../../wallet/WalletAttentionCue.js';
+import { createPendingHudOwner } from '../pending-hud.js';
 
 const BANK_MENU_MODES: readonly BankMode[] = ['shield', 'unshield', 'transfer'];
 const BANK_STATION_MODES: readonly BankMode[] = ['shield', 'unshield'];
@@ -82,6 +83,7 @@ export function BankPanel({
   const panel = injected ?? owned!;
   const state = useStore(panel.store);
   const uncertaintyState = useStore(submissionUncertainty.store);
+  const pendingHud = useMemo(() => createPendingHudOwner(shellBus), [shellBus]);
 
   useEffect(() => {
     // An injected machine belongs to whoever injected it, including its
@@ -98,19 +100,13 @@ export function BankPanel({
     shellBus?.emit('hud:balance', { display });
   }, [shellBus, state.balance]);
 
+  const pending = state.flow.name === 'preparing' || state.flow.name === 'submitting';
   useEffect(() => {
     // The ambient pending indicator is derived from the operation's own state,
     // never from an expected number of wallet prompts (SPEC §5 rule 5, D-028).
-    const busy = state.flow.name === 'preparing' || state.flow.name === 'submitting';
-    shellBus?.emit('hud:pending', { count: busy ? 1 : 0 });
-  }, [shellBus, state.flow]);
-
-  useEffect(() => () => {
-    // The panel can unmount while the wallet handoff continues. Its state
-    // store may settle later, but no component remains to publish the final
-    // HUD transition, so retire this panel's ambient pending marker here.
-    shellBus?.emit('hud:pending', { count: 0 });
-  }, [shellBus]);
+    pendingHud.setBusy(pending);
+  }, [pendingHud, pending]);
+  useEffect(() => () => pendingHud.release(), [pendingHud]);
 
   const committing = state.flow.name === 'review' || state.flow.name === 'submitting';
   const gateBlocked = uncertaintyState.active && !uncertaintyState.acknowledged;
