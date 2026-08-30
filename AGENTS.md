@@ -258,6 +258,25 @@ empty shell to fetchers, so a 200 there means nothing.
 
 ## 6. Findings log
 
+### 2026-08-30 — Synchronous Bridge loader failures release ownership
+
+Bridge runtime loading is optional and lazy, but the provider called a
+Promise-typed loader before entering its rejection boundary. A synchronous
+chunk/storage throw escaped the mounted app and left the loader owner marked
+pending forever, so no later replacement loader could recover the route.
+
+Loader invocation now begins inside the existing asynchronous chain. Both
+synchronous and asynchronous failure reach the same isolated catch/finally,
+which releases ownership without affecting wallet or app admission.
+
+*Verified:* a public provider regression mounts a synchronously throwing loader,
+then replaces it with a successful runtime loader. Before the fix the first
+throw escapes and recovery never runs; afterward the app remains mounted and
+the replacement service is published. The focused BridgeProvider suite passes
+12 tests; Web typecheck, all 13 invariants and diff hygiene pass. No browser,
+wallet, provider, RPC, proof, signature, funds or transaction was used.*
+
+
 ### 2026-08-30 — Remote avatar replay must own shutdown before subscribe returns
 
 `createRemoteAvatarLayer()` previously subscribed to the retained remote-peer

@@ -150,7 +150,7 @@ export function BridgeProvider({
     if (!loadRuntime || service || currentRuntime || demoRejected || loadOwner.current.pending) return;
     const generation = loadOwner.current.generation;
     loadOwner.current.pending = true;
-    void loadRuntime().then((runtime) => {
+    void Promise.resolve().then(() => loadRuntime()).then((runtime) => {
       if (runtime && generation === loadOwner.current.generation) {
         setLoadedRuntime({ loader: loadRuntime, source: runtime });
       }

@@ -184,4 +184,30 @@ describe('BridgeProvider', () => {
     expect(container.innerHTML).toContain('data-service="no"');
     await act(async () => root.unmount());
   });
+
+  it('releases loader ownership after a synchronous optional-runtime failure', async () => {
+    const failed = vi.fn(() => { throw new Error('synchronous chunk failure'); });
+    const recovered = vi.fn(async () => ({
+      service: { owner: 'recovered' } as never,
+      loadSources: async () => [],
+    }));
+    const container = document.createElement('div');
+    const root = createRoot(container);
+
+    await act(async () => {
+      root.render(<BridgeProvider loadRuntime={failed as never}><LoadProbe start /></BridgeProvider>);
+      await Promise.resolve();
+    });
+    expect(failed).toHaveBeenCalledOnce();
+    expect(container.innerHTML).toContain('data-service="no"');
+
+    await act(async () => {
+      root.render(<BridgeProvider loadRuntime={recovered}><LoadProbe start /></BridgeProvider>);
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    expect(recovered).toHaveBeenCalledOnce();
+    expect(container.innerHTML).toContain('data-owner="recovered"');
+    await act(async () => root.unmount());
+  });
 });
