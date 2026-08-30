@@ -10,7 +10,7 @@ const CODE_TO_KIND = {
 } as const;
 
 export function mapWalletError(error: unknown): PrivacyError {
-  if (error instanceof PrivacyError) return error;
+  if (isPrivacyError(error)) return error;
   const code = readCode(error);
   const kind = isAbortError(error)
     ? 'user-rejected'
@@ -20,15 +20,27 @@ export function mapWalletError(error: unknown): PrivacyError {
   return new PrivacyError(kind, safeMessage(kind), error);
 }
 
-function isAbortError(error: unknown): boolean {
-  if (error instanceof DOMException) {
-    try {
-      return error.name === 'AbortError';
-    } catch {
-      return false;
-    }
+function isPrivacyError(error: unknown): error is PrivacyError {
+  try {
+    return error instanceof PrivacyError;
+  } catch {
+    return false;
   }
-  return Boolean(error && typeof error === 'object' && readProperty(error, 'name') === 'AbortError');
+}
+
+function isAbortError(error: unknown): boolean {
+  try {
+    if (error instanceof DOMException) {
+      try {
+        return error.name === 'AbortError';
+      } catch {
+        return false;
+      }
+    }
+    return Boolean(error && typeof error === 'object' && readProperty(error, 'name') === 'AbortError');
+  } catch {
+    return false;
+  }
 }
 
 function readCode(error: unknown, seen = new Set<object>()): number | null {
