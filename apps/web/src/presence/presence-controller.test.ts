@@ -668,6 +668,29 @@ describe('presence controller', () => {
     stop();
   });
 
+  it('does not turn a live connection unavailable when a state listener throws', async () => {
+    const world = createEventBus<WorldEvents>();
+    const made = fakeClient();
+    made.client.connect = vi.fn(async () => undefined);
+    const listenerFailure = new Error('state listener failed');
+    const presence = createPresenceController({ endpoint: 'ws://example', factory: () => made.client });
+    const stop = presence.listen(world);
+    const consoleError = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    presence.subscribe(() => {
+      if (presence.getState().status === 'connected') throw listenerFailure;
+    });
+
+    world.emit('player:moved', moved);
+    await Promise.resolve();
+    await Promise.resolve();
+
+    expect(presence.getState().status).toBe('connected');
+    expect(made.client.updatePosition).toHaveBeenCalledWith(40, 72, 'left');
+    expect(consoleError).toHaveBeenCalledWith('presence controller: state subscriber threw');
+    consoleError.mockRestore();
+    stop();
+  });
+
   it('queues reconnect before the first placement without inventing coordinates', async () => {
     const world = createEventBus<WorldEvents>();
     const made = fakeClient();

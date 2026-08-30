@@ -80,7 +80,14 @@ export function createPresenceController({ endpoint, factory = (options) => new 
     // Deliver one transition to the subscriptions that owned its snapshot.
     // A replacement of the same function is a new subscription generation.
     for (const [listener, token] of [...listeners]) {
-      if (listeners.get(listener) === token) listener();
+      if (listeners.get(listener) !== token) continue;
+      try {
+        listener();
+      } catch {
+        // A state consumer must not turn a successful transport handoff into
+        // a failed connection or prevent later consumers from observing it.
+        console.error('presence controller: state subscriber threw');
+      }
     }
   };
   const unavailable = () => {

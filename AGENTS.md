@@ -258,6 +258,27 @@ empty shell to fetchers, so a 200 there means nothing.
 
 ## 6. Findings log
 
+### 2026-08-30 — Presence state consumers cannot poison a live handoff
+
+Presence state snapshots were assigned before subscriber delivery, but a
+subscriber exception still escaped `setState()`. During asynchronous connect
+settlement that exception was caught by the join failure handler, which then
+published `unavailable` and detached the client even though the transport was
+live. One faulty state consumer could therefore turn a successful join into a
+false disconnect and suppress later consumers in the same transition.
+
+State delivery now isolates each subscriber exception, logs the existing
+diagnostic, and continues through the remaining subscription generation. The
+assigned immutable state and transport ownership are preserved; listener
+replacement/unsubscribe ordering and normal connection cleanup are unchanged.
+
+*Verified:* a public regression makes a state subscriber throw while a
+successful join publishes `connected`; the old path ends `unavailable`, while
+the corrected path remains connected and forwards its placement. The focused
+presence suite passes 59 tests; full workspace tests and typechecks, the Web
+build, invariants, and diff hygiene are green. No browser, lobby server,
+wallet, provider, RPC, proof, signature, funds or transaction was used.
+
 ### 2026-08-30 — PanelLayer retires callbacks from replaced World buses
 
 `PanelLayer` unsubscribed its three World listeners when the `world` prop
