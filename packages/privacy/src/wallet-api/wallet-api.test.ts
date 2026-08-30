@@ -1050,6 +1050,10 @@ describe('quote-bound swap plan admission', () => {
 
   it.each([
     ['no executor calls', { executorCalls: [] }, /executor calls/i],
+    ['a non-array executor call container', { executorCalls: null }, /executor calls/i],
+    ['a call with a non-array calldata container', {
+      executorCalls: [{ contractAddress: '0x111', entrypoint: 'swap', calldata: null }],
+    }, /malformed executor calls/i],
     ['a zero call target', {
       executorCalls: [{ contractAddress: '0x0', entrypoint: 'swap', calldata: [] }],
     }, /call target/i],
