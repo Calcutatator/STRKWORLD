@@ -99,6 +99,36 @@ describe('suspend', () => {
     expect(keyboard.enabled).toBe(true);
   });
 
+  it.each(['capture', 'delivery', 'keys'] as const)(
+    'honors a reentrant resume during the %s suspend step',
+    (step) => {
+      let keyboard: KeyboardLike = fakeKeyboard().keyboard;
+      let gate!: ReturnType<typeof createInputGate>;
+      let fired = false;
+      const resumeOnce = () => {
+        if (fired) return;
+        fired = true;
+        gate.resume();
+      };
+      if (step === 'capture') keyboard.disableGlobalCapture = vi.fn(resumeOnce);
+      if (step === 'keys') keyboard.resetKeys = vi.fn(resumeOnce);
+      if (step === 'delivery') {
+        keyboard = new Proxy(keyboard, {
+          set(target, property, value) {
+            if (property === 'enabled' && value === false) resumeOnce();
+            return Reflect.set(target, property, value);
+          },
+        });
+      }
+      gate = createInputGate(keyboard);
+
+      gate.suspend();
+
+      expect(gate.suspended).toBe(false);
+      expect(keyboard.enabled).toBe(true);
+    },
+  );
+
   it('attempts exit cleanup and input restoration when entry cleanup throws', () => {
     const { keyboard } = fakeKeyboard();
     const gate = createInputGate(keyboard);
@@ -207,6 +237,38 @@ describe('resume', () => {
     expect(keyboard.enabled).toBe(true);
     expect(gate.suspended).toBe(false);
   });
+
+  it.each(['keys', 'delivery', 'capture'] as const)(
+    'honors a reentrant suspend during the %s resume step',
+    (step) => {
+      let keyboard: KeyboardLike = fakeKeyboard().keyboard;
+      let gate!: ReturnType<typeof createInputGate>;
+      let fired = false;
+      const suspendOnce = () => {
+        if (fired) return;
+        fired = true;
+        gate.suspend();
+      };
+      if (step === 'keys') keyboard.resetKeys = vi.fn(suspendOnce);
+      if (step === 'capture') keyboard.enableGlobalCapture = vi.fn(suspendOnce);
+      if (step === 'delivery') {
+        keyboard = new Proxy(keyboard, {
+          set(target, property, value) {
+            if (property === 'enabled' && value === true) suspendOnce();
+            return Reflect.set(target, property, value);
+          },
+        });
+      }
+      gate = createInputGate(keyboard);
+      gate.suspend();
+      fired = false;
+
+      gate.resume();
+
+      expect(gate.suspended).toBe(true);
+      expect(keyboard.enabled).toBe(false);
+    },
+  );
 });
 
 describe('binding to building events', () => {
