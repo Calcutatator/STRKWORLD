@@ -261,6 +261,56 @@ empty shell to fetchers, so a 200 there means nothing.
 
 ## 6. Findings log
 
+
+## 6. Findings log
+
+### 2026-08-30 — Paymaster fee tokens require strict felt encoding
+
+`BackendApi.fee()` and swap preparation compared the paymaster's returned
+`fee.token` with `sameAddress()`, whose `BigInt` coercion accepted decimal
+strings, numbers, and an uppercase `0X` prefix when they represented the
+configured token. The API could therefore issue a successful authorization
+and expose a token encoding the browser and Wallet API do not accept.
+
+Both fee paths now require the provider token to pass the existing strict
+lowercase-`0x` Stark field validator before numeric address comparison. The
+existing token-match behavior and `400` response contract remain unchanged;
+recipient validation still rejects non-string values safely through its type
+guard.
+
+*Verified:* red-first Backend regressions cover decimal-string, numerically
+equivalent, uppercase-prefix, and object provider tokens on ordinary fee
+estimation and swap preparation, asserting no authorization issuance. Before
+the guard, the three coercible forms returned `200` in each path; after it,
+all eight cases pass with no authorization for any malformed value. No
+browser, external provider, RPC, wallet, proof, signature, funds or
+transaction was used.*
+
+### 2026-08-30 — Paymaster fee recipients require a nonzero felt
+
+`BackendApi.fee()` and swap preparation validated the paymaster's returned fee
+recipient with the generic felt rule. That rule accepts zero, so a malformed
+provider response could issue an authorization directing the private fee
+withdrawal to `0x0` (including leading-zero encodings), where it cannot
+reimburse the paymaster.
+
+Both fee paths now require a nonzero Stark field felt for the provider
+recipient. The existing fee-token, amount, authorization and status contracts
+are unchanged; malformed zero recipients return the existing `400` validation
+response before authorization issuance.
+
+*Verified:* red-first Backend regressions cover `0x0`, `0x00` and
+`0x00000000` on ordinary fee estimation and swap preparation. Before the
+guard, all six returned `200` and issued authorizations; after it, all six
+return `HTTP_400` and issue none. No browser, external provider, RPC, wallet,
+proof, signature, funds or transaction was used.*
+
+### 2026-08-30 — Lobby peer deliveries freeze shared snapshots
+
+
+
+## 6. Findings log
+
 ### 2026-08-30 — Browser pool fees require uint256 bounds
 
 `BackendPrivacyClient.config()` converted the backend's decimal `feeAmount`

@@ -156,6 +156,7 @@ export class BackendApi {
       this.rpc.getPoolConfig(signal),
       this.rpc.getBlockNumber(signal),
     ]);
+    requireFelt(fee.token, 'paymaster fee token');
     const feeAmount = requireProviderFeeAmount(fee.amount);
     if (!sameAddress(fee.token, feeToken)) throw new ApiFailure(400, 'Paymaster changed the fee token.');
     requireNonzeroFelt(fee.recipient, 'fee recipient');
@@ -329,6 +330,7 @@ export class BackendApi {
       operationToken: sellToken,
       signal,
     });
+    requireFelt(fee.token, 'paymaster fee token');
     const feeAmount = requireProviderFeeAmount(fee.amount);
     if (
       !sameAddress(fee.token, this.config.feeToken) ||

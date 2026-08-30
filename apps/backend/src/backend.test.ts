@@ -242,6 +242,31 @@ describe('strict fee authorization', () => {
     },
   );
 
+  it.each([
+    ['decimal string', '18200'],
+    ['numeric equivalent', 18200],
+    ['uppercase prefix', '0X4718'],
+    ['object', {}],
+  ])(
+    'rejects a malformed paymaster fee token (%s) before authorization issuance',
+    async (_label, token) => {
+      const { api, paymaster, authorizations } = fixture();
+      vi.spyOn(paymaster, 'buildFee').mockResolvedValue({
+        token,
+        recipient: FEE_RECIPIENT,
+        amount: 7n,
+      } as never);
+      const issue = vi.spyOn(authorizations, 'issue');
+
+      await expect(api.handle({
+        method: 'POST',
+        path: '/v1/private/fees',
+        body: { v: 1, route: 'transfer', feeToken: STRK, operationToken: '0xabc' },
+      })).resolves.toMatchObject({ status: 400 });
+      expect(issue).not.toHaveBeenCalled();
+    },
+  );
+
   it('rejects a tampered production HMAC authorization', async () => {
     const codec = new HmacAuthorizationCodec('a-long-production-secret-that-is-not-committed');
     const token = await codec.issue({
@@ -793,6 +818,38 @@ describe('bounded private submission', () => {
         status: 400,
         body: { code: 'HTTP_400', message: 'Invalid fee recipient.' },
       });
+      expect(issue).not.toHaveBeenCalled();
+    },
+  );
+
+  it.each([
+    ['decimal string', '18200'],
+    ['numeric equivalent', 18200],
+    ['uppercase prefix', '0X4718'],
+    ['object', {}],
+  ])(
+    'rejects a malformed swap paymaster fee token (%s) before authorization issuance',
+    async (_label, token) => {
+      const { api, paymaster, authorizations } = fixture();
+      vi.spyOn(paymaster, 'buildFee').mockResolvedValue({
+        token,
+        recipient: FEE_RECIPIENT,
+        amount: 7n,
+      } as never);
+      const issue = vi.spyOn(authorizations, 'issue');
+
+      await expect(api.handle({
+        method: 'POST',
+        path: '/v1/private/swaps/prepare',
+        body: {
+          v: 1,
+          sellToken: '0xabc',
+          buyToken: STRK,
+          sellAmount: '20',
+          minAmountOut: '90',
+          slippageBps: 100,
+        },
+      })).resolves.toMatchObject({ status: 400 });
       expect(issue).not.toHaveBeenCalled();
     },
   );
