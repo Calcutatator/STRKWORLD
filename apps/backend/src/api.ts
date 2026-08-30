@@ -38,6 +38,7 @@ import {
 
 const MAX_NODE_TIMEOUT_MS = 2_147_483_647;
 const MAX_UINT256 = (1n << 256n) - 1n;
+const MAINNET_CHAIN_ID = '0x534e5f4d41494e';
 
 export interface BackendApiOptions {
   config: BackendConfig;
@@ -306,7 +307,7 @@ export class BackendApi {
     if (
       typeof plan.quoteId !== 'string' ||
       plan.quoteId.length === 0 ||
-      !plan.chainId ||
+      plan.chainId !== MAINNET_CHAIN_ID ||
       !isFelt(plan.executorAddress) ||
       BigInt(plan.executorAddress) === 0n ||
       typeof plan.buyAmount !== 'bigint' ||

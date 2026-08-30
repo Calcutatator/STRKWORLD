@@ -258,6 +258,25 @@ empty shell to fetchers, so a 200 there means nothing.
 
 ## 6. Findings log
 
+### 2026-08-30 — Private swap planner quotes must target mainnet
+
+`BackendApi.prepareSwap()` previously checked only that an external planner
+returned a truthy `chainId`. A planner response for Sepolia or another chain
+could therefore trigger paymaster fee construction and authorization issuance
+before the browser rejected the quote against its mainnet Wallet API policy.
+
+Swap quote admission now requires the exact canonical Starknet mainnet chain
+identifier before any fee or authorization work. The configured production
+planner already targets this chain; this is a defense-in-depth response
+boundary and does not add a dynamic chain-selection feature.
+
+*Verified:* a red-first Backend regression supplied the canonical Sepolia
+chain ID; the old path returned `200` and issued a fee, while the corrected
+path returns the existing `409` invalid-quote response with zero paymaster and
+authorization calls. Removing the exact-chain guard reproduces the failure.
+The focused Backend suite passes 105 tests. No browser, wallet, provider, RPC,
+proof, signature, funds or transaction was used.
+
 ### 2026-08-30 — The default Web panel registry is immutable
 
 `BUILDING_PANELS` was exported as a mutable object whose descriptors were also

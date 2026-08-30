@@ -17,6 +17,7 @@ const POOL = '0x123';
 const STRK = '0x4718';
 const FEE_RECIPIENT = '0x789';
 const MAX_UINT256 = (1n << 256n) - 1n;
+const MAINNET_CHAIN_ID = '0x534e5f4d41494e';
 
 const transferCalldata = ['0x1', '0x3', FEE_RECIPIENT, STRK, '0x7'];
 const artifact: PreparedArtifact = {
@@ -634,6 +635,30 @@ describe('bounded private swap inputs', () => {
 });
 
 describe('bounded private swap planner responses', () => {
+  it('rejects a planner quote for a non-mainnet chain before fee authorization', async () => {
+    const { api, swapPlanner, paymaster, authorizations } = fixture();
+    vi.spyOn(swapPlanner, 'prepare').mockResolvedValue({
+      quoteId: 'quote-sepolia',
+      buyAmount: 100n,
+      expiresAt: 2_000,
+      chainId: '0x534e5f5345504f4c4941',
+      executorAddress: '0x999',
+      executorCalls: [{ contractAddress: '0x111', entrypoint: 'swap', selector: '0x555', calldata: ['0xaaa'] }],
+    });
+    const buildFee = vi.spyOn(paymaster, 'buildFee');
+    const issue = vi.spyOn(authorizations, 'issue');
+
+    await expect(api.handle({
+      method: 'POST', path: '/v1/private/swaps/prepare',
+      body: {
+        v: 1, sellToken: '0xabc', buyToken: STRK,
+        sellAmount: '1', minAmountOut: '1', slippageBps: 100,
+      },
+    })).resolves.toMatchObject({ status: 409 });
+    expect(buildFee).not.toHaveBeenCalled();
+    expect(issue).not.toHaveBeenCalled();
+  });
+
   it.each([
     ['number', 42],
     ['object', {}],
@@ -667,7 +692,7 @@ describe('bounded private swap planner responses', () => {
       quoteId: 'quote-maximum',
       buyAmount: MAX_UINT256,
       expiresAt: 2_000,
-      chainId: '0x534e5f4d41494e4',
+      chainId: MAINNET_CHAIN_ID,
       executorAddress: '0x999',
       executorCalls: [{ contractAddress: '0x111', entrypoint: 'swap', selector: '0x555', calldata: ['0xaaa'] }],
     }));
@@ -687,7 +712,7 @@ describe('bounded private swap planner responses', () => {
       quoteId: 'quote-overflow',
       buyAmount: MAX_UINT256 + 1n,
       expiresAt: 2_000,
-      chainId: '0x534e5f4d41494e4',
+      chainId: MAINNET_CHAIN_ID,
       executorAddress: '0x999',
       executorCalls: [{ contractAddress: '0x111', entrypoint: 'swap', selector: '0x555', calldata: ['0xaaa'] }],
     });
