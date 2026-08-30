@@ -258,6 +258,26 @@ empty shell to fetchers, so a 200 there means nothing.
 
 ## 6. Findings log
 
+### 2026-08-30 — Prepared swap responses require a nonempty quote identifier
+
+`BackendPrivacyClient.prepareSwap()` previously accepted any string as
+`quoteId`, including the empty string. The backend's swap boundary requires a
+quote identifier and the Wallet API operations layer validates chain, amounts,
+expiry, executor and fee data but did not recheck this identifier. A malformed
+successful response could therefore produce a prepared quote with no
+identifier for the quote-bound review/submission lifecycle.
+
+Swap response parsing now requires an own nonempty string quote identifier.
+Whitespace remains opaque and permitted, matching the backend's existing
+nonempty check; all other swap response validation and quote binding are
+unchanged.
+
+*Verified:* a red-first public BackendPrivacyClient regression supplied an
+empty `quoteId` with otherwise valid swap data; it resolved on the old path and
+now rejects with `kind: 'unknown'`. The focused backend-client suite passes 44
+tests. No browser, external provider, RPC, wallet, proof, signature, funds or
+transaction was used.
+
 ### 2026-08-30 — Fixed-room listener registration rolls back partial controllers
 
 `createFixedRoomController()` previously registered the three Shell listeners

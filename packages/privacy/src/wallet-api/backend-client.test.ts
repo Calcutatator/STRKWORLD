@@ -241,6 +241,19 @@ describe('BackendPrivacyClient', () => {
     }
   });
 
+  it('rejects an empty swap quote identifier', async () => {
+    const client = new BackendPrivacyClient(
+      'https://backend.example',
+      async () => response({
+        quoteId: '', buyAmount: '100', expiresAt: 2_000,
+        chainId: '0x534e5f4d41494e', executorAddress: '0x999', executorCalls: [],
+        fee: { token: '0x4718', recipient: '0x789', amount: '7', authorization: 'auth', expiresAtBlock: 1450 },
+      }),
+    );
+    await expect(client.prepareSwap({ sellToken: '0xabc', buyToken: '0x4718', sellAmount: 20n, minAmountOut: 90n, slippageBps: 100 }))
+      .rejects.toMatchObject({ kind: 'unknown' });
+  });
+
   it('maps the JSON wire format into bigint privacy ports', async () => {
     const fetcher = vi.fn(async (url: string) => {
       if (url.endsWith('/v1/rpc/pool-config')) {

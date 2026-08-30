@@ -100,7 +100,7 @@ export class BackendPrivacyClient implements PoolReadClient, PrivateSubmissionGa
     const fee = asRecord(ownField(value, 'fee'));
     const rawCalls = asArray(ownField(value, 'executorCalls'));
     return {
-      quoteId: asString(ownField(value, 'quoteId')),
+      quoteId: asNonEmptyString(ownField(value, 'quoteId')),
       buyAmount: asBigInt(ownField(value, 'buyAmount')),
       expiresAt: asInteger(ownField(value, 'expiresAt')),
       chainId: asString(ownField(value, 'chainId')),
@@ -261,6 +261,14 @@ function asString(value: unknown): string {
     throw new PrivacyError('unknown', 'The private service returned an invalid response.');
   }
   return value;
+}
+
+function asNonEmptyString(value: unknown): string {
+  const text = asString(value);
+  if (text.length === 0) {
+    throw new PrivacyError('unknown', 'The private service returned an invalid response.');
+  }
+  return text;
 }
 
 function asInteger(value: unknown): number {
