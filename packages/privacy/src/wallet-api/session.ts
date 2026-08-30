@@ -746,6 +746,14 @@ function validWarning(value: unknown): boolean {
         && detail.value.trim().length > 0
       );
     }
+    case 'recipient-unregistered': {
+      const recipient = Object.getOwnPropertyDescriptor(value, 'recipient');
+      return Boolean(
+        recipient && 'value' in recipient
+        && typeof recipient.value === 'string'
+        && isNonzeroFelt(recipient.value)
+      );
+    }
     default:
       return true;
   }
