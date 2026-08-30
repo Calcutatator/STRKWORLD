@@ -298,7 +298,7 @@ export function createPresenceController({ endpoint, factory = (options) => new 
       }
     })().finally(() => { replacing = null; });
   };
-  return {
+  return Object.freeze<PresenceController>({
     listen(world) {
       const stops: Array<() => void> = [];
       const stop = () => {
@@ -391,5 +391,5 @@ export function createPresenceController({ endpoint, factory = (options) => new 
       });
       await destroying;
     },
-  };
+  });
 }

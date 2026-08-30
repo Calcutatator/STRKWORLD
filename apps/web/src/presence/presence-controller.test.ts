@@ -55,6 +55,18 @@ async function drainAsyncWork() {
 }
 
 describe('presence controller', () => {
+  it('publishes an immutable controller API while retaining owned transitions', () => {
+    const presence = createPresenceController({ endpoint: 'ws://example' });
+    const originalReconnect = presence.reconnect;
+
+    expect(Object.isFrozen(presence)).toBe(true);
+    expect(Reflect.set(presence, 'reconnect', () => undefined)).toBe(false);
+    expect(Reflect.set(presence, 'destroy', async () => undefined)).toBe(false);
+    expect(presence.reconnect).toBe(originalReconnect);
+    presence.reconnect();
+    expect(presence.getState()).toEqual({ status: 'unavailable', canReconnect: true });
+  });
+
   it('publishes an immutable presence state snapshot', () => {
     const presence = createPresenceController({ endpoint: 'ws://example' });
     const state = presence.getState();
