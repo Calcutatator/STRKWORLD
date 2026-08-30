@@ -6,23 +6,24 @@ import type {
   WorldEvents,
 } from '@strkworld/shared';
 import { PRIVACY_REGISTER, type RouteGrade } from '../privacy/register.js';
-import { createStore, type Store } from '../store/store.js';
+import { createStore, type ReadableStore } from '../store/store.js';
 import { resolveStation, stationSnapshot, type StationCapabilities } from './station-registry.js';
 
 export type VisitState =
-  | { name: 'outside' }
-  | { name: 'locked'; building: BuildingId; reason: 'coming-soon' }
+  | { readonly name: 'outside' }
+  | { readonly name: 'locked'; readonly building: BuildingId; readonly reason: 'coming-soon' }
   | {
-      name: 'visiting';
-      building: BuildingId;
-      surface:
-        | { name: 'room' }
-        | { name: 'menu' }
-        | { name: 'station'; station: StationId };
+      readonly name: 'visiting';
+      readonly building: BuildingId;
+      readonly surface:
+        | { readonly name: 'room' }
+        | { readonly name: 'menu' }
+        | { readonly name: 'station'; readonly station: StationId };
     };
 
 export interface VisitController {
-  readonly store: Store<VisitState>;
+  /** Read-only view; controller methods own every state transition. */
+  readonly store: ReadableStore<VisitState>;
   /** Attach World listeners. The returned cleanup owns every subscription. */
   listen(world: EventBus<WorldEvents>): () => void;
   /** Ask the World to leave the active Game Mode room. World confirms exit. */
@@ -45,7 +46,24 @@ export function createVisitController(
   register: readonly RouteGrade[] = PRIVACY_REGISTER,
   capabilities: StationCapabilities | (() => StationCapabilities) = {},
 ): VisitController {
-  const store = createStore<VisitState>({ name: 'outside' });
+  function freezeVisitState(state: VisitState): VisitState {
+    if (state.name === 'visiting') Object.freeze(state.surface);
+    return Object.freeze(state);
+  }
+
+  const stateStore = createStore<VisitState>(freezeVisitState({ name: 'outside' }));
+  const setState = (update: VisitState | ((previous: VisitState) => VisitState)): void => {
+    stateStore.setState(
+      typeof update === 'function'
+        ? (previous) => freezeVisitState((update as (previous: VisitState) => VisitState)(previous))
+        : freezeVisitState(update),
+    );
+  };
+  const store: ReadableStore<VisitState> = {
+    getState: stateStore.getState,
+    getServerSnapshot: stateStore.getServerSnapshot,
+    subscribe: stateStore.subscribe,
+  };
 
   function ownControls(building: BuildingId, owner: 'world' | 'shell'): void {
     shell.emit('world:control-owner', { building, owner });
@@ -56,7 +74,7 @@ export function createVisitController(
     // Ignore any re-entrant or stale enter while React still owns an active
     // visit; only the authoritative matching exit may reset this state.
     if (store.getState().name === 'visiting') return;
-    store.setState({ name: 'visiting', building, surface: { name: 'room' } });
+    setState({ name: 'visiting', building, surface: { name: 'room' } });
     shell.emit('world:stations', { building, stations: stationSnapshot(building, register, currentCapabilities()) });
   }
 
@@ -85,7 +103,7 @@ export function createVisitController(
     // Ownership changes before the interaction window appears. React now owns
     // Escape and every text input until closeSurface hands controls back.
     ownControls(building, 'shell');
-    store.setState({ name: 'visiting', building, surface: { name: 'station', station } });
+    setState({ name: 'visiting', building, surface: { name: 'station', station } });
   }
 
   return {
@@ -109,7 +127,7 @@ export function createVisitController(
         stops.push(world.on('building:locked', ({ building, reason }) => {
           const state = store.getState();
           if (state.name === 'visiting') return;
-          store.setState({ name: 'locked', building, reason });
+          setState({ name: 'locked', building, reason });
         }));
         stops.push(world.on('building:exited', ({ building }) => {
           const state = store.getState();
@@ -117,7 +135,7 @@ export function createVisitController(
             // The World owns movement after the player leaves, even if the
             // exit arrived while a station window was still mounted.
             if (state.surface.name !== 'room') ownControls(building, 'world');
-            store.setState({ name: 'outside' });
+            setState({ name: 'outside' });
           }
         }));
         stops.push(world.on('station:activated', ({ building, station }) => activate(building, station)));
@@ -161,18 +179,18 @@ export function createVisitController(
       const state = store.getState();
       if (state.name !== 'visiting' || state.surface.name !== 'room') return;
       ownControls(state.building, 'shell');
-      store.setState({ ...state, surface: { name: 'menu' } });
+      setState({ ...state, surface: { name: 'menu' } });
     },
 
     closeSurface(): void {
       const state = store.getState();
       if (state.name !== 'visiting' || state.surface.name === 'room') return;
       ownControls(state.building, 'world');
-      store.setState({ ...state, surface: { name: 'room' } });
+      setState({ ...state, surface: { name: 'room' } });
     },
 
     dismissLocked(): void {
-      if (store.getState().name === 'locked') store.setState({ name: 'outside' });
+      if (store.getState().name === 'locked') setState({ name: 'outside' });
     },
 
     handleEscape(): void {

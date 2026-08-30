@@ -6,6 +6,28 @@ import { createVisitController } from './visit-controller.js';
 import { resolveStation, stationSnapshot } from './station-registry.js';
 
 describe('visit controller', () => {
+  it('keeps the public visit store read-only and immutable', () => {
+    const world = createEventBus<WorldEvents>();
+    const shell = createEventBus<ShellEvents>();
+    const controller = createVisitController(shell);
+
+    expect('setState' in controller.store).toBe(false);
+    expect(Object.isFrozen(controller.store.getState())).toBe(true);
+
+    controller.listen(world);
+    world.emit('building:entered', { building: 'bank' });
+    const state = controller.store.getState();
+    if (state.name !== 'visiting') throw new Error('expected an active visit');
+    expect(Object.isFrozen(state)).toBe(true);
+    expect(Object.isFrozen(state.surface)).toBe(true);
+    expect(Reflect.set(state, 'building', 'exchange')).toBe(false);
+    expect(Reflect.set(state.surface, 'name', 'menu')).toBe(false);
+    expect(controller.store.getState()).toMatchObject({
+      building: 'bank',
+      surface: { name: 'room' },
+    });
+  });
+
   it('starts a Bank visit in Game Mode and publishes presentation-only stations', () => {
     const world = createEventBus<WorldEvents>();
     const shell = createEventBus<ShellEvents>();
