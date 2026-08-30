@@ -58,10 +58,10 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 export function validateRemotePeer(value: unknown): RemotePeerSnapshot | null {
   if (!isRecord(value)) return null;
 
-  const id = value.id;
-  const x = value.x;
-  const y = value.y;
-  const facing = value.facing;
+  const id = ownDataField(value, 'id');
+  const x = ownDataField(value, 'x');
+  const y = ownDataField(value, 'y');
+  const facing = ownDataField(value, 'facing');
 
   if (typeof id !== 'string' || !OPAQUE_ID.test(id)) return null;
   if (typeof x !== 'number' || !Number.isFinite(x) || Math.abs(x) > REMOTE_WORLD_LIMIT) {
@@ -72,7 +72,7 @@ export function validateRemotePeer(value: unknown): RemotePeerSnapshot | null {
   }
   if (!FACINGS.includes(facing as Facing)) return null;
 
-  const sprite = value.sprite;
+  const sprite = ownDataField(value, 'sprite');
   return Object.freeze({
     id,
     x,
@@ -80,6 +80,11 @@ export function validateRemotePeer(value: unknown): RemotePeerSnapshot | null {
     facing: facing as Facing,
     sprite: validateAvatarSprite(sprite),
   });
+}
+
+function ownDataField(value: Record<string, unknown>, key: string): unknown {
+  const descriptor = Object.getOwnPropertyDescriptor(value, key);
+  return descriptor && 'value' in descriptor ? descriptor.value : undefined;
 }
 
 /**

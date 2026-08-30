@@ -277,6 +277,18 @@ describe('RemotePeerSource', () => {
 });
 
 describe('remote peer reconciliation', () => {
+  it('rejects peer identities and positions supplied through a prototype', () => {
+    const inherited = Object.create({
+      id: 'inherited-peer',
+      x: 40,
+      y: 72,
+      facing: 'down',
+      sprite: 'avatar-1',
+    }) as object;
+
+    expect(reconcileRemotePeers([inherited])).toEqual(new Map());
+  });
+
   it('validates coordinates, facing and opaque ids, with a safe sprite fallback', () => {
     const reconciled = reconcileRemotePeers([
       peer(),
