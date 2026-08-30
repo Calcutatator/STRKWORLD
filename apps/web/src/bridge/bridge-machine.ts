@@ -157,7 +157,8 @@ export function createBridgePanel(options: BridgePanelOptions): BridgePanel {
   let preflightSequence = 0;
   let refreshOwner = 0;
   let refreshSequence = 0;
-  let shieldBusy = false;
+  let shieldOwner = 0;
+  let shieldSequence = 0;
   let revalidateBusy = false;
 
   const nextSession = (): number => (session += 1);
@@ -409,6 +410,7 @@ export function createBridgePanel(options: BridgePanelOptions): BridgePanel {
       if (coordinator.quoteFlight) coordinator.quoteFlight.cancelled = true;
       nextSession();
       begin();
+      shieldOwner = 0;
       preflightOwner = 0;
       refreshOwner = 0;
       watchController?.abort();
@@ -585,8 +587,9 @@ export function createBridgePanel(options: BridgePanelOptions): BridgePanel {
     },
 
     async planShield(): Promise<void> {
-      if (shieldBusy) return;
-      shieldBusy = true;
+      if (shieldOwner !== 0) return;
+      const owner = ++shieldSequence;
+      shieldOwner = owner;
       try {
       const planner = options.planner;
       const record = options.service.resume();
@@ -620,7 +623,7 @@ export function createBridgePanel(options: BridgePanelOptions): BridgePanel {
         if (live(id, currentSession)) fail(COPY.bridge.shieldUnavailable, 'shield');
       }
       } finally {
-        shieldBusy = false;
+        if (shieldOwner === owner) shieldOwner = 0;
       }
     },
 

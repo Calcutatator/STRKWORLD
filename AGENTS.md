@@ -258,6 +258,26 @@ empty shell to fetchers, so a 200 there means nothing.
 
 ## 6. Findings log
 
+### 2026-08-30 — Bridge shield planning ownership is retired on close
+
+The Web Bridge panel used one `shieldBusy` flag for the lifetime of a machine.
+Closing the panel while its settled-funds account or planner read was pending
+did not retire that flag, so a reopened panel could not start its own shield
+plan until stale work settled. The session clock prevented stale publication,
+but the replacement action was silently unavailable in the meantime.
+
+Shield planning now has an owner token whose release is conditional on that
+token still being current; close retires the owner immediately, allowing a
+reopened panel to plan while the old account/planner work drains. Existing
+attempt/session, account, evidence and plan guards still prevent stale results
+from becoming executable.
+
+*Verified:* a red-first Bridge regression starts deferred shield planning A,
+closes the panel, starts planning B and resolves B before stale A; on the old
+path B never read the account, while the corrected path performs one planner
+call and leaves stale A inert. Focused Bridge tests pass 43/43. No browser,
+wallet, provider, RPC, proof, signature, funds or transaction was used.
+
 ### 2026-08-30 — Fixed-room entry rechecks ownership after onEnter
 
 `FixedRoomController.enter()` marked the room active, then invoked the

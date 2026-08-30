@@ -475,6 +475,30 @@ describe('Bridge shell machine', () => {
     expect(h.machine.store.getState()).toEqual(closedState);
   });
 
+  it('allows reopened shield planning while a closed account read is pending', async () => {
+    let releaseAccount!: (value: string | null) => void;
+    let reads = 0;
+    const planner: PublicShieldPlanner = { planMax: vi.fn(async ({ available }: PublicShieldPlanInput) => plan(available)) };
+    const h = harness(record({ leg: 'settled', message: 'settled', pollingStopped: true, strkReceived: 1_234n }), planner, {
+      readAccount: () => {
+        reads += 1;
+        if (reads === 1) return new Promise<string | null>((resolve) => { releaseAccount = resolve; });
+        return ACCOUNT;
+      },
+    });
+
+    const first = h.machine.planShield();
+    await Promise.resolve();
+    h.machine.close();
+    const second = h.machine.planShield();
+    await second;
+
+    expect(reads).toBe(3);
+    expect(planner.planMax).toHaveBeenCalledOnce();
+    releaseAccount(ACCOUNT);
+    await first;
+  });
+
   it('invalidates a commit guard when the saved evidence is imported during planning', async () => {
     let release!: () => void;
     const planner: PublicShieldPlanner = { planMax: vi.fn(async ({ available }: PublicShieldPlanInput) => {
