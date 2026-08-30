@@ -258,6 +258,27 @@ empty shell to fetchers, so a 200 there means nothing.
 
 ## 6. Findings log
 
+### 2026-08-30 — Fixed-room station activation rechecks authority after onChange
+
+`createFixedRoomController.update()` publishes a synchronous `onChange` snapshot
+when the player first approaches a station. Before the guard, that callback
+could destroy the controller or let Shell claim control, then the suspended
+`update()` resumed and still activated the station using the old authority.
+The result was a `station:activated` event and input suspension after teardown,
+or activation after Shell had already claimed the station.
+
+The update path now rechecks `destroyed`, `inRoom` and `controlOwner` after
+`onChange` delivery and before station admission. Normal activation ordering,
+station arming and Shell ownership are unchanged.
+
+*Verified:* public fixed-room regressions first failed on current `origin/main`
+when `onChange` destroyed the controller or synchronously transferred control
+to Shell; both emitted station activation despite the new authority. The
+corrected fixed-room suite passes 35 tests and the World suite passes 20 files
+/ 195 tests. No browser, lobby, wallet, provider, RPC, proof, signature, funds
+or transaction was used.
+
+
 ### 2026-08-30 — PrivacyProvider renders only the current financial seam
 
 `PrivacyProvider` copied an explicit `operations` prop into state and exposed

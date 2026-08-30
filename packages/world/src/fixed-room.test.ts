@@ -302,6 +302,60 @@ describe('fixed room station admission', () => {
 });
 
 describe('fixed room controller', () => {
+  it('does not activate a station after onChange destroys the controller', () => {
+    let controller: ReturnType<typeof createFixedRoomController> | undefined;
+    const h = harness(POST_OFFICE_ROOM_DEFINITION, (state) => {
+      if (state.highlightedStation === 'post-office:transfer') controller?.destroy();
+    });
+    controller = h.controller;
+
+    controller.enter();
+    h.shell.emit('world:stations', {
+      building: 'post-office',
+      stations: [
+        {
+          station: 'post-office:transfer',
+          label: 'TRANSFER',
+          status: 'available',
+        },
+      ],
+    });
+    controller.update({ x: 3, y: 4 });
+
+    expect(controller.state.inRoom).toBe(false);
+    expect(h.events.filter((event) => event.event === 'station:activated')).toEqual([]);
+    expect(h.inputCalls).toEqual(['resume', 'resume']);
+  });
+
+  it('does not activate a station after onChange transfers control to Shell', () => {
+    let shell: ReturnType<typeof bus<ShellEvents>> | undefined;
+    let claimed = false;
+    const h = harness(POST_OFFICE_ROOM_DEFINITION, (state) => {
+      if (!claimed && state.highlightedStation === 'post-office:transfer') {
+        claimed = true;
+        shell?.emit('world:control-owner', { building: 'post-office', owner: 'shell' });
+      }
+    });
+    shell = h.shell;
+
+    h.controller.enter();
+    h.shell.emit('world:stations', {
+      building: 'post-office',
+      stations: [
+        {
+          station: 'post-office:transfer',
+          label: 'TRANSFER',
+          status: 'available',
+        },
+      ],
+    });
+    h.controller.update({ x: 3, y: 4 });
+
+    expect(h.controller.state.controlOwner).toBe('shell');
+    expect(h.events.filter((event) => event.event === 'station:activated')).toEqual([]);
+    expect(h.inputCalls).toEqual(['resume', 'suspend']);
+  });
+
   it('does not expose station admission through the public state snapshot', () => {
     const h = harness();
     h.controller.enter();

@@ -358,6 +358,7 @@ export function createFixedRoomController(
     stations,
   });
   const publish = (): void => options.onChange?.(state());
+  const ownsWorldControl = (): boolean => controlOwner === 'world';
 
   const stopStations = options.in?.on('world:stations', (payload) => {
     if (destroyed || !inRoom || payload.building !== options.definition.building) return;
@@ -420,6 +421,9 @@ export function createFixedRoomController(
         highlightedStation = nextHighlighted;
         publish();
       }
+      // onChange delivery is synchronous and may destroy the room or let
+      // Shell claim control before this update resumes.
+      if (destroyed || !inRoom || !ownsWorldControl()) return;
       const station = stations.find((candidate) => candidate.station === nextHighlighted);
       if (approached && station?.status === 'available' && approachArmed.has(approached.station)) {
         approachArmed.delete(approached.station);
