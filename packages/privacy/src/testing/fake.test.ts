@@ -480,6 +480,17 @@ describe('recipients must be registered', () => {
     expect(await ops.recipientStatus('0x222')).toBe('registered');
     expect(await ops.recipientStatus('0x0000222')).toBe('registered');
   });
+
+  it.each([
+    ['decimal', '546'],
+    ['zero', '0x0'],
+    ['negative', '-1'],
+    ['field-prime', `0x${((1n << 251n) + 17n * (1n << 192n) + 1n).toString(16)}`],
+  ])('rejects a malformed %s recipient like production', async (_label, recipient) => {
+    const ops = fresh();
+
+    await expect(ops.recipientStatus(recipient)).rejects.toMatchObject({ kind: 'unknown' });
+  });
 });
 
 describe('fault injection', () => {

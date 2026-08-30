@@ -19,6 +19,8 @@ import type {
 } from '../operations.js';
 import { protectedMinimumOut } from '../protected-minimum.js';
 
+const STARK_FIELD_PRIME = (1n << 251n) + 17n * (1n << 192n) + 1n;
+
 /**
  * A deterministic, in-memory `PrivacyOperations`.
  *
@@ -271,6 +273,7 @@ export class FakePrivacyOperations implements PrivacyOperations {
   }
 
   async recipientStatus(address: Address, signal?: AbortSignal): Promise<RecipientStatus> {
+    assertAddress(address, 'fake recipient');
     await this.tick('recipientStatus', signal);
     return this.registeredAddrs.has(normalise(address)) ? 'registered' : 'unregistered';
   }
@@ -557,6 +560,17 @@ function freezeWarnings(warnings: readonly BatchWarning[]): readonly BatchWarnin
  */
 function normalise(address: string): string {
   return `0x${BigInt(address).toString(16)}`;
+}
+
+function assertAddress(address: unknown, label: string): asserts address is Address {
+  if (typeof address !== 'string' || !/^0x[0-9a-fA-F]+$/.test(address)) {
+    throw new PrivacyError('unknown', `Invalid ${label} address.`);
+  }
+  let value: bigint;
+  try { value = BigInt(address); } catch { throw new PrivacyError('unknown', `Invalid ${label} address.`); }
+  if (value <= 0n || value >= STARK_FIELD_PRIME) {
+    throw new PrivacyError('unknown', `Invalid ${label} address.`);
+  }
 }
 
 function sameAddress(a: string, b: string): boolean {
