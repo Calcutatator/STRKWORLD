@@ -467,6 +467,26 @@ describe('StreetScene lifecycle', () => {
     harness.shutdown();
   });
 
+  it('retains Scene Studio mode when presentation exit fails', () => {
+    const harness = createWorldPlayHarness();
+    harness.create();
+    harness.scene.avatarStudio.enter();
+    const error = new Error('studio presentation exit failed');
+    vi.spyOn(harness.scene.avatarStudioPresentation, 'exit').mockImplementationOnce(() => {
+      throw error;
+    });
+
+    expect(() => harness.scene.avatarStudio.update({ x: 8, y: 0 })).toThrow(error);
+    expect(harness.scene.avatarStudio.state.inRoom).toBe(true);
+    expect(harness.scene.avatarStudioActive).toBe(true);
+
+    expect(() => harness.scene.avatarStudio.update({ x: 8, y: 0 })).not.toThrow();
+    expect(harness.scene.avatarStudio.state.inRoom).toBe(false);
+    expect(harness.scene.avatarStudioActive).toBe(false);
+
+    harness.shutdown();
+  });
+
   it('retries fixed-room entry after a failed transition on the same tile', () => {
     const harness = createWorldPlayHarness();
     harness.create();

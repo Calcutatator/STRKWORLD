@@ -258,6 +258,26 @@ empty shell to fetchers, so a 200 there means nothing.
 
 ## 6. Findings log
 
+### 2026-08-30 — Avatar Studio Scene mode remains retryable after exit failure
+
+`StreetScene.exitAvatarStudioRoom()` cleared the Scene's
+`avatarStudioActive` flag before invoking the presentation exit handoff. If
+that injected presentation callback threw, the Avatar Studio controller
+restored its own `inRoom` state for retry, but the Scene remained in street
+mode and subsequent updates followed the wrong movement path.
+
+The Scene now restores its Studio mode flag when presentation exit fails,
+unless the callback already retired the Scene. The original error remains
+unchanged, the controller's retryable exit behavior is preserved, and a later
+exit completes normally.
+
+*Verified:* a red-first public StreetScene regression makes presentation exit
+throw, then confirms the controller and Scene both remain in Studio mode; the
+old path left `avatarStudioActive` false. The next exit succeeds and both
+return outside. World tests pass 24 files / 330 tests; World typecheck and
+invariants pass. No browser, wallet, provider, RPC, proof, signature, funds
+or transaction was used.
+
 ### 2026-08-30 — Avatar Studio Scene mode rolls back after presentation failure
 
 `StreetScene.enterAvatarStudioRoom()` marked the Scene's
