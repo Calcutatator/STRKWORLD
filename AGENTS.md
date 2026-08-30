@@ -417,6 +417,26 @@ join or leave calls and remains `closed`. The focused Lobby client suite passes
 83/83. No browser, external lobby, wallet, provider, RPC, proof, signature,
 funds or transaction was used.*
 
+### 2026-08-30 — Lobby connected delivery does not retain retired-room handlers
+
+`LobbyClient.#join()` published `connected` before registering the room's state,
+error and leave callbacks. A synchronous status listener could disconnect while
+that publication was in flight; the join continuation then attached handlers
+to the already-retired room, retaining stale lifecycle closures until SDK room
+cleanup and allowing unnecessary callbacks to be installed after ownership was
+gone.
+
+The join now rechecks the generation and room identity immediately after the
+connected status handoff and stops before peer delivery or handler registration
+when the room was retired. Normal connected delivery, suspend/reconnect, and
+room callback registration remain unchanged.
+
+*Verified:* a red-first public fake-room regression disconnects from a
+`connected` status listener; the old path registered all three stale handlers,
+while the corrected path leaves the room once and registers none. The focused
+Lobby client suite passes 84/84. No browser, external lobby, wallet, provider,
+RPC, proof, signature, funds or transaction was used.*
+
 ### 2026-08-30 — Lobby resume normalizes facing before crossing the wire
 
 `LobbyClient.resume()` forwarded its runtime `facing` value directly, even

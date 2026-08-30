@@ -140,6 +140,30 @@ it('does not join after disconnect retires a synchronous connecting transition',
   }
 });
 
+it('does not register callbacks on a room retired during connected delivery', async () => {
+  const joined = fakeRoom();
+  const joinOrCreate = vi
+    .spyOn(ColyseusClient.prototype, 'joinOrCreate')
+    .mockResolvedValueOnce(joined.room as never);
+  const client = new LobbyClient({ endpoint: 'ws://example', start: { x: 10, y: 20 } });
+  let disconnecting: Promise<void> | undefined;
+  client.onStatus((event) => {
+    if (event.status === 'connected') disconnecting = client.disconnect();
+  });
+
+  try {
+    await expect(client.connect()).rejects.toThrow(/interrupted/i);
+    await disconnecting;
+    expect(joined.leave).toHaveBeenCalledOnce();
+    expect(joined.room.onStateChange).not.toHaveBeenCalled();
+    expect(joined.room.onError).not.toHaveBeenCalled();
+    expect(joined.room.onLeave).not.toHaveBeenCalled();
+    expect(client.status).toBe('closed');
+  } finally {
+    joinOrCreate.mockRestore();
+  }
+});
+
 it.each(['onStateChange', 'onError', 'onLeave'] as const)(
   'releases a joined room when %s registration fails',
   async (registration) => {

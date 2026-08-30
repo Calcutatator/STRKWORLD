@@ -499,6 +499,10 @@ export class LobbyClient {
       this.#desired = null;
       this.#lastSentAt = null;
       this.#setStatus('connected');
+      // Status delivery is synchronous. A listener may retire this exact
+      // room before lifecycle callbacks are installed; do not attach stale
+      // handlers to a room that no longer belongs to this client.
+      if (!this.#isCurrentRoom(generation, room)) return;
       this.#emitPeers();
 
       room.onStateChange(() => {
