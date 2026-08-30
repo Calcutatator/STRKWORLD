@@ -50,6 +50,8 @@ const DEFAULT_ALLOWED_ORIGINS: readonly string[] = [
   'http://127.0.0.1:4173',
 ];
 
+const INVALID_PORT_ATTEMPTS_ERROR = 'Lobby port attempts must be a positive safe integer.';
+
 export interface PresenceServerOptions {
   /** Defaults to 2567. */
   port?: number;
@@ -136,7 +138,10 @@ export async function startPresenceServer(
 ): Promise<PresenceServer> {
   const basePort = options.port ?? DEFAULT_LOBBY_PORT;
   const roomName = options.roomName ?? DEFAULT_ROOM_NAME;
-  const attempts = Math.max(1, options.portAttempts ?? 1);
+  const attempts = options.portAttempts ?? 1;
+  if (!Number.isSafeInteger(attempts) || attempts < 1) {
+    throw new Error(INVALID_PORT_ATTEMPTS_ERROR);
+  }
 
   // Off before anything binds, so no per-connection line can print even under
   // DEBUG=colyseus:* (see logging.ts).
