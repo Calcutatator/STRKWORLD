@@ -18,7 +18,8 @@ export interface KenneyAtlasMetadata {
   runtimeTileSize: number;
 }
 
-export const KENNEY_ATLAS: KenneyAtlasMetadata = {
+/** Authored source geometry is runtime authority; consumers must not rewrite it. */
+export const KENNEY_ATLAS: Readonly<KenneyAtlasMetadata> = Object.freeze({
   width: 458,
   height: 305,
   tileWidth: 16,
@@ -28,7 +29,7 @@ export const KENNEY_ATLAS: KenneyAtlasMetadata = {
   rows: 18,
   scale: 2,
   runtimeTileSize: 32,
-};
+});
 
 export const KENNEY_ATLAS_KEY = 'kenney-rpg-urban-atlas';
 export const KENNEY_TILE_TEXTURE_KEY = 'tiles';

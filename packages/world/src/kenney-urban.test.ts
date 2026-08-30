@@ -31,6 +31,12 @@ describe('Kenney Urban runtime atlas contract', () => {
     expect(atlasFrameRect(284)).toEqual({ x: 238, y: 170, width: 16, height: 16 });
   });
 
+  it('does not let consumers rewrite the runtime atlas authority', () => {
+    expect(Object.isFrozen(KENNEY_ATLAS)).toBe(true);
+    expect(Reflect.set(KENNEY_ATLAS, 'columns', 1)).toBe(false);
+    expect(KENNEY_ATLAS.columns).toBe(27);
+  });
+
   it('pins only the approved mappings and leaves grass and roof out of the atlas roles', () => {
     expect(KENNEY_TILE_ROLES).toEqual(['road', 'pavement', 'wall', 'facade', 'door']);
     expect(kenneyTileForRole('road')).toEqual({
