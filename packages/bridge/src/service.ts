@@ -590,7 +590,8 @@ function hasSignedQuoteShape(value: unknown): value is QuoteResponse {
   if (
     hasOwnDataProperty(value.quote, 'depositMemo') &&
     value.quote.depositMemo !== undefined &&
-    typeof value.quote.depositMemo !== 'string'
+    (typeof value.quote.depositMemo !== 'string' ||
+      (value.quote.depositMemo.length > 0 && !/\S/.test(value.quote.depositMemo)))
   ) return false;
   if ('depositMode' in value.quoteRequest && !hasOwnDataProperty(value.quoteRequest, 'depositMode')) return false;
   return true;
