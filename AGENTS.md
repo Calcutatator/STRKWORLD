@@ -258,6 +258,27 @@ empty shell to fetchers, so a 200 there means nothing.
 
 ## 6. Findings log
 
+### 2026-08-30 — Bridge input amounts must fit uint256
+
+`BridgeService.validateInput()` previously rejected only non-positive amounts.
+An arbitrarily large positive `bigint`, including `2^256`, therefore reached
+the OneClick quote client before failing against the returned quote. That
+made an invalid blockchain amount cross the external bridge boundary and
+spent a provider request on input that could never be represented by the
+source transfer contract.
+
+Bridge input validation now requires `0 < amountIn <= 2^256 - 1` before any
+quote request. Existing source metadata, recipient, refund, slippage and
+quote evidence rules are unchanged.
+
+*Verified:* a red-first public Bridge regression passes `2^256` and confirms
+the old path called the quote client before rejecting; the corrected path
+returns the positive-uint256 error without a quote request. Removing the
+upper-bound guard reproduces the failure. The Bridge suite passes 65/65; the
+package typecheck, invariant scan and `git diff --check` pass. No browser,
+external provider, RPC, wallet, proof, signature, funds or transaction was
+used.
+
 ### 2026-08-30 — Bridge saved-quote preflight ownership is retired on close
 
 The Web Bridge panel used one `preflightBusy` flag for the lifetime of a

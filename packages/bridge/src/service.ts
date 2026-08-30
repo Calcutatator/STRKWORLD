@@ -361,7 +361,9 @@ function validateInput(input: CreateDepositInput): void {
   ) {
     throw new Error('The source asset metadata is invalid.');
   }
-  if (input.amountIn <= 0n) throw new Error('Bridge amount must be positive.');
+  if (input.amountIn <= 0n || input.amountIn > MAX_BASE_UNIT_AMOUNT) {
+    throw new Error('Bridge amount must be a positive uint256.');
+  }
   const slippage = input.slippageBps ?? DEFAULT_SLIPPAGE_BPS;
   if (!Number.isInteger(slippage) || slippage < 1 || slippage > 1_000) {
     throw new Error('Bridge slippage must be between 1 and 1000 basis points.');

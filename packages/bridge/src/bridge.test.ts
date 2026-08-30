@@ -123,6 +123,24 @@ function deferred<T>(): {
 }
 
 describe('BridgeService', () => {
+  it('rejects an amount above the uint256 bound before requesting a quote', async () => {
+    const client = new StubClient();
+    const service = new BridgeService({
+      client,
+      store: new MemoryBridgeStore(),
+      quoteVerifier: () => true,
+      now: () => NOW,
+    });
+
+    await expect(service.createManualDeposit({
+      source: SOURCE,
+      amountIn: 1n << 256n,
+      starknetRecipient: '0x123',
+      refundAddress: request.refundTo,
+    })).rejects.toThrow('Bridge amount must be a positive uint256.');
+    expect(client.quoteRequests).toHaveLength(0);
+  });
+
   it('does not overwrite an imported record while its quote is pending', async () => {
     const quote = deferred<QuoteResponse>();
     const client = new StubClient();
