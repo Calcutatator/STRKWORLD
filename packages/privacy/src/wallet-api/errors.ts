@@ -21,18 +21,41 @@ export function mapWalletError(error: unknown): PrivacyError {
 }
 
 function isAbortError(error: unknown): boolean {
-  return error instanceof DOMException
-    ? error.name === 'AbortError'
-    : Boolean(error && typeof error === 'object' && 'name' in error && error.name === 'AbortError');
+  if (error instanceof DOMException) {
+    try {
+      return error.name === 'AbortError';
+    } catch {
+      return false;
+    }
+  }
+  return Boolean(error && typeof error === 'object' && readProperty(error, 'name') === 'AbortError');
 }
 
 function readCode(error: unknown, seen = new Set<object>()): number | null {
   if (!error || typeof error !== 'object') return null;
   if (seen.has(error)) return null;
   seen.add(error);
-  const candidate = error as { code?: unknown; error?: unknown; cause?: unknown };
-  if (typeof candidate.code === 'number') return candidate.code;
-  return readCode(candidate.error, seen) ?? readCode(candidate.cause, seen);
+  const code = readProperty(error, 'code');
+  if (typeof code === 'number') return code;
+  return readCode(readProperty(error, 'error'), seen) ?? readCode(readProperty(error, 'cause'), seen);
+}
+
+/** Read error metadata without invoking hostile accessors. */
+function readProperty(value: object, key: PropertyKey): unknown {
+  try {
+    let current: object | null = value;
+    while (current !== null) {
+      const descriptor = Object.getOwnPropertyDescriptor(current, key);
+      if (descriptor) {
+        if ('value' in descriptor) return descriptor.value;
+        return undefined;
+      }
+      current = Object.getPrototypeOf(current) as object | null;
+    }
+  } catch {
+    // Malformed wallet errors must still map to an opaque PrivacyError.
+  }
+  return undefined;
 }
 
 function safeMessage(kind: PrivacyErrorKind): string {

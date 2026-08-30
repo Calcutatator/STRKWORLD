@@ -1160,6 +1160,18 @@ describe('quote-bound swap plan admission', () => {
 });
 
 describe('wallet error mapping', () => {
+  it('does not leak a throwing error accessor from wallet failure mapping', () => {
+    const error = {};
+    Object.defineProperty(error, 'code', {
+      get() {
+        throw new Error('wallet-internal error accessor');
+      },
+    });
+
+    expect(() => mapWalletError(error)).not.toThrow();
+    expect(mapWalletError(error)).toMatchObject({ kind: 'unreachable' });
+  });
+
   it.each([
     [113, 'user-rejected'],
     [118, 'not-registered'],
