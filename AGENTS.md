@@ -258,6 +258,25 @@ empty shell to fetchers, so a 200 there means nothing.
 
 ## 6. Findings log
 
+### 2026-08-30 — Avatar Studio tile delivery remains retryable after failure
+
+`StreetScene.reportAvatarStudioTile()` committed its `lastTile` sentinel
+before delegating to the Studio controller. If synchronous figure selection or
+presentation delivery threw, the player remained on that tile but subsequent
+frames treated it as already handled, so the selection could never retry.
+
+Studio tile reporting now rolls back only its own sentinel when the controller
+throws; a nested report that has already taken a newer sentinel remains
+authoritative. Normal tile de-duplication and Studio lifecycle behavior are
+unchanged.
+
+*Verified:* a red-first public StreetScene regression makes the first
+`avatar:selected` delivery throw on a figure tile, observes the old tile
+sentinel retained, then retries the same tile and confirms the selection
+completes. The corrected lifecycle suite passes 20/20; the full World suite,
+typecheck and invariant evidence are recorded on the candidate. No browser,
+wallet, provider, RPC, proof, signature, funds or transaction was used.
+
 ### 2026-08-30 — Avatar Studio exit presentation failure remains retryable
 
 `createAvatarStudioController.leave()` cleared Studio ownership before invoking

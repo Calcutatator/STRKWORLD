@@ -876,8 +876,17 @@ export function createStreetScene({ Phaser, onTileChanged, remotePeers }: Street
     private reportAvatarStudioTile(): void {
       const tile = worldToRoomTile(this.player.x, this.player.y);
       if (tile.x === this.lastTile.x && tile.y === this.lastTile.y) return;
+      const previousTile = this.lastTile;
       this.lastTile = tile;
-      this.avatarStudio?.update(tile);
+      try {
+        this.avatarStudio?.update(tile);
+      } catch (error) {
+        // Studio callbacks are synchronous and may fail at the shell boundary.
+        // Keep this tile retryable unless a nested report has already replaced
+        // the Scene's sentinel with newer ownership.
+        if (this.lastTile === tile) this.lastTile = previousTile;
+        throw error;
+      }
     }
 
     private applyAvatarSprite(sprite: AvatarSpriteKey): void {

@@ -237,6 +237,23 @@ function expectCompleteCleanup(cycle: ReturnType<typeof cycleResources>): void {
 }
 
 describe('StreetScene lifecycle', () => {
+  it('retries the same Avatar Studio tile after selection delivery fails', () => {
+    const harness = createWorldPlayHarness();
+    harness.create();
+    harness.scene.avatarStudio.enter();
+
+    const error = new Error('selection delivery failed');
+    harness.failNextAvatarSelection(error);
+    harness.scene.player.x = 64 + (5 + 0.5) * 32;
+    harness.scene.player.y = 64 + (3 + 0.5) * 32;
+
+    expect(() => harness.scene.reportAvatarStudioTile()).toThrow(error);
+    expect(harness.scene.lastTile).toEqual({ x: -1, y: -1 });
+
+    expect(() => harness.scene.reportAvatarStudioTile()).not.toThrow();
+    expect(harness.selected()).toBe('avatar-2');
+  });
+
   it('toggles the outfit outdoors, in the Studio and back, from one Scene-owned binding', () => {
     const harness = createWorldPlayHarness();
     harness.create();
@@ -780,10 +797,16 @@ function createWorldPlayHarness() {
   const emitted: Array<{ event: string; payload: unknown }> = [];
   const shellListeners = new Map<string, Set<(payload: unknown) => void>>();
   let retireOnMovement = false;
+  let failNextAvatarSelection: Error | undefined;
   const bus = {
     out: {
       emit: (event: string, payload: unknown) => {
         emitted.push({ event, payload });
+        if (event === 'avatar:selected' && failNextAvatarSelection !== undefined) {
+          const error = failNextAvatarSelection;
+          failNextAvatarSelection = undefined;
+          throw error;
+        }
         if (retireOnMovement && event === 'player:moved') {
           retireOnMovement = false;
           scene.cleanShutdown();
@@ -877,6 +900,9 @@ function createWorldPlayHarness() {
     shellListenerCount: () =>
       [...shellListeners.values()].reduce((total, handlers) => total + handlers.size, 0),
     eventCount: (event: string) => emitted.filter((entry) => entry.event === event).length,
+    failNextAvatarSelection: (error: Error) => {
+      failNextAvatarSelection = error;
+    },
     retireDuringNextStreetMovement: () => {
       player.x = 5 * 32 + 16;
       player.y = 10 * 32 + 16;
@@ -916,7 +942,8 @@ function createWorldPlayHarness() {
 
 interface WorldPlayScene extends FakeScene {
   map: ReturnType<typeof createStreetMap>;
-  player: unknown;
+  player: { x: number; y: number };
+  lastTile: { x: number; y: number };
   cursors: {
     left: { isDown: boolean };
     right: { isDown: boolean };
@@ -943,6 +970,7 @@ interface WorldPlayScene extends FakeScene {
   createRoomVisuals(): void;
   createExteriorLabels(): void;
   update(time: number, delta: number): void;
+  reportAvatarStudioTile(): void;
 }
 
 interface LifecycleKeyEvent {
