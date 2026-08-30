@@ -45,11 +45,24 @@ export function createAvatarOutfitSelection(options: {
   readonly initial?: AvatarSpriteKey;
 }): AvatarOutfitSelection {
   let selected = options.initial ?? DEFAULT_AVATAR_SPRITE;
+  let selectionRevision = 0;
 
   const select = (sprite: AvatarSpriteKey): boolean => {
     if (sprite === selected) return false;
+    const previous = selected;
+    const ownRevision = ++selectionRevision;
     selected = sprite;
-    options.out.emit('avatar:selected', { sprite: selected });
+    try {
+      options.out.emit('avatar:selected', { sprite: selected });
+    } catch (error) {
+      // Event delivery is an external lifecycle boundary. Roll back only if
+      // no reentrant selection took ownership while the event was delivered;
+      // a nested successful selection remains the latest authoritative state.
+      if (selectionRevision === ownRevision && selected === sprite) {
+        selected = previous;
+      }
+      throw error;
+    }
     return true;
   };
 

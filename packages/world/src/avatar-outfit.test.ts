@@ -8,6 +8,25 @@ import {
 type Emitted = { event: keyof WorldEvents; payload: unknown };
 
 describe('World-local outfit selection', () => {
+  it('rolls back selection when avatar change delivery fails', () => {
+    let fail = true;
+    const error = new Error('avatar selection delivery failed');
+    const emit = vi.fn(() => {
+      if (fail) throw error;
+    });
+    const selection = createAvatarOutfitSelection({
+      out: { emit },
+    });
+
+    expect(() => selection.select('avatar-2')).toThrow(error);
+    expect(selection.selected).toBe('avatar-1');
+
+    fail = false;
+    expect(selection.select('avatar-2')).toBe(true);
+    expect(selection.selected).toBe('avatar-2');
+    expect(emit).toHaveBeenCalledTimes(2);
+  });
+
   it('starts on the default cosy state and only emits real changes', () => {
     const events: Emitted[] = [];
     const selection = createAvatarOutfitSelection({
