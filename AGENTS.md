@@ -305,6 +305,26 @@ transaction was used.*
 
 ## 6. Findings log
 
+### 2026-08-30 — Private swap outputs require uint256 bounds
+
+`WalletApiPrivacyOperations.validateSwapPlan()` previously checked only that
+the external swap plan's `buyAmount` was a positive bigint. A malformed AVNU
+or backend response above the STRK20 `u256` range could therefore become the
+reviewed expected output and protected minimum, crossing quote admission with
+an impossible amount.
+
+Swap-plan admission now requires `0 < buyAmount <= 2^256 - 1`. The maximum
+valid value remains accepted; values above it fail with the existing malformed
+expected-output error before any wallet handoff. Other quote, fee, executor,
+expiry and action-binding checks are unchanged.
+
+*Verified:* red-first public regressions prove that `2^256 - 1` is accepted
+and `2^256` is rejected before a review is returned. The focused Wallet API
+suite passes 65 tests; the full Privacy suite passes 9 files / 205 tests,
+with package typecheck, invariants and diff hygiene green. No browser,
+external provider, RPC, wallet, proof, signature, funds or transaction was
+used.*
+
 
 ## 6. Findings log
 

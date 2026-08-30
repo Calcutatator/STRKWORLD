@@ -751,6 +751,7 @@ describe('Wallet API action routes', () => {
  */
 describe('quote-bound swap plan admission', () => {
   const CHAIN = '0x534e5f4d41494e';
+  const MAX_U256 = (1n << 256n) - 1n;
   const SWAP: Intent = { kind: 'swap', tokenIn: TOKEN, tokenOut: STRK, amountIn: 20n, minAmountOut: 90n };
 
   function swapFixture(
@@ -821,6 +822,18 @@ describe('quote-bound swap plan admission', () => {
     expect(walletPrepare).not.toHaveBeenCalled();
     expect(submit).not.toHaveBeenCalled();
     expect(progress).not.toContain('awaiting-approval');
+  });
+
+  it('accepts the maximum uint256 swap output', async () => {
+    const { ops } = swapFixture(undefined, { buyAmount: MAX_U256 });
+
+    await expect(ops.prepare([SWAP])).resolves.toBeDefined();
+  });
+
+  it('rejects a swap output above uint256 before returning a review', async () => {
+    const { ops } = swapFixture(undefined, { buyAmount: MAX_U256 + 1n });
+
+    await expect(ops.prepare([SWAP])).rejects.toThrow(/expected output/i);
   });
 
   it('does not publish a swap batch after its quote read is aborted', async () => {

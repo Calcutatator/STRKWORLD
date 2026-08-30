@@ -32,6 +32,7 @@ import type {
 
 const REQUIRED_WALLET_API = '0.10.3';
 const STARK_FIELD_PRIME = (1n << 251n) + 17n * (1n << 192n) + 1n;
+const MAX_UINT256 = (1n << 256n) - 1n;
 
 export interface WalletApiPrivacyOperationsOptions {
   wallet: WalletStrk20Account;
@@ -292,7 +293,7 @@ export class WalletApiPrivacyOperations implements PrivacyOperations {
     if (plan.chainId !== expectedChainId) {
       throw new PrivacyError('unknown', 'The private swap quote is for the wrong network.');
     }
-    if (typeof plan.buyAmount !== 'bigint' || plan.buyAmount <= 0n) {
+    if (typeof plan.buyAmount !== 'bigint' || plan.buyAmount <= 0n || plan.buyAmount > MAX_UINT256) {
       throw new PrivacyError('unknown', 'The private swap expected output is malformed.');
     }
     if (!Number.isSafeInteger(plan.expiresAt) || plan.expiresAt <= this.now()) {
