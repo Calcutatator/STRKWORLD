@@ -619,6 +619,10 @@ function ownPreparedBatch(
     retireInvalidPrepared(prepared);
     throw new PrivacyError('unknown', 'The wallet returned an invalid prepared warning.');
   }
+  if (!prepared.intents.every(validIntent)) {
+    retireInvalidPrepared(prepared);
+    throw new PrivacyError('unknown', 'The wallet returned an invalid prepared intent.');
+  }
   const intents = Object.freeze(prepared.intents.map((intent) => Object.freeze({ ...intent })));
   const warnings = Object.freeze(prepared.warnings.map((warning) => Object.freeze({ ...warning })));
   let discarded = false;
@@ -700,6 +704,23 @@ function ownPreparedBatch(
     },
     discard,
   });
+}
+
+function validIntent(value: unknown): boolean {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return false;
+  const kind = Object.getOwnPropertyDescriptor(value, 'kind');
+  if (!kind || !('value' in kind) || typeof kind.value !== 'string') return false;
+  if (kind.value === 'transfer') {
+    const token = Object.getOwnPropertyDescriptor(value, 'token');
+    const recipient = Object.getOwnPropertyDescriptor(value, 'recipient');
+    const amount = Object.getOwnPropertyDescriptor(value, 'amount');
+    return Boolean(
+      token && 'value' in token && typeof token.value === 'string' && isNonzeroFelt(token.value)
+      && recipient && 'value' in recipient && typeof recipient.value === 'string' && isNonzeroFelt(recipient.value)
+      && amount && 'value' in amount && typeof amount.value === 'bigint' && amount.value > 0n
+    );
+  }
+  return true;
 }
 
 function isNonzeroFelt(value: string): boolean {
