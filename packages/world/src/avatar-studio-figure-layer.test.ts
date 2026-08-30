@@ -2,6 +2,20 @@ import { describe, expect, it, vi } from 'vitest';
 import { createAvatarStudioFigureLayer } from './avatar-studio-figure-layer.js';
 
 describe('Avatar Studio final figure layer', () => {
+  it('owns the injected room origin after construction', () => {
+    const fake = fakeScene();
+    const roomOrigin = { x: 64, y: 64 };
+    const layer = createAvatarStudioFigureLayer({
+      scene: fake.scene as never,
+      roomOrigin,
+    });
+
+    Reflect.set(roomOrigin, 'x', 1);
+    layer.sync({ visible: true, highlightedFigure: 8 });
+
+    expect(fake.highlight.setPosition).toHaveBeenLastCalledWith(528, 272);
+  });
+
   it('renders the eight cosy selectors as non-physics final-sheet sprites at their fixed centres', () => {
     const fake = fakeScene();
 
