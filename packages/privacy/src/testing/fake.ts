@@ -125,6 +125,15 @@ export class FakePrivacyOperations implements PrivacyOperations {
 
   constructor(config: FakeConfig = {}) {
     for (const [token, amount] of Object.entries(config.balances ?? {})) {
+      try {
+        if (BigInt(token) === 0n) throw new Error();
+        normalise(token);
+      } catch {
+        throw new PrivacyError('unknown', 'The fake starting balance token is invalid.');
+      }
+      if (typeof amount !== 'bigint' || amount < 0n) {
+        throw new PrivacyError('unknown', 'The fake starting balance amount must be a non-negative bigint.');
+      }
       this.spendable.set(token, amount);
     }
     this.registeredAddrs = new Set(

@@ -31,6 +31,16 @@ describe('fake lifecycle configuration', () => {
     expect(() => new FakePrivacyOperations({ latencyMs: latencyMs as never }))
       .toThrow(/latency/i);
   });
+
+  it.each([
+    ['negative amount', { [STRK]: -1n }],
+    ['number amount', { [STRK]: 1 }],
+    ['malformed token', { 'not-a-felt': 1n }],
+    ['zero token', { '0x0': 1n }],
+  ] as const)('rejects a %s before publishing fake funds', (_label, balances) => {
+    expect(() => new FakePrivacyOperations({ balances: balances as never }))
+      .toThrow(/starting balance/i);
+  });
 });
 
 describe('the fee comes out of the balance being spent', () => {
