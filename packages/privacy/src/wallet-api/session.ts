@@ -615,6 +615,10 @@ function ownPreparedBatch(
     retireInvalidPrepared(prepared);
     throw new PrivacyError('unknown', 'The wallet returned invalid prepared review collections.');
   }
+  if (!prepared.warnings.every(validWarning)) {
+    retireInvalidPrepared(prepared);
+    throw new PrivacyError('unknown', 'The wallet returned an invalid prepared warning.');
+  }
   const intents = Object.freeze(prepared.intents.map((intent) => Object.freeze({ ...intent })));
   const warnings = Object.freeze(prepared.warnings.map((warning) => Object.freeze({ ...warning })));
   let discarded = false;
@@ -705,6 +709,20 @@ function isNonzeroFelt(value: string): boolean {
       && BigInt(value) < STARK_FIELD_PRIME;
   } catch {
     return false;
+  }
+}
+
+function validWarning(value: unknown): boolean {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return false;
+  const kind = Object.getOwnPropertyDescriptor(value, 'kind');
+  if (!kind || !('value' in kind) || typeof kind.value !== 'string') return false;
+  switch (kind.value) {
+    case 'multiple-prompts': {
+      const count = Object.getOwnPropertyDescriptor(value, 'count');
+      return Boolean(count && 'value' in count && Number.isSafeInteger(count.value) && count.value > 1);
+    }
+    default:
+      return true;
   }
 }
 
