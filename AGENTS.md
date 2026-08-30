@@ -258,6 +258,25 @@ empty shell to fetchers, so a 200 there means nothing.
 
 ## 6. Findings log
 
+### 2026-08-30 — Lobby resume reads only own data placement fields
+
+`LobbyClient.resume()` used ordinary property access for the runtime placement
+coordinates. An accessor-backed `x` or `y` could therefore execute caller code
+and leak its raw exception before the existing controlled invalid-placement
+failure; inherited values were also eligible to cross the client boundary.
+
+Resume now reads own data descriptors for `x`, `y` and `facing`, with descriptor
+or proxy failures treated as absent. Required coordinates still fail closed with
+`Lobby resume placement is invalid.`, while missing or malformed facing keeps
+the existing default-to-down behavior. Valid placement normalization, wire
+shape and transport lifecycle ownership are unchanged.
+
+*Verified:* red-first public fake-room regressions supplied accessor-backed `x`
+and `y` whose getters throw; the old client leaked those exceptions, while the
+corrected path neither invoked the accessors nor sent a resume message.
+Removing the own-data reads makes both regressions fail. No browser, external
+lobby, wallet, provider, RPC, proof, signature, funds or transaction was used.
+
 ### 2026-08-30 — Lobby resume rejects malformed placement containers
 
 `LobbyClient.resume()` assumed its runtime argument was a non-null placement

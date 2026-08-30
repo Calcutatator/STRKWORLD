@@ -1438,6 +1438,39 @@ describe('presence', () => {
     }
   });
 
+  it.each(['x', 'y'] as const)('rejects an accessor-backed resumed %s coordinate without invoking it', async (axis) => {
+    const joined = fakeRoom();
+    const joinOrCreate = vi
+      .spyOn(ColyseusClient.prototype, 'joinOrCreate')
+      .mockImplementation(() => Promise.resolve(joined.room) as never);
+    const client = makeClient(20, 0);
+    let accessed = false;
+    const placement = { x: 40, y: 40, facing: 'up' as const };
+    Object.defineProperty(placement, axis, {
+      configurable: true,
+      get: () => {
+        accessed = true;
+        throw new Error(`unexpected ${axis} accessor`);
+      },
+    });
+
+    try {
+      const connecting = client.connect();
+      await Promise.resolve();
+      joined.welcome({ gameId: '0123456789abcdef' });
+      await connecting;
+      client.suspend();
+
+      expect(() => client.resume(placement)).toThrow('Lobby resume placement is invalid.');
+      expect(accessed).toBe(false);
+      expect(joined.send).toHaveBeenLastCalledWith('suspend');
+      expect(client.status).toBe('suspended');
+    } finally {
+      await client.disconnect();
+      joinOrCreate.mockRestore();
+    }
+  });
+
   it('does not restore connected status when transport leaves during resume send', async () => {
     const joined = fakeRoom();
     const joinOrCreate = vi

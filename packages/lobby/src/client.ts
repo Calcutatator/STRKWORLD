@@ -308,15 +308,20 @@ export class LobbyClient {
     if (placement === null || typeof placement !== 'object') {
       throw new Error(INVALID_RESUME_PLACEMENT_ERROR);
     }
-    const x = normalizeCoordinate(placement.x);
-    const y = normalizeCoordinate(placement.y);
+    // Read only own data properties at this trust boundary. Ordinary property
+    // access would invoke an accessor (or a proxy trap) supplied by the
+    // caller, allowing a malformed placement to leak a raw exception before
+    // the controlled validation error below. Missing/invalid facing keeps the
+    // existing default-to-down behavior; coordinates remain required.
+    const x = normalizeCoordinate(ownDataField(placement, 'x'));
+    const y = normalizeCoordinate(ownDataField(placement, 'y'));
     if (x === null || y === null) {
       throw new Error(INVALID_RESUME_PLACEMENT_ERROR);
     }
     const next: Required<Placement> = {
       x,
       y,
-      facing: normalizeFacing(placement.facing),
+      facing: normalizeFacing(ownDataField(placement, 'facing')),
     };
     const room = this.#room;
     room.send(MESSAGE.resume, {
@@ -708,6 +713,15 @@ export class LobbyClient {
     } catch {
       console.error('lobby client: status subscriber threw');
     }
+  }
+}
+
+function ownDataField(value: object, key: string): unknown {
+  try {
+    const descriptor = Object.getOwnPropertyDescriptor(value, key);
+    return descriptor && 'value' in descriptor ? descriptor.value : undefined;
+  } catch {
+    return undefined;
   }
 }
 
