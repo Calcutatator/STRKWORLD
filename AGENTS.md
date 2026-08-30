@@ -347,6 +347,27 @@ so the post-handoff exit regression is deterministic under suite load. No
 browser, wallet, provider, RPC, proof, signature, funds or transaction was
 used.
 
+### 2026-08-30 — Failed presence joins retire their status authority
+
+When an asynchronous Lobby join rejected, PresenceController published
+`unavailable` but left the failed client's status listener active. A queued
+`connected` callback from that failed client could then resurrect the presence
+state and make the stale client authoritative again, even though no join was
+in flight. The same stale callback could interfere with an explicit retry.
+
+Connect failure handling now deactivates and detaches the current client's
+status listener before publishing `unavailable`; cleanup is detached before
+invocation and cleanup errors remain contained. Peer delivery and explicit
+reconnect ownership are otherwise unchanged, and normal disconnect rejection
+semantics are preserved.
+
+*Verified:* a public regression rejects a deferred connect, then delivers a
+late `connected` callback; the old path resurrects `connected`, while the
+corrected path remains `unavailable`. The focused presence suite passes 54
+tests; full workspace tests and typechecks, the Web build, invariants, and
+diff hygiene are green. No browser, lobby server, wallet, provider, RPC,
+proof, signature, funds or transaction was used.
+
 ### 2026-08-30 — Production bootstrap destroys rejected session candidates
 
 After the bootstrap began freezing and revalidating loaded sessions, a

@@ -63,6 +63,16 @@ export function createPresenceController({ endpoint, factory = (options) => new 
     peerStop = null;
     clearPeers();
   };
+  const deactivateClientStatus = () => {
+    const stop = statusStop;
+    statusStop = null;
+    try {
+      stop?.();
+    } catch {
+      // A status cleanup failure must not leave the failed client authoritative
+      // or mask the connect failure.
+    }
+  };
   const setState = (next: PresenceState) => {
     if (destroyed) return;
     state = freezePresenceState(next);
@@ -233,6 +243,7 @@ export function createPresenceController({ endpoint, factory = (options) => new 
       attempt = next.connect();
     } catch {
       if (connecting === owner) connecting = null;
+      deactivateClientStatus();
       if (!owner.retired && !destroyed) unavailable();
       return;
     }
@@ -273,6 +284,7 @@ export function createPresenceController({ endpoint, factory = (options) => new 
       if (settlingOwner === owner) settlingOwner = null;
       if (owner.retired) return;
       if (destroyed) return;
+      deactivateClientStatus();
       unavailable();
       // LobbyClient reports `idle` before a failed join's promise rejects.
       // A reconnect click in that window is therefore explicit intent to

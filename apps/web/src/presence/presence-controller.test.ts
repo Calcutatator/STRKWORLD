@@ -1253,6 +1253,32 @@ describe('presence controller', () => {
     stop();
   });
 
+  it('does not resurrect a client after its asynchronous connect failure', async () => {
+    const world = createEventBus<WorldEvents>();
+    const made = fakeClient();
+    let rejectConnect!: (error: unknown) => void;
+    let statusListener!: StatusListener;
+    made.client.onStatus = vi.fn((listener: StatusListener) => {
+      statusListener = listener;
+      return () => undefined;
+    });
+    made.client.connect = vi.fn(() => new Promise<void>((_resolve, reject) => {
+      rejectConnect = reject;
+    }));
+    const presence = createPresenceController({ endpoint: 'ws://example', factory: () => made.client });
+    const stop = presence.listen(world);
+
+    world.emit('player:moved', moved);
+    rejectConnect(new Error('connect failed'));
+    await Promise.resolve();
+    await Promise.resolve();
+
+    expect(presence.getState().status).toBe('unavailable');
+    statusListener({ status: 'connected' });
+    expect(presence.getState().status).toBe('unavailable');
+    stop();
+  });
+
   it('does not resurrect a dropped pre-welcome connection inside a building', async () => {
     const world = createEventBus<WorldEvents>();
     let resolve!: () => void;
