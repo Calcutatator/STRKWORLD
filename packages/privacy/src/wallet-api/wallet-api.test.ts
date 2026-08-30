@@ -1327,6 +1327,34 @@ describe('quote-bound swap plan admission', () => {
     ]));
   });
 
+  it('does not hand a discarded swap batch to the wallet after its fee read', async () => {
+    const { ops, pool, wallet, gateway } = swapFixture();
+    const originalConfig = pool.config;
+    let configCalls = 0;
+    let release!: () => void;
+    let started!: () => void;
+    const readStarted = new Promise<void>((resolve) => { started = resolve; });
+    const pending = new Promise<void>((resolve) => { release = resolve; });
+    vi.spyOn(pool, 'config').mockImplementation(async (signal) => {
+      configCalls += 1;
+      if (configCalls === 1) return originalConfig(signal);
+      started();
+      await pending;
+      return originalConfig(signal);
+    });
+    const walletPrepare = vi.spyOn(wallet, 'strk20PrepareInvoke');
+    const batch = await ops.prepare([SWAP]);
+
+    const confirming = batch.confirm({ feeCeiling: POOL_FEE + 1n });
+    await readStarted;
+    batch.discard();
+    release();
+
+    await expect(confirming).rejects.toThrow(/discarded/i);
+    expect(walletPrepare).not.toHaveBeenCalled();
+    expect(gateway.submit).not.toHaveBeenCalled();
+  });
+
   it('does not hand an aborted swap confirmation to the wallet after its fee read', async () => {
     const { ops, pool, wallet, gateway } = swapFixture();
     const originalConfig = pool.config;

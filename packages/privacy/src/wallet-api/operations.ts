@@ -269,6 +269,7 @@ export class WalletApiPrivacyOperations implements PrivacyOperations {
           throwIfAborted(confirmSignal);
           owner.validateSwapPlan(canonicalIntent, current, plan, swapPolicy.expectedChainId);
           assertFeeCeiling(current.feeAmount + plan.fee.amount, feeCeiling);
+          assertNotDiscarded(discarded);
           // Snapshot the freshly validated calls, then hand the SDK its own
           // separate copy. Sharing one array would let an input-mutating SDK
           // corrupt the action *and* the authority the guard recomputes from,
