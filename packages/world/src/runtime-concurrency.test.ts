@@ -106,4 +106,18 @@ describe('world runtime lazy host ownership', () => {
     releaseWorld();
     await vi.runAllTimersAsync();
   });
+
+  it('retires an acquire released while Phaser is lazy-loading', async () => {
+    const { acquireWorld, releaseWorld, worldDebugState } = await import('./runtime.js');
+    const acquire = acquireWorld(fakeParent(), fakeBus());
+
+    // The owner can unmount before the lazy Phaser import settles. That
+    // release must apply to the late lease rather than becoming a no-op.
+    releaseWorld();
+    await acquire;
+
+    expect(worldDebugState()).toEqual({ refCount: 0, alive: true });
+    await vi.runAllTimersAsync();
+    expect(worldDebugState()).toEqual({ refCount: 0, alive: false });
+  });
 });

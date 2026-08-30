@@ -46,6 +46,11 @@ interface WorldRuntime {
 let host: Host<WorldRuntime, WorldBinding> | null = null;
 let hostLoading: Promise<Host<WorldRuntime, WorldBinding>> | null = null;
 let activeBinding: WorldBinding | null = null;
+interface PendingAcquire {
+  cancelled: boolean;
+}
+
+const pendingAcquires: PendingAcquire[] = [];
 
 /**
  * Build the host lazily so `phaser` is only fetched when a world is actually
@@ -131,11 +136,27 @@ export async function acquireWorld(
   parent: HTMLElement,
   config: WorldConfig,
 ): Promise<Game> {
-  const h = await ensureHost();
+  const pendingAcquire: PendingAcquire = { cancelled: false };
+  pendingAcquires.push(pendingAcquire);
+  let h: Host<WorldRuntime, WorldBinding>;
+  try {
+    h = await ensureHost();
+  } catch (error) {
+    const failedIndex = pendingAcquires.indexOf(pendingAcquire);
+    if (failedIndex !== -1) pendingAcquires.splice(failedIndex, 1);
+    throw error;
+  }
+  const index = pendingAcquires.indexOf(pendingAcquire);
+  if (index !== -1) pendingAcquires.splice(index, 1);
   const binding = activeBinding && sameBinding(activeBinding, parent, config)
     ? activeBinding
     : { parent, config };
-  return h.acquire(binding).game;
+  const game = h.acquire(binding).game;
+  // A React owner may unmount while the lazy Phaser import is in flight. The
+  // matching release is recorded above and must retire this lease immediately
+  // after it is acquired, otherwise the late bootstrap leaks a live Game.
+  if (pendingAcquire.cancelled) h.release();
+  return game;
 }
 
 function createWorldMount(parent: HTMLElement): HTMLElement {
@@ -148,6 +169,11 @@ function createWorldMount(parent: HTMLElement): HTMLElement {
 
 /** Release it. Teardown is deferred, so a synchronous remount cancels it. */
 export function releaseWorld(): void {
+  const pendingAcquire = pendingAcquires.shift();
+  if (pendingAcquire) {
+    pendingAcquire.cancelled = true;
+    return;
+  }
   host?.release();
 }
 
