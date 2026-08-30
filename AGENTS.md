@@ -258,6 +258,25 @@ empty shell to fetchers, so a 200 there means nothing.
 
 ## 6. Findings log
 
+### 2026-08-30 — Route-door decisions are immutable snapshots
+
+`routeDoor()` and `buildingDoor()` returned a shared mutable `OPEN` object for
+every playable route. A consumer that changed the returned `open`, `reason` or
+`message` field could therefore alter later authorization and disclosure
+decisions for every route using that object. Locked decisions were also
+mutable, allowing a consumer to retain a forged door snapshot and present it
+as current state.
+
+Route decisions now freeze both the shared playable result and each newly
+created locked result. The route register remains the only source of admission;
+callers can inspect a decision but cannot rewrite it or poison later checks.
+
+*Verified:* a red-first public routes regression attempted to mutate playable
+and unknown-route decisions and then re-read them. The old shared result was
+mutable; the corrected results are frozen and preserve their original values.
+The focused routes suite passes 19/19. No browser, wallet, provider, RPC,
+proof, signature, funds or transaction was used.
+
 ### 2026-08-30 — Fixed-room station activation does not resume after teardown
 
 `createFixedRoomController.update()` suspended input and emitted

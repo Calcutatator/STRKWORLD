@@ -64,6 +64,18 @@ describe('route gate', () => {
     expect(routeDoor('vault.supply', [approvedDeviation]).open).toBe(true);
   });
 
+  it('returns immutable route decisions', () => {
+    const open = routeDoor('bank.shield');
+    const locked = routeDoor('not-a-route');
+
+    expect(Object.isFrozen(open)).toBe(true);
+    expect(Object.isFrozen(locked)).toBe(true);
+    expect(Reflect.set(open, 'open', false)).toBe(false);
+    expect(Reflect.set(locked, 'message', 'forged')).toBe(false);
+    expect(routeDoor('bank.shield')).toMatchObject({ open: true, reason: null, message: '' });
+    expect(routeDoor('not-a-route').message).toBe(COPY.locked.unknownRoute);
+  });
+
   it('returns the register disclosure verbatim, never a local paraphrase', () => {
     for (const entry of PRIVACY_REGISTER) {
       expect(routeDisclosure(entry.route)).toBe(entry.disclosure);

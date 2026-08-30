@@ -26,7 +26,7 @@ export interface DoorState {
   message: string;
 }
 
-const OPEN: DoorState = { open: true, reason: null, message: '' };
+const OPEN: DoorState = Object.freeze({ open: true, reason: null, message: '' });
 
 function locked(reason: LockReason): DoorState {
   const message =
@@ -37,7 +37,7 @@ function locked(reason: LockReason): DoorState {
         : reason === 'capability-unavailable'
           ? COPY.bridge.unavailable
         : COPY.locked.unknownRoute;
-  return { open: false, reason, message };
+  return Object.freeze({ open: false, reason, message });
 }
 
 export function findRoute(
