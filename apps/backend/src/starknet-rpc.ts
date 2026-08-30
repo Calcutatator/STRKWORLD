@@ -24,7 +24,7 @@ export class StarknetRpcPoolPort implements PoolRpcPort {
   private readonly fetcher: FetchLike;
 
   constructor(private readonly options: StarknetRpcOptions) {
-    this.fetcher = options.fetcher ?? fetch;
+    this.fetcher = options.fetcher ?? ((input, init) => globalThis.fetch(input, init));
   }
 
   async getPoolConfig(signal?: AbortSignal) {

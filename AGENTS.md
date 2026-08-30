@@ -258,6 +258,24 @@ empty shell to fetchers, so a 200 there means nothing.
 
 ## 6. Findings log
 
+### 2026-08-30 — Starknet RPC default fetch must retain its global receiver
+
+`StarknetRpcPoolPort` previously stored the ambient `fetch` function and later
+called it as a method of the port. Browser-compatible Fetch implementations
+may require `globalThis` as their receiver, so the default path threw
+`TypeError: Illegal invocation` before making any JSON-RPC request. The port
+now uses a small globalThis-bound wrapper for its default fetcher; explicitly
+injected fetchers retain their existing call behavior and receiver.
+
+*Verified:* a receiver-sensitive global fetch fake first rejected the default
+`getBlockNumber()` call before recording a request; after the wrapper it
+returned the fake JSON-RPC result and recorded exactly one request. A separate
+injected-fetcher regression preserves its URL, POST behavior, response mapping
+and existing port receiver. Focused adapter tests and the backend/workspace
+gates are recorded on the final candidate. No real network, wallet, provider,
+proof, signature, funds or transaction was used.
+
+
 ### 2026-08-30 — Bridge status quote envelopes fail closed before dereference
 
 The Bridge service treated the generated 1Click status type as runtime truth.
