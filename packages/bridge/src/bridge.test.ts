@@ -1497,6 +1497,46 @@ describe('bridge persistence', () => {
     }
   });
 
+  it.each([
+    ['depositTxHash', {}],
+    ['settlementTxHash', 42],
+    ['strkReceived', '7'],
+  ] as const)('ignores an inherited optional status field %s while retaining signed evidence', async (field, inheritedValue) => {
+    const client = new StubClient();
+    const service = new BridgeService({
+      client,
+      store: new MemoryBridgeStore(),
+      quoteVerifier: () => true,
+      now: () => NOW,
+    });
+    const record = await service.createManualDeposit({
+      source: SOURCE,
+      amountIn: 1_000_000n,
+      starknetRecipient: '0x123',
+      refundAddress: request.refundTo,
+    });
+    const encoded = serializeBridgeRecord(record);
+    const values = new Map<string, string>([['strkworld.bridge.inbound.v1', encoded]]);
+    const storage = {
+      getItem: (key: string) => values.get(key) ?? null,
+      setItem: (key: string, value: string) => { values.set(key, value); },
+      removeItem: (key: string) => { values.delete(key); },
+    };
+    const previous = Object.getOwnPropertyDescriptor(Object.prototype, field);
+    Object.defineProperty(Object.prototype, field, {
+      value: inheritedValue,
+      configurable: true,
+    });
+    try {
+      expect(deserializeBridgeRecord(encoded)).toEqual(record);
+      expect(new LocalBridgeStore(storage).load()).toEqual(record);
+      expect(values.has('strkworld.bridge.inbound.v1')).toBe(true);
+    } finally {
+      if (previous) Object.defineProperty(Object.prototype, field, previous);
+      else delete (Object.prototype as Record<string, unknown>)[field];
+    }
+  });
+
   it('does not silently delete old signed dispute evidence', () => {
     const store = new MemoryBridgeStore();
     const old = {

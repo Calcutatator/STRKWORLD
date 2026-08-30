@@ -80,10 +80,16 @@ function isBridgeStatus(value: unknown): value is BridgeStatus {
     value.message.length === 0 ||
     typeof value.pollingStopped !== 'boolean'
   ) return false;
-  if ('depositTxHash' in value && !isBoundedHash(value.depositTxHash)) return false;
-  if ('settlementTxHash' in value && !isBoundedHash(value.settlementTxHash)) return false;
   if (
-    'strkReceived' in value &&
+    Object.prototype.hasOwnProperty.call(value, 'depositTxHash') &&
+    !isBoundedHash(value.depositTxHash)
+  ) return false;
+  if (
+    Object.prototype.hasOwnProperty.call(value, 'settlementTxHash') &&
+    !isBoundedHash(value.settlementTxHash)
+  ) return false;
+  if (
+    Object.prototype.hasOwnProperty.call(value, 'strkReceived') &&
     (typeof value.strkReceived !== 'bigint' ||
       value.strkReceived < 0n ||
       value.strkReceived > MAX_PERSISTED_AMOUNT)
