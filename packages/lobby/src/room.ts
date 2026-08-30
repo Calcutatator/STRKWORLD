@@ -189,7 +189,14 @@ export class PresenceRoom extends Room<{ state: LobbyState }> {
 export function definePresenceRoom(
   config: PresenceRoomConfig,
 ): typeof PresenceRoom {
+  // Own the operator's resolved configuration at class-definition time. A
+  // room may be instantiated later by the matchmaker; retaining a mutable
+  // caller object would let an intervening edit change its wire authority.
+  const ownedConfig = Object.freeze({
+    ...config,
+    spriteKeys: Object.freeze([...config.spriteKeys]),
+  });
   return class ConfiguredPresenceRoom extends PresenceRoom {
-    protected override roomConfig = config;
+    protected override roomConfig = ownedConfig;
   };
 }
