@@ -27,12 +27,12 @@ export function visitLayerActions(
     'openMenu' | 'requestExit' | 'closeSurface' | 'dismissLocked'
   >,
 ) {
-  return {
+  return Object.freeze({
     onOpenMenu: () => controller.openMenu(),
     onRequestExit: () => controller.requestExit(),
     onCloseSurface: () => controller.closeSurface(),
     onDismissLocked: () => controller.dismissLocked(),
-  };
+  });
 }
 
 /** Production keyboard filter shared with the public lifecycle regression. */
