@@ -605,6 +605,10 @@ function ownPreparedBatch(
     retireInvalidPrepared(prepared);
     throw new PrivacyError('unknown', 'The wallet returned invalid prepared costs.');
   }
+  if (!Number.isSafeInteger(prepared.promptCount) || prepared.promptCount < 0) {
+    retireInvalidPrepared(prepared);
+    throw new PrivacyError('unknown', 'The wallet returned an invalid prepared prompt count.');
+  }
   const intents = Object.freeze(prepared.intents.map((intent) => Object.freeze({ ...intent })));
   const warnings = Object.freeze(prepared.warnings.map((warning) => Object.freeze({ ...warning })));
   let discarded = false;
