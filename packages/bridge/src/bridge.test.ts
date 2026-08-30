@@ -547,6 +547,27 @@ describe('BridgeService', () => {
     expect(store.load()).toBeNull();
   });
 
+  it.each(['amountOut', 'minAmountOut'] as const)('rejects a coercible signed quote %s before persistence', async (field) => {
+    const client = new StubClient();
+    const store = new MemoryBridgeStore();
+    client.getQuote = async () => ({
+      ...signedQuote,
+      quote: {
+        ...signedQuote.quote,
+        [field]: { length: 19, toString: () => '2000000000000000000' },
+      },
+    } as unknown as QuoteResponse);
+    const service = new BridgeService({ client, store, quoteVerifier: () => true, now: () => NOW });
+
+    await expect(service.createManualDeposit({
+      source: SOURCE,
+      amountIn: 1_000_000n,
+      starknetRecipient: '0x123',
+      refundAddress: request.refundTo,
+    })).rejects.toThrow('1Click returned invalid executable quote amounts.');
+    expect(store.load()).toBeNull();
+  });
+
   it.each([
     ['zero', '0'],
     ['negative', '-1'],

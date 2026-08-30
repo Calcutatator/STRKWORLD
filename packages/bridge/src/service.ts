@@ -425,6 +425,8 @@ function assertSignedQuote(
   }
   if (
     response.quote.amountIn !== input.amountIn.toString() ||
+    typeof response.quote.amountOut !== 'string' ||
+    typeof response.quote.minAmountOut !== 'string' ||
     !isBoundedPositiveDecimal(response.quote.amountOut) ||
     !isBoundedPositiveDecimal(response.quote.minAmountOut) ||
     BigInt(response.quote.minAmountOut) > BigInt(response.quote.amountOut) ||
