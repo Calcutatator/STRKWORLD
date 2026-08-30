@@ -315,6 +315,7 @@ export class WalletApiPrivacyOperations implements PrivacyOperations {
             onAccepted(result) { acceptedResult = readSubmissionResult(result); },
           });
           const accepted = readSubmissionResult(result);
+          assertMatchingAcceptedResult(acceptedResult, accepted);
           emitProgress(onProgress, { stage: 'done', message: 'Done' });
           return accepted;
         } catch (error) {
@@ -470,6 +471,7 @@ export class WalletApiPrivacyOperations implements PrivacyOperations {
             onAccepted(result) { acceptedResult = readSubmissionResult(result); },
           });
           const accepted = readSubmissionResult(result);
+          assertMatchingAcceptedResult(acceptedResult, accepted);
           emitProgress(onProgress, { stage: 'done', message: 'Done' });
           return accepted;
         } catch (error) {
@@ -795,6 +797,12 @@ function ownPolicy(policy: WalletRoutePolicy): WalletRoutePolicy {
     }),
     ...(policy.swap ? { swap: Object.freeze({ ...policy.swap }) } : {}),
   });
+}
+
+function assertMatchingAcceptedResult(accepted: TxResult | undefined, settled: TxResult): void {
+  if (accepted && accepted.transactionHash !== settled.transactionHash) {
+    throw new PrivacyError('unknown', 'The private service returned conflicting transaction receipts.');
+  }
 }
 
 function tokenFor(intent: Intent): string {

@@ -799,6 +799,21 @@ describe('Wallet API action routes', () => {
     expect(receipt).toEqual({ transactionHash: '0xsettled-private' });
   });
 
+  it('keeps the first accepted receipt when the settled result conflicts', async () => {
+    const { ops, gateway } = fixture();
+    vi.mocked(gateway.submit).mockImplementation(async (input) => {
+      input.onAccepted?.({ transactionHash: '0xaccepted' });
+      return { transactionHash: '0xdifferent' };
+    });
+    const batch = await ops.prepare([
+      { kind: 'transfer', token: TOKEN, amount: 20n, recipient: BOB },
+    ]);
+
+    await expect(batch.confirm({ feeCeiling: POOL_FEE + 2n })).resolves.toEqual({
+      transactionHash: '0xaccepted',
+    });
+  });
+
   it('does not let a throwing progress observer interrupt a financial operation', async () => {
     const { ops, gateway } = fixture();
     const batch = await ops.prepare([
