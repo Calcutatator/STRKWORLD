@@ -189,7 +189,7 @@ export function VisitLayerView({
       );
     }
     if (station.definition.view === 'exchange') {
-      return withControls(<ExchangePanel experience="station" onClose={onCloseSurface} />);
+      return withControls(<ExchangePanel experience="station" register={register} onClose={onCloseSurface} />);
     }
     if (station.definition.view === 'bridge') {
       return withControls(<BridgePanel experience="station" register={register} onClose={onCloseSurface} />);

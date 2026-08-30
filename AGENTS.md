@@ -1957,6 +1957,26 @@ tests, full World tests, World typecheck, invariants and diff checks are
 recorded on this candidate. No browser, wallet, provider, RPC, proof,
 signature, funds or transaction was used.
 
+### 2026-08-30 — Exchange panels use the admitted route authority
+
+`VisitLayer` admitted an Exchange station against its supplied route register,
+but `ExchangePanel` did not accept or forward that register when it created
+its owned machine. A custom composition could therefore pass the station gate
+with one route authority while the Exchange panel opened using the canonical
+global register.
+
+`ExchangePanel` now accepts the route register and gives it to the owned
+Exchange machine; the station wiring forwards the same register used for
+admission. Injected machines retain their own authority, and the canonical
+production register and financial handoff are unchanged.
+
+*Verified:* a red-first public Exchange render supplied a register that
+disabled `exchange.swap`; the old component rendered the balance form instead
+of the existing fail-closed door. The corrected component renders
+`unapproved-route` and no balance form. ExchangePanel and Visit tests pass;
+typecheck, build, invariants and diff hygiene pass. No browser, wallet,
+provider, RPC, proof, signature, funds or transaction was used.
+
 ### 2026-08-30 — Web route records reject accessor-backed fields
 
 The route resolver checked only whether each `RouteGrade` key was present as

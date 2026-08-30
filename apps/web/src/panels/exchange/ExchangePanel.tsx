@@ -1,6 +1,7 @@
 import { useEffect, useMemo } from 'react';
 import { COPY } from '../../copy.js';
 import { usePrivacy } from '../../privacy/PrivacyProvider.js';
+import { PRIVACY_REGISTER, type RouteGrade } from '../../privacy/register.js';
 import { useStore } from '../../store/use-store.js';
 import { ConfirmGate } from '../ConfirmGate.js';
 import { LockedNotice } from '../LockedRoom.js';
@@ -11,12 +12,13 @@ import { WalletAttentionCue, walletOperationAttention } from '../../wallet/Walle
 import { createPendingHudOwner } from '../pending-hud.js';
 
 /** Dedicated one-swap view; this deliberately has no batch/add vocabulary. */
-export function ExchangePanel({ onClose, panel: injected, experience = 'menu' }: { onClose: () => void; panel?: ExchangeMachine; experience?: 'menu' | 'station' }) {
+export function ExchangePanel({ onClose, panel: injected, experience = 'menu', register = PRIVACY_REGISTER }: { onClose: () => void; panel?: ExchangeMachine; experience?: 'menu' | 'station'; register?: readonly RouteGrade[] }) {
   const { operations, receipts, noteOperationError, shellBus, submissionUncertainty } = usePrivacy();
   const owned = useMemo(() => injected ? null : createExchangePanel({
     operations, receipts, onError: noteOperationError,
+    register,
     canStartFinancialAction: () => { const state = submissionUncertainty.store.getState(); return !state.active || state.acknowledged; },
-  }), [injected, operations, receipts, noteOperationError, submissionUncertainty]);
+  }), [injected, operations, receipts, noteOperationError, submissionUncertainty, register]);
   const panel = injected ?? owned!;
   const state = useStore(panel.store);
   const uncertainty = useStore(submissionUncertainty.store);
