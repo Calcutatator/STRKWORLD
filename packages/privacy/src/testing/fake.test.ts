@@ -21,6 +21,18 @@ function fresh(balance = 100n * 10n ** 18n) {
   });
 }
 
+describe('fake lifecycle configuration', () => {
+  it.each([
+    ['negative', -1],
+    ['fractional', 1.5],
+    ['unsafe', Number.MAX_SAFE_INTEGER + 1],
+    ['string', '1'],
+  ] as const)('rejects an invalid %s simulated latency', (_label, latencyMs) => {
+    expect(() => new FakePrivacyOperations({ latencyMs: latencyMs as never }))
+      .toThrow(/latency/i);
+  });
+});
+
 describe('the fee comes out of the balance being spent', () => {
   it('rejects a spend that cannot also cover the pool fee', async () => {
     // Exactly enough for the transfer, nothing left for the 6 STRK fee.

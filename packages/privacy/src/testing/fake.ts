@@ -137,7 +137,11 @@ export class FakePrivacyOperations implements PrivacyOperations {
       registration: 'registered',
       ...config.capability,
     };
-    this.latency = config.latencyMs ?? 0;
+    const latency = config.latencyMs ?? 0;
+    if (!Number.isSafeInteger(latency) || latency < 0) {
+      throw new PrivacyError('unknown', 'The fake latency must be a non-negative safe integer.');
+    }
+    this.latency = latency;
     this.configuredSwapReview = config.swapReview === undefined
       ? undefined
       : Object.freeze({ ...config.swapReview });
