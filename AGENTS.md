@@ -258,6 +258,30 @@ empty shell to fetchers, so a 200 there means nothing.
 
 ## 6. Findings log
 
+### 2026-08-30 — Wallet session guards synchronous subscription handoff
+
+`createWalletSession()` captured the connection account and chain before
+registering its Wallet Standard listener. A connection port is allowed to
+replay its current event synchronously from `subscribe()`, so an account
+replacement or account removal during registration was processed by the
+listener and then overwritten by the stale continuation. The session could
+therefore expose the old account with replacement operations, or reconnect an
+account that had already been removed.
+
+The handoff now rechecks `destroyed`, generation and connection ownership
+after `subscribe()` returns, then reads and validates a fresh snapshot before
+constructing or publishing initial operations. A stale continuation returns
+without disturbing replacement state; an already-retired port is destroyed
+once. This preserves the existing synchronous listener and Wallet API
+ownership boundary.
+
+*Verified:* red-first public regressions reproduced synchronous account
+replacement and synchronous account removal during subscription; both failed
+on the old continuation and pass with the post-subscribe ownership guard.
+Session tests, privacy gates, typechecks, invariants and diff hygiene are
+recorded on the candidate. No browser, wallet, provider, RPC, proof,
+signature, funds or transaction was used.*
+
 
 ## 6. Findings log
 

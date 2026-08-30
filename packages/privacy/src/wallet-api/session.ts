@@ -339,12 +339,23 @@ export function createWalletSession(
             publish('failed', null);
           }
         });
-        if (!sameFelt(next.chainId, expectedChainId)) {
+        // A WalletConnectionPort may replay an account/chain change while
+        // subscribe() is registering the listener. In that case the
+        // callback above has already advanced this session's authority and
+        // built the replacement state (or retired it); the continuation
+        // must not publish the stale pre-subscribe snapshot.
+        if (destroyed || attempt !== generation || connection !== connected) {
+          if (connection !== connected) connected.destroy();
+          return snapshot;
+        }
+        const current = connected.getSnapshot();
+        assertAddress(current.account);
+        if (!sameFelt(current.chainId, expectedChainId)) {
           publish('wrong-network', null);
           return snapshot;
         }
         operations = connected.createOperations(policy);
-        publish('connected', next.account);
+        publish('connected', current.account);
         return snapshot;
       } catch (error) {
         if (attemptedConnection && attemptedConnection !== connection) attemptedConnection.destroy();

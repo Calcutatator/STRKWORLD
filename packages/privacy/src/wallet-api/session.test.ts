@@ -686,6 +686,54 @@ describe('WalletSession', () => {
     expect(session.getSnapshot()).toMatchObject({ phase: 'connected', account: '0x222' });
   });
 
+  it('keeps a synchronous account replacement during subscribe as the session authority', async () => {
+    const selected = wallet('Ready');
+    const state = {
+      account: '0x111',
+      chainId: '0x534e5f4d41494e',
+      operations: operationsWithBatch(batch(), '0.10.3'),
+    };
+    const replacement = operationsWithBatch(batch(), '0.10.4');
+    const connected = synchronouslyChangingConnection(state, () => {
+      state.account = '0x222';
+      state.operations = replacement;
+    });
+    const session = createWalletSession(
+      denyAllOptions(),
+      { discovery: discoveryWith(selected), connectWallet: async () => connected },
+    );
+
+    await session.connect(session.getSnapshot().wallets[0]!.key);
+
+    expect(session.getSnapshot()).toMatchObject({ phase: 'connected', account: '0x222' });
+    await expect(session.operations.capability()).resolves.toMatchObject({ walletApiVersion: '0.10.4' });
+  });
+
+  it('does not reconnect a synchronously disconnected wallet after subscribe', async () => {
+    const selected = wallet('Ready');
+    const state = {
+      account: '0x111',
+      chainId: '0x534e5f4d41494e',
+      operations: new FakePrivacyOperations(),
+    };
+    const connected = synchronouslyChangingConnection(state, () => {
+      state.account = '';
+    });
+    const session = createWalletSession(
+      denyAllOptions(),
+      { discovery: discoveryWith(selected), connectWallet: async () => connected },
+    );
+
+    await session.connect(session.getSnapshot().wallets[0]!.key);
+
+    expect(session.getSnapshot()).toMatchObject({
+      phase: 'selection-required',
+      selectedKey: null,
+      account: null,
+    });
+    await expect(session.operations.capability()).rejects.toMatchObject({ kind: 'user-rejected' });
+  });
+
   it('keeps a wrong-network connection observable until it returns to mainnet', async () => {
     const selected = wallet('Ready');
     const connected = controllableConnection(
@@ -921,6 +969,25 @@ function controllableConnection(
       chainId = next;
       listeners.forEach((listener) => listener());
     },
+  };
+}
+
+function synchronouslyChangingConnection(
+  state: { account: string; chainId: string; operations: PrivacyOperations },
+  onSubscribe: () => void,
+): WalletConnectionPort {
+  const listeners = new Set<() => void>();
+  return {
+    getSnapshot: () => ({ account: state.account, chainId: state.chainId }),
+    createOperations: () => state.operations,
+    subscribe(listener) {
+      listeners.add(listener);
+      onSubscribe();
+      listener();
+      return () => listeners.delete(listener);
+    },
+    disconnect: async () => undefined,
+    destroy: () => undefined,
   };
 }
 
