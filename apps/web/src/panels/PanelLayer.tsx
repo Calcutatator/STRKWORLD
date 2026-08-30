@@ -75,20 +75,37 @@ export function PanelLayer({
     // mount; each `on` hands back its own unsubscribe and the cleanup calls
     // every one, so no subscription outlives the effect that made it and the
     // bus never accumulates a second copy of these handlers.
-    const stops = [
-      world.on('building:entered', (payload) =>
-        setActive((current) => nextActiveRoom(current, { name: 'building:entered', payload })),
-      ),
-      world.on('building:locked', (payload) =>
-        setActive((current) => nextActiveRoom(current, { name: 'building:locked', payload })),
-      ),
-      world.on('building:exited', (payload) =>
-        setActive((current) => nextActiveRoom(current, { name: 'building:exited', payload })),
-      ),
-    ];
-    return () => {
-      for (const stop of stops) stop();
+    const stops: Array<() => void> = [];
+    const stopWorld = () => {
+      let cleanupFailure: unknown;
+      for (const stop of stops.splice(0)) {
+        try {
+          stop();
+        } catch (error) {
+          cleanupFailure ??= error;
+        }
+      }
+      if (cleanupFailure) throw cleanupFailure;
     };
+    try {
+      stops.push(world.on('building:entered', (payload) =>
+        setActive((current) => nextActiveRoom(current, { name: 'building:entered', payload })),
+      ));
+      stops.push(world.on('building:locked', (payload) =>
+        setActive((current) => nextActiveRoom(current, { name: 'building:locked', payload })),
+      ));
+      stops.push(world.on('building:exited', (payload) =>
+        setActive((current) => nextActiveRoom(current, { name: 'building:exited', payload })),
+      ));
+      return stopWorld;
+    } catch (error) {
+      try {
+        stopWorld();
+      } catch {
+        // Preserve the listener registration error; cleanup is best effort.
+      }
+      throw error;
+    }
   }, [world]);
 
   if (!active) return null;

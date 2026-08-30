@@ -258,6 +258,26 @@ empty shell to fetchers, so a 200 there means nothing.
 
 ## 6. Findings log
 
+### 2026-08-30 — PanelLayer effect rolls back partial World listener setup
+
+`PanelLayer` previously acquired its three World listeners in one array
+expression. If a later `world.on()` call threw during React effect setup, the
+earlier handlers remained attached even though React received no cleanup
+function, so a failed remount could leave stale room updates subscribed to the
+World bus.
+
+The effect now owns listener registrations incrementally, rolls back every
+handler acquired before a failing registration, attempts all rollback
+callbacks even when one cleanup throws, preserves the original setup error,
+and makes normal cleanup idempotent. Room reduction, wallet gating and close
+behavior are unchanged.
+
+*Verified:* a red-first Web regression makes the third registration throw after
+attaching the first two and makes the first rollback throw; the corrected
+effect calls both rollback callbacks once and rethrows the original error.
+Focused PanelLayer tests pass 13/13. No browser, wallet, provider, RPC,
+proof, signature, funds or transaction was used.
+
 ### 2026-08-30 — Bridge persisted required fields must be own data
 
 `deserializeBridgeRecord()` previously read required root fields through

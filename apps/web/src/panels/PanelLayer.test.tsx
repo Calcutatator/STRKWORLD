@@ -1,10 +1,14 @@
+// @vitest-environment jsdom
+import { act } from 'react';
+import { createRoot } from 'react-dom/client';
 import { describe, expect, it, vi } from 'vitest';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { FakePrivacyOperations } from '@strkworld/privacy';
-import type { BuildingId } from '@strkworld/shared';
+import type { BuildingId, WorldEvents } from '@strkworld/shared';
 import { COPY } from '../copy.js';
 import { PrivacyProvider } from '../privacy/PrivacyProvider.js';
-import { ActiveRoomView, nextActiveRoom, type ActiveRoom } from './PanelLayer.js';
+import { createEventBus } from '../bus/event-bus.js';
+import { ActiveRoomView, nextActiveRoom, PanelLayer, type ActiveRoom } from './PanelLayer.js';
 import { BUILDING_PANELS } from './registry.js';
 
 const entered = (building: BuildingId) =>
@@ -140,5 +144,42 @@ describe('ActiveRoomView', () => {
         />,
       ),
     ).not.toThrow();
+  });
+});
+
+describe('PanelLayer lifecycle', () => {
+  it('rolls back world listeners when a later effect registration fails', () => {
+    const world = createEventBus<WorldEvents>();
+    const originalOn = world.on;
+    const stopCalls: Array<ReturnType<typeof vi.fn>> = [];
+    let registrations = 0;
+    const failure = new Error('world listener registration failed');
+    world.on = ((event, handler) => {
+      registrations += 1;
+      if (registrations === 3) throw failure;
+      const stop = originalOn(event, handler);
+      const trackedStop = vi.fn(stop);
+      if (stopCalls.length === 0) {
+        trackedStop.mockImplementation(() => {
+          stop();
+          throw new Error('listener cleanup failed');
+        });
+      }
+      stopCalls.push(trackedStop);
+      return trackedStop;
+    }) as typeof world.on;
+    const container = document.createElement('div');
+    const root = createRoot(container);
+
+    expect(() => act(() => {
+      root.render(
+        <PrivacyProvider operations={new FakePrivacyOperations()}>
+          <PanelLayer world={world} />
+        </PrivacyProvider>,
+      );
+    })).toThrow(failure);
+    expect(stopCalls).toHaveLength(2);
+    expect(stopCalls.every((stop) => stop.mock.calls.length === 1)).toBe(true);
+    root.unmount();
   });
 });
