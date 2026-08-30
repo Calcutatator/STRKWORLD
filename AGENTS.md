@@ -258,6 +258,26 @@ empty shell to fetchers, so a 200 there means nothing.
 
 ## 6. Findings log
 
+### 2026-08-30 — Relay fee authority is an owned exact snapshot
+
+Relay fee validation checked own data descriptors but then re-read the provider
+object normally and copied it with object spread. A hostile Proxy could expose
+safe descriptor values during validation, substitute recipient or authorization
+through `get`, or throw during inspection/spread, making the reviewed fee differ
+from the fee later proved and submitted.
+
+One exact five-field decoder now contains ownKeys/descriptor traps, validates
+descriptor values only and returns a frozen quote. Pool-native estimates and
+swap-plan fee ownership use that same snapshot; extra provider fields are
+rejected and proxy getters cannot substitute authority.
+
+*Verified:* public regressions were red for recipient/authorization
+substitution, descriptor and ownKeys traps, and an extra provider field. The
+focused Wallet API suite passes 183 tests and privacy typecheck. Full workspace
+verification is recorded with the owning commit. Deterministic fakes only: no
+browser, wallet, provider, RPC, proof, signature, funds or transaction was
+used.*
+
 ### 2026-08-30 — Pool-config proxy traps stay inside the provider boundary
 
 The owned pool-config decoder rejected accessors and extra fields, but its

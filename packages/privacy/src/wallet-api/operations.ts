@@ -223,7 +223,10 @@ export class WalletApiPrivacyOperations implements PrivacyOperations {
     });
     throwIfAborted(signal);
     this.validateSwapPlan(intent, config, rawPlan, swapPolicy.expectedChainId);
-    const plan = snapshotSwapPlan(rawPlan);
+    const plan = snapshotSwapPlan({
+      ...rawPlan,
+      fee: ownRelayFee(rawPlan.fee, config, this.policy.maxRelayFee),
+    });
     const protectedMinimum = protectedMinimumOut(plan.buyAmount, swapPolicy.slippageBps);
     if (protectedMinimum < intent.minAmountOut) {
       throw new PrivacyError(
@@ -365,7 +368,7 @@ export class WalletApiPrivacyOperations implements PrivacyOperations {
         throw new PrivacyError('unknown', 'The private swap contains malformed executor calls.');
       }
     }
-    this.validateRelayFee(plan.fee, config);
+    ownRelayFee(plan.fee, config, this.policy.maxRelayFee);
   }
 
   private readNow(): number {
@@ -508,29 +511,7 @@ export class WalletApiPrivacyOperations implements PrivacyOperations {
       signal,
     });
     throwIfAborted(signal);
-    this.validateRelayFee(fee, config);
-    return Object.freeze({ ...fee });
-  }
-
-  private validateRelayFee(fee: RelayFeeQuote, config: PoolConfig): void {
-    if (!hasOwnDataProperties(fee, ['token', 'recipient', 'amount', 'authorization', 'expiresAtBlock'])) {
-      throw new PrivacyError('unknown', 'The relay returned an invalid fee quote.');
-    }
-    if (!isFelt(fee.token) || !sameAddress(fee.token, config.feeToken)) {
-      throw new PrivacyError('unknown', 'The relay returned an unexpected fee token.');
-    }
-    assertAddress(fee.recipient, 'relay fee recipient');
-    if (typeof fee.amount !== 'bigint' || fee.amount <= 0n || fee.amount > this.policy.maxRelayFee) {
-      throw new PrivacyError('unknown', 'The relay fee exceeds the route policy.');
-    }
-    if (
-      typeof fee.authorization !== 'string'
-      || fee.authorization.trim().length === 0
-      || !Number.isSafeInteger(fee.expiresAtBlock)
-      || fee.expiresAtBlock <= 0
-    ) {
-      throw new PrivacyError('unknown', 'The relay returned no valid fee authorization.');
-    }
+    return ownRelayFee(fee, config, this.policy.maxRelayFee);
   }
 
   private async warningsFor(intents: readonly Intent[], signal?: AbortSignal): Promise<BatchWarning[]> {
@@ -832,8 +813,46 @@ function snapshotSwapPlan(plan: PreparedPrivateSwap): PreparedPrivateSwap {
     chainId: plan.chainId,
     executorAddress: plan.executorAddress,
     executorCalls: snapshotExecutorCalls(plan.executorCalls),
-    fee: Object.freeze({ ...plan.fee }),
+    fee: plan.fee,
   });
+}
+
+function ownRelayFee(value: unknown, config: PoolConfig, maxRelayFee: bigint): RelayFeeQuote {
+  let token: unknown;
+  let recipient: unknown;
+  let amount: unknown;
+  let authorization: unknown;
+  let expiresAtBlock: unknown;
+  try {
+    if (!value || typeof value !== 'object' || Array.isArray(value) || Reflect.ownKeys(value).length !== 5) {
+      throw new Error('invalid fee container');
+    }
+    const read = (key: PropertyKey): unknown => {
+      const descriptor = Object.getOwnPropertyDescriptor(value, key);
+      if (!descriptor || !('value' in descriptor)) throw new Error('missing fee data property');
+      return descriptor.value;
+    };
+    token = read('token');
+    recipient = read('recipient');
+    amount = read('amount');
+    authorization = read('authorization');
+    expiresAtBlock = read('expiresAtBlock');
+  } catch {
+    throw new PrivacyError('unknown', 'The relay returned an invalid fee quote.');
+  }
+  if (typeof token !== 'string' || !isFelt(token) || !sameAddress(token, config.feeToken)) {
+    throw new PrivacyError('unknown', 'The relay returned an unexpected fee token.');
+  }
+  if (typeof recipient !== 'string') throw new PrivacyError('unknown', 'Invalid relay fee recipient address.');
+  assertAddress(recipient, 'relay fee recipient');
+  if (typeof amount !== 'bigint' || amount <= 0n || amount > maxRelayFee) {
+    throw new PrivacyError('unknown', 'The relay fee exceeds the route policy.');
+  }
+  if (typeof authorization !== 'string' || authorization.trim().length === 0
+    || !Number.isSafeInteger(expiresAtBlock) || (expiresAtBlock as number) <= 0) {
+    throw new PrivacyError('unknown', 'The relay returned no valid fee authorization.');
+  }
+  return Object.freeze({ token, recipient, amount, authorization, expiresAtBlock: expiresAtBlock as number });
 }
 
 function tokenFor(intent: Intent): string {

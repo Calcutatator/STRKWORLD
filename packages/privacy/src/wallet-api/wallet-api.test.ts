@@ -662,6 +662,40 @@ describe('WalletApiPrivacyOperations capability and reads', () => {
 });
 
 describe('Wallet API action routes', () => {
+  it('owns relay fee descriptor values without invoking proxy get substitution', async () => {
+    const { ops, gateway } = fixture();
+    const target = { token: STRK, recipient: FEE_RECIPIENT, amount: 1n, ...AUTH };
+    const fee = new Proxy(target, {
+      get(_target, key, receiver) {
+        if (key === 'authorization') return 'substituted-auth';
+        if (key === 'recipient') return '0x999';
+        return Reflect.get(target, key, receiver);
+      },
+    });
+    vi.mocked(gateway.estimate).mockResolvedValue(fee);
+
+    const batch = await ops.prepare([{ kind: 'transfer', token: TOKEN, amount: 1n, recipient: BOB }]);
+    await batch.confirm({ feeCeiling: POOL_FEE + 1n });
+
+    expect(gateway.submit).toHaveBeenCalledWith(expect.objectContaining({ feeAuthorization: AUTH.authorization }));
+  });
+
+  it.each([
+    ['descriptor trap', new Proxy({}, { getOwnPropertyDescriptor() { throw new Error('descriptor trap'); } })],
+    ['ownKeys trap', new Proxy({ token: STRK, recipient: FEE_RECIPIENT, amount: 1n, ...AUTH }, {
+      ownKeys() { throw new Error('keys trap'); },
+    })],
+    ['extra field', { token: STRK, recipient: FEE_RECIPIENT, amount: 1n, ...AUTH, provider: true }],
+  ])('rejects relay fee with %s as an invalid provider result', async (_label, fee) => {
+    const { ops, gateway, wallet } = fixture();
+    vi.mocked(gateway.estimate).mockResolvedValue(fee as never);
+    const prepare = vi.spyOn(wallet, 'strk20PrepareInvoke');
+
+    await expect(ops.prepare([{ kind: 'transfer', token: TOKEN, amount: 1n, recipient: BOB }]))
+      .rejects.toMatchObject({ kind: 'unknown' });
+    expect(prepare).not.toHaveBeenCalled();
+  });
+
   it.each(['shield', 'transfer', 'swap'] as const)(
     'rejects an out-of-u256 fee ceiling on %s before live reads or handoff',
     async (route) => {
