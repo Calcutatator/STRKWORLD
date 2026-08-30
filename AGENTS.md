@@ -258,6 +258,29 @@ empty shell to fetchers, so a 200 there means nothing.
 
 ## 6. Findings log
 
+### 2026-08-30 — Fixed-room input restoration cannot resume a retired transition
+
+`createFixedRoomController.enter()` and `leave()` crossed the injected input
+gate's synchronous `resume()` callback without rechecking controller
+ownership. A gate callback that destroyed the controller could therefore still
+invoke the presentation `onEnter`/`onExit` callback; a callback that re-entered
+during exit could run the stale exit presentation as well. The controller's
+state was already changed, so the stale callback described a transition that
+no longer belonged to the active lifecycle.
+
+Both transitions now recheck that the controller is still live and still owns
+the expected room state immediately after input restoration. A retired or
+re-entered transition stops before presentation callbacks; ordinary entry and
+exit ordering is unchanged.
+
+*Verified:* red-first public fixed-room regressions make input `resume()`
+destroy the controller during entry and exit, and make it synchronously
+re-enter during exit. Before the guard, stale `onEnter`/`onExit` callbacks ran;
+after the guard, none runs for the retired turn. Removing either lifecycle
+guard fails its corresponding regression. The focused fixed-room suite and
+World package gates are recorded on the candidate. No browser, wallet,
+provider, RPC, proof, signature, funds or transaction was used.
+
 ### 2026-08-30 — Exchange pending state reaches the world HUD
 
 `ExchangePanel` drove private swap preparation and wallet submission without

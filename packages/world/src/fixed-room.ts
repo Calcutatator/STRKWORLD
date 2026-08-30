@@ -432,6 +432,10 @@ export function createFixedRoomController(
       approachArmed = previousApproachArmed;
       throw error;
     }
+    // Input restoration is an external synchronous boundary. It may retire
+    // this controller (or synchronously re-enter it) before presentation gets
+    // the continuation. Do not invoke an onExit callback for that stale turn.
+    if (destroyed || inRoom) return;
     try {
       options.onExit?.();
     } catch (error) {
@@ -476,6 +480,10 @@ export function createFixedRoomController(
         approachArmed = new Set(options.definition.stations.map((station) => station.station));
         throw error;
       }
+      // Input restoration is an external synchronous boundary. A callback
+      // can destroy the controller before presentation entry starts; retain
+      // the retired state and stop this stale continuation.
+      if (destroyed || !inRoom) return;
       try {
         options.onEnter?.();
       } catch (error) {

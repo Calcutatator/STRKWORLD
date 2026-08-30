@@ -911,6 +911,90 @@ describe('fixed room controller', () => {
     expect(events).toEqual([]);
   });
 
+  it('stops entry continuation when input resume destroys the controller', () => {
+    const out = bus<WorldEvents>();
+    const shell = bus<ShellEvents>();
+    let controller!: FixedRoomController;
+    const onEnter = vi.fn();
+    const resume = vi.fn(() => controller.destroy());
+    controller = createFixedRoomController({
+      definition: POST_OFFICE_ROOM_DEFINITION,
+      out,
+      in: shell,
+      input: { suspend: vi.fn(), resume },
+      onEnter,
+    });
+
+    controller.enter();
+
+    expect(controller.state.inRoom).toBe(false);
+    expect(onEnter).not.toHaveBeenCalled();
+    expect(resume).toHaveBeenCalledTimes(2);
+  });
+
+  it('stops exit continuation when input resume re-enters or destroys the controller', () => {
+    const out = bus<WorldEvents>();
+    const shell = bus<ShellEvents>();
+    let controller!: FixedRoomController;
+    let destroyOnResume = false;
+    const onExit = vi.fn();
+    const resume = vi.fn(() => {
+      if (destroyOnResume) controller.destroy();
+    });
+    controller = createFixedRoomController({
+      definition: POST_OFFICE_ROOM_DEFINITION,
+      out,
+      in: shell,
+      input: { suspend: vi.fn(), resume },
+      onExit,
+    });
+    controller.enter();
+    destroyOnResume = true;
+
+    controller.update({
+      x: POST_OFFICE_ROOM_DEFINITION.exit.x,
+      y: POST_OFFICE_ROOM_DEFINITION.exit.y,
+    });
+
+    expect(controller.state.inRoom).toBe(false);
+    expect(onExit).not.toHaveBeenCalled();
+    expect(resume).toHaveBeenCalledTimes(3);
+  });
+
+  it('stops exit continuation when input resume synchronously re-enters', () => {
+    const out = bus<WorldEvents>();
+    const shell = bus<ShellEvents>();
+    let controller!: FixedRoomController;
+    let reenterOnResume = false;
+    const onEnter = vi.fn();
+    const onExit = vi.fn();
+    const resume = vi.fn(() => {
+      if (reenterOnResume) {
+        reenterOnResume = false;
+        controller.enter();
+      }
+    });
+    controller = createFixedRoomController({
+      definition: POST_OFFICE_ROOM_DEFINITION,
+      out,
+      in: shell,
+      input: { suspend: vi.fn(), resume },
+      onEnter,
+      onExit,
+    });
+    controller.enter();
+    reenterOnResume = true;
+
+    controller.update({
+      x: POST_OFFICE_ROOM_DEFINITION.exit.x,
+      y: POST_OFFICE_ROOM_DEFINITION.exit.y,
+    });
+
+    expect(controller.state.inRoom).toBe(true);
+    expect(onEnter).toHaveBeenCalledTimes(2);
+    expect(onExit).not.toHaveBeenCalled();
+  });
+
   it('uses the Bridge building and station ids for admission, activation, and exit', () => {
     const h = harness(BRIDGE_ROOM_DEFINITION);
     h.controller.enter();
