@@ -246,6 +246,25 @@ describe('D-052 avatar visual catalog', () => {
     expect(target.setTexture).toHaveBeenLastCalledWith('avatar-1');
   });
 
+  it('does not commit local facing when a pose presentation fails', () => {
+    const target = Object.assign(fakeAvatarTarget(), {
+      body: { velocity: {}, setSize: vi.fn(), setOffset: vi.fn() },
+    });
+    const local = createLocalAvatarVisual(target as never);
+    const error = new Error('local pose presentation failed');
+    target.setTexture.mockImplementationOnce(() => { throw error; });
+
+    expect(() => local.update({ left: false, right: true, up: false, down: false }, false))
+      .toThrow(error);
+    expect(local.state.facing).toBe('down');
+
+    // A no-input retry must use the last successfully rendered facing rather
+    // than the failed turn kept in createLocalAvatarVisual's closure.
+    local.update({ left: false, right: false, up: false, down: false }, false);
+    expect(local.state.facing).toBe('down');
+    expect(target.setFrame).toHaveBeenLastCalledWith(0);
+  });
+
   it('owns local body, movement pose and selection as one StreetScene seam', () => {
     const target = Object.assign(fakeAvatarTarget(), {
       body: { velocity: {}, setSize: vi.fn(), setOffset: vi.fn() },

@@ -258,6 +258,26 @@ empty shell to fetchers, so a 200 there means nothing.
 
 ## 6. Findings log
 
+### 2026-08-30 — Failed local avatar poses must not advance facing state
+
+`createLocalAvatarVisual.update()` advanced its private movement-facing
+accumulator before asking the visual controller to present the pose. If a
+Phaser setter threw during that presentation, the controller correctly kept
+the last successful logical pose, but the local adapter retained the failed
+facing. A later no-input retry therefore rendered the failed turn even though
+the original update never committed.
+
+The adapter now commits its facing accumulator only after the visual
+presentation succeeds. Failed pose delivery leaves both the visual controller
+and movement-facing state on the last successful pose; successful movement,
+idle facing retention and sprite selection are unchanged.
+
+*Verified:* a red-first public World regression makes the first right-facing
+pose setter throw, then retries with no input. The old adapter rendered
+`right` on the retry; the corrected adapter remains `down`. Focused avatar
+visual tests pass 14 tests. No browser, lobby server, wallet, provider, RPC,
+proof, signature, funds or transaction was used.
+
 ### 2026-08-30 — Concurrent first World acquires must share lazy Phaser loading
 
 `runtime.ensureHost()` awaited the dynamic Phaser import before assigning the

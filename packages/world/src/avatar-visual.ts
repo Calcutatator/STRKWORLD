@@ -294,13 +294,18 @@ export function createLocalAvatarVisual(
       visual.select(sprite);
     },
     update(input, sprinting) {
-      facing = resolveMovementFacing(input, facing);
+      const nextFacing = resolveMovementFacing(input, facing);
       const velocity = calculateMovementVelocity(input, sprinting);
       visual.update({
-        facing,
+        facing: nextFacing,
         moving: velocity.x !== 0 || velocity.y !== 0,
         sprinting,
       });
+      // The visual controller is the commit point for the pose. Keep the
+      // movement-facing accumulator aligned with it only after presentation
+      // succeeds, so a Phaser setter failure cannot make a later no-input
+      // retry inherit a turn that never rendered.
+      facing = nextFacing;
     },
   };
 }
