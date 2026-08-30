@@ -100,6 +100,10 @@ export function reconcileRemotePeers(
   _previous?: ReadonlyMap<string, RemotePeerSnapshot>,
 ): ReadonlyMap<string, RemotePeerSnapshot> {
   const peers = new Map<string, RemotePeerSnapshot>();
+  // The source is a public composition seam. A malformed producer can cross
+  // it at runtime despite the TypeScript array type; treat that as an
+  // authoritative empty snapshot instead of taking down the render loop.
+  if (!Array.isArray(snapshot)) return peers;
   for (const candidate of snapshot) {
     const peer = validateRemotePeer(candidate);
     if (peer !== null) peers.set(peer.id, peer);
