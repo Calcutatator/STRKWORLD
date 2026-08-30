@@ -24,9 +24,24 @@ export function startProductionWalletBootstrap({
     owned = null;
     destroyQuietly(session);
   };
-  hot?.dispose(dispose);
+  try {
+    hot?.dispose(dispose);
+  } catch {
+    dispose();
+    reportFailure(failure);
+    return dispose;
+  }
 
-  void load().then(
+  let loading: Promise<WalletSession>;
+  try {
+    loading = Promise.resolve(load());
+  } catch {
+    dispose();
+    reportFailure(failure);
+    return dispose;
+  }
+
+  void loading.then(
     (session) => {
       if (retired) {
         destroyQuietly(session);

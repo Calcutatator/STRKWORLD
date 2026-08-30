@@ -278,6 +278,26 @@ corrected source observes x=40 then x=80 and still throws the original error.
 Removing queued-drain continuation restores the failure. No browser, lobby,
 wallet, provider, RPC, proof, signature, funds or transaction was used.
 
+### 2026-08-30 — Production bootstrap contains synchronous lifecycle failures
+
+The production bootstrap assumed both HMR disposal registration and the
+loader would return without throwing. A synchronous `hot.dispose()` or loader
+failure therefore escaped before the controlled failure surface; thenable
+assimilation was not explicit either.
+
+Bootstrap setup now treats disposal registration as an admission boundary and
+fails closed without starting the loader if registration fails. Loader
+invocation is normalized through `Promise.resolve` and synchronous throws are
+routed to the contained failure reporter. Existing late-load retirement,
+render ownership and fallback behavior remain unchanged.
+
+*Verified:* red-first public regressions made HMR registration and loader
+setup throw; the old bootstrap leaked both exceptions, while the corrected
+path reports each once and performs no load after failed HMR setup. Focused
+bootstrap tests pass 6 tests; workspace gates are recorded on the candidate.
+No browser, wallet, provider, RPC, proof, signature, funds or transaction was
+used.
+
 ### 2026-08-30 — Remote avatar errors do not discard newer queued state
 
 The remote-avatar render queue preserved reentrant ordering, but its outer

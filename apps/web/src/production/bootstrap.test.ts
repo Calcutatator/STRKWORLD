@@ -97,4 +97,28 @@ describe('production wallet bootstrap', () => {
     expect(loaded.destroy).toHaveBeenCalledOnce();
     expect(failure).not.toHaveBeenCalled();
   });
+
+  it('contains a loader that throws before returning a promise', async () => {
+    const failure = vi.fn();
+    expect(() => startProductionWalletBootstrap({
+      load: () => { throw new Error('loader failed synchronously'); },
+      render: vi.fn(),
+      failure,
+    })).not.toThrow();
+    await Promise.resolve();
+    expect(failure).toHaveBeenCalledOnce();
+  });
+
+  it('fails closed when hot disposal registration throws', () => {
+    const failure = vi.fn();
+    const load = vi.fn(async () => session());
+    expect(() => startProductionWalletBootstrap({
+      load,
+      render: vi.fn(),
+      failure,
+      hot: { dispose: () => { throw new Error('hot registration failed'); } },
+    })).not.toThrow();
+    expect(failure).toHaveBeenCalledOnce();
+    expect(load).not.toHaveBeenCalled();
+  });
 });
