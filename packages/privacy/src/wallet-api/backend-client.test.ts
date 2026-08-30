@@ -30,6 +30,13 @@ function inheritResponseField(key: string, value: unknown): () => void {
 }
 
 describe('BackendPrivacyClient', () => {
+  it('rejects a blank backend base URL before dispatching transport', () => {
+    const fetcher = vi.fn(async () => response({}));
+
+    expect(() => new BackendPrivacyClient('   ', fetcher)).toThrow(/URL/i);
+    expect(fetcher).not.toHaveBeenCalled();
+  });
+
   it('rejects a non-string base URL before dispatching transport', () => {
     const fetcher = vi.fn(async () => response({}));
 

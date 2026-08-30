@@ -20,7 +20,7 @@ export class BackendPrivacyClient implements PoolReadClient, PrivateSubmissionGa
     baseUrl: string,
     fetcher?: FetchLike,
   ) {
-    if (typeof baseUrl !== 'string') {
+    if (typeof baseUrl !== 'string' || baseUrl.trim().length === 0) {
       throw new PrivacyError('unknown', 'The private service URL is invalid.');
     }
     this.baseUrl = baseUrl;
