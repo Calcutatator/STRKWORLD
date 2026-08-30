@@ -228,6 +228,33 @@ describe('remote avatar layer', () => {
     expect(fake.objects[0]?.x).toBe(80);
   });
 
+  it('does not resurrect retained peers when shutdown destroys during rendering', () => {
+    const fake = fakeScene();
+    let shutdown!: () => void;
+    fake.scene.events.once.mockImplementation((_event, callback) => {
+      shutdown = callback;
+    });
+    const source: RemotePeerSource = {
+      subscribe(listener) {
+        listener([peer()]);
+        return () => undefined;
+      },
+    };
+    const addSprite = fake.scene.add.sprite;
+    fake.scene.add.sprite.mockImplementationOnce((x, y, texture, frame) => {
+      const sprite = addSprite(x, y, texture, frame);
+      sprite.setPosition.mockImplementationOnce(() => {
+        shutdown();
+        return sprite;
+      });
+      return sprite;
+    });
+
+    const layer = createRemoteAvatarLayer({ scene: fake.scene as never, source });
+
+    expect(layer.peers).toEqual(new Map());
+  });
+
   it('retains a new avatar when its first presentation throws, then recovers', () => {
     const sourceController = createRemotePeerSource();
     const fake = fakeScene();

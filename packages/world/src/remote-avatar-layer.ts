@@ -147,6 +147,7 @@ export function createRemoteAvatarLayer({
       if (previous === undefined) rendered.delete(id);
       else rendered.set(id, previous);
     }
+    if (destroyed) return;
     peers = rendered;
 
     if (errors.length === 1) throw errors[0];

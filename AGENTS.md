@@ -276,6 +276,25 @@ suite passes 170 tests and privacy typecheck. Full workspace verification is
 recorded with the owning commit. Deterministic fakes only: no browser, wallet,
 provider, RPC, proof, signature, funds or transaction was used.*
 
+### 2026-08-30 — Remote avatar teardown cannot resurrect its retained peer map
+
+`createRemoteAvatarLayer.render()` could continue after a synchronous Scene
+shutdown destroyed the layer during sprite presentation. Cleanup correctly
+cleared `peers`, but the in-flight render then assigned its already-built
+snapshot afterward, making the destroyed layer report live remote peers until
+another callback (which teardown had correctly made inert) arrived.
+
+The render now checks teardown ownership immediately before committing its
+retained map. A shutdown during presentation leaves the public layer empty and
+does not resurrect stale World state; ordinary rendering, reentrant queueing,
+and cleanup error behavior remain unchanged.
+
+*Verified:* a red-first public World fake triggered shutdown from the initial
+sprite position setter; the old layer retained one peer after destruction,
+while the corrected layer retains an empty map. Removing the post-render
+destroy guard restores the failure. No browser, lobby, wallet, provider, RPC,
+proof, signature, funds or transaction was used.
+
 ### 2026-08-30 — Pool and combined fees remain inside u256
 
 Pool configuration accepted any nonnegative bigint fee. A provider value at
