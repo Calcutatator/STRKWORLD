@@ -32,6 +32,32 @@ describe('street movement seam', () => {
     expect(resolveMovementFacing(idle, 'right')).toBe('right');
   });
 
+  it('isolates movement payloads from synchronous listener mutation', () => {
+    const seen: Array<{ position: { x: number; y: number }; facing: string }> = [];
+    const listeners = [
+      (payload: { position: { x: number; y: number }; facing: string }) => {
+        expect(Reflect.set(payload.position, 'x', 999)).toBe(false);
+      },
+      (payload: { position: { x: number; y: number }; facing: string }) => {
+        seen.push(payload);
+      },
+    ];
+    const out = {
+      emit: (_event: keyof WorldEvents, payload: { position: { x: number; y: number }; facing: string }) => {
+        for (const listener of listeners) listener(payload);
+      },
+    };
+    const reporter = createStreetMovementReporter(out as never);
+    const position = { x: 784, y: 496 };
+
+    reporter.initial(position);
+
+    expect(seen).toEqual([{ position: { x: 784, y: 496 }, facing: 'down' }]);
+    expect(Object.isFrozen(seen[0])).toBe(true);
+    expect(Object.isFrozen(seen[0]?.position)).toBe(true);
+    expect(position).toEqual({ x: 784, y: 496 });
+  });
+
   it.each([
     ['right', { x: 160, y: 0 }, { x: 16, y: 0 }],
     ['left', { x: -160, y: 0 }, { x: -16, y: 0 }],

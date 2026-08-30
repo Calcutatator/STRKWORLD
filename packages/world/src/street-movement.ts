@@ -164,7 +164,12 @@ export function createStreetMovementReporter(
   let facing: Facing = 'down';
 
   const publish = (position: Position): void => {
-    out.emit('player:moved', { position, facing });
+    // The shell may have several synchronous listeners. Do not let one of
+    // them rewrite the caller's position or the payload observed by another.
+    out.emit('player:moved', Object.freeze({
+      position: Object.freeze({ ...position }),
+      facing,
+    }));
   };
 
   return {
