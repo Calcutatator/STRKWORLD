@@ -145,6 +145,44 @@ async function fee(api: BackendApi, route = 'transfer') {
 }
 
 describe('strict fee authorization', () => {
+  it('rejects a missing own request version even when the prototype supplies one', async () => {
+    const { api, rpc } = fixture();
+    const readConfig = vi.spyOn(rpc, 'getPoolConfig');
+    const previous = Object.getOwnPropertyDescriptor(Object.prototype, 'v');
+    Object.defineProperty(Object.prototype, 'v', { value: 1, configurable: true });
+    try {
+      await expect(api.handle({
+        method: 'POST',
+        path: '/v1/rpc/pool-config',
+        body: {},
+      })).resolves.toMatchObject({ status: 400 });
+      expect(readConfig).not.toHaveBeenCalled();
+    } finally {
+      if (previous) Object.defineProperty(Object.prototype, 'v', previous);
+      else delete (Object.prototype as Record<string, unknown>).v;
+    }
+  });
+
+  it('rejects a missing own fee route even when the prototype supplies one', async () => {
+    const { api, paymaster, rpc } = fixture();
+    const buildFee = vi.spyOn(paymaster, 'buildFee');
+    const readConfig = vi.spyOn(rpc, 'getPoolConfig');
+    const previous = Object.getOwnPropertyDescriptor(Object.prototype, 'route');
+    Object.defineProperty(Object.prototype, 'route', { value: 'transfer', configurable: true });
+    try {
+      await expect(api.handle({
+        method: 'POST',
+        path: '/v1/private/fees',
+        body: { v: 1, feeToken: STRK, operationToken: '0xabc' },
+      })).resolves.toMatchObject({ status: 400 });
+      expect(buildFee).not.toHaveBeenCalled();
+      expect(readConfig).not.toHaveBeenCalled();
+    } finally {
+      if (previous) Object.defineProperty(Object.prototype, 'route', previous);
+      else delete (Object.prototype as Record<string, unknown>).route;
+    }
+  });
+
   it('validates the paymaster fee and returns a stateless authorization', async () => {
     const { api } = fixture();
     await expect(fee(api)).resolves.toMatchObject({

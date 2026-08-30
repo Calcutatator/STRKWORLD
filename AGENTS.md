@@ -261,6 +261,27 @@ empty shell to fetchers, so a 200 there means nothing.
 
 ## 6. Findings log
 
+### 2026-08-30 — Backend request records require own required fields
+
+The Backend request-record helper treated its field list only as an
+allowlist. Required values were read through normal prototype lookup, so a
+polluted `Object.prototype.v = 1` made an otherwise empty pool-config request
+pass version validation and reach the RPC. The same gap applied to route,
+artifact and nested request fields.
+
+`requireRecord()` now requires every listed field to be an own property as
+well as rejecting unknown own fields. This keeps omitted request data from
+being supplied by inherited properties and preserves the existing strict
+route/artifact schemas.
+
+*Verified:* red-first public regressions polluted `Object.prototype.v` for an
+empty pool-config request and `Object.prototype.route` for a fee request with
+the route omitted; both previously returned `200` and reached an external
+port. After the fix both return `400`, with zero RPC or paymaster calls.
+Backend tests pass 162 tests; package typecheck, invariants and diff hygiene
+pass. No browser, provider, RPC, wallet, proof, signature, funds or
+transaction was used.*
+
 ### 2026-08-30 — Bridge status optional fields ignore inherited properties
 
 Bridge persistence validated optional status fields with the `in` operator.
