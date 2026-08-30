@@ -11,6 +11,26 @@ describe('event bus', () => {
     expect(handler).toHaveBeenCalledWith({ building: 'bank' });
   });
 
+  it('publishes an immutable payload snapshot to every subscriber', () => {
+    const bus = createEventBus<WorldEvents>();
+    const original = { position: { x: 1, y: 2 }, facing: 'right' } as const;
+    let observed!: WorldEvents['player:moved'];
+    bus.on('player:moved', (payload) => {
+      Reflect.set(payload.position, 'x', 99);
+      Reflect.set(payload, 'facing', 'up');
+    });
+    bus.on('player:moved', (payload) => {
+      observed = payload;
+    });
+
+    bus.emit('player:moved', original);
+
+    expect(original).toEqual({ position: { x: 1, y: 2 }, facing: 'right' });
+    expect(observed).toEqual(original);
+    expect(Object.isFrozen(observed)).toBe(true);
+    expect(Object.isFrozen(observed.position)).toBe(true);
+  });
+
   it('returns an unsubscribe function from on()', () => {
     const bus = createEventBus<WorldEvents>();
     const handler = vi.fn();
