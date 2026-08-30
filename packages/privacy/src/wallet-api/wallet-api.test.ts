@@ -586,6 +586,36 @@ describe('Wallet API action routes', () => {
     expect(gateway.submit).toHaveBeenCalledTimes(1);
   });
 
+  it('publishes an immutable private receipt after confirmation', async () => {
+    const { ops } = fixture();
+    const batch = await ops.prepare([
+      { kind: 'transfer', token: TOKEN, amount: 20n, recipient: BOB },
+    ]);
+
+    const receipt = await batch.confirm({ feeCeiling: POOL_FEE + 2n });
+
+    expect(Object.isFrozen(receipt)).toBe(true);
+    expect(Reflect.set(receipt, 'transactionHash', '0xforged')).toBe(false);
+    expect(receipt).toEqual({ transactionHash: '0xprivate' });
+  });
+
+  it('keeps an accepted private receipt immutable when response cleanup fails', async () => {
+    const { ops, gateway } = fixture();
+    vi.mocked(gateway.submit).mockImplementation(async (input) => {
+      input.onAccepted?.({ transactionHash: '0xsettled-private' });
+      throw new Error('response stream failed after acceptance');
+    });
+    const batch = await ops.prepare([
+      { kind: 'transfer', token: TOKEN, amount: 20n, recipient: BOB },
+    ]);
+
+    const receipt = await batch.confirm({ feeCeiling: POOL_FEE + 2n });
+
+    expect(Object.isFrozen(receipt)).toBe(true);
+    expect(Reflect.set(receipt, 'transactionHash', '0xforged')).toBe(false);
+    expect(receipt).toEqual({ transactionHash: '0xsettled-private' });
+  });
+
   it('does not let a throwing progress observer interrupt a financial operation', async () => {
     const { ops, gateway } = fixture();
     const batch = await ops.prepare([

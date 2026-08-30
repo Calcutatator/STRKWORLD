@@ -772,7 +772,9 @@ function readWalletTransactionHash(value: unknown): string {
 }
 
 function readSubmissionResult(value: unknown): TxResult {
-  return { transactionHash: readTransactionHash(value, 'transactionHash', 'private service') };
+  return Object.freeze({
+    transactionHash: readTransactionHash(value, 'transactionHash', 'private service'),
+  });
 }
 
 function readTransactionHash(value: unknown, field: string, source: string): string {
