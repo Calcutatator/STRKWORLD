@@ -363,7 +363,16 @@ export function createAvatarStudioController(
       if (destroyed || inRoom) return;
       inRoom = true;
       highlightedFigure = null;
-      options.onEnter?.();
+      try {
+        options.onEnter?.();
+      } catch (error) {
+        // Presentation entry is an external lifecycle boundary. If it fails,
+        // do not leave the controller claiming a Studio it cannot operate; a
+        // later explicit enter can retry the same presentation transition.
+        inRoom = false;
+        highlightedFigure = null;
+        throw error;
+      }
       if (destroyed || !inRoom) return;
       publish();
       options.out.emit('avatar-studio:entered', {});

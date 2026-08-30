@@ -21,6 +21,22 @@ import { createStreetMap, tileToWorld } from './map/street.js';
 type Emitted = { [K in keyof WorldEvents]: { event: K; payload: WorldEvents[K] } }[keyof WorldEvents];
 
 describe('hidden Avatar Studio', () => {
+  it('rolls back studio ownership when enter presentation fails', () => {
+    const out: Pick<EventBus<WorldEvents>, 'emit'> = { emit: vi.fn() };
+    const selection = createAvatarOutfitSelection({ out });
+    const error = new Error('studio presentation failed');
+    const onEnter = vi.fn().mockImplementationOnce(() => { throw error; });
+    const controller = createAvatarStudioController({ out, selection, onEnter });
+
+    expect(() => controller.enter()).toThrow(error);
+    expect(controller.state.inRoom).toBe(false);
+    expect(controller.state.highlightedFigure).toBeNull();
+
+    expect(() => controller.enter()).not.toThrow();
+    expect(controller.state.inRoom).toBe(true);
+    expect(onEnter).toHaveBeenCalledTimes(2);
+  });
+
   it('owns injected presentation geometry after construction', () => {
     const studioBounds = { x: 64, y: 64, width: 576, height: 384 };
     const studioSpawn = { x: 368, y: 112 };
