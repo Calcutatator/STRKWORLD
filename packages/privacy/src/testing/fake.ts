@@ -261,13 +261,13 @@ export class FakePrivacyOperations implements PrivacyOperations {
     const keys = requestedTokens?.length
       ? requestedTokens
       : [...new Set([...this.spendable.keys(), ...this.maturing.map((n) => n.token)])];
-    return keys.map((token) => {
+    return Object.freeze(keys.map((token) => {
       const spendable = this.spendable.get(token) ?? 0n;
       const maturing = this.maturing
         .filter((n) => sameAddress(n.token, token))
         .reduce((sum, n) => sum + n.amount, 0n);
-      return { token, spendable, maturing, total: spendable + maturing, maturityKnown: true };
-    });
+      return Object.freeze({ token, spendable, maturing, total: spendable + maturing, maturityKnown: true });
+    })) as PrivateBalance[];
   }
 
   async recipientStatus(address: Address, signal?: AbortSignal): Promise<RecipientStatus> {

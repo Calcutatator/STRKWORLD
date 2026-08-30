@@ -601,6 +601,16 @@ describe('published pool configuration ownership', () => {
 });
 
 describe('balance query ownership', () => {
+  it('publishes immutable simulated balance snapshots', async () => {
+    const ops = fresh();
+
+    const balances = await ops.balances([STRK]);
+
+    expect(Object.isFrozen(balances)).toBe(true);
+    expect(balances.every(Object.isFrozen)).toBe(true);
+    expect(Reflect.set(balances[0]!, 'total', 0n)).toBe(false);
+  });
+
   it('snapshots requested tokens before the fake latency boundary', async () => {
     const ops = new FakePrivacyOperations({
       balances: { [STRK]: 100n, ['0x1234']: 50n },
