@@ -50,9 +50,16 @@ function isKind(value: unknown): value is PrivacyErrorKind {
  */
 export function toFailure(error: unknown): ShellFailure {
   if (typeof error === 'object' && error !== null) {
-    const candidate = error as { kind?: unknown };
-    if (isKind(candidate.kind)) {
-      return { kind: candidate.kind, cause: error };
+    try {
+      const descriptor = Object.getOwnPropertyDescriptor(error, 'kind');
+      // Error values can cross a provider or package boundary. Read only an
+      // own data field: inherited/accessor values are not trustworthy, and a
+      // throwing getter must not escape the sanitizing classifier.
+      if (descriptor && 'value' in descriptor && isKind(descriptor.value)) {
+        return { kind: descriptor.value, cause: error };
+      }
+    } catch {
+      // Hostile proxies and descriptor traps are unknown failures too.
     }
   }
   return { kind: 'unknown', cause: error };

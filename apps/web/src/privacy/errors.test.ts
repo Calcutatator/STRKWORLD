@@ -23,6 +23,22 @@ describe('failure classification', () => {
     expect(toFailure({ kind: 'something-else' }).kind).toBe('unknown');
   });
 
+  it('fails closed for accessor-backed and inherited kinds', () => {
+    let reads = 0;
+    const accessor = Object.defineProperty({}, 'kind', {
+      configurable: true,
+      get() {
+        reads += 1;
+        throw new Error('kind getter should not run');
+      },
+    });
+    const inherited = Object.create({ kind: 'not-registered' });
+
+    expect(toFailure(accessor).kind).toBe('unknown');
+    expect(toFailure(inherited).kind).toBe('unknown');
+    expect(reads).toBe(0);
+  });
+
   it('is idempotent, because a failure is reclassified as it is handed on', () => {
     // A panel classifies, then the connect flow classifies the same failure
     // again on its way to a room. A second pass must not degrade it.
