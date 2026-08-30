@@ -306,6 +306,32 @@ describe('WalletApiPrivacyOperations capability and reads', () => {
     await expect(ops.poolConfig()).rejects.toMatchObject({ kind: 'unknown' });
   });
 
+  it.each([
+    ['descriptor trap', new Proxy({}, { getOwnPropertyDescriptor() { throw new Error('descriptor trap'); } })],
+    ['ownKeys trap', new Proxy({
+      feeAmount: POOL_FEE, feeToken: STRK, proofValidityBlocks: 450, noteMaturityBlocks: 10,
+    }, { ownKeys() { throw new Error('own keys trap'); } })],
+  ])('contains a pool config %s as an invalid provider result', async (_label, response) => {
+    const { ops, pool } = fixture();
+    vi.spyOn(pool, 'config').mockResolvedValue(response as never);
+
+    await expect(ops.poolConfig()).rejects.toMatchObject({ kind: 'unknown' });
+  });
+
+  it.each([
+    ['extra string field', {
+      feeAmount: POOL_FEE, feeToken: STRK, proofValidityBlocks: 450, noteMaturityBlocks: 10, extra: true,
+    }],
+    ['extra symbol field', Object.assign({
+      feeAmount: POOL_FEE, feeToken: STRK, proofValidityBlocks: 450, noteMaturityBlocks: 10,
+    }, { [Symbol('provider')]: true })],
+  ])('rejects pool config with an %s', async (_label, response) => {
+    const { ops, pool } = fixture();
+    vi.spyOn(pool, 'config').mockResolvedValue(response as never);
+
+    await expect(ops.poolConfig()).rejects.toMatchObject({ kind: 'unknown' });
+  });
+
   it.each(['shield', 'transfer', 'swap'] as const)(
     'rejects malformed live %s config before confirmation authority',
     async (route) => {

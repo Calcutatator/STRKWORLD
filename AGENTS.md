@@ -258,6 +258,27 @@ empty shell to fetchers, so a 200 there means nothing.
 
 ## 6. Findings log
 
+### 2026-08-30 — Pool-config proxy traps stay inside the provider boundary
+
+The owned pool-config decoder rejected accessors and extra fields, but its
+descriptor and own-key inspection could itself throw on a hostile Proxy. Those
+raw trap errors were then mapped as a network outage rather than an invalid
+provider result.
+
+Decoder inspection now runs inside one contained block, reads only own data
+descriptor values into locals, and converts every inspection trap into the
+existing `unknown` invalid-configuration error. Exact key counting includes
+string and symbol fields, so provider metadata cannot cross the snapshot; no
+ordinary getter is invoked.
+
+*Verified:* public regressions were red for descriptor and ownKeys traps and
+green after containment. Extra string/symbol fields, inherited/accessor fields,
+valid frozen snapshots and all live confirmation consumers remain covered.
+The focused Wallet API suite passes 179 tests and privacy typecheck. Full
+workspace verification is recorded with the owning commit. Deterministic fakes
+only: no browser, wallet, provider, RPC, proof, signature, funds or transaction
+was used.*
+
 ### 2026-08-30 — Remote peer sources retain queued state after listener errors
 
 `createRemotePeerSource()` queued reentrant publications while a listener was

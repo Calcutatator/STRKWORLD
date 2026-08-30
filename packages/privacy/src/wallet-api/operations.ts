@@ -886,30 +886,45 @@ function assertAddress(address: string, label: string): void {
 }
 
 function ownPoolConfig(value: unknown): PoolConfig {
-  if (!hasOwnDataProperties(value, ['feeAmount', 'feeToken', 'proofValidityBlocks', 'noteMaturityBlocks'])) {
+  let feeAmount: unknown;
+  let feeToken: unknown;
+  let proofValidityBlocks: unknown;
+  let noteMaturityBlocks: unknown;
+  try {
+    if (!value || typeof value !== 'object' || Array.isArray(value) || Reflect.ownKeys(value).length !== 4) {
+      throw new Error('invalid config container');
+    }
+    const read = (key: PropertyKey): unknown => {
+      const descriptor = Object.getOwnPropertyDescriptor(value, key);
+      if (!descriptor || !('value' in descriptor)) throw new Error('missing data property');
+      return descriptor.value;
+    };
+    feeAmount = read('feeAmount');
+    feeToken = read('feeToken');
+    proofValidityBlocks = read('proofValidityBlocks');
+    noteMaturityBlocks = read('noteMaturityBlocks');
+  } catch {
     throw new PrivacyError('unknown', 'The pool returned an invalid configuration.');
   }
-  const config = value as PoolConfig;
   if (
-    Reflect.ownKeys(config).length !== 4
-    || typeof config.feeAmount !== 'bigint'
-    || config.feeAmount < 0n
-    || config.feeAmount > MAX_UINT256
-    || typeof config.feeToken !== 'string'
-    || !isFelt(config.feeToken)
-    || BigInt(config.feeToken) === 0n
-    || !Number.isSafeInteger(config.proofValidityBlocks)
-    || config.proofValidityBlocks <= 0
-    || !Number.isSafeInteger(config.noteMaturityBlocks)
-    || config.noteMaturityBlocks < 0
+    typeof feeAmount !== 'bigint'
+    || feeAmount < 0n
+    || feeAmount > MAX_UINT256
+    || typeof feeToken !== 'string'
+    || !isFelt(feeToken)
+    || BigInt(feeToken) === 0n
+    || !Number.isSafeInteger(proofValidityBlocks)
+    || (proofValidityBlocks as number) <= 0
+    || !Number.isSafeInteger(noteMaturityBlocks)
+    || (noteMaturityBlocks as number) < 0
   ) {
     throw new PrivacyError('unknown', 'The pool returned an invalid configuration.');
   }
   return Object.freeze({
-    feeAmount: config.feeAmount,
-    feeToken: config.feeToken,
-    proofValidityBlocks: config.proofValidityBlocks,
-    noteMaturityBlocks: config.noteMaturityBlocks,
+    feeAmount,
+    feeToken,
+    proofValidityBlocks: proofValidityBlocks as number,
+    noteMaturityBlocks: noteMaturityBlocks as number,
   });
 }
 
