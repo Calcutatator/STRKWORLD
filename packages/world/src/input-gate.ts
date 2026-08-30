@@ -47,63 +47,83 @@ export interface InputGate {
 
 export function createInputGate(keyboard: KeyboardLike): InputGate {
   let suspended = false;
-  let suspending = false;
+  let requestedSuspended = false;
+  let transitioning = false;
+
+  const suspendKeyboard = (): void => {
+    let captureDisabled = false;
+    let deliveryDisabled = false;
+    // Order is load-bearing.
+    try {
+      keyboard.disableGlobalCapture(); // stop swallowing keystrokes
+      captureDisabled = true;
+      keyboard.enabled = false; // stop delivering them to the game
+      deliveryDisabled = true;
+      keyboard.resetKeys(); // drop anything currently held
+      suspended = true;
+    } catch (error) {
+      // If the handoff reached either disabling step, cleanup must own the
+      // partially suspended keyboard. Otherwise resume() would no-op while
+      // Phaser delivery remained disabled after a reset/assignment failure.
+      if (captureDisabled || deliveryDisabled) suspended = true;
+      throw error;
+    }
+  };
+
+  const resumeKeyboard = (): void => {
+    // Clear first: a key pressed while suspended must not arrive as held.
+    keyboard.resetKeys();
+    try {
+      keyboard.enabled = true;
+      keyboard.enableGlobalCapture();
+    } catch (error) {
+      // Re-capture is an external lifecycle boundary. If it fails after
+      // delivery was re-enabled, immediately fail closed so a panel cannot
+      // remain open while gameplay starts receiving its keystrokes. Keep the
+      // suspended flag set so a later resume can retry the handoff.
+      try {
+        keyboard.enabled = false;
+      } catch {
+        // Preserve the original capture error.
+      }
+      try {
+        keyboard.disableGlobalCapture();
+      } catch {
+        // Preserve the original capture error.
+      }
+      throw error;
+    }
+    // Retire the suspended state only after every restoration step succeeds.
+    // A failing keyboard operation remains retryable by Scene teardown.
+    suspended = false;
+  };
+
+  const drain = (): void => {
+    // Keyboard methods are synchronous but can synchronously call back into
+    // this gate. The callback records the newer desired state; the active
+    // handoff remains responsible for its current keyboard step, and this
+    // loop applies the newest request after that step has committed.
+    if (transitioning) return;
+    transitioning = true;
+    try {
+      while (suspended !== requestedSuspended) {
+        if (requestedSuspended) suspendKeyboard();
+        else resumeKeyboard();
+      }
+    } finally {
+      transitioning = false;
+    }
+  };
 
   return {
     suspend() {
-      if (suspended || suspending) return;
-      // Keep the transition in-flight until every keyboard operation succeeds.
-      // A Phaser callback or adapter can throw synchronously; leaving the gate
-      // marked suspended would make all later retries silently no-op.
-      suspending = true;
-      let captureDisabled = false;
-      let deliveryDisabled = false;
-      // Order is load-bearing.
-      try {
-        keyboard.disableGlobalCapture(); // stop swallowing keystrokes
-        captureDisabled = true;
-        keyboard.enabled = false; // stop delivering them to the game
-        deliveryDisabled = true;
-        keyboard.resetKeys(); // drop anything currently held
-        suspended = true;
-      } catch (error) {
-        // If the handoff reached either disabling step, cleanup must own the
-        // partially suspended keyboard. Otherwise resume() would no-op while
-        // Phaser delivery remained disabled after a reset/assignment failure.
-        if (captureDisabled || deliveryDisabled) suspended = true;
-        throw error;
-      } finally {
-        suspending = false;
-      }
+      requestedSuspended = true;
+      drain();
     },
 
     resume() {
-      if (!suspended) return;
-      // Clear first: a key pressed while suspended must not arrive as held.
-      keyboard.resetKeys();
-      try {
-        keyboard.enabled = true;
-        keyboard.enableGlobalCapture();
-      } catch (error) {
-        // Re-capture is an external lifecycle boundary. If it fails after
-        // delivery was re-enabled, immediately fail closed so a panel cannot
-        // remain open while gameplay starts receiving its keystrokes. Keep the
-        // suspended flag set so a later resume can retry the handoff.
-        try {
-          keyboard.enabled = false;
-        } catch {
-          // Preserve the original capture error.
-        }
-        try {
-          keyboard.disableGlobalCapture();
-        } catch {
-          // Preserve the original capture error.
-        }
-        throw error;
-      }
-      // Retire the suspended state only after every restoration step succeeds.
-      // A failing keyboard operation remains retryable by Scene teardown.
-      suspended = false;
+      requestedSuspended = false;
+      drain();
     },
 
     get suspended() {

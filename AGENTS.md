@@ -258,6 +258,31 @@ empty shell to fetchers, so a 200 there means nothing.
 
 ## 6. Findings log
 
+### 2026-08-30 — Input-gate handoffs must honor reentrant desired state
+
+`createInputGate()` ignored a `resume()` called synchronously during a suspend
+handoff because the gate was not marked suspended until all three keyboard
+mutations completed. The inverse `suspend()` during resume was likewise lost
+while the gate still reported suspended. A Phaser keyboard operation or setter
+is an external synchronous boundary, so the newer lifecycle request must not
+disappear; otherwise the gate can finish in the opposite state from the latest
+room/panel authority.
+
+The gate now records the latest requested state and drains it after the active
+handoff commits. It preserves the existing capture/delivery/key ordering,
+partial-failure rollback and retry semantics, while serializing nested requests
+without recursive keyboard mutation.
+
+*Verified:* red-first public World regressions request resume from each suspend
+mutation and suspend from each resume mutation; the old gate finishes in the
+wrong state, while the corrected gate reaches the latest requested state. The
+focused input-gate suite passes 22 tests; the World suite passes 25 files and
+412 tests; workspace typechecks, production build, 13 invariants and diff
+hygiene pass. The full workspace run is green for 106 files and 2,398 tests;
+the remaining 8 failures are existing local Vite-path and launcher timeout
+environment failures outside World. No browser, lobby service, wallet,
+provider, RPC, proof, signature, funds or transaction was used.
+
 ### 2026-08-30 — Fly retires private requests after public disconnects
 
 The Fly HTTP proxy destroyed its private-child request when the incoming body
