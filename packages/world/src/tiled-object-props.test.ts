@@ -67,4 +67,13 @@ describe('flattenProperties', () => {
     ];
     expect(flattenProperties(raw)).toEqual({ building: 'post-office' });
   });
+
+  it('does not let prototype-sensitive names inject a building property', () => {
+    const flat = flattenProperties([
+      { name: '__proto__', type: 'object', value: { building: 'bank' } },
+    ]);
+
+    expect(flat['building']).toBeUndefined();
+    expect(Object.getPrototypeOf(flat)).toBeNull();
+  });
 });

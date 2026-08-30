@@ -65,7 +65,10 @@ export interface TiledObject {
  * bad property in a hand-edited map cannot take down the whole layer.
  */
 export function flattenProperties(properties?: TiledProperty[]): Record<string, unknown> {
-  const flat: Record<string, unknown> = {};
+  // Tiled property names are data, not trusted object keys. A null prototype
+  // keeps `__proto__` from changing the record's inheritance and prevents a
+  // polluted ambient prototype from supplying a missing property later.
+  const flat: Record<string, unknown> = Object.create(null) as Record<string, unknown>;
   if (!Array.isArray(properties)) return flat;
   for (const prop of properties) {
     if (prop && typeof prop.name === 'string') {
