@@ -258,6 +258,29 @@ empty shell to fetchers, so a 200 there means nothing.
 
 ## 6. Findings log
 
+### 2026-08-30 — Fly retires private requests after public disconnects
+
+The Fly HTTP proxy destroyed its private-child request when the incoming body
+was aborted, but not when a public client disconnected after completing its
+upload while the child response was still pending. The abandoned private
+request could therefore continue consuming child and queue resources even
+though no browser remained to receive the result.
+
+The edge now owns both halves of the proxy lifecycle: an incomplete public
+response close destroys the corresponding private request, while a normally
+finished public response leaves the completed upstream untouched. Routing,
+header projection, response bodies and submission semantics are unchanged.
+
+*Verified:* a deterministic raw-socket regression completes an API upload,
+waits until a private-child fake owns the request, then disconnects the public
+client. The base left the child response open; the corrected edge closes it.
+Focused Fly verification passes 4 files / 145 tests. All workspace typechecks,
+the production build, 13 invariants, tilemap gate and diff hygiene pass. The
+full workspace test run reaches 108 files / 2,406 passing tests, while six Web
+suites fail to load because this isolated worktree's shared Vite dependency
+denies asset paths from the separate live checkout. No browser, external
+provider, RPC, wallet, proof, signature, funds or transaction was used.*
+
 ### 2026-08-30 — Wallet discovery display snapshots must bypass hostile reads
 
 `WalletSession` validated discovered wallet `name` and `icon` descriptors but
