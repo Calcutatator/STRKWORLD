@@ -226,6 +226,28 @@ describe('WalletApiPrivacyOperations capability and reads', () => {
     expect(reads).toBe(0);
   });
 
+  it('owns the balance result array without invoking element or length proxy reads', async () => {
+    const { ops, wallet } = fixture();
+    const source = [{ token: TOKEN, balance: '0x64' }];
+    const reads: PropertyKey[] = [];
+    const balances = new Proxy(source, {
+      get(target, key, receiver) {
+        reads.push(key);
+        if (key === '0') return { token: TOKEN, balance: '0x32' };
+        return Reflect.get(target, key, receiver);
+      },
+    });
+    vi.spyOn(wallet, 'strk20Balances').mockResolvedValue(balances);
+
+    await expect(ops.balances([TOKEN])).resolves.toEqual([
+      { token: TOKEN, total: 100n, spendable: 0n, maturing: 0n, maturityKnown: false },
+    ]);
+    // Promise resolution performs the language-mandated thenable probe before
+    // this method receives the wallet result. The decoder itself must perform
+    // no length or indexed reads.
+    expect(reads).toEqual(['then']);
+  });
+
   it.each([
     ['null', null],
     ['missing transaction hash', {}],

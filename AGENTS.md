@@ -258,6 +258,29 @@ empty shell to fetchers, so a 200 there means nothing.
 
 ## 6. Findings log
 
+### 2026-08-30 — Wallet balance result arrays are owned before decoding
+
+Balance entry fields were descriptor-owned, but the wallet's result array was
+still traversed with `Array.prototype.map`. A stateful proxy could substitute
+an indexed entry or array length through ordinary reads before the entry
+decoder ran, so the immutable published snapshot could describe a value absent
+from the wallet result's own descriptors. Sparse arrays and extra array or
+entry fields were also not an exact provider shape.
+
+The balance decoder now owns the array length and every indexed element from
+data-property descriptors, rejects holes and extra array keys, and requires
+each entry to contain exactly the two owned fields `token` and `balance`.
+Duplicate numeric tokens, requested-token correlation, felt validation and
+frozen publication are unchanged and run only over the owned values.
+
+*Verified:* a public Wallet API regression supplies an array proxy whose own
+index descriptor contains balance `0x64` while an ordinary index read returns
+`0x32`. The base published total 50; the corrected decoder publishes total 100
+without reading the provider's length or index. Focused Wallet API verification
+passes 191 tests and privacy typecheck passes. Full workspace gates are
+recorded in the owning commit. Deterministic fakes only: no browser, external
+provider, RPC, wallet, proof, signature, funds or transaction was used.*
+
 ### 2026-08-30 — Wallet balances publish descriptor-owned values
 
 The balance decoder checked that wallet entries exposed own data properties,

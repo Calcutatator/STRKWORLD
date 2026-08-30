@@ -106,14 +106,17 @@ export class WalletApiPrivacyOperations implements PrivacyOperations {
     try {
       const balances = await this.wallet.strk20Balances(requestedTokens);
       throwIfAborted(signal);
-      if (!Array.isArray(balances)) {
-        throw new PrivacyError('unknown', 'The wallet returned an invalid balance response.');
-      }
       const seenTokens = new Set<bigint>();
-      const published = balances.map((entry) => {
+      const published: PrivateBalance[] = [];
+      const entries = ownArrayElements(balances, 'balance response');
+      for (const entry of entries) {
         let token: unknown;
         let balance: unknown;
         try {
+          if (!entry || typeof entry !== 'object' || Array.isArray(entry)) {
+            throw new Error('invalid balance entry');
+          }
+          if (Reflect.ownKeys(entry).length !== 2) throw new Error('invalid balance shape');
           const tokenDescriptor = Object.getOwnPropertyDescriptor(entry, 'token');
           const balanceDescriptor = Object.getOwnPropertyDescriptor(entry, 'balance');
           if (
@@ -144,14 +147,14 @@ export class WalletApiPrivacyOperations implements PrivacyOperations {
         if (total < 0n) {
           throw new PrivacyError('unknown', 'The wallet returned an invalid balance.');
         }
-        return Object.freeze({
+        published.push(Object.freeze({
           token,
           total,
           spendable: 0n,
           maturing: 0n,
           maturityKnown: false,
-        });
-      });
+        }));
+      }
       return Object.freeze(published) as PrivateBalance[];
     } catch (error) {
       throw mapWalletError(error);
@@ -531,6 +534,31 @@ export class WalletApiPrivacyOperations implements PrivacyOperations {
       }
     }
     return warnings;
+  }
+}
+
+function ownArrayElements(value: unknown, label: string): readonly unknown[] {
+  try {
+    if (!Array.isArray(value)) throw new Error(`invalid ${label} container`);
+    const lengthDescriptor = Object.getOwnPropertyDescriptor(value, 'length');
+    if (
+      !lengthDescriptor
+      || !('value' in lengthDescriptor)
+      || !Number.isSafeInteger(lengthDescriptor.value)
+      || lengthDescriptor.value < 0
+      || Reflect.ownKeys(value).length !== lengthDescriptor.value + 1
+    ) {
+      throw new Error(`invalid ${label} shape`);
+    }
+    const owned: unknown[] = [];
+    for (let index = 0; index < lengthDescriptor.value; index += 1) {
+      const descriptor = Object.getOwnPropertyDescriptor(value, String(index));
+      if (!descriptor || !('value' in descriptor)) throw new Error(`missing ${label} item`);
+      owned.push(descriptor.value);
+    }
+    return Object.freeze(owned);
+  } catch {
+    throw new PrivacyError('unknown', `The wallet returned an invalid ${label}.`);
   }
 }
 
