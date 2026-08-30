@@ -9,6 +9,7 @@ import type {
 
 type FetchLike = (input: string, init?: RequestInit) => Promise<Response>;
 const STARK_FIELD_PRIME = (1n << 251n) + 17n * (1n << 192n) + 1n;
+const MAX_UINT256 = (1n << 256n) - 1n;
 
 /** Browser client for the narrow, no-logging backend API. */
 export class BackendPrivacyClient implements PoolReadClient, PrivateSubmissionGateway {
@@ -32,7 +33,7 @@ export class BackendPrivacyClient implements PoolReadClient, PrivateSubmissionGa
     throwIfAborted(signal);
     const record = asRecord(value);
     return {
-      feeAmount: BigInt(asString(ownField(record, 'feeAmount'))),
+      feeAmount: asUint256(ownField(record, 'feeAmount')),
       feeToken: asString(ownField(record, 'feeToken')),
       proofValidityBlocks: asInteger(ownField(record, 'proofValidityBlocks')),
       noteMaturityBlocks: asInteger(ownField(record, 'noteMaturityBlocks')),
@@ -198,6 +199,20 @@ function ownField(record: Record<string, unknown>, key: string): unknown {
     throw new PrivacyError('unknown', 'The private service returned an invalid response.');
   }
   return descriptor.value;
+}
+
+function asUint256(value: unknown): bigint {
+  const text = asString(value);
+  let parsed: bigint;
+  try {
+    parsed = BigInt(text);
+  } catch {
+    throw new PrivacyError('unknown', 'The private service returned an invalid response.');
+  }
+  if (parsed < 0n || parsed > MAX_UINT256) {
+    throw new PrivacyError('unknown', 'The private service returned an invalid response.');
+  }
+  return parsed;
 }
 
 function asString(value: unknown): string {

@@ -261,6 +261,26 @@ empty shell to fetchers, so a 200 there means nothing.
 
 ## 6. Findings log
 
+### 2026-08-30 — Browser pool fees require uint256 bounds
+
+`BackendPrivacyClient.config()` converted the backend's decimal `feeAmount`
+with `BigInt()` alone. Negative values and values above the pool's `u256`
+fee domain therefore crossed the browser privacy seam as valid
+`PoolConfig` data. Downstream fee-ceiling logic only imposed an upper bound,
+so a negative fee could appear in review and pass the pre-wallet check.
+
+Config parsing now requires `0 <= feeAmount <= 2^256 - 1`; zero remains valid
+for governance-configured fees and the maximum value remains representable.
+Malformed strings and out-of-range values use the existing generic invalid
+response error. Other response amounts and schemas are unchanged.
+
+*Verified:* red-first public regressions cover zero, maximum uint256, negative
+and `2^256` fee values; the two invalid cases resolved before the guard and
+now reject. The focused BackendPrivacyClient suite passes 31 tests; the full
+Privacy suite passes 9 files / 209 tests, with package typecheck, invariants
+and diff hygiene green. No browser, external provider, RPC, wallet, proof,
+signature, funds or transaction was used.*
+
 ### 2026-08-30 — Paymaster fee recipients require a nonzero felt
 
 `BackendApi.fee()` and swap preparation validated the paymaster's returned fee

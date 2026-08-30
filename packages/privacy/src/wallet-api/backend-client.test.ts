@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { BackendPrivacyClient } from './backend-client.js';
 
 const STARK_FIELD_PRIME = (1n << 251n) + 17n * (1n << 192n) + 1n;
+const MAX_UINT256 = (1n << 256n) - 1n;
 
 function response(body: unknown, status = 200): Response {
   return new Response(JSON.stringify(body), {
@@ -113,6 +114,24 @@ describe('BackendPrivacyClient', () => {
 
     await expect(client.config()).rejects.toMatchObject({ kind: 'unknown' });
     expect(getterCalled).toBe(false);
+  });
+
+  it.each([
+    ['zero', '0', true],
+    ['maximum uint256', MAX_UINT256.toString(), true],
+    ['negative', '-1', false],
+    ['above uint256', (MAX_UINT256 + 1n).toString(), false],
+  ])('validates the pool fee amount as a uint256 (%s)', async (_label, feeAmount, valid) => {
+    const client = new BackendPrivacyClient(
+      'https://backend.example',
+      async () => response({ feeAmount, feeToken: '0x4718', proofValidityBlocks: 450, noteMaturityBlocks: 10 }),
+    );
+
+    if (valid) {
+      await expect(client.config()).resolves.toMatchObject({ feeAmount: BigInt(feeAmount) });
+    } else {
+      await expect(client.config()).rejects.toMatchObject({ kind: 'unknown' });
+    }
   });
 
   it('rejects a public key supplied only by the object prototype', async () => {
