@@ -114,9 +114,56 @@ describe('Avatar Studio final figure layer', () => {
       }
     },
   );
+
+  it('preserves the construction error while attempting every partial teardown', () => {
+    const fake = fakeScene({ failHighlightDepth: true, failSpriteDestroyAt: 1 });
+
+    expect(() =>
+      createAvatarStudioFigureLayer({
+        scene: fake.scene as never,
+        roomOrigin: { x: 64, y: 64 },
+      }),
+    ).toThrow('construction failed');
+
+    for (const sprite of fake.sprites) expect(sprite.destroy).toHaveBeenCalledTimes(1);
+    expect(fake.highlight.destroy).toHaveBeenCalledTimes(1);
+  });
+
+  it('attempts every normal teardown and remains idempotent after one failure', () => {
+    const fake = fakeScene({ failSpriteDestroyAt: 1 });
+    const layer = createAvatarStudioFigureLayer({
+      scene: fake.scene as never,
+      roomOrigin: { x: 64, y: 64 },
+    });
+
+    expect(() => layer.destroy()).toThrow('sprite destroy failed');
+    for (const sprite of fake.sprites) expect(sprite.destroy).toHaveBeenCalledTimes(1);
+    expect(fake.highlight.destroy).toHaveBeenCalledTimes(1);
+
+    layer.destroy();
+    for (const sprite of fake.sprites) expect(sprite.destroy).toHaveBeenCalledTimes(1);
+    expect(fake.highlight.destroy).toHaveBeenCalledTimes(1);
+  });
+
+  it('aggregates multiple normal teardown failures after all attempts', () => {
+    const fake = fakeScene({ failSpriteDestroyAt: 1, failHighlightDestroy: true });
+    const layer = createAvatarStudioFigureLayer({
+      scene: fake.scene as never,
+      roomOrigin: { x: 64, y: 64 },
+    });
+
+    expect(() => layer.destroy()).toThrow(AggregateError);
+    for (const sprite of fake.sprites) expect(sprite.destroy).toHaveBeenCalledTimes(1);
+    expect(fake.highlight.destroy).toHaveBeenCalledTimes(1);
+  });
 });
 
-function fakeScene(options: { failSpriteAt?: number; failHighlightDepth?: boolean } = {}) {
+function fakeScene(options: {
+  failSpriteAt?: number;
+  failSpriteDestroyAt?: number;
+  failHighlightDepth?: boolean;
+  failHighlightDestroy?: boolean;
+} = {}) {
   const sprites: Array<ReturnType<typeof fakeSprite>> = [];
   let spriteCount = 0;
   const highlight = fakeHighlight(options.failHighlightDepth === true);
@@ -126,12 +173,22 @@ function fakeScene(options: { failSpriteAt?: number; failHighlightDepth?: boolea
         spriteCount += 1;
         if (spriteCount === options.failSpriteAt) throw new Error('construction failed');
         const sprite = fakeSprite(x, y, texture, frame);
+        if (spriteCount === options.failSpriteDestroyAt) {
+          sprite.destroy.mockImplementationOnce(() => {
+            throw new Error('sprite destroy failed');
+          });
+        }
         sprites.push(sprite);
         return sprite;
       }),
       rectangle: vi.fn(() => highlight),
     },
   };
+  if (options.failHighlightDestroy) {
+    highlight.destroy.mockImplementationOnce(() => {
+      throw new Error('highlight destroy failed');
+    });
+  }
   return { scene, sprites, highlight };
 }
 

@@ -60,9 +60,10 @@ export function createAvatarStudioFigureLayer(options: {
     highlight.setDepth(2);
     highlight.setVisible(false);
   } catch (error) {
-    for (const sprite of sprites.values()) sprite.destroy();
+    // Construction failures must preserve the original error, but a secondary
+    // teardown failure must not strand any other object created before it.
+    destroyOwned(sprites.values(), highlight);
     sprites.clear();
-    highlight?.destroy();
     throw error;
   }
 
@@ -89,9 +90,36 @@ export function createAvatarStudioFigureLayer(options: {
     destroy(): void {
       if (destroyed) return;
       destroyed = true;
-      for (const sprite of sprites.values()) sprite.destroy();
+      const errors = destroyOwned(sprites.values(), ownedHighlight);
       sprites.clear();
-      ownedHighlight.destroy();
+      throwCleanupErrors(errors);
     },
   };
+}
+
+function destroyOwned(
+  sprites: Iterable<Sprite>,
+  highlight: PhaserTypes.GameObjects.Rectangle | undefined,
+): unknown[] {
+  const errors: unknown[] = [];
+  for (const sprite of sprites) {
+    try {
+      sprite.destroy();
+    } catch (error) {
+      errors.push(error);
+    }
+  }
+  if (highlight) {
+    try {
+      highlight.destroy();
+    } catch (error) {
+      errors.push(error);
+    }
+  }
+  return errors;
+}
+
+function throwCleanupErrors(errors: readonly unknown[]): void {
+  if (errors.length === 1) throw errors[0];
+  if (errors.length > 1) throw new AggregateError(errors, 'Avatar Studio figure cleanup failed');
 }

@@ -356,6 +356,26 @@ identity subset, timestamps and `amountIn`. It returned any decoded `status`,
 
 ## 6. Findings log
 
+### 2026-08-30 — Avatar Studio figure teardown must attempt every object
+
+`createAvatarStudioFigureLayer()` previously stopped at the first throwing
+sprite destructor during construction-failure cleanup or normal `destroy()`.
+That could mask the original construction error and leave later figure sprites
+or the highlight alive; after `destroy()` set its retired flag, a later call
+could not recover those objects. This is a World-owned presentation boundary,
+so one Phaser object failure must not strand the rest of the layer.
+
+Both paths now attempt every owned sprite and the highlight. Construction
+preserves and rethrows its original error, while normal destruction rethrows a
+single cleanup error unchanged or combines multiple failures in an
+`AggregateError`; repeated destruction remains idempotent.
+
+*Verified:* public regressions cover a throwing partial-construction destructor,
+single-error normal teardown and multiple-error normal teardown. Every owned
+object is attempted in each case, the original construction error remains
+primary, and the focused Avatar Studio figure suite passes 8 tests. No browser,
+wallet, provider, RPC, proof, signature, funds or transaction was used.
+
 ### 2026-08-30 — Remote avatar teardown must survive unsubscribe errors
 
 `createRemoteAvatarLayer().destroy()` previously marked the layer destroyed and
