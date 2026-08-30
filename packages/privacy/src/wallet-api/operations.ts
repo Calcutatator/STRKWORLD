@@ -928,8 +928,8 @@ function assertFeeCeiling(actual: bigint, ceiling: bigint): void {
 }
 
 function assertFeeCeilingInput(ceiling: unknown): asserts ceiling is bigint {
-  if (typeof ceiling !== 'bigint' || ceiling < 0n) {
-    throw new PrivacyError('unknown', 'The fee ceiling must be a non-negative bigint.');
+  if (typeof ceiling !== 'bigint' || ceiling < 0n || ceiling > MAX_UINT256) {
+    throw new PrivacyError('unknown', 'The fee ceiling must be a u256 bigint.');
   }
 }
 

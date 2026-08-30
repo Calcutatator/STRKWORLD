@@ -258,6 +258,24 @@ empty shell to fetchers, so a 200 there means nothing.
 
 ## 6. Findings log
 
+### 2026-08-30 — Confirmation fee ceilings are u256-bounded authority
+
+Confirmation accepted any nonnegative bigint fee ceiling. A value above
+`u256::MAX` could therefore cross the review boundary and effectively disable
+the ceiling even though every actual fee and total is u256-denominated.
+
+The common confirmation validator now requires the inclusive
+`0..u256::MAX` range before any live pool read, wallet action, proof or relay
+handoff. Shield, private transfer and swap share the same rule; the exact
+maximum remains valid.
+
+*Verified:* public regressions were red across all three confirmation routes
+for `2^256`, then proved rejection before live reads or handoff after the fix.
+An exact-maximum shield confirmation remains green. The focused Wallet API
+suite passes 170 tests and privacy typecheck. Full workspace verification is
+recorded with the owning commit. Deterministic fakes only: no browser, wallet,
+provider, RPC, proof, signature, funds or transaction was used.*
+
 ### 2026-08-30 — Pool and combined fees remain inside u256
 
 Pool configuration accepted any nonnegative bigint fee. A provider value at

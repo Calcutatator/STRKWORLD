@@ -583,6 +583,53 @@ describe('WalletApiPrivacyOperations capability and reads', () => {
 });
 
 describe('Wallet API action routes', () => {
+  it.each(['shield', 'transfer', 'swap'] as const)(
+    'rejects an out-of-u256 fee ceiling on %s before live reads or handoff',
+    async (route) => {
+      let { ops, pool, wallet, gateway } = fixture();
+      const intent: Intent = route === 'shield'
+        ? { kind: 'shield', token: TOKEN, amount: 1n }
+        : route === 'transfer'
+          ? { kind: 'transfer', token: TOKEN, amount: 1n, recipient: BOB }
+          : { kind: 'swap', tokenIn: TOKEN, tokenOut: STRK, amountIn: 1n, minAmountOut: 1n };
+      if (route === 'swap') {
+        gateway.prepareSwap = vi.fn(async () => ({
+          quoteId: 'quote-1', buyAmount: 2n, expiresAt: 2_000,
+          chainId: '0x534e5f4d41494e', executorAddress: '0x999',
+          executorCalls: [{ contractAddress: '0x111', entrypoint: 'swap', calldata: ['0xaaa'] }],
+          fee: { token: STRK, recipient: FEE_RECIPIENT, amount: 1n, ...AUTH },
+        }));
+        ops = new WalletApiPrivacyOperations({
+          wallet, pool, submission: gateway, supportedVersions: async () => ['0.10.3'], now: () => 1_000,
+          policy: {
+            maxIntents: 1, maxRelayFee: 10n, enabledRoutes: ['swap'],
+            allowedTokens: { shield: [], unshield: [], transfer: [], swap: [TOKEN, STRK] },
+            swap: { expectedChainId: '0x534e5f4d41494e', slippageBps: 100 },
+          },
+        });
+      }
+      const batch = await ops.prepare([intent]);
+      const config = vi.spyOn(pool, 'config');
+      const invoke = vi.spyOn(wallet, 'strk20InvokeTransaction');
+      const prepare = vi.spyOn(wallet, 'strk20PrepareInvoke');
+
+      await expect(batch.confirm({ feeCeiling: MAX_UINT256 + 1n })).rejects.toMatchObject({ kind: 'unknown' });
+      expect(config).not.toHaveBeenCalled();
+      expect(invoke).not.toHaveBeenCalled();
+      expect(prepare).not.toHaveBeenCalled();
+      expect(gateway.submit).not.toHaveBeenCalled();
+    },
+  );
+
+  it('preserves the exact u256 maximum fee ceiling', async () => {
+    const { ops } = fixture();
+    const batch = await ops.prepare([{ kind: 'shield', token: TOKEN, amount: 1n }]);
+
+    await expect(batch.confirm({ feeCeiling: MAX_UINT256 })).resolves.toEqual({
+      transactionHash: '0xshield',
+    });
+  });
+
   it.each([
     ['shield', { kind: 'shield', token: TOKEN, amount: 1n, recipient: BOB }],
     ['transfer', { kind: 'transfer', token: TOKEN, amount: 1n, recipient: BOB, memo: 'private' }],
