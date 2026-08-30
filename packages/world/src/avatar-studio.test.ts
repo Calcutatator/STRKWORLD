@@ -21,6 +21,44 @@ import { createStreetMap, tileToWorld } from './map/street.js';
 type Emitted = { [K in keyof WorldEvents]: { event: K; payload: WorldEvents[K] } }[keyof WorldEvents];
 
 describe('hidden Avatar Studio', () => {
+  it('owns injected presentation geometry after construction', () => {
+    const studioBounds = { x: 64, y: 64, width: 576, height: 384 };
+    const studioSpawn = { x: 368, y: 112 };
+    const setWorldBounds = vi.fn();
+    const setPlayerPosition = vi.fn();
+    const noop = vi.fn();
+    const presentation = createAvatarStudioPresentation({
+      port: {
+        setPlayerVelocity: noop,
+        setBodyEnabled: noop,
+        setGroundVisible: noop,
+        setDoorsVisible: noop,
+        setRemoteVisible: noop,
+        setLabelsVisible: noop,
+        setRoomVisible: noop,
+        setStudioVisible: noop,
+        setWorldBounds,
+        setCameraBounds: noop,
+        setPlayerPosition,
+        resetDoors: noop,
+        resumeStreet: noop,
+        destroyStudio: noop,
+      },
+      streetBounds: { x: 0, y: 0, width: 1_536, height: 896 },
+      studioBounds,
+      studioSpawn,
+      streetReturn: { x: 784, y: 496 },
+      reportStreet: noop,
+    });
+
+    Reflect.set(studioBounds, 'width', 1);
+    Reflect.set(studioSpawn, 'x', 1);
+    presentation.enter();
+
+    expect(setWorldBounds).toHaveBeenCalledWith({ x: 64, y: 64, width: 576, height: 384 });
+    expect(setPlayerPosition).toHaveBeenCalledWith({ x: 368, y: 112 });
+  });
+
   it('retries presentation cleanup after a failed destroy', () => {
     const cleanupError = new Error('studio cleanup failed');
     const destroyStudio = vi.fn().mockImplementationOnce(() => { throw cleanupError; });
@@ -403,11 +441,15 @@ describe('hidden Avatar Studio', () => {
       setCameraBounds: noop,
       setPlayerPosition: (position) => {
         playerPositions.push(position);
-        operations.push(position === streetReturn ? 'position:street' : 'position:studio');
+        operations.push(
+          position.x === streetReturn.x && position.y === streetReturn.y
+            ? 'position:street'
+            : 'position:studio',
+        );
       },
       resetDoors: () => operations.push('doors:reset'),
       resumeStreet: (position, report) => {
-        expect(position).toBe(streetReturn);
+        expect(position).toEqual(streetReturn);
         operations.push('presence:resume');
         report();
       },
@@ -450,7 +492,7 @@ describe('hidden Avatar Studio', () => {
     });
 
     expect(controller.state.inRoom).toBe(false);
-    expect(playerPositions.at(-1)).toBe(streetReturn);
+    expect(playerPositions.at(-1)).toEqual(streetReturn);
     expect(operations.slice(-5)).toEqual([
       'position:street',
       'doors:reset',
@@ -552,15 +594,23 @@ describe('hidden Avatar Studio', () => {
         },
         setWorldBounds: (bounds) => {
           lifecycle.worldBounds = bounds;
-          lifecycle.operations.push(bounds === studioBounds ? 'world:studio' : 'world:street');
+          lifecycle.operations.push(
+            bounds.width === studioBounds.width ? 'world:studio' : 'world:street',
+          );
         },
         setCameraBounds: (bounds) => {
           lifecycle.cameraBounds = bounds;
-          lifecycle.operations.push(bounds === studioBounds ? 'camera:studio' : 'camera:street');
+          lifecycle.operations.push(
+            bounds.width === studioBounds.width ? 'camera:studio' : 'camera:street',
+          );
         },
         setPlayerPosition: (position) => {
           lifecycle.playerPosition = position;
-          lifecycle.operations.push(position === studioSpawn ? 'position:studio' : 'position:street');
+          lifecycle.operations.push(
+            position.x === studioSpawn.x && position.y === studioSpawn.y
+              ? 'position:studio'
+              : 'position:street',
+          );
         },
         resetDoors: () => lifecycle.operations.push('doors:reset'),
         resumeStreet: (_position, report) => {
@@ -612,9 +662,9 @@ describe('hidden Avatar Studio', () => {
     expect(lifecycle.roomVisible).toBe(false);
     expect(lifecycle.studioVisible).toBe(false);
     expect(lifecycle.bodyEnabled).toBe(true);
-    expect(lifecycle.worldBounds).toBe(streetBounds);
-    expect(lifecycle.cameraBounds).toBe(streetBounds);
-    expect(lifecycle.playerPosition).toBe(streetReturn);
+    expect(lifecycle.worldBounds).toEqual(streetBounds);
+    expect(lifecycle.cameraBounds).toEqual(streetBounds);
+    expect(lifecycle.playerPosition).toEqual(streetReturn);
     expect(lifecycle.resumed).toBe(1);
     expect(lifecycle.figureCreations).toBe(8);
     expect(lifecycle.figures.size).toBe(8);
@@ -658,9 +708,9 @@ describe('hidden Avatar Studio', () => {
     expect(lifecycle.labelsVisible).toBe(false);
     expect(lifecycle.remoteVisible).toBe(false);
     expect(lifecycle.bodyEnabled).toBe(false);
-    expect(lifecycle.worldBounds).toBe(studioBounds);
-    expect(lifecycle.cameraBounds).toBe(studioBounds);
-    expect(lifecycle.playerPosition).toBe(studioSpawn);
+    expect(lifecycle.worldBounds).toEqual(studioBounds);
+    expect(lifecycle.cameraBounds).toEqual(studioBounds);
+    expect(lifecycle.playerPosition).toEqual(studioSpawn);
     expect(lifecycle.figureCreations).toBe(8);
     expect(lifecycle.figures.size).toBe(8);
     expect(lifecycle.operations.slice(-12)).toEqual([

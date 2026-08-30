@@ -130,6 +130,10 @@ export function createAvatarStudioPresentation(options: {
   readonly streetReturn: { x: number; y: number };
   readonly reportStreet: () => void;
 }): AvatarStudioPresentation {
+  const streetBounds = Object.freeze({ ...options.streetBounds });
+  const studioBounds = Object.freeze({ ...options.studioBounds });
+  const studioSpawn = Object.freeze({ ...options.studioSpawn });
+  const streetReturn = Object.freeze({ ...options.streetReturn });
   let destroyed = false;
   let destroying = false;
   return {
@@ -152,11 +156,11 @@ export function createAvatarStudioPresentation(options: {
       if (destroyed) return;
       port.setStudioVisible(true);
       if (destroyed) return;
-      port.setWorldBounds(options.studioBounds);
+      port.setWorldBounds(studioBounds);
       if (destroyed) return;
-      port.setCameraBounds(options.studioBounds);
+      port.setCameraBounds(studioBounds);
       if (destroyed) return;
-      port.setPlayerPosition(options.studioSpawn);
+      port.setPlayerPosition(studioSpawn);
     },
     exit(): void {
       if (destroyed) return;
@@ -177,15 +181,15 @@ export function createAvatarStudioPresentation(options: {
       if (destroyed) return;
       port.setStudioVisible(false);
       if (destroyed) return;
-      port.setWorldBounds(options.streetBounds);
+      port.setWorldBounds(streetBounds);
       if (destroyed) return;
-      port.setCameraBounds(options.streetBounds);
+      port.setCameraBounds(streetBounds);
       if (destroyed) return;
-      port.setPlayerPosition(options.streetReturn);
+      port.setPlayerPosition(streetReturn);
       if (destroyed) return;
       port.resetDoors();
       if (destroyed) return;
-      port.resumeStreet(options.streetReturn, options.reportStreet);
+      port.resumeStreet(streetReturn, options.reportStreet);
     },
     destroy(): void {
       if (destroyed || destroying) return;
