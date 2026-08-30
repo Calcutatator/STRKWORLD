@@ -505,6 +505,30 @@ describe('WalletApiPrivacyOperations capability and reads', () => {
 });
 
 describe('Wallet API action routes', () => {
+  it('owns the live relay quote before wallet proof generation', async () => {
+    const { ops, wallet, gateway } = fixture();
+    const liveFee = { token: STRK, recipient: FEE_RECIPIENT, amount: 1n, ...AUTH };
+    vi.mocked(gateway.estimate)
+      .mockResolvedValueOnce({ ...liveFee })
+      .mockResolvedValueOnce(liveFee);
+    vi.spyOn(wallet, 'strk20PrepareInvoke').mockImplementation(async () => {
+      liveFee.authorization = 'mutated-auth';
+      return {
+        call: { contract_address: '0x123', entry_point: 'apply_actions', calldata: ['0x1'] },
+        proof: { data: 'proof', output: ['0x1'], proof_facts: ['0x2'] },
+      };
+    });
+    const batch = await ops.prepare([
+      { kind: 'transfer', token: TOKEN, amount: 20n, recipient: BOB },
+    ]);
+
+    await batch.confirm({ feeCeiling: POOL_FEE + 1n });
+
+    expect(gateway.submit).toHaveBeenCalledWith(expect.objectContaining({
+      feeAuthorization: AUTH.authorization,
+    }));
+  });
+
   it('does not hand a discarded shield batch to the wallet after its fee read', async () => {
     const { ops, pool, wallet } = fixture();
     const originalConfig = pool.config;

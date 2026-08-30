@@ -502,7 +502,7 @@ export class WalletApiPrivacyOperations implements PrivacyOperations {
     });
     throwIfAborted(signal);
     this.validateRelayFee(fee, config);
-    return fee;
+    return Object.freeze({ ...fee });
   }
 
   private validateRelayFee(fee: RelayFeeQuote, config: PoolConfig): void {
