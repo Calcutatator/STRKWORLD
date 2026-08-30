@@ -1640,6 +1640,36 @@ describe('bridge persistence', () => {
     }
   });
 
+  it('rejects a persisted record whose required status is inherited', async () => {
+    const client = new StubClient();
+    const service = new BridgeService({
+      client,
+      store: new MemoryBridgeStore(),
+      quoteVerifier: () => true,
+      now: () => NOW,
+    });
+    const record = await service.createManualDeposit({
+      source: SOURCE,
+      amountIn: 1_000_000n,
+      starknetRecipient: '0x123',
+      refundAddress: request.refundTo,
+    });
+    const parsed = JSON.parse(serializeBridgeRecord(record)) as Record<string, unknown>;
+    delete parsed.status;
+    const raw = JSON.stringify(parsed);
+    const previous = Object.getOwnPropertyDescriptor(Object.prototype, 'status');
+    Object.defineProperty(Object.prototype, 'status', {
+      value: record.status,
+      configurable: true,
+    });
+    try {
+      expect(deserializeBridgeRecord(raw)).toBeNull();
+    } finally {
+      if (previous) Object.defineProperty(Object.prototype, 'status', previous);
+      else delete (Object.prototype as Record<string, unknown>).status;
+    }
+  });
+
   it('does not silently delete old signed dispute evidence', () => {
     const store = new MemoryBridgeStore();
     const old = {

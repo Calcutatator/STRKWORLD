@@ -258,6 +258,26 @@ empty shell to fetchers, so a 200 there means nothing.
 
 ## 6. Findings log
 
+### 2026-08-30 — Bridge persisted required fields must be own data
+
+`deserializeBridgeRecord()` previously read required root fields through
+ordinary property access. A malformed persisted record could omit `status`
+and supply it through `Object.prototype`; the decoder then accepted the
+record and `BridgeService.resume()` could expose inherited state.
+
+Persistence now requires own data properties for every required root field
+(`v`, `signedQuote`, `createdAt`, `updatedAt`, `amountIn`, and `status`).
+Accessors and inherited values fail closed; valid serialized records and
+optional-field semantics remain unchanged.
+
+*Verified:* a red-first public Bridge persistence regression deletes the
+required `status` from a serialized record and supplies it only through
+`Object.prototype`; the old decoder returned a record and the corrected
+decoder returns `null`. The focused Bridge suite passes 98/98, the Bridge
+typecheck and all invariant checks pass, and `git diff --check` is clean. No
+browser, external provider, RPC, wallet, proof, signature, funds or
+transaction was used.
+
 ### 2026-08-30 — Tiled property containers fail closed when malformed
 
 `flattenProperties()` previously iterated any truthy `properties` value. A

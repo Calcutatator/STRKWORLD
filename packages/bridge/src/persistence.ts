@@ -50,6 +50,12 @@ export function deserializeBridgeRecord(raw: string): BridgeRecord | null {
       return entry;
     }) as BridgeRecord;
     if (
+      !hasOwnDataProperty(value, 'v') ||
+      !hasOwnDataProperty(value, 'signedQuote') ||
+      !hasOwnDataProperty(value, 'createdAt') ||
+      !hasOwnDataProperty(value, 'updatedAt') ||
+      !hasOwnDataProperty(value, 'amountIn') ||
+      !hasOwnDataProperty(value, 'status') ||
       value.v !== 1 ||
       !value.signedQuote?.signature ||
       !isUsableDepositAddress(value.signedQuote.quote?.depositAddress)
@@ -99,6 +105,11 @@ function isBridgeStatus(value: unknown): value is BridgeStatus {
 
 function isBoundedHash(value: unknown): value is string {
   return typeof value === 'string' && value.length > 0 && value.length <= 256 && !/\s/.test(value);
+}
+
+function hasOwnDataProperty(value: object, key: PropertyKey): boolean {
+  const descriptor = Object.getOwnPropertyDescriptor(value, key);
+  return Boolean(descriptor && 'value' in descriptor);
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
