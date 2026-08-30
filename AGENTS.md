@@ -264,6 +264,25 @@ empty shell to fetchers, so a 200 there means nothing.
 
 ## 6. Findings log
 
+### 2026-08-30 — Vite proxy-boundary tests must isolate dependency optimization
+
+The exact `/api` proxy test created a full Vite development server using the
+production development config, which includes Phaser dependency optimization.
+Vite's asynchronous scanner/esbuild lifecycle is independent of the HTTP
+requests and `vite.close()` waits for it; repeated isolated runs intermittently
+hung in teardown until the 15-second test timeout. This was a test-fixture
+lifecycle trap, not a proxy matcher failure.
+
+The test now disables dependency optimization only on its inline Vite server.
+It still exercises the real configured proxy and asserts `/api` reaches the
+fake backend while `/apis` and `/api2` do not. The production Vite config and
+runtime optimization remain unchanged.
+
+*Verified:* the unmodified fixture passed once and then timed out on its
+second repeated run at `vite.close()`. The corrected exact test passed five
+consecutive runs. No browser, external provider, RPC, wallet, proof,
+signature, funds or transaction was used.*
+
 ### 2026-08-30 — Paymaster fee tokens require strict felt encoding
 
 `BackendApi.fee()` and swap preparation compared the paymaster's returned

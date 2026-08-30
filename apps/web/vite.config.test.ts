@@ -86,6 +86,11 @@ describe('web environment lookup', () => {
       configFile: false,
       root: new URL('.', import.meta.url).pathname,
       logLevel: 'silent',
+      // This test exercises only the HTTP proxy boundary. Disabling Vite's
+      // dependency optimizer keeps its asynchronous scanner/esbuild lifecycle
+      // out of the fixture, so teardown cannot race an unrelated optimization
+      // job on repeated test runs.
+      optimizeDeps: { disabled: true },
       server: {
         host: '127.0.0.1',
         port: 0,
