@@ -278,6 +278,27 @@ privacy typecheck. Full workspace verification is recorded with the owning
 commit. Deterministic fakes only: no browser, wallet, provider, RPC, proof,
 signature, funds or transaction was used.*
 
+### 2026-08-30 — Production wallet bootstrap retires late dynamic imports
+
+The production entrypoint started the asynchronous `@strkworld/privacy`
+import and registered an HMR cleanup that closed over a mutable session
+variable. If disposal happened before the import resolved, the callback saw
+no session; the late completion then created and rendered a wallet session
+into a retired entrypoint, with no owner left to destroy it.
+
+Production wallet loading now has an explicit bootstrap owner. Disposal
+retires the owner, destroys a session that resolves after retirement, and
+suppresses late render/failure publication. A normally resolved session is
+still rendered and is destroyed by the same HMR cleanup. Wallet policy,
+composition and dynamic-import boundaries are unchanged.
+
+*Verified:* a red-first deferred-load public regression disposed the entrypoint
+before session resolution; the old shape rendered the late session and never
+destroyed it, while the corrected bootstrap renders nothing and destroys it
+once. Focused bootstrap and architecture tests pass 7 tests; workspace gates
+are recorded on the candidate. No browser, wallet, provider, RPC, proof,
+signature, funds or transaction was used.
+
 ### 2026-08-30 — Caller intent amounts are bounded to u256 before dependencies
 
 Wallet API intent validation required positive bigints but did not cap them at
