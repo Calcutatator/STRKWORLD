@@ -149,6 +149,19 @@ export class FakePrivacyOperations implements PrivacyOperations {
       return normalise(address);
     }));
     this.pool = { ...DEFAULT_POOL, ...config.poolConfig };
+    let feeTokenValue: bigint;
+    try {
+      feeTokenValue = BigInt(this.pool.feeToken);
+    } catch {
+      throw new PrivacyError('unknown', 'The fake pool fee configuration is invalid.');
+    }
+    if (
+      typeof this.pool.feeAmount !== 'bigint'
+      || this.pool.feeAmount < 0n
+      || feeTokenValue <= 0n
+    ) {
+      throw new PrivacyError('unknown', 'The fake pool fee configuration is invalid.');
+    }
     if (
       !Number.isSafeInteger(this.pool.noteMaturityBlocks)
       || this.pool.noteMaturityBlocks < 0

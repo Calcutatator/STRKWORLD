@@ -81,6 +81,16 @@ describe('fake lifecycle configuration', () => {
       registration: 'unknown',
     });
   });
+
+  it.each([
+    ['negative fee amount', { feeAmount: -1n }],
+    ['number fee amount', { feeAmount: 1 }],
+    ['malformed fee token', { feeToken: 'not-a-felt' }],
+    ['zero fee token', { feeToken: '0x0' }],
+  ] as const)('rejects a %s before publishing pool state', (_label, poolConfig) => {
+    expect(() => new FakePrivacyOperations({ poolConfig: poolConfig as never }))
+      .toThrow(/pool fee/i);
+  });
 });
 
 describe('the fee comes out of the balance being spent', () => {
