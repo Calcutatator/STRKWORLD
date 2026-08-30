@@ -14,6 +14,7 @@ interface StorageLike {
 
 const STORAGE_KEY = 'strkworld.bridge.inbound.v1';
 export const MAX_RESUME_RECORD_BYTES = 256_000;
+export const MAX_DEPOSIT_ADDRESS_LENGTH = 256;
 
 export function serializeBridgeRecord(record: BridgeRecord): string {
   return JSON.stringify(record, (_key, value: unknown) =>
@@ -38,7 +39,11 @@ export function deserializeBridgeRecord(raw: string): BridgeRecord | null {
       }
       return entry;
     }) as BridgeRecord;
-    if (value.v !== 1 || !value.signedQuote?.signature || !value.signedQuote.quote?.depositAddress) {
+    if (
+      value.v !== 1 ||
+      !value.signedQuote?.signature ||
+      !isUsableDepositAddress(value.signedQuote.quote?.depositAddress)
+    ) {
       return null;
     }
     if (!Number.isFinite(value.createdAt) || !Number.isFinite(value.updatedAt)) return null;
@@ -47,6 +52,13 @@ export function deserializeBridgeRecord(raw: string): BridgeRecord | null {
   } catch {
     return null;
   }
+}
+
+export function isUsableDepositAddress(value: unknown): value is string {
+  return typeof value === 'string' &&
+    value.length > 0 &&
+    value.length <= MAX_DEPOSIT_ADDRESS_LENGTH &&
+    !/\s/.test(value);
 }
 
 export class LocalBridgeStore implements BridgeStore {

@@ -258,6 +258,33 @@ empty shell to fetchers, so a 200 there means nothing.
 
 ## 6. Findings log
 
+### 2026-08-30 — Bridge quote evidence must own a usable deposit address and source metadata
+
+`BridgeService` previously treated any truthy `depositAddress` from the
+untrusted 1Click response as executable evidence. A whitespace-only string or
+non-string runtime value could therefore be persisted, rendered as deposit
+instructions and passed back to the SDK for status/report calls. The service
+also copied `input.source` only after awaiting the quote: a caller mutating its
+source symbol or decimals during that await could persist metadata inconsistent
+with the signed quote's asset and amount.
+
+Signed quote validation and resume deserialization now require a nonempty,
+non-whitespace string no longer than 256 characters, and quote creation takes a
+shallow snapshot of the complete input and source metadata before the provider
+await. The bound is above every supported 1Click address shape (including the
+longest shielded UTXO forms); Stellar's memo remains separate deposit metadata.
+The signed route, quote request, status schema and persistence format are
+otherwise unchanged.
+
+*Verified:* public Bridge regressions were red before the fix for whitespace
+and overlong deposit addresses, persisted whitespace/overlong/non-string
+addresses, and source symbol/decimal mutation during a deferred quote. Green
+after the fix: the Bridge suite passes 1 file / 70 tests, including the
+existing ownership/status/evidence cases; package typecheck and diff hygiene
+pass. No browser, external provider, wallet, RPC, proof, signature, funds or
+transaction was used.
+
+
 ### 2026-08-30 — Receipt identity follows the Starknet transaction felt
 
 The application receipt ledger claimed idempotence by transaction hash but

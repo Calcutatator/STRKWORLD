@@ -18,6 +18,7 @@ import {
   serializeBridgeRecord,
   validateSourceAddress,
   validateStarknetAddress,
+  type CreateDepositInput,
   type OneClickClient,
   type SourceAsset,
 } from './index.js';
@@ -212,6 +213,34 @@ describe('BridgeService', () => {
     expect(service.resume()).toMatchObject({
       amountIn: 1_000_000n,
       source: { depositMode: 'manual' },
+    });
+  });
+
+  it('retains the source metadata captured when quote creation began', async () => {
+    const quote = deferred<QuoteResponse>();
+    const client = new StubClient();
+    client.getQuote = async () => quote.promise;
+    const service = new BridgeService({
+      client,
+      store: new MemoryBridgeStore(),
+      quoteVerifier: () => true,
+      now: () => NOW,
+    });
+    const input: CreateDepositInput = {
+      source: { ...SOURCE },
+      amountIn: 1_000_000n,
+      starknetRecipient: '0x123',
+      refundAddress: request.refundTo,
+    };
+
+    const creating = service.createManualDeposit(input);
+    await Promise.resolve();
+    input.source.symbol = 'MUTATED';
+    input.source.decimals = 18;
+    quote.resolve(signedQuote);
+
+    await expect(creating).resolves.toMatchObject({
+      source: { symbol: 'USDC', decimals: 6 },
     });
   });
 
@@ -840,6 +869,42 @@ describe('BridgeService', () => {
     expect(store.load()).toBeNull();
   });
 
+  it('rejects a signed quote with a whitespace-only deposit address', async () => {
+    const client = new StubClient();
+    const store = new MemoryBridgeStore();
+    client.getQuote = async () => ({
+      ...signedQuote,
+      quote: { ...signedQuote.quote, depositAddress: '   ' },
+    });
+    const service = new BridgeService({ client, store, quoteVerifier: () => true, now: () => NOW });
+
+    await expect(service.createManualDeposit({
+      source: SOURCE,
+      amountIn: 1_000_000n,
+      starknetRecipient: '0x123',
+      refundAddress: request.refundTo,
+    })).rejects.toThrow(/deposit address/i);
+    expect(store.load()).toBeNull();
+  });
+
+  it('rejects a signed quote with an overlong deposit address', async () => {
+    const client = new StubClient();
+    const store = new MemoryBridgeStore();
+    client.getQuote = async () => ({
+      ...signedQuote,
+      quote: { ...signedQuote.quote, depositAddress: 'x'.repeat(257) },
+    });
+    const service = new BridgeService({ client, store, quoteVerifier: () => true, now: () => NOW });
+
+    await expect(service.createManualDeposit({
+      source: SOURCE,
+      amountIn: 1_000_000n,
+      starknetRecipient: '0x123',
+      refundAddress: request.refundTo,
+    })).rejects.toThrow(/deposit address/i);
+    expect(store.load()).toBeNull();
+  });
+
   it('rejects a signed quote whose executable amounts do not match the request', async () => {
     const client = new StubClient();
     const store = new MemoryBridgeStore();
@@ -1346,6 +1411,30 @@ describe('bridge persistence', () => {
     const decoded = store.deserialize(encoded);
     expect(decoded?.amountIn).toBe(1_000_000n);
     expect(decoded?.signedQuote).toEqual(signedQuote);
+  });
+
+  it.each([
+    ['whitespace-only', '   '],
+    ['overlong', 'x'.repeat(257)],
+    ['non-string', 42],
+  ])('rejects persisted records with a %s deposit address', (_label, depositAddress) => {
+    const store = new MemoryBridgeStore();
+    const malformed = {
+      v: 1 as const,
+      createdAt: NOW,
+      updatedAt: NOW,
+      source: SOURCE,
+      amountIn: 1_000_000n,
+      starknetRecipient: '0x123',
+      refundAddress: request.refundTo,
+      signedQuote: {
+        ...signedQuote,
+        quote: { ...signedQuote.quote, depositAddress: depositAddress as never },
+      },
+      status: { leg: 'awaiting-deposit' as const, message: 'pending', pollingStopped: false },
+    };
+
+    expect(store.deserialize(store.serialize(malformed))).toBeNull();
   });
 
   it('does not silently delete old signed dispute evidence', () => {

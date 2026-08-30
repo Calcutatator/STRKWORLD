@@ -8,6 +8,7 @@ import { validateSourceAddress, validateStarknetAddress } from './address-valida
 import type { OneClickClient } from './client.js';
 import {
   deserializeBridgeRecord,
+  isUsableDepositAddress,
   serializeBridgeRecord,
   type BridgeStore,
 } from './persistence.js';
@@ -84,29 +85,33 @@ export class BridgeService {
   }
 
   private async createDeposit(input: CreateDepositInput): Promise<BridgeRecord> {
+    const stableInput: CreateDepositInput = {
+      ...input,
+      source: { ...input.source },
+    };
     if (this.resume()) {
       throw new Error('An existing bridge deposit is available. Discard it before creating a new deposit.');
     }
-    validateInput(input);
+    validateInput(stableInput);
     const deadline = new Date(this.now() + QUOTE_DEADLINE_MS).toISOString();
     const request = {
       dry: false,
-      ...(input.source.chainName === 'stellar' ? { depositMode: 'MEMO' } : {}),
+      ...(stableInput.source.chainName === 'stellar' ? { depositMode: 'MEMO' } : {}),
       swapType: 'EXACT_INPUT',
-      slippageTolerance: input.slippageBps ?? DEFAULT_SLIPPAGE_BPS,
-      originAsset: input.source.assetId,
+      slippageTolerance: stableInput.slippageBps ?? DEFAULT_SLIPPAGE_BPS,
+      originAsset: stableInput.source.assetId,
       depositType: 'ORIGIN_CHAIN',
       destinationAsset: STRK_ON_STARKNET_ASSET_ID,
-      amount: input.amountIn.toString(),
-      refundTo: input.refundAddress,
+      amount: stableInput.amountIn.toString(),
+      refundTo: stableInput.refundAddress,
       refundType: 'ORIGIN_CHAIN',
-      recipient: input.starknetRecipient,
+      recipient: stableInput.starknetRecipient,
       recipientType: 'DESTINATION_CHAIN',
       deadline,
     } as QuoteRequest;
 
     const signedQuote = await this.client.getQuote(request);
-    assertSignedQuote(signedQuote, input, request);
+    assertSignedQuote(signedQuote, stableInput, request);
     if (!this.quoteVerifier(signedQuote)) {
       throw new Error('1Click quote signature verification failed.');
     }
@@ -118,14 +123,14 @@ export class BridgeService {
       v: 1,
       createdAt: now,
       updatedAt: now,
-      source: { ...input.source },
-      amountIn: input.amountIn,
-      starknetRecipient: input.starknetRecipient,
-      refundAddress: input.refundAddress,
+      source: { ...stableInput.source },
+      amountIn: stableInput.amountIn,
+      starknetRecipient: stableInput.starknetRecipient,
+      refundAddress: stableInput.refundAddress,
       signedQuote,
       status: {
         leg: 'awaiting-deposit',
-        message: input.source.depositMode === 'signed'
+        message: stableInput.source.depositMode === 'signed'
           ? 'Approve the exact origin deposit in your connected wallet.'
           : signedQuote.quote.depositMemo
             ? 'Send the exact amount with both the deposit address and memo.'
@@ -370,7 +375,9 @@ function assertSignedQuote(
   if (!Number.isFinite(Date.parse(response.timestamp))) {
     throw new Error('1Click returned an invalid signed quote timestamp.');
   }
-  if (!response.quote.depositAddress) throw new Error('1Click returned no deposit address.');
+  if (!isUsableDepositAddress(response.quote.depositAddress)) {
+    throw new Error('1Click returned an invalid deposit address.');
+  }
   if (
     !response.quote.deadline ||
     response.quote.deadline !== request.deadline ||
