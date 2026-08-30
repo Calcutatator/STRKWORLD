@@ -284,6 +284,33 @@ describe('street movement seam', () => {
     ]);
   });
 
+  it('does not run a stale movement callback after a nested update wins', () => {
+    const callbacks: string[] = [];
+    let nested = false;
+    let adapter!: ReturnType<typeof createStreetMovementAdapter>;
+    adapter = createStreetMovementAdapter({
+      emit: (event) => {
+        if (event === 'player:moved' && !nested) {
+          nested = true;
+          adapter.streetUpdate(
+            { x: 12, y: 20 },
+            { ...idle, left: true },
+            () => callbacks.push('new'),
+          );
+        }
+      },
+    });
+
+    adapter.streetUpdate(
+      { x: 11, y: 20 },
+      { ...idle, right: true },
+      () => callbacks.push('stale'),
+    );
+
+    expect(callbacks).toEqual(['new']);
+    expect(adapter.facing).toBe('left');
+  });
+
   it('keeps interior updates silent and does not change street facing', () => {
     const h = capture();
     const adapter = createStreetMovementAdapter({

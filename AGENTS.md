@@ -258,6 +258,25 @@ empty shell to fetchers, so a 200 there means nothing.
 
 ## 6. Findings log
 
+### 2026-08-30 — Nested street movement can run a stale post-move callback
+
+`createStreetMovementAdapter.streetUpdate()` published the movement and then
+always invoked its `afterMovement` callback. A synchronous `player:moved`
+consumer could start a newer street update first; when that nested update
+returned, the older callback still ran and could report a stale door tile or
+other movement handoff after the newer transition had won.
+
+Street and exit callbacks now capture an adapter transition revision and run
+only while their own publication remains current. The reporter's facing
+rollback remains independent, and successful movement publication plus the
+existing callback ordering are unchanged.
+
+*Verified:* a red-first public World regression starts a left-moving update
+from the first right-moving publication. The old path invoked both `new` and
+`stale` callbacks; the corrected path invokes only `new` and retains left
+facing. Focused street-movement tests pass 21 tests. No browser, lobby server,
+wallet, provider, RPC, proof, signature, funds or transaction was used.
+
 ### 2026-08-30 — Input resumption fails closed when recapture throws
 
 `createInputGate.resume()` enabled Phaser keyboard delivery before asking the

@@ -211,6 +211,7 @@ export function createStreetMovementAdapter(
   out: Pick<EventBus<WorldEvents>, 'emit'>,
 ): StreetMovementAdapter {
   const reporter = createStreetMovementReporter(out);
+  let transitionRevision = 0;
   return {
     get facing() {
       return reporter.facing;
@@ -219,14 +220,18 @@ export function createStreetMovementAdapter(
       reporter.initial(position);
     },
     streetUpdate(position, input, afterMovement) {
+      const ownRevision = ++transitionRevision;
       reporter.update(position, input);
+      if (transitionRevision !== ownRevision) return;
       afterMovement();
     },
     interiorUpdate(afterMovement) {
       afterMovement();
     },
     exit(position, afterPlacement) {
+      const ownRevision = ++transitionRevision;
       reporter.update(position, { left: false, right: false, up: false, down: false });
+      if (transitionRevision !== ownRevision) return;
       afterPlacement();
     },
   };
