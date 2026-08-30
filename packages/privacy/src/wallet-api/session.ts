@@ -661,7 +661,10 @@ function ownPreparedBatch(
         retire();
         throw changedSessionError();
       }
-      return result;
+      if (!hasOwnDataProperties(result, ['transactionHash']) || typeof result.transactionHash !== 'string') {
+        throw new PrivacyError('unknown', 'The wallet returned an invalid transaction receipt.');
+      }
+      return Object.freeze({ transactionHash: result.transactionHash });
     },
     discard,
   });

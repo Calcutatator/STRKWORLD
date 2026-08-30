@@ -597,6 +597,27 @@ describe('WalletSession', () => {
     expect(confirm).toHaveBeenCalledOnce();
   });
 
+  it('owns the confirmed transaction receipt returned by the session facade', async () => {
+    const selected = wallet('Ready');
+    const mutable = { transactionHash: '0x1' };
+    const confirm = vi.fn(async () => mutable);
+    const connected = controllableConnection(
+      '0x111', operationsWithBatch({ ...batch(), confirm }, '0.10.3'), new FakePrivacyOperations(),
+    );
+    const session = createWalletSession(
+      denyAllOptions(),
+      { discovery: discoveryWith(selected), connectWallet: async () => connected.port },
+    );
+    await session.connect(session.getSnapshot().wallets[0]!.key);
+    const prepared = await session.operations.prepare([]);
+
+    const receipt = await prepared.confirm({ feeCeiling: 0n });
+    mutable.transactionHash = '0x2';
+
+    expect(Object.isFrozen(receipt)).toBe(true);
+    expect(receipt.transactionHash).toBe('0x1');
+  });
+
   it('owns confirmation options before the underlying batch can observe caller mutation', async () => {
     const selected = wallet('Ready');
     let observedCeiling: bigint | undefined;
