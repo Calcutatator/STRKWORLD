@@ -674,6 +674,21 @@ describe('BackendPrivacyClient', () => {
     );
   });
 
+  it('rejects a zero private swap output before publishing a plan', async () => {
+    const client = new BackendPrivacyClient(
+      'https://backend.example',
+      async () => response({
+        quoteId: 'quote-1', buyAmount: '0', expiresAt: 2_000,
+        chainId: '0x534e5f4d41494e', executorAddress: '0x999', executorCalls: [],
+        fee: { token: '0x4718', recipient: '0x789', amount: '7', authorization: 'auth', expiresAtBlock: 1450 },
+      }),
+    );
+
+    await expect(client.prepareSwap({
+      sellToken: '0xabc', buyToken: '0x4718', sellAmount: 20n, minAmountOut: 1n, slippageBps: 100,
+    })).rejects.toMatchObject({ kind: 'unknown' });
+  });
+
   it('publishes an immutable private swap plan graph', async () => {
     const client = new BackendPrivacyClient(
       'https://backend.example',
