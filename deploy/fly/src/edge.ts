@@ -6,9 +6,9 @@ import {
   type ServerResponse,
 } from 'node:http';
 import { createConnection, type Socket } from 'node:net';
-import { realpath, readFile } from 'node:fs/promises';
+import { realpath } from 'node:fs/promises';
 import { extname, resolve, sep } from 'node:path';
-import { resolveContainedRegularFile } from './static-file.js';
+import { openContainedRegularFile, resolveContainedRegularFile } from './static-file.js';
 
 export interface EdgeOptions {
   readonly staticRoot: string;
@@ -16,6 +16,12 @@ export interface EdgeOptions {
   readonly lobbyPort: number;
   /** The only browser origin allowed to upgrade the lobby WebSocket. */
   readonly publicOrigin: string;
+}
+
+interface EdgeObserver {
+  readonly onStaticFileResolved?: (file: string) => void | Promise<void>;
+  readonly onStaticFileValidated?: (file: string) => void | Promise<void>;
+  readonly resolveStaticDescriptor?: (fd: number) => Promise<string | null>;
 }
 
 const HOP_BY_HOP = new Set([
@@ -51,10 +57,10 @@ const CONTENT_TYPES: Record<string, string> = {
 
 const activeSockets = new WeakMap<Server, Set<Socket>>();
 
-export function createEdgeServer(options: EdgeOptions): Server {
+export function createEdgeServer(options: EdgeOptions, observer: EdgeObserver = {}): Server {
   const root = resolve(options.staticRoot);
   const server = createServer((request, response) => {
-    void handleRequest(request, response, { ...options, staticRoot: root });
+    void handleRequest(request, response, { ...options, staticRoot: root }, observer);
   }).on('upgrade', (request, socket, head) => {
     tunnelUpgrade(request, socket, head, options.lobbyPort, options.publicOrigin);
   }).on('clientError', (_error, socket) => {
@@ -93,6 +99,7 @@ async function handleRequest(
   request: IncomingMessage,
   response: ServerResponse,
   options: EdgeOptions,
+  observer: EdgeObserver,
 ): Promise<void> {
   const method = request.method ?? 'GET';
   const pathname = pathnameOf(request.url);
@@ -121,7 +128,7 @@ async function handleRequest(
   if (method !== 'GET' && method !== 'HEAD') {
     return sendError(response, 405, 'METHOD_NOT_ALLOWED', 'The method is not allowed.');
   }
-  return serveStatic(request, response, options.staticRoot, pathname);
+  return serveStatic(request, response, options.staticRoot, pathname, observer);
 }
 
 function isCanonicalApiTarget(target: string | undefined): boolean {
@@ -372,6 +379,7 @@ async function serveStatic(
   response: ServerResponse,
   root: string,
   pathname: string,
+  observer: EdgeObserver,
 ): Promise<void> {
   const relativePath = safeRelativePath(pathname);
   if (relativePath === null) return sendError(response, 404, 'NOT_FOUND', 'The requested resource was not found.');
@@ -397,7 +405,22 @@ async function serveStatic(
     }
   }
 
-  const content = await readFile(file).catch(() => null);
+  const requestPath = candidate ? resolve(rootReal, relativePath) : resolve(rootReal, 'index.html');
+  const handle = await openContainedRegularFile(requestPath, rootReal, {
+    onResolved: observer.onStaticFileResolved,
+    resolveDescriptor: observer.resolveStaticDescriptor,
+    requireDescriptorIdentity: observer.resolveStaticDescriptor !== undefined,
+  });
+  if (!handle) return sendError(response, 404, 'NOT_FOUND', 'The requested resource was not found.');
+  let content: Buffer | null = null;
+  try {
+    await observer.onStaticFileValidated?.(file);
+    content = await handle.readFile().catch(() => null);
+  } catch {
+    content = null;
+  } finally {
+    await handle.close().catch(() => undefined);
+  }
   if (content === null) return sendError(response, 404, 'NOT_FOUND', 'The requested resource was not found.');
   response.statusCode = 200;
   response.setHeader('cache-control', cacheControl);
