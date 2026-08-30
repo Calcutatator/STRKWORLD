@@ -585,10 +585,12 @@ function ownPreparedBatch(
 ): PreparedBatch {
   const required = ['intents', 'poolFee', 'gasEstimate', 'totalCost', 'warnings', 'promptCount', 'confirm', 'discard'] as const;
   if (!hasOwnDataProperties(prepared, required)) {
+    retireInvalidPrepared(prepared);
     throw new PrivacyError('unknown', 'The wallet returned an invalid prepared batch.');
   }
   const swapReviewDescriptor = Object.getOwnPropertyDescriptor(prepared, 'swapReview');
   if (swapReviewDescriptor && !('value' in swapReviewDescriptor)) {
+    retireInvalidPrepared(prepared);
     throw new PrivacyError('unknown', 'The wallet returned an invalid prepared batch.');
   }
   const swapReview = swapReviewDescriptor?.value;
@@ -641,6 +643,16 @@ function ownPreparedBatch(
     },
     discard,
   });
+}
+
+function retireInvalidPrepared(prepared: PreparedBatch): void {
+  const descriptor = Object.getOwnPropertyDescriptor(prepared, 'discard');
+  if (!descriptor || !('value' in descriptor) || typeof descriptor.value !== 'function') return;
+  try {
+    descriptor.value.call(prepared);
+  } catch {
+    // Malformed work must not escape solely because best-effort retirement fails.
+  }
 }
 
 function assertAddress(address: string): void {

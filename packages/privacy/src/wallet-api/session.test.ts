@@ -580,6 +580,24 @@ describe('WalletSession', () => {
     expect(getterCalled).toBe(false);
   });
 
+  it('retires malformed prepared work when facade validation rejects it', async () => {
+    const selected = wallet('Ready');
+    const discard = vi.fn();
+    const malformed = batch(undefined, discard);
+    delete (malformed as unknown as Record<string, unknown>).poolFee;
+    const connected = controllableConnection(
+      '0x111', operationsWithBatch(malformed, '0.10.3'), new FakePrivacyOperations(),
+    );
+    const session = createWalletSession(
+      denyAllOptions(),
+      { discovery: discoveryWith(selected), connectWallet: async () => connected.port },
+    );
+    await session.connect(session.getSnapshot().wallets[0]!.key);
+
+    await expect(session.operations.prepare([])).rejects.toMatchObject({ kind: 'unknown' });
+    expect(discard).toHaveBeenCalledOnce();
+  });
+
   it('retires an old batch when confirmation succeeds after the account changes', async () => {
     const selected = wallet('Ready');
     let release!: (result: { transactionHash: string }) => void;
