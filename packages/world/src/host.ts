@@ -123,7 +123,8 @@ export function createHost<T, P>(options: HostOptions<T, P>): Host<T, P> {
     if (stopping) throw new Error(lifecycleDuringStopError);
     refs = Math.max(0, refs - 1);
     if (refs > 0 || pending !== null || instance === null) return;
-    pending = defer(() => {
+    let callbackStarted = false;
+    const teardown = (): void | Promise<void> => {
       pending = null;
       // Re-check: a holder may have acquired while the teardown was queued.
       if (refs > 0 || instance === null) return;
@@ -143,7 +144,36 @@ export function createHost<T, P>(options: HostOptions<T, P>): Host<T, P> {
         throw error;
       }
       finish();
-    });
+    };
+    try {
+      const handle = defer(() => {
+        callbackStarted = true;
+        return teardown();
+      });
+      // A custom deferrer may execute synchronously. Do not retain a handle
+      // for work that already completed; stale pending state would make a
+      // later acquire cancel an unrelated task.
+      if (!callbackStarted) pending = handle;
+    } catch (error) {
+      // Scheduling can fail before it owns the callback. Fall back to teardown
+      // now so the final release cannot orphan the live instance.
+      if (!callbackStarted) {
+        try {
+          const result = teardown();
+          if (result !== undefined) {
+            void result.catch((teardownError) => {
+              queueMicrotask(() => { throw teardownError; });
+            });
+          }
+        } catch (teardownError) {
+          throw new AggregateError(
+            [error, teardownError],
+            'Host teardown scheduling and cleanup failed',
+          );
+        }
+      }
+      throw error;
+    }
   }
 
   return {

@@ -100,6 +100,44 @@ describe('StrictMode double-mount', () => {
 });
 
 describe('teardown', () => {
+  it('does not orphan the instance when teardown scheduling fails', () => {
+    const schedulingError = new Error('teardown scheduling failed');
+    const stop = vi.fn();
+    const host = createHost<{ id: number }, string>({
+      start: () => ({ id: 1 }),
+      stop,
+      defer: () => { throw schedulingError; },
+    });
+
+    const instance = host.acquire('#host');
+    expect(() => host.release()).toThrow(schedulingError);
+    expect(stop).toHaveBeenCalledOnce();
+    expect(stop).toHaveBeenCalledWith(instance);
+    expect(host.current).toBeNull();
+    expect(host.refCount).toBe(0);
+  });
+
+  it('does not retain a completed handle from a synchronous deferrer', () => {
+    const cancel = vi.fn();
+    let stopped = 0;
+    const host = createHost<{ id: number }, string>({
+      start: () => ({ id: 1 }),
+      stop: () => { stopped += 1; },
+      defer: (fn) => {
+        fn();
+        return 'already-completed';
+      },
+      cancel,
+    });
+
+    host.acquire('#host');
+    host.release();
+    expect(stopped).toBe(1);
+    expect(host.current).toBeNull();
+
+    host.acquire('#host');
+    expect(cancel).not.toHaveBeenCalled();
+  });
   it('destroys once the last holder releases and the deferral runs', () => {
     const h = harness();
     h.host.acquire('#host');

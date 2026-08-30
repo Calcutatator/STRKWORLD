@@ -258,6 +258,25 @@ empty shell to fetchers, so a 200 there means nothing.
 
 ## 6. Findings log
 
+### 2026-08-30 — World host release cannot orphan on teardown scheduling failure
+
+`createHost().release()` decremented its final lease before calling the
+injectable teardown deferrer. If that scheduler threw, the release exited
+without invoking `stop`, leaving the live World instance retained forever with
+zero references and no pending teardown. A synchronous custom deferrer also
+left its already-completed handle in `pending`, causing later remounts to
+cancel unrelated work.
+
+Release now falls back to immediate teardown when scheduling fails, preserves
+the scheduling error (or combines it with a synchronous teardown error), and
+does not retain a handle when a deferrer completes synchronously. Normal
+deferred and asynchronous teardown semantics are unchanged.
+
+*Verified:* public Host regressions prove a throwing deferrer still retires the
+instance and a synchronous deferrer leaves no stale cancel handle. The focused
+Host suite passes 22 tests. No browser, wallet, provider, RPC, proof,
+signature, funds or transaction was used.
+
 ### 2026-08-30 — Authored Web copy is immutable product authority
 
 `COPY` was exported as a mutable object despite its `as const` TypeScript
