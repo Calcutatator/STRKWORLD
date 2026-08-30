@@ -588,6 +588,18 @@ describe('published capability ownership', () => {
   });
 });
 
+describe('published pool configuration ownership', () => {
+  it('publishes an immutable simulated pool snapshot', async () => {
+    const ops = fresh();
+
+    const pool = await ops.poolConfig();
+
+    expect(Object.isFrozen(pool)).toBe(true);
+    expect(Reflect.set(pool, 'feeAmount', 0n)).toBe(false);
+    expect((await ops.poolConfig()).feeAmount).toBe(SIX_STRK);
+  });
+});
+
 describe('balance query ownership', () => {
   it('snapshots requested tokens before the fake latency boundary', async () => {
     const ops = new FakePrivacyOperations({

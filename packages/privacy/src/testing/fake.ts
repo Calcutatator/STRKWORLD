@@ -252,7 +252,7 @@ export class FakePrivacyOperations implements PrivacyOperations {
 
   async poolConfig(signal?: AbortSignal): Promise<PoolConfig> {
     await this.tick('poolConfig', signal);
-    return { ...this.pool };
+    return Object.freeze({ ...this.pool });
   }
 
   async balances(tokens?: Address[], signal?: AbortSignal): Promise<PrivateBalance[]> {
