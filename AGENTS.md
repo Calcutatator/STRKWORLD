@@ -258,6 +258,26 @@ empty shell to fetchers, so a 200 there means nothing.
 
 ## 6. Findings log
 
+### 2026-08-30 — Relay authorizations must contain non-whitespace data
+
+`WalletApiPrivacyOperations.validateRelayFee()` previously rejected only an
+empty authorization string. A relay response containing spaces, tabs or
+newlines therefore produced a reviewable prepared batch and could cross into
+wallet proof generation even though the backend's authorization verifier
+would reject the token after the private proof was created. This is an
+external-response validation defect at the wallet handoff boundary.
+
+Relay fee validation now requires a string whose trimmed length is nonzero,
+while preserving the original opaque authorization token for submission.
+Ordinary private transfers and quote-bound swaps use the same validation;
+their fee token, recipient, amount and expiry checks are unchanged.
+
+*Verified:* red-first public regressions supplied whitespace-only
+authorizations (`" \\t\\n"`) on both transfer and swap fee paths; both resolved
+before the fix and now reject before `strk20PrepareInvoke`. The focused wallet
+API suite passes 68 tests. No browser, external provider, RPC, wallet, proof,
+signature, funds or transaction was used.
+
 
 ## 6. Findings log
 

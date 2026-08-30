@@ -334,6 +334,38 @@ describe('Wallet API action routes', () => {
     );
   });
 
+  it('rejects a whitespace-only relay authorization before a private transfer reaches the wallet', async () => {
+    const { ops, gateway, prepared } = fixture();
+    vi.mocked(gateway.estimate).mockResolvedValue({
+      token: STRK,
+      recipient: FEE_RECIPIENT,
+      amount: 1n,
+      authorization: ' \t\n',
+      expiresAtBlock: 1_450,
+    });
+
+    await expect(ops.prepare([{ kind: 'transfer', token: TOKEN, amount: 20n, recipient: BOB }]))
+      .rejects.toThrow(/fee authorization/i);
+    expect(prepared).toEqual([]);
+  });
+
+  it('preserves non-whitespace relay authorization bytes when validating', async () => {
+    const { ops, gateway } = fixture();
+    vi.mocked(gateway.estimate).mockResolvedValue({
+      token: STRK,
+      recipient: FEE_RECIPIENT,
+      amount: 1n,
+      authorization: ' fee-auth ',
+      expiresAtBlock: 1_450,
+    });
+    const batch = await ops.prepare([{ kind: 'transfer', token: TOKEN, amount: 20n, recipient: BOB }]);
+
+    await expect(batch.confirm({ feeCeiling: POOL_FEE + 2n })).resolves.toEqual({
+      transactionHash: '0xprivate',
+    });
+    expect(gateway.submit).toHaveBeenCalledWith(expect.objectContaining({ feeAuthorization: ' fee-auth ' }));
+  });
+
   it('returns a private receipt when the gateway throws after reporting acceptance', async () => {
     const { ops, gateway } = fixture();
     vi.mocked(gateway.submit).mockImplementation(async (input) => {
@@ -901,6 +933,9 @@ describe('quote-bound swap plan admission', () => {
     }, /fee recipient/i],
     ['an unsigned relay fee', {
       fee: { token: STRK, recipient: FEE_RECIPIENT, amount: 1n, authorization: '', expiresAtBlock: 1_450 },
+    }, /fee authorization/i],
+    ['a whitespace-only relay fee authorization', {
+      fee: { token: STRK, recipient: FEE_RECIPIENT, amount: 1n, authorization: ' \t\n', expiresAtBlock: 1_450 },
     }, /fee authorization/i],
     ['an unbounded relay fee', {
       fee: { token: STRK, recipient: FEE_RECIPIENT, amount: 1n, authorization: 'fee-auth', expiresAtBlock: 0 },

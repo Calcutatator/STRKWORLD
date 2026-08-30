@@ -451,7 +451,12 @@ export class WalletApiPrivacyOperations implements PrivacyOperations {
     if (fee.amount <= 0n || fee.amount > this.policy.maxRelayFee) {
       throw new PrivacyError('unknown', 'The relay fee exceeds the route policy.');
     }
-    if (!fee.authorization || !Number.isSafeInteger(fee.expiresAtBlock) || fee.expiresAtBlock <= 0) {
+    if (
+      typeof fee.authorization !== 'string'
+      || fee.authorization.trim().length === 0
+      || !Number.isSafeInteger(fee.expiresAtBlock)
+      || fee.expiresAtBlock <= 0
+    ) {
       throw new PrivacyError('unknown', 'The relay returned no valid fee authorization.');
     }
   }
