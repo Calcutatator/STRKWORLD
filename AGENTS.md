@@ -411,6 +411,26 @@ resume and observed the old unbounded wire payload; the corrected path sends
 No browser, external lobby, wallet, provider, RPC, proof, signature, funds or
 transaction was used.*
 
+### 2026-08-30 — Fixed-room entry rolls back failed state publication
+
+`createFixedRoomController.enter()` committed `inRoom = true` and completed
+the presentation handoff before publishing its first state snapshot. If the
+synchronous `onChange` renderer threw, entry surfaced an error but left the
+controller and presentation inside the room; a later `enter()` became a no-op,
+so the failed transition could not be retried coherently.
+
+Entry publication now compensates the presentation and restores outside state
+when delivery fails, while preserving the original publication error. A
+reentrant destroy or prior lifecycle transition remains authoritative, and a
+later explicit entry can retry after the renderer recovers.
+
+*Verified:* a red-first public World regression makes the first fixed-room
+state publication throw; the old path retained `inRoom` and blocked retry,
+while the corrected path calls presentation exit once, preserves the exact
+error, and successfully re-enters. Focused fixed-room tests pass 60/60. No
+browser, wallet, provider, RPC, proof, signature, funds or transaction was
+used.
+
 ### 2026-08-30 — Lobby startup cleans up after bound-port inspection failure
 
 `startPresenceServer({ port: 0 })` successfully opened a listener and then

@@ -116,6 +116,37 @@ describe('fixed room definitions', () => {
     expect(resume).toHaveBeenCalledTimes(2);
   });
 
+  it('rolls back room ownership when entry state publication fails', () => {
+    const out = bus<WorldEvents>();
+    const shell = bus<ShellEvents>();
+    const error = new Error('room state publication failed');
+    let shouldThrow = true;
+    const onChange = vi.fn(() => {
+      if (shouldThrow) {
+        shouldThrow = false;
+        throw error;
+      }
+    });
+    const onExit = vi.fn();
+    const controller = createFixedRoomController({
+      definition: POST_OFFICE_ROOM_DEFINITION,
+      out,
+      in: shell,
+      input: { suspend: vi.fn(), resume: vi.fn() },
+      onEnter: vi.fn(),
+      onExit,
+      onChange,
+    });
+
+    expect(() => controller.enter()).toThrow(error);
+    expect(controller.state.inRoom).toBe(false);
+    expect(controller.state.building).toBeNull();
+    expect(onExit).toHaveBeenCalledOnce();
+
+    expect(() => controller.enter()).not.toThrow();
+    expect(controller.state.inRoom).toBe(true);
+  });
+
   it('owns generated room maps independently of injected definitions', () => {
     const definition = {
       ...POST_OFFICE_ROOM_DEFINITION,

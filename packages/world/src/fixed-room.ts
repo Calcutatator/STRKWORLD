@@ -500,7 +500,24 @@ export function createFixedRoomController(
         throw error;
       }
       if (destroyed || !inRoom) return;
-      publish();
+      try {
+        publish();
+      } catch (error) {
+        // The first room snapshot completes entry. If delivery fails, roll
+        // back the presentation and logical owner so a later enter can retry.
+        if (!destroyed && inRoom) {
+          inRoom = false;
+          controlOwner = 'world';
+          highlightedStation = null;
+          approachArmed = new Set(options.definition.stations.map((station) => station.station));
+          try {
+            options.onExit?.();
+          } catch {
+            // Preserve the original publication error.
+          }
+        }
+        throw error;
+      }
     },
     update(tile): void {
       if (destroyed || !inRoom || controlOwner === 'shell') return;
