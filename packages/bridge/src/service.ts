@@ -310,12 +310,20 @@ export class BridgeService {
     }
   }
 
-  private verifyStatusQuote(raw: { quoteResponse: QuoteResponse }, record: BridgeRecord): void {
+  private verifyStatusQuote(
+    raw: {
+      quoteResponse: QuoteResponse;
+      status: unknown;
+      swapDetails: GetExecutionStatusResponse['swapDetails'];
+    },
+    record: BridgeRecord,
+  ): void {
     if (
       !isRecord(raw) ||
       !hasOwnDataProperty(raw, 'quoteResponse') ||
       !hasOwnDataProperty(raw, 'status') ||
       !hasOwnDataProperty(raw, 'swapDetails') ||
+      typeof raw.status !== 'string' ||
       !isStatusQuoteResponse(raw.quoteResponse)
     ) throw invalidExecutionStatus();
     const quoteResponse = raw.quoteResponse;

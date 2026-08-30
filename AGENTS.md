@@ -258,6 +258,40 @@ empty shell to fetchers, so a 200 there means nothing.
 
 ## 6. Findings log
 
+### 2026-08-30 — Published Web station snapshots are immutable
+
+`stationSnapshot()` returned a fresh array but left both the array and each
+station entry mutable. A Shell or World-bus consumer could rewrite a status,
+label, or entry before another listener observed the same synchronous payload;
+the TypeScript readonly event shape did not protect this station-admission
+boundary.
+
+The snapshot array and its flat entries are now frozen before publication.
+Values remain derived from the current register and capabilities.
+
+*Verified:* a red-first station-snapshot regression observed successful status
+and array replacement; the corrected test rejects both and preserves the
+available Bank station. The focused station suite passes 25 tests. No browser,
+wallet, provider, RPC, proof, signature, funds or transaction was used.
+
+### 2026-08-30 — Bridge execution status requires string runtime data
+
+`BridgeService.verifyStatusQuote()` required an own `status` property but did
+not validate its runtime type. A malformed 1Click response could provide an
+object with `toString() => 'SUCCESS'`; `mapStatus()` coerced it, parsed
+settlement data, and published a settled status without a provider string.
+
+Status verification now requires the own status field to be a runtime string
+before mapping or settlement parsing. Valid provider strings and the existing
+unknown-string error path are unchanged; coercible objects fail closed and
+cannot update persisted progress.
+
+*Verified:* a red-first Bridge regression supplied a coercible `SUCCESS`
+status; the corrected path rejects it and preserves the awaiting-deposit
+record. Removing the runtime type guard reproduces the failure. The focused
+Bridge suite passes 104 tests. No browser, wallet, provider, RPC, proof,
+signature, funds or transaction was used.
+
 ### 2026-08-30 — Avatar Studio presentation retains failed destroy ownership
 
 `createAvatarStudioPresentation().destroy()` marked the presentation retired

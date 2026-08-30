@@ -1000,6 +1000,29 @@ describe('BridgeService', () => {
     expect(store.load()).toEqual(before);
   });
 
+  it('rejects a coercible execution status before mapping provider progress', async () => {
+    const client = new StubClient();
+    const store = new MemoryBridgeStore();
+    const service = new BridgeService({ client, store, quoteVerifier: () => true, now: () => NOW });
+    await service.createManualDeposit({
+      source: SOURCE,
+      amountIn: 1_000_000n,
+      starknetRecipient: '0x123',
+      refundAddress: request.refundTo,
+    });
+    const before = store.load();
+    client.statuses.push({
+      ...status('SUCCESS' as never, {
+        amountOut: '2000000000000000000',
+        destinationChainTxHashes: [{ hash: '0xdestination', explorerUrl: '' }],
+      }),
+      status: { toString: () => 'SUCCESS' },
+    } as unknown as GetExecutionStatusResponse);
+
+    await expect(service.refresh()).rejects.toThrow('1Click returned invalid execution status data.');
+    expect(store.load()).toEqual(before);
+  });
+
   it('rejects a quote that omits its deposit address or signed dispute evidence', async () => {
     const client = new StubClient();
     const store = new MemoryBridgeStore();
