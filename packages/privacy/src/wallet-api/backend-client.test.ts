@@ -118,7 +118,11 @@ describe('BackendPrivacyClient', () => {
 
   it.each([
     ['zero', '0', true],
+    ['leading zeros', '006', true],
     ['maximum uint256', MAX_UINT256.toString(), true],
+    ['whitespace', ' ', false],
+    ['signed', '+6', false],
+    ['fractional', '1.0', false],
     ['negative', '-1', false],
     ['above uint256', (MAX_UINT256 + 1n).toString(), false],
   ])('validates the pool fee amount as a uint256 (%s)', async (_label, feeAmount, valid) => {

@@ -203,6 +203,9 @@ function ownField(record: Record<string, unknown>, key: string): unknown {
 
 function asUint256(value: unknown): bigint {
   const text = asString(value);
+  if (!/^\d+$/.test(text)) {
+    throw new PrivacyError('unknown', 'The private service returned an invalid response.');
+  }
   let parsed: bigint;
   try {
     parsed = BigInt(text);

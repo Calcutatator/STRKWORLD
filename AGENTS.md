@@ -258,6 +258,27 @@ empty shell to fetchers, so a 200 there means nothing.
 
 ## 6. Findings log
 
+### 2026-08-30 — Pool fee wire values require decimal syntax
+
+`BackendPrivacyClient.asUint256()` used `BigInt()` and range checks alone for
+the backend's decimal-string `feeAmount`. JavaScript's bigint parser accepts
+whitespace and signed forms, so a response containing only spaces was silently
+converted to `0n` and published as a valid zero pool fee; `+6` was likewise
+accepted as six. This made malformed pool configuration cross the browser
+privacy boundary.
+
+The parser now requires one or more decimal digits before applying the existing
+uint256 bounds. Leading-zero decimal strings remain accepted, while whitespace,
+signs and fractional syntax fail with the existing generic protocol error.
+
+*Verified:* red-first BackendPrivacyClient regressions prove whitespace and
+signed values were accepted before the guard and now reject; zero, leading-zero
+decimal, maximum uint256, negative and above-uint256 cases retain their
+intended outcomes. The focused BackendPrivacyClient suite passes 35 tests; the
+Privacy suite passes 9 files / 219 tests. Package typecheck, invariants and
+diff hygiene pass. No browser, external provider, RPC, wallet, proof,
+signature, funds or transaction was used.
+
 ### 2026-08-30 — Wallet balance reads reject negative amounts
 
 `WalletApiPrivacyOperations.balances()` converted each wallet-reported
