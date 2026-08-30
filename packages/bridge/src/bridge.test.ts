@@ -1439,6 +1439,25 @@ describe('BridgeService', () => {
 });
 
 describe('source registry and refund validation', () => {
+  it('falls back when the live token registry has a malformed response shape', async () => {
+    await expect(loadSourceAssets({
+      getTokens: async () => null as never,
+    })).resolves.toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        assetId: 'nep141:arb-0xaf88d065e77c8cc2239327c5edb3a432268e5831.omft.near',
+        availability: 'fallback',
+      }),
+    ]));
+  });
+
+  it('ignores malformed entries in an otherwise valid token registry response', async () => {
+    const assets = await loadSourceAssets({
+      getTokens: async () => [null, 'not-an-entry'] as never,
+    });
+    expect(assets).toHaveLength(6);
+    expect(assets.every((asset) => asset.availability === 'fallback')).toBe(true);
+  });
+
   it('merges live metadata over curated fallbacks without making live availability up', async () => {
     const live = [
       {

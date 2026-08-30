@@ -258,6 +258,26 @@ empty shell to fetchers, so a 200 there means nothing.
 
 ## 6. Findings log
 
+### 2026-08-30 — Bridge source registry responses fail closed on malformed shapes
+
+`loadSourceAssets()` previously caught only a rejected token request. A
+malformed runtime response such as `null`, or an array containing `null`, was
+then iterated and dereferenced as if it were the generated SDK type. The
+source picker could crash instead of retaining its curated safe fallbacks.
+
+The loader now requires an array response and skips non-object entries before
+reading token metadata. Transport failures, malformed top-level responses and
+bad entries all retain the fallback registry; valid live metadata continues
+to override matching fallback entries under the existing decimal and chain
+guards.
+
+*Verified:* red-first public Bridge regressions cover a `null` registry
+response and null/primitive array entries; the old loader threw, while the
+corrected loader returns the six curated fallback assets. Removing either
+guard reproduces its matching failure. The Bridge suite passes 66/66; package
+typecheck, invariant scan and `git diff --check` pass. No browser, external
+provider, RPC, wallet, proof, signature, funds or transaction was used.
+
 ### 2026-08-30 — Bridge shield planning ownership is retired on close
 
 The Web Bridge panel used one `shieldBusy` flag for the lifetime of a machine.

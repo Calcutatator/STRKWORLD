@@ -69,8 +69,10 @@ export async function loadSourceAssets(client: TokenRegistryClient): Promise<Sou
   } catch {
     return [...byId.values()];
   }
+  if (!Array.isArray(live)) return [...byId.values()];
 
   for (const token of live) {
+    if (!token || typeof token !== 'object' || Array.isArray(token)) continue;
     if (token.assetId === STRK_ON_STARKNET_ASSET_ID) continue;
     const chainName = CHAIN_MAP[String(token.blockchain)];
     if (
