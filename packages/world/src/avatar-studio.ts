@@ -406,6 +406,9 @@ export function createAvatarStudioController(
     }
     if (destroyed || inRoom) return;
     publish();
+    // Exit publication is synchronous and may retire or replace the Studio
+    // before this turn resumes. Do not announce a stale exit.
+    if (destroyed || inRoom) return;
     options.out.emit('avatar-studio:exited', {});
   };
 

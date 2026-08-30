@@ -258,6 +258,25 @@ empty shell to fetchers, so a 200 there means nothing.
 
 ## 6. Findings log
 
+### 2026-08-30 — Avatar Studio exit can announce stale ownership after reentrant state publication
+
+`createAvatarStudioController.leave()` published the outside snapshot and then
+unconditionally emitted `avatar-studio:exited`. An `onChange` consumer can
+synchronously re-enter the Studio while that snapshot is delivered. The
+outer leave then announces an exit after newer Studio ownership has already
+won.
+
+The exit path now rechecks `destroyed` and `inRoom` after synchronous outside
+state publication, suppressing the stale semantic event. Normal exit
+publication and announcement ordering are unchanged when the controller
+remains outside.
+
+*Verified:* a public World regression re-enters the Studio from the outside
+snapshot callback. On the old path `avatar-studio:exited` was emitted after
+re-entry; the corrected path emits no stale exit and remains inside. Focused
+Avatar Studio tests pass 42 tests. No browser, lobby server, wallet, provider,
+RPC, proof, signature, funds or transaction was used.
+
 ### 2026-08-30 — Avatar Studio entry can announce stale ownership after reentrant state publication
 
 `createAvatarStudioController.enter()` published the inside snapshot and then
