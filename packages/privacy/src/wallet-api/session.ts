@@ -710,6 +710,14 @@ function validIntent(value: unknown): boolean {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return false;
   const kind = Object.getOwnPropertyDescriptor(value, 'kind');
   if (!kind || !('value' in kind) || typeof kind.value !== 'string') return false;
+  if (kind.value === 'shield') {
+    const token = Object.getOwnPropertyDescriptor(value, 'token');
+    const amount = Object.getOwnPropertyDescriptor(value, 'amount');
+    return Boolean(
+      token && 'value' in token && typeof token.value === 'string' && isNonzeroFelt(token.value)
+      && amount && 'value' in amount && typeof amount.value === 'bigint' && amount.value > 0n
+    );
+  }
   if (kind.value === 'transfer') {
     const token = Object.getOwnPropertyDescriptor(value, 'token');
     const recipient = Object.getOwnPropertyDescriptor(value, 'recipient');
