@@ -397,6 +397,7 @@ export function createFixedRoomController(
     approachArmed = new Set(options.definition.stations.map((station) => station.station));
     options.input.resume();
     options.onExit?.();
+    if (destroyed || inRoom) return;
     publish();
     options.out.emit('building:exited', {
       building: options.definition.building,

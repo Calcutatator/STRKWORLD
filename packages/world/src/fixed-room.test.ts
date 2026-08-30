@@ -550,6 +550,34 @@ describe('fixed room controller', () => {
     expect(inputCalls).toEqual(['resume', 'resume']);
   });
 
+  it('stops the exit continuation when onExit destroys the controller', () => {
+    const out = bus<WorldEvents>();
+    const shell = bus<ShellEvents>();
+    const events: unknown[] = [];
+    const changes: FixedRoomState[] = [];
+    out.on('building:exited', (payload) => events.push(payload));
+    let controller!: FixedRoomController;
+    controller = createFixedRoomController({
+      definition: POST_OFFICE_ROOM_DEFINITION,
+      out,
+      in: shell,
+      input: { suspend: () => {}, resume: () => {} },
+      onExit: () => controller.destroy(),
+      onChange: (state) => changes.push(state),
+    });
+
+    controller.enter();
+    changes.length = 0;
+    controller.update({
+      x: POST_OFFICE_ROOM_DEFINITION.exit.x,
+      y: POST_OFFICE_ROOM_DEFINITION.exit.y,
+    });
+
+    expect(controller.state.inRoom).toBe(false);
+    expect(changes).toEqual([]);
+    expect(events).toEqual([]);
+  });
+
   it('uses the Bridge building and station ids for admission, activation, and exit', () => {
     const h = harness(BRIDGE_ROOM_DEFINITION);
     h.controller.enter();

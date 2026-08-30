@@ -258,6 +258,24 @@ empty shell to fetchers, so a 200 there means nothing.
 
 ## 6. Findings log
 
+### 2026-08-30 — Fixed-room exit rechecks ownership after onExit
+
+`FixedRoomController.leave()` invoked the consumer-owned `onExit` callback,
+then unconditionally published its state and emitted `building:exited`. If
+that callback synchronously destroyed or re-entered the controller, the
+remaining continuation described a transition that no longer belonged to the
+current controller lifecycle.
+
+Exit now rechecks that the controller is still live and outside the room after
+`onExit`; a retired or re-entered controller stops the stale continuation.
+Normal exit ordering and the legitimate `building:exited` event are unchanged.
+
+*Verified:* a red-first fixed-room regression made `onExit` destroy the
+controller and observed one stale state publication; the corrected test emits
+neither a stale state nor `building:exited`. Focused fixed-room tests pass
+34/34. No browser, wallet, provider, RPC, proof, signature, funds or
+transaction was used.
+
 ### 2026-08-30 — Bridge source registry responses fail closed on malformed shapes
 
 `loadSourceAssets()` previously caught only a rejected token request. A
