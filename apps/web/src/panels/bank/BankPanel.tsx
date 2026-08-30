@@ -7,6 +7,7 @@ import { useStore } from '../../store/use-store.js';
 import { ConfirmGate } from '../ConfirmGate.js';
 import { LockedNotice } from '../LockedRoom.js';
 import { PanelFrame } from '../PanelFrame.js';
+import { PRIVACY_REGISTER, type RouteGrade } from '../../privacy/register.js';
 import { routeDoor } from '../routes.js';
 import { createBankPanel, ROUTE_BY_MODE, type BankMode, type BankPanel as BankPanelMachine, type BankState } from './bank-machine.js';
 import { describeIntent, describeWarning } from './summary-copy.js';
@@ -35,6 +36,7 @@ export function BankPanel({
   title = COPY.bank.title,
   building = 'bank',
   preConfirmGuard,
+  register = PRIVACY_REGISTER,
 }: {
   onClose: () => void;
   /** Supply a driven machine to render a specific state. Tests use this. */
@@ -50,6 +52,8 @@ export function BankPanel({
   /** Receipt ownership, independent of the reused Bank machine visuals. */
   building?: BuildingId;
   preConfirmGuard?: () => Promise<boolean>;
+  /** Route authority used for every mode tab and the owned machine. */
+  register?: readonly RouteGrade[];
 }) {
   const { operations, receipts, noteOperationError, shellBus, submissionUncertainty } = usePrivacy();
   const modes = allowedModes ?? (experience === 'station' ? BANK_STATION_MODES : BANK_MENU_MODES);
@@ -64,6 +68,7 @@ export function BankPanel({
             allowedModes: modes,
             initialMode,
             building,
+            register,
             maxIntents: experience === 'station' ? 1 : undefined,
             onError: noteOperationError,
             preConfirmGuard,
@@ -72,7 +77,7 @@ export function BankPanel({
               return !current.active || current.acknowledged;
             },
           }),
-    [injected, operations, receipts, noteOperationError, experience, modes, initialMode, building, preConfirmGuard, submissionUncertainty],
+    [injected, operations, receipts, noteOperationError, experience, modes, initialMode, building, preConfirmGuard, register, submissionUncertainty],
   );
   const panel = injected ?? owned!;
   const state = useStore(panel.store);
@@ -132,8 +137,9 @@ export function BankPanel({
       >
         <ModeTabs
           mode={state.mode}
-          register={state.door}
+          activeDoor={state.door}
           modes={modes}
+          register={register}
           onSelect={(mode) => panel.setMode(mode)}
         />
 
@@ -187,13 +193,15 @@ export function BankPanel({
 
 function ModeTabs({
   mode,
-  register,
+  activeDoor,
   modes,
+  register,
   onSelect,
 }: {
   mode: BankMode;
-  register: BankState['door'];
+  activeDoor: BankState['door'];
   modes: readonly BankMode[];
+  register: readonly RouteGrade[];
   onSelect: (mode: BankMode) => void;
 }) {
   const labels: Record<BankMode, string> = {
@@ -206,7 +214,7 @@ function ModeTabs({
       {modes.map((value) => {
         // Each tab reports its own door, so a route that loses its approval is
         // visibly shut rather than looking available until it is clicked.
-        const door = value === mode ? register : routeDoor(ROUTE_BY_MODE[value]);
+        const door = value === mode ? activeDoor : routeDoor(ROUTE_BY_MODE[value], register);
         return (
           <button
             key={value}

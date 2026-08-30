@@ -1,8 +1,9 @@
 import { COPY } from '../../copy.js';
 import { BankPanel } from '../bank/BankPanel.js';
 import type { BankMode } from '../bank/bank-machine.js';
+import type { RouteGrade } from '../../privacy/register.js';
 
-type PostOfficePanelProps = { onClose: () => void };
+type PostOfficePanelProps = { onClose: () => void; register?: readonly RouteGrade[] };
 const POST_OFFICE_MENU_MODES: readonly BankMode[] = ['transfer'];
 
 /**
@@ -11,13 +12,14 @@ const POST_OFFICE_MENU_MODES: readonly BankMode[] = ['transfer'];
  * to the one approved Post Office route while retaining its batching,
  * recipient preflight, commit gate, receipts and uncertainty handling.
  */
-export function PostOfficePanel({ onClose }: PostOfficePanelProps) {
+export function PostOfficePanel({ onClose, register }: PostOfficePanelProps) {
   return (
     <BankPanel
       onClose={onClose}
       experience="menu"
       allowedModes={POST_OFFICE_MENU_MODES}
       initialMode="transfer"
+      register={register}
       title={COPY.buildings['post-office']}
       building="post-office"
     />

@@ -6,6 +6,7 @@ import { PostOfficePanel } from './post-office/PostOfficePanel.js';
 import { ExchangePanel } from './exchange/ExchangePanel.js';
 import { BridgePanel } from './bridge/BridgePanel.js';
 import type { PanelRegistry } from './panel-framework.js';
+import type { RouteGrade } from '../privacy/register.js';
 
 /**
  * Which buildings have a room written.
@@ -18,6 +19,7 @@ import type { PanelRegistry } from './panel-framework.js';
 
 export interface BuildingPanelProps {
   onClose: () => void;
+  register?: readonly RouteGrade[];
 }
 
 export interface BuildingPanelDescriptor {

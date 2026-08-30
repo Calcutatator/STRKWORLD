@@ -182,6 +182,7 @@ export function VisitLayerView({
           building={station.definition.building}
           allowedModes={station.definition.modes}
           initialMode={station.definition.initialMode}
+          register={register}
           title={COPY.buildings[station.definition.building]}
           onClose={onCloseSurface}
         />,
@@ -221,7 +222,7 @@ export function VisitLayerView({
   }
 
   const { Component } = room.panel;
-  return withControls(<Component onClose={onCloseSurface} />);
+  return withControls(<Component onClose={onCloseSurface} register={register} />);
 }
 
 function ConnectionSurface({

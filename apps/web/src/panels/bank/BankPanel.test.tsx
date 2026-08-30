@@ -56,7 +56,7 @@ function render(
   seam: FakePrivacyOperations,
   experience: 'menu' | 'station' = 'menu',
   submissionUncertainty = createSubmissionUncertainty(),
-  options: { allowedModes?: readonly BankMode[]; initialMode?: BankMode; title?: string } = {},
+  options: { allowedModes?: readonly BankMode[]; initialMode?: BankMode; title?: string; register?: readonly RouteGrade[] } = {},
 ): string {
   return renderToStaticMarkup(
     <PrivacyProvider operations={seam} submissionUncertainty={submissionUncertainty}>
@@ -320,6 +320,37 @@ describe('BankPanel rendering', () => {
     expect(confirmButton(markup)).toBeNull();
     // The tab itself is marked, so the door is visibly shut before it is tried.
     expect(markup).toMatch(/<button[^>]*data-locked="true"/);
+  });
+
+  it('marks non-active mode tabs from the machine route register', async () => {
+    const unapproved: RouteGrade = {
+      building: 'bank',
+      route: 'bank.unshield',
+      grade: 'public-edge',
+      observable: 'test fixture',
+      disclosure: null,
+      approvedBy: null,
+      approvedOn: null,
+      rationale: null,
+      returnToPool: false,
+    };
+    const shieldRoute = PRIVACY_REGISTER.find((entry) => entry.route === 'bank.shield')!;
+    const seam = operations();
+    const panel = createAllowedBankPanel({
+      operations: seam,
+      receipts: createReceiptLedger(),
+      allowedModes: ['shield', 'unshield'],
+      initialMode: 'shield',
+      register: [shieldRoute, unapproved],
+    });
+    await panel.open();
+
+    const markup = render(panel, seam, 'menu', undefined, {
+      allowedModes: ['shield', 'unshield'],
+      initialMode: 'shield',
+      register: [shieldRoute, unapproved],
+    });
+    expect(markup).toMatch(/<button[^>]*data-locked="true"[^>]*>Unshield<\/button>/);
   });
 
   it('shows uncertainty without a retry path or another financial form', async () => {

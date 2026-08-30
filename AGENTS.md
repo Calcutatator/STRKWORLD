@@ -258,6 +258,25 @@ empty shell to fetchers, so a 200 there means nothing.
 
 ## 6. Findings log
 
+### 2026-08-30 — Bank mode tabs use the same route authority as the panel
+
+`BankPanel` passed only the active mode's door into its tab renderer. Every
+non-active tab then resolved its lock state against the default privacy
+register, so a custom/current route register could show an unapproved mode as
+open until the player clicked it. That made the tab presentation disagree with
+the machine's actual admission decision.
+
+The Bank view now accepts the route register used by its machine, resolves
+every mode tab from that register, and Menu/Station composition forwards the
+same register it used for admission. The active mode still uses the machine's
+already-resolved door, and the default production register is unchanged.
+
+*Verified:* a red-first static `BankPanel` regression supplied a private
+shield route plus an unapproved unshield route and observed the old unshield
+tab without its lock marker. The corrected render marks that tab locked.
+Focused Bank rendering tests pass 21/21. No browser, wallet, provider, RPC,
+proof, signature, funds or transaction was used.
+
 ### 2026-08-30 — Fixed-room station decoding ignores accessor-backed fields
 
 `normalizeFixedRoomStations()` read Shell-provided station `station`, `label`
