@@ -31,8 +31,12 @@ export interface PresenceController {
   destroy(): Promise<void>;
 }
 
+function freezePresenceState(next: PresenceState): PresenceState {
+  return Object.freeze({ ...next });
+}
+
 export function createPresenceController({ endpoint, factory = (options) => new LobbyClient(options) }: { endpoint?: string; factory?: PresenceFactory }): PresenceController {
-  let state: PresenceState = { status: endpoint ? 'unavailable' : 'unavailable', canReconnect: Boolean(endpoint) };
+  let state: PresenceState = freezePresenceState({ status: 'unavailable', canReconnect: Boolean(endpoint) });
   let client: PresenceClient | null = null;
   let clientSprite: AvatarSpriteKey | null = null;
   let placement: { x: number; y: number; facing: Facing } | null = null;
@@ -61,7 +65,7 @@ export function createPresenceController({ endpoint, factory = (options) => new 
   };
   const setState = (next: PresenceState) => {
     if (destroyed) return;
-    state = next;
+    state = freezePresenceState(next);
     // Deliver one transition to the subscriptions that owned its snapshot.
     // A replacement of the same function is a new subscription generation.
     for (const [listener, token] of [...listeners]) {

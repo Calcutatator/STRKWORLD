@@ -55,6 +55,16 @@ async function drainAsyncWork() {
 }
 
 describe('presence controller', () => {
+  it('publishes an immutable presence state snapshot', () => {
+    const presence = createPresenceController({ endpoint: 'ws://example' });
+    const state = presence.getState();
+
+    expect(Object.isFrozen(state)).toBe(true);
+    expect(Reflect.set(state, 'status', 'connected')).toBe(false);
+    expect(Reflect.set(state, 'canReconnect', false)).toBe(false);
+    expect(presence.getState()).toEqual({ status: 'unavailable', canReconnect: true });
+  });
+
   it('does not notify a listener added during a transition until the next transition', () => {
     const world = createEventBus<WorldEvents>();
     const made = controlledClient();
