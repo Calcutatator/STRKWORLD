@@ -239,4 +239,48 @@ describe('production wallet bootstrap', () => {
     expect(render).not.toHaveBeenCalled();
     expect(failure).toHaveBeenCalledOnce();
   });
+
+  it('rejects a session proxy that mutates operations during validation', async () => {
+    const target = session();
+    let mutated = false;
+    const loaded = new Proxy(target, {
+      getOwnPropertyDescriptor(object, property) {
+        const descriptor = Reflect.getOwnPropertyDescriptor(object, property);
+        if (property === 'destroy' && !mutated) {
+          mutated = true;
+          Object.defineProperty(object, 'operations', { value: {} });
+        }
+        return descriptor;
+      },
+    });
+    const render = vi.fn();
+    const failure = vi.fn();
+    startProductionWalletBootstrap({
+      load: async () => loaded,
+      render,
+      failure,
+    });
+    await Promise.resolve();
+    await Promise.resolve();
+
+    expect(render).not.toHaveBeenCalled();
+    expect(failure).toHaveBeenCalledOnce();
+  });
+
+  it('freezes the admitted session and operations before rendering', async () => {
+    const loaded = session();
+    const render = vi.fn((received: WalletSession) => {
+      expect(Object.isFrozen(received)).toBe(true);
+      expect(Object.isFrozen(received.operations)).toBe(true);
+    });
+    startProductionWalletBootstrap({
+      load: async () => loaded,
+      render,
+      failure: vi.fn(),
+    });
+    await Promise.resolve();
+    await Promise.resolve();
+
+    expect(render).toHaveBeenCalledOnce();
+  });
 });

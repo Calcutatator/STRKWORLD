@@ -47,7 +47,7 @@ export function startProductionWalletBootstrap({
         destroyQuietly(session);
         return;
       }
-      if (!isWalletSession(session)) {
+      if (!admitWalletSession(session)) {
         if (!retired) reportFailure(failure);
         return;
       }
@@ -99,6 +99,21 @@ function isWalletSession(value: unknown): value is WalletSession {
       'disconnect',
       'destroy',
     ].every((key) => hasOwnDataMethod(value, key));
+  } catch {
+    return false;
+  }
+}
+
+function admitWalletSession(value: unknown): value is WalletSession {
+  if (!isWalletSession(value)) return false;
+  try {
+    const descriptor = Object.getOwnPropertyDescriptor(value, 'operations');
+    if (!descriptor || !('value' in descriptor) || !descriptor.value || typeof descriptor.value !== 'object') {
+      return false;
+    }
+    Object.freeze(descriptor.value);
+    Object.freeze(value);
+    return isWalletSession(value);
   } catch {
     return false;
   }

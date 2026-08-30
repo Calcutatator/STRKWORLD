@@ -258,6 +258,27 @@ empty shell to fetchers, so a 200 there means nothing.
 
 ## 6. Findings log
 
+### 2026-08-30 — Production bootstrap owns an immutable admitted session
+
+Session shape validation alone did not close the ownership boundary. A
+hostile Proxy could return valid descriptors while mutating the session's
+`operations` object during the final method check; the original mutable
+session would then be handed to the renderer in a different shape than the
+one that was validated.
+
+After validation, bootstrap now freezes both the session and its privacy
+operations object, then repeats validation before publication. This closes
+the synchronous validation-to-render TOCTOU while preserving the original
+method values and receiver. Freeze or revalidation traps fail closed through
+the existing startup failure surface; no facade or rebinding is introduced.
+
+*Verified:* a red-first public bootstrap regression mutated `operations` from
+inside a descriptor trap and reached `render()` on the old path. The corrected
+path reports failure, and a separate regression confirms both admitted objects
+are frozen before rendering. Focused bootstrap tests pass 14 tests; workspace
+gates are recorded on the candidate. No browser, wallet, provider, RPC, proof,
+signature, funds or transaction was used.
+
 ### 2026-08-30 — Production bootstrap validates the privacy operations seam
 
 The production bootstrap validator checked that a loaded session had an
