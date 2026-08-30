@@ -25,6 +25,14 @@ const BRIDGE_LEGS: readonly BridgeLeg[] = [
   'failed',
   'expired',
 ];
+const BRIDGE_STATUS_FIELDS = [
+  'leg',
+  'depositTxHash',
+  'settlementTxHash',
+  'strkReceived',
+  'message',
+  'pollingStopped',
+] as const;
 
 export function serializeBridgeRecord(record: BridgeRecord): string {
   return JSON.stringify(record, (_key, value: unknown) =>
@@ -80,6 +88,9 @@ export function isUsableDepositAddress(value: unknown): value is string {
 
 function isBridgeStatus(value: unknown): value is BridgeStatus {
   if (!isRecord(value)) return false;
+  if (Object.keys(value).some((key) => !BRIDGE_STATUS_FIELDS.includes(key as typeof BRIDGE_STATUS_FIELDS[number]))) {
+    return false;
+  }
   if (
     !BRIDGE_LEGS.includes(value.leg as BridgeLeg) ||
     typeof value.message !== 'string' ||

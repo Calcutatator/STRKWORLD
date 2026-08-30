@@ -2036,6 +2036,7 @@ describe('bridge persistence', () => {
     ['invalid leg', { leg: 'unknown' }],
     ['non-string message', { leg: 'awaiting-deposit', message: 42 }],
     ['non-boolean polling flag', { leg: 'awaiting-deposit', message: 'waiting', pollingStopped: 'false' }],
+    ['unknown status field', { leg: 'awaiting-deposit', message: 'waiting', pollingStopped: false, unexpected: 'forged' }],
     ['non-string deposit hash', { leg: 'deposit-detected', message: 'detected', pollingStopped: true, depositTxHash: 42 }],
     ['non-string settlement hash', { leg: 'settled', message: 'settled', pollingStopped: true, settlementTxHash: {} }],
     ['non-bigint received amount', { leg: 'settled', message: 'settled', pollingStopped: true, strkReceived: '1' }],
