@@ -434,6 +434,8 @@ export function createAvatarStudioController(
   let destroyPending = false;
   let destroying = false;
   let updateRevision = 0;
+  let highlightRevision = 0;
+  let committedHighlightRevision = 0;
 
   const state = (): AvatarStudioState => ({
     inRoom,
@@ -534,8 +536,36 @@ export function createAvatarStudioController(
       const figure = avatarStudioFigureAt(definition, tile.x, tile.y);
       const nextHighlight = figure?.figure ?? null;
       if (nextHighlight !== highlightedFigure) {
+        const previousHighlight = highlightedFigure;
+        const ownHighlightRevision = ++highlightRevision;
         highlightedFigure = nextHighlight;
-        publish();
+        try {
+          publish();
+          // A nested failed update may have restored this candidate, while a
+          // nested successful update remains the newer owner. The final
+          // value is the authoritative published state when this callback
+          // completes successfully.
+          if (!destroyed && inRoom && highlightedFigure === nextHighlight) {
+            committedHighlightRevision = Math.max(
+              committedHighlightRevision,
+              highlightRevision,
+            );
+          }
+        } catch (error) {
+          // Highlight delivery is an external synchronous boundary. Roll
+          // back only when no newer successful highlight publication owns the
+          // candidate; a nested failed update restores its own prior value and
+          // lets this outer failure roll back as well.
+          if (
+            !destroyed &&
+            inRoom &&
+            highlightedFigure === nextHighlight &&
+            committedHighlightRevision < ownHighlightRevision
+          ) {
+            highlightedFigure = previousHighlight;
+          }
+          throw error;
+        }
       }
       // onChange delivery is synchronous and may destroy the Studio before
       // this update resumes. It may also synchronously run a newer update;

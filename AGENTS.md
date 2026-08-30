@@ -258,6 +258,27 @@ empty shell to fetchers, so a 200 there means nothing.
 
 ## 6. Findings log
 
+### 2026-08-30 — Avatar Studio highlight publication must remain retryable
+
+`createAvatarStudioController.update()` assigned `highlightedFigure` before
+publishing the synchronous `onChange` snapshot. If that external publication
+threw, the controller retained a highlight the renderer had not accepted; the
+same tile then skipped publication on retry because the sentinel already
+matched.
+
+Highlight updates now use their own committed revision. A failed publication
+rolls back its candidate when no newer successful nested update owns it, while
+reentrant newer state remains authoritative. Successful highlighting and
+selection behavior are unchanged.
+
+*Verified:* a red-first public World regression makes highlight delivery throw
+on a figure tile; the old controller retained the unrendered figure and could
+not retry its highlight, while the corrected controller restores `null` and
+successfully republishes and selects the same tile. Focused Avatar Studio tests
+pass 47 tests and the World suite passes 25 files / 404 tests. No browser,
+lobby server, wallet, provider, RPC, proof, signature, funds or transaction was
+used.
+
 ### 2026-08-30 — Fixed-room control ownership must follow the input handoff
 
 The `world:control-owner` Shell callback committed `controlOwner = 'shell'`

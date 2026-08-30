@@ -1214,6 +1214,33 @@ describe('hidden Avatar Studio', () => {
     controller.enter();
     expect(controller.state.inRoom).toBe(true);
   });
+
+  it('rolls back a failed highlight publication so the tile can retry', () => {
+    const error = new Error('Studio highlight delivery failed');
+    let fail = false;
+    const changes: AvatarStudioState[] = [];
+    const out: Pick<EventBus<WorldEvents>, 'emit'> = { emit: vi.fn() };
+    const controller = createAvatarStudioController({
+      out,
+      selection: createAvatarOutfitSelection({ out }),
+      onChange: (state) => {
+        if (fail) throw error;
+        changes.push(state);
+      },
+    });
+    controller.enter();
+    const figure = AVATAR_STUDIO_DEFINITION.figures[0];
+    if (!figure) throw new Error('missing Studio figure');
+
+    fail = true;
+    expect(() => controller.update({ x: figure.x, y: figure.y })).toThrow(error);
+    expect(controller.state.highlightedFigure).toBeNull();
+
+    fail = false;
+    controller.update({ x: figure.x, y: figure.y });
+    expect(controller.state.highlightedFigure).toBe(figure.figure);
+    expect(changes.at(-1)?.highlightedFigure).toBe(figure.figure);
+  });
 });
 
 function authoredDefinition(
