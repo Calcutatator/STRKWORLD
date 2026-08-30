@@ -449,6 +449,9 @@ function proxyHttp(
     else response.destroy();
   });
   request.once('aborted', () => upstream.destroy());
+  response.once('close', () => {
+    if (!response.writableFinished) upstream.destroy();
+  });
   if (options.body !== undefined) upstream.end(options.body);
   else request.pipe(upstream);
 }

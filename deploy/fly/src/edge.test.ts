@@ -323,6 +323,40 @@ describe('Fly edge public boundary', () => {
     expect(await response.text()).toBe('{"ok":true}');
   });
 
+  it('retires the private request when the public client disconnects after upload', async () => {
+    const root = await fixture();
+    let resolveBackendStarted: (() => void) | undefined;
+    const backendStarted = new Promise<void>((resolve) => { resolveBackendStarted = resolve; });
+    let resolveBackendClosed: (() => void) | undefined;
+    const backendClosed = new Promise<void>((resolve) => { resolveBackendClosed = resolve; });
+    const backend = createServer((request, response) => {
+      response.once('close', () => resolveBackendClosed?.());
+      request.resume();
+      resolveBackendStarted?.();
+    });
+    const backendPort = await listen(backend);
+    const edge = createEdgeServer({ staticRoot: root, backendPort, lobbyPort: 1, publicOrigin: 'https://game.example' });
+    const edgePort = await listen(edge);
+    const client = createConnection({ host: '127.0.0.1', port: edgePort });
+    await new Promise<void>((resolve, reject) => {
+      client.once('connect', resolve);
+      client.once('error', reject);
+    });
+    client.write(
+      'POST /api/v1/rpc/pool-config HTTP/1.1\r\n' +
+      'Host: localhost\r\n' +
+      'Content-Type: application/json\r\n' +
+      'Content-Length: 2\r\n\r\n{}',
+    );
+    await backendStarted;
+    client.destroy();
+
+    await expect(Promise.race([
+      backendClosed.then(() => 'closed'),
+      new Promise<string>((resolve) => setTimeout(() => resolve('open'), 100)),
+    ])).resolves.toBe('closed');
+  });
+
   it('forwards only JSON body metadata from the public API request', async () => {
     const root = await fixture();
     const backend = createServer((request, response) => {
