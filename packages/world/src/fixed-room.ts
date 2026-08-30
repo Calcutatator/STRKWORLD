@@ -84,6 +84,84 @@ export interface FixedRoomInputGate {
   resume(): void;
 }
 
+export interface FixedRoomPresentationPort {
+  setPlayerVelocity(): void;
+  setBodyEnabled(enabled: boolean): void;
+  setGroundVisible(visible: boolean): void;
+  setDoorsVisible(visible: boolean): void;
+  setRemoteVisible(visible: boolean): void;
+  setLabelsVisible(visible: boolean): void;
+  setRoomVisible(visible: boolean): void;
+  setWorldBounds(room: boolean): void;
+  setCameraBounds(room: boolean): void;
+  setPlayerPosition(room: boolean): void;
+  resetDoors(): void;
+  resumeStreet(): void;
+}
+
+export interface FixedRoomPresentation {
+  enter(): void;
+  exit(): void;
+}
+
+export function createFixedRoomPresentation(
+  port: FixedRoomPresentationPort,
+): FixedRoomPresentation {
+  let transitionRevision = 0;
+  const run = (room: boolean): void => {
+    const ownTransition = ++transitionRevision;
+    const isCurrent = (): boolean => transitionRevision === ownTransition;
+    try {
+      port.setPlayerVelocity();
+      if (!isCurrent()) return;
+      port.setBodyEnabled(!room);
+      if (!isCurrent()) return;
+      port.setGroundVisible(!room);
+      if (!isCurrent()) return;
+      port.setDoorsVisible(!room);
+      if (!isCurrent()) return;
+      port.setRemoteVisible(!room);
+      if (!isCurrent()) return;
+      port.setLabelsVisible(!room);
+      if (!isCurrent()) return;
+      port.setRoomVisible(room);
+      if (!isCurrent()) return;
+      port.setWorldBounds(room);
+      if (!isCurrent()) return;
+      port.setCameraBounds(room);
+      if (!isCurrent()) return;
+      port.setPlayerPosition(room);
+      if (!room && isCurrent()) {
+        port.resetDoors();
+        if (!isCurrent()) return;
+        port.resumeStreet();
+      }
+    } catch (error) {
+      if (room && isCurrent()) restoreStreetPresentation(port);
+      throw error;
+    }
+  };
+  return Object.freeze({ enter: () => run(true), exit: () => run(false) });
+}
+
+function restoreStreetPresentation(port: FixedRoomPresentationPort): void {
+  const attempts = [
+    () => port.setPlayerVelocity(),
+    () => port.setBodyEnabled(true),
+    () => port.setGroundVisible(true),
+    () => port.setDoorsVisible(true),
+    () => port.setRemoteVisible(true),
+    () => port.setLabelsVisible(true),
+    () => port.setRoomVisible(false),
+    () => port.setWorldBounds(false),
+    () => port.setCameraBounds(false),
+    () => port.setPlayerPosition(false),
+  ];
+  for (const attempt of attempts) {
+    try { attempt(); } catch { /* preserve the entry failure */ }
+  }
+}
+
 export interface FixedRoomController {
   readonly state: FixedRoomState;
   enter(): void;

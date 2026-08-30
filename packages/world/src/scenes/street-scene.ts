@@ -54,6 +54,7 @@ import {
   FIXED_ROOM_TILE_SIZE,
   createFixedRoom,
   createFixedRoomController,
+  createFixedRoomPresentation,
   fixedRoomStationPresentations,
   isFixedRoomSolidAt,
   type FixedRoomController,
@@ -670,58 +671,50 @@ export function createStreetScene({ Phaser, onTileChanged, remotePeers }: Street
     }
 
     private enterRoom(definition: FixedRoomDefinition): void {
-      this.player.setVelocity(0, 0);
-      const body = this.player.body as PhaserTypes.Physics.Arcade.Body;
-      body.setEnable(false);
-      this.ground?.setVisible(false);
-      for (const overlay of this.doorOverlays) overlay.setVisible(false);
-      this.remoteAvatars?.setVisible(false);
-      for (const label of this.exteriorLabels.values()) label.setVisible(false);
-      this.roomGraphics?.setVisible(true);
-      this.roomStationGraphics?.setVisible(true);
-      this.physics.world.setBounds(
-        ROOM_ORIGIN.x,
-        ROOM_ORIGIN.y,
-        definition.width * FIXED_ROOM_TILE_SIZE,
-        definition.height * FIXED_ROOM_TILE_SIZE,
-      );
-      this.player.setPosition(
-        ROOM_ORIGIN.x + definition.spawn.x * FIXED_ROOM_TILE_SIZE + FIXED_ROOM_TILE_SIZE / 2,
-        ROOM_ORIGIN.y + definition.spawn.y * FIXED_ROOM_TILE_SIZE + FIXED_ROOM_TILE_SIZE / 2,
-      );
-      this.cameras.main.setBounds(
-        ROOM_ORIGIN.x,
-        ROOM_ORIGIN.y,
-        definition.width * FIXED_ROOM_TILE_SIZE,
-        definition.height * FIXED_ROOM_TILE_SIZE,
-      );
+      this.fixedRoomPresentation(definition).enter();
       this.lastTile = { x: -1, y: -1 };
       this.renderRoom();
     }
 
-    private exitRoom(_definition: FixedRoomDefinition): void {
-      this.player.setVelocity(0, 0);
-      const body = this.player.body as PhaserTypes.Physics.Arcade.Body;
-      body.setEnable(true);
-      this.ground?.setVisible(true);
-      for (const overlay of this.doorOverlays) overlay.setVisible(true);
-      this.remoteAvatars?.setVisible(true);
-      for (const label of this.exteriorLabels.values()) label.setVisible(true);
-      this.roomGraphics?.setVisible(false);
-      this.roomStationGraphics?.setVisible(false);
-      for (const label of this.roomLabels.values()) label.setVisible(false);
-      this.physics.world.setBounds(0, 0, this.map.width * TILE_SIZE, this.map.height * TILE_SIZE);
-      this.cameras.main.setBounds(0, 0, this.map.width * TILE_SIZE, this.map.height * TILE_SIZE);
-      const world = tileToWorld(this.returnTile.x, this.returnTile.y);
-      this.player.setPosition(world.x, world.y);
+    private exitRoom(definition: FixedRoomDefinition): void {
+      this.fixedRoomPresentation(definition).exit();
       this.lastTile = { x: -1, y: -1 };
-      // The door trigger is reset by reporting the safe approach tile; the
-      // next physical approach can therefore enter once again.
-      this.doors?.reset();
-      // Rejoin presence at the restored street placement before the room
-      // controller publishes building:exited.
-      this.movement.exit({ x: this.player.x, y: this.player.y }, () => this.reportTile());
       this.activeRoom = undefined;
+    }
+
+    private fixedRoomPresentation(definition: FixedRoomDefinition) {
+      const streetPosition = tileToWorld(this.returnTile.x, this.returnTile.y);
+      return createFixedRoomPresentation({
+        setPlayerVelocity: () => this.player.setVelocity(0, 0),
+        setBodyEnabled: (enabled) => (this.player.body as PhaserTypes.Physics.Arcade.Body).setEnable(enabled),
+        setGroundVisible: (visible) => this.ground?.setVisible(visible),
+        setDoorsVisible: (visible) => this.doorOverlays.forEach((overlay) => overlay.setVisible(visible)),
+        setRemoteVisible: (visible) => this.remoteAvatars?.setVisible(visible),
+        setLabelsVisible: (visible) => this.exteriorLabels.forEach((label) => label.setVisible(visible)),
+        setRoomVisible: (visible) => {
+          this.roomGraphics?.setVisible(visible);
+          this.roomStationGraphics?.setVisible(visible);
+          if (!visible) for (const label of this.roomLabels.values()) label.setVisible(false);
+        },
+        setWorldBounds: (room) => this.physics.world.setBounds(
+          room ? ROOM_ORIGIN.x : 0,
+          room ? ROOM_ORIGIN.y : 0,
+          room ? definition.width * FIXED_ROOM_TILE_SIZE : this.map.width * TILE_SIZE,
+          room ? definition.height * FIXED_ROOM_TILE_SIZE : this.map.height * TILE_SIZE,
+        ),
+        setCameraBounds: (room) => this.cameras.main.setBounds(
+          room ? ROOM_ORIGIN.x : 0,
+          room ? ROOM_ORIGIN.y : 0,
+          room ? definition.width * FIXED_ROOM_TILE_SIZE : this.map.width * TILE_SIZE,
+          room ? definition.height * FIXED_ROOM_TILE_SIZE : this.map.height * TILE_SIZE,
+        ),
+        setPlayerPosition: (room) => this.player.setPosition(
+          room ? ROOM_ORIGIN.x + definition.spawn.x * FIXED_ROOM_TILE_SIZE + FIXED_ROOM_TILE_SIZE / 2 : streetPosition.x,
+          room ? ROOM_ORIGIN.y + definition.spawn.y * FIXED_ROOM_TILE_SIZE + FIXED_ROOM_TILE_SIZE / 2 : streetPosition.y,
+        ),
+        resetDoors: () => this.doors?.reset(),
+        resumeStreet: () => this.movement.exit({ x: this.player.x, y: this.player.y }, () => this.reportTile()),
+      });
     }
 
     private enterAvatarStudioRoom(): void {

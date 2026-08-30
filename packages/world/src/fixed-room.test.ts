@@ -9,6 +9,7 @@ import {
   POST_OFFICE_ROOM_DEFINITION,
   createFixedRoom,
   createFixedRoomController,
+  createFixedRoomPresentation,
   fixedRoomStationPresentations,
   isFixedRoomApproach,
   isFixedRoomExit,
@@ -18,6 +19,62 @@ import {
   type FixedRoomController,
   type FixedRoomState,
 } from './fixed-room.js';
+
+describe('fixed room presentation transaction', () => {
+  function presentationHarness() {
+    const calls: string[] = [];
+    let presentation!: ReturnType<typeof createFixedRoomPresentation>;
+    const port = {
+      setPlayerVelocity: () => calls.push('velocity'),
+      setBodyEnabled: (enabled: boolean) => calls.push(`body:${enabled}`),
+      setGroundVisible: (visible: boolean) => calls.push(`ground:${visible}`),
+      setDoorsVisible: (visible: boolean) => calls.push(`doors:${visible}`),
+      setRemoteVisible: (visible: boolean) => calls.push(`remote:${visible}`),
+      setLabelsVisible: (visible: boolean) => calls.push(`labels:${visible}`),
+      setRoomVisible: (visible: boolean) => { calls.push(`room:${visible}`); },
+      setWorldBounds: (room: boolean) => { calls.push(`world:${room}`); },
+      setCameraBounds: (room: boolean) => { calls.push(`camera:${room}`); },
+      setPlayerPosition: (room: boolean) => { calls.push(`position:${room}`); },
+      resetDoors: () => { calls.push('reset'); },
+      resumeStreet: () => { calls.push('resume'); },
+    };
+    presentation = createFixedRoomPresentation(port);
+    return { calls, port, get presentation() { return presentation; } };
+  }
+
+  it('retires a stale enter when a nested exit takes ownership', () => {
+    const h = presentationHarness();
+    const original = h.port.setRoomVisible;
+    h.port.setRoomVisible = (visible) => {
+      original(visible);
+      if (visible) h.presentation.exit();
+    };
+
+    h.presentation.enter();
+
+    expect(h.calls.at(-1)).toBe('resume');
+    expect(h.calls).not.toContain('position:true');
+  });
+
+  it('compensates partial entry before allowing a retry', () => {
+    const h = presentationHarness();
+    const error = new Error('room bounds failed');
+    let fail = true;
+    const original = h.port.setWorldBounds;
+    h.port.setWorldBounds = (room) => {
+      if (room && fail) {
+        fail = false;
+        throw error;
+      }
+      original(room);
+    };
+
+    expect(() => h.presentation.enter()).toThrow(error);
+    expect(h.calls.at(-1)).toBe('position:false');
+    expect(() => h.presentation.enter()).not.toThrow();
+    expect(h.calls.at(-1)).toBe('position:true');
+  });
+});
 
 function bus<Events extends Record<string, unknown>>(): EventBus<Events> {
   const listeners = new Map<keyof Events, Set<(payload: never) => void>>();

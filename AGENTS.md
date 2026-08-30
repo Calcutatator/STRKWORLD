@@ -258,6 +258,32 @@ empty shell to fetchers, so a 200 there means nothing.
 
 ## 6. Findings log
 
+### 2026-08-30 — Fixed-room presentation transitions own one generation
+
+Fixed-room entry and exit previously performed their Phaser presentation
+handoffs directly in `StreetScene`. A synchronous nested opposite transition
+could complete and then be overwritten by the stale outer continuation, while
+a later setter failure could leave the player body, street visibility, bounds
+or position only partly switched.
+
+The handoff now runs through one World-owned presentation transaction. Each
+enter or exit owns a generation and stops after a newer transition wins. A
+failed current entry attempts every street-restoration action before preserving
+the original error, so the controller can retry the same room transition.
+Existing setter order, door reset, presence resume and controller authority are
+unchanged.
+
+*Verified:* public Phaser-free regressions were red before the transaction:
+one nested exit allowed the stale enter to set the room position afterwards,
+and one bounds failure left the partial entry unrestored. Both pass after the
+fix. Focused fixed-room and StreetScene lifecycle verification passes 2 files /
+96 tests; all World tests pass 24 files / 371 tests. Workspace typechecks,
+production build, 13 invariants and diff hygiene pass. The full workspace run
+was attempted but this isolated worktree's symlinked dependency root caused six
+Vite asset-ID denials; its one executed unrelated presence assertion also fails
+on exact base `2f78d8d`. No browser, wallet, network, provider, RPC, proof,
+signature, funds or transaction was used.*
+
 ### 2026-08-30 — Avatar Studio entry rollback can overwrite a reentrant retry
 
 `createAvatarStudioPresentation.enter()` used a transition revision for its
