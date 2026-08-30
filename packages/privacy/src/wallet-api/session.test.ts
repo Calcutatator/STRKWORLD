@@ -604,6 +604,32 @@ describe('WalletSession', () => {
     expect(observedCeiling).toBe(10n);
   });
 
+  it('does not invoke an accessor-backed confirmation fee ceiling', async () => {
+    const selected = wallet('Ready');
+    let getterCalled = false;
+    const confirm = vi.fn(async () => ({ transactionHash: '0x1' }));
+    const connected = controllableConnection(
+      '0x111', operationsWithBatch({ ...batch(), confirm }, '0.10.3'), new FakePrivacyOperations(),
+    );
+    const session = createWalletSession(
+      denyAllOptions(),
+      { discovery: discoveryWith(selected), connectWallet: async () => connected.port },
+    );
+    await session.connect(session.getSnapshot().wallets[0]!.key);
+    const prepared = await session.operations.prepare([]);
+    const options = {} as { feeCeiling: bigint };
+    Object.defineProperty(options, 'feeCeiling', {
+      get() {
+        getterCalled = true;
+        throw new Error('fee getter must not run');
+      },
+    });
+
+    await expect(prepared.confirm(options)).rejects.toMatchObject({ kind: 'unknown' });
+    expect(getterCalled).toBe(false);
+    expect(confirm).not.toHaveBeenCalled();
+  });
+
   it('does not publish accessor-backed prepared fields through the session facade', async () => {
     const selected = wallet('Ready');
     let getterCalled = false;

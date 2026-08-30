@@ -616,6 +616,15 @@ function ownPreparedBatch(
     promptCount: prepared.promptCount,
     ...(swapReview ? { swapReview } : {}),
     async confirm(options: Parameters<PreparedBatch['confirm']>[0]) {
+      if (!hasOwnDataProperties(options, ['feeCeiling'])) {
+        throw new PrivacyError('unknown', 'The confirmation options are invalid.');
+      }
+      for (const optional of ['onProgress', 'signal'] as const) {
+        const descriptor = Object.getOwnPropertyDescriptor(options, optional);
+        if (descriptor && !('value' in descriptor)) {
+          throw new PrivacyError('unknown', 'The confirmation options are invalid.');
+        }
+      }
       const ownedOptions = {
         feeCeiling: options.feeCeiling,
         ...(options.onProgress ? { onProgress: options.onProgress } : {}),
