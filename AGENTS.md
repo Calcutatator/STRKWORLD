@@ -258,6 +258,26 @@ empty shell to fetchers, so a 200 there means nothing.
 
 ## 6. Findings log
 
+### 2026-08-30 — Lobby suspend cannot resurrect a room closed during send
+
+`LobbyClient.suspend()` sent the suspend command and then unconditionally
+changed the wrapper to `suspended`. A synchronous transport callback could
+report the room closed during that send; the stale continuation then exposed a
+usable suspended client even though its room and server identity were already
+retired.
+
+Suspend now captures the room and rechecks room identity and connected status
+after send before publishing `suspended`. A transport closure remains
+authoritative; normal interior suspension and reconcile cancellation are
+unchanged.
+
+*Verified:* a red-first public Lobby regression makes a fake room deliver
+`onLeave` synchronously from its suspend send; before the guard the client
+ended `suspended`, while the corrected client remains `closed` with no game id.
+Removing the post-send guard reproduces the failure. The focused Lobby client
+suite passes 62 tests. No browser, wallet, provider, RPC, proof, signature,
+funds or transaction was used.
+
 ### 2026-08-30 — Lobby resume cannot resurrect a room closed during send
 
 `LobbyClient.resume()` sent the resume command and then unconditionally set

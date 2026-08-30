@@ -1062,6 +1062,29 @@ describe('presence', () => {
     expect(observer.peers()).toEqual([]);
   });
 
+  it('does not restore suspended status when transport leaves during suspend send', async () => {
+    const joined = fakeRoom();
+    const joinOrCreate = vi
+      .spyOn(ColyseusClient.prototype, 'joinOrCreate')
+      .mockImplementation(() => Promise.resolve(joined.room) as never);
+
+    try {
+      const client = new LobbyClient({ endpoint: 'ws://test', start: { x: 20, y: 0 } });
+      const connecting = client.connect();
+      await Promise.resolve();
+      joined.welcome({ gameId: '000000000000000f' });
+      await connecting;
+
+      joined.send.mockImplementationOnce(() => joined.left(1006, 'transport dropped'));
+      client.suspend();
+
+      expect(client.status).toBe('closed');
+      expect(client.gameId).toBeNull();
+    } finally {
+      joinOrCreate.mockRestore();
+    }
+  });
+
   it('brings the avatar back on an explicit resume', async () => {
     const observer = makeClient(0, 0);
     await observer.connect();

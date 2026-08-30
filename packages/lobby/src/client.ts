@@ -262,7 +262,11 @@ export class LobbyClient {
     if (this.#status !== 'connected' || this.#room === null) return;
     this.#cancelReconcile();
     this.#desired = null;
-    this.#room.send(MESSAGE.suspend);
+    const room = this.#room;
+    room.send(MESSAGE.suspend);
+    // A transport can report closure synchronously from send; do not let the
+    // suspended command overwrite that authoritative lifecycle state.
+    if (this.#room !== room || this.#status !== 'connected') return;
     this.#setStatus('suspended');
   }
 
