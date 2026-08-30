@@ -158,7 +158,7 @@ export class BackendApi {
     ]);
     const feeAmount = requireProviderFeeAmount(fee.amount);
     if (!sameAddress(fee.token, feeToken)) throw new ApiFailure(400, 'Paymaster changed the fee token.');
-    requireFelt(fee.recipient, 'fee recipient');
+    requireNonzeroFelt(fee.recipient, 'fee recipient');
     if (feeAmount <= 0n || feeAmount > policy.maxRelayFee) {
       throw new ApiFailure(400, 'Paymaster fee exceeds the route ceiling.');
     }
@@ -337,7 +337,7 @@ export class BackendApi {
     ) {
       throw new ApiFailure(400, 'Paymaster fee exceeds swap policy.');
     }
-    requireFelt(fee.recipient, 'fee recipient');
+    requireNonzeroFelt(fee.recipient, 'fee recipient');
     const invokePrefix = [buyToken, ...serializeCairo1Calls(plan.executorCalls)];
     // count + two TransferTo actions + Invoke header + buy token/open-note id
     if (invokePrefix.length + 13 > this.config.maxCalldataItems) {

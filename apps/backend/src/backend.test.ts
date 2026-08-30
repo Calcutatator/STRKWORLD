@@ -219,6 +219,29 @@ describe('strict fee authorization', () => {
     expect(issue).not.toHaveBeenCalled();
   });
 
+  it.each(['0x0', '0x00', '0x00000000'])(
+    'rejects a zero paymaster fee recipient %s before authorization issuance',
+    async (recipient) => {
+      const { api, paymaster, authorizations } = fixture();
+      vi.spyOn(paymaster, 'buildFee').mockResolvedValue({
+        token: STRK,
+        recipient,
+        amount: 7n,
+      });
+      const issue = vi.spyOn(authorizations, 'issue');
+
+      await expect(api.handle({
+        method: 'POST',
+        path: '/v1/private/fees',
+        body: { v: 1, route: 'transfer', feeToken: STRK, operationToken: '0xabc' },
+      })).resolves.toEqual({
+        status: 400,
+        body: { code: 'HTTP_400', message: 'Invalid fee recipient.' },
+      });
+      expect(issue).not.toHaveBeenCalled();
+    },
+  );
+
   it('rejects a tampered production HMAC authorization', async () => {
     const codec = new HmacAuthorizationCodec('a-long-production-secret-that-is-not-committed');
     const token = await codec.issue({
@@ -743,6 +766,36 @@ describe('bounded private submission', () => {
     });
     expect(issue).not.toHaveBeenCalled();
   });
+
+  it.each(['0x0', '0x00', '0x00000000'])(
+    'rejects a zero swap paymaster fee recipient %s before authorization issuance',
+    async (recipient) => {
+      const { api, paymaster, authorizations } = fixture();
+      vi.spyOn(paymaster, 'buildFee').mockResolvedValue({
+        token: STRK,
+        recipient,
+        amount: 7n,
+      });
+      const issue = vi.spyOn(authorizations, 'issue');
+
+      await expect(api.handle({
+        method: 'POST',
+        path: '/v1/private/swaps/prepare',
+        body: {
+          v: 1,
+          sellToken: '0xabc',
+          buyToken: STRK,
+          sellAmount: '20',
+          minAmountOut: '90',
+          slippageBps: 100,
+        },
+      })).resolves.toEqual({
+        status: 400,
+        body: { code: 'HTTP_400', message: 'Invalid fee recipient.' },
+      });
+      expect(issue).not.toHaveBeenCalled();
+    },
+  );
 
   it('rejects a swap after its AVNU quote expiry even while the block authorization is live', async () => {
     const { api, setNow, submitted } = fixture();

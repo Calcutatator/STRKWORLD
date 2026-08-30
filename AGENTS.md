@@ -258,6 +258,56 @@ empty shell to fetchers, so a 200 there means nothing.
 
 ## 6. Findings log
 
+
+## 6. Findings log
+
+### 2026-08-30 — Paymaster fee recipients require a nonzero felt
+
+`BackendApi.fee()` and swap preparation validated the paymaster's returned fee
+recipient with the generic felt rule. That rule accepts zero, so a malformed
+provider response could issue an authorization directing the private fee
+withdrawal to `0x0` (including leading-zero encodings), where it cannot
+reimburse the paymaster.
+
+Both fee paths now require a nonzero Stark field felt for the provider
+recipient. The existing fee-token, amount, authorization and status contracts
+are unchanged; malformed zero recipients return the existing `400` validation
+response before authorization issuance.
+
+*Verified:* red-first Backend regressions cover `0x0`, `0x00` and
+`0x00000000` on ordinary fee estimation and swap preparation. Before the
+guard, all six returned `200` and issued authorizations; after it, all six
+return `HTTP_400` and issue none. No browser, external provider, RPC, wallet,
+proof, signature, funds or transaction was used.*
+
+### 2026-08-30 — Lobby peer deliveries freeze shared snapshots
+
+`LobbyClient.peers()` returned a fresh array but left both that array and its
+entry objects mutable. `#emitPeers()` then delivered the same snapshot to every
+listener, so an earlier subscriber could change coordinates, pose, sprite or
+membership before a later subscriber received it. This violated the readonly
+peer seam at runtime and could make shell consumers disagree about one state
+update.
+
+Peer snapshots now freeze the array and each entry before delivery. This is
+deliberately an immutability-only boundary fix: the World-owned
+`reconcileRemotePeers()` remains responsible for validating untrusted runtime
+identity, coordinates, facing and sprite values because the Lobby client does
+not possess the server's trusted custom sprite allowlist.
+
+*Verified:* a red-first public regression mutates a snapshot in listener A and
+confirms listener B still receives the original one-entry snapshot, with both
+runtime layers frozen. The focused client suite passes 59 tests; the full Lobby
+suite passes 10 files / 224 tests. Lobby typecheck, all 13 invariants and diff
+hygiene pass. No browser, network, wallet, RPC, proof, signature, funds or
+transaction was used.*
+
+
+## 6. Findings log
+
+
+
+
 ### 2026-08-30 — World remote-peer sources sanitize before replay
 
 The Shell's Lobby-to-World adapter published raw peer fields into the
