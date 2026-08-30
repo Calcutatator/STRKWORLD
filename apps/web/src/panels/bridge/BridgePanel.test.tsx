@@ -1,10 +1,12 @@
 import { describe, expect, it } from 'vitest';
+import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { FakePrivacyOperations } from '@strkworld/privacy';
 import { PrivacyProvider } from '../../privacy/PrivacyProvider.js';
 import { BridgeProvider } from '../../bridge/BridgeProvider.js';
 import { BridgePanel } from './BridgePanel.js';
 import { createBridgePanel } from '../../bridge/bridge-machine.js';
+import { PRIVACY_REGISTER } from '../../privacy/register.js';
 import type { BridgeRecord } from '@strkworld/bridge';
 
 const service = {
@@ -51,6 +53,22 @@ describe('BridgePanel', () => {
     expect(markup).toContain('Provider fee: 0.2% of the bridged amount. Pool and network costs are separate.');
     expect(markup).toContain('<details class="bridge-details"><summary>Keep the signed record safe</summary>');
     expect(markup).not.toContain('appFees');
+  });
+
+  it('renders the disclosure from the supplied route register', () => {
+    const disclosure = 'Custom bridge disclosure.';
+    const register = PRIVACY_REGISTER.map((entry) => entry.route === 'bridge.deposit'
+      ? { ...entry, disclosure }
+      : entry);
+    const markup = renderToStaticMarkup(
+      <PrivacyProvider operations={new FakePrivacyOperations()}>
+        <BridgeProvider service={service} account="0x123" planner={null}>
+          {createElement(BridgePanel, { onClose: () => {}, register })}
+        </BridgeProvider>
+      </PrivacyProvider>,
+    );
+    expect(markup).toContain(disclosure);
+    expect(markup).not.toContain('Bridging is public. Your destination address and amount are visible');
   });
 
   it('keeps recovery controls and quote evidence compact instead of making them primary actions', () => {

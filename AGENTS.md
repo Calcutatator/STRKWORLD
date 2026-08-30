@@ -294,6 +294,25 @@ disclosure; the corrected review shows the supplied one. Removing the register
 argument reproduces the failure. Exchange tests pass 29/29. No browser,
 wallet, provider, RPC, proof, signature, funds or transaction was used.
 
+### 2026-08-30 — Bridge disclosures use their supplied route authority
+
+`VisitLayer` admitted Bridge stations against its supplied route register, but
+`BridgePanel` always read the global register when rendering the public bridge
+disclosure. A custom composition could therefore admit a station with one
+route authority while showing copy from another authority.
+
+`BridgePanel` now accepts and uses the same register for both disclosure
+surfaces and passes it into the nested shield Bank. Menu and station wiring
+forward the register from `VisitLayer`; the canonical production register and
+bridge behavior are unchanged.
+
+*Verified:* a red-first public Bridge render supplied a valid register with a
+distinct `bridge.deposit` disclosure. The old panel rendered the canonical
+copy; the corrected panel renders the supplied copy. Removing either
+disclosure argument reproduces the regression. Bridge and Visit tests pass
+25/25. No browser, wallet, provider, RPC, proof, signature, funds or
+transaction was used.
+
 ### 2026-08-30 — Fixed-room input restoration cannot resume a retired transition
 
 `createFixedRoomController.enter()` and `leave()` crossed the injected input

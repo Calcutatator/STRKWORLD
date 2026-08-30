@@ -9,17 +9,21 @@ import { routeDisclosure } from '../routes.js';
 import { BankPanel } from '../bank/BankPanel.js';
 import { createBankPanel, type BankPanel as BankMachine } from '../bank/bank-machine.js';
 import { usePrivacy } from '../../privacy/PrivacyProvider.js';
+import { PRIVACY_REGISTER, type RouteGrade } from '../../privacy/register.js';
 
 export function BridgePanel({
   onClose,
   panel: injected,
   experience = 'menu',
   onShieldReady,
+  register = PRIVACY_REGISTER,
 }: {
   onClose: () => void;
   panel?: BridgeMachine;
   experience?: 'menu' | 'station';
   onShieldReady?: (amount: bigint) => void;
+  /** Route authority used for disclosure and the nested shield panel. */
+  register?: readonly RouteGrade[];
 }) {
   const runtime = useBridge();
   const { operations, receipts, noteOperationError, submissionUncertainty } = usePrivacy();
@@ -55,8 +59,9 @@ export function BridgePanel({
       },
       onError: noteOperationError,
       preConfirmGuard: async () => (await owned.revalidateShieldPlan()) !== null,
+      register,
     });
-  }, [showShieldBank, owned, operations, receipts, noteOperationError, submissionUncertainty]);
+  }, [showShieldBank, owned, operations, receipts, noteOperationError, submissionUncertainty, register]);
 
   useEffect(() => {
     if (!shieldMachine || !state.plan) return;
@@ -77,7 +82,7 @@ export function BridgePanel({
 
   if (!owned || !runtime.service) {
     return (
-      <PanelFrame title={COPY.bridge.title} disclosure={routeDisclosure('bridge.deposit')} onClose={onClose}>
+      <PanelFrame title={COPY.bridge.title} disclosure={routeDisclosure('bridge.deposit', register)} onClose={onClose}>
         <p className="room-locked" role="note">{COPY.bridge.recoveryUnavailable}</p>
       </PanelFrame>
     );
@@ -88,7 +93,7 @@ export function BridgePanel({
   const plan = state.plan;
   return (
     <section className="bridge-experience" data-experience={experience}>
-      <PanelFrame title={COPY.bridge.title} disclosure={routeDisclosure('bridge.deposit')} onClose={onClose}>
+      <PanelFrame title={COPY.bridge.title} disclosure={routeDisclosure('bridge.deposit', register)} onClose={onClose}>
         <p className="bridge-compact-note" role="note">{COPY.bridge.providerFee}</p>
         <details className="bridge-details">
           <summary>Keep the signed record safe</summary>
@@ -171,7 +176,7 @@ export function BridgePanel({
             </div>
           </details>
         ) : null}
-        {shieldMachine ? <BankPanel panel={shieldMachine} experience="station" allowedModes={['shield']} initialMode="shield" title={COPY.bank.title} building="bank" onClose={() => setShowShieldBank(false)} /> : null}
+        {shieldMachine ? <BankPanel panel={shieldMachine} experience="station" allowedModes={['shield']} initialMode="shield" title={COPY.bank.title} building="bank" register={register} onClose={() => setShowShieldBank(false)} /> : null}
       </PanelFrame>
     </section>
   );

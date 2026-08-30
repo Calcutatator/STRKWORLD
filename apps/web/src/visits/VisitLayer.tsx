@@ -192,7 +192,7 @@ export function VisitLayerView({
       return withControls(<ExchangePanel experience="station" onClose={onCloseSurface} />);
     }
     if (station.definition.view === 'bridge') {
-      return withControls(<BridgePanel experience="station" onClose={onCloseSurface} />);
+      return withControls(<BridgePanel experience="station" register={register} onClose={onCloseSurface} />);
     }
   }
 
@@ -213,7 +213,7 @@ export function VisitLayerView({
     );
   }
   if (state.building === 'bridge') {
-    return withControls(<BridgePanel experience="menu" onClose={onCloseSurface} />);
+    return withControls(<BridgePanel experience="menu" register={register} onClose={onCloseSurface} />);
   }
   if (!connected) {
     return withControls(
