@@ -147,7 +147,7 @@ export class BridgeService {
     txHash: string,
     nearSenderAccount?: string,
   ): Promise<BridgeStatus> {
-    if (!txHash || txHash.length > 256 || /\s/.test(txHash)) {
+    if (typeof txHash !== 'string' || txHash.length === 0 || txHash.length > 256 || /\s/.test(txHash)) {
       throw new Error('The origin deposit transaction hash is invalid.');
     }
     const record = this.resume();

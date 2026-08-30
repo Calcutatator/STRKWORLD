@@ -1039,6 +1039,24 @@ describe('BridgeService', () => {
     expect(store.load()).toBeNull();
   });
 
+  it('rejects a coercible origin transaction hash before notifying 1Click', async () => {
+    const client = new StubClient();
+    const store = new MemoryBridgeStore();
+    const service = new BridgeService({ client, store, quoteVerifier: () => true, now: () => NOW });
+    await service.createManualDeposit({
+      source: SOURCE,
+      amountIn: 1_000_000n,
+      starknetRecipient: '0x123',
+      refundAddress: request.refundTo,
+    });
+
+    await expect(service.reportDepositTransaction({
+      length: 0,
+      toString: () => '0xorigin-tx',
+    } as unknown as string)).rejects.toThrow('The origin deposit transaction hash is invalid.');
+    expect(client.depositRequests).toHaveLength(0);
+  });
+
   it('rejects a signed quote with a whitespace-only deposit address', async () => {
     const client = new StubClient();
     const store = new MemoryBridgeStore();
