@@ -32,10 +32,10 @@ export class BackendPrivacyClient implements PoolReadClient, PrivateSubmissionGa
     throwIfAborted(signal);
     const record = asRecord(value);
     return {
-      feeAmount: BigInt(asString(record.feeAmount)),
-      feeToken: asString(record.feeToken),
-      proofValidityBlocks: asInteger(record.proofValidityBlocks),
-      noteMaturityBlocks: asInteger(record.noteMaturityBlocks),
+      feeAmount: BigInt(asString(ownField(record, 'feeAmount'))),
+      feeToken: asString(ownField(record, 'feeToken')),
+      proofValidityBlocks: asInteger(ownField(record, 'proofValidityBlocks')),
+      noteMaturityBlocks: asInteger(ownField(record, 'noteMaturityBlocks')),
     };
   }
 
@@ -43,7 +43,7 @@ export class BackendPrivacyClient implements PoolReadClient, PrivateSubmissionGa
     const raw = await this.post('/v1/rpc/public-key', { v: 1, address }, signal);
     throwIfAborted(signal);
     const value = asRecord(raw);
-    return asString(value.publicKey);
+    return asString(ownField(value, 'publicKey'));
   }
 
   async estimate(input: Parameters<PrivateSubmissionGateway['estimate']>[0]): Promise<RelayFeeQuote> {
@@ -56,11 +56,11 @@ export class BackendPrivacyClient implements PoolReadClient, PrivateSubmissionGa
     throwIfAborted(input.signal);
     const value = asRecord(raw);
     return {
-      token: asString(value.token),
-      recipient: asString(value.recipient),
-      amount: BigInt(asString(value.amount)),
-      authorization: asString(value.authorization),
-      expiresAtBlock: asInteger(value.expiresAtBlock),
+      token: asString(ownField(value, 'token')),
+      recipient: asString(ownField(value, 'recipient')),
+      amount: BigInt(asString(ownField(value, 'amount'))),
+      authorization: asString(ownField(value, 'authorization')),
+      expiresAtBlock: asInteger(ownField(value, 'expiresAtBlock')),
     };
   }
 
@@ -72,7 +72,7 @@ export class BackendPrivacyClient implements PoolReadClient, PrivateSubmissionGa
       feeAuthorization: input.feeAuthorization,
       proofValidityBlocks: input.proofValidityBlocks,
     }, input.signal, 'submission-uncertain'));
-    const transactionHash = asString(value.transactionHash);
+    const transactionHash = asString(ownField(value, 'transactionHash'));
     if (!isNonzeroFelt(transactionHash)) {
       throw new PrivacyError('unknown', 'The private service returned an invalid response.');
     }
@@ -96,28 +96,28 @@ export class BackendPrivacyClient implements PoolReadClient, PrivateSubmissionGa
     }, input.signal);
     throwIfAborted(input.signal);
     const value = asRecord(raw);
-    const fee = asRecord(value.fee);
-    const rawCalls = asArray(value.executorCalls);
+    const fee = asRecord(ownField(value, 'fee'));
+    const rawCalls = asArray(ownField(value, 'executorCalls'));
     return {
-      quoteId: asString(value.quoteId),
-      buyAmount: BigInt(asString(value.buyAmount)),
-      expiresAt: asInteger(value.expiresAt),
-      chainId: asString(value.chainId),
-      executorAddress: asString(value.executorAddress),
+      quoteId: asString(ownField(value, 'quoteId')),
+      buyAmount: BigInt(asString(ownField(value, 'buyAmount'))),
+      expiresAt: asInteger(ownField(value, 'expiresAt')),
+      chainId: asString(ownField(value, 'chainId')),
+      executorAddress: asString(ownField(value, 'executorAddress')),
       executorCalls: rawCalls.map((raw) => {
         const call = asRecord(raw);
         return {
-          contractAddress: asString(call.contractAddress),
-          entrypoint: asString(call.entrypoint),
-          calldata: asArray(call.calldata).map(asString),
+          contractAddress: asString(ownField(call, 'contractAddress')),
+          entrypoint: asString(ownField(call, 'entrypoint')),
+          calldata: asArray(ownField(call, 'calldata')).map(asString),
         };
       }),
       fee: {
-        token: asString(fee.token),
-        recipient: asString(fee.recipient),
-        amount: BigInt(asString(fee.amount)),
-        authorization: asString(fee.authorization),
-        expiresAtBlock: asInteger(fee.expiresAtBlock),
+        token: asString(ownField(fee, 'token')),
+        recipient: asString(ownField(fee, 'recipient')),
+        amount: BigInt(asString(ownField(fee, 'amount'))),
+        authorization: asString(ownField(fee, 'authorization')),
+        expiresAtBlock: asInteger(ownField(fee, 'expiresAtBlock')),
       },
     };
   }
@@ -190,6 +190,14 @@ function asRecord(value: unknown): Record<string, unknown> {
     throw new PrivacyError('unknown', 'The private service returned an invalid response.');
   }
   return value as Record<string, unknown>;
+}
+
+function ownField(record: Record<string, unknown>, key: string): unknown {
+  const descriptor = Object.getOwnPropertyDescriptor(record, key);
+  if (!descriptor || !('value' in descriptor)) {
+    throw new PrivacyError('unknown', 'The private service returned an invalid response.');
+  }
+  return descriptor.value;
 }
 
 function asString(value: unknown): string {

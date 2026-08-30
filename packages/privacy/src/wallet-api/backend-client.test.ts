@@ -10,6 +10,24 @@ function response(body: unknown, status = 200): Response {
   });
 }
 
+function objectResponse(body: unknown, status = 200): Response {
+  return {
+    ok: status >= 200 && status < 300,
+    status,
+    json: async () => body,
+  } as Response;
+}
+
+function inheritResponseField(key: string, value: unknown): () => void {
+  const prototype = Object.prototype as Record<string, unknown>;
+  const previous = Object.getOwnPropertyDescriptor(prototype, key);
+  Object.defineProperty(prototype, key, { configurable: true, value });
+  return () => {
+    if (previous) Object.defineProperty(prototype, key, previous);
+    else delete prototype[key];
+  };
+}
+
 describe('BackendPrivacyClient', () => {
   it.each([
     ['config', (client: BackendPrivacyClient, signal: AbortSignal) => client.config(signal), {
@@ -61,6 +79,115 @@ describe('BackendPrivacyClient', () => {
       expect(browserFetch).toHaveBeenCalledWith('/api/v1/rpc/pool-config', expect.anything());
     } finally {
       vi.unstubAllGlobals();
+    }
+  });
+
+  it('rejects a config field supplied only by the object prototype', async () => {
+    const restore = inheritResponseField('feeAmount', '6');
+    try {
+      const client = new BackendPrivacyClient(
+        'https://backend.example',
+        async () => response({ feeToken: '0x4718', proofValidityBlocks: 450, noteMaturityBlocks: 10 }),
+      );
+
+      await expect(client.config()).rejects.toMatchObject({ kind: 'unknown' });
+    } finally {
+      restore();
+    }
+  });
+
+  it('rejects an accessor response field without invoking the getter', async () => {
+    let getterCalled = false;
+    const body = { feeToken: '0x4718', proofValidityBlocks: 450, noteMaturityBlocks: 10 };
+    Object.defineProperty(body, 'feeAmount', {
+      configurable: true,
+      get: () => {
+        getterCalled = true;
+        return '6';
+      },
+    });
+    const client = new BackendPrivacyClient(
+      'https://backend.example',
+      async () => objectResponse(body),
+    );
+
+    await expect(client.config()).rejects.toMatchObject({ kind: 'unknown' });
+    expect(getterCalled).toBe(false);
+  });
+
+  it('rejects a public key supplied only by the object prototype', async () => {
+    const restore = inheritResponseField('publicKey', '0x456');
+    try {
+      const client = new BackendPrivacyClient(
+        'https://backend.example',
+        async () => response({}),
+      );
+
+      await expect(client.publicKey('0x123')).rejects.toMatchObject({ kind: 'unknown' });
+    } finally {
+      restore();
+    }
+  });
+
+  it('rejects a nested swap fee field supplied only by the object prototype', async () => {
+    const restore = inheritResponseField('amount', '7');
+    try {
+      const client = new BackendPrivacyClient(
+        'https://backend.example',
+        async () => response({
+          quoteId: 'quote-1',
+          buyAmount: '100',
+          expiresAt: 2_000,
+          chainId: '0x534e5f4d41494e',
+          executorAddress: '0x999',
+          executorCalls: [],
+          fee: { token: '0x4718', recipient: '0x789', authorization: 'auth', expiresAtBlock: 1450 },
+        }),
+      );
+
+      await expect(client.prepareSwap({
+        sellToken: '0xabc',
+        buyToken: '0x4718',
+        sellAmount: 20n,
+        minAmountOut: 90n,
+        slippageBps: 100,
+      })).rejects.toMatchObject({ kind: 'unknown' });
+    } finally {
+      restore();
+    }
+  });
+
+  it('rejects a nested swap call field supplied only by the object prototype', async () => {
+    const restore = inheritResponseField('entrypoint', 'swap');
+    try {
+      const client = new BackendPrivacyClient(
+        'https://backend.example',
+        async () => response({
+          quoteId: 'quote-1',
+          buyAmount: '100',
+          expiresAt: 2_000,
+          chainId: '0x534e5f4d41494e',
+          executorAddress: '0x999',
+          executorCalls: [{ contractAddress: '0x111', calldata: ['0xaaa'] }],
+          fee: {
+            token: '0x4718',
+            recipient: '0x789',
+            amount: '7',
+            authorization: 'auth',
+            expiresAtBlock: 1450,
+          },
+        }),
+      );
+
+      await expect(client.prepareSwap({
+        sellToken: '0xabc',
+        buyToken: '0x4718',
+        sellAmount: 20n,
+        minAmountOut: 90n,
+        slippageBps: 100,
+      })).rejects.toMatchObject({ kind: 'unknown' });
+    } finally {
+      restore();
     }
   });
 

@@ -261,6 +261,61 @@ empty shell to fetchers, so a 200 there means nothing.
 
 ## 6. Findings log
 
+
+## 6. Findings log
+
+### 2026-08-30 — Backend privacy responses require own data fields
+
+`BackendPrivacyClient` validated response values through ordinary property
+lookup. A same-origin prototype pollution could therefore supply an omitted
+config, public-key, relay-fee, submission, or swap field through
+`Object.prototype`; an own accessor could also run during parsing. This let a
+malformed backend response cross the browser privacy boundary and made the
+result depend on ambient object state.
+
+The client now requires every response field to be an own data property before
+type conversion, including nested swap fee and executor-call records. Accessor
+properties are rejected without invoking their getter; existing response
+shapes and injected fetchers are unchanged.
+
+*Verified:* red-first public regressions polluted `Object.prototype` for
+config, public-key, nested fee, and nested executor-call fields; each
+previously resolved on the current base and now rejects with the generic
+`unknown` protocol error. A separate accessor regression confirms the getter
+is not invoked. Privacy tests pass 27 tests; no browser, external provider,
+RPC, wallet, proof, signature, funds or transaction was used.*
+
+### 2026-08-30 — AVNU swap planning stops between provider awaits
+
+`AvnuSwapPlanner.prepare()` passed its cancellation signal into the AVNU
+quote and executor-call helpers, but did not recheck the signal after either
+await. A cancellation-ignoring quote lookup could therefore trigger a second
+provider call to construct private executor calldata, and a cancellation-
+ignoring call-construction request could still publish a prepared swap plan.
+
+The planner now rechecks the same signal after quote retrieval and after call
+construction, throwing the signal's exact reason before starting the next
+provider step or mapping/publishing the plan. The AVNU request shapes,
+mainnet-chain checks, protected minimum and Wallet API handoff are unchanged.
+
+*Verified:* red-first public adapter regressions abort immediately before a
+deferred quote settles and immediately before a deferred executor-call plan
+settles. Before the guards, the first case still called `quoteToCalls` and the
+second returned a plan; after the guards both reject with the exact abort
+reason and no stale executor plan is mapped. The focused Backend adapter suite
+passes 49 tests. No browser, external provider, wallet, RPC, proof,
+signature, funds or transaction was used.*
+
+### 2026-08-30 — Presence destroy completes ownership cleanup after disconnect failure
+
+`PresenceController.destroy()` used `Promise.all()` and performed its final
+ownership cleanup only after that promise fulfilled. A client whose
+`disconnect()` rejected therefore left the controller retaining its client
+
+
+
+## 6. Findings log
+
 ### 2026-08-30 — Paymaster fee amounts require runtime bigint validation
 
 `BackendApi.fee()` and swap preparation compared the untrusted paymaster fee
