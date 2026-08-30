@@ -258,6 +258,27 @@ empty shell to fetchers, so a 200 there means nothing.
 
 ## 6. Findings log
 
+### 2026-08-30 — Fixed-room station render projection must validate matching fields
+
+`fixedRoomStationPresentations()` accepted a matching runtime station snapshot
+by station id and copied its `label` and `status` directly into the public
+render model. A malformed snapshot such as `{station: known, label: 42,
+status: 'forged'}` therefore crossed the World boundary and could reach Phaser
+despite the presentation contract requiring a nonblank string label and one of
+`available`/`locked`.
+
+The projection now reads station, label, and status through the existing
+own-data-field boundary helper, accepts only a nonblank string label and the
+two allowed statuses, and falls back to the authored label plus locked status
+otherwise. Unknown, duplicate, null, accessor-backed, and malformed station
+records remain fail-closed; valid custom labels/statuses are unchanged.
+
+*Verified:* a public fixed-room regression first exposed the invalid matching
+fields on the pre-fix head, then passed with the validation. Reverting the
+projection validation reproduces the failure. Focused fixed-room tests, the
+World package suite/typecheck, invariants, and diff hygiene pass. No browser,
+wallet, provider, RPC, proof, signature, funds, or transaction was used.
+
 ### 2026-08-30 — Backend cancellation accepts genuine cross-realm signals
 
 The browser backend client previously validated optional operation signals
