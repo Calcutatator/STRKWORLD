@@ -258,6 +258,43 @@ empty shell to fetchers, so a 200 there means nothing.
 
 ## 6. Findings log
 
+### 2026-08-30 — Initial Bridge quotes require own data fields
+
+`BridgeService.createDeposit()` passed the untrusted 1Click quote response to
+`assertSignedQuote()`, whose ordinary property access accepted inherited or
+accessor-backed signed evidence, executable quote, and route request fields.
+The object could then be retained as signed bridge evidence and used for player
+instructions.
+
+Signed quote validation now requires own data properties for every required
+field Bridge reads, including evidence, quote containers, executable amounts
+and deadlines, and route-request fields. Optional memo and mode fields are
+also rejected when present only through inheritance or an accessor. Malformed
+data fails before quote verification or persistence.
+
+*Verified:* red-first Bridge regressions supplied an accessor-backed deposit
+address and inherited executable fields. The corrected path rejects both,
+never invokes the getter, and saves no record. The focused Bridge suite passes
+103 tests. No browser, wallet, provider, RPC, proof, signature, funds or
+transaction was used.
+
+### 2026-08-30 — Resolved Web station definitions are immutable
+
+`resolveStation()` returned the internal station definition directly. A caller
+could rewrite its view, route list, label, or Bank mode list, and the next visit
+resolution would consume that forged definition. TypeScript readonly types did
+not protect the runtime object or its nested arrays.
+
+Authored station definitions, route arrays, and mode arrays are now frozen
+before entering the private registry. Resolution and presentation values are
+unchanged; custom route registers and capabilities remain supported.
+
+*Verified:* a red-first station regression observed mutable definitions,
+routes, and modes; the corrected test rejects view and route rewrites and
+preserves the Post Office station. The focused station and visit suite passes
+24 tests. No browser, wallet, provider, RPC, proof, signature, funds or
+transaction was used.
+
 ### 2026-08-30 — Input-gate unbind attempts every cleanup action
 
 `bindInputGate()` returned an unbind function that removed the entry listener,

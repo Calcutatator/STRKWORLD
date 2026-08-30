@@ -1052,6 +1052,47 @@ describe('BridgeService', () => {
     expect(store.load()).toBeNull();
   });
 
+  it('rejects accessor-backed signed quote fields without invoking the provider getter', async () => {
+    const client = new StubClient();
+    const store = new MemoryBridgeStore();
+    let getterCalls = 0;
+    const quote = Object.create(signedQuote.quote) as typeof signedQuote.quote;
+    Object.defineProperty(quote, 'depositAddress', {
+      configurable: true,
+      get: () => {
+        getterCalls += 1;
+        return signedQuote.quote.depositAddress;
+      },
+    });
+    client.getQuote = async () => ({ ...signedQuote, quote });
+    const service = new BridgeService({ client, store, quoteVerifier: () => true, now: () => NOW });
+
+    await expect(service.createManualDeposit({
+      source: SOURCE,
+      amountIn: 1_000_000n,
+      starknetRecipient: '0x123',
+      refundAddress: request.refundTo,
+    })).rejects.toThrow('1Click returned invalid signed quote data.');
+    expect(getterCalls).toBe(0);
+    expect(store.load()).toBeNull();
+  });
+
+  it('rejects inherited required signed quote fields before persistence', async () => {
+    const client = new StubClient();
+    const store = new MemoryBridgeStore();
+    const quote = Object.create(signedQuote.quote) as typeof signedQuote.quote;
+    client.getQuote = async () => ({ ...signedQuote, quote });
+    const service = new BridgeService({ client, store, quoteVerifier: () => true, now: () => NOW });
+
+    await expect(service.createManualDeposit({
+      source: SOURCE,
+      amountIn: 1_000_000n,
+      starknetRecipient: '0x123',
+      refundAddress: request.refundTo,
+    })).rejects.toThrow('1Click returned invalid signed quote data.');
+    expect(store.load()).toBeNull();
+  });
+
   it('rejects a signed quote whose executable amounts do not match the request', async () => {
     const client = new StubClient();
     const store = new MemoryBridgeStore();

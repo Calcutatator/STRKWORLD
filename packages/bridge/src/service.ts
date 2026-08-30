@@ -379,6 +379,9 @@ function assertSignedQuote(
   input: CreateDepositInput,
   request: QuoteRequest,
 ): void {
+  if (!hasSignedQuoteShape(response)) {
+    throw new Error('1Click returned invalid signed quote data.');
+  }
   if (!response.signature || !response.timestamp || !response.correlationId) {
     throw new Error('1Click returned no signed quote dispute evidence.');
   }
@@ -548,6 +551,30 @@ function isStatusQuoteResponse(value: unknown): value is QuoteResponse {
   return Boolean(
     isRecord(response.quote) && isRecord(response.quoteRequest),
   );
+}
+
+function hasSignedQuoteShape(value: unknown): value is QuoteResponse {
+  if (
+    !isRecord(value) ||
+    !hasOwnDataProperties(value, ['signature', 'timestamp', 'correlationId', 'quote', 'quoteRequest']) ||
+    !isRecord(value.quote) ||
+    !isRecord(value.quoteRequest) ||
+    !hasOwnDataProperties(value.quote, [
+      'depositAddress', 'deadline', 'amountIn', 'amountOut', 'minAmountOut', 'timeEstimate',
+    ]) ||
+    !hasOwnDataProperties(value.quoteRequest, [
+      'slippageTolerance', 'destinationAsset', 'originAsset', 'amount', 'recipient',
+      'refundTo', 'deadline', 'swapType', 'depositType', 'refundType', 'recipientType',
+      'dry',
+    ])
+  ) return false;
+  if ('depositMemo' in value.quote && !hasOwnDataProperty(value.quote, 'depositMemo')) return false;
+  if ('depositMode' in value.quoteRequest && !hasOwnDataProperty(value.quoteRequest, 'depositMode')) return false;
+  return true;
+}
+
+function hasOwnDataProperties(value: unknown, keys: readonly PropertyKey[]): value is Record<string, unknown> {
+  return isRecord(value) && keys.every((key) => hasOwnDataProperty(value, key));
 }
 
 function hasOwnDataProperty(value: object, key: PropertyKey): boolean {
