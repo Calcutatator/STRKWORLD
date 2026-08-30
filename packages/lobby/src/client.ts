@@ -481,7 +481,7 @@ export class LobbyClient {
         rejectWelcome(new Error('Lobby room left before welcome'));
       });
 
-      await Promise.race([this.#awaitWelcome(welcomed), interrupted]);
+      await this.#awaitWelcome(welcomed, interrupted);
       if (!this.#isCurrentRoom(generation, room)) {
         throw new Error('Lobby room closed before connect completed');
       }
@@ -516,13 +516,13 @@ export class LobbyClient {
   }
 
   /** Resolve when the welcome message arrives, or after the timeout. */
-  async #awaitWelcome(welcomed: Promise<void>): Promise<void> {
+  async #awaitWelcome(welcomed: Promise<void>, interrupted: Promise<never>): Promise<void> {
     let timer: ReturnType<typeof setTimeout> | undefined;
     const timeout = new Promise<void>((resolve) => {
       timer = setTimeout(resolve, this.#welcomeTimeoutMs);
     });
     try {
-      await Promise.race([welcomed, timeout]);
+      await Promise.race([welcomed, timeout, interrupted]);
     } finally {
       if (timer !== undefined) clearTimeout(timer);
     }

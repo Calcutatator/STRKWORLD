@@ -378,6 +378,35 @@ describe('client send interval configuration', () => {
 });
 
 describe('welcome timeout configuration', () => {
+  it('clears the pending welcome timeout when disconnect interrupts a join', async () => {
+    vi.useFakeTimers();
+    const joined = fakeRoom();
+    const joinOrCreate = vi
+      .spyOn(ColyseusClient.prototype, 'joinOrCreate')
+      .mockResolvedValueOnce(joined.room as never);
+
+    try {
+      const client = new LobbyClient({
+        endpoint: server.endpoint,
+        start: { x: 20, y: 0 },
+        welcomeTimeoutMs: 2_147_483_647,
+      });
+      const connecting = client.connect();
+      for (let i = 0; i < 5; i += 1) {
+        await Promise.resolve();
+      }
+      expect(joined.room.onMessage).toHaveBeenCalled();
+      expect(vi.getTimerCount()).toBe(1);
+
+      await client.disconnect();
+      await expect(connecting).rejects.toThrow(/interrupted/i);
+      expect(vi.getTimerCount()).toBe(0);
+    } finally {
+      joinOrCreate.mockRestore();
+      vi.useRealTimers();
+    }
+  });
+
   it.each([
     Number.NaN,
     Number.POSITIVE_INFINITY,

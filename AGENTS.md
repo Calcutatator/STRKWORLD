@@ -258,6 +258,26 @@ empty shell to fetchers, so a 200 there means nothing.
 
 ## 6. Findings log
 
+### 2026-08-30 — Interrupted Lobby joins cancel their welcome timer
+
+`LobbyClient.connect()` raced the welcome wait against its disconnect
+interrupt, but the welcome wait owned a separate timeout. When a caller
+disconnected after the room joined but before the server identity arrived,
+the outer join rejected while the timeout remained scheduled until its full
+configured delay. Repeated interrupted joins could therefore retain timers
+and their closures long after the client had retired the room.
+
+The interrupt promise now belongs to `#awaitWelcome()` itself. Its `finally`
+always clears the timeout whether welcome, timeout, room interruption or a
+transport failure wins; normal timeout and identity semantics are unchanged.
+
+*Verified:* a red-first fake-timer regression leaves the welcome message
+pending, disconnects the joined client, and observes one timer still live on
+the old path. The corrected path rejects the join and leaves zero timers.
+The full Lobby suite passes 10 files / 225 tests; Lobby typecheck,
+invariants and diff hygiene pass. No browser, external provider, RPC, wallet,
+proof, signature, funds or transaction was used.
+
 ### 2026-08-30 — Pool fee wire values require decimal syntax
 
 `BackendPrivacyClient.asUint256()` used `BigInt()` and range checks alone for
