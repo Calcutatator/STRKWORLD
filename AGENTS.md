@@ -258,6 +258,47 @@ empty shell to fetchers, so a 200 there means nothing.
 
 ## 6. Findings log
 
+### 2026-08-30 — Lobby resume cannot resurrect a room closed during send
+
+`LobbyClient.resume()` sent the resume command and then unconditionally set
+the wrapper to `connected`. A synchronous transport callback could report the
+room closed while that send was in progress; the stale continuation then
+restored `connected` even though `#room` and the server-assigned identity had
+already been retired.
+
+Resume now captures the room and rechecks room identity and suspended status
+after send before recording the placement or publishing `connected`. A
+transport closure therefore remains authoritative; ordinary resume behavior
+and explicit placement validation are unchanged.
+
+*Verified:* a red-first public Lobby regression makes a fake room deliver
+`onLeave` synchronously from its resume send; before the guard the client ended
+`connected`, while the corrected client remains `closed` with no game id.
+Removing the post-send guard reproduces the failure. The focused Lobby and
+Backend suites pass 165 tests, and both package typechecks and diff hygiene
+pass. No browser, wallet, provider, RPC, proof, signature, funds or transaction
+was used.
+
+### 2026-08-30 — Planner quote identifiers require string shape
+
+`BackendApi.prepareSwap()` previously checked only the truthiness of the
+external planner's `quoteId`. A malformed planner response containing a
+number or object therefore crossed the backend boundary, triggered paymaster
+fee construction and issued an authorization before the browser rejected the
+response as invalid.
+
+Swap quote admission now requires a nonempty string identifier before any fee
+or authorization work. Existing opaque nonempty identifier handling and
+quote-bound claims remain unchanged.
+
+*Verified:* red-first Backend regressions supplied numeric and object quote
+identifiers; both previously returned `200` and issued fees, while the
+corrected path returns the existing `409` invalid-quote response with zero
+paymaster and authorization calls. Removing the type guard independently
+reproduces both regressions. The focused Lobby and Backend suites pass 165
+tests, and both package typechecks and diff hygiene pass. No browser, wallet,
+provider, RPC, proof, signature, funds or transaction was used.
+
 ### 2026-08-30 — Room resolution ignores inherited panel descriptors
 
 `resolveRoom()` read `panels[building]` through ordinary prototype lookup. A

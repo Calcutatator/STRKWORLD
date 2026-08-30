@@ -304,7 +304,8 @@ export class BackendApi {
       this.rpc.getPoolConfig(signal),
     ]);
     if (
-      !plan.quoteId ||
+      typeof plan.quoteId !== 'string' ||
+      plan.quoteId.length === 0 ||
       !plan.chainId ||
       !isFelt(plan.executorAddress) ||
       BigInt(plan.executorAddress) === 0n ||

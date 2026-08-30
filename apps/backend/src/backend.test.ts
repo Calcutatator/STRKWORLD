@@ -634,6 +634,33 @@ describe('bounded private swap inputs', () => {
 });
 
 describe('bounded private swap planner responses', () => {
+  it.each([
+    ['number', 42],
+    ['object', {}],
+  ])('rejects a planner response with a non-string quote identifier (%s) before fee authorization', async (_label, quoteId) => {
+    const { api, swapPlanner, paymaster, authorizations } = fixture();
+    vi.spyOn(swapPlanner, 'prepare').mockResolvedValue({
+      quoteId: quoteId as never,
+      buyAmount: 100n,
+      expiresAt: 2_000,
+      chainId: '0x534e5f4d41494e',
+      executorAddress: '0x999',
+      executorCalls: [{ contractAddress: '0x111', entrypoint: 'swap', selector: '0x555', calldata: ['0xaaa'] }],
+    });
+    const buildFee = vi.spyOn(paymaster, 'buildFee');
+    const issue = vi.spyOn(authorizations, 'issue');
+
+    await expect(api.handle({
+      method: 'POST', path: '/v1/private/swaps/prepare',
+      body: {
+        v: 1, sellToken: '0xabc', buyToken: STRK,
+        sellAmount: '1', minAmountOut: '1', slippageBps: 100,
+      },
+    })).resolves.toMatchObject({ status: 409 });
+    expect(buildFee).not.toHaveBeenCalled();
+    expect(issue).not.toHaveBeenCalled();
+  });
+
   it('accepts the maximum uint256 AVNU output at the response boundary', async () => {
     const { api, swapPlanner } = fixture();
     vi.spyOn(swapPlanner, 'prepare').mockImplementation(async () => ({
