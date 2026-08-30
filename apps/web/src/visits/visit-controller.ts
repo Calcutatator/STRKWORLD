@@ -103,6 +103,10 @@ export function createVisitController(
     // Ownership changes before the interaction window appears. React now owns
     // Escape and every text input until closeSurface hands controls back.
     ownControls(building, 'shell');
+    // Shell delivery is synchronous. A World callback can report the room's
+    // exit during that handoff, so do not publish a station for a visit that
+    // no longer owns this transition.
+    if (store.getState() !== state) return;
     setState({ name: 'visiting', building, surface: { name: 'station', station } });
   }
 
@@ -179,6 +183,7 @@ export function createVisitController(
       const state = store.getState();
       if (state.name !== 'visiting' || state.surface.name !== 'room') return;
       ownControls(state.building, 'shell');
+      if (store.getState() !== state) return;
       setState({ ...state, surface: { name: 'menu' } });
     },
 
@@ -186,6 +191,7 @@ export function createVisitController(
       const state = store.getState();
       if (state.name !== 'visiting' || state.surface.name === 'room') return;
       ownControls(state.building, 'world');
+      if (store.getState() !== state) return;
       setState({ ...state, surface: { name: 'room' } });
     },
 

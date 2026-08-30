@@ -227,6 +227,21 @@ describe('visit controller', () => {
     });
   });
 
+  it('does not publish a station after the control handoff synchronously exits the building', () => {
+    const world = createEventBus<WorldEvents>();
+    const shell = createEventBus<ShellEvents>();
+    shell.on('world:control-owner', ({ owner }) => {
+      if (owner === 'shell') world.emit('building:exited', { building: 'bank' });
+    });
+    const controller = createVisitController(shell);
+    controller.listen(world);
+    world.emit('building:entered', { building: 'bank' });
+
+    world.emit('station:activated', { building: 'bank', station: 'bank:shielding' });
+
+    expect(controller.store.getState()).toEqual({ name: 'outside' });
+  });
+
   it('fails closed on an unknown station and releases input the World suspended', () => {
     const world = createEventBus<WorldEvents>();
     const shell = createEventBus<ShellEvents>();
