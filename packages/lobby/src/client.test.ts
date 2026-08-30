@@ -1090,6 +1090,30 @@ describe('presence', () => {
     expect(peers[0]?.facing).toBe('up');
   });
 
+  it('does not restore connected status when transport leaves during resume send', async () => {
+    const joined = fakeRoom();
+    const joinOrCreate = vi
+      .spyOn(ColyseusClient.prototype, 'joinOrCreate')
+      .mockImplementation(() => Promise.resolve(joined.room) as never);
+
+    try {
+      const client = new LobbyClient({ endpoint: 'ws://test', start: { x: 20, y: 0 } });
+      const connecting = client.connect();
+      await Promise.resolve();
+      joined.welcome({ gameId: '000000000000000e' });
+      await connecting;
+      client.suspend();
+
+      joined.send.mockImplementationOnce(() => joined.left(1006, 'transport dropped'));
+      client.resume({ x: 40, y: 40, facing: 'up' });
+
+      expect(client.status).toBe('closed');
+      expect(client.gameId).toBeNull();
+    } finally {
+      joinOrCreate.mockRestore();
+    }
+  });
+
   it('delivers a reentrant suspend after the resume transition to every subscriber', async () => {
     const walker = makeClient(20, 0);
     await walker.connect();

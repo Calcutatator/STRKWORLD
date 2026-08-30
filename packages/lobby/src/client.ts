@@ -291,10 +291,14 @@ export class LobbyClient {
       y: Math.round(placement.y),
       facing: placement.facing ?? 'down',
     };
-    this.#room.send(MESSAGE.resume, {
+    const room = this.#room;
+    room.send(MESSAGE.resume, {
       ...next,
       sprite: sprite ?? this.#options.sprite ?? DEFAULT_SPRITE,
     });
+    // The transport may synchronously report its own closure while sending;
+    // do not let this stale command resurrect a disconnected client.
+    if (this.#room !== room || this.#status !== 'suspended') return;
     // The server writes this placement unconditionally on resume, so it is the
     // confirmed position; nothing to reconcile until the consumer moves again.
     this.#desired = null;
