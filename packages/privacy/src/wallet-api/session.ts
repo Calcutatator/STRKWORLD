@@ -231,20 +231,25 @@ export function createWalletSession(
     const owned = connection;
     connectionCleanup = null;
     connection = null;
-    let firstError: unknown = null;
+    let firstError: unknown;
+    let hasError = false;
     try {
       cleanup?.();
     } catch (error) {
       firstError = error;
+      hasError = true;
     }
     if (owned) {
       try {
         destroyConnection(owned, false);
       } catch (error) {
-        firstError ??= error;
+        if (!hasError) {
+          firstError = error;
+          hasError = true;
+        }
       }
     }
-    if (firstError) throw firstError;
+    if (hasError) throw firstError;
   }
 
   function selectedWallet(): WalletHandle | null {
@@ -290,15 +295,17 @@ export function createWalletSession(
       generation += 1;
       connectFlight = null;
       const owned = connection;
-      let retirementError: unknown = null;
+      let retirementError: unknown;
+      let hasRetirementError = false;
       try {
         retireConnectionExplicit();
       } catch (error) {
         retirementError = error;
+        hasRetirementError = true;
       }
       selectedKey = null;
       publish('selection-required', null);
-      if (retirementError) throw retirementError;
+      if (hasRetirementError) throw retirementError;
       await owned?.disconnect();
     },
     destroy() {
@@ -306,21 +313,26 @@ export function createWalletSession(
       destroyed = true;
       generation += 1;
       connectFlight = null;
-      let teardownError: unknown = null;
+      let teardownError: unknown;
+      let hasTeardownError = false;
       try {
         discoveryCleanup();
       } catch (error) {
         teardownError = error;
+        hasTeardownError = true;
       }
       try {
         retireConnectionExplicit();
       } catch (error) {
-        teardownError ??= error;
+        if (!hasTeardownError) {
+          teardownError = error;
+          hasTeardownError = true;
+        }
       }
       selectedKey = null;
       publish('selection-required', null);
       listeners.clear();
-      if (teardownError) throw teardownError;
+      if (hasTeardownError) throw teardownError;
     },
   };
 

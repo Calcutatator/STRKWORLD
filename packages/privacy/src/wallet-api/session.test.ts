@@ -147,6 +147,30 @@ describe('WalletSession', () => {
     expect(() => session.destroy()).not.toThrow();
   });
 
+  it('preserves falsey explicit cleanup errors', async () => {
+    const selected = wallet('Ready');
+    const connected = controllableConnection(
+      '0x111',
+      new FakePrivacyOperations(),
+      new FakePrivacyOperations(),
+    );
+    connected.port.subscribe = () => () => { throw null; };
+    const session = createWalletSession(
+      denyAllOptions(),
+      { discovery: discoveryWith(selected), connectWallet: async () => connected.port },
+    );
+    await session.connect(session.getSnapshot().wallets[0]!.key);
+
+    let caught: unknown = Symbol('not caught');
+    try {
+      await session.disconnect();
+    } catch (error) {
+      caught = error;
+    }
+    expect(caught).toBe(null);
+    expect(session.getSnapshot()).toMatchObject({ phase: 'selection-required', account: null });
+  });
+
   it('lets only the newest connection attempt publish financial authority', async () => {
     const first = wallet('First wallet');
     const second = wallet('Second wallet');
