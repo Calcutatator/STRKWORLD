@@ -24,6 +24,32 @@ describe('the street is walkable', () => {
     expect(TILES.wall.solid).toBe(true);
   });
 
+  it('rejects geometry supplied only through an object prototype', () => {
+    const object = Object.create({
+      x: TILE_SIZE,
+      y: 2 * TILE_SIZE,
+      width: 2 * TILE_SIZE,
+      height: TILE_SIZE,
+    });
+    object.properties = [{ name: 'building', type: 'string', value: 'bank' }];
+
+    expect(objectLayerToDoors([object], DOOR_MAP_BOUNDS)).toEqual([]);
+  });
+
+  it('rejects accessor-backed geometry without invoking the accessor', () => {
+    const object = tiledDoor();
+    let accessed = false;
+    Object.defineProperty(object, 'x', {
+      get: () => {
+        accessed = true;
+        return TILE_SIZE;
+      },
+    });
+
+    expect(objectLayerToDoors([object], DOOR_MAP_BOUNDS)).toEqual([]);
+    expect(accessed).toBe(false);
+  });
+
   it('spawns the player on a non-solid tile', () => {
     // A spawn inside a wall is the kind of bug that only shows up when someone
     // opens the game and cannot move.

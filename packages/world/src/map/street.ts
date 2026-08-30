@@ -262,6 +262,12 @@ function isValidMapBounds(bounds: Pick<DistrictMap, 'width' | 'height'>): boolea
 function normalizeDoorGeometry(
   object: Pick<TiledObject, 'x' | 'y' | 'width' | 'height'>,
 ): Pick<DoorZone, 'x' | 'y' | 'width' | 'height'> | null {
+  // Geometry is decoded from an untrusted parsed object. Require own data
+  // fields so a prototype or accessor cannot manufacture a door rectangle.
+  for (const key of ['x', 'y', 'width', 'height'] as const) {
+    const descriptor = Object.getOwnPropertyDescriptor(object, key);
+    if (descriptor === undefined || !('value' in descriptor)) return null;
+  }
   const geometry = {
     x: object.x / TILE_SIZE,
     y: object.y / TILE_SIZE,
