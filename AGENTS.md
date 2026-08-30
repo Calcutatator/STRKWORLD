@@ -258,6 +258,26 @@ empty shell to fetchers, so a 200 there means nothing.
 
 ## 6. Findings log
 
+### 2026-08-30 — Production bootstrap destroys rejected session candidates
+
+After the bootstrap began freezing and revalidating loaded sessions, a
+candidate that failed that admission could still be dropped without teardown.
+That included a session with malformed operations and a proxy that mutated its
+operations during validation; the failure surface was reported, but the
+candidate's wallet session remained unowned.
+
+Rejected loaded candidates now go through the same contained data-method
+destructor used for late and retired sessions before startup failure is
+reported. Primitive or accessor-only malformed values remain harmless no-ops,
+while valid data-backed destroy methods run once. Accepted sessions, HMR
+retirement, render failures and duplicate disposal behavior are unchanged.
+
+*Verified:* red-first regressions observed zero destruction for malformed
+operations and validation-mutating candidates; the corrected path destroys
+each exactly once. Focused bootstrap tests pass 14 tests; workspace gates are
+recorded on the candidate. No browser, wallet, provider, RPC, proof,
+signature, funds or transaction was used.
+
 ### 2026-08-30 — Production bootstrap owns an immutable admitted session
 
 Session shape validation alone did not close the ownership boundary. A

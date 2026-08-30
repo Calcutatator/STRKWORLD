@@ -208,10 +208,11 @@ describe('production wallet bootstrap', () => {
   });
 
   it('fails closed when the loaded session carries malformed operations', async () => {
+    const loaded = sessionWithOperations({});
     const render = vi.fn();
     const failure = vi.fn();
     startProductionWalletBootstrap({
-      load: async () => sessionWithOperations({}),
+      load: async () => loaded,
       render,
       failure,
     });
@@ -220,6 +221,7 @@ describe('production wallet bootstrap', () => {
 
     expect(render).not.toHaveBeenCalled();
     expect(failure).toHaveBeenCalledOnce();
+    expect(loaded.destroy).toHaveBeenCalledOnce();
   });
 
   it('contains an operations proxy whose descriptor inspection throws', async () => {
@@ -265,6 +267,7 @@ describe('production wallet bootstrap', () => {
 
     expect(render).not.toHaveBeenCalled();
     expect(failure).toHaveBeenCalledOnce();
+    expect(target.destroy).toHaveBeenCalledOnce();
   });
 
   it('freezes the admitted session and operations before rendering', async () => {

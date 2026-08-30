@@ -48,6 +48,7 @@ export function startProductionWalletBootstrap({
         return;
       }
       if (!admitWalletSession(session)) {
+        destroyQuietly(session);
         if (!retired) reportFailure(failure);
         return;
       }
