@@ -258,6 +258,24 @@ empty shell to fetchers, so a 200 there means nothing.
 
 ## 6. Findings log
 
+### 2026-08-30 — Dynamic room labels claim ownership before styling
+
+`StreetScene.renderRoom()` previously inserted a newly-created station label
+into `roomLabels` only after its presentation setters completed. A Phaser text
+setter failure during the first station render could therefore leave an
+allocated label outside the Scene-owned map, unreachable by shutdown or
+partial-create cleanup.
+
+Dynamic station labels are now registered immediately after construction,
+before styling setters run. Existing label geometry, update behavior and normal
+room teardown are unchanged; failed presentation setup remains owned by the
+Scene.
+
+*Verified:* a red-first World regression makes the first dynamic label styling
+setter throw and observes missing ownership on the old path; the corrected test
+retains it. Focused World art tests pass 6/6. No browser, wallet, provider,
+RPC, proof, signature, funds or transaction was used.
+
 ### 2026-08-30 — Authorization wire claims require canonical own data
 
 `fromWire()` previously accepted signed JSON claims through ordinary property

@@ -743,10 +743,9 @@ export function createStreetScene({ Phaser, onTileChanged, remotePeers }: Street
               fontFamily: 'monospace',
               fontSize: '12px',
               align: 'center',
-            })
-            .setOrigin(0.5)
-            .setDepth(3);
+            });
           this.roomLabels.set(station.station, label);
+          label.setOrigin(0.5).setDepth(3);
         }
         label
           .setVisible(true)

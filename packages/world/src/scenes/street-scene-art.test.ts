@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
+import { BANK_ROOM_DEFINITION, createFixedRoom } from '../fixed-room.js';
 import { createStreetMap } from '../map/street.js';
 import { createStreetScene, doorOverlayLayout } from './street-scene.js';
 
@@ -106,5 +107,32 @@ describe('street Kenney door presentation', () => {
 
     expect(() => scene.createExteriorLabels()).toThrow(presentationError);
     expect(scene.exteriorLabels.get('bank')).toBe(label);
+  });
+
+  it('retains a dynamic room label before presentation setters can throw', () => {
+    const presentationError = new Error('room label presentation failed');
+    const label = { setOrigin: vi.fn(() => { throw presentationError; }), setDepth: vi.fn() };
+    const SceneType = createStreetScene({ Phaser: { Scene: class {} } as never });
+    const scene = new SceneType() as unknown as {
+      add: { text: ReturnType<typeof vi.fn> };
+      roomGraphics: { clear(): void; fillStyle(colour: number, alpha: number): void; fillRect(...args: number[]): void };
+      roomStationGraphics: { clear(): void; fillStyle(colour: number, alpha: number): void; fillRect(...args: number[]): void };
+      roomLabels: Map<string, unknown>;
+      activeRoom: 'bank';
+      roomMaps: { bank: ReturnType<typeof createFixedRoom> };
+      roomControllers: { bank: { state: unknown } };
+      renderRoom(): void;
+    };
+    scene.add = { text: vi.fn(() => label) };
+    const graphics = { clear: vi.fn(), fillStyle: vi.fn(), fillRect: vi.fn() };
+    scene.roomGraphics = graphics;
+    scene.roomStationGraphics = graphics;
+    scene.roomLabels = new Map();
+    scene.activeRoom = 'bank';
+    scene.roomMaps = { bank: createFixedRoom(BANK_ROOM_DEFINITION) };
+    scene.roomControllers = { bank: { state: { inRoom: true, building: 'bank', controlOwner: 'world', highlightedStation: null, stations: [] } } };
+
+    expect(() => scene.renderRoom()).toThrow(presentationError);
+    expect(scene.roomLabels.get('bank:shielding')).toBe(label);
   });
 });
