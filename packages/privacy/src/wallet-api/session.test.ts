@@ -52,6 +52,40 @@ describe('WalletSession', () => {
     },
   );
 
+  it('publishes each discovered wallet authority exactly once', () => {
+    const selected = wallet('Ready');
+    const session = createWalletSession(
+      denyAllOptions(),
+      { discovery: discoveryWith(selected, selected), connectWallet: async () => connection('0x111') },
+    );
+
+    expect(session.getSnapshot().wallets).toHaveLength(1);
+    expect(session.getSnapshot().wallets[0]).toMatchObject({ name: 'Ready' });
+  });
+
+  it('deduplicates a repeated discovery notification without retiring the selected authority', async () => {
+    const selected = wallet('Ready');
+    const discovery = controllableDiscovery(selected);
+    const connected = connection('0x111');
+    const createOperations = vi.spyOn(connected, 'createOperations');
+    const session = createWalletSession(
+      denyAllOptions(),
+      { discovery: discovery.port, connectWallet: async () => connected },
+    );
+    await session.connect(session.getSnapshot().wallets[0]!.key);
+    const generation = session.getSnapshot().generation;
+
+    discovery.replace(selected, selected);
+
+    expect(session.getSnapshot()).toMatchObject({
+      phase: 'connected',
+      account: '0x111',
+      generation,
+    });
+    expect(session.getSnapshot().wallets).toHaveLength(1);
+    expect(createOperations).toHaveBeenCalledOnce();
+  });
+
   it('shares same-key connection attempts instead of opening duplicate wallet workflows', async () => {
     const selected = wallet('Ready');
     let release!: (connection: WalletConnectionPort) => void;

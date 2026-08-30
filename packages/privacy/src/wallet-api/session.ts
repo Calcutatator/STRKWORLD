@@ -90,7 +90,7 @@ export function createWalletSession(
   const keys = new WeakMap<object, string>();
   let nextKey = 0;
   const initialWallets = dependencies.discovery.getWallets();
-  let wallets = Array.isArray(initialWallets) ? [...initialWallets] : [];
+  let wallets = ownDiscoveredWallets(initialWallets);
   let generation = 0;
   let selectedKey: string | null = null;
   let connection: WalletConnectionPort | null = null;
@@ -269,7 +269,7 @@ export function createWalletSession(
       publish('selection-required', null);
       return;
     }
-    wallets = [...nextWallets];
+    wallets = ownDiscoveredWallets(nextWallets);
     if (selectedKey && !selectedWallet()) {
       generation += 1;
       connectFlight = null;
@@ -510,6 +510,17 @@ export function createProductionWalletSession(
         },
       };
     },
+  });
+}
+
+function ownDiscoveredWallets(value: unknown): WalletHandle[] {
+  if (!Array.isArray(value)) return [];
+  const seen = new Set<object>();
+  return value.filter((wallet): wallet is WalletHandle => {
+    if ((typeof wallet !== 'object' && typeof wallet !== 'function') || wallet === null) return false;
+    if (seen.has(wallet)) return false;
+    seen.add(wallet);
+    return true;
   });
 }
 
