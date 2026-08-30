@@ -38,6 +38,17 @@ const unapprovedDeviation: RouteGrade = {
 const approvedButUndisclosed: RouteGrade = { ...approvedDeviation, disclosure: null };
 
 describe('route gate', () => {
+  it('keeps the canonical register immutable at the Web seam', () => {
+    const shield = PRIVACY_REGISTER.find((entry) => entry.route === 'bank.shield')!;
+
+    expect(Object.isFrozen(PRIVACY_REGISTER)).toBe(true);
+    expect(Object.isFrozen(shield)).toBe(true);
+    expect(Reflect.set(PRIVACY_REGISTER, 0, shield)).toBe(false);
+    expect(Reflect.set(shield, 'grade', 'private')).toBe(false);
+    expect(routeDoor('bank.shield').open).toBe(true);
+    expect(shield.grade).toBe('public-edge');
+  });
+
   it('opens the four approved v1 routes', () => {
     for (const route of ['bank.shield', 'bank.unshield', 'post-office.transfer', 'exchange.swap', 'bridge.deposit']) {
       expect(isRouteOpen(route), route).toBe(true);
