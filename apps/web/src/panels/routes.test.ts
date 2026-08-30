@@ -91,6 +91,14 @@ describe('route gate', () => {
     expect(buildingDoor('vault', [inherited]).open).toBe(false);
   });
 
+  it.each([null, {}, 'not-a-register'])('fails closed for a malformed register container: %s', (malformed) => {
+    const register = malformed as unknown as readonly RouteGrade[];
+    expect(() => routeDoor('bank.shield', register)).not.toThrow();
+    expect(routeDoor('bank.shield', register)).toMatchObject({ open: false, reason: 'unknown-route' });
+    expect(() => buildingDoor('bank', register)).not.toThrow();
+    expect(buildingDoor('bank', register)).toMatchObject({ open: false, reason: 'coming-soon' });
+  });
+
   it('opens an approved and disclosed deviation', () => {
     expect(routeDoor('vault.supply', [approvedDeviation]).open).toBe(true);
   });

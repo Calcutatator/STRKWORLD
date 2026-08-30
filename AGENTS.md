@@ -258,6 +258,26 @@ empty shell to fetchers, so a 200 there means nothing.
 
 ## 6. Findings log
 
+### 2026-08-30 — Web route resolvers fail closed for malformed register containers
+
+The Web route gate validated individual `RouteGrade` entries but assumed the
+caller supplied an array for the register itself. A malformed public
+composition value such as `null`, an object or a string therefore threw from
+`.find()`/`.filter()` instead of returning an explicit locked door. In a live
+shell this could replace the route decision with an ErrorBoundary surface
+rather than preserving fail-closed admission.
+
+`findRoute()` now treats non-array register values as empty, and
+`buildingRoutes()` does the same for building-level admission. Canonical and
+valid custom arrays are unchanged; malformed containers resolve to the
+existing unknown-route/coming-soon locks without invoking route work.
+
+*Verified:* public route regressions supplied `null`, object and string
+registers and observed TypeErrors on the old path. The corrected resolver
+returns locked decisions for all three and the focused routes suite passes
+29/29. No browser, wallet, provider, RPC, proof, signature, funds or
+transaction was used.
+
 ### 2026-08-30 — Street door handoffs remain retryable after a failed room entry
 
 `StreetScene.reportTile()` previously committed its `lastTile` sentinel before

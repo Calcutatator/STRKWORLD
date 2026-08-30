@@ -37,6 +37,10 @@ function isOwnRouteGrade(entry: unknown): entry is RouteGrade {
     ROUTE_GRADE_FIELDS.every((field) => Object.prototype.hasOwnProperty.call(entry, field));
 }
 
+function isRouteRegister(value: unknown): value is readonly RouteGrade[] {
+  return Array.isArray(value);
+}
+
 export interface DoorState {
   open: boolean;
   reason: LockReason | null;
@@ -62,6 +66,7 @@ export function findRoute(
   routeId: string,
   register: readonly RouteGrade[] = PRIVACY_REGISTER,
 ): RouteGrade | undefined {
+  if (!isRouteRegister(register)) return undefined;
   return register.find((entry) => isOwnRouteGrade(entry) && entry.route === routeId);
 }
 
@@ -99,6 +104,7 @@ export function buildingRoutes(
   building: BuildingId,
   register: readonly RouteGrade[] = PRIVACY_REGISTER,
 ): readonly RouteGrade[] {
+  if (!isRouteRegister(register)) return [];
   return register.filter((entry) => isOwnRouteGrade(entry) && entry.building === building);
 }
 
