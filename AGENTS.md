@@ -258,6 +258,51 @@ empty shell to fetchers, so a 200 there means nothing.
 
 ## 6. Findings log
 
+
+## 6. Findings log
+
+### 2026-08-30 — StreetScene construction failures retire partial ownership immediately
+
+`StreetScene.create()` arms its World cleanup handler before construction, but
+Phaser calls `Scene#create` directly and does not emit the Scene `shutdown`
+event when that call throws. A failure after ground, player, remote-avatar,
+input, outfit or room creation therefore left the partial cycle's resources,
+listeners and shutdown callbacks live until an external lifecycle event that
+might never arrive.
+
+The construction sequence now runs inside a `try/catch`. A thrown create step
+detaches the pending Scene cleanup handler, runs the existing idempotent World
+cleanup without broadcasting Phaser `shutdown`, and rethrows the original
+error. Player and ground are explicit Scene-owned resources and are destroyed
+by that same cleanup. Cleanup attempts every owned destructor even when one
+throws. During failed construction the original create error remains primary
+and a secondary teardown error is swallowed after all attempts; during an
+ordinary framework shutdown, cleanup errors are propagated (as one error or an
+`AggregateError`) after all teardown has been attempted. A later framework
+shutdown is harmless, and the retained Scene can create a fresh cycle normally.
+
+*Verified:* the red lifecycle regression injects a failure at `createAvatarStudio`
+and does not emit `shutdown`; it observes immediate destruction of the player,
+ground, remote layer, room controller, input ownership, outfit binding and
+overlays, with the original error preserved. Later shutdown/cleanup does not
+double-destroy. A throwing ground destructor does not mask the original create
+error or prevent later teardown, while a normal shutdown propagates that
+cleanup error after attempting every resource. A subsequent create/ shutdown
+cycle cleans normally. The
+focused StreetScene lifecycle suite passes 15 tests; World typecheck and the
+remaining workspace gates are recorded with the candidate. No browser, wallet,
+provider, RPC, proof, signature, funds or transaction was used.
+
+### 2026-08-29 — Fly sanitizes private-child response headers
+
+The Fly public edge previously copied every non-hop-by-hop response header
+from the private child to the browser. A child response could therefore set
+cookies, redirects, public caching, CORS permissions, content encoding,
+cross-origin isolation, or arbitrary private metadata at the public origin.
+That was an unnecessary response-boundary escape: the Backend JSON contract
+only needs its content type and content-type protection marker, and dynamic
+
+
 ### 2026-08-30 — Bridge bigint revival ignores inherited markers
 
 Bridge persistence used the `in` operator to recognize its JSON bigint
@@ -3500,6 +3545,10 @@ new CLI export was claimed. No runtime code, browser, Phaser scene, wallet,
 network or transaction was used.
 
 ### 2026-08-20 — StreetScene restarts own a fresh failure-safe lifecycle
+
+**The thrown-`create()` cleanup limitation below is superseded by the
+2026-08-30 construction-failure finding above; the restart and framework
+shutdown verification here remains valid.**
 
 Phaser may restart the same `StreetScene` instance, so `create()` now opens a
 new cleanup cycle before its first allocation: it clears the prior ground

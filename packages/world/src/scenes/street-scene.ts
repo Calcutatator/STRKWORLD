@@ -168,32 +168,48 @@ export function createStreetScene({ Phaser, onTileChanged, remotePeers }: Street
       this.retireWorldOwnership();
       this.cleanedUp = false;
       this.ground = undefined;
+      this.playerOwned = false;
       this.lastTile = { x: -1, y: -1 };
       this.events.once('shutdown', this.cleanShutdown, this);
-      createKenneyRuntimeTextures(this, Phaser, {
-        tileIndex: TILE_INDEX,
-        grassColour: TILES.grass.colour,
-      });
-      registerAvatarAnimations(this);
-      this.drawGround();
-      this.createDoorOverlays();
-      this.movement = createStreetMovementAdapter({
-        emit: (event, payload) => this.resolveWorldConfig()?.out.emit(event, payload),
-      });
-      this.createPlayer();
-      const currentConfig = this.resolveWorldConfig();
-      this.remoteAvatars = createRemoteAvatarLayer({
-        scene: this,
-        source: currentConfig ? currentConfig.remotePeers : remotePeers,
-      });
-      this.createInput();
-      this.createAvatarOutfit();
-      this.createFixedRooms();
-      this.createAvatarStudio();
-      this.createCamera();
-      this.createDoorTriggers();
-      this.createRoomVisuals();
-      this.createExteriorLabels();
+      try {
+        createKenneyRuntimeTextures(this, Phaser, {
+          tileIndex: TILE_INDEX,
+          grassColour: TILES.grass.colour,
+        });
+        registerAvatarAnimations(this);
+        this.drawGround();
+        this.createDoorOverlays();
+        this.movement = createStreetMovementAdapter({
+          emit: (event, payload) => this.resolveWorldConfig()?.out.emit(event, payload),
+        });
+        this.createPlayer();
+        const currentConfig = this.resolveWorldConfig();
+        this.remoteAvatars = createRemoteAvatarLayer({
+          scene: this,
+          source: currentConfig ? currentConfig.remotePeers : remotePeers,
+        });
+        this.createInput();
+        this.createAvatarOutfit();
+        this.createFixedRooms();
+        this.createAvatarStudio();
+        this.createCamera();
+        this.createDoorTriggers();
+        this.createRoomVisuals();
+        this.createExteriorLabels();
+      } catch (error) {
+        // Phaser calls Scene#create directly. If construction throws, it does
+        // not emit shutdown, so retire the partial World cycle here without
+        // broadcasting shutdown to Phaser's still-live plugins.
+        this.events.off('shutdown', this.cleanShutdown, this);
+        try {
+          this.cleanShutdown();
+        } catch {
+          // The construction failure is the actionable public error. Cleanup
+          // has already attempted every owned action; a secondary teardown
+          // failure must not replace the original failure.
+        }
+        throw error;
+      }
     }
 
     override update(_time: number, delta: number): void {
@@ -216,42 +232,67 @@ export function createStreetScene({ Phaser, onTileChanged, remotePeers }: Street
     private cleanShutdown(): void {
       if (this.cleanedUp) return;
       this.cleanedUp = true;
-      for (const room of Object.values(this.roomControllers ?? {})) room?.destroy();
+      const errors: unknown[] = [];
+      const attempt = (cleanup: () => void): void => {
+        try {
+          cleanup();
+        } catch (error) {
+          errors.push(error);
+        }
+      };
+      for (const room of Object.values(this.roomControllers ?? {})) {
+        if (room) attempt(() => room.destroy());
+      }
       this.roomControllers = {};
       this.roomMaps = {};
       this.activeRoom = undefined;
       this.avatarStudioActive = false;
       if (this.playerOwned) {
-        this.player.destroy();
+        const player = this.player;
         this.playerOwned = false;
+        attempt(() => player.destroy());
       }
-      this.ground?.destroy();
+      const ground = this.ground;
       this.ground = undefined;
+      if (ground) attempt(() => ground.destroy());
       this.avatarVisual = undefined;
-      this.avatarOutfitToggle?.destroy();
+      const avatarOutfitToggle = this.avatarOutfitToggle;
       this.avatarOutfitToggle = undefined;
+      if (avatarOutfitToggle) attempt(() => avatarOutfitToggle.destroy());
       this.avatarOutfit = NOOP_AVATAR_OUTFIT;
-      this.avatarStudio?.destroy();
+      const avatarStudio = this.avatarStudio;
       this.avatarStudio = undefined;
+      if (avatarStudio) attempt(() => avatarStudio.destroy());
       this.avatarStudioPresentation = undefined;
-      this.avatarStudioFigureLayer?.destroy();
+      const avatarStudioFigureLayer = this.avatarStudioFigureLayer;
       this.avatarStudioFigureLayer = undefined;
-      this.inputGate?.resume();
+      if (avatarStudioFigureLayer) attempt(() => avatarStudioFigureLayer.destroy());
+      const inputGate = this.inputGate;
       this.inputGate = NOOP_INPUT_GATE;
-      this.roomGraphics?.destroy();
+      if (inputGate) attempt(() => inputGate.resume());
+      const roomGraphics = this.roomGraphics;
       this.roomGraphics = undefined;
-      this.roomStationGraphics?.destroy();
+      if (roomGraphics) attempt(() => roomGraphics.destroy());
+      const roomStationGraphics = this.roomStationGraphics;
       this.roomStationGraphics = undefined;
-      this.avatarStudioGraphics?.destroy();
+      if (roomStationGraphics) attempt(() => roomStationGraphics.destroy());
+      const avatarStudioGraphics = this.avatarStudioGraphics;
       this.avatarStudioGraphics = undefined;
-      for (const label of this.roomLabels.values()) label.destroy();
+      if (avatarStudioGraphics) attempt(() => avatarStudioGraphics.destroy());
+      const roomLabels = [...this.roomLabels.values()];
       this.roomLabels.clear();
-      for (const label of this.exteriorLabels.values()) label.destroy();
+      for (const label of roomLabels) attempt(() => label.destroy());
+      const exteriorLabels = [...this.exteriorLabels.values()];
       this.exteriorLabels.clear();
-      this.remoteAvatars?.destroy();
+      for (const label of exteriorLabels) attempt(() => label.destroy());
+      const remoteAvatars = this.remoteAvatars;
       this.remoteAvatars = undefined;
-      for (const overlay of this.doorOverlays) overlay.destroy();
+      if (remoteAvatars) attempt(() => remoteAvatars.destroy());
+      const doorOverlays = this.doorOverlays;
       this.doorOverlays = [];
+      for (const overlay of doorOverlays) attempt(() => overlay.destroy());
+      if (errors.length === 1) throw errors[0];
+      if (errors.length > 1) throw new AggregateError(errors, 'StreetScene cleanup failed');
     }
 
     private retireWorldOwnership(): void {
@@ -289,7 +330,6 @@ export function createStreetScene({ Phaser, onTileChanged, remotePeers }: Street
 
       const layer = tilemap.createLayer(0, tileset, 0, 0);
       if (!layer) return;
-      this.ground = layer;
       layer.setDepth(0);
 
       // Collision from the same indices the unit tests assert against, so
@@ -299,6 +339,7 @@ export function createStreetScene({ Phaser, onTileChanged, remotePeers }: Street
         .map((spec) => TILE_INDEX[spec.kind]);
       layer.setCollision(solidIndices);
 
+      this.ground = layer;
     }
 
     /** Door art is an overlay so it never changes the tile/index/collision map. */

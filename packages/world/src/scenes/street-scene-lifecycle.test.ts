@@ -129,7 +129,6 @@ interface StreetSceneHarness extends FakeScene {
   avatarStudio: { readonly state: { readonly inRoom: boolean }; destroy(): void };
   avatarStudioPresentation: { enter(): void; exit(): void; destroy(): void };
   avatarOutfitToggle?: { destroy(): void };
-  player?: { destroy(): void };
   inputGate: { resume(): void };
   roomGraphics: { destroy(): void };
   roomStationGraphics: { destroy(): void };
@@ -138,8 +137,10 @@ interface StreetSceneHarness extends FakeScene {
   roomLabels: Map<string, { destroy(): void }>;
   exteriorLabels: Map<string, { destroy(): void }>;
   doorOverlays: Array<{ destroy(): void }>;
+  player: { destroy(): void };
   ground?: { destroy(): void };
   avatarVisual?: { cycle: symbol };
+  playerOwned: boolean;
   lastTile: { x: number; y: number };
 }
 
@@ -153,6 +154,7 @@ function createHarness(initialBus?: {
   let current = cycleResources();
   let currentBus = initialBus;
   let failure: 'early' | 'partial' | null = null;
+  let failureError: Error | undefined;
 
   if (initialBus) {
     scene.game = {
@@ -165,9 +167,9 @@ function createHarness(initialBus?: {
     scene.ground = current.ground;
   });
   scene.createPlayer = vi.fn(() => {
-    scene.avatarVisual = current.avatarVisual;
     scene.player = current.player;
-    (scene as unknown as { playerOwned: boolean }).playerOwned = true;
+    scene.playerOwned = true;
+    scene.avatarVisual = current.avatarVisual;
   });
   scene.createCamera = vi.fn();
   scene.createDoorTriggers = vi.fn();
@@ -176,7 +178,10 @@ function createHarness(initialBus?: {
   scene.createAvatarOutfit = vi.fn(() => { scene.avatarOutfitToggle = current.outfitToggle; });
   scene.createFixedRooms = vi.fn(() => { scene.roomControllers = { bank: current.controller }; });
   scene.createAvatarStudio = vi.fn(() => {
-    if (failure === 'partial') throw new Error('partial create failure');
+    if (failure === 'partial') {
+      failureError = new Error('partial create failure');
+      throw failureError;
+    }
     scene.avatarStudio = current.studio;
     scene.avatarStudioPresentation = current.studioPresentation;
   });
@@ -206,6 +211,7 @@ function createHarness(initialBus?: {
     failAt(next: typeof failure) {
       failure = next;
     },
+    failureError: () => failureError,
     create() {
       scene.create();
     },
@@ -231,27 +237,6 @@ function expectCompleteCleanup(cycle: ReturnType<typeof cycleResources>): void {
 }
 
 describe('StreetScene lifecycle', () => {
-  it('destroys the replaced player and ground exactly once across repeated create', () => {
-    const harness = createHarness();
-    const first = harness.current;
-    harness.create();
-
-    const second = harness.nextCycle();
-    harness.create();
-
-    expect(first.player.destroy).toHaveBeenCalledTimes(1);
-    expect(first.ground.destroy).toHaveBeenCalledTimes(1);
-    expect(second.player.destroy).not.toHaveBeenCalled();
-    expect(second.ground.destroy).not.toHaveBeenCalled();
-
-    harness.shutdown();
-    harness.scene.cleanShutdown();
-    expect(first.player.destroy).toHaveBeenCalledTimes(1);
-    expect(first.ground.destroy).toHaveBeenCalledTimes(1);
-    expect(second.player.destroy).toHaveBeenCalledTimes(1);
-    expect(second.ground.destroy).toHaveBeenCalledTimes(1);
-  });
-
   it('toggles the outfit outdoors, in the Studio and back, from one Scene-owned binding', () => {
     const harness = createWorldPlayHarness();
     harness.create();
@@ -546,7 +531,7 @@ describe('StreetScene lifecycle', () => {
     harness.nextCycle();
     harness.failAt('early');
     expect(() => harness.create()).toThrow('early create failure');
-    expect(harness.scene.events.count('shutdown')).toBe(1);
+    expect(harness.scene.events.count('shutdown')).toBe(0);
     harness.shutdown();
     harness.scene.cleanShutdown();
 
@@ -571,7 +556,7 @@ describe('StreetScene lifecycle', () => {
     const partial = harness.nextCycle();
     harness.failAt('partial');
     expect(() => harness.create()).toThrow('partial create failure');
-    expect(harness.scene.events.count('shutdown')).toBe(2);
+    expect(harness.scene.events.count('shutdown')).toBe(0);
     harness.shutdown();
     harness.scene.cleanShutdown();
 
@@ -591,6 +576,88 @@ describe('StreetScene lifecycle', () => {
     harness.create();
     harness.shutdown();
     expectCompleteCleanup(recovered);
+  });
+
+  it('cleans a failed create immediately when Phaser emits no shutdown', () => {
+    const harness = createHarness();
+    const partial = harness.nextCycle();
+    harness.failAt('partial');
+
+    expect(() => harness.create()).toThrow('partial create failure');
+
+    expect(partial.player.destroy).toHaveBeenCalledOnce();
+    expect(partial.ground.destroy).toHaveBeenCalledOnce();
+    expect(partial.controller.destroy).toHaveBeenCalledOnce();
+    expect(partial.unsubscribe).toHaveBeenCalledOnce();
+    expect(partial.input.resume).toHaveBeenCalledOnce();
+    expect(partial.overlay.destroy).toHaveBeenCalledOnce();
+    expect(partial.outfitToggle.destroy).toHaveBeenCalledOnce();
+    expect(harness.scene.remoteLayers[0]?.destroy).toHaveBeenCalledOnce();
+    expect(harness.scene.events.count('shutdown')).toBe(0);
+
+    // A later framework shutdown and explicit idempotence call cannot double
+    // destroy the failed cycle, and the same Scene can still recover.
+    harness.shutdown();
+    harness.scene.cleanShutdown();
+    expect(partial.player.destroy).toHaveBeenCalledOnce();
+    expect(partial.controller.destroy).toHaveBeenCalledOnce();
+
+    const recovered = harness.nextCycle();
+    harness.failAt(null);
+    harness.create();
+    harness.shutdown();
+    expectCompleteCleanup(recovered);
+  });
+
+  it('preserves the create error and continues cleanup when a destructor throws', () => {
+    const harness = createHarness();
+    const partial = harness.nextCycle();
+    const cleanupError = new Error('ground destroy failed');
+    partial.ground.destroy.mockImplementation(() => {
+      throw cleanupError;
+    });
+    harness.failAt('partial');
+
+    let thrown: unknown;
+    try {
+      harness.create();
+    } catch (error) {
+      thrown = error;
+    }
+
+    expect(thrown).toBe(harness.failureError());
+    expect(thrown).toBeInstanceOf(Error);
+    expect(partial.player.destroy).toHaveBeenCalledOnce();
+    expect(partial.ground.destroy).toHaveBeenCalledOnce();
+    expect(partial.controller.destroy).toHaveBeenCalledOnce();
+    expect(partial.unsubscribe).toHaveBeenCalledOnce();
+    expect(partial.input.resume).toHaveBeenCalledOnce();
+    expect(partial.overlay.destroy).toHaveBeenCalledOnce();
+    expect(partial.outfitToggle.destroy).toHaveBeenCalledOnce();
+    expect(harness.scene.remoteLayers[0]?.destroy).toHaveBeenCalledOnce();
+    expect(harness.scene.events.count('shutdown')).toBe(0);
+  });
+
+  it('propagates framework cleanup errors after attempting every teardown', () => {
+    const harness = createHarness();
+    const cycle = harness.nextCycle();
+    harness.create();
+    const cleanupError = new Error('ground destroy failed');
+    cycle.ground.destroy.mockImplementation(() => {
+      throw cleanupError;
+    });
+
+    expect(() => harness.shutdown()).toThrow(cleanupError);
+    expect(cycle.player.destroy).toHaveBeenCalledOnce();
+    expect(cycle.controller.destroy).toHaveBeenCalledOnce();
+    expect(cycle.unsubscribe).toHaveBeenCalledOnce();
+    expect(cycle.input.resume).toHaveBeenCalledOnce();
+    expect(cycle.overlay.destroy).toHaveBeenCalledOnce();
+    expect(cycle.outfitToggle.destroy).toHaveBeenCalledOnce();
+    expect(harness.scene.remoteLayers[0]?.destroy).toHaveBeenCalledOnce();
+    harness.scene.cleanShutdown();
+    expect(cycle.player.destroy).toHaveBeenCalledOnce();
+    expect(cycle.controller.destroy).toHaveBeenCalledOnce();
   });
 
   it('does not reuse a destroyed ground layer or stale tile on restart', () => {
