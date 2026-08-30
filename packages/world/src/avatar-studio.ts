@@ -445,6 +445,9 @@ export function createAvatarStudioController(
         }
         throw error;
       }
+      // Entry publication is synchronous and may retire or replace the
+      // controller before this turn resumes. Do not announce a stale entry.
+      if (destroyed || !inRoom) return;
       try {
         options.out.emit('avatar-studio:entered', {});
       } catch (error) {

@@ -258,6 +258,25 @@ empty shell to fetchers, so a 200 there means nothing.
 
 ## 6. Findings log
 
+### 2026-08-30 — Avatar Studio entry can announce stale ownership after reentrant state publication
+
+`createAvatarStudioController.enter()` published the inside snapshot and then
+unconditionally emitted `avatar-studio:entered`. An `onChange` consumer can
+synchronously destroy the controller while that snapshot is delivered. The
+controller is already retired, but the outer enter still announces a live
+Studio to the shell.
+
+The entry path now rechecks `destroyed` and `inRoom` after synchronous state
+publication and suppresses the stale announcement when the newer lifecycle
+state has won. Normal entry publication and announcement ordering are
+unchanged when the controller remains inside.
+
+*Verified:* a public World regression destroys the controller from the entry
+`onChange` callback. On the old path `avatar-studio:entered` was emitted after
+destruction; the corrected path emits no event and remains outside. Focused
+Avatar Studio tests pass 41 tests. No browser, lobby server, wallet, provider,
+RPC, proof, signature, funds or transaction was used.
+
 ### 2026-08-30 — Fixed-room exit can announce stale ownership after reentrant state publication
 
 `createFixedRoomController.leave()` published the outside snapshot and then
