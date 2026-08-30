@@ -88,6 +88,7 @@ export class WalletApiPrivacyOperations implements PrivacyOperations {
     try {
       const config = await this.pool.config(signal);
       throwIfAborted(signal);
+      validatePoolConfig(config);
       return Object.freeze({ ...config });
     } catch (error) {
       throw mapWalletError(error);
@@ -813,6 +814,22 @@ function hasOwnDataProperties(value: unknown, keys: readonly PropertyKey[]): boo
 function assertAddress(address: string, label: string): void {
   if (!isFelt(address) || BigInt(address) === 0n) {
     throw new PrivacyError('unknown', `Invalid ${label} address.`);
+  }
+}
+
+function validatePoolConfig(config: PoolConfig): void {
+  if (
+    typeof config?.feeAmount !== 'bigint'
+    || config.feeAmount < 0n
+    || typeof config.feeToken !== 'string'
+    || !isFelt(config.feeToken)
+    || BigInt(config.feeToken) === 0n
+    || !Number.isSafeInteger(config.proofValidityBlocks)
+    || config.proofValidityBlocks <= 0
+    || !Number.isSafeInteger(config.noteMaturityBlocks)
+    || config.noteMaturityBlocks < 0
+  ) {
+    throw new PrivacyError('unknown', 'The pool returned an invalid configuration.');
   }
 }
 

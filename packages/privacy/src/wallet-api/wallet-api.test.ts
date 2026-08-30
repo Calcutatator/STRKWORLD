@@ -224,6 +224,28 @@ describe('WalletApiPrivacyOperations capability and reads', () => {
   });
 
   it.each([
+    ['negative fee', { feeAmount: -1n }],
+    ['number fee', { feeAmount: 1 }],
+    ['zero fee token', { feeToken: '0x0' }],
+    ['decimal fee token', { feeToken: '123' }],
+    ['zero proof validity', { proofValidityBlocks: 0 }],
+    ['fractional proof validity', { proofValidityBlocks: 1.5 }],
+    ['negative maturity', { noteMaturityBlocks: -1 }],
+    ['unsafe maturity', { noteMaturityBlocks: Number.MAX_SAFE_INTEGER + 1 }],
+  ] as const)('rejects a pool config with %s', async (_label, patch) => {
+    const { ops, pool } = fixture();
+    vi.spyOn(pool, 'config').mockResolvedValue({
+      feeAmount: POOL_FEE,
+      feeToken: STRK,
+      proofValidityBlocks: 450,
+      noteMaturityBlocks: 10,
+      ...patch,
+    } as never);
+
+    await expect(ops.poolConfig()).rejects.toMatchObject({ kind: 'unknown' });
+  });
+
+  it.each([
     ['null', null],
     ['object', {}],
     ['primitive', 42],
