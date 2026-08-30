@@ -74,6 +74,25 @@ function harness(
 }
 
 describe('fixed room definitions', () => {
+  it('owns generated room maps independently of injected definitions', () => {
+    const definition = {
+      ...POST_OFFICE_ROOM_DEFINITION,
+      spawn: { ...POST_OFFICE_ROOM_DEFINITION.spawn },
+      exit: { ...POST_OFFICE_ROOM_DEFINITION.exit },
+      stations: POST_OFFICE_ROOM_DEFINITION.stations.map((station) => ({ ...station })),
+    };
+    const room = createFixedRoom(definition);
+
+    Reflect.set(definition.spawn, 'x', 1);
+    Reflect.set(definition.exit, 'x', 1);
+    Reflect.set(definition.stations[0]!, 'label', 'FORGED');
+    Reflect.set(definition.stations[0]!, 'x', 14);
+
+    expect(room.spawn).toEqual({ x: 9, y: 9 });
+    expect(room.exit.x).toBe(8);
+    expect(room.stations[0]).toMatchObject({ label: 'TRANSFER', x: 3 });
+  });
+
   it('keeps canonical room definitions immutable at runtime', () => {
     expect(Object.isFrozen(FIXED_ROOM_DEFINITIONS)).toBe(true);
     expect(Object.isFrozen(POST_OFFICE_ROOM_DEFINITION)).toBe(true);

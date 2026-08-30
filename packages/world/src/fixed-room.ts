@@ -200,15 +200,17 @@ export function createFixedRoom(definition: FixedRoomDefinition): FixedRoomMap {
     }),
   );
 
-  return {
+  for (const row of tiles) Object.freeze(row);
+  const stations = definition.stations.map((station) => Object.freeze({ ...station }));
+  return Object.freeze({
     building: definition.building,
     width: definition.width,
     height: definition.height,
-    tiles,
-    spawn: definition.spawn,
-    exit: definition.exit,
-    stations: definition.stations,
-  };
+    tiles: Object.freeze(tiles),
+    spawn: Object.freeze({ ...definition.spawn }),
+    exit: Object.freeze({ ...definition.exit }),
+    stations: Object.freeze(stations),
+  });
 }
 
 export function validateFixedRoomDefinition(definition: FixedRoomDefinition): void {
