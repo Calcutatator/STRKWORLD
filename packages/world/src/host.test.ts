@@ -541,6 +541,31 @@ describe('rapid churn', () => {
     expect(h.stopped).toBe(0);
     expect(h.started).toBe(1);
   });
+
+  it('rolls back a failed remount when deferred teardown cancellation throws', () => {
+    let pending: (() => void) | undefined;
+    let stopped = 0;
+    const cancelError = new Error('teardown cancellation failed');
+    const host = createHost<{ id: number }, string>({
+      start: () => ({ id: 1 }),
+      stop: () => { stopped += 1; },
+      defer: (fn) => {
+        pending = fn;
+        return 'pending';
+      },
+      cancel: () => { throw cancelError; },
+    });
+
+    const first = host.acquire('#host');
+    host.release();
+
+    expect(() => host.acquire('#host')).toThrow(cancelError);
+    expect(host.current).toBe(first);
+    expect(host.refCount).toBe(0);
+    pending?.();
+    expect(stopped).toBe(1);
+    expect(host.current).toBeNull();
+  });
 });
 
 describe('the guard against the naive implementation', () => {

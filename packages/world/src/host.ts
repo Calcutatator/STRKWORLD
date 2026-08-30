@@ -92,12 +92,15 @@ export function createHost<T, P>(options: HostOptions<T, P>): Host<T, P> {
       options.retarget(instance, parent, activeParent as P);
       activeParent = parent;
     }
-    refs++;
     // A remount arriving before the deferred teardown ran: keep what we have.
     if (pending !== null) {
       cancel(pending);
       pending = null;
     }
+    // Do not claim a lease until deferred teardown cancellation succeeds. If
+    // cancel throws, the failed acquire must leave the queued final release
+    // able to retire the instance.
+    refs++;
     if (instance === null) {
       starting = true;
       try {
