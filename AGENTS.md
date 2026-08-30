@@ -296,6 +296,24 @@ descriptor under the Exchange key; the old resolver returned `panel`, while
 the corrected resolver returns the existing `unbuilt` result. No browser,
 wallet, provider, RPC, proof, signature, funds or transaction was used.
 
+### 2026-08-30 — Visit listeners retire stale World generations
+
+`VisitController.listen()` previously left every earlier World subscription
+authoritative when the same controller was rebound. A replaced World bus could
+therefore open or close a visit after a newer bus had become current, and a
+stale cleanup could also restore controls for the wrong listener generation.
+
+Each listener attachment now owns a generation. Older handlers become inert as
+soon as a new attachment is made, and cleanup restores Shell-owned controls
+only for the still-current attachment; each cleanup remains responsible for
+detaching its own handlers.
+
+*Verified:* a red-first public Visit regression rebound one controller from a
+first World bus to a current bus, then emitted an entry on the retired bus. The
+old controller opened Bank, while the corrected controller stays outside until
+the current bus opens Exchange. No browser, wallet, provider, RPC, proof,
+signature, funds or transaction was used.
+
 ### 2026-08-30 — Avatar Studio tile delivery remains retryable after failure
 
 `StreetScene.reportAvatarStudioTile()` committed its `lastTile` sentinel

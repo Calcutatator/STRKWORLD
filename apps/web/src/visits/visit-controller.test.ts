@@ -452,6 +452,49 @@ describe('visit controller', () => {
     expect(stations).toHaveBeenCalledTimes(1);
   });
 
+  it('retires an older World subscription when the controller is rebound', () => {
+    const firstWorld = createEventBus<WorldEvents>();
+    const currentWorld = createEventBus<WorldEvents>();
+    const shell = createEventBus<ShellEvents>();
+    const controller = createVisitController(shell);
+
+    controller.listen(firstWorld);
+    controller.listen(currentWorld);
+
+    firstWorld.emit('building:entered', { building: 'bank' });
+    expect(controller.store.getState()).toEqual({ name: 'outside' });
+
+    currentWorld.emit('building:entered', { building: 'exchange' });
+    expect(controller.store.getState()).toEqual({
+      name: 'visiting',
+      building: 'exchange',
+      surface: { name: 'room' },
+    });
+  });
+
+  it('does not let stale listener cleanup release current Shell-owned controls', () => {
+    const firstWorld = createEventBus<WorldEvents>();
+    const currentWorld = createEventBus<WorldEvents>();
+    const shell = createEventBus<ShellEvents>();
+    const owners = vi.fn();
+    shell.on('world:control-owner', owners);
+    const controller = createVisitController(shell);
+
+    const staleStop = controller.listen(firstWorld);
+    controller.listen(currentWorld);
+    currentWorld.emit('building:entered', { building: 'bank' });
+    currentWorld.emit('station:activated', { building: 'bank', station: 'bank:shielding' });
+    const ownerCalls = owners.mock.calls.length;
+
+    staleStop();
+
+    expect(owners).toHaveBeenCalledTimes(ownerCalls);
+    expect(controller.store.getState()).toMatchObject({
+      name: 'visiting',
+      surface: { name: 'station', station: 'bank:shielding' },
+    });
+  });
+
   it('rolls back World listeners when a later listener registration fails', () => {
     const world = createEventBus<WorldEvents>();
     const originalOn = world.on;

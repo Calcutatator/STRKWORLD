@@ -64,6 +64,8 @@ export function createVisitController(
     getServerSnapshot: stateStore.getServerSnapshot,
     subscribe: stateStore.subscribe,
   };
+  let listenGeneration = 0;
+  let activeListenGeneration: number | null = null;
 
   function ownControls(building: BuildingId, owner: 'world' | 'shell'): void {
     shell.emit('world:control-owner', { building, owner });
@@ -134,7 +136,11 @@ export function createVisitController(
     store,
 
     listen(world): () => void {
+      const generation = ++listenGeneration;
+      activeListenGeneration = generation;
+      const ownsListen = (): boolean => activeListenGeneration === generation;
       const stops: Array<() => void> = [];
+      let stopped = false;
       const stopWorld = () => {
         let cleanupFailure: unknown;
         for (const stop of stops.splice(0)) {
@@ -148,10 +154,12 @@ export function createVisitController(
       };
       try {
         stops.push(world.on('building:entered', (payload) => {
+          if (!ownsListen()) return;
           if (!payload || typeof payload !== 'object') return;
           enter(payload.building);
         }));
         stops.push(world.on('building:locked', (payload) => {
+          if (!ownsListen()) return;
           if (!payload || typeof payload !== 'object') return;
           const { building, reason } = payload;
           const state = store.getState();
@@ -159,6 +167,7 @@ export function createVisitController(
           setState({ name: 'locked', building, reason });
         }));
         stops.push(world.on('building:exited', (payload) => {
+          if (!ownsListen()) return;
           if (!payload || typeof payload !== 'object') return;
           const { building } = payload;
           const state = store.getState();
@@ -170,10 +179,12 @@ export function createVisitController(
           }
         }));
         stops.push(world.on('station:activated', (payload) => {
+          if (!ownsListen()) return;
           if (!payload || typeof payload !== 'object') return;
           activate(payload.building, payload.station);
         }));
       } catch (error) {
+        if (ownsListen()) activeListenGeneration = null;
         try {
           stopWorld();
         } catch {
@@ -182,6 +193,10 @@ export function createVisitController(
         throw error;
       }
       return () => {
+        if (stopped) return;
+        stopped = true;
+        const ownsCurrentListen = ownsListen();
+        if (ownsCurrentListen) activeListenGeneration = null;
         let cleanupFailure: unknown;
         try {
           stopWorld();
@@ -192,7 +207,7 @@ export function createVisitController(
         // the controls. Do not leave the World permanently suspended because
         // the panel disappeared before it could emit its normal close event.
         const state = store.getState();
-        if (state.name === 'visiting' && state.surface.name !== 'room') {
+        if (ownsCurrentListen && state.name === 'visiting' && state.surface.name !== 'room') {
           try {
             ownControls(state.building, 'world');
           } catch (error) {
