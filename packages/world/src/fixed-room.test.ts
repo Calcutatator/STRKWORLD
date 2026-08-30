@@ -93,6 +93,25 @@ describe('fixed room definitions', () => {
     expect(room.stations[0]).toMatchObject({ label: 'TRANSFER', x: 3 });
   });
 
+  it('isolates station activation payloads from synchronous listener mutation', () => {
+    const h = harness();
+    const seen: Array<{ building: string; station: string }> = [];
+    h.out.on('station:activated', (payload) => {
+      expect(Reflect.set(payload, 'station', 'bank:shielding')).toBe(false);
+    });
+    h.out.on('station:activated', (payload) => seen.push(payload));
+    h.controller.enter();
+    h.shell.emit('world:stations', {
+      building: 'post-office',
+      stations: [{ station: 'post-office:transfer', label: 'TRANSFER', status: 'available' }],
+    });
+
+    h.controller.update({ x: 3, y: 4 });
+
+    expect(seen).toEqual([{ building: 'post-office', station: 'post-office:transfer' }]);
+    expect(Object.isFrozen(seen[0])).toBe(true);
+  });
+
   it('keeps canonical room definitions immutable at runtime', () => {
     expect(Object.isFrozen(FIXED_ROOM_DEFINITIONS)).toBe(true);
     expect(Object.isFrozen(POST_OFFICE_ROOM_DEFINITION)).toBe(true);
