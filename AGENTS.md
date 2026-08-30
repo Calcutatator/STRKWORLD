@@ -303,6 +303,29 @@ it once. Removing the generation guard restores the failure. No browser,
 external lobby, wallet, provider, RPC, proof, signature, funds or transaction
 was used.
 
+### 2026-08-30 — Production composition owns hostile wallet snapshots
+
+`WalletSessionProvider` previously passed `session.getSnapshot()` directly
+through `useSyncExternalStore`. Production composition then read fields such
+as `snapshot.phase` and `snapshot.account` with ordinary property access. A
+descriptor-valid proxy snapshot could throw from its `get` trap and escape
+the wallet gate before the app could fail closed.
+
+The provider now caches an own-data projection for each raw snapshot identity,
+deep-freezes the wallet choices, and returns an empty selection snapshot when
+the session snapshot or any required field is malformed. Stable session
+snapshot identity remains stable for external-store consumers; the session
+and its financial operations are otherwise unchanged.
+
+*Verified:* red-first public ProductionRoot regressions supplied a
+descriptor-valid snapshot proxy whose property-read trap throws and a
+connected session whose snapshot read throws; the old composition leaked the
+raw exception (or could retain the connected path), while the corrected
+provider renders the wallet gate without invoking it. Removing the projection
+restores the proxy failure. Focused ProductionRoot/WalletSessionProvider tests
+pass 15 tests. No browser, wallet,
+provider, RPC, proof, signature, funds or transaction was used.
+
 ### 2026-08-30 — Privacy route-policy snapshots must bypass proxy reads
 
 The WalletSession route-policy boundary validated own data descriptors, but
