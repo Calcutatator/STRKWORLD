@@ -56,12 +56,22 @@ export function createInputGate(keyboard: KeyboardLike): InputGate {
       // A Phaser callback or adapter can throw synchronously; leaving the gate
       // marked suspended would make all later retries silently no-op.
       suspending = true;
+      let captureDisabled = false;
+      let deliveryDisabled = false;
       // Order is load-bearing.
       try {
         keyboard.disableGlobalCapture(); // stop swallowing keystrokes
+        captureDisabled = true;
         keyboard.enabled = false; // stop delivering them to the game
+        deliveryDisabled = true;
         keyboard.resetKeys(); // drop anything currently held
         suspended = true;
+      } catch (error) {
+        // If the handoff reached either disabling step, cleanup must own the
+        // partially suspended keyboard. Otherwise resume() would no-op while
+        // Phaser delivery remained disabled after a reset/assignment failure.
+        if (captureDisabled || deliveryDisabled) suspended = true;
+        throw error;
       } finally {
         suspending = false;
       }

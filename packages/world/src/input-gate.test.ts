@@ -76,6 +76,29 @@ describe('suspend', () => {
     expect(disableGlobalCapture).toHaveBeenCalledTimes(2);
   });
 
+  it('retains suspended ownership when clearing held keys fails after disabling delivery', () => {
+    const resetKeys = vi.fn().mockImplementationOnce(() => {
+      throw new Error('held-key reset failed');
+    });
+    const keyboard: KeyboardLike = {
+      enabled: true,
+      disableGlobalCapture: vi.fn(),
+      enableGlobalCapture: vi.fn(),
+      resetKeys,
+    };
+    const gate = createInputGate(keyboard);
+
+    expect(() => gate.suspend()).toThrow('held-key reset failed');
+    // The handoff has already disabled browser capture and Phaser delivery.
+    // Ownership must remain suspended so cleanup can finish the retry.
+    expect(gate.suspended).toBe(true);
+    expect(keyboard.enabled).toBe(false);
+
+    expect(() => gate.resume()).not.toThrow();
+    expect(gate.suspended).toBe(false);
+    expect(keyboard.enabled).toBe(true);
+  });
+
   it('attempts exit cleanup and input restoration when entry cleanup throws', () => {
     const { keyboard } = fakeKeyboard();
     const gate = createInputGate(keyboard);

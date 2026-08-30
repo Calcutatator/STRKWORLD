@@ -258,6 +258,28 @@ empty shell to fetchers, so a 200 there means nothing.
 
 ## 6. Findings log
 
+### 2026-08-30 — Input suspension can lose ownership after a partial handoff
+
+`createInputGate.suspend()` disabled Phaser keyboard delivery and global
+capture before clearing held keys, but if `resetKeys()` (or a later keyboard
+assignment) threw, the gate left `suspended` false. A caller could therefore
+continue with a logically active gate while delivery was disabled; its later
+`resume()` returned immediately and could never restore the keyboard.
+
+The suspend transition now retains suspended ownership once either disabling
+step has completed, even when a later step fails. Cleanup can then retry the
+normal `resume()` handoff; failures before any disabling step preserve the
+existing retry behavior. Successful ordering and idempotence are unchanged.
+
+*Verified:* a red-first public World regression makes `resetKeys()` throw after
+capture and delivery are disabled. The old path reports `suspended === false`
+and leaves recovery as a no-op; the corrected path retains suspended ownership,
+then resumes successfully. Focused input-gate tests pass 16 tests; the World
+suite passes 24 files / 381 tests; the full workspace passes 111 files / 2,410
+tests. Typechecks, production build, invariants and diff hygiene pass. No
+browser, lobby server, wallet, provider, RPC, proof, signature, funds or
+transaction was used.
+
 ### 2026-08-30 — Nested street movement can run a stale post-move callback
 
 `createStreetMovementAdapter.streetUpdate()` published the movement and then
