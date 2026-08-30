@@ -73,6 +73,7 @@ export async function loadSourceAssets(client: TokenRegistryClient): Promise<Sou
 
   for (const token of live) {
     if (!token || typeof token !== 'object' || Array.isArray(token)) continue;
+    if (!hasOwnDataProperties(token, ['assetId', 'symbol', 'blockchain', 'decimals'])) continue;
     if (token.assetId === STRK_ON_STARKNET_ASSET_ID) continue;
     if (typeof token.assetId !== 'string' || typeof token.symbol !== 'string' || typeof token.blockchain !== 'string') {
       continue;
@@ -97,4 +98,11 @@ export async function loadSourceAssets(client: TokenRegistryClient): Promise<Sou
     });
   }
   return [...byId.values()];
+}
+
+function hasOwnDataProperties(value: object, keys: readonly PropertyKey[]): boolean {
+  return keys.every((key) => {
+    const descriptor = Object.getOwnPropertyDescriptor(value, key);
+    return Boolean(descriptor && 'value' in descriptor);
+  });
 }

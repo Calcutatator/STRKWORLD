@@ -1684,6 +1684,19 @@ describe('source registry and refund validation', () => {
     expect(assets.some((asset) => asset.assetId === coercibleAsset)).toBe(false);
   });
 
+  it('ignores live token metadata supplied only through inheritance', async () => {
+    const inherited = Object.create({
+      assetId: 'nep141:inherited.omft.near',
+      symbol: 'INHERITED',
+      decimals: 6,
+      blockchain: 'arb',
+    }) as TokenResponse;
+    const assets = await loadSourceAssets({ getTokens: async () => [inherited] });
+
+    expect(assets).toHaveLength(6);
+    expect(assets.some((asset) => asset.assetId === 'nep141:inherited.omft.near')).toBe(false);
+  });
+
   it('merges live metadata over curated fallbacks without making live availability up', async () => {
     const live = [
       {
