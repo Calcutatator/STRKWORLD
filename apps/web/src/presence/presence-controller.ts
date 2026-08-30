@@ -356,7 +356,33 @@ export function createPresenceController({ endpoint, factory = (options) => new 
     const ownedClient = client;
     if (ownedClient && state.status === 'connected') {
       const generation = statusGeneration;
-      ownedClient.suspend();
+      try {
+        ownedClient.suspend();
+      } catch (error) {
+        // A failed suspend leaves the avatar on the street. Retire this
+        // client so an interior visit cannot keep broadcasting its last
+        // street position; only do so if the command did not already trigger
+        // a newer lifecycle transition of its own.
+        if (client === ownedClient && statusGeneration === generation && state.status === 'connected') {
+          inside = true;
+          deactivateClientStatus();
+          try {
+            clearClientPeers();
+          } catch {
+            // Preserve the command failure while still retiring the owner.
+          }
+          client = null;
+          clientSprite = null;
+          try {
+            void Promise.resolve(ownedClient.disconnect()).catch(() => undefined);
+          } catch {
+            // The command failure remains the actionable error; the owner is
+            // already retired even if transport cleanup rejects synchronously.
+          }
+          setState({ status: 'unavailable', canReconnect: Boolean(endpoint) });
+        }
+        throw error;
+      }
       if (client !== ownedClient || statusGeneration !== generation) return;
       setState({ status: 'suspended', canReconnect: true });
     }

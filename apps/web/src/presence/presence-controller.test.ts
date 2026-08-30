@@ -486,6 +486,28 @@ describe('presence controller', () => {
     stop();
   });
 
+  it('retires a live presence client when suspending for entry throws', async () => {
+    const world = createEventBus<WorldEvents>();
+    const made = fakeClient();
+    const suspendFailure = new Error('suspend failed');
+    const presence = createPresenceController({ endpoint: 'ws://example', factory: () => made.client });
+    const stop = presence.listen(world);
+    world.emit('player:moved', moved);
+    await Promise.resolve();
+    vi.mocked(made.client.updatePosition).mockClear();
+    vi.mocked(made.client.suspend).mockImplementationOnce(() => { throw suspendFailure; });
+    const consoleError = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+
+    world.emit('building:entered', { building: 'bank' });
+
+    expect(presence.getState()).toEqual({ status: 'unavailable', canReconnect: true });
+    expect(made.client.disconnect).toHaveBeenCalledOnce();
+    world.emit('player:moved', { position: { x: 48, y: 80 }, facing: 'up' });
+    expect(made.client.updatePosition).not.toHaveBeenCalled();
+    consoleError.mockRestore();
+    stop();
+  });
+
   it('keeps a synchronous close authoritative when building exit resumes', async () => {
     const world = createEventBus<WorldEvents>();
     const made = fakeClient();

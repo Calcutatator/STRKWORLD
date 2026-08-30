@@ -258,6 +258,27 @@ empty shell to fetchers, so a 200 there means nothing.
 
 ## 6. Findings log
 
+### 2026-08-30 — Failed presence suspension must retire street visibility
+
+When an interior entry called the live presence client's `suspend()` and that
+command threw without a lifecycle callback, the controller still considered
+the transport connected while the player was inside. Movement was then
+suppressed locally, but the lobby retained and continued exposing the last
+street position.
+
+The entry command is now fail-closed: if the same client and status generation
+remain authoritative, the controller clears peer delivery, retires the client
+and reports `unavailable` after attempting disconnect. A command that already
+triggered a newer close/replacement transition remains owned by that newer
+transition. Explicit reconnect remains the only way to establish a fresh
+presence session.
+
+*Verified:* a public regression makes `suspend()` throw during entry; the old
+path stayed connected and never disconnected, while the corrected path reports
+unavailable, disconnects once, and ignores later movement. The focused presence
+controller suite passes 61 tests. No browser, lobby server, wallet, provider,
+RPC, proof, signature, funds or transaction was used.
+
 ### 2026-08-30 — Injected Backend transports receive no client authority
 
 The Backend privacy client stored an injected fetch-compatible function as an
@@ -303,7 +324,6 @@ and invokes no proxy `get` trap. Focused Backend client verification passes 92
 tests and privacy typecheck passes. Full workspace gates are recorded in the
 owning commit. Deterministic fakes only: no browser, external provider, RPC,
 wallet, proof, signature, funds or transaction was used.*
-
 ### 2026-08-30 — Presence destroy must outlive status cleanup failures
 
 Presence controller destruction called the status-listener cleanup directly.
