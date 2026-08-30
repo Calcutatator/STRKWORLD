@@ -62,6 +62,7 @@ export function createRemoteAvatarLayer({
     if (destroyed) return;
     const next = reconcileRemotePeers(snapshot, peers);
     const errors: unknown[] = [];
+    const failedUpdates = new Set<string>();
 
     // Retry failures carried over from an earlier snapshot before processing
     // newly omitted avatars. A newly failed removal is intentionally retried
@@ -119,10 +120,21 @@ export function createRemoteAvatarLayer({
       try {
         updateAvatar(scene, avatar, peer, moving, () => !destroyed);
       } catch (error) {
+        // Keep the last successfully rendered snapshot authoritative. The
+        // source may not publish this exact state again, so committing a
+        // failed pose here would make the retained map lie about the sprite
+        // and permanently suppress a retry.
+        failedUpdates.add(id);
         errors.push(error);
       }
     }
-    peers = next;
+    const rendered = new Map(next);
+    for (const id of failedUpdates) {
+      const previous = peers.get(id);
+      if (previous === undefined) rendered.delete(id);
+      else rendered.set(id, previous);
+    }
+    peers = rendered;
 
     if (errors.length === 1) throw errors[0];
     if (errors.length > 1) throw new AggregateError(errors, 'Remote avatar reconciliation failed');

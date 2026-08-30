@@ -258,6 +258,27 @@ empty shell to fetchers, so a 200 there means nothing.
 
 ## 6. Findings log
 
+### 2026-08-30 — Remote avatar updates retain the last rendered snapshot after failure
+
+`createRemoteAvatarLayer.render()` previously committed the next peer snapshot
+even when an existing avatar's position or visual presentation setter threw.
+If no later lobby update arrived, the retained World map claimed the new pose
+was rendered while the Phaser sprite still showed the previous pose, so the
+failed update had no retry opportunity and later movement classification could
+be wrong.
+
+Existing-avatar update failures now retain that peer's last successfully
+rendered snapshot while preserving the error. A later authoritative source
+publication retries from the old pose; successful updates, first-construction
+ownership, removal retry and teardown behavior are unchanged.
+
+*Verified:* a red-first public World regression makes an existing sprite's
+position setter throw for one changed snapshot; the old layer retained the
+unrendered coordinates, while the corrected layer retains the prior snapshot
+and preserves the exact error. Focused remote-avatar tests pass 18/18. No
+browser, wallet, provider, RPC, proof, signature, funds or transaction was
+used.
+
 ### 2026-08-30 — Backend shutdown registration rolls back partial signal setup
 
 `registerBackendShutdown()` registered `SIGTERM` before `SIGINT` without a
