@@ -258,6 +258,25 @@ empty shell to fetchers, so a 200 there means nothing.
 
 ## 6. Findings log
 
+### 2026-08-30 — Avatar Studio entry rollback can overwrite a reentrant retry
+
+`createAvatarStudioPresentation.enter()` used a transition revision for its
+forward handoff, but its failure rollback only stopped when the presentation
+was destroyed. If a rollback port callback synchronously started a newer
+`enter()` retry, the old rollback continued applying street visibility,
+bounds, and position after that retry had become authoritative.
+
+Entry rollback now uses the owning transition predicate after every rollback
+port call, so a newer transition or destruction stops the stale cleanup. The
+original entry error remains authoritative and ordinary failed-entry rollback
+still attempts every action while its transition owns the presentation.
+
+*Verified:* a public World regression starts a retry from the first rollback
+port callback. On the old path the stale rollback overwrote the retry's Studio
+bounds and position; the corrected path preserves the retry's Studio state.
+Focused Avatar Studio tests pass 44 tests. No browser, lobby server, wallet,
+provider, RPC, proof, signature, funds or transaction was used.
+
 ### 2026-08-30 — Fixed-room station activation rechecks after input suspension
 
 `createFixedRoomController.update()` treated `input.suspend()` as a

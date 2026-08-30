@@ -172,7 +172,7 @@ export function createAvatarStudioPresentation(options: {
         // the known street contract while preserving the original failure so a
         // controller can retry the transition without a half-entered world.
         if (isCurrent()) {
-          restoreStreetPresentation(port, streetBounds, streetReturn, () => destroyed);
+          restoreStreetPresentation(port, streetBounds, streetReturn, isCurrent);
         }
         throw error;
       }
@@ -229,7 +229,7 @@ function restoreStreetPresentation(
   port: AvatarStudioPresentationPort,
   streetBounds: AvatarStudioBounds,
   streetReturn: { readonly x: number; readonly y: number },
-  isDestroyed: () => boolean,
+  isCurrent: () => boolean,
 ): void {
   const attempts: Array<() => void> = [
     () => port.setPlayerVelocity(0, 0),
@@ -245,7 +245,7 @@ function restoreStreetPresentation(
     () => port.setPlayerPosition(streetReturn),
   ];
   for (const attempt of attempts) {
-    if (isDestroyed()) return;
+    if (!isCurrent()) return;
     try {
       attempt();
     } catch {

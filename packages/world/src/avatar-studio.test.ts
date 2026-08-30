@@ -190,6 +190,58 @@ describe('hidden Avatar Studio', () => {
     expect(state.playerPosition).toEqual(studioSpawn);
   });
 
+  it('does not let failed-entry rollback overwrite a reentrant retry', () => {
+    const streetBounds = { x: 0, y: 0, width: 10, height: 10 };
+    const studioBounds = { x: 1, y: 1, width: 10, height: 10 };
+    const studioSpawn = { x: 5, y: 5 };
+    const streetReturn = { x: 2, y: 2 };
+    const setWorldBounds = vi.fn();
+    const setPlayerPosition = vi.fn();
+    const error = new Error('Studio bounds failed');
+    let presentation!: ReturnType<typeof createAvatarStudioPresentation>;
+    let failEntry = true;
+    let retryFromRollback = false;
+    presentation = createAvatarStudioPresentation({
+      port: {
+        setPlayerVelocity: vi.fn(() => {
+          if (retryFromRollback) {
+            retryFromRollback = false;
+            presentation.enter();
+          }
+        }),
+        setBodyEnabled: vi.fn(),
+        setGroundVisible: vi.fn(),
+        setDoorsVisible: vi.fn(),
+        setRemoteVisible: vi.fn(),
+        setLabelsVisible: vi.fn(),
+        setRoomVisible: vi.fn(),
+        setStudioVisible: vi.fn(),
+        setWorldBounds: vi.fn((bounds) => {
+          setWorldBounds(bounds);
+          if (failEntry) {
+            failEntry = false;
+            retryFromRollback = true;
+            throw error;
+          }
+        }),
+        setCameraBounds: vi.fn(),
+        setPlayerPosition: vi.fn((position) => setPlayerPosition(position)),
+        resetDoors: vi.fn(),
+        resumeStreet: vi.fn(),
+        destroyStudio: vi.fn(),
+      },
+      streetBounds,
+      studioBounds,
+      studioSpawn,
+      streetReturn,
+      reportStreet: vi.fn(),
+    });
+
+    expect(() => presentation.enter()).toThrow(error);
+    expect(setWorldBounds).toHaveBeenLastCalledWith(studioBounds);
+    expect(setPlayerPosition).toHaveBeenLastCalledWith(studioSpawn);
+  });
+
   it('retries presentation cleanup after a failed destroy', () => {
     const cleanupError = new Error('studio cleanup failed');
     const destroyStudio = vi.fn().mockImplementationOnce(() => { throw cleanupError; });
