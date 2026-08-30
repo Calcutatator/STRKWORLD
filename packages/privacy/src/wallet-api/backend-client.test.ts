@@ -138,6 +138,20 @@ describe('BackendPrivacyClient', () => {
     }
   });
 
+  it.each([
+    ['whitespace', ' '],
+    ['signed', '+7'],
+    ['fractional', '1.5'],
+  ])('rejects a non-decimal relay estimate amount (%s)', async (_label, amount) => {
+    const client = new BackendPrivacyClient(
+      'https://backend.example',
+      async () => response({ token: '0x4718', recipient: '0x789', amount, authorization: 'auth', expiresAtBlock: 1450 }),
+    );
+
+    await expect(client.estimate({ route: 'transfer', feeToken: '0x4718', operationToken: '0xabc' }))
+      .rejects.toMatchObject({ kind: 'unknown' });
+  });
+
   it('rejects a public key supplied only by the object prototype', async () => {
     const restore = inheritResponseField('publicKey', '0x456');
     try {

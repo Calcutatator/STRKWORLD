@@ -258,6 +258,27 @@ empty shell to fetchers, so a 200 there means nothing.
 
 ## 6. Findings log
 
+### 2026-08-30 — Relay estimate amounts require decimal wire syntax
+
+`BackendPrivacyClient.estimate()` previously converted the backend's decimal
+fee amount with `BigInt()` directly. JavaScript accepts whitespace and signed
+strings in that conversion, so malformed estimate responses such as `" "` or
+`"+7"` crossed the browser boundary as valid `0n` or `7n`; fractional syntax
+instead leaked a raw `SyntaxError`. The operations layer could only reject the
+zero case and would otherwise admit the signed form into fee validation.
+
+Estimate parsing now requires the existing decimal-string wire syntax before
+conversion, mapping malformed values to the generic invalid-response error.
+The parser imposes no additional fee ceiling; positive amount and route-policy
+checks remain in the operations layer.
+
+*Verified:* red-first public BackendPrivacyClient regressions cover whitespace,
+signed and fractional estimate amounts; the first two resolved on the old
+path and the fractional case leaked `SyntaxError`, while all three now reject
+with `kind: 'unknown'`. The focused backend-client suite passes 40 tests. No
+browser, external provider, RPC, wallet, proof, signature, funds or
+transaction was used.
+
 ### 2026-08-30 — Bridge status envelopes require own data fields
 
 `BridgeService` previously validated only the nested signed quote in a 1Click
