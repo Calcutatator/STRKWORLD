@@ -258,6 +258,26 @@ empty shell to fetchers, so a 200 there means nothing.
 
 ## 6. Findings log
 
+### 2026-08-30 — Street door overlays claim Phaser objects before styling
+
+`StreetScene.createDoorOverlays()` previously stored each image only after
+`setDisplaySize()` and `setDepth()` completed. If either Phaser presentation
+setter threw during Scene construction, the image had already been created but
+was absent from `doorOverlays`; partial-create cleanup therefore could not
+destroy it.
+
+Door images are now added to the Scene-owned overlay collection immediately
+after construction, before styling setters run. Existing rendering geometry
+and normal teardown are unchanged, while a failed setter leaves the object
+reachable by the existing cleanup path.
+
+*Verified:* a red-first World presentation regression makes the first styling
+setter throw and observes the created overlay missing from the ownership list
+on the old path. The corrected test retains it for cleanup. The full World
+suite passes 24 files / 263 tests; World typecheck, invariants and diff
+hygiene pass. No browser, wallet, provider, RPC, proof, signature, funds or
+transaction was used.
+
 ### 2026-08-30 — Bridge status transaction hashes require own data fields
 
 `BridgeService` previously accepted a status transaction entry whenever

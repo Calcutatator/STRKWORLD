@@ -346,15 +346,13 @@ export function createStreetScene({ Phaser, onTileChanged, remotePeers }: Street
     private createDoorOverlays(): void {
       for (const door of this.map.doors) {
         const layout = doorOverlayLayout(door);
-        const overlay = this.add
-          .image(
-            layout.x,
-            layout.y,
-            KENNEY_DOOR_TEXTURE_KEY,
-          )
-          .setDisplaySize(layout.width, layout.height)
-          .setDepth(1);
+        const overlay = this.add.image(
+          layout.x,
+          layout.y,
+          KENNEY_DOOR_TEXTURE_KEY,
+        );
         this.doorOverlays.push(overlay);
+        overlay.setDisplaySize(layout.width, layout.height).setDepth(1);
       }
     }
 
