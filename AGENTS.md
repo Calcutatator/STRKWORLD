@@ -258,6 +258,22 @@ empty shell to fetchers, so a 200 there means nothing.
 
 ## 6. Findings log
 
+### 2026-08-30 — Tiled property containers fail closed when malformed
+
+`flattenProperties()` previously iterated any truthy `properties` value. A
+malformed Tiled object whose property container was an object or primitive
+therefore threw `TypeError` out of `objectLayerToDoors()` instead of being
+skipped, allowing one bad authored object to abort map parsing.
+
+The flattener now requires an array before iterating and returns an empty
+property record for any other runtime value. Valid Tiled arrays, duplicate-name
+last-write behavior, and malformed individual-entry skipping are unchanged.
+
+*Verified:* a red-first World regression supplied a non-array property
+container and observed the old iterable TypeError; the corrected test returns
+an empty record. Focused Tiled-property tests pass 7/7. No browser, wallet,
+provider, RPC, proof, signature, funds or transaction was used.
+
 ### 2026-08-30 — Visit world-listener setup rolls back partial registration
 
 `VisitController.listen()` previously registered four world handlers in a

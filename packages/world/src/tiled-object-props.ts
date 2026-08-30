@@ -66,7 +66,7 @@ export interface TiledObject {
  */
 export function flattenProperties(properties?: TiledProperty[]): Record<string, unknown> {
   const flat: Record<string, unknown> = {};
-  if (!properties) return flat;
+  if (!Array.isArray(properties)) return flat;
   for (const prop of properties) {
     if (prop && typeof prop.name === 'string') {
       flat[prop.name] = prop.value;

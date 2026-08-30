@@ -36,6 +36,10 @@ describe('flattenProperties', () => {
     expect(flattenProperties([])).toEqual({});
   });
 
+  it('fails closed for a malformed non-array property container', () => {
+    expect(flattenProperties({ name: 'building', value: 'bank' } as never)).toEqual({});
+  });
+
   it('lets the last value win on a duplicate name, matching Phaser', () => {
     const raw: TiledProperty[] = [
       { name: 'building', type: 'string', value: 'bank' },
