@@ -7,6 +7,7 @@ import {
   KENNEY_TILE_TEXTURE_KEY,
   KENNEY_TILE_ROLES,
   atlasFrameRect,
+  createKenneyRuntimeTextures,
   kenneyTileForRole,
   validateKenneyAtlas,
 } from './kenney-urban.js';
@@ -72,5 +73,51 @@ describe('Kenney Urban runtime atlas contract', () => {
     expect(KENNEY_TILE_TEXTURE_KEY).toBe('tiles');
     expect(KENNEY_DOOR_TEXTURE_KEY).toBe('kenney-rpg-urban-door');
     expect(KENNEY_ATLAS_URL).toContain('/assets/third-party/kenney-rpg-urban/tilemap.png');
+  });
+
+  it('does not strand a partial tileset when door texture allocation fails', () => {
+    const textures = new Map<string, object>();
+    let doorAttempts = 0;
+    const makeTexture = () => ({
+      context: {
+        imageSmoothingEnabled: true,
+        fillStyle: '',
+        fillRect: () => undefined,
+        drawImage: () => undefined,
+      },
+      refresh: () => undefined,
+      setFilter: () => undefined,
+    });
+    const textureManager = {
+      exists: (key: string) => textures.has(key),
+      get: () => ({ getSourceImage: () => ({}) }),
+      createCanvas: (key: string) => {
+        if (key === KENNEY_DOOR_TEXTURE_KEY && doorAttempts++ === 0) return null;
+        const texture = makeTexture();
+        textures.set(key, texture);
+        return texture;
+      },
+      remove: (key: string) => {
+        textures.delete(key);
+      },
+    };
+    const scene = { textures: textureManager } as never;
+    const Phaser = { Textures: { FilterMode: { NEAREST: 0 } } } as never;
+    const options = {
+      tileIndex: { grass: 0, road: 1, pavement: 2, wall: 3, facade: 4 },
+      grassColour: 0x123456,
+    } as const;
+
+    expect(() => createKenneyRuntimeTextures(scene, Phaser, options)).toThrow(
+      'Could not create Kenney runtime textures',
+    );
+    expect(textures.has(KENNEY_TILE_TEXTURE_KEY)).toBe(false);
+
+    // Also cover a stale half-pair left by another owner or an older runtime.
+    textures.set(KENNEY_TILE_TEXTURE_KEY, makeTexture());
+    expect(() => createKenneyRuntimeTextures(scene, Phaser, options)).not.toThrow();
+    expect(textures.has(KENNEY_TILE_TEXTURE_KEY)).toBe(true);
+    expect(textures.has(KENNEY_DOOR_TEXTURE_KEY)).toBe(true);
+    expect(doorAttempts).toBe(2);
   });
 });

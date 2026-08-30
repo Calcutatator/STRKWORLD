@@ -299,6 +299,29 @@ guard fails its corresponding regression. The focused fixed-room suite and
 World package gates are recorded on the candidate. No browser, wallet,
 provider, RPC, proof, signature, funds or transaction was used.
 
+### 2026-08-30 — Kenney runtime texture creation must recover from a partial pair
+
+`createKenneyRuntimeTextures()` treated the `tiles` texture as the complete
+runtime-resource sentinel. If `tiles` was created but the `door` canvas
+allocation returned null or threw, the function left `tiles` registered and
+failed. A later scene creation then returned early on the existing `tiles`
+key, leaving the required door texture absent.
+
+The runtime texture factory now owns the two keys as one pair. It removes a
+stale half-pair before retrying, cleans up anything registered by a failed
+allocation/render attempt, and returns early only when both textures exist.
+The original creation error remains authoritative; normal complete-pair reuse
+and all atlas geometry are unchanged.
+
+*Verified:* a red-first public fake-texture regression made the door allocation
+fail after tiles had registered; the old factory left tiles behind and could
+not recover on the next call. The corrected test confirms both keys are absent
+after failure, then confirms a retry creates both from a stale half-pair. The
+package-focused test and mutation of the cleanup/pair guards fail as expected;
+World typecheck, tests, invariants and diff checks are recorded on this
+candidate. No browser, wallet, provider, RPC, proof, signature, funds or
+transaction was used.
+
 ### 2026-08-30 — Exchange pending state reaches the world HUD
 
 `ExchangePanel` drove private swap preparation and wallet submission without

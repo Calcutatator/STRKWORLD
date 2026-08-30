@@ -142,56 +142,82 @@ export function createKenneyRuntimeTextures(
   Phaser: typeof PhaserTypes,
   options: KenneyRuntimeTextureOptions,
 ): void {
-  if (scene.textures.exists(KENNEY_TILE_TEXTURE_KEY)) return;
+  const hasTiles = scene.textures.exists(KENNEY_TILE_TEXTURE_KEY);
+  const hasDoor = scene.textures.exists(KENNEY_DOOR_TEXTURE_KEY);
+  if (hasTiles && hasDoor) return;
+
+  // These keys are owned as a pair. A failed allocation must not leave a
+  // half-built pair that makes a later call return before the missing texture
+  // can be created.
+  removeRuntimeTexture(scene, KENNEY_TILE_TEXTURE_KEY);
+  removeRuntimeTexture(scene, KENNEY_DOOR_TEXTURE_KEY);
 
   const sourceTexture = scene.textures.get(KENNEY_ATLAS_KEY);
   const source = sourceTexture.getSourceImage() as HTMLImageElement | HTMLCanvasElement;
-  const tiles = scene.textures.createCanvas(
-    KENNEY_TILE_TEXTURE_KEY,
-    KENNEY_ATLAS.runtimeTileSize * 5,
-    KENNEY_ATLAS.runtimeTileSize,
-  );
-  const door = scene.textures.createCanvas(
-    KENNEY_DOOR_TEXTURE_KEY,
-    KENNEY_ATLAS.runtimeTileSize * 2,
-    KENNEY_ATLAS.runtimeTileSize,
-  );
-  if (!tiles || !door) throw new Error('Could not create Kenney runtime textures');
+  try {
+    const tiles = scene.textures.createCanvas(
+      KENNEY_TILE_TEXTURE_KEY,
+      KENNEY_ATLAS.runtimeTileSize * 5,
+      KENNEY_ATLAS.runtimeTileSize,
+    );
+    const door = scene.textures.createCanvas(
+      KENNEY_DOOR_TEXTURE_KEY,
+      KENNEY_ATLAS.runtimeTileSize * 2,
+      KENNEY_ATLAS.runtimeTileSize,
+    );
+    if (!tiles || !door) throw new Error('Could not create Kenney runtime textures');
 
-  tiles.context.imageSmoothingEnabled = false;
-  tiles.context.fillStyle = `#${options.grassColour.toString(16).padStart(6, '0')}`;
-  tiles.context.fillRect(
-    0,
-    0,
-    KENNEY_ATLAS.runtimeTileSize,
-    KENNEY_ATLAS.runtimeTileSize,
-  );
+    tiles.context.imageSmoothingEnabled = false;
+    tiles.context.fillStyle = `#${options.grassColour.toString(16).padStart(6, '0')}`;
+    tiles.context.fillRect(
+      0,
+      0,
+      KENNEY_ATLAS.runtimeTileSize,
+      KENNEY_ATLAS.runtimeTileSize,
+    );
 
-  for (const role of ['road', 'pavement', 'wall', 'facade'] as const) {
-    const tile = kenneyTileForRole(role);
-    const x = options.tileIndex[role] * KENNEY_ATLAS.runtimeTileSize;
-    drawScaledFrame(tiles.context, source, tile.rect, x, 0);
+    for (const role of ['road', 'pavement', 'wall', 'facade'] as const) {
+      const tile = kenneyTileForRole(role);
+      const x = options.tileIndex[role] * KENNEY_ATLAS.runtimeTileSize;
+      drawScaledFrame(tiles.context, source, tile.rect, x, 0);
+    }
+    tiles.refresh();
+    tiles.setFilter(Phaser.Textures.FilterMode.NEAREST);
+
+    door.context.imageSmoothingEnabled = false;
+    // The trigger remains two tiles wide so it is reachable and stable, while
+    // the native door is one tile wide. Fill the visual surround with the
+    // existing facade course to hide the walkable pavement cells at either
+    // side without changing the map or collision contract.
+    const surround = kenneyTileForRole('facade').rect;
+    drawScaledFrame(door.context, source, surround, 0, 0);
+    drawScaledFrame(door.context, source, surround, KENNEY_ATLAS.runtimeTileSize, 0);
+    drawScaledFrame(
+      door.context,
+      source,
+      kenneyTileForRole('door').rect,
+      KENNEY_ATLAS.runtimeTileSize / 2,
+      0,
+    );
+    door.refresh();
+    door.setFilter(Phaser.Textures.FilterMode.NEAREST);
+  } catch (error) {
+    // Preserve the allocation/render error while removing anything this
+    // attempt managed to register, so the next scene creation can recover.
+    removeRuntimeTexture(scene, KENNEY_TILE_TEXTURE_KEY);
+    removeRuntimeTexture(scene, KENNEY_DOOR_TEXTURE_KEY);
+    throw error;
   }
-  tiles.refresh();
-  tiles.setFilter(Phaser.Textures.FilterMode.NEAREST);
+}
 
-  door.context.imageSmoothingEnabled = false;
-  // The trigger remains two tiles wide so it is reachable and stable, while
-  // the native door is one tile wide. Fill the visual surround with the
-  // existing facade course to hide the walkable pavement cells at either
-  // side without changing the map or collision contract.
-  const surround = kenneyTileForRole('facade').rect;
-  drawScaledFrame(door.context, source, surround, 0, 0);
-  drawScaledFrame(door.context, source, surround, KENNEY_ATLAS.runtimeTileSize, 0);
-  drawScaledFrame(
-    door.context,
-    source,
-    kenneyTileForRole('door').rect,
-    KENNEY_ATLAS.runtimeTileSize / 2,
-    0,
-  );
-  door.refresh();
-  door.setFilter(Phaser.Textures.FilterMode.NEAREST);
+function removeRuntimeTexture(scene: PhaserTypes.Scene, key: string): void {
+  if (!scene.textures.exists(key)) return;
+  try {
+    scene.textures.remove(key);
+  } catch {
+    // Keep the original creation error authoritative; Phaser texture removal
+    // is best-effort here and a subsequent scene teardown can retry it.
+  }
 }
 
 function drawScaledFrame(
