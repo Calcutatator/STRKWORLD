@@ -88,7 +88,8 @@ export function createWalletSession(
   const listeners = new Map<() => void, symbol>();
   const keys = new WeakMap<object, string>();
   let nextKey = 0;
-  let wallets = [...dependencies.discovery.getWallets()];
+  const initialWallets = dependencies.discovery.getWallets();
+  let wallets = Array.isArray(initialWallets) ? [...initialWallets] : [];
   let generation = 0;
   let selectedKey: string | null = null;
   let connection: WalletConnectionPort | null = null;

@@ -11,6 +11,32 @@ import {
 } from './session.js';
 
 describe('WalletSession', () => {
+  it.each([null, {}, 'wallet'] as const)(
+    'starts fail-closed when initial discovery is malformed: %p',
+    (initial) => {
+      const discovery: WalletDiscoveryPort = {
+        getWallets: () => initial as never,
+        subscribe: () => () => undefined,
+        refresh: () => undefined,
+      };
+
+      expect(() => createWalletSession(
+        denyAllOptions(),
+        { discovery, connectWallet: async () => connection('0x111') },
+      )).not.toThrow();
+      const session = createWalletSession(
+        denyAllOptions(),
+        { discovery, connectWallet: async () => connection('0x111') },
+      );
+      expect(session.getSnapshot()).toMatchObject({
+        phase: 'selection-required',
+        selectedKey: null,
+        account: null,
+        wallets: [],
+      });
+    },
+  );
+
   it('shares same-key connection attempts instead of opening duplicate wallet workflows', async () => {
     const selected = wallet('Ready');
     let release!: (connection: WalletConnectionPort) => void;
