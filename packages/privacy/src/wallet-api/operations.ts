@@ -245,6 +245,7 @@ export class WalletApiPrivacyOperations implements PrivacyOperations {
       }),
       async confirm({ feeCeiling, onProgress, signal: confirmSignal }) {
         if (discarded) throw new PrivacyError('unknown', 'batch already discarded');
+        assertFeeCeilingInput(feeCeiling);
         assertFirstConfirmation(confirmationAttempted);
         confirmationAttempted = true;
         throwIfAborted(confirmSignal);
@@ -368,6 +369,7 @@ export class WalletApiPrivacyOperations implements PrivacyOperations {
       promptCount: 1,
       async confirm({ feeCeiling, onProgress, signal }) {
         if (discarded) throw new PrivacyError('unknown', 'batch already discarded');
+        assertFeeCeilingInput(feeCeiling);
         assertFirstConfirmation(confirmationAttempted);
         confirmationAttempted = true;
         throwIfAborted(signal);
@@ -414,6 +416,7 @@ export class WalletApiPrivacyOperations implements PrivacyOperations {
       promptCount: 1,
       async confirm({ feeCeiling, onProgress, signal }) {
         if (discarded) throw new PrivacyError('unknown', 'batch already discarded');
+        assertFeeCeilingInput(feeCeiling);
         assertFirstConfirmation(confirmationAttempted);
         confirmationAttempted = true;
         throwIfAborted(signal);
@@ -822,6 +825,12 @@ function isFelt(value: string): boolean {
 function assertFeeCeiling(actual: bigint, ceiling: bigint): void {
   if (actual > ceiling) {
     throw new PrivacyError('unknown', `The current fee ${actual} is above the ceiling ${ceiling}.`);
+  }
+}
+
+function assertFeeCeilingInput(ceiling: unknown): asserts ceiling is bigint {
+  if (typeof ceiling !== 'bigint' || ceiling < 0n) {
+    throw new PrivacyError('unknown', 'The fee ceiling must be a non-negative bigint.');
   }
 }
 

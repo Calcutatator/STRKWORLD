@@ -405,6 +405,27 @@ describe('WalletApiPrivacyOperations capability and reads', () => {
 });
 
 describe('Wallet API action routes', () => {
+  it.each([
+    ['negative bigint', -1n],
+    ['number', 1],
+    ['string', '1'],
+  ] as const)('rejects an invalid %s fee ceiling before live reads or wallet handoff', async (_label, feeCeiling) => {
+    const { ops, pool, wallet, gateway } = fixture();
+    const poolRead = vi.spyOn(pool, 'config');
+    const invoke = vi.spyOn(wallet, 'strk20PrepareInvoke');
+    const batch = await ops.prepare([
+      { kind: 'transfer', token: TOKEN, amount: 20n, recipient: BOB },
+    ]);
+    poolRead.mockClear();
+
+    await expect(batch.confirm({ feeCeiling: feeCeiling as never })).rejects.toMatchObject({
+      kind: 'unknown',
+    });
+    expect(poolRead).not.toHaveBeenCalled();
+    expect(invoke).not.toHaveBeenCalled();
+    expect(gateway.submit).not.toHaveBeenCalled();
+  });
+
   it('freezes prepared warnings so disclosure cannot be removed before confirmation', async () => {
     const { ops } = fixture();
     const batch = await ops.prepare([{ kind: 'shield', token: TOKEN, amount: 20n }]);
