@@ -27,6 +27,59 @@ describe('World-local outfit selection', () => {
     expect(emit).toHaveBeenCalledTimes(2);
   });
 
+  it('rolls back an outer selection when a failed nested selection restores it', () => {
+    const nestedError = new Error('nested avatar selection failed');
+    let selection!: ReturnType<typeof createAvatarOutfitSelection>;
+    const emit = vi.fn((_event: keyof WorldEvents, payload: unknown) => {
+      const sprite = (payload as { sprite: string }).sprite;
+      if (sprite === 'avatar-2') {
+        selection.select('avatar-3');
+      } else if (sprite === 'avatar-3') {
+        throw nestedError;
+      }
+    });
+    selection = createAvatarOutfitSelection({ out: { emit } });
+
+    expect(() => selection.select('avatar-2')).toThrow(nestedError);
+    expect(selection.selected).toBe('avatar-1');
+  });
+
+  it('keeps a successful nested selection authoritative when the outer delivery fails', () => {
+    const outerError = new Error('outer avatar selection failed');
+    let selection!: ReturnType<typeof createAvatarOutfitSelection>;
+    const emit = vi.fn((_event: keyof WorldEvents, payload: unknown) => {
+      if ((payload as { sprite: string }).sprite === 'avatar-2') {
+        expect(selection.select('avatar-3')).toBe(true);
+        throw outerError;
+      }
+    });
+    selection = createAvatarOutfitSelection({ out: { emit } });
+
+    expect(() => selection.select('avatar-2')).toThrow(outerError);
+    expect(selection.selected).toBe('avatar-3');
+  });
+
+  it('keeps a successful nested selection that returns to the outer candidate', () => {
+    const outerError = new Error('outer avatar selection failed');
+    let selection!: ReturnType<typeof createAvatarOutfitSelection>;
+    let nested = false;
+    const emit = vi.fn((_event: keyof WorldEvents, payload: unknown) => {
+      const sprite = (payload as { sprite: string }).sprite;
+      if (sprite === 'avatar-2' && !nested) {
+        nested = true;
+        expect(selection.select('avatar-3')).toBe(true);
+        throw outerError;
+      }
+      if (sprite === 'avatar-3') {
+        expect(selection.select('avatar-2')).toBe(true);
+      }
+    });
+    selection = createAvatarOutfitSelection({ out: { emit } });
+
+    expect(() => selection.select('avatar-2')).toThrow(outerError);
+    expect(selection.selected).toBe('avatar-2');
+  });
+
   it('starts on the default cosy state and only emits real changes', () => {
     const events: Emitted[] = [];
     const selection = createAvatarOutfitSelection({

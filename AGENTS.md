@@ -258,6 +258,30 @@ empty shell to fetchers, so a 200 there means nothing.
 
 ## 6. Findings log
 
+### 2026-08-30 — Failed nested avatar selection can leave the outer candidate committed
+
+`createAvatarOutfitSelection.select()` used the selection revision to avoid
+rolling back an outer failed event when a nested selection had taken over.
+That check treated every newer revision as a successful owner, however. A
+nested selection whose event delivery throws restores the outer candidate but
+still increments the revision; if the outer event then fails, the logical
+selection remains on an avatar whose delivery never completed.
+
+Selection now tracks the newest revision whose event delivery completed. A
+failed selection rolls back whenever its candidate is still selected and no
+newer successful selection owns it, including when a failed nested attempt
+restored that candidate. A genuinely successful nested selection remains
+authoritative, and the existing forged-key and ordinary delivery contracts
+are unchanged.
+
+*Verified:* a red-first public regression makes an outer `avatar-2` delivery
+synchronously attempt `avatar-3`, then fail the nested delivery. The old
+selection remained `avatar-2` after the thrown error; the corrected selection
+returns to `avatar-1`. Companion regressions preserve a successful nested
+selection, including one that returns to the outer candidate. Focused outfit
+tests pass 14 tests. No browser, lobby server, wallet, provider, RPC, proof,
+signature, funds or transaction was used.
+
 ### 2026-08-30 — Failed host remount cancellation must undo speculative retargeting
 
 `createHost.acquire()` retargeted a retained World instance before cancelling

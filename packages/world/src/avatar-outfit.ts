@@ -50,6 +50,7 @@ export function createAvatarOutfitSelection(options: {
 }): AvatarOutfitSelection {
   let selected = options.initial ?? DEFAULT_AVATAR_SPRITE;
   let selectionRevision = 0;
+  let lastCommittedRevision = 0;
 
   const select = (sprite: AvatarSpriteKey): boolean => {
     // The exported selection object can be reached from untyped runtime
@@ -62,11 +63,19 @@ export function createAvatarOutfitSelection(options: {
     selected = sprite;
     try {
       options.out.emit('avatar:selected', { sprite: selected });
+      // A nested failed selection may have restored this candidate after
+      // changing the revision. It is still a successful outer delivery, but
+      // a nested successful selection must remain the latest owner.
+      if (selectionRevision === ownRevision && selected === sprite) {
+        lastCommittedRevision = ownRevision;
+      }
     } catch (error) {
       // Event delivery is an external lifecycle boundary. Roll back only if
-      // no reentrant selection took ownership while the event was delivered;
-      // a nested successful selection remains the latest authoritative state.
-      if (selectionRevision === ownRevision && selected === sprite) {
+      // this candidate is still selected and no newer successful selection
+      // took ownership. A nested failed selection can restore this candidate
+      // while leaving a newer revision, so revision equality alone is not
+      // enough to decide whether rollback remains ours.
+      if (selected === sprite && lastCommittedRevision < ownRevision) {
         selected = previous;
       }
       throw error;
