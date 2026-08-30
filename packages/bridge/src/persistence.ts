@@ -78,6 +78,9 @@ export function deserializeBridgeRecord(raw: string): BridgeRecord | null {
       !hasOwnDataProperty(value, 'createdAt') ||
       !hasOwnDataProperty(value, 'updatedAt') ||
       !hasOwnDataProperty(value, 'amountIn') ||
+      !hasOwnDataProperty(value, 'source') ||
+      !hasOwnDataProperty(value, 'starknetRecipient') ||
+      !hasOwnDataProperty(value, 'refundAddress') ||
       !hasOwnDataProperty(value, 'status') ||
       value.v !== 1 ||
       !value.signedQuote?.signature ||

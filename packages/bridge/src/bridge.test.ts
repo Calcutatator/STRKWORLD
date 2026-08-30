@@ -2112,6 +2112,25 @@ describe('bridge persistence', () => {
     }
   });
 
+  it.each(['source', 'starknetRecipient', 'refundAddress'] as const)(
+    'rejects a persisted record missing required root field %s',
+    async (field) => {
+      const client = new StubClient();
+      const store = new MemoryBridgeStore();
+      const service = new BridgeService({ client, store, quoteVerifier: () => true, now: () => NOW });
+      const record = await service.createManualDeposit({
+        source: SOURCE,
+        amountIn: 1_000_000n,
+        starknetRecipient: '0x123',
+        refundAddress: request.refundTo,
+      });
+      const parsed = JSON.parse(serializeBridgeRecord(record)) as Record<string, unknown>;
+      delete parsed[field];
+
+      expect(deserializeBridgeRecord(JSON.stringify(parsed))).toBeNull();
+    },
+  );
+
   it('does not silently delete old signed dispute evidence', () => {
     const store = new MemoryBridgeStore();
     const old = {
