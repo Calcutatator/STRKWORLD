@@ -185,6 +185,30 @@ describe('WalletApiPrivacyOperations capability and reads', () => {
     expect(handed).not.toBe(requested);
   });
 
+  it('owns requested token descriptors before a caller proxy can substitute them', async () => {
+    const { ops, wallet } = fixture();
+    const source = [TOKEN];
+    const reads: PropertyKey[] = [];
+    const requested = new Proxy(source, {
+      get(target, key, receiver) {
+        reads.push(key);
+        if (key === '0') return STRK;
+        return Reflect.get(target, key, receiver);
+      },
+    });
+    let handed: string[] | undefined;
+    vi.spyOn(wallet, 'strk20Balances').mockImplementation(async (tokens) => {
+      handed = tokens;
+      return [{ token: tokens[0]!, balance: '0x64' }];
+    });
+
+    await expect(ops.balances(requested)).resolves.toEqual([
+      { token: TOKEN, total: 100n, spendable: 0n, maturing: 0n, maturityKnown: false },
+    ]);
+    expect(handed).toEqual([TOKEN]);
+    expect(reads).toEqual([]);
+  });
+
   it('rejects balance fields supplied only by the object prototype', async () => {
     const { ops, wallet } = fixture();
     const inherited = Object.create({ token: TOKEN, balance: '0x64' });

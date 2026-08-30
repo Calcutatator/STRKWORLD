@@ -281,6 +281,29 @@ and typechecks, the Web build, invariants, and diff hygiene are green. No
 browser, lobby server, wallet, provider, RPC, proof, signature, funds or
 transaction was used.
 
+### 2026-08-30 — Requested balance tokens are owned before wallet handoff
+
+The balance input path validated caller tokens with `Array.prototype.some`
+and then copied the same caller array with spread. A stateful proxy could
+return one valid token during validation and a different valid token during
+the later copy, changing both the wallet query and the response-correlation
+allowlist after admission.
+
+Requested tokens now pass through the same exact descriptor-owned array
+boundary as provider result arrays before felt validation. The wallet receives
+a separate mutable copy of those owned scalars, while response correlation
+continues to use the same owned values. Sparse arrays, extra keys, accessors and
+proxy traps fail before the wallet is called.
+
+*Verified:* a public Wallet API regression supplies a caller proxy whose own
+index descriptor is token `0x123` while ordinary reads substitute canonical
+STRK. The base queried STRK and published that result; the corrected path asks
+for `0x123`, publishes `0x123` and invokes no caller `get` trap. Focused Wallet
+API verification passes 193 tests and privacy typecheck passes. Full workspace
+gates are recorded in the owning commit. Deterministic fakes only: no browser,
+external provider, RPC, wallet, proof, signature, funds or transaction was
+used.*
+
 ### 2026-08-30 — Wallet capability versions are owned before admission
 
 Capability detection validated that the wallet returned an array, but then
