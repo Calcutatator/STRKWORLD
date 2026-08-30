@@ -497,10 +497,12 @@ function firstTransactionHash(entries: unknown): string | undefined {
   if (!Array.isArray(entries)) throw invalidExecutionStatus();
   const first = entries[0];
   if (first === undefined) return undefined;
-  if (!first || typeof first !== 'object' || !('hash' in first)) {
+  if (!first || typeof first !== 'object' || Array.isArray(first)) {
     throw invalidExecutionStatus();
   }
-  return boundedTransactionHash(first.hash);
+  const hash = Object.getOwnPropertyDescriptor(first, 'hash');
+  if (!hash || !('value' in hash)) throw invalidExecutionStatus();
+  return boundedTransactionHash(hash.value);
 }
 
 function boundedTransactionHash(value: unknown): string {

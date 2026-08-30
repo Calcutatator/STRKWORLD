@@ -258,6 +258,25 @@ empty shell to fetchers, so a 200 there means nothing.
 
 ## 6. Findings log
 
+### 2026-08-30 — Bridge status transaction hashes require own data fields
+
+`BridgeService` previously accepted a status transaction entry whenever
+`'hash' in entry` was true. A malformed or prototype-polluted 1Click response
+could therefore supply an inherited hash, or an accessor whose getter ran
+during status mapping, and have that value persisted and displayed as deposit
+or settlement evidence.
+
+Status mapping now requires an own data `hash` property before bounded hash
+validation. Inherited and accessor hashes fail with the existing generic
+invalid-execution-status error without invoking a getter; valid own string
+hashes and empty transaction lists are unchanged.
+
+*Verified:* red-first public Bridge refresh regressions first accepted an
+inherited destination hash and an accessor hash; the corrected path rejects
+both and leaves the persisted record awaiting deposit. The focused Bridge
+suite passes 93 tests. No browser, network, wallet, provider, RPC, proof,
+signature, funds or transaction was used.
+
 ### 2026-08-30 — Interrupted Lobby joins cancel their welcome timer
 
 `LobbyClient.connect()` raced the welcome wait against its disconnect

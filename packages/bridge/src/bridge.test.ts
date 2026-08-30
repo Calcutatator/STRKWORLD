@@ -590,6 +590,57 @@ describe('BridgeService', () => {
     await expect(service.refresh()).rejects.toThrow('1Click returned invalid execution status data.');
   });
 
+  it('rejects a SUCCESS status whose destination hash is inherited', async () => {
+    const client = new StubClient();
+    const store = new MemoryBridgeStore();
+    const service = new BridgeService({ client, store, quoteVerifier: () => true, now: () => NOW });
+    await service.createManualDeposit({
+      source: SOURCE,
+      amountIn: 1_000_000n,
+      starknetRecipient: '0x123',
+      refundAddress: request.refundTo,
+    });
+
+    const entry = Object.create({ hash: '0xinherited' }) as { explorerUrl: string };
+    entry.explorerUrl = 'https://example/tx';
+    client.statuses.push(status('SUCCESS' as never, {
+      amountOut: '1980000000000000000',
+      destinationChainTxHashes: [entry as never],
+    }));
+    await expect(service.refresh()).rejects.toThrow('1Click returned invalid execution status data.');
+    expect(store.load()?.status.leg).toBe('awaiting-deposit');
+  });
+
+  it('rejects a SUCCESS status whose destination hash is an accessor', async () => {
+    const client = new StubClient();
+    const store = new MemoryBridgeStore();
+    const service = new BridgeService({ client, store, quoteVerifier: () => true, now: () => NOW });
+    await service.createManualDeposit({
+      source: SOURCE,
+      amountIn: 1_000_000n,
+      starknetRecipient: '0x123',
+      refundAddress: request.refundTo,
+    });
+
+    let accessed = false;
+    const entry = {} as { explorerUrl: string; hash: string };
+    Object.defineProperty(entry, 'hash', {
+      configurable: true,
+      get() {
+        accessed = true;
+        throw new Error('hash getter must not run');
+      },
+    });
+    entry.explorerUrl = 'https://example/tx';
+    client.statuses.push(status('SUCCESS' as never, {
+      amountOut: '1980000000000000000',
+      destinationChainTxHashes: [entry as never],
+    }));
+    await expect(service.refresh()).rejects.toThrow('1Click returned invalid execution status data.');
+    expect(accessed).toBe(false);
+    expect(store.load()?.status.leg).toBe('awaiting-deposit');
+  });
+
   it('rejects an amountOut above the uint256 upper bound', async () => {
     const client = new StubClient();
     const store = new MemoryBridgeStore();
