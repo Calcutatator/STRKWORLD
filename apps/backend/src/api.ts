@@ -317,6 +317,7 @@ export class BackendApi {
     for (const call of plan.executorCalls) {
       if (
         !isFelt(call.contractAddress) ||
+        BigInt(call.contractAddress) === 0n ||
         !isFelt(call.selector) ||
         !call.entrypoint ||
         call.calldata.some((felt) => !isFelt(felt))

@@ -258,6 +258,24 @@ empty shell to fetchers, so a 200 there means nothing.
 
 ## 6. Findings log
 
+### 2026-08-30 — AVNU nested executor call targets require nonzero felts
+
+The Backend swap-preparation boundary checked each AVNU executor call target
+with the generic felt rule, which accepts zero. A malformed plan could
+therefore return `200`, issue a fee authorization and serialize an inner call
+to `0x0`, even though the Wallet API rejects that target before handoff.
+
+Nested executor call targets now require a nonzero Stark field felt before the
+paymaster or authorization step. Selector validation remains felt-only; this
+lane does not infer an additional nonzero-selector policy.
+
+*Verified:* red-first Backend regressions cover `0x0`, `0x00` and
+`0x00000000`; each previously returned `200` and issued an authorization, and
+now returns the existing malformed-AVNU `502` without calling the paymaster
+or authorization codec. Backend tests, typecheck, invariants and diff
+hygiene pass. No browser, external provider, RPC, wallet, proof, signature,
+funds or transaction was used.*
+
 
 ## 6. Findings log
 

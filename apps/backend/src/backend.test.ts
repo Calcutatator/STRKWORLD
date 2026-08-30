@@ -826,6 +826,45 @@ describe('bounded private submission', () => {
     },
   );
 
+  it.each(['0x0', '0x00', '0x00000000'])(
+    'rejects a zero nested private-swap call target %s before fee or authorization issuance',
+    async (contractAddress) => {
+      const { api, paymaster, authorizations, swapPlanner } = fixture();
+      vi.spyOn(swapPlanner, 'prepare').mockResolvedValue({
+        quoteId: 'quote-zero-call-target',
+        buyAmount: 100n,
+        expiresAt: 2_000,
+        chainId: '0x534e5f4d41494e',
+        executorAddress: '0x999',
+        executorCalls: [{
+          contractAddress,
+          entrypoint: 'swap',
+          selector: '0x555',
+          calldata: ['0xaaa'],
+        }],
+      });
+      const buildFee = vi.spyOn(paymaster, 'buildFee');
+      const issueAuthorization = vi.spyOn(authorizations, 'issue');
+
+      await expect(api.handle({
+        method: 'POST', path: '/v1/private/swaps/prepare',
+        body: {
+          v: 1,
+          sellToken: '0xabc',
+          buyToken: STRK,
+          sellAmount: '20',
+          minAmountOut: '90',
+          slippageBps: 100,
+        },
+      })).resolves.toEqual({
+        status: 502,
+        body: { code: 'HTTP_502', message: 'AVNU returned malformed private executor calls.' },
+      });
+      expect(buildFee).not.toHaveBeenCalled();
+      expect(issueAuthorization).not.toHaveBeenCalled();
+    },
+  );
+
   it.each([
     ['fractional string', '7.5'],
     ['nonnumeric string', 'not-a-number'],
