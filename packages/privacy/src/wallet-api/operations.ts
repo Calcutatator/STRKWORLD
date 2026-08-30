@@ -462,6 +462,9 @@ export class WalletApiPrivacyOperations implements PrivacyOperations {
   }
 
   private validateRelayFee(fee: RelayFeeQuote, config: PoolConfig): void {
+    if (!hasOwnDataProperties(fee, ['token', 'recipient', 'amount', 'authorization', 'expiresAtBlock'])) {
+      throw new PrivacyError('unknown', 'The relay returned an invalid fee quote.');
+    }
     if (!isFelt(fee.token) || !sameAddress(fee.token, config.feeToken)) {
       throw new PrivacyError('unknown', 'The relay returned an unexpected fee token.');
     }
@@ -756,6 +759,14 @@ function readTransactionHash(value: unknown, field: string, source: string): str
     throw new PrivacyError('unknown', `The ${source} returned an invalid transaction result.`);
   }
   return descriptor.value;
+}
+
+function hasOwnDataProperties(value: unknown, keys: readonly PropertyKey[]): boolean {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return false;
+  return keys.every((key) => {
+    const descriptor = Object.getOwnPropertyDescriptor(value, key);
+    return Boolean(descriptor && 'value' in descriptor);
+  });
 }
 
 function assertAddress(address: string, label: string): void {

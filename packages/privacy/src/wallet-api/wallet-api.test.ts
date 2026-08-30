@@ -993,6 +993,18 @@ describe('quote-bound swap plan admission', () => {
     await expect(ops.prepare([SWAP])).rejects.toThrow(/expected output/i);
   });
 
+  it('rejects inherited swap relay fee fields before returning a review', async () => {
+    const inheritedFee = Object.create({
+      token: STRK,
+      recipient: FEE_RECIPIENT,
+      amount: 1n,
+      ...AUTH,
+    });
+    const { ops } = swapFixture(undefined, { fee: inheritedFee });
+
+    await expect(ops.prepare([SWAP])).rejects.toMatchObject({ kind: 'unknown' });
+  });
+
   it('does not publish a swap batch after its quote read is aborted', async () => {
     const { ops, gateway } = swapFixture();
     const originalPrepareSwap = gateway.prepareSwap!;
