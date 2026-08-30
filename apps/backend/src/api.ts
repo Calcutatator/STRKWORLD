@@ -156,9 +156,10 @@ export class BackendApi {
       this.rpc.getPoolConfig(signal),
       this.rpc.getBlockNumber(signal),
     ]);
+    const feeAmount = requireProviderFeeAmount(fee.amount);
     if (!sameAddress(fee.token, feeToken)) throw new ApiFailure(400, 'Paymaster changed the fee token.');
     requireFelt(fee.recipient, 'fee recipient');
-    if (fee.amount <= 0n || fee.amount > policy.maxRelayFee) {
+    if (feeAmount <= 0n || feeAmount > policy.maxRelayFee) {
       throw new ApiFailure(400, 'Paymaster fee exceeds the route ceiling.');
     }
     const claims: FeeAuthorizationClaims = {
@@ -168,7 +169,7 @@ export class BackendApi {
       operationToken,
       token: fee.token,
       recipient: fee.recipient,
-      amount: fee.amount,
+      amount: feeAmount,
       issuedAtBlock: block,
       expiresAtBlock: block + poolConfig.proofValidityBlocks,
     };
@@ -177,7 +178,7 @@ export class BackendApi {
       body: {
         token: fee.token,
         recipient: fee.recipient,
-        amount: fee.amount.toString(),
+        amount: feeAmount.toString(),
         authorization: await this.authorizations.issue(claims),
         expiresAtBlock: claims.expiresAtBlock,
       },
@@ -328,10 +329,11 @@ export class BackendApi {
       operationToken: sellToken,
       signal,
     });
+    const feeAmount = requireProviderFeeAmount(fee.amount);
     if (
       !sameAddress(fee.token, this.config.feeToken) ||
-      fee.amount <= 0n ||
-      fee.amount > policy.maxRelayFee
+      feeAmount <= 0n ||
+      feeAmount > policy.maxRelayFee
     ) {
       throw new ApiFailure(400, 'Paymaster fee exceeds swap policy.');
     }
@@ -348,7 +350,7 @@ export class BackendApi {
       operationToken: sellToken,
       token: fee.token,
       recipient: fee.recipient,
-      amount: fee.amount,
+      amount: feeAmount,
       issuedAtBlock: block,
       expiresAtBlock: block + poolConfig.proofValidityBlocks,
       swap: {
@@ -372,7 +374,7 @@ export class BackendApi {
         fee: {
           token: fee.token,
           recipient: fee.recipient,
-          amount: fee.amount.toString(),
+          amount: feeAmount.toString(),
           authorization: await this.authorizations.issue(claims),
           expiresAtBlock: claims.expiresAtBlock,
         },
@@ -473,6 +475,13 @@ function requireProviderTransactionHash(result: unknown): string {
   const value = descriptor?.value;
   if (typeof value !== 'string' || !isFelt(value) || BigInt(value) === 0n) {
     throw new Error('Paymaster returned an invalid transaction hash.');
+  }
+  return value;
+}
+
+function requireProviderFeeAmount(value: unknown): bigint {
+  if (typeof value !== 'bigint') {
+    throw new Error('Paymaster returned an invalid fee amount.');
   }
   return value;
 }

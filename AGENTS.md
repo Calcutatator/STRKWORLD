@@ -261,6 +261,29 @@ empty shell to fetchers, so a 200 there means nothing.
 
 ## 6. Findings log
 
+### 2026-08-30 — Paymaster fee amounts require runtime bigint validation
+
+`BackendApi.fee()` and swap preparation compared the untrusted paymaster fee
+amount directly with `bigint` policy limits but never checked its runtime
+type. JavaScript relational coercion allowed fractional or nonnumeric strings,
+numbers, `NaN` and objects to pass both comparisons. The API could then issue
+an authorization and return a successful response containing an unusable fee
+amount; later authorization verification or relay handling would disagree
+with that earlier success.
+
+Both fee paths now require the provider amount to be a runtime `bigint` before
+policy comparison or authorization construction. Malformed provider data
+therefore follows the existing opaque upstream-failure response, while valid
+fee bounds, authorization claims and swap behavior are unchanged.
+
+*Verified:* red-first Backend regressions cover fractional and nonnumeric
+strings, a number, `NaN` and an object on both ordinary fee estimation and
+swap preparation. Before the guard, all ten cases returned `200` and issued
+authorizations; after it, all return generic `502` with zero authorization
+issuance. The Backend suite passes 174 tests; Backend typecheck, invariants and
+diff hygiene pass. No browser, external provider, wallet, RPC, proof,
+signature, funds or transaction was used.*
+
 ### 2026-08-30 — AVNU swap planning stops between provider awaits
 
 `AvnuSwapPlanner.prepare()` passed its cancellation signal into the AVNU

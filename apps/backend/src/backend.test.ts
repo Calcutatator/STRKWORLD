@@ -193,6 +193,32 @@ describe('strict fee authorization', () => {
     });
   });
 
+  it.each([
+    ['fractional string', '7.5'],
+    ['nonnumeric string', 'not-a-number'],
+    ['number', 7],
+    ['NaN', Number.NaN],
+    ['object', {}],
+  ])('rejects a paymaster fee with a malformed amount: %s', async (_label, amount) => {
+    const { api, paymaster, authorizations } = fixture();
+    vi.spyOn(paymaster, 'buildFee').mockResolvedValue({
+      token: STRK,
+      recipient: FEE_RECIPIENT,
+      amount,
+    } as never);
+    const issue = vi.spyOn(authorizations, 'issue');
+
+    await expect(api.handle({
+      method: 'POST',
+      path: '/v1/private/fees',
+      body: { v: 1, route: 'transfer', feeToken: STRK, operationToken: '0xabc' },
+    })).resolves.toEqual({
+      status: 502,
+      body: { code: 'UPSTREAM_FAILURE', message: 'A private service dependency failed.' },
+    });
+    expect(issue).not.toHaveBeenCalled();
+  });
+
   it('rejects a tampered production HMAC authorization', async () => {
     const codec = new HmacAuthorizationCodec('a-long-production-secret-that-is-not-committed');
     const token = await codec.issue({
@@ -684,6 +710,39 @@ describe('bounded private submission', () => {
       expect(issueAuthorization).not.toHaveBeenCalled();
     },
   );
+
+  it.each([
+    ['fractional string', '7.5'],
+    ['nonnumeric string', 'not-a-number'],
+    ['number', 7],
+    ['NaN', Number.NaN],
+    ['object', {}],
+  ])('rejects a swap paymaster fee with a malformed amount: %s', async (_label, amount) => {
+    const { api, paymaster, authorizations } = fixture();
+    vi.spyOn(paymaster, 'buildFee').mockResolvedValue({
+      token: STRK,
+      recipient: FEE_RECIPIENT,
+      amount,
+    } as never);
+    const issue = vi.spyOn(authorizations, 'issue');
+
+    await expect(api.handle({
+      method: 'POST',
+      path: '/v1/private/swaps/prepare',
+      body: {
+        v: 1,
+        sellToken: '0xabc',
+        buyToken: STRK,
+        sellAmount: '20',
+        minAmountOut: '90',
+        slippageBps: 100,
+      },
+    })).resolves.toEqual({
+      status: 502,
+      body: { code: 'UPSTREAM_FAILURE', message: 'A private service dependency failed.' },
+    });
+    expect(issue).not.toHaveBeenCalled();
+  });
 
   it('rejects a swap after its AVNU quote expiry even while the block authorization is live', async () => {
     const { api, setNow, submitted } = fixture();
