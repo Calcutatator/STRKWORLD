@@ -150,7 +150,10 @@ export class BridgeService {
     if (typeof txHash !== 'string' || txHash.length === 0 || txHash.length > 256 || /\s/.test(txHash)) {
       throw new Error('The origin deposit transaction hash is invalid.');
     }
-    if (nearSenderAccount !== undefined && typeof nearSenderAccount !== 'string') {
+    if (
+      nearSenderAccount !== undefined &&
+      (typeof nearSenderAccount !== 'string' || /\s/.test(nearSenderAccount))
+    ) {
       throw new Error('The Near sender account is invalid.');
     }
     const record = this.resume();
