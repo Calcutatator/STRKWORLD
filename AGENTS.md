@@ -258,6 +258,28 @@ empty shell to fetchers, so a 200 there means nothing.
 
 ## 6. Findings log
 
+### 2026-08-30 — Fixed-room station activation rechecks after input suspension
+
+`createFixedRoomController.update()` treated `input.suspend()` as a
+non-reentrant call and emitted `station:activated` immediately afterward. A
+synchronous input adapter can destroy or leave the controller, let Shell take
+control, or trigger a newer update during suspension. The stale continuation
+then activated a station after World had lost the room or its authority.
+
+The station handoff now rechecks controller liveness, room membership, World
+control and the update revision after suspension. A still-live room rearms the
+approach when that check retires the turn; destruction and leave transitions
+retain ownership of their own reset. Normal suspension, activation and
+delivery-failure retry behavior remain unchanged.
+
+*Verified:* a red-first public fixed-room regression made `input.suspend()`
+destroy the controller. Before the guard, the stale update emitted
+`station:activated`; after it, no activation is delivered and the controller
+remains outside. Removing the post-suspension guard reproduces the failure.
+Focused fixed-room and World tests, typechecks, build, invariants and diff
+hygiene pass. No browser, lobby, wallet, provider, RPC, proof, signature,
+funds or transaction was used.
+
 ### 2026-08-30 — Avatar Studio presentation transitions can overwrite reentrant ownership
 
 `createAvatarStudioPresentation.enter()` and `exit()` only checked whether the

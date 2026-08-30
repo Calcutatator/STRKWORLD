@@ -572,6 +572,13 @@ export function createFixedRoomController(
           approachArmed.add(approached.station);
           throw error;
         }
+        // Input suspension is synchronous and may retire this controller,
+        // transfer control to Shell, or trigger a newer update before the
+        // handoff below. Do not emit station activation for that stale turn.
+        if (destroyed || !inRoom || !ownsWorldControl() || updateRevision !== ownRevision) {
+          if (!destroyed && inRoom) approachArmed.add(approached.station);
+          return;
+        }
         let deliveryError: unknown;
         let deliveryFailed = false;
         try {

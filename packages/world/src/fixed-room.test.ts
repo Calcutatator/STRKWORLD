@@ -246,6 +246,33 @@ describe('fixed room definitions', () => {
     expect(resume).toHaveBeenCalledTimes(3);
   });
 
+  it('does not activate a station after input suspension retires the room', () => {
+    const out = bus<WorldEvents>();
+    const shell = bus<ShellEvents>();
+    const events: unknown[] = [];
+    out.on('station:activated', (payload) => events.push(payload));
+    let controller!: FixedRoomController;
+    controller = createFixedRoomController({
+      definition: POST_OFFICE_ROOM_DEFINITION,
+      out,
+      in: shell,
+      input: {
+        suspend: () => controller.destroy(),
+        resume: vi.fn(),
+      },
+    });
+    controller.enter();
+    shell.emit('world:stations', {
+      building: 'post-office',
+      stations: [{ station: 'post-office:transfer', label: 'TRANSFER', status: 'available' }],
+    });
+
+    controller.update({ x: 3, y: 4 });
+
+    expect(events).toEqual([]);
+    expect(controller.state.inRoom).toBe(false);
+  });
+
   it('keeps room ownership when input restoration fails on exit so it can retry', () => {
     const out = bus<WorldEvents>();
     const shell = bus<ShellEvents>();
