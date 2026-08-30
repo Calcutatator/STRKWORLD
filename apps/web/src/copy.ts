@@ -14,7 +14,15 @@ import type { PrivacyErrorKind } from '@strkworld/privacy';
  *    `packages/shared/src/privacy-grades.ts` (D-024) and are imported verbatim.
  *    A paraphrase in this file would be a privacy claim nobody reviewed.
  */
-export const COPY = {
+function freezeCopy<T>(value: T): T {
+  if (value && typeof value === 'object' && !Object.isFrozen(value)) {
+    for (const child of Object.values(value as Record<string, unknown>)) freezeCopy(child);
+    Object.freeze(value);
+  }
+  return value;
+}
+
+export const COPY = freezeCopy({
   buildings: {
     bank: 'The Bank',
     exchange: 'The Exchange',
@@ -265,7 +273,7 @@ export const COPY = {
     acknowledged:
       'A previous private action is still unconfirmed. You checked your refreshed balance before continuing.',
   },
-} as const;
+} as const satisfies Record<string, unknown> & { errors: Record<PrivacyErrorKind, string> });
 
 /** Flattened for the copy tests. Order is not meaningful. */
 export function allCopyStrings(node: unknown = COPY, out: string[] = []): string[] {

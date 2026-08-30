@@ -3,6 +3,13 @@ import { PRIVACY_REGISTER } from './privacy/register.js';
 import { COPY, allCopyStrings } from './copy.js';
 
 describe('shell copy', () => {
+  it('keeps the authored copy tree immutable at the public seam', () => {
+    expect(Object.isFrozen(COPY)).toBe(true);
+    expect(Object.isFrozen(COPY.connect)).toBe(true);
+    expect(Object.isFrozen(COPY.errors)).toBe(true);
+    expect(Reflect.set(COPY.connect, 'body', 'rewritten')).toBe(false);
+    expect(COPY.connect.body).toContain('your wallet');
+  });
   it('says "your wallet", never "your extension"', () => {
     // v1 happens to ship against browser wallets. The forward-compatibility
     // design (SPEC §5 rule 5) exists so a web or embedded wallet can appear

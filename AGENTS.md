@@ -258,6 +258,25 @@ empty shell to fetchers, so a 200 there means nothing.
 
 ## 6. Findings log
 
+### 2026-08-30 — Authored Web copy is immutable product authority
+
+`COPY` was exported as a mutable object despite its `as const` TypeScript
+annotation. A same-bundle consumer could rewrite nested wallet, privacy,
+failure, or submission-uncertainty messages after startup; those strings are
+the player-facing explanation of gates and financial outcomes, so the runtime
+could present text that no longer matched the reviewed behavior.
+
+The authored copy tree is now deeply frozen at module initialization. The
+existing `allCopyStrings` traversal and exact copy values remain unchanged;
+this protects the shared default while retaining its read-only consumer
+contract.
+
+*Verified:* a red-first public copy regression observed mutable root, nested
+connect, and error records; the corrected test rejects a nested wallet-message
+rewrite and preserves the authored wording. The focused copy suite passes 6/6;
+no browser, wallet, provider, RPC, proof, signature, funds or transaction was
+used.
+
 ### 2026-08-30 — Relay fee felt checks reject coercible runtime values
 
 `WalletApiPrivacyOperations` used `isFelt()` on external relay fee tokens,
