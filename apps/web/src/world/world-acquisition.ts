@@ -6,6 +6,8 @@ interface WorldLeaseState {
   release: WorldRelease | null;
   released: boolean;
   acquisition: Promise<WorldRelease> | null;
+  retired: Promise<void>;
+  retire(): void;
 }
 
 /**
@@ -23,7 +25,11 @@ export function createWorldLeaseManager() {
     if (state.leaseCount !== 0 || !state.release || state.released) return;
     state.released = true;
     if (current === state) current = null;
-    state.release();
+    try {
+      state.release();
+    } finally {
+      state.retire();
+    }
   };
 
   const observe = (state: WorldLeaseState, acquisition: Promise<WorldRelease>): void => {
@@ -35,6 +41,7 @@ export function createWorldLeaseManager() {
       },
       () => {
         if (current === state) current = null;
+        state.retire();
       },
     );
   };
@@ -67,40 +74,47 @@ export function createWorldLeaseManager() {
   };
 
   const start = (acquire: () => Promise<WorldRelease>, key: unknown): WorldLeaseState => {
+    let retire!: () => void;
     const state: WorldLeaseState = {
       key,
       leaseCount: 0,
       release: null,
       released: false,
       acquisition: null,
+      retired: new Promise<void>((resolve) => {
+        retire = resolve;
+      }),
+      retire,
     };
     current = state;
     begin(state, acquire);
     return state;
   };
 
-  const replacePending = (
+  const replace = (
     previous: WorldLeaseState,
     acquire: () => Promise<WorldRelease>,
     key: unknown,
   ): WorldLeaseState => {
+    let retire!: () => void;
     const state: WorldLeaseState = {
       key,
       leaseCount: 0,
       release: null,
       released: false,
       acquisition: null,
+      retired: new Promise<void>((resolve) => {
+        retire = resolve;
+      }),
+      retire,
     };
     current = state;
-    // The previous acquisition owns the lazy import boundary. Waiting for it
-    // prevents two Phaser worlds from racing through the singleton host, while
-    // the old state's rejection remains handled by its own continuation.
+    // The previous state owns the singleton world until its last lease releases
+    // it (or its acquisition rejects). Waiting for retirement prevents a new
+    // configuration from racing or inheriting the old event buses.
     const pending = pendingAcquisition();
     observe(state, pending.promise);
-    void previous.acquisition!.then(
-      () => invoke(pending, acquire),
-      () => invoke(pending, acquire),
-    );
+    void previous.retired.then(() => invoke(pending, acquire));
     return state;
   };
 
@@ -108,9 +122,9 @@ export function createWorldLeaseManager() {
     acquire(acquire: () => Promise<WorldRelease>, key?: unknown): () => void {
       const state = current === null
         ? start(acquire, key)
-        : current.key === key || current.release !== null
+        : current.key === key
           ? current
-          : replacePending(current, acquire, key);
+          : replace(current, acquire, key);
       state.leaseCount++;
       let cleaned = false;
 
