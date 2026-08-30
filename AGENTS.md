@@ -258,6 +258,27 @@ empty shell to fetchers, so a 200 there means nothing.
 
 ## 6. Findings log
 
+### 2026-08-30 — Bridge status envelopes require own data fields
+
+`BridgeService` previously validated only the nested signed quote in a 1Click
+execution-status response. `mapStatus()` then read `status` and `swapDetails`
+through ordinary property access, so an inherited or accessor field could
+cross the provider boundary and be persisted as user-visible bridge state;
+the signed quote evidence itself could also be inherited.
+
+Status verification now requires own data properties for `quoteResponse`,
+`status`, and `swapDetails`. Inherited and accessor fields fail with the
+existing generic invalid-execution-status error without invoking getters;
+normal provider responses and omitted optional transaction hashes are
+unchanged.
+
+*Verified:* red-first public Bridge refresh regressions first accepted an
+inherited or accessor status, inherited swap details, and inherited signed
+quote evidence; the corrected path rejects all four and leaves the persisted
+record awaiting deposit. Removing each own-data guard independently fails its
+regression. No browser, network, wallet, provider, RPC, proof, signature,
+funds or transaction was used.
+
 ### 2026-08-30 — Street ground layers claim ownership before setup
 
 `StreetScene.drawGround()` previously created a tilemap layer, configured its

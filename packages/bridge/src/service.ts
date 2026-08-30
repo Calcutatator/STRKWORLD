@@ -311,7 +311,13 @@ export class BridgeService {
   }
 
   private verifyStatusQuote(raw: { quoteResponse: QuoteResponse }, record: BridgeRecord): void {
-    if (!isRecord(raw) || !isStatusQuoteResponse(raw.quoteResponse)) throw invalidExecutionStatus();
+    if (
+      !isRecord(raw) ||
+      !hasOwnDataProperty(raw, 'quoteResponse') ||
+      !hasOwnDataProperty(raw, 'status') ||
+      !hasOwnDataProperty(raw, 'swapDetails') ||
+      !isStatusQuoteResponse(raw.quoteResponse)
+    ) throw invalidExecutionStatus();
     const quoteResponse = raw.quoteResponse;
     if (
       quoteResponse.correlationId !== record.signedQuote.correlationId ||
@@ -540,6 +546,11 @@ function isStatusQuoteResponse(value: unknown): value is QuoteResponse {
   return Boolean(
     isRecord(response.quote) && isRecord(response.quoteRequest),
   );
+}
+
+function hasOwnDataProperty(value: object, key: PropertyKey): boolean {
+  const descriptor = Object.getOwnPropertyDescriptor(value, key);
+  return Boolean(descriptor && 'value' in descriptor);
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

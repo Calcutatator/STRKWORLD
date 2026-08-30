@@ -641,6 +641,58 @@ describe('BridgeService', () => {
     expect(store.load()?.status.leg).toBe('awaiting-deposit');
   });
 
+  it.each([
+    ['inherited', (response: GetExecutionStatusResponse) => {
+      Reflect.deleteProperty(response, 'status');
+      Object.setPrototypeOf(response, { status: 'SUCCESS' });
+    }],
+    ['accessor', (response: GetExecutionStatusResponse) => {
+      Reflect.deleteProperty(response, 'status');
+      Object.defineProperty(response, 'status', {
+        configurable: true,
+        get() { throw new Error('status getter must not run'); },
+      });
+    }],
+  ] as const)('rejects a status response with an unowned %s status field', async (_label, mutate) => {
+    const client = new StubClient();
+    const store = new MemoryBridgeStore();
+    const service = new BridgeService({ client, store, quoteVerifier: () => true, now: () => NOW });
+    await service.createManualDeposit({ source: SOURCE, amountIn: 1_000_000n, starknetRecipient: '0x123', refundAddress: request.refundTo });
+    const response = status('SUCCESS' as never, { amountOut: '1980000000000000000', destinationChainTxHashes: [{ hash: '0xsettled', explorerUrl: 'https://example/tx' }] });
+    mutate(response);
+    client.statuses.push(response);
+    await expect(service.refresh()).rejects.toThrow('1Click returned invalid execution status data.');
+    expect(store.load()?.status.leg).toBe('awaiting-deposit');
+  });
+
+  it('rejects a status response with inherited swap details', async () => {
+    const client = new StubClient();
+    const store = new MemoryBridgeStore();
+    const service = new BridgeService({ client, store, quoteVerifier: () => true, now: () => NOW });
+    await service.createManualDeposit({ source: SOURCE, amountIn: 1_000_000n, starknetRecipient: '0x123', refundAddress: request.refundTo });
+    const response = status('SUCCESS' as never, { amountOut: '1980000000000000000', destinationChainTxHashes: [{ hash: '0xsettled', explorerUrl: 'https://example/tx' }] });
+    const details = response.swapDetails;
+    Reflect.deleteProperty(response, 'swapDetails');
+    Object.setPrototypeOf(response, { swapDetails: details });
+    client.statuses.push(response);
+    await expect(service.refresh()).rejects.toThrow('1Click returned invalid execution status data.');
+    expect(store.load()?.status.leg).toBe('awaiting-deposit');
+  });
+
+  it('rejects a status response with inherited signed quote evidence', async () => {
+    const client = new StubClient();
+    const store = new MemoryBridgeStore();
+    const service = new BridgeService({ client, store, quoteVerifier: () => true, now: () => NOW });
+    await service.createManualDeposit({ source: SOURCE, amountIn: 1_000_000n, starknetRecipient: '0x123', refundAddress: request.refundTo });
+    const response = status('PENDING_DEPOSIT' as never);
+    const evidence = response.quoteResponse;
+    Reflect.deleteProperty(response, 'quoteResponse');
+    Object.setPrototypeOf(response, { quoteResponse: evidence });
+    client.statuses.push(response);
+    await expect(service.refresh()).rejects.toThrow('1Click returned invalid execution status data.');
+    expect(store.load()?.status.leg).toBe('awaiting-deposit');
+  });
+
   it('rejects an amountOut above the uint256 upper bound', async () => {
     const client = new StubClient();
     const store = new MemoryBridgeStore();
