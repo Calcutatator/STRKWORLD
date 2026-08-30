@@ -75,7 +75,7 @@ export function createBatchAccumulator(options: AccumulatorOptions = {}): BatchA
     return Object.freeze([...intents]);
   }
 
-  return {
+  return Object.freeze({
     get intents() {
       return snapshot();
     },
@@ -129,7 +129,7 @@ export function createBatchAccumulator(options: AccumulatorOptions = {}): BatchA
       }
       return { ok: true, value: snapshot() };
     },
-  };
+  });
 }
 
 // ---------------------------------------------------------------------------

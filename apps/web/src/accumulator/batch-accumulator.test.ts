@@ -17,6 +17,18 @@ const swap = (): Intent => ({
 });
 
 describe('batch accumulator', () => {
+  it('publishes an immutable accumulator API while retaining owned mutation', () => {
+    const batch = createBatchAccumulator();
+    const originalAccept = batch.accept;
+
+    expect(Object.isFrozen(batch)).toBe(true);
+    expect(Reflect.set(batch, 'accept', () => ({ ok: true, value: [] }))).toBe(false);
+    expect(Reflect.set(batch, 'confirm', () => ({ ok: true, value: [] }))).toBe(false);
+    expect(batch.accept).toBe(originalAccept);
+    expect(batch.accept(transfer()).ok).toBe(true);
+    expect(batch.confirm().ok).toBe(true);
+  });
+
   it('collects several intents of one kind and emits them as one array', () => {
     const batch = createBatchAccumulator();
     batch.accept(transfer(1n));
