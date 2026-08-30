@@ -105,7 +105,12 @@ export class BackendPrivacyClient implements PoolReadClient, PrivateSubmissionGa
       throw new PrivacyError('unknown', 'The private service returned an invalid response.');
     }
     const result = Object.freeze({ transactionHash });
-    input.onAccepted?.(result);
+    try {
+      input.onAccepted?.(result);
+    } catch {
+      // Acceptance observers cannot turn a validated accepted transaction
+      // back into a rejected promise and invite an unsafe retry.
+    }
     return result;
   }
 

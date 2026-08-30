@@ -539,6 +539,26 @@ describe('BackendPrivacyClient', () => {
     expect(receipt.transactionHash).toBe('0xabc123');
   });
 
+  it('does not let an acceptance observer failure hide an accepted receipt', async () => {
+    const client = new BackendPrivacyClient(
+      'https://backend.example',
+      async () => response({ transactionHash: '0xabc123' }),
+    );
+
+    await expect(client.submit({
+      route: 'transfer',
+      artifact: {
+        call: { contract_address: '0x123', entry_point: 'apply_actions', calldata: ['0x1'] },
+        proof: { data: 'proof', output: ['0x1'], proof_facts: ['0x2'] },
+      },
+      feeAuthorization: 'auth',
+      proofValidityBlocks: 450,
+      onAccepted() {
+        throw new Error('observer failed');
+      },
+    })).resolves.toEqual({ transactionHash: '0xabc123' });
+  });
+
   it.each([
     ['zero', '0x0'],
     ['leading-zero zero', '0x000'],
