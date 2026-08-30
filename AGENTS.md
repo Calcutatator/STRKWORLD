@@ -258,6 +258,26 @@ empty shell to fetchers, so a 200 there means nothing.
 
 ## 6. Findings log
 
+### 2026-08-30 — Bridge bigint revival ignores inherited markers
+
+Bridge persistence used the `in` operator to recognize its JSON bigint
+wrapper. If any same-origin code polluted `Object.prototype` with a string
+`$strkworldBigInt`, every decoded object inherited that marker and was
+converted to a bigint. A valid resumable record then failed its shape checks
+and `LocalBridgeStore` cleared the signed evidence as corrupt.
+
+The reviver now accepts the marker only when it is an own property of the
+decoded object. Genuine serialized bigint wrappers continue to revive, while
+inherited markers of string, numeric or object types are ignored.
+
+*Verified:* the public persistence regression failed red for an inherited
+string marker and passed green for all three inherited marker types after the
+own-property guard; each test restores the previous prototype descriptor in a
+`finally` block. The Bridge suite and workspace gates are recorded with this
+commit. No browser, provider, RPC, wallet, proof, signature, funds or
+transaction was used.*
+
+
 ### 2026-08-30 — Persisted Bridge status is validated before resume
 
 `deserializeBridgeRecord()` previously checked only the signed quote's small

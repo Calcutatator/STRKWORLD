@@ -1463,6 +1463,40 @@ describe('bridge persistence', () => {
     expect(store.deserialize(store.serialize(malformed))).toBeNull();
   });
 
+  it.each([
+    ['string', '7'],
+    ['number', 7],
+    ['object', {}],
+  ] as const)('ignores an inherited %s bigint marker while reviving own wrappers', async (_label, inheritedMarker) => {
+    const client = new StubClient();
+    const service = new BridgeService({
+      client,
+      store: new MemoryBridgeStore(),
+      quoteVerifier: () => true,
+      now: () => NOW,
+    });
+    const record = await service.createManualDeposit({
+      source: SOURCE,
+      amountIn: 1_000_000n,
+      starknetRecipient: '0x123',
+      refundAddress: request.refundTo,
+    });
+    const encoded = serializeBridgeRecord(record);
+    const previous = Object.getOwnPropertyDescriptor(Object.prototype, '$strkworldBigInt');
+    Object.defineProperty(Object.prototype, '$strkworldBigInt', {
+      value: inheritedMarker,
+      configurable: true,
+    });
+    try {
+      const decoded = deserializeBridgeRecord(encoded);
+      expect(decoded).toEqual(record);
+      expect(decoded?.amountIn).toBe(1_000_000n);
+    } finally {
+      if (previous) Object.defineProperty(Object.prototype, '$strkworldBigInt', previous);
+      else delete (Object.prototype as Record<string, unknown>).$strkworldBigInt;
+    }
+  });
+
   it('does not silently delete old signed dispute evidence', () => {
     const store = new MemoryBridgeStore();
     const old = {

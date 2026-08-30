@@ -42,7 +42,7 @@ export function deserializeBridgeRecord(raw: string): BridgeRecord | null {
       if (
         entry &&
         typeof entry === 'object' &&
-        '$strkworldBigInt' in entry &&
+        Object.prototype.hasOwnProperty.call(entry, '$strkworldBigInt') &&
         typeof (entry as { $strkworldBigInt?: unknown }).$strkworldBigInt === 'string'
       ) {
         return BigInt((entry as { $strkworldBigInt: string }).$strkworldBigInt);
