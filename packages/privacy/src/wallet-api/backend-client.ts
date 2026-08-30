@@ -101,7 +101,7 @@ export class BackendPrivacyClient implements PoolReadClient, PrivateSubmissionGa
     const rawCalls = asArray(ownField(value, 'executorCalls'));
     return {
       quoteId: asNonEmptyString(ownField(value, 'quoteId')),
-      buyAmount: asBigInt(ownField(value, 'buyAmount')),
+      buyAmount: asDecimalBigInt(ownField(value, 'buyAmount')),
       expiresAt: asInteger(ownField(value, 'expiresAt')),
       chainId: asString(ownField(value, 'chainId')),
       executorAddress: asString(ownField(value, 'executorAddress')),
@@ -116,7 +116,7 @@ export class BackendPrivacyClient implements PoolReadClient, PrivateSubmissionGa
       fee: {
         token: asString(ownField(fee, 'token')),
         recipient: asString(ownField(fee, 'recipient')),
-        amount: asBigInt(ownField(fee, 'amount')),
+        amount: asDecimalBigInt(ownField(fee, 'amount')),
         authorization: asString(ownField(fee, 'authorization')),
         expiresAtBlock: asInteger(ownField(fee, 'expiresAtBlock')),
       },
@@ -216,15 +216,6 @@ function asUint256(value: unknown): bigint {
     throw new PrivacyError('unknown', 'The private service returned an invalid response.');
   }
   return parsed;
-}
-
-function asBigInt(value: unknown): bigint {
-  const text = asString(value);
-  try {
-    return BigInt(text);
-  } catch {
-    throw new PrivacyError('unknown', 'The private service returned an invalid response.');
-  }
 }
 
 function asFelt(value: unknown): string {

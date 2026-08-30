@@ -489,9 +489,24 @@ describe('BackendPrivacyClient', () => {
 
   it.each([
     ['buy amount', (body: Record<string, unknown>) => ({ ...body, buyAmount: '1.5' })],
+    ['buy amount with whitespace', (body: Record<string, unknown>) => ({ ...body, buyAmount: ' 100' })],
+    ['buy amount with sign', (body: Record<string, unknown>) => ({ ...body, buyAmount: '+100' })],
+    ['buy amount with hex syntax', (body: Record<string, unknown>) => ({ ...body, buyAmount: '0x64' })],
     ['fee amount', (body: Record<string, unknown>) => ({
       ...body,
       fee: { ...(body.fee as Record<string, unknown>), amount: '1.5' },
+    })],
+    ['fee amount with whitespace', (body: Record<string, unknown>) => ({
+      ...body,
+      fee: { ...(body.fee as Record<string, unknown>), amount: ' 7' },
+    })],
+    ['fee amount with sign', (body: Record<string, unknown>) => ({
+      ...body,
+      fee: { ...(body.fee as Record<string, unknown>), amount: '+7' },
+    })],
+    ['fee amount with hex syntax', (body: Record<string, unknown>) => ({
+      ...body,
+      fee: { ...(body.fee as Record<string, unknown>), amount: '0x7' },
     })],
   ])('maps malformed swap %s into a generic privacy error', async (_label, mutate) => {
     const body = {

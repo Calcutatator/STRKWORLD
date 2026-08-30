@@ -258,6 +258,28 @@ empty shell to fetchers, so a 200 there means nothing.
 
 ## 6. Findings log
 
+### 2026-08-30 — Private swap response amounts require decimal wire syntax
+
+`BackendPrivacyClient.prepareSwap()` previously converted the backend's
+`buyAmount` and nested relay-fee `amount` with `BigInt()` directly. JavaScript
+accepts whitespace, signed values and hexadecimal strings in that conversion,
+so malformed successful responses crossed the browser privacy boundary as
+valid bigint values even though the backend emits decimal strings.
+
+Swap response amount fields now use the existing decimal-string parser. This
+rejects whitespace, signs, hexadecimal and fractional syntax with the generic
+invalid-response `PrivacyError`; zero, leading-zero decimal and valid large
+decimal values retain their existing mapping, while semantic positivity and
+route bounds remain enforced by the operations layer.
+
+*Verified:* red-first public BackendPrivacyClient regressions cover whitespace,
+signed and hexadecimal `buyAmount` and nested fee amounts; all six resolved
+before the guard and now reject with `kind: 'unknown'`. A mutation restoring
+direct `BigInt()` made all eight malformed swap amount regressions fail,
+including the existing fractional cases. The focused backend-client suite
+passes 53 tests; the full Privacy suite passes 9 files / 241 tests. No browser,
+provider, RPC, wallet, proof, signature, funds or transaction was used.
+
 ### 2026-08-30 — Avatar outfit binding retries failed listener cleanup
 
 `createAvatarOutfitToggleBinding().destroy()` previously set its destroyed flag
