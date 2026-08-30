@@ -348,7 +348,7 @@ export class LobbyClient {
   onStatus(listener: StatusListener): () => void {
     const owner = Symbol('status listener');
     this.#statusListeners.set(listener, owner);
-    this.#notifyStatus(listener, { status: this.#status });
+    this.#notifyStatus(listener, Object.freeze({ status: this.#status }));
     return () => {
       if (this.#statusListeners.get(listener) === owner) {
         this.#statusListeners.delete(listener);
@@ -620,11 +620,11 @@ export class LobbyClient {
   #setStatus(status: LobbyStatus, reason?: LobbyStatusReason, code?: number): void {
     this.#status = status;
     if (this.#statusListeners.size === 0) return;
-    const event: LobbyStatusEvent = {
+    const event: LobbyStatusEvent = Object.freeze({
       status,
       ...(reason ? { reason } : {}),
       ...(code !== undefined ? { code } : {}),
-    };
+    });
     this.#statusDeliveries.push({ listeners: [...this.#statusListeners], event });
     if (this.#deliveringStatus) return;
 
