@@ -74,6 +74,17 @@ function harness(
 }
 
 describe('fixed room definitions', () => {
+  it('keeps canonical room definitions immutable at runtime', () => {
+    expect(Object.isFrozen(FIXED_ROOM_DEFINITIONS)).toBe(true);
+    expect(Object.isFrozen(POST_OFFICE_ROOM_DEFINITION)).toBe(true);
+    expect(Object.isFrozen(POST_OFFICE_ROOM_DEFINITION.spawn)).toBe(true);
+    expect(Object.isFrozen(POST_OFFICE_ROOM_DEFINITION.exit)).toBe(true);
+    expect(Object.isFrozen(POST_OFFICE_ROOM_DEFINITION.stations)).toBe(true);
+    expect(Object.isFrozen(POST_OFFICE_ROOM_DEFINITION.stations[0])).toBe(true);
+    expect(Reflect.set(POST_OFFICE_ROOM_DEFINITION.stations[0], 'label', 'FORGED')).toBe(false);
+    expect(POST_OFFICE_ROOM_DEFINITION.stations[0].label).toBe('TRANSFER');
+  });
+
   it.each([
     ['bank', BANK_ROOM_DEFINITION],
     ['exchange', EXCHANGE_ROOM_DEFINITION],

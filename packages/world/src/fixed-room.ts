@@ -101,7 +101,15 @@ export interface FixedRoomControllerOptions {
   readonly onChange?: (state: FixedRoomState) => void;
 }
 
-export const BANK_ROOM_DEFINITION = {
+function freezeAuthoredRoom<const T extends FixedRoomDefinition>(definition: T): T {
+  Object.freeze(definition.spawn);
+  Object.freeze(definition.exit);
+  for (const station of definition.stations) Object.freeze(station);
+  Object.freeze(definition.stations);
+  return Object.freeze(definition);
+}
+
+export const BANK_ROOM_DEFINITION = freezeAuthoredRoom({
   building: 'bank',
   width: 18,
   height: 12,
@@ -117,9 +125,9 @@ export const BANK_ROOM_DEFINITION = {
       height: 1,
     },
   ],
-} as const satisfies FixedRoomDefinition;
+} as const satisfies FixedRoomDefinition);
 
-export const POST_OFFICE_ROOM_DEFINITION = {
+export const POST_OFFICE_ROOM_DEFINITION = freezeAuthoredRoom({
   building: 'post-office',
   width: 18,
   height: 12,
@@ -135,9 +143,9 @@ export const POST_OFFICE_ROOM_DEFINITION = {
       height: 1,
     },
   ],
-} as const satisfies FixedRoomDefinition;
+} as const satisfies FixedRoomDefinition);
 
-export const EXCHANGE_ROOM_DEFINITION = {
+export const EXCHANGE_ROOM_DEFINITION = freezeAuthoredRoom({
   building: 'exchange',
   width: 18,
   height: 12,
@@ -153,9 +161,9 @@ export const EXCHANGE_ROOM_DEFINITION = {
       height: 1,
     },
   ],
-} as const satisfies FixedRoomDefinition;
+} as const satisfies FixedRoomDefinition);
 
-export const BRIDGE_ROOM_DEFINITION = {
+export const BRIDGE_ROOM_DEFINITION = freezeAuthoredRoom({
   building: 'bridge',
   width: 18,
   height: 12,
@@ -171,14 +179,14 @@ export const BRIDGE_ROOM_DEFINITION = {
       height: 1,
     },
   ],
-} as const satisfies FixedRoomDefinition;
+} as const satisfies FixedRoomDefinition);
 
-export const FIXED_ROOM_DEFINITIONS = {
+export const FIXED_ROOM_DEFINITIONS = Object.freeze({
   bank: BANK_ROOM_DEFINITION,
   bridge: BRIDGE_ROOM_DEFINITION,
   exchange: EXCHANGE_ROOM_DEFINITION,
   'post-office': POST_OFFICE_ROOM_DEFINITION,
-} as const satisfies Partial<Record<BuildingId, FixedRoomDefinition>>;
+} as const satisfies Partial<Record<BuildingId, FixedRoomDefinition>>);
 
 export function createFixedRoom(definition: FixedRoomDefinition): FixedRoomMap {
   validateFixedRoomDefinition(definition);
