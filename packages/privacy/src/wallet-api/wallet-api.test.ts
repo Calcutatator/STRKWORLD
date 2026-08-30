@@ -90,6 +90,26 @@ describe('WalletApiPrivacyOperations capability and reads', () => {
     expect(balances).not.toHaveBeenCalled();
   });
 
+  it('rejects balance fields supplied only by the object prototype', async () => {
+    const { ops, wallet } = fixture();
+    const inherited = Object.create({ token: TOKEN, balance: '0x64' });
+    vi.spyOn(wallet, 'strk20Balances').mockResolvedValue([inherited as never]);
+
+    await expect(ops.balances([TOKEN])).rejects.toMatchObject({ kind: 'unknown' });
+  });
+
+  it('does not invoke an accessor-backed balance field', async () => {
+    const { ops, wallet } = fixture();
+    const accessor = { token: TOKEN, balance: '0x64' } as { token: string; balance: string };
+    Object.defineProperty(accessor, 'balance', {
+      configurable: true,
+      get() { throw new Error('balance getter must not run'); },
+    });
+    vi.spyOn(wallet, 'strk20Balances').mockResolvedValue([accessor as never]);
+
+    await expect(ops.balances([TOKEN])).rejects.toMatchObject({ kind: 'unknown' });
+  });
+
   it.each([
     ['null', null],
     ['missing transaction hash', {}],
