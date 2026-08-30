@@ -56,13 +56,13 @@ export class BackendPrivacyClient implements PoolReadClient, PrivateSubmissionGa
     }, input.signal);
     throwIfAborted(input.signal);
     const value = asRecord(raw);
-    return {
+    return Object.freeze({
       token: asString(ownField(value, 'token')),
       recipient: asString(ownField(value, 'recipient')),
       amount: asDecimalBigInt(ownField(value, 'amount')),
       authorization: asString(ownField(value, 'authorization')),
       expiresAtBlock: asInteger(ownField(value, 'expiresAtBlock')),
-    };
+    });
   }
 
   async submit(input: Parameters<PrivateSubmissionGateway['submit']>[0]): Promise<TxResult> {

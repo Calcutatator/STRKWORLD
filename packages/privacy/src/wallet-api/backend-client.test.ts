@@ -350,6 +350,24 @@ describe('BackendPrivacyClient', () => {
     );
   });
 
+  it('publishes an immutable relay fee quote', async () => {
+    const client = new BackendPrivacyClient(
+      'https://backend.example',
+      async () => response({
+        token: '0x4718', recipient: '0x789', amount: '7', authorization: 'auth', expiresAtBlock: 1450,
+      }),
+    );
+
+    const quote = await client.estimate({
+      route: 'transfer', feeToken: '0x4718', operationToken: '0xabc',
+    });
+
+    expect(Object.isFrozen(quote)).toBe(true);
+    expect(Reflect.set(quote, 'authorization', 'forged')).toBe(false);
+    expect(quote.authorization).toBe('auth');
+    expect(quote.amount).toBe(7n);
+  });
+
   it('maps an unavailable backend without exposing a raw transport error', async () => {
     const client = new BackendPrivacyClient('https://backend.example', async () => response({ message: 'paused' }, 503));
     await expect(client.config()).rejects.toMatchObject({ kind: 'unreachable', message: 'paused' });
