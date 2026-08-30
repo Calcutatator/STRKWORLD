@@ -8,8 +8,8 @@ export function PresenceStatusLayer({ presence, world }: { presence: PresenceCon
   useEffect(() => presence.listen(world), [presence, world]);
   const state = useSyncExternalStore(
     (listener) => presence.subscribe(listener),
-    presence.getState,
-    presence.getState,
+    () => presence.getState(),
+    () => presence.getState(),
   );
   return <PresenceStatusView state={state} onReconnect={() => presence.reconnect()} />;
 }
