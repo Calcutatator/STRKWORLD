@@ -1385,6 +1385,23 @@ describe('quote-bound swap withdrawal matching', () => {
 });
 
 describe('privacy-safe RPC and operations', () => {
+  it('bounds server-action span allocation by the remaining calldata', () => {
+    const originalFrom = Array.from;
+    const from = vi.spyOn(Array, 'from').mockImplementation(((items: ArrayLike<unknown> | Iterable<unknown>) => {
+      const length = typeof items === 'object' && items !== null && 'length' in items
+        ? Number((items as ArrayLike<unknown>).length)
+        : 0;
+      if (length > 1_024) throw new Error('unbounded span allocation');
+      return originalFrom(items as never) as never;
+    }) as typeof Array.from);
+    try {
+      expect(() => decodeServerActions(['0x1', '0x0', '0x1', '0x1fffffffffffff']))
+        .toThrow('Truncated server-action calldata.');
+    } finally {
+      from.mockRestore();
+    }
+  });
+
   it('rejects negative server-action span lengths', () => {
     expect(() => decodeServerActions(['0x1', '0x0', '0x1', '-1']))
       .toThrow('Invalid span length.');

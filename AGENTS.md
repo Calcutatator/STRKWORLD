@@ -258,6 +258,28 @@ empty shell to fetchers, so a 200 there means nothing.
 
 ## 6. Findings log
 
+### 2026-08-30 — Server-action span decoding must be bounded by remaining calldata
+
+`Cursor.take()` previously allocated an array from the decoded span length
+before checking whether that many words remained. A valid felt encoding of
+`Number.MAX_SAFE_INTEGER` could therefore request an enormous allocation for a
+truncated server-action payload, instead of failing closed at the wire
+boundary.
+
+The cursor now checks the requested count against the remaining calldata
+words before slicing, preserving the existing truncation error and preventing
+unbounded allocation. Variant, maximum-count and trailing-calldata rules are
+unchanged.
+
+*Verified:* a red-first public Backend regression uses a guarded `Array.from`
+and a `Number.MAX_SAFE_INTEGER` span length; the old decoder attempted the
+unbounded allocation, while the corrected decoder returns the generic
+truncated-calldata error before allocation. Removing the remaining-input
+guard fails the regression. The Backend suite passes 5 files / 159 tests;
+package typecheck, invariant scan and `git diff --check` pass. No browser,
+external provider, RPC, wallet, proof, signature, funds or transaction was
+used.
+
 ### 2026-08-30 — Fixed-room control ownership accepts only known owners
 
 The fixed-room controller trusted the `owner` field of a matching

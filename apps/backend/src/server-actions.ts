@@ -185,7 +185,12 @@ class Cursor {
   }
 
   take(count: number): string[] {
-    return Array.from({ length: count }, () => this.felt());
+    if (count > this.values.length - this.offset) {
+      throw new ApiFailure(400, 'Truncated server-action calldata.');
+    }
+    const values = this.values.slice(this.offset, this.offset + count);
+    this.offset += count;
+    return values;
   }
 
   span(): string[] {
