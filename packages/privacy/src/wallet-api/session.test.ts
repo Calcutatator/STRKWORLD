@@ -793,6 +793,23 @@ describe('WalletSession', () => {
     expect(discard).toHaveBeenCalledOnce();
   });
 
+  it('rejects an invalid funds-maturing warning before publishing review', async () => {
+    const selected = wallet('Ready');
+    const discard = vi.fn();
+    const warnings = [{ kind: 'funds-maturing' as const, maturingAmount: 1n, blocksRemaining: -1 }];
+    const connected = controllableConnection(
+      '0x111', operationsWithBatch({ ...batch(undefined, discard), warnings }, '0.10.3'), new FakePrivacyOperations(),
+    );
+    const session = createWalletSession(
+      denyAllOptions(),
+      { discovery: discoveryWith(selected), connectWallet: async () => connected.port },
+    );
+    await session.connect(session.getSnapshot().wallets[0]!.key);
+
+    await expect(session.operations.prepare([])).rejects.toMatchObject({ kind: 'unknown' });
+    expect(discard).toHaveBeenCalledOnce();
+  });
+
   it('rejects a sparse prepared-intents array before publishing review', async () => {
     const selected = wallet('Ready');
     const discard = vi.fn();

@@ -721,6 +721,14 @@ function validWarning(value: unknown): boolean {
       const count = Object.getOwnPropertyDescriptor(value, 'count');
       return Boolean(count && 'value' in count && Number.isSafeInteger(count.value) && count.value > 1);
     }
+    case 'funds-maturing': {
+      const amount = Object.getOwnPropertyDescriptor(value, 'maturingAmount');
+      const blocks = Object.getOwnPropertyDescriptor(value, 'blocksRemaining');
+      return Boolean(
+        amount && 'value' in amount && typeof amount.value === 'bigint' && amount.value > 0n
+        && blocks && 'value' in blocks && Number.isSafeInteger(blocks.value) && blocks.value >= 0
+      );
+    }
     default:
       return true;
   }
