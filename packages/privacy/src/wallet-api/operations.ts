@@ -735,7 +735,9 @@ function sameAddress(a: string, b: string): boolean {
 }
 
 function isFelt(value: string): boolean {
-  return /^0x[0-9a-fA-F]{1,64}$/.test(value) && BigInt(value) < STARK_FIELD_PRIME;
+  return typeof value === 'string'
+    && /^0x[0-9a-fA-F]{1,64}$/.test(value)
+    && BigInt(value) < STARK_FIELD_PRIME;
 }
 
 function assertFeeCeiling(actual: bigint, ceiling: bigint): void {

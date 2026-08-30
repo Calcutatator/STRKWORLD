@@ -258,6 +258,27 @@ empty shell to fetchers, so a 200 there means nothing.
 
 ## 6. Findings log
 
+### 2026-08-30 — Relay fee felt checks reject coercible runtime values
+
+`WalletApiPrivacyOperations` used `isFelt()` on external relay fee tokens,
+but the helper assumed its TypeScript `string` input and let JavaScript
+coercion run through regular-expression and bigint conversion. A gateway
+response object with a `toString()` returning the configured token could
+therefore pass the fee-token guard and cross into a Wallet API fee action as a
+non-string value.
+
+The felt predicate now requires a runtime string before applying the exact
+lowercase-`0x`, hexadecimal and Stark-field bounds. Existing canonical token
+rules, address comparisons and fee authorization semantics are unchanged;
+coercible objects fail closed before preparation or wallet handoff.
+
+*Verified:* a red-first public Wallet API regression supplied a coercible
+object token to quote-bound relay-fee validation; the old path published the
+batch, while the corrected path rejects it as an unexpected fee token.
+Removing the runtime type guard reproduces the failure. The focused Wallet API
+suite passes 80 tests; no browser, provider, RPC, wallet, proof, signature,
+funds or transaction was used.
+
 ### 2026-08-30 — Bank mode route projection is immutable
 
 `ROUTE_BY_MODE` was exported as a mutable object. A same-bundle consumer could

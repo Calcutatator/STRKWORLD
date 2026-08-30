@@ -1001,6 +1001,9 @@ describe('quote-bound swap plan admission', () => {
     ['an uppercase-prefix relay fee token', {
       fee: { token: STRK_UPPER_PREFIX, recipient: FEE_RECIPIENT, amount: 1n, ...AUTH },
     }, /fee token/i],
+    ['a coercible object relay fee token', {
+      fee: { token: { toString: (): string => STRK }, recipient: FEE_RECIPIENT, amount: 1n, ...AUTH },
+    }, /fee token/i],
     ['an unbounded relay fee', {
       fee: { token: STRK, recipient: FEE_RECIPIENT, amount: 1n, authorization: 'fee-auth', expiresAtBlock: 0 },
     }, /fee authorization/i],
