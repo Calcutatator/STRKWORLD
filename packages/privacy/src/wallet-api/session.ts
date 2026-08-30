@@ -595,6 +595,7 @@ function ownPreparedBatch(
   }
   const swapReview = swapReviewDescriptor?.value;
   let discarded = false;
+  let confirmationAttempted = false;
   const discard = (): void => {
     if (discarded) return;
     discarded = true;
@@ -633,10 +634,14 @@ function ownPreparedBatch(
       if (discarded) {
         throw new PrivacyError('unknown', 'This prepared batch was discarded. Prepare a new batch.');
       }
+      if (confirmationAttempted) {
+        throw new PrivacyError('unknown', 'This prepared batch was already confirmed or attempted. Prepare a new batch.');
+      }
       if (!isCurrent()) {
         retire();
         throw changedSessionError();
       }
+      confirmationAttempted = true;
       let result: Awaited<ReturnType<PreparedBatch['confirm']>>;
       try {
         result = await prepared.confirm(ownedOptions);
