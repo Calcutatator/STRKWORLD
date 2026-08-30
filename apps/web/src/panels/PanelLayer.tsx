@@ -45,6 +45,7 @@ export function nextActiveRoom(
     | { name: 'building:locked'; payload: WorldEvents['building:locked'] }
     | { name: 'building:exited'; payload: WorldEvents['building:exited'] },
 ): ActiveRoom | null {
+  if (!event.payload || typeof event.payload !== 'object') return current;
   switch (event.name) {
     case 'building:entered':
       return { source: 'entered', building: event.payload.building };

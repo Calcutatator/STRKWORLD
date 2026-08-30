@@ -19,6 +19,20 @@ const exited = (building: BuildingId) =>
   ({ name: 'building:exited', payload: { building } }) as const;
 
 describe('nextActiveRoom', () => {
+  it('ignores non-record World payloads without escaping the reducer boundary', () => {
+    const current: ActiveRoom = { source: 'entered', building: 'bank' };
+    const malformed = [
+      { name: 'building:entered', payload: null },
+      { name: 'building:locked', payload: null },
+      { name: 'building:exited', payload: null },
+    ] as Array<{ name: string; payload: null }>;
+
+    for (const event of malformed) {
+      expect(() => nextActiveRoom(current, event as never)).not.toThrow();
+      expect(nextActiveRoom(current, event as never)).toBe(current);
+    }
+  });
+
   it('opens the entered building', () => {
     expect(nextActiveRoom(null, entered('bank'))).toEqual({ source: 'entered', building: 'bank' });
   });
