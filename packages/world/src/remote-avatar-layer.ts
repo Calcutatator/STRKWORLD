@@ -18,7 +18,7 @@ type TimerEvent = PhaserTypes.Time.TimerEvent;
 
 interface RemoteAvatar {
   readonly sprite: Sprite;
-  readonly visual: AvatarVisualController;
+  visual?: AvatarVisualController;
   idleTimer?: TimerEvent;
 }
 
@@ -96,15 +96,24 @@ export function createRemoteAvatarLayer({
       if (avatar === undefined) {
         try {
           avatar = createAvatar(scene, layer, peer);
+          // Register the sprite before constructing its visual controller.
+          // The controller renders immediately, so a Phaser setter can throw
+          // before the factory returns. Keeping the partial avatar in the map
+          // gives the next snapshot a retry owner and teardown a cleanup owner.
+          avatars.set(id, avatar);
         } catch (error) {
           errors.push(error);
           continue;
         }
       }
-      // Register a newly-created sprite before presentation can call into
-      // Phaser. If that first update throws, destroy() and a later snapshot
-      // still own the partial avatar instead of creating/leaking another one.
-      avatars.set(id, avatar);
+      if (avatar.visual === undefined) {
+        try {
+          avatar.visual = createAvatarVisualController(avatar.sprite, peer.sprite);
+        } catch (error) {
+          errors.push(error);
+          continue;
+        }
+      }
       const previous = peers.get(id);
       const moving = previous !== undefined && (previous.x !== peer.x || previous.y !== peer.y);
       try {
@@ -192,12 +201,18 @@ export function createRemoteAvatarLayer({
 function createAvatar(scene: Scene, layer: Layer, peer: RemotePeerSnapshot): RemoteAvatar {
   const sheet = resolveAvatarSheet(peer.sprite);
   const avatar = scene.add.sprite(peer.x, peer.y, sheet.textureKey, 0);
-  avatar.setDepth(9);
-  layer.add(avatar);
-  return {
-    sprite: avatar,
-    visual: createAvatarVisualController(avatar, peer.sprite),
-  };
+  try {
+    avatar.setDepth(9);
+    layer.add(avatar);
+  } catch (error) {
+    try {
+      avatar.destroy();
+    } catch {
+      // Preserve the construction error; the layer never received ownership.
+    }
+    throw error;
+  }
+  return { sprite: avatar };
 }
 
 function updateAvatar(
@@ -207,9 +222,11 @@ function updateAvatar(
   moving: boolean,
   isAlive: () => boolean,
 ): void {
+  const visual = avatar.visual;
+  if (visual === undefined) return;
   cancelIdle(avatar);
   avatar.sprite.setPosition(peer.x, peer.y);
-  avatar.visual.present({
+  visual.present({
     sprite: peer.sprite,
     facing: peer.facing,
     moving,
@@ -221,7 +238,7 @@ function updateAvatar(
   avatar.idleTimer = scene.time.delayedCall(movementIdleMs, () => {
     avatar.idleTimer = undefined;
     if (!isAlive()) return;
-    avatar.visual.present({
+    visual.present({
       sprite: peer.sprite,
       facing: peer.facing,
       moving: false,

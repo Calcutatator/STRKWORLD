@@ -258,6 +258,30 @@ empty shell to fetchers, so a 200 there means nothing.
 
 ## 6. Findings log
 
+### 2026-08-30 — Remote avatar visual construction retains partial ownership
+
+`createRemoteAvatarLayer` added a new sprite to the Phaser layer and then
+constructed its visual controller before recording the sprite in `avatars`.
+Because the visual controller renders immediately, a setter failure during
+that constructor left the sprite in the Phaser layer with no cleanup or retry
+owner; the next snapshot created a second sprite for the same peer.
+This is distinct from the existing post-registration `updateAvatar()` guard:
+that guard cannot run when the visual controller constructor itself throws.
+
+New sprites are now registered before visual-controller construction. A failed
+initial presentation retains the partial avatar for a later retry and for
+explicit layer teardown; successful existing-avatar updates, removal retry and
+aggregate cleanup behavior are unchanged.
+
+*Verified:* a red-first public regression makes the first new sprite's
+`setTexture` throw, republishes the same peer, and asserts the old path creates
+a second sprite while leaving the first unowned. The corrected path retries on
+the original sprite and destroys it exactly once at layer teardown. Removing
+the early ownership registration fails the regression. Remote-avatar focused
+tests, full World tests, World typecheck, invariants and diff checks are
+recorded on this candidate. No browser, wallet, provider, RPC, proof,
+signature, funds or transaction was used.
+
 ### 2026-08-30 — Web route records reject accessor-backed fields
 
 The route resolver checked only whether each `RouteGrade` key was present as
