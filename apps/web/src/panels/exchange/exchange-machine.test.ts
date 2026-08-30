@@ -18,6 +18,28 @@ async function ready(machine = panel()) {
 }
 
 describe('Exchange machine', () => {
+  it('exposes a read-only immutable state snapshot to panel consumers', async () => {
+    const machine = panel();
+    const state = machine.store.getState();
+
+    expect('setState' in machine.store).toBe(false);
+    expect(Object.isFrozen(state)).toBe(true);
+    expect(Reflect.set(state, 'amountText', 'forged')).toBe(false);
+    expect(machine.store.getState().amountText).toBe('');
+
+    await machine.open();
+    await machine.refreshBalances();
+    machine.setAmount('1');
+    await machine.prepare();
+    const reviewed = machine.store.getState();
+    expect(reviewed.flow.name).toBe('review');
+    if (reviewed.flow.name !== 'review') return;
+    expect(Object.isFrozen(reviewed.flow.summary)).toBe(true);
+    expect(Object.isFrozen(reviewed.flow.summary.disclosures)).toBe(true);
+    expect(Reflect.set(reviewed.flow.summary, 'sell', 'forged')).toBe(false);
+    expect(Reflect.set(reviewed.flow.summary.disclosures, '0', 'forged')).toBe(false);
+  });
+
   it('does not read balances until the player explicitly asks, then offers positive catalog assets only', async () => {
     const machine = panel(); await machine.open();
     expect(machine.store.getState().balances).toBe('unrequested');
