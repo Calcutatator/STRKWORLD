@@ -29,7 +29,11 @@
  */
 
 import type { AvatarSpriteKey, EventBus, WorldEvents } from '@strkworld/shared';
-import { DEFAULT_AVATAR_SPRITE, pairedAvatarSprite } from './avatar-state.js';
+import {
+  DEFAULT_AVATAR_SPRITE,
+  isAvatarSpriteKey,
+  pairedAvatarSprite,
+} from './avatar-state.js';
 
 export interface AvatarOutfitSelection {
   /** What the local avatar is wearing right now. */
@@ -48,6 +52,10 @@ export function createAvatarOutfitSelection(options: {
   let selectionRevision = 0;
 
   const select = (sprite: AvatarSpriteKey): boolean => {
+    // The exported selection object can be reached from untyped runtime
+    // composition. Do not let a forged key become authoritative or cross the
+    // avatar:selected event boundary into the renderer.
+    if (!isAvatarSpriteKey(sprite)) return false;
     if (sprite === selected) return false;
     const previous = selected;
     const ownRevision = ++selectionRevision;

@@ -44,6 +44,18 @@ describe('World-local outfit selection', () => {
     expect(events).toEqual([{ event: 'avatar:selected', payload: { sprite: 'avatar-6' } }]);
   });
 
+  it('rejects a forged runtime sprite key without changing authority', () => {
+    const emit = vi.fn();
+    const selection = createAvatarOutfitSelection({ out: { emit } });
+
+    expect(selection.select('avatar-2')).toBe(true);
+    emit.mockClear();
+
+    expect(selection.select('not-an-avatar' as never)).toBe(false);
+    expect(selection.selected).toBe('avatar-2');
+    expect(emit).not.toHaveBeenCalled();
+  });
+
   it('toggles through the existing pairedAvatarSprite mapping and back', () => {
     const events: Emitted[] = [];
     const selection = createAvatarOutfitSelection({

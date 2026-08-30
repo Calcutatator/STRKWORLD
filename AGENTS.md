@@ -340,6 +340,26 @@ World typecheck, tests, invariants and diff checks are recorded on this
 candidate. No browser, wallet, provider, RPC, proof, signature, funds or
 transaction was used.
 
+### 2026-08-30 — Avatar outfit selection rejects forged runtime keys
+
+The exported World outfit selection trusted its TypeScript-only
+`AvatarSpriteKey` parameter. An untyped caller could therefore select an
+arbitrary string, publish it through `avatar:selected`, and leave the local
+selection authority in a state that the World avatar renderer cannot resolve.
+
+`select()` now validates the key against the World-owned catalog and returns
+`false` without changing state or emitting when the runtime value is unknown.
+Valid cosy/fighting selections, toggle pairing, event delivery and rollback on
+delivery failure are unchanged.
+
+*Verified:* a red-first public regression cast `not-an-avatar` through the
+selection seam after selecting `avatar-2`; the old selection changed authority
+and emitted the forged key, while the corrected selection remains `avatar-2`
+and emits nothing. Removing the runtime guard fails the regression. World
+focused/full tests, typecheck, invariants and diff checks are recorded on this
+candidate. No browser, wallet, provider, RPC, proof, signature, funds or
+transaction was used.
+
 ### 2026-08-30 — Exchange pending state reaches the world HUD
 
 `ExchangePanel` drove private swap preparation and wallet submission without
