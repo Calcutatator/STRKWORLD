@@ -356,6 +356,28 @@ transaction was used.*
 
 ## 6. Findings log
 
+### 2026-08-30 — Remote avatar removal attempts every child cleanup
+
+`createRemoteAvatarLayer.render()` removed omitted peers directly in a loop.
+If one timer or sprite destructor threw, the loop aborted before later omitted
+avatars were retired, and the authoritative peer map was never advanced. A
+single presentation cleanup failure could therefore leave stale remote objects
+visible and mask cleanup failures for the rest of the snapshot.
+
+Removal now attempts every omitted avatar, retains any failed object for a
+future retry, advances the authoritative snapshot, and rethrows one cleanup
+error unchanged or multiple as an `AggregateError`. Existing-avatar
+presentation and explicit layer-destroy ownership remain attempt-all and
+idempotent.
+
+*Verified:* public regressions omit two peers while the first destructor throws;
+both cleanup calls now occur and the retained map clears. A second regression
+throws from both destructors and confirms `AggregateError` after both attempts.
+The focused remote-avatar suite passes 13 tests; the full World suite passes
+24 files / 258 tests. World typecheck, all 13 invariants and diff hygiene pass.
+No browser, network, wallet, RPC, proof, signature, funds or transaction was
+used.*
+
 ### 2026-08-30 — Vite proxy-boundary tests must isolate dependency optimization
 
 The exact `/api` proxy test created a full Vite development server using the

@@ -241,6 +241,42 @@ describe('remote avatar layer', () => {
     expect(layer.peers.size).toBe(0);
   });
 
+  it('attempts every omitted avatar cleanup before rethrowing one error', () => {
+    const sourceController = createRemotePeerSource([peer(), peer({ id: 'peer-2' })]);
+    const fake = fakeScene();
+    const layer = createRemoteAvatarLayer({ scene: fake.scene as never, source: sourceController.source });
+    const cleanupError = new Error('first sprite cleanup failed');
+    fake.objects[0]!.destroy.mockImplementationOnce(() => {
+      throw cleanupError;
+    });
+
+    expect(() => sourceController.publish([])).toThrow(cleanupError);
+    expect(fake.objects[0]?.destroy).toHaveBeenCalledTimes(1);
+    expect(fake.objects[1]?.destroy).toHaveBeenCalledTimes(1);
+    expect(layer.peers.size).toBe(0);
+    layer.destroy();
+  });
+
+  it('aggregates omitted avatar cleanup errors after attempting every peer', () => {
+    const sourceController = createRemotePeerSource([peer(), peer({ id: 'peer-2' })]);
+    const fake = fakeScene();
+    const layer = createRemoteAvatarLayer({ scene: fake.scene as never, source: sourceController.source });
+    const firstError = new Error('first sprite cleanup failed');
+    const secondError = new Error('second sprite cleanup failed');
+    fake.objects[0]!.destroy.mockImplementationOnce(() => {
+      throw firstError;
+    });
+    fake.objects[1]!.destroy.mockImplementationOnce(() => {
+      throw secondError;
+    });
+
+    expect(() => sourceController.publish([])).toThrow(AggregateError);
+    expect(fake.objects[0]?.destroy).toHaveBeenCalledTimes(1);
+    expect(fake.objects[1]?.destroy).toHaveBeenCalledTimes(1);
+    expect(layer.peers.size).toBe(0);
+    layer.destroy();
+  });
+
   it('owns shutdown when source replay fires before subscribe returns', () => {
     const fake = fakeScene();
     let shutdown: (() => void) | undefined;

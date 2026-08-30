@@ -57,24 +57,46 @@ export function createRemoteAvatarLayer({
   const render = (snapshot: readonly RemotePeerSnapshot[]): void => {
     if (destroyed) return;
     const next = reconcileRemotePeers(snapshot, peers);
+    const errors: unknown[] = [];
 
     for (const [id, avatar] of avatars) {
       if (next.has(id)) continue;
-      destroyAvatar(avatar);
-      avatars.delete(id);
+      try {
+        destroyAvatar(avatar);
+        avatars.delete(id);
+      } catch (error) {
+        // A failed child cleanup must not prevent later omitted peers from
+        // being retired. Keep the failed avatar owned for a future retry.
+        errors.push(error);
+      }
     }
 
     for (const [id, peer] of next) {
-      const avatar = avatars.get(id) ?? createAvatar(scene, layer, peer);
+      let avatar = avatars.get(id);
+      if (avatar === undefined) {
+        try {
+          avatar = createAvatar(scene, layer, peer);
+        } catch (error) {
+          errors.push(error);
+          continue;
+        }
+      }
       // Register a newly-created sprite before presentation can call into
       // Phaser. If that first update throws, destroy() and a later snapshot
       // still own the partial avatar instead of creating/leaking another one.
       avatars.set(id, avatar);
       const previous = peers.get(id);
       const moving = previous !== undefined && (previous.x !== peer.x || previous.y !== peer.y);
-      updateAvatar(scene, avatar, peer, moving, () => !destroyed);
+      try {
+        updateAvatar(scene, avatar, peer, moving, () => !destroyed);
+      } catch (error) {
+        errors.push(error);
+      }
     }
     peers = next;
+
+    if (errors.length === 1) throw errors[0];
+    if (errors.length > 1) throw new AggregateError(errors, 'Remote avatar reconciliation failed');
   };
 
   const destroy = (): void => {
