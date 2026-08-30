@@ -578,6 +578,32 @@ describe('WalletSession', () => {
     expect(discard).toHaveBeenCalledOnce();
   });
 
+  it('owns confirmation options before the underlying batch can observe caller mutation', async () => {
+    const selected = wallet('Ready');
+    let observedCeiling: bigint | undefined;
+    const options = { feeCeiling: 10n };
+    const confirm = vi.fn(async (received: typeof options) => {
+      await Promise.resolve();
+      observedCeiling = received.feeCeiling;
+      return { transactionHash: '0x1' };
+    });
+    const connected = controllableConnection(
+      '0x111', operationsWithBatch({ ...batch(), confirm }, '0.10.3'), new FakePrivacyOperations(),
+    );
+    const session = createWalletSession(
+      denyAllOptions(),
+      { discovery: discoveryWith(selected), connectWallet: async () => connected.port },
+    );
+    await session.connect(session.getSnapshot().wallets[0]!.key);
+    const prepared = await session.operations.prepare([]);
+
+    const confirming = prepared.confirm(options);
+    options.feeCeiling = 0n;
+    await confirming;
+
+    expect(observedCeiling).toBe(10n);
+  });
+
   it('does not publish accessor-backed prepared fields through the session facade', async () => {
     const selected = wallet('Ready');
     let getterCalled = false;

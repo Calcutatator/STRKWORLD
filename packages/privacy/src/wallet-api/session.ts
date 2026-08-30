@@ -616,6 +616,11 @@ function ownPreparedBatch(
     promptCount: prepared.promptCount,
     ...(swapReview ? { swapReview } : {}),
     async confirm(options: Parameters<PreparedBatch['confirm']>[0]) {
+      const ownedOptions = {
+        feeCeiling: options.feeCeiling,
+        ...(options.onProgress ? { onProgress: options.onProgress } : {}),
+        ...(options.signal ? { signal: options.signal } : {}),
+      };
       if (discarded) {
         throw new PrivacyError('unknown', 'This prepared batch was discarded. Prepare a new batch.');
       }
@@ -625,7 +630,7 @@ function ownPreparedBatch(
       }
       let result: Awaited<ReturnType<PreparedBatch['confirm']>>;
       try {
-        result = await prepared.confirm(options);
+        result = await prepared.confirm(ownedOptions);
       } catch (error) {
         if (!isCurrent()) {
           retire();
