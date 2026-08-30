@@ -258,6 +258,29 @@ empty shell to fetchers, so a 200 there means nothing.
 
 ## 6. Findings log
 
+### 2026-08-30 — Backend response metadata and body reader share one owner
+
+The Backend privacy client captured coherent `ok` and `status` metadata, but
+resolved the `json` body reader in a later prototype walk. A stateful response
+proxy could therefore admit one response shape and substitute a different body
+reader before success or error parsing, causing the body consumed by the client
+to come from a prototype that never owned the admitted metadata.
+
+Response ownership now captures `ok`, `status` and `json` together from the
+same object or same captured prototype. The exact body reader is bound once and
+used for both success and error responses. Native Fetch responses retain their
+platform metadata getters and descriptor-owned body method; accessors and
+prototype traps still fail through the controlled invalid-response path.
+
+*Verified:* a public BackendPrivacyClient regression supplies an admitted
+prototype with `400` metadata and message `admitted rejection`, then exposes a
+later prototype whose reader returns `substituted rejection`. The base consumed
+the substituted body; the corrected client preserves the admitted message.
+Focused Backend client verification passes 96 tests and privacy typecheck
+passes. Full workspace gates are recorded in the owning commit. Deterministic
+fakes only: no browser, external provider, RPC, wallet, proof, signature, funds
+or transaction was used.*
+
 ### 2026-08-30 — Zero-duration interior movement is a no-op
 
 `moveWithCollisionSubsteps()` converted a valid `delta` of `0` into one

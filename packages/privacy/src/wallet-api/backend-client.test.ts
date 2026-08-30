@@ -31,6 +31,35 @@ function inheritResponseField(key: string, value: unknown): () => void {
 }
 
 describe('BackendPrivacyClient', () => {
+  it('owns response metadata and body reader from one prototype snapshot', async () => {
+    const admittedPrototype = {
+      ok: false,
+      status: 400,
+      json: async () => ({ message: 'admitted rejection' }),
+    };
+    const substitutedPrototype = {
+      ok: false,
+      status: 400,
+      json: async () => ({ message: 'substituted rejection' }),
+    };
+    let prototypeReads = 0;
+    const responseValue = new Proxy(Object.create(admittedPrototype), {
+      getPrototypeOf() {
+        prototypeReads += 1;
+        return prototypeReads <= 2 ? admittedPrototype : substitutedPrototype;
+      },
+    });
+    const client = new BackendPrivacyClient(
+      'https://backend.example',
+      async () => responseValue as Response,
+    );
+
+    await expect(client.config()).rejects.toMatchObject({
+      kind: 'unknown', message: 'admitted rejection',
+    });
+    expect(prototypeReads).toBe(2);
+  });
+
   it('owns response ok and status from one prototype before error classification', async () => {
     const acceptedPrototype = {
       ok: false,
@@ -55,7 +84,7 @@ describe('BackendPrivacyClient', () => {
     );
 
     await expect(client.config()).rejects.toMatchObject({ kind: 'unknown', message: 'rejected' });
-    expect(prototypeReads).toBeGreaterThan(2);
+    expect(prototypeReads).toBe(2);
   });
 
   it('owns submission artifact data before JSON serialization can substitute it', async () => {

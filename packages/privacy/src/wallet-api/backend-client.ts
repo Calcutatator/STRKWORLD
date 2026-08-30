@@ -232,7 +232,7 @@ export class BackendPrivacyClient implements PoolReadClient, PrivateSubmissionGa
       const status = responseMeta.status;
       let failure: unknown;
       try {
-        failure = await ownResponseJson(response)();
+        failure = await responseMeta.json();
       } catch (error) {
         if (transportFailureKind === 'submission-uncertain') {
           throw new PrivacyError('submission-uncertain', 'The private submission response was lost.', error);
@@ -246,7 +246,7 @@ export class BackendPrivacyClient implements PoolReadClient, PrivateSubmissionGa
       );
     }
     try {
-      return await ownResponseJson(response)();
+      return await responseMeta.json();
     } catch (error) {
       if (error instanceof SyntaxError) {
         throw new PrivacyError('unknown', 'The private service returned an invalid response.', error);
@@ -356,9 +356,11 @@ function ownResponseJson(response: Response): () => Promise<unknown> {
   throw new PrivacyError('unknown', 'The private service returned an invalid response.');
 }
 
-function ownResponseMeta(response: Response): { ok: boolean; status: number } {
+function ownResponseMeta(response: Response): { ok: boolean; status: number; json: () => Promise<unknown> } {
   try {
-    if (response instanceof Response) return { ok: response.ok, status: response.status };
+    if (response instanceof Response) {
+      return { ok: response.ok, status: response.status, json: ownResponseJson(response) };
+    }
   } catch {
     // Continue into descriptor-only validation for malformed implementations.
   }
@@ -367,12 +369,14 @@ function ownResponseMeta(response: Response): { ok: boolean; status: number } {
     while (current !== null) {
       const ok = Object.getOwnPropertyDescriptor(current, 'ok');
       const status = Object.getOwnPropertyDescriptor(current, 'status');
+      const json = Object.getOwnPropertyDescriptor(current, 'json');
       if (ok || status) {
         if (
           ok && 'value' in ok && typeof ok.value === 'boolean'
           && status && 'value' in status && typeof status.value === 'number'
+          && json && 'value' in json && typeof json.value === 'function'
         ) {
-          return { ok: ok.value, status: status.value };
+          return { ok: ok.value, status: status.value, json: json.value.bind(response) as () => Promise<unknown> };
         }
         break;
       }
@@ -380,11 +384,17 @@ function ownResponseMeta(response: Response): { ok: boolean; status: number } {
       if (prototype === null) break;
       const prototypeOk = Object.getOwnPropertyDescriptor(prototype, 'ok');
       const prototypeStatus = Object.getOwnPropertyDescriptor(prototype, 'status');
+      const prototypeJson = Object.getOwnPropertyDescriptor(prototype, 'json');
       if (
         prototypeOk && 'value' in prototypeOk && typeof prototypeOk.value === 'boolean'
         && prototypeStatus && 'value' in prototypeStatus && typeof prototypeStatus.value === 'number'
+        && prototypeJson && 'value' in prototypeJson && typeof prototypeJson.value === 'function'
       ) {
-        return { ok: prototypeOk.value, status: prototypeStatus.value };
+        return {
+          ok: prototypeOk.value,
+          status: prototypeStatus.value,
+          json: prototypeJson.value.bind(response) as () => Promise<unknown>,
+        };
       }
       current = Object.getPrototypeOf(prototype) as object | null;
     }
