@@ -57,6 +57,8 @@ describe('fake lifecycle configuration', () => {
     ['malformed', 'not-a-felt'],
     ['zero', '0x0'],
     ['negative', '-1'],
+    ['decimal', '273'],
+    ['field-prime', `0x${((1n << 251n) + 17n * (1n << 192n) + 1n).toString(16)}`],
   ] as const)('rejects a %s registered recipient as a privacy configuration error', (_label, recipient) => {
     expect(() => new FakePrivacyOperations({ registered: [recipient] }))
       .toThrow(PrivacyError);
