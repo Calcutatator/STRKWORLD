@@ -50,6 +50,24 @@ describe('visit controller', () => {
     });
   });
 
+  it('keeps the Escape callback usable when passed without its controller receiver', () => {
+    const world = createEventBus<WorldEvents>();
+    const shell = createEventBus<ShellEvents>();
+    const controller = createVisitController(shell);
+    controller.listen(world);
+    world.emit('building:entered', { building: 'bank' });
+    controller.openMenu();
+
+    const handleEscape = controller.handleEscape;
+
+    expect(() => handleEscape()).not.toThrow();
+    expect(controller.store.getState()).toEqual({
+      name: 'visiting',
+      building: 'bank',
+      surface: { name: 'room' },
+    });
+  });
+
   it('keeps the public visit store read-only and immutable', () => {
     const world = createEventBus<WorldEvents>();
     const shell = createEventBus<ShellEvents>();

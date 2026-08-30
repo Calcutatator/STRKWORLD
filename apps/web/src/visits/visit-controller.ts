@@ -110,6 +110,26 @@ export function createVisitController(
     setState({ name: 'visiting', building, surface: { name: 'station', station } });
   }
 
+  function closeSurface(): void {
+    const state = store.getState();
+    if (state.name !== 'visiting' || state.surface.name === 'room') return;
+    ownControls(state.building, 'world');
+    if (store.getState() !== state) return;
+    setState({ ...state, surface: { name: 'room' } });
+  }
+
+  function dismissLocked(): void {
+    if (store.getState().name === 'locked') setState({ name: 'outside' });
+  }
+
+  function handleEscape(): void {
+    if (store.getState().name === 'locked') {
+      dismissLocked();
+      return;
+    }
+    closeSurface();
+  }
+
   return Object.freeze<VisitController>({
     store,
 
@@ -197,24 +217,8 @@ export function createVisitController(
       setState({ ...state, surface: { name: 'menu' } });
     },
 
-    closeSurface(): void {
-      const state = store.getState();
-      if (state.name !== 'visiting' || state.surface.name === 'room') return;
-      ownControls(state.building, 'world');
-      if (store.getState() !== state) return;
-      setState({ ...state, surface: { name: 'room' } });
-    },
-
-    dismissLocked(): void {
-      if (store.getState().name === 'locked') setState({ name: 'outside' });
-    },
-
-    handleEscape(): void {
-      if (store.getState().name === 'locked') {
-        this.dismissLocked();
-        return;
-      }
-      this.closeSurface();
-    },
+    closeSurface,
+    dismissLocked,
+    handleEscape,
   });
 }

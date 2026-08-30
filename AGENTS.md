@@ -258,6 +258,24 @@ empty shell to fetchers, so a 200 there means nothing.
 
 ## 6. Findings log
 
+### 2026-08-30 — Visit Escape handlers retain their lifecycle owner when extracted
+
+`VisitController.handleEscape()` called `this.dismissLocked()` and
+`this.closeSurface()`. A legitimate event or callback consumer that extracted
+the public handler before passing it to a key listener therefore lost the
+controller receiver and threw instead of closing the active Menu/Station
+surface or dismissing a locked door.
+
+The controller now closes over its owned transition functions and publishes
+`handleEscape` as a receiver-independent callback. Direct method calls and
+the existing visit-layer Escape behavior are unchanged.
+
+*Verified:* the red-first public visit regression extracted
+`const handleEscape = controller.handleEscape` after opening a Bank menu; the
+old path threw a TypeError reading `closeSurface`, while the corrected path
+returns to Game Mode. No browser,
+wallet, provider, RPC, proof, signature, funds or transaction was used.
+
 ### 2026-08-30 — Lobby movement normalizes malformed facing before reconciliation
 
 `LobbyClient.updatePosition()` trusted its TypeScript `Facing` parameter at the
