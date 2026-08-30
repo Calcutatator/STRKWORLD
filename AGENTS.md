@@ -324,6 +324,31 @@ bootstrap tests pass 10 tests; workspace gates are recorded on the candidate.
 No browser, wallet, provider, RPC, proof, signature, funds or transaction was
 used.
 
+### 2026-08-30 — Presence client setup failures retire the failed owner
+
+`PresenceController.ensureClient()` published a client reference before
+installing the status and peer callbacks, but did not contain synchronous
+errors from either registration. A client whose `onStatus()` attached the
+callback and then threw could therefore remain the active owner; a later
+status event from that failed setup could publish `connected` without a
+successful join. The same gap in `onPeers()` allowed a callback attached
+before the throw to publish stale remote peers after startup had failed.
+
+Setup registration is now an ownership transaction. Both callback paths
+deactivate their local delivery guards, retire the exact failed client,
+clear the retained peer snapshot, restore unavailable state, and preserve the
+original registration error. A failed setup cannot be revived by a late
+status/peer callback or strand the controller as a partially initialized
+client.
+
+*Verified:* public regressions make `onStatus()` and `onPeers()` attach their
+callback and then throw. The status case first reproduces a late connected
+event reviving the failed controller; the peer case first reproduces a stale
+remote snapshot after failed setup. The corrected presence suite passes 50
+tests, Web typecheck passes, and diff hygiene is clean. No browser, lobby
+server, wallet, provider, RPC, proof, signature, funds or transaction was
+used.
+
 ### 2026-08-30 — Remote peer sources retain queued state after listener errors
 
 `createRemotePeerSource()` queued reentrant publications while a listener was

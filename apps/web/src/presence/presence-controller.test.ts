@@ -298,6 +298,60 @@ describe('presence controller', () => {
     stop();
   });
 
+  it('retires a client when status listener setup throws after attaching', () => {
+    const world = createEventBus<WorldEvents>();
+    const made = fakeClient();
+    const failure = new Error('status listener setup failed');
+    let lateStatus: StatusListener | undefined;
+    made.client.onStatus = vi.fn((listener: StatusListener) => {
+      lateStatus = listener;
+      listener({ status: 'idle' });
+      throw failure;
+    });
+    const presence = createPresenceController({ endpoint: 'ws://example', factory: () => made.client });
+    const stop = presence.listen(world);
+    const consoleError = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+
+    world.emit('player:moved', moved);
+    expect(consoleError).toHaveBeenCalledOnce();
+    expect(lateStatus).toBeDefined();
+    expect(made.client.onPeers).not.toHaveBeenCalled();
+
+    lateStatus?.({ status: 'connected' });
+
+    expect(presence.getState()).toEqual({ status: 'unavailable', canReconnect: true });
+    consoleError.mockRestore();
+    stop();
+  });
+
+  it('retires a client when peer listener setup throws after attaching', () => {
+    const world = createEventBus<WorldEvents>();
+    const made = fakeClient();
+    const failure = new Error('peer listener setup failed');
+    let latePeers: Parameters<PresenceClient['onPeers']>[0] | undefined;
+    made.client.onPeers = vi.fn((listener) => {
+      latePeers = listener;
+      throw failure;
+    });
+    const presence = createPresenceController({ endpoint: 'ws://example', factory: () => made.client });
+    const snapshots: RemotePeerSnapshot[][] = [];
+    const stopSource = presence.remotePeers.subscribe((peers) => snapshots.push([...peers]));
+    const stop = presence.listen(world);
+    const consoleError = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+
+    world.emit('player:moved', moved);
+    expect(consoleError).toHaveBeenCalledOnce();
+    expect(latePeers).toBeDefined();
+
+    latePeers?.([{ gameId: 'stale', x: 1, y: 2, facing: 'up', sprite: 'avatar-1' }]);
+
+    expect(presence.getState()).toEqual({ status: 'unavailable', canReconnect: true });
+    expect(snapshots.at(-1)).toEqual([]);
+    consoleError.mockRestore();
+    stopSource();
+    stop();
+  });
+
   it('keeps a synchronous close authoritative when connected status suspends inside', async () => {
     const world = createEventBus<WorldEvents>();
     const made = controlledClient();

@@ -118,21 +118,43 @@ export function createPresenceController({ endpoint, factory = (options) => new 
     let installingStatus = true;
     let initialStatusPending = true;
     let statusActive = true;
-    const stopStatus = ownedClient.onStatus((event) => {
-      if (!statusActive || destroyed || client !== ownedClient) return;
-      // LobbyClient replays exactly one current-status snapshot on subscribe.
-      // A stale client may legitimately replay `closed` before an explicit
-      // reconnect, so only that first synchronous callback lacks transition
-      // authority. Any later callback during setup is a real reentrant event.
-      if (installingStatus && initialStatusPending) {
-        initialStatusPending = false;
-        return;
+    let stopStatus: (() => void) | null = null;
+    const retireSetup = (): void => {
+      owner.retired = true;
+      if (setupOwner === owner) setupOwner = null;
+      if (client !== ownedClient) return;
+      client = null;
+      clientSprite = null;
+      try {
+        clearPeers();
+      } catch {
+        // Preserve the setup failure; a failed source notification must not
+        // strand the failed client as the active presence owner.
       }
-      onStatus(event);
-    });
+      setState({ status: 'unavailable', canReconnect: Boolean(endpoint) });
+    };
+    try {
+      stopStatus = ownedClient.onStatus((event) => {
+        if (!statusActive || destroyed || client !== ownedClient) return;
+        // LobbyClient replays exactly one current-status snapshot on subscribe.
+        // A stale client may legitimately replay `closed` before an explicit
+        // reconnect, so only that first synchronous callback lacks transition
+        // authority. Any later callback during setup is a real reentrant event.
+        if (installingStatus && initialStatusPending) {
+          initialStatusPending = false;
+          return;
+        }
+        onStatus(event);
+      });
+    } catch (error) {
+      statusActive = false;
+      stopStatus?.();
+      retireSetup();
+      throw error;
+    }
     installingStatus = false;
     if (destroyed || client !== ownedClient || owner.retired) {
-      stopStatus();
+      stopStatus?.();
       if (setupOwner === owner) setupOwner = null;
       if (client === ownedClient) {
         client = null;
@@ -142,17 +164,26 @@ export function createPresenceController({ endpoint, factory = (options) => new 
     }
     statusStop = () => {
       statusActive = false;
-      stopStatus();
+      stopStatus?.();
     };
     let active = true;
-    const stopPeers = ownedClient.onPeers((snapshot) => {
-      if (active && !destroyed && client === ownedClient) {
-        peerChannel.publish(snapshot.map(({ gameId, x, y, facing, sprite }) => ({ id: gameId, x, y, facing, sprite })));
-      }
-    });
+    let stopPeers: (() => void) | null = null;
+    try {
+      stopPeers = ownedClient.onPeers((snapshot) => {
+        if (active && !destroyed && client === ownedClient) {
+          peerChannel.publish(snapshot.map(({ gameId, x, y, facing, sprite }) => ({ id: gameId, x, y, facing, sprite })));
+        }
+      });
+    } catch (error) {
+      active = false;
+      statusStop?.();
+      statusStop = null;
+      retireSetup();
+      throw error;
+    }
     peerStop = () => {
       active = false;
-      stopPeers();
+      stopPeers?.();
     };
     if (destroyed || client !== ownedClient || owner.retired) {
       peerStop();
