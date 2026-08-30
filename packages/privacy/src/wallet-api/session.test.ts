@@ -810,6 +810,23 @@ describe('WalletSession', () => {
     expect(discard).toHaveBeenCalledOnce();
   });
 
+  it('rejects an invalid leaves-below-fee warning before publishing review', async () => {
+    const selected = wallet('Ready');
+    const discard = vi.fn();
+    const warnings = [{ kind: 'leaves-below-fee' as const, remaining: -1n, feeEstimate: 1n }];
+    const connected = controllableConnection(
+      '0x111', operationsWithBatch({ ...batch(undefined, discard), warnings }, '0.10.3'), new FakePrivacyOperations(),
+    );
+    const session = createWalletSession(
+      denyAllOptions(),
+      { discovery: discoveryWith(selected), connectWallet: async () => connected.port },
+    );
+    await session.connect(session.getSnapshot().wallets[0]!.key);
+
+    await expect(session.operations.prepare([])).rejects.toMatchObject({ kind: 'unknown' });
+    expect(discard).toHaveBeenCalledOnce();
+  });
+
   it('rejects a sparse prepared-intents array before publishing review', async () => {
     const selected = wallet('Ready');
     const discard = vi.fn();

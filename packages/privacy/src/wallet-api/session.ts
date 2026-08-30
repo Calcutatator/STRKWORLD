@@ -729,6 +729,15 @@ function validWarning(value: unknown): boolean {
         && blocks && 'value' in blocks && Number.isSafeInteger(blocks.value) && blocks.value >= 0
       );
     }
+    case 'leaves-below-fee': {
+      const remaining = Object.getOwnPropertyDescriptor(value, 'remaining');
+      const estimate = Object.getOwnPropertyDescriptor(value, 'feeEstimate');
+      return Boolean(
+        remaining && 'value' in remaining && typeof remaining.value === 'bigint' && remaining.value >= 0n
+        && estimate && 'value' in estimate && typeof estimate.value === 'bigint' && estimate.value > 0n
+        && remaining.value < estimate.value
+      );
+    }
     default:
       return true;
   }
