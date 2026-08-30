@@ -429,7 +429,20 @@ export function createFixedRoomController(
       approachArmed = previousApproachArmed;
       throw error;
     }
-    options.onExit?.();
+    try {
+      options.onExit?.();
+    } catch (error) {
+      // Room presentation is an external lifecycle boundary. If it fails,
+      // keep this transition retryable unless the callback already retired or
+      // replaced the controller's ownership synchronously.
+      if (!destroyed && !inRoom) {
+        inRoom = true;
+        controlOwner = previousControlOwner;
+        highlightedStation = previousHighlightedStation;
+        approachArmed = previousApproachArmed;
+      }
+      throw error;
+    }
     if (destroyed || inRoom) return;
     publish();
     options.out.emit('building:exited', Object.freeze({

@@ -258,6 +258,26 @@ empty shell to fetchers, so a 200 there means nothing.
 
 ## 6. Findings log
 
+### 2026-08-30 — Fixed-room exit presentation failure remains retryable
+
+`FixedRoomController.leave()` relinquished room ownership before invoking the
+consumer-owned `onExit` callback. If that callback threw, the original error
+was propagated but the controller stayed outside the room, so a later exit
+retry became a no-op and could never complete the presentation handoff.
+
+Exit now restores the prior room ownership, control owner, highlighted station
+and approach-arm state when `onExit` throws, unless that callback synchronously
+destroyed or re-entered the controller. The existing post-callback ownership
+guard still suppresses stale publication/events, and normal exit ordering is
+unchanged.
+
+*Verified:* a red-first public fixed-room regression makes the first `onExit`
+callback throw, observes the old controller outside the room, then retries the
+same exit and confirms no second callback. The corrected path preserves the
+exact original error, keeps the room owned for retry, and completes the second
+exit. Focused fixed-room tests pass 54/54. No browser, wallet, provider, RPC,
+proof, signature, funds or transaction was used.
+
 ### 2026-08-30 — Batch intent validation ignores accessor-backed fields
 
 `createBatchAccumulator().accept()` previously read candidate intent fields
