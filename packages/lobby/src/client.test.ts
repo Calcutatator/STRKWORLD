@@ -902,6 +902,35 @@ describe('connect is idempotent', () => {
 });
 
 describe('presence', () => {
+  it('does not schedule reconciliation after move synchronously closes its room', async () => {
+    const joined = fakeRoom();
+    const joinOrCreate = vi
+      .spyOn(ColyseusClient.prototype, 'joinOrCreate')
+      .mockResolvedValueOnce(joined.room as never);
+    const timer = vi.spyOn(globalThis, 'setTimeout');
+    const client = new LobbyClient({ endpoint: server.endpoint, start: { x: 0, y: 0 } });
+
+    try {
+      const connecting = client.connect();
+      await Promise.resolve();
+      joined.welcome({ gameId: '0123456789abcdef' });
+      await connecting;
+      timer.mockClear();
+      joined.send.mockImplementationOnce((message: string) => {
+        expect(message).toBe('move');
+        joined.left(1006);
+      });
+
+      client.updatePosition(10, 0, 'right');
+
+      expect(client.status).toBe('closed');
+      expect(timer).not.toHaveBeenCalled();
+    } finally {
+      await client.disconnect();
+      timer.mockRestore();
+      joinOrCreate.mockRestore();
+    }
+  });
   it('keeps reconciliation timers within the timer ceiling through clock rollback', async () => {
     const joined = fakeRoom();
     const joinOrCreate = vi

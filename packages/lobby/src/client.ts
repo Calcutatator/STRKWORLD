@@ -558,7 +558,11 @@ export class LobbyClient {
 
     const elapsed = this.#lastSentAt === null ? null : now - this.#lastSentAt;
     if (elapsed === null || elapsed >= this.#minSendIntervalMs) {
-      this.#room.send(MESSAGE.move, desired);
+      const room = this.#room;
+      room.send(MESSAGE.move, desired);
+      // A transport can report closure synchronously from send. Do not stamp
+      // the retired room's send time or schedule work against its replacement.
+      if (this.#room !== room || this.#status !== 'connected') return;
       this.#lastSentAt = now;
       // Re-check after an interval: if the server accepted this move its state
       // change will clear #desired; if it was dropped by the server floor, we
