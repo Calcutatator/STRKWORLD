@@ -258,6 +258,28 @@ empty shell to fetchers, so a 200 there means nothing.
 
 ## 6. Findings log
 
+### 2026-08-30 — Avatar Studio ignores a stale outer figure update after reentrant publication
+
+`createAvatarStudioController.update()` published the newly highlighted figure
+before selecting it. An `onChange` consumer can synchronously call `update()`
+again, which lets the nested update select and publish figure B; the outer call
+then resumed with figure A and selected A over the newer state. The controller
+therefore exposed a highlighted figure B while the shared outfit selection had
+been rolled back to A.
+
+Each update now owns a monotonically increasing revision. After synchronous
+highlight publication and after selection delivery, the update verifies that
+its revision is still current before applying or publishing its stale figure.
+Destroy/leave guards remain authoritative, and ordinary non-reentrant figure
+contact keeps the same selection and event ordering.
+
+*Verified:* a public World regression re-enters from the first figure's
+`onChange` callback into a second figure contact. On the old path the final
+selection was `avatar-1` despite highlighted figure 2; the corrected path
+retains `avatar-2` and figure 2. The focused Avatar Studio suite passes 40
+tests. No browser, lobby server, wallet, provider, RPC, proof, signature,
+funds or transaction was used.
+
 ### 2026-08-30 — Backend response metadata and body reader share one owner
 
 The Backend privacy client captured coherent `ok` and `status` metadata, but

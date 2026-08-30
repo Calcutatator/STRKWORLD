@@ -493,6 +493,29 @@ describe('hidden Avatar Studio', () => {
     expect(events.filter((event) => event.event === 'avatar:selected')).toEqual([]);
   });
 
+  it('does not let a reentrant figure update apply the outer stale selection', () => {
+    const out: Pick<EventBus<WorldEvents>, 'emit'> = { emit: vi.fn() };
+    const selection = createAvatarOutfitSelection({ out });
+    let controller!: ReturnType<typeof createAvatarStudioController>;
+    let reentered = false;
+    controller = createAvatarStudioController({
+      out,
+      selection,
+      onChange: (state) => {
+        if (!reentered && state.highlightedFigure === 1) {
+          reentered = true;
+          controller.update({ x: 5, y: 3 });
+        }
+      },
+    });
+
+    controller.enter();
+    controller.update({ x: 2, y: 3 });
+
+    expect(selection.selected).toBe('avatar-2');
+    expect(controller.state.highlightedFigure).toBe(2);
+  });
+
   it('does not publish after avatar selection destroys the controller', () => {
     const snapshots: AvatarStudioState[] = [];
     const out: Pick<EventBus<WorldEvents>, 'emit'> = {

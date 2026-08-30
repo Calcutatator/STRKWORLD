@@ -378,6 +378,7 @@ export function createAvatarStudioController(
   let destroyed = false;
   let destroyPending = false;
   let destroying = false;
+  let updateRevision = 0;
 
   const state = (): AvatarStudioState => ({
     inRoom,
@@ -464,6 +465,7 @@ export function createAvatarStudioController(
     },
     update(tile): void {
       if (destroyed || !inRoom) return;
+      const ownRevision = ++updateRevision;
       if (isAvatarStudioExit(definition, tile.x, tile.y)) {
         leave();
         return;
@@ -475,12 +477,13 @@ export function createAvatarStudioController(
         publish();
       }
       // onChange delivery is synchronous and may destroy the Studio before
-      // this update resumes; do not select or emit after that lifecycle edge.
-      if (destroyed || !inRoom) return;
+      // this update resumes. It may also synchronously run a newer update;
+      // do not let this stale frame select or publish over that newer state.
+      if (destroyed || !inRoom || updateRevision !== ownRevision) return;
       if (figure && options.selection.select(figure.sprite)) {
         // Selection delivery is synchronous and can destroy or leave the
         // Studio; do not publish a snapshot for a retired lifecycle.
-        if (destroyed || !inRoom) return;
+        if (destroyed || !inRoom || updateRevision !== ownRevision) return;
         publish();
       }
     },
