@@ -31,6 +31,43 @@ describe('WalletSession', () => {
     expect(session.getSnapshot()).toMatchObject({ phase: 'connected', account: '0x111' });
   });
 
+  it('rejects a connection snapshot whose authority fields are inherited', async () => {
+    const selected = wallet('Ready');
+    const port = connection('0x111');
+    port.getSnapshot = () => Object.create({
+      account: '0x111',
+      chainId: '0x534e5f4d41494e',
+    }) as never;
+    const session = createWalletSession(
+      denyAllOptions(),
+      { discovery: discoveryWith(selected), connectWallet: async () => port },
+    );
+
+    await expect(session.connect(session.getSnapshot().wallets[0]!.key)).rejects.toMatchObject({ kind: 'unknown' });
+    expect(session.getSnapshot()).toMatchObject({ phase: 'failed', account: null });
+  });
+
+  it('does not invoke an accessor-backed connection snapshot field', async () => {
+    const selected = wallet('Ready');
+    const port = connection('0x111');
+    const snapshot = { account: '0x111', chainId: '0x534e5f4d41494e' } as {
+      account: string;
+      chainId: string;
+    };
+    Object.defineProperty(snapshot, 'account', {
+      configurable: true,
+      get() { throw new Error('connection account getter must not run'); },
+    });
+    port.getSnapshot = () => snapshot;
+    const session = createWalletSession(
+      denyAllOptions(),
+      { discovery: discoveryWith(selected), connectWallet: async () => port },
+    );
+
+    await expect(session.connect(session.getSnapshot().wallets[0]!.key)).rejects.toMatchObject({ kind: 'unknown' });
+    expect(session.getSnapshot()).toMatchObject({ phase: 'failed', account: null });
+  });
+
   it('starts a fresh same-key connection after disconnect retires a pending one', async () => {
     const selected = wallet('Ready');
     let releaseFirst!: (connection: WalletConnectionPort) => void;

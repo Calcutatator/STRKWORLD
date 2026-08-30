@@ -353,14 +353,14 @@ export function createWalletSession(
           destroyConnection(connected, true);
           return snapshot;
         }
-        const next = connected.getSnapshot();
+        const next = readConnectionSnapshot(connected.getSnapshot());
         assertAddress(next.account);
         connection = connected;
         const cleanup = connected.subscribe(() => {
           if (destroyed || connection !== connected) return;
           let changed: WalletConnectionSnapshot;
           try {
-            changed = connected.getSnapshot();
+            changed = readConnectionSnapshot(connected.getSnapshot());
           } catch {
             generation += 1;
             operations = null;
@@ -415,7 +415,7 @@ export function createWalletSession(
         if (destroyed || attempt !== generation || connection !== connected) {
           return snapshot;
         }
-        const current = connected.getSnapshot();
+        const current = readConnectionSnapshot(connected.getSnapshot());
         assertAddress(current.account);
         if (!sameFelt(current.chainId, expectedChainId)) {
           publish('wrong-network', null);
@@ -608,4 +608,20 @@ function sameFelt(left: string, right: string): boolean {
   } catch {
     return false;
   }
+}
+
+function readConnectionSnapshot(value: unknown): WalletConnectionSnapshot {
+  if (!hasOwnDataProperties(value, ['account', 'chainId'])) {
+    throw new PrivacyError('unknown', 'The wallet returned an invalid connection snapshot.');
+  }
+  const { account, chainId } = value as WalletConnectionSnapshot;
+  return { account, chainId };
+}
+
+function hasOwnDataProperties(value: unknown, keys: readonly PropertyKey[]): boolean {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return false;
+  return keys.every((key) => {
+    const descriptor = Object.getOwnPropertyDescriptor(value, key);
+    return Boolean(descriptor && 'value' in descriptor);
+  });
 }
