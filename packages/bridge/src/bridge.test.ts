@@ -1093,6 +1093,24 @@ describe('BridgeService', () => {
     expect(store.load()).toBeNull();
   });
 
+  it('rejects a coercible Near sender account before notifying 1Click', async () => {
+    const client = new StubClient();
+    const store = new MemoryBridgeStore();
+    const service = new BridgeService({ client, store, quoteVerifier: () => true, now: () => NOW });
+    await service.createManualDeposit({
+      source: SOURCE,
+      amountIn: 1_000_000n,
+      starknetRecipient: '0x123',
+      refundAddress: request.refundTo,
+    });
+
+    await expect(service.reportDepositTransaction(
+      '0xorigin-tx',
+      { toString: () => 'alice.near' } as unknown as string,
+    )).rejects.toThrow('The Near sender account is invalid.');
+    expect(client.depositRequests).toHaveLength(0);
+  });
+
   it('rejects a signed quote with an overlong deposit address', async () => {
     const client = new StubClient();
     const store = new MemoryBridgeStore();

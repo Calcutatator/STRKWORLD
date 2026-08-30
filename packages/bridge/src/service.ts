@@ -150,6 +150,9 @@ export class BridgeService {
     if (typeof txHash !== 'string' || txHash.length === 0 || txHash.length > 256 || /\s/.test(txHash)) {
       throw new Error('The origin deposit transaction hash is invalid.');
     }
+    if (nearSenderAccount !== undefined && typeof nearSenderAccount !== 'string') {
+      throw new Error('The Near sender account is invalid.');
+    }
     const record = this.resume();
     if (!record) throw new Error('No bridge deposit is available to resume.');
     const raw = await this.client.submitDepositTx({
