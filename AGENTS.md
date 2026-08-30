@@ -258,6 +258,28 @@ empty shell to fetchers, so a 200 there means nothing.
 
 ## 6. Findings log
 
+### 2026-08-30 — Wallet discovery display snapshots must bypass hostile reads
+
+`WalletSession` validated discovered wallet `name` and `icon` descriptors but
+then read those fields through ordinary property access while building its
+public selection snapshot. A descriptor-valid proxy could therefore throw from
+its `get` trap during session construction, leaking an arbitrary exception
+before the wallet-selection surface existed.
+
+Selection snapshots now reuse the validated own data descriptors inside a
+guarded projection. Malformed or newly hostile display objects are omitted
+without escaping through session construction or discovery publication; valid
+wallet identity objects remain unchanged for explicit connection. No wallet
+identity matching or financial operation behavior changes.
+
+*Verified:* a red-first public `createWalletSession()` regression supplied a
+descriptor-valid wallet proxy whose display `get` trap throws. The old path
+leaked that exception while constructing the initial snapshot; the corrected
+path publishes the expected frozen wallet choice without invoking the trap.
+Removing the descriptor projection restores the failure. Privacy tests pass 10
+files / 530 tests and package typecheck passes. No browser, wallet, provider,
+RPC, proof, signature, funds or transaction was used.*
+
 ### 2026-08-30 — Web World-event consumers own and validate payloads
 
 The Web visit, panel and presence consumers previously narrowed World event
