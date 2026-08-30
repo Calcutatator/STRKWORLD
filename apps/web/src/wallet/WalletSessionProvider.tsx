@@ -18,11 +18,12 @@ export function WalletSessionProvider({
   session: WalletSession;
   children: ReactNode;
 }) {
-  const snapshot = useSyncExternalStore(
-    session.subscribe,
-    session.getSnapshot,
-    session.getSnapshot,
+  const subscribe = useMemo(
+    () => (listener: () => void) => session.subscribe(listener),
+    [session],
   );
+  const getSnapshot = useMemo(() => () => session.getSnapshot(), [session]);
+  const snapshot = useSyncExternalStore(subscribe, getSnapshot, getSnapshot);
   const value = useMemo<WalletSessionRuntime>(() => Object.freeze({
     session,
     snapshot,

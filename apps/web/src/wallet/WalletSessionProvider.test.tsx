@@ -48,4 +48,21 @@ describe('WalletSessionProvider', () => {
     expect(captured.session).toBe(session);
     expect(captured.snapshot.account).toBe('0xabc');
   });
+
+  it('retains the WalletSession receiver for external-store callbacks', () => {
+    const session = sessionFixture();
+    const snapshot = session.getSnapshot();
+    session.getSnapshot = function (this: WalletSession) {
+      if (this !== session) throw new Error('WalletSession receiver lost');
+      return snapshot;
+    };
+    session.subscribe = function (this: WalletSession) {
+      if (this !== session) throw new Error('WalletSession receiver lost');
+      return () => undefined;
+    };
+
+    expect(() => renderToStaticMarkup(
+      <WalletSessionProvider session={session}><span>ready</span></WalletSessionProvider>,
+    )).not.toThrow();
+  });
 });

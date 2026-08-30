@@ -267,11 +267,12 @@ function WalletSessionConnectSync({
   session: WalletSession;
   connect: ConnectFlow;
 }) {
-  const snapshot = useSyncExternalStore(
-    session.subscribe,
-    session.getSnapshot,
-    session.getSnapshot,
+  const subscribe = useMemo(
+    () => (listener: () => void) => session.subscribe(listener),
+    [session],
   );
+  const getSnapshot = useMemo(() => () => session.getSnapshot(), [session]);
+  const snapshot = useSyncExternalStore(subscribe, getSnapshot, getSnapshot);
   const previous = useRef(snapshot);
   const mounted = useRef(false);
   useEffect(() => {
