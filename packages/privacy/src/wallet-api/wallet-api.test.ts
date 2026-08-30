@@ -1288,6 +1288,18 @@ describe('quote-bound swap plan admission', () => {
     return { ...base, ops };
   }
 
+  it('binds a private swap to the account owned at operation construction', async () => {
+    const { ops, wallet, prepared } = swapFixture();
+    (wallet as { address: string }).address = '0xdef';
+
+    const batch = await ops.prepare([SWAP]);
+    await batch.confirm({ feeCeiling: POOL_FEE + 1n });
+
+    expect(prepared[0]).toEqual(expect.arrayContaining([
+      expect.objectContaining({ type: 'transfer', recipient: '0xabc' }),
+    ]));
+  });
+
   it('does not hand an aborted swap confirmation to the wallet after its fee read', async () => {
     const { ops, pool, wallet, gateway } = swapFixture();
     const originalConfig = pool.config;

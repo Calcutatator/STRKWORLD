@@ -50,9 +50,12 @@ export class WalletApiPrivacyOperations implements PrivacyOperations {
   private readonly supportedVersions: SupportedVersionsReader;
   private readonly policy: WalletRoutePolicy;
   private readonly now: () => number;
+  private readonly walletAddress: Address;
 
   constructor(options: WalletApiPrivacyOperationsOptions) {
     this.wallet = options.wallet;
+    assertAddress(options.wallet.address, 'wallet account');
+    this.walletAddress = options.wallet.address;
     this.pool = options.pool;
     this.submission = options.submission;
     this.supportedVersions = options.supportedVersions;
@@ -282,14 +285,14 @@ export class WalletApiPrivacyOperations implements PrivacyOperations {
               recipient: plan.fee.recipient,
               amount: plan.fee.amount,
             },
-            takerAddress: owner.wallet.address,
+            takerAddress: owner.walletAddress,
           };
           const actions = buildStrk20Actions(avnuPlan);
           assertPreparedSwapActions(actions, {
             sellToken: canonicalIntent.tokenIn,
             sellAmount: canonicalIntent.amountIn,
             buyToken: canonicalIntent.tokenOut,
-            taker: owner.wallet.address,
+            taker: owner.walletAddress,
             executor: plan.executorAddress,
             executorCalls: reviewedCalls,
             fee: plan.fee,
