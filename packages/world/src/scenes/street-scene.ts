@@ -925,7 +925,15 @@ export function createStreetScene({ Phaser, onTileChanged, remotePeers }: Street
         throw error;
       }
       if (this.cleanedUp) return;
-      onTileChanged?.(tile);
+      try {
+        onTileChanged?.(tile);
+      } catch (error) {
+        // The tile observer is an external synchronous handoff. If it fails,
+        // keep this tile retryable unless a nested report or teardown already
+        // took ownership of the Scene's newer state.
+        if (!this.cleanedUp && this.lastTile === tile) this.lastTile = previousTile;
+        throw error;
+      }
     }
 
     private reportAvatarStudioTile(): void {

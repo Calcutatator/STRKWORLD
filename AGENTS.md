@@ -258,6 +258,25 @@ empty shell to fetchers, so a 200 there means nothing.
 
 ## 6. Findings log
 
+### 2026-08-30 — Street tile observers retain retryable ownership after failure
+
+`StreetScene.reportTile()` rolled back its `lastTile` sentinel when the door
+trigger failed, but an exception from the injected `onTileChanged` observer
+escaped after the sentinel was committed. A movement/presence handoff failure
+could therefore make the player remain on a tile that the Scene would never
+report again.
+
+The observer handoff now rolls back only its own sentinel when it fails. A
+nested report or Scene teardown that has already taken ownership remains
+authoritative, and the original observer error is preserved so the same tile
+can be retried after the external consumer recovers.
+
+*Verified:* a public StreetScene regression makes the first tile observer call
+throw; the old path retained `{x: 0, y: 0}` and suppressed the retry, while the
+corrected path restores `{-1, -1}` and successfully reports the same tile on
+the next call. Focused StreetScene lifecycle tests pass 26/26. No browser,
+wallet, provider, RPC, proof, signature, funds or transaction was used.
+
 ### 2026-08-30 — Avatar Studio presentation entry rolls back partial handoffs
 
 `createAvatarStudioPresentation.enter()` performed a sequence of external

@@ -459,6 +459,39 @@ describe('StreetScene lifecycle', () => {
     expect(tileReports).toBe(0);
   });
 
+  it('retries the tile observer after a failed movement handoff', () => {
+    let fail = true;
+    let tileReports = 0;
+    const SceneType = createStreetScene({
+      Phaser: { Scene: FakeScene } as never,
+      onTileChanged: () => {
+        tileReports += 1;
+        if (fail) throw new Error('tile observer failed');
+      },
+    });
+    const scene = new SceneType() as unknown as {
+      map: ReturnType<typeof createStreetMap>;
+      player: { x: number; y: number };
+      lastTile: { x: number; y: number };
+      doors: { update(tile: { x: number; y: number }): void };
+      cleanedUp: boolean;
+      reportTile(): void;
+    };
+    scene.map = createStreetMap();
+    scene.player = { x: 0, y: 0 };
+    scene.lastTile = { x: -1, y: -1 };
+    scene.cleanedUp = false;
+    scene.doors = { update: () => undefined };
+
+    expect(() => scene.reportTile()).toThrow('tile observer failed');
+    expect(scene.lastTile).toEqual({ x: -1, y: -1 });
+
+    fail = false;
+    expect(() => scene.reportTile()).not.toThrow();
+    expect(tileReports).toBe(2);
+    expect(scene.lastTile).toEqual({ x: 0, y: 0 });
+  });
+
   it('retries Avatar Studio entry after a failed transition on the same tile', () => {
     const harness = createWorldPlayHarness();
     harness.create();
