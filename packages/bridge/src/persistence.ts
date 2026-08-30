@@ -92,6 +92,10 @@ function isBridgeStatus(value: unknown): value is BridgeStatus {
       Object.prototype.hasOwnProperty.call(value, 'strkReceived'))
   ) return false;
   if (
+    (value.leg === 'quoted' || value.leg === 'awaiting-deposit') &&
+    Object.prototype.hasOwnProperty.call(value, 'depositTxHash')
+  ) return false;
+  if (
     Object.prototype.hasOwnProperty.call(value, 'depositTxHash') &&
     !isBoundedHash(value.depositTxHash)
   ) return false;
