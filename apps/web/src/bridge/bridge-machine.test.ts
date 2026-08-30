@@ -40,6 +40,19 @@ function harness(initial: BridgeRecord | null = null, planner: PublicShieldPlann
 }
 
 describe('Bridge shell machine', () => {
+  it('publishes an immutable panel API while retaining owned transitions', async () => {
+    const h = harness();
+    const originalDiscard = h.machine.discardRecord;
+
+    expect(Object.isFrozen(h.machine)).toBe(true);
+    expect(Reflect.set(h.machine, 'discardRecord', () => undefined)).toBe(false);
+    expect(Reflect.set(h.machine, 'planShield', async () => undefined)).toBe(false);
+    expect(h.machine.discardRecord).toBe(originalDiscard);
+    await h.machine.open();
+    h.machine.discardRecord();
+    expect(h.machine.store.getState().record).toBeNull();
+  });
+
   it('exposes a read-only immutable state snapshot to panel consumers', async () => {
     const h = harness(record());
     await h.machine.open();

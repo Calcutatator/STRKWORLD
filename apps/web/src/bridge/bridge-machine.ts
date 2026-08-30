@@ -322,7 +322,7 @@ export function createBridgePanel(options: BridgePanelOptions): BridgePanel {
     }
   }
 
-  return {
+  return Object.freeze<BridgePanel>({
     store,
 
     async open(): Promise<void> {
@@ -692,7 +692,7 @@ export function createBridgePanel(options: BridgePanelOptions): BridgePanel {
         if (revalidateOwner === owner) revalidateOwner = 0;
       }
     },
-  };
+  });
 }
 
 /** Small helper for the view; exact values only, never quote-derived shielding. */
