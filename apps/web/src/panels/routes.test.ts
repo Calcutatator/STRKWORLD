@@ -61,6 +61,17 @@ describe('route gate', () => {
     expect(routeDoor('vault.supply', [approvedButUndisclosed]).open).toBe(false);
   });
 
+  it('does not admit a route whose identifier is inherited', () => {
+    const inherited = Object.create(approvedDeviation) as RouteGrade;
+    expect(routeDoor('vault.supply', [inherited]).open).toBe(false);
+  });
+
+  it('does not admit approval fields inherited by an otherwise named route', () => {
+    const inherited = Object.create(approvedDeviation) as RouteGrade;
+    Object.defineProperty(inherited, 'route', { value: approvedDeviation.route });
+    expect(routeDoor('vault.supply', [inherited]).open).toBe(false);
+  });
+
   it('opens an approved and disclosed deviation', () => {
     expect(routeDoor('vault.supply', [approvedDeviation]).open).toBe(true);
   });

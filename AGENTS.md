@@ -258,6 +258,26 @@ empty shell to fetchers, so a 200 there means nothing.
 
 ## 6. Findings log
 
+### 2026-08-30 — Route resolvers require own route-grade fields
+
+The Web route resolver used ordinary property access on caller-supplied
+`RouteGrade` entries. A malformed entry could therefore inherit its route id
+or its approval/disclosure fields from a prototype and be treated as a graded,
+playable route. That would let configuration supplied through the public
+resolver boundary alter the privacy door without carrying an authored record.
+
+`findRoute()` now admits only object entries carrying every `RouteGrade` field
+as an own property before matching the route id. This keeps the canonical
+register and normal test fixtures unchanged while failing closed for inherited
+or partial route descriptors; route-door immutability and panel-registry
+ownership remain separate protections.
+
+*Verified:* red-first public route regressions supplied a descriptor inheriting
+the route id, then one with an own route id but inherited approval fields. Both
+were admitted before the guard and both now resolve to a locked unknown route.
+The focused routes suite passes 23/23; no browser, wallet, provider, RPC,
+proof, signature, funds or transaction was used.
+
 ### 2026-08-30 — Private swap planner quotes must target mainnet
 
 `BackendApi.prepareSwap()` previously checked only that an external planner
