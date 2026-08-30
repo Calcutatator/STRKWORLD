@@ -258,6 +258,26 @@ empty shell to fetchers, so a 200 there means nothing.
 
 ## 6. Findings log
 
+### 2026-08-30 — Wallet error classification contains hostile prototype checks
+
+`mapWalletError()` began by testing wallet failures with `instanceof
+PrivacyError` and then used `instanceof DOMException` for abort mapping. A
+proxy rejection can throw from its `getPrototypeOf` trap during either check,
+so an untrusted wallet failure escaped as a raw exception instead of becoming
+the existing opaque `PrivacyError` classification.
+
+Both prototype checks are now contained. Ordinary `PrivacyError` identity and
+abort classification remain unchanged; malformed or hostile failures continue
+through descriptor-owned metadata reads and map to the existing generic kind
+and message without invoking arbitrary error properties.
+
+*Verified:* a red-first public `mapWalletError()` regression supplied a proxy
+wallet failure whose `getPrototypeOf` trap throws. The old classifier leaked
+that exception; the corrected classifier returns `unreachable` with the
+standard opaque message. Removing the containment restores the failure. No
+browser, wallet, provider, RPC, proof, signature, funds or transaction was
+used.*
+
 ### 2026-08-30 — Wallet discovery display snapshots must bypass hostile reads
 
 `WalletSession` validated discovered wallet `name` and `icon` descriptors but
