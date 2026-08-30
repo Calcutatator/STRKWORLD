@@ -19,6 +19,14 @@ describe('normalizeGameId', () => {
     expect(normalizeGameId('0123456789abcdef')).toBe('0123456789abcdef');
   });
 
+  it('rejects an injected randomness source with the wrong byte length', () => {
+    for (const bytes of [new Uint8Array(0), new Uint8Array(9)]) {
+      expect(() => createGameId(() => bytes)).toThrow(
+        'Lobby game id randomness must return exactly 8 bytes',
+      );
+    }
+  });
+
   it('rejects anything else', () => {
     const rejected = [
       '',

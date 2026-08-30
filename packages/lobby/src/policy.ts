@@ -37,6 +37,9 @@ export function createGameId(
   random: (bytes: Uint8Array) => Uint8Array = defaultRandom,
 ): GameId {
   const bytes = random(new Uint8Array(8));
+  if (!(bytes instanceof Uint8Array) || bytes.length !== 8) {
+    throw new Error('Lobby game id randomness must return exactly 8 bytes');
+  }
   let out = '';
   for (const byte of bytes) out += byte.toString(16).padStart(2, '0');
   return out as GameId;
