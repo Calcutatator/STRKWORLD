@@ -611,6 +611,10 @@ function ownPreparedBatch(
     retireInvalidPrepared(prepared);
     throw new PrivacyError('unknown', 'The wallet returned an invalid prepared prompt count.');
   }
+  if (!denseDataArray(prepared.intents) || !denseDataArray(prepared.warnings)) {
+    retireInvalidPrepared(prepared);
+    throw new PrivacyError('unknown', 'The wallet returned invalid prepared review collections.');
+  }
   const intents = Object.freeze(prepared.intents.map((intent) => Object.freeze({ ...intent })));
   const warnings = Object.freeze(prepared.warnings.map((warning) => Object.freeze({ ...warning })));
   let discarded = false;
@@ -702,6 +706,15 @@ function isNonzeroFelt(value: string): boolean {
   } catch {
     return false;
   }
+}
+
+function denseDataArray(value: unknown): value is unknown[] {
+  if (!Array.isArray(value)) return false;
+  for (let index = 0; index < value.length; index += 1) {
+    const descriptor = Object.getOwnPropertyDescriptor(value, String(index));
+    if (!descriptor || !('value' in descriptor)) return false;
+  }
+  return true;
 }
 
 function retireInvalidPrepared(prepared: PreparedBatch): void {

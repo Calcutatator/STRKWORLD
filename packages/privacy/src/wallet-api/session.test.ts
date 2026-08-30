@@ -776,6 +776,24 @@ describe('WalletSession', () => {
     expect(prepared.warnings.every(Object.isFrozen)).toBe(true);
   });
 
+  it('rejects a sparse prepared-intents array before publishing review', async () => {
+    const selected = wallet('Ready');
+    const discard = vi.fn();
+    const intents = new Array(1) as PreparedBatch['intents'];
+    const underlying = { ...batch(undefined, discard), intents };
+    const connected = controllableConnection(
+      '0x111', operationsWithBatch(underlying, '0.10.3'), new FakePrivacyOperations(),
+    );
+    const session = createWalletSession(
+      denyAllOptions(),
+      { discovery: discoveryWith(selected), connectWallet: async () => connected.port },
+    );
+    await session.connect(session.getSnapshot().wallets[0]!.key);
+
+    await expect(session.operations.prepare([])).rejects.toMatchObject({ kind: 'unknown' });
+    expect(discard).toHaveBeenCalledOnce();
+  });
+
   it('rejects inconsistent prepared cost totals before publishing review', async () => {
     const selected = wallet('Ready');
     const discard = vi.fn();
