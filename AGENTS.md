@@ -276,6 +276,24 @@ the corrected resolver returns the existing locked unknown-route decision
 without invoking the accessor. Focused route tests pass 34/34. No browser,
 wallet, provider, RPC, proof, signature, funds or transaction was used.
 
+### 2026-08-30 — Exchange reviews use their supplied route authority
+
+`createExchangePanel()` accepted a caller-supplied route register for the
+Exchange door, but its prepared review derived disclosures from the global
+canonical register instead. A custom composition could therefore open using
+one route authority while showing the disclosure belonging to another, and
+the commit surface would not describe the route that admitted the panel.
+
+Swap review construction now passes the same register used for door admission
+into disclosure derivation. The canonical register and financial handoff are
+unchanged; custom registers remain an explicit test/composition seam.
+
+*Verified:* a red-first public Exchange-machine regression supplied a valid
+register with a distinct Exchange disclosure. The old review showed the global
+disclosure; the corrected review shows the supplied one. Removing the register
+argument reproduces the failure. Exchange tests pass 29/29. No browser,
+wallet, provider, RPC, proof, signature, funds or transaction was used.
+
 ### 2026-08-30 — Fixed-room input restoration cannot resume a retired transition
 
 `createFixedRoomController.enter()` and `leave()` crossed the injected input

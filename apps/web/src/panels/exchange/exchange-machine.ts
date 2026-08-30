@@ -188,7 +188,7 @@ export function createExchangePanel(options: {
           slippage: `${(safeReview.slippageBps / 100).toFixed(2)}%`,
           expiresAt: new Date(safeReview.expiresAt).toISOString(),
           poolFee: fee(batch.poolFee), networkCost: fee(batch.gasEstimate), total: fee(batch.totalCost),
-          disclosures: disclosuresForIntents(batch.intents, PRIVACY_REGISTER),
+          disclosures: disclosuresForIntents(batch.intents, register),
         };
         patch({ flow: { name: 'review', summary } });
       } catch (error) { fail(error, id); }
