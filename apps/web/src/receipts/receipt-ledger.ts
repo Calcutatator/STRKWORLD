@@ -50,7 +50,7 @@ export function createReceiptLedger(): ReceiptLedger {
     subscribe: ownerStore.subscribe,
   });
 
-  return {
+  return Object.freeze({
     store,
 
     record(receipt: Receipt): void {
@@ -76,7 +76,7 @@ export function createReceiptLedger(): ReceiptLedger {
         held.filter((receipt) => receiptIdentity(receipt.transactionHash) !== identity),
       ));
     },
-  };
+  });
 }
 
 function receiptIdentity(transactionHash: string): string {
