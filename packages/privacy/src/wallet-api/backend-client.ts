@@ -99,28 +99,29 @@ export class BackendPrivacyClient implements PoolReadClient, PrivateSubmissionGa
     const value = asRecord(raw);
     const fee = asRecord(ownField(value, 'fee'));
     const rawCalls = asArray(ownField(value, 'executorCalls'));
-    return {
+    const executorCalls = rawCalls.map((raw) => {
+      const call = asRecord(raw);
+      return Object.freeze({
+        contractAddress: asString(ownField(call, 'contractAddress')),
+        entrypoint: asString(ownField(call, 'entrypoint')),
+        calldata: Object.freeze(asArray(ownField(call, 'calldata')).map(asString)) as string[],
+      });
+    });
+    return Object.freeze({
       quoteId: asNonEmptyString(ownField(value, 'quoteId')),
       buyAmount: asDecimalBigInt(ownField(value, 'buyAmount')),
       expiresAt: asInteger(ownField(value, 'expiresAt')),
       chainId: asString(ownField(value, 'chainId')),
       executorAddress: asString(ownField(value, 'executorAddress')),
-      executorCalls: rawCalls.map((raw) => {
-        const call = asRecord(raw);
-        return {
-          contractAddress: asString(ownField(call, 'contractAddress')),
-          entrypoint: asString(ownField(call, 'entrypoint')),
-          calldata: asArray(ownField(call, 'calldata')).map(asString),
-        };
-      }),
-      fee: {
+      executorCalls: Object.freeze(executorCalls) as PreparedPrivateSwap['executorCalls'],
+      fee: Object.freeze({
         token: asString(ownField(fee, 'token')),
         recipient: asString(ownField(fee, 'recipient')),
         amount: asDecimalBigInt(ownField(fee, 'amount')),
         authorization: asString(ownField(fee, 'authorization')),
         expiresAtBlock: asInteger(ownField(fee, 'expiresAtBlock')),
-      },
-    };
+      }),
+    });
   }
 
   private async post(

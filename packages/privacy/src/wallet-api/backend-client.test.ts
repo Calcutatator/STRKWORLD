@@ -571,6 +571,30 @@ describe('BackendPrivacyClient', () => {
     );
   });
 
+  it('publishes an immutable private swap plan graph', async () => {
+    const client = new BackendPrivacyClient(
+      'https://backend.example',
+      async () => response({
+        quoteId: 'quote-1', buyAmount: '100', expiresAt: 2_000,
+        chainId: '0x534e5f4d41494e', executorAddress: '0x999',
+        executorCalls: [{ contractAddress: '0x111', entrypoint: 'swap', calldata: ['0xaaa'] }],
+        fee: { token: '0x4718', recipient: '0x789', amount: '7', authorization: 'auth', expiresAtBlock: 1450 },
+      }),
+    );
+
+    const plan = await client.prepareSwap({
+      sellToken: '0xabc', buyToken: '0x4718', sellAmount: 20n, minAmountOut: 90n, slippageBps: 100,
+    });
+
+    expect(Object.isFrozen(plan)).toBe(true);
+    expect(Object.isFrozen(plan.executorCalls)).toBe(true);
+    expect(Object.isFrozen(plan.executorCalls[0])).toBe(true);
+    expect(Object.isFrozen(plan.executorCalls[0]?.calldata)).toBe(true);
+    expect(Object.isFrozen(plan.fee)).toBe(true);
+    expect(Reflect.set(plan.executorCalls[0]!, 'entrypoint', 'forged')).toBe(false);
+    expect(plan.executorCalls[0]?.entrypoint).toBe('swap');
+  });
+
   it.each([
     ['buy amount', (body: Record<string, unknown>) => ({ ...body, buyAmount: '1.5' })],
     ['buy amount with whitespace', (body: Record<string, unknown>) => ({ ...body, buyAmount: ' 100' })],
