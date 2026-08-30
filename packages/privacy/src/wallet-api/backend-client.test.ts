@@ -425,4 +425,34 @@ describe('BackendPrivacyClient', () => {
       expect.objectContaining({ body: expect.stringContaining('"sellAmount":"20"') }),
     );
   });
+
+  it.each([
+    ['buy amount', (body: Record<string, unknown>) => ({ ...body, buyAmount: '1.5' })],
+    ['fee amount', (body: Record<string, unknown>) => ({
+      ...body,
+      fee: { ...(body.fee as Record<string, unknown>), amount: '1.5' },
+    })],
+  ])('maps malformed swap %s into a generic privacy error', async (_label, mutate) => {
+    const body = {
+      quoteId: 'quote-1',
+      buyAmount: '100',
+      expiresAt: 2_000,
+      chainId: '0x534e5f4d41494e',
+      executorAddress: '0x999',
+      executorCalls: [],
+      fee: { token: '0x4718', recipient: '0x789', amount: '7', authorization: 'auth', expiresAtBlock: 1450 },
+    };
+    const client = new BackendPrivacyClient(
+      'https://backend.example',
+      async () => response(mutate(body)),
+    );
+
+    await expect(client.prepareSwap({
+      sellToken: '0xabc',
+      buyToken: '0x4718',
+      sellAmount: 20n,
+      minAmountOut: 90n,
+      slippageBps: 100,
+    })).rejects.toMatchObject({ kind: 'unknown' });
+  });
 });

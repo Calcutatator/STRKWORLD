@@ -258,6 +258,27 @@ empty shell to fetchers, so a 200 there means nothing.
 
 ## 6. Findings log
 
+### 2026-08-30 — Malformed swap bigint fields stay inside the PrivacyError boundary
+
+`BackendPrivacyClient.prepareSwap()` previously called `BigInt()` directly for
+the backend's `buyAmount` and nested relay-fee `amount`. A malformed successful
+response such as the fractional string `1.5` therefore escaped as a raw
+JavaScript `SyntaxError` instead of the generic `PrivacyError('unknown')` used
+for invalid private-service responses. That exposed parser/runtime details to
+callers and made malformed swap responses behave differently from the other
+validated response fields.
+
+Swap bigint parsing now maps bigint conversion failures to the existing generic
+invalid-response error. Valid decimal and bigint-sized values retain their
+existing mapping; semantic amount bounds remain enforced by the operations
+layer and are unchanged.
+
+*Verified:* red-first public BackendPrivacyClient regressions cover malformed
+`buyAmount` and nested fee `amount`; both leaked `SyntaxError` before the
+parser guard and now reject with `kind: 'unknown'`. The focused backend-client
+suite passes 37 tests. No browser, external provider, RPC, wallet, proof,
+signature, funds or transaction was used.
+
 ### 2026-08-30 — Street door overlays claim Phaser objects before styling
 
 `StreetScene.createDoorOverlays()` previously stored each image only after
