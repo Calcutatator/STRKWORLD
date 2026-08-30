@@ -1014,6 +1014,36 @@ it('clears peer listeners even when room leave fails during disconnect', async (
 });
 
 describe('presence', () => {
+  it.each([
+    ['x', Number.NaN, 0],
+    ['y', 0, Number.POSITIVE_INFINITY],
+    ['x negative infinity', Number.NEGATIVE_INFINITY, 0],
+  ] as const)('does not send a non-finite %s update', async (_axis, x, y) => {
+    const joined = fakeRoom();
+    const joinOrCreate = vi
+      .spyOn(ColyseusClient.prototype, 'joinOrCreate')
+      .mockResolvedValueOnce(joined.room as never);
+    const timer = vi.spyOn(globalThis, 'setTimeout');
+    const client = new LobbyClient({ endpoint: server.endpoint, start: { x: 0, y: 0 } });
+
+    try {
+      const connecting = client.connect();
+      await Promise.resolve();
+      joined.welcome({ gameId: '0123456789abcde0' });
+      await connecting;
+      timer.mockClear();
+
+      client.updatePosition(x, y, 'right');
+
+      expect(joined.send).not.toHaveBeenCalled();
+      expect(timer).not.toHaveBeenCalled();
+    } finally {
+      await client.disconnect();
+      timer.mockRestore();
+      joinOrCreate.mockRestore();
+    }
+  });
+
   it('does not schedule reconciliation after move synchronously closes its room', async () => {
     const joined = fakeRoom();
     const joinOrCreate = vi

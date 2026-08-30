@@ -254,6 +254,10 @@ export class LobbyClient {
    */
   updatePosition(x: number, y: number, facing: Facing = 'down'): void {
     if (this.#status !== 'connected' || this.#room === null) return;
+    // The server rejects non-finite coordinates. Ignore malformed frame input
+    // before it becomes a desired position that reconciliation would retry
+    // forever at the client send interval.
+    if (!Number.isFinite(x) || !Number.isFinite(y)) return;
     this.#desired = { x: Math.round(x), y: Math.round(y), facing };
     this.#pump(performance.now());
   }

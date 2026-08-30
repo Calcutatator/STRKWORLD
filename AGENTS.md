@@ -258,6 +258,25 @@ empty shell to fetchers, so a 200 there means nothing.
 
 ## 6. Findings log
 
+### 2026-08-30 — Lobby client drops non-finite movement updates
+
+`LobbyClient.updatePosition()` rounded and queued every caller-provided
+coordinate without checking finiteness. `NaN` or an infinity therefore crossed
+the client-to-server move boundary immediately; because the server rejects
+such placements, the desired value remained unconfirmed and reconciliation
+would keep retrying malformed movement at the send interval.
+
+The client now ignores updates with non-finite `x` or `y` before changing its
+desired placement or scheduling reconciliation. Valid finite coordinates,
+server-side bounds/clamping, facing, and send-floor behavior are unchanged;
+this is a defensive client boundary and does not widen lobby state.
+
+*Verified:* red-first public Lobby regressions supplied `NaN`, positive infinity
+and negative infinity through `updatePosition()`; the old path sent each
+malformed `move` payload, while the corrected path sends none and schedules no
+retry. The focused Lobby client suite passes 69 tests. No browser, World,
+wallet, provider, RPC, proof, signature, funds or transaction was used.
+
 ### 2026-08-30 — Web room resolution fails closed for malformed panel containers
 
 `resolveRoom()` already rejected inherited panel descriptors, but it assumed
