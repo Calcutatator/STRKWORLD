@@ -236,12 +236,12 @@ export class WalletApiPrivacyOperations implements PrivacyOperations {
       totalCost: config.feeAmount + plan.fee.amount,
       warnings,
       promptCount: 1,
-      swapReview: {
+      swapReview: Object.freeze({
         expectedAmountOut: plan.buyAmount,
         minimumAmountOut: canonicalIntent.minAmountOut,
         slippageBps: swapPolicy.slippageBps,
         expiresAt: plan.expiresAt,
-      },
+      }),
       async confirm({ feeCeiling, onProgress, signal: confirmSignal }) {
         if (discarded) throw new PrivacyError('unknown', 'batch already discarded');
         assertFirstConfirmation(confirmationAttempted);

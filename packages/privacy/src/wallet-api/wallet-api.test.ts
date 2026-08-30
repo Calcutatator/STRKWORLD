@@ -685,6 +685,10 @@ describe('Wallet API action routes', () => {
     expect(batch.swapReview).not.toHaveProperty('executorAddress');
     expect(batch.swapReview).not.toHaveProperty('executorCalls');
     expect(batch.swapReview).not.toHaveProperty('fee');
+    const reviewedOutput = batch.swapReview!.expectedAmountOut;
+    expect(Object.isFrozen(batch.swapReview)).toBe(true);
+    expect(Reflect.set(batch.swapReview!, 'expectedAmountOut', 1n)).toBe(false);
+    expect(batch.swapReview!.expectedAmountOut).toBe(reviewedOutput);
     expect(batch.totalCost).toBe(POOL_FEE + 1n);
     await expect(batch.confirm({ feeCeiling: POOL_FEE + 1n })).resolves.toEqual({
       transactionHash: '0xprivate',
