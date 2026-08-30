@@ -99,8 +99,9 @@ export class WalletApiPrivacyOperations implements PrivacyOperations {
     if (!Array.isArray(tokens) || tokens.some((token) => !isFelt(token))) {
       throw new PrivacyError('unknown', 'The requested balance tokens are invalid.');
     }
+    const requestedTokens = [...tokens];
     try {
-      const balances = await this.wallet.strk20Balances(tokens);
+      const balances = await this.wallet.strk20Balances(requestedTokens);
       throwIfAborted(signal);
       if (!Array.isArray(balances)) {
         throw new PrivacyError('unknown', 'The wallet returned an invalid balance response.');
