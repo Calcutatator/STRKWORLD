@@ -448,6 +448,25 @@ describe('StreetScene lifecycle', () => {
     harness.shutdown();
   });
 
+  it('does not retain Scene Studio mode when presentation entry fails', () => {
+    const harness = createWorldPlayHarness();
+    harness.create();
+    const error = new Error('studio presentation failed');
+    vi.spyOn(harness.scene.avatarStudioPresentation, 'enter').mockImplementationOnce(() => {
+      throw error;
+    });
+
+    expect(() => harness.scene.avatarStudio.enter()).toThrow(error);
+    expect(harness.scene.avatarStudio.state.inRoom).toBe(false);
+    expect(harness.scene.avatarStudioActive).toBe(false);
+
+    expect(() => harness.scene.avatarStudio.enter()).not.toThrow();
+    expect(harness.scene.avatarStudio.state.inRoom).toBe(true);
+    expect(harness.scene.avatarStudioActive).toBe(true);
+
+    harness.shutdown();
+  });
+
   it('retries fixed-room entry after a failed transition on the same tile', () => {
     const harness = createWorldPlayHarness();
     harness.create();
@@ -959,6 +978,8 @@ interface WorldPlayScene extends FakeScene {
   avatarVisual?: { select(sprite: AvatarSpriteKey): void; update(input: unknown, sprinting: boolean): void };
   inputGate: InputGate;
   avatarStudio: AvatarStudioController;
+  avatarStudioActive: boolean;
+  avatarStudioPresentation: { enter(): void; exit(): void; destroy(): void };
   roomControllers: Partial<Record<string, FixedRoomController>>;
   create(): void;
   cleanShutdown(): void;

@@ -258,6 +258,26 @@ empty shell to fetchers, so a 200 there means nothing.
 
 ## 6. Findings log
 
+### 2026-08-30 — Avatar Studio Scene mode rolls back after presentation failure
+
+`StreetScene.enterAvatarStudioRoom()` marked the Scene's
+`avatarStudioActive` flag before invoking the presentation handoff. If that
+injected presentation callback threw, the Avatar Studio controller rolled back
+to outside state but the Scene retained Studio mode, so later updates followed
+the Studio movement path for a controller that was not in the Studio.
+
+The Scene now clears its mode flag when presentation entry fails, preserving
+the original error and allowing the controller's retryable entry transition to
+run normally on the next attempt. Successful entry ordering and ordinary
+teardown are unchanged.
+
+*Verified:* a red-first public StreetScene regression makes the presentation
+entry callback throw, then confirms the controller and Scene both remain
+outside; the old path left `avatarStudioActive` true. The retry then succeeds
+and both report Studio mode. World tests pass 24 files / 329 tests; World
+typecheck and invariants pass. No browser, wallet, provider, RPC, proof,
+signature, funds or transaction was used.
+
 ### 2026-08-30 — Bank HUD pending state retires on panel unmount
 
 `BankPanel` published `hud:pending` while preparing or submitting, but had no

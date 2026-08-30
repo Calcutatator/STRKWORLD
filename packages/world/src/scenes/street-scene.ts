@@ -664,7 +664,15 @@ export function createStreetScene({ Phaser, onTileChanged, remotePeers }: Street
       this.avatarStudioActive = true;
       this.activeRoom = undefined;
       this.lastTile = { x: -1, y: -1 };
-      this.avatarStudioPresentation?.enter();
+      try {
+        this.avatarStudioPresentation?.enter();
+      } catch (error) {
+        // The controller rolls back its own room state when this presentation
+        // handoff fails. Keep the Scene's mode flag aligned with that rollback
+        // so a later update cannot run the player through a retired Studio.
+        this.avatarStudioActive = false;
+        throw error;
+      }
     }
 
     private exitAvatarStudioRoom(): void {
