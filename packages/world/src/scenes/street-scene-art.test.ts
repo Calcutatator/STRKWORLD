@@ -1,9 +1,17 @@
 import { describe, expect, it, vi } from 'vitest';
 import { BANK_ROOM_DEFINITION, createFixedRoom } from '../fixed-room.js';
 import { createStreetMap } from '../map/street.js';
-import { createStreetScene, doorOverlayLayout } from './street-scene.js';
+import { createStreetScene, doorOverlayLayout, TILE_INDEX } from './street-scene.js';
 
 describe('street Kenney door presentation', () => {
+  it('keeps the shared tile render indices immutable', () => {
+    expect(Object.isFrozen(TILE_INDEX)).toBe(true);
+    expect(() => {
+      (TILE_INDEX as Record<string, number>).wall = 99;
+    }).toThrow(TypeError);
+    expect(TILE_INDEX.wall).toBe(3);
+  });
+
   it('keeps the two-tile trigger but centers a native-size door over a facade surround', () => {
     const bankDoor = createStreetMap().doors.find((door) => door.building === 'bank')!;
 

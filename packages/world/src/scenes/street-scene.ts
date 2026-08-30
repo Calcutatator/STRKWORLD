@@ -923,10 +923,10 @@ function worldToRoomTile(x: number, y: number): { x: number; y: number } {
 }
 
 /** Index of each tile kind within the generated tileset strip. */
-export const TILE_INDEX: Record<TileKind, number> = {
+export const TILE_INDEX: Readonly<Record<TileKind, number>> = Object.freeze({
   grass: 0,
   road: 1,
   pavement: 2,
   wall: 3,
   facade: 4,
-};
+});
