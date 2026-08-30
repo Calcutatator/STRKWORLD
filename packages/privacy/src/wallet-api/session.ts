@@ -111,11 +111,25 @@ export function createWalletSession(
   }
 
   function choices(): readonly WalletChoice[] {
-    return Object.freeze(wallets.map((wallet) => Object.freeze({
-      key: keyFor(wallet),
-      name: wallet.name,
-      icon: wallet.icon,
-    })));
+    const result: WalletChoice[] = [];
+    for (const wallet of wallets) {
+      try {
+        const name = Object.getOwnPropertyDescriptor(wallet, 'name');
+        const icon = Object.getOwnPropertyDescriptor(wallet, 'icon');
+        if (
+          !name || !('value' in name) || typeof name.value !== 'string'
+          || !icon || !('value' in icon) || typeof icon.value !== 'string'
+        ) continue;
+        result.push(Object.freeze({
+          key: keyFor(wallet),
+          name: name.value,
+          icon: icon.value,
+        }));
+      } catch {
+        // A malformed discovery object must not escape through the snapshot.
+      }
+    }
+    return Object.freeze(result);
   }
 
   function buildSnapshot(
