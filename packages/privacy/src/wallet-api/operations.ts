@@ -111,10 +111,24 @@ export class WalletApiPrivacyOperations implements PrivacyOperations {
       }
       const seenTokens = new Set<bigint>();
       const published = balances.map((entry) => {
-        if (!hasOwnDataProperties(entry, ['token', 'balance'])) {
+        let token: unknown;
+        let balance: unknown;
+        try {
+          const tokenDescriptor = Object.getOwnPropertyDescriptor(entry, 'token');
+          const balanceDescriptor = Object.getOwnPropertyDescriptor(entry, 'balance');
+          if (
+            !tokenDescriptor
+            || !('value' in tokenDescriptor)
+            || !balanceDescriptor
+            || !('value' in balanceDescriptor)
+          ) {
+            throw new Error('missing balance data property');
+          }
+          token = tokenDescriptor.value;
+          balance = balanceDescriptor.value;
+        } catch {
           throw new PrivacyError('unknown', 'The wallet returned an invalid balance.');
         }
-        const { token, balance } = entry;
         if (typeof token !== 'string' || !isFelt(token) || typeof balance !== 'string' || !isFelt(balance)) {
           throw new PrivacyError('unknown', 'The wallet returned an invalid balance.');
         }

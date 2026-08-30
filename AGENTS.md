@@ -258,6 +258,29 @@ empty shell to fetchers, so a 200 there means nothing.
 
 ## 6. Findings log
 
+### 2026-08-30 — Wallet balances publish descriptor-owned values
+
+The balance decoder checked that wallet entries exposed own data properties,
+but then destructured `token` and `balance` through ordinary property reads.
+A stateful proxy could therefore present valid descriptors and substitute a
+different token or amount for the immutable balance snapshot published to the
+game. Accessor-only and inherited fields were rejected, but descriptor checks
+alone did not own the values.
+
+Balance decoding now reads both fields directly from their own data-property
+descriptors inside the controlled wallet-result boundary. Descriptor traps are
+mapped to the existing invalid-balance failure, and the subsequent felt,
+requested-token, duplicate-token and immutable-publication rules operate only
+on those owned scalar values.
+
+*Verified:* a public Wallet API regression supplies a stateful proxy whose
+balance descriptor says `0x64` while ordinary reads substitute `0x32`. The base
+published total 50 and invoked the proxy trap; the corrected decoder publishes
+total 100 and records zero ordinary reads. Focused Wallet API verification
+passes 190 tests and privacy typecheck passes. Full workspace gates are
+recorded in the owning commit. Deterministic fakes only: no browser, external
+provider, RPC, wallet, proof, signature, funds or transaction was used.*
+
 ### 2026-08-30 — Production bootstrap destroys rejected session candidates
 
 After the bootstrap began freezing and revalidating loaded sessions, a

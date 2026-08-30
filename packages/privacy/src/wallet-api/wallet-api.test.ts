@@ -205,6 +205,27 @@ describe('WalletApiPrivacyOperations capability and reads', () => {
     await expect(ops.balances([TOKEN])).rejects.toMatchObject({ kind: 'unknown' });
   });
 
+  it('owns balance descriptor values before a stateful proxy can substitute them', async () => {
+    const { ops, wallet } = fixture();
+    const source = { token: TOKEN, balance: '0x64' };
+    let reads = 0;
+    const entry = new Proxy(source, {
+      get(target, key, receiver) {
+        if (key === 'balance') {
+          reads += 1;
+          return '0x32';
+        }
+        return Reflect.get(target, key, receiver);
+      },
+    });
+    vi.spyOn(wallet, 'strk20Balances').mockResolvedValue([entry]);
+
+    await expect(ops.balances([TOKEN])).resolves.toEqual([
+      { token: TOKEN, total: 100n, spendable: 0n, maturing: 0n, maturityKnown: false },
+    ]);
+    expect(reads).toBe(0);
+  });
+
   it.each([
     ['null', null],
     ['missing transaction hash', {}],
