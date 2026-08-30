@@ -907,6 +907,32 @@ describe('Wallet API action routes', () => {
  * pinned to reject before the wallet is asked to prove anything.
  */
 describe('quote-bound swap plan admission', () => {
+  it('rejects executor call fields supplied only by the object prototype', async () => {
+    const inheritedCall = Object.create({
+      contractAddress: '0x111',
+      entrypoint: 'swap',
+      calldata: ['0xaaa'],
+    });
+    const { ops } = swapFixture(undefined, { executorCalls: [inheritedCall] });
+
+    await expect(ops.prepare([SWAP])).rejects.toMatchObject({ kind: 'unknown' });
+  });
+
+  it('does not invoke an accessor-backed executor call field', async () => {
+    const accessorCall = { contractAddress: '0x111', entrypoint: 'swap', calldata: ['0xaaa'] } as {
+      contractAddress: string;
+      entrypoint: string;
+      calldata: string[];
+    };
+    Object.defineProperty(accessorCall, 'entrypoint', {
+      configurable: true,
+      get() { throw new Error('executor call getter must not run'); },
+    });
+    const { ops } = swapFixture(undefined, { executorCalls: [accessorCall] });
+
+    await expect(ops.prepare([SWAP])).rejects.toMatchObject({ kind: 'unknown' });
+  });
+
   const CHAIN = '0x534e5f4d41494e';
   const MAX_U256 = (1n << 256n) - 1n;
   const SWAP: Intent = { kind: 'swap', tokenIn: TOKEN, tokenOut: STRK, amountIn: 20n, minAmountOut: 90n };

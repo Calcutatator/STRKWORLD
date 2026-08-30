@@ -323,7 +323,10 @@ export class WalletApiPrivacyOperations implements PrivacyOperations {
       throw new PrivacyError('unknown', 'The private swap contains no executor calls.');
     }
     for (const call of plan.executorCalls) {
-      if (!call || typeof call !== 'object' || Array.isArray(call) || !Array.isArray(call.calldata)) {
+      if (
+        !hasOwnDataProperties(call, ['contractAddress', 'entrypoint', 'calldata'])
+        || !Array.isArray(call.calldata)
+      ) {
         throw new PrivacyError('unknown', 'The private swap contains malformed executor calls.');
       }
       assertAddress(call.contractAddress, 'private swap call target');
