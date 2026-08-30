@@ -589,6 +589,11 @@ describe('BridgeService', () => {
     expect(store.load()).toBeNull();
   });
 
+  it.each([null, 42, {}, []] as const)('fails closed for a non-string decoder input %s', (raw) => {
+    expect(() => deserializeBridgeRecord(raw as never)).not.toThrow();
+    expect(deserializeBridgeRecord(raw as never)).toBeNull();
+  });
+
   it.each([
     ['zero', '0'],
     ['negative', '-1'],

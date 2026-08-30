@@ -52,6 +52,7 @@ export function serializeBridgeRecord(record: BridgeRecord): string {
 }
 
 export function deserializeBridgeRecord(raw: string): BridgeRecord | null {
+  if (typeof raw !== 'string') return null;
   if (
     raw.length > MAX_RESUME_RECORD_BYTES ||
     new TextEncoder().encode(raw).byteLength > MAX_RESUME_RECORD_BYTES
