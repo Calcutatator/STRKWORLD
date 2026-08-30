@@ -360,22 +360,33 @@ export function createFixedRoomController(
   const publish = (): void => options.onChange?.(state());
   const ownsWorldControl = (): boolean => controlOwner === 'world';
 
-  const stopStations = options.in?.on('world:stations', (payload) => {
-    if (destroyed || !inRoom || payload.building !== options.definition.building) return;
-    stations = normalizeFixedRoomStations(options.definition, payload.stations);
-    publish();
-  });
-  const stopOwner = options.in?.on('world:control-owner', (payload) => {
-    if (destroyed || !inRoom || payload.building !== options.definition.building) return;
-    controlOwner = payload.owner;
-    if (controlOwner === 'shell') options.input.suspend();
-    else options.input.resume();
-    publish();
-  });
-  const stopExit = options.in?.on('world:exit-building', (payload) => {
-    if (destroyed || !inRoom || payload.building !== options.definition.building) return;
-    leave();
-  });
+  let stopStations: (() => void) | undefined;
+  let stopOwner: (() => void) | undefined;
+  let stopExit: (() => void) | undefined;
+  try {
+    stopStations = options.in?.on('world:stations', (payload) => {
+      if (destroyed || !inRoom || payload.building !== options.definition.building) return;
+      stations = normalizeFixedRoomStations(options.definition, payload.stations);
+      publish();
+    });
+    stopOwner = options.in?.on('world:control-owner', (payload) => {
+      if (destroyed || !inRoom || payload.building !== options.definition.building) return;
+      controlOwner = payload.owner;
+      if (controlOwner === 'shell') options.input.suspend();
+      else options.input.resume();
+      publish();
+    });
+    stopExit = options.in?.on('world:exit-building', (payload) => {
+      if (destroyed || !inRoom || payload.building !== options.definition.building) return;
+      leave();
+    });
+  } catch (error) {
+    for (const stop of [stopExit, stopOwner, stopStations]) {
+      if (!stop) continue;
+      try { stop(); } catch { /* preserve registration failure */ }
+    }
+    throw error;
+  }
 
   function leave(): void {
     if (!inRoom) return;

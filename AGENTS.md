@@ -258,6 +258,25 @@ empty shell to fetchers, so a 200 there means nothing.
 
 ## 6. Findings log
 
+### 2026-08-30 — Fixed-room listener registration rolls back partial controllers
+
+`createFixedRoomController()` previously registered the three Shell listeners
+sequentially without retaining or rolling back registrations when a later
+`in.on()` call threw. During `StreetScene.createFixedRooms()`, that leaves a
+partially-constructed controller's earlier listener attached even though the
+controller is never stored and cannot be reached by Scene cleanup.
+
+Controller construction now rolls back every listener registration acquired
+before the failing registration, preserves the original registration error,
+and attempts all rollback callbacks even if one rollback throws. Normal
+controller ownership, listener behavior and destroy idempotence are unchanged.
+
+*Verified:* a red-first World regression makes the second Shell listener
+registration throw and observes the first stop callback was not called on the
+old path; the corrected test calls it once. Focused fixed-room tests pass 36/36.
+No browser, wallet, provider, RPC, proof, signature, funds or transaction was
+used.
+
 ### 2026-08-30 — Dynamic room labels claim ownership before styling
 
 `StreetScene.renderRoom()` previously inserted a newly-created station label

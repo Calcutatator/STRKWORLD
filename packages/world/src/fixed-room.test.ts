@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import type { EventBus, ShellEvents, WorldEvents } from '@strkworld/shared';
 import {
   BANK_ROOM_DEFINITION,
@@ -302,6 +302,25 @@ describe('fixed room station admission', () => {
 });
 
 describe('fixed room controller', () => {
+  it('rolls back shell listeners when a later listener registration throws', () => {
+    const registrationError = new Error('shell listener registration failed');
+    const firstStop = vi.fn();
+    let registrations = 0;
+    const shell = {
+      on: vi.fn(() => {
+        if (registrations === 1) throw registrationError;
+        registrations += 1;
+        return firstStop;
+      }),
+    };
+    expect(() => createFixedRoomController({
+      definition: POST_OFFICE_ROOM_DEFINITION,
+      out: bus<WorldEvents>(),
+      in: shell as never,
+      input: { suspend: vi.fn(), resume: vi.fn() },
+    })).toThrow(registrationError);
+    expect(firstStop).toHaveBeenCalledOnce();
+  });
   it('does not activate a station after onChange destroys the controller', () => {
     let controller: ReturnType<typeof createFixedRoomController> | undefined;
     const h = harness(POST_OFFICE_ROOM_DEFINITION, (state) => {
