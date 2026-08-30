@@ -184,6 +184,35 @@ describe('WalletApiPrivacyOperations capability and reads', () => {
     ]);
   });
 
+  it('publishes immutable live balance snapshots', async () => {
+    const { ops } = fixture();
+
+    const balances = await ops.balances([TOKEN]);
+
+    expect(Object.isFrozen(balances)).toBe(true);
+    expect(balances.every(Object.isFrozen)).toBe(true);
+    expect(Reflect.set(balances[0]!, 'total', 0n)).toBe(false);
+    expect(balances[0]?.total).toBe(100n);
+  });
+
+  it('publishes an immutable live pool snapshot distinct from the backend owner', async () => {
+    const { ops, pool } = fixture();
+    const source = {
+      feeAmount: POOL_FEE,
+      feeToken: STRK,
+      proofValidityBlocks: 450,
+      noteMaturityBlocks: 10,
+    };
+    vi.spyOn(pool, 'config').mockResolvedValue(source);
+
+    const config = await ops.poolConfig();
+
+    expect(config).not.toBe(source);
+    expect(Object.isFrozen(config)).toBe(true);
+    expect(Reflect.set(config, 'feeAmount', 0n)).toBe(false);
+    expect(config.feeAmount).toBe(POOL_FEE);
+  });
+
   it.each([
     ['null', null],
     ['object', {}],

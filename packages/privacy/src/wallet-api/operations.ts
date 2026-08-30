@@ -88,7 +88,7 @@ export class WalletApiPrivacyOperations implements PrivacyOperations {
     try {
       const config = await this.pool.config(signal);
       throwIfAborted(signal);
-      return config;
+      return Object.freeze({ ...config });
     } catch (error) {
       throw mapWalletError(error);
     }
@@ -106,7 +106,7 @@ export class WalletApiPrivacyOperations implements PrivacyOperations {
       if (!Array.isArray(balances)) {
         throw new PrivacyError('unknown', 'The wallet returned an invalid balance response.');
       }
-      return balances.map((entry) => {
+      const published = balances.map((entry) => {
         if (!hasOwnDataProperties(entry, ['token', 'balance'])) {
           throw new PrivacyError('unknown', 'The wallet returned an invalid balance.');
         }
@@ -118,14 +118,15 @@ export class WalletApiPrivacyOperations implements PrivacyOperations {
         if (total < 0n) {
           throw new PrivacyError('unknown', 'The wallet returned an invalid balance.');
         }
-        return {
+        return Object.freeze({
           token,
           total,
           spendable: 0n,
           maturing: 0n,
           maturityKnown: false,
-        };
+        });
       });
+      return Object.freeze(published) as PrivateBalance[];
     } catch (error) {
       throw mapWalletError(error);
     }
