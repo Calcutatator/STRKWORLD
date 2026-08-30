@@ -145,11 +145,17 @@ export function createPresenceController({ endpoint, factory = (options) => new 
     const sprite = currentSprite;
     const owner = { retired: false };
     setupOwner = owner;
-    const ownedClient = factory({
-      endpoint,
-      start: placement ?? { x: 0, y: 0, facing: 'down' },
-      sprite,
-    });
+    let ownedClient: PresenceClient;
+    try {
+      ownedClient = factory({
+        endpoint,
+        start: placement ?? { x: 0, y: 0, facing: 'down' },
+        sprite,
+      });
+    } catch {
+      if (setupOwner === owner) setupOwner = null;
+      return null;
+    }
     client = ownedClient;
     clientSprite = sprite;
     let installingStatus = true;

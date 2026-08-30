@@ -643,6 +643,31 @@ describe('presence controller', () => {
     stop();
   });
 
+  it('keeps reconnect fail-closed when the client factory throws', async () => {
+    const world = createEventBus<WorldEvents>();
+    const made = fakeClient();
+    const factoryFailure = new Error('factory failed');
+    let attempts = 0;
+    const factory = vi.fn(() => {
+      if (attempts++ < 2) throw factoryFailure;
+      return made.client;
+    });
+    const presence = createPresenceController({ endpoint: 'ws://example', factory });
+    const stop = presence.listen(world);
+    const consoleError = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+
+    world.emit('player:moved', moved);
+    expect(() => presence.reconnect()).not.toThrow();
+    expect(presence.getState()).toEqual({ status: 'unavailable', canReconnect: true });
+    expect(() => presence.reconnect()).not.toThrow();
+    await Promise.resolve();
+
+    expect(factory).toHaveBeenCalledTimes(3);
+    expect(made.client.connect).toHaveBeenCalledOnce();
+    consoleError.mockRestore();
+    stop();
+  });
+
   it('queues reconnect before the first placement without inventing coordinates', async () => {
     const world = createEventBus<WorldEvents>();
     const made = fakeClient();

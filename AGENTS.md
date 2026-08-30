@@ -258,6 +258,28 @@ empty shell to fetchers, so a 200 there means nothing.
 
 ## 6. Findings log
 
+### 2026-08-30 — Presence client factory failures stay fail-closed
+
+`PresenceController` contained transport `connect()` failures but invoked the
+client factory outside that boundary. A synchronous factory failure during an
+explicit reconnect therefore escaped the public reconnect action instead of
+leaving the controller safely unavailable for a later retry.
+
+Client construction now retires the in-progress setup owner and returns no
+client when the factory throws. No status or peer listeners have been
+installed at that point, so the existing unavailable state remains the safe
+projection and a subsequent explicit reconnect may retry construction. Errors
+from status/peer listener registration remain on their existing setup rollback
+path; transport disconnect reporting is unchanged.
+
+*Verified:* a public regression makes the factory throw for the initial join
+and first explicit reconnect, then recover; the old path throws from the
+reconnect action, while the corrected path stays unavailable and successfully
+constructs/connects on the next request. The focused presence suite passes 58
+tests; full workspace tests and typechecks, the Web build, invariants, and
+diff hygiene are green. No browser, lobby server, wallet, provider, RPC,
+proof, signature, funds or transaction was used.
+
 ### 2026-08-30 — Backend response body readers are descriptor-owned
 
 The Backend privacy client owned a response's `ok` and `status` values through
