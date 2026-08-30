@@ -38,6 +38,18 @@ describe('ProductionRoot', () => {
     expect(capabilityAdmits({ name: 'unsupported-wallet', walletApiVersion: '0.9.0' })).toBe(false);
     expect(capabilityAdmits({ name: 'unreachable' })).toBe(false);
     expect(capabilityAdmits({ name: 'not-registered' })).toBe(true);
+    expect(capabilityAdmits({ name: 'connected' } as never)).toBe(false);
+    expect(capabilityAdmits({
+      name: 'connected',
+      capability: { supportsStrk20: 'yes', walletApiVersion: {}, registration: 'registered' },
+      registrationConfirmed: true,
+    } as never)).toBe(false);
+    const inherited = Object.create({
+      name: 'connected',
+      capability: { supportsStrk20: true, walletApiVersion: '0.10.3', registration: 'registered' },
+      registrationConfirmed: true,
+    });
+    expect(capabilityAdmits(inherited as never)).toBe(false);
   });
 
   it('keeps the production app and its World out of the tree before wallet connection', () => {

@@ -258,6 +258,25 @@ empty shell to fetchers, so a 200 there means nothing.
 
 ## 6. Findings log
 
+### 2026-08-30 — Production capability admission validates connected state shape
+
+`capabilityAdmits()` previously admitted any runtime object whose `name` was
+`connected`, without checking the capability or registration fields needed to
+establish a usable Wallet API verdict. A malformed or inherited connected
+record at the Web composition boundary could therefore bypass the production
+capability gate and mount the app.
+
+The predicate now reads own data fields only and requires true STRK20 support,
+a nonempty wallet API version, a valid registration value, and a matching
+`registrationConfirmed` flag. `not-registered` remains an explicit admitted
+room. Malformed, inherited or accessor-backed fields fail closed.
+
+*Verified:* red-first production-root regressions supplied a connected record
+without capability, with wrong runtime field types, and with all fields
+inherited; the old predicate returned true for these shapes, while the
+corrected predicate returns false. No browser, wallet, provider, RPC, proof,
+signature, funds or transaction was used.
+
 ### 2026-08-30 — Fixed-room entry rolls back after presentation failure
 
 `createFixedRoomController.enter()` resumed input and marked the room owned

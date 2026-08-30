@@ -191,7 +191,30 @@ function isConnectedWallet(snapshot: WalletSessionSnapshot): boolean {
 }
 
 export function capabilityAdmits(state: ConnectState): boolean {
-  return state.name === 'connected' || state.name === 'not-registered';
+  if (typeof state !== 'object' || state === null) return false;
+  try {
+    const name = ownData(state, 'name');
+    if (name === 'not-registered') return true;
+    if (name !== 'connected') return false;
+
+    const capability = ownData(state, 'capability');
+    if (typeof capability !== 'object' || capability === null) return false;
+    const supportsStrk20 = ownData(capability, 'supportsStrk20');
+    const walletApiVersion = ownData(capability, 'walletApiVersion');
+    const registration = ownData(capability, 'registration');
+    const registrationConfirmed = ownData(state, 'registrationConfirmed');
+    return supportsStrk20 === true &&
+      typeof walletApiVersion === 'string' && walletApiVersion.length > 0 &&
+      (registration === 'registered' || registration === 'unknown') &&
+      registrationConfirmed === (registration === 'registered');
+  } catch {
+    return false;
+  }
+}
+
+function ownData(record: object, key: PropertyKey): unknown {
+  const descriptor = Object.getOwnPropertyDescriptor(record, key);
+  return descriptor && 'value' in descriptor ? descriptor.value : undefined;
 }
 
 function WalletEntryGate({
