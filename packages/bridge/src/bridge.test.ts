@@ -1576,6 +1576,23 @@ describe('source registry and refund validation', () => {
     expect(assets.every((asset) => asset.availability === 'fallback')).toBe(true);
   });
 
+  it('ignores coercible live token metadata instead of publishing non-string assets', async () => {
+    const coercibleAsset = { toString: () => 'nep141:coercible.omft.near' };
+    const coercibleSymbol = { toString: () => 'COERCIBLE' };
+    const coercibleBlockchain = { toString: () => 'arb' };
+    const assets = await loadSourceAssets({
+      getTokens: async () => [{
+        assetId: coercibleAsset,
+        symbol: coercibleSymbol,
+        decimals: 6,
+        blockchain: coercibleBlockchain,
+      }] as unknown as TokenResponse[],
+    });
+
+    expect(assets).toHaveLength(6);
+    expect(assets.some((asset) => asset.assetId === coercibleAsset)).toBe(false);
+  });
+
   it('merges live metadata over curated fallbacks without making live availability up', async () => {
     const live = [
       {

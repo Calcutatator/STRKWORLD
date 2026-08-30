@@ -1,7 +1,7 @@
 import type { AvatarSpriteKey } from '@strkworld/shared';
 
 /** The complete D-047 wire vocabulary, kept local to the World registry. */
-export const AVATAR_SPRITE_KEYS: readonly AvatarSpriteKey[] = [
+export const AVATAR_SPRITE_KEYS: readonly AvatarSpriteKey[] = Object.freeze([
   'avatar-1',
   'avatar-2',
   'avatar-3',
@@ -18,7 +18,7 @@ export const AVATAR_SPRITE_KEYS: readonly AvatarSpriteKey[] = [
   'avatar-14',
   'avatar-15',
   'avatar-16',
-] as const;
+] as const);
 
 export const DEFAULT_AVATAR_SPRITE: AvatarSpriteKey = 'avatar-1';
 
