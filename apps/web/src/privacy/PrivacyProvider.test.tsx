@@ -70,6 +70,27 @@ describe('PrivacyProvider', () => {
     await act(async () => root.unmount());
   });
 
+  it('publishes an immutable shell privacy context snapshot', () => {
+    const operations = new FakePrivacyOperations();
+    let captured!: ShellPrivacy;
+    function Capture() {
+      captured = usePrivacy();
+      return null;
+    }
+
+    renderToStaticMarkup(
+      <PrivacyProvider operations={operations}>
+        <Capture />
+      </PrivacyProvider>,
+    );
+
+    expect(Object.isFrozen(captured)).toBe(true);
+    expect(Reflect.set(captured, 'operations', null)).toBe(false);
+    expect(Reflect.set(captured, 'connect', null)).toBe(false);
+    expect(captured.operations).toBe(operations);
+    expect(captured.connectState.name).toBe('disconnected');
+  });
+
   it('does not expose a retired real seam while the lazy demo seam loads', async () => {
     const first = new FakePrivacyOperations();
     const stale = { current: false };

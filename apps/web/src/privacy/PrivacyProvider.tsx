@@ -234,7 +234,7 @@ function PrivacyRuntime({
   }, [shellBus, connectState]);
 
   const value = useMemo<ShellPrivacy>(
-    () => ({
+    () => Object.freeze({
       operations,
       connect,
       connectState,
