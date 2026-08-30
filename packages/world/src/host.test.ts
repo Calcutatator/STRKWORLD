@@ -556,6 +556,34 @@ describe('async teardown', () => {
 });
 
 describe('rapid churn', () => {
+  it('does not claim a lease when retained-instance retargeting fails', () => {
+    const queue: Array<() => void> = [];
+    const retargetError = new Error('scene restart failed');
+    const stop = vi.fn();
+    const host = createHost<{ parent: string }, string>({
+      start: (parent) => ({ parent }),
+      retarget: () => { throw retargetError; },
+      stop,
+      defer: (fn) => {
+        queue.push(fn);
+        return queue.length - 1;
+      },
+      cancel: (handle) => {
+        queue[handle as number] = () => {};
+      },
+    });
+
+    const first = host.acquire('old-wallet-tree');
+    host.release();
+    expect(() => host.acquire('new-wallet-tree')).toThrow(retargetError);
+    expect(host.current).toBe(first);
+    expect(host.refCount).toBe(0);
+    for (const fn of queue.splice(0, queue.length)) fn();
+    expect(stop).toHaveBeenCalledOnce();
+    expect(stop).toHaveBeenCalledWith(first);
+    expect(host.current).toBeNull();
+  });
+
   it('holds one instance through repeated same-tick remounts', () => {
     // HMR and StrictMode can both produce bursts of this shape.
     const h = harness();

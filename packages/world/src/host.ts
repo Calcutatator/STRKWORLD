@@ -89,7 +89,13 @@ export function createHost<T, P>(options: HostOptions<T, P>): Host<T, P> {
       !Object.is(activeParent, parent) &&
       options.retarget
     ) {
-      options.retarget(instance, parent, activeParent as P);
+      try {
+        options.retarget(instance, parent, activeParent as P);
+      } catch (error) {
+        refs = previousRefs;
+        pending = previousPending;
+        throw error;
+      }
       activeParent = parent;
     }
     // A remount arriving before the deferred teardown ran: keep what we have.
