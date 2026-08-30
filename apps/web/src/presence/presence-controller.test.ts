@@ -884,6 +884,40 @@ describe('presence controller', () => {
     expect(made.client.disconnect).toHaveBeenCalledTimes(1);
   });
 
+  it('finishes cleanup before surfacing an asynchronous disconnect rejection', async () => {
+    const world = createEventBus<WorldEvents>();
+    const made = fakeClient();
+    const failure = new Error('disconnect failed');
+    made.client.disconnect = vi.fn(async () => { throw failure; });
+    const presence = createPresenceController({ endpoint: 'ws://example', factory: () => made.client });
+    const stop = presence.listen(world);
+    world.emit('player:moved', moved);
+    await drainAsyncWork();
+
+    await expect(presence.destroy()).rejects.toBe(failure);
+    await expect(presence.destroy()).rejects.toBe(failure);
+    expect(made.client.disconnect).toHaveBeenCalledOnce();
+    expect(made.peerListenerCount()).toBe(0);
+    stop();
+  });
+
+  it('retains a deterministic destroy rejection when disconnect throws synchronously', async () => {
+    const world = createEventBus<WorldEvents>();
+    const made = fakeClient();
+    const failure = new Error('synchronous disconnect failed');
+    made.client.disconnect = vi.fn(() => { throw failure; });
+    const presence = createPresenceController({ endpoint: 'ws://example', factory: () => made.client });
+    const stop = presence.listen(world);
+    world.emit('player:moved', moved);
+    await drainAsyncWork();
+
+    await expect(presence.destroy()).rejects.toBe(failure);
+    await expect(presence.destroy()).rejects.toBe(failure);
+    expect(made.client.disconnect).toHaveBeenCalledOnce();
+    expect(made.peerListenerCount()).toBe(0);
+    stop();
+  });
+
   it('ignores late connected and rejected connect callbacks after destroy', async () => {
     const world = createEventBus<WorldEvents>();
     let resolve!: () => void;

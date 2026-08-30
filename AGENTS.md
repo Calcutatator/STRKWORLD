@@ -258,6 +258,28 @@ empty shell to fetchers, so a 200 there means nothing.
 
 ## 6. Findings log
 
+### 2026-08-30 — Presence destroy completes ownership cleanup after disconnect failure
+
+`PresenceController.destroy()` used `Promise.all()` and performed its final
+ownership cleanup only after that promise fulfilled. A client whose
+`disconnect()` rejected therefore left the controller retaining its client
+reference and replacement state, skipped listener cleanup, and made repeated
+destroy calls return the same unfinished rejection. A client that threw
+synchronously could reject before the destroy promise was retained at all.
+
+Destroy now normalizes synchronous disconnect throws, waits for both the
+current client and any replacement teardown with `Promise.allSettled()`, then
+always clears client, replacement and subscriber ownership. It preserves one
+cleanup error unchanged and combines multiple failures in an `AggregateError`.
+
+*Verified:* red-first public regressions cover asynchronous disconnect
+rejection and synchronous disconnect throw. Before the fix, the synchronous
+case resolved on the repeated destroy call; after the fix, both calls reject
+with the same error, disconnect runs once, and peer ownership is cleared.
+The focused Presence suite passes 44 tests; Web typecheck, invariants and diff
+hygiene pass. No browser, lobby server, wallet, provider, RPC, proof,
+signature, funds or transaction was used.*
+
 ### 2026-08-30 — Wallet session guards synchronous subscription handoff
 
 `createWalletSession()` captured the connection account and chain before

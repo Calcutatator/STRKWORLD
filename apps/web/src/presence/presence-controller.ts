@@ -341,15 +341,32 @@ export function createPresenceController({ endpoint, factory = (options) => new 
       statusStop = null;
       clearClientPeers();
       const current = client;
-      destroying = Promise.all([
-        current ? current.disconnect() : Promise.resolve(),
+      const currentDisconnect = current
+        ? (() => {
+          try {
+            return Promise.resolve(current.disconnect());
+          } catch (error) {
+            return Promise.reject(error);
+          }
+        })()
+        : Promise.resolve();
+      destroying = Promise.allSettled([
+        currentDisconnect,
         replacing ?? Promise.resolve(),
-      ]).then(() => undefined);
+      ]).then((results) => {
+        client = null;
+        clientSprite = null;
+        replacementDeferred = false;
+        listeners.clear();
+        const failures = results
+          .filter((result): result is PromiseRejectedResult => result.status === 'rejected')
+          .map((result) => result.reason);
+        if (failures.length === 1) throw failures[0];
+        if (failures.length > 1) {
+          throw new AggregateError(failures, 'Presence cleanup failed.');
+        }
+      });
       await destroying;
-      client = null;
-      clientSprite = null;
-      replacementDeferred = false;
-      listeners.clear();
     },
   };
 }
