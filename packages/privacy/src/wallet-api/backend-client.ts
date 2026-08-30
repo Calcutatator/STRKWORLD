@@ -48,6 +48,15 @@ export class BackendPrivacyClient implements PoolReadClient, PrivateSubmissionGa
   }
 
   async estimate(input: Parameters<PrivateSubmissionGateway['estimate']>[0]): Promise<RelayFeeQuote> {
+    if (
+      (input.route !== 'transfer' && input.route !== 'unshield')
+      || typeof input.feeToken !== 'string'
+      || !isNonzeroFelt(input.feeToken)
+      || typeof input.operationToken !== 'string'
+      || !isNonzeroFelt(input.operationToken)
+    ) {
+      throw new PrivacyError('unknown', 'The relay estimate request is invalid.');
+    }
     const raw = await this.post('/v1/private/fees', {
       v: 1,
       route: input.route,

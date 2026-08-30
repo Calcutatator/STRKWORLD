@@ -30,6 +30,18 @@ function inheritResponseField(key: string, value: unknown): () => void {
 }
 
 describe('BackendPrivacyClient', () => {
+  it.each([
+    ['unsupported route', { route: 'swap', feeToken: '0x4718', operationToken: '0xabc' }],
+    ['decimal fee token', { route: 'transfer', feeToken: '123', operationToken: '0xabc' }],
+    ['zero operation token', { route: 'unshield', feeToken: '0x4718', operationToken: '0x0' }],
+  ] as const)('rejects an invalid relay estimate request before transport: %s', async (_label, input) => {
+    const fetcher = vi.fn(async () => response({}));
+    const client = new BackendPrivacyClient('https://backend.example', fetcher);
+
+    await expect(client.estimate(input as never)).rejects.toMatchObject({ kind: 'unknown' });
+    expect(fetcher).not.toHaveBeenCalled();
+  });
+
   it('does not dispatch a read already cancelled by its caller', async () => {
     const fetcher = vi.fn(async () => response({}));
     const client = new BackendPrivacyClient('https://backend.example', fetcher);
