@@ -448,6 +448,13 @@ function ownPreparedBatch(
     discarded = true;
     prepared.discard();
   };
+  const retire = (): void => {
+    try {
+      discard();
+    } catch {
+      // Automatic cleanup cannot replace the authoritative settlement result.
+    }
+  };
   return Object.freeze({
     intents: prepared.intents,
     poolFee: prepared.poolFee,
@@ -458,10 +465,29 @@ function ownPreparedBatch(
     ...(prepared.swapReview ? { swapReview: prepared.swapReview } : {}),
     async confirm(options: Parameters<PreparedBatch['confirm']>[0]) {
       if (!isCurrent()) {
-        discard();
+        retire();
         throw changedSessionError();
       }
-      return prepared.confirm(options);
+      let result: Awaited<ReturnType<PreparedBatch['confirm']>>;
+      try {
+        result = await prepared.confirm(options);
+      } catch (error) {
+        if (!isCurrent()) {
+          retire();
+          // A lost post-submit response remains non-retryable even when the
+          // wallet account changes while the uncertainty is settling.
+          if (error instanceof PrivacyError && error.kind === 'submission-uncertain') {
+            throw error;
+          }
+          throw changedSessionError();
+        }
+        throw error;
+      }
+      if (!isCurrent()) {
+        retire();
+        throw changedSessionError();
+      }
+      return result;
     },
     discard,
   });

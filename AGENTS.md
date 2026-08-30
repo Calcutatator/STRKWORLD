@@ -258,6 +258,30 @@ empty shell to fetchers, so a 200 there means nothing.
 
 ## 6. Findings log
 
+### 2026-08-30 — WalletSession suppresses stale confirmation errors without masking uncertainty
+
+The WalletSession prepared-batch wrapper checked account ownership before
+calling `PreparedBatch.confirm()`, but did not recheck it when confirmation
+settled with an error. A wallet/network failure from an old account could
+therefore escape after a replacement account became authoritative, while the
+old batch was never disposed. The success path has the same stale-result rule:
+an old result must not be returned to the new account.
+
+The wrapper now owns both settlement paths: stale success and ordinary stale
+error discard the exact old batch and return the existing changed-session
+`user-rejected` error. The D-034 `submission-uncertain` error is the deliberate
+exception and is preserved unchanged after an account change, while the exact
+old batch is still retired. Current-session errors and results are unchanged.
+
+*Verified:* public session regressions cover stale success, stale ordinary
+error, and stale `submission-uncertain`; each runs against deferred confirmation
+settlement and asserts exact discard behavior. The focused WalletSession suite
+passes 27 tests; Privacy passes 9 files / 175 tests and the full workspace
+passes 102 files / 1,591 tests. Privacy typecheck, all 13 invariants and diff
+hygiene pass. No browser, wallet, provider, RPC, proof, signature, funds or
+transaction was used.*
+
+
 ### 2026-08-30 — Bridge quote evidence must own a usable deposit address and source metadata
 
 `BridgeService` previously treated any truthy `depositAddress` from the

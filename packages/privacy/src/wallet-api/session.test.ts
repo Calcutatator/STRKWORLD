@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import type { PreparedBatch, PrivacyOperations } from '../operations.js';
 import { FakePrivacyOperations } from '../testing/fake.js';
+import { PrivacyError } from '../types.js';
 import {
   createProductionWalletSession,
   createWalletSession,
@@ -242,6 +243,85 @@ describe('WalletSession', () => {
     expect(oldDiscard).toHaveBeenCalledTimes(1);
     expect(oldConfirm).not.toHaveBeenCalled();
     await expect(session.operations.capability()).resolves.toMatchObject({ walletApiVersion: '0.10.4' });
+  });
+
+  it('retires an old batch when confirmation succeeds after the account changes', async () => {
+    const selected = wallet('Ready');
+    let release!: (result: { transactionHash: string }) => void;
+    const pending = new Promise<{ transactionHash: string }>((resolve) => { release = resolve; });
+    const oldConfirm = vi.fn(() => pending);
+    const oldDiscard = vi.fn();
+    const connected = controllableConnection(
+      '0x111',
+      operationsWithBatch(batch(oldConfirm, oldDiscard), '0.10.3'),
+      operationsWithBatch(batch(), '0.10.4'),
+    );
+    const session = createWalletSession(
+      denyAllOptions(),
+      { discovery: discoveryWith(selected), connectWallet: async () => connected.port },
+    );
+    await session.connect(session.getSnapshot().wallets[0]!.key);
+    const prepared = await session.operations.prepare([]);
+
+    const confirming = prepared.confirm({ feeCeiling: 0n });
+    connected.changeAccount('0x222');
+    release({ transactionHash: '0xold' });
+
+    await expect(confirming).rejects.toMatchObject({ kind: 'user-rejected' });
+    expect(oldDiscard).toHaveBeenCalledTimes(1);
+  });
+
+  it('retires an old batch when confirmation fails after the account changes', async () => {
+    const selected = wallet('Ready');
+    let reject!: (error: unknown) => void;
+    const pending = new Promise<never>((_resolve, fail) => { reject = fail; });
+    const oldConfirm = vi.fn(() => pending);
+    const oldDiscard = vi.fn(() => { throw new Error('cleanup failed'); });
+    const connected = controllableConnection(
+      '0x111',
+      operationsWithBatch(batch(oldConfirm, oldDiscard), '0.10.3'),
+      operationsWithBatch(batch(), '0.10.4'),
+    );
+    const session = createWalletSession(
+      denyAllOptions(),
+      { discovery: discoveryWith(selected), connectWallet: async () => connected.port },
+    );
+    await session.connect(session.getSnapshot().wallets[0]!.key);
+    const prepared = await session.operations.prepare([]);
+
+    const confirming = prepared.confirm({ feeCeiling: 0n });
+    connected.changeAccount('0x222');
+    reject(new PrivacyError('unreachable', 'old account failure'));
+
+    await expect(confirming).rejects.toMatchObject({ kind: 'user-rejected' });
+    expect(oldDiscard).toHaveBeenCalledTimes(1);
+  });
+
+  it('preserves submission uncertainty after the account changes', async () => {
+    const selected = wallet('Ready');
+    let reject!: (error: unknown) => void;
+    const pending = new Promise<never>((_resolve, fail) => { reject = fail; });
+    const oldConfirm = vi.fn(() => pending);
+    const oldDiscard = vi.fn(() => { throw new Error('cleanup failed'); });
+    const uncertain = new PrivacyError('submission-uncertain', 'receipt status is unknown');
+    const connected = controllableConnection(
+      '0x111',
+      operationsWithBatch(batch(oldConfirm, oldDiscard), '0.10.3'),
+      operationsWithBatch(batch(), '0.10.4'),
+    );
+    const session = createWalletSession(
+      denyAllOptions(),
+      { discovery: discoveryWith(selected), connectWallet: async () => connected.port },
+    );
+    await session.connect(session.getSnapshot().wallets[0]!.key);
+    const prepared = await session.operations.prepare([]);
+
+    const confirming = prepared.confirm({ feeCeiling: 0n });
+    connected.changeAccount('0x222');
+    reject(uncertain);
+
+    await expect(confirming).rejects.toBe(uncertain);
+    expect(oldDiscard).toHaveBeenCalledTimes(1);
   });
 
   it('keeps reviewed work owned across a duplicate account notification', async () => {
