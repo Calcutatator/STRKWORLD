@@ -444,7 +444,7 @@ export class WalletApiPrivacyOperations implements PrivacyOperations {
   }
 
   private validateRelayFee(fee: RelayFeeQuote, config: PoolConfig): void {
-    if (!sameAddress(fee.token, config.feeToken)) {
+    if (!isFelt(fee.token) || !sameAddress(fee.token, config.feeToken)) {
       throw new PrivacyError('unknown', 'The relay returned an unexpected fee token.');
     }
     assertAddress(fee.recipient, 'relay fee recipient');

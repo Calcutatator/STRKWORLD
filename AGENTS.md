@@ -258,6 +258,56 @@ empty shell to fetchers, so a 200 there means nothing.
 
 ## 6. Findings log
 
+
+## 6. Findings log
+
+### 2026-08-30 — Browser relay fee tokens require strict felt encoding
+
+`WalletApiPrivacyOperations.validateRelayFee()` previously compared the
+external relay token with `sameAddress()`, whose `BigInt` coercion accepts
+decimal strings and an uppercase `0X` prefix. A malformed backend or gateway
+response could therefore match the configured token numerically while the
+noncanonical token crossed into the Wallet API fee action.
+
+Relay fee validation now requires the token to pass the existing strict felt
+encoding rule before numeric comparison. Lowercase `0x` with uppercase hex
+digits remains valid; decimal and uppercase-prefix encodings fail before a
+prepared batch is returned. Fee recipient, amount, authorization and expiry
+checks are unchanged.
+
+*Verified:* red-first public regressions cover decimal and uppercase-prefix
+tokens on ordinary transfer and quote-bound swap paths, with rejection before
+wallet proving; a canonical lowercase-prefix token with uppercase hex digits
+remains accepted. The focused Wallet API suite passes 73 tests. No browser,
+external provider, RPC, wallet, proof, signature, funds or transaction was
+used.
+
+
+## 6. Findings log
+
+### 2026-08-30 — Issued fee authorizations require a safe block expiry
+
+`BackendApi.fee()` and swap preparation formed authorization expiry with an
+unchecked `issuedAtBlock + proofValidityBlocks` number addition. Although the
+RPC adapter validates each input as a nonnegative safe integer, their sum can
+round above `Number.MAX_SAFE_INTEGER`. The API then returned `200` and issued
+an authorization whose expiry was unsafe; the later submission validator
+rejected that same authorization as a claim mismatch.
+
+Both issuance paths now reject an unsafe expiry before constructing or issuing
+the authorization. The exact safe-integer boundary remains accepted, and
+submission freshness behavior is unchanged.
+
+*Verified:* red-first public Backend regressions set the block to
+`Number.MAX_SAFE_INTEGER` with a one-block validity window and assert generic
+upstream failure plus zero authorization issuance for ordinary and swap
+routes. Matching cases at `Number.MAX_SAFE_INTEGER - 1` remain successful with
+the exact safe expiry. Backend focused tests and diff hygiene pass; no
+browser, external provider, RPC, wallet, proof, signature, funds or
+transaction was used.*
+
+
+
 ### 2026-08-30 — AVNU nested executor call targets require nonzero felts
 
 The Backend swap-preparation boundary checked each AVNU executor call target

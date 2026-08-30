@@ -11,6 +11,9 @@ import {
 } from '../index.js';
 
 const STRK = '0x04718f5a0fc34cc1af16a1cdee98ffb20c31f5cd61d6ab07201858f4287c938d';
+const STRK_DECIMAL = BigInt(STRK).toString();
+const STRK_UPPER_PREFIX = `0X${STRK.slice(2)}`;
+const STRK_UPPER_HEX = `0x${STRK.slice(2).toUpperCase()}`;
 const TOKEN = '0x123';
 const BOB = '0x456';
 const FEE_RECIPIENT = '0x789';
@@ -364,6 +367,36 @@ describe('Wallet API action routes', () => {
       transactionHash: '0xprivate',
     });
     expect(gateway.submit).toHaveBeenCalledWith(expect.objectContaining({ feeAuthorization: ' fee-auth ' }));
+  });
+
+  it.each([STRK_DECIMAL, STRK_UPPER_PREFIX])(
+    'rejects a noncanonical relay fee token %s before a private transfer reaches the wallet',
+    async (token) => {
+      const { ops, gateway, prepared } = fixture();
+      vi.mocked(gateway.estimate).mockResolvedValue({
+        token,
+        recipient: FEE_RECIPIENT,
+        amount: 1n,
+        ...AUTH,
+      });
+
+      await expect(ops.prepare([{ kind: 'transfer', token: TOKEN, amount: 20n, recipient: BOB }]))
+        .rejects.toThrow(/fee token/i);
+      expect(prepared).toEqual([]);
+    },
+  );
+
+  it('accepts uppercase hex digits in a canonical relay fee token', async () => {
+    const { ops, gateway } = fixture();
+    vi.mocked(gateway.estimate).mockResolvedValue({
+      token: STRK_UPPER_HEX,
+      recipient: FEE_RECIPIENT,
+      amount: 1n,
+      ...AUTH,
+    });
+
+    await expect(ops.prepare([{ kind: 'transfer', token: TOKEN, amount: 20n, recipient: BOB }]))
+      .resolves.toBeDefined();
   });
 
   it('returns a private receipt when the gateway throws after reporting acceptance', async () => {
@@ -937,6 +970,12 @@ describe('quote-bound swap plan admission', () => {
     ['a whitespace-only relay fee authorization', {
       fee: { token: STRK, recipient: FEE_RECIPIENT, amount: 1n, authorization: ' \t\n', expiresAtBlock: 1_450 },
     }, /fee authorization/i],
+    ['a decimal relay fee token', {
+      fee: { token: STRK_DECIMAL, recipient: FEE_RECIPIENT, amount: 1n, ...AUTH },
+    }, /fee token/i],
+    ['an uppercase-prefix relay fee token', {
+      fee: { token: STRK_UPPER_PREFIX, recipient: FEE_RECIPIENT, amount: 1n, ...AUTH },
+    }, /fee token/i],
     ['an unbounded relay fee', {
       fee: { token: STRK, recipient: FEE_RECIPIENT, amount: 1n, authorization: 'fee-auth', expiresAtBlock: 0 },
     }, /fee authorization/i],
