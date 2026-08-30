@@ -258,6 +258,29 @@ empty shell to fetchers, so a 200 there means nothing.
 
 ## 6. Findings log
 
+### 2026-08-30 — Wallet route policy is semantically validated before discovery
+
+The wallet session already copied policy data into an immutable snapshot, but
+accepted runtime values that only matched the TypeScript shape nominally. A
+`NaN` maximum intent count made the batch-size ceiling comparison permanently
+false; fractional, negative and unsafe counts, negative relay fees, unknown or
+duplicate routes, malformed or numerically duplicated token felts, and an
+enabled swap without valid chain/slippage policy could all survive session
+construction.
+
+Policy construction now fails closed before wallet discovery for invalid
+scalar bounds, non-bigint or negative relay fees, unknown/duplicate routes,
+zero or above-field token felts, numeric token duplicates, and incomplete or
+invalid swap semantics. Valid route ordering and token encodings are preserved;
+the owned arrays and objects remain frozen and wallet identity is never read.
+
+*Verified:* sixteen public session regressions were red together before the
+semantic boundary and green after it, including `NaN` intent authority,
+numeric token aliases and swap-without-policy. The focused WalletSession suite
+passes 100 tests and package typecheck. Full workspace verification is recorded
+with the owning commit. Deterministic fakes only: no browser, wallet, provider,
+RPC, proof, signature, funds or transaction was used.*
+
 ### 2026-08-30 — Privacy route-policy snapshots must bypass proxy reads
 
 The WalletSession route-policy boundary validated own data descriptors, but

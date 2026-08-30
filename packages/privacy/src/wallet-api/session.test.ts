@@ -12,6 +12,78 @@ import {
 
 describe('WalletSession', () => {
   it.each([
+    ['NaN max intents', { maxIntents: Number.NaN }],
+    ['fractional max intents', { maxIntents: 1.5 }],
+    ['negative max intents', { maxIntents: -1 }],
+    ['unsafe max intents', { maxIntents: Number.MAX_SAFE_INTEGER + 1 }],
+    ['number relay fee', { maxRelayFee: 1 }],
+    ['negative relay fee', { maxRelayFee: -1n }],
+    ['unknown enabled route', { enabledRoutes: ['transfer', 'mint'] }],
+    ['duplicate enabled route', { enabledRoutes: ['transfer', 'transfer'] }],
+  ])('rejects a policy with %s before discovery', (_label, override) => {
+    const discovery = discoveryWith(wallet('Ready'));
+    const getWallets = vi.spyOn(discovery, 'getWallets');
+    const policy = { ...denyAllOptions().policy, ...override };
+
+    expect(() => createWalletSession(
+      { ...denyAllOptions(), policy: policy as never },
+      { discovery, connectWallet: async () => connection('0x111') },
+    )).toThrow(PrivacyError);
+    expect(getWallets).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ['decimal token', '123'],
+    ['zero token', '0x0'],
+    ['field-prime token', `0x${((1n << 251n) + 17n * (1n << 192n) + 1n).toString(16)}`],
+  ])('rejects a policy with a %s before discovery', (_label, token) => {
+    const discovery = discoveryWith(wallet('Ready'));
+    const getWallets = vi.spyOn(discovery, 'getWallets');
+    const policy = denyAllOptions().policy;
+
+    expect(() => createWalletSession(
+      { ...denyAllOptions(), policy: {
+        ...policy,
+        allowedTokens: { ...policy.allowedTokens, transfer: [token] },
+      } },
+      { discovery, connectWallet: async () => connection('0x111') },
+    )).toThrow(PrivacyError);
+    expect(getWallets).not.toHaveBeenCalled();
+  });
+
+  it('rejects numerically duplicate allowlisted tokens before discovery', () => {
+    const discovery = discoveryWith(wallet('Ready'));
+    const getWallets = vi.spyOn(discovery, 'getWallets');
+    const policy = denyAllOptions().policy;
+
+    expect(() => createWalletSession(
+      { ...denyAllOptions(), policy: {
+        ...policy,
+        allowedTokens: { ...policy.allowedTokens, transfer: ['0x1', '0x01'] },
+      } },
+      { discovery, connectWallet: async () => connection('0x111') },
+    )).toThrow(PrivacyError);
+    expect(getWallets).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ['missing swap policy', undefined],
+    ['malformed swap chain', { expectedChainId: 'mainnet', slippageBps: 100 }],
+    ['zero swap slippage', { expectedChainId: '0x534e5f4d41494e', slippageBps: 0 }],
+    ['excessive swap slippage', { expectedChainId: '0x534e5f4d41494e', slippageBps: 10_001 }],
+  ])('rejects an enabled swap with %s before discovery', (_label, swap) => {
+    const discovery = discoveryWith(wallet('Ready'));
+    const getWallets = vi.spyOn(discovery, 'getWallets');
+    const policy = denyAllOptions().policy;
+
+    expect(() => createWalletSession(
+      { ...denyAllOptions(), policy: { ...policy, enabledRoutes: ['swap'], swap } as never },
+      { discovery, connectWallet: async () => connection('0x111') },
+    )).toThrow(PrivacyError);
+    expect(getWallets).not.toHaveBeenCalled();
+  });
+
+  it.each([
     ['decimal chain id', '2344859'],
     ['zero chain id', '0x0'],
     ['field-prime chain id', `0x${((1n << 251n) + 17n * (1n << 192n) + 1n).toString(16)}`],

@@ -572,6 +572,27 @@ function ownPolicy(policy: WalletRoutePolicy): WalletRoutePolicy {
   if (swap !== undefined && !hasOwnDataProperties(swap, ['expectedChainId', 'slippageBps'])) {
     throw new PrivacyError('unknown', 'The wallet route policy is invalid.');
   }
+  if (!Number.isSafeInteger(maxIntents) || maxIntents < 0 || typeof maxRelayFee !== 'bigint' || maxRelayFee < 0n) {
+    throw invalidPolicy();
+  }
+  const knownRoutes = new Set(['shield', 'unshield', 'transfer', 'swap']);
+  if (
+    enabledRoutes.some((route) => typeof route !== 'string' || !knownRoutes.has(route))
+    || new Set(enabledRoutes).size !== enabledRoutes.length
+  ) {
+    throw invalidPolicy();
+  }
+  for (const tokens of [shield, unshield, transfer, swapTokens]) validatePolicyTokens(tokens);
+  if (enabledRoutes.includes('swap') && swap === undefined) throw invalidPolicy();
+  let ownedSwap: NonNullable<WalletRoutePolicy['swap']> | undefined;
+  if (swap !== undefined) {
+    const expectedChainId = readPolicyValue<NonNullable<WalletRoutePolicy['swap']>['expectedChainId']>(swap, 'expectedChainId');
+    const slippageBps = readPolicyValue<NonNullable<WalletRoutePolicy['swap']>['slippageBps']>(swap, 'slippageBps');
+    if (!isNonzeroFelt(expectedChainId) || !Number.isSafeInteger(slippageBps) || slippageBps <= 0 || slippageBps > 10_000) {
+      throw invalidPolicy();
+    }
+    ownedSwap = Object.freeze({ expectedChainId, slippageBps });
+  }
   return Object.freeze({
     maxIntents,
     maxRelayFee,
@@ -582,13 +603,24 @@ function ownPolicy(policy: WalletRoutePolicy): WalletRoutePolicy {
       transfer: Object.freeze(transfer),
       swap: Object.freeze(swapTokens),
     }),
-    ...(swap
-      ? { swap: Object.freeze({
-          expectedChainId: readPolicyValue<NonNullable<WalletRoutePolicy['swap']>['expectedChainId']>(swap, 'expectedChainId'),
-          slippageBps: readPolicyValue<NonNullable<WalletRoutePolicy['swap']>['slippageBps']>(swap, 'slippageBps'),
-        }) }
+    ...(ownedSwap
+      ? { swap: ownedSwap }
       : {}),
   });
+}
+
+function validatePolicyTokens(tokens: unknown[]): void {
+  const seen = new Set<bigint>();
+  for (const token of tokens) {
+    if (typeof token !== 'string' || !isNonzeroFelt(token)) throw invalidPolicy();
+    const canonical = BigInt(token);
+    if (seen.has(canonical)) throw invalidPolicy();
+    seen.add(canonical);
+  }
+}
+
+function invalidPolicy(): PrivacyError {
+  return new PrivacyError('unknown', 'The wallet route policy is invalid.');
 }
 
 function readPolicyValue<T>(value: object, key: PropertyKey): T {
