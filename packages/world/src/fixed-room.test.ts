@@ -545,6 +545,35 @@ describe('fixed room controller', () => {
     expect(h.events).toEqual([]);
   });
 
+  it('attempts every listener cleanup when one stop callback throws', () => {
+    const out = bus<WorldEvents>();
+    const stops: Array<ReturnType<typeof vi.fn>> = [];
+    const shell = {
+      on: vi.fn(() => {
+        const stop = vi.fn();
+        stops.push(stop);
+        return stop;
+      }),
+    };
+    const input = { suspend: vi.fn(), resume: vi.fn() };
+    const controller = createFixedRoomController({
+      definition: POST_OFFICE_ROOM_DEFINITION,
+      out,
+      in: shell as never,
+      input,
+    });
+    const cleanupError = new Error('station listener cleanup failed');
+    stops[0]!.mockImplementationOnce(() => { throw cleanupError; });
+
+    expect(() => controller.destroy()).toThrow(cleanupError);
+    expect(stops).toHaveLength(3);
+    for (const stop of stops) expect(stop).toHaveBeenCalledOnce();
+    expect(input.resume).toHaveBeenCalledOnce();
+
+    controller.destroy();
+    for (const stop of stops) expect(stop).toHaveBeenCalledOnce();
+  });
+
   it('stops the entry continuation when onEnter destroys the controller', () => {
     const out = bus<WorldEvents>();
     const shell = bus<ShellEvents>();

@@ -454,13 +454,25 @@ export function createFixedRoomController(
     destroy(): void {
       if (destroyed) return;
       destroyed = true;
-      stopStations?.();
-      stopOwner?.();
-      stopExit?.();
+      const errors: unknown[] = [];
+      const attempt = (cleanup: () => void): void => {
+        try {
+          cleanup();
+        } catch (error) {
+          errors.push(error);
+        }
+      };
+      if (stopStations) attempt(stopStations);
+      if (stopOwner) attempt(stopOwner);
+      if (stopExit) attempt(stopExit);
       inRoom = false;
       controlOwner = 'world';
       highlightedStation = null;
-      options.input.resume();
+      attempt(() => options.input.resume());
+      if (errors.length === 1) throw errors[0];
+      if (errors.length > 1) {
+        throw new AggregateError(errors, 'Fixed-room cleanup failed');
+      }
     },
   };
 }

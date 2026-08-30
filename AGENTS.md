@@ -258,6 +258,26 @@ empty shell to fetchers, so a 200 there means nothing.
 
 ## 6. Findings log
 
+### 2026-08-30 — Fixed-room destroy attempts every listener cleanup
+
+`createFixedRoomController().destroy()` marked the controller destroyed and
+called its three Shell-listener stop callbacks sequentially without isolation.
+If the first stop callback threw, the remaining listeners and input restoration
+were skipped, while the destroyed flag made a later call a no-op. A controller
+could therefore remain subscribed to Shell commands after teardown and leave
+the input gate in the wrong state.
+
+Destroy now attempts each registered listener stop and input restoration
+independently, then rethrows one cleanup error unchanged or combines multiple
+errors in an `AggregateError`. State is retired before cleanup, and repeated
+destroy remains idempotent after all owned resources have been attempted.
+
+*Verified:* a public fixed-room regression makes the first listener stop throw,
+then confirms all three stops and input restoration still run, while a second
+destroy performs no duplicate cleanup. The focused fixed-room suite passes 43
+tests. No browser, wallet, provider, RPC, proof, signature, funds or
+transaction was used.
+
 ### 2026-08-30 — Private swap executor entrypoints reject malformed names
 
 `WalletApiPrivacyOperations.validateSwapPlan()` previously rejected only a
