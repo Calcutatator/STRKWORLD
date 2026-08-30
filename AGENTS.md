@@ -258,6 +258,24 @@ empty shell to fetchers, so a 200 there means nothing.
 
 ## 6. Findings log
 
+### 2026-08-30 — Zero-duration interior movement is a no-op
+
+`moveWithCollisionSubsteps()` converted a valid `delta` of `0` into one
+millisecond with `Math.max(delta, 1)`. A zero-time Phaser update could
+therefore move the local avatar by a nonzero fractional distance despite no
+elapsed time, producing drift and unnecessary pixel-phase changes in fixed
+rooms or Avatar Studio.
+
+The movement guard now returns the current position for exactly zero duration;
+positive durations retain the existing bounded substep and collision behavior,
+while negative, nonfinite and malformed inputs remain fail-closed.
+
+*Verified:* a red-first World regression with a 160 px/s horizontal velocity
+and `delta: 0` first moved from `x=100` to `x=100.16`; the corrected path
+returns exactly `{ x: 100, y: 100 }`. The focused street-movement suite passes
+19 tests. No browser, lobby, wallet, provider, RPC, proof, signature, funds
+or transaction was used.*
+
 ### 2026-08-30 — Failed presence resume must expose reconnectability
 
 When an interior exit called the live presence client's `resume()` and that

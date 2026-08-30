@@ -75,6 +75,19 @@ describe('street movement seam', () => {
     ).toEqual({ x: 100 + expected.x, y: 100 + expected.y });
   });
 
+  it('does not move on a zero-duration update', () => {
+    const position = moveWithCollisionSubsteps({
+      position: { x: 100, y: 100 },
+      velocity: { x: 160, y: 0 },
+      delta: 0,
+      tileSize: 32,
+      toTile: (x, y) => ({ x: Math.floor(x / 32), y: Math.floor(y / 32) }),
+      isSolidAt: () => false,
+    });
+
+    expect(position).toEqual({ x: 100, y: 100 });
+  });
+
   it('preserves normal and sprint displacement at the movement speeds', () => {
     const move = (speed: number) =>
       moveWithCollisionSubsteps({

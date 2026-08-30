@@ -75,7 +75,8 @@ export function moveWithCollisionSubsteps(options: CollisionSubstepOptions): Mov
     return current;
   }
 
-  const duration = Math.max(options.delta, 1);
+  if (options.delta === 0) return current;
+  const duration = options.delta;
   const speed = Math.hypot(velocity.x, velocity.y);
   if (speed === 0) return current;
 
