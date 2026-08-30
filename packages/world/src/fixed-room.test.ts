@@ -1211,6 +1211,37 @@ describe('fixed room controller', () => {
     expect(events).toEqual([]);
   });
 
+  it('rolls back room ownership when exit announcement fails', () => {
+    const out = bus<WorldEvents>();
+    const shell = bus<ShellEvents>();
+    const announcementError = new Error('exit announcement failed');
+    let fail = true;
+    out.on('building:exited', () => {
+      if (fail) throw announcementError;
+    });
+    const onEnter = vi.fn();
+    const onExit = vi.fn();
+    const controller = createFixedRoomController({
+      definition: POST_OFFICE_ROOM_DEFINITION,
+      out,
+      in: shell,
+      input: { suspend: vi.fn(), resume: vi.fn() },
+      onEnter,
+      onExit,
+    });
+    controller.enter();
+    const exit = POST_OFFICE_ROOM_DEFINITION.exit;
+
+    expect(() => controller.update({ x: exit.x, y: exit.y })).toThrow(announcementError);
+    expect(controller.state.inRoom).toBe(true);
+    expect(onEnter).toHaveBeenCalledTimes(2);
+
+    fail = false;
+    expect(() => controller.update({ x: exit.x, y: exit.y })).not.toThrow();
+    expect(controller.state.inRoom).toBe(false);
+    expect(onExit).toHaveBeenCalledTimes(2);
+  });
+
   it('stops entry continuation when input resume destroys the controller', () => {
     const out = bus<WorldEvents>();
     const shell = bus<ShellEvents>();

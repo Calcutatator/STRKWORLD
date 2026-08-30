@@ -258,6 +258,29 @@ empty shell to fetchers, so a 200 there means nothing.
 
 ## 6. Findings log
 
+### 2026-08-30 — Fixed-room exit announcement failure remains retryable
+
+`createFixedRoomController.leave()` completed the outside presentation and
+then emitted `building:exited` without treating the semantic announcement as
+an external lifecycle boundary. If a synchronous consumer threw, the error
+escaped after the controller had become outside, so a later exit call was a
+no-op and the same handoff could not be retried coherently.
+
+Exit announcement failure now restores the prior room ownership and
+highlight/approach state, then compensates the presentation with `onEnter`
+before preserving and rethrowing the original error. A destroyed or otherwise
+replaced lifecycle remains authoritative, and a compensation failure never
+masks the announcement error. Normal exit ordering and successful announcement
+behavior are unchanged.
+
+*Verified:* a red-first public fixed-room regression makes the first
+`building:exited` consumer throw, observes the controller outside on the old
+path, then retries after recovery. The corrected path calls `onEnter` to
+restore the room, and the second exit completes successfully. Focused
+fixed-room and World tests, typechecks, build, invariants and diff hygiene
+pass. No browser, lobby, wallet, provider, RPC, proof, signature, funds or
+transaction was used.
+
 ### 2026-08-30 — Avatar Studio destroy retry must retain retirement ownership
 
 `createAvatarStudioPresentation.destroy()` left `destroyed` false when

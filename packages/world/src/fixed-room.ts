@@ -555,9 +555,27 @@ export function createFixedRoomController(
     // Exit publication is synchronous and may immediately re-enter the room.
     // Do not announce an outside transition after that newer ownership wins.
     if (destroyed || inRoom) return;
-    options.out.emit('building:exited', Object.freeze({
-      building: options.definition.building,
-    }));
+    try {
+      options.out.emit('building:exited', Object.freeze({
+        building: options.definition.building,
+      }));
+    } catch (error) {
+      // The semantic announcement is an external lifecycle boundary. If it
+      // fails after the presentation has left, restore the room so the same
+      // exit can be retried coherently once the consumer recovers.
+      if (!destroyed && !inRoom) {
+        inRoom = true;
+        controlOwner = previousControlOwner;
+        highlightedStation = previousHighlightedStation;
+        approachArmed = previousApproachArmed;
+        try {
+          options.onEnter?.();
+        } catch {
+          // Preserve the original announcement error.
+        }
+      }
+      throw error;
+    }
   }
 
   return {
