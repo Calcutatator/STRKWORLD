@@ -258,6 +258,29 @@ empty shell to fetchers, so a 200 there means nothing.
 
 ## 6. Findings log
 
+### 2026-08-30 — Web World-event consumers own and validate payloads
+
+The Web visit, panel and presence consumers previously narrowed World event
+payloads with an object check and then read typed fields normally. Runtime
+payloads can still be null, accessor-backed, proxy-hostile or contain unknown
+building/reason/facing values and non-finite coordinates. Those shapes could
+throw inside bus delivery, open a panel for a nonexistent building, or start
+lobby presence with an invalid placement.
+
+The Web boundary now reads only own data descriptors, contains descriptor
+traps, validates known building/lock/facing values, requires matching station
+prefixes and finite coordinates, and publishes an owned frozen snapshot to
+the existing consumers. Invalid events are ignored without changing the
+current visit, panel or presence authority. Valid event ordering and station
+registry fail-closed behavior are unchanged.
+
+*Verified:* public regressions were red before the decoder: malformed movement
+started a lobby join and accessor-backed visit/panel payloads were not owned at
+their consumption boundary. The corrected focused run passes 4 files / 116
+tests and Web typecheck. The full workspace gates are recorded in the owning
+commit. Deterministic in-memory buses only: no browser, lobby service, wallet,
+provider, RPC, proof, signature, funds or transaction was used.*
+
 ### 2026-08-30 — Avatar Studio highlight publication must remain retryable
 
 `createAvatarStudioController.update()` assigned `highlightedFigure` before

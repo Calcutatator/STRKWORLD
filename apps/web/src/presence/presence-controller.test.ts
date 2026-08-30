@@ -55,6 +55,24 @@ async function drainAsyncWork() {
 }
 
 describe('presence controller', () => {
+  it('ignores malformed movement payloads without invoking accessors or joining', () => {
+    const world = createEventBus<WorldEvents>();
+    const made = fakeClient();
+    const presence = createPresenceController({ endpoint: 'ws://example', factory: () => made.client });
+    presence.listen(world);
+    let read = false;
+    const hostile = {};
+    Object.defineProperty(hostile, 'position', { get() { read = true; throw new Error('read'); } });
+
+    world.emit('player:moved', null as never);
+    world.emit('player:moved', hostile as never);
+    world.emit('player:moved', { position: { x: Number.NaN, y: 10 }, facing: 'down' });
+    world.emit('player:moved', { position: { x: 10, y: 10 }, facing: 'diagonal' as never });
+
+    expect(read).toBe(false);
+    expect(made.client.connect).not.toHaveBeenCalled();
+    expect(presence.getState()).toEqual({ status: 'unavailable', canReconnect: true });
+  });
   it('publishes an immutable controller API while retaining owned transitions', () => {
     const presence = createPresenceController({ endpoint: 'ws://example' });
     const originalReconnect = presence.reconnect;

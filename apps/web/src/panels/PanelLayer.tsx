@@ -7,6 +7,7 @@ import { LockedRoom, UnbuiltRoom } from './LockedRoom.js';
 import { PanelFrame } from './PanelFrame.js';
 import { resolveRoom, type PanelRegistry } from './panel-framework.js';
 import { BUILDING_PANELS, type BuildingPanelDescriptor } from './registry.js';
+import { ownBuildingPayload, ownLockedBuildingPayload } from '../bus/world-event-payload.js';
 
 /**
  * The building overlay.
@@ -45,19 +46,25 @@ export function nextActiveRoom(
     | { name: 'building:locked'; payload: WorldEvents['building:locked'] }
     | { name: 'building:exited'; payload: WorldEvents['building:exited'] },
 ): ActiveRoom | null {
-  if (!event.payload || typeof event.payload !== 'object') return current;
   switch (event.name) {
-    case 'building:entered':
-      return { source: 'entered', building: event.payload.building };
-    case 'building:locked':
-      return { source: 'locked', building: event.payload.building, reason: event.payload.reason };
-    case 'building:exited':
+    case 'building:entered': {
+      const payload = ownBuildingPayload(event.payload);
+      return payload ? { source: 'entered', building: payload.building } : current;
+    }
+    case 'building:locked': {
+      const payload = ownLockedBuildingPayload(event.payload);
+      return payload ? { source: 'locked', building: payload.building, reason: payload.reason } : current;
+    }
+    case 'building:exited': {
+      const payload = ownBuildingPayload(event.payload);
+      if (!payload) return current;
       // The world emits this only for a door that was actually entered, so a
       // stale exit for some other building should not tear down the room the
       // player is now looking at. A locked door emits no exit at all — walking
       // away from it is closed with the Close control instead (see the PR note).
-      if (current?.building === event.payload.building) return null;
+      if (current?.building === payload.building) return null;
       return current;
+    }
   }
 }
 

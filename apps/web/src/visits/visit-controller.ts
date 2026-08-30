@@ -7,6 +7,7 @@ import type {
 } from '@strkworld/shared';
 import { PRIVACY_REGISTER, type RouteGrade } from '../privacy/register.js';
 import { createStore, type ReadableStore } from '../store/store.js';
+import { ownBuildingPayload, ownLockedBuildingPayload, ownStationPayload } from '../bus/world-event-payload.js';
 import { resolveStation, stationSnapshot, type StationCapabilities } from './station-registry.js';
 
 export type VisitState =
@@ -155,21 +156,24 @@ export function createVisitController(
       try {
         stops.push(world.on('building:entered', (payload) => {
           if (!ownsListen()) return;
-          if (!payload || typeof payload !== 'object') return;
-          enter(payload.building);
+          const owned = ownBuildingPayload(payload);
+          if (!owned) return;
+          enter(owned.building);
         }));
         stops.push(world.on('building:locked', (payload) => {
           if (!ownsListen()) return;
-          if (!payload || typeof payload !== 'object') return;
-          const { building, reason } = payload;
+          const owned = ownLockedBuildingPayload(payload);
+          if (!owned) return;
+          const { building, reason } = owned;
           const state = store.getState();
           if (state.name === 'visiting') return;
           setState({ name: 'locked', building, reason });
         }));
         stops.push(world.on('building:exited', (payload) => {
           if (!ownsListen()) return;
-          if (!payload || typeof payload !== 'object') return;
-          const { building } = payload;
+          const owned = ownBuildingPayload(payload);
+          if (!owned) return;
+          const { building } = owned;
           const state = store.getState();
           if (state.name === 'visiting' && state.building === building) {
             // The World owns movement after the player leaves, even if the
@@ -180,8 +184,9 @@ export function createVisitController(
         }));
         stops.push(world.on('station:activated', (payload) => {
           if (!ownsListen()) return;
-          if (!payload || typeof payload !== 'object') return;
-          activate(payload.building, payload.station);
+          const owned = ownStationPayload(payload);
+          if (!owned) return;
+          activate(owned.building, owned.station);
         }));
       } catch (error) {
         if (ownsListen()) activeListenGeneration = null;
