@@ -103,21 +103,11 @@ export function reconcileRemotePeers(
 }
 
 function immutableSnapshot(snapshot: readonly RemotePeerSnapshot[]): readonly RemotePeerSnapshot[] {
-  const copy = snapshot.map((entry) => {
-    // Copy only the frozen seam. Extra runtime fields cannot enter the source
-    // even if a caller has received a wider object from a transport adapter.
-    const value: Record<string, unknown> = isRecord(entry)
-      ? entry
-      : ({} as Record<string, unknown>);
-    return Object.freeze({
-      id: value.id as string,
-      x: value.x as number,
-      y: value.y as number,
-      facing: value.facing as Facing,
-      sprite: value.sprite as string,
-    });
-  });
-  return Object.freeze(copy);
+  // Reuse the same validation policy as the renderer so every source
+  // subscriber receives only an opaque, finite, legal presentation snapshot.
+  // `reconcileRemotePeers` also gives duplicate IDs deterministic last-wins
+  // semantics and maps unknown cosmetic keys to the safe local fallback.
+  return Object.freeze([...reconcileRemotePeers(snapshot).values()]);
 }
 
 /**

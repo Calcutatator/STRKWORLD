@@ -49,6 +49,22 @@ describe('RemotePeerSource', () => {
     ]);
   });
 
+  it('sanitizes untrusted entries before replaying the retained source', () => {
+    const controller = createRemotePeerSource();
+    const seen: Array<readonly RemotePeerSnapshot[]> = [];
+    controller.source.subscribe((snapshot) => seen.push(snapshot));
+
+    controller.publish([
+      peer({ id: 'nan', x: Number.NaN }),
+      peer({ id: 'infinite', y: Number.POSITIVE_INFINITY }),
+      peer({ id: 'bad-facing', facing: 'diagonal' as never }),
+      peer({ id: 'bad id' }),
+      peer({ id: 'bad-sprite', sprite: 'not-allowlisted' }),
+    ]);
+
+    expect(seen.at(-1)).toEqual([peer({ id: 'bad-sprite', sprite: 'avatar-1' })]);
+  });
+
   it('makes unsubscribe idempotent and stops later delivery', () => {
     const controller = createRemotePeerSource();
     const source = controller.source;

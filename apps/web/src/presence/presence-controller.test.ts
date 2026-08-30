@@ -191,6 +191,35 @@ describe('presence controller', () => {
     stopWorld();
   });
 
+  it('sanitizes malformed lobby peers before exposing the retained source', async () => {
+    const world = createEventBus<WorldEvents>();
+    const made = fakeClient();
+    const presence = createPresenceController({ endpoint: 'ws://example', factory: () => made.client });
+    const snapshots: RemotePeerSnapshot[][] = [];
+    const stopSource = presence.remotePeers.subscribe((peers) => snapshots.push([...peers]));
+    const stopWorld = presence.listen(world);
+    world.emit('player:moved', moved);
+    await Promise.resolve();
+
+    made.publishPeers([
+      { gameId: 'not valid', x: 40, y: 72, facing: 'down', sprite: 'avatar-1' },
+      { gameId: 'nan', x: Number.NaN, y: 72, facing: 'down', sprite: 'avatar-1' },
+      { gameId: 'infinite', x: 40, y: Number.POSITIVE_INFINITY, facing: 'down', sprite: 'avatar-1' },
+      { gameId: 'bad-facing', x: 40, y: 72, facing: 'diagonal' as never, sprite: 'avatar-1' },
+      { gameId: 'bad-sprite', x: 40, y: 72, facing: 'down', sprite: 'not-allowlisted' },
+    ]);
+
+    expect(snapshots.at(-1)).toEqual([{
+      id: 'bad-sprite',
+      x: 40,
+      y: 72,
+      facing: 'down',
+      sprite: 'avatar-1',
+    }]);
+    stopSource();
+    stopWorld();
+  });
+
   it('publishes complete replacements and clears on a lobby drop', async () => {
     const world = createEventBus<WorldEvents>();
     const made = fakeClient();

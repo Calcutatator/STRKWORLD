@@ -258,6 +258,28 @@ empty shell to fetchers, so a 200 there means nothing.
 
 ## 6. Findings log
 
+### 2026-08-30 — World remote-peer sources sanitize before replay
+
+The Shell's Lobby-to-World adapter published raw peer fields into the
+World-owned `RemotePeerSource`. Its retained source copied and cast those
+fields without validation, so a direct source subscriber could receive a
+malformed ID, NaN/Infinity coordinate, illegal facing or arbitrary sprite.
+The renderer validated later, but that left the public source seam inconsistent
+for any other World consumer.
+
+The source now routes initial and published snapshots through the existing
+`reconcileRemotePeers()` policy before freezing them. Invalid identity,
+position or facing entries are dropped and unknown sprites use the approved
+local fallback. The fixed World registry remains authoritative; no server
+operator-specific Lobby sprite list is inferred in this package.
+
+*Verified:* red-first World and Web regressions inject malformed peer fields
+through the public retained-source paths and previously observed all of them;
+the corrected paths expose only the valid fallback entry. The focused World
+source suite passes 16 tests and the focused Presence suite passes 45 tests.
+No browser, network, wallet, RPC, proof, signature, funds or transaction was
+used.*
+
 ### 2026-08-30 — Lobby peer deliveries freeze shared snapshots
 
 `LobbyClient.peers()` returned a fresh array but left both that array and its
