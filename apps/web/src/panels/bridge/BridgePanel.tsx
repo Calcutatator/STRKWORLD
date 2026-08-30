@@ -61,7 +61,7 @@ export function BridgePanel({
       preConfirmGuard: async () => (await owned.revalidateShieldPlan()) !== null,
       register,
     });
-  }, [showShieldBank, owned, operations, receipts, noteOperationError, submissionUncertainty, register]);
+  }, [showShieldBank, owned, state.plan, state.flow.name, operations, receipts, noteOperationError, submissionUncertainty, register]);
 
   useEffect(() => {
     if (!shieldMachine || !state.plan) return;

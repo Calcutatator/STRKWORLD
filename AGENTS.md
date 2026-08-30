@@ -258,6 +258,24 @@ empty shell to fetchers, so a 200 there means nothing.
 
 ## 6. Findings log
 
+### 2026-08-30 — BridgePanel retires a nested shield form with its plan
+
+`BridgePanel` memoized the nested Bank used for a ready-to-shield Bridge plan,
+but omitted the Bridge `plan` and flow from that memo's ownership key. If the
+Bridge record was discarded while the nested Bank was open, the stale Bank
+remained mounted with the old shield amount even though the Bridge no longer
+held the plan that authorized it.
+
+The nested shield machine is now recomputed when the plan or Bridge flow name
+changes, so losing readiness immediately unmounts and closes the stale Bank.
+Its existing wallet handoff and fresh plan revalidation guards remain intact.
+
+*Verified:* a public red-first React regression mounted a ready shield plan,
+opened the nested Bank, discarded the Bridge record, and observed the stale
+station remain on the base. The corrected panel removes the station
+immediately. Focused Bridge panel tests pass 7/7. No browser, wallet,
+provider, RPC, proof, signature, funds or transaction was used.
+
 ### 2026-08-30 — Presence state consumers cannot poison a live handoff
 
 Presence state snapshots were assigned before subscriber delivery, but a
