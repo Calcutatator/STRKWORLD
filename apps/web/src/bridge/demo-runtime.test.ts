@@ -3,6 +3,17 @@ import { createDemoBridgeRuntime } from './demo-runtime.js';
 import { createBridgePanel } from './bridge-machine.js';
 
 describe('demo Bridge runtime', () => {
+  it('publishes an immutable demo runtime API while retaining its service', async () => {
+    const runtime = await createDemoBridgeRuntime();
+    const originalService = runtime.service;
+
+    expect(Object.isFrozen(runtime)).toBe(true);
+    expect(Reflect.set(runtime, 'service', null)).toBe(false);
+    expect(Reflect.set(runtime, 'planner', null)).toBe(false);
+    expect(runtime.service).toBe(originalService);
+    expect(runtime.available()).toBe(true);
+  });
+
   it('persists the signed quote across runtime recreation', async () => {
     const values = new Map<string, string>();
     const storage: Storage = {

@@ -103,7 +103,7 @@ export async function createDemoBridgeRuntime(storage?: Storage): Promise<Bridge
     poolFee: 6n * 10n ** 18n,
     gasEstimate: 1n * 10n ** 18n,
   });
-  return {
+  return Object.freeze({
     service,
     loadSources: () => loadSourceAssets(client),
     readAccount: fixedBridgeAccount(DEMO_ACCOUNT),
@@ -112,7 +112,7 @@ export async function createDemoBridgeRuntime(storage?: Storage): Promise<Bridge
     account: DEMO_ACCOUNT,
     available: () => true,
     load: () => {},
-  };
+  });
 }
 
 /**
