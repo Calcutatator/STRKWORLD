@@ -11,23 +11,63 @@ function toWire(claims: FeeAuthorizationClaims) {
 }
 
 function fromWire(value: unknown): FeeAuthorizationClaims | null {
-  if (!value || typeof value !== 'object') return null;
+  if (!isRecord(value)) return null;
   const record = value as Record<string, unknown>;
   try {
-    if (record.v !== 1 || typeof record.amount !== 'string') return null;
-    const swap = record.swap && typeof record.swap === 'object'
-      ? record.swap as Record<string, unknown>
-      : undefined;
+    if (
+      !hasOwnDataFields(record, ['v', 'route', 'feeToken', 'operationToken', 'token', 'recipient', 'amount', 'issuedAtBlock', 'expiresAtBlock']) ||
+      record.v !== 1 ||
+      (record.route !== 'transfer' && record.route !== 'unshield' && record.route !== 'swap') ||
+      !isStringRecord(record, ['feeToken', 'operationToken', 'token', 'recipient']) ||
+      !isCanonicalDecimal(record.amount) ||
+      !Number.isSafeInteger(record.issuedAtBlock) ||
+      !Number.isSafeInteger(record.expiresAtBlock)
+    ) return null;
+    const swapDescriptor = Object.getOwnPropertyDescriptor(record, 'swap');
+    if (swapDescriptor && !('value' in swapDescriptor)) return null;
+    let swap: Record<string, unknown> | undefined;
+    const wireSwap = swapDescriptor?.value;
+    if (wireSwap !== undefined) {
+      if (
+        !isRecord(wireSwap) ||
+        !hasOwnDataFields(wireSwap, ['executor', 'sellToken', 'buyToken', 'sellAmount', 'quoteExpiresAt', 'invokePrefix']) ||
+        !isStringRecord(wireSwap, ['executor', 'sellToken', 'buyToken']) ||
+        !isCanonicalDecimal(wireSwap.sellAmount) ||
+        !Number.isSafeInteger(wireSwap.quoteExpiresAt) ||
+        !Array.isArray(wireSwap.invokePrefix) ||
+        wireSwap.invokePrefix.some((entry) => typeof entry !== 'string')
+      ) return null;
+      swap = wireSwap;
+    }
     return {
       ...record,
       amount: BigInt(record.amount),
       swap: swap
-        ? { ...swap, sellAmount: BigInt(String(swap.sellAmount)) }
+        ? { ...swap, sellAmount: BigInt(swap.sellAmount as string) }
         : undefined,
     } as unknown as FeeAuthorizationClaims;
   } catch {
     return null;
   }
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+function hasOwnDataFields(record: Record<string, unknown>, fields: readonly string[]): boolean {
+  return fields.every((field) => {
+    const descriptor = Object.getOwnPropertyDescriptor(record, field);
+    return Boolean(descriptor && 'value' in descriptor);
+  });
+}
+
+function isStringRecord(record: Record<string, unknown>, fields: readonly string[]): boolean {
+  return fields.every((field) => typeof record[field] === 'string');
+}
+
+function isCanonicalDecimal(value: unknown): value is string {
+  return typeof value === 'string' && /^(?:0|[1-9][0-9]*)$/.test(value);
 }
 
 /** Test/local codec. Production must use HMAC; this only proves stateless flow. */

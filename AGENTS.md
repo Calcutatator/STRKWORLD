@@ -258,6 +258,27 @@ empty shell to fetchers, so a 200 there means nothing.
 
 ## 6. Findings log
 
+### 2026-08-30 — Authorization wire claims require canonical own data
+
+`fromWire()` previously accepted signed JSON claims through ordinary property
+access and converted bigint strings with `BigInt()`. A validly signed but
+malformed authorization could therefore inherit a missing claim from a
+polluted prototype, accept signed forms such as `+7`, `0x7` or `007`, or carry
+an incomplete swap binding into later claim validation.
+
+The decoder now requires own data properties for all required top-level
+claims, validates the optional swap binding as a complete object with typed
+fields, and accepts only canonical decimal strings for bigint values. Safe
+block and quote-expiry numbers, string fields and invoke-prefix entries are
+shape-checked before conversion; valid issued claims remain unchanged.
+
+*Verified:* red-first codec regressions cover a prototype-supplied amount,
+noncanonical signed amounts and an incomplete signed swap binding. Before the
+guards those tokens decoded successfully; after them they return `null`.
+Removing the own-data, canonical-decimal, or swap-shape guard independently
+revives its regression. No browser, external provider, RPC, wallet, proof,
+signature, funds or transaction was used.
+
 ### 2026-08-30 — Pool fee tokens require canonical felt encoding at the browser boundary
 
 `BackendPrivacyClient.config()` previously treated the backend's `feeToken`
