@@ -40,13 +40,16 @@ export function createPresenceController({ endpoint, factory = (options) => new 
   let inside = false;
   let reconnectRequested = false;
   let hasAttempted = false;
-  let connecting: Promise<void> | null = null;
+  let connecting: { readonly client: PresenceClient; retired: boolean } | null = null;
+  let settlingOwner: { readonly client: PresenceClient; retired: boolean } | null = null;
   let destroyed = false;
   let statusStop: (() => void) | null = null;
   let peerStop: (() => void) | null = null;
   let destroying: Promise<void> | null = null;
   let replacing: Promise<void> | null = null;
   let replacementDeferred = false;
+  let setupOwner: { retired: boolean } | null = null;
+  let statusGeneration = 0;
   const listeners = new Map<() => void, symbol>();
   const peerChannel = createRemotePeerSource();
   const peerSource = peerChannel.source;
@@ -74,13 +77,24 @@ export function createPresenceController({ endpoint, factory = (options) => new 
     if (destroyed) return;
     if (event.status === 'connected') {
       if (inside) {
-        if (client && state.status !== 'suspended') client.suspend();
+        const ownedClient = client;
+        if (ownedClient && state.status !== 'suspended') {
+          ownedClient.suspend();
+          if (client !== ownedClient || state.status === 'unavailable') return;
+        }
         setState({ status: 'suspended', canReconnect: true });
       } else setState({ status: 'connected', canReconnect: true });
     }
     else if (event.status === 'connecting') setState({ status: 'connecting', canReconnect: true });
     else if (event.status === 'suspended') setState({ status: 'suspended', canReconnect: true });
     else if (event.status === 'closed' || event.status === 'idle') {
+      if (event.status === 'closed' && connecting?.client === client) {
+        connecting.retired = true;
+        connecting = null;
+      }
+      if (event.status === 'closed' && settlingOwner?.client === client) settlingOwner.retired = true;
+      if (event.status === 'closed' && setupOwner) setupOwner.retired = true;
+      if (event.status === 'closed') statusGeneration += 1;
       if (event.status === 'idle' || event.reason !== 'client-left') unavailable();
       else clearClientPeers();
     }
@@ -88,14 +102,44 @@ export function createPresenceController({ endpoint, factory = (options) => new 
   const ensureClient = () => {
     if (!endpoint || destroyed || client) return client;
     const sprite = currentSprite;
-    client = factory({
+    const owner = { retired: false };
+    setupOwner = owner;
+    const ownedClient = factory({
       endpoint,
       start: placement ?? { x: 0, y: 0, facing: 'down' },
       sprite,
     });
+    client = ownedClient;
     clientSprite = sprite;
-    statusStop = client.onStatus(onStatus);
-    const ownedClient = client;
+    let installingStatus = true;
+    let initialStatusPending = true;
+    let statusActive = true;
+    const stopStatus = ownedClient.onStatus((event) => {
+      if (!statusActive || destroyed || client !== ownedClient) return;
+      // LobbyClient replays exactly one current-status snapshot on subscribe.
+      // A stale client may legitimately replay `closed` before an explicit
+      // reconnect, so only that first synchronous callback lacks transition
+      // authority. Any later callback during setup is a real reentrant event.
+      if (installingStatus && initialStatusPending) {
+        initialStatusPending = false;
+        return;
+      }
+      onStatus(event);
+    });
+    installingStatus = false;
+    if (destroyed || client !== ownedClient || owner.retired) {
+      stopStatus();
+      if (setupOwner === owner) setupOwner = null;
+      if (client === ownedClient) {
+        client = null;
+        clientSprite = null;
+      }
+      return null;
+    }
+    statusStop = () => {
+      statusActive = false;
+      stopStatus();
+    };
     let active = true;
     const stopPeers = ownedClient.onPeers((snapshot) => {
       if (active && !destroyed && client === ownedClient) {
@@ -106,15 +150,42 @@ export function createPresenceController({ endpoint, factory = (options) => new 
       active = false;
       stopPeers();
     };
-    return client;
+    if (destroyed || client !== ownedClient || owner.retired) {
+      peerStop();
+      peerStop = null;
+      statusStop?.();
+      statusStop = null;
+      if (setupOwner === owner) setupOwner = null;
+      if (client === ownedClient) {
+        client = null;
+        clientSprite = null;
+      }
+      return null;
+    }
+    if (setupOwner === owner) setupOwner = null;
+    return ownedClient;
   };
   const connect = () => {
     if (!endpoint || destroyed || inside || !placement || connecting) return;
     const next = ensureClient();
     if (!next) return;
+    if (client !== next) return;
+    const owner = { client: next, retired: false };
+    connecting = owner;
     setState({ status: 'connecting', canReconnect: true });
-    connecting = next.connect().then(() => {
-      connecting = null;
+    if (connecting !== owner || owner.retired || client !== next) return;
+    let attempt: Promise<void>;
+    try {
+      attempt = next.connect();
+    } catch {
+      if (connecting === owner) connecting = null;
+      if (!owner.retired && !destroyed) unavailable();
+      return;
+    }
+    void attempt.then(() => {
+      if (connecting === owner) connecting = null;
+      if (owner.retired) return;
+      settlingOwner = owner;
       if (destroyed) return next.disconnect();
       if (reconnectRequested && !inside) {
         reconnectRequested = false;
@@ -133,14 +204,20 @@ export function createPresenceController({ endpoint, factory = (options) => new 
       }
       if (inside) {
         if (state.status === 'unavailable') return;
-        if (state.status !== 'suspended') next.suspend();
+        if (state.status !== 'suspended') {
+          next.suspend();
+          if (client !== next || owner.retired) return;
+        }
         setState({ status: 'suspended', canReconnect: true });
       } else if (state.status === 'connecting') {
         next.updatePosition(placement!.x, placement!.y, placement!.facing);
         setState({ status: 'connected', canReconnect: true });
       }
+      if (settlingOwner === owner) settlingOwner = null;
     }).catch(() => {
-      connecting = null;
+      if (connecting === owner) connecting = null;
+      if (settlingOwner === owner) settlingOwner = null;
+      if (owner.retired) return;
       if (destroyed) return;
       unavailable();
       // LobbyClient reports `idle` before a failed join's promise rejects.
@@ -166,14 +243,26 @@ export function createPresenceController({ endpoint, factory = (options) => new 
       connect();
     }
   };
-  const onEntered = () => { inside = true; if (client && state.status === 'connected') { client.suspend(); setState({ status: 'suspended', canReconnect: true }); } };
+  const onEntered = () => {
+    inside = true;
+    const ownedClient = client;
+    if (ownedClient && state.status === 'connected') {
+      const generation = statusGeneration;
+      ownedClient.suspend();
+      if (client !== ownedClient || statusGeneration !== generation) return;
+      setState({ status: 'suspended', canReconnect: true });
+    }
+  };
   const onAvatarSelected = ({ sprite }: WorldEvents['avatar:selected']) => {
     if (isAvatarSpriteKey(sprite)) currentSprite = sprite;
   };
   const onExited = () => {
     inside = false;
-    if (client && state.status === 'suspended' && placement) {
-      client.resume(placement, currentSprite);
+    const ownedClient = client;
+    if (ownedClient && state.status === 'suspended' && placement) {
+      const generation = statusGeneration;
+      ownedClient.resume(placement, currentSprite);
+      if (client !== ownedClient || statusGeneration !== generation) return;
       clientSprite = currentSprite;
       reconnectRequested = false;
       setState({ status: 'connected', canReconnect: true });

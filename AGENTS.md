@@ -258,6 +258,35 @@ empty shell to fetchers, so a 200 there means nothing.
 
 ## 6. Findings log
 
+### 2026-08-30 — Presence setup and interior suspension retain transport ownership
+
+The Web Presence controller previously treated setup and interior suspension as
+single synchronous steps. A conforming client can replay its initial status and
+then synchronously report a drop while the controller is installing status
+delivery; setup still installed peer delivery and attempted to connect the
+retired client. Likewise, `suspend()` can synchronously report that the
+transport closed, but both the connected-status path and a just-settled join
+then overwrote `unavailable` with `suspended`.
+
+Setup now ignores only the mandatory first status replay, owns the rest of the
+installation with a retirement token, and stops before peer delivery or connect
+when a later callback drops the client. Connect and settlement have explicit
+owners, and both suspension paths recheck their exact client/attempt after the
+handoff. Reusing a client whose initial replay is already `closed` remains a
+valid explicit reconnect, and existing queued-reconnect behavior is unchanged.
+
+*Verified:* seven public `createPresenceController()` regressions cover an
+initial replay followed by a synchronous setup drop, a connected status whose
+interior suspension synchronously closes, and a resolved join whose interior
+suspension synchronously closes. They also cover direct building-entry
+suspension, a late status callback from a replaced client, synchronous
+reconnect reentry while the connecting state is published, and a building exit
+whose resume synchronously closes the transport. The focused
+Presence suite passes 41 tests; the full workspace passes 102 files / 1,595
+tests, all workspace typechecks,
+production build, all 13 invariants and diff hygiene. No browser, lobby server,
+wallet, provider, RPC, proof, signature, funds or transaction was used.*
+
 ### 2026-08-29 — Fly sanitizes private-child response headers
 
 The Fly public edge previously copied every non-hop-by-hop response header
