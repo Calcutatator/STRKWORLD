@@ -433,9 +433,11 @@ export class WalletApiPrivacyOperations implements PrivacyOperations {
           ];
           emitProgress(onProgress, { stage: 'awaiting-approval', message: 'Confirm in your wallet' });
           emitProgress(onProgress, { stage: 'proving', message: 'Your wallet is generating a proof' });
+          assertNotDiscarded(discarded);
           const artifact = await owner.wallet.strk20PrepareInvoke(actions, false);
           throwIfAborted(signal);
           emitProgress(onProgress, { stage: 'submitting', message: 'Queued for private submission' });
+          assertNotDiscarded(discarded);
           const result = await owner.submission.submit({
             route,
             artifact,
@@ -547,6 +549,10 @@ function freezeIntents(intents: readonly Intent[]): readonly Intent[] {
 
 function freezeWarnings(warnings: readonly BatchWarning[]): readonly BatchWarning[] {
   return Object.freeze(warnings.map((warning) => Object.freeze({ ...warning })));
+}
+
+function assertNotDiscarded(discarded: boolean): void {
+  if (discarded) throw new PrivacyError('unknown', 'batch already discarded');
 }
 
 function validateIntents(intents: readonly Intent[], policy: WalletRoutePolicy): void {

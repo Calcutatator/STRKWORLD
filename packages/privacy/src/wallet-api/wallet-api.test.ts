@@ -599,6 +599,38 @@ describe('Wallet API action routes', () => {
     expect(gateway.submit).toHaveBeenCalledTimes(1);
   });
 
+  it('does not prove a private transfer discarded from its progress callback', async () => {
+    const { ops, wallet, gateway } = fixture();
+    const prepareInvoke = vi.spyOn(wallet, 'strk20PrepareInvoke');
+    const batch = await ops.prepare([
+      { kind: 'transfer', token: TOKEN, amount: 20n, recipient: BOB },
+    ]);
+
+    await expect(batch.confirm({
+      feeCeiling: POOL_FEE + 2n,
+      onProgress({ stage }) {
+        if (stage === 'proving') batch.discard();
+      },
+    })).rejects.toMatchObject({ kind: 'unknown' });
+    expect(prepareInvoke).not.toHaveBeenCalled();
+    expect(gateway.submit).not.toHaveBeenCalled();
+  });
+
+  it('does not submit a private transfer discarded after proof generation', async () => {
+    const { ops, gateway } = fixture();
+    const batch = await ops.prepare([
+      { kind: 'transfer', token: TOKEN, amount: 20n, recipient: BOB },
+    ]);
+
+    await expect(batch.confirm({
+      feeCeiling: POOL_FEE + 2n,
+      onProgress({ stage }) {
+        if (stage === 'submitting') batch.discard();
+      },
+    })).rejects.toMatchObject({ kind: 'unknown' });
+    expect(gateway.submit).not.toHaveBeenCalled();
+  });
+
   it('rechecks fees and refuses before asking the wallet to prove', async () => {
     const { ops, gateway, prepared } = fixture();
     vi.mocked(gateway.estimate)
