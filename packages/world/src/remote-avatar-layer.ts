@@ -48,6 +48,10 @@ export function createRemoteAvatarLayer({
 }: RemoteAvatarLayerOptions): RemoteAvatarLayer {
   const layer = scene.add.layer().setDepth(9);
   const avatars = new Map<string, RemoteAvatar>();
+  // A child whose removal failed is still owned, but must not be reused if
+  // its peer reappears. It is retried separately before a replacement is
+  // created, so a destroyed/partially-destroyed child can never be presented.
+  const failedRemovals = new Map<string, RemoteAvatar>();
   let peers: ReadonlyMap<string, RemotePeerSnapshot> = new Map();
   let destroyed = false;
   let unsubscribe: (() => void) | undefined;
@@ -59,6 +63,18 @@ export function createRemoteAvatarLayer({
     const next = reconcileRemotePeers(snapshot, peers);
     const errors: unknown[] = [];
 
+    // Retry failures carried over from an earlier snapshot before processing
+    // newly omitted avatars. A newly failed removal is intentionally retried
+    // on the next render, not twice in the same reconciliation pass.
+    for (const [id, avatar] of failedRemovals) {
+      try {
+        destroyAvatar(avatar);
+        failedRemovals.delete(id);
+      } catch (error) {
+        errors.push(error);
+      }
+    }
+
     for (const [id, avatar] of avatars) {
       if (next.has(id)) continue;
       try {
@@ -66,12 +82,16 @@ export function createRemoteAvatarLayer({
         avatars.delete(id);
       } catch (error) {
         // A failed child cleanup must not prevent later omitted peers from
-        // being retired. Keep the failed avatar owned for a future retry.
+        // being retired. Move the failed avatar to retry-only ownership so a
+        // same-ID peer cannot reuse a destroyed or partially-destroyed child.
+        avatars.delete(id);
+        failedRemovals.set(id, avatar);
         errors.push(error);
       }
     }
 
     for (const [id, peer] of next) {
+      if (failedRemovals.has(id)) continue;
       let avatar = avatars.get(id);
       if (avatar === undefined) {
         try {
@@ -122,7 +142,9 @@ export function createRemoteAvatarLayer({
       unsubscribePending = true;
     }
     for (const avatar of avatars.values()) attempt(() => destroyAvatar(avatar));
+    for (const avatar of failedRemovals.values()) attempt(() => destroyAvatar(avatar));
     avatars.clear();
+    failedRemovals.clear();
     peers = new Map();
     attempt(() => layer.destroy());
 
@@ -215,11 +237,13 @@ function cancelIdle(avatar: RemoteAvatar): void {
 function destroyAvatar(avatar: RemoteAvatar): void {
   const errors: unknown[] = [];
   const timer = avatar.idleTimer;
-  avatar.idleTimer = undefined;
   if (timer) {
     try {
       timer.remove(false);
+      avatar.idleTimer = undefined;
     } catch (error) {
+      // Keep the timer owned when Phaser rejects removal so a later cleanup
+      // attempt can retry the same resource instead of silently leaking it.
       errors.push(error);
     }
   }

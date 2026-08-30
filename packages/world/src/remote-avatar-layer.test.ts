@@ -277,6 +277,43 @@ describe('remote avatar layer', () => {
     layer.destroy();
   });
 
+  it('retries failed removal before creating a replacement for a reappearing ID', () => {
+    const sourceController = createRemotePeerSource([peer()]);
+    const fake = fakeScene();
+    const layer = createRemoteAvatarLayer({ scene: fake.scene as never, source: sourceController.source });
+    sourceController.publish([peer({ x: 48 })]);
+    const timerError = new Error('timer cleanup failed');
+    fake.timers[0]!.remove.mockImplementationOnce(() => {
+      throw timerError;
+    });
+
+    expect(() => sourceController.publish([])).toThrow(timerError);
+    expect(() => sourceController.publish([peer()])).not.toThrow();
+    expect(fake.scene.add.sprite).toHaveBeenCalledTimes(2);
+    expect(layer.peers.size).toBe(1);
+
+    layer.destroy();
+    expect(fake.objects[0]?.destroy).toHaveBeenCalledTimes(2);
+    expect(fake.objects[1]?.destroy).toHaveBeenCalledTimes(1);
+  });
+
+  it('keeps a failed removal owned without duplicating on a failed reappearance retry', () => {
+    const sourceController = createRemotePeerSource([peer()]);
+    const fake = fakeScene();
+    const layer = createRemoteAvatarLayer({ scene: fake.scene as never, source: sourceController.source });
+    sourceController.publish([peer({ x: 48 })]);
+    const timerError = new Error('timer cleanup remains unavailable');
+    fake.timers[0]!.remove.mockImplementation(() => {
+      throw timerError;
+    });
+
+    expect(() => sourceController.publish([])).toThrow(timerError);
+    expect(() => sourceController.publish([peer()])).toThrow(timerError);
+    expect(fake.scene.add.sprite).toHaveBeenCalledTimes(1);
+    expect(layer.peers.size).toBe(1);
+    expect(() => layer.destroy()).toThrow(timerError);
+  });
+
   it('owns shutdown when source replay fires before subscribe returns', () => {
     const fake = fakeScene();
     let shutdown: (() => void) | undefined;

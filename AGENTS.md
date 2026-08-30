@@ -258,6 +258,32 @@ empty shell to fetchers, so a 200 there means nothing.
 
 ## 6. Findings log
 
+### 2026-08-30 — Failed remote avatar removals must not be reused
+
+The remote avatar layer retained a child whose removal had thrown in its
+active avatar map. If that peer ID reappeared before cleanup succeeded, the
+reconciliation loop treated the failed child as live and reused it, even
+though its sprite or timer could already be partially destroyed. A repeated
+cleanup failure could also be lost, leaving the old child without a retry
+owner.
+
+Failed removals now move to a retry-only ownership map. Each later snapshot
+retries those children before creating replacements; an ID with an unresolved
+cleanup is skipped rather than presented with the failed child. The latest
+validated peer snapshot still advances, and layer destruction attempts both
+active and retry-only children. Timer ownership is retained when Phaser
+rejects timer removal so subsequent cleanup can retry it. Cleanup errors are
+still surfaced as the existing single error or `AggregateError`, and all
+other omitted children are attempted.
+
+*Verified:* red-first public regressions cover a timer removal that throws
+once (empty snapshot, then same-ID reappearance creates a fresh sprite only
+after retry) and a timer removal that throws repeatedly (same-ID reappearance
+retries without creating or reusing a child, and final destroy retries the
+owned child). The focused remote-avatar suite passes 15 tests; the full World
+suite passes 24 files / 260 tests. No browser, external provider, RPC,
+wallet, proof, signature, funds or transaction was used.
+
 
 ## 6. Findings log
 
