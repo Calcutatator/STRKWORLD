@@ -300,6 +300,7 @@ export function createAvatarStudioController(
     inRoom = false;
     highlightedFigure = null;
     options.onExit?.();
+    if (destroyed || inRoom) return;
     publish();
     options.out.emit('avatar-studio:exited', {});
   };
@@ -313,6 +314,7 @@ export function createAvatarStudioController(
       inRoom = true;
       highlightedFigure = null;
       options.onEnter?.();
+      if (destroyed || !inRoom) return;
       publish();
       options.out.emit('avatar-studio:entered', {});
     },

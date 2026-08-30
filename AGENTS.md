@@ -258,6 +258,46 @@ empty shell to fetchers, so a 200 there means nothing.
 
 ## 6. Findings log
 
+### 2026-08-30 — Wallet balance reads reject negative amounts
+
+`WalletApiPrivacyOperations.balances()` converted each wallet-reported
+`balance` with `BigInt()` but did not reject a negative value. A malformed or
+hostile Wallet API response could therefore publish an impossible negative
+private balance to the shell, where it was formatted as user funds and used by
+asset selection logic.
+
+Balance mapping now rejects negative amounts with the existing generic
+`PrivacyError('unknown')`; zero and positive values retain the existing
+aggregate-balance semantics. No product-level cap is imposed on user funds.
+
+*Verified:* a red-first public Wallet API regression returned `balance: '-1'`
+and observed `total: -1n` before the guard; it now rejects. Removing the
+guard reproduces the failure. The focused Wallet API suite passes 74 tests;
+the full Privacy suite passes 9 files / 218 tests. Package typecheck,
+invariants and diff hygiene pass. No browser, external provider, RPC, wallet,
+proof, signature, funds or transaction was used.
+
+### 2026-08-30 — Avatar Studio lifecycle callbacks cannot publish after teardown
+
+`createAvatarStudioController.enter()` and `leave()` changed lifecycle state,
+then invoked their synchronous `onEnter`/`onExit` callbacks before publishing
+the transition and emitting the corresponding event. If a callback destroyed
+the controller during that handoff, the method resumed and published a stale
+state or emitted `avatar-studio:entered`/`avatar-studio:exited` after teardown.
+An exit callback that re-entered would likewise leave the outer exit event
+describing the wrong transition.
+
+Both methods now recheck lifecycle ownership after the callback. A destroyed
+controller, or an exit callback that synchronously re-enters, suppresses the
+stale outer publication/event; ordinary enter/exit ordering is unchanged.
+
+*Verified:* red-first public regressions destroy the controller from
+`onEnter` and `onExit`; before the guard each leaked a post-teardown state
+publication, while after the guard neither leaked a snapshot nor lifecycle
+event. The focused Avatar Studio suite passes 27 tests and the full World
+suite passes 24 files / 262 tests. No browser, wallet, provider, RPC, proof,
+signature, funds or transaction was used.
+
 ### 2026-08-30 — Failed remote avatar removals must not be reused
 
 The remote avatar layer retained a child whose removal had thrown in its

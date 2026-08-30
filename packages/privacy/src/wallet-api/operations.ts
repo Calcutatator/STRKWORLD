@@ -96,13 +96,19 @@ export class WalletApiPrivacyOperations implements PrivacyOperations {
     try {
       const balances = await this.wallet.strk20Balances(tokens);
       throwIfAborted(signal);
-      return balances.map(({ token, balance }) => ({
-        token,
-        total: BigInt(balance),
-        spendable: 0n,
-        maturing: 0n,
-        maturityKnown: false,
-      }));
+      return balances.map(({ token, balance }) => {
+        const total = BigInt(balance);
+        if (total < 0n) {
+          throw new PrivacyError('unknown', 'The wallet returned an invalid balance.');
+        }
+        return {
+          token,
+          total,
+          spendable: 0n,
+          maturing: 0n,
+          maturityKnown: false,
+        };
+      });
     } catch (error) {
       throw mapWalletError(error);
     }

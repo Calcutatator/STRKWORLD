@@ -12,6 +12,7 @@ import {
   isAvatarStudioSolidAt,
   type AvatarStudioDefinition,
   type AvatarStudioFigure,
+  type AvatarStudioState,
   type AvatarStudioPresentationPort,
   validateAvatarStudioDefinition,
 } from './avatar-studio.js';
@@ -178,6 +179,51 @@ describe('hidden Avatar Studio', () => {
     expect(controller.state.inRoom).toBe(false);
     expect(selection.selected).toBe('avatar-1');
     expect(events.filter((event) => event.event === 'avatar:selected')).toEqual([]);
+  });
+
+  it('does not publish or announce entry after onEnter destroys the controller', () => {
+    const events: Emitted[] = [];
+    const snapshots: AvatarStudioState[] = [];
+    const out: Pick<EventBus<WorldEvents>, 'emit'> = {
+      emit: (event, payload) => events.push({ event, payload } as Emitted),
+    };
+    let controller!: ReturnType<typeof createAvatarStudioController>;
+    controller = createAvatarStudioController({
+      out,
+      selection: createAvatarOutfitSelection({ out }),
+      onEnter: () => controller.destroy(),
+      onChange: (state) => snapshots.push(state),
+    });
+
+    controller.enter();
+
+    expect(controller.state.inRoom).toBe(false);
+    expect(snapshots).toEqual([]);
+    expect(events).toEqual([]);
+  });
+
+  it('does not publish or announce exit after onExit destroys the controller', () => {
+    const events: Emitted[] = [];
+    const snapshots: AvatarStudioState[] = [];
+    const out: Pick<EventBus<WorldEvents>, 'emit'> = {
+      emit: (event, payload) => events.push({ event, payload } as Emitted),
+    };
+    let controller!: ReturnType<typeof createAvatarStudioController>;
+    controller = createAvatarStudioController({
+      out,
+      selection: createAvatarOutfitSelection({ out }),
+      onExit: () => controller.destroy(),
+      onChange: (state) => snapshots.push(state),
+    });
+
+    controller.enter();
+    events.length = 0;
+    snapshots.length = 0;
+    controller.update({ x: AVATAR_STUDIO_DEFINITION.exit.x, y: AVATAR_STUDIO_DEFINITION.exit.y });
+
+    expect(controller.state.inRoom).toBe(false);
+    expect(snapshots).toEqual([]);
+    expect(events).toEqual([]);
   });
 
   it('reads and writes the Scene\'s outfit selection rather than its own copy', () => {

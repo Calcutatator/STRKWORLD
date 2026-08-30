@@ -97,6 +97,15 @@ describe('WalletApiPrivacyOperations capability and reads', () => {
     ]);
   });
 
+  it('rejects a negative wallet balance instead of publishing impossible funds', async () => {
+    const { ops, wallet } = fixture();
+    vi.spyOn(wallet, 'strk20Balances').mockResolvedValue([
+      { token: TOKEN, balance: '-1' },
+    ]);
+
+    await expect(ops.balances([TOKEN])).rejects.toMatchObject({ kind: 'unknown' });
+  });
+
   it('does not return pool config after its read is aborted', async () => {
     const { ops, pool } = fixture();
     let release!: () => void;
