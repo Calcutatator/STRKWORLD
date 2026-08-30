@@ -756,6 +756,7 @@ interface Semver {
 const REQUIRED_VERSION = parseSemver(REQUIRED_WALLET_API)!;
 
 function parseSemver(value: string): Semver | null {
+  if (typeof value !== 'string') return null;
   const match = /^(?:v)?(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-([0-9A-Za-z.-]+))?$/.exec(value);
   if (!match) return null;
   const core = [Number(match[1]), Number(match[2]), Number(match[3])] as Semver['core'];

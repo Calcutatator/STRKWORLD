@@ -1069,6 +1069,30 @@ describe('Wallet API capability versions', () => {
     });
   });
 
+  it('ignores non-string capability versions from the wallet', async () => {
+    const { wallet, pool, gateway } = fixture();
+    const ops = new WalletApiPrivacyOperations({
+      wallet,
+      pool,
+      submission: gateway,
+      supportedVersions: async () => [{ toString: () => '0.10.3' }] as never,
+      policy: {
+        maxIntents: 8,
+        maxRelayFee: 10n,
+        enabledRoutes: ['shield', 'unshield', 'transfer'],
+        allowedTokens: {
+          shield: [STRK, TOKEN], unshield: [STRK, TOKEN], transfer: [STRK, TOKEN], swap: [STRK, TOKEN],
+        },
+      },
+    });
+
+    await expect(ops.capability()).resolves.toEqual({
+      supportsStrk20: false,
+      walletApiVersion: null,
+      registration: 'unknown',
+    });
+  });
+
   it('rejects empty, zero-padded, and malformed semantic-version identifiers', async () => {
     const { wallet, pool, gateway } = fixture();
     const ops = new WalletApiPrivacyOperations({

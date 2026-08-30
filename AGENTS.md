@@ -258,6 +258,27 @@ empty shell to fetchers, so a 200 there means nothing.
 
 ## 6. Findings log
 
+### 2026-08-30 — Wallet capability versions require string runtime data
+
+`WalletApiPrivacyOperations.capability()` passed every value from the wallet's
+supported-version response into semver parsing. The parser coerced objects via
+their `toString()` method, so a hostile or malformed response object could be
+reported as a supported version and returned through the typed capability
+snapshot, despite the Wallet API contract requiring version strings.
+
+Capability parsing now ignores non-string version entries before semver
+parsing. Valid version ordering, prerelease handling and support thresholds
+are unchanged; malformed entries cannot grant capability or cross the privacy
+boundary as a version value.
+
+*Verified:* a red-first public Wallet API regression supplied an object whose
+`toString()` returned `0.10.3`; the old path reported support and returned the
+object as `walletApiVersion`, while the corrected path reports unsupported with
+no version. Removing the runtime type guard reproduces the failure. The
+focused capability suite passes 79 tests; the full Privacy suite passes 9
+files / 246 tests. No browser, provider, RPC, wallet, proof, signature, funds
+or transaction was used.
+
 ### 2026-08-30 — The Exchange asset catalog is immutable product authority
 
 `EXCHANGE_CATALOG` was exported as a mutable array whose asset records were
