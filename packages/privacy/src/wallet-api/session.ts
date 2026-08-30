@@ -616,6 +616,9 @@ function ownPreparedBatch(
     promptCount: prepared.promptCount,
     ...(swapReview ? { swapReview } : {}),
     async confirm(options: Parameters<PreparedBatch['confirm']>[0]) {
+      if (discarded) {
+        throw new PrivacyError('unknown', 'This prepared batch was discarded. Prepare a new batch.');
+      }
       if (!isCurrent()) {
         retire();
         throw changedSessionError();

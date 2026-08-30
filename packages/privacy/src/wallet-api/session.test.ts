@@ -557,6 +557,27 @@ describe('WalletSession', () => {
     await expect(session.operations.capability()).resolves.toMatchObject({ walletApiVersion: '0.10.4' });
   });
 
+  it('does not confirm prepared work after the facade explicitly discarded it', async () => {
+    const selected = wallet('Ready');
+    const confirm = vi.fn(async () => ({ transactionHash: '0x1' }));
+    const discard = vi.fn();
+    const connected = controllableConnection(
+      '0x111', operationsWithBatch(batch(confirm, discard), '0.10.3'), new FakePrivacyOperations(),
+    );
+    const session = createWalletSession(
+      denyAllOptions(),
+      { discovery: discoveryWith(selected), connectWallet: async () => connected.port },
+    );
+    await session.connect(session.getSnapshot().wallets[0]!.key);
+    const prepared = await session.operations.prepare([]);
+
+    prepared.discard();
+
+    await expect(prepared.confirm({ feeCeiling: 0n })).rejects.toMatchObject({ kind: 'unknown' });
+    expect(confirm).not.toHaveBeenCalled();
+    expect(discard).toHaveBeenCalledOnce();
+  });
+
   it('does not publish accessor-backed prepared fields through the session facade', async () => {
     const selected = wallet('Ready');
     let getterCalled = false;
