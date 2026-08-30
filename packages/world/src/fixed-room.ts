@@ -371,6 +371,7 @@ export function createFixedRoomController(
     });
     stopOwner = options.in?.on('world:control-owner', (payload) => {
     if (destroyed || !inRoom || payload?.building !== options.definition.building) return;
+      if (payload.owner !== 'world' && payload.owner !== 'shell') return;
       controlOwner = payload.owner;
       if (controlOwner === 'shell') options.input.suspend();
       else options.input.resume();

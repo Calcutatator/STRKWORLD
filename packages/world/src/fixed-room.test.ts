@@ -465,6 +465,21 @@ describe('fixed room controller', () => {
     expect(h.events).toEqual([]);
   });
 
+  it('ignores a control-owner command with an unknown owner', () => {
+    const h = harness();
+    h.controller.enter();
+    const callsBefore = h.inputCalls.length;
+
+    h.shell.emit('world:control-owner', {
+      building: 'post-office',
+      owner: 'forged' as never,
+    });
+
+    expect(h.controller.state.controlOwner).toBe('world');
+    expect(h.inputCalls).toHaveLength(callsBefore);
+    expect(h.events).toEqual([]);
+  });
+
   it('rearms after leaving the station approach and resumes when no Shell claims', () => {
     const h = harness();
     h.controller.enter();

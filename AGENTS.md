@@ -258,6 +258,24 @@ empty shell to fetchers, so a 200 there means nothing.
 
 ## 6. Findings log
 
+### 2026-08-30 — Fixed-room control ownership accepts only known owners
+
+The fixed-room controller trusted the `owner` field of a matching
+`world:control-owner` Shell event. A malformed runtime value such as `forged`
+was stored in the public controller state and took the fallback input-resume
+path, so the state projection no longer described the actual two-owner
+protocol.
+
+The handler now accepts only the protocol's `world` and `shell` values;
+unknown owners are ignored without changing input state, room state or station
+activation. Valid control handoffs retain their existing ordering.
+
+*Verified:* a red-first fixed-room regression sent a matching building event
+with an unknown owner and observed the old `forged` state plus an input resume;
+the corrected test leaves World ownership unchanged and makes no input call.
+Focused fixed-room tests pass 34/34. No browser, wallet, provider, RPC, proof,
+signature, funds or transaction was used.
+
 ### 2026-08-30 — Server-action span lengths must be nonnegative
 
 `decodeServerActions()` previously accepted negative values anywhere a Cairo
