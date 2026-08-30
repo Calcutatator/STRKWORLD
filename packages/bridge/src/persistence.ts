@@ -62,7 +62,7 @@ export function deserializeBridgeRecord(raw: string): BridgeRecord | null {
     ) {
       return null;
     }
-    if (!Number.isFinite(value.createdAt) || !Number.isFinite(value.updatedAt)) return null;
+    if (!isPersistedTimestamp(value.createdAt) || !isPersistedTimestamp(value.updatedAt)) return null;
     if (typeof value.amountIn !== 'bigint') return null;
     if (!isBridgeStatus(value.status)) return null;
     return value;
@@ -114,6 +114,10 @@ function isBridgeStatus(value: unknown): value is BridgeStatus {
 
 function isBoundedHash(value: unknown): value is string {
   return typeof value === 'string' && value.length > 0 && value.length <= 256 && !/\s/.test(value);
+}
+
+function isPersistedTimestamp(value: unknown): value is number {
+  return typeof value === 'number' && Number.isSafeInteger(value) && value >= 0;
 }
 
 function hasOwnDataProperty(value: object, key: PropertyKey): boolean {

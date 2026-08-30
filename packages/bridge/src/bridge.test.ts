@@ -720,6 +720,28 @@ describe('BridgeService', () => {
   });
 
   it.each([
+    ['negative createdAt', { createdAt: -1 }],
+    ['fractional updatedAt', { updatedAt: NOW + 0.5 }],
+    ['unsafe createdAt', { createdAt: Number.MAX_SAFE_INTEGER + 1 }],
+  ] as const)('rejects persisted records with an invalid %s timestamp', async (_label, patch) => {
+    const client = new StubClient();
+    const store = new MemoryBridgeStore();
+    const service = new BridgeService({ client, store, quoteVerifier: () => true, now: () => NOW });
+    const record = await service.createManualDeposit({
+      source: SOURCE,
+      amountIn: 1_000_000n,
+      starknetRecipient: '0x123',
+      refundAddress: request.refundTo,
+    });
+    const malformed = { ...record, ...patch };
+    const raw = store.serialize(malformed as never);
+
+    expect(deserializeBridgeRecord(raw)).toBeNull();
+    store.save(malformed as never);
+    expect(service.resume()).toBeNull();
+  });
+
+  it.each([
     ['null', null],
     ['array', []],
     ['primitive', 42],
