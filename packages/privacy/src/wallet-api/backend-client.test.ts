@@ -31,6 +31,28 @@ function inheritResponseField(key: string, value: unknown): () => void {
 
 describe('BackendPrivacyClient', () => {
   it.each([
+    ['decimal sell token', { sellToken: '123' }],
+    ['zero buy token', { buyToken: '0x0' }],
+    ['zero sell amount', { sellAmount: 0n }],
+    ['number minimum output', { minAmountOut: 90 }],
+    ['zero slippage', { slippageBps: 0 }],
+    ['fractional slippage', { slippageBps: 1.5 }],
+  ] as const)('rejects an invalid swap-prepare request before transport: %s', async (_label, patch) => {
+    const fetcher = vi.fn(async () => response({}));
+    const client = new BackendPrivacyClient('https://backend.example', fetcher);
+
+    await expect(client.prepareSwap({
+      sellToken: '0xabc',
+      buyToken: '0x4718',
+      sellAmount: 20n,
+      minAmountOut: 90n,
+      slippageBps: 100,
+      ...patch,
+    } as never)).rejects.toMatchObject({ kind: 'unknown' });
+    expect(fetcher).not.toHaveBeenCalled();
+  });
+
+  it.each([
     ['decimal', '123'],
     ['zero', '0x0'],
     ['field-prime', `0x${STARK_FIELD_PRIME.toString(16)}`],

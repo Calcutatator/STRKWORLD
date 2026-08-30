@@ -99,6 +99,20 @@ export class BackendPrivacyClient implements PoolReadClient, PrivateSubmissionGa
       ? A[0]
       : never,
   ): Promise<PreparedPrivateSwap> {
+    if (
+      typeof input.sellToken !== 'string'
+      || !isNonzeroFelt(input.sellToken)
+      || typeof input.buyToken !== 'string'
+      || !isNonzeroFelt(input.buyToken)
+      || typeof input.sellAmount !== 'bigint'
+      || input.sellAmount <= 0n
+      || typeof input.minAmountOut !== 'bigint'
+      || input.minAmountOut <= 0n
+      || !Number.isSafeInteger(input.slippageBps)
+      || input.slippageBps <= 0
+    ) {
+      throw new PrivacyError('unknown', 'The swap-prepare request is invalid.');
+    }
     const raw = await this.post('/v1/private/swaps/prepare', {
       v: 1,
       sellToken: input.sellToken,
