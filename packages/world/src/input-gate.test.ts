@@ -55,6 +55,35 @@ describe('suspend', () => {
     gate.suspend();
     expect(calls.filter((c) => c === 'disableGlobalCapture')).toHaveLength(1);
   });
+
+  it('attempts exit cleanup and input restoration when entry cleanup throws', () => {
+    const { keyboard } = fakeKeyboard();
+    const gate = createInputGate(keyboard);
+    const entryCleanupError = new Error('entry cleanup failed');
+    const offEnter = vi.fn(() => { throw entryCleanupError; });
+    const offExit = vi.fn();
+    const on = vi.fn().mockReturnValueOnce(offEnter).mockReturnValueOnce(offExit);
+    const unbind = bindInputGate(gate, on as never);
+
+    gate.suspend();
+    expect(() => unbind()).toThrow(entryCleanupError);
+    expect(offExit).toHaveBeenCalledOnce();
+    expect(gate.suspended).toBe(false);
+  });
+
+  it('restores input even when exit cleanup throws', () => {
+    const { keyboard } = fakeKeyboard();
+    const gate = createInputGate(keyboard);
+    const exitCleanupError = new Error('exit cleanup failed');
+    const offEnter = vi.fn();
+    const offExit = vi.fn(() => { throw exitCleanupError; });
+    const on = vi.fn().mockReturnValueOnce(offEnter).mockReturnValueOnce(offExit);
+    const unbind = bindInputGate(gate, on as never);
+
+    gate.suspend();
+    expect(() => unbind()).toThrow(exitCleanupError);
+    expect(gate.suspended).toBe(false);
+  });
 });
 
 describe('resume', () => {

@@ -258,6 +258,25 @@ empty shell to fetchers, so a 200 there means nothing.
 
 ## 6. Findings log
 
+### 2026-08-30 — Input-gate unbind attempts every cleanup action
+
+`bindInputGate()` returned an unbind function that removed the entry listener,
+then the exit listener, then resumed input without isolating those operations.
+If either listener cleanup threw, later cleanup was skipped: a panel could
+leave its exit handler attached or leave Phaser keyboard input suspended even
+though the binding was being torn down.
+
+Unbind now attempts both listener removals and input restoration independently,
+then rethrows one cleanup error unchanged or combines multiple failures in an
+`AggregateError`. Normal event routing and idempotent input-gate behavior are
+unchanged.
+
+*Verified:* red-first public regressions make entry cleanup throw and observe
+the old path skipped exit cleanup and input restoration; the corrected path
+attempts both. A second regression covers an exit-cleanup throw while still
+restoring input. No browser, wallet, provider, RPC, proof, signature, funds or
+transaction was used.
+
 ### 2026-08-30 — Intent route projection is immutable
 
 `ROUTE_BY_INTENT_KIND` was exported as a mutable object. A same-bundle

@@ -89,11 +89,21 @@ export function bindInputGate(
     offEnter = on('building:entered', () => gate.suspend());
     const offExit = on('building:exited', () => gate.resume());
     return () => {
-      offEnter?.();
-      offExit();
+      const errors: unknown[] = [];
+      const attempt = (cleanup: () => void): void => {
+        try {
+          cleanup();
+        } catch (error) {
+          errors.push(error);
+        }
+      };
+      attempt(() => offEnter?.());
+      attempt(offExit);
       // Never leave the world unable to receive input because a panel unmounted
       // in an unexpected order.
-      gate.resume();
+      attempt(() => gate.resume());
+      if (errors.length === 1) throw errors[0];
+      if (errors.length > 1) throw new AggregateError(errors, 'Input-gate cleanup failed');
     };
   } catch (error) {
     // A bus may register the entry handler and then fail while installing the
