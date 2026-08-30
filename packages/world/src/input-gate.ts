@@ -60,11 +60,13 @@ export function createInputGate(keyboard: KeyboardLike): InputGate {
 
     resume() {
       if (!suspended) return;
-      suspended = false;
       // Clear first: a key pressed while suspended must not arrive as held.
       keyboard.resetKeys();
       keyboard.enabled = true;
       keyboard.enableGlobalCapture();
+      // Retire the suspended state only after every restoration step succeeds.
+      // A failing keyboard operation remains retryable by Scene teardown.
+      suspended = false;
     },
 
     get suspended() {

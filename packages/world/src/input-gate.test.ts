@@ -87,6 +87,28 @@ describe('suspend', () => {
 });
 
 describe('resume', () => {
+  it('keeps restoration retryable when keyboard reset fails', () => {
+    const resetKeys = vi.fn();
+    const keyboard: KeyboardLike = {
+      enabled: true,
+      disableGlobalCapture: vi.fn(),
+      enableGlobalCapture: vi.fn(),
+      resetKeys,
+    };
+    const gate = createInputGate(keyboard);
+    gate.suspend();
+    resetKeys.mockClear();
+    const error = new Error('keyboard reset failed');
+    resetKeys.mockImplementationOnce(() => { throw error; });
+
+    expect(() => gate.resume()).toThrow(error);
+    expect(gate.suspended).toBe(true);
+
+    expect(() => gate.resume()).not.toThrow();
+    expect(gate.suspended).toBe(false);
+    expect(keyboard.enabled).toBe(true);
+  });
+
   it('clears held keys before re-enabling', () => {
     const { keyboard, calls } = fakeKeyboard();
     const gate = createInputGate(keyboard);
