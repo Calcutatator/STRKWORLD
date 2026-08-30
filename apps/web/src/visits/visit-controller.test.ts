@@ -353,6 +353,34 @@ describe('visit controller', () => {
     expect(stations).toHaveBeenCalledTimes(1);
   });
 
+  it('rolls back World listeners when a later listener registration fails', () => {
+    const world = createEventBus<WorldEvents>();
+    const originalOn = world.on;
+    const stopCalls: Array<ReturnType<typeof vi.fn>> = [];
+    let registrations = 0;
+    const failure = new Error('world listener registration failed');
+    world.on = ((event, handler) => {
+      registrations += 1;
+      if (registrations === 4) throw failure;
+      const stop = originalOn(event, handler);
+      const trackedStop = vi.fn(stop);
+      if (stopCalls.length === 0) {
+        trackedStop.mockImplementation(() => {
+          stop();
+          throw new Error('listener cleanup failed');
+        });
+      }
+      stopCalls.push(trackedStop);
+      return trackedStop;
+    }) as typeof world.on;
+
+    const controller = createVisitController(createEventBus<ShellEvents>());
+
+    expect(() => controller.listen(world)).toThrow(failure);
+    expect(stopCalls).toHaveLength(3);
+    expect(stopCalls.every((stop) => stop.mock.calls.length === 1)).toBe(true);
+  });
+
   it('releases Shell-owned controls when listener cleanup unmounts a station window', () => {
     const world = createEventBus<WorldEvents>();
     const shell = createEventBus<ShellEvents>();

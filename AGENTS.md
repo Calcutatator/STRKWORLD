@@ -258,6 +258,28 @@ empty shell to fetchers, so a 200 there means nothing.
 
 ## 6. Findings log
 
+### 2026-08-30 — Visit world-listener setup rolls back partial registration
+
+`VisitController.listen()` previously registered four world handlers in a
+single array expression. If a later `world.on()` registration threw, the
+earlier handlers remained attached even though no cleanup function was
+returned, so a failed React effect setup could leak callbacks into the world
+bus. Its normal cleanup also stopped at the first unsubscribe failure, which
+could leave Shell-owned controls suspended.
+
+Listener setup now owns registrations incrementally, rolls back every handler
+acquired before the failing registration, attempts all cleanup callbacks, and
+preserves the original setup error. Normal teardown releases Shell-owned
+controls even when listener cleanup reports an error, while retaining
+idempotent listener ownership. Visit routing and matching-exit semantics are
+unchanged.
+
+*Verified:* a red-first Web regression makes the fourth world registration
+throw after attaching the first three and makes the first rollback throw; the
+corrected path calls all three rollback callbacks once and rethrows the
+original registration error. Focused Visit tests pass 23/23. No browser,
+wallet, provider, RPC, proof, signature, funds or transaction was used.
+
 ### 2026-08-30 — Avatar Studio presentation stops after synchronous destroy
 
 `createAvatarStudioPresentation().enter()` and `.exit()` previously continued

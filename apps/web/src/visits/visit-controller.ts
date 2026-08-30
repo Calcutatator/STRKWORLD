@@ -92,14 +92,26 @@ export function createVisitController(
     store,
 
     listen(world): () => void {
-      const stops = [
-        world.on('building:entered', ({ building }) => enter(building)),
-        world.on('building:locked', ({ building, reason }) => {
+      const stops: Array<() => void> = [];
+      const stopWorld = () => {
+        let cleanupFailure: unknown;
+        for (const stop of stops.splice(0)) {
+          try {
+            stop();
+          } catch (error) {
+            cleanupFailure ??= error;
+          }
+        }
+        if (cleanupFailure) throw cleanupFailure;
+      };
+      try {
+        stops.push(world.on('building:entered', ({ building }) => enter(building)));
+        stops.push(world.on('building:locked', ({ building, reason }) => {
           const state = store.getState();
           if (state.name === 'visiting') return;
           store.setState({ name: 'locked', building, reason });
-        }),
-        world.on('building:exited', ({ building }) => {
+        }));
+        stops.push(world.on('building:exited', ({ building }) => {
           const state = store.getState();
           if (state.name === 'visiting' && state.building === building) {
             // The World owns movement after the player leaves, even if the
@@ -107,18 +119,35 @@ export function createVisitController(
             if (state.surface.name !== 'room') ownControls(building, 'world');
             store.setState({ name: 'outside' });
           }
-        }),
-        world.on('station:activated', ({ building, station }) => activate(building, station)),
-      ];
+        }));
+        stops.push(world.on('station:activated', ({ building, station }) => activate(building, station)));
+      } catch (error) {
+        try {
+          stopWorld();
+        } catch {
+          // Preserve the listener registration error; cleanup is best effort.
+        }
+        throw error;
+      }
       return () => {
-        for (const stop of stops) stop();
+        let cleanupFailure: unknown;
+        try {
+          stopWorld();
+        } catch (error) {
+          cleanupFailure = error;
+        }
         // StrictMode and route changes can unmount the Shell while React owns
         // the controls. Do not leave the World permanently suspended because
         // the panel disappeared before it could emit its normal close event.
         const state = store.getState();
         if (state.name === 'visiting' && state.surface.name !== 'room') {
-          ownControls(state.building, 'world');
+          try {
+            ownControls(state.building, 'world');
+          } catch (error) {
+            cleanupFailure ??= error;
+          }
         }
+        if (cleanupFailure) throw cleanupFailure;
       };
     },
 
