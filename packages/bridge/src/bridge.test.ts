@@ -793,6 +793,47 @@ describe('BridgeService', () => {
     expect(store.load()?.status.leg).toBe('awaiting-deposit');
   });
 
+  it('rejects settlement fields supplied only by the swap-details prototype', async () => {
+    const client = new StubClient();
+    const store = new MemoryBridgeStore();
+    const service = new BridgeService({ client, store, quoteVerifier: () => true, now: () => NOW });
+    await service.createManualDeposit({ source: SOURCE, amountIn: 1_000_000n, starknetRecipient: '0x123', refundAddress: request.refundTo });
+    const response = status('SUCCESS' as never);
+    response.swapDetails = Object.create({
+      amountOut: '1980000000000000000',
+      originChainTxHashes: [],
+      destinationChainTxHashes: [],
+    }) as never;
+    client.statuses.push(response);
+
+    await expect(service.refresh()).rejects.toThrow('1Click returned invalid execution status data.');
+    expect(store.load()?.status.leg).toBe('awaiting-deposit');
+  });
+
+  it('does not invoke an accessor-backed settlement amount', async () => {
+    const client = new StubClient();
+    const store = new MemoryBridgeStore();
+    const service = new BridgeService({ client, store, quoteVerifier: () => true, now: () => NOW });
+    await service.createManualDeposit({ source: SOURCE, amountIn: 1_000_000n, starknetRecipient: '0x123', refundAddress: request.refundTo });
+    const details = {
+      intentHashes: [],
+      nearTxHashes: [],
+      originChainTxHashes: [],
+      destinationChainTxHashes: [],
+      amountOut: '1980000000000000000',
+    } as Record<string, unknown>;
+    Object.defineProperty(details, 'amountOut', {
+      configurable: true,
+      get() { throw new Error('settlement amount getter must not run'); },
+    });
+    const response = status('SUCCESS' as never);
+    response.swapDetails = details as never;
+    client.statuses.push(response);
+
+    await expect(service.refresh()).rejects.toThrow('1Click returned invalid execution status data.');
+    expect(store.load()?.status.leg).toBe('awaiting-deposit');
+  });
+
   it('rejects an amountOut above the uint256 upper bound', async () => {
     const client = new StubClient();
     const store = new MemoryBridgeStore();

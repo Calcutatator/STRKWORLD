@@ -479,6 +479,7 @@ function mapStatus(raw: {
       return { leg: 'awaiting-deposit', message: 'Waiting for the origin deposit.', pollingStopped: false };
     case 'KNOWN_DEPOSIT_TX':
     case 'INCOMPLETE_DEPOSIT':
+      requireOwnDataFields(raw.swapDetails, ['originChainTxHashes']);
       return {
         leg: 'deposit-detected',
         depositTxHash: firstTransactionHash(raw.swapDetails.originChainTxHashes),
@@ -488,6 +489,7 @@ function mapStatus(raw: {
         pollingStopped: false,
       };
     case 'PROCESSING':
+      requireOwnDataFields(raw.swapDetails, ['originChainTxHashes']);
       return {
         leg: 'solver-settling',
         depositTxHash: firstTransactionHash(raw.swapDetails.originChainTxHashes),
@@ -496,6 +498,11 @@ function mapStatus(raw: {
       };
     case 'SUCCESS':
       {
+        requireOwnDataFields(raw.swapDetails, [
+          'amountOut',
+          'originChainTxHashes',
+          'destinationChainTxHashes',
+        ]);
         const strkReceived = parseSettlementAmount(raw.swapDetails.amountOut);
         const settlementTxHash = firstTransactionHash(
           raw.swapDetails.destinationChainTxHashes,
@@ -510,6 +517,7 @@ function mapStatus(raw: {
         };
       }
     case 'REFUNDED':
+      requireOwnDataFields(raw.swapDetails, ['originChainTxHashes']);
       return {
         leg: 'failed',
         depositTxHash: firstTransactionHash(raw.swapDetails.originChainTxHashes),
@@ -566,6 +574,10 @@ function parseSettlementAmount(value: unknown): bigint {
 
 function invalidExecutionStatus(): Error {
   return new Error(INVALID_EXECUTION_STATUS_MESSAGE);
+}
+
+function requireOwnDataFields(value: unknown, keys: readonly PropertyKey[]): void {
+  if (!hasOwnDataProperties(value, keys)) throw invalidExecutionStatus();
 }
 
 function isStatusQuoteResponse(value: unknown): value is QuoteResponse {
