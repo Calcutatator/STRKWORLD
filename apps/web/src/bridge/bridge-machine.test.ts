@@ -193,6 +193,16 @@ describe('Bridge shell machine', () => {
     expect(h.machine.store.getState().instructionsVisible).toBe(true);
   });
 
+  it('keeps the saved-quote resume callback usable when extracted', async () => {
+    const h = harness(record());
+    await h.machine.open();
+    const resumeSavedQuote = h.machine.resumeSavedQuote;
+
+    await resumeSavedQuote();
+
+    expect(h.machine.store.getState().instructionsVisible).toBe(true);
+  });
+
   it('does not run deposit preflight after resume has reached a settled leg', async () => {
     const h = harness(record({ leg: 'settled', message: 'settled', pollingStopped: true, strkReceived: 1_234n }));
     await h.machine.resumeSavedQuote();

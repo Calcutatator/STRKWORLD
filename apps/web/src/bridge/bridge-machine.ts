@@ -322,50 +322,11 @@ export function createBridgePanel(options: BridgePanelOptions): BridgePanel {
     }
   }
 
-  return Object.freeze<BridgePanel>({
-    store,
-
-    async open(): Promise<void> {
-      const id = begin();
-      const currentSession = session;
-      patch({ flow: { name: 'loading' }, notice: null });
-      // Resume is local evidence. It intentionally does not refresh status.
-      let record: BridgeRecord | null;
-      try {
-        record = options.service.resume();
-      } catch {
-        if (live(id, currentSession)) fail(COPY.bridge.recoveryUnavailable, 'none');
-        return;
-      }
-      patch({
-        record,
-        quote: record ? quoteReview(record) : null,
-        preflightAvailable: canShowInstructions(record, record ? quoteReview(record) : null),
-        instructionsVisible: false,
-        plan: null,
-      });
-      // Source assets exist only to create a new quote. Recovery-only
-      // production has no planner, so opening its panel must remain a local
-      // record read rather than contacting 1Click for unusable picker data.
-      if (!options.planner) {
-        patch({ flow: { name: 'idle' } });
-        return;
-      }
-      try {
-        const assets = await options.loadSources();
-        if (!live(id, currentSession)) return;
-        patch({ sources: { status: 'loaded', assets }, flow: { name: 'idle' } });
-      } catch {
-        if (!live(id, currentSession)) return;
-        patch({ sources: { status: 'failed', assets: [] }, flow: { name: 'idle' } });
-      }
-    },
-
-    async preflightSavedQuote(): Promise<void> {
-      if (preflightOwner !== 0) return;
-      const owner = ++preflightSequence;
-      preflightOwner = owner;
-      try {
+  async function preflightSavedQuote(): Promise<void> {
+    if (preflightOwner !== 0) return;
+    const owner = ++preflightSequence;
+    preflightOwner = owner;
+    try {
       const planner = options.planner;
       const { record, review } = recordAndReview();
       if (!planner) {
@@ -409,10 +370,51 @@ export function createBridgePanel(options: BridgePanelOptions): BridgePanel {
           fail(COPY.bridge.preflightFailed, 'quote');
         }
       }
-      } finally {
-        if (preflightOwner === owner) preflightOwner = 0;
+    } finally {
+      if (preflightOwner === owner) preflightOwner = 0;
+    }
+  }
+
+  return Object.freeze<BridgePanel>({
+    store,
+
+    async open(): Promise<void> {
+      const id = begin();
+      const currentSession = session;
+      patch({ flow: { name: 'loading' }, notice: null });
+      // Resume is local evidence. It intentionally does not refresh status.
+      let record: BridgeRecord | null;
+      try {
+        record = options.service.resume();
+      } catch {
+        if (live(id, currentSession)) fail(COPY.bridge.recoveryUnavailable, 'none');
+        return;
+      }
+      patch({
+        record,
+        quote: record ? quoteReview(record) : null,
+        preflightAvailable: canShowInstructions(record, record ? quoteReview(record) : null),
+        instructionsVisible: false,
+        plan: null,
+      });
+      // Source assets exist only to create a new quote. Recovery-only
+      // production has no planner, so opening its panel must remain a local
+      // record read rather than contacting 1Click for unusable picker data.
+      if (!options.planner) {
+        patch({ flow: { name: 'idle' } });
+        return;
+      }
+      try {
+        const assets = await options.loadSources();
+        if (!live(id, currentSession)) return;
+        patch({ sources: { status: 'loaded', assets }, flow: { name: 'idle' } });
+      } catch {
+        if (!live(id, currentSession)) return;
+        patch({ sources: { status: 'failed', assets: [] }, flow: { name: 'idle' } });
       }
     },
+
+    preflightSavedQuote,
 
     async resumeSavedQuote(): Promise<void> {
       // A resumed quote is not executable merely because it exists in local
@@ -421,7 +423,7 @@ export function createBridgePanel(options: BridgePanelOptions): BridgePanel {
       // as evidence and expose their ordinary refresh/watch/settlement action.
       if (!options.service.resume()) return;
       const status = await refreshCurrent();
-      if (status?.leg === 'awaiting-deposit') await this.preflightSavedQuote();
+      if (status?.leg === 'awaiting-deposit') await preflightSavedQuote();
     },
 
     close(): void {

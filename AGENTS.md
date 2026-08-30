@@ -258,6 +258,24 @@ empty shell to fetchers, so a 200 there means nothing.
 
 ## 6. Findings log
 
+### 2026-08-30 — Bridge saved-quote resume retains its callback owner
+
+`BridgePanel.resumeSavedQuote()` was the only public panel transition that
+called another transition through `this`. A caller that extracted the method
+for an event callback therefore lost the machine receiver after the refresh
+and threw before the account-bound shield preflight could run.
+
+The preflight transition is now a machine-owned closure, and resume calls that
+closure directly. The extracted callback remains bound to the same panel
+state, while refresh, account matching, plan validation and all existing close
+ownership remain unchanged.
+
+*Verified:* a public regression opens a saved quote, extracts
+`resumeSavedQuote`, and completes the refresh plus preflight through the
+extracted callback. The old path throws a receiver `TypeError`; the corrected
+Bridge machine suite passes 49 tests. No browser, wallet, provider, RPC,
+proof, signature, funds or transaction was used.
+
 ### 2026-08-30 — Avatar selection delivery must roll back the rendered sprite
 
 `StreetScene` applied the new avatar sprite before delivering the existing
