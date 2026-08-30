@@ -258,6 +258,53 @@ empty shell to fetchers, so a 200 there means nothing.
 
 ## 6. Findings log
 
+### 2026-08-30 — World releases must retire a still-loading acquire
+
+`acquireWorld()` waits for Phaser's lazy module import before handing the
+request to the ref-counted host. A React owner can unmount in that window and
+call `releaseWorld()`, but the old release saw no host and became a no-op. The
+late acquire then created a live Game with an unclaimed reference, leaving the
+World running after its only owner had gone away.
+
+The runtime now tracks pending acquire requests and marks the matching pending
+request cancelled when released. Once lazy loading completes, the request
+still resolves its Game but immediately releases that lease, allowing the
+normal deferred host teardown to retire it. Failed lazy imports remove their
+pending request, while concurrent acquires and ordinary retained/remounted
+ownership are unchanged.
+
+*Verified:* a red-first runtime regression starts an acquire, releases before
+the lazy Phaser import settles, and observes the late lease. The old runtime
+left `refCount: 1` after release; the corrected runtime reaches
+`refCount: 0` and destroys the Game on the deferred teardown. The mutation
+that removes pending-release tracking reproduces the leak. Focused runtime
+concurrency tests pass 2 tests. No browser, lobby server, wallet, provider,
+RPC, proof, signature, funds or transaction was used.
+
+### 2026-08-30 — Remote avatar position must roll back after failed presentation
+
+`createRemoteAvatarLayer.updateAvatar()` moved an existing Phaser sprite before
+visual presentation and movement-idle timer setup completed. If either later
+operation threw, reconciliation correctly retained the last rendered peer
+snapshot, but the sprite had already moved to the uncommitted coordinates.
+That left the public retained map and visible remote avatar disagreeing until
+another source publication happened, and could make the next movement update
+start from the wrong spatial state.
+
+The update now captures the last rendered coordinates and compensates a
+partially applied position when presentation or timer setup fails. A failed
+position setter that did not mutate still preserves the original error, while
+a rollback failure is reported together with it. Successful updates, idle
+timers, retryable visual failures and teardown ownership are unchanged.
+
+*Verified:* a red-first public World regression makes an existing sprite move
+to a new position, then throws from its visual setter; the old layer retained
+the old peer snapshot while leaving the sprite at the new coordinates, while
+the corrected layer restores the old coordinates and preserves the exact
+presentation error. Focused remote-avatar tests pass 24 tests. No browser,
+lobby server, wallet, provider, RPC, proof, signature, funds or transaction
+was used.
+
 ### 2026-08-30 — Failed local avatar poses must not advance facing state
 
 `createLocalAvatarVisual.update()` advanced its private movement-facing

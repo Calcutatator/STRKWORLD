@@ -201,6 +201,22 @@ describe('remote avatar layer', () => {
     expect(sprite.setPosition).toHaveBeenCalledTimes(2);
   });
 
+  it('rolls back an existing sprite position when its new presentation fails', () => {
+    const sourceController = createRemotePeerSource([peer()]);
+    const fake = fakeScene();
+    const layer = createRemoteAvatarLayer({ scene: fake.scene as never, source: sourceController.source });
+    const sprite = fake.objects[0]!;
+    const presentationError = new Error('presentation update failed');
+    sprite.setData.mockImplementationOnce(() => {
+      throw presentationError;
+    });
+
+    expect(() => sourceController.publish([peer({ x: 100, y: 120 })])).toThrow(presentationError);
+    expect(layer.peers.get('peer-1')).toEqual(peer());
+    expect(sprite.x).toBe(40);
+    expect(sprite.y).toBe(72);
+  });
+
   it('commits the newest snapshot after a source reenters during rendering', () => {
     const fake = fakeScene();
     let deliver!: (snapshot: readonly RemotePeerSnapshot[]) => void;

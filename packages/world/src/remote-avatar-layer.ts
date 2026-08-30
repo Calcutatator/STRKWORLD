@@ -299,26 +299,47 @@ function updateAvatar(
   const visual = avatar.visual;
   if (visual === undefined) return;
   cancelIdle(avatar);
-  avatar.sprite.setPosition(peer.x, peer.y);
-  visual.present({
-    sprite: peer.sprite,
-    facing: peer.facing,
-    moving,
-    sprinting: false,
-  });
-  if (!moving) return;
-  const animation = resolveAvatarAnimation(peer.sprite, peer.facing, false);
-  const movementIdleMs = (animation.frames.length / animation.frameRate) * 1_000;
-  avatar.idleTimer = scene.time.delayedCall(movementIdleMs, () => {
-    avatar.idleTimer = undefined;
-    if (!isAlive()) return;
+  const previousX = avatar.sprite.x;
+  const previousY = avatar.sprite.y;
+  try {
+    avatar.sprite.setPosition(peer.x, peer.y);
     visual.present({
       sprite: peer.sprite,
       facing: peer.facing,
-      moving: false,
+      moving,
       sprinting: false,
     });
-  });
+    if (!moving) return;
+    const animation = resolveAvatarAnimation(peer.sprite, peer.facing, false);
+    const movementIdleMs = (animation.frames.length / animation.frameRate) * 1_000;
+    avatar.idleTimer = scene.time.delayedCall(movementIdleMs, () => {
+      avatar.idleTimer = undefined;
+      if (!isAlive()) return;
+      visual.present({
+        sprite: peer.sprite,
+        facing: peer.facing,
+        moving: false,
+        sprinting: false,
+      });
+    });
+  } catch (error) {
+    // Position is part of the same presentation commit as the pose. A Phaser
+    // setter may mutate coordinates before a later visual/timer operation
+    // fails; retain the last-rendered snapshot by compensating only when the
+    // coordinates actually changed. Preserve the original failure if the
+    // position setter failed before mutating, as common Phaser mocks do.
+    if (avatar.sprite.x !== previousX || avatar.sprite.y !== previousY) {
+      try {
+        avatar.sprite.setPosition(previousX, previousY);
+      } catch (rollbackError) {
+        throw new AggregateError(
+          [error, rollbackError],
+          'Remote avatar position rollback failed',
+        );
+      }
+    }
+    throw error;
+  }
 }
 
 function cancelIdle(avatar: RemoteAvatar): void {
