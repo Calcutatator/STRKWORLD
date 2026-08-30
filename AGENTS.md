@@ -258,6 +258,23 @@ empty shell to fetchers, so a 200 there means nothing.
 
 ## 6. Findings log
 
+### 2026-08-30 — Lobby config resolution fails closed for malformed containers
+
+`resolveRoomConfig()` assumed its operator override argument was always a
+non-null object. A runtime `null` supplied through composition therefore threw
+before the lobby could resolve its bounded defaults, turning a malformed
+configuration into a startup failure rather than a safe configuration.
+
+Resolution now treats null and non-object override containers as no overrides.
+Valid operator fields, numeric clamps, sprite/default selection and the frozen
+resolved configuration are unchanged; this does not widen any lobby policy.
+
+*Verified:* a red-first public Lobby regression supplied a null override and
+observed the old null dereference; the corrected resolver returns the frozen
+default configuration. The focused Lobby privacy suite passes 17 tests. No
+browser, external lobby, wallet, provider, RPC, proof, signature, funds or
+transaction was used.
+
 ### 2026-08-30 — Production capability admission validates connected state shape
 
 `capabilityAdmits()` previously admitted any runtime object whose `name` was

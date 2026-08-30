@@ -217,6 +217,11 @@ describe('a client cannot set the room configuration', () => {
     expect(config.minUpdateIntervalMs).toBeGreaterThanOrEqual(0);
     expect(config.maxMessagesPerSecond).toBeLessThanOrEqual(1000);
   });
+
+  it('fails closed for a null override container', () => {
+    expect(() => resolveRoomConfig(null as never)).not.toThrow();
+    expect(resolveRoomConfig(null as never)).toEqual(DEFAULT_ROOM_CONFIG);
+  });
 });
 
 describe('suspend removes a player from every other view', () => {

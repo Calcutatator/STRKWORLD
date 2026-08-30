@@ -256,6 +256,10 @@ function clamp(value: unknown, lo: number, hi: number, fallback: number): number
 export function resolveRoomConfig(
   overrides: PresenceRoomConfigOverrides = {},
 ): PresenceRoomConfig {
+  // This is an operator-facing seam, but it is still called from runtime
+  // composition code. Treat a malformed container as no overrides rather
+  // than allowing a null dereference to prevent the lobby from starting.
+  if (overrides === null || typeof overrides !== 'object') overrides = {};
   const spriteKeys =
     Array.isArray(overrides.spriteKeys) &&
     overrides.spriteKeys.length > 0 &&
