@@ -65,6 +65,22 @@ describe('World-local outfit selection', () => {
 });
 
 describe('World-local outfit toggle binding', () => {
+  it('rolls back a listener when keyboard registration throws after attaching it', () => {
+    const registrationError = new Error('keyboard registration failed');
+    const handlers = new Set<(event: KeyEvent) => void>();
+    const off = vi.fn((_event: string, handler: (event: KeyEvent) => void) => handlers.delete(handler));
+    const keyboard = {
+      on: vi.fn((_event: string, handler: (event: KeyEvent) => void) => {
+        handlers.add(handler);
+        throw registrationError;
+      }),
+      off,
+    };
+    expect(() => createAvatarOutfitToggleBinding({ keyboard: keyboard as never, isActive: () => true, toggle: vi.fn() }))
+      .toThrow(registrationError);
+    expect(handlers).toHaveLength(0);
+    expect(off).toHaveBeenCalledOnce();
+  });
   it('owns exactly one keydown-F listener for its whole lifetime', () => {
     const keyboard = new FakeKeyboard();
     const binding = createAvatarOutfitToggleBinding({

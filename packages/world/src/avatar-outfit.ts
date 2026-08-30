@@ -101,7 +101,12 @@ export function createAvatarOutfitToggleBinding(options: {
     options.toggle();
   };
 
-  options.keyboard.on('keydown-F', onKeyDown);
+  try {
+    options.keyboard.on('keydown-F', onKeyDown);
+  } catch (error) {
+    try { options.keyboard.off('keydown-F', onKeyDown); } catch { /* preserve registration failure */ }
+    throw error;
+  }
 
   return {
     destroy(): void {

@@ -258,6 +258,23 @@ empty shell to fetchers, so a 200 there means nothing.
 
 ## 6. Findings log
 
+### 2026-08-30 — Avatar outfit binding rolls back partial keyboard registration
+
+`createAvatarOutfitToggleBinding()` previously called `keyboard.on()` without
+handling a registration failure. An emitter that attached the handler before
+throwing left the Scene-lifetime F listener installed even though no binding
+was returned, so `StreetScene.createAvatarOutfit()` could not destroy it on a
+partial create cleanup.
+
+Binding construction now removes the handler after a failed registration,
+preserves the original error, and tolerates a cleanup failure. Normal binding
+ownership, input filtering and idempotent destroy behavior are unchanged.
+
+*Verified:* a red-first World regression makes keyboard registration attach
+then throw and observes one leaked handler on the old path; the corrected test
+removes it. Focused outfit tests pass 8/8. No browser, wallet, provider, RPC,
+proof, signature, funds or transaction was used.
+
 ### 2026-08-30 — Prepared swap responses require a nonempty quote identifier
 
 `BackendPrivacyClient.prepareSwap()` previously accepted any string as
