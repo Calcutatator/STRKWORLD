@@ -278,6 +278,29 @@ each exactly once. Focused bootstrap tests pass 14 tests; workspace gates are
 recorded on the candidate. No browser, wallet, provider, RPC, proof,
 signature, funds or transaction was used.
 
+### 2026-08-30 — Swap decoder owns array lengths without proxy reads
+
+The owned swap-plan decoder took root and nested field values from property
+descriptors, but still read the `length` of the provider's executor-call and
+calldata arrays through ordinary property access. Exact own-key checks made a
+simple substituted length fail closed later, yet the provider-controlled `get`
+trap still executed inside the authority boundary and could throw or cause
+side effects before rejection.
+
+The decoder now reads both array lengths from their own data-property
+descriptors, alongside the already descriptor-owned elements. No provider
+`get` trap is invoked while acquiring array shape; malformed descriptors and
+proxy traps retain the existing controlled malformed-plan classification.
+
+*Verified:* a public Wallet API regression installs a stateful executor-call
+array proxy whose `length` getter reports a substituted value and records each
+ordinary read. The base invoked that trap once; the corrected decoder owns the
+real descriptor length, publishes the complete valid review and records zero
+ordinary reads. Focused Wallet API verification passes 189 tests and the
+privacy package typecheck passes. Full workspace gates are recorded in the
+owning commit. Deterministic fakes only: no browser, external provider, RPC,
+wallet, proof, signature, funds or transaction was used.*
+
 ### 2026-08-30 — Production bootstrap owns an immutable admitted session
 
 Session shape validation alone did not close the ownership boundary. A

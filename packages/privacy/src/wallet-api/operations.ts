@@ -832,7 +832,11 @@ function ownExecutorCalls(value: unknown): PreparedPrivateSwap['executorCalls'] 
   let length: number;
   try {
     if (!Array.isArray(value)) throw new Error('invalid call container');
-    length = value.length;
+    const lengthDescriptor = Object.getOwnPropertyDescriptor(value, 'length');
+    if (!lengthDescriptor || !('value' in lengthDescriptor) || !Number.isSafeInteger(lengthDescriptor.value)) {
+      throw new Error('invalid call container length');
+    }
+    length = lengthDescriptor.value as number;
     if (length === 0 || Reflect.ownKeys(value).length !== length + 1) {
       throw new Error('invalid call container shape');
     }
@@ -873,7 +877,11 @@ function ownFeltArray(value: unknown): readonly string[] {
   let length: number;
   try {
     if (!Array.isArray(value)) throw new Error('invalid calldata container');
-    length = value.length;
+    const lengthDescriptor = Object.getOwnPropertyDescriptor(value, 'length');
+    if (!lengthDescriptor || !('value' in lengthDescriptor) || !Number.isSafeInteger(lengthDescriptor.value)) {
+      throw new Error('invalid calldata length');
+    }
+    length = lengthDescriptor.value as number;
     if (Reflect.ownKeys(value).length !== length + 1) throw new Error('invalid calldata shape');
   } catch {
     throw new PrivacyError('unknown', 'The private swap contains malformed executor calls.');

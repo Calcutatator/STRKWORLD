@@ -662,6 +662,41 @@ describe('WalletApiPrivacyOperations capability and reads', () => {
 });
 
 describe('Wallet API action routes', () => {
+  it('owns the executor-call array length without invoking proxy get substitution', async () => {
+    const { wallet, pool, gateway, supportedVersions } = fixture();
+    const calls = [
+      { contractAddress: '0x111', entrypoint: 'swap', calldata: ['0xaaa'] },
+      { contractAddress: '0x222', entrypoint: 'settle', calldata: ['0xbbb'] },
+    ];
+    let lengthReads = 0;
+    gateway.prepareSwap = vi.fn(async () => ({
+      quoteId: 'quote-1', buyAmount: 95n, expiresAt: 2_000, chainId: '0x534e5f4d41494e', executorAddress: '0x999',
+      executorCalls: new Proxy(calls, {
+        get(target, key, receiver) {
+          if (key === 'length') {
+            lengthReads += 1;
+            return 1;
+          }
+          return Reflect.get(target, key, receiver);
+        },
+      }),
+      fee: { token: STRK, recipient: FEE_RECIPIENT, amount: 1n, ...AUTH },
+    }));
+    const ops = new WalletApiPrivacyOperations({
+      wallet, pool, submission: gateway, supportedVersions, now: () => 1_000,
+      policy: {
+        maxIntents: 1, maxRelayFee: 10n, enabledRoutes: ['swap'],
+        allowedTokens: { shield: [], unshield: [], transfer: [], swap: [TOKEN, STRK] },
+        swap: { expectedChainId: '0x534e5f4d41494e', slippageBps: 100 },
+      },
+    });
+
+    await expect(ops.prepare([
+      { kind: 'swap', tokenIn: TOKEN, tokenOut: STRK, amountIn: 20n, minAmountOut: 90n },
+    ])).resolves.toMatchObject({ swapReview: { expectedAmountOut: 95n } });
+    expect(lengthReads).toBe(0);
+  });
+
   it('owns the validated executor before a stateful proxy can substitute it', async () => {
     const { wallet, pool, gateway, supportedVersions, prepared } = fixture();
     const target = {
