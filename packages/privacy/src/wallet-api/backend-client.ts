@@ -20,6 +20,9 @@ export class BackendPrivacyClient implements PoolReadClient, PrivateSubmissionGa
     baseUrl: string,
     fetcher?: FetchLike,
   ) {
+    if (typeof baseUrl !== 'string') {
+      throw new PrivacyError('unknown', 'The private service URL is invalid.');
+    }
     this.baseUrl = baseUrl;
     // Window fetch is a Web IDL method and rejects a non-Window receiver.
     // Calling it through this object's property would bind `this` to the

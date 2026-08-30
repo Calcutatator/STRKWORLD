@@ -30,6 +30,13 @@ function inheritResponseField(key: string, value: unknown): () => void {
 }
 
 describe('BackendPrivacyClient', () => {
+  it('rejects a non-string base URL before dispatching transport', () => {
+    const fetcher = vi.fn(async () => response({}));
+
+    expect(() => new BackendPrivacyClient(null as never, fetcher)).toThrow(/URL/i);
+    expect(fetcher).not.toHaveBeenCalled();
+  });
+
   it.each([
     ['unsupported route', { route: 'shield' }],
     ['empty authorization', { feeAuthorization: '' }],
