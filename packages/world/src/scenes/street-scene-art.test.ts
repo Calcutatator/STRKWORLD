@@ -84,4 +84,27 @@ describe('street Kenney door presentation', () => {
     expect(() => scene.createRoomVisuals()).toThrow(depthError);
     expect(scene.roomGraphics).toBe(graphics);
   });
+
+  it('retains exterior labels before presentation setters can throw', () => {
+    const presentationError = new Error('exterior label presentation failed');
+    const label = {
+      setOrigin: vi.fn(() => {
+        throw presentationError;
+      }),
+      setDepth: vi.fn(),
+    };
+    const SceneType = createStreetScene({ Phaser: { Scene: class {} } as never });
+    const scene = new SceneType() as unknown as {
+      map: ReturnType<typeof createStreetMap>;
+      add: { text: ReturnType<typeof vi.fn> };
+      exteriorLabels: Map<string, unknown>;
+      createExteriorLabels(): void;
+    };
+    scene.map = createStreetMap();
+    scene.exteriorLabels = new Map();
+    scene.add = { text: vi.fn(() => label) };
+
+    expect(() => scene.createExteriorLabels()).toThrow(presentationError);
+    expect(scene.exteriorLabels.get('bank')).toBe(label);
+  });
 });

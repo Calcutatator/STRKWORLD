@@ -258,6 +258,25 @@ empty shell to fetchers, so a 200 there means nothing.
 
 ## 6. Findings log
 
+### 2026-08-30 — Exterior labels claim ownership before styling
+
+`StreetScene.createExteriorLabels()` previously inserted each text object into
+`exteriorLabels` only after `.setOrigin()` and `.setDepth()` completed. A
+Phaser setter failure during Scene construction therefore left an allocated
+label outside the Scene-owned collection and unreachable by partial-create
+cleanup.
+
+Each label is now registered immediately after construction, before its
+presentation setters run. Label geometry and normal rendering/teardown are
+unchanged; a failed setter leaves the object owned for `cleanShutdown()`.
+
+*Verified:* a red-first World presentation regression makes the first label
+styling setter throw and observes the created label missing from Scene
+ownership on the old path. The corrected test retains it. The full World
+suite passes 24 files / 266 tests; World typecheck, invariants and diff
+hygiene pass. No browser, wallet, provider, RPC, proof, signature, funds or
+transaction was used.
+
 ### 2026-08-30 — Room graphics claim ownership before depth setup
 
 `StreetScene.createRoomVisuals()` previously assigned each graphics object

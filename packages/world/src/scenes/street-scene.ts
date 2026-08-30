@@ -586,18 +586,16 @@ export function createStreetScene({ Phaser, onTileChanged, remotePeers }: Street
     private createExteriorLabels(): void {
       for (const exterior of this.map.exteriorLabels) {
         const position = tileToWorld(exterior.x, exterior.y);
-        const label = this.add
-          .text(position.x, position.y, exterior.text, {
-            color: '#f4e9c9',
-            fontFamily: 'monospace',
-            fontSize: '10px',
-            align: 'center',
-            stroke: '#2b2b33',
-            strokeThickness: 3,
-          })
-          .setOrigin(0.5)
-          .setDepth(3);
+        const label = this.add.text(position.x, position.y, exterior.text, {
+          color: '#f4e9c9',
+          fontFamily: 'monospace',
+          fontSize: '10px',
+          align: 'center',
+          stroke: '#2b2b33',
+          strokeThickness: 3,
+        });
         this.exteriorLabels.set(exterior.building, label);
+        label.setOrigin(0.5).setDepth(3);
       }
     }
 
