@@ -20,6 +20,7 @@ async function fakeChild(): Promise<string> {
   const path = join(directory, 'child.mjs');
   await writeFile(path, `
     import { createServer } from 'node:http';
+    import { existsSync } from 'node:fs';
     const port = Number(process.env.PORT ?? process.env.LOBBY_PORT);
     const delay = Number(
       !process.env.START_DELAY_PORT || process.env.START_DELAY_PORT === String(port)
@@ -31,7 +32,16 @@ async function fakeChild(): Promise<string> {
     if (!process.env.EXIT_BEFORE_READY) {
       setTimeout(() => server.listen(port, '127.0.0.1', () => {
         process.send?.({ type: 'ready' }, () => {
-          if (process.env.EXIT_AFTER_READY) setTimeout(() => process.exit(2), Number(process.env.EXIT_AFTER_READY));
+          if (process.env.EXIT_AFTER_READY_MARKER) {
+            const timer = setInterval(() => {
+              if (existsSync(process.env.EXIT_AFTER_READY_MARKER)) {
+                clearInterval(timer);
+                process.exit(2);
+              }
+            }, 5);
+          } else if (process.env.EXIT_AFTER_READY) {
+            setTimeout(() => process.exit(2), Number(process.env.EXIT_AFTER_READY));
+          }
         });
       }), delay);
     }
@@ -479,6 +489,9 @@ describe('Fly composition process boundary', () => {
 
   it('reports a ready child exit to the machine supervisor', async () => {
     const child = await fakeChild();
+    const exitMarkerDirectory = await mkdtemp(join(tmpdir(), 'strkworld-exit-marker-'));
+    directories.push(exitMarkerDirectory);
+    const exitMarker = join(exitMarkerDirectory, 'exit');
     const { publicPort, backendPort, lobbyPort } = await ports();
     let resolveFatal: (error: Error) => void = () => undefined;
     const fatalPromise = new Promise<Error>((resolve) => { resolveFatal = resolve; });
@@ -490,11 +503,12 @@ describe('Fly composition process boundary', () => {
       backendPort,
       lobbyPort,
       publicOrigin: 'https://game.example',
-      environment: { ...process.env, EXIT_AFTER_READY: '100' },
+      environment: { ...process.env, EXIT_AFTER_READY_MARKER: exitMarker },
       readinessTimeoutMs: 2_000,
       onFatal: resolveFatal,
     });
     compositions.push(composition);
+    await writeFile(exitMarker, 'exit');
 
     await expect(fatalPromise).resolves.toMatchObject({ message: 'A private service exited.' });
   });

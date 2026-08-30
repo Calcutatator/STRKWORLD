@@ -281,6 +281,24 @@ passes 190 tests and privacy typecheck passes. Full workspace gates are
 recorded in the owning commit. Deterministic fakes only: no browser, external
 provider, RPC, wallet, proof, signature, funds or transaction was used.*
 
+### 2026-08-30 — Fly ready-child supervisor test uses a post-handoff trigger
+
+The Fly composition correctly rejects a private child that exits while
+startup is still in progress. The ready-child supervisor regression used a
+100 ms post-ready timer, so a busy full test run could cross that timer before
+the composition was handed to the supervisor; the test then failed while
+assuming it was exercising a post-handoff exit.
+
+The fixture now keeps a ready child alive until the test creates an explicit
+marker after composition handoff. Production startup ordering is unchanged:
+pre-handoff exits remain startup failures and post-handoff exits still invoke
+the supervisor fatal callback.
+
+*Verified:* the marker is created only after `startFlyComposition()` returns,
+so the post-handoff exit regression is deterministic under suite load. No
+browser, wallet, provider, RPC, proof, signature, funds or transaction was
+used.
+
 ### 2026-08-30 — Production bootstrap destroys rejected session candidates
 
 After the bootstrap began freezing and revalidating loaded sessions, a
