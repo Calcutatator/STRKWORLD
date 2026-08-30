@@ -91,6 +91,19 @@ describe('route gate', () => {
     expect(buildingDoor('vault', [inherited]).open).toBe(false);
   });
 
+  it('fails closed without reading accessor-backed route fields', () => {
+    const accessor = Object.create(null) as RouteGrade;
+    for (const field of ['building', 'grade', 'observable', 'disclosure', 'approvedBy', 'approvedOn', 'rationale', 'returnToPool'] as const) {
+      Object.defineProperty(accessor, field, { value: approvedDeviation[field] });
+    }
+    Object.defineProperty(accessor, 'route', {
+      get() { throw new Error('route accessor should not run'); },
+    });
+
+    expect(() => routeDoor('vault.supply', [accessor])).not.toThrow();
+    expect(routeDoor('vault.supply', [accessor])).toMatchObject({ open: false, reason: 'unknown-route' });
+  });
+
   it.each([null, {}, 'not-a-register'])('fails closed for a malformed register container: %s', (malformed) => {
     const register = malformed as unknown as readonly RouteGrade[];
     expect(() => routeDoor('bank.shield', register)).not.toThrow();

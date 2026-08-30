@@ -32,9 +32,11 @@ const ROUTE_GRADE_FIELDS = [
 ] as const;
 
 function isOwnRouteGrade(entry: unknown): entry is RouteGrade {
-  return entry !== null &&
-    typeof entry === 'object' &&
-    ROUTE_GRADE_FIELDS.every((field) => Object.prototype.hasOwnProperty.call(entry, field));
+  if (entry === null || typeof entry !== 'object') return false;
+  return ROUTE_GRADE_FIELDS.every((field) => {
+    const descriptor = Object.getOwnPropertyDescriptor(entry, field);
+    return descriptor !== undefined && 'value' in descriptor;
+  });
 }
 
 function isRouteRegister(value: unknown): value is readonly RouteGrade[] {

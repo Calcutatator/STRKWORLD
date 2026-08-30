@@ -258,6 +258,24 @@ empty shell to fetchers, so a 200 there means nothing.
 
 ## 6. Findings log
 
+### 2026-08-30 — Web route records reject accessor-backed fields
+
+The route resolver checked only whether each `RouteGrade` key was present as
+an own property. An untrusted route record could therefore define an accessor
+for `route` or another approval field; resolving the route then invoked that
+accessor, allowing a throw to escape the fail-closed door decision.
+
+Route records now require every field to be an own data property before any
+route or building lookup reads it. Authored register entries and ordinary
+custom fixtures retain their behavior; inherited and accessor-backed records
+resolve as absent route data.
+
+*Verified:* a red-first public routes regression supplied all required fields
+but made `route` an accessor that throws. The old resolver escaped the error;
+the corrected resolver returns the existing locked unknown-route decision
+without invoking the accessor. Focused route tests pass 34/34. No browser,
+wallet, provider, RPC, proof, signature, funds or transaction was used.
+
 ### 2026-08-30 — Fixed-room input restoration cannot resume a retired transition
 
 `createFixedRoomController.enter()` and `leave()` crossed the injected input
