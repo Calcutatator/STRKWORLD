@@ -188,7 +188,11 @@ export function createWalletSession(
         throw error;
       }
       if (!isCurrent(owner)) {
-        prepared.discard();
+        try {
+          prepared.discard();
+        } catch {
+          // Automatic stale cleanup cannot mask the changed-session result.
+        }
         throw changedSessionError();
       }
       return ownPreparedBatch(prepared, () => isCurrent(owner), changedSessionError);

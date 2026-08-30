@@ -433,6 +433,36 @@ describe('WalletSession', () => {
     expect(discard).toHaveBeenCalledTimes(1);
   });
 
+  it('preserves the changed-session error when stale batch cleanup throws', async () => {
+    const selected = wallet('Ready');
+    let release!: (prepared: PreparedBatch) => void;
+    const pendingBatch = new Promise<PreparedBatch>((resolve) => {
+      release = resolve;
+    });
+    const discard = vi.fn(() => { throw new Error('cleanup failed'); });
+    const oldOperations: PrivacyOperations = {
+      ...operationsWithBatch(batch(), '0.10.3'),
+      prepare: () => pendingBatch,
+    };
+    const connected = controllableConnection(
+      '0x111',
+      oldOperations,
+      operationsWithBatch(batch(), '0.10.4'),
+    );
+    const session = createWalletSession(
+      denyAllOptions(),
+      { discovery: discoveryWith(selected), connectWallet: async () => connected.port },
+    );
+    await session.connect(session.getSnapshot().wallets[0]!.key);
+
+    const preparing = session.operations.prepare([]);
+    connected.changeAccount('0x222');
+    release(batch(undefined, discard));
+
+    await expect(preparing).rejects.toMatchObject({ kind: 'user-rejected' });
+    expect(discard).toHaveBeenCalledTimes(1);
+  });
+
   it('does not surface an old account error after a replacement owns the session', async () => {
     const selected = wallet('Ready');
     let rejectCapability!: (error: unknown) => void;

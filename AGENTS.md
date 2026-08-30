@@ -258,6 +258,26 @@ empty shell to fetchers, so a 200 there means nothing.
 
 ## 6. Findings log
 
+### 2026-08-30 — Stale prepare cleanup cannot mask session ownership
+
+When an in-flight `WalletSession.operations.prepare()` settled after the
+account changed, the session called the returned batch's `discard()` before
+returning its changed-session result. A cleanup implementation that threw
+could therefore replace the authoritative `user-rejected` outcome with a raw
+cleanup exception.
+
+Stale-result cleanup is now best-effort: the exact batch is still retired, but
+any cleanup exception is swallowed so the changed-session error remains the
+public result. Explicit caller `PreparedBatch.discard()` retains its prior
+propagation semantics.
+
+*Verified:* a public deferred preparation regression changes accounts before a
+batch whose `discard()` throws settles; it confirms one cleanup call and the
+expected `user-rejected` result. Privacy and repository gates are recorded on
+the final candidate. No browser, wallet, provider, RPC, proof, signature,
+funds or transaction was used.*
+
+
 ### 2026-08-30 — WalletSession suppresses stale confirmation errors without masking uncertainty
 
 The WalletSession prepared-batch wrapper checked account ownership before
