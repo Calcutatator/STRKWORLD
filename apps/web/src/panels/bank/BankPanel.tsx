@@ -105,6 +105,13 @@ export function BankPanel({
     shellBus?.emit('hud:pending', { count: busy ? 1 : 0 });
   }, [shellBus, state.flow]);
 
+  useEffect(() => () => {
+    // The panel can unmount while the wallet handoff continues. Its state
+    // store may settle later, but no component remains to publish the final
+    // HUD transition, so retire this panel's ambient pending marker here.
+    shellBus?.emit('hud:pending', { count: 0 });
+  }, [shellBus]);
+
   const committing = state.flow.name === 'review' || state.flow.name === 'submitting';
   const gateBlocked = uncertaintyState.active && !uncertaintyState.acknowledged;
   // A submission-uncertain failure is closed only while the session gate is

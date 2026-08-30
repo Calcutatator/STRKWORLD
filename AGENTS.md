@@ -258,6 +258,23 @@ empty shell to fetchers, so a 200 there means nothing.
 
 ## 6. Findings log
 
+### 2026-08-30 — Bank HUD pending state retires on panel unmount
+
+`BankPanel` published `hud:pending` while preparing or submitting, but had no
+cleanup publication. Closing the room during a wallet handoff could therefore
+leave the World HUD showing a pending action forever: the machine may settle
+later, but the unmounted panel cannot publish its final state.
+
+The panel now emits a zero pending count when its shell-bus lifetime ends,
+including a bus replacement. State-driven publications and the submission
+itself are unchanged.
+
+*Verified:* a red-first jsdom regression mounted a Bank panel, entered the
+wallet approval stage, unmounted it before confirmation settled, and observed
+the old last HUD count remain `1`. The corrected lifecycle test observes the
+clearing `0` and then lets the original confirmation settle. No browser,
+wallet, provider, RPC, proof, signature, funds or transaction was used.
+
 ### 2026-08-30 — Lobby movement converges to the server's bounded coordinates
 
 `LobbyClient.updatePosition()` rounded finite coordinates but did not apply the
