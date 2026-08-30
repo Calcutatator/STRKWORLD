@@ -387,6 +387,88 @@ describe('BackendPrivacyClient', () => {
     expect(fetcher).not.toHaveBeenCalled();
   });
 
+  it.each([
+    ['relay estimate', (client: BackendPrivacyClient, signal: AbortSignal) => client.estimate({
+      route: 'transfer', feeToken: '0x4718', operationToken: '0xabc', signal,
+    })],
+    ['private submission', (client: BackendPrivacyClient, signal: AbortSignal) => client.submit({
+      route: 'transfer',
+      artifact: {
+        call: { contract_address: '0x123', entry_point: 'apply_actions', calldata: ['0x1'] },
+        proof: { data: 'proof', output: ['0x1'], proof_facts: ['0x2'] },
+      },
+      feeAuthorization: 'auth',
+      proofValidityBlocks: 450,
+      signal,
+    })],
+    ['swap preparation', (client: BackendPrivacyClient, signal: AbortSignal) => client.prepareSwap({
+      sellToken: '0xabc', buyToken: '0x4718', sellAmount: 20n, minAmountOut: 90n, slippageBps: 100, signal,
+    })],
+  ] as const)('accepts a genuine cross-realm-like AbortSignal for %s', async (_label, invoke) => {
+    const native = new AbortController().signal;
+    const prototype = {};
+    for (const key of ['aborted', 'reason', 'addEventListener', 'removeEventListener'] as const) {
+      const value = key === 'addEventListener' || key === 'removeEventListener'
+        ? native[key].bind(native)
+        : native[key];
+      Object.defineProperty(prototype, key, { enumerable: true, value });
+    }
+    const signal = Object.create(prototype) as AbortSignal;
+    const fetcher = vi.fn(async (url: string) => response(url.endsWith('/fees')
+      ? { token: '0x4718', recipient: '0x789', amount: '7', authorization: 'auth', expiresAtBlock: 1450 }
+      : url.endsWith('/submissions')
+        ? { transactionHash: '0xabc123' }
+        : {
+            quoteId: 'quote-1', buyAmount: '100', expiresAt: 2_000,
+            chainId: '0x534e5f4d41494e', executorAddress: '0x999', executorCalls: [],
+            fee: { token: '0x4718', recipient: '0x789', amount: '7', authorization: 'auth', expiresAtBlock: 1450 },
+          }));
+    const client = new BackendPrivacyClient('https://backend.example', fetcher);
+
+    await expect(invoke(client, signal)).resolves.toBeDefined();
+    expect(fetcher).toHaveBeenCalledTimes(1);
+  });
+
+  it.each([
+    ['missing listener', { aborted: false, reason: undefined, removeEventListener: () => undefined }],
+    ['wrong aborted type', {
+      aborted: 'false', reason: undefined,
+      addEventListener: () => undefined, removeEventListener: () => undefined,
+    }],
+  ] as const)('rejects a malformed structural AbortSignal before transport: %s', async (_label, signal) => {
+    const fetcher = vi.fn(async () => response({}));
+    const client = new BackendPrivacyClient('https://backend.example', fetcher);
+
+    await expect(client.estimate({
+      route: 'transfer', feeToken: '0x4718', operationToken: '0xabc', signal: signal as never,
+    })).rejects.toMatchObject({ kind: 'unknown' });
+    expect(fetcher).not.toHaveBeenCalled();
+  });
+
+  it('rejects accessor-backed AbortSignal fields without invoking them', async () => {
+    let getterRead = false;
+    const signal = {
+      reason: undefined,
+      addEventListener: () => undefined,
+      removeEventListener: () => undefined,
+    };
+    Object.defineProperty(signal, 'aborted', {
+      get() {
+        getterRead = true;
+        return false;
+      },
+    });
+    const fetcher = vi.fn(async () => response({}));
+    const client = new BackendPrivacyClient('https://backend.example', fetcher);
+
+    await expect(client.prepareSwap({
+      sellToken: '0xabc', buyToken: '0x4718', sellAmount: 20n, minAmountOut: 90n,
+      slippageBps: 100, signal: signal as never,
+    })).rejects.toMatchObject({ kind: 'unknown' });
+    expect(getterRead).toBe(false);
+    expect(fetcher).not.toHaveBeenCalled();
+  });
+
   it('does not dispatch a read already cancelled by its caller', async () => {
     const fetcher = vi.fn(async () => response({}));
     const client = new BackendPrivacyClient('https://backend.example', fetcher);

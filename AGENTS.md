@@ -258,6 +258,26 @@ empty shell to fetchers, so a 200 there means nothing.
 
 ## 6. Findings log
 
+### 2026-08-30 — Backend cancellation accepts genuine cross-realm signals
+
+The browser backend client previously validated optional operation signals
+with `instanceof AbortSignal`. A genuine signal created by another browser
+realm therefore failed before transport, even though Fetch and cancellation
+use only the standard AbortSignal surface.
+
+The boundary now retains the native same-realm fast path and otherwise accepts
+only a descriptor-owned structural signal with boolean `aborted`, a present
+`reason`, and callable `addEventListener` / `removeEventListener`. Accessors,
+missing members and wrong scalar types fail closed without invocation. Relay
+estimate, private submission and swap preparation share the validator.
+
+*Verified:* three public backend-client regressions were red before the fix
+and prove cross-realm-like signals reach transport for all three operations.
+Malformed and accessor-backed lookalikes are rejected before transport, with
+the accessor never invoked. The focused client suite passes 102 tests and the
+privacy package typecheck and diff hygiene pass. No browser, wallet, provider,
+RPC, proof, signature, funds or transaction was used.*
+
 ### 2026-08-30 — Bank compatibility maps must retain runtime immutability
 
 `createBankRoom()` spread the already-frozen `FixedRoomMap` into a new
