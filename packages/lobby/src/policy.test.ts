@@ -1,5 +1,12 @@
 import { describe, expect, it } from 'vitest';
-import { DEFAULT_ROOM_CONFIG, DEFAULT_SPRITE_KEYS, GAME_ID_PATTERN, WORLD_LIMIT } from './config';
+import {
+  DEFAULT_ROOM_CONFIG,
+  DEFAULT_SPRITE_KEYS,
+  GAME_ID_PATTERN,
+  MESSAGE,
+  SERVER_MESSAGE,
+  WORLD_LIMIT,
+} from './config';
 import {
   UpdateThrottle,
   createGameId,
@@ -19,6 +26,15 @@ describe('default lobby vocabulary ownership', () => {
     expect(Reflect.set(DEFAULT_SPRITE_KEYS, 0, 'not-a-sprite')).toBe(false);
     expect(DEFAULT_SPRITE_KEYS[0]).toBe('avatar-1');
     expect(DEFAULT_ROOM_CONFIG.spriteKeys[0]).toBe('avatar-1');
+  });
+
+  it('does not expose mutable wire protocol names', () => {
+    expect(Reflect.set(MESSAGE, 'move', 'untrusted-move')).toBe(false);
+    expect(Reflect.set(MESSAGE, 'resume', 'untrusted-resume')).toBe(false);
+    expect(Reflect.set(SERVER_MESSAGE, 'welcome', 'untrusted-welcome')).toBe(false);
+    expect(MESSAGE.move).toBe('move');
+    expect(MESSAGE.resume).toBe('resume');
+    expect(SERVER_MESSAGE.welcome).toBe('welcome');
   });
 });
 
