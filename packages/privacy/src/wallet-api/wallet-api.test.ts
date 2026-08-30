@@ -503,6 +503,17 @@ describe('Wallet API action routes', () => {
     expect(invoked).toEqual([[{ type: 'deposit', token: TOKEN, amount: '0x14' }]]);
   });
 
+  it('publishes an immutable shield settlement result', async () => {
+    const { ops } = fixture();
+    const batch = await ops.prepare([{ kind: 'shield', token: TOKEN, amount: 20n }]);
+
+    const result = await batch.confirm({ feeCeiling: POOL_FEE });
+
+    expect(Object.isFrozen(result)).toBe(true);
+    expect(Reflect.set(result, 'transactionHash', '0xforged')).toBe(false);
+    expect(result.transactionHash).toBe('0xshield');
+  });
+
   it('reports a returned shield hash even if cancellation races with wallet settlement', async () => {
     const { ops, wallet } = fixture();
     const controller = new AbortController();

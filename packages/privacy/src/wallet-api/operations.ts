@@ -385,7 +385,7 @@ export class WalletApiPrivacyOperations implements PrivacyOperations {
           const transactionHash = readWalletTransactionHash(result);
           emitProgress(onProgress, { stage: 'confirming', message: 'Shield submitted' });
           emitProgress(onProgress, { stage: 'done', message: 'Done' });
-          return { transactionHash };
+          return Object.freeze({ transactionHash });
         } catch (error) {
           emitProgress(onProgress, { stage: 'failed', message: 'Shield failed' });
           throw mapWalletError(error);
