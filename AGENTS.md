@@ -258,6 +258,25 @@ empty shell to fetchers, so a 200 there means nothing.
 
 ## 6. Findings log
 
+### 2026-08-30 — Lobby movement normalizes malformed facing before reconciliation
+
+`LobbyClient.updatePosition()` trusted its TypeScript `Facing` parameter at the
+runtime boundary. An invalid string or object was sent unchanged, while the
+server normalized it to `down`; the client then compared the unnormalized
+desired facing with the server's value and retried the same movement forever.
+
+Movement updates now reuse the Lobby policy's `normalizeFacing()` before storing
+or sending the desired placement. Valid facings and the existing coordinate,
+send-floor and reconciliation behavior are unchanged; malformed runtime input
+falls back to the server's established `down` policy.
+
+*Verified:* red-first public Lobby regressions supplied an unknown string and a
+coercible object as facing, then published a matching server `down` state. The
+old path sent the malformed value and sent again during reconciliation; the
+corrected path sends one normalized move and converges. The focused Lobby client
+suite passes 71 tests. No browser, World, wallet, provider, RPC, proof,
+signature, funds or transaction was used.
+
 ### 2026-08-30 — Lobby client drops non-finite movement updates
 
 `LobbyClient.updatePosition()` rounded and queued every caller-provided

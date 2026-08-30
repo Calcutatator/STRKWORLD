@@ -51,7 +51,7 @@ import {
   SERVER_MESSAGE,
   type LobbySprite,
 } from './config';
-import { normalizeGameId } from './policy';
+import { normalizeFacing, normalizeGameId } from './policy';
 import type { LobbyState } from './state';
 
 export type { LobbySprite } from './config';
@@ -258,7 +258,7 @@ export class LobbyClient {
     // before it becomes a desired position that reconciliation would retry
     // forever at the client send interval.
     if (!Number.isFinite(x) || !Number.isFinite(y)) return;
-    this.#desired = { x: Math.round(x), y: Math.round(y), facing };
+    this.#desired = { x: Math.round(x), y: Math.round(y), facing: normalizeFacing(facing) };
     this.#pump(performance.now());
   }
 
