@@ -59,6 +59,7 @@ function cycleResources() {
   const unsubscribe = vi.fn();
   return {
     avatarVisual: { cycle: Symbol('avatar-visual') },
+    player: destroyable(),
     unsubscribe,
     controller: { destroy: vi.fn(() => unsubscribe()) },
     studio: { state: { inRoom: true }, ...destroyable() },
@@ -128,6 +129,7 @@ interface StreetSceneHarness extends FakeScene {
   avatarStudio: { readonly state: { readonly inRoom: boolean }; destroy(): void };
   avatarStudioPresentation: { enter(): void; exit(): void; destroy(): void };
   avatarOutfitToggle?: { destroy(): void };
+  player?: { destroy(): void };
   inputGate: { resume(): void };
   roomGraphics: { destroy(): void };
   roomStationGraphics: { destroy(): void };
@@ -162,7 +164,11 @@ function createHarness(initialBus?: {
     if (failure === 'early') throw new Error('early create failure');
     scene.ground = current.ground;
   });
-  scene.createPlayer = vi.fn(() => { scene.avatarVisual = current.avatarVisual; });
+  scene.createPlayer = vi.fn(() => {
+    scene.avatarVisual = current.avatarVisual;
+    scene.player = current.player;
+    (scene as unknown as { playerOwned: boolean }).playerOwned = true;
+  });
   scene.createCamera = vi.fn();
   scene.createDoorTriggers = vi.fn();
   scene.createDoorOverlays = vi.fn(() => { scene.doorOverlays = [current.overlay]; });
@@ -225,6 +231,27 @@ function expectCompleteCleanup(cycle: ReturnType<typeof cycleResources>): void {
 }
 
 describe('StreetScene lifecycle', () => {
+  it('destroys the replaced player and ground exactly once across repeated create', () => {
+    const harness = createHarness();
+    const first = harness.current;
+    harness.create();
+
+    const second = harness.nextCycle();
+    harness.create();
+
+    expect(first.player.destroy).toHaveBeenCalledTimes(1);
+    expect(first.ground.destroy).toHaveBeenCalledTimes(1);
+    expect(second.player.destroy).not.toHaveBeenCalled();
+    expect(second.ground.destroy).not.toHaveBeenCalled();
+
+    harness.shutdown();
+    harness.scene.cleanShutdown();
+    expect(first.player.destroy).toHaveBeenCalledTimes(1);
+    expect(first.ground.destroy).toHaveBeenCalledTimes(1);
+    expect(second.player.destroy).toHaveBeenCalledTimes(1);
+    expect(second.ground.destroy).toHaveBeenCalledTimes(1);
+  });
+
   it('toggles the outfit outdoors, in the Studio and back, from one Scene-owned binding', () => {
     const harness = createWorldPlayHarness();
     harness.create();

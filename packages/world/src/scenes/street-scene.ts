@@ -122,6 +122,7 @@ export function createStreetScene({ Phaser, onTileChanged, remotePeers }: Street
     // Phaser 4 can return either renderer-backed layer type from createLayer.
     private ground?: PhaserTypes.Tilemaps.TilemapLayer | PhaserTypes.Tilemaps.TilemapGPULayer;
     private player!: Sprite;
+    private playerOwned = false;
     private avatarVisual?: LocalAvatarVisual;
     private cursors!: PhaserTypes.Types.Input.Keyboard.CursorKeys;
     private wasd!: Record<'up' | 'down' | 'left' | 'right', PhaserTypes.Input.Keyboard.Key>;
@@ -220,6 +221,11 @@ export function createStreetScene({ Phaser, onTileChanged, remotePeers }: Street
       this.roomMaps = {};
       this.activeRoom = undefined;
       this.avatarStudioActive = false;
+      if (this.playerOwned) {
+        this.player.destroy();
+        this.playerOwned = false;
+      }
+      this.ground?.destroy();
       this.ground = undefined;
       this.avatarVisual = undefined;
       this.avatarOutfitToggle?.destroy();
@@ -283,6 +289,7 @@ export function createStreetScene({ Phaser, onTileChanged, remotePeers }: Street
 
       const layer = tilemap.createLayer(0, tileset, 0, 0);
       if (!layer) return;
+      this.ground = layer;
       layer.setDepth(0);
 
       // Collision from the same indices the unit tests assert against, so
@@ -292,7 +299,6 @@ export function createStreetScene({ Phaser, onTileChanged, remotePeers }: Street
         .map((spec) => TILE_INDEX[spec.kind]);
       layer.setCollision(solidIndices);
 
-      this.ground = layer;
     }
 
     /** Door art is an overlay so it never changes the tile/index/collision map. */
@@ -314,6 +320,7 @@ export function createStreetScene({ Phaser, onTileChanged, remotePeers }: Street
     private createPlayer(): void {
       const spawn = tileToWorld(this.map.spawn.x, this.map.spawn.y);
       this.player = this.physics.add.sprite(spawn.x, spawn.y, DEFAULT_AVATAR_SPRITE, 0);
+      this.playerOwned = true;
       this.player.setDepth(10);
       this.player.setCollideWorldBounds(true);
       this.avatarVisual = createLocalAvatarVisual(this.player, DEFAULT_AVATAR_SPRITE);

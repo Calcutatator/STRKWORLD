@@ -258,6 +258,31 @@ empty shell to fetchers, so a 200 there means nothing.
 
 ## 6. Findings log
 
+### 2026-08-30 — StreetScene repeated create retires player and ground objects
+
+`StreetScene.cleanShutdown()` previously cleared the current ground reference
+and avatar visual without destroying the Phaser ground layer or local player.
+`retireWorldOwnership()` deliberately invokes this cleanup during a defensive
+same-instance `create()` without emitting Phaser `shutdown`, so the old display
+and physics objects could remain active while the replacement cycle allocated
+another player and ground.
+
+Cleanup now owns and destroys the cycle's player and ground before dropping the
+ground reference; the player ownership flag prevents a failed or later shutdown
+from double-destroying a completed cycle. Ground ownership is established before
+its final presentation call so a partial create can also be retired. Framework
+shutdown emission, controller ordering and the replacement cycle are unchanged.
+
+*Verified:* a public same-instance lifecycle regression first observed zero
+destroy calls for the old player and ground on repeated create. The corrected
+regression proves each old object is destroyed once, replacement objects remain
+live until the real shutdown, and repeated cleanup does not double-destroy. The
+focused lifecycle suite passes 13 tests, World passes 20 files / 193 tests and
+the full workspace passes 102 files / 1,589 tests. Workspace typechecks, the
+production build, all 13 invariants and diff hygiene pass. No browser, lobby,
+wallet, provider, RPC, proof, signature, funds or transaction was used.
+
+
 ### 2026-08-30 — Starknet RPC default fetch must retain its global receiver
 
 `StarknetRpcPoolPort` previously stored the ambient `fetch` function and later
