@@ -1280,6 +1280,42 @@ describe('Wallet API action routes', () => {
  * pinned to reject before the wallet is asked to prove anything.
  */
 describe('quote-bound swap plan admission', () => {
+  it.each([NaN, Infinity, -1, 1.5, '1000'] as const)(
+    'rejects malformed clock output before publishing a swap review: %p',
+    async (now) => {
+      const base = fixture();
+      base.gateway.prepareSwap = vi.fn(async () => ({
+        quoteId: 'quote-clock',
+        buyAmount: 95n,
+        expiresAt: 2_000,
+        chainId: '0x534e5f4d41494e',
+        executorAddress: '0x999',
+        executorCalls: [{ contractAddress: '0x111', entrypoint: 'swap', calldata: ['0xaaa'] }],
+        fee: { token: STRK, recipient: FEE_RECIPIENT, amount: 1n, ...AUTH },
+      }));
+      const ops = new WalletApiPrivacyOperations({
+        wallet: base.wallet,
+        pool: base.pool,
+        submission: base.gateway,
+        supportedVersions: base.supportedVersions,
+        now: () => now as number,
+        policy: {
+          maxIntents: 8,
+          maxRelayFee: 10n,
+          enabledRoutes: ['swap'],
+          allowedTokens: {
+            shield: [STRK, TOKEN], unshield: [STRK, TOKEN], transfer: [STRK, TOKEN], swap: [STRK, TOKEN],
+          },
+          swap: { expectedChainId: '0x534e5f4d41494e', slippageBps: 100 },
+        },
+      });
+
+      await expect(ops.prepare([
+        { kind: 'swap', tokenIn: TOKEN, tokenOut: STRK, amountIn: 20n, minAmountOut: 90n },
+      ])).rejects.toMatchObject({ kind: 'unknown' });
+    },
+  );
+
   it.each([
     ['a number minimum output', 90],
     ['a string minimum output', '90'],

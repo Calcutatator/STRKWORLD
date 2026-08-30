@@ -303,7 +303,7 @@ export class WalletApiPrivacyOperations implements PrivacyOperations {
           emitProgress(onProgress, { stage: 'proving', message: 'Your wallet is generating a proof' });
           const artifact = await owner.wallet.strk20PrepareInvoke(actions, false);
           throwIfAborted(confirmSignal);
-          if (plan.expiresAt <= owner.now()) {
+          if (plan.expiresAt <= owner.readNow()) {
             throw new PrivacyError('unknown', 'The private swap quote has expired.');
           }
           emitProgress(onProgress, { stage: 'submitting', message: 'Submitting the quote-bound private swap' });
@@ -344,7 +344,7 @@ export class WalletApiPrivacyOperations implements PrivacyOperations {
     if (typeof plan.buyAmount !== 'bigint' || plan.buyAmount <= 0n || plan.buyAmount > MAX_UINT256) {
       throw new PrivacyError('unknown', 'The private swap expected output is malformed.');
     }
-    if (!Number.isSafeInteger(plan.expiresAt) || plan.expiresAt <= this.now()) {
+    if (!Number.isSafeInteger(plan.expiresAt) || plan.expiresAt <= this.readNow()) {
       throw new PrivacyError('unknown', 'The private swap quote has expired.');
     }
     if (plan.buyAmount < intent.minAmountOut) {
@@ -367,6 +367,14 @@ export class WalletApiPrivacyOperations implements PrivacyOperations {
       }
     }
     this.validateRelayFee(plan.fee, config);
+  }
+
+  private readNow(): number {
+    const value = this.now();
+    if (!Number.isSafeInteger(value) || value < 0) {
+      throw new PrivacyError('unknown', 'The private swap clock is invalid.');
+    }
+    return value;
   }
 
   private prepareShield(
