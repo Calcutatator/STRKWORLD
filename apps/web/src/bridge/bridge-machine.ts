@@ -154,7 +154,8 @@ export function createBridgePanel(options: BridgePanelOptions): BridgePanel {
   let watchController: AbortController | null = null;
   let quoteBusy = false;
   let preflightBusy = false;
-  let refreshBusy = false;
+  let refreshOwner = 0;
+  let refreshSequence = 0;
   let shieldBusy = false;
   let revalidateBusy = false;
 
@@ -280,8 +281,9 @@ export function createBridgePanel(options: BridgePanelOptions): BridgePanel {
   }
 
   async function refreshCurrent(): Promise<BridgeStatus | null> {
-    if (refreshBusy || watchController) return null;
-    refreshBusy = true;
+    if (refreshOwner !== 0 || watchController) return null;
+    const owner = ++refreshSequence;
+    refreshOwner = owner;
     const id = begin();
     const currentSession = session;
     patch({ flow: { name: 'loading' }, notice: null });
@@ -296,7 +298,7 @@ export function createBridgePanel(options: BridgePanelOptions): BridgePanel {
       if (live(id, currentSession)) fail(COPY.bridge.statusFailed, 'none');
       return null;
     } finally {
-      refreshBusy = false;
+      if (refreshOwner === owner) refreshOwner = 0;
     }
   }
 
@@ -405,6 +407,7 @@ export function createBridgePanel(options: BridgePanelOptions): BridgePanel {
       if (coordinator.quoteFlight) coordinator.quoteFlight.cancelled = true;
       nextSession();
       begin();
+      refreshOwner = 0;
       watchController?.abort();
       watchController = null;
       patch({ flow: { name: 'idle' } });
@@ -506,7 +509,7 @@ export function createBridgePanel(options: BridgePanelOptions): BridgePanel {
     refresh: async (): Promise<void> => { await refreshCurrent(); },
 
     async watch(): Promise<void> {
-      if (watchController || refreshBusy) return;
+      if (watchController || refreshOwner !== 0) return;
       const controller = new AbortController();
       watchController = controller;
       const id = begin();

@@ -258,6 +258,26 @@ empty shell to fetchers, so a 200 there means nothing.
 
 ## 6. Findings log
 
+### 2026-08-30 — Bridge refresh ownership is retired on close
+
+The Web Bridge panel used one `refreshBusy` flag for the lifetime of a panel
+machine. Closing the panel while its status refresh was pending did not retire
+that flag, so a reopened panel could not start its own refresh until the stale
+provider request settled. That left the recovery surface stuck behind an
+unrelated old request.
+
+Refresh now has an owner token whose release is conditional on that token still
+being current; close retires the owner immediately, allowing a reopened panel
+to refresh while the old provider call drains. Existing attempt/session guards
+prevent the old result from publishing over the new panel state, and Watch
+continues to exclude concurrent refreshes.
+
+*Verified:* a red-first Bridge regression starts deferred refresh A, closes the
+panel, starts refresh B, and resolves B before stale A; on the old path B was
+never called, while the corrected path starts both and keeps the panel idle
+after stale A settles. Focused Bridge tests pass 43/43. No browser, wallet,
+provider, RPC, proof, signature, funds or transaction was used.
+
 ### 2026-08-30 — Backend request records require own data fields
 
 `requireRecord()` previously used its allowed-key list only to reject unknown

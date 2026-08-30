@@ -186,6 +186,33 @@ describe('Bridge shell machine', () => {
     expect(h.machine.store.getState().flow.name).toBe('idle');
   });
 
+  it('allows a reopened panel to refresh while a closed refresh is still pending', async () => {
+    let releaseFirst!: (status: BridgeStatus) => void;
+    let releaseSecond!: (status: BridgeStatus) => void;
+    let refreshes = 0;
+    const h = harness(record());
+    h.service.refresh.mockImplementation(() => {
+      refreshes += 1;
+      return new Promise<BridgeStatus>((resolve) => {
+        if (refreshes === 1) releaseFirst = resolve;
+        else releaseSecond = resolve;
+      });
+    });
+
+    const first = h.machine.refresh();
+    await Promise.resolve();
+    h.machine.close();
+    const second = h.machine.refresh();
+    await Promise.resolve();
+
+    expect(refreshes).toBe(2);
+    releaseSecond({ leg: 'awaiting-deposit', message: 'new', pollingStopped: false });
+    await second;
+    releaseFirst({ leg: 'awaiting-deposit', message: 'stale', pollingStopped: false });
+    await first;
+    expect(h.machine.store.getState().flow).toEqual({ name: 'idle' });
+  });
+
   it('aborts an in-flight watch when the panel closes', async () => {
     let signal: AbortSignal | undefined;
     let release!: () => void;
