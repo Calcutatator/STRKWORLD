@@ -163,6 +163,13 @@ export class FakePrivacyOperations implements PrivacyOperations {
       registration: 'registered',
       ...config.capability,
     };
+    if (
+      typeof this.cap.supportsStrk20 !== 'boolean'
+      || (this.cap.walletApiVersion !== null && typeof this.cap.walletApiVersion !== 'string')
+      || !['registered', 'unregistered', 'unknown'].includes(this.cap.registration)
+    ) {
+      throw new PrivacyError('unknown', 'The fake capability configuration is invalid.');
+    }
     const latency = config.latencyMs ?? 0;
     if (!Number.isSafeInteger(latency) || latency < 0) {
       throw new PrivacyError('unknown', 'The fake latency must be a non-negative safe integer.');

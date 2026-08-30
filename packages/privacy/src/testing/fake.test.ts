@@ -61,6 +61,26 @@ describe('fake lifecycle configuration', () => {
     expect(() => new FakePrivacyOperations({ registered: [recipient] }))
       .toThrow(PrivacyError);
   });
+
+  it.each([
+    ['non-boolean support', { supportsStrk20: 'yes' }],
+    ['non-string version', { walletApiVersion: 103 }],
+    ['invalid registration', { registration: 'connected' }],
+  ] as const)('rejects %s before publishing capability state', (_label, capability) => {
+    expect(() => new FakePrivacyOperations({ capability: capability as never }))
+      .toThrow(/capability/i);
+  });
+
+  it('allows a null wallet API version for unsupported capability', async () => {
+    const ops = new FakePrivacyOperations({
+      capability: { supportsStrk20: false, walletApiVersion: null, registration: 'unknown' },
+    });
+    await expect(ops.capability()).resolves.toMatchObject({
+      supportsStrk20: false,
+      walletApiVersion: null,
+      registration: 'unknown',
+    });
+  });
 });
 
 describe('the fee comes out of the balance being spent', () => {
