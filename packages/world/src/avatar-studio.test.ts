@@ -831,6 +831,29 @@ describe('hidden Avatar Studio', () => {
     expect(lifecycle.figureDestructions).toBe(8);
     expect(lifecycle.figures.size).toBe(0);
   });
+
+  it('rolls back Studio entry when state publication fails', () => {
+    const error = new Error('Studio state delivery failed');
+    let fail = true;
+    const exited = vi.fn();
+    const controller = createAvatarStudioController({
+      out: { emit: vi.fn() },
+      selection: createAvatarOutfitSelection({ out: { emit: vi.fn() } }),
+      onEnter: vi.fn(),
+      onExit: exited,
+      onChange: () => {
+        if (fail) throw error;
+      },
+    });
+
+    expect(() => controller.enter()).toThrow(error);
+    expect(controller.state.inRoom).toBe(false);
+    expect(exited).toHaveBeenCalledOnce();
+
+    fail = false;
+    controller.enter();
+    expect(controller.state.inRoom).toBe(true);
+  });
 });
 
 function authoredDefinition(

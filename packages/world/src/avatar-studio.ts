@@ -386,7 +386,23 @@ export function createAvatarStudioController(
         throw error;
       }
       if (destroyed || !inRoom) return;
-      publish();
+      try {
+        publish();
+      } catch (error) {
+        // State publication is an external lifecycle boundary too. If the
+        // renderer rejects the entered snapshot, restore the presentation so
+        // the controller remains outside and a later enter can retry cleanly.
+        if (!destroyed && inRoom) {
+          inRoom = false;
+          highlightedFigure = null;
+          try {
+            options.onExit?.();
+          } catch {
+            // Preserve the original publication error.
+          }
+        }
+        throw error;
+      }
       options.out.emit('avatar-studio:entered', {});
     },
     update(tile): void {

@@ -258,6 +258,25 @@ empty shell to fetchers, so a 200 there means nothing.
 
 ## 6. Findings log
 
+### 2026-08-30 — Avatar Studio entry rolls back failed state publication
+
+`createAvatarStudioController.enter()` committed `inRoom = true` and ran the
+presentation handoff before publishing its state. If the synchronous
+`onChange` renderer threw, the controller stayed in the Studio even though the
+entry transition had failed; a later `enter()` became a no-op and the player
+could remain in a partially admitted room.
+
+Entry publication now rolls the controller back to outside and invokes the
+existing presentation exit compensation when delivery fails. The original
+publication error remains authoritative, and a later enter can retry the
+normal handoff.
+
+*Verified:* a public Avatar Studio regression makes the first state publication
+throw; the old path retained `inRoom`, while the corrected path exits once,
+preserves the exact error, and successfully re-enters after delivery recovers.
+Focused Avatar Studio tests pass 37/37. No browser, wallet, provider, RPC,
+proof, signature, funds or transaction was used.
+
 ### 2026-08-30 — Bridge saved-quote resume retains its callback owner
 
 `BridgePanel.resumeSavedQuote()` was the only public panel transition that
