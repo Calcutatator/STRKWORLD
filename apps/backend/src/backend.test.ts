@@ -16,6 +16,7 @@ import {
 const POOL = '0x123';
 const STRK = '0x4718';
 const FEE_RECIPIENT = '0x789';
+const MAX_UINT256 = (1n << 256n) - 1n;
 
 const transferCalldata = ['0x1', '0x3', FEE_RECIPIENT, STRK, '0x7'];
 const artifact: PreparedArtifact = {
@@ -596,6 +597,39 @@ describe('strict fee authorization', () => {
     expect(siblingSignal?.aborted).toBe(true);
     expect(siblingSignal?.reason).toMatchObject({ name: 'AbortError', message: 'Request failed.' });
     expect(siblingAborted).toHaveBeenCalledOnce();
+  });
+});
+
+describe('bounded private swap inputs', () => {
+  it('accepts the maximum uint256 sell amount at the planner boundary', async () => {
+    const { api, swapPlanner } = fixture();
+    const prepare = vi.spyOn(swapPlanner, 'prepare');
+
+    await expect(api.handle({
+      method: 'POST', path: '/v1/private/swaps/prepare',
+      body: {
+        v: 1, sellToken: '0xabc', buyToken: STRK,
+        sellAmount: MAX_UINT256.toString(), minAmountOut: '1', slippageBps: 100,
+      },
+    })).resolves.toMatchObject({ status: 200 });
+    expect(prepare).toHaveBeenCalledWith(expect.objectContaining({ sellAmount: MAX_UINT256 }));
+  });
+
+  it.each([
+    ['sell amount', { sellAmount: (1n << 256n).toString(), minAmountOut: '1' }],
+    ['minimum output', { sellAmount: '1', minAmountOut: (1n << 256n).toString() }],
+  ])('rejects an over-uint256 %s before asking the swap planner', async (_label, amounts) => {
+    const { api, swapPlanner } = fixture();
+    const prepare = vi.spyOn(swapPlanner, 'prepare');
+
+    await expect(api.handle({
+      method: 'POST', path: '/v1/private/swaps/prepare',
+      body: {
+        v: 1, sellToken: '0xabc', buyToken: STRK,
+        ...amounts, slippageBps: 100,
+      },
+    })).resolves.toMatchObject({ status: 400 });
+    expect(prepare).not.toHaveBeenCalled();
   });
 });
 

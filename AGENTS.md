@@ -258,6 +258,27 @@ empty shell to fetchers, so a 200 there means nothing.
 
 ## 6. Findings log
 
+### 2026-08-30 — Private swap request amounts must fit uint256
+
+`BackendApi.prepareSwap()` previously accepted any positive decimal string for
+`sellAmount` and `minAmountOut`. Values above the STRK20 `u256` range therefore
+crossed the public API boundary and reached the swap planner, even though they
+cannot be represented by the wallet action or the AVNU route. An overlarge
+sell amount could return a successful quote response; an overlarge minimum
+could consume planner work before being rejected as a stale quote.
+
+Swap request amounts now require `1 <= value <= 2^256 - 1` before any planner,
+RPC or paymaster work. The maximum remains accepted and the existing positive
+decimal syntax and policy checks are unchanged.
+
+*Verified:* red-first Backend regressions cover `2^256` for both sell amount
+and minimum output and assert zero swap-planner calls; both previously crossed
+the planner and returned `200`/`409`, while the corrected path returns generic
+`400`. A maximum-uint256 sell amount remains accepted at the planner boundary.
+The focused Backend suite and package gates are recorded on the candidate.
+No browser, wallet, provider, RPC, proof, signature, funds or transaction was
+used.*
+
 ### 2026-08-30 — Fixed-room exit rechecks ownership after onExit
 
 `FixedRoomController.leave()` invoked the consumer-owned `onExit` callback,

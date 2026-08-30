@@ -37,6 +37,7 @@ import {
 } from './validation.js';
 
 const MAX_NODE_TIMEOUT_MS = 2_147_483_647;
+const MAX_UINT256 = (1n << 256n) - 1n;
 
 export interface BackendApiOptions {
   config: BackendConfig;
@@ -503,7 +504,9 @@ function requireBigintString(value: unknown, label: string): bigint {
   if (typeof value !== 'string' || !/^[1-9][0-9]*$/.test(value)) {
     throw new ApiFailure(400, `Invalid ${label}.`);
   }
-  return BigInt(value);
+  const parsed = BigInt(value);
+  if (parsed > MAX_UINT256) throw new ApiFailure(400, `Invalid ${label}.`);
+  return parsed;
 }
 
 function serializeCairo1Calls(
