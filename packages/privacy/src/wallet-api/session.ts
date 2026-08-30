@@ -661,7 +661,11 @@ function ownPreparedBatch(
         retire();
         throw changedSessionError();
       }
-      if (!hasOwnDataProperties(result, ['transactionHash']) || typeof result.transactionHash !== 'string') {
+      if (
+        !hasOwnDataProperties(result, ['transactionHash'])
+        || typeof result.transactionHash !== 'string'
+        || !isNonzeroFelt(result.transactionHash)
+      ) {
         retire();
         throw new PrivacyError('unknown', 'The wallet returned an invalid transaction receipt.');
       }
@@ -669,6 +673,16 @@ function ownPreparedBatch(
     },
     discard,
   });
+}
+
+function isNonzeroFelt(value: string): boolean {
+  try {
+    return /^0x[0-9a-f]+$/i.test(value)
+      && BigInt(value) > 0n
+      && BigInt(value) < STARK_FIELD_PRIME;
+  } catch {
+    return false;
+  }
 }
 
 function retireInvalidPrepared(prepared: PreparedBatch): void {
