@@ -436,6 +436,28 @@ describe('fixed room definitions', () => {
       { station: 'bank:second', label: 'SECOND LIVE', highlighted: true },
     ]);
   });
+
+  it('fails closed when a malformed station snapshot reaches the render projection', () => {
+    const map = createFixedRoom(BANK_ROOM_DEFINITION);
+
+    expect(() => fixedRoomStationPresentations(map, {
+      inRoom: true,
+      building: 'bank',
+      controlOwner: 'world',
+      highlightedStation: null,
+      stations: null as unknown as FixedRoomState['stations'],
+    })).not.toThrow();
+
+    expect(fixedRoomStationPresentations(map, {
+      inRoom: true,
+      building: 'bank',
+      controlOwner: 'world',
+      highlightedStation: null,
+      stations: [null] as unknown as FixedRoomState['stations'],
+    }).map(({ status, label }) => ({ status, label }))).toEqual(
+      map.stations.map(({ label }) => ({ status: 'locked', label })),
+    );
+  });
 });
 
 function expectDefinitionError(definition: FixedRoomDefinition, code: string): void {

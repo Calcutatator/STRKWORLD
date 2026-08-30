@@ -258,6 +258,25 @@ empty shell to fetchers, so a 200 there means nothing.
 
 ## 6. Findings log
 
+### 2026-08-30 — Fixed-room render projection fails closed on malformed station snapshots
+
+`fixedRoomStationPresentations()` previously called `.find()` directly on the
+controller state's `stations` field. A malformed runtime state with a null
+snapshot list (or a null entry) therefore threw during the Phaser-free render
+projection instead of rendering configured stations as locked. A bad state
+could consequently take down the World render path before the controller had a
+chance to recover or replace it.
+
+The projection now treats a non-array snapshot list as empty and ignores null
+or non-object entries, preserving the configured station labels and locked
+status. Valid controller snapshots and highlighting behavior are unchanged.
+
+*Verified:* a red-first public World regression supplied both a null station
+list and a null station entry; the old projection threw while the corrected
+projection returns one locked presentation per configured station. Focused
+fixed-room tests pass. No browser, wallet, provider, RPC, proof, signature,
+funds or transaction was used.
+
 ### 2026-08-30 — Backend listener cleanup consumes close failures
 
 When `listenBackendServer()` discovered that a bound transport exposed no TCP

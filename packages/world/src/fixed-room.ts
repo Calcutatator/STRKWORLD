@@ -326,8 +326,11 @@ export function fixedRoomStationPresentations(
   room: FixedRoomMap,
   state: FixedRoomState,
 ): readonly FixedRoomStationPresentation[] {
+  const snapshots = Array.isArray(state.stations) ? state.stations : [];
   return room.stations.map((station) => {
-    const snapshot = state.stations.find((candidate) => candidate.station === station.station);
+    const snapshot = snapshots.find((candidate) => (
+      candidate !== null && typeof candidate === 'object' && candidate.station === station.station
+    ));
     return {
       ...station,
       label: snapshot?.label ?? station.label,
