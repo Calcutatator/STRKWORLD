@@ -6,6 +6,7 @@ import {
   isAvatarStudioEntrance,
   isSolidAt,
   objectLayerToDoors,
+  TILES,
   TILE_SIZE,
   tileToWorld,
   worldToTile,
@@ -16,6 +17,13 @@ const map = createStreetMap();
 const DOOR_MAP_BOUNDS = { width: 48, height: 28 } as const;
 
 describe('the street is walkable', () => {
+  it('keeps the canonical collision vocabulary immutable', () => {
+    expect(Object.isFrozen(TILES)).toBe(true);
+    expect(Object.isFrozen(TILES.wall)).toBe(true);
+    expect(Reflect.set(TILES.wall, 'solid', false)).toBe(false);
+    expect(TILES.wall.solid).toBe(true);
+  });
+
   it('spawns the player on a non-solid tile', () => {
     // A spawn inside a wall is the kind of bug that only shows up when someone
     // opens the game and cannot move.

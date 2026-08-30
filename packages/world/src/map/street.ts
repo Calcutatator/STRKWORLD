@@ -25,14 +25,14 @@ export interface TileSpec {
   colour: number;
 }
 
-export const TILES: Record<TileKind, TileSpec> = {
-  grass: { kind: 'grass', solid: false, colour: 0x4a7c3f },
-  road: { kind: 'road', solid: false, colour: 0x3d3d47 },
-  pavement: { kind: 'pavement', solid: false, colour: 0x8a8a94 },
-  wall: { kind: 'wall', solid: true, colour: 0x5a4a3f },
+export const TILES: Readonly<Record<TileKind, Readonly<TileSpec>>> = Object.freeze({
+  grass: Object.freeze({ kind: 'grass', solid: false, colour: 0x4a7c3f }),
+  road: Object.freeze({ kind: 'road', solid: false, colour: 0x3d3d47 }),
+  pavement: Object.freeze({ kind: 'pavement', solid: false, colour: 0x8a8a94 }),
+  wall: Object.freeze({ kind: 'wall', solid: true, colour: 0x5a4a3f }),
   /** The front face of a building. Solid — you enter through the door. */
-  facade: { kind: 'facade', solid: true, colour: 0x6b5847 },
-};
+  facade: Object.freeze({ kind: 'facade', solid: true, colour: 0x6b5847 }),
+});
 
 /**
  * A door, as a trigger zone in tile coordinates.
