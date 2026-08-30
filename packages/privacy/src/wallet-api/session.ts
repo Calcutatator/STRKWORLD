@@ -356,7 +356,7 @@ export function createWalletSession(
         const next = connected.getSnapshot();
         assertAddress(next.account);
         connection = connected;
-        connectionCleanup = connected.subscribe(() => {
+        const cleanup = connected.subscribe(() => {
           if (destroyed || connection !== connected) return;
           let changed: WalletConnectionSnapshot;
           try {
@@ -411,6 +411,7 @@ export function createWalletSession(
         // callback above has already advanced this session's authority and
         // built the replacement state (or retired it); the continuation
         // must not publish the stale pre-subscribe snapshot.
+        if (connection === connected) connectionCleanup = cleanup;
         if (destroyed || attempt !== generation || connection !== connected) {
           return snapshot;
         }

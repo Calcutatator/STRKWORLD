@@ -807,10 +807,11 @@ describe('WalletSession', () => {
       operations: operationsWithBatch(batch(), '0.10.3'),
     };
     const replacement = operationsWithBatch(batch(), '0.10.4');
+    const cleanup = vi.fn();
     const connected = synchronouslyChangingConnection(state, () => {
       state.account = '0x222';
       state.operations = replacement;
-    });
+    }, undefined, cleanup);
     const session = createWalletSession(
       denyAllOptions(),
       { discovery: discoveryWith(selected), connectWallet: async () => connected },
@@ -820,6 +821,8 @@ describe('WalletSession', () => {
 
     expect(session.getSnapshot()).toMatchObject({ phase: 'connected', account: '0x222' });
     await expect(session.operations.capability()).resolves.toMatchObject({ walletApiVersion: '0.10.4' });
+    await session.disconnect();
+    expect(cleanup).toHaveBeenCalledOnce();
   });
 
   it('does not reconnect a synchronously disconnected wallet after subscribe', async () => {
@@ -869,6 +872,29 @@ describe('WalletSession', () => {
       phase: 'selection-required',
     });
     expect(destroy).toHaveBeenCalledOnce();
+  });
+
+  it('does not retain cleanup for a connection retired during subscribe', async () => {
+    const selected = wallet('Ready');
+    const state = {
+      account: '0x111',
+      chainId: '0x534e5f4d41494e',
+      operations: new FakePrivacyOperations(),
+    };
+    const cleanup = vi.fn(() => { throw new Error('stale cleanup'); });
+    const connected = synchronouslyChangingConnection(state, () => {
+      state.account = '';
+    }, undefined, cleanup);
+    const session = createWalletSession(
+      denyAllOptions(),
+      { discovery: discoveryWith(selected), connectWallet: async () => connected },
+    );
+
+    await expect(session.connect(session.getSnapshot().wallets[0]!.key)).resolves.toMatchObject({
+      phase: 'selection-required',
+    });
+    await expect(session.disconnect()).resolves.toBeUndefined();
+    expect(cleanup).not.toHaveBeenCalled();
   });
 
   it('keeps a wrong-network connection observable until it returns to mainnet', async () => {
@@ -1113,6 +1139,7 @@ function synchronouslyChangingConnection(
   state: { account: string; chainId: string; operations: PrivacyOperations },
   onSubscribe: () => void,
   destroy: () => void = () => undefined,
+  cleanup: () => void = () => undefined,
 ): WalletConnectionPort {
   const listeners = new Set<() => void>();
   return {
@@ -1122,7 +1149,10 @@ function synchronouslyChangingConnection(
       listeners.add(listener);
       onSubscribe();
       listener();
-      return () => listeners.delete(listener);
+      return () => {
+        cleanup();
+        listeners.delete(listener);
+      };
     },
     disconnect: async () => undefined,
     destroy,

@@ -258,6 +258,30 @@ empty shell to fetchers, so a 200 there means nothing.
 
 ## 6. Findings log
 
+### 2026-08-30 — Wallet connection cleanup is not retained after synchronous retirement
+
+`WalletSession.connectOwned()` previously assigned the unsubscribe callback
+returned by `connected.subscribe()` even when that subscription synchronously
+reported account removal and `retireConnectionBestEffort()` had already
+retired and destroyed the connection. A later explicit `disconnect()` then
+invoked cleanup for the already-retired connection; a throwing stale cleanup
+could surface as a new disconnect failure despite there being no live wallet
+connection.
+
+The subscription cleanup is now installed only if the same connection still
+owns the session after registration. Synchronous account replacement retains
+the cleanup for its still-current connection, while synchronous retirement
+leaves no stale cleanup to invoke. Connection destruction and explicit cleanup
+error semantics are otherwise unchanged.
+
+*Verified:* a red-first public session regression makes subscription report
+account removal synchronously and return a cleanup that throws; the old path
+rejected a later disconnect, while the corrected path resolves without
+invoking stale cleanup. The existing synchronous account-replacement test also
+confirms cleanup is retained for the current connection. The Privacy suite
+passes 232 tests. No browser, external provider, RPC, wallet, proof,
+signature, funds or transaction was used.
+
 ### 2026-08-30 — Input-gate binding rolls back partial event registration
 
 `bindInputGate()` previously registered the entry listener and then registered
