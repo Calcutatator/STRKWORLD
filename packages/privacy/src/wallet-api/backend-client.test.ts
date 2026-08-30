@@ -600,6 +600,30 @@ describe('BackendPrivacyClient', () => {
     })).rejects.toMatchObject({ kind: 'submission-uncertain' });
   });
 
+  it('preserves submission uncertainty when caller cancellation races a lost response', async () => {
+    let rejectResponse!: (reason?: unknown) => void;
+    const client = new BackendPrivacyClient(
+      'https://backend.example',
+      () => new Promise<Response>((_resolve, reject) => { rejectResponse = reject; }),
+    );
+    const controller = new AbortController();
+    const submitting = client.submit({
+      route: 'transfer',
+      artifact: {
+        call: { contract_address: '0x123', entry_point: 'apply_actions', calldata: ['0x1'] },
+        proof: { data: 'proof', output: ['0x1'], proof_facts: ['0x2'] },
+      },
+      feeAuthorization: 'auth',
+      proofValidityBlocks: 450,
+      signal: controller.signal,
+    });
+
+    controller.abort(new DOMException('Panel closed.', 'AbortError'));
+    rejectResponse(new TypeError('response connection closed'));
+
+    await expect(submitting).rejects.toMatchObject({ kind: 'submission-uncertain' });
+  });
+
   it('keeps a private submit failure before dispatch retryable', async () => {
     const client = new BackendPrivacyClient(
       'https://backend.example',

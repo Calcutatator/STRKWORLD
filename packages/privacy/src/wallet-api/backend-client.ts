@@ -187,7 +187,11 @@ export class BackendPrivacyClient implements PoolReadClient, PrivateSubmissionGa
     try {
       response = await pendingResponse;
     } catch (error) {
-      if (signal?.aborted) throwIfAborted(signal);
+      // Once a private submission has been dispatched, a missing response is
+      // authoritative uncertainty even if the caller cancels concurrently.
+      // Reclassifying it as cancellation would make an accepted transaction
+      // look safely retryable.
+      if (transportFailureKind !== 'submission-uncertain' && signal?.aborted) throwIfAborted(signal);
       throw new PrivacyError(
         transportFailureKind,
         transportFailureKind === 'submission-uncertain'
