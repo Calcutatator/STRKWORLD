@@ -258,6 +258,26 @@ empty shell to fetchers, so a 200 there means nothing.
 
 ## 6. Findings log
 
+### 2026-08-30 — Door-trigger transitions are reentrancy-owned
+
+`createDoorTrigger.update()` emitted building events before committing its new
+active door. A synchronous listener could report another tile or reset the
+trigger during that delivery; the outer update then overwrote the newer
+occupancy and could emit a stale `building:entered` event. This made the World
+door state disagree with the ordered callbacks that caused it.
+
+The trigger now commits the candidate occupancy before event delivery and
+guards each continuation with a transition revision. A nested update or reset
+therefore remains authoritative, while ordinary exit-then-enter ordering and
+locked-door behavior are unchanged.
+
+*Verified:* red-first public regressions cover a nested bank-to-Post-Office
+transition and an exit callback that redirects to the street; before the guard
+the outer transition overwrote or announced stale occupancy, while the
+corrected trigger preserves the nested result. The focused door-trigger suite
+passes 8 tests. No browser, lobby, wallet, provider, RPC, proof, signature,
+funds or transaction was used.
+
 ### 2026-08-30 — Bridge shield-plan revalidation ownership is retired on close
 
 The Web Bridge panel used one `revalidateBusy` flag for the lifetime of a

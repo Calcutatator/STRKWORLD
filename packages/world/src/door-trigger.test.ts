@@ -105,4 +105,54 @@ describe('door triggers', () => {
       { event: 'building:entered', payload: { building: 'post-office' } },
     ]);
   });
+
+  it('preserves a reentrant door transition from the enter callback', () => {
+    const events: Emitted[] = [];
+    let trigger!: ReturnType<typeof createDoorTrigger>;
+    const bus = {
+      emit<K extends keyof WorldEvents>(event: K, payload: WorldEvents[K]): void {
+        events.push({ event, payload } as Emitted);
+        if (
+          event === 'building:entered' &&
+          (payload as WorldEvents['building:entered']).building === 'bank'
+        ) {
+          trigger.update(doorTile('post-office'));
+        }
+      },
+    };
+    trigger = createDoorTrigger(map, bus);
+
+    trigger.update(doorTile('bank'));
+
+    expect(events).toEqual([
+      { event: 'building:entered', payload: { building: 'bank' } },
+      { event: 'building:exited', payload: { building: 'bank' } },
+      { event: 'building:entered', payload: { building: 'post-office' } },
+    ]);
+    expect(trigger.inside).toBe('post-office');
+  });
+
+  it('does not emit a stale entry after an exit callback changes occupancy', () => {
+    const events: Emitted[] = [];
+    let trigger!: ReturnType<typeof createDoorTrigger>;
+    let redirectOnExit = false;
+    const bus = {
+      emit<K extends keyof WorldEvents>(event: K, payload: WorldEvents[K]): void {
+        events.push({ event, payload } as Emitted);
+        if (redirectOnExit && event === 'building:exited') trigger.update(AWAY);
+      },
+    };
+    trigger = createDoorTrigger(map, bus);
+
+    trigger.update(doorTile('bank'));
+    redirectOnExit = true;
+    trigger.update(doorTile('post-office'));
+
+    expect(events).toEqual([
+      { event: 'building:entered', payload: { building: 'bank' } },
+      { event: 'building:exited', payload: { building: 'bank' } },
+      { event: 'building:exited', payload: { building: 'post-office' } },
+    ]);
+    expect(trigger.inside).toBeNull();
+  });
 });

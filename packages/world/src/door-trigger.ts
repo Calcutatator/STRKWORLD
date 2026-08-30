@@ -46,6 +46,7 @@ export function createDoorTrigger(map: DistrictMap, out: WorldEmit): DoorTrigger
   // The door zone the player currently occupies, or null. Identity is the
   // building id: this map has exactly one door per building and no overlaps.
   let active: DoorZone | null = null;
+  let transition = 0;
 
   function sameZone(a: DoorZone | null, b: DoorZone | null): boolean {
     if (a === null || b === null) return a === b;
@@ -57,10 +58,18 @@ export function createDoorTrigger(map: DistrictMap, out: WorldEmit): DoorTrigger
       const next = doorAt(map, tile.x, tile.y);
       if (sameZone(active, next)) return;
 
+      const ownTransition = ++transition;
+      const previous = active;
+      // Commit the new occupancy before synchronous event delivery. A listener
+      // may immediately report another tile or reset the trigger; the version
+      // check below prevents this transition from overwriting that newer state.
+      active = next;
+
       // Leaving a door the player had actually entered. A locked door was never
       // entered, so there is nothing to exit.
-      if (active && !active.locked) {
-        out.emit('building:exited', { building: active.building });
+      if (previous && !previous.locked) {
+        out.emit('building:exited', { building: previous.building });
+        if (transition !== ownTransition) return;
       }
 
       if (next) {
@@ -69,12 +78,12 @@ export function createDoorTrigger(map: DistrictMap, out: WorldEmit): DoorTrigger
         } else {
           out.emit('building:entered', { building: next.building });
         }
+        if (transition !== ownTransition) return;
       }
-
-      active = next;
     },
 
     reset() {
+      transition += 1;
       active = null;
     },
 
