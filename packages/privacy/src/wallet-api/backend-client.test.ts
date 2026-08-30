@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
+import { PrivacyError } from '../types.js';
 import { BackendPrivacyClient } from './backend-client.js';
 
 const STARK_FIELD_PRIME = (1n << 251n) + 17n * (1n << 192n) + 1n;
@@ -30,6 +31,34 @@ function inheritResponseField(key: string, value: unknown): () => void {
 }
 
 describe('BackendPrivacyClient', () => {
+  it('does not invoke an accessor-backed response status during submission settlement', async () => {
+    let getterCalled = false;
+    const responseValue = {
+      ok: false,
+      json: async () => ({ message: 'rejected' }),
+    };
+    Object.defineProperty(responseValue, 'status', {
+      get() {
+        getterCalled = true;
+        throw new Error('status getter must not run');
+      },
+    });
+    const client = new BackendPrivacyClient(
+      'https://backend.example',
+      async () => responseValue as unknown as Response,
+    );
+
+    await expect(client.submit({
+      route: 'transfer',
+      artifact: {
+        call: { contract_address: '0x123', entry_point: 'apply_actions', calldata: ['0x1'] },
+        proof: { data: 'proof', output: ['0x1'], proof_facts: ['0x2'] },
+      },
+      feeAuthorization: 'auth', proofValidityBlocks: 450,
+    })).rejects.toBeInstanceOf(PrivacyError);
+    expect(getterCalled).toBe(false);
+  });
+
   it('preserves submission uncertainty when an HTTP error body stream is lost', async () => {
     const client = new BackendPrivacyClient('https://backend.example', async () => ({
       ok: false,
