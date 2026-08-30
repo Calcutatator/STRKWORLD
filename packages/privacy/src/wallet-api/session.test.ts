@@ -11,6 +11,21 @@ import {
 } from './session.js';
 
 describe('WalletSession', () => {
+  it.each([
+    ['decimal chain id', '2344859'],
+    ['zero chain id', '0x0'],
+    ['field-prime chain id', `0x${((1n << 251n) + 17n * (1n << 192n) + 1n).toString(16)}`],
+  ])('rejects a malformed configured %s before discovery or connection', (_label, expectedChainId) => {
+    const discovery = discoveryWith(wallet('Ready'));
+    const getWallets = vi.spyOn(discovery, 'getWallets');
+
+    expect(() => createWalletSession(
+      { ...denyAllOptions(), expectedChainId },
+      { discovery, connectWallet: async () => connection('0x111') },
+    )).toThrow(PrivacyError);
+    expect(getWallets).not.toHaveBeenCalled();
+  });
+
   it.each([null, {}, 'wallet'] as const)(
     'starts fail-closed when initial discovery is malformed: %p',
     (initial) => {

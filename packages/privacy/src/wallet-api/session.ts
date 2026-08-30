@@ -84,6 +84,7 @@ export function createWalletSession(
   dependencies: WalletSessionDependencies,
 ): WalletSession {
   const expectedChainId = options.expectedChainId ?? MAINNET_CHAIN_ID;
+  assertChainId(expectedChainId);
   const policy = ownPolicy(options.policy);
   const listeners = new Map<() => void, symbol>();
   const keys = new WeakMap<object, string>();
@@ -609,6 +610,17 @@ function assertAddress(address: string): void {
     }
   } catch {
     throw new PrivacyError('unknown', 'The wallet returned an invalid account.');
+  }
+}
+
+function assertChainId(chainId: string): void {
+  try {
+    const value = BigInt(chainId);
+    if (!/^0x[0-9a-f]+$/i.test(chainId) || value === 0n || value >= STARK_FIELD_PRIME) {
+      throw new Error();
+    }
+  } catch {
+    throw new PrivacyError('unknown', 'The configured wallet chain is invalid.');
   }
 }
 
