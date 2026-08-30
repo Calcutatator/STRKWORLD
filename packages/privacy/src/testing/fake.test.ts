@@ -52,6 +52,15 @@ describe('fake lifecycle configuration', () => {
     expect(() => new FakePrivacyOperations({ poolConfig }))
       .toThrow(/pool config/i);
   });
+
+  it.each([
+    ['malformed', 'not-a-felt'],
+    ['zero', '0x0'],
+    ['negative', '-1'],
+  ] as const)('rejects a %s registered recipient as a privacy configuration error', (_label, recipient) => {
+    expect(() => new FakePrivacyOperations({ registered: [recipient] }))
+      .toThrow(PrivacyError);
+  });
 });
 
 describe('the fee comes out of the balance being spent', () => {

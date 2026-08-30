@@ -136,9 +136,18 @@ export class FakePrivacyOperations implements PrivacyOperations {
       }
       this.spendable.set(token, amount);
     }
-    this.registeredAddrs = new Set(
-      (config.registered ?? []).map((a) => normalise(a)),
-    );
+    this.registeredAddrs = new Set((config.registered ?? []).map((address) => {
+      let value: bigint;
+      try {
+        value = BigInt(address);
+      } catch {
+        throw new PrivacyError('unknown', 'The fake registered recipient is invalid.');
+      }
+      if (value <= 0n) {
+        throw new PrivacyError('unknown', 'The fake registered recipient is invalid.');
+      }
+      return normalise(address);
+    }));
     this.pool = { ...DEFAULT_POOL, ...config.poolConfig };
     if (
       !Number.isSafeInteger(this.pool.noteMaturityBlocks)
