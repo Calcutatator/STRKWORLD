@@ -13,6 +13,7 @@ import {
   ROUTE_BY_INTENT_KIND,
 } from './routes.js';
 import { resolveRoom } from './panel-framework.js';
+import { BUILDING_PANELS } from './registry.js';
 
 const approvedDeviation: RouteGrade = {
   building: 'vault',
@@ -143,6 +144,19 @@ describe('room resolution', () => {
     const panels = Object.create({ exchange: 'forged-panel' }) as { exchange?: string };
     const room = resolveRoom('exchange', panels);
     expect(room.kind).toBe('unbuilt');
+  });
+});
+
+describe('default panel registry', () => {
+  it('does not let consumers rewrite the authored panel descriptors', () => {
+    const exchange = BUILDING_PANELS.exchange;
+    expect(exchange).toBeDefined();
+    expect(Object.isFrozen(BUILDING_PANELS)).toBe(true);
+    expect(Object.isFrozen(exchange)).toBe(true);
+    expect(Reflect.set(BUILDING_PANELS, 'exchange', { forged: true })).toBe(false);
+    expect(Reflect.set(exchange!, 'title', 'forged')).toBe(false);
+    expect(BUILDING_PANELS.exchange).toBe(exchange);
+    expect(BUILDING_PANELS.exchange?.title).toBe(COPY.buildings.exchange);
   });
 });
 

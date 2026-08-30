@@ -26,13 +26,13 @@ export interface BuildingPanelDescriptor {
   Component: ComponentType<BuildingPanelProps>;
 }
 
-export const BUILDING_PANELS: PanelRegistry<BuildingPanelDescriptor> = {
-  bank: { building: 'bank', title: COPY.buildings.bank, Component: BankPanel },
-  exchange: { building: 'exchange', title: COPY.buildings.exchange, Component: ExchangePanel },
-  'post-office': {
+export const BUILDING_PANELS: PanelRegistry<BuildingPanelDescriptor> = Object.freeze({
+  bank: Object.freeze({ building: 'bank', title: COPY.buildings.bank, Component: BankPanel }),
+  exchange: Object.freeze({ building: 'exchange', title: COPY.buildings.exchange, Component: ExchangePanel }),
+  'post-office': Object.freeze({
     building: 'post-office',
     title: COPY.buildings['post-office'],
     Component: PostOfficePanel,
-  },
-  bridge: { building: 'bridge', title: COPY.buildings.bridge, Component: BridgePanel },
-};
+  }),
+  bridge: Object.freeze({ building: 'bridge', title: COPY.buildings.bridge, Component: BridgePanel }),
+});

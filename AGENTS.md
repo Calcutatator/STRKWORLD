@@ -258,6 +258,24 @@ empty shell to fetchers, so a 200 there means nothing.
 
 ## 6. Findings log
 
+### 2026-08-30 — The default Web panel registry is immutable
+
+`BUILDING_PANELS` was exported as a mutable object whose descriptors were also
+mutable. A same-bundle consumer could therefore replace a panel or rewrite its
+title/component after startup, changing the room composition behind the
+already-graded route gate. The resolver's own-property guard prevents inherited
+entries, but it does not protect authored entries from later mutation.
+
+The default registry and each authored descriptor are now frozen. Custom panel
+registries passed to `PanelLayer` or `VisitLayer` remain supported and retain
+their caller-owned lifecycle; only the shared production registry is pinned.
+
+*Verified:* a red-first public registry regression attempted to replace the
+Exchange descriptor and rewrite its title; the mutable default accepted both.
+The corrected registry rejects both mutations and preserves the authored
+descriptor. The focused routes suite passes 21/21; no browser, wallet,
+provider, RPC, proof, signature, funds or transaction was used.
+
 ### 2026-08-30 — Lobby suspend cannot resurrect a room closed during send
 
 `LobbyClient.suspend()` sent the suspend command and then unconditionally
