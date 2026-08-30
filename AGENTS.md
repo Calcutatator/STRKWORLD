@@ -258,6 +258,28 @@ empty shell to fetchers, so a 200 there means nothing.
 
 ## 6. Findings log
 
+### 2026-08-30 — Privacy route-policy snapshots must bypass proxy reads
+
+The WalletSession route-policy boundary validated own data descriptors, but
+then read the policy and its nested collections through ordinary property
+access and spread iteration. A proxy could report valid descriptors while its
+`get` or iterator trap threw, leaking an arbitrary exception during session
+construction instead of producing an owned policy snapshot.
+
+Policy snapshots now read validated data-descriptor values and materialize
+collections inside a controlled failure boundary. Optional swap metadata uses
+the same descriptor-only reads. Inherited/accessor fields remain rejected and
+valid policy values keep the same frozen shape; no wallet connection or
+operation is created for a malformed policy.
+
+*Verified:* a red-first public session regression supplied a descriptor-valid
+proxy whose property-read trap throws; the old constructor leaked that raw
+exception, while the corrected path constructs the session without invoking
+the trap. Collection iteration failures are also mapped to the same
+`PrivacyError`. Focused WalletSession tests pass 83 tests, Privacy tests pass
+460 tests, and workspace gates are recorded on the candidate. No browser,
+wallet, provider, RPC, proof, signature, funds or transaction was used.
+
 ### 2026-08-30 — Privacy policy validation contains descriptor-trap failures
 
 The WalletSession route-policy boundary used `Object.getOwnPropertyDescriptor()`

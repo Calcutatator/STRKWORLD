@@ -1774,6 +1774,34 @@ describe('WalletSession', () => {
     )).toThrow(PrivacyError);
   });
 
+  it('snapshots a proxy-backed route policy without invoking property reads', () => {
+    const policy = new Proxy(denyAllOptions().policy, {
+      get(_target, key) {
+        throw new Error(`policy get trap must not run for ${String(key)}`);
+      },
+    });
+
+    expect(() => createWalletSession(
+      { ...denyAllOptions(), policy: policy as never },
+      { discovery: discoveryWith(wallet('Ready')), connectWallet: async () => connection('0x111') },
+    )).not.toThrow();
+  });
+
+  it('contains a proxy-backed route collection iterator failure', () => {
+    const enabledRoutes = new Proxy([] as ('transfer')[], {
+      get(target, key, receiver) {
+        if (key === Symbol.iterator) throw new Error('route iterator trap must not escape');
+        return Reflect.get(target, key, receiver);
+      },
+    });
+    const policy = { ...denyAllOptions().policy, enabledRoutes };
+
+    expect(() => createWalletSession(
+      { ...denyAllOptions(), policy: policy as never },
+      { discovery: discoveryWith(wallet('Ready')), connectWallet: async () => connection('0x111') },
+    )).toThrow(PrivacyError);
+  });
+
   it('rejects an account outside the Stark field before publishing operations', async () => {
     const selected = wallet('Ready');
     const starkPrime = (1n << 251n) + 17n * (1n << 192n) + 1n;

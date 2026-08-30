@@ -547,35 +547,77 @@ function ownPolicy(policy: WalletRoutePolicy): WalletRoutePolicy {
   if (!hasOwnDataProperties(policy, ['maxIntents', 'maxRelayFee', 'enabledRoutes', 'allowedTokens'])) {
     throw new PrivacyError('unknown', 'The wallet route policy is invalid.');
   }
-  const allowedTokens = Object.getOwnPropertyDescriptor(policy, 'allowedTokens')!.value;
+  const maxIntents = readPolicyValue<WalletRoutePolicy['maxIntents']>(policy, 'maxIntents');
+  const maxRelayFee = readPolicyValue<WalletRoutePolicy['maxRelayFee']>(policy, 'maxRelayFee');
+  const enabledRoutes = copyPolicyCollection(
+    readPolicyValue<WalletRoutePolicy['enabledRoutes']>(policy, 'enabledRoutes'),
+  );
+  const allowedTokens = readPolicyValue<WalletRoutePolicy['allowedTokens']>(policy, 'allowedTokens');
   if (!hasOwnDataProperties(allowedTokens, ['shield', 'unshield', 'transfer', 'swap'])) {
     throw new PrivacyError('unknown', 'The wallet route policy is invalid.');
   }
-  const swapDescriptor = Object.getOwnPropertyDescriptor(policy, 'swap');
-  if (swapDescriptor && !('value' in swapDescriptor)) {
-    throw new PrivacyError('unknown', 'The wallet route policy is invalid.');
-  }
-  const swap = swapDescriptor?.value;
+  const shield = copyPolicyCollection(
+    readPolicyValue<WalletRoutePolicy['allowedTokens']['shield']>(allowedTokens, 'shield'),
+  );
+  const unshield = copyPolicyCollection(
+    readPolicyValue<WalletRoutePolicy['allowedTokens']['unshield']>(allowedTokens, 'unshield'),
+  );
+  const transfer = copyPolicyCollection(
+    readPolicyValue<WalletRoutePolicy['allowedTokens']['transfer']>(allowedTokens, 'transfer'),
+  );
+  const swapTokens = copyPolicyCollection(
+    readPolicyValue<WalletRoutePolicy['allowedTokens']['swap']>(allowedTokens, 'swap'),
+  );
+  const swap = readOptionalPolicyValue<NonNullable<WalletRoutePolicy['swap']>>(policy, 'swap');
   if (swap !== undefined && !hasOwnDataProperties(swap, ['expectedChainId', 'slippageBps'])) {
     throw new PrivacyError('unknown', 'The wallet route policy is invalid.');
   }
   return Object.freeze({
-    maxIntents: policy.maxIntents,
-    maxRelayFee: policy.maxRelayFee,
-    enabledRoutes: Object.freeze([...policy.enabledRoutes]),
+    maxIntents,
+    maxRelayFee,
+    enabledRoutes: Object.freeze(enabledRoutes),
     allowedTokens: Object.freeze({
-      shield: Object.freeze([...allowedTokens.shield]),
-      unshield: Object.freeze([...allowedTokens.unshield]),
-      transfer: Object.freeze([...allowedTokens.transfer]),
-      swap: Object.freeze([...allowedTokens.swap]),
+      shield: Object.freeze(shield),
+      unshield: Object.freeze(unshield),
+      transfer: Object.freeze(transfer),
+      swap: Object.freeze(swapTokens),
     }),
     ...(swap
       ? { swap: Object.freeze({
-          expectedChainId: swap.expectedChainId,
-          slippageBps: swap.slippageBps,
+          expectedChainId: readPolicyValue<NonNullable<WalletRoutePolicy['swap']>['expectedChainId']>(swap, 'expectedChainId'),
+          slippageBps: readPolicyValue<NonNullable<WalletRoutePolicy['swap']>['slippageBps']>(swap, 'slippageBps'),
         }) }
       : {}),
   });
+}
+
+function readPolicyValue<T>(value: object, key: PropertyKey): T {
+  try {
+    const descriptor = Object.getOwnPropertyDescriptor(value, key);
+    if (!descriptor || !('value' in descriptor)) throw new Error('missing data property');
+    return descriptor.value as T;
+  } catch {
+    throw new PrivacyError('unknown', 'The wallet route policy is invalid.');
+  }
+}
+
+function readOptionalPolicyValue<T>(value: object, key: PropertyKey): T | undefined {
+  try {
+    const descriptor = Object.getOwnPropertyDescriptor(value, key);
+    if (!descriptor) return undefined;
+    if (!('value' in descriptor)) throw new Error('accessor property');
+    return descriptor.value as T;
+  } catch {
+    throw new PrivacyError('unknown', 'The wallet route policy is invalid.');
+  }
+}
+
+function copyPolicyCollection<T>(value: Iterable<T>): T[] {
+  try {
+    return [...value];
+  } catch {
+    throw new PrivacyError('unknown', 'The wallet route policy is invalid.');
+  }
 }
 
 function ownPreparedBatch(
