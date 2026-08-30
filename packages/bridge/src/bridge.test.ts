@@ -141,6 +141,27 @@ describe('BridgeService', () => {
     expect(client.quoteRequests).toHaveLength(0);
   });
 
+  it('rejects non-string source metadata before requesting a quote', async () => {
+    const client = new StubClient();
+    const service = new BridgeService({
+      client,
+      store: new MemoryBridgeStore(),
+      quoteVerifier: () => true,
+      now: () => NOW,
+    });
+
+    await expect(service.createManualDeposit({
+      source: {
+        ...SOURCE,
+        symbol: { toString: () => SOURCE.symbol } as unknown as string,
+      },
+      amountIn: 1_000_000n,
+      starknetRecipient: '0x123',
+      refundAddress: request.refundTo,
+    })).rejects.toThrow('The source asset metadata is invalid.');
+    expect(client.quoteRequests).toHaveLength(0);
+  });
+
   it('does not overwrite an imported record while its quote is pending', async () => {
     const quote = deferred<QuoteResponse>();
     const client = new StubClient();

@@ -368,8 +368,11 @@ function samePersistedVersion(left: BridgeRecord, right: BridgeRecord): boolean 
 
 function validateInput(input: CreateDepositInput): void {
   if (
+    typeof input.source.assetId !== 'string' ||
     !input.source.assetId ||
+    typeof input.source.symbol !== 'string' ||
     !input.source.symbol ||
+    typeof input.source.chainName !== 'string' ||
     !Number.isSafeInteger(input.source.decimals) ||
     input.source.decimals < 0 ||
     input.source.decimals > 36
