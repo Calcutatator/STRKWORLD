@@ -96,7 +96,7 @@ export function listenBackendServer(
       server.off('error', onError);
       const address = server.address();
       if (!address || typeof address === 'string') {
-        void closeServer(server).finally(() => {
+        void closeServer(server).catch(() => undefined).finally(() => {
           reject(new Error('Backend listener did not bind a TCP address.'));
         });
         return;

@@ -229,6 +229,32 @@ describe('production backend composition and HTTP listener', () => {
 
     address.mockRestore();
   });
+
+  it('consumes a cleanup error when the bound address is invalid', async () => {
+    const server = createServer();
+    const address = vi.spyOn(server, 'address').mockReturnValue('unexpected' as never);
+    const cleanupFailure = new Error('close failed');
+    const close = vi.spyOn(server, 'close').mockImplementation((callback?: (error?: Error) => void) => {
+      callback?.(cleanupFailure);
+      return server;
+    });
+    const unhandled: unknown[] = [];
+    const onUnhandled = (reason: unknown) => unhandled.push(reason);
+    process.on('unhandledRejection', onUnhandled);
+
+    try {
+      const started = listenBackendServer(server, { port: 0 });
+      await new Promise<void>((resolve) => server.once('listening', resolve));
+      await expect(started).rejects.toThrow('Backend listener did not bind a TCP address.');
+      await new Promise<void>((resolve) => setImmediate(resolve));
+      expect(unhandled).toHaveLength(0);
+    } finally {
+      process.off('unhandledRejection', onUnhandled);
+      close.mockRestore();
+      address.mockRestore();
+      if (server.listening) await new Promise<void>((resolve) => server.close(() => resolve()));
+    }
+  });
 });
 
 describe('production backend shutdown lifecycle', () => {

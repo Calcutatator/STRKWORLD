@@ -258,6 +258,23 @@ empty shell to fetchers, so a 200 there means nothing.
 
 ## 6. Findings log
 
+### 2026-08-30 — Backend listener cleanup consumes close failures
+
+When `listenBackendServer()` discovered that a bound transport exposed no TCP
+address, it attempted to close the server but attached only a `finally`
+handler. A close rejection therefore escaped as an unhandled rejection even
+though startup already had its authoritative invalid-address failure.
+
+The cleanup rejection is now consumed while the same generic invalid-address
+startup error is preserved. Successful cleanup and normal bind/error paths are
+unchanged.
+
+*Verified:* a public listener regression injects a close callback failure on
+the invalid-address path and observes the old unhandled rejection. The
+corrected path emits no unhandled rejection and retains the startup error;
+Backend server tests pass 28 tests. No browser, provider, RPC, wallet, proof,
+signature, funds or transaction was used.*
+
 ### 2026-08-30 — Remote avatar updates retain the last rendered snapshot after failure
 
 `createRemoteAvatarLayer.render()` previously committed the next peer snapshot
