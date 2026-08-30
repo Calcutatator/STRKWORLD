@@ -258,6 +258,27 @@ empty shell to fetchers, so a 200 there means nothing.
 
 ## 6. Findings log
 
+### 2026-08-30 — Lobby resume rejects malformed placement containers
+
+`LobbyClient.resume()` assumed its runtime argument was a non-null placement
+object and dereferenced `placement.x` and `placement.y` immediately. A
+nullish value supplied at the client boundary therefore escaped as a raw
+`TypeError` instead of the method's controlled invalid-placement failure,
+leaving callers without a stable way to handle malformed resume input.
+
+Resume now rejects null and non-object containers with the existing
+`Lobby resume placement is invalid.` error before reading fields or sending a
+wire message. Valid placements, finite-coordinate checks and world clamping,
+facing normalization, sprite handling and transport lifecycle ownership are
+unchanged.
+
+*Verified:* red-first public fake-room regressions supplied `null` and
+`undefined` after suspension; the old client threw property-access errors,
+while the corrected path returns the controlled placement error without a
+resume send. Removing the container guard makes both regressions fail. No
+browser, external lobby, wallet, provider, RPC, proof, signature, funds or
+transaction was used.*
+
 ### 2026-08-30 — Lobby resume normalizes facing before crossing the wire
 
 `LobbyClient.resume()` forwarded its runtime `facing` value directly, even

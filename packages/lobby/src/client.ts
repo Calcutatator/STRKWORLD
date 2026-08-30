@@ -305,6 +305,9 @@ export class LobbyClient {
     // The server rejects non-finite coordinates. Validate before claiming the
     // client is connected, otherwise a failed resume leaves this wrapper in a
     // false connected state while its server session remains suspended.
+    if (placement === null || typeof placement !== 'object') {
+      throw new Error(INVALID_RESUME_PLACEMENT_ERROR);
+    }
     const x = normalizeCoordinate(placement.x);
     const y = normalizeCoordinate(placement.y);
     if (x === null || y === null) {

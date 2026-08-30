@@ -1415,6 +1415,29 @@ describe('presence', () => {
     }
   });
 
+  it.each([null, undefined])('rejects a nullish resumed placement with the controlled error', async (placement) => {
+    const joined = fakeRoom();
+    const joinOrCreate = vi
+      .spyOn(ColyseusClient.prototype, 'joinOrCreate')
+      .mockImplementation(() => Promise.resolve(joined.room) as never);
+    const client = makeClient(20, 0);
+
+    try {
+      const connecting = client.connect();
+      await Promise.resolve();
+      joined.welcome({ gameId: '0123456789abcdef' });
+      await connecting;
+      client.suspend();
+
+      expect(() => client.resume(placement as never)).toThrow('Lobby resume placement is invalid.');
+      expect(joined.send).toHaveBeenLastCalledWith('suspend');
+      expect(client.status).toBe('suspended');
+    } finally {
+      await client.disconnect();
+      joinOrCreate.mockRestore();
+    }
+  });
+
   it('does not restore connected status when transport leaves during resume send', async () => {
     const joined = fakeRoom();
     const joinOrCreate = vi
