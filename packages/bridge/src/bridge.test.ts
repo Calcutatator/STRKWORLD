@@ -1783,6 +1783,12 @@ describe('source registry and refund validation', () => {
     expect(validateSourceAddress('arbitrum', `0x${'0'.repeat(40)}`).ok).toBe(false);
     expect(validateStarknetAddress(`0x${'f'.repeat(64)}`).ok).toBe(false);
   });
+
+  it('rejects coercible address inputs instead of treating them as strings', () => {
+    const coercible = { trim: () => '0x123' } as unknown as string;
+    expect(validateStarknetAddress(coercible).ok).toBe(false);
+    expect(validateSourceAddress('arbitrum', coercible).ok).toBe(false);
+  });
 });
 
 describe('bridge persistence', () => {
