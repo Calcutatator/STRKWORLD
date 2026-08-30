@@ -175,9 +175,17 @@ export class FakePrivacyOperations implements PrivacyOperations {
       throw new PrivacyError('unknown', 'The fake latency must be a non-negative safe integer.');
     }
     this.latency = latency;
-    this.configuredSwapReview = config.swapReview === undefined
-      ? undefined
-      : Object.freeze({ ...config.swapReview });
+    if (config.swapReview !== undefined) {
+      if (!Number.isSafeInteger(config.swapReview.expiresAt) || config.swapReview.expiresAt <= 0) {
+        throw new PrivacyError('unknown', 'The deterministic swap review is invalid.');
+      }
+      try {
+        protectedMinimumOut(config.swapReview.expectedAmountOut, config.swapReview.slippageBps);
+      } catch {
+        throw new PrivacyError('unknown', 'The deterministic swap review is invalid.');
+      }
+      this.configuredSwapReview = Object.freeze({ ...config.swapReview });
+    }
   }
 
   // -- test controls --------------------------------------------------------
