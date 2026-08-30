@@ -258,6 +258,27 @@ empty shell to fetchers, so a 200 there means nothing.
 
 ## 6. Findings log
 
+### 2026-08-30 — Avatar visual state and target rendering stay transactional
+
+`createAvatarVisualController.present()` replaced its logical pose before
+calling the Phaser target. If a target setter partially mutated the sprite and
+then threw, the controller exposed the failed pose while its render cache still
+held the prior key. Returning to that prior pose could therefore skip rendering
+and leave the sprite with the partial failed mutation.
+
+Pose presentation now renders the candidate first and commits logical state
+only after success. A failed target call retains the last successful state and
+invalidates the cache so a later retry reapplies the target even when its pose
+key matches the previous successful key. Normal pose deduplication and
+animation cadence are unchanged.
+
+*Verified:* a red-first public World regression makes `setOrigin` throw after
+the texture changes during a new pose, then returns to the original pose. The
+old controller reports the new sprite and skips the repair; the corrected
+controller preserves the old state and reapplies the original texture.
+Avatar-visual tests pass 13/13. No browser, wallet, provider, RPC, proof,
+signature, funds or transaction was used.
+
 ### 2026-08-30 — Room resolution checks structured panel identity
 
 `resolveRoom()` previously trusted that a panel stored under a building key

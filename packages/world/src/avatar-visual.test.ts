@@ -232,6 +232,19 @@ describe('D-052 avatar visual catalog', () => {
     });
   });
 
+  it('invalidates the render cache after a partial pose presentation fails', () => {
+    const target = fakeAvatarTarget();
+    const controller = createAvatarVisualController(target as never);
+    const error = new Error('pose presentation failed');
+    target.setOrigin.mockImplementationOnce(() => { throw error; });
+
+    expect(() => controller.select('avatar-7')).toThrow(error);
+    expect(controller.state.sprite).toBe('avatar-1');
+
+    controller.select('avatar-1');
+    expect(target.setTexture).toHaveBeenLastCalledWith('avatar-1');
+  });
+
   it('owns local body, movement pose and selection as one StreetScene seam', () => {
     const target = Object.assign(fakeAvatarTarget(), {
       body: { velocity: {}, setSize: vi.fn(), setOffset: vi.fn() },

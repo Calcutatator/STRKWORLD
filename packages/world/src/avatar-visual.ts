@@ -212,24 +212,33 @@ export function createAvatarVisualController(
   };
   let rendered = '';
 
-  const render = (): void => {
-    const key = `${state.sprite}:${state.facing}:${state.moving}:${state.sprinting}`;
+  const render = (nextState: AvatarVisualControllerState): void => {
+    const key = `${nextState.sprite}:${nextState.facing}:${nextState.moving}:${nextState.sprinting}`;
     if (key === rendered) return;
-    applyAvatarVisual(target, state);
+    applyAvatarVisual(target, nextState);
     rendered = key;
   };
 
   const present = (pose: AvatarVisualPose): void => {
-    state = {
+    const nextState: AvatarVisualControllerState = {
       sprite: validateAvatarSprite(pose.sprite),
       facing: validateAvatarFacing(pose.facing),
       moving: pose.moving,
       sprinting: pose.moving && pose.sprinting === true,
     };
-    render();
+    try {
+      render(nextState);
+      state = nextState;
+    } catch (error) {
+      // A Phaser setter may partially mutate the target before throwing. The
+      // logical state stays at the last successful pose, and the cache is
+      // invalidated so a retry repairs the target rather than being skipped.
+      rendered = '';
+      throw error;
+    }
   };
 
-  render();
+  render(state);
   return {
     get state() {
       return Object.freeze({ ...state });
