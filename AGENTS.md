@@ -279,6 +279,31 @@ workspace verification is recorded with the owning commit. Deterministic fakes
 only: no browser, wallet, provider, RPC, proof, signature, funds or transaction
 was used.*
 
+### 2026-08-30 — Production bootstrap contains malformed loaded sessions
+
+The production bootstrap trusted the runtime value fulfilled by its dynamic
+loader because TypeScript's `Promise<WalletSession>` annotation does not
+validate a thenable or module boundary. A malformed value could therefore be
+published to the production renderer as a wallet session. Teardown also used
+ordinary `session.destroy` property access, so a hostile proxy getter could
+prevent destruction even when the underlying data method was valid.
+
+Bootstrap now requires an object with own data `operations` and all WalletSession
+methods before publishing it, containing descriptor/proxy failures as a
+controlled startup failure. Teardown reads the own data `destroy` method and
+invokes that function directly, preserving valid receiver behavior without
+triggering a hostile property getter. Native Promise assimilation continues to
+contain throwing then getters and ignore duplicate fulfillment; late malformed
+values remain unpublished after disposal.
+
+*Verified:* red-first bootstrap regressions first rendered `42` as a session
+and failed to call the target destroy method through a hostile proxy getter;
+the corrected path renders neither and destroys valid data-backed sessions.
+Throwing then getters and double-fulfilling thenables are also covered. Focused
+bootstrap tests pass 10 tests; workspace gates are recorded on the candidate.
+No browser, wallet, provider, RPC, proof, signature, funds or transaction was
+used.
+
 ### 2026-08-30 — Remote peer sources retain queued state after listener errors
 
 `createRemotePeerSource()` queued reentrant publications while a listener was

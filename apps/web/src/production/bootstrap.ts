@@ -47,6 +47,10 @@ export function startProductionWalletBootstrap({
         destroyQuietly(session);
         return;
       }
+      if (!isWalletSession(session)) {
+        if (!retired) reportFailure(failure);
+        return;
+      }
       owned = session;
       if (retired) {
         destroyQuietly(session);
@@ -70,10 +74,36 @@ export function startProductionWalletBootstrap({
   return dispose;
 }
 
-function destroyQuietly(session: WalletSession | null): void {
-  if (!session) return;
+function isWalletSession(value: unknown): value is WalletSession {
+  if (!value || typeof value !== 'object') return false;
   try {
-    session.destroy();
+    const operations = Object.getOwnPropertyDescriptor(value, 'operations');
+    if (!operations || !('value' in operations) || !operations.value || typeof operations.value !== 'object') {
+      return false;
+    }
+    return [
+      'getSnapshot',
+      'subscribe',
+      'connect',
+      'refreshDiscovery',
+      'readAccount',
+      'disconnect',
+      'destroy',
+    ].every((key) => {
+      const descriptor = Object.getOwnPropertyDescriptor(value, key);
+      return Boolean(descriptor && 'value' in descriptor && typeof descriptor.value === 'function');
+    });
+  } catch {
+    return false;
+  }
+}
+
+function destroyQuietly(session: unknown): void {
+  if (!session || (typeof session !== 'object' && typeof session !== 'function')) return;
+  try {
+    const descriptor = Object.getOwnPropertyDescriptor(session, 'destroy');
+    if (!descriptor || !('value' in descriptor) || typeof descriptor.value !== 'function') return;
+    descriptor.value.call(session);
   } catch {
     // HMR/disposal must not surface a stale wallet teardown failure.
   }
