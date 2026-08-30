@@ -21,6 +21,38 @@ import { createStreetMap, tileToWorld } from './map/street.js';
 type Emitted = { [K in keyof WorldEvents]: { event: K; payload: WorldEvents[K] } }[keyof WorldEvents];
 
 describe('hidden Avatar Studio', () => {
+  it('retries presentation cleanup after a failed destroy', () => {
+    const cleanupError = new Error('studio cleanup failed');
+    const destroyStudio = vi.fn().mockImplementationOnce(() => { throw cleanupError; });
+    const noop = vi.fn();
+    const presentation = createAvatarStudioPresentation({
+      port: {
+        setPlayerVelocity: noop,
+        setBodyEnabled: noop,
+        setGroundVisible: noop,
+        setDoorsVisible: noop,
+        setRemoteVisible: noop,
+        setLabelsVisible: noop,
+        setRoomVisible: noop,
+        setStudioVisible: noop,
+        setWorldBounds: noop,
+        setCameraBounds: noop,
+        setPlayerPosition: noop,
+        resetDoors: noop,
+        resumeStreet: noop,
+        destroyStudio,
+      },
+      streetBounds: { x: 0, y: 0, width: 10, height: 10 },
+      studioBounds: { x: 1, y: 1, width: 10, height: 10 },
+      studioSpawn: { x: 5, y: 5 },
+      streetReturn: { x: 2, y: 2 },
+      reportStreet: noop,
+    });
+
+    expect(() => presentation.destroy()).toThrow(cleanupError);
+    expect(() => presentation.destroy()).not.toThrow();
+    expect(destroyStudio).toHaveBeenCalledTimes(2);
+  });
   it('stops an enter transition when a presentation callback destroys it', () => {
     let presentation!: ReturnType<typeof createAvatarStudioPresentation>;
     const destroyStudio = vi.fn();

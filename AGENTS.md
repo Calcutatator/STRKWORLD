@@ -258,6 +258,22 @@ empty shell to fetchers, so a 200 there means nothing.
 
 ## 6. Findings log
 
+### 2026-08-30 — Avatar Studio presentation retains failed destroy ownership
+
+`createAvatarStudioPresentation().destroy()` marked the presentation retired
+before calling its injected `destroyStudio` port. If that port threw part-way
+through Scene-owned Phaser cleanup, later Scene cleanup calls returned and the
+failed teardown could not be retried.
+
+Presentation destruction now marks ownership retired only after the port
+completes successfully, while an in-progress guard prevents synchronous
+reentrant `destroy()` calls from recursing. A failed port call remains
+retryable; successful destruction remains idempotent.
+
+*Verified:* a red-first Avatar Studio regression makes the first port cleanup
+throw; the corrected path retries and succeeds on the second call. No browser,
+wallet, provider, RPC, proof, signature, funds or transaction was used.
+
 ### 2026-08-30 — Initial Bridge quotes require own data fields
 
 `BridgeService.createDeposit()` passed the untrusted 1Click quote response to

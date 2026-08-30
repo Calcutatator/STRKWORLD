@@ -118,6 +118,7 @@ export function createAvatarStudioPresentation(options: {
   readonly reportStreet: () => void;
 }): AvatarStudioPresentation {
   let destroyed = false;
+  let destroying = false;
   return {
     enter(): void {
       if (destroyed) return;
@@ -174,9 +175,16 @@ export function createAvatarStudioPresentation(options: {
       port.resumeStreet(options.streetReturn, options.reportStreet);
     },
     destroy(): void {
-      if (destroyed) return;
-      destroyed = true;
-      options.port.destroyStudio();
+      if (destroyed || destroying) return;
+      // Retain ownership when cleanup fails so a later Scene teardown can
+      // retry. Guard synchronous reentrancy while the port owns this attempt.
+      destroying = true;
+      try {
+        options.port.destroyStudio();
+        destroyed = true;
+      } finally {
+        destroying = false;
+      }
     },
   };
 }
