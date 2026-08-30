@@ -37,6 +37,33 @@ describe('D-052 avatar visual catalog', () => {
     }));
   });
 
+  it('fails closed for malformed runtime facings at every visual seam', () => {
+    const target = fakeAvatarTarget();
+
+    expect(resolveAvatarAnimation('avatar-2', 'diagonal' as never, false)).toEqual({
+      key: 'avatar-2:down:walk',
+      textureKey: 'avatar-2',
+      frames: [0, 1, 2, 3, 4],
+      frameRate: 8,
+    });
+
+    applyAvatarVisual(target as never, {
+      sprite: 'avatar-2',
+      facing: 'diagonal' as never,
+      moving: false,
+    });
+    expect(target.setFrame).toHaveBeenLastCalledWith(0);
+    expect(target.setData).toHaveBeenLastCalledWith('facing', 'down');
+
+    const controller = createAvatarVisualController(target as never);
+    controller.present({
+      sprite: 'avatar-2',
+      facing: 'diagonal' as never,
+      moving: false,
+    });
+    expect(controller.state.facing).toBe('down');
+  });
+
   it('resolves an unknown runtime key to the safe avatar-1 sheet', () => {
     expect(resolveAvatarSheet('avatar-16').sprite).toBe('avatar-16');
     expect(resolveAvatarSheet('review-sheet').sprite).toBe('avatar-1');

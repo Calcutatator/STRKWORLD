@@ -108,6 +108,11 @@ export function preloadAvatarVisuals(
 const FACING_ROW: Record<Facing, number> = { down: 0, left: 1, right: 2, up: 3 };
 const AVATAR_FACINGS: readonly Facing[] = ['down', 'left', 'right', 'up'];
 
+/** Normalize untrusted runtime pose data before it can form a frame index. */
+function validateAvatarFacing(value: unknown): Facing {
+  return AVATAR_FACINGS.includes(value as Facing) ? (value as Facing) : 'down';
+}
+
 export interface AvatarAnimationPlan {
   readonly key: string;
   readonly textureKey: AvatarSpriteKey;
@@ -133,9 +138,10 @@ export function resolveAvatarAnimation(
   sprinting: boolean,
 ): AvatarAnimationPlan {
   const sheet = resolveAvatarSheet(sprite);
-  const rowOffset = FACING_ROW[facing] * sheet.columns;
+  const resolvedFacing = validateAvatarFacing(facing);
+  const rowOffset = FACING_ROW[resolvedFacing] * sheet.columns;
   return Object.freeze({
-    key: `${sheet.sprite}:${facing}:${sprinting ? 'sprint' : 'walk'}`,
+    key: `${sheet.sprite}:${resolvedFacing}:${sprinting ? 'sprint' : 'walk'}`,
     textureKey: sheet.textureKey,
     frames: Object.freeze(sheet.walkColumns.map((column) => rowOffset + column)),
     frameRate: sprinting ? AVATAR_SPRINT_WALK_FPS : AVATAR_NORMAL_WALK_FPS,
@@ -166,16 +172,17 @@ export function applyAvatarVisual(
   pose: AvatarVisualPose,
 ): AvatarSpriteKey {
   const sheet = resolveAvatarSheet(pose.sprite);
+  const facing = validateAvatarFacing(pose.facing);
   target.setTexture(sheet.textureKey);
   target.setOrigin(sheet.originX, sheet.originY);
   if (pose.moving) {
-    target.play(resolveAvatarAnimation(sheet.sprite, pose.facing, pose.sprinting === true).key, true);
+    target.play(resolveAvatarAnimation(sheet.sprite, facing, pose.sprinting === true).key, true);
   } else {
     target.stop();
-    target.setFrame(FACING_ROW[pose.facing] * sheet.columns);
+    target.setFrame(FACING_ROW[facing] * sheet.columns);
   }
   target.setData('sprite', sheet.sprite);
-  target.setData('facing', pose.facing);
+  target.setData('facing', facing);
   return sheet.sprite;
 }
 
@@ -215,7 +222,7 @@ export function createAvatarVisualController(
   const present = (pose: AvatarVisualPose): void => {
     state = {
       sprite: validateAvatarSprite(pose.sprite),
-      facing: pose.facing,
+      facing: validateAvatarFacing(pose.facing),
       moving: pose.moving,
       sprinting: pose.moving && pose.sprinting === true,
     };
