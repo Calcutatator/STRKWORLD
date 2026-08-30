@@ -853,6 +853,31 @@ describe('BridgeService', () => {
     expect(store.load()?.status.leg).toBe('awaiting-deposit');
   });
 
+  it.each([
+    ['null', null],
+    ['array', []],
+    ['primitive', 'malformed'],
+    ['nested quote', { ...signedQuote, quote: null }],
+  ] as const)('rejects a %s status quote response with the generic execution-status error', async (_label, quoteResponse) => {
+    const client = new StubClient();
+    const store = new MemoryBridgeStore();
+    const service = new BridgeService({ client, store, quoteVerifier: () => true, now: () => NOW });
+    await service.createManualDeposit({
+      source: SOURCE,
+      amountIn: 1_000_000n,
+      starknetRecipient: '0x123',
+      refundAddress: request.refundTo,
+    });
+    const before = store.load();
+    client.statuses.push({
+      ...status('PENDING_DEPOSIT' as never),
+      quoteResponse: quoteResponse as never,
+    });
+
+    await expect(service.refresh()).rejects.toThrow('1Click returned invalid execution status data.');
+    expect(store.load()).toEqual(before);
+  });
+
   it('rejects a quote that omits its deposit address or signed dispute evidence', async () => {
     const client = new StubClient();
     const store = new MemoryBridgeStore();

@@ -258,6 +258,30 @@ empty shell to fetchers, so a 200 there means nothing.
 
 ## 6. Findings log
 
+### 2026-08-30 — Bridge status quote envelopes fail closed before dereference
+
+The Bridge service treated the generated 1Click status type as runtime truth.
+`verifyStatusQuote()` dereferenced `raw.quoteResponse.correlationId` before
+checking that the response contained an object, and `assertSignedQuote()` did
+the same for its nested `quote` and `quoteRequest` objects. A malformed
+provider response therefore leaked a raw `TypeError` instead of the existing
+generic invalid-execution-status error, even though persistence remained
+unchanged.
+
+The status boundary now requires an object quote response with object
+`quote` and `quoteRequest` containers before comparing correlation/signature
+evidence or validating the signed route. Valid mismatched signed evidence
+still receives the existing quote-mismatch error, while malformed status data
+remains generic and fail-closed.
+
+*Verified:* public Bridge regressions for null, array, primitive and nested
+malformed `quoteResponse` values failed red with either a raw `TypeError` or
+the quote-mismatch error, then passed green with the generic invalid-status
+error and the retained record still awaiting deposit. The focused Bridge suite
+passes 68 tests; workspace gates are recorded with this commit. No browser,
+wallet, provider, RPC, proof, signature, funds or transaction was used.*
+
+
 ### 2026-08-30 — Synchronous Bridge loader failures release ownership
 
 Bridge runtime loading is optional and lazy, but the provider called a

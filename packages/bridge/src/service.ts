@@ -311,9 +311,11 @@ export class BridgeService {
   }
 
   private verifyStatusQuote(raw: { quoteResponse: QuoteResponse }, record: BridgeRecord): void {
+    if (!isRecord(raw) || !isStatusQuoteResponse(raw.quoteResponse)) throw invalidExecutionStatus();
+    const quoteResponse = raw.quoteResponse;
     if (
-      raw.quoteResponse.correlationId !== record.signedQuote.correlationId ||
-      raw.quoteResponse.signature !== record.signedQuote.signature
+      quoteResponse.correlationId !== record.signedQuote.correlationId ||
+      quoteResponse.signature !== record.signedQuote.signature
     ) {
       throw new Error('1Click status did not match the persisted signed quote.');
     }
@@ -324,8 +326,8 @@ export class BridgeService {
       refundAddress: record.refundAddress,
       slippageBps: record.signedQuote.quoteRequest.slippageTolerance,
     };
-    assertSignedQuote(raw.quoteResponse, input, record.signedQuote.quoteRequest);
-    if (!this.quoteVerifier(raw.quoteResponse)) {
+    assertSignedQuote(quoteResponse, input, record.signedQuote.quoteRequest);
+    if (!this.quoteVerifier(quoteResponse)) {
       throw new Error('1Click status quote signature verification failed.');
     }
   }
@@ -528,6 +530,18 @@ function parseSettlementAmount(value: unknown): bigint {
 
 function invalidExecutionStatus(): Error {
   return new Error(INVALID_EXECUTION_STATUS_MESSAGE);
+}
+
+function isStatusQuoteResponse(value: unknown): value is QuoteResponse {
+  if (!isRecord(value)) return false;
+  const response = value as { quote?: unknown; quoteRequest?: unknown };
+  return Boolean(
+    isRecord(response.quote) && isRecord(response.quoteRequest),
+  );
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
 function throwIfAborted(signal?: AbortSignal): void {
