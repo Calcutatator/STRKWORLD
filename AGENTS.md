@@ -258,6 +258,28 @@ empty shell to fetchers, so a 200 there means nothing.
 
 ## 6. Findings log
 
+### 2026-08-30 — Avatar Studio figure visibility sync must be transactional
+
+`createAvatarStudioFigureLayer.sync()` applied visibility to eight figure
+sprites and then the selection highlight one Phaser call at a time. If a
+setter failed midway, earlier objects kept the new visibility while later
+objects and the highlight kept the old state. A failed render therefore left
+the Studio with a mixed presentation and no retained operation to retry it.
+
+The sync now snapshots every owned visibility and the highlight position,
+then compensates all changes when any setter fails. The original error remains
+authoritative; rollback failures are combined in an `AggregateError` so no
+cleanup failure is hidden. Successful visibility/highlight updates and
+destroy ownership are unchanged.
+
+*Verified:* a red-first public World regression makes the fourth figure's
+visibility setter throw after the first three have changed; the old layer
+left the first three visible and the remaining figures hidden, while the
+corrected layer restores the prior all-visible state and preserves the exact
+error. Focused Avatar Studio figure tests pass 10 tests. No browser, lobby
+server, wallet, provider, RPC, proof, signature, funds or transaction was
+used.
+
 ### 2026-08-30 — Remote peer snapshot containers must fail closed
 
 `reconcileRemotePeers()` iterated its public snapshot argument directly. The

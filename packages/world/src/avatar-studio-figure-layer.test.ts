@@ -71,6 +71,23 @@ describe('Avatar Studio final figure layer', () => {
     expect(fake.highlight.setVisible).toHaveBeenLastCalledWith(false);
   });
 
+  it('rolls back partial visibility when a figure sync fails', () => {
+    const fake = fakeScene();
+    const layer = createAvatarStudioFigureLayer({
+      scene: fake.scene as never,
+      roomOrigin: { x: 64, y: 64 },
+    });
+    layer.sync({ visible: true, highlightedFigure: null });
+    fake.sprites[3]!.setVisible.mockImplementationOnce(() => {
+      throw new Error('figure visibility failed');
+    });
+
+    expect(() => layer.sync({ visible: false, highlightedFigure: null })).toThrow(
+      'figure visibility failed',
+    );
+    expect(fake.sprites.slice(0, 4).every((sprite) => sprite.visible)).toBe(true);
+  });
+
   it('reuses figures across re-entry and makes teardown idempotent with no late resurrection', () => {
     const fake = fakeScene();
     const layer = createAvatarStudioFigureLayer({
@@ -225,6 +242,7 @@ function fakeSprite(x: number, y: number, texture: string, frame: number) {
     y,
     texture,
     frame,
+    visible: false,
     setTexture: vi.fn((_key: string) => sprite),
     setOrigin: vi.fn((_x: number, _y: number) => sprite),
     setVertexRoundMode: vi.fn((_mode: string) => sprite),
@@ -236,7 +254,10 @@ function fakeSprite(x: number, y: number, texture: string, frame: number) {
     }),
     setData: vi.fn((_key: string, _value: unknown) => sprite),
     setDepth: vi.fn((_depth: number) => sprite),
-    setVisible: vi.fn((_visible: boolean) => sprite),
+    setVisible: vi.fn((visible: boolean) => {
+      sprite.visible = visible;
+      return sprite;
+    }),
     setTint: vi.fn((_tint: number) => sprite),
     setDisplaySize: vi.fn((_width: number, _height: number) => sprite),
     destroy: vi.fn(),
