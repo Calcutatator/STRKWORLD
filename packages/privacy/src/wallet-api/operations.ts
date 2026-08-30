@@ -288,6 +288,9 @@ export class WalletApiPrivacyOperations implements PrivacyOperations {
           emitProgress(onProgress, { stage: 'proving', message: 'Your wallet is generating a proof' });
           const artifact = await owner.wallet.strk20PrepareInvoke(actions, false);
           throwIfAborted(confirmSignal);
+          if (plan.expiresAt <= owner.now()) {
+            throw new PrivacyError('unknown', 'The private swap quote has expired.');
+          }
           emitProgress(onProgress, { stage: 'submitting', message: 'Submitting the quote-bound private swap' });
           const result = await owner.submission.submit({
             route: 'swap',

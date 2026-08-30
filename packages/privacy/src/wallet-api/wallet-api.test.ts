@@ -1263,6 +1263,44 @@ describe('quote-bound swap plan admission', () => {
     expect(progress).not.toContain('awaiting-approval');
   });
 
+  it('does not submit a swap quote that expires while the wallet is proving', async () => {
+    const base = fixture();
+    let now = 1_000;
+    base.gateway.prepareSwap = vi.fn(async () => ({
+      quoteId: 'quote-1',
+      buyAmount: 95n,
+      expiresAt: 2_000,
+      chainId: CHAIN,
+      executorAddress: '0x999',
+      executorCalls: [{ contractAddress: '0x111', entrypoint: 'swap', calldata: ['0xaaa'] }],
+      fee: { token: STRK, recipient: FEE_RECIPIENT, amount: 1n, ...AUTH },
+    }));
+    vi.spyOn(base.wallet, 'strk20PrepareInvoke').mockImplementation(async () => {
+      now = 2_000;
+      return base.artifact;
+    });
+    const ops = new WalletApiPrivacyOperations({
+      wallet: base.wallet,
+      pool: base.pool,
+      submission: base.gateway,
+      supportedVersions: base.supportedVersions,
+      now: () => now,
+      policy: {
+        maxIntents: 8,
+        maxRelayFee: 10n,
+        enabledRoutes: ['swap'],
+        allowedTokens: {
+          shield: [STRK, TOKEN], unshield: [STRK, TOKEN], transfer: [STRK, TOKEN], swap: [STRK, TOKEN],
+        },
+        swap: { expectedChainId: CHAIN, slippageBps: 100 },
+      },
+    });
+    const batch = await ops.prepare([SWAP]);
+
+    await expect(batch.confirm({ feeCeiling: POOL_FEE + 1n })).rejects.toThrow(/expired/i);
+    expect(base.gateway.submit).not.toHaveBeenCalled();
+  });
+
   it('accepts the maximum uint256 swap output', async () => {
     const { ops } = swapFixture(undefined, { buyAmount: MAX_U256 });
 
