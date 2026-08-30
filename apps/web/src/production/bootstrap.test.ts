@@ -45,4 +45,22 @@ describe('production wallet bootstrap', () => {
     expect(late.destroy).toHaveBeenCalledOnce();
     expect(failure).not.toHaveBeenCalled();
   });
+
+  it('contains a failure renderer that throws after render fails', async () => {
+    const unhandled: unknown[] = [];
+    const onUnhandled = (reason: unknown) => { unhandled.push(reason); };
+    process.on('unhandledRejection', onUnhandled);
+    try {
+      startProductionWalletBootstrap({
+        load: async () => session(),
+        render: () => { throw new Error('render failed'); },
+        failure: () => { throw new Error('failure renderer failed'); },
+      });
+      await Promise.resolve();
+      await Promise.resolve();
+      expect(unhandled).toEqual([]);
+    } finally {
+      process.off('unhandledRejection', onUnhandled);
+    }
+  });
 });

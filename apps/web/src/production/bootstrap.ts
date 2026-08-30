@@ -40,11 +40,11 @@ export function startProductionWalletBootstrap({
       try {
         render(session);
       } catch {
-        if (!retired) failure();
+        if (!retired) reportFailure(failure);
       }
     },
     () => {
-      if (!retired) failure();
+      if (!retired) reportFailure(failure);
     },
   );
 
@@ -57,5 +57,14 @@ function destroyQuietly(session: WalletSession | null): void {
     session.destroy();
   } catch {
     // HMR/disposal must not surface a stale wallet teardown failure.
+  }
+}
+
+function reportFailure(failure: () => void): void {
+  try {
+    failure();
+  } catch {
+    // A detached bootstrap cannot surface a second startup failure as an
+    // unhandled rejection after the original load/render error.
   }
 }

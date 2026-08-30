@@ -295,6 +295,25 @@ while the corrected layer retains an empty map. Removing the post-render
 destroy guard restores the failure. No browser, lobby, wallet, provider, RPC,
 proof, signature, funds or transaction was used.
 
+### 2026-08-30 — Production bootstrap contains failure-renderer rejection
+
+The production wallet bootstrap detached its dynamic-load promise. A render
+failure was routed to the configured failure renderer, but if that renderer
+also threw, the detached promise rejected without a handler and produced an
+unhandled rejection after the original startup failure.
+
+Failure reporting now has its own quiet boundary. The original load or render
+failure remains contained, and a second failure from the fallback renderer
+cannot escape the retired bootstrap. Normal failure rendering and late-load
+retirement behavior are unchanged.
+
+*Verified:* a red-first public bootstrap regression made `render()` throw and
+then made `failure()` throw; the old detached promise emitted an unhandled
+rejection, while the corrected path reports no unhandled rejection. Focused
+bootstrap tests pass 2 tests; workspace gates are recorded on the candidate.
+No browser, wallet, provider, RPC, proof, signature, funds or transaction was
+used.
+
 ### 2026-08-30 — Pool and combined fees remain inside u256
 
 Pool configuration accepted any nonnegative bigint fee. A provider value at
