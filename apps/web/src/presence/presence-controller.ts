@@ -279,9 +279,18 @@ export function createPresenceController({ endpoint, factory = (options) => new 
         }
         client = null;
         clientSprite = null;
-        return next.disconnect().then(() => {
+        let staleDisconnect: Promise<void>;
+        try {
+          staleDisconnect = Promise.resolve(next.disconnect());
+        } catch {
+          staleDisconnect = Promise.resolve();
+        }
+        const finishReplacement = () => {
+          // An explicit replacement remains authoritative even when the old
+          // transport cannot confirm its disconnect.
           if (!destroyed) connect();
-        });
+        };
+        return staleDisconnect.then(finishReplacement, finishReplacement);
       }
       if (!inside && client === next && clientSprite !== currentSprite) {
         replaceStaleClient();

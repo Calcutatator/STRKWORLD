@@ -258,6 +258,27 @@ empty shell to fetchers, so a 200 there means nothing.
 
 ## 6. Findings log
 
+### 2026-08-30 — Presence replacement continues after stale disconnect failure
+
+When a pending join settled successfully after an explicit reconnect request,
+the replacement handoff awaited the old client's `disconnect()` directly. A
+rejected or synchronously throwing disconnect therefore diverted the
+continuation into generic failure handling, after the old owner had already
+been cleared, and no replacement client was created.
+
+The explicit replacement now treats stale disconnect failure as cleanup noise
+and still starts the fresh client after the attempt settles. Destroyed or
+interior-deferred ownership checks remain in force; normal `destroy()` retains
+its existing disconnect-error reporting semantics.
+
+*Verified:* a public regression defers the first join, requests reconnect,
+then makes the stale disconnect reject. The old path disconnects the first
+client but never connects the second; the corrected path performs both. The
+focused presence suite passes 56 tests; full workspace tests and typechecks,
+the Web build, invariants, and diff hygiene are green. No browser, lobby
+server, wallet, provider, RPC, proof, signature, funds or transaction was
+used.
+
 ### 2026-08-30 — Presence replacement survives stale cleanup failure
 
 When a pending join settled successfully after an explicit reconnect request,
