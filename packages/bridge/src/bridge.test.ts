@@ -20,6 +20,7 @@ import {
   validateStarknetAddress,
   type CreateDepositInput,
   type OneClickClient,
+  type BridgeStatus,
   type SourceAsset,
 } from './index.js';
 
@@ -1480,5 +1481,59 @@ describe('bridge persistence', () => {
 
   it('rejects oversized imported resume records before parsing them', () => {
     expect(deserializeBridgeRecord(' '.repeat(MAX_RESUME_RECORD_BYTES + 1))).toBeNull();
+  });
+
+  it.each([
+    ['null', null],
+    ['array', []],
+    ['primitive', 'malformed'],
+    ['invalid leg', { leg: 'unknown' }],
+    ['non-string message', { leg: 'awaiting-deposit', message: 42 }],
+    ['non-boolean polling flag', { leg: 'awaiting-deposit', message: 'waiting', pollingStopped: 'false' }],
+    ['non-string deposit hash', { leg: 'deposit-detected', message: 'detected', pollingStopped: true, depositTxHash: 42 }],
+    ['non-string settlement hash', { leg: 'settled', message: 'settled', pollingStopped: true, settlementTxHash: {} }],
+    ['non-bigint received amount', { leg: 'settled', message: 'settled', pollingStopped: true, strkReceived: '1' }],
+    ['negative received amount', { leg: 'settled', message: 'settled', pollingStopped: true, strkReceived: -1n }],
+  ] as const)('rejects a persisted status with %s', async (_label, malformedStatus) => {
+    const client = new StubClient();
+    const store = new MemoryBridgeStore();
+    const service = new BridgeService({ client, store, quoteVerifier: () => true, now: () => NOW });
+    const record = await service.createManualDeposit({
+      source: SOURCE,
+      amountIn: 1_000_000n,
+      starknetRecipient: '0x123',
+      refundAddress: request.refundTo,
+    });
+    const raw = store.serialize({ ...record, status: malformedStatus as never });
+
+    expect(deserializeBridgeRecord(raw)).toBeNull();
+    store.save({ ...record, status: malformedStatus as never });
+    expect(service.resume()).toBeNull();
+  });
+
+  it('round-trips every valid bridge status shape', async () => {
+    const validStatuses: BridgeStatus[] = [
+      { leg: 'quoted', message: 'quoted', pollingStopped: false },
+      { leg: 'awaiting-deposit', message: 'waiting', pollingStopped: false },
+      { leg: 'deposit-detected', depositTxHash: '0xorigin', message: 'detected', pollingStopped: false },
+      { leg: 'solver-settling', depositTxHash: '0xorigin', message: 'settling', pollingStopped: false },
+      { leg: 'settled', depositTxHash: '0xorigin', settlementTxHash: '0xdestination', strkReceived: 1n, message: 'settled', pollingStopped: true },
+      { leg: 'failed', message: 'failed', pollingStopped: true },
+      { leg: 'expired', message: 'expired', pollingStopped: true },
+    ];
+    for (const status of validStatuses) {
+      const record = {
+        v: 1 as const,
+        createdAt: NOW,
+        updatedAt: NOW,
+        source: SOURCE,
+        amountIn: 1_000_000n,
+        starknetRecipient: '0x123',
+        refundAddress: request.refundTo,
+        signedQuote,
+        status,
+      };
+      expect(deserializeBridgeRecord(serializeBridgeRecord(record))).toEqual(record);
+    }
   });
 });

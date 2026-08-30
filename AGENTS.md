@@ -258,6 +258,30 @@ empty shell to fetchers, so a 200 there means nothing.
 
 ## 6. Findings log
 
+### 2026-08-30 — Persisted Bridge status is validated before resume
+
+`deserializeBridgeRecord()` previously checked only the signed quote's small
+identity subset, timestamps and `amountIn`. It returned any decoded `status`,
+so a corrupted or tampered browser-local record could make `BridgeService.resume()`
+publish a null, unknown-leg or wrong-typed progress object even though the
+signed quote itself reverified. Optional transaction hashes and received
+amounts crossed the same boundary without runtime type checks.
+
+Persistence now requires one of the seven declared Bridge legs, a nonempty
+message, a boolean polling flag, bounded non-whitespace transaction hashes and
+a nonnegative uint256 `strkReceived` when present. Invalid records are
+discarded before a store or service can resume them; all valid status shapes
+continue to round-trip unchanged.
+
+*Verified:* red-first public regressions cover null, array, primitive, invalid
+leg, non-string message, non-boolean polling flag, malformed optional hashes,
+non-bigint received amounts and negative received amounts. Each was accepted
+by the old parser and returned by `resume()`; the corrected parser returns
+null and the service resumes no record. Seven valid Bridge legs round-trip.
+No browser, provider, RPC, wallet, proof, signature, funds or transaction was
+used.*
+
+
 ### 2026-08-30 — StreetScene repeated create retires player and ground objects
 
 `StreetScene.cleanShutdown()` previously cleared the current ground reference
