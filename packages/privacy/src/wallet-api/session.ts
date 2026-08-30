@@ -738,6 +738,14 @@ function validWarning(value: unknown): boolean {
         && remaining.value < estimate.value
       );
     }
+    case 'public-leg': {
+      const detail = Object.getOwnPropertyDescriptor(value, 'detail');
+      return Boolean(
+        detail && 'value' in detail
+        && typeof detail.value === 'string'
+        && detail.value.trim().length > 0
+      );
+    }
     default:
       return true;
   }
