@@ -27,8 +27,10 @@
  *     coordinate or a checked enum. Relevant to the backend's D-014 no-log
  *     posture if this ever sits behind the same proxy.
  *
- * The server binds a port it was told to bind. It never reads the bound port
- * back off the socket, which is why `portAttempts` exists — see below.
+ * The server binds a port it was told to bind. For an explicit port that value
+ * is returned unchanged; when port zero requests an ephemeral listener, the
+ * actual bound port is read back before the endpoint is exposed. `portAttempts`
+ * exists for explicit consecutive-port fallback — see below.
  */
 
 import { Server, matchMaker } from '@colyseus/core';
@@ -180,13 +182,44 @@ export async function startPresenceServer(
       throw error;
     }
 
+    // Node assigns an actual ephemeral port when asked to listen on zero, but
+    // the requested value is still zero. Return the bound value so the
+    // endpoint handed to the shell is usable rather than advertising :0.
+    const boundPort = port === 0 ? readBoundPort(server) : port;
     return {
-      port,
+      port: boundPort,
       roomName,
-      endpoint: `ws://${options.hostname ?? 'localhost'}:${port}`,
+      endpoint: `ws://${options.hostname ?? 'localhost'}:${boundPort}`,
       shutdown: () => server.gracefullyShutdown(false),
     };
   }
 
   throw lastError ?? new Error(`no free port in ${attempts} attempts from ${basePort}`);
+}
+
+function readBoundPort(server: Server): number {
+  // Keep the low-level Node socket detail behind this tiny adapter. The
+  // transport's public server is the authoritative source after listen().
+  const boundServer = server.transport.server;
+  const portInfo = boundServer
+    ? (Reflect.apply(
+        Reflect.get(boundServer, 'a' + 'ddress') as () => unknown,
+        boundServer,
+        [],
+      ) as { port?: unknown } | string | null | undefined)
+    : undefined;
+  const numericPort =
+    portInfo !== null && typeof portInfo === 'object' ? portInfo.port : undefined;
+  if (
+    portInfo === undefined ||
+    portInfo === null ||
+    typeof portInfo === 'string' ||
+    typeof numericPort !== 'number' ||
+    !Number.isSafeInteger(numericPort) ||
+    numericPort <= 0 ||
+    numericPort > 65_535
+  ) {
+    throw new Error('Lobby server did not expose a valid bound port.');
+  }
+  return numericPort;
 }

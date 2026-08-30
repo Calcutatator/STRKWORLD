@@ -258,6 +258,28 @@ empty shell to fetchers, so a 200 there means nothing.
 
 ## 6. Findings log
 
+### 2026-08-30 — Lobby server must report an ephemeral bound port
+
+`startPresenceServer({ port: 0 })` asked Node for an ephemeral listener but
+returned the requested value `0` in both `PresenceServer.port` and its
+`endpoint`. A caller following the public server contract could therefore
+receive `ws://127.0.0.1:0` (or `ws://localhost:0`) even though the server was
+listening on another port; the next client connection failed before any lobby
+protocol work. This was a server lifecycle/configuration boundary, not a
+client payload policy.
+
+When the requested port is zero, startup now reads the actual numeric port from
+the transport's bound HTTP server and exposes that value in both fields. A
+missing, non-numeric, or out-of-range bound address fails startup instead of
+advertising an unusable endpoint; explicit ports and consecutive-port fallback
+are unchanged.
+
+*Verified:* a red-first public server-options regression started the server on
+port zero and observed `server.port === 0`; the corrected test requires a
+positive reported port and endpoint-port parity. The focused Lobby server
+configuration suite passes 3/3. No browser, wallet, provider, RPC, proof,
+signature, funds or transaction was used.
+
 ### 2026-08-30 — Production capability checks retire with their gate
 
 `WalletCapabilityGate` started capability detection without an owner signal.

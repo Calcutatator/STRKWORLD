@@ -13,4 +13,14 @@ describe('presence server options', () => {
       startPresenceServer({ port: Number.NaN }),
     ).rejects.toThrow('Lobby base port must be an integer from 0 through 65535.');
   });
+
+  it('reports the ephemeral port when asked to bind port zero', async () => {
+    const server = await startPresenceServer({ port: 0 });
+    try {
+      expect(server.port).toBeGreaterThan(0);
+      expect(new URL(server.endpoint).port).toBe(String(server.port));
+    } finally {
+      await server.shutdown();
+    }
+  });
 });
