@@ -330,6 +330,7 @@ export function createStreetScene({ Phaser, onTileChanged, remotePeers }: Street
 
       const layer = tilemap.createLayer(0, tileset, 0, 0);
       if (!layer) return;
+      this.ground = layer;
       layer.setDepth(0);
 
       // Collision from the same indices the unit tests assert against, so
@@ -339,7 +340,6 @@ export function createStreetScene({ Phaser, onTileChanged, remotePeers }: Street
         .map((spec) => TILE_INDEX[spec.kind]);
       layer.setCollision(solidIndices);
 
-      this.ground = layer;
     }
 
     /** Door art is an overlay so it never changes the tile/index/collision map. */

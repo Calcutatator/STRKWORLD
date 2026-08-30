@@ -258,6 +258,23 @@ empty shell to fetchers, so a 200 there means nothing.
 
 ## 6. Findings log
 
+### 2026-08-30 — Street ground layers claim ownership before setup
+
+`StreetScene.drawGround()` previously created a tilemap layer, configured its
+depth and collision, and only then assigned `this.ground`. If either Phaser
+setup call threw during Scene construction, the created layer was unreachable
+from the existing partial-create cleanup path and could remain alive.
+
+The layer is now assigned to the Scene-owned ground slot immediately after
+creation, before styling and collision setup. Rendering and collision data are
+unchanged; a failed setup remains recoverable by `cleanShutdown()`.
+
+*Verified:* a red-first World presentation regression makes collision setup
+throw and observes the created layer missing from Scene ownership on the old
+path. The corrected test retains it. The full World suite passes 24 files /
+264 tests; World typecheck, invariants and diff hygiene pass. No browser,
+wallet, provider, RPC, proof, signature, funds or transaction was used.
+
 ### 2026-08-30 — Malformed swap bigint fields stay inside the PrivacyError boundary
 
 `BackendPrivacyClient.prepareSwap()` previously called `BigInt()` directly for

@@ -37,4 +37,31 @@ describe('street Kenney door presentation', () => {
     expect(() => scene.createDoorOverlays()).toThrow(presentationError);
     expect(scene.doorOverlays).toEqual([overlay]);
   });
+
+  it('retains the ground layer before collision setup can throw', () => {
+    const collisionError = new Error('ground collision setup failed');
+    const layer = {
+      setDepth: vi.fn(function setDepth(this: typeof layer) { return this; }),
+      setCollision: vi.fn(() => {
+        throw collisionError;
+      }),
+    };
+    const tilemap = {
+      addTilesetImage: vi.fn(() => ({})),
+      createLayer: vi.fn(() => layer),
+    };
+    const SceneType = createStreetScene({ Phaser: { Scene: class {} } as never });
+    const scene = new SceneType() as unknown as {
+      map: ReturnType<typeof createStreetMap>;
+      make: { tilemap: ReturnType<typeof vi.fn> };
+      ground?: typeof layer;
+      drawGround(): void;
+    };
+    scene.map = createStreetMap();
+    scene.ground = undefined;
+    scene.make = { tilemap: vi.fn(() => tilemap) };
+
+    expect(() => scene.drawGround()).toThrow(collisionError);
+    expect(scene.ground).toBe(layer);
+  });
 });
