@@ -173,7 +173,7 @@ export function createPresenceController({ endpoint, factory = (options) => new 
     const owner = { client: next, retired: false };
     connecting = owner;
     setState({ status: 'connecting', canReconnect: true });
-    if (connecting !== owner || owner.retired || client !== next) return;
+    if (destroyed || connecting !== owner || owner.retired || client !== next) return;
     let attempt: Promise<void>;
     try {
       attempt = next.connect();

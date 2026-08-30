@@ -342,6 +342,24 @@ describe('presence controller', () => {
     stop();
   });
 
+  it('does not start a connect after synchronous destroy during connecting publication', async () => {
+    const world = createEventBus<WorldEvents>();
+    const made = controlledClient();
+    const presence = createPresenceController({ endpoint: 'ws://example', factory: () => made.client });
+    let destroying: Promise<void> | undefined;
+    presence.subscribe(() => {
+      if (presence.getState().status === 'connecting') destroying = presence.destroy();
+    });
+    const stop = presence.listen(world);
+
+    world.emit('player:moved', moved);
+    await destroying;
+
+    expect(made.client.connect).not.toHaveBeenCalled();
+    expect(made.client.disconnect).toHaveBeenCalledOnce();
+    stop();
+  });
+
   it('keeps a synchronous close authoritative when a resolved join suspends inside', async () => {
     const world = createEventBus<WorldEvents>();
     const made = controlledClient();
