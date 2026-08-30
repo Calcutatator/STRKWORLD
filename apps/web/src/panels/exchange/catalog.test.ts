@@ -13,6 +13,18 @@ describe('the D-042 display catalog', () => {
     ]);
   });
 
+  it('keeps the authored catalog and asset records immutable at the public seam', () => {
+    expect(Object.isFrozen(EXCHANGE_CATALOG)).toBe(true);
+    expect(Object.isFrozen(EXCHANGE_CATALOG[0])).toBe(true);
+    expect(Reflect.set(EXCHANGE_CATALOG, 0, { ...EXCHANGE_CATALOG[0]! })).toBe(false);
+    expect(Reflect.set(EXCHANGE_CATALOG[0]!, 'token', '0x1')).toBe(false);
+    expect(EXCHANGE_CATALOG[0]).toEqual({
+      symbol: 'STRK',
+      decimals: 18,
+      token: '0x04718f5a0fc34cc1af16a1cdee98ffb20c31f5cd61d6ab07201858f4287c938d',
+    });
+  });
+
   it('reaches and rejects duplicate token and symbol validation', () => {
     const duplicateToken = EXCHANGE_CATALOG.map((asset, index) =>
       index === 5 ? { ...asset, symbol: 'OTHER', token: EXCHANGE_CATALOG[0]!.token } : asset,

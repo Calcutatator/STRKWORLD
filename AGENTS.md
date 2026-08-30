@@ -258,6 +258,25 @@ empty shell to fetchers, so a 200 there means nothing.
 
 ## 6. Findings log
 
+### 2026-08-30 — The Exchange asset catalog is immutable product authority
+
+`EXCHANGE_CATALOG` was exported as a mutable array whose asset records were
+also mutable. A same-bundle consumer could replace an entry or rewrite its
+token, symbol, or decimals after startup; the Exchange panel and machine read
+that shared value when presenting choices, reading balances, and constructing
+the swap intent. The TypeScript `readonly` annotations did not protect the
+runtime financial boundary.
+
+The authored catalog and each asset record are now frozen. This protects the
+default product catalog while retaining the existing `validateExchangeCatalog`
+custom-fixture seam used by tests; no runtime wallet or route policy behavior
+changes.
+
+*Verified:* a red-first public catalog regression observed the mutable array and
+asset; the corrected regression rejects replacement and token rewrites and
+preserves the STRK record. The focused catalog suite passes 3/3; no browser,
+wallet, provider, RPC, proof, signature, funds or transaction was used.
+
 ### 2026-08-30 — Wallet balance responses require felt-shaped token entries
 
 `WalletApiPrivacyOperations.balances()` previously trusted the Wallet API's
