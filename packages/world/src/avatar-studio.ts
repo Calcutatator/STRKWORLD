@@ -335,6 +335,8 @@ export function createAvatarStudioController(
   let inRoom = false;
   let highlightedFigure: number | null = null;
   let destroyed = false;
+  let destroyPending = false;
+  let destroying = false;
 
   const state = (): AvatarStudioState => ({
     inRoom,
@@ -389,11 +391,23 @@ export function createAvatarStudioController(
       }
     },
     destroy(): void {
-      if (destroyed) return;
+      if (destroying || (destroyed && !destroyPending)) return;
+      destroying = true;
       destroyed = true;
       inRoom = false;
       highlightedFigure = null;
-      options.onDestroy?.();
+      try {
+        options.onDestroy?.();
+        destroyPending = false;
+      } catch (error) {
+        // Keep the controller retired while retaining the failed cleanup for
+        // an explicit retry. Reentrant destroy calls during the callback are
+        // suppressed by `destroying` and cannot recurse.
+        destroyPending = true;
+        throw error;
+      } finally {
+        destroying = false;
+      }
     },
   };
 }

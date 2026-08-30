@@ -91,6 +91,21 @@ describe('hidden Avatar Studio', () => {
     expect(() => presentation.destroy()).not.toThrow();
     expect(destroyStudio).toHaveBeenCalledTimes(2);
   });
+  it('retries controller-owned presentation cleanup after a failed destroy', () => {
+    const cleanupError = new Error('controller presentation cleanup failed');
+    const onDestroy = vi.fn().mockImplementationOnce(() => { throw cleanupError; });
+    const out: Pick<EventBus<WorldEvents>, 'emit'> = { emit: vi.fn() };
+    const controller = createAvatarStudioController({
+      out,
+      selection: createAvatarOutfitSelection({ out }),
+      onDestroy,
+    });
+
+    expect(() => controller.destroy()).toThrow(cleanupError);
+    expect(() => controller.destroy()).not.toThrow();
+    expect(onDestroy).toHaveBeenCalledTimes(2);
+  });
+
   it('owns default and injected definitions after validation', () => {
     expect(Object.isFrozen(AVATAR_STUDIO_DEFINITION)).toBe(true);
     expect(Object.isFrozen(AVATAR_STUDIO_DEFINITION.figures)).toBe(true);
