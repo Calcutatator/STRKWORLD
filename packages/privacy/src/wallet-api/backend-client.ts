@@ -28,7 +28,9 @@ export class BackendPrivacyClient implements PoolReadClient, PrivateSubmissionGa
     // Calling it through this object's property would bind `this` to the
     // client, so retain injected fakes unchanged and bind the browser default
     // to the global receiver at the boundary.
-    this.fetcher = fetcher ?? globalThis.fetch.bind(globalThis);
+    this.fetcher = fetcher
+      ? ((input, init) => Reflect.apply(fetcher, undefined, [input, init]))
+      : globalThis.fetch.bind(globalThis);
   }
 
   async config(signal?: AbortSignal): Promise<PoolConfig> {

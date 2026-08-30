@@ -258,6 +258,30 @@ empty shell to fetchers, so a 200 there means nothing.
 
 ## 6. Findings log
 
+### 2026-08-30 — Injected Backend transports receive no client authority
+
+The Backend privacy client stored an injected fetch-compatible function as an
+instance property and later called it as `this.fetcher(...)`. JavaScript method
+call semantics therefore supplied the entire BackendPrivacyClient instance as
+the transport's receiver, even though an injected transport is a plain
+function dependency and has no reason to receive the client's private URL and
+other instance authority through `this`.
+
+Injected transports are now wrapped at construction and invoked explicitly
+with an undefined receiver. The browser-default Fetch path retains its required
+`globalThis` binding, so the earlier Web IDL receiver fix remains intact.
+Arguments, promises, transport error classification and request serialization
+are unchanged.
+
+*Verified:* a public BackendPrivacyClient regression supplies a
+receiver-sensitive injected transport and records its `this` value. The base
+received the BackendPrivacyClient instance; the corrected invocation receives
+undefined while the public-key read succeeds unchanged. Focused Backend client
+verification passes 93 tests and privacy typecheck passes. Full workspace
+gates are recorded in the owning commit. Deterministic fakes only: no browser,
+external provider, RPC, wallet, proof, signature, funds or transaction was
+used.*
+
 ### 2026-08-30 — Private swap-prepare requests are owned before dispatch
 
 The Backend privacy client validated swap-prepare fields through ordinary

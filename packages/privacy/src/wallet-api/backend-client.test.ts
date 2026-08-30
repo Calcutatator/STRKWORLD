@@ -31,6 +31,18 @@ function inheritResponseField(key: string, value: unknown): () => void {
 }
 
 describe('BackendPrivacyClient', () => {
+  it('invokes an injected transport without granting the client as receiver', async () => {
+    let receiver: unknown = 'unset';
+    const fetcher = async function (this: unknown): Promise<Response> {
+      receiver = this;
+      return response({ publicKey: '0x123' });
+    };
+    const client = new BackendPrivacyClient('https://backend.example', fetcher);
+
+    await expect(client.publicKey('0xabc')).resolves.toBe('0x123');
+    expect(receiver).toBeUndefined();
+  });
+
   it('owns swap-prepare request fields before a caller proxy can substitute them', async () => {
     const fetcher = vi.fn(async () => response({
       quoteId: 'quote-1', buyAmount: '100', expiresAt: 2_000,
