@@ -370,6 +370,16 @@ describe('WalletApiPrivacyOperations capability and reads', () => {
 
 describe('Wallet API action routes', () => {
   it.each([
+    ['null', null],
+    ['object', {}],
+    ['primitive', 42],
+  ] as const)('rejects a non-array %s intent container at the privacy boundary', async (_label, intents) => {
+    const { ops } = fixture();
+
+    await expect(ops.prepare(intents as never)).rejects.toMatchObject({ kind: 'unknown' });
+  });
+
+  it.each([
     ['a number shield amount', { kind: 'shield', token: TOKEN, amount: 20 }],
     ['a string shield amount', { kind: 'shield', token: TOKEN, amount: '20' }],
   ] as const)('rejects %s before publishing a prepared batch', async (_label, intent) => {

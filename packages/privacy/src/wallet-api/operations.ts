@@ -143,6 +143,9 @@ export class WalletApiPrivacyOperations implements PrivacyOperations {
 
   async prepare(intents: Intent[], signal?: AbortSignal): Promise<PreparedBatch> {
     throwIfAborted(signal);
+    if (!Array.isArray(intents)) {
+      throw new PrivacyError('unknown', 'prepare called with an invalid intent container.');
+    }
     // Take ownership before validating, not after. Everything downstream — the
     // admission checks, the costing, the warnings the player reads, the
     // published batch and the actions `confirm()` finally proves — reads this
