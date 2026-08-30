@@ -296,15 +296,34 @@ export function createPresenceController({ endpoint, factory = (options) => new 
   };
   return {
     listen(world) {
-      const stops = [
-        world.on('player:moved', onMoved),
-        world.on('building:entered', onEntered),
-        world.on('building:exited', onExited),
-        world.on('avatar-studio:entered', onEntered),
-        world.on('avatar-studio:exited', onExited),
-        world.on('avatar:selected', onAvatarSelected),
-      ];
-      return () => stops.forEach((stop) => stop());
+      const stops: Array<() => void> = [];
+      const stop = () => {
+        let cleanupFailure: unknown;
+        for (const unsubscribe of stops.splice(0)) {
+          try {
+            unsubscribe();
+          } catch (error) {
+            cleanupFailure ??= error;
+          }
+        }
+        if (cleanupFailure) throw cleanupFailure;
+      };
+      try {
+        stops.push(world.on('player:moved', onMoved));
+        stops.push(world.on('building:entered', onEntered));
+        stops.push(world.on('building:exited', onExited));
+        stops.push(world.on('avatar-studio:entered', onEntered));
+        stops.push(world.on('avatar-studio:exited', onExited));
+        stops.push(world.on('avatar:selected', onAvatarSelected));
+        return stop;
+      } catch (error) {
+        try {
+          stop();
+        } catch {
+          // Preserve the listener registration error; cleanup is best effort.
+        }
+        throw error;
+      }
     },
     subscribe(listener) {
       const token = Symbol();

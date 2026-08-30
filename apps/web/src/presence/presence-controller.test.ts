@@ -913,6 +913,34 @@ describe('presence controller', () => {
     expect(made.client.disconnect).toHaveBeenCalledTimes(1);
   });
 
+  it('rolls back world listeners when a later listener registration fails', () => {
+    const world = createEventBus<WorldEvents>();
+    const originalOn = world.on;
+    const stopCalls: Array<ReturnType<typeof vi.fn>> = [];
+    let registrations = 0;
+    const failure = new Error('world listener registration failed');
+    world.on = ((event, handler) => {
+      registrations += 1;
+      if (registrations === 3) throw failure;
+      const stop = originalOn(event, handler);
+      const trackedStop = vi.fn(stop);
+      if (stopCalls.length === 0) {
+        trackedStop.mockImplementation(() => {
+          stop();
+          throw new Error('listener cleanup failed');
+        });
+      }
+      stopCalls.push(trackedStop);
+      return trackedStop;
+    }) as typeof world.on;
+
+    const presence = createPresenceController({ endpoint: undefined, factory: vi.fn() });
+
+    expect(() => presence.listen(world)).toThrow(failure);
+    expect(stopCalls).toHaveLength(2);
+    expect(stopCalls.every((stop) => stop.mock.calls.length === 1)).toBe(true);
+  });
+
   it('finishes cleanup before surfacing an asynchronous disconnect rejection', async () => {
     const world = createEventBus<WorldEvents>();
     const made = fakeClient();

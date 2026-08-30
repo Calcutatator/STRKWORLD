@@ -258,6 +258,26 @@ empty shell to fetchers, so a 200 there means nothing.
 
 ## 6. Findings log
 
+### 2026-08-30 — Presence world-listener setup rolls back partial registration
+
+`PresenceController.listen()` previously registered six world handlers in a
+single array expression. If a later `world.on()` registration threw, the
+earlier handlers remained attached even though no cleanup function was
+returned, so a failed React effect setup could leak callbacks into the world
+bus for the lifetime of the page.
+
+Listener setup now owns registrations incrementally, rolls back every handler
+acquired before the failing registration, attempts all rollback callbacks even
+if one cleanup throws, preserves the original setup error, and makes the
+returned cleanup idempotent. Normal event routing and controller ownership are
+unchanged.
+
+*Verified:* a red-first Web regression makes the third world registration
+throw after attaching the first two and makes the first rollback throw; the
+corrected path calls both rollback callbacks once and rethrows the original
+registration error. Focused presence tests pass 46/46. No browser, wallet,
+provider, RPC, proof, signature, funds or transaction was used.
+
 ### 2026-08-30 — Wallet connection cleanup is not retained after synchronous retirement
 
 `WalletSession.connectOwned()` previously assigned the unsubscribe callback
