@@ -83,6 +83,8 @@ export function createHost<T, P>(options: HostOptions<T, P>): Host<T, P> {
     if (stopping) throw new Error(lifecycleDuringStopError);
     const previousRefs = refs;
     const previousPending = pending;
+    const previousParent = activeParent;
+    let retargeted = false;
     if (
       instance !== null &&
       hasActiveParent &&
@@ -97,10 +99,31 @@ export function createHost<T, P>(options: HostOptions<T, P>): Host<T, P> {
         throw error;
       }
       activeParent = parent;
+      retargeted = true;
     }
     // A remount arriving before the deferred teardown ran: keep what we have.
     if (pending !== null) {
-      cancel(pending);
+      try {
+        cancel(pending);
+      } catch (error) {
+        if (retargeted && instance !== null && options.retarget && previousParent !== null) {
+          try {
+            // Cancellation failed, so the pending teardown still owns the
+            // instance. Compensate the speculative rebind before returning the
+            // failed acquire; otherwise the eventual stop runs against an
+            // owner that never acquired the host.
+            options.retarget(instance, previousParent, parent);
+          } catch (rollbackError) {
+            activeParent = previousParent;
+            throw new AggregateError(
+              [error, rollbackError],
+              'Host retarget rollback failed after teardown cancellation failure',
+            );
+          }
+          activeParent = previousParent;
+        }
+        throw error;
+      }
       pending = null;
     }
     // Do not claim a lease until deferred teardown cancellation succeeds. If

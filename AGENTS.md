@@ -258,6 +258,28 @@ empty shell to fetchers, so a 200 there means nothing.
 
 ## 6. Findings log
 
+### 2026-08-30 — Failed host remount cancellation must undo speculative retargeting
+
+`createHost.acquire()` retargeted a retained World instance before cancelling
+its deferred teardown. If cancellation then threw, the acquire failed but the
+instance and `activeParent` had already been rebound to the new owner; the
+queued teardown still belonged to the old owner and could later destroy an
+instance that never acquired the host in its new location.
+
+The host now compensates a speculative retarget when deferred cancellation
+fails, restoring the previous parent before preserving the cancellation error.
+If compensation itself fails, both errors are surfaced as an `AggregateError`;
+the pending teardown remains authoritative and can still retire the instance.
+Successful remounts, retarget failures and ordinary deferred teardown are
+unchanged.
+
+*Verified:* a red-first public host regression makes retarget mutate the
+instance, then makes cancellation throw. The old path left the instance bound
+to `new-owner`; the corrected path calls the inverse retarget, restores
+`old-owner`, leaves the lease unclaimed, and later performs the queued stop.
+Focused Host tests pass 24 tests. No browser, lobby, wallet, provider, RPC,
+proof, signature, funds or transaction was used.
+
 ### 2026-08-30 — Input suspension can lose ownership after a partial handoff
 
 `createInputGate.suspend()` disabled Phaser keyboard delivery and global

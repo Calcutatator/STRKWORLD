@@ -556,6 +556,41 @@ describe('async teardown', () => {
 });
 
 describe('rapid churn', () => {
+  it('does not leave a retained instance rebound after teardown cancellation fails', () => {
+    const queue: Array<() => void> = [];
+    const cancelError = new Error('teardown cancellation failed');
+    const retarget = vi.fn((instance: { parent: string }, parent: string) => {
+      instance.parent = parent;
+    });
+    const stop = vi.fn();
+    const host = createHost<{ parent: string }, string>({
+      start: (parent) => ({ parent }),
+      retarget,
+      stop,
+      defer: (fn) => {
+        queue.push(fn);
+        return queue.length - 1;
+      },
+      cancel: () => { throw cancelError; },
+    });
+
+    const instance = host.acquire('old-owner');
+    host.release();
+
+    expect(() => host.acquire('new-owner')).toThrow(cancelError);
+    expect(instance.parent).toBe('old-owner');
+    expect(host.current).toBe(instance);
+    expect(host.refCount).toBe(0);
+    expect(retarget).toHaveBeenNthCalledWith(1, instance, 'new-owner', 'old-owner');
+    expect(retarget).toHaveBeenNthCalledWith(2, instance, 'old-owner', 'new-owner');
+
+    const teardown = queue.shift();
+    if (teardown === undefined) throw new Error('missing deferred teardown');
+    teardown();
+    expect(stop).toHaveBeenCalledOnce();
+    expect(host.current).toBeNull();
+  });
+
   it('does not claim a lease when retained-instance retargeting fails', () => {
     const queue: Array<() => void> = [];
     const retargetError = new Error('scene restart failed');
