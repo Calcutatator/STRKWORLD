@@ -961,6 +961,12 @@ describe('quote-bound swap plan admission', () => {
     ['an unnamed entry point', {
       executorCalls: [{ contractAddress: '0x111', entrypoint: '', calldata: [] }],
     }, /malformed executor calls/i],
+    ['a whitespace-only entry point', {
+      executorCalls: [{ contractAddress: '0x111', entrypoint: ' \t\n', calldata: [] }],
+    }, /malformed executor calls/i],
+    ['a non-string entry point', {
+      executorCalls: [{ contractAddress: '0x111', entrypoint: 7, calldata: [] }],
+    }, /malformed executor calls/i],
     ['non-felt call data', {
       executorCalls: [{ contractAddress: '0x111', entrypoint: 'swap', calldata: ['not-a-felt'] }],
     }, /malformed executor calls/i],

@@ -314,7 +314,7 @@ export class WalletApiPrivacyOperations implements PrivacyOperations {
     }
     for (const call of plan.executorCalls) {
       assertAddress(call.contractAddress, 'private swap call target');
-      if (!call.entrypoint || call.calldata.some((felt) => !isFelt(felt))) {
+      if (typeof call.entrypoint !== 'string' || call.entrypoint.trim().length === 0 || call.calldata.some((felt) => !isFelt(felt))) {
         throw new PrivacyError('unknown', 'The private swap contains malformed executor calls.');
       }
     }

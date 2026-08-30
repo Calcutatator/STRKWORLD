@@ -258,6 +258,27 @@ empty shell to fetchers, so a 200 there means nothing.
 
 ## 6. Findings log
 
+### 2026-08-30 — Private swap executor entrypoints reject malformed names
+
+`WalletApiPrivacyOperations.validateSwapPlan()` previously rejected only a
+falsey executor entrypoint. A malformed external planner response containing
+whitespace-only or non-string entrypoint data therefore crossed quote
+admission and produced a reviewed batch, even though it cannot name a valid
+Starknet entrypoint and could later reach action construction.
+
+Swap plan validation now requires a string entrypoint with non-whitespace
+content, while preserving dynamic executor entrypoints from the reviewed AVNU
+plan. The guard runs before a batch is published or the wallet is asked to
+prove anything; contract, calldata and route checks are unchanged.
+
+*Verified:* red-first public Wallet API regressions supplied empty,
+whitespace-only and numeric entrypoints; the old path published all three
+batches, while the corrected path rejects them as malformed executor calls
+before proving. Removing the entrypoint guard makes all three regressions
+fail. The focused swap admission suite passes 76 tests; the full Privacy
+suite passes 9 files / 243 tests. No browser, provider, RPC, wallet, proof,
+signature, funds or transaction was used.
+
 ### 2026-08-30 — Lobby movement does not continue after synchronous transport closure
 
 `LobbyClient.#pump()` previously called `room.send('move', desired)` and then
