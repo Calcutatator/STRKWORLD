@@ -325,6 +325,26 @@ throw. The corrected tests preserve the retired snapshot, publish `failed`,
 clear operations, and retain the mapped original error. No browser, wallet,
 provider, RPC, proof, signature, funds or transaction was used.*
 
+### 2026-08-30 — Explicit wallet teardown publishes retired state before errors
+
+`session.disconnect()` and `session.destroy()` cleared connection authority
+inside explicit retirement, but published `selection-required` only after that
+retirement returned. An unsubscribe or connection `destroy()` error therefore
+left the public snapshot claiming the old account was connected while
+operations had already been cleared; `destroy()` could also skip listener
+clearing and remain unsafe to repeat.
+
+Explicit teardown now records cleanup errors, completes the public retired
+state transition and listener clearing, then preserves the first explicit
+error. `disconnect()` still reports provider teardown errors, and `destroy()`
+remains idempotent after its first attempt.
+
+*Verified:* public regressions inject unsubscribe and destroy failures. Both
+now leave a selection-required/null-account snapshot with disconnected
+operations; disconnect rethrows the exact cleanup error and destroy remains
+safe on repeat. No browser, wallet, provider, RPC, proof, signature, funds or
+transaction was used.*
+
 
 ## 6. Findings log
 

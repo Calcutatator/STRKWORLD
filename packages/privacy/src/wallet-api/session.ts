@@ -290,9 +290,15 @@ export function createWalletSession(
       generation += 1;
       connectFlight = null;
       const owned = connection;
-      retireConnectionExplicit();
+      let retirementError: unknown = null;
+      try {
+        retireConnectionExplicit();
+      } catch (error) {
+        retirementError = error;
+      }
       selectedKey = null;
       publish('selection-required', null);
+      if (retirementError) throw retirementError;
       await owned?.disconnect();
     },
     destroy() {
@@ -300,11 +306,21 @@ export function createWalletSession(
       destroyed = true;
       generation += 1;
       connectFlight = null;
-      discoveryCleanup();
-      retireConnectionExplicit();
+      let teardownError: unknown = null;
+      try {
+        discoveryCleanup();
+      } catch (error) {
+        teardownError = error;
+      }
+      try {
+        retireConnectionExplicit();
+      } catch (error) {
+        teardownError ??= error;
+      }
       selectedKey = null;
       publish('selection-required', null);
       listeners.clear();
+      if (teardownError) throw teardownError;
     },
   };
 

@@ -98,6 +98,55 @@ describe('WalletSession', () => {
     expect(destroy).toHaveBeenCalledOnce();
   });
 
+  it('publishes disconnected state when explicit unsubscribe cleanup throws', async () => {
+    const selected = wallet('Ready');
+    const connected = controllableConnection(
+      '0x111',
+      new FakePrivacyOperations(),
+      new FakePrivacyOperations(),
+    );
+    const cleanupError = new Error('unsubscribe failed');
+    connected.port.subscribe = () => () => { throw cleanupError; };
+    const session = createWalletSession(
+      denyAllOptions(),
+      { discovery: discoveryWith(selected), connectWallet: async () => connected.port },
+    );
+    await session.connect(session.getSnapshot().wallets[0]!.key);
+
+    await expect(session.disconnect()).rejects.toBe(cleanupError);
+    expect(session.getSnapshot()).toMatchObject({
+      phase: 'selection-required',
+      selectedKey: null,
+      account: null,
+    });
+    await expect(session.operations.capability()).rejects.toMatchObject({ kind: 'user-rejected' });
+  });
+
+  it('publishes disconnected state when explicit destroy cleanup throws', async () => {
+    const selected = wallet('Ready');
+    const connected = controllableConnection(
+      '0x111',
+      new FakePrivacyOperations(),
+      new FakePrivacyOperations(),
+    );
+    const destroyError = new Error('destroy failed');
+    connected.port.destroy = () => { throw destroyError; };
+    const session = createWalletSession(
+      denyAllOptions(),
+      { discovery: discoveryWith(selected), connectWallet: async () => connected.port },
+    );
+    await session.connect(session.getSnapshot().wallets[0]!.key);
+
+    expect(() => session.destroy()).toThrow(destroyError);
+    expect(session.getSnapshot()).toMatchObject({
+      phase: 'selection-required',
+      selectedKey: null,
+      account: null,
+    });
+    await expect(session.operations.capability()).rejects.toMatchObject({ kind: 'user-rejected' });
+    expect(() => session.destroy()).not.toThrow();
+  });
+
   it('lets only the newest connection attempt publish financial authority', async () => {
     const first = wallet('First wallet');
     const second = wallet('Second wallet');
