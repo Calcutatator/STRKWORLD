@@ -222,11 +222,14 @@ export class WalletApiPrivacyOperations implements PrivacyOperations {
       signal,
     });
     throwIfAborted(signal);
-    this.validateSwapPlan(intent, config, rawPlan, swapPolicy.expectedChainId);
-    const plan = snapshotSwapPlan({
-      ...rawPlan,
-      fee: ownRelayFee(rawPlan.fee, config, this.policy.maxRelayFee),
-    });
+    const plan = ownSwapPlan(
+      rawPlan,
+      intent,
+      config,
+      swapPolicy.expectedChainId,
+      this.policy.maxRelayFee,
+      this.readNow(),
+    );
     const protectedMinimum = protectedMinimumOut(plan.buyAmount, swapPolicy.slippageBps);
     if (protectedMinimum < intent.minAmountOut) {
       throw new PrivacyError(
@@ -270,7 +273,14 @@ export class WalletApiPrivacyOperations implements PrivacyOperations {
         try {
           const current = ownPoolConfig(await owner.pool.config(confirmSignal));
           throwIfAborted(confirmSignal);
-          owner.validateSwapPlan(canonicalIntent, current, plan, swapPolicy.expectedChainId);
+          validateOwnedSwapPlan(
+            plan,
+            canonicalIntent,
+            current,
+            swapPolicy.expectedChainId,
+            owner.policy.maxRelayFee,
+            owner.readNow(),
+          );
           assertFeeCeiling(checkedFeeTotal(current.feeAmount, plan.fee.amount), feeCeiling);
           assertNotDiscarded(discarded);
           // Snapshot the freshly validated calls, then hand the SDK its own
@@ -332,54 +342,6 @@ export class WalletApiPrivacyOperations implements PrivacyOperations {
       },
       discard() { discarded = true; },
     };
-  }
-
-  private validateSwapPlan(
-    intent: Extract<Intent, { kind: 'swap' }>,
-    config: PoolConfig,
-    plan: PreparedPrivateSwap,
-    expectedChainId: string,
-  ): void {
-    try {
-      if (!plan || typeof plan !== 'object' || Array.isArray(plan) || Reflect.ownKeys(plan).length !== 7) {
-        throw new Error('invalid plan fields');
-      }
-    } catch {
-      throw new PrivacyError('unknown', 'The private swap quote is malformed.');
-    }
-    if (plan.chainId !== expectedChainId) {
-      throw new PrivacyError('unknown', 'The private swap quote is for the wrong network.');
-    }
-    if (typeof plan.buyAmount !== 'bigint' || plan.buyAmount <= 0n || plan.buyAmount > MAX_UINT256) {
-      throw new PrivacyError('unknown', 'The private swap expected output is malformed.');
-    }
-    if (!Number.isSafeInteger(plan.expiresAt) || plan.expiresAt <= this.readNow()) {
-      throw new PrivacyError('unknown', 'The private swap quote has expired.');
-    }
-    if (plan.buyAmount < intent.minAmountOut) {
-      throw new PrivacyError('unknown', 'The private swap no longer meets the minimum output.');
-    }
-    assertAddress(plan.executorAddress, 'private swap executor');
-    if (!Array.isArray(plan.executorCalls) || plan.executorCalls.length === 0) {
-      throw new PrivacyError('unknown', 'The private swap contains no executor calls.');
-    }
-    for (const call of plan.executorCalls) {
-      let exact = false;
-      try {
-        exact = Reflect.ownKeys(call).length === 3
-          && hasOwnDataProperties(call, ['contractAddress', 'entrypoint', 'calldata']);
-      } catch {
-        exact = false;
-      }
-      if (!exact || !Array.isArray(call.calldata)) {
-        throw new PrivacyError('unknown', 'The private swap contains malformed executor calls.');
-      }
-      assertAddress(call.contractAddress, 'private swap call target');
-      if (typeof call.entrypoint !== 'string' || call.entrypoint.trim().length === 0 || call.calldata.some((felt) => !isFelt(felt))) {
-        throw new PrivacyError('unknown', 'The private swap contains malformed executor calls.');
-      }
-    }
-    ownRelayFee(plan.fee, config, this.policy.maxRelayFee);
   }
 
   private readNow(): number {
@@ -816,16 +778,156 @@ function assertMatchingAcceptedResult(accepted: TxResult | undefined, settled: T
   }
 }
 
-function snapshotSwapPlan(plan: PreparedPrivateSwap): PreparedPrivateSwap {
-  return Object.freeze({
-    quoteId: plan.quoteId,
-    buyAmount: plan.buyAmount,
-    expiresAt: plan.expiresAt,
-    chainId: plan.chainId,
-    executorAddress: plan.executorAddress,
-    executorCalls: snapshotExecutorCalls(plan.executorCalls),
-    fee: plan.fee,
-  });
+function ownSwapPlan(
+  value: unknown,
+  intent: Extract<Intent, { kind: 'swap' }>,
+  config: PoolConfig,
+  expectedChainId: string,
+  maxRelayFee: bigint,
+  now: number,
+): PreparedPrivateSwap {
+  let quoteId: unknown;
+  let buyAmount: unknown;
+  let expiresAt: unknown;
+  let chainId: unknown;
+  let executorAddress: unknown;
+  let executorCallsValue: unknown;
+  let feeValue: unknown;
+  try {
+    if (!value || typeof value !== 'object' || Array.isArray(value) || Reflect.ownKeys(value).length !== 7) {
+      throw new Error('invalid plan container');
+    }
+    const read = (key: PropertyKey): unknown => {
+      const descriptor = Object.getOwnPropertyDescriptor(value, key);
+      if (!descriptor || !('value' in descriptor)) throw new Error('missing plan data property');
+      return descriptor.value;
+    };
+    quoteId = read('quoteId');
+    buyAmount = read('buyAmount');
+    expiresAt = read('expiresAt');
+    chainId = read('chainId');
+    executorAddress = read('executorAddress');
+    executorCallsValue = read('executorCalls');
+    feeValue = read('fee');
+  } catch {
+    throw new PrivacyError('unknown', 'The private swap quote is malformed.');
+  }
+
+  const executorCalls = ownExecutorCalls(executorCallsValue);
+  const fee = ownRelayFee(feeValue, config, maxRelayFee);
+  const plan = Object.freeze({
+    quoteId,
+    buyAmount,
+    expiresAt,
+    chainId,
+    executorAddress,
+    executorCalls,
+    fee,
+  }) as PreparedPrivateSwap;
+  validateOwnedSwapPlan(plan, intent, config, expectedChainId, maxRelayFee, now);
+  return plan;
+}
+
+function ownExecutorCalls(value: unknown): PreparedPrivateSwap['executorCalls'] {
+  let length: number;
+  try {
+    if (!Array.isArray(value)) throw new Error('invalid call container');
+    length = value.length;
+    if (length === 0 || Reflect.ownKeys(value).length !== length + 1) {
+      throw new Error('invalid call container shape');
+    }
+  } catch {
+    throw new PrivacyError('unknown', 'The private swap contains malformed executor calls.');
+  }
+
+  const calls: PreparedPrivateSwap['executorCalls'] = [];
+  for (let index = 0; index < length; index += 1) {
+    let contractAddress: unknown;
+    let entrypoint: unknown;
+    let calldataValue: unknown;
+    try {
+      const descriptor = Object.getOwnPropertyDescriptor(value, String(index));
+      if (!descriptor || !('value' in descriptor)) throw new Error('missing call');
+      const call = descriptor.value;
+      if (!call || typeof call !== 'object' || Array.isArray(call) || Reflect.ownKeys(call).length !== 3) {
+        throw new Error('invalid call');
+      }
+      const read = (key: PropertyKey): unknown => {
+        const field = Object.getOwnPropertyDescriptor(call, key);
+        if (!field || !('value' in field)) throw new Error('missing call field');
+        return field.value;
+      };
+      contractAddress = read('contractAddress');
+      entrypoint = read('entrypoint');
+      calldataValue = read('calldata');
+    } catch {
+      throw new PrivacyError('unknown', 'The private swap contains malformed executor calls.');
+    }
+    const calldata = ownFeltArray(calldataValue);
+    calls.push(Object.freeze({ contractAddress, entrypoint, calldata }) as PreparedPrivateSwap['executorCalls'][number]);
+  }
+  return Object.freeze(calls) as PreparedPrivateSwap['executorCalls'];
+}
+
+function ownFeltArray(value: unknown): readonly string[] {
+  let length: number;
+  try {
+    if (!Array.isArray(value)) throw new Error('invalid calldata container');
+    length = value.length;
+    if (Reflect.ownKeys(value).length !== length + 1) throw new Error('invalid calldata shape');
+  } catch {
+    throw new PrivacyError('unknown', 'The private swap contains malformed executor calls.');
+  }
+  const owned: string[] = [];
+  try {
+    for (let index = 0; index < length; index += 1) {
+      const descriptor = Object.getOwnPropertyDescriptor(value, String(index));
+      if (!descriptor || !('value' in descriptor) || typeof descriptor.value !== 'string') {
+        throw new Error('invalid calldata item');
+      }
+      owned.push(descriptor.value);
+    }
+  } catch {
+    throw new PrivacyError('unknown', 'The private swap contains malformed executor calls.');
+  }
+  return Object.freeze(owned);
+}
+
+function validateOwnedSwapPlan(
+  plan: PreparedPrivateSwap,
+  intent: Extract<Intent, { kind: 'swap' }>,
+  config: PoolConfig,
+  expectedChainId: string,
+  maxRelayFee: bigint,
+  now: number,
+): void {
+  if (typeof plan.quoteId !== 'string' || plan.quoteId.trim().length === 0) {
+    throw new PrivacyError('unknown', 'The private swap quote is malformed.');
+  }
+  if (plan.chainId !== expectedChainId) {
+    throw new PrivacyError('unknown', 'The private swap quote is for the wrong network.');
+  }
+  if (typeof plan.buyAmount !== 'bigint' || plan.buyAmount <= 0n || plan.buyAmount > MAX_UINT256) {
+    throw new PrivacyError('unknown', 'The private swap expected output is malformed.');
+  }
+  if (!Number.isSafeInteger(plan.expiresAt) || plan.expiresAt <= now) {
+    throw new PrivacyError('unknown', 'The private swap quote has expired.');
+  }
+  if (plan.buyAmount < intent.minAmountOut) {
+    throw new PrivacyError('unknown', 'The private swap no longer meets the minimum output.');
+  }
+  assertAddress(plan.executorAddress, 'private swap executor');
+  for (const call of plan.executorCalls) {
+    assertAddress(call.contractAddress, 'private swap call target');
+    if (
+      typeof call.entrypoint !== 'string'
+      || call.entrypoint.trim().length === 0
+      || call.calldata.some((felt) => !isFelt(felt))
+    ) {
+      throw new PrivacyError('unknown', 'The private swap contains malformed executor calls.');
+    }
+  }
+  ownRelayFee(plan.fee, config, maxRelayFee);
 }
 
 function ownRelayFee(value: unknown, config: PoolConfig, maxRelayFee: bigint): RelayFeeQuote {

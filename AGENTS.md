@@ -279,6 +279,32 @@ are frozen before rendering. Focused bootstrap tests pass 14 tests; workspace
 gates are recorded on the candidate. No browser, wallet, provider, RPC, proof,
 signature, funds or transaction was used.
 
+### 2026-08-30 — Swap plans are owned before semantic validation
+
+The private-swap adapter previously validated an AVNU plan through ordinary
+property reads and only afterwards spread and snapshotted that same provider
+object. A stateful proxy could therefore return one executor while validation
+ran and substitute another executor for the frozen plan later used to build the
+wallet action. Exact key counts did not close this time-of-check/time-of-use
+gap because they did not take ownership of the values behind those keys.
+
+Swap preparation now reads the exact seven root fields, every executor-call
+field and every calldata element from own data-property descriptors into one
+deeply frozen graph. Proxy traps, accessors, sparse or extended arrays and
+malformed nested calls fail closed before review. The same owned plan is the
+only authority for the published review, confirmation-time semantic checks and
+the eventual wallet action; the nested relay fee keeps its existing owning
+decoder and live fee-policy recheck.
+
+*Verified:* a public Wallet API regression first supplied a stateful proxy that
+returned executor `0x999` during validation and `0x888` during the later spread;
+the base prepared the wallet withdrawal to the unvalidated `0x888`. The owned
+decoder prepares and confirms only `0x999`. Focused Wallet API verification
+passes 188 tests and the privacy package typecheck passes. Full workspace gates
+are recorded in the owning commit. Deterministic fakes only: no browser,
+external provider, RPC, wallet, proof, signature, funds or transaction was
+used.*
+
 ### 2026-08-30 — Production bootstrap validates the privacy operations seam
 
 The production bootstrap validator checked that a loaded session had an
