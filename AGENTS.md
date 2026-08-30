@@ -258,6 +258,24 @@ empty shell to fetchers, so a 200 there means nothing.
 
 ## 6. Findings log
 
+### 2026-08-30 — Remote-avatar layer setup retains the Phaser layer on depth failure
+
+`createRemoteAvatarLayer()` created its Phaser layer and immediately called
+`setDepth(9)` before any cleanup owner could reach that layer. A synchronous
+Phaser setup failure therefore threw from construction while leaving an
+orphaned layer in the display list; the caller had no returned handle with
+which to recover it.
+
+The factory now treats the layer as owned immediately after creation. If the
+initial depth setup throws, it attempts to destroy that layer, preserves the
+original setup error, and leaves normal subscription, avatar ownership, and
+layer teardown behavior unchanged.
+
+*Verified:* a red-first public World regression injects a depth setter that
+throws and confirms the exact error is preserved while the created layer is
+destroyed once. Focused remote-avatar tests pass. No browser, wallet,
+provider, RPC, proof, signature, funds or transaction was used.
+
 ### 2026-08-30 — Fixed-room render projection fails closed on malformed station snapshots
 
 `fixedRoomStationPresentations()` previously called `.find()` directly on the

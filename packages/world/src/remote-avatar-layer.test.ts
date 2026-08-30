@@ -121,6 +121,17 @@ function fakeSprite(x: number, y: number, texture: string) {
 }
 
 describe('remote avatar layer', () => {
+  it('destroys the layer when initial depth setup fails', () => {
+    const fake = fakeScene();
+    const error = new Error('depth setup failed');
+    fake.layer.setDepth.mockImplementation(() => {
+      throw error;
+    });
+
+    expect(() => createRemoteAvatarLayer({ scene: fake.scene as never })).toThrow(error);
+    expect(fake.layer.destroy).toHaveBeenCalledOnce();
+  });
+
   it('renders a validated final sheet on a non-physics sprite at the semantic feet anchor', () => {
     const sourceController = createRemotePeerSource([
       peer({ facing: 'right', sprite: 'avatar-7' }),

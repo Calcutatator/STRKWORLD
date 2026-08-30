@@ -46,7 +46,20 @@ export function createRemoteAvatarLayer({
   scene,
   source,
 }: RemoteAvatarLayerOptions): RemoteAvatarLayer {
-  const layer = scene.add.layer().setDepth(9);
+  const layer = scene.add.layer();
+  try {
+    layer.setDepth(9);
+  } catch (error) {
+    // Layer creation transferred ownership to this factory before the first
+    // setup call. Preserve the setup error, but do not strand the Phaser layer
+    // if that call fails synchronously.
+    try {
+      layer.destroy();
+    } catch {
+      // Preserve the original setup failure.
+    }
+    throw error;
+  }
   const avatars = new Map<string, RemoteAvatar>();
   // A child whose removal failed is still owned, but must not be reused if
   // its peer reappears. It is retried separately before a replacement is
