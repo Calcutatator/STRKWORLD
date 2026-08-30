@@ -666,6 +666,27 @@ describe('fixed room controller', () => {
     expect(h.events).toEqual([]);
   });
 
+  it('fails closed without invoking accessor-backed station fields', () => {
+    const h = harness();
+    h.controller.enter();
+    const error = new Error('station field should not be read');
+    let getterRead = false;
+    const hostile = {};
+    Object.defineProperty(hostile, 'station', {
+      get: () => {
+        getterRead = true;
+        throw error;
+      },
+    });
+
+    expect(() => h.shell.emit('world:stations', {
+      building: 'post-office',
+      stations: [hostile as never],
+    })).not.toThrow();
+    expect(getterRead).toBe(false);
+    expect(h.controller.state.stations[0]?.status).toBe('locked');
+  });
+
   it('ignores a control-owner command with an unknown owner', () => {
     const h = harness();
     h.controller.enter();

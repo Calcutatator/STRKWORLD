@@ -109,6 +109,14 @@ function freezeAuthoredRoom<const T extends FixedRoomDefinition>(definition: T):
   return Object.freeze(definition);
 }
 
+function ownDataField(value: unknown, key: string): unknown {
+  if (value === null || (typeof value !== 'object' && typeof value !== 'function')) {
+    return undefined;
+  }
+  const descriptor = Object.getOwnPropertyDescriptor(value, key);
+  return descriptor && 'value' in descriptor ? descriptor.value : undefined;
+}
+
 export const BANK_ROOM_DEFINITION = freezeAuthoredRoom({
   building: 'bank',
   width: 18,
@@ -336,15 +344,17 @@ export function normalizeFixedRoomStations(
 ): readonly FixedRoomStationSnapshot[] {
   return Object.freeze(definition.stations.map((known) => {
     const candidates = Array.isArray(stations)
-      ? stations.filter((candidate) => candidate?.station === known.station)
+      ? stations.filter((candidate) => ownDataField(candidate, 'station') === known.station)
       : [];
     const candidate = candidates.length === 1 ? candidates[0] : undefined;
-    const validLabel = typeof candidate?.label === 'string' && candidate.label.trim().length > 0;
-    const validStatus = candidate?.status === 'available' || candidate?.status === 'locked';
+    const label = ownDataField(candidate, 'label');
+    const status = ownDataField(candidate, 'status');
+    const validLabel = typeof label === 'string' && label.trim().length > 0;
+    const validStatus = status === 'available' || status === 'locked';
     return Object.freeze({
       station: known.station,
-      label: validLabel && candidate ? candidate.label : known.label,
-      status: candidate && validLabel && validStatus ? candidate.status : 'locked',
+      label: validLabel ? label : known.label,
+      status: candidate && validLabel && validStatus ? status : 'locked',
     });
   }));
 }

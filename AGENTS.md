@@ -258,6 +258,23 @@ empty shell to fetchers, so a 200 there means nothing.
 
 ## 6. Findings log
 
+### 2026-08-30 — Fixed-room station decoding ignores accessor-backed fields
+
+`normalizeFixedRoomStations()` read Shell-provided station `station`, `label`
+and `status` fields through ordinary property access. An accessor-backed field
+could therefore execute arbitrary code or throw during synchronous Shell event
+delivery instead of being treated as malformed station input.
+
+Station matching and projection now read only own data properties. Accessor or
+inherited values fail closed to the authored locked station without invoking a
+getter; valid plain station snapshots retain their existing behavior.
+
+*Verified:* a red-first World regression supplied an accessor-backed station id
+whose getter threw; the old Shell handler escaped that error, while the
+corrected handler ignored the entry, did not invoke the getter and kept the
+station locked. The focused fixed-room suite passes 52 tests. No browser,
+lobby, wallet, provider, RPC, proof, signature, funds or transaction was used.
+
 ### 2026-08-30 — Published Web station snapshots are immutable
 
 `stationSnapshot()` returned a fresh array but left both the array and each
