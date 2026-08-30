@@ -258,6 +258,26 @@ empty shell to fetchers, so a 200 there means nothing.
 
 ## 6. Findings log
 
+### 2026-08-30 — Remote avatar errors do not discard newer queued state
+
+The remote-avatar render queue preserved reentrant ordering, but its outer
+drain cleared pending snapshots as soon as an older render reported an error.
+A newer authoritative peer update delivered during that failed render was
+therefore lost until the lobby happened to publish again; the layer retained
+the old pose even though the source had already supplied a replacement.
+
+The drain now records render failures, continues processing every queued newer
+snapshot, and reports the original failure (or an aggregate of failures) only
+after the queue is exhausted. Existing last-successful-pose retention,
+teardown guards, and source error propagation remain unchanged.
+
+*Verified:* a red-first public World fake delivered x=80 during an x=56
+render whose position setter threw; the old layer ended at x=40 and discarded
+the newer update, while the corrected layer ends at x=80 and still rethrows the
+original error. Removing the queue-drain error handling restores the failure.
+No browser, lobby, wallet, provider, RPC, proof, signature, funds or
+transaction was used.
+
 ### 2026-08-30 — Confirmation fee ceilings are u256-bounded authority
 
 Confirmation accepted any nonnegative bigint fee ceiling. A value above

@@ -228,6 +228,29 @@ describe('remote avatar layer', () => {
     expect(fake.objects[0]?.x).toBe(80);
   });
 
+  it('drains a queued newer snapshot before rethrowing an older render error', () => {
+    const fake = fakeScene();
+    let deliver!: (snapshot: readonly RemotePeerSnapshot[]) => void;
+    const source: RemotePeerSource = {
+      subscribe(listener) {
+        deliver = listener;
+        listener([peer({ x: 40 })]);
+        return () => undefined;
+      },
+    };
+    const layer = createRemoteAvatarLayer({ scene: fake.scene as never, source });
+    const sprite = fake.objects[0]!;
+    const renderError = new Error('older render failed');
+    sprite.setPosition.mockImplementationOnce(() => {
+      deliver([peer({ x: 80 })]);
+      throw renderError;
+    });
+
+    expect(() => deliver([peer({ x: 56 })])).toThrow(renderError);
+    expect(layer.peers.get('peer-1')?.x).toBe(80);
+    expect(sprite.x).toBe(80);
+  });
+
   it('does not resurrect retained peers when shutdown destroys during rendering', () => {
     const fake = fakeScene();
     let shutdown!: () => void;

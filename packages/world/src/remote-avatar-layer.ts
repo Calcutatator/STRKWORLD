@@ -168,18 +168,26 @@ export function createRemoteAvatarLayer({
     }
     rendering = true;
     pendingRenders.push(snapshot);
+    const errors: unknown[] = [];
     try {
       while (!destroyed) {
         const next = pendingRenders.shift();
         if (next === undefined) break;
-        renderSnapshot(next);
+        try {
+          renderSnapshot(next);
+        } catch (error) {
+          // A newer snapshot queued by the failed render is still
+          // authoritative. Finish draining it before reporting the older
+          // presentation failure to the source.
+          errors.push(error);
+        }
       }
-    } catch (error) {
-      pendingRenders.length = 0;
-      throw error;
     } finally {
+      pendingRenders.length = 0;
       rendering = false;
     }
+    if (errors.length === 1) throw errors[0];
+    if (errors.length > 1) throw new AggregateError(errors, 'Remote avatar reconciliation failed');
   };
 
   const destroy = (): void => {
