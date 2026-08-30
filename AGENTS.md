@@ -258,6 +258,31 @@ empty shell to fetchers, so a 200 there means nothing.
 
 ## 6. Findings log
 
+### 2026-08-30 — Wallet capability versions are owned before admission
+
+Capability detection validated that the wallet returned an array, but then
+traversed that provider array with ordinary `map` reads. A stateful proxy could
+therefore expose an unsupported version in its own index descriptor and
+substitute the minimum supported version during traversal, causing the wallet
+to pass financial capability admission on a value the provider result did not
+own.
+
+Capability detection now owns the exact array length and indexed values from
+data-property descriptors before semantic-version parsing. Holes, extra keys
+and proxy descriptor traps fail through the existing invalid-capability path;
+non-string entries retain the existing ignored-value behavior. Recipient
+registration remains a primitive felt boundary and has no corresponding
+object ownership window.
+
+*Verified:* a public Wallet API regression supplies a version-array proxy whose
+own index descriptor is `0.9.0` while an ordinary read substitutes `0.10.3`.
+The base reported STRK20 support; the corrected decoder reports unsupported
+with version `0.9.0` and performs no length or index reads. Focused Wallet API
+verification passes 192 tests and privacy typecheck passes. Full workspace
+gates are recorded in the owning commit. Deterministic fakes only: no browser,
+external provider, RPC, wallet, proof, signature, funds or transaction was
+used.*
+
 ### 2026-08-30 — Wallet balance result arrays are owned before decoding
 
 Balance entry fields were descriptor-owned, but the wallet's result array was

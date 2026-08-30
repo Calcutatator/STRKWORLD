@@ -2108,6 +2108,32 @@ describe('wallet error mapping', () => {
 });
 
 describe('Wallet API capability versions', () => {
+  it('owns supported-version array elements before capability admission', async () => {
+    const { wallet, pool, gateway } = fixture();
+    const source = ['0.9.0'];
+    const reads: PropertyKey[] = [];
+    const versions = new Proxy(source, {
+      get(target, key, receiver) {
+        reads.push(key);
+        if (key === '0') return '0.10.3';
+        return Reflect.get(target, key, receiver);
+      },
+    });
+    const ops = new WalletApiPrivacyOperations({
+      wallet, pool, submission: gateway, supportedVersions: async () => versions,
+      policy: {
+        maxIntents: 8, maxRelayFee: 10n, enabledRoutes: ['transfer'],
+        allowedTokens: { shield: [TOKEN], unshield: [TOKEN], transfer: [TOKEN], swap: [TOKEN] },
+      },
+    });
+
+    await expect(ops.capability()).resolves.toMatchObject({
+      supportsStrk20: false,
+      walletApiVersion: '0.9.0',
+    });
+    expect(reads).toEqual(['then']);
+  });
+
   it.each([
     ['null', null],
     ['object', {}],
