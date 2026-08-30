@@ -31,6 +31,18 @@ function inheritResponseField(key: string, value: unknown): () => void {
 
 describe('BackendPrivacyClient', () => {
   it.each([
+    ['decimal', '123'],
+    ['zero', '0x0'],
+    ['field-prime', `0x${STARK_FIELD_PRIME.toString(16)}`],
+  ])('rejects an invalid public-key address before transport: %s', async (_label, address) => {
+    const fetcher = vi.fn(async () => response({ publicKey: '0x1' }));
+    const client = new BackendPrivacyClient('https://backend.example', fetcher);
+
+    await expect(client.publicKey(address)).rejects.toMatchObject({ kind: 'unknown' });
+    expect(fetcher).not.toHaveBeenCalled();
+  });
+
+  it.each([
     ['unsupported route', { route: 'swap', feeToken: '0x4718', operationToken: '0xabc' }],
     ['decimal fee token', { route: 'transfer', feeToken: '123', operationToken: '0xabc' }],
     ['zero operation token', { route: 'unshield', feeToken: '0x4718', operationToken: '0x0' }],

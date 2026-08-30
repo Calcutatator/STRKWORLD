@@ -41,6 +41,9 @@ export class BackendPrivacyClient implements PoolReadClient, PrivateSubmissionGa
   }
 
   async publicKey(address: string, signal?: AbortSignal): Promise<string> {
+    if (typeof address !== 'string' || !isNonzeroFelt(address)) {
+      throw new PrivacyError('unknown', 'The public-key address is invalid.');
+    }
     const raw = await this.post('/v1/rpc/public-key', { v: 1, address }, signal);
     throwIfAborted(signal);
     const value = asRecord(raw);
