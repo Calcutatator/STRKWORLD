@@ -107,6 +107,7 @@ export class WalletApiPrivacyOperations implements PrivacyOperations {
       if (!Array.isArray(balances)) {
         throw new PrivacyError('unknown', 'The wallet returned an invalid balance response.');
       }
+      const seenTokens = new Set<bigint>();
       const published = balances.map((entry) => {
         if (!hasOwnDataProperties(entry, ['token', 'balance'])) {
           throw new PrivacyError('unknown', 'The wallet returned an invalid balance.');
@@ -115,6 +116,14 @@ export class WalletApiPrivacyOperations implements PrivacyOperations {
         if (typeof token !== 'string' || !isFelt(token) || typeof balance !== 'string' || !isFelt(balance)) {
           throw new PrivacyError('unknown', 'The wallet returned an invalid balance.');
         }
+        const tokenIdentity = BigInt(token);
+        if (seenTokens.has(tokenIdentity)) {
+          throw new PrivacyError('unknown', 'The wallet returned a duplicate balance token.');
+        }
+        if (requestedTokens.length > 0 && !requestedTokens.some((requested) => sameAddress(requested, token))) {
+          throw new PrivacyError('unknown', 'The wallet returned an unrequested balance token.');
+        }
+        seenTokens.add(tokenIdentity);
         const total = BigInt(balance);
         if (total < 0n) {
           throw new PrivacyError('unknown', 'The wallet returned an invalid balance.');

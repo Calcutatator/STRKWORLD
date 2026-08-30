@@ -205,6 +205,26 @@ describe('WalletApiPrivacyOperations capability and reads', () => {
     expect(balances[0]?.total).toBe(100n);
   });
 
+  it('rejects duplicate numeric token identities in a wallet balance response', async () => {
+    const { ops, wallet } = fixture();
+    vi.spyOn(wallet, 'strk20Balances').mockResolvedValue([
+      { token: TOKEN, balance: '0x64' },
+      { token: `0x0${TOKEN.slice(2)}`, balance: '0x32' },
+    ]);
+
+    await expect(ops.balances([TOKEN])).rejects.toMatchObject({ kind: 'unknown' });
+  });
+
+  it('rejects an unrequested token disclosed by the wallet', async () => {
+    const { ops, wallet } = fixture();
+    vi.spyOn(wallet, 'strk20Balances').mockResolvedValue([
+      { token: TOKEN, balance: '0x64' },
+      { token: STRK, balance: '0x32' },
+    ]);
+
+    await expect(ops.balances([TOKEN])).rejects.toMatchObject({ kind: 'unknown' });
+  });
+
   it('publishes an immutable live pool snapshot distinct from the backend owner', async () => {
     const { ops, pool } = fixture();
     const source = {
