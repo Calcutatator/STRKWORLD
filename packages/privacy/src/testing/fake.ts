@@ -316,6 +316,7 @@ export class FakePrivacyOperations implements PrivacyOperations {
 
     const gasEstimate = relayFee;
     const { intents: canonicalIntents, swapReview } = this.canonicalizeIntents(reviewed);
+    const publishedWarnings = freezeWarnings(warnings);
     const self = this;
     let discarded = false;
     let confirmationAttempted = false;
@@ -327,7 +328,7 @@ export class FakePrivacyOperations implements PrivacyOperations {
       poolFee: feeAtPrepare,
       gasEstimate,
       totalCost: feeAtPrepare + gasEstimate,
-      warnings,
+      warnings: publishedWarnings,
       promptCount,
       ...(swapReview === undefined ? {} : { swapReview }),
       async confirm({ feeCeiling, onProgress, signal: sig }) {
@@ -381,12 +382,12 @@ export class FakePrivacyOperations implements PrivacyOperations {
     const canonicalIntent: Intent = Object.freeze({ ...intent, minAmountOut: protectedMinimum });
     return {
       intents: Object.freeze([canonicalIntent]),
-      swapReview: {
+      swapReview: Object.freeze({
         expectedAmountOut: configured.expectedAmountOut,
         minimumAmountOut: canonicalIntent.minAmountOut,
         slippageBps: configured.slippageBps,
         expiresAt: configured.expiresAt,
-      },
+      }),
     };
   }
 
@@ -471,6 +472,11 @@ export class FakePrivacyOperations implements PrivacyOperations {
  */
 function freezeIntents(intents: readonly Intent[]): readonly Intent[] {
   return Object.freeze(intents.map((intent) => Object.freeze({ ...intent })));
+}
+
+/** Match production's immutable review disclosure boundary. */
+function freezeWarnings(warnings: readonly BatchWarning[]): readonly BatchWarning[] {
+  return Object.freeze(warnings.map((warning) => Object.freeze({ ...warning })));
 }
 
 /**

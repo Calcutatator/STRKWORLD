@@ -370,6 +370,39 @@ describe('the fake owns its prepared intents too', () => {
     expect(ops.submitted[0]).toHaveLength(1);
   });
 
+  it('publishes immutable warnings like the production implementation', async () => {
+    const ops = fresh(0n);
+    const batch = await ops.prepare([{ kind: 'shield', token: STRK, amount: 1n }]);
+
+    expect(Object.isFrozen(batch.warnings)).toBe(true);
+    expect(Object.isFrozen(batch.warnings[0])).toBe(true);
+    expect(Reflect.deleteProperty(batch.warnings, '0')).toBe(false);
+    expect(Reflect.set(batch.warnings[0]!, 'detail', 'private')).toBe(false);
+    expect(batch.warnings).toEqual([{
+      kind: 'public-leg',
+      detail: 'Depositing 1 is public: the amount and your address are visible on-chain.',
+    }]);
+  });
+
+  it('publishes an immutable deterministic swap review like production', async () => {
+    const ops = new FakePrivacyOperations({
+      balances: { [STRK]: 100n * 10n ** 18n, ['0x1234']: 100n * 10n ** 18n },
+      swapReview: { expectedAmountOut: 101n, expiresAt: 2_000, slippageBps: 333 },
+    });
+    const batch = await ops.prepare([
+      { kind: 'swap', tokenIn: '0x1234', tokenOut: STRK, amountIn: 20n, minAmountOut: 1n },
+    ]);
+
+    expect(Object.isFrozen(batch.swapReview)).toBe(true);
+    expect(Reflect.set(batch.swapReview!, 'minimumAmountOut', 1n)).toBe(false);
+    expect(batch.swapReview).toEqual({
+      expectedAmountOut: 101n,
+      minimumAmountOut: 98n,
+      slippageBps: 333,
+      expiresAt: 2_000,
+    });
+  });
+
   /**
    * Taking the snapshot after the first `await` is not taking it at all.
    *
