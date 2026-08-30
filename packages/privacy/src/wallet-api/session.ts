@@ -623,6 +623,11 @@ function ownPreparedBatch(
     retireInvalidPrepared(prepared);
     throw new PrivacyError('unknown', 'The wallet returned an invalid prepared intent.');
   }
+  const swapIntents = prepared.intents.filter((intent) => intent.kind === 'swap');
+  if ((swapReview !== undefined && (prepared.intents.length !== 1 || swapIntents.length !== 1))) {
+    retireInvalidPrepared(prepared);
+    throw new PrivacyError('unknown', 'The wallet returned incoherent prepared swap review metadata.');
+  }
   const intents = Object.freeze(prepared.intents.map((intent) => Object.freeze({ ...intent })));
   const warnings = Object.freeze(prepared.warnings.map((warning) => Object.freeze({ ...warning })));
   let discarded = false;
