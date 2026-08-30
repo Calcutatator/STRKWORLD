@@ -258,6 +258,28 @@ empty shell to fetchers, so a 200 there means nothing.
 
 ## 6. Findings log
 
+### 2026-08-30 — Fixed-room control ownership must follow the input handoff
+
+The `world:control-owner` Shell callback committed `controlOwner = 'shell'`
+before calling `input.suspend()`. If that external handoff threw before the
+input gate had disabled delivery, the controller reported Shell ownership even
+though World input remained active; a retry or later cleanup could then act on
+divergent ownership. The inverse `world` handoff had the same stale-state
+shape when input restoration failed.
+
+The callback now restores the prior owner when the requested input state was
+not established, while retaining the new owner when the concrete input gate
+reports a partial suspended state that owns retryable cleanup. Reentrant newer
+owner callbacks remain authoritative, and successful commands publish exactly
+as before.
+
+*Verified:* a public fixed-room regression first made `input.suspend()` throw
+without changing input state; the old callback left `controlOwner` as `shell`,
+while the corrected callback preserves `world` and rethrows the original error.
+The World package suite, typecheck, invariants, and diff hygiene pass. No
+browser, wallet, provider, RPC, proof, signature, funds, or transaction was
+used.
+
 ### 2026-08-30 — Fixed-room station render projection must validate matching fields
 
 `fixedRoomStationPresentations()` accepted a matching runtime station snapshot

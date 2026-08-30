@@ -82,6 +82,8 @@ export class FixedRoomDefinitionError extends Error {
 export interface FixedRoomInputGate {
   suspend(): void;
   resume(): void;
+  /** True when suspension owns a partial or complete disabled-input handoff. */
+  readonly suspended?: boolean;
 }
 
 export interface FixedRoomPresentationPort {
@@ -493,9 +495,27 @@ export function createFixedRoomController(
     if (destroyed || !inRoom || ownDataField(payload, 'building') !== options.definition.building) return;
       const owner = ownDataField(payload, 'owner');
       if (owner !== 'world' && owner !== 'shell') return;
+      const previousControlOwner = controlOwner;
       controlOwner = owner;
-      if (controlOwner === 'shell') options.input.suspend();
-      else options.input.resume();
+      try {
+        if (controlOwner === 'shell') options.input.suspend();
+        else options.input.resume();
+      } catch (error) {
+        // Do not publish ownership the input handoff did not establish. The
+        // concrete gate retains Shell ownership when suspension reached a
+        // partial disabled state, so preserve that state; otherwise restore
+        // the previous owner and let the caller retry the command.
+        let inputStateMatches = false;
+        try {
+          inputStateMatches = options.input.suspended === (owner === 'shell');
+        } catch {
+          // A hostile status accessor must not mask the original handoff error.
+        }
+        if (controlOwner === owner && !inputStateMatches) {
+          controlOwner = previousControlOwner;
+        }
+        throw error;
+      }
       publish();
     });
     stopExit = options.in?.on('world:exit-building', (payload) => {
