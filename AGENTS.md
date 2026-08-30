@@ -258,6 +258,26 @@ empty shell to fetchers, so a 200 there means nothing.
 
 ## 6. Findings log
 
+### 2026-08-30 — Input resumption fails closed when recapture throws
+
+`createInputGate.resume()` enabled Phaser keyboard delivery before asking the
+keyboard adapter to re-enable global capture. If that second operation threw,
+the gate remained logically suspended while `keyboard.enabled` stayed `true`,
+so a panel whose exit handoff failed could still receive gameplay movement
+input.
+
+Resume now compensates a failed recapture by disabling keyboard delivery and
+reasserting disabled global capture before preserving the original error. The
+gate remains suspended and retryable; successful resume ordering and ordinary
+cleanup are unchanged.
+
+*Verified:* a red-first public input-gate regression makes
+`enableGlobalCapture()` throw after delivery is re-enabled. The old path left
+`keyboard.enabled` true; the corrected path leaves it false, retries safely,
+and preserves the exact capture error. Focused input-gate tests pass 15 tests.
+No browser, lobby, wallet, provider, RPC, proof, signature, funds or
+transaction was used.
+
 ### 2026-08-30 — Failed street movement publication can commit stale facing
 
 `createStreetMovementReporter.update()` changed its authoritative facing before

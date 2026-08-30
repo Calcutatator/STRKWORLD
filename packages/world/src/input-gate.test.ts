@@ -129,6 +129,33 @@ describe('resume', () => {
     expect(keyboard.enabled).toBe(true);
   });
 
+  it('fails closed when recapturing the keyboard throws after re-enabling delivery', () => {
+    const captureError = new Error('keyboard capture enable failed');
+    let failCapture = true;
+    const keyboard: KeyboardLike = {
+      enabled: true,
+      disableGlobalCapture: vi.fn(),
+      enableGlobalCapture: vi.fn(() => {
+        if (failCapture) {
+          failCapture = false;
+          throw captureError;
+        }
+      }),
+      resetKeys: vi.fn(),
+    };
+    const gate = createInputGate(keyboard);
+    gate.suspend();
+
+    expect(() => gate.resume()).toThrow(captureError);
+    expect(gate.suspended).toBe(true);
+    expect(keyboard.enabled).toBe(false);
+    expect(keyboard.disableGlobalCapture).toHaveBeenCalledTimes(2);
+
+    expect(() => gate.resume()).not.toThrow();
+    expect(gate.suspended).toBe(false);
+    expect(keyboard.enabled).toBe(true);
+  });
+
   it('clears held keys before re-enabling', () => {
     const { keyboard, calls } = fakeKeyboard();
     const gate = createInputGate(keyboard);

@@ -71,8 +71,26 @@ export function createInputGate(keyboard: KeyboardLike): InputGate {
       if (!suspended) return;
       // Clear first: a key pressed while suspended must not arrive as held.
       keyboard.resetKeys();
-      keyboard.enabled = true;
-      keyboard.enableGlobalCapture();
+      try {
+        keyboard.enabled = true;
+        keyboard.enableGlobalCapture();
+      } catch (error) {
+        // Re-capture is an external lifecycle boundary. If it fails after
+        // delivery was re-enabled, immediately fail closed so a panel cannot
+        // remain open while gameplay starts receiving its keystrokes. Keep the
+        // suspended flag set so a later resume can retry the handoff.
+        try {
+          keyboard.enabled = false;
+        } catch {
+          // Preserve the original capture error.
+        }
+        try {
+          keyboard.disableGlobalCapture();
+        } catch {
+          // Preserve the original capture error.
+        }
+        throw error;
+      }
       // Retire the suspended state only after every restoration step succeeds.
       // A failing keyboard operation remains retryable by Scene teardown.
       suspended = false;
