@@ -129,6 +129,7 @@ export class BackendPrivacyClient implements PoolReadClient, PrivateSubmissionGa
     signal?: AbortSignal,
     transportFailureKind: PrivacyErrorKind = 'unreachable',
   ): Promise<unknown> {
+    throwIfAborted(signal);
     let pendingResponse: Promise<Response>;
     try {
       pendingResponse = this.fetcher(`${this.baseUrl.replace(/\/$/, '')}${path}`, {
@@ -144,6 +145,7 @@ export class BackendPrivacyClient implements PoolReadClient, PrivateSubmissionGa
     try {
       response = await pendingResponse;
     } catch (error) {
+      if (signal?.aborted) throwIfAborted(signal);
       throw new PrivacyError(
         transportFailureKind,
         transportFailureKind === 'submission-uncertain'

@@ -30,6 +30,31 @@ function inheritResponseField(key: string, value: unknown): () => void {
 }
 
 describe('BackendPrivacyClient', () => {
+  it('does not dispatch a read already cancelled by its caller', async () => {
+    const fetcher = vi.fn(async () => response({}));
+    const client = new BackendPrivacyClient('https://backend.example', fetcher);
+    const controller = new AbortController();
+    controller.abort(new DOMException('Panel closed.', 'AbortError'));
+
+    await expect(client.config(controller.signal)).rejects.toMatchObject({ kind: 'user-rejected' });
+    expect(fetcher).not.toHaveBeenCalled();
+  });
+
+  it('preserves caller cancellation while a read transport is in flight', async () => {
+    const client = new BackendPrivacyClient(
+      'https://backend.example',
+      (_url, init) => new Promise((_resolve, reject) => {
+        init?.signal?.addEventListener('abort', () => reject(init.signal?.reason), { once: true });
+      }),
+    );
+    const controller = new AbortController();
+    const reading = client.config(controller.signal);
+
+    controller.abort(new DOMException('Panel closed.', 'AbortError'));
+
+    await expect(reading).rejects.toMatchObject({ kind: 'user-rejected' });
+  });
+
   it.each([
     ['config', (client: BackendPrivacyClient, signal: AbortSignal) => client.config(signal), {
       feeAmount: '6', feeToken: '0x4718', proofValidityBlocks: 450, noteMaturityBlocks: 10,
