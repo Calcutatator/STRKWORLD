@@ -145,7 +145,7 @@ export class FakePrivacyOperations implements PrivacyOperations {
 
   /** Make the next matching call fail. */
   injectFault(fault: Fault): void {
-    this.faults.push(fault);
+    this.faults.push(Object.freeze({ ...fault }));
   }
 
   /** Advance the chain. Matures any notes whose time has come. */

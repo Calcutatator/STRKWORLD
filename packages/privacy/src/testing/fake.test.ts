@@ -353,6 +353,20 @@ describe('recipients must be registered', () => {
 });
 
 describe('fault injection', () => {
+  it('owns an injected fault before caller mutation can retarget it', async () => {
+    const ops = fresh();
+    const fault = { kind: 'unreachable' as const, on: 'balances' as const };
+    ops.injectFault(fault);
+
+    (fault as { kind: string; on: string }).kind = 'not-registered';
+    (fault as { kind: string; on: string }).on = 'prepare';
+
+    await expect(ops.balances()).rejects.toMatchObject({ kind: 'unreachable' });
+    await expect(ops.prepare([
+      { kind: 'transfer', token: STRK, amount: 1n, recipient: BOB },
+    ])).resolves.toBeDefined();
+  });
+
   it('raises the requested error kind on the targeted method', async () => {
     const ops = fresh();
     ops.injectFault({ kind: 'not-registered', on: 'prepare' });
