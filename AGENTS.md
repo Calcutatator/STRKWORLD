@@ -258,6 +258,25 @@ empty shell to fetchers, so a 200 there means nothing.
 
 ## 6. Findings log
 
+### 2026-08-30 — Lobby reconciliation verifies the entry identity
+
+`LobbyClient.#serverSelf()` looked up the local session key in the decoded
+peer map but trusted the entry's position without checking that its embedded
+`gameId` still matched the local identity. A stale or malformed map entry could
+therefore make a requested move appear acknowledged even though the state did
+not describe this client, clearing reconciliation without sending the move.
+
+Reconciliation now accepts a decoded entry as the local server position only
+when its projected `gameId` exactly matches the current client identity. The
+peer snapshot projection, movement normalization, and wire protocol are
+unchanged; mismatched entries are treated as not-yet-known server state.
+
+*Verified:* a red-first public fake-room regression keyed an entry by the local
+id while embedding another identity and matching the requested position. The
+old client sent no move; the corrected client sends the move. Removing the
+identity guard restores the failure. No browser, external lobby, wallet,
+provider, RPC, proof, signature, funds or transaction was used.
+
 ### 2026-08-30 — Lobby peer projection contains malformed decoded state
 
 `LobbyClient.peers()` and its reconciliation lookup read decoded room-state

@@ -624,7 +624,7 @@ export class LobbyClient {
     const entry = this.#room.state?.peers?.get(id);
     if (entry === undefined) return null;
     const snapshot = readPeerSnapshot(entry);
-    if (snapshot === null) return null;
+    if (snapshot === null || snapshot.gameId !== id) return null;
     return snapshot;
   }
 

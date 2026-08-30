@@ -1113,6 +1113,41 @@ describe('presence', () => {
     }
   });
 
+  it('does not treat a map entry with another identity as the local server position', async () => {
+    const joined = fakeRoom();
+    const joinOrCreate = vi
+      .spyOn(ColyseusClient.prototype, 'joinOrCreate')
+      .mockResolvedValueOnce(joined.room as never);
+    const client = new LobbyClient({ endpoint: server.endpoint, start: { x: 0, y: 0 } });
+
+    try {
+      const connecting = client.connect();
+      await Promise.resolve();
+      joined.welcome({ gameId: '0123456789abcdef' });
+      await connecting;
+
+      // A decoded state map is keyed by the local id, but the entry's own
+      // identity is the authoritative value used for reconciliation.
+      joined.room.state.peers.set('0123456789abcdef', {
+        gameId: 'fedcba9876543210',
+        position: { x: 99, y: 0 },
+        facing: 'right',
+        sprite: 'avatar-1',
+      } as never);
+
+      client.updatePosition(99, 0, 'right');
+
+      expect(joined.send).toHaveBeenCalledWith('move', {
+        x: 99,
+        y: 0,
+        facing: 'right',
+      });
+    } finally {
+      await client.disconnect();
+      joinOrCreate.mockRestore();
+    }
+  });
+
   it.each([
     ['unknown string', 'diagonal'],
     ['coercible object', { toString: (): string => 'left' }],
