@@ -40,6 +40,10 @@ export function startProductionWalletBootstrap({
       try {
         render(session);
       } catch {
+        if (owned === session) {
+          owned = null;
+          destroyQuietly(session);
+        }
         if (!retired) reportFailure(failure);
       }
     },

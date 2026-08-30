@@ -63,4 +63,38 @@ describe('production wallet bootstrap', () => {
       process.off('unhandledRejection', onUnhandled);
     }
   });
+
+  it('destroys a session when rendering the loaded session fails', async () => {
+    const loaded = session();
+    const failure = vi.fn();
+    startProductionWalletBootstrap({
+      load: async () => loaded,
+      render: () => { throw new Error('render failed'); },
+      failure,
+    });
+    await Promise.resolve();
+    await Promise.resolve();
+
+    expect(failure).toHaveBeenCalledOnce();
+    expect(loaded.destroy).toHaveBeenCalledOnce();
+  });
+
+  it('does not double-destroy when disposal reenters a failing render', async () => {
+    const loaded = session();
+    const failure = vi.fn();
+    let dispose!: () => void;
+    dispose = startProductionWalletBootstrap({
+      load: async () => loaded,
+      render: () => {
+        dispose();
+        throw new Error('render failed after disposal');
+      },
+      failure,
+    });
+    await Promise.resolve();
+    await Promise.resolve();
+
+    expect(loaded.destroy).toHaveBeenCalledOnce();
+    expect(failure).not.toHaveBeenCalled();
+  });
 });

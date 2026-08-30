@@ -299,6 +299,25 @@ tests and privacy typecheck. Full workspace verification is recorded with the
 owning commit. Deterministic fakes only: no browser, wallet, provider, RPC,
 proof, signature, funds or transaction was used.*
 
+### 2026-08-30 — Production bootstrap retires sessions whose render fails
+
+The production wallet bootstrap took ownership of a loaded session before
+calling `render()`, but a synchronous render failure only showed the failure
+surface and left the unpublished session owned until a later HMR disposal.
+That retained wallet connection state after the composition had failed.
+
+The render-failure path now releases and destroys the exact loaded session
+before reporting the failure. Reentrant disposal during render remains
+idempotent, and a successfully rendered session stays owned until explicit
+bootstrap disposal.
+
+*Verified:* a red-first bootstrap regression made `render()` throw and
+observed zero session destruction on the old path; the corrected path destroys
+it once. A reentrant dispose/render-failure regression confirms no double
+destruction. Focused bootstrap tests pass 4 tests; workspace gates are
+recorded on the candidate. No browser, wallet, provider, RPC, proof,
+signature, funds or transaction was used.
+
 ### 2026-08-30 — Confirmation fee ceilings are u256-bounded authority
 
 Confirmation accepted any nonnegative bigint fee ceiling. A value above
