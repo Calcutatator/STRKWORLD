@@ -258,6 +258,29 @@ empty shell to fetchers, so a 200 there means nothing.
 
 ## 6. Findings log
 
+### 2026-08-30 — Wallet balance responses require felt-shaped token entries
+
+`WalletApiPrivacyOperations.balances()` previously trusted the Wallet API's
+runtime `token` and `balance` fields. It converted `balance` with `BigInt()`
+without first enforcing the Wallet API `FELT` wire shape, and published any
+token string unchanged. A malformed token could therefore cross the privacy
+boundary, while malformed balance text escaped as an `unreachable` parser
+failure instead of the generic invalid-wallet-response error.
+
+Balance mapping now requires both fields to be hexadecimal Stark field
+elements before conversion. Valid zero and positive felts retain the existing
+aggregate-balance semantics; negative, decimal, malformed and field-prime-or-
+above values fail closed as `PrivacyError('unknown')`. No product-level balance
+cap or maturity claim is added.
+
+*Verified:* red-first public Wallet API regressions supplied a non-felt token
+and a non-felt balance; the old path published the token and mapped the
+malformed balance to `unreachable`, while the corrected path rejects both as
+`unknown`. Removing the felt-shape guard makes both regressions fail. The
+focused Wallet API suite passes 78 tests; the full Privacy suite passes 9
+files / 245 tests. No browser, provider, RPC, wallet, proof, signature, funds
+or transaction was used.
+
 ### 2026-08-30 — Fixed-room destroy attempts every listener cleanup
 
 `createFixedRoomController().destroy()` marked the controller destroyed and

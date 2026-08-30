@@ -106,6 +106,16 @@ describe('WalletApiPrivacyOperations capability and reads', () => {
     await expect(ops.balances([TOKEN])).rejects.toMatchObject({ kind: 'unknown' });
   });
 
+  it.each([
+    ['a malformed token', { token: 'not-a-felt', balance: '0x64' }],
+    ['a malformed balance', { token: TOKEN, balance: 'not-a-felt' }],
+  ])('rejects %s from the Wallet API balance response', async (_label, entry) => {
+    const { ops, wallet } = fixture();
+    vi.spyOn(wallet, 'strk20Balances').mockResolvedValue([entry]);
+
+    await expect(ops.balances([TOKEN])).rejects.toMatchObject({ kind: 'unknown' });
+  });
+
   it('does not return pool config after its read is aborted', async () => {
     const { ops, pool } = fixture();
     let release!: () => void;
