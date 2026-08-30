@@ -1,6 +1,6 @@
 import type { PrivacyOperations, WalletCapability } from '@strkworld/privacy';
 import type { WalletStatus } from '@strkworld/shared';
-import { createStore, type Store } from '../store/store.js';
+import { createStore, type ReadableStore } from '../store/store.js';
 import { toFailure } from '../privacy/errors.js';
 
 /**
@@ -38,7 +38,8 @@ export type ConnectState =
   | { name: 'unreachable' };
 
 export interface ConnectFlow {
-  readonly store: Store<ConnectState>;
+  /** Read-only view; connection transitions are owned by this flow. */
+  readonly store: ReadableStore<ConnectState>;
   /** Run capability detection. Concurrent calls share one in-flight query. */
   connect(signal?: AbortSignal): Promise<ConnectState>;
   /** The "I have registered" affordance. Same query, different button. */
@@ -60,29 +61,40 @@ export function createConnectFlow(
   operations: PrivacyOperations,
   initialState: ConnectState = { name: 'disconnected' },
 ): ConnectFlow {
-  const store = createStore<ConnectState>(initialState);
+  function freezeConnectState(state: ConnectState): ConnectState {
+    if (state.name === 'connected') {
+      return Object.freeze({ ...state, capability: Object.freeze({ ...state.capability }) });
+    }
+    return Object.freeze({ ...state });
+  }
+
+  const stateStore = createStore<ConnectState>(freezeConnectState(initialState));
+  const publish = (state: ConnectState): ConnectState => {
+    const frozen = freezeConnectState(state);
+    stateStore.setState(frozen);
+    return frozen;
+  };
+  const store: ReadableStore<ConnectState> = {
+    getState: stateStore.getState,
+    getServerSnapshot: stateStore.getServerSnapshot,
+    subscribe: stateStore.subscribe,
+  };
   let generation = 0;
   let inFlight: { generation: number; promise: Promise<ConnectState> } | null = null;
 
   async function detect(signal?: AbortSignal): Promise<ConnectState> {
     if (inFlight) return inFlight.promise;
     const attemptGeneration = ++generation;
-    store.setState({ name: 'detecting' });
+    publish({ name: 'detecting' });
 
     const promise = (async (): Promise<ConnectState> => {
       try {
         const capability = await operations.capability(signal);
         const next = classify(capability);
-        if (generation === attemptGeneration) {
-          store.setState(next);
-        }
-        return generation === attemptGeneration ? next : store.getState();
+        return generation === attemptGeneration ? publish(next) : store.getState();
       } catch (error) {
         const next = fromError(error);
-        if (generation === attemptGeneration) {
-          store.setState(next);
-        }
-        return generation === attemptGeneration ? next : store.getState();
+        return generation === attemptGeneration ? publish(next) : store.getState();
       }
     })();
     inFlight = { generation: attemptGeneration, promise };
@@ -106,7 +118,7 @@ export function createConnectFlow(
     disconnect(): void {
       generation += 1;
       inFlight = null;
-      store.setState({ name: 'disconnected' });
+      publish({ name: 'disconnected' });
     },
 
     noteOperationError(error: unknown): ConnectState {
@@ -117,11 +129,11 @@ export function createConnectFlow(
         // account state, or its late success can reopen the financial rooms.
         generation += 1;
         inFlight = null;
-        store.setState({ name: 'not-registered' });
+        publish({ name: 'not-registered' });
       } else if (kind === 'unsupported-wallet') {
         generation += 1;
         inFlight = null;
-        store.setState({ name: 'unsupported-wallet', walletApiVersion: versionOf(store.getState()) });
+        publish({ name: 'unsupported-wallet', walletApiVersion: versionOf(store.getState()) });
       }
       return store.getState();
     },
