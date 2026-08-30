@@ -350,6 +350,22 @@ describe('BackendPrivacyClient', () => {
     );
   });
 
+  it('publishes an immutable pool configuration', async () => {
+    const client = new BackendPrivacyClient(
+      'https://backend.example',
+      async () => response({
+        feeAmount: '6', feeToken: '0x4718', proofValidityBlocks: 450, noteMaturityBlocks: 10,
+      }),
+    );
+
+    const config = await client.config();
+
+    expect(Object.isFrozen(config)).toBe(true);
+    expect(Reflect.set(config, 'feeAmount', 0n)).toBe(false);
+    expect(config.feeAmount).toBe(6n);
+    expect(config.proofValidityBlocks).toBe(450);
+  });
+
   it('publishes an immutable relay fee quote', async () => {
     const client = new BackendPrivacyClient(
       'https://backend.example',

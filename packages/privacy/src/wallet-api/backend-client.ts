@@ -32,12 +32,12 @@ export class BackendPrivacyClient implements PoolReadClient, PrivateSubmissionGa
     const value = await this.post('/v1/rpc/pool-config', { v: 1 }, signal);
     throwIfAborted(signal);
     const record = asRecord(value);
-    return {
+    return Object.freeze({
       feeAmount: asUint256(ownField(record, 'feeAmount')),
       feeToken: asFelt(ownField(record, 'feeToken')),
       proofValidityBlocks: asIntegerAtLeast(ownField(record, 'proofValidityBlocks'), 1),
       noteMaturityBlocks: asIntegerAtLeast(ownField(record, 'noteMaturityBlocks'), 0),
-    };
+    });
   }
 
   async publicKey(address: string, signal?: AbortSignal): Promise<string> {
