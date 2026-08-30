@@ -330,6 +330,28 @@ describe('cancellation', () => {
   });
 });
 
+describe('balance query ownership', () => {
+  it('snapshots requested tokens before the fake latency boundary', async () => {
+    const ops = new FakePrivacyOperations({
+      balances: { [STRK]: 100n, ['0x1234']: 50n },
+      latencyMs: 1,
+    });
+    const requested = [STRK];
+
+    const reading = ops.balances(requested);
+    requested[0] = '0x1234';
+    requested.push('0x9999');
+
+    await expect(reading).resolves.toEqual([{
+      token: STRK,
+      spendable: 100n,
+      maturing: 0n,
+      total: 100n,
+      maturityKnown: true,
+    }]);
+  });
+});
+
 describe('the fake owns its prepared intents too', () => {
   /**
    * The double is what the Shell and World lanes build against, so a

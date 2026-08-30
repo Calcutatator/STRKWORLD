@@ -190,9 +190,10 @@ export class FakePrivacyOperations implements PrivacyOperations {
   }
 
   async balances(tokens?: Address[], signal?: AbortSignal): Promise<PrivateBalance[]> {
+    const requestedTokens = tokens === undefined ? undefined : [...tokens];
     await this.tick('balances', signal);
-    const keys = tokens?.length
-      ? tokens
+    const keys = requestedTokens?.length
+      ? requestedTokens
       : [...new Set([...this.spendable.keys(), ...this.maturing.map((n) => n.token)])];
     return keys.map((token) => {
       const spendable = this.spendable.get(token) ?? 0n;
