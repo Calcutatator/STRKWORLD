@@ -437,7 +437,7 @@ export function createBankPanel(options: BankPanelOptions): BankPanel {
     return spendable > 0n ? spendable : null;
   }
 
-  return {
+  return Object.freeze<BankPanel>({
     store,
 
     /**
@@ -854,7 +854,7 @@ export function createBankPanel(options: BankPanelOptions): BankPanel {
     dismissNotice(): void {
       patch({ notice: null });
     },
-  };
+  });
 
   async function feeMovedPast(summary: PreparedSummary, signal?: AbortSignal): Promise<boolean> {
     try {

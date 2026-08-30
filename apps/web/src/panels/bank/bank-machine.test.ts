@@ -32,6 +32,18 @@ const strk = (whole: string) => parseTokenAmount(whole)!;
 const allowFinancialActions = () => true;
 
 describe('Bank route authority', () => {
+  it('publishes an immutable panel API while retaining owned transitions', async () => {
+    const panel = await openPanel(fake());
+    const originalSetMode = panel.setMode;
+
+    expect(Object.isFrozen(panel)).toBe(true);
+    expect(Reflect.set(panel, 'setMode', () => undefined)).toBe(false);
+    expect(Reflect.set(panel, 'confirm', async () => undefined)).toBe(false);
+    expect(panel.setMode).toBe(originalSetMode);
+    panel.setMode('transfer');
+    expect(panel.store.getState().mode).toBe('transfer');
+  });
+
   it('keeps the mode-to-route map immutable at the public seam', () => {
     expect(Object.isFrozen(ROUTE_BY_MODE)).toBe(true);
     expect(Reflect.set(ROUTE_BY_MODE, 'shield', 'exchange.swap')).toBe(false);
