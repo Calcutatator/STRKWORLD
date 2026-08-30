@@ -14,6 +14,7 @@ import {
   DEFAULT_ROOM_NAME,
   MAX_MESSAGES_PER_SECOND,
   MIN_CLIENT_SEND_INTERVAL_MS,
+  WORLD_LIMIT,
 } from './config';
 import {
   LobbyClient,
@@ -1040,6 +1041,40 @@ describe('presence', () => {
     } finally {
       await client.disconnect();
       timer.mockRestore();
+      joinOrCreate.mockRestore();
+    }
+  });
+
+  it('clamps finite movement to the server world limit before reconciliation', async () => {
+    const joined = fakeRoom();
+    const joinOrCreate = vi
+      .spyOn(ColyseusClient.prototype, 'joinOrCreate')
+      .mockResolvedValueOnce(joined.room as never);
+    const client = new LobbyClient({ endpoint: server.endpoint, start: { x: 0, y: 0 } });
+
+    try {
+      const connecting = client.connect();
+      await Promise.resolve();
+      joined.welcome({ gameId: '0123456789abcdef' });
+      await connecting;
+
+      client.updatePosition(9_000, -9_000, 'right');
+      expect(joined.send).toHaveBeenCalledWith('move', {
+        x: WORLD_LIMIT,
+        y: -WORLD_LIMIT,
+        facing: 'right',
+      });
+
+      joined.room.state.peers.set('0123456789abcdef', {
+        gameId: '0123456789abcdef',
+        position: { x: WORLD_LIMIT, y: -WORLD_LIMIT },
+        facing: 'right',
+        sprite: 'avatar-1',
+      } as never);
+      joined.stateChange();
+      expect(joined.send).toHaveBeenCalledTimes(1);
+    } finally {
+      await client.disconnect();
       joinOrCreate.mockRestore();
     }
   });

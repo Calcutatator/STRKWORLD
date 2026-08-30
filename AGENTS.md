@@ -258,6 +258,25 @@ empty shell to fetchers, so a 200 there means nothing.
 
 ## 6. Findings log
 
+### 2026-08-30 — Lobby movement converges to the server's bounded coordinates
+
+`LobbyClient.updatePosition()` rounded finite coordinates but did not apply the
+server's `WORLD_LIMIT` clamp. An out-of-bounds finite request therefore became
+the client's desired position while the server stored its clamped position;
+reconciliation could never observe equality and retried that move forever.
+
+Movement now uses the shared finite-round-and-clamp policy before storing or
+sending desired state. Nonfinite values remain ignored, valid in-bounds values
+and facing normalization are unchanged, and the server remains authoritative.
+
+*Verified:* a red-first public Lobby regression requested `(9000, -9000)` and
+observed the old client send those values, then fail to converge against the
+server's `(WORLD_LIMIT, -WORLD_LIMIT)` state. The corrected client sends the
+bounded placement and clears desired state after the matching server snapshot.
+Lobby tests pass 11 files / 250 tests; Lobby typecheck and invariants pass. No
+browser, wallet, provider, RPC, proof, signature, funds or transaction was
+used.
+
 ### 2026-08-30 — Avatar visual state and target rendering stay transactional
 
 `createAvatarVisualController.present()` replaced its logical pose before

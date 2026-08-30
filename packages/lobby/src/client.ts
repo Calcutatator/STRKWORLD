@@ -51,7 +51,7 @@ import {
   SERVER_MESSAGE,
   type LobbySprite,
 } from './config';
-import { normalizeFacing, normalizeGameId } from './policy';
+import { normalizeCoordinate, normalizeFacing, normalizeGameId } from './policy';
 import type { LobbyState } from './state';
 
 export type { LobbySprite } from './config';
@@ -254,11 +254,18 @@ export class LobbyClient {
    */
   updatePosition(x: number, y: number, facing: Facing = 'down'): void {
     if (this.#status !== 'connected' || this.#room === null) return;
-    // The server rejects non-finite coordinates. Ignore malformed frame input
-    // before it becomes a desired position that reconciliation would retry
-    // forever at the client send interval.
-    if (!Number.isFinite(x) || !Number.isFinite(y)) return;
-    this.#desired = { x: Math.round(x), y: Math.round(y), facing: normalizeFacing(facing) };
+    // Match the server's finite rounding and world-bound clamp before storing
+    // desired state. Without this, an out-of-bounds finite coordinate would be
+    // accepted locally, clamped remotely, and retried forever because the two
+    // values could never compare equal.
+    const normalizedX = normalizeCoordinate(x);
+    const normalizedY = normalizeCoordinate(y);
+    if (normalizedX === null || normalizedY === null) return;
+    this.#desired = {
+      x: normalizedX,
+      y: normalizedY,
+      facing: normalizeFacing(facing),
+    };
     this.#pump(performance.now());
   }
 
