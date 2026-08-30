@@ -258,6 +258,30 @@ empty shell to fetchers, so a 200 there means nothing.
 
 ## 6. Findings log
 
+### 2026-08-30 — Remote avatar position must roll back after failed presentation
+
+`createRemoteAvatarLayer.updateAvatar()` moved an existing Phaser sprite before
+visual presentation and movement-idle timer setup completed. If either later
+operation threw, reconciliation correctly retained the last rendered peer
+snapshot, but the sprite had already moved to the uncommitted coordinates.
+That left the public retained map and visible remote avatar disagreeing until
+another source publication happened, and could make the next movement update
+start from the wrong spatial state.
+
+The update now captures the last rendered coordinates and compensates a
+partially applied position when presentation or timer setup fails. A failed
+position setter that did not mutate still preserves the original error, while
+a rollback failure is reported together with it. Successful updates, idle
+timers, retryable visual failures and teardown ownership are unchanged.
+
+*Verified:* a red-first public World regression makes an existing sprite move
+to a new position, then throws from its visual setter; the old layer retained
+the old peer snapshot while leaving the sprite at the new coordinates, while
+the corrected layer restores the old coordinates and preserves the exact
+presentation error. Focused remote-avatar tests pass 24 tests. No browser,
+lobby server, wallet, provider, RPC, proof, signature, funds or transaction
+was used.
+
 ### 2026-08-30 — Failed local avatar poses must not advance facing state
 
 `createLocalAvatarVisual.update()` advanced its private movement-facing
