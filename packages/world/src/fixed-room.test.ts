@@ -74,6 +74,34 @@ describe('fixed room presentation transaction', () => {
     expect(() => h.presentation.enter()).not.toThrow();
     expect(h.calls.at(-1)).toBe('position:true');
   });
+
+  it('does not let failed-entry rollback overwrite a reentrant retry', () => {
+    const h = presentationHarness();
+    const error = new Error('room bounds failed');
+    const originalVelocity = h.port.setPlayerVelocity;
+    const originalBounds = h.port.setWorldBounds;
+    let failEntry = true;
+    let retryFromRollback = false;
+    h.port.setPlayerVelocity = () => {
+      const result = originalVelocity();
+      if (retryFromRollback) {
+        retryFromRollback = false;
+        h.presentation.enter();
+      }
+      return result;
+    };
+    h.port.setWorldBounds = (room) => {
+      if (room && failEntry) {
+        failEntry = false;
+        retryFromRollback = true;
+        throw error;
+      }
+      originalBounds(room);
+    };
+
+    expect(() => h.presentation.enter()).toThrow(error);
+    expect(h.calls.at(-1)).toBe('position:true');
+  });
 });
 
 function bus<Events extends Record<string, unknown>>(): EventBus<Events> {

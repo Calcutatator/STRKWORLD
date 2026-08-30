@@ -137,14 +137,17 @@ export function createFixedRoomPresentation(
         port.resumeStreet();
       }
     } catch (error) {
-      if (room && isCurrent()) restoreStreetPresentation(port);
+      if (room && isCurrent()) restoreStreetPresentation(port, isCurrent);
       throw error;
     }
   };
   return Object.freeze({ enter: () => run(true), exit: () => run(false) });
 }
 
-function restoreStreetPresentation(port: FixedRoomPresentationPort): void {
+function restoreStreetPresentation(
+  port: FixedRoomPresentationPort,
+  isCurrent: () => boolean,
+): void {
   const attempts = [
     () => port.setPlayerVelocity(),
     () => port.setBodyEnabled(true),
@@ -158,6 +161,7 @@ function restoreStreetPresentation(port: FixedRoomPresentationPort): void {
     () => port.setPlayerPosition(false),
   ];
   for (const attempt of attempts) {
+    if (!isCurrent()) return;
     try { attempt(); } catch { /* preserve the entry failure */ }
   }
 }

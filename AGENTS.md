@@ -258,6 +258,25 @@ empty shell to fetchers, so a 200 there means nothing.
 
 ## 6. Findings log
 
+### 2026-08-30 — Fixed-room entry rollback can overwrite a reentrant retry
+
+`createFixedRoomPresentation` used a transition revision for its forward
+handoff, but its failed-entry rollback restored street presentation without
+checking that the entry still owned the transition. If a rollback port
+callback synchronously started a newer room entry, the old rollback continued
+and overwrote the retry's room position and presentation.
+
+The rollback now rechecks the owning transition before each restoration action,
+so a newer room transition retires stale cleanup. The original entry failure
+remains authoritative and ordinary rollback still attempts every action while
+its transition owns the presentation.
+
+*Verified:* a public World regression starts a retry from the first rollback
+port callback. On the old path the stale rollback ended at `position:false`
+after the retry's `position:true`; the corrected path preserves the retry.
+Focused fixed-room tests pass 69 tests. No browser, lobby server, wallet,
+provider, RPC, proof, signature, funds or transaction was used.
+
 ### 2026-08-30 — Fixed-room exit announcement failure remains retryable
 
 `createFixedRoomController.leave()` completed the outside presentation and
