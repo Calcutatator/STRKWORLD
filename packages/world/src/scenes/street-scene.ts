@@ -857,8 +857,19 @@ export function createStreetScene({ Phaser, onTileChanged, remotePeers }: Street
         this.lastTile = tile;
         return;
       }
+      // Keep the sentinel committed during delivery so a nested report cannot
+      // re-enter the same tile. If the door handoff fails, however, the
+      // trigger restores its own occupancy and this Scene must leave the tile
+      // retryable as well. A nested transition may already have taken over;
+      // only roll back this attempt's own commit in that case.
+      const previousTile = this.lastTile;
       this.lastTile = tile;
-      this.doors.update(tile);
+      try {
+        this.doors.update(tile);
+      } catch (error) {
+        if (this.lastTile === tile) this.lastTile = previousTile;
+        throw error;
+      }
       onTileChanged?.(tile);
     }
 

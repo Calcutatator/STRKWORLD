@@ -258,6 +258,27 @@ empty shell to fetchers, so a 200 there means nothing.
 
 ## 6. Findings log
 
+### 2026-08-30 — Street door handoffs remain retryable after a failed room entry
+
+`StreetScene.reportTile()` previously committed its `lastTile` sentinel before
+delegating a changed street tile to the door trigger. If the room controller's
+entry handoff threw, the door trigger restored its own prior occupancy, but the
+Scene retained the failed tile. A player who remained on that doorway could
+therefore never retry the same entry: later updates were suppressed as a
+duplicate tile even though the room was still outside.
+
+The Scene now retains the sentinel during delivery to preserve nested-report
+ordering, but rolls back only its own commit when the door handoff throws. A
+nested transition or reset that already took ownership is left authoritative;
+ordinary door delivery and tile-change callbacks are unchanged.
+
+*Verified:* a red-first public StreetScene regression makes the Bank room entry
+throw on the first update while the player remains on the same door tile. The
+old path calls `enter()` once and suppresses the second update; the corrected
+path retries and completes the second entry. The focused StreetScene lifecycle
+suite passes 19 tests. No browser, lobby, wallet, provider, RPC, proof,
+signature, funds or transaction was used.
+
 ### 2026-08-30 — Bank mode tabs use the same route authority as the panel
 
 `BankPanel` passed only the active mode's door into its tab renderer. Every

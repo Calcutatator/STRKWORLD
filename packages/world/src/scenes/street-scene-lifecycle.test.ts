@@ -431,6 +431,35 @@ describe('StreetScene lifecycle', () => {
     harness.shutdown();
   });
 
+  it('retries fixed-room entry after a failed transition on the same tile', () => {
+    const harness = createWorldPlayHarness();
+    harness.create();
+    const room = harness.room('bank');
+    const error = new Error('fixed-room entry failed');
+    const enter = vi.spyOn(room, 'enter')
+      .mockImplementationOnce(() => { throw error; });
+    const player = harness.scene.player as { x: number; y: number };
+    player.x = 5 * 32 + 16;
+    player.y = 10 * 32 + 16;
+    harness.scene.cursors = {
+      left: { isDown: false },
+      right: { isDown: false },
+      up: { isDown: false },
+      down: { isDown: false },
+      shift: { isDown: false },
+    };
+
+    expect(() => harness.scene.update(0, 16)).toThrow(error);
+    expect(enter).toHaveBeenCalledOnce();
+
+    // The player remains on the same door tile. A failed room handoff must
+    // remain retryable instead of being hidden by the Scene's tile sentinel.
+    expect(() => harness.scene.update(0, 16)).not.toThrow();
+    expect(enter).toHaveBeenCalledTimes(2);
+    expect(room.state.inRoom).toBe(true);
+    harness.shutdown();
+  });
+
   it('rebinds the outfit toggle through the production create order on a restart', () => {
     // The ordering under test lives in create() itself: the Scene must make its
     // selection *before* it builds the Studio. Stubbing create() would hide a
