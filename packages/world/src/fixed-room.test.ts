@@ -1139,6 +1139,27 @@ describe('fixed room controller', () => {
     expect(h.controller.state.stations[0]?.status).toBe('locked');
   });
 
+  it.each(['world:stations', 'world:control-owner', 'world:exit-building'] as const)(
+    'fails closed without invoking accessor-backed command fields (%s)',
+    (event) => {
+      const h = harness();
+      h.controller.enter();
+      const error = new Error('command field should not be read');
+      let getterRead = false;
+      const hostile = {};
+      Object.defineProperty(hostile, 'building', {
+        get: () => {
+          getterRead = true;
+          throw error;
+        },
+      });
+
+      expect(() => h.shell.emit(event, hostile as never)).not.toThrow();
+      expect(getterRead).toBe(false);
+      expect(h.controller.state.controlOwner).toBe('world');
+    },
+  );
+
   it('ignores a control-owner command with an unknown owner', () => {
     const h = harness();
     h.controller.enter();

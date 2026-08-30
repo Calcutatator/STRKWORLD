@@ -258,6 +258,88 @@ empty shell to fetchers, so a 200 there means nothing.
 
 ## 6. Findings log
 
+### 2026-08-30 — Backend cancellation accepts genuine cross-realm signals
+
+The browser backend client previously validated optional operation signals
+with `instanceof AbortSignal`. A genuine signal created by another browser
+realm therefore failed before transport, even though Fetch and cancellation
+use only the standard AbortSignal surface.
+
+The boundary now retains the native same-realm fast path and otherwise accepts
+only a descriptor-owned structural signal with boolean `aborted`, a present
+`reason`, and callable `addEventListener` / `removeEventListener`. Accessors,
+missing members and wrong scalar types fail closed without invocation. Relay
+estimate, private submission and swap preparation share the validator.
+
+*Verified:* three public backend-client regressions were red before the fix
+and prove cross-realm-like signals reach transport for all three operations.
+Malformed and accessor-backed lookalikes are rejected before transport, with
+the accessor never invoked. The focused client suite passes 102 tests and the
+privacy package typecheck and diff hygiene pass. No browser, wallet, provider,
+RPC, proof, signature, funds or transaction was used.*
+
+### 2026-08-30 — Bank compatibility maps must retain runtime immutability
+
+`createBankRoom()` spread the already-frozen `FixedRoomMap` into a new
+compatibility object, then returned that outer object mutable. A consumer could
+therefore overwrite the public `name`, `building`, dimensions or station
+references despite the readonly map contract, leaving the Bank facade's
+metadata inconsistent with its fixed collision and station data.
+
+The compatibility facade now freezes its returned outer map as well as the
+deeply-owned data supplied by `createFixedRoom()`. Existing Bank geometry,
+station helpers and controller behavior are unchanged.
+
+*Verified:* a red-first public Bank regression observed that the returned map
+was mutable and allowed `name` replacement; the corrected map is frozen and
+rejects that mutation while retaining `bank`. Focused Bank tests and World
+typecheck pass. No browser, lobby server, wallet, provider, RPC, proof,
+signature, funds or transaction was used.*
+
+### 2026-08-30 — Remote avatar idle timers must commit with the new pose
+
+`createRemoteAvatarLayer.updateAvatar()` cancelled an existing movement-idle
+timer before presenting the replacement pose and scheduling its timer. If the
+replacement presentation failed, reconciliation correctly retained the last
+rendered peer snapshot, but the prior timer had already been removed. With no
+later lobby update, the avatar could remain in its old walking animation
+indefinitely instead of returning to idle.
+
+The update now keeps the prior timer until the replacement presentation and
+new timer have succeeded, then retires the old timer and publishes the new
+one together. A failed replacement leaves the prior timer owned; a failed new
+timer is cleaned up without publishing it. Existing position rollback,
+last-successful-snapshot retention, ordinary movement and teardown behavior
+are unchanged.
+
+*Verified:* a red-first public World regression starts a remote movement,
+fails the next pose presentation, and fires the prior idle timer. The old path
+had removed that timer and made no idle presentation; the corrected path keeps
+the timer and returns the sprite to idle. Focused remote-avatar tests pass 25
+tests. No browser, lobby server, wallet, provider, RPC, proof, signature,
+funds or transaction was used.
+
+### 2026-08-30 — Fixed-room Shell command fields must be accessor-safe
+
+The fixed-room controller used ordinary property access for the `building`
+and `owner` fields of Shell commands. A malformed cross-package payload with
+an accessor-backed field could therefore throw from the synchronous World
+listener before the building check ran, interrupting the scene's event bus.
+The existing null guard did not cover this case because optional chaining still
+invokes an accessor.
+
+Shell command handlers now read their discriminator and owner fields through
+the own-data-field boundary, which ignores accessors and contains descriptor
+failures. Station payload reads use the same safe path; valid command ordering,
+known-owner validation and null-payload behavior are unchanged.
+
+*Verified:* a red-first public fixed-room regression supplied a matching
+`world:control-owner` payload whose `building` getter threw; the old handler
+leaked that exact error, while the corrected handler ignored the command
+without invoking the getter or changing World ownership. Focused fixed-room
+tests pass 73 tests and World typecheck passes. No browser, lobby server,
+wallet, provider, RPC, proof, signature, funds or transaction was used.*
+
 ### 2026-08-30 — Avatar Studio figure visibility sync must be transactional
 
 `createAvatarStudioFigureLayer.sync()` applied visibility to eight figure

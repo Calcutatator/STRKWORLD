@@ -217,6 +217,28 @@ describe('remote avatar layer', () => {
     expect(sprite.y).toBe(72);
   });
 
+  it('retains the prior movement idle timer when a newer pose fails', () => {
+    const sourceController = createRemotePeerSource([peer()]);
+    const fake = fakeScene();
+    const layer = createRemoteAvatarLayer({ scene: fake.scene as never, source: sourceController.source });
+    const sprite = fake.objects[0]!;
+
+    sourceController.publish([peer({ x: 48, y: 72 })]);
+    const priorTimer = fake.timers[0]!;
+    const presentationError = new Error('newer pose failed');
+    sprite.setData.mockImplementationOnce(() => {
+      throw presentationError;
+    });
+
+    expect(() => sourceController.publish([peer({ x: 56, y: 72, sprite: 'avatar-2' })])).toThrow(presentationError);
+    expect(layer.peers.get('peer-1')).toEqual(peer({ x: 48, y: 72 }));
+
+    const frameCallsBeforeTimer = sprite.setFrame.mock.calls.length;
+    priorTimer.fire();
+    expect(sprite.setFrame).toHaveBeenCalledTimes(frameCallsBeforeTimer + 1);
+    expect(sprite.setFrame).toHaveBeenLastCalledWith(0);
+  });
+
   it('commits the newest snapshot after a source reenters during rendering', () => {
     const fake = fakeScene();
     let deliver!: (snapshot: readonly RemotePeerSnapshot[]) => void;

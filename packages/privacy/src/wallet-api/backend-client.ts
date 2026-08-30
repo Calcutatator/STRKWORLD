@@ -66,7 +66,7 @@ export class BackendPrivacyClient implements PoolReadClient, PrivateSubmissionGa
       || !isNonzeroFelt(feeToken)
       || typeof operationToken !== 'string'
       || !isNonzeroFelt(operationToken)
-      || (signal !== undefined && !(signal instanceof AbortSignal))
+      || (signal !== undefined && !isAbortSignal(signal))
     ) {
       throw new PrivacyError('unknown', 'The relay estimate request is invalid.');
     }
@@ -103,7 +103,7 @@ export class BackendPrivacyClient implements PoolReadClient, PrivateSubmissionGa
       || feeAuthorization.trim().length === 0
       || !Number.isSafeInteger(proofValidityBlocks)
       || (proofValidityBlocks as number) <= 0
-      || (signal !== undefined && !(signal instanceof AbortSignal))
+      || (signal !== undefined && !isAbortSignal(signal))
       || (onAccepted !== undefined && typeof onAccepted !== 'function')
     ) {
       throw new PrivacyError('unknown', 'The private submission request is invalid.');
@@ -151,7 +151,7 @@ export class BackendPrivacyClient implements PoolReadClient, PrivateSubmissionGa
       || minAmountOut <= 0n
       || !Number.isSafeInteger(slippageBps)
       || (slippageBps as number) <= 0
-      || (signal !== undefined && !(signal instanceof AbortSignal))
+      || (signal !== undefined && !isAbortSignal(signal))
     ) {
       throw new PrivacyError('unknown', 'The swap-prepare request is invalid.');
     }
@@ -335,6 +335,40 @@ function ownOptionalInputField(input: unknown, key: string): unknown {
   } catch {
     throw new PrivacyError('unknown', 'The private service request is invalid.');
   }
+}
+
+function isAbortSignal(value: unknown): value is AbortSignal {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return false;
+  try {
+    if (value instanceof AbortSignal) return true;
+    const prototype = Object.getPrototypeOf(value) as object | null;
+    if (prototype === null) return false;
+    const aborted = ownSignalMember(value, prototype, 'aborted');
+    const reason = ownSignalMember(value, prototype, 'reason');
+    const addEventListener = ownSignalMember(value, prototype, 'addEventListener');
+    const removeEventListener = ownSignalMember(value, prototype, 'removeEventListener');
+    return aborted.found && typeof aborted.value === 'boolean'
+      && reason.found && typeof addEventListener.value === 'function'
+      && typeof removeEventListener.value === 'function';
+  } catch {
+    return false;
+  }
+}
+
+function ownSignalMember(
+  value: object,
+  prototype: object,
+  key: PropertyKey,
+): { readonly found: boolean; readonly value: unknown } {
+  for (const current of [value, prototype]) {
+    const descriptor = Object.getOwnPropertyDescriptor(current, key);
+    if (descriptor) {
+      return 'value' in descriptor
+        ? { found: true, value: descriptor.value }
+        : { found: false, value: undefined };
+    }
+  }
+  return { found: false, value: undefined };
 }
 
 function ownResponseJson(response: Response): () => Promise<unknown> {

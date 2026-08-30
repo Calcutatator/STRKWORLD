@@ -298,7 +298,11 @@ function updateAvatar(
 ): void {
   const visual = avatar.visual;
   if (visual === undefined) return;
-  cancelIdle(avatar);
+  // Keep the last committed timer alive until the replacement presentation
+  // and its new timer have both succeeded. A failed update must leave the
+  // retained peer pose and its idle transition coherent.
+  const previousTimer = avatar.idleTimer;
+  let nextTimer: TimerEvent | undefined;
   const previousX = avatar.sprite.x;
   const previousY = avatar.sprite.y;
   try {
@@ -309,20 +313,31 @@ function updateAvatar(
       moving,
       sprinting: false,
     });
-    if (!moving) return;
-    const animation = resolveAvatarAnimation(peer.sprite, peer.facing, false);
-    const movementIdleMs = (animation.frames.length / animation.frameRate) * 1_000;
-    avatar.idleTimer = scene.time.delayedCall(movementIdleMs, () => {
-      avatar.idleTimer = undefined;
-      if (!isAlive()) return;
-      visual.present({
-        sprite: peer.sprite,
-        facing: peer.facing,
-        moving: false,
-        sprinting: false,
+    if (moving) {
+      const animation = resolveAvatarAnimation(peer.sprite, peer.facing, false);
+      const movementIdleMs = (animation.frames.length / animation.frameRate) * 1_000;
+      nextTimer = scene.time.delayedCall(movementIdleMs, () => {
+        avatar.idleTimer = undefined;
+        if (!isAlive()) return;
+        visual.present({
+          sprite: peer.sprite,
+          facing: peer.facing,
+          moving: false,
+          sprinting: false,
+        });
       });
-    });
+    }
+    previousTimer?.remove(false);
+    avatar.idleTimer = nextTimer;
   } catch (error) {
+    if (nextTimer) {
+      try {
+        nextTimer.remove(false);
+      } catch {
+        // Preserve the original presentation/timer error. The new timer was
+        // never published as the avatar's authoritative idle owner.
+      }
+    }
     // Position is part of the same presentation commit as the pose. A Phaser
     // setter may mutate coordinates before a later visual/timer operation
     // fails; retain the last-rendered snapshot by compensating only when the
@@ -340,11 +355,6 @@ function updateAvatar(
     }
     throw error;
   }
-}
-
-function cancelIdle(avatar: RemoteAvatar): void {
-  avatar.idleTimer?.remove(false);
-  avatar.idleTimer = undefined;
 }
 
 function destroyAvatar(avatar: RemoteAvatar): void {
