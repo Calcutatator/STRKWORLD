@@ -898,6 +898,7 @@ export function createStreetScene({ Phaser, onTileChanged, remotePeers }: Street
         if (this.lastTile === tile) this.lastTile = previousTile;
         throw error;
       }
+      if (this.cleanedUp) return;
       onTileChanged?.(tile);
     }
 

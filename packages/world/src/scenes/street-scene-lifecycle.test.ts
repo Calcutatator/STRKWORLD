@@ -421,6 +421,33 @@ describe('StreetScene lifecycle', () => {
     expect(harness.eventCount('player:moved')).toBe(movedBefore);
   });
 
+  it('does not call the tile observer after door delivery retires the Scene', () => {
+    let tileReports = 0;
+    const SceneType = createStreetScene({
+      Phaser: { Scene: FakeScene } as never,
+      onTileChanged: () => { tileReports += 1; },
+    });
+    const scene = new SceneType() as unknown as {
+      map: ReturnType<typeof createStreetMap>;
+      player: { x: number; y: number };
+      lastTile: { x: number; y: number };
+      doors: { update(tile: { x: number; y: number }): void };
+      cleanedUp: boolean;
+      reportTile(): void;
+      cleanShutdown(): void;
+    };
+    scene.map = createStreetMap();
+    scene.player = { x: 0, y: 0 };
+    scene.lastTile = { x: -1, y: -1 };
+    scene.cleanedUp = false;
+    scene.doors = {
+      update: () => scene.cleanShutdown(),
+    };
+
+    expect(() => scene.reportTile()).not.toThrow();
+    expect(tileReports).toBe(0);
+  });
+
   it('retries Avatar Studio entry after a failed transition on the same tile', () => {
     const harness = createWorldPlayHarness();
     harness.create();

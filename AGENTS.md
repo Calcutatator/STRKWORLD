@@ -258,6 +258,25 @@ empty shell to fetchers, so a 200 there means nothing.
 
 ## 6. Findings log
 
+### 2026-08-30 — Street tile observers must not outlive Scene ownership
+
+`StreetScene.reportTile()` delivered the door transition first and then called
+its injected `onTileChanged` observer without checking whether that synchronous
+door delivery had retired the Scene. A Shell listener can destroy the Scene
+while handling `building:entered` or another door event; the stale tile
+observer then ran after World ownership was gone and could update a retired
+movement/presence consumer.
+
+The Scene now rechecks its cleanup ownership after `doors.update()` and skips
+the external tile observer when the cycle was retired. Door rollback and the
+normal observer ordering are unchanged.
+
+*Verified:* a red-first public Scene regression supplied a door stub that
+retired the Scene synchronously; the old path called `onTileChanged` once and
+the corrected path calls it zero times. The focused StreetScene lifecycle
+suite passes 24/24 after the guard. No browser, wallet, provider, RPC, proof,
+signature, funds or transaction was used.
+
 ### 2026-08-30 — Lobby server must report an ephemeral bound port
 
 `startPresenceServer({ port: 0 })` asked Node for an ephemeral listener but
