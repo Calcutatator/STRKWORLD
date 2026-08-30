@@ -185,6 +185,25 @@ describe('doors come from a Tiled object layer, not hardcoded coordinates', () =
     expect(objectLayerToDoors(objects, DOOR_MAP_BOUNDS)).toEqual([]);
   });
 
+  it('fails closed for null and non-object entries or containers', () => {
+    expect(() => objectLayerToDoors([
+      null,
+      'not-an-object',
+      42,
+      tiledDoor(),
+    ] as never, DOOR_MAP_BOUNDS)).not.toThrow();
+    expect(objectLayerToDoors([
+      null,
+      'not-an-object',
+      42,
+      tiledDoor(),
+    ] as never, DOOR_MAP_BOUNDS)).toEqual([
+      { building: 'bank', x: 1, y: 2, width: 2, height: 1, locked: false },
+    ]);
+    expect(() => objectLayerToDoors(null as never, DOOR_MAP_BOUNDS)).not.toThrow();
+    expect(objectLayerToDoors(null as never, DOOR_MAP_BOUNDS)).toEqual([]);
+  });
+
   it('skips malformed or off-grid rectangle geometry instead of rounding it into a door', () => {
     const valid = tiledDoor();
     const malformed = [

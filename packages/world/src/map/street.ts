@@ -223,9 +223,11 @@ export function objectLayerToDoors(
   bounds: Pick<DistrictMap, 'width' | 'height'>,
 ): DoorZone[] {
   const doors: DoorZone[] = [];
+  if (!Array.isArray(objects)) return doors;
   if (!isValidMapBounds(bounds)) return doors;
 
   for (const obj of objects) {
+    if (obj === null || typeof obj !== 'object') continue;
     const props = flattenProperties(obj.properties);
     const building = props['building'];
     if (typeof building !== 'string' || !BUILDINGS.includes(building as BuildingId)) {
