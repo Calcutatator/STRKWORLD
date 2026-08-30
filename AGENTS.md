@@ -258,6 +258,25 @@ empty shell to fetchers, so a 200 there means nothing.
 
 ## 6. Findings log
 
+### 2026-08-30 — StreetScene restart cleanup survives shutdown-hook removal failure
+
+`StreetScene.retireWorldOwnership()` removed the previous cycle's Phaser
+shutdown hook before cleaning its owned resources. If the framework event
+surface threw while removing that hook, the method exited before cleanup and a
+defensive same-instance restart stranded the old player, controllers,
+listeners, and display objects.
+
+Restart retirement now records a hook-removal failure, still runs the complete
+idempotent World cleanup, and then rethrows the original failure. If both hook
+removal and cleanup fail, it reports an `AggregateError` after all cleanup
+attempts; a stale hook is harmless because cleanup marks the cycle retired.
+
+*Verified:* a red-first public StreetScene lifecycle regression makes shutdown
+hook removal throw during repeated `create()` and confirms the old cycle is
+fully destroyed while the exact removal error remains observable. Focused
+StreetScene tests pass. No browser, wallet, provider, RPC, proof, signature,
+funds or transaction was used.
+
 ### 2026-08-30 — Remote-avatar layer rolls back failed shutdown-hook registration
 
 `createRemoteAvatarLayer()` created its Phaser layer and then registered the

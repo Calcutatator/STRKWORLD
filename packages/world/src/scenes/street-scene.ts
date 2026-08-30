@@ -305,8 +305,34 @@ export function createStreetScene({ Phaser, onTileChanged, remotePeers }: Street
 
     private retireWorldOwnership(): void {
       if (this.cleanedUp) return;
-      this.events.off('shutdown', this.cleanShutdown, this);
-      this.cleanShutdown();
+      let detachError: unknown;
+      let detachFailed = false;
+      try {
+        this.events.off('shutdown', this.cleanShutdown, this);
+      } catch (error) {
+        // Cleanup remains mandatory even if the framework refuses to remove
+        // the old hook. The cleanup guard makes a later stale hook harmless.
+        detachFailed = true;
+        detachError = error;
+      }
+
+      let cleanupError: unknown;
+      let cleanupFailed = false;
+      try {
+        this.cleanShutdown();
+      } catch (error) {
+        cleanupFailed = true;
+        cleanupError = error;
+      }
+
+      if (detachFailed && cleanupFailed) {
+        throw new AggregateError(
+          [detachError, cleanupError],
+          'StreetScene restart cleanup failed',
+        );
+      }
+      if (detachFailed) throw detachError;
+      if (cleanupFailed) throw cleanupError;
     }
 
     // -- construction --------------------------------------------------------

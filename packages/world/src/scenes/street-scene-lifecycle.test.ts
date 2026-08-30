@@ -432,6 +432,19 @@ describe('StreetScene lifecycle', () => {
     expect(harness.eventCount('player:moved')).toBe(movedBefore);
   });
 
+  it('cleans the prior cycle when shutdown-hook removal fails during restart', () => {
+    const harness = createHarness();
+    harness.create();
+    const completed = harness.current;
+    const error = new Error('shutdown hook removal failed');
+    vi.spyOn(harness.scene.events, 'off').mockImplementationOnce(() => {
+      throw error;
+    });
+
+    expect(() => harness.create()).toThrow(error);
+    expectCompleteCleanup(completed);
+  });
+
   it('does not call the tile observer after door delivery retires the Scene', () => {
     let tileReports = 0;
     const SceneType = createStreetScene({
