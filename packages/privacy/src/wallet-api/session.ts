@@ -718,7 +718,7 @@ function validIntent(value: unknown): boolean {
       && amount && 'value' in amount && typeof amount.value === 'bigint' && amount.value > 0n
     );
   }
-  if (kind.value === 'transfer') {
+  if (kind.value === 'transfer' || kind.value === 'unshield') {
     const token = Object.getOwnPropertyDescriptor(value, 'token');
     const recipient = Object.getOwnPropertyDescriptor(value, 'recipient');
     const amount = Object.getOwnPropertyDescriptor(value, 'amount');

@@ -788,6 +788,23 @@ describe('WalletSession', () => {
     expect(discard).toHaveBeenCalledOnce();
   });
 
+  it('rejects a zero-recipient prepared unshield before publishing review', async () => {
+    const selected = wallet('Ready');
+    const discard = vi.fn();
+    const intents = [{ kind: 'unshield' as const, token: '0x1', amount: 1n, recipient: '0x0' }];
+    const connected = controllableConnection(
+      '0x111', operationsWithBatch({ ...batch(undefined, discard), intents }, '0.10.3'), new FakePrivacyOperations(),
+    );
+    const session = createWalletSession(
+      denyAllOptions(),
+      { discovery: discoveryWith(selected), connectWallet: async () => connected.port },
+    );
+    await session.connect(session.getSnapshot().wallets[0]!.key);
+
+    await expect(session.operations.prepare([])).rejects.toMatchObject({ kind: 'unknown' });
+    expect(discard).toHaveBeenCalledOnce();
+  });
+
   it('owns prepared warnings before publishing them through the session facade', async () => {
     const selected = wallet('Ready');
     const warnings = [{ kind: 'multiple-prompts' as const, count: 2 }];
