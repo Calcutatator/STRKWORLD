@@ -1799,6 +1799,19 @@ describe('BridgeService', () => {
 });
 
 describe('source registry and refund validation', () => {
+  it('rejects an unsupported source chain before requesting a quote', async () => {
+    const client = new StubClient();
+    const service = new BridgeService({ client, store: new MemoryBridgeStore(), quoteVerifier: () => true, now: () => NOW });
+
+    await expect(service.createManualDeposit({
+      source: { ...SOURCE, chainName: 'not-a-supported-chain' as never },
+      amountIn: 1_000_000n,
+      starknetRecipient: '0x123',
+      refundAddress: request.refundTo,
+    })).rejects.toThrow('Unsupported source chain.');
+    expect(client.quoteRequests).toHaveLength(0);
+  });
+
   it('falls back when the live token registry has a malformed response shape', async () => {
     await expect(loadSourceAssets({
       getTokens: async () => null as never,

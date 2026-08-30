@@ -97,6 +97,8 @@ export function validateSourceAddress(chain: SourceChain, raw: string): AddressC
       return new RegExp(`^T${BASE58}{33}$`).test(address)
         ? { ok: true }
         : { ok: false, hint: 'Enter a 34-character Tron T-address.' };
+    default:
+      return { ok: false, hint: 'Unsupported source chain.' };
   }
 }
 
