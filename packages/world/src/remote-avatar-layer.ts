@@ -188,7 +188,18 @@ export function createRemoteAvatarLayer({
 
   // Scene shutdown is the lifecycle authority. `destroy()` is also exposed
   // for deterministic teardown and is idempotent when both paths run.
-  scene.events.once('shutdown', destroy);
+  try {
+    scene.events.once('shutdown', destroy);
+  } catch (error) {
+    // The layer was created before the Scene lifecycle hook. If registration
+    // fails, retire the layer immediately while preserving that setup error.
+    try {
+      destroy();
+    } catch {
+      // Preserve the original lifecycle-registration failure.
+    }
+    throw error;
+  }
 
   // The layer exists before subscribe, so a synchronous replay is safe. The
   // shutdown listener is installed first because replay can run arbitrary

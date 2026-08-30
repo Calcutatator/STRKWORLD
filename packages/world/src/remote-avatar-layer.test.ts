@@ -132,6 +132,17 @@ describe('remote avatar layer', () => {
     expect(fake.layer.destroy).toHaveBeenCalledOnce();
   });
 
+  it('destroys the layer when shutdown-listener registration fails', () => {
+    const fake = fakeScene();
+    const error = new Error('shutdown listener setup failed');
+    fake.scene.events.once.mockImplementation(() => {
+      throw error;
+    });
+
+    expect(() => createRemoteAvatarLayer({ scene: fake.scene as never })).toThrow(error);
+    expect(fake.layer.destroy).toHaveBeenCalledOnce();
+  });
+
   it('renders a validated final sheet on a non-physics sprite at the semantic feet anchor', () => {
     const sourceController = createRemotePeerSource([
       peer({ facing: 'right', sprite: 'avatar-7' }),

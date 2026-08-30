@@ -258,6 +258,23 @@ empty shell to fetchers, so a 200 there means nothing.
 
 ## 6. Findings log
 
+### 2026-08-30 — Remote-avatar layer rolls back failed shutdown-hook registration
+
+`createRemoteAvatarLayer()` created its Phaser layer and then registered the
+Scene shutdown hook. If the injected Scene event surface threw synchronously,
+construction failed before a `RemoteAvatarLayer` handle was returned, leaving
+the display-list layer orphaned with no way for the caller to destroy it.
+
+The factory now treats the layer as owned while installing the lifecycle hook.
+Registration failure immediately attempts layer teardown, preserves the
+original registration error, and leaves normal shutdown, source subscription,
+avatar ownership, and idempotent destruction unchanged.
+
+*Verified:* a red-first public World regression injects a throwing shutdown
+listener registration and confirms the exact error is preserved while the
+created layer is destroyed once. Focused remote-avatar tests pass. No browser,
+wallet, provider, RPC, proof, signature, funds or transaction was used.
+
 ### 2026-08-30 — Lobby resume uses the server's bounded placement policy
 
 `LobbyClient.resume()` validated that coordinates were finite and rounded them,
