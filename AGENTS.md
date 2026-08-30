@@ -278,6 +278,27 @@ original error. Removing the queue-drain error handling restores the failure.
 No browser, lobby, wallet, provider, RPC, proof, signature, funds or
 transaction was used.
 
+### 2026-08-30 — Pool configuration is owned at every authority read
+
+Pool configuration validation read provider properties normally and then
+spread the same object. Inherited data could be accepted but disappear from
+the published snapshot, accessors could execute and be misclassified as a
+network failure, and shield/private/swap confirmation used fresh pool results
+without validating them before fee checks or wallet handoff.
+
+One decoder now requires exactly four own data properties, validates their
+felt, u256 and integer semantics, and returns a frozen snapshot. Public reads
+and every confirmation-time refresh use that owned result before fee
+comparison, relay estimation, swap revalidation or wallet authority.
+
+*Verified:* public regressions were red for inherited and accessor-backed
+configuration and for malformed live shield, transfer and swap refreshes. All
+now fail before wallet/submission handoff, while the existing immutable
+snapshot regression remains green. The focused Wallet API suite passes 175
+tests and privacy typecheck. Full workspace verification is recorded with the
+owning commit. Deterministic fakes only: no browser, wallet, provider, RPC,
+proof, signature, funds or transaction was used.*
+
 ### 2026-08-30 — Confirmation fee ceilings are u256-bounded authority
 
 Confirmation accepted any nonnegative bigint fee ceiling. A value above

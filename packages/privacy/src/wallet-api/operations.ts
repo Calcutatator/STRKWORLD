@@ -91,8 +91,7 @@ export class WalletApiPrivacyOperations implements PrivacyOperations {
     try {
       const config = await this.pool.config(signal);
       throwIfAborted(signal);
-      validatePoolConfig(config);
-      return Object.freeze({ ...config });
+      return ownPoolConfig(config);
     } catch (error) {
       throw mapWalletError(error);
     }
@@ -266,7 +265,7 @@ export class WalletApiPrivacyOperations implements PrivacyOperations {
         throwIfAborted(confirmSignal);
         let acceptedResult: TxResult | undefined;
         try {
-          const current = await owner.pool.config(confirmSignal);
+          const current = ownPoolConfig(await owner.pool.config(confirmSignal));
           throwIfAborted(confirmSignal);
           owner.validateSwapPlan(canonicalIntent, current, plan, swapPolicy.expectedChainId);
           assertFeeCeiling(checkedFeeTotal(current.feeAmount, plan.fee.amount), feeCeiling);
@@ -402,7 +401,7 @@ export class WalletApiPrivacyOperations implements PrivacyOperations {
         confirmationAttempted = true;
         throwIfAborted(signal);
         try {
-          const current = await pool.config(signal);
+          const current = ownPoolConfig(await pool.config(signal));
           throwIfAborted(signal);
           assertFeeCeiling(current.feeAmount, feeCeiling);
           assertNotDiscarded(discarded);
@@ -451,7 +450,7 @@ export class WalletApiPrivacyOperations implements PrivacyOperations {
         throwIfAborted(signal);
         let acceptedResult: TxResult | undefined;
         try {
-          const current = await owner.pool.config(signal);
+          const current = ownPoolConfig(await owner.pool.config(signal));
           throwIfAborted(signal);
           const relayFee = await owner.estimateRelay(route, operationToken, current, signal);
           assertFeeCeiling(checkedFeeTotal(current.feeAmount, relayFee.amount), feeCeiling);
@@ -886,9 +885,14 @@ function assertAddress(address: string, label: string): void {
   }
 }
 
-function validatePoolConfig(config: PoolConfig): void {
+function ownPoolConfig(value: unknown): PoolConfig {
+  if (!hasOwnDataProperties(value, ['feeAmount', 'feeToken', 'proofValidityBlocks', 'noteMaturityBlocks'])) {
+    throw new PrivacyError('unknown', 'The pool returned an invalid configuration.');
+  }
+  const config = value as PoolConfig;
   if (
-    typeof config?.feeAmount !== 'bigint'
+    Reflect.ownKeys(config).length !== 4
+    || typeof config.feeAmount !== 'bigint'
     || config.feeAmount < 0n
     || config.feeAmount > MAX_UINT256
     || typeof config.feeToken !== 'string'
@@ -901,6 +905,12 @@ function validatePoolConfig(config: PoolConfig): void {
   ) {
     throw new PrivacyError('unknown', 'The pool returned an invalid configuration.');
   }
+  return Object.freeze({
+    feeAmount: config.feeAmount,
+    feeToken: config.feeToken,
+    proofValidityBlocks: config.proofValidityBlocks,
+    noteMaturityBlocks: config.noteMaturityBlocks,
+  });
 }
 
 function checkedFeeTotal(poolFee: bigint, relayFee: bigint): bigint {

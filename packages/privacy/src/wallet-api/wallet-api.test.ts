@@ -293,6 +293,59 @@ describe('WalletApiPrivacyOperations capability and reads', () => {
   });
 
   it.each([
+    ['inherited fields', Object.assign(Object.create({
+      feeAmount: POOL_FEE, feeToken: STRK, proofValidityBlocks: 450, noteMaturityBlocks: 10,
+    }), {})],
+    ['accessor fields', Object.defineProperty({
+      feeToken: STRK, proofValidityBlocks: 450, noteMaturityBlocks: 10,
+    }, 'feeAmount', { enumerable: true, get() { throw new Error('must not run'); } })],
+  ])('rejects pool config with %s without publishing it', async (_label, response) => {
+    const { ops, pool } = fixture();
+    vi.spyOn(pool, 'config').mockResolvedValue(response as never);
+
+    await expect(ops.poolConfig()).rejects.toMatchObject({ kind: 'unknown' });
+  });
+
+  it.each(['shield', 'transfer', 'swap'] as const)(
+    'rejects malformed live %s config before confirmation authority',
+    async (route) => {
+      let { ops, pool, wallet, gateway } = fixture();
+      const intent: Intent = route === 'shield'
+        ? { kind: 'shield', token: TOKEN, amount: 1n }
+        : route === 'transfer'
+          ? { kind: 'transfer', token: TOKEN, amount: 1n, recipient: BOB }
+          : { kind: 'swap', tokenIn: TOKEN, tokenOut: STRK, amountIn: 1n, minAmountOut: 1n };
+      if (route === 'swap') {
+        gateway.prepareSwap = vi.fn(async () => ({
+          quoteId: 'quote-1', buyAmount: 2n, expiresAt: 2_000,
+          chainId: '0x534e5f4d41494e', executorAddress: '0x999',
+          executorCalls: [{ contractAddress: '0x111', entrypoint: 'swap', calldata: ['0xaaa'] }],
+          fee: { token: STRK, recipient: FEE_RECIPIENT, amount: 1n, ...AUTH },
+        }));
+        ops = new WalletApiPrivacyOperations({
+          wallet, pool, submission: gateway, supportedVersions: async () => ['0.10.3'], now: () => 1_000,
+          policy: {
+            maxIntents: 1, maxRelayFee: 10n, enabledRoutes: ['swap'],
+            allowedTokens: { shield: [], unshield: [], transfer: [], swap: [TOKEN, STRK] },
+            swap: { expectedChainId: '0x534e5f4d41494e', slippageBps: 100 },
+          },
+        });
+      }
+      const batch = await ops.prepare([intent]);
+      vi.spyOn(pool, 'config').mockResolvedValue({
+        feeAmount: POOL_FEE, feeToken: STRK, proofValidityBlocks: 0, noteMaturityBlocks: 10,
+      });
+      const invoke = vi.spyOn(wallet, 'strk20InvokeTransaction');
+      const prepare = vi.spyOn(wallet, 'strk20PrepareInvoke');
+
+      await expect(batch.confirm({ feeCeiling: POOL_FEE + 1n })).rejects.toMatchObject({ kind: 'unknown' });
+      expect(invoke).not.toHaveBeenCalled();
+      expect(prepare).not.toHaveBeenCalled();
+      expect(gateway.submit).not.toHaveBeenCalled();
+    },
+  );
+
+  it.each([
     ['negative fee', { feeAmount: -1n }],
     ['fee above u256', { feeAmount: MAX_UINT256 + 1n }],
     ['number fee', { feeAmount: 1 }],
