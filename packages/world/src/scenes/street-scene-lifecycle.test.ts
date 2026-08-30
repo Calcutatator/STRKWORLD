@@ -404,6 +404,33 @@ describe('StreetScene lifecycle', () => {
     expect(harness.eventCount('player:moved')).toBe(movedBefore);
   });
 
+  it('retries Avatar Studio entry after a failed transition on the same tile', () => {
+    const harness = createWorldPlayHarness();
+    harness.create();
+    const error = new Error('studio entry failed');
+    const enter = vi.spyOn(harness.scene.avatarStudio, 'enter')
+      .mockImplementationOnce(() => { throw error; });
+    const player = harness.scene.player as { x: number; y: number };
+    player.x = 23 * 32 + 16;
+    player.y = 27 * 32 + 16;
+    harness.scene.cursors = {
+      left: { isDown: false },
+      right: { isDown: false },
+      up: { isDown: false },
+      down: { isDown: false },
+      shift: { isDown: false },
+    };
+
+    expect(() => harness.scene.update(0, 16)).toThrow(error);
+    expect(enter).toHaveBeenCalledOnce();
+    expect(harness.scene.avatarStudio.state.inRoom).toBe(false);
+
+    expect(() => harness.scene.update(0, 16)).not.toThrow();
+    expect(enter).toHaveBeenCalledTimes(2);
+    expect(harness.scene.avatarStudio.state.inRoom).toBe(true);
+    harness.shutdown();
+  });
+
   it('rebinds the outfit toggle through the production create order on a restart', () => {
     // The ordering under test lives in create() itself: the Scene must make its
     // selection *before* it builds the Studio. Stubbing create() would hide a

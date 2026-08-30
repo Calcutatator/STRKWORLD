@@ -848,11 +848,16 @@ export function createStreetScene({ Phaser, onTileChanged, remotePeers }: Street
     private reportTile(): void {
       const tile = worldToTile(this.player.x, this.player.y);
       if (tile.x === this.lastTile.x && tile.y === this.lastTile.y) return;
-      this.lastTile = tile;
       if (!this.avatarStudioActive && isAvatarStudioEntrance(this.map, tile.x, tile.y)) {
         this.avatarStudio?.enter();
+        // Avatar Studio entry is an external lifecycle boundary. Commit the
+        // tile only after the transition succeeds so a failed entry can retry
+        // while the player remains on the entrance.
+        if (this.cleanedUp) return;
+        this.lastTile = tile;
         return;
       }
+      this.lastTile = tile;
       this.doors.update(tile);
       onTileChanged?.(tile);
     }
