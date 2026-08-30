@@ -258,6 +258,26 @@ empty shell to fetchers, so a 200 there means nothing.
 
 ## 6. Findings log
 
+### 2026-08-30 — Avatar Studio exit state publication must remain retryable
+
+`createAvatarStudioController.leave()` relinquished Studio ownership and
+completed the presentation exit before publishing its outside state. If the
+synchronous `onChange` consumer rejected that outside snapshot, the controller
+stayed outside even though the exit transition had not been accepted; a later
+exit update was then a no-op and could not complete the handoff.
+
+Exit publication now compensates the presentation and restores the prior
+Studio ownership and highlight when delivery fails, preserving the original
+error. Reentrant destruction or a newer transition remains authoritative, and
+successful exit ordering is unchanged.
+
+*Verified:* a red-first public World regression makes the first outside Studio
+state publication throw, then retries the same exit tile. The old controller
+remains outside and invokes no second exit; the corrected controller restores
+Studio ownership, compensates entry, and completes the second exit. The
+focused Avatar Studio suite passes 48 tests. No browser, lobby service,
+wallet, provider, RPC, proof, signature, funds or transaction was used.
+
 ### 2026-08-30 — Input-gate handoffs must honor reentrant desired state
 
 `createInputGate()` ignored a `resume()` called synchronously during a suspend

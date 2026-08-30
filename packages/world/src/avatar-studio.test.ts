@@ -83,6 +83,38 @@ describe('hidden Avatar Studio', () => {
     expect(onExit).toHaveBeenCalledTimes(2);
   });
 
+  it('rolls back ownership when exit state publication fails so it can retry', () => {
+    const announcementError = new Error('studio exit state publication failed');
+    let shouldThrow = true;
+    const out: Pick<EventBus<WorldEvents>, 'emit'> = { emit: vi.fn() };
+    const onEnter = vi.fn();
+    const onExit = vi.fn();
+    const onChange = vi.fn((state: AvatarStudioState) => {
+      if (!state.inRoom && shouldThrow) {
+        shouldThrow = false;
+        throw announcementError;
+      }
+    });
+    const controller = createAvatarStudioController({
+      out,
+      selection: createAvatarOutfitSelection({ out }),
+      onEnter,
+      onExit,
+      onChange,
+    });
+
+    controller.enter();
+    const exit = AVATAR_STUDIO_DEFINITION.exit;
+    expect(() => controller.update({ x: exit.x, y: exit.y })).toThrow(announcementError);
+    expect(controller.state.inRoom).toBe(true);
+    expect(onEnter).toHaveBeenCalledTimes(2);
+
+    expect(() => controller.update({ x: exit.x, y: exit.y })).not.toThrow();
+    expect(controller.state.inRoom).toBe(false);
+    expect(onExit).toHaveBeenCalledTimes(2);
+    expect(out.emit).toHaveBeenCalledWith('avatar-studio:exited', {});
+  });
+
   it('owns injected presentation geometry after construction', () => {
     const studioBounds = { x: 64, y: 64, width: 576, height: 384 };
     const studioSpawn = { x: 368, y: 112 };
