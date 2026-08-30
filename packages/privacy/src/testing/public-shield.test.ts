@@ -32,6 +32,22 @@ describe('FakePublicShieldPlanner', () => {
     });
   });
 
+  it('publishes an immutable public shield plan', async () => {
+    const planner = new FakePublicShieldPlanner({
+      token: STRK,
+      recipient: '0xabc',
+      poolFee: 3n,
+      gasEstimate: 1n,
+    });
+
+    const plan = await planner.planMax(input(100n));
+
+    expect(Object.isFrozen(plan)).toBe(true);
+    expect(Reflect.set(plan, 'amountToShield', 100n)).toBe(false);
+    expect(plan.amountToShield).toBe(96n);
+    expect(plan.plannedReserve).toBe(4n);
+  });
+
   it('fails closed for abort, account mismatch, non-positive remainder and invalid token', async () => {
     const planner = new FakePublicShieldPlanner({ token: STRK, recipient: '0xabc', poolFee: 3n, gasEstimate: 1n });
     const controller = new AbortController();
@@ -60,6 +76,22 @@ describe('FakePublicShieldPlanner', () => {
       gasEstimate: 1n,
     });
     await expect(planner.planMax(input((1n << 256n) - 1n))).rejects.toMatchObject({ kind: 'unknown' });
+  });
+
+  it('does not consume the next estimate when a plan is rejected', async () => {
+    const planner = new FakePublicShieldPlanner({
+      token: STRK,
+      recipient: '0xabc',
+      poolFee: 3n,
+      gasEstimate: [1n, 2n],
+    });
+
+    await expect(planner.planMax(input(4n))).rejects.toMatchObject({ kind: 'unknown' });
+    await expect(planner.planMax(input(100n))).resolves.toMatchObject({
+      gasEstimate: 1n,
+      plannedReserve: 4n,
+      amountToShield: 96n,
+    });
   });
 
   it('accepts a zero pool fee while requiring a positive gas reserve', async () => {

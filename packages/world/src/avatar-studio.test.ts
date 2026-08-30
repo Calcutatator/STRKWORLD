@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import type { AvatarSpriteKey, EventBus, WorldEvents } from '@strkworld/shared';
 import { createAvatarOutfitSelection } from './avatar-outfit.js';
 import {
@@ -12,6 +12,7 @@ import {
   isAvatarStudioSolidAt,
   type AvatarStudioDefinition,
   type AvatarStudioFigure,
+  type AvatarStudioState,
   type AvatarStudioPresentationPort,
   validateAvatarStudioDefinition,
 } from './avatar-studio.js';
@@ -20,6 +21,446 @@ import { createStreetMap, tileToWorld } from './map/street.js';
 type Emitted = { [K in keyof WorldEvents]: { event: K; payload: WorldEvents[K] } }[keyof WorldEvents];
 
 describe('hidden Avatar Studio', () => {
+  it('rolls back studio ownership when enter presentation fails', () => {
+    const out: Pick<EventBus<WorldEvents>, 'emit'> = { emit: vi.fn() };
+    const selection = createAvatarOutfitSelection({ out });
+    const error = new Error('studio presentation failed');
+    const onEnter = vi.fn().mockImplementationOnce(() => { throw error; });
+    const controller = createAvatarStudioController({ out, selection, onEnter });
+
+    expect(() => controller.enter()).toThrow(error);
+    expect(controller.state.inRoom).toBe(false);
+    expect(controller.state.highlightedFigure).toBeNull();
+
+    expect(() => controller.enter()).not.toThrow();
+    expect(controller.state.inRoom).toBe(true);
+    expect(onEnter).toHaveBeenCalledTimes(2);
+  });
+
+  it('rolls back and permits retry when entry announcement fails', () => {
+    const announcementError = new Error('studio entry announcement failed');
+    let shouldThrow = true;
+    const out: Pick<EventBus<WorldEvents>, 'emit'> = {
+      emit: vi.fn((event) => {
+        if (event === 'avatar-studio:entered' && shouldThrow) {
+          shouldThrow = false;
+          throw announcementError;
+        }
+      }),
+    };
+    const onExit = vi.fn();
+    const controller = createAvatarStudioController({
+      out,
+      selection: createAvatarOutfitSelection({ out }),
+      onExit,
+    });
+
+    expect(() => controller.enter()).toThrow(announcementError);
+    expect(controller.state.inRoom).toBe(false);
+    expect(onExit).toHaveBeenCalledTimes(1);
+
+    expect(() => controller.enter()).not.toThrow();
+    expect(controller.state.inRoom).toBe(true);
+  });
+
+  it('keeps studio ownership when exit presentation fails so it can retry', () => {
+    const out: Pick<EventBus<WorldEvents>, 'emit'> = { emit: vi.fn() };
+    const error = new Error('studio exit presentation failed');
+    const onExit = vi.fn().mockImplementationOnce(() => { throw error; });
+    const controller = createAvatarStudioController({
+      out,
+      selection: createAvatarOutfitSelection({ out }),
+      onExit,
+    });
+
+    controller.enter();
+    const exit = AVATAR_STUDIO_DEFINITION.exit;
+    expect(() => controller.update({ x: exit.x, y: exit.y })).toThrow(error);
+    expect(controller.state.inRoom).toBe(true);
+
+    expect(() => controller.update({ x: exit.x, y: exit.y })).not.toThrow();
+    expect(controller.state.inRoom).toBe(false);
+    expect(onExit).toHaveBeenCalledTimes(2);
+  });
+
+  it('owns injected presentation geometry after construction', () => {
+    const studioBounds = { x: 64, y: 64, width: 576, height: 384 };
+    const studioSpawn = { x: 368, y: 112 };
+    const setWorldBounds = vi.fn();
+    const setPlayerPosition = vi.fn();
+    const noop = vi.fn();
+    const presentation = createAvatarStudioPresentation({
+      port: {
+        setPlayerVelocity: noop,
+        setBodyEnabled: noop,
+        setGroundVisible: noop,
+        setDoorsVisible: noop,
+        setRemoteVisible: noop,
+        setLabelsVisible: noop,
+        setRoomVisible: noop,
+        setStudioVisible: noop,
+        setWorldBounds,
+        setCameraBounds: noop,
+        setPlayerPosition,
+        resetDoors: noop,
+        resumeStreet: noop,
+        destroyStudio: noop,
+      },
+      streetBounds: { x: 0, y: 0, width: 1_536, height: 896 },
+      studioBounds,
+      studioSpawn,
+      streetReturn: { x: 784, y: 496 },
+      reportStreet: noop,
+    });
+
+    Reflect.set(studioBounds, 'width', 1);
+    Reflect.set(studioSpawn, 'x', 1);
+    presentation.enter();
+
+    expect(setWorldBounds).toHaveBeenCalledWith({ x: 64, y: 64, width: 576, height: 384 });
+    expect(setPlayerPosition).toHaveBeenCalledWith({ x: 368, y: 112 });
+  });
+
+  it('restores the street presentation when Studio entry fails mid-handoff', () => {
+    const streetBounds = { x: 0, y: 0, width: 1_536, height: 896 };
+    const studioBounds = { x: 64, y: 64, width: 576, height: 384 };
+    const studioSpawn = { x: 368, y: 112 };
+    const streetReturn = { x: 784, y: 496 };
+    const state = {
+      bodyEnabled: true,
+      groundVisible: true,
+      doorsVisible: true,
+      remoteVisible: true,
+      labelsVisible: true,
+      roomVisible: false,
+      studioVisible: false,
+      worldBounds: streetBounds,
+      cameraBounds: streetBounds,
+      playerPosition: streetReturn,
+    };
+    let failWorldBounds = true;
+    const presentation = createAvatarStudioPresentation({
+      port: {
+        setPlayerVelocity: vi.fn(),
+        setBodyEnabled: (enabled) => { state.bodyEnabled = enabled; },
+        setGroundVisible: (visible) => { state.groundVisible = visible; },
+        setDoorsVisible: (visible) => { state.doorsVisible = visible; },
+        setRemoteVisible: (visible) => { state.remoteVisible = visible; },
+        setLabelsVisible: (visible) => { state.labelsVisible = visible; },
+        setRoomVisible: (visible) => { state.roomVisible = visible; },
+        setStudioVisible: (visible) => { state.studioVisible = visible; },
+        setWorldBounds: (bounds) => {
+          if (failWorldBounds) {
+            failWorldBounds = false;
+            throw new Error('Studio bounds failed');
+          }
+          state.worldBounds = bounds;
+        },
+        setCameraBounds: (bounds) => { state.cameraBounds = bounds; },
+        setPlayerPosition: (position) => { state.playerPosition = position; },
+        resetDoors: vi.fn(),
+        resumeStreet: vi.fn(),
+        destroyStudio: vi.fn(),
+      },
+      streetBounds,
+      studioBounds,
+      studioSpawn,
+      streetReturn,
+      reportStreet: vi.fn(),
+    });
+
+    expect(() => presentation.enter()).toThrow('Studio bounds failed');
+    expect(state).toEqual({
+      bodyEnabled: true,
+      groundVisible: true,
+      doorsVisible: true,
+      remoteVisible: true,
+      labelsVisible: true,
+      roomVisible: false,
+      studioVisible: false,
+      worldBounds: streetBounds,
+      cameraBounds: streetBounds,
+      playerPosition: streetReturn,
+    });
+
+    expect(() => presentation.enter()).not.toThrow();
+    expect(state.bodyEnabled).toBe(false);
+    expect(state.studioVisible).toBe(true);
+    expect(state.worldBounds).toEqual(studioBounds);
+    expect(state.playerPosition).toEqual(studioSpawn);
+  });
+
+  it('does not let failed-entry rollback overwrite a reentrant retry', () => {
+    const streetBounds = { x: 0, y: 0, width: 10, height: 10 };
+    const studioBounds = { x: 1, y: 1, width: 10, height: 10 };
+    const studioSpawn = { x: 5, y: 5 };
+    const streetReturn = { x: 2, y: 2 };
+    const setWorldBounds = vi.fn();
+    const setPlayerPosition = vi.fn();
+    const error = new Error('Studio bounds failed');
+    let presentation!: ReturnType<typeof createAvatarStudioPresentation>;
+    let failEntry = true;
+    let retryFromRollback = false;
+    presentation = createAvatarStudioPresentation({
+      port: {
+        setPlayerVelocity: vi.fn(() => {
+          if (retryFromRollback) {
+            retryFromRollback = false;
+            presentation.enter();
+          }
+        }),
+        setBodyEnabled: vi.fn(),
+        setGroundVisible: vi.fn(),
+        setDoorsVisible: vi.fn(),
+        setRemoteVisible: vi.fn(),
+        setLabelsVisible: vi.fn(),
+        setRoomVisible: vi.fn(),
+        setStudioVisible: vi.fn(),
+        setWorldBounds: vi.fn((bounds) => {
+          setWorldBounds(bounds);
+          if (failEntry) {
+            failEntry = false;
+            retryFromRollback = true;
+            throw error;
+          }
+        }),
+        setCameraBounds: vi.fn(),
+        setPlayerPosition: vi.fn((position) => setPlayerPosition(position)),
+        resetDoors: vi.fn(),
+        resumeStreet: vi.fn(),
+        destroyStudio: vi.fn(),
+      },
+      streetBounds,
+      studioBounds,
+      studioSpawn,
+      streetReturn,
+      reportStreet: vi.fn(),
+    });
+
+    expect(() => presentation.enter()).toThrow(error);
+    expect(setWorldBounds).toHaveBeenLastCalledWith(studioBounds);
+    expect(setPlayerPosition).toHaveBeenLastCalledWith(studioSpawn);
+  });
+
+  it('retries presentation cleanup after a failed destroy', () => {
+    const cleanupError = new Error('studio cleanup failed');
+    const destroyStudio = vi.fn().mockImplementationOnce(() => { throw cleanupError; });
+    const noop = vi.fn();
+    const presentation = createAvatarStudioPresentation({
+      port: {
+        setPlayerVelocity: noop,
+        setBodyEnabled: noop,
+        setGroundVisible: noop,
+        setDoorsVisible: noop,
+        setRemoteVisible: noop,
+        setLabelsVisible: noop,
+        setRoomVisible: noop,
+        setStudioVisible: noop,
+        setWorldBounds: noop,
+        setCameraBounds: noop,
+        setPlayerPosition: noop,
+        resetDoors: noop,
+        resumeStreet: noop,
+        destroyStudio,
+      },
+      streetBounds: { x: 0, y: 0, width: 10, height: 10 },
+      studioBounds: { x: 1, y: 1, width: 10, height: 10 },
+      studioSpawn: { x: 5, y: 5 },
+      streetReturn: { x: 2, y: 2 },
+      reportStreet: noop,
+    });
+
+    expect(() => presentation.destroy()).toThrow(cleanupError);
+    expect(() => presentation.destroy()).not.toThrow();
+    expect(destroyStudio).toHaveBeenCalledTimes(2);
+  });
+
+  it('does not start a new transition while destroy cleanup is pending', () => {
+    const cleanupError = new Error('studio cleanup failed');
+    const destroyStudio = vi.fn().mockImplementationOnce(() => { throw cleanupError; });
+    const setPlayerVelocity = vi.fn();
+    const presentation = createAvatarStudioPresentation({
+      port: {
+        setPlayerVelocity,
+        setBodyEnabled: vi.fn(),
+        setGroundVisible: vi.fn(),
+        setDoorsVisible: vi.fn(),
+        setRemoteVisible: vi.fn(),
+        setLabelsVisible: vi.fn(),
+        setRoomVisible: vi.fn(),
+        setStudioVisible: vi.fn(),
+        setWorldBounds: vi.fn(),
+        setCameraBounds: vi.fn(),
+        setPlayerPosition: vi.fn(),
+        resetDoors: vi.fn(),
+        resumeStreet: vi.fn(),
+        destroyStudio,
+      },
+      streetBounds: { x: 0, y: 0, width: 10, height: 10 },
+      studioBounds: { x: 1, y: 1, width: 10, height: 10 },
+      studioSpawn: { x: 5, y: 5 },
+      streetReturn: { x: 2, y: 2 },
+      reportStreet: vi.fn(),
+    });
+
+    expect(() => presentation.destroy()).toThrow(cleanupError);
+    presentation.enter();
+
+    expect(setPlayerVelocity).not.toHaveBeenCalled();
+    expect(() => presentation.destroy()).not.toThrow();
+    expect(destroyStudio).toHaveBeenCalledTimes(2);
+  });
+
+  it('does not start a transition reentrantly while destroy is in flight', () => {
+    const build = (transition: 'enter' | 'exit') => {
+      let presentation!: ReturnType<typeof createAvatarStudioPresentation>;
+      const calls = {
+        setPlayerVelocity: vi.fn(),
+        setBodyEnabled: vi.fn(),
+        setGroundVisible: vi.fn(),
+        setDoorsVisible: vi.fn(),
+        setRemoteVisible: vi.fn(),
+        setLabelsVisible: vi.fn(),
+        setRoomVisible: vi.fn(),
+        setStudioVisible: vi.fn(),
+        setWorldBounds: vi.fn(),
+        setCameraBounds: vi.fn(),
+        setPlayerPosition: vi.fn(),
+        resetDoors: vi.fn(),
+        resumeStreet: vi.fn(),
+      };
+      presentation = createAvatarStudioPresentation({
+        port: {
+          ...calls,
+          destroyStudio: vi.fn(() => presentation[transition]()),
+        },
+        streetBounds: { x: 0, y: 0, width: 10, height: 10 },
+        studioBounds: { x: 1, y: 1, width: 10, height: 10 },
+        studioSpawn: { x: 5, y: 5 },
+        streetReturn: { x: 2, y: 2 },
+        reportStreet: vi.fn(),
+      });
+      return { presentation, calls };
+    };
+
+    for (const transition of ['enter', 'exit'] as const) {
+      const { presentation, calls } = build(transition);
+      presentation.destroy();
+      for (const call of Object.values(calls)) expect(call).not.toHaveBeenCalled();
+    }
+  });
+
+  it('stops a stale enter continuation when exit starts during presentation', () => {
+    let presentation!: ReturnType<typeof createAvatarStudioPresentation>;
+    const streetBounds = { x: 0, y: 0, width: 10, height: 10 };
+    const studioBounds = { x: 1, y: 1, width: 10, height: 10 };
+    const streetReturn = { x: 2, y: 2 };
+    const setWorldBounds = vi.fn();
+    const setPlayerPosition = vi.fn();
+    presentation = createAvatarStudioPresentation({
+      port: {
+        setPlayerVelocity: vi.fn(),
+        setBodyEnabled: vi.fn(),
+        setGroundVisible: vi.fn(),
+        setDoorsVisible: vi.fn(),
+        setRemoteVisible: vi.fn(),
+        setLabelsVisible: vi.fn(),
+        setRoomVisible: vi.fn(),
+        setStudioVisible: vi.fn((visible) => {
+          if (visible) presentation.exit();
+        }),
+        setWorldBounds,
+        setCameraBounds: vi.fn(),
+        setPlayerPosition,
+        resetDoors: vi.fn(),
+        resumeStreet: vi.fn(),
+        destroyStudio: vi.fn(),
+      },
+      streetBounds,
+      studioBounds,
+      studioSpawn: { x: 5, y: 5 },
+      streetReturn,
+      reportStreet: vi.fn(),
+    });
+
+    presentation.enter();
+
+    expect(setWorldBounds).toHaveBeenLastCalledWith(streetBounds);
+    expect(setWorldBounds).not.toHaveBeenLastCalledWith(studioBounds);
+    expect(setPlayerPosition).toHaveBeenLastCalledWith(streetReturn);
+  });
+
+  it('retries controller-owned presentation cleanup after a failed destroy', () => {
+    const cleanupError = new Error('controller presentation cleanup failed');
+    const onDestroy = vi.fn().mockImplementationOnce(() => { throw cleanupError; });
+    const out: Pick<EventBus<WorldEvents>, 'emit'> = { emit: vi.fn() };
+    const controller = createAvatarStudioController({
+      out,
+      selection: createAvatarOutfitSelection({ out }),
+      onDestroy,
+    });
+
+    expect(() => controller.destroy()).toThrow(cleanupError);
+    expect(() => controller.destroy()).not.toThrow();
+    expect(onDestroy).toHaveBeenCalledTimes(2);
+  });
+
+  it('owns default and injected definitions after validation', () => {
+    expect(Object.isFrozen(AVATAR_STUDIO_DEFINITION)).toBe(true);
+    expect(Object.isFrozen(AVATAR_STUDIO_DEFINITION.figures)).toBe(true);
+    expect(Object.isFrozen(AVATAR_STUDIO_DEFINITION.figures[0])).toBe(true);
+
+    const definition = authoredDefinition({});
+    const out: Pick<EventBus<WorldEvents>, 'emit'> = { emit: vi.fn() };
+    const selection = createAvatarOutfitSelection({ out });
+    const controller = createAvatarStudioController({ definition, out, selection });
+    controller.enter();
+
+    const injectedFigure = definition.figures[0] as { sprite: AvatarSpriteKey; x: number };
+    injectedFigure.sprite = 'avatar-8';
+    injectedFigure.x = 14;
+    controller.update({ x: 2, y: 3 });
+
+    expect(selection.selected).toBe('avatar-1');
+  });
+
+  it('stops an enter transition when a presentation callback destroys it', () => {
+    let presentation!: ReturnType<typeof createAvatarStudioPresentation>;
+    const destroyStudio = vi.fn();
+    const setWorldBounds = vi.fn();
+    const port: AvatarStudioPresentationPort = {
+      setPlayerVelocity: vi.fn(),
+      setBodyEnabled: vi.fn(),
+      setGroundVisible: vi.fn(),
+      setDoorsVisible: vi.fn(),
+      setRemoteVisible: vi.fn(),
+      setLabelsVisible: vi.fn(),
+      setRoomVisible: vi.fn(),
+      setStudioVisible: vi.fn(() => presentation.destroy()),
+      setWorldBounds,
+      setCameraBounds: vi.fn(),
+      setPlayerPosition: vi.fn(),
+      resetDoors: vi.fn(),
+      resumeStreet: vi.fn(),
+      destroyStudio,
+    };
+    presentation = createAvatarStudioPresentation({
+      port,
+      streetBounds: { x: 0, y: 0, width: 10, height: 10 },
+      studioBounds: { x: 1, y: 1, width: 10, height: 10 },
+      studioSpawn: { x: 5, y: 5 },
+      streetReturn: { x: 2, y: 2 },
+      reportStreet: vi.fn(),
+    });
+
+    presentation.enter();
+
+    expect(destroyStudio).toHaveBeenCalledOnce();
+    expect(setWorldBounds).not.toHaveBeenCalled();
+    expect(port.setCameraBounds).not.toHaveBeenCalled();
+    expect(port.setPlayerPosition).not.toHaveBeenCalled();
+  });
+
   it('has a fixed 18x12 envelope, eight cosy figures and no building/station seam', () => {
     expect(AVATAR_STUDIO_DEFINITION).toMatchObject({
       width: 18,
@@ -157,6 +598,169 @@ describe('hidden Avatar Studio', () => {
     expect(events.at(-1)).toEqual({ event: 'avatar-studio:exited', payload: {} });
   });
 
+  it('does not select a figure after onChange destroys the controller', () => {
+    const events: Emitted[] = [];
+    const out: Pick<EventBus<WorldEvents>, 'emit'> = {
+      emit: (event, payload) => events.push({ event, payload } as Emitted),
+    };
+    const selection = createAvatarOutfitSelection({ out });
+    let controller!: ReturnType<typeof createAvatarStudioController>;
+    controller = createAvatarStudioController({
+      out,
+      selection,
+      onChange: (state) => {
+        if (state.highlightedFigure === 8) controller.destroy();
+      },
+    });
+
+    controller.enter();
+    controller.update({ x: 14, y: 6 });
+
+    expect(controller.state.inRoom).toBe(false);
+    expect(selection.selected).toBe('avatar-1');
+    expect(events.filter((event) => event.event === 'avatar:selected')).toEqual([]);
+  });
+
+  it('does not let a reentrant figure update apply the outer stale selection', () => {
+    const out: Pick<EventBus<WorldEvents>, 'emit'> = { emit: vi.fn() };
+    const selection = createAvatarOutfitSelection({ out });
+    let controller!: ReturnType<typeof createAvatarStudioController>;
+    let reentered = false;
+    controller = createAvatarStudioController({
+      out,
+      selection,
+      onChange: (state) => {
+        if (!reentered && state.highlightedFigure === 1) {
+          reentered = true;
+          controller.update({ x: 5, y: 3 });
+        }
+      },
+    });
+
+    controller.enter();
+    controller.update({ x: 2, y: 3 });
+
+    expect(selection.selected).toBe('avatar-2');
+    expect(controller.state.highlightedFigure).toBe(2);
+  });
+
+  it('does not publish after avatar selection destroys the controller', () => {
+    const snapshots: AvatarStudioState[] = [];
+    const out: Pick<EventBus<WorldEvents>, 'emit'> = {
+      emit: (event) => {
+        if (event === 'avatar:selected') controller.destroy();
+      },
+    };
+    const selection = createAvatarOutfitSelection({ out });
+    let controller!: ReturnType<typeof createAvatarStudioController>;
+    controller = createAvatarStudioController({
+      out,
+      selection,
+      onChange: (state) => snapshots.push(state),
+    });
+
+    controller.enter();
+    snapshots.length = 0;
+    controller.update({ x: 14, y: 6 });
+
+    expect(selection.selected).toBe('avatar-8');
+    expect(controller.state.inRoom).toBe(false);
+    expect(snapshots).toHaveLength(1);
+    expect(snapshots[0]).toMatchObject({ highlightedFigure: 8, inRoom: true });
+  });
+
+  it('does not publish or announce entry after onEnter destroys the controller', () => {
+    const events: Emitted[] = [];
+    const snapshots: AvatarStudioState[] = [];
+    const out: Pick<EventBus<WorldEvents>, 'emit'> = {
+      emit: (event, payload) => events.push({ event, payload } as Emitted),
+    };
+    let controller!: ReturnType<typeof createAvatarStudioController>;
+    controller = createAvatarStudioController({
+      out,
+      selection: createAvatarOutfitSelection({ out }),
+      onEnter: () => controller.destroy(),
+      onChange: (state) => snapshots.push(state),
+    });
+
+    controller.enter();
+
+    expect(controller.state.inRoom).toBe(false);
+    expect(snapshots).toEqual([]);
+    expect(events).toEqual([]);
+  });
+
+  it('does not announce entry after onChange retires the controller', () => {
+    const events: Emitted[] = [];
+    const out: Pick<EventBus<WorldEvents>, 'emit'> = {
+      emit: (event, payload) => events.push({ event, payload } as Emitted),
+    };
+    let controller!: ReturnType<typeof createAvatarStudioController>;
+    controller = createAvatarStudioController({
+      out,
+      selection: createAvatarOutfitSelection({ out }),
+      onChange: () => controller.destroy(),
+    });
+
+    controller.enter();
+
+    expect(controller.state.inRoom).toBe(false);
+    expect(events).toEqual([]);
+  });
+
+  it('does not publish or announce exit after onExit destroys the controller', () => {
+    const events: Emitted[] = [];
+    const snapshots: AvatarStudioState[] = [];
+    const out: Pick<EventBus<WorldEvents>, 'emit'> = {
+      emit: (event, payload) => events.push({ event, payload } as Emitted),
+    };
+    let controller!: ReturnType<typeof createAvatarStudioController>;
+    controller = createAvatarStudioController({
+      out,
+      selection: createAvatarOutfitSelection({ out }),
+      onExit: () => controller.destroy(),
+      onChange: (state) => snapshots.push(state),
+    });
+
+    controller.enter();
+    events.length = 0;
+    snapshots.length = 0;
+    controller.update({ x: AVATAR_STUDIO_DEFINITION.exit.x, y: AVATAR_STUDIO_DEFINITION.exit.y });
+
+    expect(controller.state.inRoom).toBe(false);
+    expect(snapshots).toEqual([]);
+    expect(events).toEqual([]);
+  });
+
+  it('does not announce a stale exit after onChange re-enters the Studio', () => {
+    const events: Array<keyof WorldEvents> = [];
+    const out: Pick<EventBus<WorldEvents>, 'emit'> = {
+      emit: (event) => {
+        if (event === 'avatar-studio:exited') events.push(event);
+      },
+    };
+    let controller!: ReturnType<typeof createAvatarStudioController>;
+    let reentered = false;
+    controller = createAvatarStudioController({
+      out,
+      selection: createAvatarOutfitSelection({ out }),
+      onChange: (state) => {
+        if (!reentered && !state.inRoom) {
+          reentered = true;
+          controller.enter();
+        }
+      },
+    });
+    controller.enter();
+    controller.update({
+      x: AVATAR_STUDIO_DEFINITION.exit.x,
+      y: AVATAR_STUDIO_DEFINITION.exit.y,
+    });
+
+    expect(controller.state.inRoom).toBe(true);
+    expect(events).toEqual([]);
+  });
+
   it('reads and writes the Scene\'s outfit selection rather than its own copy', () => {
     // D-053: F is a Scene-owned binding. The Studio must therefore never hold
     // a second copy of the selection — it would go stale the moment the outfit
@@ -221,11 +825,15 @@ describe('hidden Avatar Studio', () => {
       setCameraBounds: noop,
       setPlayerPosition: (position) => {
         playerPositions.push(position);
-        operations.push(position === streetReturn ? 'position:street' : 'position:studio');
+        operations.push(
+          position.x === streetReturn.x && position.y === streetReturn.y
+            ? 'position:street'
+            : 'position:studio',
+        );
       },
       resetDoors: () => operations.push('doors:reset'),
       resumeStreet: (position, report) => {
-        expect(position).toBe(streetReturn);
+        expect(position).toEqual(streetReturn);
         operations.push('presence:resume');
         report();
       },
@@ -268,7 +876,7 @@ describe('hidden Avatar Studio', () => {
     });
 
     expect(controller.state.inRoom).toBe(false);
-    expect(playerPositions.at(-1)).toBe(streetReturn);
+    expect(playerPositions.at(-1)).toEqual(streetReturn);
     expect(operations.slice(-5)).toEqual([
       'position:street',
       'doors:reset',
@@ -370,15 +978,23 @@ describe('hidden Avatar Studio', () => {
         },
         setWorldBounds: (bounds) => {
           lifecycle.worldBounds = bounds;
-          lifecycle.operations.push(bounds === studioBounds ? 'world:studio' : 'world:street');
+          lifecycle.operations.push(
+            bounds.width === studioBounds.width ? 'world:studio' : 'world:street',
+          );
         },
         setCameraBounds: (bounds) => {
           lifecycle.cameraBounds = bounds;
-          lifecycle.operations.push(bounds === studioBounds ? 'camera:studio' : 'camera:street');
+          lifecycle.operations.push(
+            bounds.width === studioBounds.width ? 'camera:studio' : 'camera:street',
+          );
         },
         setPlayerPosition: (position) => {
           lifecycle.playerPosition = position;
-          lifecycle.operations.push(position === studioSpawn ? 'position:studio' : 'position:street');
+          lifecycle.operations.push(
+            position.x === studioSpawn.x && position.y === studioSpawn.y
+              ? 'position:studio'
+              : 'position:street',
+          );
         },
         resetDoors: () => lifecycle.operations.push('doors:reset'),
         resumeStreet: (_position, report) => {
@@ -430,9 +1046,9 @@ describe('hidden Avatar Studio', () => {
     expect(lifecycle.roomVisible).toBe(false);
     expect(lifecycle.studioVisible).toBe(false);
     expect(lifecycle.bodyEnabled).toBe(true);
-    expect(lifecycle.worldBounds).toBe(streetBounds);
-    expect(lifecycle.cameraBounds).toBe(streetBounds);
-    expect(lifecycle.playerPosition).toBe(streetReturn);
+    expect(lifecycle.worldBounds).toEqual(streetBounds);
+    expect(lifecycle.cameraBounds).toEqual(streetBounds);
+    expect(lifecycle.playerPosition).toEqual(streetReturn);
     expect(lifecycle.resumed).toBe(1);
     expect(lifecycle.figureCreations).toBe(8);
     expect(lifecycle.figures.size).toBe(8);
@@ -476,9 +1092,9 @@ describe('hidden Avatar Studio', () => {
     expect(lifecycle.labelsVisible).toBe(false);
     expect(lifecycle.remoteVisible).toBe(false);
     expect(lifecycle.bodyEnabled).toBe(false);
-    expect(lifecycle.worldBounds).toBe(studioBounds);
-    expect(lifecycle.cameraBounds).toBe(studioBounds);
-    expect(lifecycle.playerPosition).toBe(studioSpawn);
+    expect(lifecycle.worldBounds).toEqual(studioBounds);
+    expect(lifecycle.cameraBounds).toEqual(studioBounds);
+    expect(lifecycle.playerPosition).toEqual(studioSpawn);
     expect(lifecycle.figureCreations).toBe(8);
     expect(lifecycle.figures.size).toBe(8);
     expect(lifecycle.operations.slice(-12)).toEqual([
@@ -507,6 +1123,29 @@ describe('hidden Avatar Studio', () => {
     expect(lifecycle.destroyCalls).toBe(1);
     expect(lifecycle.figureDestructions).toBe(8);
     expect(lifecycle.figures.size).toBe(0);
+  });
+
+  it('rolls back Studio entry when state publication fails', () => {
+    const error = new Error('Studio state delivery failed');
+    let fail = true;
+    const exited = vi.fn();
+    const controller = createAvatarStudioController({
+      out: { emit: vi.fn() },
+      selection: createAvatarOutfitSelection({ out: { emit: vi.fn() } }),
+      onEnter: vi.fn(),
+      onExit: exited,
+      onChange: () => {
+        if (fail) throw error;
+      },
+    });
+
+    expect(() => controller.enter()).toThrow(error);
+    expect(controller.state.inRoom).toBe(false);
+    expect(exited).toHaveBeenCalledOnce();
+
+    fail = false;
+    controller.enter();
+    expect(controller.state.inRoom).toBe(true);
   });
 });
 

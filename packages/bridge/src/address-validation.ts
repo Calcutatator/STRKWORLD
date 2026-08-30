@@ -8,6 +8,7 @@ const STARK_FIELD_PRIME = (1n << 251n) + 17n * (1n << 192n) + 1n;
 
 /** Shape check only. The 1Click quote endpoint remains authoritative. */
 export function validateSourceAddress(chain: SourceChain, raw: string): AddressCheck {
+  if (typeof raw !== 'string') return { ok: false, hint: 'Enter an address.' };
   const address = raw.trim();
   if (!address) return { ok: false, hint: 'Enter an address.' };
 
@@ -96,10 +97,13 @@ export function validateSourceAddress(chain: SourceChain, raw: string): AddressC
       return new RegExp(`^T${BASE58}{33}$`).test(address)
         ? { ok: true }
         : { ok: false, hint: 'Enter a 34-character Tron T-address.' };
+    default:
+      return { ok: false, hint: 'Unsupported source chain.' };
   }
 }
 
 export function validateStarknetAddress(raw: string): AddressCheck {
+  if (typeof raw !== 'string') return { ok: false, hint: 'Enter a Starknet felt address.' };
   const address = raw.trim();
   if (!/^0x[0-9a-fA-F]{1,64}$/.test(address)) {
     return { ok: false, hint: 'Enter a Starknet felt address.' };

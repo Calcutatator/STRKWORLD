@@ -6,6 +6,7 @@ import { PostOfficePanel } from './post-office/PostOfficePanel.js';
 import { ExchangePanel } from './exchange/ExchangePanel.js';
 import { BridgePanel } from './bridge/BridgePanel.js';
 import type { PanelRegistry } from './panel-framework.js';
+import type { RouteGrade } from '../privacy/register.js';
 
 /**
  * Which buildings have a room written.
@@ -18,6 +19,7 @@ import type { PanelRegistry } from './panel-framework.js';
 
 export interface BuildingPanelProps {
   onClose: () => void;
+  register?: readonly RouteGrade[];
 }
 
 export interface BuildingPanelDescriptor {
@@ -26,13 +28,13 @@ export interface BuildingPanelDescriptor {
   Component: ComponentType<BuildingPanelProps>;
 }
 
-export const BUILDING_PANELS: PanelRegistry<BuildingPanelDescriptor> = {
-  bank: { building: 'bank', title: COPY.buildings.bank, Component: BankPanel },
-  exchange: { building: 'exchange', title: COPY.buildings.exchange, Component: ExchangePanel },
-  'post-office': {
+export const BUILDING_PANELS: PanelRegistry<BuildingPanelDescriptor> = Object.freeze({
+  bank: Object.freeze({ building: 'bank', title: COPY.buildings.bank, Component: BankPanel }),
+  exchange: Object.freeze({ building: 'exchange', title: COPY.buildings.exchange, Component: ExchangePanel }),
+  'post-office': Object.freeze({
     building: 'post-office',
     title: COPY.buildings['post-office'],
     Component: PostOfficePanel,
-  },
-  bridge: { building: 'bridge', title: COPY.buildings.bridge, Component: BridgePanel },
-};
+  }),
+  bridge: Object.freeze({ building: 'bridge', title: COPY.buildings.bridge, Component: BridgePanel }),
+});

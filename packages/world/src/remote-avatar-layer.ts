@@ -18,7 +18,7 @@ type TimerEvent = PhaserTypes.Time.TimerEvent;
 
 interface RemoteAvatar {
   readonly sprite: Sprite;
-  readonly visual: AvatarVisualController;
+  visual?: AvatarVisualController;
   idleTimer?: TimerEvent;
 }
 
@@ -46,56 +46,226 @@ export function createRemoteAvatarLayer({
   scene,
   source,
 }: RemoteAvatarLayerOptions): RemoteAvatarLayer {
-  const layer = scene.add.layer().setDepth(9);
+  const layer = scene.add.layer();
+  try {
+    layer.setDepth(9);
+  } catch (error) {
+    // Layer creation transferred ownership to this factory before the first
+    // setup call. Preserve the setup error, but do not strand the Phaser layer
+    // if that call fails synchronously.
+    try {
+      layer.destroy();
+    } catch {
+      // Preserve the original setup failure.
+    }
+    throw error;
+  }
   const avatars = new Map<string, RemoteAvatar>();
+  // A child whose removal failed is still owned, but must not be reused if
+  // its peer reappears. It is retried separately before a replacement is
+  // created, so a destroyed/partially-destroyed child can never be presented.
+  const failedRemovals = new Map<string, RemoteAvatar>();
   let peers: ReadonlyMap<string, RemotePeerSnapshot> = new Map();
   let destroyed = false;
   let unsubscribe: (() => void) | undefined;
+  let subscribing = false;
+  let unsubscribePending = false;
 
-  const render = (snapshot: readonly RemotePeerSnapshot[]): void => {
+  const renderSnapshot = (snapshot: readonly RemotePeerSnapshot[]): void => {
     if (destroyed) return;
     const next = reconcileRemotePeers(snapshot, peers);
+    const errors: unknown[] = [];
+    const failedUpdates = new Set<string>();
+
+    // Retry failures carried over from an earlier snapshot before processing
+    // newly omitted avatars. A newly failed removal is intentionally retried
+    // on the next render, not twice in the same reconciliation pass.
+    for (const [id, avatar] of failedRemovals) {
+      try {
+        destroyAvatar(avatar);
+        failedRemovals.delete(id);
+      } catch (error) {
+        errors.push(error);
+      }
+    }
 
     for (const [id, avatar] of avatars) {
       if (next.has(id)) continue;
-      destroyAvatar(avatar);
-      avatars.delete(id);
+      try {
+        destroyAvatar(avatar);
+        avatars.delete(id);
+      } catch (error) {
+        // A failed child cleanup must not prevent later omitted peers from
+        // being retired. Move the failed avatar to retry-only ownership so a
+        // same-ID peer cannot reuse a destroyed or partially-destroyed child.
+        avatars.delete(id);
+        failedRemovals.set(id, avatar);
+        errors.push(error);
+      }
     }
 
     for (const [id, peer] of next) {
-      const avatar = avatars.get(id) ?? createAvatar(scene, layer, peer);
+      if (failedRemovals.has(id)) continue;
+      let avatar = avatars.get(id);
+      if (avatar === undefined) {
+        try {
+          avatar = createAvatar(scene, layer, peer);
+          // Register the sprite before constructing its visual controller.
+          // The controller renders immediately, so a Phaser setter can throw
+          // before the factory returns. Keeping the partial avatar in the map
+          // gives the next snapshot a retry owner and teardown a cleanup owner.
+          avatars.set(id, avatar);
+        } catch (error) {
+          errors.push(error);
+          continue;
+        }
+      }
+      if (avatar.visual === undefined) {
+        try {
+          avatar.visual = createAvatarVisualController(avatar.sprite, peer.sprite);
+        } catch (error) {
+          errors.push(error);
+          continue;
+        }
+      }
       const previous = peers.get(id);
       const moving = previous !== undefined && (previous.x !== peer.x || previous.y !== peer.y);
-      updateAvatar(scene, avatar, peer, moving);
-      avatars.set(id, avatar);
+      try {
+        updateAvatar(scene, avatar, peer, moving, () => !destroyed);
+      } catch (error) {
+        // Keep the last successfully rendered snapshot authoritative. The
+        // source may not publish this exact state again, so committing a
+        // failed pose here would make the retained map lie about the sprite
+        // and permanently suppress a retry.
+        failedUpdates.add(id);
+        errors.push(error);
+      }
     }
-    peers = next;
+    const rendered = new Map(next);
+    for (const id of failedUpdates) {
+      const previous = peers.get(id);
+      if (previous === undefined) rendered.delete(id);
+      else rendered.set(id, previous);
+    }
+    if (destroyed) return;
+    peers = rendered;
+
+    if (errors.length === 1) throw errors[0];
+    if (errors.length > 1) throw new AggregateError(errors, 'Remote avatar reconciliation failed');
   };
 
-  // The layer exists before subscribe, so a synchronous replay is safe.
-  if (source) unsubscribe = source.subscribe(render);
+  const pendingRenders: Array<readonly RemotePeerSnapshot[]> = [];
+  let rendering = false;
+  const render = (snapshot: readonly RemotePeerSnapshot[]): void => {
+    if (destroyed) return;
+    // A custom source or presentation callback may synchronously deliver a
+    // second snapshot while the first one is still reconciling. Queue it so
+    // the outer render cannot commit an older map after the newer presentation
+    // has already been applied.
+    if (rendering) {
+      pendingRenders.push(snapshot);
+      return;
+    }
+    rendering = true;
+    pendingRenders.push(snapshot);
+    const errors: unknown[] = [];
+    try {
+      while (!destroyed) {
+        const next = pendingRenders.shift();
+        if (next === undefined) break;
+        try {
+          renderSnapshot(next);
+        } catch (error) {
+          // A newer snapshot queued by the failed render is still
+          // authoritative. Finish draining it before reporting the older
+          // presentation failure to the source.
+          errors.push(error);
+        }
+      }
+    } finally {
+      pendingRenders.length = 0;
+      rendering = false;
+    }
+    if (errors.length === 1) throw errors[0];
+    if (errors.length > 1) throw new AggregateError(errors, 'Remote avatar reconciliation failed');
+  };
 
   const destroy = (): void => {
     if (destroyed) return;
     destroyed = true;
-    scene.events.off('shutdown', destroy);
-    unsubscribe?.();
-    unsubscribe = undefined;
-    for (const avatar of avatars.values()) destroyAvatar(avatar);
+    pendingRenders.length = 0;
+    const errors: unknown[] = [];
+    const attempt = (cleanup: () => void): void => {
+      try {
+        cleanup();
+      } catch (error) {
+        errors.push(error);
+      }
+    };
+
+    attempt(() => scene.events.off('shutdown', destroy));
+    if (unsubscribe) {
+      const stop = unsubscribe;
+      unsubscribe = undefined;
+      attempt(stop);
+    } else if (subscribing) {
+      // A source may replay and trigger shutdown before subscribe() returns
+      // its unsubscribe handle. The post-subscribe handoff owns that handle.
+      unsubscribePending = true;
+    }
+    for (const avatar of avatars.values()) attempt(() => destroyAvatar(avatar));
+    for (const avatar of failedRemovals.values()) attempt(() => destroyAvatar(avatar));
     avatars.clear();
+    failedRemovals.clear();
     peers = new Map();
-    layer.destroy();
+    attempt(() => layer.destroy());
+
+    if (errors.length === 1) throw errors[0];
+    if (errors.length > 1) throw new AggregateError(errors, 'Remote avatar cleanup failed');
   };
 
   // Scene shutdown is the lifecycle authority. `destroy()` is also exposed
   // for deterministic teardown and is idempotent when both paths run.
-  scene.events.once('shutdown', destroy);
+  try {
+    scene.events.once('shutdown', destroy);
+  } catch (error) {
+    // The layer was created before the Scene lifecycle hook. If registration
+    // fails, retire the layer immediately while preserving that setup error.
+    try {
+      destroy();
+    } catch {
+      // Preserve the original lifecycle-registration failure.
+    }
+    throw error;
+  }
+
+  // The layer exists before subscribe, so a synchronous replay is safe. The
+  // shutdown listener is installed first because replay can run arbitrary
+  // presentation code before subscribe() returns.
+  if (source) {
+    subscribing = true;
+    try {
+      const stop = source.subscribe(render);
+      if (destroyed || unsubscribePending) {
+        unsubscribePending = false;
+        stop();
+      } else {
+        unsubscribe = stop;
+      }
+    } catch (error) {
+      if (!destroyed) destroy();
+      throw error;
+    } finally {
+      subscribing = false;
+    }
+  }
 
   return {
     get peers() {
       return peers;
     },
     setVisible(visible) {
+      if (destroyed) return;
       layer.setVisible(visible);
     },
     destroy,
@@ -105,12 +275,18 @@ export function createRemoteAvatarLayer({
 function createAvatar(scene: Scene, layer: Layer, peer: RemotePeerSnapshot): RemoteAvatar {
   const sheet = resolveAvatarSheet(peer.sprite);
   const avatar = scene.add.sprite(peer.x, peer.y, sheet.textureKey, 0);
-  avatar.setDepth(9);
-  layer.add(avatar);
-  return {
-    sprite: avatar,
-    visual: createAvatarVisualController(avatar, peer.sprite),
-  };
+  try {
+    avatar.setDepth(9);
+    layer.add(avatar);
+  } catch (error) {
+    try {
+      avatar.destroy();
+    } catch {
+      // Preserve the construction error; the layer never received ownership.
+    }
+    throw error;
+  }
+  return { sprite: avatar };
 }
 
 function updateAvatar(
@@ -118,10 +294,13 @@ function updateAvatar(
   avatar: RemoteAvatar,
   peer: RemotePeerSnapshot,
   moving: boolean,
+  isAlive: () => boolean,
 ): void {
+  const visual = avatar.visual;
+  if (visual === undefined) return;
   cancelIdle(avatar);
   avatar.sprite.setPosition(peer.x, peer.y);
-  avatar.visual.present({
+  visual.present({
     sprite: peer.sprite,
     facing: peer.facing,
     moving,
@@ -132,7 +311,8 @@ function updateAvatar(
   const movementIdleMs = (animation.frames.length / animation.frameRate) * 1_000;
   avatar.idleTimer = scene.time.delayedCall(movementIdleMs, () => {
     avatar.idleTimer = undefined;
-    avatar.visual.present({
+    if (!isAlive()) return;
+    visual.present({
       sprite: peer.sprite,
       facing: peer.facing,
       moving: false,
@@ -147,6 +327,23 @@ function cancelIdle(avatar: RemoteAvatar): void {
 }
 
 function destroyAvatar(avatar: RemoteAvatar): void {
-  cancelIdle(avatar);
-  avatar.sprite.destroy();
+  const errors: unknown[] = [];
+  const timer = avatar.idleTimer;
+  if (timer) {
+    try {
+      timer.remove(false);
+      avatar.idleTimer = undefined;
+    } catch (error) {
+      // Keep the timer owned when Phaser rejects removal so a later cleanup
+      // attempt can retry the same resource instead of silently leaking it.
+      errors.push(error);
+    }
+  }
+  try {
+    avatar.sprite.destroy();
+  } catch (error) {
+    errors.push(error);
+  }
+  if (errors.length === 1) throw errors[0];
+  if (errors.length > 1) throw new AggregateError(errors, 'Remote avatar cleanup failed');
 }

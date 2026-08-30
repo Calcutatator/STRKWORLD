@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import {
   BackendApi,
+  decodeServerActions,
   HmacAuthorizationCodec,
   MemoryAuthorizationCodec,
   validateServerActionRoute,
@@ -15,6 +16,8 @@ import {
 const POOL = '0x123';
 const STRK = '0x4718';
 const FEE_RECIPIENT = '0x789';
+const MAX_UINT256 = (1n << 256n) - 1n;
+const MAINNET_CHAIN_ID = '0x534e5f4d41494e';
 
 const transferCalldata = ['0x1', '0x3', FEE_RECIPIENT, STRK, '0x7'];
 const artifact: PreparedArtifact = {
@@ -145,6 +148,44 @@ async function fee(api: BackendApi, route = 'transfer') {
 }
 
 describe('strict fee authorization', () => {
+  it('rejects a missing own request version even when the prototype supplies one', async () => {
+    const { api, rpc } = fixture();
+    const readConfig = vi.spyOn(rpc, 'getPoolConfig');
+    const previous = Object.getOwnPropertyDescriptor(Object.prototype, 'v');
+    Object.defineProperty(Object.prototype, 'v', { value: 1, configurable: true });
+    try {
+      await expect(api.handle({
+        method: 'POST',
+        path: '/v1/rpc/pool-config',
+        body: {},
+      })).resolves.toMatchObject({ status: 400 });
+      expect(readConfig).not.toHaveBeenCalled();
+    } finally {
+      if (previous) Object.defineProperty(Object.prototype, 'v', previous);
+      else delete (Object.prototype as Record<string, unknown>).v;
+    }
+  });
+
+  it('rejects a missing own fee route even when the prototype supplies one', async () => {
+    const { api, paymaster, rpc } = fixture();
+    const buildFee = vi.spyOn(paymaster, 'buildFee');
+    const readConfig = vi.spyOn(rpc, 'getPoolConfig');
+    const previous = Object.getOwnPropertyDescriptor(Object.prototype, 'route');
+    Object.defineProperty(Object.prototype, 'route', { value: 'transfer', configurable: true });
+    try {
+      await expect(api.handle({
+        method: 'POST',
+        path: '/v1/private/fees',
+        body: { v: 1, feeToken: STRK, operationToken: '0xabc' },
+      })).resolves.toMatchObject({ status: 400 });
+      expect(buildFee).not.toHaveBeenCalled();
+      expect(readConfig).not.toHaveBeenCalled();
+    } finally {
+      if (previous) Object.defineProperty(Object.prototype, 'route', previous);
+      else delete (Object.prototype as Record<string, unknown>).route;
+    }
+  });
+
   it('validates the paymaster fee and returns a stateless authorization', async () => {
     const { api } = fixture();
     await expect(fee(api)).resolves.toMatchObject({
@@ -154,6 +195,160 @@ describe('strict fee authorization', () => {
       expiresAtBlock: 1_450,
     });
   });
+
+  it('rejects an ordinary fee when the issued expiry exceeds the safe block bound', async () => {
+    const { api, setBlock, setProofValidityBlocks, authorizations } = fixture();
+    setBlock(Number.MAX_SAFE_INTEGER);
+    setProofValidityBlocks(1);
+    const issue = vi.spyOn(authorizations, 'issue');
+
+    await expect(api.handle({
+      method: 'POST',
+      path: '/v1/private/fees',
+      body: { v: 1, route: 'transfer', feeToken: STRK, operationToken: '0xabc' },
+    })).resolves.toMatchObject({ status: 502 });
+    expect(issue).not.toHaveBeenCalled();
+  });
+
+  it('accepts an ordinary fee whose issued expiry is exactly the safe bound', async () => {
+    const { api, setBlock, setProofValidityBlocks } = fixture();
+    setBlock(Number.MAX_SAFE_INTEGER - 1);
+    setProofValidityBlocks(1);
+
+    await expect(fee(api)).resolves.toMatchObject({
+      expiresAtBlock: Number.MAX_SAFE_INTEGER,
+    });
+  });
+
+  it('rejects a swap when the issued expiry exceeds the safe block bound', async () => {
+    const { api, setBlock, setProofValidityBlocks, authorizations } = fixture();
+    setBlock(Number.MAX_SAFE_INTEGER);
+    setProofValidityBlocks(1);
+    const issue = vi.spyOn(authorizations, 'issue');
+
+    await expect(api.handle({
+      method: 'POST',
+      path: '/v1/private/swaps/prepare',
+      body: {
+        v: 1,
+        sellToken: '0xabc',
+        buyToken: STRK,
+        sellAmount: '20',
+        minAmountOut: '90',
+        slippageBps: 100,
+      },
+    })).resolves.toMatchObject({ status: 502 });
+    expect(issue).not.toHaveBeenCalled();
+  });
+
+  it('accepts a swap whose issued expiry is exactly the safe bound', async () => {
+    const { api, setBlock, setProofValidityBlocks } = fixture();
+    setBlock(Number.MAX_SAFE_INTEGER - 1);
+    setProofValidityBlocks(1);
+
+    const response = await api.handle({
+      method: 'POST',
+      path: '/v1/private/swaps/prepare',
+      body: {
+        v: 1,
+        sellToken: '0xabc',
+        buyToken: STRK,
+        sellAmount: '20',
+        minAmountOut: '90',
+        slippageBps: 100,
+      },
+    });
+    expect(response.status).toBe(200);
+    expect((response.body as { fee: { expiresAtBlock: number } }).fee.expiresAtBlock)
+      .toBe(Number.MAX_SAFE_INTEGER);
+  });
+
+  it('rejects request versions supplied only through the prototype', async () => {
+    const { api, rpc } = fixture();
+    const getPoolConfig = vi.spyOn(rpc, 'getPoolConfig');
+    const body = Object.create({ v: 1 }) as Record<string, unknown>;
+
+    await expect(api.handle({
+      method: 'POST',
+      path: '/v1/rpc/pool-config',
+      body,
+    })).resolves.toMatchObject({ status: 400 });
+    expect(getPoolConfig).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ['fractional string', '7.5'],
+    ['nonnumeric string', 'not-a-number'],
+    ['number', 7],
+    ['NaN', Number.NaN],
+    ['object', {}],
+  ])('rejects a paymaster fee with a malformed amount: %s', async (_label, amount) => {
+    const { api, paymaster, authorizations } = fixture();
+    vi.spyOn(paymaster, 'buildFee').mockResolvedValue({
+      token: STRK,
+      recipient: FEE_RECIPIENT,
+      amount,
+    } as never);
+    const issue = vi.spyOn(authorizations, 'issue');
+
+    await expect(api.handle({
+      method: 'POST',
+      path: '/v1/private/fees',
+      body: { v: 1, route: 'transfer', feeToken: STRK, operationToken: '0xabc' },
+    })).resolves.toEqual({
+      status: 502,
+      body: { code: 'UPSTREAM_FAILURE', message: 'A private service dependency failed.' },
+    });
+    expect(issue).not.toHaveBeenCalled();
+  });
+
+  it.each(['0x0', '0x00', '0x00000000'])(
+    'rejects a zero paymaster fee recipient %s before authorization issuance',
+    async (recipient) => {
+      const { api, paymaster, authorizations } = fixture();
+      vi.spyOn(paymaster, 'buildFee').mockResolvedValue({
+        token: STRK,
+        recipient,
+        amount: 7n,
+      });
+      const issue = vi.spyOn(authorizations, 'issue');
+
+      await expect(api.handle({
+        method: 'POST',
+        path: '/v1/private/fees',
+        body: { v: 1, route: 'transfer', feeToken: STRK, operationToken: '0xabc' },
+      })).resolves.toEqual({
+        status: 400,
+        body: { code: 'HTTP_400', message: 'Invalid fee recipient.' },
+      });
+      expect(issue).not.toHaveBeenCalled();
+    },
+  );
+
+  it.each([
+    ['decimal string', '18200'],
+    ['numeric equivalent', 18200],
+    ['uppercase prefix', '0X4718'],
+    ['object', {}],
+  ])(
+    'rejects a malformed paymaster fee token (%s) before authorization issuance',
+    async (_label, token) => {
+      const { api, paymaster, authorizations } = fixture();
+      vi.spyOn(paymaster, 'buildFee').mockResolvedValue({
+        token,
+        recipient: FEE_RECIPIENT,
+        amount: 7n,
+      } as never);
+      const issue = vi.spyOn(authorizations, 'issue');
+
+      await expect(api.handle({
+        method: 'POST',
+        path: '/v1/private/fees',
+        body: { v: 1, route: 'transfer', feeToken: STRK, operationToken: '0xabc' },
+      })).resolves.toMatchObject({ status: 400 });
+      expect(issue).not.toHaveBeenCalled();
+    },
+  );
 
   it('rejects a tampered production HMAC authorization', async () => {
     const codec = new HmacAuthorizationCodec('a-long-production-secret-that-is-not-committed');
@@ -406,6 +601,136 @@ describe('strict fee authorization', () => {
   });
 });
 
+describe('bounded private swap inputs', () => {
+  it('accepts the maximum uint256 sell amount at the planner boundary', async () => {
+    const { api, swapPlanner } = fixture();
+    const prepare = vi.spyOn(swapPlanner, 'prepare');
+
+    await expect(api.handle({
+      method: 'POST', path: '/v1/private/swaps/prepare',
+      body: {
+        v: 1, sellToken: '0xabc', buyToken: STRK,
+        sellAmount: MAX_UINT256.toString(), minAmountOut: '1', slippageBps: 100,
+      },
+    })).resolves.toMatchObject({ status: 200 });
+    expect(prepare).toHaveBeenCalledWith(expect.objectContaining({ sellAmount: MAX_UINT256 }));
+  });
+
+  it.each([
+    ['sell amount', { sellAmount: (1n << 256n).toString(), minAmountOut: '1' }],
+    ['minimum output', { sellAmount: '1', minAmountOut: (1n << 256n).toString() }],
+  ])('rejects an over-uint256 %s before asking the swap planner', async (_label, amounts) => {
+    const { api, swapPlanner } = fixture();
+    const prepare = vi.spyOn(swapPlanner, 'prepare');
+
+    await expect(api.handle({
+      method: 'POST', path: '/v1/private/swaps/prepare',
+      body: {
+        v: 1, sellToken: '0xabc', buyToken: STRK,
+        ...amounts, slippageBps: 100,
+      },
+    })).resolves.toMatchObject({ status: 400 });
+    expect(prepare).not.toHaveBeenCalled();
+  });
+});
+
+describe('bounded private swap planner responses', () => {
+  it('rejects a planner quote for a non-mainnet chain before fee authorization', async () => {
+    const { api, swapPlanner, paymaster, authorizations } = fixture();
+    vi.spyOn(swapPlanner, 'prepare').mockResolvedValue({
+      quoteId: 'quote-sepolia',
+      buyAmount: 100n,
+      expiresAt: 2_000,
+      chainId: '0x534e5f5345504f4c4941',
+      executorAddress: '0x999',
+      executorCalls: [{ contractAddress: '0x111', entrypoint: 'swap', selector: '0x555', calldata: ['0xaaa'] }],
+    });
+    const buildFee = vi.spyOn(paymaster, 'buildFee');
+    const issue = vi.spyOn(authorizations, 'issue');
+
+    await expect(api.handle({
+      method: 'POST', path: '/v1/private/swaps/prepare',
+      body: {
+        v: 1, sellToken: '0xabc', buyToken: STRK,
+        sellAmount: '1', minAmountOut: '1', slippageBps: 100,
+      },
+    })).resolves.toMatchObject({ status: 409 });
+    expect(buildFee).not.toHaveBeenCalled();
+    expect(issue).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ['number', 42],
+    ['object', {}],
+  ])('rejects a planner response with a non-string quote identifier (%s) before fee authorization', async (_label, quoteId) => {
+    const { api, swapPlanner, paymaster, authorizations } = fixture();
+    vi.spyOn(swapPlanner, 'prepare').mockResolvedValue({
+      quoteId: quoteId as never,
+      buyAmount: 100n,
+      expiresAt: 2_000,
+      chainId: '0x534e5f4d41494e',
+      executorAddress: '0x999',
+      executorCalls: [{ contractAddress: '0x111', entrypoint: 'swap', selector: '0x555', calldata: ['0xaaa'] }],
+    });
+    const buildFee = vi.spyOn(paymaster, 'buildFee');
+    const issue = vi.spyOn(authorizations, 'issue');
+
+    await expect(api.handle({
+      method: 'POST', path: '/v1/private/swaps/prepare',
+      body: {
+        v: 1, sellToken: '0xabc', buyToken: STRK,
+        sellAmount: '1', minAmountOut: '1', slippageBps: 100,
+      },
+    })).resolves.toMatchObject({ status: 409 });
+    expect(buildFee).not.toHaveBeenCalled();
+    expect(issue).not.toHaveBeenCalled();
+  });
+
+  it('accepts the maximum uint256 AVNU output at the response boundary', async () => {
+    const { api, swapPlanner } = fixture();
+    vi.spyOn(swapPlanner, 'prepare').mockImplementation(async () => ({
+      quoteId: 'quote-maximum',
+      buyAmount: MAX_UINT256,
+      expiresAt: 2_000,
+      chainId: MAINNET_CHAIN_ID,
+      executorAddress: '0x999',
+      executorCalls: [{ contractAddress: '0x111', entrypoint: 'swap', selector: '0x555', calldata: ['0xaaa'] }],
+    }));
+
+    await expect(api.handle({
+      method: 'POST', path: '/v1/private/swaps/prepare',
+      body: {
+        v: 1, sellToken: '0xabc', buyToken: STRK,
+        sellAmount: '1', minAmountOut: '1', slippageBps: 100,
+      },
+    })).resolves.toMatchObject({ status: 200 });
+  });
+
+  it('rejects an over-uint256 AVNU output before fee authorization', async () => {
+    const { api, swapPlanner, paymaster, authorizations } = fixture();
+    vi.spyOn(swapPlanner, 'prepare').mockResolvedValue({
+      quoteId: 'quote-overflow',
+      buyAmount: MAX_UINT256 + 1n,
+      expiresAt: 2_000,
+      chainId: MAINNET_CHAIN_ID,
+      executorAddress: '0x999',
+      executorCalls: [{ contractAddress: '0x111', entrypoint: 'swap', selector: '0x555', calldata: ['0xaaa'] }],
+    });
+    const buildFee = vi.spyOn(paymaster, 'buildFee');
+    const issue = vi.spyOn(authorizations, 'issue');
+
+    await expect(api.handle({
+      method: 'POST', path: '/v1/private/swaps/prepare',
+      body: {
+        v: 1, sellToken: '0xabc', buyToken: STRK,
+        sellAmount: '1', minAmountOut: '1', slippageBps: 100,
+      },
+    })).resolves.toMatchObject({ status: 409 });
+    expect(buildFee).not.toHaveBeenCalled();
+    expect(issue).not.toHaveBeenCalled();
+  });
+});
+
 describe('bounded private submission', () => {
   it('validates, jitters a pool-native artifact, rechecks freshness, and relays it', async () => {
     const { api, delays, submitted } = fixture();
@@ -644,6 +969,140 @@ describe('bounded private submission', () => {
       });
       expect(buildFee).not.toHaveBeenCalled();
       expect(issueAuthorization).not.toHaveBeenCalled();
+    },
+  );
+
+  it.each(['0x0', '0x00', '0x00000000'])(
+    'rejects a zero nested private-swap call target %s before fee or authorization issuance',
+    async (contractAddress) => {
+      const { api, paymaster, authorizations, swapPlanner } = fixture();
+      vi.spyOn(swapPlanner, 'prepare').mockResolvedValue({
+        quoteId: 'quote-zero-call-target',
+        buyAmount: 100n,
+        expiresAt: 2_000,
+        chainId: '0x534e5f4d41494e',
+        executorAddress: '0x999',
+        executorCalls: [{
+          contractAddress,
+          entrypoint: 'swap',
+          selector: '0x555',
+          calldata: ['0xaaa'],
+        }],
+      });
+      const buildFee = vi.spyOn(paymaster, 'buildFee');
+      const issueAuthorization = vi.spyOn(authorizations, 'issue');
+
+      await expect(api.handle({
+        method: 'POST', path: '/v1/private/swaps/prepare',
+        body: {
+          v: 1,
+          sellToken: '0xabc',
+          buyToken: STRK,
+          sellAmount: '20',
+          minAmountOut: '90',
+          slippageBps: 100,
+        },
+      })).resolves.toEqual({
+        status: 502,
+        body: { code: 'HTTP_502', message: 'AVNU returned malformed private executor calls.' },
+      });
+      expect(buildFee).not.toHaveBeenCalled();
+      expect(issueAuthorization).not.toHaveBeenCalled();
+    },
+  );
+
+  it.each([
+    ['fractional string', '7.5'],
+    ['nonnumeric string', 'not-a-number'],
+    ['number', 7],
+    ['NaN', Number.NaN],
+    ['object', {}],
+  ])('rejects a swap paymaster fee with a malformed amount: %s', async (_label, amount) => {
+    const { api, paymaster, authorizations } = fixture();
+    vi.spyOn(paymaster, 'buildFee').mockResolvedValue({
+      token: STRK,
+      recipient: FEE_RECIPIENT,
+      amount,
+    } as never);
+    const issue = vi.spyOn(authorizations, 'issue');
+
+    await expect(api.handle({
+      method: 'POST',
+      path: '/v1/private/swaps/prepare',
+      body: {
+        v: 1,
+        sellToken: '0xabc',
+        buyToken: STRK,
+        sellAmount: '20',
+        minAmountOut: '90',
+        slippageBps: 100,
+      },
+    })).resolves.toEqual({
+      status: 502,
+      body: { code: 'UPSTREAM_FAILURE', message: 'A private service dependency failed.' },
+    });
+    expect(issue).not.toHaveBeenCalled();
+  });
+
+  it.each(['0x0', '0x00', '0x00000000'])(
+    'rejects a zero swap paymaster fee recipient %s before authorization issuance',
+    async (recipient) => {
+      const { api, paymaster, authorizations } = fixture();
+      vi.spyOn(paymaster, 'buildFee').mockResolvedValue({
+        token: STRK,
+        recipient,
+        amount: 7n,
+      });
+      const issue = vi.spyOn(authorizations, 'issue');
+
+      await expect(api.handle({
+        method: 'POST',
+        path: '/v1/private/swaps/prepare',
+        body: {
+          v: 1,
+          sellToken: '0xabc',
+          buyToken: STRK,
+          sellAmount: '20',
+          minAmountOut: '90',
+          slippageBps: 100,
+        },
+      })).resolves.toEqual({
+        status: 400,
+        body: { code: 'HTTP_400', message: 'Invalid fee recipient.' },
+      });
+      expect(issue).not.toHaveBeenCalled();
+    },
+  );
+
+  it.each([
+    ['decimal string', '18200'],
+    ['numeric equivalent', 18200],
+    ['uppercase prefix', '0X4718'],
+    ['object', {}],
+  ])(
+    'rejects a malformed swap paymaster fee token (%s) before authorization issuance',
+    async (_label, token) => {
+      const { api, paymaster, authorizations } = fixture();
+      vi.spyOn(paymaster, 'buildFee').mockResolvedValue({
+        token,
+        recipient: FEE_RECIPIENT,
+        amount: 7n,
+      } as never);
+      const issue = vi.spyOn(authorizations, 'issue');
+
+      await expect(api.handle({
+        method: 'POST',
+        path: '/v1/private/swaps/prepare',
+        body: {
+          v: 1,
+          sellToken: '0xabc',
+          buyToken: STRK,
+          sellAmount: '20',
+          minAmountOut: '90',
+          slippageBps: 100,
+        },
+      })).resolves.toMatchObject({ status: 400 });
+      expect(issue).not.toHaveBeenCalled();
     },
   );
 
@@ -1058,6 +1517,28 @@ describe('quote-bound swap withdrawal matching', () => {
 });
 
 describe('privacy-safe RPC and operations', () => {
+  it('bounds server-action span allocation by the remaining calldata', () => {
+    const originalFrom = Array.from;
+    const from = vi.spyOn(Array, 'from').mockImplementation(((items: ArrayLike<unknown> | Iterable<unknown>) => {
+      const length = typeof items === 'object' && items !== null && 'length' in items
+        ? Number((items as ArrayLike<unknown>).length)
+        : 0;
+      if (length > 1_024) throw new Error('unbounded span allocation');
+      return originalFrom(items as never) as never;
+    }) as typeof Array.from);
+    try {
+      expect(() => decodeServerActions(['0x1', '0x0', '0x1', '0x1fffffffffffff']))
+        .toThrow('Truncated server-action calldata.');
+    } finally {
+      from.mockRestore();
+    }
+  });
+
+  it('rejects negative server-action span lengths', () => {
+    expect(() => decodeServerActions(['0x1', '0x0', '0x1', '-1']))
+      .toThrow('Invalid span length.');
+  });
+
   it('bounds direct request deadlines to the Node timer ceiling', () => {
     expect(() => fixture({ requestTimeoutMs: 2_147_483_647 })).not.toThrow();
     expect(() => fixture({ requestTimeoutMs: 2_147_483_648 }))

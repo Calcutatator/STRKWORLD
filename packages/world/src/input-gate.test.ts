@@ -55,9 +55,130 @@ describe('suspend', () => {
     gate.suspend();
     expect(calls.filter((c) => c === 'disableGlobalCapture')).toHaveLength(1);
   });
+
+  it('keeps suspension retryable when entry setup fails', () => {
+    const error = new Error('keyboard capture disable failed');
+    const disableGlobalCapture = vi.fn().mockImplementationOnce(() => {
+      throw error;
+    });
+    const keyboard: KeyboardLike = {
+      enabled: true,
+      disableGlobalCapture,
+      enableGlobalCapture: vi.fn(),
+      resetKeys: vi.fn(),
+    };
+    const gate = createInputGate(keyboard);
+
+    expect(() => gate.suspend()).toThrow(error);
+    expect(gate.suspended).toBe(false);
+    expect(() => gate.suspend()).not.toThrow();
+    expect(gate.suspended).toBe(true);
+    expect(disableGlobalCapture).toHaveBeenCalledTimes(2);
+  });
+
+  it('retains suspended ownership when clearing held keys fails after disabling delivery', () => {
+    const resetKeys = vi.fn().mockImplementationOnce(() => {
+      throw new Error('held-key reset failed');
+    });
+    const keyboard: KeyboardLike = {
+      enabled: true,
+      disableGlobalCapture: vi.fn(),
+      enableGlobalCapture: vi.fn(),
+      resetKeys,
+    };
+    const gate = createInputGate(keyboard);
+
+    expect(() => gate.suspend()).toThrow('held-key reset failed');
+    // The handoff has already disabled browser capture and Phaser delivery.
+    // Ownership must remain suspended so cleanup can finish the retry.
+    expect(gate.suspended).toBe(true);
+    expect(keyboard.enabled).toBe(false);
+
+    expect(() => gate.resume()).not.toThrow();
+    expect(gate.suspended).toBe(false);
+    expect(keyboard.enabled).toBe(true);
+  });
+
+  it('attempts exit cleanup and input restoration when entry cleanup throws', () => {
+    const { keyboard } = fakeKeyboard();
+    const gate = createInputGate(keyboard);
+    const entryCleanupError = new Error('entry cleanup failed');
+    const offEnter = vi.fn(() => { throw entryCleanupError; });
+    const offExit = vi.fn();
+    const on = vi.fn().mockReturnValueOnce(offEnter).mockReturnValueOnce(offExit);
+    const unbind = bindInputGate(gate, on as never);
+
+    gate.suspend();
+    expect(() => unbind()).toThrow(entryCleanupError);
+    expect(offExit).toHaveBeenCalledOnce();
+    expect(gate.suspended).toBe(false);
+  });
+
+  it('restores input even when exit cleanup throws', () => {
+    const { keyboard } = fakeKeyboard();
+    const gate = createInputGate(keyboard);
+    const exitCleanupError = new Error('exit cleanup failed');
+    const offEnter = vi.fn();
+    const offExit = vi.fn(() => { throw exitCleanupError; });
+    const on = vi.fn().mockReturnValueOnce(offEnter).mockReturnValueOnce(offExit);
+    const unbind = bindInputGate(gate, on as never);
+
+    gate.suspend();
+    expect(() => unbind()).toThrow(exitCleanupError);
+    expect(gate.suspended).toBe(false);
+  });
 });
 
 describe('resume', () => {
+  it('keeps restoration retryable when keyboard reset fails', () => {
+    const resetKeys = vi.fn();
+    const keyboard: KeyboardLike = {
+      enabled: true,
+      disableGlobalCapture: vi.fn(),
+      enableGlobalCapture: vi.fn(),
+      resetKeys,
+    };
+    const gate = createInputGate(keyboard);
+    gate.suspend();
+    resetKeys.mockClear();
+    const error = new Error('keyboard reset failed');
+    resetKeys.mockImplementationOnce(() => { throw error; });
+
+    expect(() => gate.resume()).toThrow(error);
+    expect(gate.suspended).toBe(true);
+
+    expect(() => gate.resume()).not.toThrow();
+    expect(gate.suspended).toBe(false);
+    expect(keyboard.enabled).toBe(true);
+  });
+
+  it('fails closed when recapturing the keyboard throws after re-enabling delivery', () => {
+    const captureError = new Error('keyboard capture enable failed');
+    let failCapture = true;
+    const keyboard: KeyboardLike = {
+      enabled: true,
+      disableGlobalCapture: vi.fn(),
+      enableGlobalCapture: vi.fn(() => {
+        if (failCapture) {
+          failCapture = false;
+          throw captureError;
+        }
+      }),
+      resetKeys: vi.fn(),
+    };
+    const gate = createInputGate(keyboard);
+    gate.suspend();
+
+    expect(() => gate.resume()).toThrow(captureError);
+    expect(gate.suspended).toBe(true);
+    expect(keyboard.enabled).toBe(false);
+    expect(keyboard.disableGlobalCapture).toHaveBeenCalledTimes(2);
+
+    expect(() => gate.resume()).not.toThrow();
+    expect(gate.suspended).toBe(false);
+    expect(keyboard.enabled).toBe(true);
+  });
+
   it('clears held keys before re-enabling', () => {
     const { keyboard, calls } = fakeKeyboard();
     const gate = createInputGate(keyboard);
@@ -89,6 +210,22 @@ describe('resume', () => {
 });
 
 describe('binding to building events', () => {
+  it('rolls back entry listener when exit registration throws', () => {
+    const { keyboard } = fakeKeyboard();
+    const gate = createInputGate(keyboard);
+    const offEnter = vi.fn();
+    const registrationError = new Error('exit listener registration failed');
+    const on = vi
+      .fn()
+      .mockReturnValueOnce(offEnter)
+      .mockImplementationOnce(() => {
+        throw registrationError;
+      });
+
+    expect(() => bindInputGate(gate, on as never)).toThrow(registrationError);
+    expect(offEnter).toHaveBeenCalledOnce();
+  });
+
   it('suspends on entry and resumes on exit', () => {
     const { keyboard } = fakeKeyboard();
     const gate = createInputGate(keyboard);

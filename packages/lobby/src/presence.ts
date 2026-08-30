@@ -15,13 +15,7 @@
 import { MapSchema } from '@colyseus/schema';
 import type { Facing, GameId } from '@strkworld/shared';
 import {
-  DEFAULT_SPRITE,
-  DEFAULT_SPRITE_KEYS,
-  INTEREST_RADIUS,
-  MAX_CLIENTS_PER_ROOM,
-  MAX_VISIBLE_PEERS,
-  MIN_UPDATE_INTERVAL_MS,
-  WORLD_LIMIT,
+  resolveRoomConfig,
 } from './config.js';
 import {
   UpdateThrottle,
@@ -144,14 +138,15 @@ export class LobbyPresence {
 
   constructor(options: LobbyPresenceOptions = {}) {
     this.state = new LobbyState();
-    this.#spriteKeys = options.spriteKeys ?? DEFAULT_SPRITE_KEYS;
-    this.#defaultSprite = options.defaultSprite ?? DEFAULT_SPRITE;
-    this.#interestRadius = options.interestRadius ?? INTEREST_RADIUS;
-    this.#maxVisiblePeers = options.maxVisiblePeers ?? MAX_VISIBLE_PEERS;
-    this.#capacity = options.capacity ?? MAX_CLIENTS_PER_ROOM;
-    this.#worldLimit = options.worldLimit ?? WORLD_LIMIT;
+    const config = resolveRoomConfig(options);
+    this.#spriteKeys = config.spriteKeys;
+    this.#defaultSprite = config.defaultSprite;
+    this.#interestRadius = config.interestRadius;
+    this.#maxVisiblePeers = config.maxVisiblePeers;
+    this.#capacity = config.capacity;
+    this.#worldLimit = config.worldLimit;
     this.#throttle = new UpdateThrottle(
-      options.minUpdateIntervalMs ?? MIN_UPDATE_INTERVAL_MS,
+      config.minUpdateIntervalMs,
     );
     this.#random = options.random;
   }
@@ -201,8 +196,8 @@ export class LobbyPresence {
     const entry = this.peers.get(session.gameId);
     if (entry === undefined) return 'absent';
 
-    const x = normalizeCoordinate(request.x, this.#worldLimit);
-    const y = normalizeCoordinate(request.y, this.#worldLimit);
+    const x = normalizeCoordinate(ownDataField(request, 'x'), this.#worldLimit);
+    const y = normalizeCoordinate(ownDataField(request, 'y'), this.#worldLimit);
     if (x === null || y === null) return 'rejected';
 
     if (!this.#throttle.accept(sessionKey, now)) {
@@ -212,7 +207,7 @@ export class LobbyPresence {
 
     entry.position.x = x;
     entry.position.y = y;
-    entry.facing = normalizeFacing(request.facing);
+    entry.facing = normalizeFacing(ownDataField(request, 'facing'));
     return 'applied';
   }
 
@@ -351,17 +346,17 @@ export class LobbyPresence {
 
   /** Build and store an entry, or report that the placement was unusable. */
   #place(gameId: GameId, request: PlacementRequest): boolean {
-    const x = normalizeCoordinate(request.x, this.#worldLimit);
-    const y = normalizeCoordinate(request.y, this.#worldLimit);
+    const x = normalizeCoordinate(ownDataField(request, 'x'), this.#worldLimit);
+    const y = normalizeCoordinate(ownDataField(request, 'y'), this.#worldLimit);
     if (x === null || y === null) return false;
 
     const entry = new PresenceEntry();
     entry.gameId = gameId;
     entry.position.x = x;
     entry.position.y = y;
-    entry.facing = normalizeFacing(request.facing) satisfies Facing;
+    entry.facing = normalizeFacing(ownDataField(request, 'facing')) satisfies Facing;
     entry.sprite = normalizeSprite(
-      request.sprite,
+      ownDataField(request, 'sprite'),
       this.#spriteKeys,
       this.#defaultSprite,
     );
@@ -372,4 +367,10 @@ export class LobbyPresence {
 
 function isValidMonotonicTime(value: number): boolean {
   return Number.isFinite(value) && value >= 0;
+}
+
+function ownDataField(value: unknown, key: string): unknown {
+  if (value === null || typeof value !== 'object') return undefined;
+  const descriptor = Object.getOwnPropertyDescriptor(value, key);
+  return descriptor && 'value' in descriptor ? descriptor.value : undefined;
 }

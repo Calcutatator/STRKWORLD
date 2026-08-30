@@ -12,6 +12,8 @@ const TITLES: Readonly<Record<WalletAttentionKind, string>> = Object.freeze({
 });
 
 const AVATAR = resolveAvatarSheet('avatar-1');
+const attentionTitleOwners = new Set<symbol>();
+let titleBeforeAttention: string | null = null;
 
 export function walletOperationAttention(
   balanceLoading: boolean,
@@ -42,7 +44,9 @@ export function WalletAttentionCue({
   useEffect(() => {
     if (!active || typeof document === 'undefined') return;
 
-    const previousTitle = document.title;
+    const owner = Symbol('wallet-attention-title');
+    if (attentionTitleOwners.size === 0) titleBeforeAttention = document.title;
+    attentionTitleOwners.add(owner);
     document.title = COPY.walletAttention.tabTitle;
     // Deferral collapses React StrictMode's setup/cleanup probe into the live
     // owner and avoids sounding twice for one handoff.
@@ -50,8 +54,12 @@ export function WalletAttentionCue({
 
     return () => {
       globalThis.clearTimeout(timer);
-      if (document.title === COPY.walletAttention.tabTitle) {
-        document.title = previousTitle;
+      attentionTitleOwners.delete(owner);
+      if (attentionTitleOwners.size === 0) {
+        if (document.title === COPY.walletAttention.tabTitle) {
+          document.title = titleBeforeAttention ?? '';
+        }
+        titleBeforeAttention = null;
       }
     };
   }, [active, kind]);

@@ -1,4 +1,4 @@
-import { useSyncExternalStore } from 'react';
+import { useMemo, useSyncExternalStore } from 'react';
 import type { ReadableStore } from './store.js';
 
 /**
@@ -9,5 +9,8 @@ import type { ReadableStore } from './store.js';
  * a fresh confirm button is exactly the class of bug that matters here.
  */
 export function useStore<S>(store: ReadableStore<S>): S {
-  return useSyncExternalStore(store.subscribe, store.getState, store.getServerSnapshot);
+  const subscribe = useMemo(() => (listener: () => void) => store.subscribe(listener), [store]);
+  const getSnapshot = useMemo(() => () => store.getState(), [store]);
+  const getServerSnapshot = useMemo(() => () => store.getServerSnapshot(), [store]);
+  return useSyncExternalStore(subscribe, getSnapshot, getServerSnapshot);
 }

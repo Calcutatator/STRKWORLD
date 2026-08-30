@@ -136,7 +136,9 @@ describe('shell boundaries', () => {
 
   it('loads the demo seam dynamically, never statically', () => {
     const provider = readFileSync(join(SRC, 'privacy/PrivacyProvider.tsx'), 'utf8');
-    expect(provider).toContain("import('./demo-operations.js')");
+    const loader = readFileSync(join(SRC, 'privacy/demo-loader.ts'), 'utf8');
+    expect(loader).toContain("import('./demo-operations.js')");
+    expect(provider).not.toContain("import('./demo-operations.js')");
     expect(imports(provider).map((entry) => entry.specifier)).not.toContain('./demo-operations.js');
   });
 

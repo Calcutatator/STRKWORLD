@@ -97,10 +97,13 @@ export function looksLikeAddress(input: string): boolean {
  * so `===` silently answers "different" for two spellings of one account.
  */
 export function sameAddress(a: string, b: string): boolean {
+  if (typeof a !== 'string' || typeof b !== 'string' || !looksLikeAddress(a) || !looksLikeAddress(b)) {
+    return false;
+  }
   try {
     return BigInt(a) === BigInt(b);
   } catch {
-    return a === b;
+    return false;
   }
 }
 

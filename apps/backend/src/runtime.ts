@@ -96,7 +96,7 @@ export function listenBackendServer(
       server.off('error', onError);
       const address = server.address();
       if (!address || typeof address === 'string') {
-        void closeServer(server).finally(() => {
+        void closeServer(server).catch(() => undefined).finally(() => {
           reject(new Error('Backend listener did not bind a TCP address.'));
         });
         return;
@@ -113,7 +113,13 @@ export function listenBackendServer(
 
     server.once('error', onError);
     server.once('listening', onListening);
-    server.listen(options.port, '0.0.0.0');
+    try {
+      server.listen(options.port, '0.0.0.0');
+    } catch (error) {
+      server.off('error', onError);
+      server.off('listening', onListening);
+      reject(error);
+    }
   });
 }
 
@@ -142,9 +148,15 @@ export function registerBackendShutdown(
     );
   };
   for (const signal of ['SIGTERM', 'SIGINT'] as const) {
-    const remove = lifecycle.listen(signal, shutdown);
-    if (active) removers.push(remove);
-    else remove();
+    try {
+      const remove = lifecycle.listen(signal, shutdown);
+      if (active) removers.push(remove);
+      else remove();
+    } catch (error) {
+      active = false;
+      detach();
+      throw error;
+    }
   }
   return dispose;
 }

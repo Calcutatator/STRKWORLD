@@ -108,6 +108,11 @@ export function preloadAvatarVisuals(
 const FACING_ROW: Record<Facing, number> = { down: 0, left: 1, right: 2, up: 3 };
 const AVATAR_FACINGS: readonly Facing[] = ['down', 'left', 'right', 'up'];
 
+/** Normalize untrusted runtime pose data before it can form a frame index. */
+function validateAvatarFacing(value: unknown): Facing {
+  return AVATAR_FACINGS.includes(value as Facing) ? (value as Facing) : 'down';
+}
+
 export interface AvatarAnimationPlan {
   readonly key: string;
   readonly textureKey: AvatarSpriteKey;
@@ -124,7 +129,7 @@ export interface AvatarVisualPose {
 
 type AvatarVisualTarget = Pick<
   PhaserTypes.GameObjects.Sprite,
-  'setTexture' | 'setOrigin' | 'play' | 'stop' | 'setFrame' | 'setData'
+  'setTexture' | 'setOrigin' | 'setVertexRoundMode' | 'play' | 'stop' | 'setFrame' | 'setData'
 >;
 
 export function resolveAvatarAnimation(
@@ -133,9 +138,10 @@ export function resolveAvatarAnimation(
   sprinting: boolean,
 ): AvatarAnimationPlan {
   const sheet = resolveAvatarSheet(sprite);
-  const rowOffset = FACING_ROW[facing] * sheet.columns;
+  const resolvedFacing = validateAvatarFacing(facing);
+  const rowOffset = FACING_ROW[resolvedFacing] * sheet.columns;
   return Object.freeze({
-    key: `${sheet.sprite}:${facing}:${sprinting ? 'sprint' : 'walk'}`,
+    key: `${sheet.sprite}:${resolvedFacing}:${sprinting ? 'sprint' : 'walk'}`,
     textureKey: sheet.textureKey,
     frames: Object.freeze(sheet.walkColumns.map((column) => rowOffset + column)),
     frameRate: sprinting ? AVATAR_SPRINT_WALK_FPS : AVATAR_NORMAL_WALK_FPS,
@@ -166,16 +172,23 @@ export function applyAvatarVisual(
   pose: AvatarVisualPose,
 ): AvatarSpriteKey {
   const sheet = resolveAvatarSheet(pose.sprite);
+  const facing = validateAvatarFacing(pose.facing);
   target.setTexture(sheet.textureKey);
   target.setOrigin(sheet.originX, sheet.originY);
+  // Phaser 4's default `safeAuto` vertex mode skips rounding when the camera
+  // applies its integer zoom. Pixel-art textures are nearest-filtered, but a
+  // fractional world position can still land on fractional screen vertices;
+  // fullAuto rounds the final transformed quad and keeps horizontal motion
+  // crisp at the World camera's 2x zoom.
+  target.setVertexRoundMode('fullAuto');
   if (pose.moving) {
-    target.play(resolveAvatarAnimation(sheet.sprite, pose.facing, pose.sprinting === true).key, true);
+    target.play(resolveAvatarAnimation(sheet.sprite, facing, pose.sprinting === true).key, true);
   } else {
     target.stop();
-    target.setFrame(FACING_ROW[pose.facing] * sheet.columns);
+    target.setFrame(FACING_ROW[facing] * sheet.columns);
   }
   target.setData('sprite', sheet.sprite);
-  target.setData('facing', pose.facing);
+  target.setData('facing', facing);
   return sheet.sprite;
 }
 
@@ -205,24 +218,33 @@ export function createAvatarVisualController(
   };
   let rendered = '';
 
-  const render = (): void => {
-    const key = `${state.sprite}:${state.facing}:${state.moving}:${state.sprinting}`;
+  const render = (nextState: AvatarVisualControllerState): void => {
+    const key = `${nextState.sprite}:${nextState.facing}:${nextState.moving}:${nextState.sprinting}`;
     if (key === rendered) return;
-    applyAvatarVisual(target, state);
+    applyAvatarVisual(target, nextState);
     rendered = key;
   };
 
   const present = (pose: AvatarVisualPose): void => {
-    state = {
+    const nextState: AvatarVisualControllerState = {
       sprite: validateAvatarSprite(pose.sprite),
-      facing: pose.facing,
+      facing: validateAvatarFacing(pose.facing),
       moving: pose.moving,
       sprinting: pose.moving && pose.sprinting === true,
     };
-    render();
+    try {
+      render(nextState);
+      state = nextState;
+    } catch (error) {
+      // A Phaser setter may partially mutate the target before throwing. The
+      // logical state stays at the last successful pose, and the cache is
+      // invalidated so a retry repairs the target rather than being skipped.
+      rendered = '';
+      throw error;
+    }
   };
 
-  render();
+  render(state);
   return {
     get state() {
       return Object.freeze({ ...state });
@@ -272,13 +294,18 @@ export function createLocalAvatarVisual(
       visual.select(sprite);
     },
     update(input, sprinting) {
-      facing = resolveMovementFacing(input, facing);
+      const nextFacing = resolveMovementFacing(input, facing);
       const velocity = calculateMovementVelocity(input, sprinting);
       visual.update({
-        facing,
+        facing: nextFacing,
         moving: velocity.x !== 0 || velocity.y !== 0,
         sprinting,
       });
+      // The visual controller is the commit point for the pose. Keep the
+      // movement-facing accumulator aligned with it only after presentation
+      // succeeds, so a Phaser setter failure cannot make a later no-input
+      // retry inherit a turn that never rendered.
+      facing = nextFacing;
     },
   };
 }

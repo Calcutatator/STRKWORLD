@@ -16,6 +16,8 @@ import { createReceiptLedger } from '../../receipts/receipt-ledger.js';
 import { createSubmissionUncertainty } from '../../privacy/submission-uncertainty.js';
 import {
   createBankPanel,
+  ROUTE_BY_MODE,
+  type BankMode,
   type BankPanel,
   type BankPanelOptions,
 } from './bank-machine.js';
@@ -29,6 +31,52 @@ const POOL_FEE = 6_000000000000000000n;
 const SHIELD_DISCLOSURE = PRIVACY_REGISTER.find((entry) => entry.route === 'bank.shield')!.disclosure;
 const strk = (whole: string) => parseTokenAmount(whole)!;
 const allowFinancialActions = () => true;
+
+describe('Bank route authority', () => {
+  it('publishes an immutable panel API while retaining owned transitions', async () => {
+    const panel = await openPanel(fake());
+    const originalSetMode = panel.setMode;
+
+    expect(Object.isFrozen(panel)).toBe(true);
+    expect(Reflect.set(panel, 'setMode', () => undefined)).toBe(false);
+    expect(Reflect.set(panel, 'confirm', async () => undefined)).toBe(false);
+    expect(panel.setMode).toBe(originalSetMode);
+    panel.setMode('transfer');
+    expect(panel.store.getState().mode).toBe('transfer');
+  });
+
+  it('keeps the mode-to-route map immutable at the public seam', () => {
+    expect(Object.isFrozen(ROUTE_BY_MODE)).toBe(true);
+    expect(Reflect.set(ROUTE_BY_MODE, 'shield', 'exchange.swap')).toBe(false);
+    expect(ROUTE_BY_MODE.shield).toBe('bank.shield');
+  });
+
+  it('keeps the allowed mode authority owned after construction', async () => {
+    const allowedModes: BankPanelOptions['allowedModes'] = ['shield'];
+    const panel = await openPanel(fake(), { allowedModes });
+
+    (allowedModes as BankMode[]).push('transfer');
+    panel.setMode('transfer');
+
+    expect(panel.store.getState().mode).toBe('shield');
+  });
+
+  it('exposes a read-only immutable state snapshot to panel consumers', async () => {
+    const panel = await openPanel(fake());
+    const state = panel.store.getState();
+
+    expect('setState' in panel.store).toBe(false);
+    expect(Object.isFrozen(state)).toBe(true);
+    expect(Object.isFrozen(state.door)).toBe(true);
+    expect(Object.isFrozen(state.pool)).toBe(true);
+    expect(Object.isFrozen(state.balance)).toBe(true);
+    expect(Object.isFrozen(state.batch)).toBe(true);
+    expect(Reflect.set(state, 'mode', 'transfer')).toBe(false);
+    expect(Reflect.set(state.door, 'open', false)).toBe(false);
+    expect(Reflect.set(state.batch, '0', { kind: 'shield', token: STRK, amount: 1n })).toBe(false);
+    expect(panel.store.getState().mode).toBe('shield');
+  });
+});
 
 function fake(overrides: ConstructorParameters<typeof FakePrivacyOperations>[0] = {}) {
   return new FakePrivacyOperations({

@@ -47,24 +47,63 @@ export interface InputGate {
 
 export function createInputGate(keyboard: KeyboardLike): InputGate {
   let suspended = false;
+  let suspending = false;
 
   return {
     suspend() {
-      if (suspended) return;
-      suspended = true;
+      if (suspended || suspending) return;
+      // Keep the transition in-flight until every keyboard operation succeeds.
+      // A Phaser callback or adapter can throw synchronously; leaving the gate
+      // marked suspended would make all later retries silently no-op.
+      suspending = true;
+      let captureDisabled = false;
+      let deliveryDisabled = false;
       // Order is load-bearing.
-      keyboard.disableGlobalCapture(); // stop swallowing keystrokes
-      keyboard.enabled = false; // stop delivering them to the game
-      keyboard.resetKeys(); // drop anything currently held
+      try {
+        keyboard.disableGlobalCapture(); // stop swallowing keystrokes
+        captureDisabled = true;
+        keyboard.enabled = false; // stop delivering them to the game
+        deliveryDisabled = true;
+        keyboard.resetKeys(); // drop anything currently held
+        suspended = true;
+      } catch (error) {
+        // If the handoff reached either disabling step, cleanup must own the
+        // partially suspended keyboard. Otherwise resume() would no-op while
+        // Phaser delivery remained disabled after a reset/assignment failure.
+        if (captureDisabled || deliveryDisabled) suspended = true;
+        throw error;
+      } finally {
+        suspending = false;
+      }
     },
 
     resume() {
       if (!suspended) return;
-      suspended = false;
       // Clear first: a key pressed while suspended must not arrive as held.
       keyboard.resetKeys();
-      keyboard.enabled = true;
-      keyboard.enableGlobalCapture();
+      try {
+        keyboard.enabled = true;
+        keyboard.enableGlobalCapture();
+      } catch (error) {
+        // Re-capture is an external lifecycle boundary. If it fails after
+        // delivery was re-enabled, immediately fail closed so a panel cannot
+        // remain open while gameplay starts receiving its keystrokes. Keep the
+        // suspended flag set so a later resume can retry the handoff.
+        try {
+          keyboard.enabled = false;
+        } catch {
+          // Preserve the original capture error.
+        }
+        try {
+          keyboard.disableGlobalCapture();
+        } catch {
+          // Preserve the original capture error.
+        }
+        throw error;
+      }
+      // Retire the suspended state only after every restoration step succeeds.
+      // A failing keyboard operation remains retryable by Scene teardown.
+      suspended = false;
     },
 
     get suspended() {
@@ -84,13 +123,41 @@ export function bindInputGate(
   gate: InputGate,
   on: (event: 'building:entered' | 'building:exited', handler: () => void) => () => void,
 ): () => void {
-  const offEnter = on('building:entered', () => gate.suspend());
-  const offExit = on('building:exited', () => gate.resume());
-  return () => {
-    offEnter();
-    offExit();
-    // Never leave the world unable to receive input because a panel unmounted
-    // in an unexpected order.
-    gate.resume();
-  };
+  let offEnter: (() => void) | undefined;
+  try {
+    offEnter = on('building:entered', () => gate.suspend());
+    const offExit = on('building:exited', () => gate.resume());
+    return () => {
+      const errors: unknown[] = [];
+      const attempt = (cleanup: () => void): void => {
+        try {
+          cleanup();
+        } catch (error) {
+          errors.push(error);
+        }
+      };
+      attempt(() => offEnter?.());
+      attempt(offExit);
+      // Never leave the world unable to receive input because a panel unmounted
+      // in an unexpected order.
+      attempt(() => gate.resume());
+      if (errors.length === 1) throw errors[0];
+      if (errors.length > 1) throw new AggregateError(errors, 'Input-gate cleanup failed');
+    };
+  } catch (error) {
+    // A bus may register the entry handler and then fail while installing the
+    // exit handler. The unreturned binding cannot clean itself up later, so
+    // roll back the acquired listener while preserving the original error.
+    try {
+      offEnter?.();
+    } catch {
+      // Cleanup cannot replace the registration failure.
+    }
+    try {
+      gate.resume();
+    } catch {
+      // Preserve the listener-registration failure if input restoration fails.
+    }
+    throw error;
+  }
 }

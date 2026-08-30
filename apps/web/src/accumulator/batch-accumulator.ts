@@ -75,7 +75,7 @@ export function createBatchAccumulator(options: AccumulatorOptions = {}): BatchA
     return Object.freeze([...intents]);
   }
 
-  return {
+  return Object.freeze({
     get intents() {
       return snapshot();
     },
@@ -129,7 +129,7 @@ export function createBatchAccumulator(options: AccumulatorOptions = {}): BatchA
       }
       return { ok: true, value: snapshot() };
     },
-  };
+  });
 }
 
 // ---------------------------------------------------------------------------
@@ -157,41 +157,59 @@ function parseIntent(candidate: unknown): BatchResult<Intent> {
   if (typeof candidate !== 'object' || candidate === null) {
     return reject('an intent must be an object');
   }
-  const record = candidate as Record<string, unknown>;
-  const kind = record['kind'];
-  // `Object.hasOwn`, not `in`: `in` walks the prototype chain, so `toString`
-  // and `constructor` would pass the kind check and then be indexed into,
-  // handing the validator a function where it expected a field list.
-  if (typeof kind !== 'string' || !Object.hasOwn(INTENT_SHAPES, kind)) {
-    return reject(`unknown intent kind ${JSON.stringify(kind)}`);
-  }
-
-  const expected: readonly string[] = INTENT_SHAPES[kind as Intent['kind']];
-  const actual = Object.keys(record);
-  const extra = actual.filter((key) => !expected.includes(key));
-  if (extra.length > 0) {
-    return reject(`unexpected field(s) on a ${kind} intent: ${extra.join(', ')}`);
-  }
-  const missing = expected.filter((key) => !actual.includes(key));
-  if (missing.length > 0) {
-    return reject(`missing field(s) on a ${kind} intent: ${missing.join(', ')}`);
-  }
-
-  for (const field of ADDRESS_FIELDS) {
-    if (!expected.includes(field)) continue;
-    const value = record[field];
-    if (typeof value !== 'string' || !/^0x[0-9a-fA-F]{1,64}$/.test(value)) {
-      return reject(`${field} must be a Starknet address`);
+  try {
+    const record = candidate as Record<string, unknown>;
+    const kindDescriptor = Object.getOwnPropertyDescriptor(record, 'kind');
+    const kind = kindDescriptor && 'value' in kindDescriptor ? kindDescriptor.value : undefined;
+    // `Object.hasOwn`, not `in`: `in` walks the prototype chain, so `toString`
+    // and `constructor` would pass the kind check and then be indexed into,
+    // handing the validator a function where it expected a field list.
+    if (typeof kind !== 'string' || !Object.hasOwn(INTENT_SHAPES, kind)) {
+      return reject(`unknown intent kind ${JSON.stringify(kind)}`);
     }
-  }
-  for (const field of AMOUNT_FIELDS) {
-    if (!expected.includes(field)) continue;
-    if (typeof record[field] !== 'bigint') {
-      return reject(`${field} must be a bigint — token amounts overflow number`);
-    }
-  }
 
-  return { ok: true, value: Object.freeze({ ...record }) as unknown as Intent };
+    const expected: readonly string[] = INTENT_SHAPES[kind as Intent['kind']];
+    const actual = Object.keys(record);
+    const extra = actual.filter((key) => !expected.includes(key));
+    if (extra.length > 0) {
+      return reject(`unexpected field(s) on a ${kind} intent: ${extra.join(', ')}`);
+    }
+    const missing = expected.filter((key) => !actual.includes(key));
+    if (missing.length > 0) {
+      return reject(`missing field(s) on a ${kind} intent: ${missing.join(', ')}`);
+    }
+
+    // A structural caller may supply an object with accessors or a Proxy. Read
+    // only own data descriptors so validation never invokes untrusted getters,
+    // and build the accepted intent from those captured values rather than
+    // spreading the caller's object.
+    const values: Record<string, unknown> = {};
+    for (const field of expected) {
+      const descriptor = Object.getOwnPropertyDescriptor(record, field);
+      if (!descriptor || !('value' in descriptor)) {
+        return reject(`${field} must be an own data field`);
+      }
+      values[field] = descriptor.value;
+    }
+
+    for (const field of ADDRESS_FIELDS) {
+      if (!expected.includes(field)) continue;
+      const value = values[field];
+      if (typeof value !== 'string' || !/^0x[0-9a-fA-F]{1,64}$/.test(value)) {
+        return reject(`${field} must be a Starknet address`);
+      }
+    }
+    for (const field of AMOUNT_FIELDS) {
+      if (!expected.includes(field)) continue;
+      if (typeof values[field] !== 'bigint') {
+        return reject(`${field} must be a bigint — token amounts overflow number`);
+      }
+    }
+
+    return { ok: true, value: Object.freeze(values) as unknown as Intent };
+  } catch {
+    return reject('intent fields must be own data values');
+  }
 }
 
 function reject(detail: string): BatchResult<never> {

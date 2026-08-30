@@ -8,6 +8,7 @@ import { validateSourceAddress, validateStarknetAddress } from './address-valida
 import type { OneClickClient } from './client.js';
 import {
   deserializeBridgeRecord,
+  isUsableDepositAddress,
   serializeBridgeRecord,
   type BridgeStore,
 } from './persistence.js';
@@ -84,29 +85,33 @@ export class BridgeService {
   }
 
   private async createDeposit(input: CreateDepositInput): Promise<BridgeRecord> {
+    const stableInput: CreateDepositInput = {
+      ...input,
+      source: { ...input.source },
+    };
     if (this.resume()) {
       throw new Error('An existing bridge deposit is available. Discard it before creating a new deposit.');
     }
-    validateInput(input);
+    validateInput(stableInput);
     const deadline = new Date(this.now() + QUOTE_DEADLINE_MS).toISOString();
     const request = {
       dry: false,
-      ...(input.source.chainName === 'stellar' ? { depositMode: 'MEMO' } : {}),
+      ...(stableInput.source.chainName === 'stellar' ? { depositMode: 'MEMO' } : {}),
       swapType: 'EXACT_INPUT',
-      slippageTolerance: input.slippageBps ?? DEFAULT_SLIPPAGE_BPS,
-      originAsset: input.source.assetId,
+      slippageTolerance: stableInput.slippageBps ?? DEFAULT_SLIPPAGE_BPS,
+      originAsset: stableInput.source.assetId,
       depositType: 'ORIGIN_CHAIN',
       destinationAsset: STRK_ON_STARKNET_ASSET_ID,
-      amount: input.amountIn.toString(),
-      refundTo: input.refundAddress,
+      amount: stableInput.amountIn.toString(),
+      refundTo: stableInput.refundAddress,
       refundType: 'ORIGIN_CHAIN',
-      recipient: input.starknetRecipient,
+      recipient: stableInput.starknetRecipient,
       recipientType: 'DESTINATION_CHAIN',
       deadline,
     } as QuoteRequest;
 
     const signedQuote = await this.client.getQuote(request);
-    assertSignedQuote(signedQuote, input, request);
+    assertSignedQuote(signedQuote, stableInput, request);
     if (!this.quoteVerifier(signedQuote)) {
       throw new Error('1Click quote signature verification failed.');
     }
@@ -118,14 +123,14 @@ export class BridgeService {
       v: 1,
       createdAt: now,
       updatedAt: now,
-      source: { ...input.source },
-      amountIn: input.amountIn,
-      starknetRecipient: input.starknetRecipient,
-      refundAddress: input.refundAddress,
+      source: { ...stableInput.source },
+      amountIn: stableInput.amountIn,
+      starknetRecipient: stableInput.starknetRecipient,
+      refundAddress: stableInput.refundAddress,
       signedQuote,
       status: {
         leg: 'awaiting-deposit',
-        message: input.source.depositMode === 'signed'
+        message: stableInput.source.depositMode === 'signed'
           ? 'Approve the exact origin deposit in your connected wallet.'
           : signedQuote.quote.depositMemo
             ? 'Send the exact amount with both the deposit address and memo.'
@@ -142,8 +147,14 @@ export class BridgeService {
     txHash: string,
     nearSenderAccount?: string,
   ): Promise<BridgeStatus> {
-    if (!txHash || txHash.length > 256 || /\s/.test(txHash)) {
+    if (typeof txHash !== 'string' || txHash.length === 0 || txHash.length > 256 || /\s/.test(txHash)) {
       throw new Error('The origin deposit transaction hash is invalid.');
+    }
+    if (
+      nearSenderAccount !== undefined &&
+      (typeof nearSenderAccount !== 'string' || /\s/.test(nearSenderAccount))
+    ) {
+      throw new Error('The Near sender account is invalid.');
     }
     const record = this.resume();
     if (!record) throw new Error('No bridge deposit is available to resume.');
@@ -258,7 +269,10 @@ export class BridgeService {
       }
       const refreshed = await this.refreshRecord(owned);
       const status = refreshed.status;
-      options.onUpdate?.(status);
+      // The watcher retains `status` inside its complete-record ownership
+      // token. Give observers a separate display snapshot so a callback cannot
+      // forge the version comparison or the timeout state that is persisted.
+      options.onUpdate?.({ ...status });
       if (status.pollingStopped) return status;
       if (!refreshed.persisted) return stoppedPollingStatus(status);
       owned = refreshed.persisted;
@@ -305,10 +319,27 @@ export class BridgeService {
     }
   }
 
-  private verifyStatusQuote(raw: { quoteResponse: QuoteResponse }, record: BridgeRecord): void {
+  private verifyStatusQuote(
+    raw: {
+      quoteResponse: QuoteResponse;
+      status: unknown;
+      swapDetails: GetExecutionStatusResponse['swapDetails'];
+    },
+    record: BridgeRecord,
+  ): void {
     if (
-      raw.quoteResponse.correlationId !== record.signedQuote.correlationId ||
-      raw.quoteResponse.signature !== record.signedQuote.signature
+      !isRecord(raw) ||
+      !hasOwnDataProperty(raw, 'quoteResponse') ||
+      !hasOwnDataProperty(raw, 'status') ||
+      !hasOwnDataProperty(raw, 'swapDetails') ||
+      typeof raw.status !== 'string' ||
+      !isStatusQuoteResponse(raw.quoteResponse) ||
+      !isRecord(raw.swapDetails)
+    ) throw invalidExecutionStatus();
+    const quoteResponse = raw.quoteResponse;
+    if (
+      quoteResponse.correlationId !== record.signedQuote.correlationId ||
+      quoteResponse.signature !== record.signedQuote.signature
     ) {
       throw new Error('1Click status did not match the persisted signed quote.');
     }
@@ -319,8 +350,8 @@ export class BridgeService {
       refundAddress: record.refundAddress,
       slippageBps: record.signedQuote.quoteRequest.slippageTolerance,
     };
-    assertSignedQuote(raw.quoteResponse, input, record.signedQuote.quoteRequest);
-    if (!this.quoteVerifier(raw.quoteResponse)) {
+    assertSignedQuote(quoteResponse, input, record.signedQuote.quoteRequest);
+    if (!this.quoteVerifier(quoteResponse)) {
       throw new Error('1Click status quote signature verification failed.');
     }
   }
@@ -340,15 +371,23 @@ function samePersistedVersion(left: BridgeRecord, right: BridgeRecord): boolean 
 
 function validateInput(input: CreateDepositInput): void {
   if (
+    typeof input.source.assetId !== 'string' ||
     !input.source.assetId ||
+    typeof input.source.symbol !== 'string' ||
     !input.source.symbol ||
+    typeof input.source.chainName !== 'string' ||
     !Number.isSafeInteger(input.source.decimals) ||
     input.source.decimals < 0 ||
     input.source.decimals > 36
   ) {
     throw new Error('The source asset metadata is invalid.');
   }
-  if (input.amountIn <= 0n) throw new Error('Bridge amount must be positive.');
+  if (typeof input.amountIn !== 'bigint') {
+    throw new Error('Bridge amount must be a bigint.');
+  }
+  if (input.amountIn <= 0n || input.amountIn > MAX_BASE_UNIT_AMOUNT) {
+    throw new Error('Bridge amount must be a positive uint256.');
+  }
   const slippage = input.slippageBps ?? DEFAULT_SLIPPAGE_BPS;
   if (!Number.isInteger(slippage) || slippage < 1 || slippage > 1_000) {
     throw new Error('Bridge slippage must be between 1 and 1000 basis points.');
@@ -364,13 +403,18 @@ function assertSignedQuote(
   input: CreateDepositInput,
   request: QuoteRequest,
 ): void {
+  if (!hasSignedQuoteShape(response)) {
+    throw new Error('1Click returned invalid signed quote data.');
+  }
   if (!response.signature || !response.timestamp || !response.correlationId) {
     throw new Error('1Click returned no signed quote dispute evidence.');
   }
   if (!Number.isFinite(Date.parse(response.timestamp))) {
     throw new Error('1Click returned an invalid signed quote timestamp.');
   }
-  if (!response.quote.depositAddress) throw new Error('1Click returned no deposit address.');
+  if (!isUsableDepositAddress(response.quote.depositAddress)) {
+    throw new Error('1Click returned an invalid deposit address.');
+  }
   if (
     !response.quote.deadline ||
     response.quote.deadline !== request.deadline ||
@@ -390,8 +434,10 @@ function assertSignedQuote(
   }
   if (
     response.quote.amountIn !== input.amountIn.toString() ||
-    !isPositiveDecimal(response.quote.amountOut) ||
-    !isPositiveDecimal(response.quote.minAmountOut) ||
+    typeof response.quote.amountOut !== 'string' ||
+    typeof response.quote.minAmountOut !== 'string' ||
+    !isBoundedPositiveDecimal(response.quote.amountOut) ||
+    !isBoundedPositiveDecimal(response.quote.minAmountOut) ||
     BigInt(response.quote.minAmountOut) > BigInt(response.quote.amountOut) ||
     !Number.isFinite(response.quote.timeEstimate) ||
     response.quote.timeEstimate < 0
@@ -420,6 +466,12 @@ function isPositiveDecimal(value: string): boolean {
   return /^[1-9][0-9]*$/.test(value);
 }
 
+function isBoundedPositiveDecimal(value: string): boolean {
+  return isPositiveDecimal(value) &&
+    value.length <= MAX_BASE_UNIT_AMOUNT_DIGITS &&
+    BigInt(value) <= MAX_BASE_UNIT_AMOUNT;
+}
+
 function quoteExpired(record: BridgeRecord, now: number): boolean {
   const rawDeadline = record.signedQuote.quote.deadline;
   if (!rawDeadline) return false;
@@ -436,6 +488,7 @@ function mapStatus(raw: {
       return { leg: 'awaiting-deposit', message: 'Waiting for the origin deposit.', pollingStopped: false };
     case 'KNOWN_DEPOSIT_TX':
     case 'INCOMPLETE_DEPOSIT':
+      requireOwnDataFields(raw.swapDetails, ['originChainTxHashes']);
       return {
         leg: 'deposit-detected',
         depositTxHash: firstTransactionHash(raw.swapDetails.originChainTxHashes),
@@ -445,6 +498,7 @@ function mapStatus(raw: {
         pollingStopped: false,
       };
     case 'PROCESSING':
+      requireOwnDataFields(raw.swapDetails, ['originChainTxHashes']);
       return {
         leg: 'solver-settling',
         depositTxHash: firstTransactionHash(raw.swapDetails.originChainTxHashes),
@@ -453,6 +507,11 @@ function mapStatus(raw: {
       };
     case 'SUCCESS':
       {
+        requireOwnDataFields(raw.swapDetails, [
+          'amountOut',
+          'originChainTxHashes',
+          'destinationChainTxHashes',
+        ]);
         const strkReceived = parseSettlementAmount(raw.swapDetails.amountOut);
         const settlementTxHash = firstTransactionHash(
           raw.swapDetails.destinationChainTxHashes,
@@ -467,6 +526,7 @@ function mapStatus(raw: {
         };
       }
     case 'REFUNDED':
+      requireOwnDataFields(raw.swapDetails, ['originChainTxHashes']);
       return {
         leg: 'failed',
         depositTxHash: firstTransactionHash(raw.swapDetails.originChainTxHashes),
@@ -488,10 +548,12 @@ function firstTransactionHash(entries: unknown): string | undefined {
   if (!Array.isArray(entries)) throw invalidExecutionStatus();
   const first = entries[0];
   if (first === undefined) return undefined;
-  if (!first || typeof first !== 'object' || !('hash' in first)) {
+  if (!first || typeof first !== 'object' || Array.isArray(first)) {
     throw invalidExecutionStatus();
   }
-  return boundedTransactionHash(first.hash);
+  const hash = Object.getOwnPropertyDescriptor(first, 'hash');
+  if (!hash || !('value' in hash)) throw invalidExecutionStatus();
+  return boundedTransactionHash(hash.value);
 }
 
 function boundedTransactionHash(value: unknown): string {
@@ -521,6 +583,60 @@ function parseSettlementAmount(value: unknown): bigint {
 
 function invalidExecutionStatus(): Error {
   return new Error(INVALID_EXECUTION_STATUS_MESSAGE);
+}
+
+function requireOwnDataFields(value: unknown, keys: readonly PropertyKey[]): void {
+  if (!hasOwnDataProperties(value, keys)) throw invalidExecutionStatus();
+}
+
+function isStatusQuoteResponse(value: unknown): value is QuoteResponse {
+  if (!isRecord(value)) return false;
+  const response = value as { quote?: unknown; quoteRequest?: unknown };
+  return Boolean(
+    isRecord(response.quote) && isRecord(response.quoteRequest),
+  );
+}
+
+function hasSignedQuoteShape(value: unknown): value is QuoteResponse {
+  if (
+    !isRecord(value) ||
+    !hasOwnDataProperties(value, ['signature', 'timestamp', 'correlationId', 'quote', 'quoteRequest']) ||
+    typeof value.signature !== 'string' ||
+    typeof value.timestamp !== 'string' ||
+    typeof value.correlationId !== 'string' ||
+    !isRecord(value.quote) ||
+    !isRecord(value.quoteRequest) ||
+    !hasOwnDataProperties(value.quote, [
+      'depositAddress', 'deadline', 'amountIn', 'amountOut', 'minAmountOut', 'timeEstimate',
+    ]) ||
+    !hasOwnDataProperties(value.quoteRequest, [
+      'slippageTolerance', 'destinationAsset', 'originAsset', 'amount', 'recipient',
+      'refundTo', 'deadline', 'swapType', 'depositType', 'refundType', 'recipientType',
+      'dry',
+    ])
+  ) return false;
+  if ('depositMemo' in value.quote && !hasOwnDataProperty(value.quote, 'depositMemo')) return false;
+  if (
+    hasOwnDataProperty(value.quote, 'depositMemo') &&
+    value.quote.depositMemo !== undefined &&
+    (typeof value.quote.depositMemo !== 'string' ||
+      (value.quote.depositMemo.length > 0 && !/\S/.test(value.quote.depositMemo)))
+  ) return false;
+  if ('depositMode' in value.quoteRequest && !hasOwnDataProperty(value.quoteRequest, 'depositMode')) return false;
+  return true;
+}
+
+function hasOwnDataProperties(value: unknown, keys: readonly PropertyKey[]): value is Record<string, unknown> {
+  return isRecord(value) && keys.every((key) => hasOwnDataProperty(value, key));
+}
+
+function hasOwnDataProperty(value: object, key: PropertyKey): boolean {
+  const descriptor = Object.getOwnPropertyDescriptor(value, key);
+  return Boolean(descriptor && 'value' in descriptor);
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
 function throwIfAborted(signal?: AbortSignal): void {

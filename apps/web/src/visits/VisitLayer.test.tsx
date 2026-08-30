@@ -37,6 +37,16 @@ function findButton(node: ReactNode, label: string): ReactElement<{
 }
 
 describe('VisitLayerView', () => {
+  it('keeps the visit action projection immutable at the public seam', () => {
+    const shell = createEventBus<ShellEvents>();
+    const controller = createVisitController(shell);
+    const actions = visitLayerActions(controller);
+
+    expect(Object.isFrozen(actions)).toBe(true);
+    expect(Reflect.set(actions, 'onRequestExit', () => undefined)).toBe(false);
+    expect(actions.onRequestExit).toBeDefined();
+  });
+
   it('routes locked-door Escape through the production key filter', () => {
     const world = createEventBus<WorldEvents>();
     const shell = createEventBus<ShellEvents>();

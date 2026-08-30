@@ -84,16 +84,20 @@ export function createWalletSession(
   dependencies: WalletSessionDependencies,
 ): WalletSession {
   const expectedChainId = options.expectedChainId ?? MAINNET_CHAIN_ID;
+  assertChainId(expectedChainId);
   const policy = ownPolicy(options.policy);
   const listeners = new Map<() => void, symbol>();
   const keys = new WeakMap<object, string>();
   let nextKey = 0;
-  let wallets = [...dependencies.discovery.getWallets()];
+  const initialWallets = dependencies.discovery.getWallets();
+  let wallets = ownDiscoveredWallets(initialWallets);
   let generation = 0;
   let selectedKey: string | null = null;
   let connection: WalletConnectionPort | null = null;
   let operations: PrivacyOperations | null = null;
   let connectionCleanup: (() => void) | null = null;
+  const retiredConnections = new WeakSet<object>();
+  let connectFlight: { key: string; promise: Promise<WalletSessionSnapshot> } | null = null;
   let destroyed = false;
   let snapshot = buildSnapshot('selection-required', null);
 
@@ -188,19 +192,66 @@ export function createWalletSession(
         throw error;
       }
       if (!isCurrent(owner)) {
-        prepared.discard();
+        try {
+          prepared.discard();
+        } catch {
+          // Automatic stale cleanup cannot mask the changed-session result.
+        }
         throw changedSessionError();
       }
       return ownPreparedBatch(prepared, () => isCurrent(owner), changedSessionError);
     },
   };
 
-  function retireConnection(): void {
+  function destroyConnection(owned: WalletConnectionPort, suppressErrors: boolean): void {
+    if (retiredConnections.has(owned)) return;
+    retiredConnections.add(owned);
+    try {
+      owned.destroy();
+    } catch (error) {
+      if (!suppressErrors) throw error;
+    }
+  }
+
+  function retireConnectionBestEffort(): void {
     operations = null;
-    connectionCleanup?.();
+    const cleanup = connectionCleanup;
+    const owned = connection;
     connectionCleanup = null;
-    connection?.destroy();
     connection = null;
+    try {
+      cleanup?.();
+    } catch {
+      // Automatic cleanup cannot mask the transition that retired it.
+    }
+    if (owned) destroyConnection(owned, true);
+  }
+
+  function retireConnectionExplicit(): void {
+    operations = null;
+    const cleanup = connectionCleanup;
+    const owned = connection;
+    connectionCleanup = null;
+    connection = null;
+    let firstError: unknown;
+    let hasError = false;
+    try {
+      cleanup?.();
+    } catch (error) {
+      firstError = error;
+      hasError = true;
+    }
+    if (owned) {
+      try {
+        destroyConnection(owned, false);
+      } catch (error) {
+        if (!hasError) {
+          firstError = error;
+          hasError = true;
+        }
+      }
+    }
+    if (hasError) throw firstError;
   }
 
   function selectedWallet(): WalletHandle | null {
@@ -209,11 +260,21 @@ export function createWalletSession(
 
   const discoveryCleanup = dependencies.discovery.subscribe((nextWallets) => {
     if (destroyed) return;
-    wallets = [...nextWallets];
+    if (!Array.isArray(nextWallets)) {
+      wallets = [];
+      generation += 1;
+      connectFlight = null;
+      selectedKey = null;
+      retireConnectionBestEffort();
+      publish('selection-required', null);
+      return;
+    }
+    wallets = ownDiscoveredWallets(nextWallets);
     if (selectedKey && !selectedWallet()) {
       generation += 1;
+      connectFlight = null;
       selectedKey = null;
-      retireConnection();
+      retireConnectionBestEffort();
       publish('selection-required', null);
       return;
     }
@@ -230,31 +291,87 @@ export function createWalletSession(
         if (listeners.get(listener) === token) listeners.delete(listener);
       };
     },
-    async connect(key) {
+    connect(key) {
+      if (connectFlight?.key === key) return connectFlight.promise;
+      const promise = connectOwned(key);
+      connectFlight = { key, promise };
+      void promise.finally(() => {
+        if (connectFlight?.promise === promise) connectFlight = null;
+      }).catch(() => undefined);
+      return promise;
+    },
+    refreshDiscovery: () => dependencies.discovery.refresh(),
+    readAccount: () => snapshot.account,
+    async disconnect() {
+      generation += 1;
+      connectFlight = null;
+      const owned = connection;
+      let retirementError: unknown;
+      let hasRetirementError = false;
+      try {
+        retireConnectionExplicit();
+      } catch (error) {
+        retirementError = error;
+        hasRetirementError = true;
+      }
+      selectedKey = null;
+      publish('selection-required', null);
+      if (hasRetirementError) throw retirementError;
+      await owned?.disconnect();
+    },
+    destroy() {
+      if (destroyed) return;
+      destroyed = true;
+      generation += 1;
+      connectFlight = null;
+      let teardownError: unknown;
+      let hasTeardownError = false;
+      try {
+        discoveryCleanup();
+      } catch (error) {
+        teardownError = error;
+        hasTeardownError = true;
+      }
+      try {
+        retireConnectionExplicit();
+      } catch (error) {
+        if (!hasTeardownError) {
+          teardownError = error;
+          hasTeardownError = true;
+        }
+      }
+      selectedKey = null;
+      publish('selection-required', null);
+      listeners.clear();
+      if (hasTeardownError) throw teardownError;
+    },
+  };
+
+  async function connectOwned(key: string): Promise<WalletSessionSnapshot> {
       if (destroyed) throw new PrivacyError('unknown', 'The wallet session has ended.');
       const wallet = wallets.find((candidate) => keyFor(candidate) === key);
       if (!wallet) throw new PrivacyError('unreachable', 'The selected wallet is no longer available.');
 
       const attempt = ++generation;
       selectedKey = key;
-      retireConnection();
+      retireConnectionBestEffort();
       publish('connecting', null);
       let attemptedConnection: WalletConnectionPort | null = null;
       try {
         const connected = await dependencies.connectWallet(wallet);
         attemptedConnection = connected;
         if (destroyed || attempt !== generation) {
-          connected.destroy();
+          destroyConnection(connected, true);
           return snapshot;
         }
-        const next = connected.getSnapshot();
+        const next = readConnectionSnapshot(connected.getSnapshot());
         assertAddress(next.account);
         connection = connected;
-        connectionCleanup = connected.subscribe(() => {
+        const cleanup = connected.subscribe(() => {
           if (destroyed || connection !== connected) return;
           let changed: WalletConnectionSnapshot;
           try {
-            changed = connected.getSnapshot();
+            changed = readConnectionSnapshot(connected.getSnapshot());
           } catch {
             generation += 1;
             operations = null;
@@ -284,7 +401,7 @@ export function createWalletSession(
           operations = null;
           if (!changed.account) {
             selectedKey = null;
-            retireConnection();
+            retireConnectionBestEffort();
             publish('selection-required', null);
             return;
           }
@@ -300,43 +417,35 @@ export function createWalletSession(
             publish('failed', null);
           }
         });
-        if (!sameFelt(next.chainId, expectedChainId)) {
+        // A WalletConnectionPort may replay an account/chain change while
+        // subscribe() is registering the listener. In that case the
+        // callback above has already advanced this session's authority and
+        // built the replacement state (or retired it); the continuation
+        // must not publish the stale pre-subscribe snapshot.
+        if (connection === connected) connectionCleanup = cleanup;
+        if (destroyed || attempt !== generation || connection !== connected) {
+          return snapshot;
+        }
+        const current = readConnectionSnapshot(connected.getSnapshot());
+        assertAddress(current.account);
+        if (!sameFelt(current.chainId, expectedChainId)) {
           publish('wrong-network', null);
           return snapshot;
         }
         operations = connected.createOperations(policy);
-        publish('connected', next.account);
+        publish('connected', current.account);
         return snapshot;
       } catch (error) {
-        if (attemptedConnection && attemptedConnection !== connection) attemptedConnection.destroy();
+        if (attemptedConnection && attemptedConnection !== connection) {
+          destroyConnection(attemptedConnection, true);
+        }
         if (attempt === generation) {
-          retireConnection();
+          retireConnectionBestEffort();
           publish('failed', null);
         }
         throw mapWalletError(error);
       }
-    },
-    refreshDiscovery: () => dependencies.discovery.refresh(),
-    readAccount: () => snapshot.account,
-    async disconnect() {
-      generation += 1;
-      const owned = connection;
-      retireConnection();
-      selectedKey = null;
-      publish('selection-required', null);
-      await owned?.disconnect();
-    },
-    destroy() {
-      if (destroyed) return;
-      destroyed = true;
-      generation += 1;
-      discoveryCleanup();
-      retireConnection();
-      selectedKey = null;
-      publish('selection-required', null);
-      listeners.clear();
-    },
-  };
+  }
 }
 
 /** Build the real browser session without exposing wallet libraries to Web. */
@@ -404,6 +513,23 @@ export function createProductionWalletSession(
   });
 }
 
+function ownDiscoveredWallets(value: unknown): WalletHandle[] {
+  if (!Array.isArray(value)) return [];
+  const seen = new Set<object>();
+  return value.filter((wallet): wallet is WalletHandle => {
+    if ((typeof wallet !== 'object' && typeof wallet !== 'function') || wallet === null) return false;
+    const name = Object.getOwnPropertyDescriptor(wallet, 'name');
+    const icon = Object.getOwnPropertyDescriptor(wallet, 'icon');
+    if (
+      !name || !('value' in name) || typeof name.value !== 'string'
+      || !icon || !('value' in icon) || typeof icon.value !== 'string'
+    ) return false;
+    if (seen.has(wallet)) return false;
+    seen.add(wallet);
+    return true;
+  });
+}
+
 function productionDiscovery(): WalletDiscoveryPort {
   const store = createWalletDiscovery();
   return {
@@ -418,23 +544,112 @@ function chainIdOf(chain: string | undefined): string | null {
 }
 
 function ownPolicy(policy: WalletRoutePolicy): WalletRoutePolicy {
+  if (!hasOwnDataProperties(policy, ['maxIntents', 'maxRelayFee', 'enabledRoutes', 'allowedTokens'])) {
+    throw new PrivacyError('unknown', 'The wallet route policy is invalid.');
+  }
+  const maxIntents = readPolicyValue<WalletRoutePolicy['maxIntents']>(policy, 'maxIntents');
+  const maxRelayFee = readPolicyValue<WalletRoutePolicy['maxRelayFee']>(policy, 'maxRelayFee');
+  const enabledRoutes = copyPolicyCollection(
+    readPolicyValue<WalletRoutePolicy['enabledRoutes']>(policy, 'enabledRoutes'),
+  );
+  const allowedTokens = readPolicyValue<WalletRoutePolicy['allowedTokens']>(policy, 'allowedTokens');
+  if (!hasOwnDataProperties(allowedTokens, ['shield', 'unshield', 'transfer', 'swap'])) {
+    throw new PrivacyError('unknown', 'The wallet route policy is invalid.');
+  }
+  const shield = copyPolicyCollection(
+    readPolicyValue<WalletRoutePolicy['allowedTokens']['shield']>(allowedTokens, 'shield'),
+  );
+  const unshield = copyPolicyCollection(
+    readPolicyValue<WalletRoutePolicy['allowedTokens']['unshield']>(allowedTokens, 'unshield'),
+  );
+  const transfer = copyPolicyCollection(
+    readPolicyValue<WalletRoutePolicy['allowedTokens']['transfer']>(allowedTokens, 'transfer'),
+  );
+  const swapTokens = copyPolicyCollection(
+    readPolicyValue<WalletRoutePolicy['allowedTokens']['swap']>(allowedTokens, 'swap'),
+  );
+  const swap = readOptionalPolicyValue<NonNullable<WalletRoutePolicy['swap']>>(policy, 'swap');
+  if (swap !== undefined && !hasOwnDataProperties(swap, ['expectedChainId', 'slippageBps'])) {
+    throw new PrivacyError('unknown', 'The wallet route policy is invalid.');
+  }
+  if (!Number.isSafeInteger(maxIntents) || maxIntents < 0 || typeof maxRelayFee !== 'bigint' || maxRelayFee < 0n) {
+    throw invalidPolicy();
+  }
+  const knownRoutes = new Set(['shield', 'unshield', 'transfer', 'swap']);
+  if (
+    enabledRoutes.some((route) => typeof route !== 'string' || !knownRoutes.has(route))
+    || new Set(enabledRoutes).size !== enabledRoutes.length
+  ) {
+    throw invalidPolicy();
+  }
+  for (const tokens of [shield, unshield, transfer, swapTokens]) validatePolicyTokens(tokens);
+  if (enabledRoutes.includes('swap') && swap === undefined) throw invalidPolicy();
+  let ownedSwap: NonNullable<WalletRoutePolicy['swap']> | undefined;
+  if (swap !== undefined) {
+    const expectedChainId = readPolicyValue<NonNullable<WalletRoutePolicy['swap']>['expectedChainId']>(swap, 'expectedChainId');
+    const slippageBps = readPolicyValue<NonNullable<WalletRoutePolicy['swap']>['slippageBps']>(swap, 'slippageBps');
+    if (!isNonzeroFelt(expectedChainId) || !Number.isSafeInteger(slippageBps) || slippageBps <= 0 || slippageBps > 10_000) {
+      throw invalidPolicy();
+    }
+    ownedSwap = Object.freeze({ expectedChainId, slippageBps });
+  }
   return Object.freeze({
-    maxIntents: policy.maxIntents,
-    maxRelayFee: policy.maxRelayFee,
-    enabledRoutes: Object.freeze([...policy.enabledRoutes]),
+    maxIntents,
+    maxRelayFee,
+    enabledRoutes: Object.freeze(enabledRoutes),
     allowedTokens: Object.freeze({
-      shield: Object.freeze([...policy.allowedTokens.shield]),
-      unshield: Object.freeze([...policy.allowedTokens.unshield]),
-      transfer: Object.freeze([...policy.allowedTokens.transfer]),
-      swap: Object.freeze([...policy.allowedTokens.swap]),
+      shield: Object.freeze(shield),
+      unshield: Object.freeze(unshield),
+      transfer: Object.freeze(transfer),
+      swap: Object.freeze(swapTokens),
     }),
-    ...(policy.swap
-      ? { swap: Object.freeze({
-          expectedChainId: policy.swap.expectedChainId,
-          slippageBps: policy.swap.slippageBps,
-        }) }
+    ...(ownedSwap
+      ? { swap: ownedSwap }
       : {}),
   });
+}
+
+function validatePolicyTokens(tokens: unknown[]): void {
+  const seen = new Set<bigint>();
+  for (const token of tokens) {
+    if (typeof token !== 'string' || !isNonzeroFelt(token)) throw invalidPolicy();
+    const canonical = BigInt(token);
+    if (seen.has(canonical)) throw invalidPolicy();
+    seen.add(canonical);
+  }
+}
+
+function invalidPolicy(): PrivacyError {
+  return new PrivacyError('unknown', 'The wallet route policy is invalid.');
+}
+
+function readPolicyValue<T>(value: object, key: PropertyKey): T {
+  try {
+    const descriptor = Object.getOwnPropertyDescriptor(value, key);
+    if (!descriptor || !('value' in descriptor)) throw new Error('missing data property');
+    return descriptor.value as T;
+  } catch {
+    throw new PrivacyError('unknown', 'The wallet route policy is invalid.');
+  }
+}
+
+function readOptionalPolicyValue<T>(value: object, key: PropertyKey): T | undefined {
+  try {
+    const descriptor = Object.getOwnPropertyDescriptor(value, key);
+    if (!descriptor) return undefined;
+    if (!('value' in descriptor)) throw new Error('accessor property');
+    return descriptor.value as T;
+  } catch {
+    throw new PrivacyError('unknown', 'The wallet route policy is invalid.');
+  }
+}
+
+function copyPolicyCollection<T>(value: Iterable<T>): T[] {
+  try {
+    return [...value];
+  } catch {
+    throw new PrivacyError('unknown', 'The wallet route policy is invalid.');
+  }
 }
 
 function ownPreparedBatch(
@@ -442,29 +657,272 @@ function ownPreparedBatch(
   isCurrent: () => boolean,
   changedSessionError: () => PrivacyError,
 ): PreparedBatch {
+  const required = ['intents', 'poolFee', 'gasEstimate', 'totalCost', 'warnings', 'promptCount', 'confirm', 'discard'] as const;
+  if (!hasOwnDataProperties(prepared, required)) {
+    retireInvalidPrepared(prepared);
+    throw new PrivacyError('unknown', 'The wallet returned an invalid prepared batch.');
+  }
+  const swapReviewDescriptor = Object.getOwnPropertyDescriptor(prepared, 'swapReview');
+  if (swapReviewDescriptor && !('value' in swapReviewDescriptor)) {
+    retireInvalidPrepared(prepared);
+    throw new PrivacyError('unknown', 'The wallet returned an invalid prepared batch.');
+  }
+  const swapReview = swapReviewDescriptor?.value === undefined
+    ? undefined
+    : ownSwapReview(swapReviewDescriptor.value, prepared);
+  if (
+    typeof prepared.poolFee !== 'bigint'
+    || prepared.poolFee < 0n
+    || typeof prepared.gasEstimate !== 'bigint'
+    || prepared.gasEstimate < 0n
+    || typeof prepared.totalCost !== 'bigint'
+    || prepared.totalCost !== prepared.poolFee + prepared.gasEstimate
+  ) {
+    retireInvalidPrepared(prepared);
+    throw new PrivacyError('unknown', 'The wallet returned invalid prepared costs.');
+  }
+  if (!Number.isSafeInteger(prepared.promptCount) || prepared.promptCount < 0) {
+    retireInvalidPrepared(prepared);
+    throw new PrivacyError('unknown', 'The wallet returned an invalid prepared prompt count.');
+  }
+  if (!denseDataArray(prepared.intents) || !denseDataArray(prepared.warnings)) {
+    retireInvalidPrepared(prepared);
+    throw new PrivacyError('unknown', 'The wallet returned invalid prepared review collections.');
+  }
+  if (!prepared.warnings.every(validWarning)) {
+    retireInvalidPrepared(prepared);
+    throw new PrivacyError('unknown', 'The wallet returned an invalid prepared warning.');
+  }
+  if (!prepared.intents.every(validIntent)) {
+    retireInvalidPrepared(prepared);
+    throw new PrivacyError('unknown', 'The wallet returned an invalid prepared intent.');
+  }
+  if (new Set(prepared.intents.map((intent) => intent.kind)).size > 1) {
+    retireInvalidPrepared(prepared);
+    throw new PrivacyError('unknown', 'The wallet returned mixed prepared route kinds.');
+  }
+  const swapIntents = prepared.intents.filter((intent) => intent.kind === 'swap');
+  if ((swapReview !== undefined && (prepared.intents.length !== 1 || swapIntents.length !== 1))) {
+    retireInvalidPrepared(prepared);
+    throw new PrivacyError('unknown', 'The wallet returned incoherent prepared swap review metadata.');
+  }
+  const intents = Object.freeze(prepared.intents.map((intent) => Object.freeze({ ...intent })));
+  const warnings = Object.freeze(prepared.warnings.map((warning) => Object.freeze({ ...warning })));
   let discarded = false;
+  let confirmationAttempted = false;
   const discard = (): void => {
     if (discarded) return;
     discarded = true;
     prepared.discard();
   };
+  const retire = (): void => {
+    try {
+      discard();
+    } catch {
+      // Automatic cleanup cannot replace the authoritative settlement result.
+    }
+  };
   return Object.freeze({
-    intents: prepared.intents,
+    intents,
     poolFee: prepared.poolFee,
     gasEstimate: prepared.gasEstimate,
     totalCost: prepared.totalCost,
-    warnings: prepared.warnings,
+    warnings,
     promptCount: prepared.promptCount,
-    ...(prepared.swapReview ? { swapReview: prepared.swapReview } : {}),
+    ...(swapReview ? { swapReview } : {}),
     async confirm(options: Parameters<PreparedBatch['confirm']>[0]) {
+      if (!hasOwnDataProperties(options, ['feeCeiling'])) {
+        throw new PrivacyError('unknown', 'The confirmation options are invalid.');
+      }
+      for (const optional of ['onProgress', 'signal'] as const) {
+        const descriptor = Object.getOwnPropertyDescriptor(options, optional);
+        if (descriptor && !('value' in descriptor)) {
+          throw new PrivacyError('unknown', 'The confirmation options are invalid.');
+        }
+      }
+      const ownedOptions = {
+        feeCeiling: options.feeCeiling,
+        ...(options.onProgress ? { onProgress: options.onProgress } : {}),
+        ...(options.signal ? { signal: options.signal } : {}),
+      };
+      if (discarded) {
+        throw new PrivacyError('unknown', 'This prepared batch was discarded. Prepare a new batch.');
+      }
+      if (confirmationAttempted) {
+        throw new PrivacyError('unknown', 'This prepared batch was already confirmed or attempted. Prepare a new batch.');
+      }
       if (!isCurrent()) {
-        discard();
+        retire();
         throw changedSessionError();
       }
-      return prepared.confirm(options);
+      confirmationAttempted = true;
+      let result: Awaited<ReturnType<PreparedBatch['confirm']>>;
+      try {
+        result = await prepared.confirm(ownedOptions);
+      } catch (error) {
+        if (!isCurrent()) {
+          retire();
+          // A lost post-submit response remains non-retryable even when the
+          // wallet account changes while the uncertainty is settling.
+          if (error instanceof PrivacyError && error.kind === 'submission-uncertain') {
+            throw error;
+          }
+          throw changedSessionError();
+        }
+        throw error;
+      }
+      if (!isCurrent()) {
+        retire();
+        throw changedSessionError();
+      }
+      if (
+        !hasOwnDataProperties(result, ['transactionHash'])
+        || typeof result.transactionHash !== 'string'
+        || !isNonzeroFelt(result.transactionHash)
+      ) {
+        retire();
+        throw new PrivacyError('unknown', 'The wallet returned an invalid transaction receipt.');
+      }
+      return Object.freeze({ transactionHash: result.transactionHash });
     },
     discard,
   });
+}
+
+function validIntent(value: unknown): boolean {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return false;
+  const kind = Object.getOwnPropertyDescriptor(value, 'kind');
+  if (!kind || !('value' in kind) || typeof kind.value !== 'string') return false;
+  if (kind.value === 'shield') {
+    const token = Object.getOwnPropertyDescriptor(value, 'token');
+    const amount = Object.getOwnPropertyDescriptor(value, 'amount');
+    return Boolean(
+      token && 'value' in token && typeof token.value === 'string' && isNonzeroFelt(token.value)
+      && amount && 'value' in amount && typeof amount.value === 'bigint' && amount.value > 0n
+    );
+  }
+  if (kind.value === 'transfer' || kind.value === 'unshield') {
+    const token = Object.getOwnPropertyDescriptor(value, 'token');
+    const recipient = Object.getOwnPropertyDescriptor(value, 'recipient');
+    const amount = Object.getOwnPropertyDescriptor(value, 'amount');
+    return Boolean(
+      token && 'value' in token && typeof token.value === 'string' && isNonzeroFelt(token.value)
+      && recipient && 'value' in recipient && typeof recipient.value === 'string' && isNonzeroFelt(recipient.value)
+      && amount && 'value' in amount && typeof amount.value === 'bigint' && amount.value > 0n
+    );
+  }
+  if (kind.value === 'swap') {
+    const tokenIn = Object.getOwnPropertyDescriptor(value, 'tokenIn');
+    const tokenOut = Object.getOwnPropertyDescriptor(value, 'tokenOut');
+    const amountIn = Object.getOwnPropertyDescriptor(value, 'amountIn');
+    const minimum = Object.getOwnPropertyDescriptor(value, 'minAmountOut');
+    return Boolean(
+      tokenIn && 'value' in tokenIn && typeof tokenIn.value === 'string' && isNonzeroFelt(tokenIn.value)
+      && tokenOut && 'value' in tokenOut && typeof tokenOut.value === 'string' && isNonzeroFelt(tokenOut.value)
+      && amountIn && 'value' in amountIn && typeof amountIn.value === 'bigint' && amountIn.value > 0n
+      && minimum && 'value' in minimum && typeof minimum.value === 'bigint' && minimum.value > 0n
+    );
+  }
+  return true;
+}
+
+function isNonzeroFelt(value: string): boolean {
+  try {
+    return /^0x[0-9a-f]+$/i.test(value)
+      && BigInt(value) > 0n
+      && BigInt(value) < STARK_FIELD_PRIME;
+  } catch {
+    return false;
+  }
+}
+
+function validWarning(value: unknown): boolean {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return false;
+  const kind = Object.getOwnPropertyDescriptor(value, 'kind');
+  if (!kind || !('value' in kind) || typeof kind.value !== 'string') return false;
+  switch (kind.value) {
+    case 'multiple-prompts': {
+      const count = Object.getOwnPropertyDescriptor(value, 'count');
+      return Boolean(count && 'value' in count && Number.isSafeInteger(count.value) && count.value > 1);
+    }
+    case 'funds-maturing': {
+      const amount = Object.getOwnPropertyDescriptor(value, 'maturingAmount');
+      const blocks = Object.getOwnPropertyDescriptor(value, 'blocksRemaining');
+      return Boolean(
+        amount && 'value' in amount && typeof amount.value === 'bigint' && amount.value > 0n
+        && blocks && 'value' in blocks && Number.isSafeInteger(blocks.value) && blocks.value >= 0
+      );
+    }
+    case 'leaves-below-fee': {
+      const remaining = Object.getOwnPropertyDescriptor(value, 'remaining');
+      const estimate = Object.getOwnPropertyDescriptor(value, 'feeEstimate');
+      return Boolean(
+        remaining && 'value' in remaining && typeof remaining.value === 'bigint' && remaining.value >= 0n
+        && estimate && 'value' in estimate && typeof estimate.value === 'bigint' && estimate.value > 0n
+        && remaining.value < estimate.value
+      );
+    }
+    case 'public-leg': {
+      const detail = Object.getOwnPropertyDescriptor(value, 'detail');
+      return Boolean(
+        detail && 'value' in detail
+        && typeof detail.value === 'string'
+        && detail.value.trim().length > 0
+      );
+    }
+    case 'recipient-unregistered': {
+      const recipient = Object.getOwnPropertyDescriptor(value, 'recipient');
+      return Boolean(
+        recipient && 'value' in recipient
+        && typeof recipient.value === 'string'
+        && isNonzeroFelt(recipient.value)
+      );
+    }
+    default:
+      return true;
+  }
+}
+
+function ownSwapReview(value: unknown, prepared: PreparedBatch): NonNullable<PreparedBatch['swapReview']> {
+  if (!hasOwnDataProperties(value, ['expectedAmountOut', 'minimumAmountOut', 'slippageBps', 'expiresAt'])) {
+    retireInvalidPrepared(prepared);
+    throw new PrivacyError('unknown', 'The wallet returned an invalid prepared swap review.');
+  }
+  const review = value as NonNullable<PreparedBatch['swapReview']>;
+  if (
+    typeof review.expectedAmountOut !== 'bigint'
+    || review.expectedAmountOut <= 0n
+    || typeof review.minimumAmountOut !== 'bigint'
+    || review.minimumAmountOut <= 0n
+    || review.minimumAmountOut > review.expectedAmountOut
+    || !Number.isSafeInteger(review.slippageBps)
+    || review.slippageBps <= 0
+    || !Number.isSafeInteger(review.expiresAt)
+    || review.expiresAt <= 0
+  ) {
+    retireInvalidPrepared(prepared);
+    throw new PrivacyError('unknown', 'The wallet returned an invalid prepared swap review.');
+  }
+  return Object.freeze({ ...review });
+}
+
+function denseDataArray(value: unknown): value is unknown[] {
+  if (!Array.isArray(value)) return false;
+  for (let index = 0; index < value.length; index += 1) {
+    const descriptor = Object.getOwnPropertyDescriptor(value, String(index));
+    if (!descriptor || !('value' in descriptor)) return false;
+  }
+  return true;
+}
+
+function retireInvalidPrepared(prepared: PreparedBatch): void {
+  const descriptor = Object.getOwnPropertyDescriptor(prepared, 'discard');
+  if (!descriptor || !('value' in descriptor) || typeof descriptor.value !== 'function') return;
+  try {
+    descriptor.value.call(prepared);
+  } catch {
+    // Malformed work must not escape solely because best-effort retirement fails.
+  }
 }
 
 function assertAddress(address: string): void {
@@ -478,9 +936,43 @@ function assertAddress(address: string): void {
   }
 }
 
+function assertChainId(chainId: string): void {
+  try {
+    const value = BigInt(chainId);
+    if (!/^0x[0-9a-f]+$/i.test(chainId) || value === 0n || value >= STARK_FIELD_PRIME) {
+      throw new Error();
+    }
+  } catch {
+    throw new PrivacyError('unknown', 'The configured wallet chain is invalid.');
+  }
+}
+
 function sameFelt(left: string, right: string): boolean {
   try {
     return BigInt(left) === BigInt(right);
+  } catch {
+    return false;
+  }
+}
+
+function readConnectionSnapshot(value: unknown): WalletConnectionSnapshot {
+  if (!hasOwnDataProperties(value, ['account', 'chainId'])) {
+    throw new PrivacyError('unknown', 'The wallet returned an invalid connection snapshot.');
+  }
+  const { account, chainId } = value as WalletConnectionSnapshot;
+  if (typeof account !== 'string' || typeof chainId !== 'string') {
+    throw new PrivacyError('unknown', 'The wallet returned an invalid connection snapshot.');
+  }
+  return { account, chainId };
+}
+
+function hasOwnDataProperties(value: unknown, keys: readonly PropertyKey[]): boolean {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return false;
+  try {
+    return keys.every((key) => {
+      const descriptor = Object.getOwnPropertyDescriptor(value, key);
+      return Boolean(descriptor && 'value' in descriptor);
+    });
   } catch {
     return false;
   }

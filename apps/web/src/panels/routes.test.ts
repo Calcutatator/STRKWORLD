@@ -13,6 +13,7 @@ import {
   ROUTE_BY_INTENT_KIND,
 } from './routes.js';
 import { resolveRoom } from './panel-framework.js';
+import { BUILDING_PANELS } from './registry.js';
 
 const approvedDeviation: RouteGrade = {
   building: 'vault',
@@ -37,6 +38,17 @@ const unapprovedDeviation: RouteGrade = {
 const approvedButUndisclosed: RouteGrade = { ...approvedDeviation, disclosure: null };
 
 describe('route gate', () => {
+  it('keeps the canonical register immutable at the Web seam', () => {
+    const shield = PRIVACY_REGISTER.find((entry) => entry.route === 'bank.shield')!;
+
+    expect(Object.isFrozen(PRIVACY_REGISTER)).toBe(true);
+    expect(Object.isFrozen(shield)).toBe(true);
+    expect(Reflect.set(PRIVACY_REGISTER, 0, shield)).toBe(false);
+    expect(Reflect.set(shield, 'grade', 'private')).toBe(false);
+    expect(routeDoor('bank.shield').open).toBe(true);
+    expect(shield.grade).toBe('public-edge');
+  });
+
   it('opens the four approved v1 routes', () => {
     for (const route of ['bank.shield', 'bank.unshield', 'post-office.transfer', 'exchange.swap', 'bridge.deposit']) {
       expect(isRouteOpen(route), route).toBe(true);
@@ -60,8 +72,60 @@ describe('route gate', () => {
     expect(routeDoor('vault.supply', [approvedButUndisclosed]).open).toBe(false);
   });
 
+  it('does not admit a route whose identifier is inherited', () => {
+    const inherited = Object.create(approvedDeviation) as RouteGrade;
+    expect(routeDoor('vault.supply', [inherited]).open).toBe(false);
+  });
+
+  it('does not admit approval fields inherited by an otherwise named route', () => {
+    const inherited = Object.create(approvedDeviation) as RouteGrade;
+    Object.defineProperty(inherited, 'route', { value: approvedDeviation.route });
+    expect(routeDoor('vault.supply', [inherited]).open).toBe(false);
+  });
+
+  it('does not admit a building whose identity is inherited', () => {
+    const inherited = Object.create(approvedDeviation) as RouteGrade;
+    for (const field of ['route', 'grade', 'observable', 'disclosure', 'approvedBy', 'approvedOn', 'rationale', 'returnToPool'] as const) {
+      Object.defineProperty(inherited, field, { value: approvedDeviation[field] });
+    }
+    expect(buildingDoor('vault', [inherited]).open).toBe(false);
+  });
+
+  it('fails closed without reading accessor-backed route fields', () => {
+    const accessor = Object.create(null) as RouteGrade;
+    for (const field of ['building', 'grade', 'observable', 'disclosure', 'approvedBy', 'approvedOn', 'rationale', 'returnToPool'] as const) {
+      Object.defineProperty(accessor, field, { value: approvedDeviation[field] });
+    }
+    Object.defineProperty(accessor, 'route', {
+      get() { throw new Error('route accessor should not run'); },
+    });
+
+    expect(() => routeDoor('vault.supply', [accessor])).not.toThrow();
+    expect(routeDoor('vault.supply', [accessor])).toMatchObject({ open: false, reason: 'unknown-route' });
+  });
+
+  it.each([null, {}, 'not-a-register'])('fails closed for a malformed register container: %s', (malformed) => {
+    const register = malformed as unknown as readonly RouteGrade[];
+    expect(() => routeDoor('bank.shield', register)).not.toThrow();
+    expect(routeDoor('bank.shield', register)).toMatchObject({ open: false, reason: 'unknown-route' });
+    expect(() => buildingDoor('bank', register)).not.toThrow();
+    expect(buildingDoor('bank', register)).toMatchObject({ open: false, reason: 'coming-soon' });
+  });
+
   it('opens an approved and disclosed deviation', () => {
     expect(routeDoor('vault.supply', [approvedDeviation]).open).toBe(true);
+  });
+
+  it('returns immutable route decisions', () => {
+    const open = routeDoor('bank.shield');
+    const locked = routeDoor('not-a-route');
+
+    expect(Object.isFrozen(open)).toBe(true);
+    expect(Object.isFrozen(locked)).toBe(true);
+    expect(Reflect.set(open, 'open', false)).toBe(false);
+    expect(Reflect.set(locked, 'message', 'forged')).toBe(false);
+    expect(routeDoor('bank.shield')).toMatchObject({ open: true, reason: null, message: '' });
+    expect(routeDoor('not-a-route').message).toBe(COPY.locked.unknownRoute);
   });
 
   it('returns the register disclosure verbatim, never a local paraphrase', () => {
@@ -126,6 +190,37 @@ describe('room resolution', () => {
     expect(room.kind).toBe('locked');
     expect(room.kind === 'locked' && room.reason).toBe('unapproved-route');
   });
+
+  it('does not admit an inherited panel descriptor', () => {
+    const panels = Object.create({ exchange: 'forged-panel' }) as { exchange?: string };
+    const room = resolveRoom('exchange', panels);
+    expect(room.kind).toBe('unbuilt');
+  });
+
+  it('does not render a structured panel under the wrong building key', () => {
+    const panels = { exchange: BUILDING_PANELS.bank };
+    const room = resolveRoom('exchange', panels);
+    expect(room).toMatchObject({ kind: 'unbuilt', building: 'exchange' });
+  });
+
+  it.each([null, {}, 'not-a-registry'])('fails closed for a malformed panel registry container: %s', (malformed) => {
+    const panels = malformed as unknown as { exchange?: string };
+    expect(() => resolveRoom('exchange', panels)).not.toThrow();
+    expect(resolveRoom('exchange', panels)).toMatchObject({ kind: 'unbuilt', building: 'exchange' });
+  });
+});
+
+describe('default panel registry', () => {
+  it('does not let consumers rewrite the authored panel descriptors', () => {
+    const exchange = BUILDING_PANELS.exchange;
+    expect(exchange).toBeDefined();
+    expect(Object.isFrozen(BUILDING_PANELS)).toBe(true);
+    expect(Object.isFrozen(exchange)).toBe(true);
+    expect(Reflect.set(BUILDING_PANELS, 'exchange', { forged: true })).toBe(false);
+    expect(Reflect.set(exchange!, 'title', 'forged')).toBe(false);
+    expect(BUILDING_PANELS.exchange).toBe(exchange);
+    expect(BUILDING_PANELS.exchange?.title).toBe(COPY.buildings.exchange);
+  });
 });
 
 describe('disclosures for a batch', () => {
@@ -155,5 +250,11 @@ describe('disclosures for a batch', () => {
       // and the control silently stops working.
       expect(findRoute(ROUTE_BY_INTENT_KIND[kind]), kind).toBeDefined();
     }
+  });
+
+  it('keeps the intent-to-route authority immutable at the public seam', () => {
+    expect(Object.isFrozen(ROUTE_BY_INTENT_KIND)).toBe(true);
+    expect(Reflect.set(ROUTE_BY_INTENT_KIND, 'shield', 'exchange.swap')).toBe(false);
+    expect(ROUTE_BY_INTENT_KIND.shield).toBe('bank.shield');
   });
 });

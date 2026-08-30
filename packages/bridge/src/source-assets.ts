@@ -69,14 +69,25 @@ export async function loadSourceAssets(client: TokenRegistryClient): Promise<Sou
   } catch {
     return [...byId.values()];
   }
+  if (!Array.isArray(live)) return [...byId.values()];
 
   for (const token of live) {
+    if (!token || typeof token !== 'object' || Array.isArray(token)) continue;
+    if (!hasOwnDataProperties(token, ['assetId', 'symbol', 'blockchain', 'decimals'])) continue;
     if (token.assetId === STRK_ON_STARKNET_ASSET_ID) continue;
-    const chainName = CHAIN_MAP[String(token.blockchain)];
+    if (typeof token.assetId !== 'string' || typeof token.symbol !== 'string' || typeof token.blockchain !== 'string') {
+      continue;
+    }
+    const chainKey = String(token.blockchain);
+    const chainName = Object.prototype.hasOwnProperty.call(CHAIN_MAP, chainKey)
+      ? CHAIN_MAP[chainKey]
+      : undefined;
     if (
       !chainName ||
       !token.assetId ||
       !token.symbol ||
+      !/\S/.test(token.assetId) ||
+      !/\S/.test(token.symbol) ||
       !Number.isSafeInteger(token.decimals) ||
       token.decimals < 0 ||
       token.decimals > 36
@@ -92,4 +103,11 @@ export async function loadSourceAssets(client: TokenRegistryClient): Promise<Sou
     });
   }
   return [...byId.values()];
+}
+
+function hasOwnDataProperties(value: object, keys: readonly PropertyKey[]): boolean {
+  return keys.every((key) => {
+    const descriptor = Object.getOwnPropertyDescriptor(value, key);
+    return Boolean(descriptor && 'value' in descriptor);
+  });
 }

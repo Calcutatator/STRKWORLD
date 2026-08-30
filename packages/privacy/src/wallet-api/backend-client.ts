@@ -8,6 +8,8 @@ import type {
 } from './types.js';
 
 type FetchLike = (input: string, init?: RequestInit) => Promise<Response>;
+const STARK_FIELD_PRIME = (1n << 251n) + 17n * (1n << 192n) + 1n;
+const MAX_UINT256 = (1n << 256n) - 1n;
 
 /** Browser client for the narrow, no-logging backend API. */
 export class BackendPrivacyClient implements PoolReadClient, PrivateSubmissionGateway {
@@ -18,56 +20,112 @@ export class BackendPrivacyClient implements PoolReadClient, PrivateSubmissionGa
     baseUrl: string,
     fetcher?: FetchLike,
   ) {
+    if (typeof baseUrl !== 'string' || baseUrl.trim().length === 0) {
+      throw new PrivacyError('unknown', 'The private service URL is invalid.');
+    }
     this.baseUrl = baseUrl;
     // Window fetch is a Web IDL method and rejects a non-Window receiver.
     // Calling it through this object's property would bind `this` to the
     // client, so retain injected fakes unchanged and bind the browser default
     // to the global receiver at the boundary.
-    this.fetcher = fetcher ?? globalThis.fetch.bind(globalThis);
+    this.fetcher = fetcher
+      ? ((input, init) => Reflect.apply(fetcher, undefined, [input, init]))
+      : globalThis.fetch.bind(globalThis);
   }
 
   async config(signal?: AbortSignal): Promise<PoolConfig> {
     const value = await this.post('/v1/rpc/pool-config', { v: 1 }, signal);
+    throwIfAborted(signal);
     const record = asRecord(value);
-    return {
-      feeAmount: BigInt(asString(record.feeAmount)),
-      feeToken: asString(record.feeToken),
-      proofValidityBlocks: asInteger(record.proofValidityBlocks),
-      noteMaturityBlocks: asInteger(record.noteMaturityBlocks),
-    };
+    return Object.freeze({
+      feeAmount: asUint256(ownField(record, 'feeAmount')),
+      feeToken: asFelt(ownField(record, 'feeToken')),
+      proofValidityBlocks: asIntegerAtLeast(ownField(record, 'proofValidityBlocks'), 1),
+      noteMaturityBlocks: asIntegerAtLeast(ownField(record, 'noteMaturityBlocks'), 0),
+    });
   }
 
   async publicKey(address: string, signal?: AbortSignal): Promise<string> {
-    const value = asRecord(await this.post('/v1/rpc/public-key', { v: 1, address }, signal));
-    return asString(value.publicKey);
+    if (typeof address !== 'string' || !isNonzeroFelt(address)) {
+      throw new PrivacyError('unknown', 'The public-key address is invalid.');
+    }
+    const raw = await this.post('/v1/rpc/public-key', { v: 1, address }, signal);
+    throwIfAborted(signal);
+    const value = asRecord(raw);
+    return asString(ownField(value, 'publicKey'));
   }
 
   async estimate(input: Parameters<PrivateSubmissionGateway['estimate']>[0]): Promise<RelayFeeQuote> {
-    const value = asRecord(await this.post('/v1/private/fees', {
+    const route = ownInputField(input, 'route');
+    const feeToken = ownInputField(input, 'feeToken');
+    const operationToken = ownInputField(input, 'operationToken');
+    const signal = ownOptionalInputField(input, 'signal');
+    if (
+      (route !== 'transfer' && route !== 'unshield')
+      || typeof feeToken !== 'string'
+      || !isNonzeroFelt(feeToken)
+      || typeof operationToken !== 'string'
+      || !isNonzeroFelt(operationToken)
+      || (signal !== undefined && !(signal instanceof AbortSignal))
+    ) {
+      throw new PrivacyError('unknown', 'The relay estimate request is invalid.');
+    }
+    const raw = await this.post('/v1/private/fees', {
       v: 1,
-      route: input.route,
-      feeToken: input.feeToken,
-      operationToken: input.operationToken,
-    }, input.signal));
-    return {
-      token: asString(value.token),
-      recipient: asString(value.recipient),
-      amount: BigInt(asString(value.amount)),
-      authorization: asString(value.authorization),
-      expiresAtBlock: asInteger(value.expiresAtBlock),
-    };
+      route,
+      feeToken,
+      operationToken,
+    }, signal as AbortSignal | undefined);
+    throwIfAborted(signal as AbortSignal | undefined);
+    const value = asRecord(raw);
+    return Object.freeze({
+      token: asString(ownField(value, 'token')),
+      recipient: asString(ownField(value, 'recipient')),
+      amount: asDecimalBigInt(ownField(value, 'amount')),
+      authorization: asString(ownField(value, 'authorization')),
+      expiresAtBlock: asInteger(ownField(value, 'expiresAtBlock')),
+    });
   }
 
   async submit(input: Parameters<PrivateSubmissionGateway['submit']>[0]): Promise<TxResult> {
+    const route = ownInputField(input, 'route');
+    const artifact = ownJsonValue(ownInputField(input, 'artifact'));
+    const feeAuthorization = ownInputField(input, 'feeAuthorization');
+    const proofValidityBlocks = ownInputField(input, 'proofValidityBlocks');
+    const signal = ownOptionalInputField(input, 'signal');
+    const onAccepted = ownOptionalInputField(input, 'onAccepted');
+    if (
+      (route !== 'transfer' && route !== 'unshield' && route !== 'swap')
+      || !artifact
+      || typeof artifact !== 'object'
+      || Array.isArray(artifact)
+      || typeof feeAuthorization !== 'string'
+      || feeAuthorization.trim().length === 0
+      || !Number.isSafeInteger(proofValidityBlocks)
+      || (proofValidityBlocks as number) <= 0
+      || (signal !== undefined && !(signal instanceof AbortSignal))
+      || (onAccepted !== undefined && typeof onAccepted !== 'function')
+    ) {
+      throw new PrivacyError('unknown', 'The private submission request is invalid.');
+    }
     const value = asRecord(await this.post('/v1/private/submissions', {
       v: 1,
-      route: input.route,
-      artifact: input.artifact,
-      feeAuthorization: input.feeAuthorization,
-      proofValidityBlocks: input.proofValidityBlocks,
-    }, input.signal, 'submission-uncertain'));
-    const result = { transactionHash: asString(value.transactionHash) };
-    input.onAccepted?.(result);
+      route,
+      artifact,
+      feeAuthorization,
+      proofValidityBlocks,
+    }, signal as AbortSignal | undefined, 'submission-uncertain'));
+    const transactionHash = asString(ownField(value, 'transactionHash'));
+    if (!isNonzeroFelt(transactionHash)) {
+      throw new PrivacyError('unknown', 'The private service returned an invalid response.');
+    }
+    const result = Object.freeze({ transactionHash });
+    try {
+      (onAccepted as ((result: TxResult) => void) | undefined)?.(result);
+    } catch {
+      // Acceptance observers cannot turn a validated accepted transaction
+      // back into a rejected promise and invite an unsafe retry.
+    }
     return result;
   }
 
@@ -76,38 +134,62 @@ export class BackendPrivacyClient implements PoolReadClient, PrivateSubmissionGa
       ? A[0]
       : never,
   ): Promise<PreparedPrivateSwap> {
-    const value = asRecord(await this.post('/v1/private/swaps/prepare', {
+    const sellToken = ownInputField(input, 'sellToken');
+    const buyToken = ownInputField(input, 'buyToken');
+    const sellAmount = ownInputField(input, 'sellAmount');
+    const minAmountOut = ownInputField(input, 'minAmountOut');
+    const slippageBps = ownInputField(input, 'slippageBps');
+    const signal = ownOptionalInputField(input, 'signal');
+    if (
+      typeof sellToken !== 'string'
+      || !isNonzeroFelt(sellToken)
+      || typeof buyToken !== 'string'
+      || !isNonzeroFelt(buyToken)
+      || typeof sellAmount !== 'bigint'
+      || sellAmount <= 0n
+      || typeof minAmountOut !== 'bigint'
+      || minAmountOut <= 0n
+      || !Number.isSafeInteger(slippageBps)
+      || (slippageBps as number) <= 0
+      || (signal !== undefined && !(signal instanceof AbortSignal))
+    ) {
+      throw new PrivacyError('unknown', 'The swap-prepare request is invalid.');
+    }
+    const raw = await this.post('/v1/private/swaps/prepare', {
       v: 1,
-      sellToken: input.sellToken,
-      buyToken: input.buyToken,
-      sellAmount: input.sellAmount.toString(),
-      minAmountOut: input.minAmountOut.toString(),
-      slippageBps: input.slippageBps,
-    }, input.signal));
-    const fee = asRecord(value.fee);
-    const rawCalls = asArray(value.executorCalls);
-    return {
-      quoteId: asString(value.quoteId),
-      buyAmount: BigInt(asString(value.buyAmount)),
-      expiresAt: asInteger(value.expiresAt),
-      chainId: asString(value.chainId),
-      executorAddress: asString(value.executorAddress),
-      executorCalls: rawCalls.map((raw) => {
-        const call = asRecord(raw);
-        return {
-          contractAddress: asString(call.contractAddress),
-          entrypoint: asString(call.entrypoint),
-          calldata: asArray(call.calldata).map(asString),
-        };
+      sellToken,
+      buyToken,
+      sellAmount: sellAmount.toString(),
+      minAmountOut: minAmountOut.toString(),
+      slippageBps,
+    }, signal as AbortSignal | undefined);
+    throwIfAborted(signal as AbortSignal | undefined);
+    const value = asRecord(raw);
+    const fee = asRecord(ownField(value, 'fee'));
+    const rawCalls = asArray(ownField(value, 'executorCalls'));
+    const executorCalls = rawCalls.map((raw) => {
+      const call = asRecord(raw);
+      return Object.freeze({
+        contractAddress: asString(ownField(call, 'contractAddress')),
+        entrypoint: asString(ownField(call, 'entrypoint')),
+        calldata: Object.freeze(asArray(ownField(call, 'calldata')).map(asString)) as string[],
+      });
+    });
+    return Object.freeze({
+      quoteId: asNonEmptyString(ownField(value, 'quoteId')),
+      buyAmount: asPositiveDecimalBigInt(ownField(value, 'buyAmount')),
+      expiresAt: asInteger(ownField(value, 'expiresAt')),
+      chainId: asString(ownField(value, 'chainId')),
+      executorAddress: asString(ownField(value, 'executorAddress')),
+      executorCalls: Object.freeze(executorCalls) as PreparedPrivateSwap['executorCalls'],
+      fee: Object.freeze({
+        token: asString(ownField(fee, 'token')),
+        recipient: asString(ownField(fee, 'recipient')),
+        amount: asDecimalBigInt(ownField(fee, 'amount')),
+        authorization: asString(ownField(fee, 'authorization')),
+        expiresAtBlock: asInteger(ownField(fee, 'expiresAtBlock')),
       }),
-      fee: {
-        token: asString(fee.token),
-        recipient: asString(fee.recipient),
-        amount: BigInt(asString(fee.amount)),
-        authorization: asString(fee.authorization),
-        expiresAtBlock: asInteger(fee.expiresAtBlock),
-      },
-    };
+    });
   }
 
   private async post(
@@ -116,6 +198,7 @@ export class BackendPrivacyClient implements PoolReadClient, PrivateSubmissionGa
     signal?: AbortSignal,
     transportFailureKind: PrivacyErrorKind = 'unreachable',
   ): Promise<unknown> {
+    throwIfAborted(signal);
     let pendingResponse: Promise<Response>;
     try {
       pendingResponse = this.fetcher(`${this.baseUrl.replace(/\/$/, '')}${path}`, {
@@ -131,6 +214,11 @@ export class BackendPrivacyClient implements PoolReadClient, PrivateSubmissionGa
     try {
       response = await pendingResponse;
     } catch (error) {
+      // Once a private submission has been dispatched, a missing response is
+      // authoritative uncertainty even if the caller cancels concurrently.
+      // Reclassifying it as cancellation would make an accepted transaction
+      // look safely retryable.
+      if (transportFailureKind !== 'submission-uncertain' && signal?.aborted) throwIfAborted(signal);
       throw new PrivacyError(
         transportFailureKind,
         transportFailureKind === 'submission-uncertain'
@@ -139,15 +227,26 @@ export class BackendPrivacyClient implements PoolReadClient, PrivateSubmissionGa
         error,
       );
     }
-    if (!response.ok) {
-      const failure = await response.json().catch(() => null) as { message?: unknown } | null;
+    const responseMeta = ownResponseMeta(response);
+    if (!responseMeta.ok) {
+      const status = responseMeta.status;
+      let failure: unknown;
+      try {
+        failure = await responseMeta.json();
+      } catch (error) {
+        if (transportFailureKind === 'submission-uncertain') {
+          throw new PrivacyError('submission-uncertain', 'The private submission response was lost.', error);
+        }
+        failure = null;
+      }
+      const message = readErrorMessage(failure);
       throw new PrivacyError(
-        response.status === 503 ? 'unreachable' : 'unknown',
-        typeof failure?.message === 'string' ? failure.message : 'The private service rejected the request.',
+        status === 503 ? 'unreachable' : 'unknown',
+        message ?? 'The private service rejected the request.',
       );
     }
     try {
-      return await response.json();
+      return await responseMeta.json();
     } catch (error) {
       if (error instanceof SyntaxError) {
         throw new PrivacyError('unknown', 'The private service returned an invalid response.', error);
@@ -163,11 +262,233 @@ export class BackendPrivacyClient implements PoolReadClient, PrivateSubmissionGa
   }
 }
 
+function ownJsonValue(value: unknown): unknown {
+  if (value === null || typeof value === 'string' || typeof value === 'boolean') return value;
+  if (typeof value === 'number') {
+    if (!Number.isFinite(value)) throw new PrivacyError('unknown', 'The private submission request is invalid.');
+    return value;
+  }
+  if (Array.isArray(value)) {
+    try {
+      const length = Object.getOwnPropertyDescriptor(value, 'length');
+      if (!length || !('value' in length) || !Number.isSafeInteger(length.value)
+        || Reflect.ownKeys(value).length !== length.value + 1) {
+        throw new Error('invalid artifact array');
+      }
+      const owned: unknown[] = [];
+      for (let index = 0; index < length.value; index += 1) {
+        const descriptor = Object.getOwnPropertyDescriptor(value, String(index));
+        if (!descriptor || !('value' in descriptor)) throw new Error('invalid artifact array item');
+        owned.push(ownJsonValue(descriptor.value));
+      }
+      return owned;
+    } catch (error) {
+      if (error instanceof PrivacyError) throw error;
+      throw new PrivacyError('unknown', 'The private submission request is invalid.', error);
+    }
+  }
+  if (!value || typeof value !== 'object') {
+    throw new PrivacyError('unknown', 'The private submission request is invalid.');
+  }
+  try {
+    const owned: Record<string, unknown> = {};
+    for (const key of Reflect.ownKeys(value)) {
+      if (typeof key !== 'string') throw new Error('invalid artifact key');
+      const descriptor = Object.getOwnPropertyDescriptor(value, key);
+      if (!descriptor || !('value' in descriptor)) throw new Error('invalid artifact field');
+      Object.defineProperty(owned, key, {
+        configurable: true,
+        enumerable: true,
+        writable: true,
+        value: ownJsonValue(descriptor.value),
+      });
+    }
+    return owned;
+  } catch (error) {
+    if (error instanceof PrivacyError) throw error;
+    throw new PrivacyError('unknown', 'The private submission request is invalid.', error);
+  }
+}
+
+function ownInputField(input: unknown, key: string): unknown {
+  try {
+    if (!input || typeof input !== 'object' || Array.isArray(input)) {
+      throw new Error('invalid input');
+    }
+    const descriptor = Object.getOwnPropertyDescriptor(input, key);
+    if (!descriptor || !('value' in descriptor)) throw new Error('missing input field');
+    return descriptor.value;
+  } catch {
+    throw new PrivacyError('unknown', 'The private service request is invalid.');
+  }
+}
+
+function ownOptionalInputField(input: unknown, key: string): unknown {
+  try {
+    if (!input || typeof input !== 'object' || Array.isArray(input)) {
+      throw new Error('invalid input');
+    }
+    const descriptor = Object.getOwnPropertyDescriptor(input, key);
+    if (!descriptor) return undefined;
+    if (!('value' in descriptor)) throw new Error('invalid optional input field');
+    return descriptor.value;
+  } catch {
+    throw new PrivacyError('unknown', 'The private service request is invalid.');
+  }
+}
+
+function ownResponseJson(response: Response): () => Promise<unknown> {
+  try {
+    let current: object | null = response;
+    while (current !== null) {
+      const descriptor = Object.getOwnPropertyDescriptor(current, 'json');
+      if (descriptor) {
+        if ('value' in descriptor && typeof descriptor.value === 'function') {
+          return descriptor.value.bind(response) as () => Promise<unknown>;
+        }
+        break;
+      }
+      current = Object.getPrototypeOf(current) as object | null;
+    }
+  } catch {
+    // Fall through to one controlled provider-response failure.
+  }
+  throw new PrivacyError('unknown', 'The private service returned an invalid response.');
+}
+
+function ownResponseMeta(response: Response): { ok: boolean; status: number; json: () => Promise<unknown> } {
+  try {
+    if (response instanceof Response) {
+      return { ok: response.ok, status: response.status, json: ownResponseJson(response) };
+    }
+  } catch {
+    // Continue into descriptor-only validation for malformed implementations.
+  }
+  try {
+    let current: object | null = response;
+    while (current !== null) {
+      const ok = Object.getOwnPropertyDescriptor(current, 'ok');
+      const status = Object.getOwnPropertyDescriptor(current, 'status');
+      const json = Object.getOwnPropertyDescriptor(current, 'json');
+      if (ok || status) {
+        if (
+          ok && 'value' in ok && typeof ok.value === 'boolean'
+          && status && 'value' in status && typeof status.value === 'number'
+          && json && 'value' in json && typeof json.value === 'function'
+        ) {
+          return { ok: ok.value, status: status.value, json: json.value.bind(response) as () => Promise<unknown> };
+        }
+        break;
+      }
+      const prototype = Object.getPrototypeOf(current) as object | null;
+      if (prototype === null) break;
+      const prototypeOk = Object.getOwnPropertyDescriptor(prototype, 'ok');
+      const prototypeStatus = Object.getOwnPropertyDescriptor(prototype, 'status');
+      const prototypeJson = Object.getOwnPropertyDescriptor(prototype, 'json');
+      if (
+        prototypeOk && 'value' in prototypeOk && typeof prototypeOk.value === 'boolean'
+        && prototypeStatus && 'value' in prototypeStatus && typeof prototypeStatus.value === 'number'
+        && prototypeJson && 'value' in prototypeJson && typeof prototypeJson.value === 'function'
+      ) {
+        return {
+          ok: prototypeOk.value,
+          status: prototypeStatus.value,
+          json: prototypeJson.value.bind(response) as () => Promise<unknown>,
+        };
+      }
+      current = Object.getPrototypeOf(prototype) as object | null;
+    }
+  } catch {
+    // Fall through to a controlled invalid response.
+  }
+  throw new PrivacyError('unknown', 'The private service returned an invalid response.');
+}
+
+function readErrorMessage(value: unknown): string | null {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
+  const descriptor = Object.getOwnPropertyDescriptor(value, 'message');
+  return descriptor && 'value' in descriptor && typeof descriptor.value === 'string'
+    ? descriptor.value
+    : null;
+}
+
+function throwIfAborted(signal?: AbortSignal): void {
+  if (signal?.aborted) throw new PrivacyError('user-rejected', 'Operation cancelled.', signal.reason);
+}
+
+function isNonzeroFelt(value: string): boolean {
+  return /^0x[0-9a-fA-F]{1,64}$/.test(value)
+    && BigInt(value) > 0n
+    && BigInt(value) < STARK_FIELD_PRIME;
+}
+
 function asRecord(value: unknown): Record<string, unknown> {
   if (!value || typeof value !== 'object' || Array.isArray(value)) {
     throw new PrivacyError('unknown', 'The private service returned an invalid response.');
   }
   return value as Record<string, unknown>;
+}
+
+function ownField(record: Record<string, unknown>, key: string): unknown {
+  const descriptor = Object.getOwnPropertyDescriptor(record, key);
+  if (!descriptor || !('value' in descriptor)) {
+    throw new PrivacyError('unknown', 'The private service returned an invalid response.');
+  }
+  return descriptor.value;
+}
+
+function asUint256(value: unknown): bigint {
+  const text = asString(value);
+  if (!/^\d+$/.test(text)) {
+    throw new PrivacyError('unknown', 'The private service returned an invalid response.');
+  }
+  let parsed: bigint;
+  try {
+    parsed = BigInt(text);
+  } catch {
+    throw new PrivacyError('unknown', 'The private service returned an invalid response.');
+  }
+  if (parsed < 0n || parsed > MAX_UINT256) {
+    throw new PrivacyError('unknown', 'The private service returned an invalid response.');
+  }
+  return parsed;
+}
+
+function asFelt(value: unknown): string {
+  const text = asString(value);
+  if (!/^0x[0-9a-fA-F]{1,64}$/.test(text)) {
+    throw new PrivacyError('unknown', 'The private service returned an invalid response.');
+  }
+  let parsed: bigint;
+  try {
+    parsed = BigInt(text);
+  } catch {
+    throw new PrivacyError('unknown', 'The private service returned an invalid response.');
+  }
+  if (parsed >= STARK_FIELD_PRIME) {
+    throw new PrivacyError('unknown', 'The private service returned an invalid response.');
+  }
+  return text;
+}
+
+function asDecimalBigInt(value: unknown): bigint {
+  const text = asString(value);
+  if (!/^\d+$/.test(text)) {
+    throw new PrivacyError('unknown', 'The private service returned an invalid response.');
+  }
+  try {
+    return BigInt(text);
+  } catch {
+    throw new PrivacyError('unknown', 'The private service returned an invalid response.');
+  }
+}
+
+function asPositiveDecimalBigInt(value: unknown): bigint {
+  const parsed = asDecimalBigInt(value);
+  if (parsed <= 0n) {
+    throw new PrivacyError('unknown', 'The private service returned an invalid response.');
+  }
+  return parsed;
 }
 
 function asString(value: unknown): string {
@@ -177,6 +498,14 @@ function asString(value: unknown): string {
   return value;
 }
 
+function asNonEmptyString(value: unknown): string {
+  const text = asString(value);
+  if (text.length === 0) {
+    throw new PrivacyError('unknown', 'The private service returned an invalid response.');
+  }
+  return text;
+}
+
 function asInteger(value: unknown): number {
   if (typeof value !== 'number' || !Number.isSafeInteger(value)) {
     throw new PrivacyError('unknown', 'The private service returned an invalid response.');
@@ -184,9 +513,49 @@ function asInteger(value: unknown): number {
   return value;
 }
 
+function asIntegerAtLeast(value: unknown, minimum: number): number {
+  const parsed = asInteger(value);
+  if (parsed < minimum) {
+    throw new PrivacyError('unknown', 'The private service returned an invalid response.');
+  }
+  return parsed;
+}
+
 function asArray(value: unknown): unknown[] {
   if (!Array.isArray(value)) {
     throw new PrivacyError('unknown', 'The private service returned an invalid response.');
   }
-  return value;
+  // `Array.prototype.map` skips holes (and invokes indexed accessors). A
+  // sparse or accessor-backed response would become a different, partially
+  // unchecked action/calldata list after parsing.
+  let length: number;
+  try {
+    const lengthDescriptor = Object.getOwnPropertyDescriptor(value, 'length');
+    if (
+      !lengthDescriptor
+      || !('value' in lengthDescriptor)
+      || !Number.isSafeInteger(lengthDescriptor.value)
+      || lengthDescriptor.value < 0
+      || Reflect.ownKeys(value).length !== lengthDescriptor.value + 1
+    ) {
+      throw new PrivacyError('unknown', 'The private service returned an invalid response.');
+    }
+    length = lengthDescriptor.value as number;
+  } catch (error) {
+    if (error instanceof PrivacyError) throw error;
+    throw new PrivacyError('unknown', 'The private service returned an invalid response.', error);
+  }
+  const owned: unknown[] = [];
+  try {
+    for (let index = 0; index < length; index += 1) {
+      const descriptor = Object.getOwnPropertyDescriptor(value, String(index));
+      if (!descriptor || !('value' in descriptor)) {
+        throw new Error('invalid response array item');
+      }
+      owned.push(descriptor.value);
+    }
+  } catch (error) {
+    throw new PrivacyError('unknown', 'The private service returned an invalid response.', error);
+  }
+  return owned;
 }

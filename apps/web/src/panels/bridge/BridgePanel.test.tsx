@@ -1,10 +1,12 @@
 import { describe, expect, it } from 'vitest';
+import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { FakePrivacyOperations } from '@strkworld/privacy';
 import { PrivacyProvider } from '../../privacy/PrivacyProvider.js';
 import { BridgeProvider } from '../../bridge/BridgeProvider.js';
 import { BridgePanel } from './BridgePanel.js';
 import { createBridgePanel } from '../../bridge/bridge-machine.js';
+import { PRIVACY_REGISTER } from '../../privacy/register.js';
 import type { BridgeRecord } from '@strkworld/bridge';
 
 const service = {
@@ -53,13 +55,29 @@ describe('BridgePanel', () => {
     expect(markup).not.toContain('appFees');
   });
 
+  it('renders the disclosure from the supplied route register', () => {
+    const disclosure = 'Custom bridge disclosure.';
+    const register = PRIVACY_REGISTER.map((entry) => entry.route === 'bridge.deposit'
+      ? { ...entry, disclosure }
+      : entry);
+    const markup = renderToStaticMarkup(
+      <PrivacyProvider operations={new FakePrivacyOperations()}>
+        <BridgeProvider service={service} account="0x123" planner={null}>
+          {createElement(BridgePanel, { onClose: () => {}, register })}
+        </BridgeProvider>
+      </PrivacyProvider>,
+    );
+    expect(markup).toContain(disclosure);
+    expect(markup).not.toContain('Bridging is public. Your destination address and amount are visible');
+  });
+
   it('keeps recovery controls and quote evidence compact instead of making them primary actions', () => {
     const markup = renderBridge();
     expect(markup).toContain('<summary>Recover a saved deposit</summary>');
     expect(markup).not.toContain('Direct unauthenticated 1Click charges');
   });
 
-  it('keeps recovered status controls visible without re-exposing settled deposit instructions', () => {
+  it('keeps recovered status controls visible without re-exposing settled deposit instructions', async () => {
     const recovered: BridgeRecord = {
       v: 1,
       createdAt: 1,
@@ -78,7 +96,7 @@ describe('BridgePanel', () => {
       status: { leg: 'settled', message: 'settled', pollingStopped: true, strkReceived: 18n },
     };
     const machine = createBridgePanel({ service: { ...service, resume: () => recovered }, loadSources: async () => [], readAccount: () => '0x123', planner: null, now: () => Date.parse('2030-01-01T00:01:00.000Z') });
-    machine.store.setState((state) => ({ ...state, record: recovered, flow: { name: 'idle' } }));
+    await machine.open();
     const markup = renderToStaticMarkup(
       <PrivacyProvider operations={new FakePrivacyOperations()}>
         <BridgeProvider service={service} account="0x123" planner={null}>
@@ -92,7 +110,7 @@ describe('BridgePanel', () => {
     expect(markup).not.toContain('0xdeposit');
   });
 
-  it('offers one concise resume action for a restored awaiting-deposit quote', () => {
+  it('offers one concise resume action for a restored awaiting-deposit quote', async () => {
     const restored: BridgeRecord = {
       v: 1,
       createdAt: 1,
@@ -111,15 +129,7 @@ describe('BridgePanel', () => {
       status: { leg: 'awaiting-deposit', message: 'Waiting for deposit', pollingStopped: false },
     };
     const machine = createBridgePanel({ service: { ...service, resume: () => restored }, loadSources: async () => [], readAccount: () => '0x123', planner: { planMax: async () => { throw new Error('unused'); } }, now: () => Date.parse('2030-01-01T00:01:00.000Z') });
-    machine.store.setState((state) => ({ ...state, record: restored, quote: {
-      amountIn: restored.amountIn,
-      sourceSymbol: 'USDC',
-      sourceDecimals: 6,
-      expectedAmountOut: 20n,
-      minimumAmountOut: 19n,
-      deadline: '2030-01-01T00:30:00.000Z',
-      recipient: '0x123',
-    }, preflightAvailable: true, instructionsVisible: false, flow: { name: 'idle' } }));
+    await machine.open();
     const markup = renderToStaticMarkup(
       <PrivacyProvider operations={new FakePrivacyOperations()}>
         <BridgeProvider service={service} account="0x123" planner={{ planMax: async () => { throw new Error('unused'); } }}>

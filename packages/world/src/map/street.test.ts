@@ -6,6 +6,7 @@ import {
   isAvatarStudioEntrance,
   isSolidAt,
   objectLayerToDoors,
+  TILES,
   TILE_SIZE,
   tileToWorld,
   worldToTile,
@@ -16,6 +17,39 @@ const map = createStreetMap();
 const DOOR_MAP_BOUNDS = { width: 48, height: 28 } as const;
 
 describe('the street is walkable', () => {
+  it('keeps the canonical collision vocabulary immutable', () => {
+    expect(Object.isFrozen(TILES)).toBe(true);
+    expect(Object.isFrozen(TILES.wall)).toBe(true);
+    expect(Reflect.set(TILES.wall, 'solid', false)).toBe(false);
+    expect(TILES.wall.solid).toBe(true);
+  });
+
+  it('rejects geometry supplied only through an object prototype', () => {
+    const object = Object.create({
+      x: TILE_SIZE,
+      y: 2 * TILE_SIZE,
+      width: 2 * TILE_SIZE,
+      height: TILE_SIZE,
+    });
+    object.properties = [{ name: 'building', type: 'string', value: 'bank' }];
+
+    expect(objectLayerToDoors([object], DOOR_MAP_BOUNDS)).toEqual([]);
+  });
+
+  it('rejects accessor-backed geometry without invoking the accessor', () => {
+    const object = tiledDoor();
+    let accessed = false;
+    Object.defineProperty(object, 'x', {
+      get: () => {
+        accessed = true;
+        return TILE_SIZE;
+      },
+    });
+
+    expect(objectLayerToDoors([object], DOOR_MAP_BOUNDS)).toEqual([]);
+    expect(accessed).toBe(false);
+  });
+
   it('spawns the player on a non-solid tile', () => {
     // A spawn inside a wall is the kind of bug that only shows up when someone
     // opens the game and cannot move.
@@ -175,6 +209,25 @@ describe('doors come from a Tiled object layer, not hardcoded coordinates', () =
       { x: 0, y: 0, width: TILE_SIZE, height: TILE_SIZE, properties: [] },
     ];
     expect(objectLayerToDoors(objects, DOOR_MAP_BOUNDS)).toEqual([]);
+  });
+
+  it('fails closed for null and non-object entries or containers', () => {
+    expect(() => objectLayerToDoors([
+      null,
+      'not-an-object',
+      42,
+      tiledDoor(),
+    ] as never, DOOR_MAP_BOUNDS)).not.toThrow();
+    expect(objectLayerToDoors([
+      null,
+      'not-an-object',
+      42,
+      tiledDoor(),
+    ] as never, DOOR_MAP_BOUNDS)).toEqual([
+      { building: 'bank', x: 1, y: 2, width: 2, height: 1, locked: false },
+    ]);
+    expect(() => objectLayerToDoors(null as never, DOOR_MAP_BOUNDS)).not.toThrow();
+    expect(objectLayerToDoors(null as never, DOOR_MAP_BOUNDS)).toEqual([]);
   });
 
   it('skips malformed or off-grid rectangle geometry instead of rounding it into a door', () => {

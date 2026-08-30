@@ -40,7 +40,7 @@ export interface BridgeProviderProps {
   children: ReactNode;
 }
 
-const unavailable: BridgeRuntime = {
+const unavailable: BridgeRuntime = Object.freeze({
   service: null,
   loadSources: async () => [],
   readAccount: () => null,
@@ -48,7 +48,12 @@ const unavailable: BridgeRuntime = {
   account: null,
   available: () => false,
   load: () => {},
-};
+});
+
+/** Keep provider-owned capability snapshots read-only at the React seam. */
+function freezeRuntime(runtime: BridgeRuntime): BridgeRuntime {
+  return Object.freeze(runtime);
+}
 
 const BridgeContext = createContext<BridgeRuntime>(unavailable);
 
@@ -79,7 +84,7 @@ function createRuntime({
   account,
 }: Pick<BridgeProviderProps, 'service' | 'loadSources' | 'readAccount' | 'planner' | 'now' | 'account'>): BridgeRuntime {
   if (!service) return unavailable;
-  return {
+  return freezeRuntime({
     service,
     loadSources: loadSources ?? (async () => []),
     readAccount: readAccount ?? (() => account ?? null),
@@ -88,7 +93,7 @@ function createRuntime({
     account: account ?? null,
     available: () => Boolean(account && planner),
     load: () => {},
-  };
+  });
 }
 
 export function useBridge(): BridgeRuntime {
@@ -117,20 +122,23 @@ export function BridgeProvider({
 
   const [loadedRuntime, setLoadedRuntime] = useState<{
     loader: BridgeRuntimeLoader;
+    generation: number;
     source: BridgeRuntimeSource;
   } | null>(null);
   const loadOwner = useRef<{
     loader: BridgeRuntimeLoader | undefined;
+    service: BridgeProviderProps['service'];
     generation: number;
     pending: boolean;
-  }>({ loader: loadRuntime, generation: 1, pending: false });
+  }>({ loader: loadRuntime, service, generation: 1, pending: false });
 
   // Props are authoritative during render. Do not initialize this owner in an
   // effect: React mounts child effects before parent effects, and BridgePanel
   // is the child that legitimately starts the first load.
-  if (loadOwner.current.loader !== loadRuntime) {
+  if (loadOwner.current.loader !== loadRuntime || loadOwner.current.service !== service) {
     loadOwner.current = {
       loader: loadRuntime,
+      service,
       generation: loadOwner.current.generation + 1,
       pending: false,
     };
@@ -146,13 +154,17 @@ export function BridgeProvider({
   }, [loadRuntime]);
 
   const load = useCallback(() => {
-    const currentRuntime = loadedRuntime && loadedRuntime.loader === loadRuntime ? loadedRuntime.source : null;
+    const currentRuntime = loadedRuntime
+      && loadedRuntime.loader === loadRuntime
+      && loadedRuntime.generation === loadOwner.current.generation
+      ? loadedRuntime.source
+      : null;
     if (!loadRuntime || service || currentRuntime || demoRejected || loadOwner.current.pending) return;
     const generation = loadOwner.current.generation;
     loadOwner.current.pending = true;
-    void loadRuntime().then((runtime) => {
+    void Promise.resolve().then(() => loadRuntime()).then((runtime) => {
       if (runtime && generation === loadOwner.current.generation) {
-        setLoadedRuntime({ loader: loadRuntime, source: runtime });
+        setLoadedRuntime({ loader: loadRuntime, generation, source: runtime });
       }
     }).catch(() => {
       // Optional Bridge recovery is isolated from wallet/app admission. A
@@ -162,7 +174,11 @@ export function BridgeProvider({
     });
   }, [loadRuntime, service, loadedRuntime, demoRejected]);
 
-  const currentRuntime = loadedRuntime && loadedRuntime.loader === loadRuntime ? loadedRuntime.source : null;
+  const currentRuntime = loadedRuntime
+    && loadedRuntime.loader === loadRuntime
+    && loadedRuntime.generation === loadOwner.current.generation
+    ? loadedRuntime.source
+    : null;
   const resolvedService = service ?? currentRuntime?.service;
   const resolvedSources = loadSources ?? currentRuntime?.loadSources;
   const directRuntime = useMemo(
@@ -186,7 +202,7 @@ export function BridgeProvider({
     }
     void import('./demo-runtime.js').then(async ({ createDemoBridgeRuntime }) => {
       const runtime = await createDemoBridgeRuntime();
-      if (!cancelled && generation.isCurrent(token)) setResolved(runtime);
+      if (!cancelled && generation.isCurrent(token)) setResolved(freezeRuntime(runtime));
     }).catch(() => {
       // A failed optional demo import leaves the bridge unavailable. Do not
       // resurrect a runtime from an earlier provider configuration.
@@ -200,7 +216,7 @@ export function BridgeProvider({
   // Direct runtimes are derived from the current props during render. This
   // makes a live -> absent/rejected transition immediately unavailable, even
   // before React flushes the effect that cancels an in-flight demo import.
-  const dormantRuntime = useMemo<BridgeRuntime>(() => ({ ...unavailable, load }), [load]);
+  const dormantRuntime = useMemo<BridgeRuntime>(() => freezeRuntime({ ...unavailable, load }), [load]);
   const runtime = directRuntime ?? (demo && !demoRejected ? resolved : null) ?? dormantRuntime;
   if (demoRejected) {
     throw new Error('<BridgeProvider demo> reached a production build. Demo bridge funding is disabled.');

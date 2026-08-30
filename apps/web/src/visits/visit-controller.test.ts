@@ -1,11 +1,95 @@
 import { describe, expect, it, vi } from 'vitest';
-import type { ShellEvents, WorldEvents } from '@strkworld/shared';
+import type { EventBus, ShellEvents, WorldEvents } from '@strkworld/shared';
 import { createEventBus } from '../bus/event-bus.js';
 import { PRIVACY_REGISTER, type RouteGrade } from '../privacy/register.js';
 import { createVisitController } from './visit-controller.js';
 import { resolveStation, stationSnapshot } from './station-registry.js';
 
 describe('visit controller', () => {
+  it('ignores null World commands without escaping the visit boundary', () => {
+    const handlers = new Map<keyof WorldEvents, (payload: unknown) => void>();
+    const world = {
+      on(event: keyof WorldEvents, handler: (payload: unknown) => void) {
+        handlers.set(event, handler);
+        return () => handlers.delete(event);
+      },
+    } as unknown as EventBus<WorldEvents>;
+    const shell = createEventBus<ShellEvents>();
+    const controller = createVisitController(shell);
+    controller.listen(world);
+
+    const emitMalformed = (event: keyof WorldEvents) => {
+      handlers.get(event)?.(null);
+    };
+
+    expect(() => emitMalformed('building:entered')).not.toThrow();
+    expect(() => emitMalformed('building:locked')).not.toThrow();
+    expect(() => emitMalformed('building:exited')).not.toThrow();
+    expect(() => emitMalformed('station:activated')).not.toThrow();
+    expect(controller.store.getState()).toEqual({ name: 'outside' });
+  });
+
+  it('publishes an immutable controller API while retaining owned transitions', () => {
+    const world = createEventBus<WorldEvents>();
+    const shell = createEventBus<ShellEvents>();
+    const controller = createVisitController(shell);
+    const originalCloseSurface = controller.closeSurface;
+
+    expect(Object.isFrozen(controller)).toBe(true);
+    expect(Reflect.set(controller, 'closeSurface', () => undefined)).toBe(false);
+    expect(Reflect.set(controller, 'requestExit', () => undefined)).toBe(false);
+    expect(controller.closeSurface).toBe(originalCloseSurface);
+    controller.listen(world);
+    world.emit('building:entered', { building: 'bank' });
+    controller.openMenu();
+    controller.closeSurface();
+    expect(controller.store.getState()).toMatchObject({
+      name: 'visiting',
+      building: 'bank',
+      surface: { name: 'room' },
+    });
+  });
+
+  it('keeps the Escape callback usable when passed without its controller receiver', () => {
+    const world = createEventBus<WorldEvents>();
+    const shell = createEventBus<ShellEvents>();
+    const controller = createVisitController(shell);
+    controller.listen(world);
+    world.emit('building:entered', { building: 'bank' });
+    controller.openMenu();
+
+    const handleEscape = controller.handleEscape;
+
+    expect(() => handleEscape()).not.toThrow();
+    expect(controller.store.getState()).toEqual({
+      name: 'visiting',
+      building: 'bank',
+      surface: { name: 'room' },
+    });
+  });
+
+  it('keeps the public visit store read-only and immutable', () => {
+    const world = createEventBus<WorldEvents>();
+    const shell = createEventBus<ShellEvents>();
+    const controller = createVisitController(shell);
+
+    expect('setState' in controller.store).toBe(false);
+    expect(Object.isFrozen(controller.store.getState())).toBe(true);
+
+    controller.listen(world);
+    world.emit('building:entered', { building: 'bank' });
+    const state = controller.store.getState();
+    if (state.name !== 'visiting') throw new Error('expected an active visit');
+    expect(Object.isFrozen(state)).toBe(true);
+    expect(Object.isFrozen(state.surface)).toBe(true);
+    expect(Reflect.set(state, 'building', 'exchange')).toBe(false);
+    expect(Reflect.set(state.surface, 'name', 'menu')).toBe(false);
+    expect(controller.store.getState()).toMatchObject({
+      building: 'bank',
+      surface: { name: 'room' },
+    });
+  });
+
   it('starts a Bank visit in Game Mode and publishes presentation-only stations', () => {
     const world = createEventBus<WorldEvents>();
     const shell = createEventBus<ShellEvents>();
@@ -205,6 +289,21 @@ describe('visit controller', () => {
     });
   });
 
+  it('does not publish a station after the control handoff synchronously exits the building', () => {
+    const world = createEventBus<WorldEvents>();
+    const shell = createEventBus<ShellEvents>();
+    shell.on('world:control-owner', ({ owner }) => {
+      if (owner === 'shell') world.emit('building:exited', { building: 'bank' });
+    });
+    const controller = createVisitController(shell);
+    controller.listen(world);
+    world.emit('building:entered', { building: 'bank' });
+
+    world.emit('station:activated', { building: 'bank', station: 'bank:shielding' });
+
+    expect(controller.store.getState()).toEqual({ name: 'outside' });
+  });
+
   it('fails closed on an unknown station and releases input the World suspended', () => {
     const world = createEventBus<WorldEvents>();
     const shell = createEventBus<ShellEvents>();
@@ -353,6 +452,77 @@ describe('visit controller', () => {
     expect(stations).toHaveBeenCalledTimes(1);
   });
 
+  it('retires an older World subscription when the controller is rebound', () => {
+    const firstWorld = createEventBus<WorldEvents>();
+    const currentWorld = createEventBus<WorldEvents>();
+    const shell = createEventBus<ShellEvents>();
+    const controller = createVisitController(shell);
+
+    controller.listen(firstWorld);
+    controller.listen(currentWorld);
+
+    firstWorld.emit('building:entered', { building: 'bank' });
+    expect(controller.store.getState()).toEqual({ name: 'outside' });
+
+    currentWorld.emit('building:entered', { building: 'exchange' });
+    expect(controller.store.getState()).toEqual({
+      name: 'visiting',
+      building: 'exchange',
+      surface: { name: 'room' },
+    });
+  });
+
+  it('does not let stale listener cleanup release current Shell-owned controls', () => {
+    const firstWorld = createEventBus<WorldEvents>();
+    const currentWorld = createEventBus<WorldEvents>();
+    const shell = createEventBus<ShellEvents>();
+    const owners = vi.fn();
+    shell.on('world:control-owner', owners);
+    const controller = createVisitController(shell);
+
+    const staleStop = controller.listen(firstWorld);
+    controller.listen(currentWorld);
+    currentWorld.emit('building:entered', { building: 'bank' });
+    currentWorld.emit('station:activated', { building: 'bank', station: 'bank:shielding' });
+    const ownerCalls = owners.mock.calls.length;
+
+    staleStop();
+
+    expect(owners).toHaveBeenCalledTimes(ownerCalls);
+    expect(controller.store.getState()).toMatchObject({
+      name: 'visiting',
+      surface: { name: 'station', station: 'bank:shielding' },
+    });
+  });
+
+  it('rolls back World listeners when a later listener registration fails', () => {
+    const world = createEventBus<WorldEvents>();
+    const originalOn = world.on;
+    const stopCalls: Array<ReturnType<typeof vi.fn>> = [];
+    let registrations = 0;
+    const failure = new Error('world listener registration failed');
+    world.on = ((event, handler) => {
+      registrations += 1;
+      if (registrations === 4) throw failure;
+      const stop = originalOn(event, handler);
+      const trackedStop = vi.fn(stop);
+      if (stopCalls.length === 0) {
+        trackedStop.mockImplementation(() => {
+          stop();
+          throw new Error('listener cleanup failed');
+        });
+      }
+      stopCalls.push(trackedStop);
+      return trackedStop;
+    }) as typeof world.on;
+
+    const controller = createVisitController(createEventBus<ShellEvents>());
+
+    expect(() => controller.listen(world)).toThrow(failure);
+    expect(stopCalls).toHaveLength(3);
+    expect(stopCalls.every((stop) => stop.mock.calls.length === 1)).toBe(true);
+  });
+
   it('releases Shell-owned controls when listener cleanup unmounts a station window', () => {
     const world = createEventBus<WorldEvents>();
     const shell = createEventBus<ShellEvents>();
@@ -399,6 +569,30 @@ describe('station registry', () => {
         initialMode: 'transfer',
       },
     });
+  });
+
+  it('keeps resolved station definitions and their authority arrays immutable', () => {
+    const resolved = resolveStation('post-office', 'post-office:transfer');
+    expect(resolved.status).toBe('available');
+    if (resolved.status !== 'available') return;
+    expect(Object.isFrozen(resolved.definition)).toBe(true);
+    expect(Object.isFrozen(resolved.definition.routes)).toBe(true);
+    expect('modes' in resolved.definition && Object.isFrozen(resolved.definition.modes)).toBe(true);
+    expect(Reflect.set(resolved.definition, 'view', 'exchange')).toBe(false);
+    expect(Reflect.set(resolved.definition.routes, 0, 'exchange.swap')).toBe(false);
+    expect(resolveStation('post-office', 'post-office:transfer')).toMatchObject({
+      status: 'available',
+      definition: { view: 'bank', routes: ['post-office.transfer'] },
+    });
+  });
+
+  it('keeps published station snapshots immutable at the public seam', () => {
+    const snapshot = stationSnapshot('bank');
+    expect(Object.isFrozen(snapshot)).toBe(true);
+    expect(Object.isFrozen(snapshot[0])).toBe(true);
+    expect(Reflect.set(snapshot[0]!, 'status', 'locked')).toBe(false);
+    expect(Reflect.set(snapshot, 0, { ...snapshot[0]!, status: 'locked' })).toBe(false);
+    expect(stationSnapshot('bank')[0]?.status).toBe('available');
   });
 
   it('publishes the Bridge station and fails closed without both runtime capabilities', () => {

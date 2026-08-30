@@ -18,7 +18,9 @@ import {
   serializeBridgeRecord,
   validateSourceAddress,
   validateStarknetAddress,
+  type CreateDepositInput,
   type OneClickClient,
+  type BridgeStatus,
   type SourceAsset,
 } from './index.js';
 
@@ -121,6 +123,67 @@ function deferred<T>(): {
 }
 
 describe('BridgeService', () => {
+  it.each([
+    ['number', 1],
+    ['string', '1000000'],
+    ['coercible object', { toString: (): string => '1000000', valueOf: (): number => 1 }],
+  ] as const)('rejects a non-bigint bridge amount %s before requesting a quote', async (_label, amountIn) => {
+    const client = new StubClient();
+    const service = new BridgeService({
+      client,
+      store: new MemoryBridgeStore(),
+      quoteVerifier: () => true,
+      now: () => NOW,
+    });
+
+    await expect(service.createManualDeposit({
+      source: SOURCE,
+      amountIn: amountIn as never,
+      starknetRecipient: '0x123',
+      refundAddress: request.refundTo,
+    })).rejects.toThrow('Bridge amount must be a bigint.');
+    expect(client.quoteRequests).toHaveLength(0);
+  });
+
+  it('rejects an amount above the uint256 bound before requesting a quote', async () => {
+    const client = new StubClient();
+    const service = new BridgeService({
+      client,
+      store: new MemoryBridgeStore(),
+      quoteVerifier: () => true,
+      now: () => NOW,
+    });
+
+    await expect(service.createManualDeposit({
+      source: SOURCE,
+      amountIn: 1n << 256n,
+      starknetRecipient: '0x123',
+      refundAddress: request.refundTo,
+    })).rejects.toThrow('Bridge amount must be a positive uint256.');
+    expect(client.quoteRequests).toHaveLength(0);
+  });
+
+  it('rejects non-string source metadata before requesting a quote', async () => {
+    const client = new StubClient();
+    const service = new BridgeService({
+      client,
+      store: new MemoryBridgeStore(),
+      quoteVerifier: () => true,
+      now: () => NOW,
+    });
+
+    await expect(service.createManualDeposit({
+      source: {
+        ...SOURCE,
+        symbol: { toString: () => SOURCE.symbol } as unknown as string,
+      },
+      amountIn: 1_000_000n,
+      starknetRecipient: '0x123',
+      refundAddress: request.refundTo,
+    })).rejects.toThrow('The source asset metadata is invalid.');
+    expect(client.quoteRequests).toHaveLength(0);
+  });
+
   it('does not overwrite an imported record while its quote is pending', async () => {
     const quote = deferred<QuoteResponse>();
     const client = new StubClient();
@@ -212,6 +275,34 @@ describe('BridgeService', () => {
     expect(service.resume()).toMatchObject({
       amountIn: 1_000_000n,
       source: { depositMode: 'manual' },
+    });
+  });
+
+  it('retains the source metadata captured when quote creation began', async () => {
+    const quote = deferred<QuoteResponse>();
+    const client = new StubClient();
+    client.getQuote = async () => quote.promise;
+    const service = new BridgeService({
+      client,
+      store: new MemoryBridgeStore(),
+      quoteVerifier: () => true,
+      now: () => NOW,
+    });
+    const input: CreateDepositInput = {
+      source: { ...SOURCE },
+      amountIn: 1_000_000n,
+      starknetRecipient: '0x123',
+      refundAddress: request.refundTo,
+    };
+
+    const creating = service.createManualDeposit(input);
+    await Promise.resolve();
+    input.source.symbol = 'MUTATED';
+    input.source.decimals = 18;
+    quote.resolve(signedQuote);
+
+    await expect(creating).resolves.toMatchObject({
+      source: { symbol: 'USDC', decimals: 6 },
     });
   });
 
@@ -477,6 +568,54 @@ describe('BridgeService', () => {
     });
   });
 
+  it('rejects a signed quote output above the uint256 upper bound', async () => {
+    const client = new StubClient();
+    const store = new MemoryBridgeStore();
+    client.getQuote = async () => ({
+      ...signedQuote,
+      quote: {
+        ...signedQuote.quote,
+        amountOut: (1n << 256n).toString(),
+        minAmountOut: (1n << 256n).toString(),
+      },
+    });
+    const service = new BridgeService({ client, store, quoteVerifier: () => true, now: () => NOW });
+
+    await expect(service.createManualDeposit({
+      source: SOURCE,
+      amountIn: 1_000_000n,
+      starknetRecipient: '0x123',
+      refundAddress: request.refundTo,
+    })).rejects.toThrow('1Click returned invalid executable quote amounts.');
+    expect(store.load()).toBeNull();
+  });
+
+  it.each(['amountOut', 'minAmountOut'] as const)('rejects a coercible signed quote %s before persistence', async (field) => {
+    const client = new StubClient();
+    const store = new MemoryBridgeStore();
+    client.getQuote = async () => ({
+      ...signedQuote,
+      quote: {
+        ...signedQuote.quote,
+        [field]: { length: 19, toString: () => '2000000000000000000' },
+      },
+    } as unknown as QuoteResponse);
+    const service = new BridgeService({ client, store, quoteVerifier: () => true, now: () => NOW });
+
+    await expect(service.createManualDeposit({
+      source: SOURCE,
+      amountIn: 1_000_000n,
+      starknetRecipient: '0x123',
+      refundAddress: request.refundTo,
+    })).rejects.toThrow('1Click returned invalid executable quote amounts.');
+    expect(store.load()).toBeNull();
+  });
+
+  it.each([null, 42, {}, []] as const)('fails closed for a non-string decoder input %s', (raw) => {
+    expect(() => deserializeBridgeRecord(raw as never)).not.toThrow();
+    expect(deserializeBridgeRecord(raw as never)).toBeNull();
+  });
+
   it.each([
     ['zero', '0'],
     ['negative', '-1'],
@@ -558,6 +697,189 @@ describe('BridgeService', () => {
       destinationChainTxHashes: [{} as never],
     }));
     await expect(service.refresh()).rejects.toThrow('1Click returned invalid execution status data.');
+  });
+
+  it('rejects a SUCCESS status whose destination hash is inherited', async () => {
+    const client = new StubClient();
+    const store = new MemoryBridgeStore();
+    const service = new BridgeService({ client, store, quoteVerifier: () => true, now: () => NOW });
+    await service.createManualDeposit({
+      source: SOURCE,
+      amountIn: 1_000_000n,
+      starknetRecipient: '0x123',
+      refundAddress: request.refundTo,
+    });
+
+    const entry = Object.create({ hash: '0xinherited' }) as { explorerUrl: string };
+    entry.explorerUrl = 'https://example/tx';
+    client.statuses.push(status('SUCCESS' as never, {
+      amountOut: '1980000000000000000',
+      destinationChainTxHashes: [entry as never],
+    }));
+    await expect(service.refresh()).rejects.toThrow('1Click returned invalid execution status data.');
+    expect(store.load()?.status.leg).toBe('awaiting-deposit');
+  });
+
+  it('rejects a SUCCESS status whose destination hash is an accessor', async () => {
+    const client = new StubClient();
+    const store = new MemoryBridgeStore();
+    const service = new BridgeService({ client, store, quoteVerifier: () => true, now: () => NOW });
+    await service.createManualDeposit({
+      source: SOURCE,
+      amountIn: 1_000_000n,
+      starknetRecipient: '0x123',
+      refundAddress: request.refundTo,
+    });
+
+    let accessed = false;
+    const entry = {} as { explorerUrl: string; hash: string };
+    Object.defineProperty(entry, 'hash', {
+      configurable: true,
+      get() {
+        accessed = true;
+        throw new Error('hash getter must not run');
+      },
+    });
+    entry.explorerUrl = 'https://example/tx';
+    client.statuses.push(status('SUCCESS' as never, {
+      amountOut: '1980000000000000000',
+      destinationChainTxHashes: [entry as never],
+    }));
+    await expect(service.refresh()).rejects.toThrow('1Click returned invalid execution status data.');
+    expect(accessed).toBe(false);
+    expect(store.load()?.status.leg).toBe('awaiting-deposit');
+  });
+
+  it.each([
+    ['inherited', (response: GetExecutionStatusResponse) => {
+      Reflect.deleteProperty(response, 'status');
+      Object.setPrototypeOf(response, { status: 'SUCCESS' });
+    }],
+    ['accessor', (response: GetExecutionStatusResponse) => {
+      Reflect.deleteProperty(response, 'status');
+      Object.defineProperty(response, 'status', {
+        configurable: true,
+        get() { throw new Error('status getter must not run'); },
+      });
+    }],
+  ] as const)('rejects a status response with an unowned %s status field', async (_label, mutate) => {
+    const client = new StubClient();
+    const store = new MemoryBridgeStore();
+    const service = new BridgeService({ client, store, quoteVerifier: () => true, now: () => NOW });
+    await service.createManualDeposit({ source: SOURCE, amountIn: 1_000_000n, starknetRecipient: '0x123', refundAddress: request.refundTo });
+    const response = status('SUCCESS' as never, { amountOut: '1980000000000000000', destinationChainTxHashes: [{ hash: '0xsettled', explorerUrl: 'https://example/tx' }] });
+    mutate(response);
+    client.statuses.push(response);
+    await expect(service.refresh()).rejects.toThrow('1Click returned invalid execution status data.');
+    expect(store.load()?.status.leg).toBe('awaiting-deposit');
+  });
+
+  it('rejects a status response with inherited swap details', async () => {
+    const client = new StubClient();
+    const store = new MemoryBridgeStore();
+    const service = new BridgeService({ client, store, quoteVerifier: () => true, now: () => NOW });
+    await service.createManualDeposit({ source: SOURCE, amountIn: 1_000_000n, starknetRecipient: '0x123', refundAddress: request.refundTo });
+    const response = status('SUCCESS' as never, { amountOut: '1980000000000000000', destinationChainTxHashes: [{ hash: '0xsettled', explorerUrl: 'https://example/tx' }] });
+    const details = response.swapDetails;
+    Reflect.deleteProperty(response, 'swapDetails');
+    Object.setPrototypeOf(response, { swapDetails: details });
+    client.statuses.push(response);
+    await expect(service.refresh()).rejects.toThrow('1Click returned invalid execution status data.');
+    expect(store.load()?.status.leg).toBe('awaiting-deposit');
+  });
+
+  it.each([
+    ['negative createdAt', { createdAt: -1 }],
+    ['fractional updatedAt', { updatedAt: NOW + 0.5 }],
+    ['unsafe createdAt', { createdAt: Number.MAX_SAFE_INTEGER + 1 }],
+  ] as const)('rejects persisted records with an invalid %s timestamp', async (_label, patch) => {
+    const client = new StubClient();
+    const store = new MemoryBridgeStore();
+    const service = new BridgeService({ client, store, quoteVerifier: () => true, now: () => NOW });
+    const record = await service.createManualDeposit({
+      source: SOURCE,
+      amountIn: 1_000_000n,
+      starknetRecipient: '0x123',
+      refundAddress: request.refundTo,
+    });
+    const malformed = { ...record, ...patch };
+    const raw = store.serialize(malformed as never);
+
+    expect(deserializeBridgeRecord(raw)).toBeNull();
+    store.save(malformed as never);
+    expect(service.resume()).toBeNull();
+  });
+
+  it.each([
+    ['null', null],
+    ['array', []],
+    ['primitive', 42],
+  ] as const)('rejects a status response with %s swap details', async (_label, swapDetails) => {
+    const client = new StubClient();
+    const store = new MemoryBridgeStore();
+    const service = new BridgeService({ client, store, quoteVerifier: () => true, now: () => NOW });
+    await service.createManualDeposit({ source: SOURCE, amountIn: 1_000_000n, starknetRecipient: '0x123', refundAddress: request.refundTo });
+    const response = status('PENDING_DEPOSIT' as never);
+    response.swapDetails = swapDetails as never;
+    client.statuses.push(response);
+
+    await expect(service.refresh()).rejects.toThrow('1Click returned invalid execution status data.');
+    expect(store.load()?.status.leg).toBe('awaiting-deposit');
+  });
+
+  it('rejects a status response with inherited signed quote evidence', async () => {
+    const client = new StubClient();
+    const store = new MemoryBridgeStore();
+    const service = new BridgeService({ client, store, quoteVerifier: () => true, now: () => NOW });
+    await service.createManualDeposit({ source: SOURCE, amountIn: 1_000_000n, starknetRecipient: '0x123', refundAddress: request.refundTo });
+    const response = status('PENDING_DEPOSIT' as never);
+    const evidence = response.quoteResponse;
+    Reflect.deleteProperty(response, 'quoteResponse');
+    Object.setPrototypeOf(response, { quoteResponse: evidence });
+    client.statuses.push(response);
+    await expect(service.refresh()).rejects.toThrow('1Click returned invalid execution status data.');
+    expect(store.load()?.status.leg).toBe('awaiting-deposit');
+  });
+
+  it('rejects settlement fields supplied only by the swap-details prototype', async () => {
+    const client = new StubClient();
+    const store = new MemoryBridgeStore();
+    const service = new BridgeService({ client, store, quoteVerifier: () => true, now: () => NOW });
+    await service.createManualDeposit({ source: SOURCE, amountIn: 1_000_000n, starknetRecipient: '0x123', refundAddress: request.refundTo });
+    const response = status('SUCCESS' as never);
+    response.swapDetails = Object.create({
+      amountOut: '1980000000000000000',
+      originChainTxHashes: [],
+      destinationChainTxHashes: [],
+    }) as never;
+    client.statuses.push(response);
+
+    await expect(service.refresh()).rejects.toThrow('1Click returned invalid execution status data.');
+    expect(store.load()?.status.leg).toBe('awaiting-deposit');
+  });
+
+  it('does not invoke an accessor-backed settlement amount', async () => {
+    const client = new StubClient();
+    const store = new MemoryBridgeStore();
+    const service = new BridgeService({ client, store, quoteVerifier: () => true, now: () => NOW });
+    await service.createManualDeposit({ source: SOURCE, amountIn: 1_000_000n, starknetRecipient: '0x123', refundAddress: request.refundTo });
+    const details = {
+      intentHashes: [],
+      nearTxHashes: [],
+      originChainTxHashes: [],
+      destinationChainTxHashes: [],
+      amountOut: '1980000000000000000',
+    } as Record<string, unknown>;
+    Object.defineProperty(details, 'amountOut', {
+      configurable: true,
+      get() { throw new Error('settlement amount getter must not run'); },
+    });
+    const response = status('SUCCESS' as never);
+    response.swapDetails = details as never;
+    client.statuses.push(response);
+
+    await expect(service.refresh()).rejects.toThrow('1Click returned invalid execution status data.');
+    expect(store.load()?.status.leg).toBe('awaiting-deposit');
   });
 
   it('rejects an amountOut above the uint256 upper bound', async () => {
@@ -824,6 +1146,54 @@ describe('BridgeService', () => {
     expect(store.load()?.status.leg).toBe('awaiting-deposit');
   });
 
+  it.each([
+    ['null', null],
+    ['array', []],
+    ['primitive', 'malformed'],
+    ['nested quote', { ...signedQuote, quote: null }],
+  ] as const)('rejects a %s status quote response with the generic execution-status error', async (_label, quoteResponse) => {
+    const client = new StubClient();
+    const store = new MemoryBridgeStore();
+    const service = new BridgeService({ client, store, quoteVerifier: () => true, now: () => NOW });
+    await service.createManualDeposit({
+      source: SOURCE,
+      amountIn: 1_000_000n,
+      starknetRecipient: '0x123',
+      refundAddress: request.refundTo,
+    });
+    const before = store.load();
+    client.statuses.push({
+      ...status('PENDING_DEPOSIT' as never),
+      quoteResponse: quoteResponse as never,
+    });
+
+    await expect(service.refresh()).rejects.toThrow('1Click returned invalid execution status data.');
+    expect(store.load()).toEqual(before);
+  });
+
+  it('rejects a coercible execution status before mapping provider progress', async () => {
+    const client = new StubClient();
+    const store = new MemoryBridgeStore();
+    const service = new BridgeService({ client, store, quoteVerifier: () => true, now: () => NOW });
+    await service.createManualDeposit({
+      source: SOURCE,
+      amountIn: 1_000_000n,
+      starknetRecipient: '0x123',
+      refundAddress: request.refundTo,
+    });
+    const before = store.load();
+    client.statuses.push({
+      ...status('SUCCESS' as never, {
+        amountOut: '2000000000000000000',
+        destinationChainTxHashes: [{ hash: '0xdestination', explorerUrl: '' }],
+      }),
+      status: { toString: () => 'SUCCESS' },
+    } as unknown as GetExecutionStatusResponse);
+
+    await expect(service.refresh()).rejects.toThrow('1Click returned invalid execution status data.');
+    expect(store.load()).toEqual(before);
+  });
+
   it('rejects a quote that omits its deposit address or signed dispute evidence', async () => {
     const client = new StubClient();
     const store = new MemoryBridgeStore();
@@ -837,6 +1207,189 @@ describe('BridgeService', () => {
         refundAddress: request.refundTo,
       }),
     ).rejects.toThrow(/signed quote|deposit address/i);
+    expect(store.load()).toBeNull();
+  });
+
+  it('rejects coercible signed quote evidence before persistence', async () => {
+    const client = new StubClient();
+    const store = new MemoryBridgeStore();
+    client.getQuote = async () => ({
+      ...signedQuote,
+      timestamp: { toString: () => signedQuote.timestamp },
+    } as unknown as QuoteResponse);
+    const service = new BridgeService({ client, store, quoteVerifier: () => true, now: () => NOW });
+
+    await expect(service.createManualDeposit({
+      source: SOURCE,
+      amountIn: 1_000_000n,
+      starknetRecipient: '0x123',
+      refundAddress: request.refundTo,
+    })).rejects.toThrow('1Click returned invalid signed quote data.');
+    expect(store.load()).toBeNull();
+  });
+
+  it('rejects a coercible origin transaction hash before notifying 1Click', async () => {
+    const client = new StubClient();
+    const store = new MemoryBridgeStore();
+    const service = new BridgeService({ client, store, quoteVerifier: () => true, now: () => NOW });
+    await service.createManualDeposit({
+      source: SOURCE,
+      amountIn: 1_000_000n,
+      starknetRecipient: '0x123',
+      refundAddress: request.refundTo,
+    });
+
+    await expect(service.reportDepositTransaction({
+      length: 0,
+      toString: () => '0xorigin-tx',
+    } as unknown as string)).rejects.toThrow('The origin deposit transaction hash is invalid.');
+    expect(client.depositRequests).toHaveLength(0);
+  });
+
+  it('rejects a signed quote with a whitespace-only deposit address', async () => {
+    const client = new StubClient();
+    const store = new MemoryBridgeStore();
+    client.getQuote = async () => ({
+      ...signedQuote,
+      quote: { ...signedQuote.quote, depositAddress: '   ' },
+    });
+    const service = new BridgeService({ client, store, quoteVerifier: () => true, now: () => NOW });
+
+    await expect(service.createManualDeposit({
+      source: SOURCE,
+      amountIn: 1_000_000n,
+      starknetRecipient: '0x123',
+      refundAddress: request.refundTo,
+    })).rejects.toThrow(/deposit address/i);
+    expect(store.load()).toBeNull();
+  });
+
+  it('rejects a coercible deposit memo before retaining signed quote evidence', async () => {
+    const client = new StubClient();
+    const store = new MemoryBridgeStore();
+    client.getQuote = async () => ({
+      ...signedQuote,
+      quote: { ...signedQuote.quote, depositMemo: { toString: () => 'memo' } },
+    } as unknown as QuoteResponse);
+    const service = new BridgeService({ client, store, quoteVerifier: () => true, now: () => NOW });
+
+    await expect(service.createManualDeposit({
+      source: SOURCE,
+      amountIn: 1_000_000n,
+      starknetRecipient: '0x123',
+      refundAddress: request.refundTo,
+    })).rejects.toThrow('1Click returned invalid signed quote data.');
+    expect(store.load()).toBeNull();
+  });
+
+  it('rejects a whitespace-only deposit memo before retaining signed quote evidence', async () => {
+    const client = new StubClient();
+    const store = new MemoryBridgeStore();
+    client.getQuote = async () => ({
+      ...signedQuote,
+      quote: { ...signedQuote.quote, depositMemo: '   ' },
+    });
+    const service = new BridgeService({ client, store, quoteVerifier: () => true, now: () => NOW });
+
+    await expect(service.createManualDeposit({
+      source: SOURCE,
+      amountIn: 1_000_000n,
+      starknetRecipient: '0x123',
+      refundAddress: request.refundTo,
+    })).rejects.toThrow('1Click returned invalid signed quote data.');
+    expect(store.load()).toBeNull();
+  });
+
+  it('rejects a coercible Near sender account before notifying 1Click', async () => {
+    const client = new StubClient();
+    const store = new MemoryBridgeStore();
+    const service = new BridgeService({ client, store, quoteVerifier: () => true, now: () => NOW });
+    await service.createManualDeposit({
+      source: SOURCE,
+      amountIn: 1_000_000n,
+      starknetRecipient: '0x123',
+      refundAddress: request.refundTo,
+    });
+
+    await expect(service.reportDepositTransaction(
+      '0xorigin-tx',
+      { toString: () => 'alice.near' } as unknown as string,
+    )).rejects.toThrow('The Near sender account is invalid.');
+    expect(client.depositRequests).toHaveLength(0);
+  });
+
+  it('rejects a whitespace-bearing Near sender account before notifying 1Click', async () => {
+    const client = new StubClient();
+    const store = new MemoryBridgeStore();
+    const service = new BridgeService({ client, store, quoteVerifier: () => true, now: () => NOW });
+    await service.createManualDeposit({
+      source: SOURCE,
+      amountIn: 1_000_000n,
+      starknetRecipient: '0x123',
+      refundAddress: request.refundTo,
+    });
+
+    await expect(service.reportDepositTransaction('0xorigin-tx', 'alice near'))
+      .rejects.toThrow('The Near sender account is invalid.');
+    expect(client.depositRequests).toHaveLength(0);
+  });
+
+  it('rejects a signed quote with an overlong deposit address', async () => {
+    const client = new StubClient();
+    const store = new MemoryBridgeStore();
+    client.getQuote = async () => ({
+      ...signedQuote,
+      quote: { ...signedQuote.quote, depositAddress: 'x'.repeat(257) },
+    });
+    const service = new BridgeService({ client, store, quoteVerifier: () => true, now: () => NOW });
+
+    await expect(service.createManualDeposit({
+      source: SOURCE,
+      amountIn: 1_000_000n,
+      starknetRecipient: '0x123',
+      refundAddress: request.refundTo,
+    })).rejects.toThrow(/deposit address/i);
+    expect(store.load()).toBeNull();
+  });
+
+  it('rejects accessor-backed signed quote fields without invoking the provider getter', async () => {
+    const client = new StubClient();
+    const store = new MemoryBridgeStore();
+    let getterCalls = 0;
+    const quote = Object.create(signedQuote.quote) as typeof signedQuote.quote;
+    Object.defineProperty(quote, 'depositAddress', {
+      configurable: true,
+      get: () => {
+        getterCalls += 1;
+        return signedQuote.quote.depositAddress;
+      },
+    });
+    client.getQuote = async () => ({ ...signedQuote, quote });
+    const service = new BridgeService({ client, store, quoteVerifier: () => true, now: () => NOW });
+
+    await expect(service.createManualDeposit({
+      source: SOURCE,
+      amountIn: 1_000_000n,
+      starknetRecipient: '0x123',
+      refundAddress: request.refundTo,
+    })).rejects.toThrow('1Click returned invalid signed quote data.');
+    expect(getterCalls).toBe(0);
+    expect(store.load()).toBeNull();
+  });
+
+  it('rejects inherited required signed quote fields before persistence', async () => {
+    const client = new StubClient();
+    const store = new MemoryBridgeStore();
+    const quote = Object.create(signedQuote.quote) as typeof signedQuote.quote;
+    client.getQuote = async () => ({ ...signedQuote, quote });
+    const service = new BridgeService({ client, store, quoteVerifier: () => true, now: () => NOW });
+
+    await expect(service.createManualDeposit({
+      source: SOURCE,
+      amountIn: 1_000_000n,
+      starknetRecipient: '0x123',
+      refundAddress: request.refundTo,
+    })).rejects.toThrow('1Click returned invalid signed quote data.');
     expect(store.load()).toBeNull();
   });
 
@@ -907,6 +1460,47 @@ describe('BridgeService', () => {
     });
     expect(updates).toEqual(['awaiting-deposit', 'awaiting-deposit', 'awaiting-deposit']);
     expect(store.load()?.status).toMatchObject({ leg: 'awaiting-deposit', pollingStopped: true });
+  });
+
+  it('keeps watcher ownership when an update callback mutates its status', async () => {
+    const client = new StubClient();
+    const store = new MemoryBridgeStore();
+    let now = NOW;
+    const service = new BridgeService({
+      client,
+      store,
+      quoteVerifier: () => true,
+      now: () => now,
+      sleep: async (ms) => { now += ms; },
+    });
+    await service.createManualDeposit({
+      source: SOURCE,
+      amountIn: 1_000_000n,
+      starknetRecipient: '0x123',
+      refundAddress: request.refundTo,
+    });
+    client.statuses.push(
+      status('PENDING_DEPOSIT' as never),
+      status('PENDING_DEPOSIT' as never),
+    );
+
+    const watched = await service.watch({
+      intervalMs: 10,
+      maxActiveMs: 10,
+      onUpdate: (value) => {
+        value.leg = 'settled';
+        value.message = 'forged by observer';
+      },
+    });
+
+    expect(watched).toMatchObject({
+      leg: 'awaiting-deposit',
+      pollingStopped: true,
+    });
+    expect(store.load()?.status).toMatchObject({
+      leg: 'awaiting-deposit',
+      pollingStopped: true,
+    });
   });
 
   it('stops active polling when the wall clock rolls backwards', async () => {
@@ -1227,6 +1821,95 @@ describe('BridgeService', () => {
 });
 
 describe('source registry and refund validation', () => {
+  it('rejects an unsupported source chain before requesting a quote', async () => {
+    const client = new StubClient();
+    const service = new BridgeService({ client, store: new MemoryBridgeStore(), quoteVerifier: () => true, now: () => NOW });
+
+    await expect(service.createManualDeposit({
+      source: { ...SOURCE, chainName: 'not-a-supported-chain' as never },
+      amountIn: 1_000_000n,
+      starknetRecipient: '0x123',
+      refundAddress: request.refundTo,
+    })).rejects.toThrow('Unsupported source chain.');
+    expect(client.quoteRequests).toHaveLength(0);
+  });
+
+  it('falls back when the live token registry has a malformed response shape', async () => {
+    await expect(loadSourceAssets({
+      getTokens: async () => null as never,
+    })).resolves.toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        assetId: 'nep141:arb-0xaf88d065e77c8cc2239327c5edb3a432268e5831.omft.near',
+        availability: 'fallback',
+      }),
+    ]));
+  });
+
+  it('ignores malformed entries in an otherwise valid token registry response', async () => {
+    const assets = await loadSourceAssets({
+      getTokens: async () => [null, 'not-an-entry'] as never,
+    });
+    expect(assets).toHaveLength(6);
+    expect(assets.every((asset) => asset.availability === 'fallback')).toBe(true);
+  });
+
+  it('ignores coercible live token metadata instead of publishing non-string assets', async () => {
+    const coercibleAsset = { toString: () => 'nep141:coercible.omft.near' };
+    const coercibleSymbol = { toString: () => 'COERCIBLE' };
+    const coercibleBlockchain = { toString: () => 'arb' };
+    const assets = await loadSourceAssets({
+      getTokens: async () => [{
+        assetId: coercibleAsset,
+        symbol: coercibleSymbol,
+        decimals: 6,
+        blockchain: coercibleBlockchain,
+      }] as unknown as TokenResponse[],
+    });
+
+    expect(assets).toHaveLength(6);
+    expect(assets.some((asset) => asset.assetId === coercibleAsset)).toBe(false);
+  });
+
+  it('ignores live token metadata supplied only through inheritance', async () => {
+    const inherited = Object.create({
+      assetId: 'nep141:inherited.omft.near',
+      symbol: 'INHERITED',
+      decimals: 6,
+      blockchain: 'arb',
+    }) as TokenResponse;
+    const assets = await loadSourceAssets({ getTokens: async () => [inherited] });
+
+    expect(assets).toHaveLength(6);
+    expect(assets.some((asset) => asset.assetId === 'nep141:inherited.omft.near')).toBe(false);
+  });
+
+  it('ignores live token metadata whose blockchain only matches an inherited map key', async () => {
+    const assets = await loadSourceAssets({
+      getTokens: async () => [{
+        assetId: 'nep141:inherited-chain-key.omft.near',
+        symbol: 'INHERITED',
+        decimals: 6,
+        blockchain: 'toString',
+      }] as unknown as TokenResponse[],
+    });
+
+    expect(assets.some((asset) => asset.assetId === 'nep141:inherited-chain-key.omft.near')).toBe(false);
+  });
+
+  it('ignores live token metadata containing only whitespace', async () => {
+    const assets = await loadSourceAssets({
+      getTokens: async () => [{
+        assetId: '   ',
+        symbol: '\t',
+        decimals: 6,
+        blockchain: 'arb',
+      }] as TokenResponse[],
+    });
+
+    expect(assets).toHaveLength(6);
+    expect(assets.some((asset) => asset.assetId.trim() === '')).toBe(false);
+  });
+
   it('merges live metadata over curated fallbacks without making live availability up', async () => {
     const live = [
       {
@@ -1299,6 +1982,12 @@ describe('source registry and refund validation', () => {
     expect(validateSourceAddress('arbitrum', `0x${'0'.repeat(40)}`).ok).toBe(false);
     expect(validateStarknetAddress(`0x${'f'.repeat(64)}`).ok).toBe(false);
   });
+
+  it('rejects coercible address inputs instead of treating them as strings', () => {
+    const coercible = { trim: () => '0x123' } as unknown as string;
+    expect(validateStarknetAddress(coercible).ok).toBe(false);
+    expect(validateSourceAddress('arbitrum', coercible).ok).toBe(false);
+  });
 });
 
 describe('bridge persistence', () => {
@@ -1348,6 +2037,189 @@ describe('bridge persistence', () => {
     expect(decoded?.signedQuote).toEqual(signedQuote);
   });
 
+  it.each([
+    ['whitespace-only', '   '],
+    ['overlong', 'x'.repeat(257)],
+    ['non-string', 42],
+  ])('rejects persisted records with a %s deposit address', (_label, depositAddress) => {
+    const store = new MemoryBridgeStore();
+    const malformed = {
+      v: 1 as const,
+      createdAt: NOW,
+      updatedAt: NOW,
+      source: SOURCE,
+      amountIn: 1_000_000n,
+      starknetRecipient: '0x123',
+      refundAddress: request.refundTo,
+      signedQuote: {
+        ...signedQuote,
+        quote: { ...signedQuote.quote, depositAddress: depositAddress as never },
+      },
+      status: { leg: 'awaiting-deposit' as const, message: 'pending', pollingStopped: false },
+    };
+
+    expect(store.deserialize(store.serialize(malformed))).toBeNull();
+  });
+
+  it.each([
+    ['string', '7'],
+    ['number', 7],
+    ['object', {}],
+  ] as const)('ignores an inherited %s bigint marker while reviving own wrappers', async (_label, inheritedMarker) => {
+    const client = new StubClient();
+    const service = new BridgeService({
+      client,
+      store: new MemoryBridgeStore(),
+      quoteVerifier: () => true,
+      now: () => NOW,
+    });
+    const record = await service.createManualDeposit({
+      source: SOURCE,
+      amountIn: 1_000_000n,
+      starknetRecipient: '0x123',
+      refundAddress: request.refundTo,
+    });
+    const encoded = serializeBridgeRecord(record);
+    const previous = Object.getOwnPropertyDescriptor(Object.prototype, '$strkworldBigInt');
+    Object.defineProperty(Object.prototype, '$strkworldBigInt', {
+      value: inheritedMarker,
+      configurable: true,
+    });
+    try {
+      const decoded = deserializeBridgeRecord(encoded);
+      expect(decoded).toEqual(record);
+      expect(decoded?.amountIn).toBe(1_000_000n);
+    } finally {
+      if (previous) Object.defineProperty(Object.prototype, '$strkworldBigInt', previous);
+      else delete (Object.prototype as Record<string, unknown>).$strkworldBigInt;
+    }
+  });
+
+  it.each([
+    ['depositTxHash', {}],
+    ['settlementTxHash', 42],
+    ['strkReceived', '7'],
+  ] as const)('ignores an inherited optional status field %s while retaining signed evidence', async (field, inheritedValue) => {
+    const client = new StubClient();
+    const service = new BridgeService({
+      client,
+      store: new MemoryBridgeStore(),
+      quoteVerifier: () => true,
+      now: () => NOW,
+    });
+    const record = await service.createManualDeposit({
+      source: SOURCE,
+      amountIn: 1_000_000n,
+      starknetRecipient: '0x123',
+      refundAddress: request.refundTo,
+    });
+    const encoded = serializeBridgeRecord(record);
+    const values = new Map<string, string>([['strkworld.bridge.inbound.v1', encoded]]);
+    const storage = {
+      getItem: (key: string) => values.get(key) ?? null,
+      setItem: (key: string, value: string) => { values.set(key, value); },
+      removeItem: (key: string) => { values.delete(key); },
+    };
+    const previous = Object.getOwnPropertyDescriptor(Object.prototype, field);
+    Object.defineProperty(Object.prototype, field, {
+      value: inheritedValue,
+      configurable: true,
+    });
+    try {
+      expect(deserializeBridgeRecord(encoded)).toEqual(record);
+      expect(new LocalBridgeStore(storage).load()).toEqual(record);
+      expect(values.has('strkworld.bridge.inbound.v1')).toBe(true);
+    } finally {
+      if (previous) Object.defineProperty(Object.prototype, field, previous);
+      else delete (Object.prototype as Record<string, unknown>)[field];
+    }
+  });
+
+  it('rejects a persisted record whose required status is inherited', async () => {
+    const client = new StubClient();
+    const service = new BridgeService({
+      client,
+      store: new MemoryBridgeStore(),
+      quoteVerifier: () => true,
+      now: () => NOW,
+    });
+    const record = await service.createManualDeposit({
+      source: SOURCE,
+      amountIn: 1_000_000n,
+      starknetRecipient: '0x123',
+      refundAddress: request.refundTo,
+    });
+    const parsed = JSON.parse(serializeBridgeRecord(record)) as Record<string, unknown>;
+    delete parsed.status;
+    const raw = JSON.stringify(parsed);
+    const previous = Object.getOwnPropertyDescriptor(Object.prototype, 'status');
+    Object.defineProperty(Object.prototype, 'status', {
+      value: record.status,
+      configurable: true,
+    });
+    try {
+      expect(deserializeBridgeRecord(raw)).toBeNull();
+    } finally {
+      if (previous) Object.defineProperty(Object.prototype, 'status', previous);
+      else delete (Object.prototype as Record<string, unknown>).status;
+    }
+  });
+
+  it.each([
+    ['leg', 'settled'],
+    ['message', 'inherited status'],
+    ['pollingStopped', true],
+  ] as const)('rejects a persisted status with inherited required field %s', async (field, inheritedValue) => {
+    const client = new StubClient();
+    const service = new BridgeService({
+      client,
+      store: new MemoryBridgeStore(),
+      quoteVerifier: () => true,
+      now: () => NOW,
+    });
+    const record = await service.createManualDeposit({
+      source: SOURCE,
+      amountIn: 1_000_000n,
+      starknetRecipient: '0x123',
+      refundAddress: request.refundTo,
+    });
+    const parsed = JSON.parse(serializeBridgeRecord(record)) as Record<string, unknown>;
+    delete (parsed.status as Record<string, unknown>)[field];
+    const raw = JSON.stringify(parsed);
+    const previous = Object.getOwnPropertyDescriptor(Object.prototype, field);
+    Object.defineProperty(Object.prototype, field, {
+      value: inheritedValue,
+      configurable: true,
+    });
+    let decoded: unknown;
+    try {
+      decoded = deserializeBridgeRecord(raw);
+    } finally {
+      if (previous) Object.defineProperty(Object.prototype, field, previous);
+      else delete (Object.prototype as Record<string, unknown>)[field];
+    }
+    expect(decoded).toBeNull();
+  });
+
+  it.each(['source', 'starknetRecipient', 'refundAddress'] as const)(
+    'rejects a persisted record missing required root field %s',
+    async (field) => {
+      const client = new StubClient();
+      const store = new MemoryBridgeStore();
+      const service = new BridgeService({ client, store, quoteVerifier: () => true, now: () => NOW });
+      const record = await service.createManualDeposit({
+        source: SOURCE,
+        amountIn: 1_000_000n,
+        starknetRecipient: '0x123',
+        refundAddress: request.refundTo,
+      });
+      const parsed = JSON.parse(serializeBridgeRecord(record)) as Record<string, unknown>;
+      delete parsed[field];
+
+      expect(deserializeBridgeRecord(JSON.stringify(parsed))).toBeNull();
+    },
+  );
+
   it('does not silently delete old signed dispute evidence', () => {
     const store = new MemoryBridgeStore();
     const old = {
@@ -1366,5 +2238,81 @@ describe('bridge persistence', () => {
 
   it('rejects oversized imported resume records before parsing them', () => {
     expect(deserializeBridgeRecord(' '.repeat(MAX_RESUME_RECORD_BYTES + 1))).toBeNull();
+  });
+
+  it.each([
+    ['null', null],
+    ['array', []],
+    ['primitive', 'malformed'],
+    ['invalid leg', { leg: 'unknown' }],
+    ['non-string message', { leg: 'awaiting-deposit', message: 42 }],
+    ['non-boolean polling flag', { leg: 'awaiting-deposit', message: 'waiting', pollingStopped: 'false' }],
+    ['unknown status field', { leg: 'awaiting-deposit', message: 'waiting', pollingStopped: false, unexpected: 'forged' }],
+    ['non-string deposit hash', { leg: 'deposit-detected', message: 'detected', pollingStopped: true, depositTxHash: 42 }],
+    ['non-string settlement hash', { leg: 'settled', message: 'settled', pollingStopped: true, settlementTxHash: {} }],
+    ['non-bigint received amount', { leg: 'settled', message: 'settled', pollingStopped: true, strkReceived: '1' }],
+    ['negative received amount', { leg: 'settled', message: 'settled', pollingStopped: true, strkReceived: -1n }],
+    ['deposit hash on quoted leg', { leg: 'quoted', message: 'quoted', pollingStopped: false, depositTxHash: '0xorigin' }],
+    ['deposit hash on awaiting leg', { leg: 'awaiting-deposit', message: 'waiting', pollingStopped: false, depositTxHash: '0xorigin' }],
+    ['received amount on a pending leg', { leg: 'awaiting-deposit', message: 'waiting', pollingStopped: false, strkReceived: 1n }],
+    ['settlement hash on a pending leg', { leg: 'awaiting-deposit', message: 'waiting', pollingStopped: false, settlementTxHash: '0xdestination' }],
+  ] as const)('rejects a persisted status with %s', async (_label, malformedStatus) => {
+    const client = new StubClient();
+    const store = new MemoryBridgeStore();
+    const service = new BridgeService({ client, store, quoteVerifier: () => true, now: () => NOW });
+    const record = await service.createManualDeposit({
+      source: SOURCE,
+      amountIn: 1_000_000n,
+      starknetRecipient: '0x123',
+      refundAddress: request.refundTo,
+    });
+    const raw = store.serialize({ ...record, status: malformedStatus as never });
+
+    expect(deserializeBridgeRecord(raw)).toBeNull();
+    store.save({ ...record, status: malformedStatus as never });
+    expect(service.resume()).toBeNull();
+  });
+
+  it('rejects a persisted record with an unknown root field', async () => {
+    const client = new StubClient();
+    const store = new MemoryBridgeStore();
+    const service = new BridgeService({ client, store, quoteVerifier: () => true, now: () => NOW });
+    const record = await service.createManualDeposit({
+      source: SOURCE,
+      amountIn: 1_000_000n,
+      starknetRecipient: '0x123',
+      refundAddress: request.refundTo,
+    });
+    const raw = store.serialize({ ...record, unexpected: 'forged' } as never);
+
+    expect(deserializeBridgeRecord(raw)).toBeNull();
+    store.save({ ...record, unexpected: 'forged' } as never);
+    expect(service.resume()).toBeNull();
+  });
+
+  it('round-trips every valid bridge status shape', async () => {
+    const validStatuses: BridgeStatus[] = [
+      { leg: 'quoted', message: 'quoted', pollingStopped: false },
+      { leg: 'awaiting-deposit', message: 'waiting', pollingStopped: false },
+      { leg: 'deposit-detected', depositTxHash: '0xorigin', message: 'detected', pollingStopped: false },
+      { leg: 'solver-settling', depositTxHash: '0xorigin', message: 'settling', pollingStopped: false },
+      { leg: 'settled', depositTxHash: '0xorigin', settlementTxHash: '0xdestination', strkReceived: 1n, message: 'settled', pollingStopped: true },
+      { leg: 'failed', message: 'failed', pollingStopped: true },
+      { leg: 'expired', message: 'expired', pollingStopped: true },
+    ];
+    for (const status of validStatuses) {
+      const record = {
+        v: 1 as const,
+        createdAt: NOW,
+        updatedAt: NOW,
+        source: SOURCE,
+        amountIn: 1_000_000n,
+        starknetRecipient: '0x123',
+        refundAddress: request.refundTo,
+        signedQuote,
+        status,
+      };
+      expect(deserializeBridgeRecord(serializeBridgeRecord(record))).toEqual(record);
+    }
   });
 });

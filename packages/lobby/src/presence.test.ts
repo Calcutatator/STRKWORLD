@@ -22,6 +22,18 @@ function join(
 }
 
 describe('admission', () => {
+  it('snapshots a configured sprite allowlist at construction', () => {
+    const spriteKeys = ['avatar-1', 'avatar-2'];
+    const registry = new LobbyPresence({ spriteKeys });
+    spriteKeys.push('avatar-3');
+
+    const outcome = registry.admit('s1', { x: 0, y: 0, sprite: 'avatar-3' });
+    expect(outcome.ok).toBe(true);
+    if (!outcome.ok) throw new Error('unreachable');
+    const gameId = outcome.gameId;
+    expect(registry.peers.get(gameId)?.sprite).toBe('avatar-1');
+  });
+
   it('publishes exactly D-047\'s sixteen opaque sprite keys', () => {
     expect(DEFAULT_SPRITE_KEYS).toEqual([
       'avatar-1',
@@ -112,6 +124,22 @@ describe('admission', () => {
     });
   });
 
+  it.each([null, undefined])(
+    'fails closed for %s placement payloads on every public placement path',
+    (payload) => {
+      const registry = new LobbyPresence();
+      expect(registry.admit('malformed', payload as never)).toEqual({
+        ok: false,
+        reason: 'bad-placement',
+      });
+
+      join(registry, 's1');
+      expect(registry.move('s1', payload as never, 0)).toBe('rejected');
+      registry.suspend('s1');
+      expect(registry.resume('s1', payload as never, 0)).toBe(false);
+    },
+  );
+
   it('refuses once the room is full', () => {
     const registry = new LobbyPresence({ capacity: 2 });
     join(registry, 's1');
@@ -138,6 +166,36 @@ describe('admission', () => {
 });
 
 describe('movement', () => {
+  it('rejects inherited or accessor-backed movement fields', () => {
+    const registry = new LobbyPresence();
+    const id = join(registry, 's1');
+    const inherited = Object.create({ x: 100, y: 100, facing: 'left' });
+
+    expect(registry.move('s1', inherited as never, 0)).toBe('rejected');
+    expect(registry.peers.get(id)?.position).toEqual({ x: 0, y: 0 });
+
+    let accessed = false;
+    const accessor = { y: 100, facing: 'left' };
+    Object.defineProperty(accessor, 'x', {
+      get: () => {
+        accessed = true;
+        return 100;
+      },
+    });
+    expect(registry.move('s1', accessor as never, 0)).toBe('rejected');
+    expect(accessed).toBe(false);
+    expect(registry.peers.get(id)?.position).toEqual({ x: 0, y: 0 });
+  });
+
+  it('fails closed to the configured rate floor when it is not finite', () => {
+    const registry = new LobbyPresence({ minUpdateIntervalMs: Number.NaN });
+    const id = join(registry, 's1');
+
+    expect(registry.move('s1', { x: 10, y: 0 }, 0)).toBe('applied');
+    expect(registry.move('s1', { x: 20, y: 0 }, 0)).toBe('throttled');
+    expect(registry.peers.get(id)?.position.x).toBe(10);
+  });
+
   it('applies a due update', () => {
     const registry = new LobbyPresence({ minUpdateIntervalMs: 50 });
     const id = join(registry, 's1');

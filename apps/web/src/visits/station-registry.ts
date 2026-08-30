@@ -32,7 +32,13 @@ export interface StationCapabilities {
   bridgePlannerAvailable?: boolean;
 }
 
-const STATIONS: readonly StationDefinition[] = [
+function freezeStationDefinition(definition: StationDefinition): StationDefinition {
+  Object.freeze(definition.routes);
+  if ('modes' in definition) Object.freeze(definition.modes);
+  return Object.freeze(definition);
+}
+
+const STATIONS: readonly StationDefinition[] = Object.freeze([
   {
     station: 'bank:shielding',
     building: 'bank',
@@ -65,7 +71,7 @@ const STATIONS: readonly StationDefinition[] = [
     routes: ['bridge.deposit'],
     view: 'bridge',
   },
-] as const;
+] as const).map((definition) => freezeStationDefinition(definition));
 
 export type StationResolution =
   | { status: 'available'; definition: StationDefinition }
@@ -115,9 +121,9 @@ export function stationSnapshot(
   register: readonly RouteGrade[] = PRIVACY_REGISTER,
   capabilities: StationCapabilities = {},
 ): ShellEvents['world:stations']['stations'] {
-  return STATIONS.filter((station) => station.building === building).map((definition) => ({
+  return Object.freeze(STATIONS.filter((station) => station.building === building).map((definition) => Object.freeze({
     station: definition.station,
     label: definition.label,
     status: resolveStation(building, definition.station, register, capabilities).status,
-  }));
+  })));
 }

@@ -69,5 +69,5 @@ export function createStore<S>(initial: S): Store<S> {
     }
   };
 
-  return { getState, getServerSnapshot, setState, subscribe };
+  return Object.freeze({ getState, getServerSnapshot, setState, subscribe });
 }

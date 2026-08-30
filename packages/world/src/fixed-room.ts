@@ -84,6 +84,88 @@ export interface FixedRoomInputGate {
   resume(): void;
 }
 
+export interface FixedRoomPresentationPort {
+  setPlayerVelocity(): void;
+  setBodyEnabled(enabled: boolean): void;
+  setGroundVisible(visible: boolean): void;
+  setDoorsVisible(visible: boolean): void;
+  setRemoteVisible(visible: boolean): void;
+  setLabelsVisible(visible: boolean): void;
+  setRoomVisible(visible: boolean): void;
+  setWorldBounds(room: boolean): void;
+  setCameraBounds(room: boolean): void;
+  setPlayerPosition(room: boolean): void;
+  resetDoors(): void;
+  resumeStreet(): void;
+}
+
+export interface FixedRoomPresentation {
+  enter(): void;
+  exit(): void;
+}
+
+export function createFixedRoomPresentation(
+  port: FixedRoomPresentationPort,
+): FixedRoomPresentation {
+  let transitionRevision = 0;
+  const run = (room: boolean): void => {
+    const ownTransition = ++transitionRevision;
+    const isCurrent = (): boolean => transitionRevision === ownTransition;
+    try {
+      port.setPlayerVelocity();
+      if (!isCurrent()) return;
+      port.setBodyEnabled(!room);
+      if (!isCurrent()) return;
+      port.setGroundVisible(!room);
+      if (!isCurrent()) return;
+      port.setDoorsVisible(!room);
+      if (!isCurrent()) return;
+      port.setRemoteVisible(!room);
+      if (!isCurrent()) return;
+      port.setLabelsVisible(!room);
+      if (!isCurrent()) return;
+      port.setRoomVisible(room);
+      if (!isCurrent()) return;
+      port.setWorldBounds(room);
+      if (!isCurrent()) return;
+      port.setCameraBounds(room);
+      if (!isCurrent()) return;
+      port.setPlayerPosition(room);
+      if (!room && isCurrent()) {
+        port.resetDoors();
+        if (!isCurrent()) return;
+        port.resumeStreet();
+      }
+    } catch (error) {
+      if (room && isCurrent()) restoreStreetPresentation(port, isCurrent);
+      throw error;
+    }
+  };
+  return Object.freeze({ enter: () => run(true), exit: () => run(false) });
+}
+
+function restoreStreetPresentation(
+  port: FixedRoomPresentationPort,
+  isCurrent: () => boolean,
+): void {
+  const attempts = [
+    () => port.setPlayerVelocity(),
+    () => port.setBodyEnabled(true),
+    () => port.setGroundVisible(true),
+    () => port.setDoorsVisible(true),
+    () => port.setRemoteVisible(true),
+    () => port.setLabelsVisible(true),
+    () => port.setRoomVisible(false),
+    () => port.setWorldBounds(false),
+    () => port.setCameraBounds(false),
+    () => port.setPlayerPosition(false),
+  ];
+  for (const attempt of attempts) {
+    if (!isCurrent()) return;
+    try { attempt(); } catch { /* preserve the entry failure */ }
+  }
+}
+
 export interface FixedRoomController {
   readonly state: FixedRoomState;
   enter(): void;
@@ -101,7 +183,23 @@ export interface FixedRoomControllerOptions {
   readonly onChange?: (state: FixedRoomState) => void;
 }
 
-export const BANK_ROOM_DEFINITION = {
+function freezeAuthoredRoom<const T extends FixedRoomDefinition>(definition: T): T {
+  Object.freeze(definition.spawn);
+  Object.freeze(definition.exit);
+  for (const station of definition.stations) Object.freeze(station);
+  Object.freeze(definition.stations);
+  return Object.freeze(definition);
+}
+
+function ownDataField(value: unknown, key: string): unknown {
+  if (value === null || (typeof value !== 'object' && typeof value !== 'function')) {
+    return undefined;
+  }
+  const descriptor = Object.getOwnPropertyDescriptor(value, key);
+  return descriptor && 'value' in descriptor ? descriptor.value : undefined;
+}
+
+export const BANK_ROOM_DEFINITION = freezeAuthoredRoom({
   building: 'bank',
   width: 18,
   height: 12,
@@ -117,9 +215,9 @@ export const BANK_ROOM_DEFINITION = {
       height: 1,
     },
   ],
-} as const satisfies FixedRoomDefinition;
+} as const satisfies FixedRoomDefinition);
 
-export const POST_OFFICE_ROOM_DEFINITION = {
+export const POST_OFFICE_ROOM_DEFINITION = freezeAuthoredRoom({
   building: 'post-office',
   width: 18,
   height: 12,
@@ -135,9 +233,9 @@ export const POST_OFFICE_ROOM_DEFINITION = {
       height: 1,
     },
   ],
-} as const satisfies FixedRoomDefinition;
+} as const satisfies FixedRoomDefinition);
 
-export const EXCHANGE_ROOM_DEFINITION = {
+export const EXCHANGE_ROOM_DEFINITION = freezeAuthoredRoom({
   building: 'exchange',
   width: 18,
   height: 12,
@@ -153,9 +251,9 @@ export const EXCHANGE_ROOM_DEFINITION = {
       height: 1,
     },
   ],
-} as const satisfies FixedRoomDefinition;
+} as const satisfies FixedRoomDefinition);
 
-export const BRIDGE_ROOM_DEFINITION = {
+export const BRIDGE_ROOM_DEFINITION = freezeAuthoredRoom({
   building: 'bridge',
   width: 18,
   height: 12,
@@ -171,14 +269,14 @@ export const BRIDGE_ROOM_DEFINITION = {
       height: 1,
     },
   ],
-} as const satisfies FixedRoomDefinition;
+} as const satisfies FixedRoomDefinition);
 
-export const FIXED_ROOM_DEFINITIONS = {
+export const FIXED_ROOM_DEFINITIONS = Object.freeze({
   bank: BANK_ROOM_DEFINITION,
   bridge: BRIDGE_ROOM_DEFINITION,
   exchange: EXCHANGE_ROOM_DEFINITION,
   'post-office': POST_OFFICE_ROOM_DEFINITION,
-} as const satisfies Partial<Record<BuildingId, FixedRoomDefinition>>;
+} as const satisfies Partial<Record<BuildingId, FixedRoomDefinition>>);
 
 export function createFixedRoom(definition: FixedRoomDefinition): FixedRoomMap {
   validateFixedRoomDefinition(definition);
@@ -192,15 +290,17 @@ export function createFixedRoom(definition: FixedRoomDefinition): FixedRoomMap {
     }),
   );
 
-  return {
+  for (const row of tiles) Object.freeze(row);
+  const stations = definition.stations.map((station) => Object.freeze({ ...station }));
+  return Object.freeze({
     building: definition.building,
     width: definition.width,
     height: definition.height,
-    tiles,
-    spawn: definition.spawn,
-    exit: definition.exit,
-    stations: definition.stations,
-  };
+    tiles: Object.freeze(tiles),
+    spawn: Object.freeze({ ...definition.spawn }),
+    exit: Object.freeze({ ...definition.exit }),
+    stations: Object.freeze(stations),
+  });
 }
 
 export function validateFixedRoomDefinition(definition: FixedRoomDefinition): void {
@@ -308,8 +408,11 @@ export function fixedRoomStationPresentations(
   room: FixedRoomMap,
   state: FixedRoomState,
 ): readonly FixedRoomStationPresentation[] {
+  const snapshots = Array.isArray(state.stations) ? state.stations : [];
   return room.stations.map((station) => {
-    const snapshot = state.stations.find((candidate) => candidate.station === station.station);
+    const snapshot = snapshots.find((candidate) => (
+      candidate !== null && typeof candidate === 'object' && candidate.station === station.station
+    ));
     return {
       ...station,
       label: snapshot?.label ?? station.label,
@@ -326,15 +429,17 @@ export function normalizeFixedRoomStations(
 ): readonly FixedRoomStationSnapshot[] {
   return Object.freeze(definition.stations.map((known) => {
     const candidates = Array.isArray(stations)
-      ? stations.filter((candidate) => candidate?.station === known.station)
+      ? stations.filter((candidate) => ownDataField(candidate, 'station') === known.station)
       : [];
     const candidate = candidates.length === 1 ? candidates[0] : undefined;
-    const validLabel = typeof candidate?.label === 'string' && candidate.label.trim().length > 0;
-    const validStatus = candidate?.status === 'available' || candidate?.status === 'locked';
+    const label = ownDataField(candidate, 'label');
+    const status = ownDataField(candidate, 'status');
+    const validLabel = typeof label === 'string' && label.trim().length > 0;
+    const validStatus = status === 'available' || status === 'locked';
     return Object.freeze({
       station: known.station,
-      label: validLabel && candidate ? candidate.label : known.label,
-      status: candidate && validLabel && validStatus ? candidate.status : 'locked',
+      label: validLabel ? label : known.label,
+      status: candidate && validLabel && validStatus ? status : 'locked',
     });
   }));
 }
@@ -358,36 +463,128 @@ export function createFixedRoomController(
     stations,
   });
   const publish = (): void => options.onChange?.(state());
+  const ownsWorldControl = (): boolean => controlOwner === 'world';
 
-  const stopStations = options.in?.on('world:stations', (payload) => {
-    if (destroyed || !inRoom || payload.building !== options.definition.building) return;
-    stations = normalizeFixedRoomStations(options.definition, payload.stations);
-    publish();
-  });
-  const stopOwner = options.in?.on('world:control-owner', (payload) => {
-    if (destroyed || !inRoom || payload.building !== options.definition.building) return;
-    controlOwner = payload.owner;
-    if (controlOwner === 'shell') options.input.suspend();
-    else options.input.resume();
-    publish();
-  });
-  const stopExit = options.in?.on('world:exit-building', (payload) => {
-    if (destroyed || !inRoom || payload.building !== options.definition.building) return;
-    leave();
-  });
+  let stopStations: (() => void) | undefined;
+  let stopOwner: (() => void) | undefined;
+  let stopExit: (() => void) | undefined;
+  let destroyPending = false;
+  let destroying = false;
+  let inputCleanupPending = true;
+  let updateRevision = 0;
+  try {
+    stopStations = options.in?.on('world:stations', (payload) => {
+    if (destroyed || !inRoom || payload?.building !== options.definition.building) return;
+    stations = normalizeFixedRoomStations(options.definition, payload?.stations);
+      publish();
+    });
+    stopOwner = options.in?.on('world:control-owner', (payload) => {
+    if (destroyed || !inRoom || payload?.building !== options.definition.building) return;
+      if (payload.owner !== 'world' && payload.owner !== 'shell') return;
+      controlOwner = payload.owner;
+      if (controlOwner === 'shell') options.input.suspend();
+      else options.input.resume();
+      publish();
+    });
+    stopExit = options.in?.on('world:exit-building', (payload) => {
+    if (destroyed || !inRoom || payload?.building !== options.definition.building) return;
+      leave();
+    });
+  } catch (error) {
+    for (const stop of [stopExit, stopOwner, stopStations]) {
+      if (!stop) continue;
+      try { stop(); } catch { /* preserve registration failure */ }
+    }
+    throw error;
+  }
 
   function leave(): void {
     if (!inRoom) return;
+    const previousControlOwner = controlOwner;
+    const previousHighlightedStation = highlightedStation;
+    const previousApproachArmed = approachArmed;
     inRoom = false;
     controlOwner = 'world';
     highlightedStation = null;
     approachArmed = new Set(options.definition.stations.map((station) => station.station));
-    options.input.resume();
-    options.onExit?.();
-    publish();
-    options.out.emit('building:exited', {
-      building: options.definition.building,
-    });
+    try {
+      options.input.resume();
+    } catch (error) {
+      // Input restoration is an external lifecycle boundary. Keep the room
+      // owned when it fails so the same exit can retry the transition.
+      inRoom = true;
+      controlOwner = previousControlOwner;
+      highlightedStation = previousHighlightedStation;
+      approachArmed = previousApproachArmed;
+      throw error;
+    }
+    // Input restoration is an external synchronous boundary. It may retire
+    // this controller (or synchronously re-enter it) before presentation gets
+    // the continuation. Do not invoke an onExit callback for that stale turn.
+    if (destroyed || inRoom) return;
+    try {
+      options.onExit?.();
+    } catch (error) {
+      // Room presentation is an external lifecycle boundary. If it fails,
+      // keep this transition retryable unless the callback already retired or
+      // replaced the controller's ownership synchronously.
+      if (!destroyed && !inRoom) {
+        inRoom = true;
+        controlOwner = previousControlOwner;
+        highlightedStation = previousHighlightedStation;
+        approachArmed = previousApproachArmed;
+        try {
+          options.onEnter?.();
+        } catch {
+          // Preserve the original presentation exit error.
+        }
+      }
+      throw error;
+    }
+    if (destroyed || inRoom) return;
+    try {
+      publish();
+    } catch (error) {
+      // Exit state publication is an external lifecycle boundary. If the
+      // renderer rejects the outside snapshot, compensate the presentation
+      // and restore the prior room state so the exit can be retried.
+      if (!destroyed && !inRoom) {
+        inRoom = true;
+        controlOwner = previousControlOwner;
+        highlightedStation = previousHighlightedStation;
+        approachArmed = previousApproachArmed;
+        try {
+          options.onEnter?.();
+        } catch {
+          // Preserve the original publication error.
+        }
+      }
+      throw error;
+    }
+    // Exit publication is synchronous and may immediately re-enter the room.
+    // Do not announce an outside transition after that newer ownership wins.
+    if (destroyed || inRoom) return;
+    try {
+      options.out.emit('building:exited', Object.freeze({
+        building: options.definition.building,
+      }));
+    } catch (error) {
+      // The semantic announcement is an external lifecycle boundary. If it
+      // fails after the presentation has left, restore the room so the same
+      // exit can be retried coherently once the consumer recovers.
+      if (!destroyed && !inRoom) {
+        inRoom = true;
+        controlOwner = previousControlOwner;
+        highlightedStation = previousHighlightedStation;
+        approachArmed = previousApproachArmed;
+        try {
+          options.onEnter?.();
+        } catch {
+          // Preserve the original announcement error.
+        }
+      }
+      throw error;
+    }
   }
 
   return {
@@ -401,12 +598,66 @@ export function createFixedRoomController(
       highlightedStation = null;
       approachArmed = new Set(options.definition.stations.map((station) => station.station));
       stations = normalizeFixedRoomStations(options.definition, undefined);
-      options.input.resume();
-      options.onEnter?.();
-      publish();
+      try {
+        options.input.resume();
+      } catch (error) {
+        // Input restoration is an external lifecycle boundary. If it fails,
+        // do not leave the controller claiming an interior it cannot operate;
+        // a later explicit enter can retry the same restoration.
+        inRoom = false;
+        controlOwner = 'world';
+        highlightedStation = null;
+        approachArmed = new Set(options.definition.stations.map((station) => station.station));
+        throw error;
+      }
+      // Input restoration is an external synchronous boundary. A callback
+      // can destroy the controller before presentation entry starts; retain
+      // the retired state and stop this stale continuation.
+      if (destroyed || !inRoom) return;
+      try {
+        options.onEnter?.();
+      } catch (error) {
+        // Room presentation is an external lifecycle boundary. If it fails,
+        // compensate any partial presentation before releasing logical room
+        // ownership. A later explicit enter can then retry the same complete
+        // transition instead of inheriting a half-entered renderer.
+        const shouldCompensate = !destroyed && inRoom;
+        inRoom = false;
+        controlOwner = 'world';
+        highlightedStation = null;
+        approachArmed = new Set(options.definition.stations.map((station) => station.station));
+        if (shouldCompensate) {
+          try {
+            options.onExit?.();
+          } catch {
+            // Preserve the original entry error.
+          }
+        }
+        throw error;
+      }
+      if (destroyed || !inRoom) return;
+      try {
+        publish();
+      } catch (error) {
+        // The first room snapshot completes entry. If delivery fails, roll
+        // back the presentation and logical owner so a later enter can retry.
+        if (!destroyed && inRoom) {
+          inRoom = false;
+          controlOwner = 'world';
+          highlightedStation = null;
+          approachArmed = new Set(options.definition.stations.map((station) => station.station));
+          try {
+            options.onExit?.();
+          } catch {
+            // Preserve the original publication error.
+          }
+        }
+        throw error;
+      }
     },
     update(tile): void {
       if (destroyed || !inRoom || controlOwner === 'shell') return;
+      const ownRevision = ++updateRevision;
       if (isFixedRoomExit(room, tile.x, tile.y)) {
         leave();
         return;
@@ -420,29 +671,109 @@ export function createFixedRoomController(
         highlightedStation = nextHighlighted;
         publish();
       }
+      // onChange delivery is synchronous and may destroy the room or let
+      // Shell claim control before this update resumes. It may also run a
+      // newer update, so do not activate the stale station from this turn.
+      if (destroyed || !inRoom || !ownsWorldControl() || updateRevision !== ownRevision) return;
       const station = stations.find((candidate) => candidate.station === nextHighlighted);
       if (approached && station?.status === 'available' && approachArmed.has(approached.station)) {
         approachArmed.delete(approached.station);
-        options.input.suspend();
-        options.out.emit('station:activated', {
-          building: options.definition.building,
-          station: approached.station,
-        });
-        // EventBus delivery is synchronous. A stale/missing Shell claim must
-        // not strand the player with World input suspended.
-        if (controlOwner === 'world') options.input.resume();
+        try {
+          options.input.suspend();
+        } catch (error) {
+          // Input suspension is an external lifecycle boundary. Keep the
+          // station armed when it fails so the same approach can be retried.
+          approachArmed.add(approached.station);
+          throw error;
+        }
+        // Input suspension is synchronous and may retire this controller,
+        // transfer control to Shell, or trigger a newer update before the
+        // handoff below. Do not emit station activation for that stale turn.
+        if (destroyed || !inRoom || !ownsWorldControl() || updateRevision !== ownRevision) {
+          if (!destroyed && inRoom) approachArmed.add(approached.station);
+          return;
+        }
+        let deliveryError: unknown;
+        let deliveryFailed = false;
+        try {
+          options.out.emit('station:activated', Object.freeze({
+            building: options.definition.building,
+            station: approached.station,
+          }));
+        } catch (error) {
+          deliveryError = error;
+          deliveryFailed = true;
+        }
+        try {
+          // EventBus delivery is synchronous and may throw. A stale/missing
+          // Shell claim or failed consumer must not strand the player with
+          // World input suspended.
+          if (!destroyed && inRoom && ownsWorldControl()) options.input.resume();
+        } catch (error) {
+          if (deliveryFailed && !destroyed && inRoom) approachArmed.add(approached.station);
+          if (deliveryFailed) {
+            throw new AggregateError(
+              [deliveryError, error],
+              'Fixed-room station activation failed',
+            );
+          }
+          throw error;
+        }
+        if (deliveryFailed) {
+          // A failed synchronous handoff did not complete station activation.
+          // Keep the same approach retryable unless this controller has
+          // already left its lifecycle; leaving or destruction owns reset.
+          if (!destroyed && inRoom) approachArmed.add(approached.station);
+          throw deliveryError;
+        }
       }
     },
     destroy(): void {
-      if (destroyed) return;
+      if (destroying || (destroyed && !destroyPending)) return;
+      destroying = true;
       destroyed = true;
-      stopStations?.();
-      stopOwner?.();
-      stopExit?.();
+      const errors: unknown[] = [];
+      const attempt = (cleanup: () => void): void => {
+        try {
+          cleanup();
+        } catch (error) {
+          errors.push(error);
+        }
+      };
+      if (stopStations) {
+        const stop = stopStations;
+        attempt(() => {
+          stop();
+          stopStations = undefined;
+        });
+      }
+      if (stopOwner) {
+        const stop = stopOwner;
+        attempt(() => {
+          stop();
+          stopOwner = undefined;
+        });
+      }
+      if (stopExit) {
+        const stop = stopExit;
+        attempt(() => {
+          stop();
+          stopExit = undefined;
+        });
+      }
       inRoom = false;
       controlOwner = 'world';
       highlightedStation = null;
-      options.input.resume();
+      if (inputCleanupPending) {
+        attempt(() => {
+          options.input.resume();
+          inputCleanupPending = false;
+        });
+      }
+      destroyPending = errors.length > 0;
+      destroying = false;
+      if (errors.length === 1) throw errors[0];
+      if (errors.length > 1) throw new AggregateError(errors, 'Fixed-room cleanup failed');
     },
   };
 }

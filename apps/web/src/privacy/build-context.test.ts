@@ -2,6 +2,14 @@ import { describe, expect, it } from 'vitest';
 import { buildContextFrom, detectBuildContext } from './build-context.js';
 
 describe('build context', () => {
+  it('publishes an immutable build verdict', () => {
+    const context = buildContextFrom({ PROD: true });
+
+    expect(Object.isFrozen(context)).toBe(true);
+    expect(Reflect.set(context, 'production', false)).toBe(false);
+    expect(context.production).toBe(true);
+  });
+
   it('treats a missing bundler flag as production', () => {
     // The case that matters, and the one detection alone cannot reach: inside
     // Vite `import.meta.env` always exists. Outside it — a plain Node process,

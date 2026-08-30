@@ -10,7 +10,7 @@ import type {
   PublicShieldPlan,
   PublicShieldPlanner,
 } from '@strkworld/privacy';
-import { createStore, type Store } from '../store/store.js';
+import { createStore, type ReadableStore } from '../store/store.js';
 import { COPY } from '../copy.js';
 import { formatTokenAmountExact } from '../format.js';
 import { sameAddress } from '../format.js';
@@ -40,40 +40,41 @@ export interface BridgeServicePort {
 }
 
 export type BridgeFlow =
-  | { name: 'idle' }
-  | { name: 'loading' }
-  | { name: 'quoting' }
-  | { name: 'preflighting' }
-  | { name: 'watching' }
-  | { name: 'planning-shield' }
-  | { name: 'ready-to-shield' }
-  | { name: 'failed'; message: string; retry: 'quote' | 'shield' | 'none' };
+  | { readonly name: 'idle' }
+  | { readonly name: 'loading' }
+  | { readonly name: 'quoting' }
+  | { readonly name: 'preflighting' }
+  | { readonly name: 'watching' }
+  | { readonly name: 'planning-shield' }
+  | { readonly name: 'ready-to-shield' }
+  | { readonly name: 'failed'; readonly message: string; readonly retry: 'quote' | 'shield' | 'none' };
 
 export interface BridgeQuoteReview {
-  amountIn: bigint;
-  sourceSymbol: string;
-  sourceDecimals: number;
-  expectedAmountOut: bigint;
-  minimumAmountOut: bigint;
-  deadline: string;
-  recipient: Address;
+  readonly amountIn: bigint;
+  readonly sourceSymbol: string;
+  readonly sourceDecimals: number;
+  readonly expectedAmountOut: bigint;
+  readonly minimumAmountOut: bigint;
+  readonly deadline: string;
+  readonly recipient: Address;
 }
 
 export interface BridgeState {
-  sources: { status: 'unrequested' | 'loading' | 'loaded' | 'failed'; assets: readonly SourceAsset[] };
-  record: BridgeRecord | null;
-  account: Address | null;
-  accountMatchesRecord: boolean;
-  quote: BridgeQuoteReview | null;
-  preflightAvailable: boolean;
-  instructionsVisible: boolean;
-  plan: PublicShieldPlan | null;
-  flow: BridgeFlow;
-  notice: { tone: 'info' | 'error'; text: string } | null;
+  readonly sources: { readonly status: 'unrequested' | 'loading' | 'loaded' | 'failed'; readonly assets: readonly SourceAsset[] };
+  readonly record: BridgeRecord | null;
+  readonly account: Address | null;
+  readonly accountMatchesRecord: boolean;
+  readonly quote: BridgeQuoteReview | null;
+  readonly preflightAvailable: boolean;
+  readonly instructionsVisible: boolean;
+  readonly plan: PublicShieldPlan | null;
+  readonly flow: BridgeFlow;
+  readonly notice: { readonly tone: 'info' | 'error'; readonly text: string } | null;
 }
 
 export interface BridgePanel {
-  readonly store: Store<BridgeState>;
+  /** Read-only view; panel methods own every recovery and bridge transition. */
+  readonly store: ReadableStore<BridgeState>;
   open(): Promise<void>;
   close(): void;
   createQuote(input: {
@@ -141,28 +142,48 @@ const initialState: BridgeState = {
   notice: null,
 };
 
+/** Clone provider-owned evidence before freezing it at the React seam. */
+function cloneAndFreeze<T>(value: T): T {
+  if (value === null || typeof value !== 'object') return value;
+  if (Array.isArray(value)) return Object.freeze(value.map((entry) => cloneAndFreeze(entry))) as T;
+  const copy: Record<string, unknown> = {};
+  for (const key of Object.keys(value)) {
+    copy[key] = cloneAndFreeze((value as Record<string, unknown>)[key]);
+  }
+  return Object.freeze(copy) as T;
+}
+
 /**
  * Manual Bridge state machine. It deliberately has no timer and no implicit
  * provider call: entering opens local evidence and source metadata only.
  */
 export function createBridgePanel(options: BridgePanelOptions): BridgePanel {
-  const store = createStore<BridgeState>(initialState);
+  const stateStore = createStore<BridgeState>(cloneAndFreeze(initialState));
+  const store: ReadableStore<BridgeState> = Object.freeze({
+    getState: stateStore.getState,
+    getServerSnapshot: stateStore.getServerSnapshot,
+    subscribe: stateStore.subscribe,
+  });
   const coordinator = coordinatorFor(options.service);
   const now = options.now ?? Date.now;
   let session = 0;
   let attempt = 0;
   let watchController: AbortController | null = null;
   let quoteBusy = false;
-  let preflightBusy = false;
-  let refreshBusy = false;
-  let shieldBusy = false;
-  let revalidateBusy = false;
+  let preflightOwner = 0;
+  let preflightSequence = 0;
+  let refreshOwner = 0;
+  let refreshSequence = 0;
+  let shieldOwner = 0;
+  let shieldSequence = 0;
+  let revalidateOwner = 0;
+  let revalidateSequence = 0;
 
   const nextSession = (): number => (session += 1);
   const begin = (): number => (attempt += 1);
   const live = (id: number, currentSession: number): boolean => id === attempt && currentSession === session;
   const patch = (value: Partial<BridgeState>): void => {
-    store.setState((previous) => ({ ...previous, ...value }));
+    stateStore.setState((previous) => cloneAndFreeze({ ...previous, ...value }));
   };
   const fail = (message: string, retry: 'quote' | 'shield' | 'none'): void => {
     patch({ flow: { name: 'failed', message, retry }, notice: { tone: 'error', text: message } });
@@ -280,8 +301,9 @@ export function createBridgePanel(options: BridgePanelOptions): BridgePanel {
   }
 
   async function refreshCurrent(): Promise<BridgeStatus | null> {
-    if (refreshBusy || watchController) return null;
-    refreshBusy = true;
+    if (refreshOwner !== 0 || watchController) return null;
+    const owner = ++refreshSequence;
+    refreshOwner = owner;
     const id = begin();
     const currentSession = session;
     patch({ flow: { name: 'loading' }, notice: null });
@@ -296,53 +318,15 @@ export function createBridgePanel(options: BridgePanelOptions): BridgePanel {
       if (live(id, currentSession)) fail(COPY.bridge.statusFailed, 'none');
       return null;
     } finally {
-      refreshBusy = false;
+      if (refreshOwner === owner) refreshOwner = 0;
     }
   }
 
-  return {
-    store,
-
-    async open(): Promise<void> {
-      const id = begin();
-      const currentSession = session;
-      patch({ flow: { name: 'loading' }, notice: null });
-      // Resume is local evidence. It intentionally does not refresh status.
-      let record: BridgeRecord | null;
-      try {
-        record = options.service.resume();
-      } catch {
-        if (live(id, currentSession)) fail(COPY.bridge.recoveryUnavailable, 'none');
-        return;
-      }
-      patch({
-        record,
-        quote: record ? quoteReview(record) : null,
-        preflightAvailable: canShowInstructions(record, record ? quoteReview(record) : null),
-        instructionsVisible: false,
-        plan: null,
-      });
-      // Source assets exist only to create a new quote. Recovery-only
-      // production has no planner, so opening its panel must remain a local
-      // record read rather than contacting 1Click for unusable picker data.
-      if (!options.planner) {
-        patch({ flow: { name: 'idle' } });
-        return;
-      }
-      try {
-        const assets = await options.loadSources();
-        if (!live(id, currentSession)) return;
-        patch({ sources: { status: 'loaded', assets }, flow: { name: 'idle' } });
-      } catch {
-        if (!live(id, currentSession)) return;
-        patch({ sources: { status: 'failed', assets: [] }, flow: { name: 'idle' } });
-      }
-    },
-
-    async preflightSavedQuote(): Promise<void> {
-      if (preflightBusy) return;
-      preflightBusy = true;
-      try {
+  async function preflightSavedQuote(): Promise<void> {
+    if (preflightOwner !== 0) return;
+    const owner = ++preflightSequence;
+    preflightOwner = owner;
+    try {
       const planner = options.planner;
       const { record, review } = recordAndReview();
       if (!planner) {
@@ -386,10 +370,51 @@ export function createBridgePanel(options: BridgePanelOptions): BridgePanel {
           fail(COPY.bridge.preflightFailed, 'quote');
         }
       }
-      } finally {
-        preflightBusy = false;
+    } finally {
+      if (preflightOwner === owner) preflightOwner = 0;
+    }
+  }
+
+  return Object.freeze<BridgePanel>({
+    store,
+
+    async open(): Promise<void> {
+      const id = begin();
+      const currentSession = session;
+      patch({ flow: { name: 'loading' }, notice: null });
+      // Resume is local evidence. It intentionally does not refresh status.
+      let record: BridgeRecord | null;
+      try {
+        record = options.service.resume();
+      } catch {
+        if (live(id, currentSession)) fail(COPY.bridge.recoveryUnavailable, 'none');
+        return;
+      }
+      patch({
+        record,
+        quote: record ? quoteReview(record) : null,
+        preflightAvailable: canShowInstructions(record, record ? quoteReview(record) : null),
+        instructionsVisible: false,
+        plan: null,
+      });
+      // Source assets exist only to create a new quote. Recovery-only
+      // production has no planner, so opening its panel must remain a local
+      // record read rather than contacting 1Click for unusable picker data.
+      if (!options.planner) {
+        patch({ flow: { name: 'idle' } });
+        return;
+      }
+      try {
+        const assets = await options.loadSources();
+        if (!live(id, currentSession)) return;
+        patch({ sources: { status: 'loaded', assets }, flow: { name: 'idle' } });
+      } catch {
+        if (!live(id, currentSession)) return;
+        patch({ sources: { status: 'failed', assets: [] }, flow: { name: 'idle' } });
       }
     },
+
+    preflightSavedQuote,
 
     async resumeSavedQuote(): Promise<void> {
       // A resumed quote is not executable merely because it exists in local
@@ -398,13 +423,17 @@ export function createBridgePanel(options: BridgePanelOptions): BridgePanel {
       // as evidence and expose their ordinary refresh/watch/settlement action.
       if (!options.service.resume()) return;
       const status = await refreshCurrent();
-      if (status?.leg === 'awaiting-deposit') await this.preflightSavedQuote();
+      if (status?.leg === 'awaiting-deposit') await preflightSavedQuote();
     },
 
     close(): void {
       if (coordinator.quoteFlight) coordinator.quoteFlight.cancelled = true;
       nextSession();
       begin();
+      shieldOwner = 0;
+      preflightOwner = 0;
+      refreshOwner = 0;
+      revalidateOwner = 0;
       watchController?.abort();
       watchController = null;
       patch({ flow: { name: 'idle' } });
@@ -506,7 +535,7 @@ export function createBridgePanel(options: BridgePanelOptions): BridgePanel {
     refresh: async (): Promise<void> => { await refreshCurrent(); },
 
     async watch(): Promise<void> {
-      if (watchController || refreshBusy) return;
+      if (watchController || refreshOwner !== 0) return;
       const controller = new AbortController();
       watchController = controller;
       const id = begin();
@@ -579,8 +608,9 @@ export function createBridgePanel(options: BridgePanelOptions): BridgePanel {
     },
 
     async planShield(): Promise<void> {
-      if (shieldBusy) return;
-      shieldBusy = true;
+      if (shieldOwner !== 0) return;
+      const owner = ++shieldSequence;
+      shieldOwner = owner;
       try {
       const planner = options.planner;
       const record = options.service.resume();
@@ -614,7 +644,7 @@ export function createBridgePanel(options: BridgePanelOptions): BridgePanel {
         if (live(id, currentSession)) fail(COPY.bridge.shieldUnavailable, 'shield');
       }
       } finally {
-        shieldBusy = false;
+        if (shieldOwner === owner) shieldOwner = 0;
       }
     },
 
@@ -625,8 +655,9 @@ export function createBridgePanel(options: BridgePanelOptions): BridgePanel {
     },
 
     async revalidateShieldPlan(): Promise<PublicShieldPlan | null> {
-      if (revalidateBusy) return null;
-      revalidateBusy = true;
+      if (revalidateOwner !== 0) return null;
+      const owner = ++revalidateSequence;
+      revalidateOwner = owner;
       try {
       const planner = options.planner;
       const record = options.service.resume();
@@ -660,10 +691,10 @@ export function createBridgePanel(options: BridgePanelOptions): BridgePanel {
         return null;
       }
       } finally {
-        revalidateBusy = false;
+        if (revalidateOwner === owner) revalidateOwner = 0;
       }
     },
-  };
+  });
 }
 
 /** Small helper for the view; exact values only, never quote-derived shielding. */

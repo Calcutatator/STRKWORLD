@@ -27,12 +27,12 @@ export function visitLayerActions(
     'openMenu' | 'requestExit' | 'closeSurface' | 'dismissLocked'
   >,
 ) {
-  return {
+  return Object.freeze({
     onOpenMenu: () => controller.openMenu(),
     onRequestExit: () => controller.requestExit(),
     onCloseSurface: () => controller.closeSurface(),
     onDismissLocked: () => controller.dismissLocked(),
-  };
+  });
 }
 
 /** Production keyboard filter shared with the public lifecycle regression. */
@@ -182,16 +182,17 @@ export function VisitLayerView({
           building={station.definition.building}
           allowedModes={station.definition.modes}
           initialMode={station.definition.initialMode}
+          register={register}
           title={COPY.buildings[station.definition.building]}
           onClose={onCloseSurface}
         />,
       );
     }
     if (station.definition.view === 'exchange') {
-      return withControls(<ExchangePanel experience="station" onClose={onCloseSurface} />);
+      return withControls(<ExchangePanel experience="station" register={register} onClose={onCloseSurface} />);
     }
     if (station.definition.view === 'bridge') {
-      return withControls(<BridgePanel experience="station" onClose={onCloseSurface} />);
+      return withControls(<BridgePanel experience="station" register={register} onClose={onCloseSurface} />);
     }
   }
 
@@ -212,7 +213,7 @@ export function VisitLayerView({
     );
   }
   if (state.building === 'bridge') {
-    return withControls(<BridgePanel experience="menu" onClose={onCloseSurface} />);
+    return withControls(<BridgePanel experience="menu" register={register} onClose={onCloseSurface} />);
   }
   if (!connected) {
     return withControls(
@@ -221,7 +222,7 @@ export function VisitLayerView({
   }
 
   const { Component } = room.panel;
-  return withControls(<Component onClose={onCloseSurface} />);
+  return withControls(<Component onClose={onCloseSurface} register={register} />);
 }
 
 function ConnectionSurface({

@@ -58,10 +58,10 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 export function validateRemotePeer(value: unknown): RemotePeerSnapshot | null {
   if (!isRecord(value)) return null;
 
-  const id = value.id;
-  const x = value.x;
-  const y = value.y;
-  const facing = value.facing;
+  const id = ownDataField(value, 'id');
+  const x = ownDataField(value, 'x');
+  const y = ownDataField(value, 'y');
+  const facing = ownDataField(value, 'facing');
 
   if (typeof id !== 'string' || !OPAQUE_ID.test(id)) return null;
   if (typeof x !== 'number' || !Number.isFinite(x) || Math.abs(x) > REMOTE_WORLD_LIMIT) {
@@ -72,7 +72,7 @@ export function validateRemotePeer(value: unknown): RemotePeerSnapshot | null {
   }
   if (!FACINGS.includes(facing as Facing)) return null;
 
-  const sprite = value.sprite;
+  const sprite = ownDataField(value, 'sprite');
   return Object.freeze({
     id,
     x,
@@ -80,6 +80,11 @@ export function validateRemotePeer(value: unknown): RemotePeerSnapshot | null {
     facing: facing as Facing,
     sprite: validateAvatarSprite(sprite),
   });
+}
+
+function ownDataField(value: Record<string, unknown>, key: string): unknown {
+  const descriptor = Object.getOwnPropertyDescriptor(value, key);
+  return descriptor && 'value' in descriptor ? descriptor.value : undefined;
 }
 
 /**
@@ -103,21 +108,11 @@ export function reconcileRemotePeers(
 }
 
 function immutableSnapshot(snapshot: readonly RemotePeerSnapshot[]): readonly RemotePeerSnapshot[] {
-  const copy = snapshot.map((entry) => {
-    // Copy only the frozen seam. Extra runtime fields cannot enter the source
-    // even if a caller has received a wider object from a transport adapter.
-    const value: Record<string, unknown> = isRecord(entry)
-      ? entry
-      : ({} as Record<string, unknown>);
-    return Object.freeze({
-      id: value.id as string,
-      x: value.x as number,
-      y: value.y as number,
-      facing: value.facing as Facing,
-      sprite: value.sprite as string,
-    });
-  });
-  return Object.freeze(copy);
+  // Reuse the same validation policy as the renderer so every source
+  // subscriber receives only an opaque, finite, legal presentation snapshot.
+  // `reconcileRemotePeers` also gives duplicate IDs deterministic last-wins
+  // semantics and maps unknown cosmetic keys to the safe local fallback.
+  return Object.freeze([...reconcileRemotePeers(snapshot).values()]);
 }
 
 /**
@@ -136,19 +131,28 @@ export function createRemotePeerSource(
   function drain(): void {
     if (publishing) return;
     publishing = true;
+    const errors: unknown[] = [];
     try {
       while (pending.length > 0) {
         current = pending.shift()!;
         for (const [listener, token] of [...listeners]) {
-          if (listeners.get(listener) === token) listener(current);
+          if (listeners.get(listener) !== token) continue;
+          try {
+            listener(current);
+          } catch (error) {
+            // Stop this publication for the failing listener, but continue
+            // draining snapshots it queued before throwing. Those snapshots
+            // are newer authoritative state and must not be discarded.
+            errors.push(error);
+            break;
+          }
         }
       }
-    } catch (error) {
-      pending.length = 0;
-      throw error;
     } finally {
       publishing = false;
     }
+    if (errors.length === 1) throw errors[0];
+    if (errors.length > 1) throw new AggregateError(errors, 'Remote peer publication failed');
   }
 
   const source: RemotePeerSource = {

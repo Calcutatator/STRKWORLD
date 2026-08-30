@@ -51,7 +51,15 @@ describe('addresses', () => {
   it('compares padded and unpadded spellings as one address', () => {
     expect(sameAddress('0x04ab', '0x4ab')).toBe(true);
     expect(sameAddress('0x04ab', '0x04ac')).toBe(false);
-    expect(sameAddress('not-hex', 'not-hex')).toBe(true);
+    expect(sameAddress('not-hex', 'not-hex')).toBe(false);
+    expect(sameAddress('1234', '1234')).toBe(false);
+    expect(sameAddress('0X04ab', '0X04ab')).toBe(false);
+    expect(
+      sameAddress(
+        { toString: () => '0x04ab' } as never,
+        { toString: () => '0x04ab' } as never,
+      ),
+    ).toBe(false);
   });
 
   it('shape-checks player input', () => {

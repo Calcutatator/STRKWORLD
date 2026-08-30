@@ -14,8 +14,14 @@ import {
   DEFAULT_ROOM_NAME,
   MAX_MESSAGES_PER_SECOND,
   MIN_CLIENT_SEND_INTERVAL_MS,
+  WORLD_LIMIT,
 } from './config';
-import { LobbyClient, type LobbyStatusEvent, type PeerSnapshot } from './client';
+import {
+  LobbyClient,
+  type LobbyClientOptions,
+  type LobbyStatusEvent,
+  type PeerSnapshot,
+} from './client';
 import { startPresenceServer, type PresenceServer } from './server';
 import type { LobbyState } from './state';
 import vocabulary from './testing/forbidden-vocabulary.json';
@@ -112,6 +118,106 @@ function fakeRoom(): {
   };
 }
 
+it('does not join after disconnect retires a synchronous connecting transition', async () => {
+  const joined = fakeRoom();
+  const joinOrCreate = vi
+    .spyOn(ColyseusClient.prototype, 'joinOrCreate')
+    .mockResolvedValueOnce(joined.room as never);
+  const client = new LobbyClient({ endpoint: 'ws://example', start: { x: 10, y: 20 } });
+  let disconnected: Promise<void> | undefined;
+  client.onStatus((event) => {
+    if (event.status === 'connecting') disconnected = client.disconnect();
+  });
+
+  try {
+    await expect(client.connect()).resolves.toBeUndefined();
+    await disconnected;
+    expect(joinOrCreate).not.toHaveBeenCalled();
+    expect(joined.leave).not.toHaveBeenCalled();
+    expect(client.status).toBe('closed');
+  } finally {
+    joinOrCreate.mockRestore();
+  }
+});
+
+it('does not register callbacks on a room retired during connected delivery', async () => {
+  const joined = fakeRoom();
+  const joinOrCreate = vi
+    .spyOn(ColyseusClient.prototype, 'joinOrCreate')
+    .mockResolvedValueOnce(joined.room as never);
+  const client = new LobbyClient({ endpoint: 'ws://example', start: { x: 10, y: 20 } });
+  let disconnecting: Promise<void> | undefined;
+  client.onStatus((event) => {
+    if (event.status === 'connected') disconnecting = client.disconnect();
+  });
+
+  try {
+    await expect(client.connect()).rejects.toThrow(/interrupted/i);
+    await disconnecting;
+    expect(joined.leave).toHaveBeenCalledOnce();
+    expect(joined.room.onStateChange).not.toHaveBeenCalled();
+    expect(joined.room.onError).not.toHaveBeenCalled();
+    expect(joined.room.onLeave).not.toHaveBeenCalled();
+    expect(client.status).toBe('closed');
+  } finally {
+    joinOrCreate.mockRestore();
+  }
+});
+
+it.each(['onStateChange', 'onError', 'onLeave'] as const)(
+  'releases a joined room when %s registration fails',
+  async (registration) => {
+    const joined = fakeRoom();
+    vi.mocked(joined.room[registration]).mockImplementationOnce(() => {
+      throw new Error(`${registration} registration failed`);
+    });
+    const joinOrCreate = vi
+      .spyOn(ColyseusClient.prototype, 'joinOrCreate')
+      .mockResolvedValueOnce(joined.room as never);
+    const client = new LobbyClient({
+      endpoint: 'ws://example',
+      start: { x: 10, y: 20 },
+      welcomeTimeoutMs: 60_000,
+    });
+
+    try {
+      const connecting = client.connect();
+      joined.welcome({ gameId: '0000000000000001' });
+
+      await expect(connecting).rejects.toThrow(`${registration} registration failed`);
+      expect(joined.leave).toHaveBeenCalledOnce();
+      expect(joined.leave).toHaveBeenCalledWith(true);
+      expect(client.status).toBe('closed');
+      expect(client.gameId).toBeNull();
+    } finally {
+      joinOrCreate.mockRestore();
+    }
+  },
+);
+
+it('releases a joined room when disabling SDK reconnection fails', async () => {
+  const joined = fakeRoom();
+  Object.defineProperty(joined.room, 'reconnection', {
+    value: Object.defineProperty({}, 'enabled', {
+      set() { throw new Error('reconnection setup failed'); },
+    }),
+  });
+  const joinOrCreate = vi
+    .spyOn(ColyseusClient.prototype, 'joinOrCreate')
+    .mockResolvedValueOnce(joined.room as never);
+  const client = new LobbyClient({ endpoint: 'ws://example', start: { x: 10, y: 20 } });
+
+  try {
+    await expect(client.connect()).rejects.toThrow('reconnection setup failed');
+    expect(joined.leave).toHaveBeenCalledOnce();
+    expect(joined.leave).toHaveBeenCalledWith(true);
+    expect(client.status).toBe('closed');
+    expect(client.gameId).toBeNull();
+  } finally {
+    joinOrCreate.mockRestore();
+  }
+});
+
 /** Give the server a beat to prove it does *not* do something. */
 async function settle(): Promise<void> {
   await new Promise((resolve) => setTimeout(resolve, 250));
@@ -144,6 +250,43 @@ describe('identity is server-assigned', () => {
     await client.connect();
     expect(client.gameId).not.toBeNull();
     expect(client.gameId).toMatch(/^[0-9a-f]{16}$/);
+  });
+
+  it('rejects inherited or accessor-backed welcome identities', async () => {
+    const cases: unknown[] = [
+      Object.create({ gameId: '0123456789abcdef' }),
+    ];
+    let accessorRead = false;
+    const accessorPayload = {};
+    Object.defineProperty(accessorPayload, 'gameId', {
+      get: () => {
+        accessorRead = true;
+        return '0123456789abcdef';
+      },
+    });
+    cases.push(accessorPayload);
+
+    for (const payload of cases) {
+      const joined = fakeRoom();
+      const joinOrCreate = vi
+        .spyOn(ColyseusClient.prototype, 'joinOrCreate')
+        .mockResolvedValueOnce(joined.room as never);
+      const client = makeClient(20, 0);
+      try {
+        const connecting = client.connect();
+        await Promise.resolve();
+        joined.welcome(payload as never);
+
+        await expect(connecting).rejects.toThrow(/welcome/i);
+        expect(client.status).toBe('closed');
+        expect(client.gameId).toBeNull();
+        expect(joined.leave).toHaveBeenCalledOnce();
+      } finally {
+        joinOrCreate.mockRestore();
+      }
+    }
+
+    expect(accessorRead).toBe(false);
   });
 
   it('gives two clients distinct server-assigned ids', async () => {
@@ -234,6 +377,100 @@ describe('identity is server-assigned', () => {
       joinOrCreate.mockRestore();
     }
   });
+
+  it('isolates peer snapshots from listener mutation', async () => {
+    const joined = fakeRoom();
+    const joinOrCreate = vi
+      .spyOn(ColyseusClient.prototype, 'joinOrCreate')
+      .mockResolvedValueOnce(joined.room as never);
+
+    try {
+      const client = makeClient(20, 0);
+      const ownId = '0123456789abcdef';
+      const peerId = 'fedcba9876543210';
+      joined.room.state.peers.set(peerId, {
+        gameId: peerId,
+        position: { x: 40, y: 72 },
+        facing: 'left',
+        sprite: 'avatar-2',
+      } as never);
+
+      const secondSnapshots: Array<readonly PeerSnapshot[]> = [];
+      let mutated = false;
+      client.onPeers((snapshot) => {
+        if (snapshot.length === 0 || mutated) return;
+        mutated = true;
+        // Deliberately probe the runtime boundary despite the readonly TS
+        // type. Frozen snapshots reject both item and array mutation.
+        try {
+          const mutable = snapshot as unknown as Array<Record<string, unknown>>;
+          mutable[0]!.x = 999;
+          mutable.push({
+            gameId: '0011223344556677',
+            x: 1,
+            y: 2,
+            facing: 'down',
+            sprite: 'avatar-1',
+          });
+        } catch {
+          // Expected once the immutable boundary is enforced.
+        }
+      });
+      client.onPeers((snapshot) => secondSnapshots.push(snapshot));
+
+      const connecting = client.connect();
+      await Promise.resolve();
+      joined.welcome({ gameId: ownId });
+      await connecting;
+
+      const delivered = secondSnapshots.at(-1);
+      expect(delivered).toEqual([{
+        gameId: peerId,
+        x: 40,
+        y: 72,
+        facing: 'left',
+        sprite: 'avatar-2',
+      }]);
+      expect(Object.isFrozen(delivered)).toBe(true);
+      expect(Object.isFrozen(delivered?.[0])).toBe(true);
+    } finally {
+      joinOrCreate.mockRestore();
+    }
+  });
+
+  it('skips a peer whose decoded state accessor throws instead of leaking the exception', async () => {
+    const joined = fakeRoom();
+    const joinOrCreate = vi
+      .spyOn(ColyseusClient.prototype, 'joinOrCreate')
+      .mockResolvedValueOnce(joined.room as never);
+    const client = makeClient(20, 0);
+    const peer = {
+      gameId: 'fedcba9876543210',
+      position: { x: 40, y: 72 },
+      facing: 'left',
+      sprite: 'avatar-2',
+    } as Record<string, unknown>;
+    Object.defineProperty(peer, 'position', {
+      configurable: true,
+      get: () => {
+        throw new Error('malformed peer state');
+      },
+    });
+    joined.room.state.peers.set('fedcba9876543210', peer as never);
+
+    try {
+      const connecting = client.connect();
+      await Promise.resolve();
+      joined.welcome({ gameId: '0123456789abcdef' });
+      await connecting;
+
+      expect(() => client.peers()).not.toThrow();
+      expect(client.peers()).toEqual([]);
+    } finally {
+      await client.disconnect();
+      joinOrCreate.mockRestore();
+    }
+  });
 });
 
 describe('client send interval configuration', () => {
@@ -260,6 +497,60 @@ describe('client send interval configuration', () => {
           minSendIntervalMs: 2_147_483_647,
         }),
     ).not.toThrow();
+  });
+});
+
+describe('welcome timeout configuration', () => {
+  it('clears the pending welcome timeout when disconnect interrupts a join', async () => {
+    vi.useFakeTimers();
+    const joined = fakeRoom();
+    const joinOrCreate = vi
+      .spyOn(ColyseusClient.prototype, 'joinOrCreate')
+      .mockResolvedValueOnce(joined.room as never);
+
+    try {
+      const client = new LobbyClient({
+        endpoint: server.endpoint,
+        start: { x: 20, y: 0 },
+        welcomeTimeoutMs: 2_147_483_647,
+      });
+      const connecting = client.connect();
+      for (let i = 0; i < 5; i += 1) {
+        await Promise.resolve();
+      }
+      expect(joined.room.onMessage).toHaveBeenCalled();
+      expect(vi.getTimerCount()).toBe(1);
+
+      await client.disconnect();
+      await expect(connecting).rejects.toThrow(/interrupted/i);
+      expect(vi.getTimerCount()).toBe(0);
+    } finally {
+      joinOrCreate.mockRestore();
+      vi.useRealTimers();
+    }
+  });
+
+  it.each([
+    Number.NaN,
+    Number.POSITIVE_INFINITY,
+    -1,
+    1.5,
+    2_147_483_648,
+    Number.MAX_SAFE_INTEGER,
+  ])('rejects timer-unsafe welcome timeout %s', (welcomeTimeoutMs) => {
+    expect(() => new LobbyClient({
+      endpoint: 'ws://127.0.0.1:2567',
+      start: { x: 0, y: 0 },
+      welcomeTimeoutMs,
+    })).toThrow('Lobby welcome timeout is invalid.');
+  });
+
+  it.each([0, 2_147_483_647])('accepts bounded integer welcome timeout %s', (welcomeTimeoutMs) => {
+    expect(() => new LobbyClient({
+      endpoint: 'ws://127.0.0.1:2567',
+      start: { x: 0, y: 0 },
+      welcomeTimeoutMs,
+    })).not.toThrow();
   });
 });
 
@@ -330,6 +621,40 @@ describe('nothing connects by itself', () => {
 });
 
 describe('connect is idempotent', () => {
+  it('owns connection options after construction', async () => {
+    const joined = fakeRoom();
+    let joinOptions: unknown;
+    const joinOrCreate = vi
+      .spyOn(ColyseusClient.prototype, 'joinOrCreate')
+      .mockImplementation((_roomName, options) => {
+        joinOptions = options;
+        return Promise.resolve(joined.room) as never;
+      });
+    const options: LobbyClientOptions = {
+      endpoint: 'ws://test',
+      roomName: 'street',
+      start: { x: 20, y: 30, facing: 'right' as const },
+      sprite: 'avatar-2',
+    };
+
+    try {
+      const client = new LobbyClient(options);
+      options.roomName = 'attacker-room';
+      Reflect.set(options.start, 'x', 999);
+      Reflect.set(options.start, 'facing', 'up');
+      options.sprite = 'avatar-16';
+
+      const connecting = client.connect();
+      await Promise.resolve();
+      joined.welcome({ gameId: '0000000000000010' });
+      await connecting;
+
+      expect(joinOptions).toEqual({ x: 20, y: 30, facing: 'right', sprite: 'avatar-2' });
+    } finally {
+      joinOrCreate.mockRestore();
+    }
+  });
+
   it('disables the SDK automatic retry owner on the joined room', async () => {
     const joined = fakeRoom();
     const joinOrCreate = vi
@@ -406,6 +731,60 @@ describe('connect is idempotent', () => {
     );
     await settle();
     expect(observer.peers()).toHaveLength(1);
+  });
+
+  it('does not publish a stale peer snapshot after client-left reconnects synchronously', async () => {
+    const firstRoom = fakeRoom();
+    const replacementRoom = fakeRoom();
+    const firstLeave = deferred<number>();
+    firstRoom.leave.mockImplementationOnce(() => firstLeave.promise);
+    const joinOrCreate = vi.spyOn(ColyseusClient.prototype, 'joinOrCreate');
+    joinOrCreate
+      .mockImplementationOnce(() => Promise.resolve(firstRoom.room) as never)
+      .mockImplementationOnce(() => Promise.resolve(replacementRoom.room) as never);
+
+    try {
+      const client = new LobbyClient({ endpoint: 'ws://example', start: { x: 20, y: 0 } });
+      const peerSnapshots: Array<readonly PeerSnapshot[]> = [];
+      client.onPeers((peers) => peerSnapshots.push(peers));
+      let replacementConnecting: Promise<void> | undefined;
+      client.onStatus((event) => {
+        if (event.status === 'closed' && event.reason === 'client-left') {
+          replacementConnecting = client.connect();
+        }
+      });
+
+      const firstConnecting = client.connect();
+      await Promise.resolve();
+      firstRoom.welcome({ gameId: '0000000000000011' });
+      await firstConnecting;
+
+      const disconnecting = client.disconnect();
+      await Promise.resolve();
+      await Promise.resolve();
+      replacementRoom.room.state.peers.set('0000000000000012', {
+        gameId: '0000000000000012',
+        position: { x: 25, y: 30 },
+        facing: 'right',
+        sprite: 'avatar-2',
+      } as never);
+      replacementRoom.welcome({ gameId: '0000000000000013' });
+      await replacementConnecting;
+
+      const replacementSnapshots = () =>
+        peerSnapshots.filter((peers) => peers.some((peer) => peer.gameId === '0000000000000012'));
+      expect(replacementSnapshots()).toHaveLength(1);
+
+      firstLeave.resolve(0);
+      await disconnecting;
+
+      // The old disconnect must not deliver again after its room leave settles:
+      // the replacement room now owns the client's peer stream.
+      expect(replacementSnapshots()).toHaveLength(1);
+    } finally {
+      firstLeave.resolve(0);
+      joinOrCreate.mockRestore();
+    }
   });
 
   it('does not classify a replacement room drop as the prior local leave', async () => {
@@ -733,7 +1112,245 @@ describe('connect is idempotent', () => {
   );
 });
 
+it('clears peer listeners even when room leave fails during disconnect', async () => {
+  const joined = fakeRoom();
+  const joinOrCreate = vi
+    .spyOn(ColyseusClient.prototype, 'joinOrCreate')
+    .mockResolvedValueOnce(joined.room as never);
+
+  try {
+    const client = makeClient(20, 0);
+    const peerSnapshots: Array<readonly PeerSnapshot[]> = [];
+    client.onPeers((peers) => peerSnapshots.push(peers));
+
+    const connecting = client.connect();
+    await Promise.resolve();
+    joined.welcome({ gameId: '0000000000000009' });
+    await connecting;
+    joined.room.state.peers.set('000000000000000a', {
+      gameId: '000000000000000a',
+      position: { x: 25, y: 30 },
+      facing: 'right',
+      sprite: 'avatar-2',
+    } as never);
+    joined.stateChange();
+    expect(peerSnapshots.at(-1)).toHaveLength(1);
+
+    const leaveError = new Error('transport leave failed');
+    joined.leave.mockRejectedValueOnce(leaveError);
+    await expect(client.disconnect()).rejects.toBe(leaveError);
+
+    expect(client.status).toBe('closed');
+    expect(client.gameId).toBeNull();
+    expect(peerSnapshots.at(-1)).toEqual([]);
+  } finally {
+    joinOrCreate.mockRestore();
+  }
+});
+
 describe('presence', () => {
+  it.each([
+    ['x', Number.NaN, 0],
+    ['y', 0, Number.POSITIVE_INFINITY],
+    ['x negative infinity', Number.NEGATIVE_INFINITY, 0],
+  ] as const)('does not send a non-finite %s update', async (_axis, x, y) => {
+    const joined = fakeRoom();
+    const joinOrCreate = vi
+      .spyOn(ColyseusClient.prototype, 'joinOrCreate')
+      .mockResolvedValueOnce(joined.room as never);
+    const timer = vi.spyOn(globalThis, 'setTimeout');
+    const client = new LobbyClient({ endpoint: server.endpoint, start: { x: 0, y: 0 } });
+
+    try {
+      const connecting = client.connect();
+      await Promise.resolve();
+      joined.welcome({ gameId: '0123456789abcde0' });
+      await connecting;
+      timer.mockClear();
+
+      client.updatePosition(x, y, 'right');
+
+      expect(joined.send).not.toHaveBeenCalled();
+      expect(timer).not.toHaveBeenCalled();
+    } finally {
+      await client.disconnect();
+      timer.mockRestore();
+      joinOrCreate.mockRestore();
+    }
+  });
+
+  it('clamps finite movement to the server world limit before reconciliation', async () => {
+    const joined = fakeRoom();
+    const joinOrCreate = vi
+      .spyOn(ColyseusClient.prototype, 'joinOrCreate')
+      .mockResolvedValueOnce(joined.room as never);
+    const client = new LobbyClient({ endpoint: server.endpoint, start: { x: 0, y: 0 } });
+
+    try {
+      const connecting = client.connect();
+      await Promise.resolve();
+      joined.welcome({ gameId: '0123456789abcdef' });
+      await connecting;
+
+      client.updatePosition(9_000, -9_000, 'right');
+      expect(joined.send).toHaveBeenCalledWith('move', {
+        x: WORLD_LIMIT,
+        y: -WORLD_LIMIT,
+        facing: 'right',
+      });
+
+      joined.room.state.peers.set('0123456789abcdef', {
+        gameId: '0123456789abcdef',
+        position: { x: WORLD_LIMIT, y: -WORLD_LIMIT },
+        facing: 'right',
+        sprite: 'avatar-1',
+      } as never);
+      joined.stateChange();
+      expect(joined.send).toHaveBeenCalledTimes(1);
+    } finally {
+      await client.disconnect();
+      joinOrCreate.mockRestore();
+    }
+  });
+
+  it('does not treat a map entry with another identity as the local server position', async () => {
+    const joined = fakeRoom();
+    const joinOrCreate = vi
+      .spyOn(ColyseusClient.prototype, 'joinOrCreate')
+      .mockResolvedValueOnce(joined.room as never);
+    const client = new LobbyClient({ endpoint: server.endpoint, start: { x: 0, y: 0 } });
+
+    try {
+      const connecting = client.connect();
+      await Promise.resolve();
+      joined.welcome({ gameId: '0123456789abcdef' });
+      await connecting;
+
+      // A decoded state map is keyed by the local id, but the entry's own
+      // identity is the authoritative value used for reconciliation.
+      joined.room.state.peers.set('0123456789abcdef', {
+        gameId: 'fedcba9876543210',
+        position: { x: 99, y: 0 },
+        facing: 'right',
+        sprite: 'avatar-1',
+      } as never);
+
+      client.updatePosition(99, 0, 'right');
+
+      expect(joined.send).toHaveBeenCalledWith('move', {
+        x: 99,
+        y: 0,
+        facing: 'right',
+      });
+    } finally {
+      await client.disconnect();
+      joinOrCreate.mockRestore();
+    }
+  });
+
+  it.each([
+    ['unknown string', 'diagonal'],
+    ['coercible object', { toString: (): string => 'left' }],
+  ] as const)('normalizes a malformed %s movement facing before reconciliation', async (_label, facing) => {
+    const joined = fakeRoom();
+    const joinOrCreate = vi
+      .spyOn(ColyseusClient.prototype, 'joinOrCreate')
+      .mockResolvedValueOnce(joined.room as never);
+    const client = new LobbyClient({ endpoint: server.endpoint, start: { x: 0, y: 0 } });
+
+    try {
+      const connecting = client.connect();
+      await Promise.resolve();
+      joined.welcome({ gameId: '0123456789abcdef' });
+      await connecting;
+
+      client.updatePosition(10, 20, facing as never);
+      expect(joined.send).toHaveBeenCalledWith('move', {
+        x: 10,
+        y: 20,
+        facing: 'down',
+      });
+
+      joined.room.state.peers.set('0123456789abcdef', {
+        gameId: '0123456789abcdef',
+        position: { x: 10, y: 20 },
+        facing: 'down',
+        sprite: 'avatar-1',
+      } as never);
+      joined.stateChange();
+      expect(joined.send).toHaveBeenCalledTimes(1);
+    } finally {
+      await client.disconnect();
+      joinOrCreate.mockRestore();
+    }
+  });
+
+  it('does not schedule reconciliation after move synchronously closes its room', async () => {
+    const joined = fakeRoom();
+    const joinOrCreate = vi
+      .spyOn(ColyseusClient.prototype, 'joinOrCreate')
+      .mockResolvedValueOnce(joined.room as never);
+    const timer = vi.spyOn(globalThis, 'setTimeout');
+    const client = new LobbyClient({ endpoint: server.endpoint, start: { x: 0, y: 0 } });
+
+    try {
+      const connecting = client.connect();
+      await Promise.resolve();
+      joined.welcome({ gameId: '0123456789abcdef' });
+      await connecting;
+      timer.mockClear();
+      joined.send.mockImplementationOnce((message: string) => {
+        expect(message).toBe('move');
+        joined.left(1006);
+      });
+
+      client.updatePosition(10, 0, 'right');
+
+      expect(client.status).toBe('closed');
+      expect(timer).not.toHaveBeenCalled();
+    } finally {
+      await client.disconnect();
+      timer.mockRestore();
+      joinOrCreate.mockRestore();
+    }
+  });
+
+  it('does not schedule reconciliation after a synchronous state update confirms the move', async () => {
+    const joined = fakeRoom();
+    const joinOrCreate = vi
+      .spyOn(ColyseusClient.prototype, 'joinOrCreate')
+      .mockResolvedValueOnce(joined.room as never);
+    const timer = vi.spyOn(globalThis, 'setTimeout');
+    const client = new LobbyClient({ endpoint: server.endpoint, start: { x: 0, y: 0 } });
+
+    try {
+      const connecting = client.connect();
+      await Promise.resolve();
+      joined.welcome({ gameId: '0123456789abcdef' });
+      await connecting;
+      timer.mockClear();
+      joined.send.mockImplementationOnce((message: string, payload: { x: number; y: number; facing: string }) => {
+        expect(message).toBe('move');
+        joined.room.state.peers.set('0123456789abcdef', {
+          gameId: '0123456789abcdef',
+          position: { x: payload.x, y: payload.y },
+          facing: payload.facing,
+          sprite: 'avatar-1',
+        } as never);
+        joined.stateChange();
+      });
+
+      client.updatePosition(10, 0, 'right');
+
+      expect(joined.send).toHaveBeenCalledTimes(1);
+      expect(timer).not.toHaveBeenCalled();
+    } finally {
+      await client.disconnect();
+      timer.mockRestore();
+      joinOrCreate.mockRestore();
+    }
+  });
+
   it('keeps reconciliation timers within the timer ceiling through clock rollback', async () => {
     const joined = fakeRoom();
     const joinOrCreate = vi
@@ -894,6 +1511,29 @@ describe('presence', () => {
     expect(observer.peers()).toEqual([]);
   });
 
+  it('does not restore suspended status when transport leaves during suspend send', async () => {
+    const joined = fakeRoom();
+    const joinOrCreate = vi
+      .spyOn(ColyseusClient.prototype, 'joinOrCreate')
+      .mockImplementation(() => Promise.resolve(joined.room) as never);
+
+    try {
+      const client = new LobbyClient({ endpoint: 'ws://test', start: { x: 20, y: 0 } });
+      const connecting = client.connect();
+      await Promise.resolve();
+      joined.welcome({ gameId: '000000000000000f' });
+      await connecting;
+
+      joined.send.mockImplementationOnce(() => joined.left(1006, 'transport dropped'));
+      client.suspend();
+
+      expect(client.status).toBe('closed');
+      expect(client.gameId).toBeNull();
+    } finally {
+      joinOrCreate.mockRestore();
+    }
+  });
+
   it('brings the avatar back on an explicit resume', async () => {
     const observer = makeClient(0, 0);
     await observer.connect();
@@ -920,6 +1560,145 @@ describe('presence', () => {
     );
     expect(peers[0]?.x).toBe(40);
     expect(peers[0]?.facing).toBe('up');
+  });
+
+  it('clamps an out-of-bounds resumed placement before sending it to the room', async () => {
+    const joined = fakeRoom();
+    const joinOrCreate = vi
+      .spyOn(ColyseusClient.prototype, 'joinOrCreate')
+      .mockImplementation(() => Promise.resolve(joined.room) as never);
+    const client = makeClient(20, 0);
+
+    try {
+      const connecting = client.connect();
+      await Promise.resolve();
+      joined.welcome({ gameId: '0123456789abcdef' });
+      await connecting;
+      client.suspend();
+
+      client.resume({ x: WORLD_LIMIT + 1_000, y: -WORLD_LIMIT - 1_000 });
+
+      expect(joined.send).toHaveBeenLastCalledWith('resume', {
+        x: WORLD_LIMIT,
+        y: -WORLD_LIMIT,
+        facing: 'down',
+        sprite: 'avatar-2',
+      });
+    } finally {
+      await client.disconnect();
+      joinOrCreate.mockRestore();
+    }
+  });
+
+  it.each([
+    ['unknown string', 'diagonal'],
+    ['coercible object', { toString: (): string => 'left' }],
+  ] as const)('normalizes a malformed resumed %s facing before sending it to the room', async (_label, facing) => {
+    const joined = fakeRoom();
+    const joinOrCreate = vi
+      .spyOn(ColyseusClient.prototype, 'joinOrCreate')
+      .mockImplementation(() => Promise.resolve(joined.room) as never);
+    const client = makeClient(20, 0);
+
+    try {
+      const connecting = client.connect();
+      await Promise.resolve();
+      joined.welcome({ gameId: '0123456789abcdef' });
+      await connecting;
+      client.suspend();
+
+      client.resume({ x: 40, y: 40, facing: facing as never });
+
+      expect(joined.send).toHaveBeenLastCalledWith('resume', {
+        x: 40,
+        y: 40,
+        facing: 'down',
+        sprite: 'avatar-2',
+      });
+    } finally {
+      await client.disconnect();
+      joinOrCreate.mockRestore();
+    }
+  });
+
+  it.each([null, undefined])('rejects a nullish resumed placement with the controlled error', async (placement) => {
+    const joined = fakeRoom();
+    const joinOrCreate = vi
+      .spyOn(ColyseusClient.prototype, 'joinOrCreate')
+      .mockImplementation(() => Promise.resolve(joined.room) as never);
+    const client = makeClient(20, 0);
+
+    try {
+      const connecting = client.connect();
+      await Promise.resolve();
+      joined.welcome({ gameId: '0123456789abcdef' });
+      await connecting;
+      client.suspend();
+
+      expect(() => client.resume(placement as never)).toThrow('Lobby resume placement is invalid.');
+      expect(joined.send).toHaveBeenLastCalledWith('suspend');
+      expect(client.status).toBe('suspended');
+    } finally {
+      await client.disconnect();
+      joinOrCreate.mockRestore();
+    }
+  });
+
+  it.each(['x', 'y'] as const)('rejects an accessor-backed resumed %s coordinate without invoking it', async (axis) => {
+    const joined = fakeRoom();
+    const joinOrCreate = vi
+      .spyOn(ColyseusClient.prototype, 'joinOrCreate')
+      .mockImplementation(() => Promise.resolve(joined.room) as never);
+    const client = makeClient(20, 0);
+    let accessed = false;
+    const placement = { x: 40, y: 40, facing: 'up' as const };
+    Object.defineProperty(placement, axis, {
+      configurable: true,
+      get: () => {
+        accessed = true;
+        throw new Error(`unexpected ${axis} accessor`);
+      },
+    });
+
+    try {
+      const connecting = client.connect();
+      await Promise.resolve();
+      joined.welcome({ gameId: '0123456789abcdef' });
+      await connecting;
+      client.suspend();
+
+      expect(() => client.resume(placement)).toThrow('Lobby resume placement is invalid.');
+      expect(accessed).toBe(false);
+      expect(joined.send).toHaveBeenLastCalledWith('suspend');
+      expect(client.status).toBe('suspended');
+    } finally {
+      await client.disconnect();
+      joinOrCreate.mockRestore();
+    }
+  });
+
+  it('does not restore connected status when transport leaves during resume send', async () => {
+    const joined = fakeRoom();
+    const joinOrCreate = vi
+      .spyOn(ColyseusClient.prototype, 'joinOrCreate')
+      .mockImplementation(() => Promise.resolve(joined.room) as never);
+
+    try {
+      const client = new LobbyClient({ endpoint: 'ws://test', start: { x: 20, y: 0 } });
+      const connecting = client.connect();
+      await Promise.resolve();
+      joined.welcome({ gameId: '000000000000000e' });
+      await connecting;
+      client.suspend();
+
+      joined.send.mockImplementationOnce(() => joined.left(1006, 'transport dropped'));
+      client.resume({ x: 40, y: 40, facing: 'up' });
+
+      expect(client.status).toBe('closed');
+      expect(client.gameId).toBeNull();
+    } finally {
+      joinOrCreate.mockRestore();
+    }
   });
 
   it('delivers a reentrant suspend after the resume transition to every subscriber', async () => {

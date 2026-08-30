@@ -147,4 +147,32 @@ describe('WalletAttentionCue', () => {
     await act(async () => root.unmount());
     container.remove();
   });
+
+  it('keeps the tab title while another attention cue remains mounted', async () => {
+    const container = document.createElement('div');
+    const root = createRoot(container);
+
+    await act(async () => {
+      root.render(
+        <>
+          <WalletAttentionCue active kind="balance" signal={() => {}} />
+          <WalletAttentionCue active kind="confirm" signal={() => {}} />
+        </>,
+      );
+    });
+    expect(document.title).toBe(COPY.walletAttention.tabTitle);
+
+    await act(async () => {
+      root.render(
+        <>
+          <WalletAttentionCue active={false} kind="balance" signal={() => {}} />
+          <WalletAttentionCue active kind="confirm" signal={() => {}} />
+        </>,
+      );
+    });
+    expect(document.title).toBe(COPY.walletAttention.tabTitle);
+
+    await act(async () => root.unmount());
+    container.remove();
+  });
 });

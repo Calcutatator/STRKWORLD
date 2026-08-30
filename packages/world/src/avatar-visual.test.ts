@@ -37,6 +37,33 @@ describe('D-052 avatar visual catalog', () => {
     }));
   });
 
+  it('fails closed for malformed runtime facings at every visual seam', () => {
+    const target = fakeAvatarTarget();
+
+    expect(resolveAvatarAnimation('avatar-2', 'diagonal' as never, false)).toEqual({
+      key: 'avatar-2:down:walk',
+      textureKey: 'avatar-2',
+      frames: [0, 1, 2, 3, 4],
+      frameRate: 8,
+    });
+
+    applyAvatarVisual(target as never, {
+      sprite: 'avatar-2',
+      facing: 'diagonal' as never,
+      moving: false,
+    });
+    expect(target.setFrame).toHaveBeenLastCalledWith(0);
+    expect(target.setData).toHaveBeenLastCalledWith('facing', 'down');
+
+    const controller = createAvatarVisualController(target as never);
+    controller.present({
+      sprite: 'avatar-2',
+      facing: 'diagonal' as never,
+      moving: false,
+    });
+    expect(controller.state.facing).toBe('down');
+  });
+
   it('resolves an unknown runtime key to the safe avatar-1 sheet', () => {
     expect(resolveAvatarSheet('avatar-16').sprite).toBe('avatar-16');
     expect(resolveAvatarSheet('review-sheet').sprite).toBe('avatar-1');
@@ -147,6 +174,7 @@ describe('D-052 avatar visual catalog', () => {
 
     expect(target.setTexture).toHaveBeenLastCalledWith('avatar-7');
     expect(target.setOrigin).toHaveBeenLastCalledWith(0.5, 0.875);
+    expect(target.setVertexRoundMode).toHaveBeenLastCalledWith('fullAuto');
     expect(target.play).toHaveBeenLastCalledWith('avatar-7:right:sprint', true);
     expect(target.setData).toHaveBeenCalledWith('sprite', 'avatar-7');
     expect(target.setData).toHaveBeenCalledWith('facing', 'right');
@@ -205,6 +233,38 @@ describe('D-052 avatar visual catalog', () => {
     });
   });
 
+  it('invalidates the render cache after a partial pose presentation fails', () => {
+    const target = fakeAvatarTarget();
+    const controller = createAvatarVisualController(target as never);
+    const error = new Error('pose presentation failed');
+    target.setOrigin.mockImplementationOnce(() => { throw error; });
+
+    expect(() => controller.select('avatar-7')).toThrow(error);
+    expect(controller.state.sprite).toBe('avatar-1');
+
+    controller.select('avatar-1');
+    expect(target.setTexture).toHaveBeenLastCalledWith('avatar-1');
+  });
+
+  it('does not commit local facing when a pose presentation fails', () => {
+    const target = Object.assign(fakeAvatarTarget(), {
+      body: { velocity: {}, setSize: vi.fn(), setOffset: vi.fn() },
+    });
+    const local = createLocalAvatarVisual(target as never);
+    const error = new Error('local pose presentation failed');
+    target.setTexture.mockImplementationOnce(() => { throw error; });
+
+    expect(() => local.update({ left: false, right: true, up: false, down: false }, false))
+      .toThrow(error);
+    expect(local.state.facing).toBe('down');
+
+    // A no-input retry must use the last successfully rendered facing rather
+    // than the failed turn kept in createLocalAvatarVisual's closure.
+    local.update({ left: false, right: false, up: false, down: false }, false);
+    expect(local.state.facing).toBe('down');
+    expect(target.setFrame).toHaveBeenLastCalledWith(0);
+  });
+
   it('owns local body, movement pose and selection as one StreetScene seam', () => {
     const target = Object.assign(fakeAvatarTarget(), {
       body: { velocity: {}, setSize: vi.fn(), setOffset: vi.fn() },
@@ -237,6 +297,7 @@ function fakeAvatarTarget() {
   const target = {
     setTexture: vi.fn(() => target),
     setOrigin: vi.fn(() => target),
+    setVertexRoundMode: vi.fn(() => target),
     play: vi.fn(() => target),
     stop: vi.fn(() => target),
     setFrame: vi.fn(() => target),

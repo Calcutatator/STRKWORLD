@@ -37,6 +37,8 @@ import {
 } from './validation.js';
 
 const MAX_NODE_TIMEOUT_MS = 2_147_483_647;
+const MAX_UINT256 = (1n << 256n) - 1n;
+const MAINNET_CHAIN_ID = '0x534e5f4d41494e';
 
 export interface BackendApiOptions {
   config: BackendConfig;
@@ -156,11 +158,14 @@ export class BackendApi {
       this.rpc.getPoolConfig(signal),
       this.rpc.getBlockNumber(signal),
     ]);
+    requireFelt(fee.token, 'paymaster fee token');
+    const feeAmount = requireProviderFeeAmount(fee.amount);
     if (!sameAddress(fee.token, feeToken)) throw new ApiFailure(400, 'Paymaster changed the fee token.');
-    requireFelt(fee.recipient, 'fee recipient');
-    if (fee.amount <= 0n || fee.amount > policy.maxRelayFee) {
+    requireNonzeroFelt(fee.recipient, 'fee recipient');
+    if (feeAmount <= 0n || feeAmount > policy.maxRelayFee) {
       throw new ApiFailure(400, 'Paymaster fee exceeds the route ceiling.');
     }
+    const expiresAtBlock = safeBlockExpiry(block, poolConfig.proofValidityBlocks);
     const claims: FeeAuthorizationClaims = {
       v: 1,
       route,
@@ -168,16 +173,16 @@ export class BackendApi {
       operationToken,
       token: fee.token,
       recipient: fee.recipient,
-      amount: fee.amount,
+      amount: feeAmount,
       issuedAtBlock: block,
-      expiresAtBlock: block + poolConfig.proofValidityBlocks,
+      expiresAtBlock,
     };
     return {
       status: 200,
       body: {
         token: fee.token,
         recipient: fee.recipient,
-        amount: fee.amount.toString(),
+        amount: feeAmount.toString(),
         authorization: await this.authorizations.issue(claims),
         expiresAtBlock: claims.expiresAtBlock,
       },
@@ -300,10 +305,13 @@ export class BackendApi {
       this.rpc.getPoolConfig(signal),
     ]);
     if (
-      !plan.quoteId ||
-      !plan.chainId ||
+      typeof plan.quoteId !== 'string' ||
+      plan.quoteId.length === 0 ||
+      plan.chainId !== MAINNET_CHAIN_ID ||
       !isFelt(plan.executorAddress) ||
       BigInt(plan.executorAddress) === 0n ||
+      typeof plan.buyAmount !== 'bigint' ||
+      plan.buyAmount > MAX_UINT256 ||
       plan.buyAmount < minAmountOut ||
       !Number.isSafeInteger(plan.expiresAt) ||
       plan.expiresAt <= this.clockNow() ||
@@ -314,6 +322,7 @@ export class BackendApi {
     for (const call of plan.executorCalls) {
       if (
         !isFelt(call.contractAddress) ||
+        BigInt(call.contractAddress) === 0n ||
         !isFelt(call.selector) ||
         !call.entrypoint ||
         call.calldata.some((felt) => !isFelt(felt))
@@ -328,19 +337,22 @@ export class BackendApi {
       operationToken: sellToken,
       signal,
     });
+    requireFelt(fee.token, 'paymaster fee token');
+    const feeAmount = requireProviderFeeAmount(fee.amount);
     if (
       !sameAddress(fee.token, this.config.feeToken) ||
-      fee.amount <= 0n ||
-      fee.amount > policy.maxRelayFee
+      feeAmount <= 0n ||
+      feeAmount > policy.maxRelayFee
     ) {
       throw new ApiFailure(400, 'Paymaster fee exceeds swap policy.');
     }
-    requireFelt(fee.recipient, 'fee recipient');
+    requireNonzeroFelt(fee.recipient, 'fee recipient');
     const invokePrefix = [buyToken, ...serializeCairo1Calls(plan.executorCalls)];
     // count + two TransferTo actions + Invoke header + buy token/open-note id
     if (invokePrefix.length + 13 > this.config.maxCalldataItems) {
       throw new ApiFailure(413, 'AVNU private executor plan is too large.');
     }
+    const expiresAtBlock = safeBlockExpiry(block, poolConfig.proofValidityBlocks);
     const claims: FeeAuthorizationClaims = {
       v: 1,
       route: 'swap',
@@ -348,9 +360,9 @@ export class BackendApi {
       operationToken: sellToken,
       token: fee.token,
       recipient: fee.recipient,
-      amount: fee.amount,
+      amount: feeAmount,
       issuedAtBlock: block,
-      expiresAtBlock: block + poolConfig.proofValidityBlocks,
+      expiresAtBlock,
       swap: {
         executor: plan.executorAddress,
         sellToken,
@@ -372,7 +384,7 @@ export class BackendApi {
         fee: {
           token: fee.token,
           recipient: fee.recipient,
-          amount: fee.amount.toString(),
+          amount: feeAmount.toString(),
           authorization: await this.authorizations.issue(claims),
           expiresAtBlock: claims.expiresAtBlock,
         },
@@ -477,11 +489,28 @@ function requireProviderTransactionHash(result: unknown): string {
   return value;
 }
 
+function requireProviderFeeAmount(value: unknown): bigint {
+  if (typeof value !== 'bigint') {
+    throw new Error('Paymaster returned an invalid fee amount.');
+  }
+  return value;
+}
+
+function safeBlockExpiry(issuedAtBlock: number, validity: number): number {
+  const expiry = issuedAtBlock + validity;
+  if (!Number.isSafeInteger(expiry)) {
+    throw new Error('Pool proof-validity window exceeds the safe block bound.');
+  }
+  return expiry;
+}
+
 function requireBigintString(value: unknown, label: string): bigint {
   if (typeof value !== 'string' || !/^[1-9][0-9]*$/.test(value)) {
     throw new ApiFailure(400, `Invalid ${label}.`);
   }
-  return BigInt(value);
+  const parsed = BigInt(value);
+  if (parsed > MAX_UINT256) throw new ApiFailure(400, `Invalid ${label}.`);
+  return parsed;
 }
 
 function serializeCairo1Calls(

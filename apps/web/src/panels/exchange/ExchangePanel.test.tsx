@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import { renderToStaticMarkup } from 'react-dom/server';
+import type { ComponentProps, ReactElement } from 'react';
 import { FakePrivacyOperations } from '@strkworld/privacy';
+import { PRIVACY_REGISTER, type RouteGrade } from '../../privacy/register.js';
 import { PrivacyProvider } from '../../privacy/PrivacyProvider.js';
 import { SessionNoticeLayer } from '../../privacy/SessionNoticeLayer.js';
 import { createSubmissionUncertainty } from '../../privacy/submission-uncertainty.js';
@@ -11,6 +13,12 @@ import { createExchangePanel } from './exchange-machine.js';
 
 const [strk] = EXCHANGE_CATALOG;
 
+// Keep the red regression on the component's public composition seam before
+// the production prop is added to its declared props.
+const ExchangePanelWithRegister = ExchangePanel as unknown as (props: ComponentProps<typeof ExchangePanel> & {
+  register: readonly RouteGrade[];
+}) => ReactElement;
+
 async function reviewed() {
   const operations = new FakePrivacyOperations({ balances: { [strk!.token]: 100n * 10n ** 18n }, swapReview: { expectedAmountOut: 2n * 10n ** 18n, slippageBps: 50, expiresAt: 4_102_444_800_000 } });
   const panel = createExchangePanel({ operations, receipts: createReceiptLedger(), canStartFinancialAction: () => true });
@@ -19,6 +27,19 @@ async function reviewed() {
 }
 
 describe('ExchangePanel review render', () => {
+  it('uses the supplied route authority for the Exchange door', () => {
+    const disabled: readonly RouteGrade[] = PRIVACY_REGISTER.map((entry) => entry.route === 'exchange.swap'
+      ? { ...entry, disclosure: null, approvedBy: null, approvedOn: null, rationale: null }
+      : entry);
+    const markup = renderToStaticMarkup(
+      <PrivacyProvider operations={new FakePrivacyOperations()}>
+        <ExchangePanelWithRegister register={disabled} onClose={() => {}} />
+      </PrivacyProvider>,
+    );
+    expect(markup).toContain('data-lock-reason="unapproved-route"');
+    expect(markup).not.toContain('Show my balance');
+  });
+
   it('shows the avatar attention cue while a requested private balance waits on the wallet', async () => {
     const operations = new FakePrivacyOperations({
       balances: { [strk!.token]: 100n * 10n ** 18n },

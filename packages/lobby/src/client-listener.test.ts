@@ -36,6 +36,23 @@ describe('LobbyClient listener ownership', () => {
     }
   });
 
+  it('isolates status event mutations between subscribers', async () => {
+    const lobby = client();
+    const received: LobbyStatusEvent[] = [];
+    lobby.onStatus((event) => {
+      if (event.status === 'closed') {
+        Reflect.set(event, 'status', 'idle');
+        Reflect.set(event, 'reason', 'error');
+      }
+    });
+    lobby.onStatus((event) => received.push(event));
+    received.length = 0;
+
+    await lobby.disconnect();
+
+    expect(received).toEqual([{ status: 'closed', reason: 'client-left' }]);
+  });
+
   it('isolates a throwing peer replay and still returns its cleanup', async () => {
     const lobby = client();
     const error = new Error('peer replay failed');

@@ -55,6 +55,28 @@ async function drainAsyncWork() {
 }
 
 describe('presence controller', () => {
+  it('publishes an immutable controller API while retaining owned transitions', () => {
+    const presence = createPresenceController({ endpoint: 'ws://example' });
+    const originalReconnect = presence.reconnect;
+
+    expect(Object.isFrozen(presence)).toBe(true);
+    expect(Reflect.set(presence, 'reconnect', () => undefined)).toBe(false);
+    expect(Reflect.set(presence, 'destroy', async () => undefined)).toBe(false);
+    expect(presence.reconnect).toBe(originalReconnect);
+    presence.reconnect();
+    expect(presence.getState()).toEqual({ status: 'unavailable', canReconnect: true });
+  });
+
+  it('publishes an immutable presence state snapshot', () => {
+    const presence = createPresenceController({ endpoint: 'ws://example' });
+    const state = presence.getState();
+
+    expect(Object.isFrozen(state)).toBe(true);
+    expect(Reflect.set(state, 'status', 'connected')).toBe(false);
+    expect(Reflect.set(state, 'canReconnect', false)).toBe(false);
+    expect(presence.getState()).toEqual({ status: 'unavailable', canReconnect: true });
+  });
+
   it('does not notify a listener added during a transition until the next transition', () => {
     const world = createEventBus<WorldEvents>();
     const made = controlledClient();
@@ -191,6 +213,35 @@ describe('presence controller', () => {
     stopWorld();
   });
 
+  it('sanitizes malformed lobby peers before exposing the retained source', async () => {
+    const world = createEventBus<WorldEvents>();
+    const made = fakeClient();
+    const presence = createPresenceController({ endpoint: 'ws://example', factory: () => made.client });
+    const snapshots: RemotePeerSnapshot[][] = [];
+    const stopSource = presence.remotePeers.subscribe((peers) => snapshots.push([...peers]));
+    const stopWorld = presence.listen(world);
+    world.emit('player:moved', moved);
+    await Promise.resolve();
+
+    made.publishPeers([
+      { gameId: 'not valid', x: 40, y: 72, facing: 'down', sprite: 'avatar-1' },
+      { gameId: 'nan', x: Number.NaN, y: 72, facing: 'down', sprite: 'avatar-1' },
+      { gameId: 'infinite', x: 40, y: Number.POSITIVE_INFINITY, facing: 'down', sprite: 'avatar-1' },
+      { gameId: 'bad-facing', x: 40, y: 72, facing: 'diagonal' as never, sprite: 'avatar-1' },
+      { gameId: 'bad-sprite', x: 40, y: 72, facing: 'down', sprite: 'not-allowlisted' },
+    ]);
+
+    expect(snapshots.at(-1)).toEqual([{
+      id: 'bad-sprite',
+      x: 40,
+      y: 72,
+      facing: 'down',
+      sprite: 'avatar-1',
+    }]);
+    stopSource();
+    stopWorld();
+  });
+
   it('publishes complete replacements and clears on a lobby drop', async () => {
     const world = createEventBus<WorldEvents>();
     const made = fakeClient();
@@ -216,6 +267,369 @@ describe('presence controller', () => {
     expect(snapshots.at(-1)).toEqual([]);
     stopSource();
     stopWorld();
+  });
+
+  it('does not install peer delivery after status subscription synchronously drops the client', () => {
+    const world = createEventBus<WorldEvents>();
+    const made = fakeClient();
+    let peerListener: Parameters<PresenceClient['onPeers']>[0] | undefined;
+    const stopPeers = vi.fn();
+    made.client.onStatus = vi.fn((listener) => {
+      listener({ status: 'idle' });
+      listener({ status: 'closed', reason: 'server-dropped' });
+      return () => undefined;
+    });
+    made.client.onPeers = vi.fn((listener) => {
+      peerListener = listener;
+      return stopPeers;
+    });
+    const presence = createPresenceController({ endpoint: 'ws://example', factory: () => made.client });
+    const snapshots: RemotePeerSnapshot[][] = [];
+    presence.remotePeers.subscribe((peers) => snapshots.push([...peers]));
+    const stop = presence.listen(world);
+
+    world.emit('player:moved', moved);
+    peerListener?.([{ gameId: 'stale', x: 1, y: 2, facing: 'up', sprite: 'avatar-1' }]);
+
+    expect(presence.getState()).toEqual({ status: 'unavailable', canReconnect: true });
+    expect(made.client.onPeers).not.toHaveBeenCalled();
+    expect(stopPeers).not.toHaveBeenCalled();
+    expect(snapshots.at(-1)).toEqual([]);
+    stop();
+  });
+
+  it('retires a client when status listener setup throws after attaching', () => {
+    const world = createEventBus<WorldEvents>();
+    const made = fakeClient();
+    const failure = new Error('status listener setup failed');
+    let lateStatus: StatusListener | undefined;
+    made.client.onStatus = vi.fn((listener: StatusListener) => {
+      lateStatus = listener;
+      listener({ status: 'idle' });
+      throw failure;
+    });
+    const presence = createPresenceController({ endpoint: 'ws://example', factory: () => made.client });
+    const stop = presence.listen(world);
+    const consoleError = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+
+    world.emit('player:moved', moved);
+    expect(consoleError).toHaveBeenCalledOnce();
+    expect(lateStatus).toBeDefined();
+    expect(made.client.onPeers).not.toHaveBeenCalled();
+
+    lateStatus?.({ status: 'connected' });
+
+    expect(presence.getState()).toEqual({ status: 'unavailable', canReconnect: true });
+    consoleError.mockRestore();
+    stop();
+  });
+
+  it('retires a client when peer listener setup throws after attaching', () => {
+    const world = createEventBus<WorldEvents>();
+    const made = fakeClient();
+    const failure = new Error('peer listener setup failed');
+    let latePeers: Parameters<PresenceClient['onPeers']>[0] | undefined;
+    made.client.onPeers = vi.fn((listener) => {
+      latePeers = listener;
+      throw failure;
+    });
+    const presence = createPresenceController({ endpoint: 'ws://example', factory: () => made.client });
+    const snapshots: RemotePeerSnapshot[][] = [];
+    const stopSource = presence.remotePeers.subscribe((peers) => snapshots.push([...peers]));
+    const stop = presence.listen(world);
+    const consoleError = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+
+    world.emit('player:moved', moved);
+    expect(consoleError).toHaveBeenCalledOnce();
+    expect(latePeers).toBeDefined();
+
+    latePeers?.([{ gameId: 'stale', x: 1, y: 2, facing: 'up', sprite: 'avatar-1' }]);
+
+    expect(presence.getState()).toEqual({ status: 'unavailable', canReconnect: true });
+    expect(snapshots.at(-1)).toEqual([]);
+    consoleError.mockRestore();
+    stopSource();
+    stop();
+  });
+
+  it('recovers when failed peer setup has a throwing status cleanup', async () => {
+    const world = createEventBus<WorldEvents>();
+    const first = fakeClient();
+    const second = fakeClient();
+    const setupFailure = new Error('peer listener setup failed');
+    const cleanupFailure = new Error('status cleanup failed');
+    let created = 0;
+    first.client.onStatus = vi.fn((listener: StatusListener) => {
+      listener({ status: 'idle' });
+      return () => { throw cleanupFailure; };
+    });
+    first.client.onPeers = vi.fn(() => { throw setupFailure; });
+    const presence = createPresenceController({
+      endpoint: 'ws://example',
+      factory: vi.fn(() => (created++ === 0 ? first.client : second.client)),
+    });
+    const stop = presence.listen(world);
+    const consoleError = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+
+    world.emit('player:moved', moved);
+    expect(consoleError).toHaveBeenCalledOnce();
+
+    expect(() => presence.reconnect()).not.toThrow();
+    await Promise.resolve();
+    await Promise.resolve();
+
+    expect(created).toBe(2);
+    expect(second.client.connect).toHaveBeenCalledOnce();
+    consoleError.mockRestore();
+    stop();
+  });
+
+  it('retries after a synchronous connect failure with a throwing status cleanup', async () => {
+    const world = createEventBus<WorldEvents>();
+    const first = fakeClient();
+    const second = fakeClient();
+    const connectFailure = new Error('connect failed synchronously');
+    const cleanupFailure = new Error('status cleanup failed');
+    let created = 0;
+    first.client.onStatus = vi.fn((listener: StatusListener) => {
+      listener({ status: 'idle' });
+      return () => { throw cleanupFailure; };
+    });
+    first.client.connect = vi.fn(() => { throw connectFailure; });
+    const presence = createPresenceController({
+      endpoint: 'ws://example',
+      factory: vi.fn(() => (created++ === 0 ? first.client : second.client)),
+    });
+    const stop = presence.listen(world);
+    const consoleError = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+
+    world.emit('player:moved', moved);
+    expect(presence.getState()).toEqual({ status: 'unavailable', canReconnect: true });
+
+    expect(() => presence.reconnect()).not.toThrow();
+    await Promise.resolve();
+    await Promise.resolve();
+
+    expect(created).toBe(2);
+    expect(second.client.connect).toHaveBeenCalledOnce();
+    consoleError.mockRestore();
+    stop();
+  });
+
+  it('keeps a drop unavailable when clearing remote peers throws', async () => {
+    const world = createEventBus<WorldEvents>();
+    const first = fakeClient();
+    const second = fakeClient();
+    let created = 0;
+    let throwOnClear = false;
+    first.client.connect = vi.fn(async () => {
+      first.emitStatus({ status: 'connected' });
+    });
+    const presence = createPresenceController({
+      endpoint: 'ws://example',
+      factory: vi.fn(() => (created++ === 0 ? first.client : second.client)),
+    });
+    const stopSource = presence.remotePeers.subscribe((peers) => {
+      if (throwOnClear && peers.length === 0) throw new Error('peer clear failed');
+    });
+    const stop = presence.listen(world);
+
+    world.emit('player:moved', moved);
+    await Promise.resolve();
+    first.publishPeers([{ gameId: 'peer-1', x: 40, y: 72, facing: 'down', sprite: 'avatar-1' }]);
+    throwOnClear = true;
+
+    expect(() => first.drop()).not.toThrow();
+    expect(presence.getState()).toEqual({ status: 'unavailable', canReconnect: true });
+
+    throwOnClear = false;
+    presence.reconnect();
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(created).toBe(2);
+    expect(second.client.connect).toHaveBeenCalledOnce();
+    stopSource();
+    stop();
+  });
+
+  it('keeps a synchronous close authoritative when connected status suspends inside', async () => {
+    const world = createEventBus<WorldEvents>();
+    const made = controlledClient();
+    const presence = createPresenceController({ endpoint: 'ws://example', factory: () => made.client });
+    const stop = presence.listen(world);
+    world.emit('player:moved', moved);
+    world.emit('building:entered', { building: 'bank' });
+    vi.mocked(made.client.suspend).mockImplementationOnce(() => {
+      made.emitStatus({ status: 'closed', reason: 'server-dropped' });
+    });
+
+    made.emitStatus({ status: 'connected' });
+
+    expect(presence.getState()).toEqual({ status: 'unavailable', canReconnect: true });
+    stop();
+  });
+
+  it('keeps a synchronous close authoritative when building entry suspends', async () => {
+    const world = createEventBus<WorldEvents>();
+    const made = fakeClient();
+    const presence = createPresenceController({ endpoint: 'ws://example', factory: () => made.client });
+    const stop = presence.listen(world);
+    world.emit('player:moved', moved);
+    await Promise.resolve();
+    vi.mocked(made.client.suspend).mockImplementationOnce(() => {
+      made.emitStatus({ status: 'closed', reason: 'server-dropped' });
+    });
+
+    world.emit('building:entered', { building: 'bank' });
+
+    expect(presence.getState()).toEqual({ status: 'unavailable', canReconnect: true });
+    stop();
+  });
+
+  it('retires a live presence client when suspending for entry throws', async () => {
+    const world = createEventBus<WorldEvents>();
+    const made = fakeClient();
+    const suspendFailure = new Error('suspend failed');
+    const presence = createPresenceController({ endpoint: 'ws://example', factory: () => made.client });
+    const stop = presence.listen(world);
+    world.emit('player:moved', moved);
+    await Promise.resolve();
+    vi.mocked(made.client.updatePosition).mockClear();
+    vi.mocked(made.client.suspend).mockImplementationOnce(() => { throw suspendFailure; });
+    const consoleError = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+
+    world.emit('building:entered', { building: 'bank' });
+
+    expect(presence.getState()).toEqual({ status: 'unavailable', canReconnect: true });
+    expect(made.client.disconnect).toHaveBeenCalledOnce();
+    world.emit('player:moved', { position: { x: 48, y: 80 }, facing: 'up' });
+    expect(made.client.updatePosition).not.toHaveBeenCalled();
+    consoleError.mockRestore();
+    stop();
+  });
+
+  it('keeps a synchronous close authoritative when building exit resumes', async () => {
+    const world = createEventBus<WorldEvents>();
+    const made = fakeClient();
+    const presence = createPresenceController({ endpoint: 'ws://example', factory: () => made.client });
+    const stop = presence.listen(world);
+    world.emit('player:moved', moved);
+    await Promise.resolve();
+    world.emit('building:entered', { building: 'bank' });
+    vi.mocked(made.client.resume).mockImplementationOnce(() => {
+      made.emitStatus({ status: 'closed', reason: 'server-dropped' });
+    });
+
+    world.emit('building:exited', { building: 'bank' });
+
+    expect(presence.getState()).toEqual({ status: 'unavailable', canReconnect: true });
+    stop();
+  });
+
+  it('retires a suspended presence client when resuming for exit throws', async () => {
+    const world = createEventBus<WorldEvents>();
+    const made = fakeClient();
+    const resumeFailure = new Error('resume failed');
+    const presence = createPresenceController({ endpoint: 'ws://example', factory: () => made.client });
+    const stop = presence.listen(world);
+    world.emit('player:moved', moved);
+    await Promise.resolve();
+    world.emit('building:entered', { building: 'bank' });
+    vi.mocked(made.client.resume).mockImplementationOnce(() => { throw resumeFailure; });
+    const consoleError = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+
+    world.emit('building:exited', { building: 'bank' });
+
+    expect(presence.getState()).toEqual({ status: 'unavailable', canReconnect: true });
+    expect(made.client.disconnect).toHaveBeenCalledOnce();
+    presence.reconnect();
+    await Promise.resolve();
+    expect(made.client.connect).toHaveBeenCalledTimes(2);
+    consoleError.mockRestore();
+    stop();
+  });
+
+  it('ignores a retired client status callback after replacement begins', async () => {
+    const world = createEventBus<WorldEvents>();
+    const first = fakeClient();
+    const second = controlledClient();
+    let staleStatus!: StatusListener;
+    first.client.onStatus = vi.fn((listener) => {
+      staleStatus = listener;
+      listener({ status: 'idle' });
+      return () => undefined;
+    });
+    let created = 0;
+    const presence = createPresenceController({
+      endpoint: 'ws://example',
+      factory: () => (created++ === 0 ? first.client : second.client),
+    });
+    const stop = presence.listen(world);
+    world.emit('player:moved', moved);
+    await Promise.resolve();
+    staleStatus({ status: 'closed', reason: 'server-dropped' });
+    presence.reconnect();
+    await Promise.resolve();
+    staleStatus({ status: 'connected' });
+
+    expect(second.client.connect).toHaveBeenCalledOnce();
+    expect(presence.getState()).toEqual({ status: 'connecting', canReconnect: true });
+    stop();
+  });
+
+  it('owns a connect attempt before publishing its connecting state', () => {
+    const world = createEventBus<WorldEvents>();
+    const made = controlledClient();
+    const presence = createPresenceController({ endpoint: 'ws://example', factory: () => made.client });
+    presence.subscribe(() => {
+      if (presence.getState().status === 'connecting') presence.reconnect();
+    });
+    const stop = presence.listen(world);
+
+    world.emit('player:moved', moved);
+
+    expect(made.client.connect).toHaveBeenCalledOnce();
+    stop();
+  });
+
+  it('does not start a connect after synchronous destroy during connecting publication', async () => {
+    const world = createEventBus<WorldEvents>();
+    const made = controlledClient();
+    const presence = createPresenceController({ endpoint: 'ws://example', factory: () => made.client });
+    let destroying: Promise<void> | undefined;
+    presence.subscribe(() => {
+      if (presence.getState().status === 'connecting') destroying = presence.destroy();
+    });
+    const stop = presence.listen(world);
+
+    world.emit('player:moved', moved);
+    await destroying;
+
+    expect(made.client.connect).not.toHaveBeenCalled();
+    expect(made.client.disconnect).toHaveBeenCalledOnce();
+    stop();
+  });
+
+  it('keeps a synchronous close authoritative when a resolved join suspends inside', async () => {
+    const world = createEventBus<WorldEvents>();
+    const made = controlledClient();
+    let resolveConnect!: () => void;
+    made.client.connect = vi.fn(() => new Promise<void>((resolve) => { resolveConnect = resolve; }));
+    const presence = createPresenceController({ endpoint: 'ws://example', factory: () => made.client });
+    const stop = presence.listen(world);
+    world.emit('player:moved', moved);
+    made.emitStatus({ status: 'connecting' });
+    world.emit('building:entered', { building: 'bank' });
+    vi.mocked(made.client.suspend).mockImplementationOnce(() => {
+      made.emitStatus({ status: 'closed', reason: 'server-dropped' });
+    });
+
+    await vi.waitFor(() => expect(made.client.connect).toHaveBeenCalledOnce());
+    resolveConnect();
+    await Promise.resolve();
+
+    expect(presence.getState()).toEqual({ status: 'unavailable', canReconnect: true });
+    stop();
   });
 
   it('detaches stale peer callbacks on drop and replacement', async () => {
@@ -271,6 +685,54 @@ describe('presence controller', () => {
     world.emit('player:moved', moved);
     expect(factory).toHaveBeenCalledWith(expect.objectContaining({ endpoint: 'ws://example', start: { ...moved.position, facing: 'left' } }));
     expect(made.client.connect).toHaveBeenCalledTimes(1);
+    stop();
+  });
+
+  it('keeps reconnect fail-closed when the client factory throws', async () => {
+    const world = createEventBus<WorldEvents>();
+    const made = fakeClient();
+    const factoryFailure = new Error('factory failed');
+    let attempts = 0;
+    const factory = vi.fn(() => {
+      if (attempts++ < 2) throw factoryFailure;
+      return made.client;
+    });
+    const presence = createPresenceController({ endpoint: 'ws://example', factory });
+    const stop = presence.listen(world);
+    const consoleError = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+
+    world.emit('player:moved', moved);
+    expect(() => presence.reconnect()).not.toThrow();
+    expect(presence.getState()).toEqual({ status: 'unavailable', canReconnect: true });
+    expect(() => presence.reconnect()).not.toThrow();
+    await Promise.resolve();
+
+    expect(factory).toHaveBeenCalledTimes(3);
+    expect(made.client.connect).toHaveBeenCalledOnce();
+    consoleError.mockRestore();
+    stop();
+  });
+
+  it('does not turn a live connection unavailable when a state listener throws', async () => {
+    const world = createEventBus<WorldEvents>();
+    const made = fakeClient();
+    made.client.connect = vi.fn(async () => undefined);
+    const listenerFailure = new Error('state listener failed');
+    const presence = createPresenceController({ endpoint: 'ws://example', factory: () => made.client });
+    const stop = presence.listen(world);
+    const consoleError = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    presence.subscribe(() => {
+      if (presence.getState().status === 'connected') throw listenerFailure;
+    });
+
+    world.emit('player:moved', moved);
+    await Promise.resolve();
+    await Promise.resolve();
+
+    expect(presence.getState().status).toBe('connected');
+    expect(made.client.updatePosition).toHaveBeenCalledWith(40, 72, 'left');
+    expect(consoleError).toHaveBeenCalledWith('presence controller: state subscriber threw');
+    consoleError.mockRestore();
     stop();
   });
 
@@ -720,6 +1182,87 @@ describe('presence controller', () => {
     expect(made.client.disconnect).toHaveBeenCalledTimes(1);
   });
 
+  it('finishes presence cleanup when status listener removal throws', async () => {
+    const world = createEventBus<WorldEvents>();
+    const made = fakeClient();
+    const cleanupFailure = new Error('status listener removal failed');
+    made.client.onStatus = vi.fn((listener: StatusListener) => {
+      listener({ status: 'idle' });
+      return () => { throw cleanupFailure; };
+    });
+    const presence = createPresenceController({ endpoint: 'ws://example', factory: () => made.client });
+    const stop = presence.listen(world);
+    world.emit('player:moved', moved);
+    await drainAsyncWork();
+
+    await expect(presence.destroy()).rejects.toBe(cleanupFailure);
+    expect(made.client.disconnect).toHaveBeenCalledOnce();
+    expect(made.peerListenerCount()).toBe(0);
+    stop();
+  });
+
+  it('rolls back world listeners when a later listener registration fails', () => {
+    const world = createEventBus<WorldEvents>();
+    const originalOn = world.on;
+    const stopCalls: Array<ReturnType<typeof vi.fn>> = [];
+    let registrations = 0;
+    const failure = new Error('world listener registration failed');
+    world.on = ((event, handler) => {
+      registrations += 1;
+      if (registrations === 3) throw failure;
+      const stop = originalOn(event, handler);
+      const trackedStop = vi.fn(stop);
+      if (stopCalls.length === 0) {
+        trackedStop.mockImplementation(() => {
+          stop();
+          throw new Error('listener cleanup failed');
+        });
+      }
+      stopCalls.push(trackedStop);
+      return trackedStop;
+    }) as typeof world.on;
+
+    const presence = createPresenceController({ endpoint: undefined, factory: vi.fn() });
+
+    expect(() => presence.listen(world)).toThrow(failure);
+    expect(stopCalls).toHaveLength(2);
+    expect(stopCalls.every((stop) => stop.mock.calls.length === 1)).toBe(true);
+  });
+
+  it('finishes cleanup before surfacing an asynchronous disconnect rejection', async () => {
+    const world = createEventBus<WorldEvents>();
+    const made = fakeClient();
+    const failure = new Error('disconnect failed');
+    made.client.disconnect = vi.fn(async () => { throw failure; });
+    const presence = createPresenceController({ endpoint: 'ws://example', factory: () => made.client });
+    const stop = presence.listen(world);
+    world.emit('player:moved', moved);
+    await drainAsyncWork();
+
+    await expect(presence.destroy()).rejects.toBe(failure);
+    await expect(presence.destroy()).rejects.toBe(failure);
+    expect(made.client.disconnect).toHaveBeenCalledOnce();
+    expect(made.peerListenerCount()).toBe(0);
+    stop();
+  });
+
+  it('retains a deterministic destroy rejection when disconnect throws synchronously', async () => {
+    const world = createEventBus<WorldEvents>();
+    const made = fakeClient();
+    const failure = new Error('synchronous disconnect failed');
+    made.client.disconnect = vi.fn(() => { throw failure; });
+    const presence = createPresenceController({ endpoint: 'ws://example', factory: () => made.client });
+    const stop = presence.listen(world);
+    world.emit('player:moved', moved);
+    await drainAsyncWork();
+
+    await expect(presence.destroy()).rejects.toBe(failure);
+    await expect(presence.destroy()).rejects.toBe(failure);
+    expect(made.client.disconnect).toHaveBeenCalledOnce();
+    expect(made.peerListenerCount()).toBe(0);
+    stop();
+  });
+
   it('ignores late connected and rejected connect callbacks after destroy', async () => {
     const world = createEventBus<WorldEvents>();
     let resolve!: () => void;
@@ -791,6 +1334,68 @@ describe('presence controller', () => {
     stop();
   });
 
+  it('replaces a pending join when stale status cleanup throws', async () => {
+    const world = createEventBus<WorldEvents>();
+    const first = fakeClient();
+    const second = fakeClient();
+    const cleanupFailure = new Error('status cleanup failed');
+    let resolveInitial!: () => void;
+    first.client.onStatus = vi.fn((listener: StatusListener) => {
+      listener({ status: 'idle' });
+      return () => { throw cleanupFailure; };
+    });
+    first.client.connect = vi.fn(() => new Promise<void>((resolve) => {
+      resolveInitial = resolve;
+    }));
+    let created = 0;
+    const presence = createPresenceController({
+      endpoint: 'ws://example',
+      factory: vi.fn(() => (created++ === 0 ? first.client : second.client)),
+    });
+    const stop = presence.listen(world);
+
+    world.emit('player:moved', moved);
+    presence.reconnect();
+    resolveInitial();
+    await Promise.resolve();
+    await Promise.resolve();
+    await Promise.resolve();
+
+    expect(first.client.disconnect).toHaveBeenCalledOnce();
+    expect(second.client.connect).toHaveBeenCalledOnce();
+    stop();
+  });
+
+  it('continues replacement when the stale client disconnect rejects', async () => {
+    const world = createEventBus<WorldEvents>();
+    const first = fakeClient();
+    const second = fakeClient();
+    let resolveInitial!: () => void;
+    first.client.connect = vi.fn(() => new Promise<void>((resolve) => {
+      resolveInitial = resolve;
+    }));
+    first.client.disconnect = vi.fn(async () => {
+      throw new Error('stale disconnect failed');
+    });
+    let created = 0;
+    const presence = createPresenceController({
+      endpoint: 'ws://example',
+      factory: vi.fn(() => (created++ === 0 ? first.client : second.client)),
+    });
+    const stop = presence.listen(world);
+
+    world.emit('player:moved', moved);
+    presence.reconnect();
+    resolveInitial();
+    await Promise.resolve();
+    await Promise.resolve();
+    await Promise.resolve();
+
+    expect(first.client.disconnect).toHaveBeenCalledOnce();
+    expect(second.client.connect).toHaveBeenCalledOnce();
+    stop();
+  });
+
   it('retries a failed join when reconnect was requested while it was settling', async () => {
     const world = createEventBus<WorldEvents>();
     const first = fakeClient();
@@ -819,6 +1424,69 @@ describe('presence controller', () => {
 
     expect(second.client.connect).toHaveBeenCalledTimes(1);
     expect(presence.getState().status).toBe('connected');
+    stop();
+  });
+
+  it('does not resurrect a client after its asynchronous connect failure', async () => {
+    const world = createEventBus<WorldEvents>();
+    const made = fakeClient();
+    let rejectConnect!: (error: unknown) => void;
+    let statusListener!: StatusListener;
+    made.client.onStatus = vi.fn((listener: StatusListener) => {
+      statusListener = listener;
+      return () => undefined;
+    });
+    made.client.connect = vi.fn(() => new Promise<void>((_resolve, reject) => {
+      rejectConnect = reject;
+    }));
+    const presence = createPresenceController({ endpoint: 'ws://example', factory: () => made.client });
+    const stop = presence.listen(world);
+
+    world.emit('player:moved', moved);
+    rejectConnect(new Error('connect failed'));
+    await Promise.resolve();
+    await Promise.resolve();
+
+    expect(presence.getState().status).toBe('unavailable');
+    statusListener({ status: 'connected' });
+    expect(presence.getState().status).toBe('unavailable');
+    stop();
+  });
+
+  it('defers a reconnect requested by peer cleanup until the failed client is retired', async () => {
+    const world = createEventBus<WorldEvents>();
+    const first = fakeClient();
+    const second = fakeClient();
+    let rejectInitial!: (error: unknown) => void;
+    first.client.connect = vi.fn(() => new Promise<void>((_resolve, reject) => { rejectInitial = reject; }));
+    const clients = [first, second];
+    let created = 0;
+    const presence = createPresenceController({
+      endpoint: 'ws://example',
+      factory: vi.fn(() => clients[created++]!.client),
+    });
+    let armed = false;
+    let requested = false;
+    const stopSource = presence.remotePeers.subscribe(() => {
+      if (armed && !requested) {
+        requested = true;
+        presence.reconnect();
+      }
+    });
+    const stop = presence.listen(world);
+
+    world.emit('player:moved', moved);
+    armed = true;
+    rejectInitial(new Error('server unavailable'));
+    await Promise.resolve();
+    await Promise.resolve();
+    await Promise.resolve();
+
+    expect(first.client.connect).toHaveBeenCalledOnce();
+    expect(first.client.disconnect).toHaveBeenCalledOnce();
+    expect(created).toBe(2);
+    expect(second.client.connect).toHaveBeenCalledOnce();
+    stopSource();
     stop();
   });
 

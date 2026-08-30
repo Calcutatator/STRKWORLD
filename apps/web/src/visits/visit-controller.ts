@@ -6,23 +6,24 @@ import type {
   WorldEvents,
 } from '@strkworld/shared';
 import { PRIVACY_REGISTER, type RouteGrade } from '../privacy/register.js';
-import { createStore, type Store } from '../store/store.js';
+import { createStore, type ReadableStore } from '../store/store.js';
 import { resolveStation, stationSnapshot, type StationCapabilities } from './station-registry.js';
 
 export type VisitState =
-  | { name: 'outside' }
-  | { name: 'locked'; building: BuildingId; reason: 'coming-soon' }
+  | { readonly name: 'outside' }
+  | { readonly name: 'locked'; readonly building: BuildingId; readonly reason: 'coming-soon' }
   | {
-      name: 'visiting';
-      building: BuildingId;
-      surface:
-        | { name: 'room' }
-        | { name: 'menu' }
-        | { name: 'station'; station: StationId };
+      readonly name: 'visiting';
+      readonly building: BuildingId;
+      readonly surface:
+        | { readonly name: 'room' }
+        | { readonly name: 'menu' }
+        | { readonly name: 'station'; readonly station: StationId };
     };
 
 export interface VisitController {
-  readonly store: Store<VisitState>;
+  /** Read-only view; controller methods own every state transition. */
+  readonly store: ReadableStore<VisitState>;
   /** Attach World listeners. The returned cleanup owns every subscription. */
   listen(world: EventBus<WorldEvents>): () => void;
   /** Ask the World to leave the active Game Mode room. World confirms exit. */
@@ -45,7 +46,26 @@ export function createVisitController(
   register: readonly RouteGrade[] = PRIVACY_REGISTER,
   capabilities: StationCapabilities | (() => StationCapabilities) = {},
 ): VisitController {
-  const store = createStore<VisitState>({ name: 'outside' });
+  function freezeVisitState(state: VisitState): VisitState {
+    if (state.name === 'visiting') Object.freeze(state.surface);
+    return Object.freeze(state);
+  }
+
+  const stateStore = createStore<VisitState>(freezeVisitState({ name: 'outside' }));
+  const setState = (update: VisitState | ((previous: VisitState) => VisitState)): void => {
+    stateStore.setState(
+      typeof update === 'function'
+        ? (previous) => freezeVisitState((update as (previous: VisitState) => VisitState)(previous))
+        : freezeVisitState(update),
+    );
+  };
+  const store: ReadableStore<VisitState> = {
+    getState: stateStore.getState,
+    getServerSnapshot: stateStore.getServerSnapshot,
+    subscribe: stateStore.subscribe,
+  };
+  let listenGeneration = 0;
+  let activeListenGeneration: number | null = null;
 
   function ownControls(building: BuildingId, owner: 'world' | 'shell'): void {
     shell.emit('world:control-owner', { building, owner });
@@ -56,7 +76,7 @@ export function createVisitController(
     // Ignore any re-entrant or stale enter while React still owns an active
     // visit; only the authoritative matching exit may reset this state.
     if (store.getState().name === 'visiting') return;
-    store.setState({ name: 'visiting', building, surface: { name: 'room' } });
+    setState({ name: 'visiting', building, surface: { name: 'room' } });
     shell.emit('world:stations', { building, stations: stationSnapshot(building, register, currentCapabilities()) });
   }
 
@@ -85,40 +105,116 @@ export function createVisitController(
     // Ownership changes before the interaction window appears. React now owns
     // Escape and every text input until closeSurface hands controls back.
     ownControls(building, 'shell');
-    store.setState({ name: 'visiting', building, surface: { name: 'station', station } });
+    // Shell delivery is synchronous. A World callback can report the room's
+    // exit during that handoff, so do not publish a station for a visit that
+    // no longer owns this transition.
+    if (store.getState() !== state) return;
+    setState({ name: 'visiting', building, surface: { name: 'station', station } });
   }
 
-  return {
+  function closeSurface(): void {
+    const state = store.getState();
+    if (state.name !== 'visiting' || state.surface.name === 'room') return;
+    ownControls(state.building, 'world');
+    if (store.getState() !== state) return;
+    setState({ ...state, surface: { name: 'room' } });
+  }
+
+  function dismissLocked(): void {
+    if (store.getState().name === 'locked') setState({ name: 'outside' });
+  }
+
+  function handleEscape(): void {
+    if (store.getState().name === 'locked') {
+      dismissLocked();
+      return;
+    }
+    closeSurface();
+  }
+
+  return Object.freeze<VisitController>({
     store,
 
     listen(world): () => void {
-      const stops = [
-        world.on('building:entered', ({ building }) => enter(building)),
-        world.on('building:locked', ({ building, reason }) => {
+      const generation = ++listenGeneration;
+      activeListenGeneration = generation;
+      const ownsListen = (): boolean => activeListenGeneration === generation;
+      const stops: Array<() => void> = [];
+      let stopped = false;
+      const stopWorld = () => {
+        let cleanupFailure: unknown;
+        for (const stop of stops.splice(0)) {
+          try {
+            stop();
+          } catch (error) {
+            cleanupFailure ??= error;
+          }
+        }
+        if (cleanupFailure) throw cleanupFailure;
+      };
+      try {
+        stops.push(world.on('building:entered', (payload) => {
+          if (!ownsListen()) return;
+          if (!payload || typeof payload !== 'object') return;
+          enter(payload.building);
+        }));
+        stops.push(world.on('building:locked', (payload) => {
+          if (!ownsListen()) return;
+          if (!payload || typeof payload !== 'object') return;
+          const { building, reason } = payload;
           const state = store.getState();
           if (state.name === 'visiting') return;
-          store.setState({ name: 'locked', building, reason });
-        }),
-        world.on('building:exited', ({ building }) => {
+          setState({ name: 'locked', building, reason });
+        }));
+        stops.push(world.on('building:exited', (payload) => {
+          if (!ownsListen()) return;
+          if (!payload || typeof payload !== 'object') return;
+          const { building } = payload;
           const state = store.getState();
           if (state.name === 'visiting' && state.building === building) {
             // The World owns movement after the player leaves, even if the
             // exit arrived while a station window was still mounted.
             if (state.surface.name !== 'room') ownControls(building, 'world');
-            store.setState({ name: 'outside' });
+            setState({ name: 'outside' });
           }
-        }),
-        world.on('station:activated', ({ building, station }) => activate(building, station)),
-      ];
+        }));
+        stops.push(world.on('station:activated', (payload) => {
+          if (!ownsListen()) return;
+          if (!payload || typeof payload !== 'object') return;
+          activate(payload.building, payload.station);
+        }));
+      } catch (error) {
+        if (ownsListen()) activeListenGeneration = null;
+        try {
+          stopWorld();
+        } catch {
+          // Preserve the listener registration error; cleanup is best effort.
+        }
+        throw error;
+      }
       return () => {
-        for (const stop of stops) stop();
+        if (stopped) return;
+        stopped = true;
+        const ownsCurrentListen = ownsListen();
+        if (ownsCurrentListen) activeListenGeneration = null;
+        let cleanupFailure: unknown;
+        try {
+          stopWorld();
+        } catch (error) {
+          cleanupFailure = error;
+        }
         // StrictMode and route changes can unmount the Shell while React owns
         // the controls. Do not leave the World permanently suspended because
         // the panel disappeared before it could emit its normal close event.
         const state = store.getState();
-        if (state.name === 'visiting' && state.surface.name !== 'room') {
-          ownControls(state.building, 'world');
+        if (ownsCurrentListen && state.name === 'visiting' && state.surface.name !== 'room') {
+          try {
+            ownControls(state.building, 'world');
+          } catch (error) {
+            cleanupFailure ??= error;
+          }
         }
+        if (cleanupFailure) throw cleanupFailure;
       };
     },
 
@@ -132,26 +228,12 @@ export function createVisitController(
       const state = store.getState();
       if (state.name !== 'visiting' || state.surface.name !== 'room') return;
       ownControls(state.building, 'shell');
-      store.setState({ ...state, surface: { name: 'menu' } });
+      if (store.getState() !== state) return;
+      setState({ ...state, surface: { name: 'menu' } });
     },
 
-    closeSurface(): void {
-      const state = store.getState();
-      if (state.name !== 'visiting' || state.surface.name === 'room') return;
-      ownControls(state.building, 'world');
-      store.setState({ ...state, surface: { name: 'room' } });
-    },
-
-    dismissLocked(): void {
-      if (store.getState().name === 'locked') store.setState({ name: 'outside' });
-    },
-
-    handleEscape(): void {
-      if (store.getState().name === 'locked') {
-        this.dismissLocked();
-        return;
-      }
-      this.closeSurface();
-    },
-  };
+    closeSurface,
+    dismissLocked,
+    handleEscape,
+  });
 }

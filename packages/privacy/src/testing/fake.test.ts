@@ -21,6 +21,97 @@ function fresh(balance = 100n * 10n ** 18n) {
   });
 }
 
+describe('fake construction ownership', () => {
+  it('rejects an accessor-backed starting balance without invoking it', () => {
+    let getterCalled = false;
+    const balances = {} as Record<string, bigint>;
+    Object.defineProperty(balances, STRK, {
+      enumerable: true,
+      get() {
+        getterCalled = true;
+        throw new Error('balance getter must not run');
+      },
+    });
+
+    expect(() => new FakePrivacyOperations({ balances })).toThrow(PrivacyError);
+    expect(getterCalled).toBe(false);
+  });
+});
+
+describe('fake lifecycle configuration', () => {
+  it.each([
+    ['negative', -1],
+    ['fractional', 1.5],
+    ['unsafe', Number.MAX_SAFE_INTEGER + 1],
+    ['string', '1'],
+  ] as const)('rejects an invalid %s simulated latency', (_label, latencyMs) => {
+    expect(() => new FakePrivacyOperations({ latencyMs: latencyMs as never }))
+      .toThrow(/latency/i);
+  });
+
+  it.each([
+    ['negative amount', { [STRK]: -1n }],
+    ['number amount', { [STRK]: 1 }],
+    ['malformed token', { 'not-a-felt': 1n }],
+    ['zero token', { '0x0': 1n }],
+  ] as const)('rejects a %s before publishing fake funds', (_label, balances) => {
+    expect(() => new FakePrivacyOperations({ balances: balances as never }))
+      .toThrow(/starting balance/i);
+  });
+
+  it.each([
+    ['negative maturity', { noteMaturityBlocks: -1 }],
+    ['fractional maturity', { noteMaturityBlocks: 1.5 }],
+    ['unsafe maturity', { noteMaturityBlocks: Number.MAX_SAFE_INTEGER + 1 }],
+    ['zero proof validity', { proofValidityBlocks: 0 }],
+    ['fractional proof validity', { proofValidityBlocks: 1.5 }],
+  ] as const)('rejects %s in pool config', (_label, poolConfig) => {
+    expect(() => new FakePrivacyOperations({ poolConfig }))
+      .toThrow(/pool config/i);
+  });
+
+  it.each([
+    ['malformed', 'not-a-felt'],
+    ['zero', '0x0'],
+    ['negative', '-1'],
+    ['decimal', '273'],
+    ['field-prime', `0x${((1n << 251n) + 17n * (1n << 192n) + 1n).toString(16)}`],
+  ] as const)('rejects a %s registered recipient as a privacy configuration error', (_label, recipient) => {
+    expect(() => new FakePrivacyOperations({ registered: [recipient] }))
+      .toThrow(PrivacyError);
+  });
+
+  it.each([
+    ['non-boolean support', { supportsStrk20: 'yes' }],
+    ['non-string version', { walletApiVersion: 103 }],
+    ['invalid registration', { registration: 'connected' }],
+  ] as const)('rejects %s before publishing capability state', (_label, capability) => {
+    expect(() => new FakePrivacyOperations({ capability: capability as never }))
+      .toThrow(/capability/i);
+  });
+
+  it('allows a null wallet API version for unsupported capability', async () => {
+    const ops = new FakePrivacyOperations({
+      capability: { supportsStrk20: false, walletApiVersion: null, registration: 'unknown' },
+    });
+    await expect(ops.capability()).resolves.toMatchObject({
+      supportsStrk20: false,
+      walletApiVersion: null,
+      registration: 'unknown',
+    });
+  });
+
+  it.each([
+    ['negative fee amount', { feeAmount: -1n }],
+    ['number fee amount', { feeAmount: 1 }],
+    ['malformed fee token', { feeToken: 'not-a-felt' }],
+    ['zero fee token', { feeToken: '0x0' }],
+  ] as const)('rejects a %s before publishing pool state', (_label, poolConfig) => {
+    expect(() => new FakePrivacyOperations({ poolConfig: poolConfig as never }))
+      .toThrow(/pool fee/i);
+  });
+});
+
 describe('the fee comes out of the balance being spent', () => {
   it('rejects a spend that cannot also cover the pool fee', async () => {
     // Exactly enough for the transfer, nothing left for the 6 STRK fee.
@@ -107,6 +198,37 @@ describe('the gas estimate varies with the batch shape', () => {
 });
 
 describe('deterministic prepared swap review', () => {
+  it.each([
+    ['nonpositive expected output', { expectedAmountOut: 0n, expiresAt: 2_000, slippageBps: 333 }],
+    ['invalid slippage', { expectedAmountOut: 101n, expiresAt: 2_000, slippageBps: 10_001 }],
+    ['invalid expiry', { expectedAmountOut: 101n, expiresAt: 0, slippageBps: 333 }],
+  ] as const)('rejects %s atomically at fake construction', (_label, swapReview) => {
+    expect(() => new FakePrivacyOperations({ swapReview }))
+      .toThrow(/swap review/i);
+  });
+
+  it('owns configured swap review inputs before caller mutation', async () => {
+    const review = { expectedAmountOut: 101n, expiresAt: 2_000, slippageBps: 333 };
+    const ops = new FakePrivacyOperations({
+      balances: { [STRK]: 100n * 10n ** 18n, ['0x1234']: 100n * 10n ** 18n },
+      swapReview: review,
+    });
+
+    review.expectedAmountOut = 1_000n;
+    review.slippageBps = 9_000;
+    review.expiresAt = 9_999;
+
+    const batch = await ops.prepare([
+      { kind: 'swap', tokenIn: '0x1234', tokenOut: STRK, amountIn: 20n, minAmountOut: 1n },
+    ]);
+    expect(batch.swapReview).toEqual({
+      expectedAmountOut: 101n,
+      minimumAmountOut: 98n,
+      slippageBps: 333,
+      expiresAt: 2_000,
+    });
+  });
+
   it('uses only explicit review inputs and derives minimum output from the intent', async () => {
     const make = async () => {
       const ops = new FakePrivacyOperations({
@@ -145,6 +267,17 @@ describe('deterministic prepared swap review', () => {
 });
 
 describe('shielded funds are not immediately spendable', () => {
+  it.each([
+    ['negative', -1],
+    ['fractional', 1.5],
+    ['unsafe', Number.MAX_SAFE_INTEGER + 1],
+  ] as const)('rejects a %s block advance without moving chain state', (_label, blocks) => {
+    const ops = fresh();
+
+    expect(() => ops.advanceBlocks(blocks)).toThrow(/block advance/i);
+    expect(ops.currentBlock).toBe(0);
+  });
+
   it('holds a deposit as maturing until enough blocks pass', async () => {
     const ops = fresh(0n);
     const batch = await ops.prepare([{ kind: 'shield', token: STRK, amount: 50n * 10n ** 18n }]);
@@ -210,6 +343,42 @@ describe('a shield is never bundled with what it funds', () => {
 });
 
 describe('the fee can move between prepare and confirm', () => {
+  it.each([
+    ['negative bigint', -1n],
+    ['number', 1],
+    ['string', '1'],
+  ] as const)('rejects an invalid %s pool fee without changing confirmation cost', async (_label, fee) => {
+    const ops = fresh();
+    const batch = await ops.prepare([
+      { kind: 'transfer', token: STRK, amount: 10n ** 18n, recipient: BOB },
+    ]);
+
+    expect(() => ops.setPoolFee(fee as never)).toThrow(/pool fee/i);
+    await expect(batch.confirm({ feeCeiling: batch.totalCost })).resolves.toBeDefined();
+    const [balance] = await ops.balances([STRK]);
+    expect(balance?.spendable).toBe(100n * 10n ** 18n - 10n ** 18n - batch.totalCost);
+  });
+
+  it.each([
+    ['negative bigint', -1n],
+    ['number', 10],
+    ['string', '10'],
+  ] as const)('rejects an invalid %s fee ceiling before consuming confirmation state', async (_label, feeCeiling) => {
+    const ops = fresh();
+    const batch = await ops.prepare([
+      { kind: 'transfer', token: STRK, amount: 10n ** 18n, recipient: BOB },
+    ]);
+    ops.injectFault({ kind: 'unreachable', on: 'confirm' });
+
+    await expect(batch.confirm({ feeCeiling: feeCeiling as never })).rejects.toMatchObject({
+      kind: 'unknown',
+    });
+    await expect(batch.confirm({ feeCeiling: CEILING })).rejects.toMatchObject({
+      kind: 'unreachable',
+    });
+    expect(ops.submitted).toHaveLength(0);
+  });
+
   it('guards and charges the whole private fee quoted in totalCost', async () => {
     const ops = fresh();
     const batch = await ops.prepare([
@@ -262,6 +431,43 @@ describe('the fee can move between prepare and confirm', () => {
     })).resolves.toBeDefined();
     expect(ops.submitted).toHaveLength(1);
   });
+
+  it('publishes immutable simulated progress snapshots', async () => {
+    const ops = fresh();
+    const batch = await ops.prepare([
+      { kind: 'transfer', token: STRK, amount: 10n ** 18n, recipient: BOB },
+    ]);
+    const progress: Array<{ stage: string; message: string }> = [];
+
+    await batch.confirm({
+      feeCeiling: CEILING,
+      onProgress(update) { progress.push(update); },
+    });
+
+    expect(progress.length).toBeGreaterThan(0);
+    expect(progress.every(Object.isFrozen)).toBe(true);
+    expect(Reflect.set(progress[0]!, 'message', 'forged')).toBe(false);
+  });
+
+  it('does not settle a batch discarded while fake confirmation is pending', async () => {
+    const ops = new FakePrivacyOperations({
+      balances: { [STRK]: 100n * 10n ** 18n },
+      registered: [BOB],
+      latencyMs: 1,
+    });
+    const batch = await ops.prepare([
+      { kind: 'transfer', token: STRK, amount: 10n ** 18n, recipient: BOB },
+    ]);
+
+    const confirming = batch.confirm({ feeCeiling: CEILING });
+    batch.discard();
+
+    await expect(confirming).rejects.toMatchObject({ kind: 'unknown' });
+    expect(ops.submitted).toEqual([]);
+    await expect(ops.balances([STRK])).resolves.toEqual([
+      expect.objectContaining({ spendable: 100n * 10n ** 18n }),
+    ]);
+  });
 });
 
 describe('invalid fake intents', () => {
@@ -271,6 +477,21 @@ describe('invalid fake intents', () => {
       { kind: 'transfer', token: STRK, amount: -1n, recipient: BOB },
     ])).rejects.toThrow(/positive/i);
     expect(ops.submitted).toHaveLength(0);
+  });
+
+  it.each([
+    ['decimal token', { kind: 'shield', token: '123', amount: 1n }],
+    ['zero token', { kind: 'shield', token: '0x0', amount: 1n }],
+    ['field-prime token', {
+      kind: 'shield',
+      token: `0x${((1n << 251n) + 17n * (1n << 192n) + 1n).toString(16)}`,
+      amount: 1n,
+    }],
+    ['decimal recipient', { kind: 'unshield', token: STRK, amount: 1n, recipient: '273' }],
+  ] as const)('rejects a malformed %s before publishing a batch', async (_label, intent) => {
+    const ops = fresh();
+
+    await expect(ops.prepare([intent as Intent])).rejects.toMatchObject({ kind: 'unknown' });
   });
 });
 
@@ -293,9 +514,34 @@ describe('recipients must be registered', () => {
     expect(await ops.recipientStatus('0x222')).toBe('registered');
     expect(await ops.recipientStatus('0x0000222')).toBe('registered');
   });
+
+  it.each([
+    ['decimal', '546'],
+    ['zero', '0x0'],
+    ['negative', '-1'],
+    ['field-prime', `0x${((1n << 251n) + 17n * (1n << 192n) + 1n).toString(16)}`],
+  ])('rejects a malformed %s recipient like production', async (_label, recipient) => {
+    const ops = fresh();
+
+    await expect(ops.recipientStatus(recipient)).rejects.toMatchObject({ kind: 'unknown' });
+  });
 });
 
 describe('fault injection', () => {
+  it('owns an injected fault before caller mutation can retarget it', async () => {
+    const ops = fresh();
+    const fault = { kind: 'unreachable' as const, on: 'balances' as const };
+    ops.injectFault(fault);
+
+    (fault as { kind: string; on: string }).kind = 'not-registered';
+    (fault as { kind: string; on: string }).on = 'prepare';
+
+    await expect(ops.balances()).rejects.toMatchObject({ kind: 'unreachable' });
+    await expect(ops.prepare([
+      { kind: 'transfer', token: STRK, amount: 1n, recipient: BOB },
+    ])).resolves.toBeDefined();
+  });
+
   it('raises the requested error kind on the targeted method', async () => {
     const ops = fresh();
     ops.injectFault({ kind: 'not-registered', on: 'prepare' });
@@ -327,6 +573,62 @@ describe('cancellation', () => {
     await expect(ops.balances(undefined, controller.signal)).rejects.toMatchObject({
       kind: 'user-rejected',
     });
+  });
+});
+
+describe('published capability ownership', () => {
+  it('publishes an immutable simulated capability snapshot', async () => {
+    const ops = fresh();
+
+    const capability = await ops.capability();
+
+    expect(Object.isFrozen(capability)).toBe(true);
+    expect(Reflect.set(capability, 'registration', 'unregistered')).toBe(false);
+    expect(capability.registration).toBe('registered');
+  });
+});
+
+describe('published pool configuration ownership', () => {
+  it('publishes an immutable simulated pool snapshot', async () => {
+    const ops = fresh();
+
+    const pool = await ops.poolConfig();
+
+    expect(Object.isFrozen(pool)).toBe(true);
+    expect(Reflect.set(pool, 'feeAmount', 0n)).toBe(false);
+    expect((await ops.poolConfig()).feeAmount).toBe(SIX_STRK);
+  });
+});
+
+describe('balance query ownership', () => {
+  it('publishes immutable simulated balance snapshots', async () => {
+    const ops = fresh();
+
+    const balances = await ops.balances([STRK]);
+
+    expect(Object.isFrozen(balances)).toBe(true);
+    expect(balances.every(Object.isFrozen)).toBe(true);
+    expect(Reflect.set(balances[0]!, 'total', 0n)).toBe(false);
+  });
+
+  it('snapshots requested tokens before the fake latency boundary', async () => {
+    const ops = new FakePrivacyOperations({
+      balances: { [STRK]: 100n, ['0x1234']: 50n },
+      latencyMs: 1,
+    });
+    const requested = [STRK];
+
+    const reading = ops.balances(requested);
+    requested[0] = '0x1234';
+    requested.push('0x9999');
+
+    await expect(reading).resolves.toEqual([{
+      token: STRK,
+      spendable: 100n,
+      maturing: 0n,
+      total: 100n,
+      maturityKnown: true,
+    }]);
   });
 });
 
@@ -368,6 +670,39 @@ describe('the fake owns its prepared intents too', () => {
     await batch.confirm({ feeCeiling: CEILING });
 
     expect(ops.submitted[0]).toHaveLength(1);
+  });
+
+  it('publishes immutable warnings like the production implementation', async () => {
+    const ops = fresh(0n);
+    const batch = await ops.prepare([{ kind: 'shield', token: STRK, amount: 1n }]);
+
+    expect(Object.isFrozen(batch.warnings)).toBe(true);
+    expect(Object.isFrozen(batch.warnings[0])).toBe(true);
+    expect(Reflect.deleteProperty(batch.warnings, '0')).toBe(false);
+    expect(Reflect.set(batch.warnings[0]!, 'detail', 'private')).toBe(false);
+    expect(batch.warnings).toEqual([{
+      kind: 'public-leg',
+      detail: 'Depositing 1 is public: the amount and your address are visible on-chain.',
+    }]);
+  });
+
+  it('publishes an immutable deterministic swap review like production', async () => {
+    const ops = new FakePrivacyOperations({
+      balances: { [STRK]: 100n * 10n ** 18n, ['0x1234']: 100n * 10n ** 18n },
+      swapReview: { expectedAmountOut: 101n, expiresAt: 2_000, slippageBps: 333 },
+    });
+    const batch = await ops.prepare([
+      { kind: 'swap', tokenIn: '0x1234', tokenOut: STRK, amountIn: 20n, minAmountOut: 1n },
+    ]);
+
+    expect(Object.isFrozen(batch.swapReview)).toBe(true);
+    expect(Reflect.set(batch.swapReview!, 'minimumAmountOut', 1n)).toBe(false);
+    expect(batch.swapReview).toEqual({
+      expectedAmountOut: 101n,
+      minimumAmountOut: 98n,
+      slippageBps: 333,
+      expiresAt: 2_000,
+    });
   });
 
   /**

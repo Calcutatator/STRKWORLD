@@ -1,4 +1,5 @@
 import { COPY } from '../copy.js';
+import { useEffect, useRef } from 'react';
 import { usePrivacy } from '../privacy/PrivacyProvider.js';
 import type { ConnectFlow, ConnectState } from './connect-machine.js';
 import { useWalletSessionOptional, type WalletSessionRuntime } from '../wallet/WalletSessionProvider.js';
@@ -14,17 +15,27 @@ import { useWalletSessionOptional, type WalletSessionRuntime } from '../wallet/W
 export function ConnectRoom() {
   const { connect, connectState } = usePrivacy();
   const wallet = useWalletSessionOptional();
-  return ConnectRoomView({ connect, connectState, wallet });
+  const mounted = useRef(false);
+  useEffect(() => {
+    mounted.current = true;
+    return () => {
+      mounted.current = false;
+    };
+  }, []);
+  return ConnectRoomView({ connect, connectState, wallet, isMounted: () => mounted.current });
 }
 
 export function ConnectRoomView({
   connect,
   connectState,
   wallet,
+  isMounted,
 }: {
   connect: Pick<ConnectFlow, 'connect' | 'recheck'>;
   connectState: ConnectState;
   wallet: Pick<WalletSessionRuntime, 'snapshot' | 'connect' | 'refreshDiscovery'> | null;
+  /** Optional lifecycle owner supplied by the mounted production component. */
+  isMounted?: () => boolean;
 }) {
 
   switch (connectState.name) {
@@ -77,7 +88,7 @@ export function ConnectRoomView({
       return null;
 
     case 'disconnected':
-      if (wallet) return WalletSelection({ wallet, detect: connect.connect });
+      if (wallet) return WalletSelection({ wallet, detect: () => connect.connect(), isMounted });
       return (
         <section className="room room-connect">
           <h2>{COPY.connect.title}</h2>
@@ -93,9 +104,11 @@ export function ConnectRoomView({
 function WalletSelection({
   wallet,
   detect,
+  isMounted,
 }: {
   wallet: Pick<WalletSessionRuntime, 'snapshot' | 'connect' | 'refreshDiscovery'>;
   detect: ConnectFlow['connect'];
+  isMounted?: () => boolean;
 }) {
   const { snapshot } = wallet;
   if (snapshot.phase === 'connecting' || snapshot.phase === 'connected') {
@@ -122,6 +135,7 @@ function WalletSelection({
           onClick={async () => {
             try {
               await wallet.connect(choice.key);
+              if (isMounted && !isMounted()) return;
               await detect();
             } catch {
               // The session publishes a sanitized failed/wrong-network state.

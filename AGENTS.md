@@ -258,6 +258,5818 @@ empty shell to fetchers, so a 200 there means nothing.
 
 ## 6. Findings log
 
+### 2026-08-30 — Failed local avatar poses must not advance facing state
+
+`createLocalAvatarVisual.update()` advanced its private movement-facing
+accumulator before asking the visual controller to present the pose. If a
+Phaser setter threw during that presentation, the controller correctly kept
+the last successful logical pose, but the local adapter retained the failed
+facing. A later no-input retry therefore rendered the failed turn even though
+the original update never committed.
+
+The adapter now commits its facing accumulator only after the visual
+presentation succeeds. Failed pose delivery leaves both the visual controller
+and movement-facing state on the last successful pose; successful movement,
+idle facing retention and sprite selection are unchanged.
+
+*Verified:* a red-first public World regression makes the first right-facing
+pose setter throw, then retries with no input. The old adapter rendered
+`right` on the retry; the corrected adapter remains `down`. Focused avatar
+visual tests pass 14 tests. No browser, lobby server, wallet, provider, RPC,
+proof, signature, funds or transaction was used.
+
+### 2026-08-30 — Concurrent first World acquires must share lazy Phaser loading
+
+`runtime.ensureHost()` awaited the dynamic Phaser import before assigning the
+singleton `host`. Concurrent first `acquireWorld()` calls could therefore both
+observe an empty host and each construct a separate ref-count host and Phaser
+Game, while the module-level `host` retained only the later one. The first
+game then had no reachable release owner and StrictMode/concurrent composition
+could create duplicate canvases and World lifecycles.
+
+The runtime now retains one in-flight host-construction promise and all
+concurrent callers await it before acquiring the shared host. The promise is
+cleared after success or import failure so a failed lazy load remains
+retryable. Existing same-owner remount, retarget and deferred teardown
+semantics are unchanged.
+
+*Verified:* a red-first public runtime regression starts two `acquireWorld()`
+calls before lazy Phaser resolves; the old path initiates two independent
+dynamic imports and fails before the one-game assertion, while the corrected
+path coalesces both calls to one Game and returns the same instance. The
+focused runtime suites pass 6 tests; the World suite and full workspace gates
+are recorded on this candidate. No browser, lobby server, wallet, provider,
+RPC, proof, signature, funds or transaction was used.
+
+### 2026-08-30 — Failed nested avatar selection can leave the outer candidate committed
+
+`createAvatarOutfitSelection.select()` used the selection revision to avoid
+rolling back an outer failed event when a nested selection had taken over.
+That check treated every newer revision as a successful owner, however. A
+nested selection whose event delivery throws restores the outer candidate but
+still increments the revision; if the outer event then fails, the logical
+selection remains on an avatar whose delivery never completed.
+
+Selection now tracks the newest revision whose event delivery completed. A
+failed selection rolls back whenever its candidate is still selected and no
+newer successful selection owns it, including when a failed nested attempt
+restored that candidate. A genuinely successful nested selection remains
+authoritative, and the existing forged-key and ordinary delivery contracts
+are unchanged.
+
+*Verified:* a red-first public regression makes an outer `avatar-2` delivery
+synchronously attempt `avatar-3`, then fail the nested delivery. The old
+selection remained `avatar-2` after the thrown error; the corrected selection
+returns to `avatar-1`. Companion regressions preserve a successful nested
+selection, including one that returns to the outer candidate. Focused outfit
+tests pass 14 tests. No browser, lobby server, wallet, provider, RPC, proof,
+signature, funds or transaction was used.
+
+### 2026-08-30 — Failed host remount cancellation must undo speculative retargeting
+
+`createHost.acquire()` retargeted a retained World instance before cancelling
+its deferred teardown. If cancellation then threw, the acquire failed but the
+instance and `activeParent` had already been rebound to the new owner; the
+queued teardown still belonged to the old owner and could later destroy an
+instance that never acquired the host in its new location.
+
+The host now compensates a speculative retarget when deferred cancellation
+fails, restoring the previous parent before preserving the cancellation error.
+If compensation itself fails, both errors are surfaced as an `AggregateError`;
+the pending teardown remains authoritative and can still retire the instance.
+Successful remounts, retarget failures and ordinary deferred teardown are
+unchanged.
+
+*Verified:* a red-first public host regression makes retarget mutate the
+instance, then makes cancellation throw. The old path left the instance bound
+to `new-owner`; the corrected path calls the inverse retarget, restores
+`old-owner`, leaves the lease unclaimed, and later performs the queued stop.
+Focused Host tests pass 24 tests. No browser, lobby, wallet, provider, RPC,
+proof, signature, funds or transaction was used.
+
+### 2026-08-30 — Input suspension can lose ownership after a partial handoff
+
+`createInputGate.suspend()` disabled Phaser keyboard delivery and global
+capture before clearing held keys, but if `resetKeys()` (or a later keyboard
+assignment) threw, the gate left `suspended` false. A caller could therefore
+continue with a logically active gate while delivery was disabled; its later
+`resume()` returned immediately and could never restore the keyboard.
+
+The suspend transition now retains suspended ownership once either disabling
+step has completed, even when a later step fails. Cleanup can then retry the
+normal `resume()` handoff; failures before any disabling step preserve the
+existing retry behavior. Successful ordering and idempotence are unchanged.
+
+*Verified:* a red-first public World regression makes `resetKeys()` throw after
+capture and delivery are disabled. The old path reports `suspended === false`
+and leaves recovery as a no-op; the corrected path retains suspended ownership,
+then resumes successfully. Focused input-gate tests pass 16 tests; the World
+suite passes 24 files / 381 tests; the full workspace passes 111 files / 2,410
+tests. Typechecks, production build, invariants and diff hygiene pass. No
+browser, lobby server, wallet, provider, RPC, proof, signature, funds or
+transaction was used.
+
+### 2026-08-30 — Nested street movement can run a stale post-move callback
+
+`createStreetMovementAdapter.streetUpdate()` published the movement and then
+always invoked its `afterMovement` callback. A synchronous `player:moved`
+consumer could start a newer street update first; when that nested update
+returned, the older callback still ran and could report a stale door tile or
+other movement handoff after the newer transition had won.
+
+Street and exit callbacks now capture an adapter transition revision and run
+only while their own publication remains current. The reporter's facing
+rollback remains independent, and successful movement publication plus the
+existing callback ordering are unchanged.
+
+*Verified:* a red-first public World regression starts a left-moving update
+from the first right-moving publication. The old path invoked both `new` and
+`stale` callbacks; the corrected path invokes only `new` and retains left
+facing. Focused street-movement tests pass 21 tests. No browser, lobby server,
+wallet, provider, RPC, proof, signature, funds or transaction was used.
+
+### 2026-08-30 — Input resumption fails closed when recapture throws
+
+`createInputGate.resume()` enabled Phaser keyboard delivery before asking the
+keyboard adapter to re-enable global capture. If that second operation threw,
+the gate remained logically suspended while `keyboard.enabled` stayed `true`,
+so a panel whose exit handoff failed could still receive gameplay movement
+input.
+
+Resume now compensates a failed recapture by disabling keyboard delivery and
+reasserting disabled global capture before preserving the original error. The
+gate remains suspended and retryable; successful resume ordering and ordinary
+cleanup are unchanged.
+
+*Verified:* a red-first public input-gate regression makes
+`enableGlobalCapture()` throw after delivery is re-enabled. The old path left
+`keyboard.enabled` true; the corrected path leaves it false, retries safely,
+and preserves the exact capture error. Focused input-gate tests pass 15 tests.
+No browser, lobby, wallet, provider, RPC, proof, signature, funds or
+transaction was used.
+
+### 2026-08-30 — Failed street movement publication can commit stale facing
+
+`createStreetMovementReporter.update()` changed its authoritative facing before
+publishing `player:moved`. If a synchronous shell listener threw, the failed
+movement still left the new facing committed even though the publication did
+not complete. A retry therefore started from state that belonged to an
+uncommitted turn; a nested newer update could also be incorrectly overwritten
+by a stale rollback.
+
+Movement publication now owns a facing revision and restores the previous
+facing only when the failed turn still owns it. A nested successful update
+remains authoritative, while the existing frozen payload and facing priority
+are unchanged.
+
+*Verified:* a red-first public World regression makes the movement listener
+throw on a right-facing update; the old path retained `right`, while the
+corrected path restores `down` and accepts the retry after recovery. Focused
+street-movement tests pass 20 tests. No browser, lobby server, wallet,
+provider, RPC, proof, signature, funds or transaction was used.
+
+### 2026-08-30 — Fixed-room entry failure can leave a partial presentation live
+
+`createFixedRoomController.enter()` released logical room ownership when its
+`onEnter()` callback threw, but did not compensate the callback. The Scene's
+entry callback performs the presentation handoff before rendering the room;
+if that later render step throws, the controller could report the street while
+the Phaser presentation still showed the room.
+
+Entry failure now attempts the matching `onExit()` compensation while the
+controller still owns the room, preserving the original entry error if
+compensation also fails. A controller already destroyed or synchronously
+replaced by the failing callback remains authoritative and is not compensated
+again.
+
+*Verified:* a red-first public fixed-room regression completed the room
+presentation, then threw from `onEnter`; the old path left room visibility on,
+while the corrected path calls the paired exit and restores street visibility.
+The focused fixed-room suite passes 72 tests. No browser, lobby server,
+wallet, provider, RPC, proof, signature, funds or transaction was used.
+
+### 2026-08-30 — Fixed-room exit compensation must restore partial presentation
+
+`createFixedRoomController.leave()` restored logical room ownership when its
+`onExit()` presentation callback threw, but did not invoke `onEnter()` to
+restore a presentation that had already applied only part of the outside
+handoff. The controller could therefore report `inRoom` while the renderer
+remained outside and partially transitioned.
+
+After restoring logical ownership, the exit failure path now attempts
+`onEnter()` compensation. The original exit error remains authoritative if
+compensation also fails, and a destroyed or synchronously re-entered controller
+is not compensated a second time.
+
+*Verified:* a public World regression makes the real fixed-room presentation
+throw after applying partial exit state. On the old path the final presentation
+operation remained `position:false` while the controller was inside; the
+corrected path restores `position:true` and preserves the original error.
+Focused fixed-room tests pass 71 tests. No browser, lobby server, wallet,
+provider, RPC, proof, signature, funds or transaction was used.
+
+### 2026-08-30 — Fixed-room entry rollback can overwrite a reentrant retry
+
+`createFixedRoomPresentation` used a transition revision for its forward
+handoff, but its failed-entry rollback restored street presentation without
+checking that the entry still owned the transition. If a rollback port
+callback synchronously started a newer room entry, the old rollback continued
+and overwrote the retry's room position and presentation.
+
+The rollback now rechecks the owning transition before each restoration action,
+so a newer room transition retires stale cleanup. The original entry failure
+remains authoritative and ordinary rollback still attempts every action while
+its transition owns the presentation.
+
+*Verified:* a public World regression starts a retry from the first rollback
+port callback. On the old path the stale rollback ended at `position:false`
+after the retry's `position:true`; the corrected path preserves the retry.
+Focused fixed-room tests pass 69 tests. No browser, lobby server, wallet,
+provider, RPC, proof, signature, funds or transaction was used.
+
+### 2026-08-30 — Fixed-room exit announcement failure remains retryable
+
+`createFixedRoomController.leave()` completed the outside presentation and
+then emitted `building:exited` without treating the semantic announcement as
+an external lifecycle boundary. If a synchronous consumer threw, the error
+escaped after the controller had become outside, so a later exit call was a
+no-op and the same handoff could not be retried coherently.
+
+Exit announcement failure now restores the prior room ownership and
+highlight/approach state, then compensates the presentation with `onEnter`
+before preserving and rethrowing the original error. A destroyed or otherwise
+replaced lifecycle remains authoritative, and a compensation failure never
+masks the announcement error. Normal exit ordering and successful announcement
+behavior are unchanged.
+
+*Verified:* a red-first public fixed-room regression makes the first
+`building:exited` consumer throw, observes the controller outside on the old
+path, then retries after recovery. The corrected path calls `onEnter` to
+restore the room, and the second exit completes successfully. Focused
+fixed-room and World tests, typechecks, build, invariants and diff hygiene
+pass. No browser, lobby, wallet, provider, RPC, proof, signature, funds or
+transaction was used.
+
+### 2026-08-30 — Avatar Studio destroy retry must retain retirement ownership
+
+`createAvatarStudioPresentation.destroy()` left `destroyed` false when
+`destroyStudio()` threw so a later teardown could retry. That also allowed a
+new `enter()` or `exit()` handoff to run against partially destroyed
+presentation objects before the retry, violating teardown ownership.
+
+Destroy now retires the presentation before invoking cleanup and tracks a
+pending cleanup failure separately. Enter/exit remain blocked while cleanup
+is pending; a subsequent destroy retries exactly once for that attempt and
+successful cleanup remains idempotent.
+
+*Verified:* a public World regression makes the first `destroyStudio()` throw,
+then attempts `enter()` before retrying destroy. On the old path the transition
+started; the corrected path performs no transition, preserves the original
+cleanup error, and permits the explicit retry. Focused Avatar Studio tests pass
+45 tests. No browser, lobby server, wallet, provider, RPC, proof, signature,
+funds or transaction was used.
+
+### 2026-08-30 — Fixed-room presentation transitions own one generation
+
+Fixed-room entry and exit previously performed their Phaser presentation
+handoffs directly in `StreetScene`. A synchronous nested opposite transition
+could complete and then be overwritten by the stale outer continuation, while
+a later setter failure could leave the player body, street visibility, bounds
+or position only partly switched.
+
+The handoff now runs through one World-owned presentation transaction. Each
+enter or exit owns a generation and stops after a newer transition wins. A
+failed current entry attempts every street-restoration action before preserving
+the original error, so the controller can retry the same room transition.
+Existing setter order, door reset, presence resume and controller authority are
+unchanged.
+
+*Verified:* public Phaser-free regressions were red before the transaction:
+one nested exit allowed the stale enter to set the room position afterwards,
+and one bounds failure left the partial entry unrestored. Both pass after the
+fix. Focused fixed-room and StreetScene lifecycle verification passes 2 files /
+96 tests; all World tests pass 24 files / 371 tests. Workspace typechecks,
+production build, 13 invariants and diff hygiene pass. The full workspace run
+was attempted but this isolated worktree's symlinked dependency root caused six
+Vite asset-ID denials; its one executed unrelated presence assertion also fails
+on exact base `2f78d8d`. No browser, wallet, network, provider, RPC, proof,
+signature, funds or transaction was used.*
+
+### 2026-08-30 — Avatar Studio entry rollback can overwrite a reentrant retry
+
+`createAvatarStudioPresentation.enter()` used a transition revision for its
+forward handoff, but its failure rollback only stopped when the presentation
+was destroyed. If a rollback port callback synchronously started a newer
+`enter()` retry, the old rollback continued applying street visibility,
+bounds, and position after that retry had become authoritative.
+
+Entry rollback now uses the owning transition predicate after every rollback
+port call, so a newer transition or destruction stops the stale cleanup. The
+original entry error remains authoritative and ordinary failed-entry rollback
+still attempts every action while its transition owns the presentation.
+
+*Verified:* a public World regression starts a retry from the first rollback
+port callback. On the old path the stale rollback overwrote the retry's Studio
+bounds and position; the corrected path preserves the retry's Studio state.
+Focused Avatar Studio tests pass 44 tests. No browser, lobby server, wallet,
+provider, RPC, proof, signature, funds or transaction was used.
+
+### 2026-08-30 — Fixed-room station activation rechecks after input suspension
+
+`createFixedRoomController.update()` treated `input.suspend()` as a
+non-reentrant call and emitted `station:activated` immediately afterward. A
+synchronous input adapter can destroy or leave the controller, let Shell take
+control, or trigger a newer update during suspension. The stale continuation
+then activated a station after World had lost the room or its authority.
+
+The station handoff now rechecks controller liveness, room membership, World
+control and the update revision after suspension. A still-live room rearms the
+approach when that check retires the turn; destruction and leave transitions
+retain ownership of their own reset. Normal suspension, activation and
+delivery-failure retry behavior remain unchanged.
+
+*Verified:* a red-first public fixed-room regression made `input.suspend()`
+destroy the controller. Before the guard, the stale update emitted
+`station:activated`; after it, no activation is delivered and the controller
+remains outside. Removing the post-suspension guard reproduces the failure.
+Focused fixed-room and World tests, typechecks, build, invariants and diff
+hygiene pass. No browser, lobby, wallet, provider, RPC, proof, signature,
+funds or transaction was used.
+
+### 2026-08-30 — Avatar Studio presentation transitions can overwrite reentrant ownership
+
+`createAvatarStudioPresentation.enter()` and `exit()` only checked whether the
+presentation was destroyed between port calls. A synchronous port callback
+could therefore start the opposite transition while a handoff was in flight;
+the older transition then resumed and overwrote the newer street/Studio
+bounds, visibility, or player position.
+
+Presentation enter/exit now own a transition revision and recheck it after
+each synchronous port call. A newer transition or destruction retires the old
+continuation; failed entry restoration is attempted only while that entry
+still owns the transition. Normal handoff ordering and retry behavior remain
+unchanged.
+
+*Verified:* a public World regression starts `exit()` from the Studio-visible
+port callback during `enter()`. On the old path the stale enter reapplied
+Studio bounds and position after the exit; the corrected path leaves the
+street bounds and return position authoritative. Focused Avatar Studio tests
+pass 43 tests. No browser, lobby server, wallet, provider, RPC, proof,
+signature, funds or transaction was used.
+
+### 2026-08-30 — Failed station delivery must remain retryable
+
+`createFixedRoomController.update()` removed a station from
+`approachArmed` before suspending input and delivering `station:activated`.
+When a synchronous station consumer threw, input was restored and the error
+was reported, but the approach remained disarmed. The player could stay on
+the same approach tile and receive no second activation until leaving and
+re-entering it, turning a transient presentation/consumer failure into a
+stuck station interaction.
+
+Failed station delivery now rearms that station after the input-restoration
+attempt, including the aggregate delivery-plus-restoration failure path. The
+reset is skipped only when the controller has already been destroyed or left;
+those lifecycle transitions own their own reset. Successful activation,
+input-suspension failure, Shell control claims and normal leave behavior are
+unchanged.
+
+*Verified:* a red-first public fixed-room regression made the first
+`station:activated` consumer throw, then retried the same approach tile. On
+the old path only one delivery occurred; the corrected path delivers the
+second attempt and restores input after both attempts. Removing either
+rearm path reproduces the relevant failure. Focused fixed-room and World
+checks, typechecks, build, invariants and diff hygiene pass. No browser,
+lobby, wallet, provider, RPC, proof, signature, funds or transaction was
+used.
+
+### 2026-08-30 — Avatar Studio exit can announce stale ownership after reentrant state publication
+
+`createAvatarStudioController.leave()` published the outside snapshot and then
+unconditionally emitted `avatar-studio:exited`. An `onChange` consumer can
+synchronously re-enter the Studio while that snapshot is delivered. The
+outer leave then announces an exit after newer Studio ownership has already
+won.
+
+The exit path now rechecks `destroyed` and `inRoom` after synchronous outside
+state publication, suppressing the stale semantic event. Normal exit
+publication and announcement ordering are unchanged when the controller
+remains outside.
+
+*Verified:* a public World regression re-enters the Studio from the outside
+snapshot callback. On the old path `avatar-studio:exited` was emitted after
+re-entry; the corrected path emits no stale exit and remains inside. Focused
+Avatar Studio tests pass 42 tests. No browser, lobby server, wallet, provider,
+RPC, proof, signature, funds or transaction was used.
+
+### 2026-08-30 — Avatar Studio entry can announce stale ownership after reentrant state publication
+
+`createAvatarStudioController.enter()` published the inside snapshot and then
+unconditionally emitted `avatar-studio:entered`. An `onChange` consumer can
+synchronously destroy the controller while that snapshot is delivered. The
+controller is already retired, but the outer enter still announces a live
+Studio to the shell.
+
+The entry path now rechecks `destroyed` and `inRoom` after synchronous state
+publication and suppresses the stale announcement when the newer lifecycle
+state has won. Normal entry publication and announcement ordering are
+unchanged when the controller remains inside.
+
+*Verified:* a public World regression destroys the controller from the entry
+`onChange` callback. On the old path `avatar-studio:entered` was emitted after
+destruction; the corrected path emits no event and remains outside. Focused
+Avatar Studio tests pass 41 tests. No browser, lobby server, wallet, provider,
+RPC, proof, signature, funds or transaction was used.
+
+### 2026-08-30 — Fixed-room exit can announce stale ownership after reentrant state publication
+
+`createFixedRoomController.leave()` published the outside snapshot and then
+unconditionally emitted `building:exited`. An `onChange` consumer can
+synchronously call `enter()` while that outside snapshot is delivered. The
+controller is then back inside, but the outer exit still announces that it
+left, so the shell can hide the wrong room or retire the wrong presence state.
+
+The exit path now rechecks `destroyed` and `inRoom` after synchronous outside
+state publication and suppresses the stale announcement when newer room
+ownership has already won. Normal exit publication and event ordering are
+unchanged when no reentrant transition occurs.
+
+*Verified:* a public World regression re-enters from the outside
+`onChange` snapshot. On the old path `building:exited` was emitted despite the
+controller being inside; the corrected path emits no stale event and retains
+room ownership. Focused fixed-room tests pass 63 tests. No browser, lobby
+server, wallet, provider, RPC, proof, signature, funds or transaction was used.
+
+### 2026-08-30 — Avatar vertices must round after the camera zoom
+
+The World enabled Phaser's `pixelArt` mode and rounded the following camera,
+but Phaser 4's default `safeAuto` Game Object vertex mode does not round a
+textured sprite when the camera transform includes a zoom. Local and remote
+avatar positions are intentionally fractional during movement, so their
+transformed quads could still land between screen pixels and appear soft,
+especially during horizontal travel. The existing camera `lerpX = 1` fix
+removes camera easing but does not change this object-level rounding decision.
+
+The shared avatar presentation seam now sets every avatar sprite to Phaser's
+`fullAuto` vertex mode. This retains nearest-neighbour texture filtering and
+the existing camera/physics contracts while rounding the final transformed
+quad at the integer 2x camera zoom. All local, remote and Avatar Studio
+figures use this seam.
+
+*Verified:* a red-first public avatar presentation regression first observed
+that a resolved pose never selected `fullAuto`; after the change every pose
+selects it while texture, origin, animation and body setup remain unchanged.
+The focused avatar-visual suite passes 13 tests. No browser, lobby, wallet,
+provider, RPC, proof, signature, funds or transaction was used.
+
+### 2026-08-30 — Room tile handoffs remain retryable after failure
+
+`StreetScene.reportRoomTile()` committed its `lastTile` sentinel before
+delegating to the active fixed-room controller. If station activation or its
+shell-owned synchronous handoff threw, the same tile was treated as already
+delivered on every later frame, so the player could not retry after the
+consumer recovered. Street and Avatar Studio tile reporting already preserve
+retryability at their external handoff boundaries; the room path must do the
+same.
+
+Room tile reporting now restores only its own prior sentinel when controller
+delivery fails, while a nested transition or Scene teardown remains
+authoritative. Normal de-duplication and station activation ordering are
+unchanged.
+
+*Verified:* a red-first public StreetScene regression makes the first room
+tile handoff throw, then retries the same `{x: 3, y: 8}` tile after recovery;
+the old path retained the tile and suppressed the retry, while the corrected
+path calls the controller twice and commits it only after successful delivery.
+The focused lifecycle suite passes 28 tests. No browser, lobby, wallet,
+provider, RPC, proof, signature, funds or transaction was used.
+
+### 2026-08-30 — Fixed-room update can activate a stale station after reentrant publication
+
+`createFixedRoomController.update()` published a changed station highlight and
+then continued using the outer approach. An `onChange` consumer could
+synchronously call `update()` for a different station: the nested update
+activated station B, then the outer turn resumed and activated stale station A.
+That produced two financial-building activation events for one latest movement
+state and could hand the Shell an obsolete station action.
+
+Each update now owns a monotonically increasing revision. After synchronous
+highlight publication, the controller verifies that its revision remains
+current, alongside the existing destroy, room and control-owner guards, before
+activating a station. Normal station approach ordering and input restoration
+are unchanged.
+
+*Verified:* a public World regression uses two non-overlapping Post Office
+stations and re-enters from station A's `onChange` callback into station B. On
+the old path both B and stale A activated; the corrected path emits only B and
+retains B as the highlighted station. Focused fixed-room tests pass 62 tests.
+No browser, lobby server, wallet, provider, RPC, proof, signature, funds or
+transaction was used.
+
+### 2026-08-30 — Avatar Studio ignores a stale outer figure update after reentrant publication
+
+`createAvatarStudioController.update()` published the newly highlighted figure
+before selecting it. An `onChange` consumer can synchronously call `update()`
+again, which lets the nested update select and publish figure B; the outer call
+then resumed with figure A and selected A over the newer state. The controller
+therefore exposed a highlighted figure B while the shared outfit selection had
+been rolled back to A.
+
+Each update now owns a monotonically increasing revision. After synchronous
+highlight publication and after selection delivery, the update verifies that
+its revision is still current before applying or publishing its stale figure.
+Destroy/leave guards remain authoritative, and ordinary non-reentrant figure
+contact keeps the same selection and event ordering.
+
+*Verified:* a public World regression re-enters from the first figure's
+`onChange` callback into a second figure contact. On the old path the final
+selection was `avatar-1` despite highlighted figure 2; the corrected path
+retains `avatar-2` and figure 2. The focused Avatar Studio suite passes 40
+tests. No browser, lobby server, wallet, provider, RPC, proof, signature,
+funds or transaction was used.
+
+### 2026-08-30 — Backend response metadata and body reader share one owner
+
+The Backend privacy client captured coherent `ok` and `status` metadata, but
+resolved the `json` body reader in a later prototype walk. A stateful response
+proxy could therefore admit one response shape and substitute a different body
+reader before success or error parsing, causing the body consumed by the client
+to come from a prototype that never owned the admitted metadata.
+
+Response ownership now captures `ok`, `status` and `json` together from the
+same object or same captured prototype. The exact body reader is bound once and
+used for both success and error responses. Native Fetch responses retain their
+platform metadata getters and descriptor-owned body method; accessors and
+prototype traps still fail through the controlled invalid-response path.
+
+*Verified:* a public BackendPrivacyClient regression supplies an admitted
+prototype with `400` metadata and message `admitted rejection`, then exposes a
+later prototype whose reader returns `substituted rejection`. The base consumed
+the substituted body; the corrected client preserves the admitted message.
+Focused Backend client verification passes 96 tests and privacy typecheck
+passes. Full workspace gates are recorded in the owning commit. Deterministic
+fakes only: no browser, external provider, RPC, wallet, proof, signature, funds
+or transaction was used.*
+
+### 2026-08-30 — Zero-duration interior movement is a no-op
+
+`moveWithCollisionSubsteps()` converted a valid `delta` of `0` into one
+millisecond with `Math.max(delta, 1)`. A zero-time Phaser update could
+therefore move the local avatar by a nonzero fractional distance despite no
+elapsed time, producing drift and unnecessary pixel-phase changes in fixed
+rooms or Avatar Studio.
+
+The movement guard now returns the current position for exactly zero duration;
+positive durations retain the existing bounded substep and collision behavior,
+while negative, nonfinite and malformed inputs remain fail-closed.
+
+*Verified:* a red-first World regression with a 160 px/s horizontal velocity
+and `delta: 0` first moved from `x=100` to `x=100.16`; the corrected path
+returns exactly `{ x: 100, y: 100 }`. The focused street-movement suite passes
+19 tests. No browser, lobby, wallet, provider, RPC, proof, signature, funds
+or transaction was used.*
+
+### 2026-08-30 — Failed presence resume must expose reconnectability
+
+When an interior exit called the live presence client's `resume()` and that
+command threw without a lifecycle callback, the controller remained
+`suspended`. The avatar was absent from lobby state, but the UI's reconnect
+control is only available from `unavailable`, leaving the client with no
+explicit recovery path after a failed resume.
+
+The exit command is now fail-closed for its authoritative client and status
+generation: peer delivery is cleared, the client is retired and disconnected,
+and `unavailable` is published so the shell can offer an explicit fresh join.
+A command that already triggered a newer close/replacement transition remains
+owned by that newer transition.
+
+*Verified:* a public regression makes `resume()` throw during exit; the old
+path stayed suspended without disconnecting, while the corrected path reports
+unavailable, disconnects once, and permits explicit reconnect. The focused
+presence controller suite passes 62 tests; the full workspace passes 111 test
+files and 2,385 tests, all workspace typechecks pass, the Web production build
+passes, all 13 invariants hold, and diff hygiene passes. No browser, lobby
+server, wallet, provider, RPC, proof, signature, funds or transaction was
+used.
+
+### 2026-08-30 — Backend response status metadata is one coherent snapshot
+
+The Backend privacy client resolved `ok` and `status` in separate prototype
+walks. A stateful response proxy could therefore report `ok: false` from one
+prototype, then substitute a different status prototype before error
+classification. A normal backend rejection could be reclassified as a service
+outage—or vice versa—without those two values ever coexisting on one response
+shape.
+
+Response metadata now resolves `ok` and `status` together from one object or
+one captured prototype. Native Fetch responses still use their platform
+getters, while malformed descriptor/prototype traps retain the controlled
+invalid-response path. Body-reader ownership and backend error messages remain
+unchanged.
+
+*Verified:* a public BackendPrivacyClient regression supplies a stateful
+prototype proxy whose admitted response metadata is `ok: false/status: 400`
+and whose later prototype is `status: 503`. The base classified the response
+as unreachable; the corrected client preserves the coherent 400 rejection as
+`unknown`, even though the prototype later changes. Focused Backend client
+verification passes 95 tests and privacy typecheck passes. Full workspace
+gates are recorded in the owning commit. Deterministic fakes only: no browser,
+external provider, RPC, wallet, proof, signature, funds or transaction was
+used.*
+
+### 2026-08-30 — Submission artifacts are owned before serialization
+
+The private submission request owned its top-level artifact reference, but
+passed that caller object directly to `JSON.stringify`. Serialization performs
+ordinary recursive property reads, so a proxy, getter or concurrent mutation
+could replace the call or proof after top-level admission and change the
+artifact dispatched at the irreversible submission boundary.
+
+Submission now recursively copies the JSON data graph from own data-property
+descriptors before validation and transport. Arrays require exact dense indexed
+data, objects reject symbols and accessors, numeric values must be finite, and
+proxy traps fail before dispatch. JSON serialization sees only the owned plain
+graph; the wire shape and proof contents remain otherwise unchanged.
+
+*Verified:* a public BackendPrivacyClient regression supplies an artifact proxy
+whose own `call` descriptor targets `0x123/apply_actions` while ordinary reads
+substitute `0x999/forged`. The base dispatched the forged call; the corrected
+client dispatches the descriptor-owned call and invokes no proxy `get` trap.
+Focused Backend client verification passes 94 tests and privacy typecheck
+passes. Full workspace gates are recorded in the owning commit. Deterministic
+fakes only: no browser, external provider, RPC, wallet, proof, signature, funds
+or transaction was used.*
+
+### 2026-08-30 — Failed presence suspension must retire street visibility
+
+When an interior entry called the live presence client's `suspend()` and that
+command threw without a lifecycle callback, the controller still considered
+the transport connected while the player was inside. Movement was then
+suppressed locally, but the lobby retained and continued exposing the last
+street position.
+
+The entry command is now fail-closed: if the same client and status generation
+remain authoritative, the controller clears peer delivery, retires the client
+and reports `unavailable` after attempting disconnect. A command that already
+triggered a newer close/replacement transition remains owned by that newer
+transition. Explicit reconnect remains the only way to establish a fresh
+presence session.
+
+*Verified:* a public regression makes `suspend()` throw during entry; the old
+path stayed connected and never disconnected, while the corrected path reports
+unavailable, disconnects once, and ignores later movement. The focused presence
+controller suite passes 61 tests. No browser, lobby server, wallet, provider,
+RPC, proof, signature, funds or transaction was used.
+
+### 2026-08-30 — Injected Backend transports receive no client authority
+
+The Backend privacy client stored an injected fetch-compatible function as an
+instance property and later called it as `this.fetcher(...)`. JavaScript method
+call semantics therefore supplied the entire BackendPrivacyClient instance as
+the transport's receiver, even though an injected transport is a plain
+function dependency and has no reason to receive the client's private URL and
+other instance authority through `this`.
+
+Injected transports are now wrapped at construction and invoked explicitly
+with an undefined receiver. The browser-default Fetch path retains its required
+`globalThis` binding, so the earlier Web IDL receiver fix remains intact.
+Arguments, promises, transport error classification and request serialization
+are unchanged.
+
+*Verified:* a public BackendPrivacyClient regression supplies a
+receiver-sensitive injected transport and records its `this` value. The base
+received the BackendPrivacyClient instance; the corrected invocation receives
+undefined while the public-key read succeeds unchanged. Focused Backend client
+verification passes 93 tests and privacy typecheck passes. Full workspace
+gates are recorded in the owning commit. Deterministic fakes only: no browser,
+external provider, RPC, wallet, proof, signature, funds or transaction was
+used.*
+
+### 2026-08-30 — Private swap-prepare requests are owned before dispatch
+
+The Backend privacy client validated swap-prepare fields through ordinary
+property reads and then reread the caller object to build the quote request. A
+stateful proxy could therefore pass validation with one sell token, amount or
+slippage value and substitute another value at dispatch, divorcing the backend
+quote from the request that passed local admission.
+
+Swap preparation now reads both tokens, both amounts, slippage and the optional
+abort signal from own data-property descriptors exactly once. Validation,
+decimal serialization, dispatch and post-response cancellation use only those
+owned values. Inherited fields, accessors and descriptor traps fail before
+transport; the backend response ownership path is unchanged.
+
+*Verified:* a public BackendPrivacyClient regression supplies an input proxy
+whose sell-token descriptor is `0xabc` while ordinary reads later substitute
+`0xdef`. The base dispatched `0xdef`; the corrected client dispatches `0xabc`
+and invokes no proxy `get` trap. Focused Backend client verification passes 92
+tests and privacy typecheck passes. Full workspace gates are recorded in the
+owning commit. Deterministic fakes only: no browser, external provider, RPC,
+wallet, proof, signature, funds or transaction was used.*
+### 2026-08-30 — Presence destroy must outlive status cleanup failures
+
+Presence controller destruction called the status-listener cleanup directly.
+If a host subscription threw while being removed, `destroy()` rejected before
+clearing peer delivery or disconnecting the lobby client, leaving a live
+transport and stale callbacks behind. Cleanup failures must not prevent the
+remaining owned resources from being retired.
+
+Destroy now records synchronous status/peer cleanup failures, attempts peer
+clear and client/replacement disconnect, and reports the recorded failures
+after all cleanup has settled. Normal single-failure and multi-failure
+reporting remain deterministic and repeated destroy calls reuse the same
+settled result.
+
+*Verified:* a public regression makes status-listener removal throw during
+destroy; the old path skipped disconnect and peer unsubscription, while the
+corrected path attempts both and preserves the cleanup error. The focused
+presence controller suite passes 60 tests; the full workspace passes 110 test
+files and 2,377 tests, all workspace typechecks pass, the Web production build
+passes, all 13 invariants hold, and diff hygiene passes. No browser, lobby
+server, wallet, provider, RPC, proof, signature, funds or transaction was
+used.
+
+### 2026-08-30 — Private submission requests are owned before dispatch
+
+The Backend privacy client validated submission request fields through
+ordinary property reads and then reread the same caller object while building
+the dispatched body. A stateful proxy could pass admission as an approved
+route and substitute another route, authorization or validity window at the
+irreversible submission boundary. The signal and acceptance observer were also
+looked up later rather than belonging to the admitted request snapshot.
+
+Submission now reads route, artifact, authorization, proof-validity window,
+optional signal and optional acceptance observer from own data-property
+descriptors exactly once. Validation, dispatch, uncertainty handling and
+accepted-receipt notification use only those owned locals. Inherited fields,
+accessors and descriptor traps fail before transport; the artifact retains its
+existing JSON serialization contract.
+
+*Verified:* a public BackendPrivacyClient regression supplies an input proxy
+whose route descriptor is `transfer` while successive ordinary reads return
+`transfer` then `swap`. The base dispatched `swap`; the corrected client
+dispatches `transfer` and invokes no proxy `get` trap. Focused Backend client
+verification passes 91 tests and privacy typecheck passes. Full workspace
+gates are recorded in the owning commit. Deterministic fakes only: no browser,
+external provider, RPC, wallet, proof, signature, funds or transaction was
+used.*
+
+### 2026-08-30 — BridgePanel retires a nested shield form with its plan
+
+`BridgePanel` memoized the nested Bank used for a ready-to-shield Bridge plan,
+but omitted the Bridge `plan` and flow from that memo's ownership key. If the
+Bridge record was discarded while the nested Bank was open, the stale Bank
+remained mounted with the old shield amount even though the Bridge no longer
+held the plan that authorized it.
+
+The nested shield machine is now recomputed when the plan or Bridge flow name
+changes, so losing readiness immediately unmounts and closes the stale Bank.
+Its existing wallet handoff and fresh plan revalidation guards remain intact.
+
+*Verified:* a public red-first React regression mounted a ready shield plan,
+opened the nested Bank, discarded the Bridge record, and observed the stale
+station remain on the base. The corrected panel removes the station
+immediately. Focused Bridge panel tests pass 7/7. No browser, wallet,
+provider, RPC, proof, signature, funds or transaction was used.
+
+### 2026-08-30 — Presence state consumers cannot poison a live handoff
+
+Presence state snapshots were assigned before subscriber delivery, but a
+subscriber exception still escaped `setState()`. During asynchronous connect
+settlement that exception was caught by the join failure handler, which then
+published `unavailable` and detached the client even though the transport was
+live. One faulty state consumer could therefore turn a successful join into a
+false disconnect and suppress later consumers in the same transition.
+
+State delivery now isolates each subscriber exception, logs the existing
+diagnostic, and continues through the remaining subscription generation. The
+assigned immutable state and transport ownership are preserved; listener
+replacement/unsubscribe ordering and normal connection cleanup are unchanged.
+
+*Verified:* a public regression makes a state subscriber throw while a
+successful join publishes `connected`; the old path ends `unavailable`, while
+the corrected path remains connected and forwards its placement. The focused
+presence suite passes 59 tests; full workspace tests and typechecks, the Web
+build, invariants, and diff hygiene are green. No browser, lobby server,
+wallet, provider, RPC, proof, signature, funds or transaction was used.
+
+### 2026-08-30 — PanelLayer retires callbacks from replaced World buses
+
+`PanelLayer` unsubscribed its three World listeners when the `world` prop
+changed, but had no ownership token on the callbacks themselves. A callback
+already captured by the old World could therefore run after a replacement bus
+was installed and reopen or close a room owned by the new bus. This is the
+same stale-completion shape as an async result: unsubscribe cannot retract a
+callback that has already escaped the bus.
+
+The effect now assigns each listener set a generation and invalidates that
+generation before cleanup. Every World callback checks ownership before
+publishing room state; ordinary events, room close behavior and StrictMode
+cleanup are unchanged.
+
+*Verified:* a public red-first PanelLayer regression enters Bank on World A,
+rebinds to World B and enters Exchange, then invokes an already-captured Bank
+callback from World A. The base reopens Bank; the corrected implementation
+keeps Exchange authoritative. Focused PanelLayer tests pass 16/16. No
+browser, wallet, provider, RPC, proof, signature, funds or transaction was
+used.
+
+### 2026-08-30 — Relay estimate requests are owned before dispatch
+
+The Backend privacy client validated estimate request fields through ordinary
+property reads and then read the same caller object again while constructing
+the HTTP body. A stateful proxy could therefore pass validation as one approved
+route and substitute another route or token at dispatch, breaking the rule that
+the validated request is the request sent to the private service.
+
+Estimate now reads required route/token fields and the optional abort signal
+from own data-property descriptors into local scalar owners before validation.
+The body, cancellation checks and response processing use only those owned
+values. Inherited fields, accessors and descriptor traps fail before transport;
+ordinary object callers and optional omitted signals remain supported.
+
+*Verified:* a public BackendPrivacyClient regression supplies an input proxy
+whose route descriptor is `transfer` while successive ordinary reads return
+`transfer` then `unshield`. The base dispatched `unshield`; the corrected
+client dispatches `transfer` and invokes no proxy `get` trap. Focused Backend
+client verification passes 90 tests and privacy typecheck passes. Full
+workspace gates are recorded in the owning commit. Deterministic fakes only:
+no browser, external provider, RPC, wallet, proof, signature, funds or
+transaction was used.*
+
+### 2026-08-30 — Presence client factory failures stay fail-closed
+
+`PresenceController` contained transport `connect()` failures but invoked the
+client factory outside that boundary. A synchronous factory failure during an
+explicit reconnect therefore escaped the public reconnect action instead of
+leaving the controller safely unavailable for a later retry.
+
+Client construction now retires the in-progress setup owner and returns no
+client when the factory throws. No status or peer listeners have been
+installed at that point, so the existing unavailable state remains the safe
+projection and a subsequent explicit reconnect may retry construction. Errors
+from status/peer listener registration remain on their existing setup rollback
+path; transport disconnect reporting is unchanged.
+
+*Verified:* a public regression makes the factory throw for the initial join
+and first explicit reconnect, then recover; the old path throws from the
+reconnect action, while the corrected path stays unavailable and successfully
+constructs/connects on the next request. The focused presence suite passes 58
+tests; full workspace tests and typechecks, the Web build, invariants, and
+diff hygiene are green. No browser, lobby server, wallet, provider, RPC,
+proof, signature, funds or transaction was used.
+
+### 2026-08-30 — Backend response body readers are descriptor-owned
+
+The Backend privacy client owned a response's `ok` and `status` values through
+descriptors, but invoked `response.json()` through ordinary property access
+after status admission. A stateful response proxy could therefore expose one
+body reader in its own descriptor and substitute another reader for successful
+or error parsing, changing the provider body that crossed the validated HTTP
+response boundary.
+
+Response parsing now resolves `json` from a data-property descriptor on the
+response or its prototype chain, binds that exact function to the response,
+and invokes only the owned reader. Accessors and proxy prototype/descriptor
+traps fail through the existing controlled invalid-response path. Native Fetch
+`Response` receiver behavior and submission-uncertainty classification remain
+unchanged.
+
+*Verified:* a public BackendPrivacyClient regression supplies a response proxy
+whose own `json` descriptor returns public key `0x123` while an ordinary read
+substitutes a reader returning `0x999`. The base published `0x999`; the
+corrected client publishes `0x123` and invokes no proxy `get` trap. Focused
+Backend client verification passes 89 tests and privacy typecheck passes. Full
+workspace gates are recorded in the owning commit. Deterministic fakes only:
+no browser, external provider, RPC, wallet, proof, signature, funds or
+transaction was used.*
+
+### 2026-08-30 — Backend response arrays are owned before swap decoding
+
+The Backend privacy client checked swap response arrays for holes using own
+property descriptors, but returned the original provider array to callers that
+immediately traversed it with `map`. A stateful proxy could therefore expose a
+valid executor call or calldata value in its descriptor and substitute a
+different value during traversal, changing the immutable plan published to the
+Wallet API layer after the sparse-array check.
+
+The shared response-array decoder now owns its length and each indexed element
+from data-property descriptors, rejects holes and extra keys, contains proxy
+traps, and returns a separate array. Swap call and calldata parsing therefore
+operate only on the owned values; existing field validation and final freezing
+remain unchanged.
+
+*Verified:* a public BackendPrivacyClient regression supplies an executor-call
+array whose own descriptor targets `0x111/swap` while an ordinary index read
+substitutes `0x222/forged`. The base published the forged call; the corrected
+decoder publishes the descriptor-owned call and performs no provider array
+reads. Focused Backend client verification passes 88 tests and privacy
+typecheck passes. Full workspace gates are recorded in the owning commit.
+Deterministic fakes only: no browser, external provider, RPC, wallet, proof,
+signature, funds or transaction was used.*
+
+### 2026-08-30 — Presence replacement continues after stale disconnect failure
+
+When a pending join settled successfully after an explicit reconnect request,
+the replacement handoff awaited the old client's `disconnect()` directly. A
+rejected or synchronously throwing disconnect therefore diverted the
+continuation into generic failure handling, after the old owner had already
+been cleared, and no replacement client was created.
+
+The explicit replacement now treats stale disconnect failure as cleanup noise
+and still starts the fresh client after the attempt settles. Destroyed or
+interior-deferred ownership checks remain in force; normal `destroy()` retains
+its existing disconnect-error reporting semantics.
+
+*Verified:* a public regression defers the first join, requests reconnect,
+then makes the stale disconnect reject. The old path disconnects the first
+client but never connects the second; the corrected path performs both. The
+focused presence suite passes 56 tests; full workspace tests and typechecks,
+the Web build, invariants, and diff hygiene are green. No browser, lobby
+server, wallet, provider, RPC, proof, signature, funds or transaction was
+used.
+
+### 2026-08-30 — Presence replacement survives stale cleanup failure
+
+When a pending join settled successfully after an explicit reconnect request,
+the replacement branch invoked the stale status cleanup directly. If that
+cleanup threw, the continuation fell into generic connect-failure handling
+after clearing the reconnect request, so the old client was never disconnected
+and no replacement client was started. A queued success could therefore leave
+the controller unavailable without honoring the user's retry.
+
+The successful replacement handoff now detaches status ownership before
+invoking cleanup and contains both status and peer cleanup errors before
+retiring the stale client. The replacement still disconnects the old client
+before creating the new one; ordinary disconnect rejection and explicit retry
+semantics remain unchanged.
+
+*Verified:* a public regression defers the first join, requests reconnect,
+then resolves the join while its status cleanup throws. The old path performs
+no replacement; the corrected path disconnects the first client and connects
+the second. The focused presence suite passes 55 tests; full workspace tests
+and typechecks, the Web build, invariants, and diff hygiene are green. No
+browser, lobby server, wallet, provider, RPC, proof, signature, funds or
+transaction was used.
+
+### 2026-08-30 — Requested balance tokens are owned before wallet handoff
+
+The balance input path validated caller tokens with `Array.prototype.some`
+and then copied the same caller array with spread. A stateful proxy could
+return one valid token during validation and a different valid token during
+the later copy, changing both the wallet query and the response-correlation
+allowlist after admission.
+
+Requested tokens now pass through the same exact descriptor-owned array
+boundary as provider result arrays before felt validation. The wallet receives
+a separate mutable copy of those owned scalars, while response correlation
+continues to use the same owned values. Sparse arrays, extra keys, accessors and
+proxy traps fail before the wallet is called.
+
+*Verified:* a public Wallet API regression supplies a caller proxy whose own
+index descriptor is token `0x123` while ordinary reads substitute canonical
+STRK. The base queried STRK and published that result; the corrected path asks
+for `0x123`, publishes `0x123` and invokes no caller `get` trap. Focused Wallet
+API verification passes 193 tests and privacy typecheck passes. Full workspace
+gates are recorded in the owning commit. Deterministic fakes only: no browser,
+external provider, RPC, wallet, proof, signature, funds or transaction was
+used.*
+
+### 2026-08-30 — Presence reconnect requests are deferred during drop publication
+
+Presence drop handling clears the retained peer snapshot before publishing the
+`unavailable` state. A peer subscriber can synchronously request reconnect
+during that clear; before this correction, the controller still looked
+`connecting` and started a second join on the failed client instead of
+retiring it and constructing the explicit replacement.
+
+Drop publication now tracks nested unavailable transitions and holds a
+reconnect request made by a peer or state subscriber until the transition has
+finished. The request then follows the existing stale-client replacement path;
+ordinary drops, failed-join retries, and peer cleanup remain unchanged.
+
+*Verified:* a public regression rejects a deferred join and requests reconnect
+from the retained-peer clear callback. The base invokes the failed client's
+`connect()` twice and never creates a replacement; the corrected path invokes
+it once, disconnects it once, and connects one fresh client. No browser, lobby
+server, wallet, provider, RPC, proof, signature, funds or transaction was
+used.
+
+### 2026-08-30 — Wallet capability versions are owned before admission
+
+Capability detection validated that the wallet returned an array, but then
+traversed that provider array with ordinary `map` reads. A stateful proxy could
+therefore expose an unsupported version in its own index descriptor and
+substitute the minimum supported version during traversal, causing the wallet
+to pass financial capability admission on a value the provider result did not
+own.
+
+Capability detection now owns the exact array length and indexed values from
+data-property descriptors before semantic-version parsing. Holes, extra keys
+and proxy descriptor traps fail through the existing invalid-capability path;
+non-string entries retain the existing ignored-value behavior. Recipient
+registration remains a primitive felt boundary and has no corresponding
+object ownership window.
+
+*Verified:* a public Wallet API regression supplies a version-array proxy whose
+own index descriptor is `0.9.0` while an ordinary read substitutes `0.10.3`.
+The base reported STRK20 support; the corrected decoder reports unsupported
+with version `0.9.0` and performs no length or index reads. Focused Wallet API
+verification passes 192 tests and privacy typecheck passes. Full workspace
+gates are recorded in the owning commit. Deterministic fakes only: no browser,
+external provider, RPC, wallet, proof, signature, funds or transaction was
+used.*
+
+### 2026-08-30 — Wallet balance result arrays are owned before decoding
+
+Balance entry fields were descriptor-owned, but the wallet's result array was
+still traversed with `Array.prototype.map`. A stateful proxy could substitute
+an indexed entry or array length through ordinary reads before the entry
+decoder ran, so the immutable published snapshot could describe a value absent
+from the wallet result's own descriptors. Sparse arrays and extra array or
+entry fields were also not an exact provider shape.
+
+The balance decoder now owns the array length and every indexed element from
+data-property descriptors, rejects holes and extra array keys, and requires
+each entry to contain exactly the two owned fields `token` and `balance`.
+Duplicate numeric tokens, requested-token correlation, felt validation and
+frozen publication are unchanged and run only over the owned values.
+
+*Verified:* a public Wallet API regression supplies an array proxy whose own
+index descriptor contains balance `0x64` while an ordinary index read returns
+`0x32`. The base published total 50; the corrected decoder publishes total 100
+without reading the provider's length or index. Focused Wallet API verification
+passes 191 tests and privacy typecheck passes. Full workspace gates are
+recorded in the owning commit. Deterministic fakes only: no browser, external
+provider, RPC, wallet, proof, signature, funds or transaction was used.*
+
+### 2026-08-30 — Wallet balances publish descriptor-owned values
+
+The balance decoder checked that wallet entries exposed own data properties,
+but then destructured `token` and `balance` through ordinary property reads.
+A stateful proxy could therefore present valid descriptors and substitute a
+different token or amount for the immutable balance snapshot published to the
+game. Accessor-only and inherited fields were rejected, but descriptor checks
+alone did not own the values.
+
+Balance decoding now reads both fields directly from their own data-property
+descriptors inside the controlled wallet-result boundary. Descriptor traps are
+mapped to the existing invalid-balance failure, and the subsequent felt,
+requested-token, duplicate-token and immutable-publication rules operate only
+on those owned scalar values.
+
+*Verified:* a public Wallet API regression supplies a stateful proxy whose
+balance descriptor says `0x64` while ordinary reads substitute `0x32`. The base
+published total 50 and invoked the proxy trap; the corrected decoder publishes
+total 100 and records zero ordinary reads. Focused Wallet API verification
+passes 190 tests and privacy typecheck passes. Full workspace gates are
+recorded in the owning commit. Deterministic fakes only: no browser, external
+provider, RPC, wallet, proof, signature, funds or transaction was used.*
+
+### 2026-08-30 — Fly ready-child supervisor test uses a post-handoff trigger
+
+The Fly composition correctly rejects a private child that exits while
+startup is still in progress. The ready-child supervisor regression used a
+100 ms post-ready timer, so a busy full test run could cross that timer before
+the composition was handed to the supervisor; the test then failed while
+assuming it was exercising a post-handoff exit.
+
+The fixture now keeps a ready child alive until the test creates an explicit
+marker after composition handoff. Production startup ordering is unchanged:
+pre-handoff exits remain startup failures and post-handoff exits still invoke
+the supervisor fatal callback.
+
+*Verified:* the marker is created only after `startFlyComposition()` returns,
+so the post-handoff exit regression is deterministic under suite load. No
+browser, wallet, provider, RPC, proof, signature, funds or transaction was
+used.
+
+### 2026-08-30 — Failed presence joins retire their status authority
+
+When an asynchronous Lobby join rejected, PresenceController published
+`unavailable` but left the failed client's status listener active. A queued
+`connected` callback from that failed client could then resurrect the presence
+state and make the stale client authoritative again, even though no join was
+in flight. The same stale callback could interfere with an explicit retry.
+
+Connect failure handling now deactivates and detaches the current client's
+status listener before publishing `unavailable`; cleanup is detached before
+invocation and cleanup errors remain contained. Peer delivery and explicit
+reconnect ownership are otherwise unchanged, and normal disconnect rejection
+semantics are preserved.
+
+*Verified:* a public regression rejects a deferred connect, then delivers a
+late `connected` callback; the old path resurrects `connected`, while the
+corrected path remains `unavailable`. The focused presence suite passes 54
+tests; full workspace tests and typechecks, the Web build, invariants, and
+diff hygiene are green. No browser, lobby server, wallet, provider, RPC,
+proof, signature, funds or transaction was used.
+
+### 2026-08-30 — Production bootstrap destroys rejected session candidates
+
+After the bootstrap began freezing and revalidating loaded sessions, a
+candidate that failed that admission could still be dropped without teardown.
+That included a session with malformed operations and a proxy that mutated its
+operations during validation; the failure surface was reported, but the
+candidate's wallet session remained unowned.
+
+Rejected loaded candidates now go through the same contained data-method
+destructor used for late and retired sessions before startup failure is
+reported. Primitive or accessor-only malformed values remain harmless no-ops,
+while valid data-backed destroy methods run once. Accepted sessions, HMR
+retirement, render failures and duplicate disposal behavior are unchanged.
+
+*Verified:* red-first regressions observed zero destruction for malformed
+operations and validation-mutating candidates; the corrected path destroys
+each exactly once. Focused bootstrap tests pass 14 tests; workspace gates are
+recorded on the candidate. No browser, wallet, provider, RPC, proof,
+signature, funds or transaction was used.
+
+### 2026-08-30 — Swap decoder owns array lengths without proxy reads
+
+The owned swap-plan decoder took root and nested field values from property
+descriptors, but still read the `length` of the provider's executor-call and
+calldata arrays through ordinary property access. Exact own-key checks made a
+simple substituted length fail closed later, yet the provider-controlled `get`
+trap still executed inside the authority boundary and could throw or cause
+side effects before rejection.
+
+The decoder now reads both array lengths from their own data-property
+descriptors, alongside the already descriptor-owned elements. No provider
+`get` trap is invoked while acquiring array shape; malformed descriptors and
+proxy traps retain the existing controlled malformed-plan classification.
+
+*Verified:* a public Wallet API regression installs a stateful executor-call
+array proxy whose `length` getter reports a substituted value and records each
+ordinary read. The base invoked that trap once; the corrected decoder owns the
+real descriptor length, publishes the complete valid review and records zero
+ordinary reads. Focused Wallet API verification passes 189 tests and the
+privacy package typecheck passes. Full workspace gates are recorded in the
+owning commit. Deterministic fakes only: no browser, external provider, RPC,
+wallet, proof, signature, funds or transaction was used.*
+
+### 2026-08-30 — Production bootstrap owns an immutable admitted session
+
+Session shape validation alone did not close the ownership boundary. A
+hostile Proxy could return valid descriptors while mutating the session's
+`operations` object during the final method check; the original mutable
+session would then be handed to the renderer in a different shape than the
+one that was validated.
+
+After validation, bootstrap now freezes both the session and its privacy
+operations object, then repeats validation before publication. This closes
+the synchronous validation-to-render TOCTOU while preserving the original
+method values and receiver. Freeze or revalidation traps fail closed through
+the existing startup failure surface; no facade or rebinding is introduced.
+
+*Verified:* a red-first public bootstrap regression mutated `operations` from
+inside a descriptor trap and reached `render()` on the old path. The corrected
+path reports failure, and a separate regression confirms both admitted objects
+are frozen before rendering. Focused bootstrap tests pass 14 tests; workspace
+gates are recorded on the candidate. No browser, wallet, provider, RPC, proof,
+signature, funds or transaction was used.
+
+### 2026-08-30 — Swap plans are owned before semantic validation
+
+The private-swap adapter previously validated an AVNU plan through ordinary
+property reads and only afterwards spread and snapshotted that same provider
+object. A stateful proxy could therefore return one executor while validation
+ran and substitute another executor for the frozen plan later used to build the
+wallet action. Exact key counts did not close this time-of-check/time-of-use
+gap because they did not take ownership of the values behind those keys.
+
+Swap preparation now reads the exact seven root fields, every executor-call
+field and every calldata element from own data-property descriptors into one
+deeply frozen graph. Proxy traps, accessors, sparse or extended arrays and
+malformed nested calls fail closed before review. The same owned plan is the
+only authority for the published review, confirmation-time semantic checks and
+the eventual wallet action; the nested relay fee keeps its existing owning
+decoder and live fee-policy recheck.
+
+*Verified:* a public Wallet API regression first supplied a stateful proxy that
+returned executor `0x999` during validation and `0x888` during the later spread;
+the base prepared the wallet withdrawal to the unvalidated `0x888`. The owned
+decoder prepares and confirms only `0x999`. Focused Wallet API verification
+passes 188 tests and the privacy package typecheck passes. Full workspace gates
+are recorded in the owning commit. Deterministic fakes only: no browser,
+external provider, RPC, wallet, proof, signature, funds or transaction was
+used.*
+
+### 2026-08-30 — Production bootstrap validates the privacy operations seam
+
+The production bootstrap validator checked that a loaded session had an
+object-shaped `operations` property, but did not validate the five methods of
+the `PrivacyOperations` seam. A value such as `operations: {}` therefore
+passed admission and was rendered as a usable wallet session; a proxy whose
+descriptor inspection throws could also escape the intended controlled
+failure path.
+
+Bootstrap admission now requires own data methods for `capability`,
+`poolConfig`, `balances`, `recipientStatus` and `prepare`, in addition to the
+existing WalletSession methods. Descriptor/proxy failures remain contained as
+a startup failure. The session and operation method values are not rebound or
+mutated, preserving the existing WalletSession receiver contract; teardown
+continues to use its captured data method.
+
+*Verified:* red-first bootstrap regressions first rendered a session carrying
+`operations: {}` and accepted an operations proxy that cannot be safely
+inspected; the corrected path renders neither and reports each failure once.
+Focused bootstrap tests pass 12 tests; workspace gates are recorded on the
+candidate. No browser, wallet,
+provider, RPC, proof, signature, funds or transaction was used.
+
+### 2026-08-30 — Swap plans and executor calls have exact provider shapes
+
+Swap validation required the fields it used but accepted extra root and nested
+executor-call fields. A nested descriptor trap could also escape as a raw
+provider error. That weakened the exact quote boundary and made malformed AVNU
+objects inconsistently classified.
+
+The existing mature validation/snapshot path now additionally requires exactly
+seven own root fields and three own fields per executor call. Root and nested
+ownKeys/descriptor traps are contained as the existing `unknown` invalid-plan
+failure. Quote semantics, owned relay fees, executor-call snapshotting and
+confirmation behavior are unchanged.
+
+*Verified:* public regressions were red for extra root/call fields and a nested
+descriptor trap; a root ownKeys trap remained fail-closed. The focused Wallet
+API suite passes 187 tests and privacy typecheck. Full workspace verification
+is recorded with the owning commit. Deterministic fakes only: no browser,
+wallet, provider, RPC, proof, signature, funds or transaction was used.*
+
+### 2026-08-30 — Relay fee authority is an owned exact snapshot
+
+Relay fee validation checked own data descriptors but then re-read the provider
+object normally and copied it with object spread. A hostile Proxy could expose
+safe descriptor values during validation, substitute recipient or authorization
+through `get`, or throw during inspection/spread, making the reviewed fee differ
+from the fee later proved and submitted.
+
+One exact five-field decoder now contains ownKeys/descriptor traps, validates
+descriptor values only and returns a frozen quote. Pool-native estimates and
+swap-plan fee ownership use that same snapshot; extra provider fields are
+rejected and proxy getters cannot substitute authority.
+
+*Verified:* public regressions were red for recipient/authorization
+substitution, descriptor and ownKeys traps, and an extra provider field. The
+focused Wallet API suite passes 183 tests and privacy typecheck. Full workspace
+verification is recorded with the owning commit. Deterministic fakes only: no
+browser, wallet, provider, RPC, proof, signature, funds or transaction was
+used.*
+
+### 2026-08-30 — Pool-config proxy traps stay inside the provider boundary
+
+The owned pool-config decoder rejected accessors and extra fields, but its
+descriptor and own-key inspection could itself throw on a hostile Proxy. Those
+raw trap errors were then mapped as a network outage rather than an invalid
+provider result.
+
+Decoder inspection now runs inside one contained block, reads only own data
+descriptor values into locals, and converts every inspection trap into the
+existing `unknown` invalid-configuration error. Exact key counting includes
+string and symbol fields, so provider metadata cannot cross the snapshot; no
+ordinary getter is invoked.
+
+*Verified:* public regressions were red for descriptor and ownKeys traps and
+green after containment. Extra string/symbol fields, inherited/accessor fields,
+valid frozen snapshots and all live confirmation consumers remain covered.
+The focused Wallet API suite passes 179 tests and privacy typecheck. Full
+workspace verification is recorded with the owning commit. Deterministic fakes
+only: no browser, wallet, provider, RPC, proof, signature, funds or transaction
+was used.*
+
+### 2026-08-30 — Production bootstrap contains malformed loaded sessions
+
+The production bootstrap trusted the runtime value fulfilled by its dynamic
+loader because TypeScript's `Promise<WalletSession>` annotation does not
+validate a thenable or module boundary. A malformed value could therefore be
+published to the production renderer as a wallet session. Teardown also used
+ordinary `session.destroy` property access, so a hostile proxy getter could
+prevent destruction even when the underlying data method was valid.
+
+Bootstrap now requires an object with own data `operations` and all WalletSession
+methods before publishing it, containing descriptor/proxy failures as a
+controlled startup failure. Teardown reads the own data `destroy` method and
+invokes that function directly, preserving valid receiver behavior without
+triggering a hostile property getter. Native Promise assimilation continues to
+contain throwing then getters and ignore duplicate fulfillment; late malformed
+values remain unpublished after disposal.
+
+*Verified:* red-first bootstrap regressions first rendered `42` as a session
+and failed to call the target destroy method through a hostile proxy getter;
+the corrected path renders neither and destroys valid data-backed sessions.
+Throwing then getters and double-fulfilling thenables are also covered. Focused
+bootstrap tests pass 10 tests; workspace gates are recorded on the candidate.
+No browser, wallet, provider, RPC, proof, signature, funds or transaction was
+used.
+
+### 2026-08-30 — Presence drops and retries survive consumer cleanup errors
+
+Presence teardown previously let a remote-peer clear callback or stale status
+cleanup throw through lifecycle control. A dropped client could therefore
+remain reported as connected when clearing its retained peer source failed,
+and a synchronous `connect()` failure could not be retried if replacing the
+stale client encountered a throwing status cleanup.
+
+Drop handling now still publishes `unavailable` after best-effort peer
+cleanup, and stale-client replacement attempts status and peer cleanup before
+retiring the old owner and starting the explicit replacement. Failed setup
+rollback also preserves its original error when state subscribers throw after
+the owner has been retired. These cleanup-error suppressions do not change
+normal disconnect rejection handling.
+
+*Verified:* public regressions cover a synchronous connect failure with a
+throwing status cleanup and a remote-peer clear callback that throws during a
+drop. The old path either threw before retry or failed to publish unavailable;
+the corrected path remains unavailable and constructs/connects the replacement.
+The focused presence suite passes 53 tests; full workspace tests and
+typechecks, invariants, and diff hygiene are green. No browser, lobby server,
+wallet, provider, RPC, proof, signature, funds or transaction was used.
+
+### 2026-08-30 — Presence setup preserves registration errors across throwing cleanup
+
+When peer-listener setup failed after status registration, the presence
+controller attempted to stop the status listener directly. A cleanup callback
+that threw masked the original peer-registration failure and prevented the
+failed client from being retired; an explicit reconnect then threw again from
+that stale cleanup instead of creating a replacement client.
+
+The failed setup path now attempts status cleanup best-effort, preserves the
+original peer setup error, and always retires the exact partially initialized
+client through the existing setup rollback. Normal teardown error behavior is
+unchanged; this suppression applies only while preserving a more authoritative
+setup failure.
+
+*Verified:* a public regression makes peer registration throw and makes the
+already-installed status cleanup throw. The old path throws the cleanup error
+on reconnect and never constructs the replacement; the corrected path retires
+the failed owner and reconnects through the second client. The focused
+presence suite passes 51 tests, with Web typecheck and diff hygiene green. No
+browser, lobby server, wallet, provider, RPC, proof, signature, funds or
+transaction was used.
+
+### 2026-08-30 — Presence client setup failures retire the failed owner
+
+`PresenceController.ensureClient()` published a client reference before
+installing the status and peer callbacks, but did not contain synchronous
+errors from either registration. A client whose `onStatus()` attached the
+callback and then threw could therefore remain the active owner; a later
+status event from that failed setup could publish `connected` without a
+successful join. The same gap in `onPeers()` allowed a callback attached
+before the throw to publish stale remote peers after startup had failed.
+
+Setup registration is now an ownership transaction. Both callback paths
+deactivate their local delivery guards, retire the exact failed client,
+clear the retained peer snapshot, restore unavailable state, and preserve the
+original registration error. A failed setup cannot be revived by a late
+status/peer callback or strand the controller as a partially initialized
+client.
+
+*Verified:* public regressions make `onStatus()` and `onPeers()` attach their
+callback and then throw. The status case first reproduces a late connected
+event reviving the failed controller; the peer case first reproduces a stale
+remote snapshot after failed setup. The corrected presence suite passes 50
+tests, Web typecheck passes, and diff hygiene is clean. No browser, lobby
+server, wallet, provider, RPC, proof, signature, funds or transaction was
+used.
+
+### 2026-08-30 — Remote peer sources retain queued state after listener errors
+
+`createRemotePeerSource()` queued reentrant publications while a listener was
+being delivered, but cleared that queue when the listener threw. A newer full
+snapshot produced during an older remote-avatar render could therefore be
+discarded by the source before the World layer saw it, leaving stale
+presentation state despite the source having accepted the newer update.
+
+The source now stops the failing listener's current delivery, continues
+draining queued authoritative snapshots, and rethrows the original error (or
+an aggregate when multiple queued deliveries fail) after the queue is
+exhausted. Listener generation checks, immutable snapshots, and ordinary
+error propagation remain unchanged.
+
+*Verified:* a red-first public World source regression queued x=80 while the
+x=40 listener delivery threw; the old source observed only x=40, while the
+corrected source observes x=40 then x=80 and still throws the original error.
+Removing queued-drain continuation restores the failure. No browser, lobby,
+wallet, provider, RPC, proof, signature, funds or transaction was used.
+
+### 2026-08-30 — Production bootstrap contains synchronous lifecycle failures
+
+The production bootstrap assumed both HMR disposal registration and the
+loader would return without throwing. A synchronous `hot.dispose()` or loader
+failure therefore escaped before the controlled failure surface; thenable
+assimilation was not explicit either.
+
+Bootstrap setup now treats disposal registration as an admission boundary and
+fails closed without starting the loader if registration fails. Loader
+invocation is normalized through `Promise.resolve` and synchronous throws are
+routed to the contained failure reporter. Existing late-load retirement,
+render ownership and fallback behavior remain unchanged.
+
+*Verified:* red-first public regressions made HMR registration and loader
+setup throw; the old bootstrap leaked both exceptions, while the corrected
+path reports each once and performs no load after failed HMR setup. Focused
+bootstrap tests pass 6 tests; workspace gates are recorded on the candidate.
+No browser, wallet, provider, RPC, proof, signature, funds or transaction was
+used.
+
+### 2026-08-30 — Remote avatar errors do not discard newer queued state
+
+The remote-avatar render queue preserved reentrant ordering, but its outer
+drain cleared pending snapshots as soon as an older render reported an error.
+A newer authoritative peer update delivered during that failed render was
+therefore lost until the lobby happened to publish again; the layer retained
+the old pose even though the source had already supplied a replacement.
+
+The drain now records render failures, continues processing every queued newer
+snapshot, and reports the original failure (or an aggregate of failures) only
+after the queue is exhausted. Existing last-successful-pose retention,
+teardown guards, and source error propagation remain unchanged.
+
+*Verified:* a red-first public World fake delivered x=80 during an x=56
+render whose position setter threw; the old layer ended at x=40 and discarded
+the newer update, while the corrected layer ends at x=80 and still rethrows the
+original error. Removing the queue-drain error handling restores the failure.
+No browser, lobby, wallet, provider, RPC, proof, signature, funds or
+transaction was used.
+
+### 2026-08-30 — Pool configuration is owned at every authority read
+
+Pool configuration validation read provider properties normally and then
+spread the same object. Inherited data could be accepted but disappear from
+the published snapshot, accessors could execute and be misclassified as a
+network failure, and shield/private/swap confirmation used fresh pool results
+without validating them before fee checks or wallet handoff.
+
+One decoder now requires exactly four own data properties, validates their
+felt, u256 and integer semantics, and returns a frozen snapshot. Public reads
+and every confirmation-time refresh use that owned result before fee
+comparison, relay estimation, swap revalidation or wallet authority.
+
+*Verified:* public regressions were red for inherited and accessor-backed
+configuration and for malformed live shield, transfer and swap refreshes. All
+now fail before wallet/submission handoff, while the existing immutable
+snapshot regression remains green. The focused Wallet API suite passes 175
+tests and privacy typecheck. Full workspace verification is recorded with the
+owning commit. Deterministic fakes only: no browser, wallet, provider, RPC,
+proof, signature, funds or transaction was used.*
+
+### 2026-08-30 — Production bootstrap retires sessions whose render fails
+
+The production wallet bootstrap took ownership of a loaded session before
+calling `render()`, but a synchronous render failure only showed the failure
+surface and left the unpublished session owned until a later HMR disposal.
+That retained wallet connection state after the composition had failed.
+
+The render-failure path now releases and destroys the exact loaded session
+before reporting the failure. Reentrant disposal during render remains
+idempotent, and a successfully rendered session stays owned until explicit
+bootstrap disposal.
+
+*Verified:* a red-first bootstrap regression made `render()` throw and
+observed zero session destruction on the old path; the corrected path destroys
+it once. A reentrant dispose/render-failure regression confirms no double
+destruction. Focused bootstrap tests pass 4 tests; workspace gates are
+recorded on the candidate. No browser, wallet, provider, RPC, proof,
+signature, funds or transaction was used.
+
+### 2026-08-30 — Confirmation fee ceilings are u256-bounded authority
+
+Confirmation accepted any nonnegative bigint fee ceiling. A value above
+`u256::MAX` could therefore cross the review boundary and effectively disable
+the ceiling even though every actual fee and total is u256-denominated.
+
+The common confirmation validator now requires the inclusive
+`0..u256::MAX` range before any live pool read, wallet action, proof or relay
+handoff. Shield, private transfer and swap share the same rule; the exact
+maximum remains valid.
+
+*Verified:* public regressions were red across all three confirmation routes
+for `2^256`, then proved rejection before live reads or handoff after the fix.
+An exact-maximum shield confirmation remains green. The focused Wallet API
+suite passes 170 tests and privacy typecheck. Full workspace verification is
+recorded with the owning commit. Deterministic fakes only: no browser, wallet,
+provider, RPC, proof, signature, funds or transaction was used.*
+
+### 2026-08-30 — Remote avatar teardown cannot resurrect its retained peer map
+
+`createRemoteAvatarLayer.render()` could continue after a synchronous Scene
+shutdown destroyed the layer during sprite presentation. Cleanup correctly
+cleared `peers`, but the in-flight render then assigned its already-built
+snapshot afterward, making the destroyed layer report live remote peers until
+another callback (which teardown had correctly made inert) arrived.
+
+The render now checks teardown ownership immediately before committing its
+retained map. A shutdown during presentation leaves the public layer empty and
+does not resurrect stale World state; ordinary rendering, reentrant queueing,
+and cleanup error behavior remain unchanged.
+
+*Verified:* a red-first public World fake triggered shutdown from the initial
+sprite position setter; the old layer retained one peer after destruction,
+while the corrected layer retains an empty map. Removing the post-render
+destroy guard restores the failure. No browser, lobby, wallet, provider, RPC,
+proof, signature, funds or transaction was used.
+
+### 2026-08-30 — Production bootstrap contains failure-renderer rejection
+
+The production wallet bootstrap detached its dynamic-load promise. A render
+failure was routed to the configured failure renderer, but if that renderer
+also threw, the detached promise rejected without a handler and produced an
+unhandled rejection after the original startup failure.
+
+Failure reporting now has its own quiet boundary. The original load or render
+failure remains contained, and a second failure from the fallback renderer
+cannot escape the retired bootstrap. Normal failure rendering and late-load
+retirement behavior are unchanged.
+
+*Verified:* a red-first public bootstrap regression made `render()` throw and
+then made `failure()` throw; the old detached promise emitted an unhandled
+rejection, while the corrected path reports no unhandled rejection. Focused
+bootstrap tests pass 2 tests; workspace gates are recorded on the candidate.
+No browser, wallet, provider, RPC, proof, signature, funds or transaction was
+used.
+
+### 2026-08-30 — Pool and combined fees remain inside u256
+
+Pool configuration accepted any nonnegative bigint fee. A provider value at
+`2^256` could therefore be published as the pool fee and total cost, while two
+individually valid pool and relay fees could produce an out-of-domain combined
+cost at preparation or confirmation.
+
+Pool fees now require the inclusive u256 range. Private and swap preparation
+and their live confirmation rechecks use one checked pool-plus-relay helper,
+which rejects totals above `u256::MAX` before wallet handoff. The exact maximum
+total remains valid; zero governance pool fees and the existing relay-policy
+ceiling remain unchanged.
+
+*Verified:* public regressions were red for an oversized pool fee, an
+overflowing prepared total, and a live confirm-time overflow; the exact maximum
+boundary stayed green. The focused Wallet API suite passes 166 tests and
+privacy typecheck. Full workspace verification is recorded with the owning
+commit. Deterministic fakes only: no browser, wallet, provider, RPC, proof,
+signature, funds or transaction was used.*
+
+### 2026-08-30 — Production wallet bootstrap retires late dynamic imports
+
+The production entrypoint started the asynchronous `@strkworld/privacy`
+import and registered an HMR cleanup that closed over a mutable session
+variable. If disposal happened before the import resolved, the callback saw
+no session; the late completion then created and rendered a wallet session
+into a retired entrypoint, with no owner left to destroy it.
+
+Production wallet loading now has an explicit bootstrap owner. Disposal
+retires the owner, destroys a session that resolves after retirement, and
+suppresses late render/failure publication. A normally resolved session is
+still rendered and is destroyed by the same HMR cleanup. Wallet policy,
+composition and dynamic-import boundaries are unchanged.
+
+*Verified:* a red-first deferred-load public regression disposed the entrypoint
+before session resolution; the old shape rendered the late session and never
+destroyed it, while the corrected bootstrap renders nothing and destroys it
+once. Focused bootstrap and architecture tests pass 7 tests; workspace gates
+are recorded on the candidate. No browser, wallet, provider, RPC, proof,
+signature, funds or transaction was used.
+
+### 2026-08-30 — Caller intent amounts are bounded to u256 before dependencies
+
+Wallet API intent validation required positive bigints but did not cap them at
+the protocol amount domain. Shield, transfer and unshield values at `2^256`
+could therefore survive preparation and later be serialized into an invalid
+action felt; swap input and minimum-output values relied on stricter downstream
+plan behavior rather than the common caller boundary.
+
+All caller-controlled amounts now require the inclusive `1..u256::MAX` range
+inside `validateIntents()`, before pool reads, registration checks, relay
+estimation, swap planning or wallet calls. The exact maximum remains valid.
+Route policy, batching, relay aggregation and swap token direction are
+unchanged.
+
+*Verified:* public regressions cover out-of-range shield, transfer, unshield,
+swap input and swap minimum output, assert no dependency call, and preserve the
+exact maximum boundary. The focused Wallet API suite passes 162 tests and
+privacy typecheck. Full workspace verification is recorded with the owning
+commit. Deterministic fakes only: no browser, wallet, provider, RPC, proof,
+signature, funds or transaction was used.*
+
+### 2026-08-30 — Wallet session replacement survives old unsubscribe failures
+
+`WalletSessionProvider` passed the session's unsubscribe callback directly to
+`useSyncExternalStore`. When a session prop was replaced, a synchronous throw
+from the old session's cleanup aborted React's passive-effect transition
+before the replacement subscription was installed, leaving the new session
+without updates and surfacing a stale provider lifecycle failure.
+
+The provider now owns a guarded subscription wrapper: setup failures become a
+no-op cleanup, and retired-session unsubscribe failures are contained so a
+replacement can subscribe independently. Snapshot projection, session
+methods, and normal unsubscribe behavior are unchanged.
+
+*Verified:* a red-first public jsdom regression replaced a subscribed session
+whose unsubscribe throws and observed the old exception before the new
+session subscribed. The corrected provider invokes both subscriptions and
+retains the replacement render. Focused WalletSessionProvider tests pass
+3 tests; Web typecheck, full tests, build, invariants and diff hygiene are
+recorded on the candidate. No browser, wallet, provider, RPC, proof,
+signature, funds or transaction was used.
+
+### 2026-08-30 — Remote avatar presentation serializes reentrant snapshots
+
+`createRemoteAvatarLayer()` reconciled a source snapshot directly from its
+listener. A source or presentation callback could synchronously deliver a
+newer full snapshot while that reconciliation was still rendering; the nested
+render updated the sprite and retained map, but the outer render then
+committed its older snapshot over the newer one. The World could therefore
+keep stale peer coordinates until another publication arrived.
+
+The layer now queues source callbacks that reenter during reconciliation and
+drains them in order before returning, clearing pending work on teardown or a
+render failure. Existing validation, failed-update retention, removal retry,
+and shutdown ownership remain unchanged.
+
+*Verified:* a red-first public World fake source reentered with an x=80
+snapshot while the initial x=40 snapshot was rendering; the old layer ended
+at x=40, while the corrected layer finishes with x=80 on both its retained
+map and sprite. The focused remote-avatar and remote-peer suites pass 38
+tests. No browser, lobby, wallet, provider, RPC, proof, signature, funds or
+transaction was used.
+
+### 2026-08-30 — Wallet route policy is semantically validated before discovery
+
+The wallet session already copied policy data into an immutable snapshot, but
+accepted runtime values that only matched the TypeScript shape nominally. A
+`NaN` maximum intent count made the batch-size ceiling comparison permanently
+false; fractional, negative and unsafe counts, negative relay fees, unknown or
+duplicate routes, malformed or numerically duplicated token felts, and an
+enabled swap without valid chain/slippage policy could all survive session
+construction.
+
+Policy construction now fails closed before wallet discovery for invalid
+scalar bounds, non-bigint or negative relay fees, unknown/duplicate routes,
+zero or above-field token felts, numeric token duplicates, and incomplete or
+invalid swap semantics. Valid route ordering and token encodings are preserved;
+the owned arrays and objects remain frozen and wallet identity is never read.
+
+*Verified:* sixteen public session regressions were red together before the
+semantic boundary and green after it, including `NaN` intent authority,
+numeric token aliases and swap-without-policy. The focused WalletSession suite
+passes 100 tests and package typecheck. Full workspace verification is recorded
+with the owning commit. Deterministic fakes only: no browser, wallet, provider,
+RPC, proof, signature, funds or transaction was used.*
+
+### 2026-08-30 — Lobby disconnect does not publish through a replacement room
+
+`LobbyClient.disconnect()` retired its room and emitted the `closed` status
+before awaiting `room.leave(true)`, allowing a synchronous status listener to
+start a replacement connection. The old disconnect continuation then emitted
+its cleared peer snapshot after the leave settled, even though the replacement
+room already owned the client's peer stream. That produced a duplicate,
+stale delivery through the live replacement connection and made the old
+transport operation observable after authority had moved on.
+
+Disconnect now records its generation and emits the post-cleanup empty peer
+snapshot only if that generation remains current. A replacement connection
+therefore owns all subsequent peer delivery, while ordinary disconnects and
+leave-error cleanup still publish the removal and preserve the original error.
+
+*Verified:* a red-first public fake-room regression deferred room A's leave,
+reconnected synchronously from the `client-left` status listener, and observed
+the replacement peer snapshot twice on the old path. The corrected path emits
+it once. Removing the generation guard restores the failure. No browser,
+external lobby, wallet, provider, RPC, proof, signature, funds or transaction
+was used.
+
+### 2026-08-30 — Production composition owns hostile wallet snapshots
+
+`WalletSessionProvider` previously passed `session.getSnapshot()` directly
+through `useSyncExternalStore`. Production composition then read fields such
+as `snapshot.phase` and `snapshot.account` with ordinary property access. A
+descriptor-valid proxy snapshot could throw from its `get` trap and escape
+the wallet gate before the app could fail closed.
+
+The provider now caches an own-data projection for each raw snapshot identity,
+deep-freezes the wallet choices, and returns an empty selection snapshot when
+the session snapshot or any required field is malformed. Stable session
+snapshot identity remains stable for external-store consumers; the session
+and its financial operations are otherwise unchanged.
+
+*Verified:* red-first public ProductionRoot regressions supplied a
+descriptor-valid snapshot proxy whose property-read trap throws and a
+connected session whose snapshot read throws; the old composition leaked the
+raw exception (or could retain the connected path), while the corrected
+provider renders the wallet gate without invoking it. Removing the projection
+restores the proxy failure. Focused ProductionRoot/WalletSessionProvider tests
+pass 15 tests. No browser, wallet,
+provider, RPC, proof, signature, funds or transaction was used.
+
+### 2026-08-30 — Privacy route-policy snapshots must bypass proxy reads
+
+The WalletSession route-policy boundary validated own data descriptors, but
+then read the policy and its nested collections through ordinary property
+access and spread iteration. A proxy could report valid descriptors while its
+`get` or iterator trap threw, leaking an arbitrary exception during session
+construction instead of producing an owned policy snapshot.
+
+Policy snapshots now read validated data-descriptor values and materialize
+collections inside a controlled failure boundary. Optional swap metadata uses
+the same descriptor-only reads. Inherited/accessor fields remain rejected and
+valid policy values keep the same frozen shape; no wallet connection or
+operation is created for a malformed policy.
+
+*Verified:* a red-first public session regression supplied a descriptor-valid
+proxy whose property-read trap throws; the old constructor leaked that raw
+exception, while the corrected path constructs the session without invoking
+the trap. Collection iteration failures are also mapped to the same
+`PrivacyError`. Focused WalletSession tests pass 83 tests, Privacy tests pass
+460 tests, and workspace gates are recorded on the candidate. No browser,
+wallet, provider, RPC, proof, signature, funds or transaction was used.
+
+### 2026-08-30 — Privacy policy validation contains descriptor-trap failures
+
+The WalletSession route-policy boundary used `Object.getOwnPropertyDescriptor()`
+to reject inherited and accessor-backed fields, but did not contain a proxy's
+descriptor trap. A malformed policy could therefore throw an arbitrary raw
+exception while the session was being constructed, before the intended
+controlled invalid-policy `PrivacyError` and before discovery began.
+
+The shared own-data validator now treats descriptor inspection failures as a
+failed validation. Existing inherited/accessor rejection, policy ownership and
+valid route behavior are unchanged; no wallet connection or operation is
+created for a malformed policy.
+
+*Verified:* a red-first public session regression supplied a proxy-backed policy
+whose descriptor trap throws; the old constructor leaked that exception, while
+the corrected path returns `PrivacyError`. Removing the validator catch
+restores the failure. No browser, wallet, provider, RPC, proof, signature,
+funds or transaction was used.
+
+### 2026-08-30 — Lobby reconciliation avoids redundant timers after synchronous confirmation
+
+`LobbyClient.#pump()` sent a move and unconditionally scheduled its retry timer
+after the send returned. A transport/state callback can run synchronously from
+`room.send()` and update the local entry before that return; the nested pump
+then correctly clears the desired move, but the outer pump still left a stale
+reconciliation timer behind.
+
+The send path now checks whether the desired placement was cleared by that
+synchronous confirmation before stamping the send time or scheduling another
+timer. Asynchronous server updates, dropped-move retries, send-floor handling
+and transport-closure ownership are unchanged.
+
+*Verified:* a red-first public fake-room regression synchronously applied the
+move and emitted a state change from `room.send`; the old client created one
+redundant timer, while the corrected path sent once with no timer. Removing the
+post-send desired-state guard restores the failure. No browser, external
+lobby, wallet, provider, RPC, proof, signature, funds or transaction was used.
+
+### 2026-08-30 — Lobby reconciliation verifies the entry identity
+
+`LobbyClient.#serverSelf()` looked up the local session key in the decoded
+peer map but trusted the entry's position without checking that its embedded
+`gameId` still matched the local identity. A stale or malformed map entry could
+therefore make a requested move appear acknowledged even though the state did
+not describe this client, clearing reconciliation without sending the move.
+
+Reconciliation now accepts a decoded entry as the local server position only
+when its projected `gameId` exactly matches the current client identity. The
+peer snapshot projection, movement normalization, and wire protocol are
+unchanged; mismatched entries are treated as not-yet-known server state.
+
+*Verified:* a red-first public fake-room regression keyed an entry by the local
+id while embedding another identity and matching the requested position. The
+old client sent no move; the corrected client sends the move. Removing the
+identity guard restores the failure. No browser, external lobby, wallet,
+provider, RPC, proof, signature, funds or transaction was used.
+
+### 2026-08-30 — Lobby peer projection contains malformed decoded state
+
+`LobbyClient.peers()` and its reconciliation lookup read decoded room-state
+fields directly. A malformed state entry whose position accessor throws could
+therefore escape through a normal state-change projection or timer-driven move
+path and crash the consumer, even though the entry came from an untrusted wire
+boundary.
+
+Both paths now use a small guarded peer projection. A state entry that cannot
+be read is ignored, while valid Colyseus schema entries retain the same plain
+snapshot shape, self-filtering, reconciliation and immutable delivery
+behavior. No lobby financial data or new protocol fields are introduced.
+
+*Verified:* a red-first public fake-room regression injected an accessor-backed
+peer position and observed `peers()` throw; the corrected projection returns an
+empty snapshot. Removing the guard restores the failure. Valid real-server and
+schema-backed Lobby tests remain green. No browser, external lobby, wallet,
+provider, RPC, proof, signature, funds or transaction was used.
+
+### 2026-08-30 — Lobby resume reads only own data placement fields
+
+`LobbyClient.resume()` used ordinary property access for the runtime placement
+coordinates. An accessor-backed `x` or `y` could therefore execute caller code
+and leak its raw exception before the existing controlled invalid-placement
+failure; inherited values were also eligible to cross the client boundary.
+
+Resume now reads own data descriptors for `x`, `y` and `facing`, with descriptor
+or proxy failures treated as absent. Required coordinates still fail closed with
+`Lobby resume placement is invalid.`, while missing or malformed facing keeps
+the existing default-to-down behavior. Valid placement normalization, wire
+shape and transport lifecycle ownership are unchanged.
+
+*Verified:* red-first public fake-room regressions supplied accessor-backed `x`
+and `y` whose getters throw; the old client leaked those exceptions, while the
+corrected path neither invoked the accessors nor sent a resume message.
+Removing the own-data reads makes both regressions fail. No browser, external
+lobby, wallet, provider, RPC, proof, signature, funds or transaction was used.
+
+### 2026-08-30 — Lobby resume rejects malformed placement containers
+
+`LobbyClient.resume()` assumed its runtime argument was a non-null placement
+object and dereferenced `placement.x` and `placement.y` immediately. A
+nullish value supplied at the client boundary therefore escaped as a raw
+`TypeError` instead of the method's controlled invalid-placement failure,
+leaving callers without a stable way to handle malformed resume input.
+
+Resume now rejects null and non-object containers with the existing
+`Lobby resume placement is invalid.` error before reading fields or sending a
+wire message. Valid placements, finite-coordinate checks and world clamping,
+facing normalization, sprite handling and transport lifecycle ownership are
+unchanged.
+
+*Verified:* red-first public fake-room regressions supplied `null` and
+`undefined` after suspension; the old client threw property-access errors,
+while the corrected path returns the controlled placement error without a
+resume send. Removing the container guard makes both regressions fail. No
+browser, external lobby, wallet, provider, RPC, proof, signature, funds or
+transaction was used.*
+
+### 2026-08-30 — Lobby connect honors synchronous retirement during status delivery
+
+`LobbyClient.connect()` published `connecting` before installing its join
+attempt. A synchronous status listener could call `disconnect()` during that
+publication, retiring the generation, but `connect()` then continued and
+opened a room for the already-closed client. The stale room was eventually
+left, but the public lifecycle call still performed an unauthorized transport
+join and briefly created a server-side presence entry.
+
+Connect now rechecks its generation and `connecting` status immediately after
+the synchronous status handoff, before constructing the join promise. A
+listener-retired attempt therefore resolves without opening transport, while
+ordinary concurrent connect and explicit reconnect behavior remain unchanged.
+
+*Verified:* a red-first public fake-room regression has a `connecting` status
+listener synchronously disconnect the client; the old path called
+`joinOrCreate()` and left the stale room, while the corrected path makes zero
+join or leave calls and remains `closed`. The focused Lobby client suite passes
+83/83. No browser, external lobby, wallet, provider, RPC, proof, signature,
+funds or transaction was used.*
+
+### 2026-08-30 — Lobby connected delivery does not retain retired-room handlers
+
+`LobbyClient.#join()` published `connected` before registering the room's state,
+error and leave callbacks. A synchronous status listener could disconnect while
+that publication was in flight; the join continuation then attached handlers
+to the already-retired room, retaining stale lifecycle closures until SDK room
+cleanup and allowing unnecessary callbacks to be installed after ownership was
+gone.
+
+The join now rechecks the generation and room identity immediately after the
+connected status handoff and stops before peer delivery or handler registration
+when the room was retired. Normal connected delivery, suspend/reconnect, and
+room callback registration remain unchanged.
+
+*Verified:* a red-first public fake-room regression disconnects from a
+`connected` status listener; the old path registered all three stale handlers,
+while the corrected path leaves the room once and registers none. The focused
+Lobby client suite passes 84/84. No browser, external lobby, wallet, provider,
+RPC, proof, signature, funds or transaction was used.*
+
+### 2026-08-30 — Lobby resume normalizes facing before crossing the wire
+
+`LobbyClient.resume()` forwarded its runtime `facing` value directly, even
+though `LobbyPresence.resume()` normalizes malformed facings to `down`. A
+malformed string or object could therefore cross the Lobby protocol while the
+server silently stored a different facing, unlike the already-normalized move
+path.
+
+Resume now uses the shared `normalizeFacing()` policy before sending. Valid
+facings, coordinate bounds, sprite selection, suspend/resume lifecycle and
+transport-closure ownership are unchanged; malformed facing values fall back
+to the established `down` value.
+
+*Verified:* red-first public fake-room regressions supplied an unknown string
+and a coercible object and observed the old values on the resume wire; the
+corrected path sends `down`. Removing the normalizer makes both regressions
+fail. Lobby and workspace tests, typechecks, build, invariants and diff
+checks pass. No browser, external lobby, wallet, provider, RPC, proof,
+signature, funds or transaction was used.*
+
+### 2026-08-30 — StreetScene restart cleanup survives shutdown-hook removal failure
+
+`StreetScene.retireWorldOwnership()` removed the previous cycle's Phaser
+shutdown hook before cleaning its owned resources. If the framework event
+surface threw while removing that hook, the method exited before cleanup and a
+defensive same-instance restart stranded the old player, controllers,
+listeners, and display objects.
+
+Restart retirement now records a hook-removal failure, still runs the complete
+idempotent World cleanup, and then rethrows the original failure. If both hook
+removal and cleanup fail, it reports an `AggregateError` after all cleanup
+attempts; a stale hook is harmless because cleanup marks the cycle retired.
+
+*Verified:* a red-first public StreetScene lifecycle regression makes shutdown
+hook removal throw during repeated `create()` and confirms the old cycle is
+fully destroyed while the exact removal error remains observable. Focused
+StreetScene tests pass. No browser, wallet, provider, RPC, proof, signature,
+funds or transaction was used.
+
+### 2026-08-30 — Remote-avatar layer rolls back failed shutdown-hook registration
+
+`createRemoteAvatarLayer()` created its Phaser layer and then registered the
+Scene shutdown hook. If the injected Scene event surface threw synchronously,
+construction failed before a `RemoteAvatarLayer` handle was returned, leaving
+the display-list layer orphaned with no way for the caller to destroy it.
+
+The factory now treats the layer as owned while installing the lifecycle hook.
+Registration failure immediately attempts layer teardown, preserves the
+original registration error, and leaves normal shutdown, source subscription,
+avatar ownership, and idempotent destruction unchanged.
+
+*Verified:* a red-first public World regression injects a throwing shutdown
+listener registration and confirms the exact error is preserved while the
+created layer is destroyed once. Focused remote-avatar tests pass. No browser,
+wallet, provider, RPC, proof, signature, funds or transaction was used.
+
+### 2026-08-30 — Fixed-room exit rolls back failed state publication
+
+`FixedRoomController.leave()` relinquished room ownership and completed the
+presentation exit before publishing its outside snapshot. If the synchronous
+`onChange` renderer threw, the controller stayed outside while the failed
+transition could not be retried: a later exit update was ignored and no
+authoritative completion could be delivered.
+
+Exit publication now compensates the presentation and restores the prior room
+state when delivery fails, while preserving the original publication error. A
+reentrant destroy or transition remains authoritative, and a later explicit
+exit can retry after the renderer recovers.
+
+*Verified:* a red-first public World regression makes the first fixed-room
+exit state publication throw; the old path left the controller outside and
+blocked retry, while the corrected path re-enters for compensation, preserves
+the exact error, and completes the second exit. Focused fixed-room tests pass
+61/61. No browser, wallet, provider, RPC, proof, signature, funds or
+transaction was used.
+
+### 2026-08-30 — Lobby resume uses the server's bounded placement policy
+
+`LobbyClient.resume()` validated that coordinates were finite and rounded them,
+but did not apply the server's `WORLD_LIMIT` clamp used by `LobbyPresence` and
+by `updatePosition()`. A finite out-of-bounds resume therefore sent a placement
+such as `(9192, -9192)` while the server stored `(8192, -8192)`, leaving the
+client's reconnect handoff inconsistent with authoritative presence state.
+
+Resume now runs both coordinates through the shared finite-round-and-clamp
+policy before sending them. Invalid values still throw the existing resume
+placement error; in-bounds placement, facing, sprite and transport-closure
+ownership are unchanged.
+
+*Verified:* a red-first public fake-room regression requested an out-of-bounds
+resume and observed the old unbounded wire payload; the corrected path sends
+`(WORLD_LIMIT, -WORLD_LIMIT)`. The focused resume test and mutation check pass.
+No browser, external lobby, wallet, provider, RPC, proof, signature, funds or
+transaction was used.*
+
+### 2026-08-30 — Fixed-room entry rolls back failed state publication
+
+`createFixedRoomController.enter()` committed `inRoom = true` and completed
+the presentation handoff before publishing its first state snapshot. If the
+synchronous `onChange` renderer threw, entry surfaced an error but left the
+controller and presentation inside the room; a later `enter()` became a no-op,
+so the failed transition could not be retried coherently.
+
+Entry publication now compensates the presentation and restores outside state
+when delivery fails, while preserving the original publication error. A
+reentrant destroy or prior lifecycle transition remains authoritative, and a
+later explicit entry can retry after the renderer recovers.
+
+*Verified:* a red-first public World regression makes the first fixed-room
+state publication throw; the old path retained `inRoom` and blocked retry,
+while the corrected path calls presentation exit once, preserves the exact
+error, and successfully re-enters. Focused fixed-room tests pass 60/60. No
+browser, wallet, provider, RPC, proof, signature, funds or transaction was
+used.
+
+### 2026-08-30 — Lobby startup cleans up after bound-port inspection failure
+
+`startPresenceServer({ port: 0 })` successfully opened a listener and then
+read the transport's bound address. If that inspection returned a malformed
+or unavailable value, the function threw without closing the already-listening
+server, leaving an unreachable process-owned socket behind and making retries
+leak resources or fail with an occupied port.
+
+Startup now shuts down the just-bound server when bound-port inspection fails,
+while preserving the original inspection error. Normal ephemeral-port
+reporting, explicit ports, and consecutive-port bind failure cleanup are
+unchanged.
+
+*Verified:* a red-first public Lobby server regression forced the bound address
+to be invalid after listen; the old path made zero shutdown calls while the
+corrected path shuts down exactly once and preserves the exact error. Focused
+server tests pass. No browser, wallet, provider, RPC, proof, signature, funds
+or transaction was used.
+
+### 2026-08-30 — Lobby port retry ranges stay inside the TCP ceiling
+
+`startPresenceServer()` validated the requested base port and the number of
+retry attempts independently, then added the attempt offset without checking
+the resulting port. If the final valid port was occupied — for example,
+`port: 65535, portAttempts: 2` — startup attempted `65536` and leaked the
+platform's invalid-port error instead of rejecting the impossible retry plan
+before binding.
+
+Startup now rejects any retry range whose highest candidate exceeds `65535`,
+before CORS or transport setup. Valid explicit ports, port zero, and
+consecutive fallback ranges that remain within the TCP port space are
+unchanged.
+
+*Verified:* a red-first public server-options regression makes the mocked
+`65535` bind return `EADDRINUSE`; the old loop then calls `listen(65536)`, while
+the corrected path returns `Lobby port retry range exceeds 65535.` without a
+second bind. The focused Lobby server configuration suite passes 4 tests. No
+browser, external lobby, wallet, provider, RPC, proof, signature, funds or
+transaction was used.*
+
+### 2026-08-30 — Remote-avatar layer setup retains the Phaser layer on depth failure
+
+`createRemoteAvatarLayer()` created its Phaser layer and immediately called
+`setDepth(9)` before any cleanup owner could reach that layer. A synchronous
+Phaser setup failure therefore threw from construction while leaving an
+orphaned layer in the display list; the caller had no returned handle with
+which to recover it.
+
+The factory now treats the layer as owned immediately after creation. If the
+initial depth setup throws, it attempts to destroy that layer, preserves the
+original setup error, and leaves normal subscription, avatar ownership, and
+layer teardown behavior unchanged.
+
+*Verified:* a red-first public World regression injects a depth setter that
+throws and confirms the exact error is preserved while the created layer is
+destroyed once. Focused remote-avatar tests pass. No browser, wallet,
+provider, RPC, proof, signature, funds or transaction was used.
+
+### 2026-08-30 — Fixed-room render projection fails closed on malformed station snapshots
+
+`fixedRoomStationPresentations()` previously called `.find()` directly on the
+controller state's `stations` field. A malformed runtime state with a null
+snapshot list (or a null entry) therefore threw during the Phaser-free render
+projection instead of rendering configured stations as locked. A bad state
+could consequently take down the World render path before the controller had a
+chance to recover or replace it.
+
+The projection now treats a non-array snapshot list as empty and ignores null
+or non-object entries, preserving the configured station labels and locked
+status. Valid controller snapshots and highlighting behavior are unchanged.
+
+*Verified:* a red-first public World regression supplied both a null station
+list and a null station entry; the old projection threw while the corrected
+projection returns one locked presentation per configured station. Focused
+fixed-room tests pass. No browser, wallet, provider, RPC, proof, signature,
+funds or transaction was used.
+
+### 2026-08-30 — Backend listener cleanup consumes close failures
+
+When `listenBackendServer()` discovered that a bound transport exposed no TCP
+address, it attempted to close the server but attached only a `finally`
+handler. A close rejection therefore escaped as an unhandled rejection even
+though startup already had its authoritative invalid-address failure.
+
+The cleanup rejection is now consumed while the same generic invalid-address
+startup error is preserved. Successful cleanup and normal bind/error paths are
+unchanged.
+
+*Verified:* a public listener regression injects a close callback failure on
+the invalid-address path and observes the old unhandled rejection. The
+corrected path emits no unhandled rejection and retains the startup error;
+Backend server tests pass 28 tests. No browser, provider, RPC, wallet, proof,
+signature, funds or transaction was used.*
+
+### 2026-08-30 — Remote avatar updates retain the last rendered snapshot after failure
+
+`createRemoteAvatarLayer.render()` previously committed the next peer snapshot
+even when an existing avatar's position or visual presentation setter threw.
+If no later lobby update arrived, the retained World map claimed the new pose
+was rendered while the Phaser sprite still showed the previous pose, so the
+failed update had no retry opportunity and later movement classification could
+be wrong.
+
+Existing-avatar update failures now retain that peer's last successfully
+rendered snapshot while preserving the error. A later authoritative source
+publication retries from the old pose; successful updates, first-construction
+ownership, removal retry and teardown behavior are unchanged.
+
+*Verified:* a red-first public World regression makes an existing sprite's
+position setter throw for one changed snapshot; the old layer retained the
+unrendered coordinates, while the corrected layer retains the prior snapshot
+and preserves the exact error. Focused remote-avatar tests pass 18/18. No
+browser, wallet, provider, RPC, proof, signature, funds or transaction was
+used.
+
+### 2026-08-30 — Backend shutdown registration rolls back partial signal setup
+
+`registerBackendShutdown()` registered `SIGTERM` before `SIGINT` without a
+rollback boundary. If the second lifecycle registration threw, the function
+rejected while leaving the first signal hook installed, so a later retry could
+invoke a stale shutdown callback.
+
+Registration now detaches all previously installed hooks before propagating a
+registration error. Normal two-signal setup, idempotent shutdown and explicit
+disposal are unchanged.
+
+*Verified:* a public shutdown-lifecycle regression makes `SIGINT` registration
+throw after `SIGTERM` succeeds. The old path leaves one hook; the corrected
+path preserves the exact error and leaves no hooks. Backend server tests pass
+27 tests. No browser, provider, RPC, wallet, proof, signature, funds or
+transaction was used.*
+
+### 2026-08-30 — Tiled property records fail closed without invoking accessors
+
+`flattenProperties()` previously read each raw Tiled property's `name` and
+`value` through ordinary property access. A malformed or hostile runtime
+record with an accessor-backed field could therefore throw during map
+decoding, aborting the whole object layer instead of being skipped as the
+decoder contract promises.
+
+The flattener now accepts only own data descriptors for both fields. Missing,
+inherited and accessor-backed records are skipped without invoking getters;
+valid Tiled records, duplicate-name last-write behavior, null-prototype
+output, and non-array container handling are unchanged.
+
+*Verified:* a red-first public World regression supplied getter-backed `name`
+and `value` fields that throw if read; the old decoder invoked the getter and
+failed, while the corrected decoder returns an empty record and records zero
+getter reads. Focused Tiled-property tests pass 9/9. No browser, wallet,
+provider, RPC, proof, signature, funds or transaction was used.
+
+### 2026-08-30 — Backend listener setup releases hooks after synchronous bind failure
+
+`listenBackendServer()` installed its `error` and `listening` handlers before
+calling Node's `server.listen()`. A synchronous transport throw rejected the
+startup promise but left both handlers attached, so a later retry on the same
+server could invoke stale startup callbacks and retain the failed attempt.
+
+The bind call now removes both startup handlers before propagating a
+synchronous error. Normal asynchronous bind errors, successful listening and
+the existing close behavior are unchanged.
+
+*Verified:* a public listener regression makes an injected `server.listen()`
+throw synchronously and checks that the rejection preserves the exact error
+while no new `error` or `listening` hooks remain. The old path failed with one
+stale hook; the corrected Backend server suite passes 25 tests. No browser,
+provider, RPC, wallet, proof, signature, funds or transaction was used.*
+
+### 2026-08-30 — Street tile observers retain retryable ownership after failure
+
+`StreetScene.reportTile()` rolled back its `lastTile` sentinel when the door
+trigger failed, but an exception from the injected `onTileChanged` observer
+escaped after the sentinel was committed. A movement/presence handoff failure
+could therefore make the player remain on a tile that the Scene would never
+report again.
+
+The observer handoff now rolls back only its own sentinel when it fails. A
+nested report or Scene teardown that has already taken ownership remains
+authoritative, and the original observer error is preserved so the same tile
+can be retried after the external consumer recovers.
+
+*Verified:* a public StreetScene regression makes the first tile observer call
+throw; the old path retained `{x: 0, y: 0}` and suppressed the retry, while the
+corrected path restores `{-1, -1}` and successfully reports the same tile on
+the next call. Focused StreetScene lifecycle tests pass 26/26. No browser,
+wallet, provider, RPC, proof, signature, funds or transaction was used.
+
+### 2026-08-30 — Avatar Studio entry rolls back failed semantic announcement
+
+`createAvatarStudioController.enter()` published the admitted Studio state and
+then announced `avatar-studio:entered` without treating the event bus as an
+external lifecycle boundary. If a synchronous listener threw, entry surfaced an
+error but left `inRoom = true` and the presentation entered; a later `enter()`
+was a no-op, so the failed transition could not be retried coherently.
+
+The announcement now compensates the presentation and restores outside state
+when delivery fails, while preserving the original announcement error. A
+reentrant destroy or prior lifecycle transition remains authoritative, and a
+later explicit enter can retry after the listener recovers.
+
+*Verified:* a public regression makes the first `avatar-studio:entered`
+announcement throw; the old path retained `inRoom` and blocked retry, while the
+corrected path calls presentation exit once, preserves the exact error, and
+successfully re-enters. Focused Avatar Studio tests pass 39/39. No browser,
+wallet, provider, RPC, proof, signature, funds or transaction was used.
+
+### 2026-08-30 — Avatar Studio presentation entry rolls back partial handoffs
+
+`createAvatarStudioPresentation.enter()` performed a sequence of external
+visibility, physics, bounds and position calls without compensation. If a
+later port call threw, earlier calls could leave the player disabled and the
+street hidden even though the controller rolled back its logical `inRoom`
+state; the next frame then ran street movement against a half-entered world.
+
+Entry now attempts the known street restoration contract after any mid-handoff
+failure, preserving the original error and attempting every restoration action
+so a secondary port failure cannot skip the remaining repairs. A failed entry
+remains retryable once the external port recovers.
+
+*Verified:* a public presentation-port regression fails on the old path after
+`setWorldBounds` throws, leaving body/visibility state partially entered; the
+corrected path restores body, visibility, street bounds and position while
+preserving the exact error. Focused Avatar Studio tests pass 38/38. No browser,
+wallet, provider, RPC, proof, signature, funds or transaction was used.
+
+### 2026-08-30 — Financial HUD pending state retains every mounted owner
+
+`BankPanel` and `ExchangePanel` each wrote the global `hud:pending` count as
+a last-writer boolean. When one panel was busy and another mounted panel
+unmounted, the idle panel's cleanup published `0` and hid the still-active
+wallet handoff.
+
+Financial panels now own one pending marker per Shell bus. The HUD count is
+the number of currently busy mounted panels; changing a panel's stage keeps
+its marker, and unmounting removes only that panel's marker. Single-panel
+cleanup and wallet-operation state semantics are unchanged.
+
+*Verified:* a public jsdom regression mounts two Bank panels on one Shell bus,
+enters wallet approval in one, then unmounts the idle one. The old last-writer
+path reports `0`; the corrected path retains `1` until the signing panel
+settles or unmounts. The focused Bank/Exchange lifecycle files pass 3/3 tests.
+No browser, wallet, provider, RPC, proof, signature, funds or transaction was
+used.
+
+### 2026-08-30 — Avatar Studio entry rolls back failed state publication
+
+`createAvatarStudioController.enter()` committed `inRoom = true` and ran the
+presentation handoff before publishing its state. If the synchronous
+`onChange` renderer threw, the controller stayed in the Studio even though the
+entry transition had failed; a later `enter()` became a no-op and the player
+could remain in a partially admitted room.
+
+Entry publication now rolls the controller back to outside and invokes the
+existing presentation exit compensation when delivery fails. The original
+publication error remains authoritative, and a later enter can retry the
+normal handoff.
+
+*Verified:* a public Avatar Studio regression makes the first state publication
+throw; the old path retained `inRoom`, while the corrected path exits once,
+preserves the exact error, and successfully re-enters after delivery recovers.
+Focused Avatar Studio tests pass 37/37. No browser, wallet, provider, RPC,
+proof, signature, funds or transaction was used.
+
+### 2026-08-30 — Bridge saved-quote resume retains its callback owner
+
+`BridgePanel.resumeSavedQuote()` was the only public panel transition that
+called another transition through `this`. A caller that extracted the method
+for an event callback therefore lost the machine receiver after the refresh
+and threw before the account-bound shield preflight could run.
+
+The preflight transition is now a machine-owned closure, and resume calls that
+closure directly. The extracted callback remains bound to the same panel
+state, while refresh, account matching, plan validation and all existing close
+ownership remain unchanged.
+
+*Verified:* a public regression opens a saved quote, extracts
+`resumeSavedQuote`, and completes the refresh plus preflight through the
+extracted callback. The old path throws a receiver `TypeError`; the corrected
+Bridge machine suite passes 49 tests. No browser, wallet, provider, RPC,
+proof, signature, funds or transaction was used.
+
+### 2026-08-30 — Avatar selection delivery must roll back the rendered sprite
+
+`StreetScene` applied the new avatar sprite before delivering the existing
+`avatar:selected` event to the Shell. The World selection rolls its logical
+key back when that external delivery throws, but the Phaser visual stayed on
+the new sprite. A synchronous Shell failure could therefore leave the Studio
+reporting cosy `avatar-1` while the player was visibly wearing fighting
+`avatar-9`; a later toggle started from the wrong visual state.
+
+The Scene now tracks the rendered sprite and application revision, and rolls
+the visual back when the same selection's delivery fails. A newer reentrant
+selection is left authoritative, and a rollback failure never masks the
+original delivery error.
+
+*Verified:* a public lifecycle regression first observed logical `avatar-1`
+with rendered `avatar-9` after a post-apply delivery failure; the corrected
+path reapplies `avatar-1` and preserves the original error. Focused StreetScene
+tests pass 25/25. No browser, wallet, provider, RPC, proof, signature, funds
+or transaction was used.
+
+### 2026-08-30 — Street tile observers must not outlive Scene ownership
+
+`StreetScene.reportTile()` delivered the door transition first and then called
+its injected `onTileChanged` observer without checking whether that synchronous
+door delivery had retired the Scene. A Shell listener can destroy the Scene
+while handling `building:entered` or another door event; the stale tile
+observer then ran after World ownership was gone and could update a retired
+movement/presence consumer.
+
+The Scene now rechecks its cleanup ownership after `doors.update()` and skips
+the external tile observer when the cycle was retired. Door rollback and the
+normal observer ordering are unchanged.
+
+*Verified:* a red-first public Scene regression supplied a door stub that
+retired the Scene synchronously; the old path called `onTileChanged` once and
+the corrected path calls it zero times. The focused StreetScene lifecycle
+suite passes 24/24 after the guard. No browser, wallet, provider, RPC, proof,
+signature, funds or transaction was used.
+
+### 2026-08-30 — Lobby server must report an ephemeral bound port
+
+`startPresenceServer({ port: 0 })` asked Node for an ephemeral listener but
+returned the requested value `0` in both `PresenceServer.port` and its
+`endpoint`. A caller following the public server contract could therefore
+receive `ws://127.0.0.1:0` (or `ws://localhost:0`) even though the server was
+listening on another port; the next client connection failed before any lobby
+protocol work. This was a server lifecycle/configuration boundary, not a
+client payload policy.
+
+When the requested port is zero, startup now reads the actual numeric port from
+the transport's bound HTTP server and exposes that value in both fields. A
+missing, non-numeric, or out-of-range bound address fails startup instead of
+advertising an unusable endpoint; explicit ports and consecutive-port fallback
+are unchanged.
+
+*Verified:* a red-first public server-options regression started the server on
+port zero and observed `server.port === 0`; the corrected test requires a
+positive reported port and endpoint-port parity. The focused Lobby server
+configuration suite passes 3/3. No browser, wallet, provider, RPC, proof,
+signature, funds or transaction was used.
+
+### 2026-08-30 — Production capability checks retire with their gate
+
+`WalletCapabilityGate` started capability detection without an owner signal.
+If the wallet session disconnected or changed network while that check was
+pending, the gate unmounted but the capability operation remained live beyond
+the admission it belonged to. That could leave wallet work running after the
+connected financial surface had been retired.
+
+The gate now creates one `AbortController` for each mounted detection attempt,
+passes its signal to `connect.connect`, and aborts it during cleanup. This is
+abort-only: it does not call `disconnect` during cleanup, so React StrictMode's
+probe does not invalidate a still-live flow and start another wallet query.
+The retired result cannot be consumed by a mounted capability gate, presence
+owner, or financial surface.
+
+*Verified:* a red-first `ProductionRoot` regression used a deferred capability
+operation, retired the connected session, and observed that the old gate passed
+no signal. The corrected path receives a live signal and aborts it when the
+session returns to the wallet gate. Focused ProductionRoot tests pass 10/10;
+no browser, wallet prompt, provider, RPC, proof, signature, funds or
+transaction was used.
+
+### 2026-08-30 — Remote avatar visual construction retains partial ownership
+
+`createRemoteAvatarLayer` added a new sprite to the Phaser layer and then
+constructed its visual controller before recording the sprite in `avatars`.
+Because the visual controller renders immediately, a setter failure during
+that constructor left the sprite in the Phaser layer with no cleanup or retry
+owner; the next snapshot created a second sprite for the same peer.
+This is distinct from the existing post-registration `updateAvatar()` guard:
+that guard cannot run when the visual controller constructor itself throws.
+
+New sprites are now registered before visual-controller construction. A failed
+initial presentation retains the partial avatar for a later retry and for
+explicit layer teardown; successful existing-avatar updates, removal retry and
+aggregate cleanup behavior are unchanged.
+
+*Verified:* a red-first public regression makes the first new sprite's
+`setTexture` throw, republishes the same peer, and asserts the old path creates
+a second sprite while leaving the first unowned. The corrected path retries on
+the original sprite and destroys it exactly once at layer teardown. Removing
+the early ownership registration fails the regression. Remote-avatar focused
+tests, full World tests, World typecheck, invariants and diff checks are
+recorded on this candidate. No browser, wallet, provider, RPC, proof,
+signature, funds or transaction was used.
+
+### 2026-08-30 — Exchange panels use the admitted route authority
+
+`VisitLayer` admitted an Exchange station against its supplied route register,
+but `ExchangePanel` did not accept or forward that register when it created
+its owned machine. A custom composition could therefore pass the station gate
+with one route authority while the Exchange panel opened using the canonical
+global register.
+
+`ExchangePanel` now accepts the route register and gives it to the owned
+Exchange machine; the station wiring forwards the same register used for
+admission. Injected machines retain their own authority, and the canonical
+production register and financial handoff are unchanged.
+
+*Verified:* a red-first public Exchange render supplied a register that
+disabled `exchange.swap`; the old component rendered the balance form instead
+of the existing fail-closed door. The corrected component renders
+`unapproved-route` and no balance form. ExchangePanel and Visit tests pass;
+typecheck, build, invariants and diff hygiene pass. No browser, wallet,
+provider, RPC, proof, signature, funds or transaction was used.
+
+### 2026-08-30 — Web route records reject accessor-backed fields
+
+The route resolver checked only whether each `RouteGrade` key was present as
+an own property. An untrusted route record could therefore define an accessor
+for `route` or another approval field; resolving the route then invoked that
+accessor, allowing a throw to escape the fail-closed door decision.
+
+Route records now require every field to be an own data property before any
+route or building lookup reads it. Authored register entries and ordinary
+custom fixtures retain their behavior; inherited and accessor-backed records
+resolve as absent route data.
+
+*Verified:* a red-first public routes regression supplied all required fields
+but made `route` an accessor that throws. The old resolver escaped the error;
+the corrected resolver returns the existing locked unknown-route decision
+without invoking the accessor. Focused route tests pass 34/34. No browser,
+wallet, provider, RPC, proof, signature, funds or transaction was used.
+
+### 2026-08-30 — Exchange reviews use their supplied route authority
+
+`createExchangePanel()` accepted a caller-supplied route register for the
+Exchange door, but its prepared review derived disclosures from the global
+canonical register instead. A custom composition could therefore open using
+one route authority while showing the disclosure belonging to another, and
+the commit surface would not describe the route that admitted the panel.
+
+Swap review construction now passes the same register used for door admission
+into disclosure derivation. The canonical register and financial handoff are
+unchanged; custom registers remain an explicit test/composition seam.
+
+*Verified:* a red-first public Exchange-machine regression supplied a valid
+register with a distinct Exchange disclosure. The old review showed the global
+disclosure; the corrected review shows the supplied one. Removing the register
+argument reproduces the failure. Exchange tests pass 29/29. No browser,
+wallet, provider, RPC, proof, signature, funds or transaction was used.
+
+### 2026-08-30 — Bridge disclosures use their supplied route authority
+
+`VisitLayer` admitted Bridge stations against its supplied route register, but
+`BridgePanel` always read the global register when rendering the public bridge
+disclosure. A custom composition could therefore admit a station with one
+route authority while showing copy from another authority.
+
+`BridgePanel` now accepts and uses the same register for both disclosure
+surfaces and passes it into the nested shield Bank. Menu and station wiring
+forward the register from `VisitLayer`; the canonical production register and
+bridge behavior are unchanged.
+
+*Verified:* a red-first public Bridge render supplied a valid register with a
+distinct `bridge.deposit` disclosure. The old panel rendered the canonical
+copy; the corrected panel renders the supplied copy. Removing either
+disclosure argument reproduces the regression. Bridge and Visit tests pass
+25/25. No browser, wallet, provider, RPC, proof, signature, funds or
+transaction was used.
+
+### 2026-08-30 — Fixed-room input restoration cannot resume a retired transition
+
+`createFixedRoomController.enter()` and `leave()` crossed the injected input
+gate's synchronous `resume()` callback without rechecking controller
+ownership. A gate callback that destroyed the controller could therefore still
+invoke the presentation `onEnter`/`onExit` callback; a callback that re-entered
+during exit could run the stale exit presentation as well. The controller's
+state was already changed, so the stale callback described a transition that
+no longer belonged to the active lifecycle.
+
+Both transitions now recheck that the controller is still live and still owns
+the expected room state immediately after input restoration. A retired or
+re-entered transition stops before presentation callbacks; ordinary entry and
+exit ordering is unchanged.
+
+*Verified:* red-first public fixed-room regressions make input `resume()`
+destroy the controller during entry and exit, and make it synchronously
+re-enter during exit. Before the guard, stale `onEnter`/`onExit` callbacks ran;
+after the guard, none runs for the retired turn. Removing either lifecycle
+guard fails its corresponding regression. The focused fixed-room suite and
+World package gates are recorded on the candidate. No browser, wallet,
+provider, RPC, proof, signature, funds or transaction was used.
+
+### 2026-08-30 — Kenney runtime texture creation must recover from a partial pair
+
+`createKenneyRuntimeTextures()` treated the `tiles` texture as the complete
+runtime-resource sentinel. If `tiles` was created but the `door` canvas
+allocation returned null or threw, the function left `tiles` registered and
+failed. A later scene creation then returned early on the existing `tiles`
+key, leaving the required door texture absent.
+
+The runtime texture factory now owns the two keys as one pair. It removes a
+stale half-pair before retrying, cleans up anything registered by a failed
+allocation/render attempt, and returns early only when both textures exist.
+The original creation error remains authoritative; normal complete-pair reuse
+and all atlas geometry are unchanged.
+
+*Verified:* a red-first public fake-texture regression made the door allocation
+fail after tiles had registered; the old factory left tiles behind and could
+not recover on the next call. The corrected test confirms both keys are absent
+after failure, then confirms a retry creates both from a stale half-pair. The
+package-focused test and mutation of the cleanup/pair guards fail as expected;
+World typecheck, tests, invariants and diff checks are recorded on this
+candidate. No browser, wallet, provider, RPC, proof, signature, funds or
+transaction was used.
+
+### 2026-08-30 — Avatar outfit selection rejects forged runtime keys
+
+The exported World outfit selection trusted its TypeScript-only
+`AvatarSpriteKey` parameter. An untyped caller could therefore select an
+arbitrary string, publish it through `avatar:selected`, and leave the local
+selection authority in a state that the World avatar renderer cannot resolve.
+
+`select()` now validates the key against the World-owned catalog and returns
+`false` without changing state or emitting when the runtime value is unknown.
+Valid cosy/fighting selections, toggle pairing, event delivery and rollback on
+delivery failure are unchanged.
+
+*Verified:* a red-first public regression cast `not-an-avatar` through the
+selection seam after selecting `avatar-2`; the old selection changed authority
+and emitted the forged key, while the corrected selection remains `avatar-2`
+and emits nothing. Removing the runtime guard fails the regression. World
+focused/full tests, typecheck, invariants and diff checks are recorded on this
+candidate. No browser, wallet, provider, RPC, proof, signature, funds or
+transaction was used.
+
+### 2026-08-30 — Avatar Studio presentation blocks transitions during teardown
+
+`createAvatarStudioPresentation.destroy()` marked the presentation destroyed
+only after calling the consumer-owned `port.destroyStudio()`. If that callback
+re-entered `enter()` or `exit()` synchronously, the presentation started a new
+transition while teardown was still in flight and could mutate already-retired
+Phaser state.
+
+Presentation transitions now treat the in-flight destroy operation as retired
+ownership and return immediately while `destroying` is true. The existing
+post-step destroyed guards, retry after a failed destroy, and normal entry/exit
+ordering are unchanged.
+
+*Verified:* a red-first public regression made `destroyStudio()` synchronously
+call both an extracted `enter()` and `exit()` transition; before the guard the
+port received transition calls during teardown, while after it received none.
+Removing the `destroying` guard fails the regression. Avatar Studio focused and
+full World tests, World typecheck, invariants and diff checks are recorded on
+this candidate. No browser, wallet, provider, RPC, proof, signature, funds or
+transaction was used.
+
+### 2026-08-30 — Exchange pending state reaches the world HUD
+
+`ExchangePanel` drove private swap preparation and wallet submission without
+publishing the shared `hud:pending` event. The Bank panel already publishes
+that event, and the shared contract describes it as the ambient in-flight
+operation indicator, so a swap could be awaiting wallet approval while the
+world HUD continued to report no pending action.
+
+The Exchange panel now publishes count `1` while its flow is `preparing` or
+`submitting`, and emits count `0` when the panel unmounts. The machine's
+financial state, wallet handoff and receipt behavior are unchanged.
+
+*Verified:* a red-first jsdom regression mounted an Exchange panel with a
+deferred confirmation, entered the wallet approval stage, and observed that
+the old panel emitted no pending count. The corrected lifecycle test observes
+`1`, unmounts before confirmation settles, observes the cleanup `0`, and then
+allows the original confirmation to settle. No browser, wallet, provider,
+RPC, proof, signature, funds or transaction was used.
+
+### 2026-08-30 — Fixed-room destruction retries failed cleanup ownership
+
+`createFixedRoomController().destroy()` marked the controller permanently
+destroyed before teardown. If a Shell-listener stop callback or input
+restoration threw, a later `destroy()` became a no-op even though that resource
+could still be attached or the keyboard could still be suspended.
+
+Destruction now retires the controller immediately but retains only failed
+cleanup callbacks for a later retry. Successful listener removal and input
+restoration are not repeated; reentrant destruction during one attempt is
+ignored. The first cleanup error remains unchanged, multiple errors remain an
+`AggregateError`, and successful destruction remains idempotent.
+
+*Verified:* red-first public regressions make a listener stop and input
+restoration fail once; the old controller cannot clean them on a second
+`destroy()`, while the corrected controller retries only those failures and
+completes cleanup. World tests pass 24 files / 332 tests; World typecheck and
+invariants pass. No browser, wallet, provider, RPC, proof, signature, funds
+or transaction was used.
+
+### 2026-08-30 — Web event payload snapshots reject accessors at the boundary
+
+The Web event bus snapshotter previously read payload members through normal
+property access before entering its subscriber-isolation guard. An
+accessor-backed or hostile Proxy payload could therefore throw out of
+`emit()`, interrupting the producer before any subscriber ran.
+
+Event snapshots now traverse own data descriptors only. If snapshotting finds
+an accessor or another malformed object boundary, the event is dropped and
+`emit()` returns without invoking subscribers. Plain records, arrays, cycles,
+listener generation ownership and handler-error isolation are unchanged.
+
+*Verified:* a red-first public bus regression supplied an accessor-backed
+`hud:pending` payload whose getter threw; the old bus escaped the exception.
+The corrected bus drops it without invoking the subscriber. Focused event-bus
+tests pass 14/14. No browser, wallet, provider, RPC, proof, signature, funds
+or transaction was used.
+
+### 2026-08-30 — Fixed-room Scene ownership rolls back after controller entry failure
+
+`StreetScene` provisionally set `activeRoom` before invoking a fixed-room
+controller's `enter()`. If that controller entry threw, its own state rolled
+back to outside, but the Scene retained the building as active and subsequent
+updates could follow a stale interior ownership path.
+
+The Scene now clears that provisional `activeRoom` only when the same building
+handoff fails and no nested transition or teardown has replaced the ownership.
+The original error and the controller's retryable entry behavior are
+preserved; successful entry ordering is unchanged.
+
+*Verified:* a red-first public StreetScene regression makes fixed-room
+controller entry throw from a door transition and observes the old `activeRoom`
+leak. The corrected Scene clears it while preserving the exact error. World
+tests pass 24 files / 331 tests; World typecheck and invariants pass. No
+browser, wallet, provider, RPC, proof, signature, funds or transaction was
+used.
+
+### 2026-08-30 — Avatar Studio Scene mode remains retryable after exit failure
+
+`StreetScene.exitAvatarStudioRoom()` cleared the Scene's
+`avatarStudioActive` flag before invoking the presentation exit handoff. If
+that injected presentation callback threw, the Avatar Studio controller
+restored its own `inRoom` state for retry, but the Scene remained in street
+mode and subsequent updates followed the wrong movement path.
+
+The Scene now restores its Studio mode flag when presentation exit fails,
+unless the callback already retired the Scene. The original error remains
+unchanged, the controller's retryable exit behavior is preserved, and a later
+exit completes normally.
+
+*Verified:* a red-first public StreetScene regression makes presentation exit
+throw, then confirms the controller and Scene both remain in Studio mode; the
+old path left `avatarStudioActive` false. The next exit succeeds and both
+return outside. World tests pass 24 files / 330 tests; World typecheck and
+invariants pass. No browser, wallet, provider, RPC, proof, signature, funds
+or transaction was used.
+
+### 2026-08-30 — Avatar Studio Scene mode rolls back after presentation failure
+
+`StreetScene.enterAvatarStudioRoom()` marked the Scene's
+`avatarStudioActive` flag before invoking the presentation handoff. If that
+injected presentation callback threw, the Avatar Studio controller rolled back
+to outside state but the Scene retained Studio mode, so later updates followed
+the Studio movement path for a controller that was not in the Studio.
+
+The Scene now clears its mode flag when presentation entry fails, preserving
+the original error and allowing the controller's retryable entry transition to
+run normally on the next attempt. Successful entry ordering and ordinary
+teardown are unchanged.
+
+*Verified:* a red-first public StreetScene regression makes the presentation
+entry callback throw, then confirms the controller and Scene both remain
+outside; the old path left `avatarStudioActive` true. The retry then succeeds
+and both report Studio mode. World tests pass 24 files / 329 tests; World
+typecheck and invariants pass. No browser, wallet, provider, RPC, proof,
+signature, funds or transaction was used.
+
+### 2026-08-30 — Bank HUD pending state retires on panel unmount
+
+`BankPanel` published `hud:pending` while preparing or submitting, but had no
+cleanup publication. Closing the room during a wallet handoff could therefore
+leave the World HUD showing a pending action forever: the machine may settle
+later, but the unmounted panel cannot publish its final state.
+
+The panel now emits a zero pending count when its shell-bus lifetime ends,
+including a bus replacement. State-driven publications and the submission
+itself are unchanged.
+
+*Verified:* a red-first jsdom regression mounted a Bank panel, entered the
+wallet approval stage, unmounted it before confirmation settled, and observed
+the old last HUD count remain `1`. The corrected lifecycle test observes the
+clearing `0` and then lets the original confirmation settle. No browser,
+wallet, provider, RPC, proof, signature, funds or transaction was used.
+
+### 2026-08-30 — Lobby movement converges to the server's bounded coordinates
+
+`LobbyClient.updatePosition()` rounded finite coordinates but did not apply the
+server's `WORLD_LIMIT` clamp. An out-of-bounds finite request therefore became
+the client's desired position while the server stored its clamped position;
+reconciliation could never observe equality and retried that move forever.
+
+Movement now uses the shared finite-round-and-clamp policy before storing or
+sending desired state. Nonfinite values remain ignored, valid in-bounds values
+and facing normalization are unchanged, and the server remains authoritative.
+
+*Verified:* a red-first public Lobby regression requested `(9000, -9000)` and
+observed the old client send those values, then fail to converge against the
+server's `(WORLD_LIMIT, -WORLD_LIMIT)` state. The corrected client sends the
+bounded placement and clears desired state after the matching server snapshot.
+Lobby tests pass 11 files / 250 tests; Lobby typecheck and invariants pass. No
+browser, wallet, provider, RPC, proof, signature, funds or transaction was
+used.
+
+### 2026-08-30 — Avatar visual state and target rendering stay transactional
+
+`createAvatarVisualController.present()` replaced its logical pose before
+calling the Phaser target. If a target setter partially mutated the sprite and
+then threw, the controller exposed the failed pose while its render cache still
+held the prior key. Returning to that prior pose could therefore skip rendering
+and leave the sprite with the partial failed mutation.
+
+Pose presentation now renders the candidate first and commits logical state
+only after success. A failed target call retains the last successful state and
+invalidates the cache so a later retry reapplies the target even when its pose
+key matches the previous successful key. Normal pose deduplication and
+animation cadence are unchanged.
+
+*Verified:* a red-first public World regression makes `setOrigin` throw after
+the texture changes during a new pose, then returns to the original pose. The
+old controller reports the new sprite and skips the repair; the corrected
+controller preserves the old state and reapplies the original texture.
+Avatar-visual tests pass 13/13. No browser, wallet, provider, RPC, proof,
+signature, funds or transaction was used.
+
+### 2026-08-30 — Room resolution checks structured panel identity
+
+`resolveRoom()` previously trusted that a panel stored under a building key
+belonged to that building. A miswired or forged structured descriptor could
+therefore put the Bank panel under Exchange (or another building), passing the
+door and rendering the wrong financial route.
+
+Room resolution now requires structured panel descriptors to carry an own data
+`building` field matching the requested key. Generic non-object test seams
+remain supported, while mismatched or accessor-backed descriptor identities
+fail closed as unbuilt.
+
+*Verified:* the red-first resolver regression placed the authored Bank
+descriptor under the Exchange key; the old resolver returned `panel`, while
+the corrected resolver returns the existing `unbuilt` result. No browser,
+wallet, provider, RPC, proof, signature, funds or transaction was used.
+
+### 2026-08-30 — Visit listeners retire stale World generations
+
+`VisitController.listen()` previously left every earlier World subscription
+authoritative when the same controller was rebound. A replaced World bus could
+therefore open or close a visit after a newer bus had become current, and a
+stale cleanup could also restore controls for the wrong listener generation.
+
+Each listener attachment now owns a generation. Older handlers become inert as
+soon as a new attachment is made, and cleanup restores Shell-owned controls
+only for the still-current attachment; each cleanup remains responsible for
+detaching its own handlers.
+
+*Verified:* a red-first public Visit regression rebound one controller from a
+first World bus to a current bus, then emitted an entry on the retired bus. The
+old controller opened Bank, while the corrected controller stays outside until
+the current bus opens Exchange. No browser, wallet, provider, RPC, proof,
+signature, funds or transaction was used.
+
+### 2026-08-30 — Avatar Studio tile delivery remains retryable after failure
+
+`StreetScene.reportAvatarStudioTile()` committed its `lastTile` sentinel
+before delegating to the Studio controller. If synchronous figure selection or
+presentation delivery threw, the player remained on that tile but subsequent
+frames treated it as already handled, so the selection could never retry.
+
+Studio tile reporting now rolls back only its own sentinel when the controller
+throws; a nested report that has already taken a newer sentinel remains
+authoritative. Normal tile de-duplication and Studio lifecycle behavior are
+unchanged.
+
+*Verified:* a red-first public StreetScene regression makes the first
+`avatar:selected` delivery throw on a figure tile, observes the old tile
+sentinel retained, then retries the same tile and confirms the selection
+completes. The corrected lifecycle suite passes 20/20; the full World suite,
+typecheck and invariant evidence are recorded on the candidate. No browser,
+wallet, provider, RPC, proof, signature, funds or transaction was used.
+
+### 2026-08-30 — Avatar Studio exit presentation failure remains retryable
+
+`createAvatarStudioController.leave()` cleared Studio ownership before invoking
+the consumer-owned `onExit` callback. If that callback threw, the original
+error was propagated but the controller stayed outside the Studio, so a later
+exit retry became a no-op and could never complete the presentation handoff.
+
+Studio exit now restores the prior room ownership and highlighted figure when
+`onExit` throws, unless that callback synchronously destroyed or re-entered the
+controller. The existing post-callback ownership guard still suppresses stale
+publication/events, and normal exit ordering is unchanged.
+
+*Verified:* a red-first public Avatar Studio regression makes the first
+`onExit` callback throw, observes the old controller outside the Studio, then
+retries the same exit and confirms no second callback. The corrected path
+preserves the exact original error, keeps Studio ownership for retry, and
+completes the second exit. Focused Avatar Studio tests pass 35/35. No browser,
+wallet, provider, RPC, proof, signature, funds or transaction was used.
+
+### 2026-08-30 — Bank mode configuration is snapshotted at construction
+
+`createBankPanel()` previously retained the caller's `allowedModes` array
+directly after validating it. A later mutation of that array could therefore
+rewrite which financial route the existing panel accepted, even though its
+machine and review state had already been constructed.
+
+The validated mode list is now copied and frozen at construction. The panel's
+mode authority cannot be changed through the caller's array; explicit panel
+recreation remains the way to supply a new mode set.
+
+*Verified:* a red-first Bank regression appended `transfer` to a panel created
+with only `shield`; the old machine then accepted the new route, while the
+corrected machine remains on the original Shield authority. No browser,
+wallet, provider, RPC, proof, signature, funds or transaction was used.
+
+### 2026-08-30 — Fixed-room exit presentation failure remains retryable
+
+`FixedRoomController.leave()` relinquished room ownership before invoking the
+consumer-owned `onExit` callback. If that callback threw, the original error
+was propagated but the controller stayed outside the room, so a later exit
+retry became a no-op and could never complete the presentation handoff.
+
+Exit now restores the prior room ownership, control owner, highlighted station
+and approach-arm state when `onExit` throws, unless that callback synchronously
+destroyed or re-entered the controller. The existing post-callback ownership
+guard still suppresses stale publication/events, and normal exit ordering is
+unchanged.
+
+*Verified:* a red-first public fixed-room regression makes the first `onExit`
+callback throw, observes the old controller outside the room, then retries the
+same exit and confirms no second callback. The corrected path preserves the
+exact original error, keeps the room owned for retry, and completes the second
+exit. Focused fixed-room tests pass 54/54. No browser, wallet, provider, RPC,
+proof, signature, funds or transaction was used.
+
+### 2026-08-30 — Batch intent validation ignores accessor-backed fields
+
+`createBatchAccumulator().accept()` previously read candidate intent fields
+through ordinary property access and spread the candidate after validation. An
+accessor-backed or proxy-shaped intent could therefore execute a getter or
+throw out of the accumulator instead of returning its typed rejection, at the
+financial boundary that must exclude arbitrary protocol-shaped input.
+
+The parser now reads only own data descriptors, captures those values into a
+fresh accepted record, and maps descriptor/proxy failures to the existing
+`not-an-intent` rejection. Plain game intents retain their existing shape,
+amount, route-mixing and batch-limit behavior.
+
+*Verified:* the red-first accumulator regression supplied an enumerable
+accessor-backed recipient whose getter threw; the old parser escaped the
+exception and invoked the getter, while the corrected parser returns
+`not-an-intent` without invoking it. No browser, wallet, provider, RPC, proof,
+signature, funds or transaction was used.
+
+### 2026-08-30 — Lobby config resolution fails closed for malformed containers
+
+`resolveRoomConfig()` assumed its operator override argument was always a
+non-null object. A runtime `null` supplied through composition therefore threw
+before the lobby could resolve its bounded defaults, turning a malformed
+configuration into a startup failure rather than a safe configuration.
+
+Resolution now treats null and non-object override containers as no overrides.
+Valid operator fields, numeric clamps, sprite/default selection and the frozen
+resolved configuration are unchanged; this does not widen any lobby policy.
+
+*Verified:* a red-first public Lobby regression supplied a null override and
+observed the old null dereference; the corrected resolver returns the frozen
+default configuration. The focused Lobby privacy suite passes 17 tests. No
+browser, external lobby, wallet, provider, RPC, proof, signature, funds or
+transaction was used.
+
+### 2026-08-30 — Production capability admission validates connected state shape
+
+`capabilityAdmits()` previously admitted any runtime object whose `name` was
+`connected`, without checking the capability or registration fields needed to
+establish a usable Wallet API verdict. A malformed or inherited connected
+record at the Web composition boundary could therefore bypass the production
+capability gate and mount the app.
+
+The predicate now reads own data fields only and requires true STRK20 support,
+a nonempty wallet API version, a valid registration value, and a matching
+`registrationConfirmed` flag. `not-registered` remains an explicit admitted
+room. Malformed, inherited or accessor-backed fields fail closed.
+
+*Verified:* red-first production-root regressions supplied a connected record
+without capability, with wrong runtime field types, and with all fields
+inherited; the old predicate returned true for these shapes, while the
+corrected predicate returns false. No browser, wallet, provider, RPC, proof,
+signature, funds or transaction was used.
+
+### 2026-08-30 — Fixed-room entry rolls back after presentation failure
+
+`createFixedRoomController.enter()` resumed input and marked the room owned
+before invoking its injected `onEnter` presentation callback. If that callback
+threw, the controller remained `inRoom` and a later doorway retry became a
+no-op, leaving the failed presentation transition unrecoverable.
+
+Entry now restores the controller's outside state when `onEnter` throws:
+`inRoom` is cleared, control returns to World, the highlight is cleared and
+station approach arming is reset. The original presentation error is
+preserved, input restoration and successful entry ordering are unchanged, and
+a later explicit entry retries the callback.
+
+*Verified:* a red-first public World regression makes the first `onEnter`
+callback throw, observes the old controller remain inside, then passes after
+the rollback and confirms a second entry invokes the callback. Focused fixed
+room tests pass 53 tests. No browser, wallet, provider, RPC, proof, signature,
+funds or transaction was used.
+
+### 2026-08-30 — Web address identity rejects malformed runtime values
+
+`sameAddress()` used numeric comparison when possible but fell back to raw
+string equality on conversion failure. Two identical malformed values such as
+`not-hex` were therefore treated as the same account or recipient. That could
+weaken Bridge and financial identity checks when a structural caller supplied
+runtime data outside the TypeScript address contract.
+
+The comparator now requires both inputs to have the accepted lowercase `0x`
+hexadecimal address shape before applying padding-tolerant numeric equality;
+malformed, decimal and uppercase-prefix values fail closed. Valid address
+spellings and all existing financial validation remain unchanged.
+
+*Verified:* the red-first Web formatting regression observed identical
+malformed, decimal and uppercase-prefix values comparing equal on the old
+path. The corrected comparator returns false while retaining padded/unpadded
+hex equality. No browser, wallet, provider, RPC, proof, signature, funds or
+transaction was used.
+
+### 2026-08-30 — Visit Escape handlers retain their lifecycle owner when extracted
+
+`VisitController.handleEscape()` called `this.dismissLocked()` and
+`this.closeSurface()`. A legitimate event or callback consumer that extracted
+the public handler before passing it to a key listener therefore lost the
+controller receiver and threw instead of closing the active Menu/Station
+surface or dismissing a locked door.
+
+The controller now closes over its owned transition functions and publishes
+`handleEscape` as a receiver-independent callback. Direct method calls and
+the existing visit-layer Escape behavior are unchanged.
+
+*Verified:* the red-first public visit regression extracted
+`const handleEscape = controller.handleEscape` after opening a Bank menu; the
+old path threw a TypeError reading `closeSurface`, while the corrected path
+returns to Game Mode. No browser,
+wallet, provider, RPC, proof, signature, funds or transaction was used.
+
+### 2026-08-30 — Lobby movement normalizes malformed facing before reconciliation
+
+`LobbyClient.updatePosition()` trusted its TypeScript `Facing` parameter at the
+runtime boundary. An invalid string or object was sent unchanged, while the
+server normalized it to `down`; the client then compared the unnormalized
+desired facing with the server's value and retried the same movement forever.
+
+Movement updates now reuse the Lobby policy's `normalizeFacing()` before storing
+or sending the desired placement. Valid facings and the existing coordinate,
+send-floor and reconciliation behavior are unchanged; malformed runtime input
+falls back to the server's established `down` policy.
+
+*Verified:* red-first public Lobby regressions supplied an unknown string and a
+coercible object as facing, then published a matching server `down` state. The
+old path sent the malformed value and sent again during reconciliation; the
+corrected path sends one normalized move and converges. The focused Lobby client
+suite passes 71 tests. No browser, World, wallet, provider, RPC, proof,
+signature, funds or transaction was used.
+
+### 2026-08-30 — Lobby client drops non-finite movement updates
+
+`LobbyClient.updatePosition()` rounded and queued every caller-provided
+coordinate without checking finiteness. `NaN` or an infinity therefore crossed
+the client-to-server move boundary immediately; because the server rejects
+such placements, the desired value remained unconfirmed and reconciliation
+would keep retrying malformed movement at the send interval.
+
+The client now ignores updates with non-finite `x` or `y` before changing its
+desired placement or scheduling reconciliation. Valid finite coordinates,
+server-side bounds/clamping, facing, and send-floor behavior are unchanged;
+this is a defensive client boundary and does not widen lobby state.
+
+*Verified:* red-first public Lobby regressions supplied `NaN`, positive infinity
+and negative infinity through `updatePosition()`; the old path sent each
+malformed `move` payload, while the corrected path sends none and schedules no
+retry. The focused Lobby client suite passes 69 tests. No browser, World,
+wallet, provider, RPC, proof, signature, funds or transaction was used.
+
+### 2026-08-30 — Web room resolution fails closed for malformed panel containers
+
+`resolveRoom()` already rejected inherited panel descriptors, but it assumed
+the caller supplied an object for the panel registry. A malformed `null`
+registry therefore threw from `hasOwnProperty.call()` while resolving a valid
+building, replacing the room decision with an ErrorBoundary surface instead
+of the existing unbuilt result.
+
+Room resolution now treats null and non-object registries as empty. Valid
+custom registries and the frozen authored registry are unchanged; malformed
+containers fail closed to the existing `unbuilt` result after the privacy door
+has run.
+
+*Verified:* red-first public resolver regressions supplied `null`, object and
+string registry containers. The old resolver threw for `null`; the corrected
+resolver returns `unbuilt` for all three. The focused routes suite passes
+32/32, and no browser, wallet, provider, RPC, proof, signature, funds or
+transaction was used.
+
+### 2026-08-30 — Lobby disconnect publishes peer removal after leave failure
+
+`LobbyClient.disconnect()` retired its local room and identity before awaiting
+the SDK's `room.leave(true)`, but published the empty peer snapshot only after
+that promise resolved. If transport cleanup rejected, the client was already
+closed while peer subscribers retained the last visible avatars indefinitely.
+
+Disconnect now always emits the cleared peer snapshot after attempting room
+cleanup, then rethrows the original leave error. Local status and authority
+retirement remain immediate, successful cleanup is unchanged, and a failed SDK
+leave cannot strand stale World presentation state.
+
+*Verified:* a red-first public Lobby regression connected a fake room, exposed
+one peer, and rejected `room.leave(true)`. The old path left the listener's last
+snapshot populated; the corrected path delivers `[]` while preserving the
+exact rejection. The focused Lobby client suite passes 66 tests. No browser,
+World, wallet, provider, RPC, proof, signature, funds or transaction was used.
+
+### 2026-08-30 — Web route resolvers fail closed for malformed register containers
+
+The Web route gate validated individual `RouteGrade` entries but assumed the
+caller supplied an array for the register itself. A malformed public
+composition value such as `null`, an object or a string therefore threw from
+`.find()`/`.filter()` instead of returning an explicit locked door. In a live
+shell this could replace the route decision with an ErrorBoundary surface
+rather than preserving fail-closed admission.
+
+`findRoute()` now treats non-array register values as empty, and
+`buildingRoutes()` does the same for building-level admission. Canonical and
+valid custom arrays are unchanged; malformed containers resolve to the
+existing unknown-route/coming-soon locks without invoking route work.
+
+*Verified:* public route regressions supplied `null`, object and string
+registers and observed TypeErrors on the old path. The corrected resolver
+returns locked decisions for all three and the focused routes suite passes
+29/29. No browser, wallet, provider, RPC, proof, signature, funds or
+transaction was used.
+
+### 2026-08-30 — Street door handoffs remain retryable after a failed room entry
+
+`StreetScene.reportTile()` previously committed its `lastTile` sentinel before
+delegating a changed street tile to the door trigger. If the room controller's
+entry handoff threw, the door trigger restored its own prior occupancy, but the
+Scene retained the failed tile. A player who remained on that doorway could
+therefore never retry the same entry: later updates were suppressed as a
+duplicate tile even though the room was still outside.
+
+The Scene now retains the sentinel during delivery to preserve nested-report
+ordering, but rolls back only its own commit when the door handoff throws. A
+nested transition or reset that already took ownership is left authoritative;
+ordinary door delivery and tile-change callbacks are unchanged.
+
+*Verified:* a red-first public StreetScene regression makes the Bank room entry
+throw on the first update while the player remains on the same door tile. The
+old path calls `enter()` once and suppresses the second update; the corrected
+path retries and completes the second entry. The focused StreetScene lifecycle
+suite passes 19 tests. No browser, lobby, wallet, provider, RPC, proof,
+signature, funds or transaction was used.
+
+### 2026-08-30 — Bank mode tabs use the same route authority as the panel
+
+`BankPanel` passed only the active mode's door into its tab renderer. Every
+non-active tab then resolved its lock state against the default privacy
+register, so a custom/current route register could show an unapproved mode as
+open until the player clicked it. That made the tab presentation disagree with
+the machine's actual admission decision.
+
+The Bank view now accepts the route register used by its machine, resolves
+every mode tab from that register, and Menu/Station composition forwards the
+same register it used for admission. The active mode still uses the machine's
+already-resolved door, and the default production register is unchanged.
+
+*Verified:* a red-first static `BankPanel` regression supplied a private
+shield route plus an unapproved unshield route and observed the old unshield
+tab without its lock marker. The corrected render marks that tab locked.
+Focused Bank rendering tests pass 21/21. No browser, wallet, provider, RPC,
+proof, signature, funds or transaction was used.
+
+### 2026-08-30 — Fixed-room station decoding ignores accessor-backed fields
+
+`normalizeFixedRoomStations()` read Shell-provided station `station`, `label`
+and `status` fields through ordinary property access. An accessor-backed field
+could therefore execute arbitrary code or throw during synchronous Shell event
+delivery instead of being treated as malformed station input.
+
+Station matching and projection now read only own data properties. Accessor or
+inherited values fail closed to the authored locked station without invoking a
+getter; valid plain station snapshots retain their existing behavior.
+
+*Verified:* a red-first World regression supplied an accessor-backed station id
+whose getter threw; the old Shell handler escaped that error, while the
+corrected handler ignored the entry, did not invoke the getter and kept the
+station locked. The focused fixed-room suite passes 52 tests. No browser,
+lobby, wallet, provider, RPC, proof, signature, funds or transaction was used.
+
+### 2026-08-30 — Published Web station snapshots are immutable
+
+`stationSnapshot()` returned a fresh array but left both the array and each
+station entry mutable. A Shell or World-bus consumer could rewrite a status,
+label, or entry before another listener observed the same synchronous payload;
+the TypeScript readonly event shape did not protect this station-admission
+boundary.
+
+The snapshot array and its flat entries are now frozen before publication.
+Values remain derived from the current register and capabilities.
+
+*Verified:* a red-first station-snapshot regression observed successful status
+and array replacement; the corrected test rejects both and preserves the
+available Bank station. The focused station suite passes 25 tests. No browser,
+wallet, provider, RPC, proof, signature, funds or transaction was used.
+
+### 2026-08-30 — Bridge execution status requires string runtime data
+
+`BridgeService.verifyStatusQuote()` required an own `status` property but did
+not validate its runtime type. A malformed 1Click response could provide an
+object with `toString() => 'SUCCESS'`; `mapStatus()` coerced it, parsed
+settlement data, and published a settled status without a provider string.
+
+Status verification now requires the own status field to be a runtime string
+before mapping or settlement parsing. Valid provider strings and the existing
+unknown-string error path are unchanged; coercible objects fail closed and
+cannot update persisted progress.
+
+*Verified:* a red-first Bridge regression supplied a coercible `SUCCESS`
+status; the corrected path rejects it and preserves the awaiting-deposit
+record. Removing the runtime type guard reproduces the failure. The focused
+Bridge suite passes 104 tests. No browser, wallet, provider, RPC, proof,
+signature, funds or transaction was used.
+
+### 2026-08-30 — Avatar Studio presentation retains failed destroy ownership
+
+`createAvatarStudioPresentation().destroy()` marked the presentation retired
+before calling its injected `destroyStudio` port. If that port threw part-way
+through Scene-owned Phaser cleanup, later Scene cleanup calls returned and the
+failed teardown could not be retried.
+
+Presentation destruction now marks ownership retired only after the port
+completes successfully, while an in-progress guard prevents synchronous
+reentrant `destroy()` calls from recursing. A failed port call remains
+retryable; successful destruction remains idempotent.
+
+*Verified:* a red-first Avatar Studio regression makes the first port cleanup
+throw; the corrected path retries and succeeds on the second call. No browser,
+wallet, provider, RPC, proof, signature, funds or transaction was used.
+
+### 2026-08-30 — Initial Bridge quotes require own data fields
+
+`BridgeService.createDeposit()` passed the untrusted 1Click quote response to
+`assertSignedQuote()`, whose ordinary property access accepted inherited or
+accessor-backed signed evidence, executable quote, and route request fields.
+The object could then be retained as signed bridge evidence and used for player
+instructions.
+
+Signed quote validation now requires own data properties for every required
+field Bridge reads, including evidence, quote containers, executable amounts
+and deadlines, and route-request fields. Optional memo and mode fields are
+also rejected when present only through inheritance or an accessor. Malformed
+data fails before quote verification or persistence.
+
+*Verified:* red-first Bridge regressions supplied an accessor-backed deposit
+address and inherited executable fields. The corrected path rejects both,
+never invokes the getter, and saves no record. The focused Bridge suite passes
+103 tests. No browser, wallet, provider, RPC, proof, signature, funds or
+transaction was used.
+
+### 2026-08-30 — Resolved Web station definitions are immutable
+
+`resolveStation()` returned the internal station definition directly. A caller
+could rewrite its view, route list, label, or Bank mode list, and the next visit
+resolution would consume that forged definition. TypeScript readonly types did
+not protect the runtime object or its nested arrays.
+
+Authored station definitions, route arrays, and mode arrays are now frozen
+before entering the private registry. Resolution and presentation values are
+unchanged; custom route registers and capabilities remain supported.
+
+*Verified:* a red-first station regression observed mutable definitions,
+routes, and modes; the corrected test rejects view and route rewrites and
+preserves the Post Office station. The focused station and visit suite passes
+24 tests. No browser, wallet, provider, RPC, proof, signature, funds or
+transaction was used.
+
+### 2026-08-30 — Input-gate unbind attempts every cleanup action
+
+`bindInputGate()` returned an unbind function that removed the entry listener,
+then the exit listener, then resumed input without isolating those operations.
+If either listener cleanup threw, later cleanup was skipped: a panel could
+leave its exit handler attached or leave Phaser keyboard input suspended even
+though the binding was being torn down.
+
+Unbind now attempts both listener removals and input restoration independently,
+then rethrows one cleanup error unchanged or combines multiple failures in an
+`AggregateError`. Normal event routing and idempotent input-gate behavior are
+unchanged.
+
+*Verified:* red-first public regressions make entry cleanup throw and observe
+the old path skipped exit cleanup and input restoration; the corrected path
+attempts both. A second regression covers an exit-cleanup throw while still
+restoring input. No browser, wallet, provider, RPC, proof, signature, funds or
+transaction was used.
+
+### 2026-08-30 — Intent route projection is immutable
+
+`ROUTE_BY_INTENT_KIND` was exported as a mutable object. A same-bundle
+consumer could rewrite the route associated with `shield`, `unshield`,
+`transfer`, or `swap`; disclosure derivation and private-route checks read this
+map when a batch reaches the commit surface. TypeScript's `Record` annotation
+did not protect this runtime privacy and route authority.
+
+The authored intent-to-route map is now a frozen `Readonly<Record<...>>`.
+Intent shapes, the approved register, and custom register fixtures remain
+unchanged; only mutation of the shared mapping is prevented.
+
+*Verified:* a red-first public route regression observed that the map accepted
+an `exchange.swap` replacement for `shield`; the corrected regression rejects
+the rewrite and preserves `shield -> bank.shield`. The focused routes suite
+passes 25/25; no browser, wallet, provider, RPC, proof, signature, funds or
+transaction was used.
+
+### 2026-08-30 — World host release cannot orphan on teardown scheduling failure
+
+`createHost().release()` decremented its final lease before calling the
+injectable teardown deferrer. If that scheduler threw, the release exited
+without invoking `stop`, leaving the live World instance retained forever with
+zero references and no pending teardown. A synchronous custom deferrer also
+left its already-completed handle in `pending`, causing later remounts to
+cancel unrelated work.
+
+Release now falls back to immediate teardown when scheduling fails, preserves
+the scheduling error (or combines it with a synchronous teardown error), and
+does not retain a handle when a deferrer completes synchronously. Normal
+deferred and asynchronous teardown semantics are unchanged.
+
+*Verified:* public Host regressions prove a throwing deferrer still retires the
+instance and a synchronous deferrer leaves no stale cancel handle. The focused
+Host suite passes 22 tests. No browser, wallet, provider, RPC, proof,
+signature, funds or transaction was used.
+
+### 2026-08-30 — Authored Web copy is immutable product authority
+
+`COPY` was exported as a mutable object despite its `as const` TypeScript
+annotation. A same-bundle consumer could rewrite nested wallet, privacy,
+failure, or submission-uncertainty messages after startup; those strings are
+the player-facing explanation of gates and financial outcomes, so the runtime
+could present text that no longer matched the reviewed behavior.
+
+The authored copy tree is now deeply frozen at module initialization. The
+existing `allCopyStrings` traversal and exact copy values remain unchanged;
+this protects the shared default while retaining its read-only consumer
+contract.
+
+*Verified:* a red-first public copy regression observed mutable root, nested
+connect, and error records; the corrected test rejects a nested wallet-message
+rewrite and preserves the authored wording. The focused copy suite passes 6/6;
+no browser, wallet, provider, RPC, proof, signature, funds or transaction was
+used.
+
+### 2026-08-30 — Relay fee felt checks reject coercible runtime values
+
+`WalletApiPrivacyOperations` used `isFelt()` on external relay fee tokens,
+but the helper assumed its TypeScript `string` input and let JavaScript
+coercion run through regular-expression and bigint conversion. A gateway
+response object with a `toString()` returning the configured token could
+therefore pass the fee-token guard and cross into a Wallet API fee action as a
+non-string value.
+
+The felt predicate now requires a runtime string before applying the exact
+lowercase-`0x`, hexadecimal and Stark-field bounds. Existing canonical token
+rules, address comparisons and fee authorization semantics are unchanged;
+coercible objects fail closed before preparation or wallet handoff.
+
+*Verified:* a red-first public Wallet API regression supplied a coercible
+object token to quote-bound relay-fee validation; the old path published the
+batch, while the corrected path rejects it as an unexpected fee token.
+Removing the runtime type guard reproduces the failure. The focused Wallet API
+suite passes 80 tests; no browser, provider, RPC, wallet, proof, signature,
+funds or transaction was used.
+
+### 2026-08-30 — Bank mode route projection is immutable
+
+`ROUTE_BY_MODE` was exported as a mutable object. A same-bundle consumer could
+rewrite the route behind `shield`, `unshield`, or `transfer` after startup;
+Bank UI mode tabs and the machine both read this map when projecting doors and
+preparing the corresponding financial action. TypeScript's `Record` annotation
+did not protect this runtime route authority.
+
+The authored mode-to-route map is now a frozen `Readonly<Record<...>>`. The
+Bank mode set and route register remain unchanged; this only prevents a shared
+consumer from rewriting the approved route projection.
+
+*Verified:* a red-first public Bank regression observed that the map accepted a
+replacement on the prior integration head; the corrected regression rejects the
+rewrite and preserves `shield -> bank.shield`. The focused Bank machine suite
+passes 84/84; no browser, wallet, provider, RPC, proof, signature, funds or
+transaction was used.
+
+### 2026-08-30 — Wallet capability versions require string runtime data
+
+`WalletApiPrivacyOperations.capability()` passed every value from the wallet's
+supported-version response into semver parsing. The parser coerced objects via
+their `toString()` method, so a hostile or malformed response object could be
+reported as a supported version and returned through the typed capability
+snapshot, despite the Wallet API contract requiring version strings.
+
+Capability parsing now ignores non-string version entries before semver
+parsing. Valid version ordering, prerelease handling and support thresholds
+are unchanged; malformed entries cannot grant capability or cross the privacy
+boundary as a version value.
+
+*Verified:* a red-first public Wallet API regression supplied an object whose
+`toString()` returned `0.10.3`; the old path reported support and returned the
+object as `walletApiVersion`, while the corrected path reports unsupported with
+no version. Removing the runtime type guard reproduces the failure. The
+focused capability suite passes 79 tests; the full Privacy suite passes 9
+files / 246 tests. No browser, provider, RPC, wallet, proof, signature, funds
+or transaction was used.
+
+### 2026-08-30 — The Exchange asset catalog is immutable product authority
+
+`EXCHANGE_CATALOG` was exported as a mutable array whose asset records were
+also mutable. A same-bundle consumer could replace an entry or rewrite its
+token, symbol, or decimals after startup; the Exchange panel and machine read
+that shared value when presenting choices, reading balances, and constructing
+the swap intent. The TypeScript `readonly` annotations did not protect the
+runtime financial boundary.
+
+The authored catalog and each asset record are now frozen. This protects the
+default product catalog while retaining the existing `validateExchangeCatalog`
+custom-fixture seam used by tests; no runtime wallet or route policy behavior
+changes.
+
+*Verified:* a red-first public catalog regression observed the mutable array and
+asset; the corrected regression rejects replacement and token rewrites and
+preserves the STRK record. The focused catalog suite passes 3/3; no browser,
+wallet, provider, RPC, proof, signature, funds or transaction was used.
+
+### 2026-08-30 — Wallet balance responses require felt-shaped token entries
+
+`WalletApiPrivacyOperations.balances()` previously trusted the Wallet API's
+runtime `token` and `balance` fields. It converted `balance` with `BigInt()`
+without first enforcing the Wallet API `FELT` wire shape, and published any
+token string unchanged. A malformed token could therefore cross the privacy
+boundary, while malformed balance text escaped as an `unreachable` parser
+failure instead of the generic invalid-wallet-response error.
+
+Balance mapping now requires both fields to be hexadecimal Stark field
+elements before conversion. Valid zero and positive felts retain the existing
+aggregate-balance semantics; negative, decimal, malformed and field-prime-or-
+above values fail closed as `PrivacyError('unknown')`. No product-level balance
+cap or maturity claim is added.
+
+*Verified:* red-first public Wallet API regressions supplied a non-felt token
+and a non-felt balance; the old path published the token and mapped the
+malformed balance to `unreachable`, while the corrected path rejects both as
+`unknown`. Removing the felt-shape guard makes both regressions fail. The
+focused Wallet API suite passes 78 tests; the full Privacy suite passes 9
+files / 245 tests. No browser, provider, RPC, wallet, proof, signature, funds
+or transaction was used.
+
+### 2026-08-30 — Fixed-room destroy attempts every listener cleanup
+
+`createFixedRoomController().destroy()` marked the controller destroyed and
+called its three Shell-listener stop callbacks sequentially without isolation.
+If the first stop callback threw, the remaining listeners and input restoration
+were skipped, while the destroyed flag made a later call a no-op. A controller
+could therefore remain subscribed to Shell commands after teardown and leave
+the input gate in the wrong state.
+
+Destroy now attempts each registered listener stop and input restoration
+independently, then rethrows one cleanup error unchanged or combines multiple
+errors in an `AggregateError`. State is retired before cleanup, and repeated
+destroy remains idempotent after all owned resources have been attempted.
+
+*Verified:* a public fixed-room regression makes the first listener stop throw,
+then confirms all three stops and input restoration still run, while a second
+destroy performs no duplicate cleanup. The focused fixed-room suite passes 43
+tests. No browser, wallet, provider, RPC, proof, signature, funds or
+transaction was used.
+
+### 2026-08-30 — Private swap executor entrypoints reject malformed names
+
+`WalletApiPrivacyOperations.validateSwapPlan()` previously rejected only a
+falsey executor entrypoint. A malformed external planner response containing
+whitespace-only or non-string entrypoint data therefore crossed quote
+admission and produced a reviewed batch, even though it cannot name a valid
+Starknet entrypoint and could later reach action construction.
+
+Swap plan validation now requires a string entrypoint with non-whitespace
+content, while preserving dynamic executor entrypoints from the reviewed AVNU
+plan. The guard runs before a batch is published or the wallet is asked to
+prove anything; contract, calldata and route checks are unchanged.
+
+*Verified:* red-first public Wallet API regressions supplied empty,
+whitespace-only and numeric entrypoints; the old path published all three
+batches, while the corrected path rejects them as malformed executor calls
+before proving. Removing the entrypoint guard makes all three regressions
+fail. The focused swap admission suite passes 76 tests; the full Privacy
+suite passes 9 files / 243 tests. No browser, provider, RPC, wallet, proof,
+signature, funds or transaction was used.
+
+### 2026-08-30 — Lobby movement does not continue after synchronous transport closure
+
+`LobbyClient.#pump()` previously called `room.send('move', desired)` and then
+unconditionally stamped `lastSentAt` and scheduled reconciliation. A transport
+can synchronously invoke the room's `onLeave` callback from `send`; that retires
+the room and cancels existing reconciliation, but the stale continuation then
+installed a timer against the closed client. The client now rechecks both room
+identity and connected status after the send before recording send state or
+creating follow-up work.
+
+*Verified:* a deterministic fake room closes synchronously from its move send.
+The old path scheduled a 50ms reconciliation timer after the close; the public
+regression now observes the closed status and zero new timers. Removing the
+post-send ownership guard reproduces the failure. Normal movement and
+reconciliation behavior are unchanged. The focused Lobby client suite passes
+63 tests.
+
+### 2026-08-30 — Web route and building lookups reject inherited records
+
+The route gate used ordinary property access on caller-supplied `RouteGrade`
+entries. A malformed object could inherit its route id or approval fields and
+be treated as a playable route. `buildingRoutes()` had a separate version of
+the same flaw: an inherited building id could make `buildingDoor()` open even
+when `routeDoor()` rejected the corresponding entry.
+
+Both lookups now share an own-record guard requiring every `RouteGrade` field
+before admitting an entry. Authored register entries and custom valid fixtures
+retain their behavior, while inherited or partial descriptors fail closed as
+unknown/unbuilt route data.
+
+*Verified:* red-first public route regressions cover inherited route identity,
+inherited approval/disclosure fields, and inherited building identity. All
+three are admitted on the old path and rejected by the corrected lookups; the
+focused routes suite passes 24/24. No browser, wallet, provider, RPC, proof,
+signature, funds or transaction was used.
+
+### 2026-08-30 — Private swap response amounts require decimal wire syntax
+
+`BackendPrivacyClient.prepareSwap()` previously converted the backend's
+`buyAmount` and nested relay-fee `amount` with `BigInt()` directly. JavaScript
+accepts whitespace, signed values and hexadecimal strings in that conversion,
+so malformed successful responses crossed the browser privacy boundary as
+valid bigint values even though the backend emits decimal strings.
+
+Swap response amount fields now use the existing decimal-string parser. This
+rejects whitespace, signs, hexadecimal and fractional syntax with the generic
+invalid-response `PrivacyError`; zero, leading-zero decimal and valid large
+decimal values retain their existing mapping, while semantic positivity and
+route bounds remain enforced by the operations layer.
+
+*Verified:* red-first public BackendPrivacyClient regressions cover whitespace,
+signed and hexadecimal `buyAmount` and nested fee amounts; all six resolved
+before the guard and now reject with `kind: 'unknown'`. A mutation restoring
+direct `BigInt()` made all eight malformed swap amount regressions fail,
+including the existing fractional cases. The focused backend-client suite
+passes 53 tests; the full Privacy suite passes 9 files / 241 tests. No browser,
+provider, RPC, wallet, proof, signature, funds or transaction was used.
+
+### 2026-08-30 — Avatar outfit binding retries failed listener cleanup
+
+`createAvatarOutfitToggleBinding().destroy()` previously set its destroyed flag
+before calling the keyboard emitter's `off`. If an emitter threw during that
+cleanup, the listener could remain attached but every later `destroy()` call
+returned immediately, so the Scene permanently retained an inert input
+listener. The binding now keeps the handler inert immediately while tracking
+detachment separately; a failed `off` remains owned and a later destroy
+retries it, becoming idempotent only after successful removal.
+
+*Verified:* a receiver-owned keyboard fake that throws on its first `off`
+leaves one listener on the old implementation; the public regression now
+observes the throw, retries cleanup, and confirms zero listeners after the
+second call. The mutation restoring the destroyed-flag early return fails.
+The change is World-local and does not alter input or avatar-selection
+semantics. The focused outfit suite passes 9 tests.
+
+### 2026-08-30 — Route resolvers require own route-grade fields
+
+The Web route resolver used ordinary property access on caller-supplied
+`RouteGrade` entries. A malformed entry could therefore inherit its route id
+or its approval/disclosure fields from a prototype and be treated as a graded,
+playable route. That would let configuration supplied through the public
+resolver boundary alter the privacy door without carrying an authored record.
+
+`findRoute()` now admits only object entries carrying every `RouteGrade` field
+as an own property before matching the route id. This keeps the canonical
+register and normal test fixtures unchanged while failing closed for inherited
+or partial route descriptors; route-door immutability and panel-registry
+ownership remain separate protections.
+
+*Verified:* red-first public route regressions supplied a descriptor inheriting
+the route id, then one with an own route id but inherited approval fields. Both
+were admitted before the guard and both now resolve to a locked unknown route.
+The focused routes suite passes 23/23; no browser, wallet, provider, RPC,
+proof, signature, funds or transaction was used.
+
+### 2026-08-30 — Private swap planner quotes must target mainnet
+
+`BackendApi.prepareSwap()` previously checked only that an external planner
+returned a truthy `chainId`. A planner response for Sepolia or another chain
+could therefore trigger paymaster fee construction and authorization issuance
+before the browser rejected the quote against its mainnet Wallet API policy.
+
+Swap quote admission now requires the exact canonical Starknet mainnet chain
+identifier before any fee or authorization work. The configured production
+planner already targets this chain; this is a defense-in-depth response
+boundary and does not add a dynamic chain-selection feature.
+
+*Verified:* a red-first Backend regression supplied the canonical Sepolia
+chain ID; the old path returned `200` and issued a fee, while the corrected
+path returns the existing `409` invalid-quote response with zero paymaster and
+authorization calls. Removing the exact-chain guard reproduces the failure.
+The focused Backend suite passes 105 tests. No browser, wallet, provider, RPC,
+proof, signature, funds or transaction was used.
+
+### 2026-08-30 — The default Web panel registry is immutable
+
+`BUILDING_PANELS` was exported as a mutable object whose descriptors were also
+mutable. A same-bundle consumer could therefore replace a panel or rewrite its
+title/component after startup, changing the room composition behind the
+already-graded route gate. The resolver's own-property guard prevents inherited
+entries, but it does not protect authored entries from later mutation.
+
+The default registry and each authored descriptor are now frozen. Custom panel
+registries passed to `PanelLayer` or `VisitLayer` remain supported and retain
+their caller-owned lifecycle; only the shared production registry is pinned.
+
+*Verified:* a red-first public registry regression attempted to replace the
+Exchange descriptor and rewrite its title; the mutable default accepted both.
+The corrected registry rejects both mutations and preserves the authored
+descriptor. The focused routes suite passes 21/21; no browser, wallet,
+provider, RPC, proof, signature, funds or transaction was used.
+
+### 2026-08-30 — Lobby suspend cannot resurrect a room closed during send
+
+`LobbyClient.suspend()` sent the suspend command and then unconditionally
+changed the wrapper to `suspended`. A synchronous transport callback could
+report the room closed during that send; the stale continuation then exposed a
+usable suspended client even though its room and server identity were already
+retired.
+
+Suspend now captures the room and rechecks room identity and connected status
+after send before publishing `suspended`. A transport closure remains
+authoritative; normal interior suspension and reconcile cancellation are
+unchanged.
+
+*Verified:* a red-first public Lobby regression makes a fake room deliver
+`onLeave` synchronously from its suspend send; before the guard the client
+ended `suspended`, while the corrected client remains `closed` with no game id.
+Removing the post-send guard reproduces the failure. The focused Lobby client
+suite passes 62 tests. No browser, wallet, provider, RPC, proof, signature,
+funds or transaction was used.
+
+### 2026-08-30 — Lobby resume cannot resurrect a room closed during send
+
+`LobbyClient.resume()` sent the resume command and then unconditionally set
+the wrapper to `connected`. A synchronous transport callback could report the
+room closed while that send was in progress; the stale continuation then
+restored `connected` even though `#room` and the server-assigned identity had
+already been retired.
+
+Resume now captures the room and rechecks room identity and suspended status
+after send before recording the placement or publishing `connected`. A
+transport closure therefore remains authoritative; ordinary resume behavior
+and explicit placement validation are unchanged.
+
+*Verified:* a red-first public Lobby regression makes a fake room deliver
+`onLeave` synchronously from its resume send; before the guard the client ended
+`connected`, while the corrected client remains `closed` with no game id.
+Removing the post-send guard reproduces the failure. The focused Lobby and
+Backend suites pass 165 tests, and both package typechecks and diff hygiene
+pass. No browser, wallet, provider, RPC, proof, signature, funds or transaction
+was used.
+
+### 2026-08-30 — Planner quote identifiers require string shape
+
+`BackendApi.prepareSwap()` previously checked only the truthiness of the
+external planner's `quoteId`. A malformed planner response containing a
+number or object therefore crossed the backend boundary, triggered paymaster
+fee construction and issued an authorization before the browser rejected the
+response as invalid.
+
+Swap quote admission now requires a nonempty string identifier before any fee
+or authorization work. Existing opaque nonempty identifier handling and
+quote-bound claims remain unchanged.
+
+*Verified:* red-first Backend regressions supplied numeric and object quote
+identifiers; both previously returned `200` and issued fees, while the
+corrected path returns the existing `409` invalid-quote response with zero
+paymaster and authorization calls. Removing the type guard independently
+reproduces both regressions. The focused Lobby and Backend suites pass 165
+tests, and both package typechecks and diff hygiene pass. No browser, wallet,
+provider, RPC, proof, signature, funds or transaction was used.
+
+### 2026-08-30 — Room resolution ignores inherited panel descriptors
+
+`resolveRoom()` read `panels[building]` through ordinary prototype lookup. A
+prototype-polluted or otherwise non-record registry could therefore provide a
+panel for a building that was not actually present in the registry, causing
+the shell to render an injected room descriptor. The privacy door still runs
+first, but the panel registry is a separate composition boundary and must not
+accept inherited values as authored configuration.
+
+Room resolution now requires an own property before admitting a panel;
+inherited descriptors fall back to the existing `unbuilt` result. This keeps
+the default registry behavior unchanged while making the public resolver
+fail closed for hostile or malformed registry objects.
+
+*Verified:* a red-first public resolver regression supplied an `exchange`
+descriptor only through a custom prototype and received `panel` on the old
+path. The corrected resolver returns `unbuilt`. The focused routes suite
+passes 20/20; no browser, wallet, provider, RPC, proof, signature, funds or
+transaction was used.
+
+### 2026-08-30 — World host remount cancellation failures preserve teardown
+
+`createHost.acquire()` incremented its lease before cancelling a deferred final
+teardown. If the injected/default cancellation boundary threw, the failed
+acquire left the host with a phantom reference; the queued stop then observed
+that reference and never destroyed the retained instance.
+
+The host now cancels the pending teardown before claiming the new lease. A
+cancellation failure therefore leaves the original reference count and queued
+cleanup untouched, while successful remounts retain the existing same-instance
+behavior.
+
+*Verified:* a red-first public host regression makes deferred cancellation
+throw during a remount; before the fix the failed acquire left `refCount === 1`
+and the queued stop was skipped, while the corrected path keeps zero refs and
+retires the instance. Removing the ordering change reproduces the failure. The
+focused Host suite passes 20 tests. No browser, lobby, wallet, provider, RPC,
+proof, signature, funds or transaction was used.
+
+### 2026-08-30 — Pool configuration block windows require nonnegative values
+
+`BackendPrivacyClient.config()` previously accepted any safe integer for the
+backend's `proofValidityBlocks` and `noteMaturityBlocks`, including negative
+values. A malformed successful pool-config response could therefore publish
+an impossible proof window or maturity period through the privacy seam; the
+later operation paths would receive invalid chain parameters instead of
+failing at the wire boundary.
+
+Config decoding now requires a positive proof-validity window and a
+nonnegative note-maturity window. Existing safe-integer checks and valid
+zero-maturity behavior remain unchanged; other response fields are untouched.
+
+*Verified:* red-first BackendPrivacyClient regressions supplied `-1` for each
+block field; both previously resolved and now reject with generic
+`PrivacyError('unknown')`. Removing either minimum guard independently
+reproduces its regression. The focused privacy and Host suites pass 67 tests,
+and both affected package typechecks and diff hygiene pass. No browser, wallet,
+provider, RPC, proof, signature, funds or transaction was used.
+
+### 2026-08-30 — Route-door decisions are immutable snapshots
+
+`routeDoor()` and `buildingDoor()` returned a shared mutable `OPEN` object for
+every playable route. A consumer that changed the returned `open`, `reason` or
+`message` field could therefore alter later authorization and disclosure
+decisions for every route using that object. Locked decisions were also
+mutable, allowing a consumer to retain a forged door snapshot and present it
+as current state.
+
+Route decisions now freeze both the shared playable result and each newly
+created locked result. The route register remains the only source of admission;
+callers can inspect a decision but cannot rewrite it or poison later checks.
+
+*Verified:* a red-first public routes regression attempted to mutate playable
+and unknown-route decisions and then re-read them. The old shared result was
+mutable; the corrected results are frozen and preserve their original values.
+The focused routes suite passes 19/19. No browser, wallet, provider, RPC,
+proof, signature, funds or transaction was used.
+
+### 2026-08-30 — Fixed-room station activation does not resume after teardown
+
+`createFixedRoomController.update()` suspended input and emitted
+`station:activated`, then unconditionally resumed input when World still owned
+the room. A synchronous station listener could destroy the controller during
+that emission; destruction already resumed input, and the stale update then
+resumed it a second time after the lifecycle had ended.
+
+The post-event continuation now requires the controller to remain live, in the
+room and World-owned before restoring input. Normal activation ordering and
+Shell claims remain unchanged; teardown owns its single restoration.
+
+*Verified:* a red-first public regression destroys the controller from
+`station:activated`; before the guard the input sequence ended with two resumes
+after the suspension, while the corrected sequence has exactly one teardown
+resume. Removing the post-event lifecycle guard reproduces the failure. The
+focused fixed-room and Backend run passes 144 tests, and both affected package
+typechecks and diff hygiene pass. No browser, lobby, wallet, provider, RPC,
+proof, signature, funds or transaction was used.
+
+### 2026-08-30 — Private swap planner outputs must fit uint256
+
+`BackendApi.prepareSwap()` checked that an external planner's `buyAmount`
+met the requested minimum but did not enforce the STRK20 `u256` upper bound.
+An AVNU or planner response above `2^256 - 1` could therefore receive a fee
+authorization and cross the backend response boundary, even though the
+Wallet API cannot represent that output amount.
+
+Swap quote admission now requires a runtime bigint output no greater than
+`2^256 - 1` before paymaster fee construction or authorization issuance. The
+existing stale/invalid-quote response and the exact maximum boundary are
+unchanged.
+
+*Verified:* a red-first Backend regression supplied `2^256`; the old path
+returned `200` and issued a fee, while the corrected path returns `409` with
+zero paymaster and authorization calls. An exact-maximum output remains
+accepted. The focused fixed-room and Backend run passes 144 tests, and both
+affected package typechecks and diff hygiene pass. No browser, wallet,
+provider, RPC, proof, signature, funds or transaction was used.
+
+### 2026-08-30 — Door-trigger transitions are reentrancy-owned
+
+`createDoorTrigger.update()` emitted building events before committing its new
+active door. A synchronous listener could report another tile or reset the
+trigger during that delivery; the outer update then overwrote the newer
+occupancy and could emit a stale `building:entered` event. This made the World
+door state disagree with the ordered callbacks that caused it.
+
+The trigger now commits the candidate occupancy before event delivery and
+guards each continuation with a transition revision. A nested update or reset
+therefore remains authoritative, while ordinary exit-then-enter ordering and
+locked-door behavior are unchanged.
+
+*Verified:* red-first public regressions cover a nested bank-to-Post-Office
+transition and an exit callback that redirects to the street; before the guard
+the outer transition overwrote or announced stale occupancy, while the
+corrected trigger preserves the nested result. The focused door-trigger suite
+passes 8 tests. No browser, lobby, wallet, provider, RPC, proof, signature,
+funds or transaction was used.
+
+### 2026-08-30 — Bridge shield-plan revalidation ownership is retired on close
+
+The Web Bridge panel used one `revalidateBusy` flag for the lifetime of a
+machine. Closing the panel while a settled-funds account read was pending did
+not retire that flag, so a reopened panel could not revalidate its current
+shield plan until stale work settled. The session clock prevented stale
+publication, but the replacement validation was silently unavailable in the
+meantime.
+
+Shield-plan revalidation now has an owner token whose release is conditional
+on that token still being current; close retires the owner immediately,
+allowing a reopened panel to validate while the old read drains. Existing
+attempt/session, account, evidence and plan guards still prevent stale results
+from becoming executable.
+
+*Verified:* a red-first public Bridge regression starts revalidation A with a
+deferred account read, closes the panel, starts revalidation B and resolves B
+before stale A. On the old path B returned `null` without planning; the
+corrected path completes B and stale A returns `null`. Removing the owner
+guard reproduces the failure. The focused Bridge suite passes 46/46; no
+browser, wallet, provider, RPC, proof, signature, funds or transaction was
+used.
+
+### 2026-08-30 — Avatar Studio does not publish after selection teardown
+
+`createAvatarStudioController.update()` selected a contacted figure and then
+published a state snapshot. Selection emits synchronously through the shared
+outfit event bus, so an `avatar:selected` listener could destroy the Studio or
+leave it before the update resumed. The old continuation then published a
+snapshot for a controller that no longer owned the lifecycle.
+
+The update path now rechecks `destroyed` and `inRoom` after selection before
+publishing. The selection remains Scene-owned and still emits normally; only
+the stale post-selection publication is suppressed. This is distinct from the
+existing pre-selection guard, which protects against teardown during the
+highlight `onChange` callback.
+
+*Verified:* a red-first public regression made the `avatar:selected` delivery
+destroy the controller; before the guard the update produced two snapshots,
+while the corrected path retains only the highlight snapshot and still selects
+`avatar-8`. The focused Avatar Studio suite passes 29 tests. No browser,
+lobby, wallet, provider, RPC, proof, signature, funds or transaction was used.
+
+### 2026-08-30 — Private swap request amounts must fit uint256
+
+`BackendApi.prepareSwap()` previously accepted any positive decimal string for
+`sellAmount` and `minAmountOut`. Values above the STRK20 `u256` range therefore
+crossed the public API boundary and reached the swap planner, even though they
+cannot be represented by the wallet action or the AVNU route. An overlarge
+sell amount could return a successful quote response; an overlarge minimum
+could consume planner work before being rejected as a stale quote.
+
+Swap request amounts now require `1 <= value <= 2^256 - 1` before any planner,
+RPC or paymaster work. The maximum remains accepted and the existing positive
+decimal syntax and policy checks are unchanged.
+
+*Verified:* red-first Backend regressions cover `2^256` for both sell amount
+and minimum output and assert zero swap-planner calls; both previously crossed
+the planner and returned `200`/`409`, while the corrected path returns generic
+`400`. A maximum-uint256 sell amount remains accepted at the planner boundary.
+The focused Backend suite and package gates are recorded on the candidate.
+No browser, wallet, provider, RPC, proof, signature, funds or transaction was
+used.*
+
+### 2026-08-30 — Fixed-room exit rechecks ownership after onExit
+
+`FixedRoomController.leave()` invoked the consumer-owned `onExit` callback,
+then unconditionally published its state and emitted `building:exited`. If
+that callback synchronously destroyed or re-entered the controller, the
+remaining continuation described a transition that no longer belonged to the
+current controller lifecycle.
+
+Exit now rechecks that the controller is still live and outside the room after
+`onExit`; a retired or re-entered controller stops the stale continuation.
+Normal exit ordering and the legitimate `building:exited` event are unchanged.
+
+*Verified:* a red-first fixed-room regression made `onExit` destroy the
+controller and observed one stale state publication; the corrected test emits
+neither a stale state nor `building:exited`. Focused fixed-room tests pass
+34/34. No browser, wallet, provider, RPC, proof, signature, funds or
+transaction was used.
+
+### 2026-08-30 — Bridge source registry responses fail closed on malformed shapes
+
+`loadSourceAssets()` previously caught only a rejected token request. A
+malformed runtime response such as `null`, or an array containing `null`, was
+then iterated and dereferenced as if it were the generated SDK type. The
+source picker could crash instead of retaining its curated safe fallbacks.
+
+The loader now requires an array response and skips non-object entries before
+reading token metadata. Transport failures, malformed top-level responses and
+bad entries all retain the fallback registry; valid live metadata continues
+to override matching fallback entries under the existing decimal and chain
+guards.
+
+*Verified:* red-first public Bridge regressions cover a `null` registry
+response and null/primitive array entries; the old loader threw, while the
+corrected loader returns the six curated fallback assets. Removing either
+guard reproduces its matching failure. The Bridge suite passes 66/66; package
+typecheck, invariant scan and `git diff --check` pass. No browser, external
+provider, RPC, wallet, proof, signature, funds or transaction was used.
+
+### 2026-08-30 — Bridge shield planning ownership is retired on close
+
+The Web Bridge panel used one `shieldBusy` flag for the lifetime of a machine.
+Closing the panel while its settled-funds account or planner read was pending
+did not retire that flag, so a reopened panel could not start its own shield
+plan until stale work settled. The session clock prevented stale publication,
+but the replacement action was silently unavailable in the meantime.
+
+Shield planning now has an owner token whose release is conditional on that
+token still being current; close retires the owner immediately, allowing a
+reopened panel to plan while the old account/planner work drains. Existing
+attempt/session, account, evidence and plan guards still prevent stale results
+from becoming executable.
+
+*Verified:* a red-first Bridge regression starts deferred shield planning A,
+closes the panel, starts planning B and resolves B before stale A; on the old
+path B never read the account, while the corrected path performs one planner
+call and leaves stale A inert. Focused Bridge tests pass 43/43. No browser,
+wallet, provider, RPC, proof, signature, funds or transaction was used.
+
+### 2026-08-30 — Fixed-room entry rechecks ownership after onEnter
+
+`FixedRoomController.enter()` marked the room active, then invoked the
+consumer-owned `onEnter` callback before publishing state. If that callback
+synchronously destroyed the controller (for example during Scene teardown),
+the method still published a post-destroy snapshot describing an already
+retired transition.
+
+Entry now rechecks the controller's destroyed and in-room ownership after
+`onEnter` and stops the continuation when the callback retired it. Normal entry
+ordering and input restoration are unchanged.
+
+*Verified:* a red-first fixed-room regression made `onEnter` destroy the
+controller and observed one stale `onChange` publication; the corrected test
+publishes none and leaves the controller outside. Focused fixed-room tests pass
+34/34. No browser, wallet, provider, RPC, proof, signature, funds or
+transaction was used.
+
+### 2026-08-30 — Server-action span decoding must be bounded by remaining calldata
+
+`Cursor.take()` previously allocated an array from the decoded span length
+before checking whether that many words remained. A valid felt encoding of
+`Number.MAX_SAFE_INTEGER` could therefore request an enormous allocation for a
+truncated server-action payload, instead of failing closed at the wire
+boundary.
+
+The cursor now checks the requested count against the remaining calldata
+words before slicing, preserving the existing truncation error and preventing
+unbounded allocation. Variant, maximum-count and trailing-calldata rules are
+unchanged.
+
+*Verified:* a red-first public Backend regression uses a guarded `Array.from`
+and a `Number.MAX_SAFE_INTEGER` span length; the old decoder attempted the
+unbounded allocation, while the corrected decoder returns the generic
+truncated-calldata error before allocation. Removing the remaining-input
+guard fails the regression. The Backend suite passes 5 files / 159 tests;
+package typecheck, invariant scan and `git diff --check` pass. No browser,
+external provider, RPC, wallet, proof, signature, funds or transaction was
+used.
+
+### 2026-08-30 — Fixed-room control ownership accepts only known owners
+
+The fixed-room controller trusted the `owner` field of a matching
+`world:control-owner` Shell event. A malformed runtime value such as `forged`
+was stored in the public controller state and took the fallback input-resume
+path, so the state projection no longer described the actual two-owner
+protocol.
+
+The handler now accepts only the protocol's `world` and `shell` values;
+unknown owners are ignored without changing input state, room state or station
+activation. Valid control handoffs retain their existing ordering.
+
+*Verified:* a red-first fixed-room regression sent a matching building event
+with an unknown owner and observed the old `forged` state plus an input resume;
+the corrected test leaves World ownership unchanged and makes no input call.
+Focused fixed-room tests pass 34/34. No browser, wallet, provider, RPC, proof,
+signature, funds or transaction was used.
+
+### 2026-08-30 — Server-action span lengths must be nonnegative
+
+`decodeServerActions()` previously accepted negative values anywhere a Cairo
+span length was decoded. JavaScript's `Array.from({ length: -1 })` silently
+creates an empty array, so malformed calldata such as a `WriteOnce` action
+with span length `-1` passed the route decoder as a valid `other` action.
+
+`Cursor.number()` now rejects negative values as malformed before converting
+them to a JavaScript number. Existing maximum-length, truncation, variant and
+trailing-calldata checks are unchanged.
+
+*Verified:* a red-first public Backend regression first accepted
+`[action_count=1, variant=0, storage=0x1, span_length=-1]`; the corrected
+decoder returns the generic invalid-span-length error. Removing the
+nonnegative guard reproduces acceptance. The Backend suite passes 5 files /
+159 tests; package typecheck, invariant scan and `git diff --check` pass. No
+browser, external provider, RPC, wallet, proof, signature, funds or
+transaction was used.
+
+### 2026-08-30 — Fixed-room shell decoders fail closed on null commands
+
+The fixed-room controller subscribed directly to the Shell event bus and
+dereferenced `world:stations`, `world:control-owner` and
+`world:exit-building` payloads before checking their building. A malformed
+runtime `null` payload therefore threw from a synchronous callback instead of
+being ignored, allowing one bad cross-package command to escape the World
+boundary and interrupt the caller.
+
+The three handlers now use null-safe building and station reads. Malformed
+`null` and `undefined` commands are ignored without changing room state,
+input ownership or station admission; valid commands retain their existing
+ordering and behavior.
+
+*Verified:* a red-first fixed-room regression emitted a `null` payload through
+each Shell command and observed the old dereference error; the corrected test
+keeps the controller in the room with World ownership and no output events.
+Focused fixed-room tests pass 35/35. No browser, wallet, provider, RPC, proof,
+signature, funds or transaction was used.
+
+### 2026-08-30 — Bridge input amounts must fit uint256
+
+`BridgeService.validateInput()` previously rejected only non-positive amounts.
+An arbitrarily large positive `bigint`, including `2^256`, therefore reached
+the OneClick quote client before failing against the returned quote. That
+made an invalid blockchain amount cross the external bridge boundary and
+spent a provider request on input that could never be represented by the
+source transfer contract.
+
+Bridge input validation now requires `0 < amountIn <= 2^256 - 1` before any
+quote request. Existing source metadata, recipient, refund, slippage and
+quote evidence rules are unchanged.
+
+*Verified:* a red-first public Bridge regression passes `2^256` and confirms
+the old path called the quote client before rejecting; the corrected path
+returns the positive-uint256 error without a quote request. Removing the
+upper-bound guard reproduces the failure. The Bridge suite passes 65/65; the
+package typecheck, invariant scan and `git diff --check` pass. No browser,
+external provider, RPC, wallet, proof, signature, funds or transaction was
+used.
+
+### 2026-08-30 — Bridge saved-quote preflight ownership is retired on close
+
+The Web Bridge panel used one `preflightBusy` flag for the lifetime of a
+machine. Closing the panel while its saved-quote account read was pending did
+not retire that flag, so a reopened panel could not begin its own preflight
+until the stale read settled. The session clock prevented stale publication,
+but also left the new recovery attempt silently unavailable.
+
+Preflight now has an owner token whose release is conditional on that token
+still being current; close retires the owner immediately, allowing a reopened
+panel to preflight while the old account read drains. Existing attempt/session
+guards still prevent stale account, planner or record results from publishing
+over the replacement attempt.
+
+*Verified:* a red-first Bridge regression starts deferred preflight A, closes
+the panel, starts preflight B and resolves B before stale A; on the old path B
+never read the account, while the corrected path runs B through planning and
+keeps the stale completion inert. Focused Bridge tests pass 43/43. No browser,
+wallet, provider, RPC, proof, signature, funds or transaction was used.
+
+### 2026-08-30 — Bridge refresh ownership is retired on close
+
+The Web Bridge panel used one `refreshBusy` flag for the lifetime of a panel
+machine. Closing the panel while its status refresh was pending did not retire
+that flag, so a reopened panel could not start its own refresh until the stale
+provider request settled. That left the recovery surface stuck behind an
+unrelated old request.
+
+Refresh now has an owner token whose release is conditional on that token still
+being current; close retires the owner immediately, allowing a reopened panel
+to refresh while the old provider call drains. Existing attempt/session guards
+prevent the old result from publishing over the new panel state, and Watch
+continues to exclude concurrent refreshes.
+
+*Verified:* a red-first Bridge regression starts deferred refresh A, closes the
+panel, starts refresh B, and resolves B before stale A; on the old path B was
+never called, while the corrected path starts both and keeps the panel idle
+after stale A settles. Focused Bridge tests pass 43/43. No browser, wallet,
+provider, RPC, proof, signature, funds or transaction was used.
+
+### 2026-08-30 — Backend request records require own data fields
+
+`requireRecord()` previously used its allowed-key list only to reject unknown
+own enumerable fields; it did not require the listed request fields to exist
+as own data properties. A malformed direct API request could therefore supply
+`v` (or another required field) through a prototype and pass validation,
+reaching the RPC or financial handler with inherited input.
+
+Request validation now requires every declared field to be an own data
+property, rejecting missing and accessor-backed fields before endpoint work.
+The existing unknown-field, route, value, rate-limit and response contracts
+are unchanged.
+
+*Verified:* a red-first public Backend regression passes a pool-config request
+whose only `v` is inherited from a custom prototype; the old path returned
+`200` and called the RPC, while the corrected path returns generic `400` and
+does not call it. The mutation removing the own-field guard reproduces the
+failure. The Backend suite passes 5 files / 159 tests; package typecheck,
+invariants and `git diff --check` pass. No browser, external provider, RPC,
+wallet, proof, signature, funds or transaction was used.
+
+### 2026-08-30 — Lobby placement decoders fail closed on null payloads
+
+`LobbyPresence.admit()`, `.move()` and `.resume()` previously dereferenced
+placement fields directly. A malformed runtime `null` payload therefore threw
+a `TypeError` instead of taking the existing `bad-placement`, `rejected` or
+`false` paths, allowing one malformed payload to escape the Lobby boundary as
+an uncontrolled exception.
+
+Placement reads now use null-safe access so `null` and `undefined` payloads
+fail closed without mutating presence or rate-floor state. Valid placements and
+the existing finite-coordinate behavior are unchanged.
+
+*Verified:* a red-first Lobby regression supplied a `null` payload to every
+public placement path and observed the old dereference error; the corrected
+test returns `bad-placement`, `rejected` and `false`. Focused Lobby presence
+tests pass 32/32. No browser, wallet, provider, RPC, proof, signature, funds
+or transaction was used.
+
+### 2026-08-30 — PanelLayer effect rolls back partial World listener setup
+
+`PanelLayer` previously acquired its three World listeners in one array
+expression. If a later `world.on()` call threw during React effect setup, the
+earlier handlers remained attached even though React received no cleanup
+function, so a failed remount could leave stale room updates subscribed to the
+World bus.
+
+The effect now owns listener registrations incrementally, rolls back every
+handler acquired before a failing registration, attempts all rollback
+callbacks even when one cleanup throws, preserves the original setup error,
+and makes normal cleanup idempotent. Room reduction, wallet gating and close
+behavior are unchanged.
+
+*Verified:* a red-first Web regression makes the third registration throw after
+attaching the first two and makes the first rollback throw; the corrected
+effect calls both rollback callbacks once and rethrows the original error.
+Focused PanelLayer tests pass 13/13. No browser, wallet, provider, RPC,
+proof, signature, funds or transaction was used.
+
+### 2026-08-30 — Bridge persisted required fields must be own data
+
+`deserializeBridgeRecord()` previously read required root fields through
+ordinary property access. A malformed persisted record could omit `status`
+and supply it through `Object.prototype`; the decoder then accepted the
+record and `BridgeService.resume()` could expose inherited state.
+
+Persistence now requires own data properties for every required root field
+(`v`, `signedQuote`, `createdAt`, `updatedAt`, `amountIn`, and `status`).
+Accessors and inherited values fail closed; valid serialized records and
+optional-field semantics remain unchanged.
+
+*Verified:* a red-first public Bridge persistence regression deletes the
+required `status` from a serialized record and supplies it only through
+`Object.prototype`; the old decoder returned a record and the corrected
+decoder returns `null`. The focused Bridge suite passes 98/98, the Bridge
+typecheck and all invariant checks pass, and `git diff --check` is clean. No
+browser, external provider, RPC, wallet, proof, signature, funds or
+transaction was used.
+
+### 2026-08-30 — Tiled property containers fail closed when malformed
+
+`flattenProperties()` previously iterated any truthy `properties` value. A
+malformed Tiled object whose property container was an object or primitive
+therefore threw `TypeError` out of `objectLayerToDoors()` instead of being
+skipped, allowing one bad authored object to abort map parsing.
+
+The flattener now requires an array before iterating and returns an empty
+property record for any other runtime value. Valid Tiled arrays, duplicate-name
+last-write behavior, and malformed individual-entry skipping are unchanged.
+
+*Verified:* a red-first World regression supplied a non-array property
+container and observed the old iterable TypeError; the corrected test returns
+an empty record. Focused Tiled-property tests pass 7/7. No browser, wallet,
+provider, RPC, proof, signature, funds or transaction was used.
+
+### 2026-08-30 — Visit world-listener setup rolls back partial registration
+
+`VisitController.listen()` previously registered four world handlers in a
+single array expression. If a later `world.on()` registration threw, the
+earlier handlers remained attached even though no cleanup function was
+returned, so a failed React effect setup could leak callbacks into the world
+bus. Its normal cleanup also stopped at the first unsubscribe failure, which
+could leave Shell-owned controls suspended.
+
+Listener setup now owns registrations incrementally, rolls back every handler
+acquired before the failing registration, attempts all cleanup callbacks, and
+preserves the original setup error. Normal teardown releases Shell-owned
+controls even when listener cleanup reports an error, while retaining
+idempotent listener ownership. Visit routing and matching-exit semantics are
+unchanged.
+
+*Verified:* a red-first Web regression makes the fourth world registration
+throw after attaching the first three and makes the first rollback throw; the
+corrected path calls all three rollback callbacks once and rethrows the
+original registration error. Focused Visit tests pass 23/23. No browser,
+wallet, provider, RPC, proof, signature, funds or transaction was used.
+
+### 2026-08-30 — Avatar Studio presentation stops after synchronous destroy
+
+`createAvatarStudioPresentation().enter()` and `.exit()` previously continued
+their ordered port calls after one port callback synchronously destroyed the
+presentation. A reentrant teardown could therefore restore or move the player,
+camera and presence after the presentation had already retired its ownership.
+
+Both transitions now recheck the presentation's destroyed state after every
+port operation and stop immediately when teardown occurs. Normal operation
+order and idempotent destruction remain unchanged.
+
+*Verified:* a red-first World regression destroys the presentation from the
+`setStudioVisible` callback and observes later bounds/position calls on the old
+path; the corrected test stops the transition. Focused Avatar Studio tests pass
+25/25. No browser, wallet, provider, RPC, proof, signature, funds or
+transaction was used.
+
+### 2026-08-30 — Presence world-listener setup rolls back partial registration
+
+`PresenceController.listen()` previously registered six world handlers in a
+single array expression. If a later `world.on()` registration threw, the
+earlier handlers remained attached even though no cleanup function was
+returned, so a failed React effect setup could leak callbacks into the world
+bus for the lifetime of the page.
+
+Listener setup now owns registrations incrementally, rolls back every handler
+acquired before the failing registration, attempts all rollback callbacks even
+if one cleanup throws, preserves the original setup error, and makes the
+returned cleanup idempotent. Normal event routing and controller ownership are
+unchanged.
+
+*Verified:* a red-first Web regression makes the third world registration
+throw after attaching the first two and makes the first rollback throw; the
+corrected path calls both rollback callbacks once and rethrows the original
+registration error. Focused presence tests pass 46/46. No browser, wallet,
+provider, RPC, proof, signature, funds or transaction was used.
+
+### 2026-08-30 — Wallet connection cleanup is not retained after synchronous retirement
+
+`WalletSession.connectOwned()` previously assigned the unsubscribe callback
+returned by `connected.subscribe()` even when that subscription synchronously
+reported account removal and `retireConnectionBestEffort()` had already
+retired and destroyed the connection. A later explicit `disconnect()` then
+invoked cleanup for the already-retired connection; a throwing stale cleanup
+could surface as a new disconnect failure despite there being no live wallet
+connection.
+
+The subscription cleanup is now installed only if the same connection still
+owns the session after registration. Synchronous account replacement retains
+the cleanup for its still-current connection, while synchronous retirement
+leaves no stale cleanup to invoke. Connection destruction and explicit cleanup
+error semantics are otherwise unchanged.
+
+*Verified:* a red-first public session regression makes subscription report
+account removal synchronously and return a cleanup that throws; the old path
+rejected a later disconnect, while the corrected path resolves without
+invoking stale cleanup. The existing synchronous account-replacement test also
+confirms cleanup is retained for the current connection. The Privacy suite
+passes 232 tests. No browser, external provider, RPC, wallet, proof,
+signature, funds or transaction was used.
+
+### 2026-08-30 — Input-gate binding rolls back partial event registration
+
+`bindInputGate()` previously registered the entry listener and then registered
+the exit listener without a rollback path. If the second `on()` call threw,
+the entry listener remained attached even though no unbind function was
+returned, leaving later building events able to suspend input permanently.
+
+The binding now rolls back the acquired entry listener, restores input, and
+preserves the original registration error if exit registration fails. Normal
+event handling and unbind idempotence remain unchanged.
+
+*Verified:* a red-first World regression makes exit-listener registration throw
+after entry registration and observes the entry stop callback was not called on
+the old path; the corrected test calls it once. Focused input-gate tests pass
+10/10. No browser, wallet, provider, RPC, proof, signature, funds or
+transaction was used.
+
+### 2026-08-30 — Avatar outfit binding rolls back partial keyboard registration
+
+`createAvatarOutfitToggleBinding()` previously called `keyboard.on()` without
+handling a registration failure. An emitter that attached the handler before
+throwing left the Scene-lifetime F listener installed even though no binding
+was returned, so `StreetScene.createAvatarOutfit()` could not destroy it on a
+partial create cleanup.
+
+Binding construction now removes the handler after a failed registration,
+preserves the original error, and tolerates a cleanup failure. Normal binding
+ownership, input filtering and idempotent destroy behavior are unchanged.
+
+*Verified:* a red-first World regression makes keyboard registration attach
+then throw and observes one leaked handler on the old path; the corrected test
+removes it. Focused outfit tests pass 8/8. No browser, wallet, provider, RPC,
+proof, signature, funds or transaction was used.
+
+### 2026-08-30 — Prepared swap responses require a nonempty quote identifier
+
+`BackendPrivacyClient.prepareSwap()` previously accepted any string as
+`quoteId`, including the empty string. The backend's swap boundary requires a
+quote identifier and the Wallet API operations layer validates chain, amounts,
+expiry, executor and fee data but did not recheck this identifier. A malformed
+successful response could therefore produce a prepared quote with no
+identifier for the quote-bound review/submission lifecycle.
+
+Swap response parsing now requires an own nonempty string quote identifier.
+Whitespace remains opaque and permitted, matching the backend's existing
+nonempty check; all other swap response validation and quote binding are
+unchanged.
+
+*Verified:* a red-first public BackendPrivacyClient regression supplied an
+empty `quoteId` with otherwise valid swap data; it resolved on the old path and
+now rejects with `kind: 'unknown'`. The focused backend-client suite passes 44
+tests. No browser, external provider, RPC, wallet, proof, signature, funds or
+transaction was used.
+
+### 2026-08-30 — Fixed-room listener registration rolls back partial controllers
+
+`createFixedRoomController()` previously registered the three Shell listeners
+sequentially without retaining or rolling back registrations when a later
+`in.on()` call threw. During `StreetScene.createFixedRooms()`, that leaves a
+partially-constructed controller's earlier listener attached even though the
+controller is never stored and cannot be reached by Scene cleanup.
+
+Controller construction now rolls back every listener registration acquired
+before the failing registration, preserves the original registration error,
+and attempts all rollback callbacks even if one rollback throws. Normal
+controller ownership, listener behavior and destroy idempotence are unchanged.
+
+*Verified:* a red-first World regression makes the second Shell listener
+registration throw and observes the first stop callback was not called on the
+old path; the corrected test calls it once. Focused fixed-room tests pass 36/36.
+No browser, wallet, provider, RPC, proof, signature, funds or transaction was
+used.
+
+### 2026-08-30 — Dynamic room labels claim ownership before styling
+
+`StreetScene.renderRoom()` previously inserted a newly-created station label
+into `roomLabels` only after its presentation setters completed. A Phaser text
+setter failure during the first station render could therefore leave an
+allocated label outside the Scene-owned map, unreachable by shutdown or
+partial-create cleanup.
+
+Dynamic station labels are now registered immediately after construction,
+before styling setters run. Existing label geometry, update behavior and normal
+room teardown are unchanged; failed presentation setup remains owned by the
+Scene.
+
+*Verified:* a red-first World regression makes the first dynamic label styling
+setter throw and observes missing ownership on the old path; the corrected test
+retains it. Focused World art tests pass 6/6. No browser, wallet, provider,
+RPC, proof, signature, funds or transaction was used.
+
+### 2026-08-30 — Authorization wire claims require canonical own data
+
+`fromWire()` previously accepted signed JSON claims through ordinary property
+access and converted bigint strings with `BigInt()`. A validly signed but
+malformed authorization could therefore inherit a missing claim from a
+polluted prototype, accept signed forms such as `+7`, `0x7` or `007`, or carry
+an incomplete swap binding into later claim validation.
+
+The decoder now requires own data properties for all required top-level
+claims, validates the optional swap binding as a complete object with typed
+fields, and accepts only canonical decimal strings for bigint values. Safe
+block and quote-expiry numbers, string fields and invoke-prefix entries are
+shape-checked before conversion; valid issued claims remain unchanged.
+
+*Verified:* red-first codec regressions cover a prototype-supplied amount,
+noncanonical signed amounts and an incomplete signed swap binding. Before the
+guards those tokens decoded successfully; after them they return `null`.
+Removing the own-data, canonical-decimal, or swap-shape guard independently
+revives its regression. No browser, external provider, RPC, wallet, proof,
+signature, funds or transaction was used.
+
+### 2026-08-30 — Pool fee tokens require canonical felt encoding at the browser boundary
+
+`BackendPrivacyClient.config()` previously treated the backend's `feeToken`
+as an arbitrary string. A malformed successful pool-config response could
+therefore publish decimal or uppercase-prefix encodings, or a value at/above
+the Stark field prime, as the configured fee token. Later route checks compare
+tokens numerically and do not repair that malformed configuration, so an
+invalid token representation could reach fee-action construction.
+
+Config parsing now requires the token to be a lowercase-`0x` Stark field felt
+before returning `PoolConfig`. Uppercase hexadecimal digits and zero remain
+valid under the existing felt rule; no route allowlist or nonzero policy is
+introduced here.
+
+*Verified:* red-first public BackendPrivacyClient regressions cover a decimal
+token, uppercase `0X` prefix and field-prime value; all three resolved on the
+old path and now reject with `kind: 'unknown'`. The focused backend-client
+suite passes 43 tests. No browser, external provider, RPC, wallet, proof,
+signature, funds or transaction was used.
+
+### 2026-08-30 — Exterior labels claim ownership before styling
+
+`StreetScene.createExteriorLabels()` previously inserted each text object into
+`exteriorLabels` only after `.setOrigin()` and `.setDepth()` completed. A
+Phaser setter failure during Scene construction therefore left an allocated
+label outside the Scene-owned collection and unreachable by partial-create
+cleanup.
+
+Each label is now registered immediately after construction, before its
+presentation setters run. Label geometry and normal rendering/teardown are
+unchanged; a failed setter leaves the object owned for `cleanShutdown()`.
+
+*Verified:* a red-first World presentation regression makes the first label
+styling setter throw and observes the created label missing from Scene
+ownership on the old path. The corrected test retains it. The full World
+suite passes 24 files / 266 tests; World typecheck, invariants and diff
+hygiene pass. No browser, wallet, provider, RPC, proof, signature, funds or
+transaction was used.
+
+### 2026-08-30 — Room graphics claim ownership before depth setup
+
+`StreetScene.createRoomVisuals()` previously assigned each graphics object
+only after `.setDepth()` returned. If a Phaser depth setter threw during Scene
+construction, the newly allocated graphic was absent from the Scene-owned
+fields and could not be reached by partial-create cleanup.
+
+Each room/studio graphics object is now assigned immediately after creation,
+before its depth setter runs. Rendering order and the existing cleanup path
+are unchanged; a failed setter leaves the allocation owned and recoverable.
+
+*Verified:* a red-first World presentation regression makes the first room
+graphics depth setter throw and observes the created object missing from Scene
+ownership on the old path. The corrected test retains it. The full World
+suite passes 24 files / 265 tests; World typecheck, invariants and diff
+hygiene pass. No browser, wallet, provider, RPC, proof, signature, funds or
+transaction was used.
+
+### 2026-08-30 — Relay estimate amounts require decimal wire syntax
+
+`BackendPrivacyClient.estimate()` previously converted the backend's decimal
+fee amount with `BigInt()` directly. JavaScript accepts whitespace and signed
+strings in that conversion, so malformed estimate responses such as `" "` or
+`"+7"` crossed the browser boundary as valid `0n` or `7n`; fractional syntax
+instead leaked a raw `SyntaxError`. The operations layer could only reject the
+zero case and would otherwise admit the signed form into fee validation.
+
+Estimate parsing now requires the existing decimal-string wire syntax before
+conversion, mapping malformed values to the generic invalid-response error.
+The parser imposes no additional fee ceiling; positive amount and route-policy
+checks remain in the operations layer.
+
+*Verified:* red-first public BackendPrivacyClient regressions cover whitespace,
+signed and fractional estimate amounts; the first two resolved on the old
+path and the fractional case leaked `SyntaxError`, while all three now reject
+with `kind: 'unknown'`. The focused backend-client suite passes 40 tests. No
+browser, external provider, RPC, wallet, proof, signature, funds or
+transaction was used.
+
+### 2026-08-30 — Bridge status envelopes require own data fields
+
+`BridgeService` previously validated only the nested signed quote in a 1Click
+execution-status response. `mapStatus()` then read `status` and `swapDetails`
+through ordinary property access, so an inherited or accessor field could
+cross the provider boundary and be persisted as user-visible bridge state;
+the signed quote evidence itself could also be inherited.
+
+Status verification now requires own data properties for `quoteResponse`,
+`status`, and `swapDetails`. Inherited and accessor fields fail with the
+existing generic invalid-execution-status error without invoking getters;
+normal provider responses and omitted optional transaction hashes are
+unchanged.
+
+*Verified:* red-first public Bridge refresh regressions first accepted an
+inherited or accessor status, inherited swap details, and inherited signed
+quote evidence; the corrected path rejects all four and leaves the persisted
+record awaiting deposit. Removing each own-data guard independently fails its
+regression. No browser, network, wallet, provider, RPC, proof, signature,
+funds or transaction was used.
+
+### 2026-08-30 — Street ground layers claim ownership before setup
+
+`StreetScene.drawGround()` previously created a tilemap layer, configured its
+depth and collision, and only then assigned `this.ground`. If either Phaser
+setup call threw during Scene construction, the created layer was unreachable
+from the existing partial-create cleanup path and could remain alive.
+
+The layer is now assigned to the Scene-owned ground slot immediately after
+creation, before styling and collision setup. Rendering and collision data are
+unchanged; a failed setup remains recoverable by `cleanShutdown()`.
+
+*Verified:* a red-first World presentation regression makes collision setup
+throw and observes the created layer missing from Scene ownership on the old
+path. The corrected test retains it. The full World suite passes 24 files /
+264 tests; World typecheck, invariants and diff hygiene pass. No browser,
+wallet, provider, RPC, proof, signature, funds or transaction was used.
+
+### 2026-08-30 — Malformed swap bigint fields stay inside the PrivacyError boundary
+
+`BackendPrivacyClient.prepareSwap()` previously called `BigInt()` directly for
+the backend's `buyAmount` and nested relay-fee `amount`. A malformed successful
+response such as the fractional string `1.5` therefore escaped as a raw
+JavaScript `SyntaxError` instead of the generic `PrivacyError('unknown')` used
+for invalid private-service responses. That exposed parser/runtime details to
+callers and made malformed swap responses behave differently from the other
+validated response fields.
+
+Swap bigint parsing now maps bigint conversion failures to the existing generic
+invalid-response error. Valid decimal and bigint-sized values retain their
+existing mapping; semantic amount bounds remain enforced by the operations
+layer and are unchanged.
+
+*Verified:* red-first public BackendPrivacyClient regressions cover malformed
+`buyAmount` and nested fee `amount`; both leaked `SyntaxError` before the
+parser guard and now reject with `kind: 'unknown'`. The focused backend-client
+suite passes 37 tests. No browser, external provider, RPC, wallet, proof,
+signature, funds or transaction was used.
+
+### 2026-08-30 — Street door overlays claim Phaser objects before styling
+
+`StreetScene.createDoorOverlays()` previously stored each image only after
+`setDisplaySize()` and `setDepth()` completed. If either Phaser presentation
+setter threw during Scene construction, the image had already been created but
+was absent from `doorOverlays`; partial-create cleanup therefore could not
+destroy it.
+
+Door images are now added to the Scene-owned overlay collection immediately
+after construction, before styling setters run. Existing rendering geometry
+and normal teardown are unchanged, while a failed setter leaves the object
+reachable by the existing cleanup path.
+
+*Verified:* a red-first World presentation regression makes the first styling
+setter throw and observes the created overlay missing from the ownership list
+on the old path. The corrected test retains it for cleanup. The full World
+suite passes 24 files / 263 tests; World typecheck, invariants and diff
+hygiene pass. No browser, wallet, provider, RPC, proof, signature, funds or
+transaction was used.
+
+### 2026-08-30 — Bridge status transaction hashes require own data fields
+
+`BridgeService` previously accepted a status transaction entry whenever
+`'hash' in entry` was true. A malformed or prototype-polluted 1Click response
+could therefore supply an inherited hash, or an accessor whose getter ran
+during status mapping, and have that value persisted and displayed as deposit
+or settlement evidence.
+
+Status mapping now requires an own data `hash` property before bounded hash
+validation. Inherited and accessor hashes fail with the existing generic
+invalid-execution-status error without invoking a getter; valid own string
+hashes and empty transaction lists are unchanged.
+
+*Verified:* red-first public Bridge refresh regressions first accepted an
+inherited destination hash and an accessor hash; the corrected path rejects
+both and leaves the persisted record awaiting deposit. The focused Bridge
+suite passes 93 tests. No browser, network, wallet, provider, RPC, proof,
+signature, funds or transaction was used.
+
+### 2026-08-30 — Interrupted Lobby joins cancel their welcome timer
+
+`LobbyClient.connect()` raced the welcome wait against its disconnect
+interrupt, but the welcome wait owned a separate timeout. When a caller
+disconnected after the room joined but before the server identity arrived,
+the outer join rejected while the timeout remained scheduled until its full
+configured delay. Repeated interrupted joins could therefore retain timers
+and their closures long after the client had retired the room.
+
+The interrupt promise now belongs to `#awaitWelcome()` itself. Its `finally`
+always clears the timeout whether welcome, timeout, room interruption or a
+transport failure wins; normal timeout and identity semantics are unchanged.
+
+*Verified:* a red-first fake-timer regression leaves the welcome message
+pending, disconnects the joined client, and observes one timer still live on
+the old path. The corrected path rejects the join and leaves zero timers.
+The full Lobby suite passes 10 files / 225 tests; Lobby typecheck,
+invariants and diff hygiene pass. No browser, external provider, RPC, wallet,
+proof, signature, funds or transaction was used.
+
+### 2026-08-30 — Pool fee wire values require decimal syntax
+
+`BackendPrivacyClient.asUint256()` used `BigInt()` and range checks alone for
+the backend's decimal-string `feeAmount`. JavaScript's bigint parser accepts
+whitespace and signed forms, so a response containing only spaces was silently
+converted to `0n` and published as a valid zero pool fee; `+6` was likewise
+accepted as six. This made malformed pool configuration cross the browser
+privacy boundary.
+
+The parser now requires one or more decimal digits before applying the existing
+uint256 bounds. Leading-zero decimal strings remain accepted, while whitespace,
+signs and fractional syntax fail with the existing generic protocol error.
+
+*Verified:* red-first BackendPrivacyClient regressions prove whitespace and
+signed values were accepted before the guard and now reject; zero, leading-zero
+decimal, maximum uint256, negative and above-uint256 cases retain their
+intended outcomes. The focused BackendPrivacyClient suite passes 35 tests; the
+Privacy suite passes 9 files / 219 tests. Package typecheck, invariants and
+diff hygiene pass. No browser, external provider, RPC, wallet, proof,
+signature, funds or transaction was used.
+
+### 2026-08-30 — Wallet balance reads reject negative amounts
+
+`WalletApiPrivacyOperations.balances()` converted each wallet-reported
+`balance` with `BigInt()` but did not reject a negative value. A malformed or
+hostile Wallet API response could therefore publish an impossible negative
+private balance to the shell, where it was formatted as user funds and used by
+asset selection logic.
+
+Balance mapping now rejects negative amounts with the existing generic
+`PrivacyError('unknown')`; zero and positive values retain the existing
+aggregate-balance semantics. No product-level cap is imposed on user funds.
+
+*Verified:* a red-first public Wallet API regression returned `balance: '-1'`
+and observed `total: -1n` before the guard; it now rejects. Removing the
+guard reproduces the failure. The focused Wallet API suite passes 74 tests;
+the full Privacy suite passes 9 files / 218 tests. Package typecheck,
+invariants and diff hygiene pass. No browser, external provider, RPC, wallet,
+proof, signature, funds or transaction was used.
+
+### 2026-08-30 — Avatar Studio lifecycle callbacks cannot publish after teardown
+
+`createAvatarStudioController.enter()` and `leave()` changed lifecycle state,
+then invoked their synchronous `onEnter`/`onExit` callbacks before publishing
+the transition and emitting the corresponding event. If a callback destroyed
+the controller during that handoff, the method resumed and published a stale
+state or emitted `avatar-studio:entered`/`avatar-studio:exited` after teardown.
+An exit callback that re-entered would likewise leave the outer exit event
+describing the wrong transition.
+
+Both methods now recheck lifecycle ownership after the callback. A destroyed
+controller, or an exit callback that synchronously re-enters, suppresses the
+stale outer publication/event; ordinary enter/exit ordering is unchanged.
+
+*Verified:* red-first public regressions destroy the controller from
+`onEnter` and `onExit`; before the guard each leaked a post-teardown state
+publication, while after the guard neither leaked a snapshot nor lifecycle
+event. The focused Avatar Studio suite passes 27 tests and the full World
+suite passes 24 files / 262 tests. No browser, wallet, provider, RPC, proof,
+signature, funds or transaction was used.
+
+### 2026-08-30 — Failed remote avatar removals must not be reused
+
+The remote avatar layer retained a child whose removal had thrown in its
+active avatar map. If that peer ID reappeared before cleanup succeeded, the
+reconciliation loop treated the failed child as live and reused it, even
+though its sprite or timer could already be partially destroyed. A repeated
+cleanup failure could also be lost, leaving the old child without a retry
+owner.
+
+Failed removals now move to a retry-only ownership map. Each later snapshot
+retries those children before creating replacements; an ID with an unresolved
+cleanup is skipped rather than presented with the failed child. The latest
+validated peer snapshot still advances, and layer destruction attempts both
+active and retry-only children. Timer ownership is retained when Phaser
+rejects timer removal so subsequent cleanup can retry it. Cleanup errors are
+still surfaced as the existing single error or `AggregateError`, and all
+other omitted children are attempted.
+
+*Verified:* red-first public regressions cover a timer removal that throws
+once (empty snapshot, then same-ID reappearance creates a fresh sprite only
+after retry) and a timer removal that throws repeatedly (same-ID reappearance
+retries without creating or reusing a child, and final destroy retries the
+owned child). The focused remote-avatar suite passes 15 tests; the full World
+suite passes 24 files / 260 tests. No browser, external provider, RPC,
+wallet, proof, signature, funds or transaction was used.
+
+
+## 6. Findings log
+
+### 2026-08-30 — Browser relay fee tokens require strict felt encoding
+
+`WalletApiPrivacyOperations.validateRelayFee()` previously compared the
+external relay token with `sameAddress()`, whose `BigInt` coercion accepts
+decimal strings and an uppercase `0X` prefix. A malformed backend or gateway
+response could therefore match the configured token numerically while the
+noncanonical token crossed into the Wallet API fee action.
+
+Relay fee validation now requires the token to pass the existing strict felt
+encoding rule before numeric comparison. Lowercase `0x` with uppercase hex
+digits remains valid; decimal and uppercase-prefix encodings fail before a
+prepared batch is returned. Fee recipient, amount, authorization and expiry
+checks are unchanged.
+
+*Verified:* red-first public regressions cover decimal and uppercase-prefix
+tokens on ordinary transfer and quote-bound swap paths, with rejection before
+wallet proving; a canonical lowercase-prefix token with uppercase hex digits
+remains accepted. The focused Wallet API suite passes 73 tests. No browser,
+external provider, RPC, wallet, proof, signature, funds or transaction was
+used.
+
+
+## 6. Findings log
+
+### 2026-08-30 — Issued fee authorizations require a safe block expiry
+
+`BackendApi.fee()` and swap preparation formed authorization expiry with an
+unchecked `issuedAtBlock + proofValidityBlocks` number addition. Although the
+RPC adapter validates each input as a nonnegative safe integer, their sum can
+round above `Number.MAX_SAFE_INTEGER`. The API then returned `200` and issued
+an authorization whose expiry was unsafe; the later submission validator
+rejected that same authorization as a claim mismatch.
+
+Both issuance paths now reject an unsafe expiry before constructing or issuing
+the authorization. The exact safe-integer boundary remains accepted, and
+submission freshness behavior is unchanged.
+
+*Verified:* red-first public Backend regressions set the block to
+`Number.MAX_SAFE_INTEGER` with a one-block validity window and assert generic
+upstream failure plus zero authorization issuance for ordinary and swap
+routes. Matching cases at `Number.MAX_SAFE_INTEGER - 1` remain successful with
+the exact safe expiry. Backend focused tests and diff hygiene pass; no
+browser, external provider, RPC, wallet, proof, signature, funds or
+transaction was used.*
+
+
+
+### 2026-08-30 — AVNU nested executor call targets require nonzero felts
+
+The Backend swap-preparation boundary checked each AVNU executor call target
+with the generic felt rule, which accepts zero. A malformed plan could
+therefore return `200`, issue a fee authorization and serialize an inner call
+to `0x0`, even though the Wallet API rejects that target before handoff.
+
+Nested executor call targets now require a nonzero Stark field felt before the
+paymaster or authorization step. Selector validation remains felt-only; this
+lane does not infer an additional nonzero-selector policy.
+
+*Verified:* red-first Backend regressions cover `0x0`, `0x00` and
+`0x00000000`; each previously returned `200` and issued an authorization, and
+now returns the existing malformed-AVNU `502` without calling the paymaster
+or authorization codec. Backend tests, typecheck, invariants and diff
+hygiene pass. No browser, external provider, RPC, wallet, proof, signature,
+funds or transaction was used.*
+
+
+## 6. Findings log
+
+### 2026-08-30 — Issued fee authorizations require a safe block expiry
+
+`BackendApi.fee()` and swap preparation formed authorization expiry with an
+unchecked `issuedAtBlock + proofValidityBlocks` number addition. Although the
+RPC adapter validates each input as a nonnegative safe integer, their sum can
+round above `Number.MAX_SAFE_INTEGER`. The API then returned `200` and issued
+an authorization whose expiry was unsafe; the later submission validator
+rejected that same authorization as a claim mismatch.
+
+Both issuance paths now reject an unsafe expiry before constructing or issuing
+the authorization. The exact safe-integer boundary remains accepted, and
+submission freshness behavior is unchanged.
+
+*Verified:* red-first public Backend regressions set the block to
+`Number.MAX_SAFE_INTEGER` with a one-block validity window and assert generic
+upstream failure plus zero authorization issuance for ordinary and swap
+routes. Matching cases at `Number.MAX_SAFE_INTEGER - 1` remain successful with
+the exact safe expiry. Backend focused tests and diff hygiene pass; no
+browser, external provider, RPC, wallet, proof, signature, funds or
+transaction was used.*
+
+
+## 6. Findings log
+
+
+## 6. Findings log
+
+### 2026-08-30 — Remote avatar removal attempts every child cleanup
+
+`createRemoteAvatarLayer.render()` removed omitted peers directly in a loop.
+If one timer or sprite destructor threw, the loop aborted before later omitted
+avatars were retired, and the authoritative peer map was never advanced. A
+single presentation cleanup failure could therefore leave stale remote objects
+visible and mask cleanup failures for the rest of the snapshot.
+
+Removal now attempts every omitted avatar, retains any failed object for a
+future retry, advances the authoritative snapshot, and rethrows one cleanup
+error unchanged or multiple as an `AggregateError`. Existing-avatar
+presentation and explicit layer-destroy ownership remain attempt-all and
+idempotent.
+
+*Verified:* public regressions omit two peers while the first destructor throws;
+both cleanup calls now occur and the retained map clears. A second regression
+throws from both destructors and confirms `AggregateError` after both attempts.
+The focused remote-avatar suite passes 13 tests; the full World suite passes
+24 files / 258 tests. World typecheck, all 13 invariants and diff hygiene pass.
+No browser, network, wallet, RPC, proof, signature, funds or transaction was
+used.*
+
+### 2026-08-30 — Vite proxy-boundary tests must isolate dependency optimization
+
+The exact `/api` proxy test created a full Vite development server using the
+production development config, which includes Phaser dependency optimization.
+Vite's asynchronous scanner/esbuild lifecycle is independent of the HTTP
+requests and `vite.close()` waits for it; repeated isolated runs intermittently
+hung in teardown until the 15-second test timeout. This was a test-fixture
+lifecycle trap, not a proxy matcher failure.
+
+The test now disables dependency optimization only on its inline Vite server.
+It still exercises the real configured proxy and asserts `/api` reaches the
+fake backend while `/apis` and `/api2` do not. The production Vite config and
+runtime optimization remain unchanged.
+
+*Verified:* the unmodified fixture passed once and then timed out on its
+second repeated run at `vite.close()`. The corrected exact test passed five
+consecutive runs. No browser, external provider, RPC, wallet, proof,
+signature, funds or transaction was used.*
+
+
+### 2026-08-30 — Relay authorizations must contain non-whitespace data
+
+`WalletApiPrivacyOperations.validateRelayFee()` previously rejected only an
+empty authorization string. A relay response containing spaces, tabs or
+newlines therefore produced a reviewable prepared batch and could cross into
+wallet proof generation even though the backend's authorization verifier
+would reject the token after the private proof was created. This is an
+external-response validation defect at the wallet handoff boundary.
+
+Relay fee validation now requires a string whose trimmed length is nonzero,
+while preserving the original opaque authorization token for submission.
+Ordinary private transfers and quote-bound swaps use the same validation;
+their fee token, recipient, amount and expiry checks are unchanged.
+
+*Verified:* red-first public regressions supplied whitespace-only
+authorizations (`" \\t\\n"`) on both transfer and swap fee paths; both resolved
+before the fix and now reject before `strk20PrepareInvoke`. The focused wallet
+API suite passes 68 tests. No browser, external provider, RPC, wallet, proof,
+signature, funds or transaction was used.
+
+
+## 6. Findings log
+
+
+## 6. Findings log
+
+### 2026-08-30 — Remote avatar ownership is registered before first presentation
+
+`createRemoteAvatarLayer.render()` created a new sprite, presented its first
+pose, and only then stored the avatar in its ownership map. If a Phaser
+presentation call or timer setup threw during that first update, the source
+publication failed with a live sprite that `destroy()` could not reach. A later
+snapshot created a second sprite while the first remained orphaned.
+
+New avatars are now registered before `updateAvatar()` runs. A failed first
+presentation therefore remains owned for teardown and can be retried by the
+next authoritative snapshot; existing-avatar updates, removal, and aggregate
+cleanup semantics are unchanged.
+
+*Verified:* a public regression makes the first new-avatar presentation throw,
+then republishes the same peer and confirms no second sprite is created; final
+destroy reaches the original sprite exactly once. The focused remote-avatar
+suite passes 11 tests. No browser, network, wallet, RPC, proof, signature,
+funds or transaction was used.*
+
+### 2026-08-30 — Vite proxy-boundary tests must isolate dependency optimization
+
+The exact `/api` proxy test created a full Vite development server using the
+production development config, which includes Phaser dependency optimization.
+Vite's asynchronous scanner/esbuild lifecycle is independent of the HTTP
+requests and `vite.close()` waits for it; repeated isolated runs intermittently
+hung in teardown until the 15-second test timeout. This was a test-fixture
+lifecycle trap, not a proxy matcher failure.
+
+The test now disables dependency optimization only on its inline Vite server.
+It still exercises the real configured proxy and asserts `/api` reaches the
+fake backend while `/apis` and `/api2` do not. The production Vite config and
+runtime optimization remain unchanged.
+
+*Verified:* the unmodified fixture passed once and then timed out on its
+second repeated run at `vite.close()`. The corrected exact test passed five
+consecutive runs. No browser, external provider, RPC, wallet, proof,
+signature, funds or transaction was used.*
+
+### 2026-08-30 — Paymaster fee tokens require strict felt encoding
+
+`BackendApi.fee()` and swap preparation compared the paymaster's returned
+`fee.token` with `sameAddress()`, whose `BigInt` coercion accepted decimal
+strings, numbers, and an uppercase `0X` prefix when they represented the
+configured token. The API could therefore issue a successful authorization
+and expose a token encoding the browser and Wallet API do not accept.
+
+Both fee paths now require the provider token to pass the existing strict
+lowercase-`0x` Stark field validator before numeric address comparison. The
+existing token-match behavior and `400` response contract remain unchanged;
+recipient validation still rejects non-string values safely through its type
+guard.
+
+*Verified:* red-first Backend regressions cover decimal-string, numerically
+equivalent, uppercase-prefix, and object provider tokens on ordinary fee
+estimation and swap preparation, asserting no authorization issuance. Before
+the guard, the three coercible forms returned `200` in each path; after it,
+all eight cases pass with no authorization for any malformed value. No
+browser, external provider, RPC, wallet, proof, signature, funds or
+transaction was used.*
+
+### 2026-08-30 — Paymaster fee recipients require a nonzero felt
+
+`BackendApi.fee()` and swap preparation validated the paymaster's returned fee
+recipient with the generic felt rule. That rule accepts zero, so a malformed
+provider response could issue an authorization directing the private fee
+withdrawal to `0x0` (including leading-zero encodings), where it cannot
+reimburse the paymaster.
+
+Both fee paths now require a nonzero Stark field felt for the provider
+recipient. The existing fee-token, amount, authorization and status contracts
+are unchanged; malformed zero recipients return the existing `400` validation
+response before authorization issuance.
+
+*Verified:* red-first Backend regressions cover `0x0`, `0x00` and
+`0x00000000` on ordinary fee estimation and swap preparation. Before the
+guard, all six returned `200` and issued authorizations; after it, all six
+return `HTTP_400` and issue none. No browser, external provider, RPC, wallet,
+proof, signature, funds or transaction was used.*
+
+### 2026-08-30 — Lobby peer deliveries freeze shared snapshots
+
+
+
+## 6. Findings log
+
+### 2026-08-30 — Browser pool fees require uint256 bounds
+
+`BackendPrivacyClient.config()` converted the backend's decimal `feeAmount`
+with `BigInt()` alone. Negative values and values above the pool's `u256`
+fee domain therefore crossed the browser privacy seam as valid
+`PoolConfig` data. Downstream fee-ceiling logic only imposed an upper bound,
+so a negative fee could appear in review and pass the pre-wallet check.
+
+Config parsing now requires `0 <= feeAmount <= 2^256 - 1`; zero remains valid
+for governance-configured fees and the maximum value remains representable.
+Malformed strings and out-of-range values use the existing generic invalid
+response error. Other response amounts and schemas are unchanged.
+
+*Verified:* red-first public regressions cover zero, maximum uint256, negative
+and `2^256` fee values; the two invalid cases resolved before the guard and
+now reject. The focused BackendPrivacyClient suite passes 31 tests; the full
+Privacy suite passes 9 files / 209 tests, with package typecheck, invariants
+and diff hygiene green. No browser, external provider, RPC, wallet, proof,
+signature, funds or transaction was used.*
+
+### 2026-08-30 — Paymaster fee recipients require a nonzero felt
+
+`BackendApi.fee()` and swap preparation validated the paymaster's returned fee
+recipient with the generic felt rule. That rule accepts zero, so a malformed
+provider response could issue an authorization directing the private fee
+withdrawal to `0x0` (including leading-zero encodings), where it cannot
+reimburse the paymaster.
+
+Both fee paths now require a nonzero Stark field felt for the provider
+recipient. The existing fee-token, amount, authorization and status contracts
+are unchanged; malformed zero recipients return the existing `400` validation
+response before authorization issuance.
+
+*Verified:* red-first Backend regressions cover `0x0`, `0x00` and
+`0x00000000` on ordinary fee estimation and swap preparation. Before the
+guard, all six returned `200` and issued authorizations; after it, all six
+return `HTTP_400` and issue none. No browser, external provider, RPC, wallet,
+proof, signature, funds or transaction was used.*
+
+### 2026-08-30 — Lobby peer deliveries freeze shared snapshots
+
+`LobbyClient.peers()` returned a fresh array but left both that array and its
+entry objects mutable. `#emitPeers()` then delivered the same snapshot to every
+listener, so an earlier subscriber could change coordinates, pose, sprite or
+membership before a later subscriber received it. This violated the readonly
+peer seam at runtime and could make shell consumers disagree about one state
+update.
+
+Peer snapshots now freeze the array and each entry before delivery. This is
+deliberately an immutability-only boundary fix: the World-owned
+`reconcileRemotePeers()` remains responsible for validating untrusted runtime
+identity, coordinates, facing and sprite values because the Lobby client does
+not possess the server's trusted custom sprite allowlist.
+
+*Verified:* a red-first public regression mutates a snapshot in listener A and
+confirms listener B still receives the original one-entry snapshot, with both
+runtime layers frozen. The focused client suite passes 59 tests; the full Lobby
+suite passes 10 files / 224 tests. Lobby typecheck, all 13 invariants and diff
+hygiene pass. No browser, network, wallet, RPC, proof, signature, funds or
+transaction was used.*
+
+
+## 6. Findings log
+
+
+
+
+### 2026-08-30 — World remote-peer sources sanitize before replay
+
+The Shell's Lobby-to-World adapter published raw peer fields into the
+World-owned `RemotePeerSource`. Its retained source copied and cast those
+fields without validation, so a direct source subscriber could receive a
+malformed ID, NaN/Infinity coordinate, illegal facing or arbitrary sprite.
+The renderer validated later, but that left the public source seam inconsistent
+for any other World consumer.
+
+The source now routes initial and published snapshots through the existing
+`reconcileRemotePeers()` policy before freezing them. Invalid identity,
+position or facing entries are dropped and unknown sprites use the approved
+local fallback. The fixed World registry remains authoritative; no server
+operator-specific Lobby sprite list is inferred in this package.
+
+*Verified:* red-first World and Web regressions inject malformed peer fields
+through the public retained-source paths and previously observed all of them;
+the corrected paths expose only the valid fallback entry. The focused World
+source suite passes 16 tests and the focused Presence suite passes 45 tests.
+No browser, network, wallet, RPC, proof, signature, funds or transaction was
+used.*
+
+### 2026-08-30 — Lobby peer deliveries freeze shared snapshots
+
+`LobbyClient.peers()` returned a fresh array but left both that array and its
+entry objects mutable. `#emitPeers()` then delivered the same snapshot to every
+listener, so an earlier subscriber could change coordinates, pose, sprite or
+membership before a later subscriber received it. This violated the readonly
+peer seam at runtime and could make shell consumers disagree about one state
+update.
+
+Peer snapshots now freeze the array and each entry before delivery. This is
+deliberately an immutability-only boundary fix: the World-owned
+`reconcileRemotePeers()` remains responsible for validating untrusted runtime
+identity, coordinates, facing and sprite values because the Lobby client does
+not possess the server's trusted custom sprite allowlist.
+
+*Verified:* a red-first public regression mutates a snapshot in listener A and
+confirms listener B still receives the original one-entry snapshot, with both
+runtime layers frozen. The focused client suite passes 59 tests; the full Lobby
+suite passes 10 files / 224 tests. Lobby typecheck, all 13 invariants and diff
+hygiene pass. No browser, network, wallet, RPC, proof, signature, funds or
+transaction was used.*
+
+
+## 6. Findings log
+
+### 2026-08-30 — Private swap outputs require uint256 bounds
+
+`WalletApiPrivacyOperations.validateSwapPlan()` previously checked only that
+the external swap plan's `buyAmount` was a positive bigint. A malformed AVNU
+or backend response above the STRK20 `u256` range could therefore become the
+reviewed expected output and protected minimum, crossing quote admission with
+an impossible amount.
+
+Swap-plan admission now requires `0 < buyAmount <= 2^256 - 1`. The maximum
+valid value remains accepted; values above it fail with the existing malformed
+expected-output error before any wallet handoff. Other quote, fee, executor,
+expiry and action-binding checks are unchanged.
+
+*Verified:* red-first public regressions prove that `2^256 - 1` is accepted
+and `2^256` is rejected before a review is returned. The focused Wallet API
+suite passes 65 tests; the full Privacy suite passes 9 files / 205 tests,
+with package typecheck, invariants and diff hygiene green. No browser,
+external provider, RPC, wallet, proof, signature, funds or transaction was
+used.*
+
+
+## 6. Findings log
+
+### 2026-08-30 — Backend privacy responses require own data fields
+
+`BackendPrivacyClient` validated response values through ordinary property
+lookup. A same-origin prototype pollution could therefore supply an omitted
+config, public-key, relay-fee, submission, or swap field through
+`Object.prototype`; an own accessor could also run during parsing. This let a
+malformed backend response cross the browser privacy boundary and made the
+result depend on ambient object state.
+
+The client now requires every response field to be an own data property before
+type conversion, including nested swap fee and executor-call records. Accessor
+properties are rejected without invoking their getter; existing response
+shapes and injected fetchers are unchanged.
+
+*Verified:* red-first public regressions polluted `Object.prototype` for
+config, public-key, nested fee, and nested executor-call fields; each
+previously resolved on the current base and now rejects with the generic
+`unknown` protocol error. A separate accessor regression confirms the getter
+is not invoked. Privacy tests pass 27 tests; no browser, external provider,
+RPC, wallet, proof, signature, funds or transaction was used.*
+
+### 2026-08-30 — AVNU swap planning stops between provider awaits
+
+`AvnuSwapPlanner.prepare()` passed its cancellation signal into the AVNU
+quote and executor-call helpers, but did not recheck the signal after either
+await. A cancellation-ignoring quote lookup could therefore trigger a second
+provider call to construct private executor calldata, and a cancellation-
+ignoring call-construction request could still publish a prepared swap plan.
+
+The planner now rechecks the same signal after quote retrieval and after call
+construction, throwing the signal's exact reason before starting the next
+provider step or mapping/publishing the plan. The AVNU request shapes,
+mainnet-chain checks, protected minimum and Wallet API handoff are unchanged.
+
+*Verified:* red-first public adapter regressions abort immediately before a
+deferred quote settles and immediately before a deferred executor-call plan
+settles. Before the guards, the first case still called `quoteToCalls` and the
+second returned a plan; after the guards both reject with the exact abort
+reason and no stale executor plan is mapped. The focused Backend adapter suite
+passes 49 tests. No browser, external provider, wallet, RPC, proof,
+signature, funds or transaction was used.*
+
+### 2026-08-30 — Presence destroy completes ownership cleanup after disconnect failure
+
+`PresenceController.destroy()` used `Promise.all()` and performed its final
+ownership cleanup only after that promise fulfilled. A client whose
+`disconnect()` rejected therefore left the controller retaining its client
+
+
+
+## 6. Findings log
+
+### 2026-08-30 — Paymaster fee amounts require runtime bigint validation
+
+`BackendApi.fee()` and swap preparation compared the untrusted paymaster fee
+amount directly with `bigint` policy limits but never checked its runtime
+type. JavaScript relational coercion allowed fractional or nonnumeric strings,
+numbers, `NaN` and objects to pass both comparisons. The API could then issue
+an authorization and return a successful response containing an unusable fee
+amount; later authorization verification or relay handling would disagree
+with that earlier success.
+
+Both fee paths now require the provider amount to be a runtime `bigint` before
+policy comparison or authorization construction. Malformed provider data
+therefore follows the existing opaque upstream-failure response, while valid
+fee bounds, authorization claims and swap behavior are unchanged.
+
+*Verified:* red-first Backend regressions cover fractional and nonnumeric
+strings, a number, `NaN` and an object on both ordinary fee estimation and
+swap preparation. Before the guard, all ten cases returned `200` and issued
+authorizations; after it, all return generic `502` with zero authorization
+issuance. The Backend suite passes 174 tests; Backend typecheck, invariants and
+diff hygiene pass. No browser, external provider, wallet, RPC, proof,
+signature, funds or transaction was used.*
+
+### 2026-08-30 — AVNU swap planning stops between provider awaits
+
+`AvnuSwapPlanner.prepare()` passed its cancellation signal into the AVNU
+quote and executor-call helpers, but did not recheck the signal after either
+await. A cancellation-ignoring quote lookup could therefore trigger a second
+provider call to construct private executor calldata, and a cancellation-
+ignoring call-construction request could still publish a prepared swap plan.
+
+The planner now rechecks the same signal after quote retrieval and after call
+construction, throwing the signal's exact reason before starting the next
+provider step or mapping/publishing the plan. The AVNU request shapes,
+mainnet-chain checks, protected minimum and Wallet API handoff are unchanged.
+
+*Verified:* red-first public adapter regressions abort immediately before a
+deferred quote settles and immediately before a deferred executor-call plan
+settles. Before the guards, the first case still called `quoteToCalls` and the
+second returned a plan; after the guards both reject with the exact abort
+reason and no stale executor plan is mapped. The focused Backend adapter suite
+passes 49 tests. No browser, external provider, wallet, RPC, proof,
+signature, funds or transaction was used.*
+
+### 2026-08-30 — Presence destroy completes ownership cleanup after disconnect failure
+
+`PresenceController.destroy()` used `Promise.all()` and performed its final
+ownership cleanup only after that promise fulfilled. A client whose
+`disconnect()` rejected therefore left the controller retaining its client
+reference and replacement state, skipped listener cleanup, and made repeated
+destroy calls return the same unfinished rejection. A client that threw
+synchronously could reject before the destroy promise was retained at all.
+
+Destroy now normalizes synchronous disconnect throws, waits for both the
+current client and any replacement teardown with `Promise.allSettled()`, then
+always clears client, replacement and subscriber ownership. It preserves one
+cleanup error unchanged and combines multiple failures in an `AggregateError`.
+
+*Verified:* red-first public regressions cover asynchronous disconnect
+rejection and synchronous disconnect throw. Before the fix, the synchronous
+case resolved on the repeated destroy call; after the fix, both calls reject
+with the same error, disconnect runs once, and peer ownership is cleared.
+The focused Presence suite passes 44 tests; Web typecheck, invariants and diff
+hygiene pass. No browser, lobby server, wallet, provider, RPC, proof,
+signature, funds or transaction was used.*
+
+### 2026-08-30 — Wallet session guards synchronous subscription handoff
+
+
+
+### 2026-08-30 — Lobby welcome timeout is bounded by the platform timer contract
+
+`LobbyClient` copied `welcomeTimeoutMs` directly into `setTimeout`. NaN,
+infinity, negative or fractional values, and delays beyond the platform timer
+ceiling can clamp or wrap into an immediate timer, allowing `connect()` to
+proceed before the server-issued game identity arrives. That temporarily
+breaks the client's self-filtering guarantee and makes a configured timeout
+mean something different across runtimes.
+
+The constructor now requires a nonnegative safe integer at or below the
+platform timer ceiling. Zero remains an intentional opt-out and the exact
+ceiling remains valid; the documented option now states this bounded-integer
+contract.
+
+*Verified:* public Lobby-client cases reject NaN, infinity, -1, 1.5, one above
+the timer ceiling and `Number.MAX_SAFE_INTEGER`, while accepting zero and the
+exact ceiling. The focused Lobby client suite passes 58 tests. No browser,
+network, wallet, RPC, proof, signature, funds or transaction was used.*
+
+### 2026-08-30 — Presence destroy completes ownership cleanup after disconnect failure
+
+`PresenceController.destroy()` used `Promise.all()` and performed its final
+ownership cleanup only after that promise fulfilled. A client whose
+`disconnect()` rejected therefore left the controller retaining its client
+reference and replacement state, skipped listener cleanup, and made repeated
+destroy calls return the same unfinished rejection. A client that threw
+synchronously could reject before the destroy promise was retained at all.
+
+Destroy now normalizes synchronous disconnect throws, waits for both the
+current client and any replacement teardown with `Promise.allSettled()`, then
+always clears client, replacement and subscriber ownership. It preserves one
+cleanup error unchanged and combines multiple failures in an `AggregateError`.
+
+*Verified:* red-first public regressions cover asynchronous disconnect
+rejection and synchronous disconnect throw. Before the fix, the synchronous
+case resolved on the repeated destroy call; after the fix, both calls reject
+with the same error, disconnect runs once, and peer ownership is cleared.
+The focused Presence suite passes 44 tests; Web typecheck, invariants and diff
+hygiene pass. No browser, lobby server, wallet, provider, RPC, proof,
+signature, funds or transaction was used.*
+
+### 2026-08-30 — Wallet session guards synchronous subscription handoff
+
+`createWalletSession()` captured the connection account and chain before
+registering its Wallet Standard listener. A connection port is allowed to
+replay its current event synchronously from `subscribe()`, so an account
+replacement or account removal during registration was processed by the
+listener and then overwritten by the stale continuation. The session could
+therefore expose the old account with replacement operations, or reconnect an
+account that had already been removed.
+
+The handoff now rechecks `destroyed`, generation and connection ownership
+after `subscribe()` returns, then reads and validates a fresh snapshot before
+constructing or publishing initial operations. A stale continuation returns
+without disturbing replacement state; an already-retired port is destroyed
+once. This preserves the existing synchronous listener and Wallet API
+ownership boundary.
+
+*Verified:* red-first public regressions reproduced synchronous account
+replacement and synchronous account removal during subscription; both failed
+on the old continuation and pass with the post-subscribe ownership guard.
+Session tests, privacy gates, typechecks, invariants and diff hygiene are
+recorded on the candidate. No browser, wallet, provider, RPC, proof,
+signature, funds or transaction was used.*
+
+### 2026-08-30 — Wallet session cleanup cannot mask connection authority
+
+Automatic cleanup of a stale or invalid WalletConnectionPort could throw from
+`destroy()`. A stale connect result then rejected with the cleanup error
+instead of preserving the already-retired session, and a `getSnapshot()`
+failure could remain stuck in `connecting` because cleanup threw before the
+failure state was published. Repeating cleanup could also invoke provider
+teardown twice.
+
+Automatic retirement now clears ownership first, attempts cleanup and destroy
+at most once, and suppresses cleanup errors. The original stale snapshot or
+mapped connection error remains authoritative. Explicit `disconnect()` and
+`destroy()` use a separate path that attempts both teardown steps and still
+surfaces the first explicit cleanup error.
+
+*Verified:* red-first public regressions make stale destroy throw after a
+pending connect is disconnected, and make both snapshot read and destroy
+throw. The corrected tests preserve the retired snapshot, publish `failed`,
+clear operations, and retain the mapped original error. No browser, wallet,
+provider, RPC, proof, signature, funds or transaction was used.*
+
+### 2026-08-30 — Explicit wallet teardown publishes retired state before errors
+
+`session.disconnect()` and `session.destroy()` cleared connection authority
+inside explicit retirement, but published `selection-required` only after that
+retirement returned. An unsubscribe or connection `destroy()` error therefore
+left the public snapshot claiming the old account was connected while
+operations had already been cleared; `destroy()` could also skip listener
+clearing and remain unsafe to repeat.
+
+Explicit teardown now records cleanup errors, completes the public retired
+state transition and listener clearing, then preserves the first explicit
+error. `disconnect()` still reports provider teardown errors, and `destroy()`
+remains idempotent after its first attempt.
+
+*Verified:* public regressions inject unsubscribe and destroy failures. Both
+now leave a selection-required/null-account snapshot with disconnected
+operations; disconnect rethrows the exact cleanup error and destroy remains
+safe on repeat. No browser, wallet, provider, RPC, proof, signature, funds or
+transaction was used.*
+
+
+## 6. Findings log
+
+### 2026-08-30 — Backend request records require own required fields
+
+The Backend request-record helper treated its field list only as an
+allowlist. Required values were read through normal prototype lookup, so a
+polluted `Object.prototype.v = 1` made an otherwise empty pool-config request
+pass version validation and reach the RPC. The same gap applied to route,
+artifact and nested request fields.
+
+`requireRecord()` now requires every listed field to be an own property as
+well as rejecting unknown own fields. This keeps omitted request data from
+being supplied by inherited properties and preserves the existing strict
+route/artifact schemas.
+
+*Verified:* red-first public regressions polluted `Object.prototype.v` for an
+empty pool-config request and `Object.prototype.route` for a fee request with
+the route omitted; both previously returned `200` and reached an external
+port. After the fix both return `400`, with zero RPC or paymaster calls.
+Backend tests pass 162 tests; package typecheck, invariants and diff hygiene
+pass. No browser, provider, RPC, wallet, proof, signature, funds or
+transaction was used.*
+
+### 2026-08-30 — Bridge status optional fields ignore inherited properties
+
+Bridge persistence validated optional status fields with the `in` operator.
+If same-origin code polluted `Object.prototype` with `depositTxHash`,
+`settlementTxHash` or `strkReceived`, a valid status that omitted that field
+could inherit the malformed value, fail deserialization and cause
+`LocalBridgeStore` to clear the signed resume evidence.
+
+Status validation now checks each optional field only when it is an own
+property of the decoded status object. Genuine persisted hashes and bigint
+amounts continue to round-trip unchanged, and inherited values cannot alter a
+record's validity.
+
+*Verified:* red-first public regressions set each of the three inherited
+fields on `Object.prototype`; before the fix, deserialization returned null
+and the local store cleared the valid record. After the fix, all three records
+deserialize and load unchanged, with the stored signed evidence retained.
+Bridge tests pass 91 tests; package typecheck and diff hygiene pass. No
+browser, provider, RPC, wallet, proof, signature, funds or transaction was
+used.*
+
+### 2026-08-30 — Bridge bigint revival ignores inherited markers
+
+Bridge persistence used the `in` operator to recognize its JSON bigint
+wrapper. If any same-origin code polluted `Object.prototype` with a string
+`$strkworldBigInt`, every decoded object inherited that marker and was
+converted to a bigint. A valid resumable record then failed its shape checks
+and `LocalBridgeStore` cleared the signed evidence as corrupt.
+
+The reviver now accepts the marker only when it is an own property of the
+decoded object. Genuine serialized bigint wrappers continue to revive, while
+inherited markers of string, numeric or object types are ignored.
+
+*Verified:* the public persistence regression failed red for an inherited
+string marker and passed green for all three inherited marker types after the
+own-property guard; each test restores the previous prototype descriptor in a
+`finally` block. The Bridge suite and workspace gates are recorded with this
+commit. No browser, provider, RPC, wallet, proof, signature, funds or
+transaction was used.*
+
+
+### 2026-08-30 — Persisted Bridge status is validated before resume
+
+`deserializeBridgeRecord()` previously checked only the signed quote's small
+identity subset, timestamps and `amountIn`. It returned any decoded `status`,
+
+
+
+## 6. Findings log
+
+### 2026-08-30 — Avatar Studio figure teardown must attempt every object
+
+`createAvatarStudioFigureLayer()` previously stopped at the first throwing
+sprite destructor during construction-failure cleanup or normal `destroy()`.
+That could mask the original construction error and leave later figure sprites
+or the highlight alive; after `destroy()` set its retired flag, a later call
+could not recover those objects. This is a World-owned presentation boundary,
+so one Phaser object failure must not strand the rest of the layer.
+
+Both paths now attempt every owned sprite and the highlight. Construction
+preserves and rethrows its original error, while normal destruction rethrows a
+single cleanup error unchanged or combines multiple failures in an
+`AggregateError`; repeated destruction remains idempotent.
+
+*Verified:* public regressions cover a throwing partial-construction destructor,
+single-error normal teardown and multiple-error normal teardown. Every owned
+object is attempted in each case, the original construction error remains
+primary, and the focused Avatar Studio figure suite passes 8 tests. No browser,
+wallet, provider, RPC, proof, signature, funds or transaction was used.
+
+### 2026-08-30 — Remote avatar teardown must survive unsubscribe errors
+
+`createRemoteAvatarLayer().destroy()` previously marked the layer destroyed and
+then called the retained source's unsubscribe before destroying any remote
+sprites or the Phaser layer. A source-owned unsubscribe failure therefore
+escaped part-way through teardown: every presentation object survived, while
+the destroyed flag made a later cleanup call a no-op. This is a public
+ownership seam because the source is injected by the Shell and the World must
+retire its own presentation even when an external cleanup callback fails.
+
+Teardown now attempts shutdown-listener removal, source unsubscribe, every
+remote avatar (including its idle timer), and the layer independently. It
+rethrows the one cleanup error unchanged or combines multiple failures in an
+`AggregateError`; state is cleared and later destroy calls remain idempotent.
+Idle callbacks also recheck the layer lifetime before touching a retired
+sprite. Synchronous source replay and the pending-unsubscribe handoff are
+unchanged.
+
+*Verified:* the public regression injects an unsubscribe failure after replaying
+two peers and confirms both sprites, the Phaser layer and retained peer state
+are cleaned; a second regression adds a sprite failure and confirms an
+`AggregateError` after all teardown attempts. The focused remote-avatar suite
+passes 10 tests. No browser, wallet, provider, RPC, proof, signature, funds
+or transaction was used.
+
+### 2026-08-30 — StreetScene construction failures retire partial ownership immediately
+
+`StreetScene.create()` arms its World cleanup handler before construction, but
+Phaser calls `Scene#create` directly and does not emit the Scene `shutdown`
+event when that call throws. A failure after ground, player, remote-avatar,
+input, outfit or room creation therefore left the partial cycle's resources,
+listeners and shutdown callbacks live until an external lifecycle event that
+might never arrive.
+
+The construction sequence now runs inside a `try/catch`. A thrown create step
+detaches the pending Scene cleanup handler, runs the existing idempotent World
+cleanup without broadcasting Phaser `shutdown`, and rethrows the original
+error. Player and ground are explicit Scene-owned resources and are destroyed
+by that same cleanup. Cleanup attempts every owned destructor even when one
+throws. During failed construction the original create error remains primary
+and a secondary teardown error is swallowed after all attempts; during an
+ordinary framework shutdown, cleanup errors are propagated (as one error or an
+`AggregateError`) after all teardown has been attempted. A later framework
+shutdown is harmless, and the retained Scene can create a fresh cycle normally.
+
+*Verified:* the red lifecycle regression injects a failure at `createAvatarStudio`
+and does not emit `shutdown`; it observes immediate destruction of the player,
+ground, remote layer, room controller, input ownership, outfit binding and
+overlays, with the original error preserved. Later shutdown/cleanup does not
+double-destroy. A throwing ground destructor does not mask the original create
+error or prevent later teardown, while a normal shutdown propagates that
+cleanup error after attempting every resource. A subsequent create/ shutdown
+cycle cleans normally. The
+focused StreetScene lifecycle suite passes 15 tests; World typecheck and the
+remaining workspace gates are recorded with the candidate. No browser, wallet,
+provider, RPC, proof, signature, funds or transaction was used.
+
+### 2026-08-29 — Fly sanitizes private-child response headers
+
+The Fly public edge previously copied every non-hop-by-hop response header
+from the private child to the browser. A child response could therefore set
+cookies, redirects, public caching, CORS permissions, content encoding,
+cross-origin isolation, or arbitrary private metadata at the public origin.
+That was an unnecessary response-boundary escape: the Backend JSON contract
+only needs its content type and content-type protection marker, and dynamic
+
+
+### 2026-08-30 — Bridge bigint revival ignores inherited markers
+
+Bridge persistence used the `in` operator to recognize its JSON bigint
+wrapper. If any same-origin code polluted `Object.prototype` with a string
+`$strkworldBigInt`, every decoded object inherited that marker and was
+converted to a bigint. A valid resumable record then failed its shape checks
+and `LocalBridgeStore` cleared the signed evidence as corrupt.
+
+The reviver now accepts the marker only when it is an own property of the
+decoded object. Genuine serialized bigint wrappers continue to revive, while
+inherited markers of string, numeric or object types are ignored.
+
+*Verified:* the public persistence regression failed red for an inherited
+string marker and passed green for all three inherited marker types after the
+own-property guard; each test restores the previous prototype descriptor in a
+`finally` block. The Bridge suite and workspace gates are recorded with this
+commit. No browser, provider, RPC, wallet, proof, signature, funds or
+transaction was used.*
+
+
+### 2026-08-30 — Persisted Bridge status is validated before resume
+
+`deserializeBridgeRecord()` previously checked only the signed quote's small
+identity subset, timestamps and `amountIn`. It returned any decoded `status`,
+so a corrupted or tampered browser-local record could make `BridgeService.resume()`
+publish a null, unknown-leg or wrong-typed progress object even though the
+signed quote itself reverified. Optional transaction hashes and received
+amounts crossed the same boundary without runtime type checks.
+
+Persistence now requires one of the seven declared Bridge legs, a nonempty
+message, a boolean polling flag, bounded non-whitespace transaction hashes and
+a nonnegative uint256 `strkReceived` when present. Invalid records are
+discarded before a store or service can resume them; all valid status shapes
+continue to round-trip unchanged.
+
+*Verified:* red-first public regressions cover null, array, primitive, invalid
+leg, non-string message, non-boolean polling flag, malformed optional hashes,
+non-bigint received amounts and negative received amounts. Each was accepted
+by the old parser and returned by `resume()`; the corrected parser returns
+null and the service resumes no record. Seven valid Bridge legs round-trip.
+No browser, provider, RPC, wallet, proof, signature, funds or transaction was
+used.*
+
+
+### 2026-08-30 — StreetScene repeated create retires player and ground objects
+
+`StreetScene.cleanShutdown()` previously cleared the current ground reference
+and avatar visual without destroying the Phaser ground layer or local player.
+`retireWorldOwnership()` deliberately invokes this cleanup during a defensive
+same-instance `create()` without emitting Phaser `shutdown`, so the old display
+and physics objects could remain active while the replacement cycle allocated
+another player and ground.
+
+Cleanup now owns and destroys the cycle's player and ground before dropping the
+ground reference; the player ownership flag prevents a failed or later shutdown
+from double-destroying a completed cycle. Ground ownership is established before
+its final presentation call so a partial create can also be retired. Framework
+shutdown emission, controller ordering and the replacement cycle are unchanged.
+
+*Verified:* a public same-instance lifecycle regression first observed zero
+destroy calls for the old player and ground on repeated create. The corrected
+regression proves each old object is destroyed once, replacement objects remain
+live until the real shutdown, and repeated cleanup does not double-destroy. The
+focused lifecycle suite passes 13 tests, World passes 20 files / 193 tests and
+the full workspace passes 102 files / 1,589 tests. Workspace typechecks, the
+production build, all 13 invariants and diff hygiene pass. No browser, lobby,
+wallet, provider, RPC, proof, signature, funds or transaction was used.
+
+
+### 2026-08-30 — Starknet RPC default fetch must retain its global receiver
+
+`StarknetRpcPoolPort` previously stored the ambient `fetch` function and later
+called it as a method of the port. Browser-compatible Fetch implementations
+may require `globalThis` as their receiver, so the default path threw
+`TypeError: Illegal invocation` before making any JSON-RPC request. The port
+now uses a small globalThis-bound wrapper for its default fetcher; explicitly
+injected fetchers retain their existing call behavior and receiver.
+
+*Verified:* a receiver-sensitive global fetch fake first rejected the default
+`getBlockNumber()` call before recording a request; after the wrapper it
+returned the fake JSON-RPC result and recorded exactly one request. A separate
+injected-fetcher regression preserves its URL, POST behavior, response mapping
+and existing port receiver. Focused adapter tests and the backend/workspace
+gates are recorded on the final candidate. No real network, wallet, provider,
+proof, signature, funds or transaction was used.
+
+
+### 2026-08-30 — Bridge status quote envelopes fail closed before dereference
+
+The Bridge service treated the generated 1Click status type as runtime truth.
+`verifyStatusQuote()` dereferenced `raw.quoteResponse.correlationId` before
+checking that the response contained an object, and `assertSignedQuote()` did
+the same for its nested `quote` and `quoteRequest` objects. A malformed
+provider response therefore leaked a raw `TypeError` instead of the existing
+generic invalid-execution-status error, even though persistence remained
+unchanged.
+
+The status boundary now requires an object quote response with object
+`quote` and `quoteRequest` containers before comparing correlation/signature
+evidence or validating the signed route. Valid mismatched signed evidence
+still receives the existing quote-mismatch error, while malformed status data
+remains generic and fail-closed.
+
+*Verified:* public Bridge regressions for null, array, primitive and nested
+malformed `quoteResponse` values failed red with either a raw `TypeError` or
+the quote-mismatch error, then passed green with the generic invalid-status
+error and the retained record still awaiting deposit. The focused Bridge suite
+passes 68 tests; workspace gates are recorded with this commit. No browser,
+wallet, provider, RPC, proof, signature, funds or transaction was used.*
+
+
+### 2026-08-30 — Synchronous Bridge loader failures release ownership
+
+Bridge runtime loading is optional and lazy, but the provider called a
+Promise-typed loader before entering its rejection boundary. A synchronous
+chunk/storage throw escaped the mounted app and left the loader owner marked
+pending forever, so no later replacement loader could recover the route.
+
+Loader invocation now begins inside the existing asynchronous chain. Both
+synchronous and asynchronous failure reach the same isolated catch/finally,
+which releases ownership without affecting wallet or app admission.
+
+*Verified:* a public provider regression mounts a synchronously throwing loader,
+then replaces it with a successful runtime loader. Before the fix the first
+throw escapes and recovery never runs; afterward the app remains mounted and
+the replacement service is published. The focused BridgeProvider suite passes
+12 tests; Web typecheck, all 13 invariants and diff hygiene pass. No browser,
+wallet, provider, RPC, proof, signature, funds or transaction was used.*
+
+
+### 2026-08-30 — Remote avatar replay must own shutdown before subscribe returns
+
+`createRemoteAvatarLayer()` previously subscribed to the retained remote-peer
+source before registering the Scene `shutdown` listener. Subscription replays
+its current snapshot synchronously, so teardown raised during replay was
+missed; the layer stayed subscribed and its sprites survived the Scene's
+shutdown. The returned unsubscribe handle also does not exist until that
+replay returns.
+
+The layer now registers shutdown ownership before subscribing and keeps a
+pending-unsubscribe handoff for shutdown during synchronous replay. The handle
+is invoked exactly once after `subscribe()` returns, while later publications
+are ignored by the destroyed guard. Existing idempotent explicit and Scene
+shutdown cleanup remains unchanged.
+
+*Verified:* a public source fake that replays one peer, fires shutdown before
+returning its unsubscribe handle, and then publishes again first left the
+sprite, layer and subscription alive on `origin/main`. The corrected remote
+avatar suite passes 8 tests; the full World and workspace gates are recorded on
+the candidate. No browser, lobby, wallet, provider, RPC, proof, signature,
+funds or transaction was used.
+
+
+### 2026-08-30 — The lazy demo seam owns loader failures
+
+`PrivacyProvider` loaded the explicit local demo seam with a bare dynamic
+import promise. A missing chunk, a transient Vite restart or an offline local
+build therefore produced an unhandled rejection while the provider stayed on
+its loading fallback forever; the application's `ErrorBoundary` cannot catch
+an asynchronous loader rejection. The provider now routes the import through
+`privacy/demo-loader.ts`, consumes failures with a cancellation-aware catch,
+and renders a deterministic retry surface. A retry starts a new lazy attempt.
+An explicit `operations` prop remains authoritative during render, so a late
+failed or resolved demo attempt cannot mask a replacement real seam; cleanup
+also prevents a late rejection from updating an unmounted provider.
+
+*Verified:* public jsdom regressions cover rejected-load error UI, successful
+retry, replacement by an explicit seam before the old rejection settles, and
+late rejection after unmount. The focused loader suite passes 4 tests and the
+Web suite passes 43 files / 493 tests. No browser, wallet, provider, RPC,
+proof, signature, funds or transaction was used.
+
+
+### 2026-08-30 — Avatar Studio does not select after callback teardown
+
+`createAvatarStudioController.update()` publishes a synchronous highlight
+change before selecting the contacted figure. Before the guard, an
+`onChange` callback could destroy the Studio during that publication, then the
+same update resumed and changed the shared outfit selection, emitting
+`avatar:selected` after the controller had left its lifecycle.
+
+The update path now rechecks `destroyed` and `inRoom` after highlight
+publication and before selection. The shared selection remains owned by the
+Scene; no separate Shell/control-owner state exists in Avatar Studio, so there
+is no additional ownership-transfer branch to guard.
+
+*Verified:* a public regression first failed on current `origin/main` when
+`onChange` destroyed the controller while highlighting figure 8; the old path
+changed the selection to `avatar-8` and emitted `avatar:selected`. The corrected
+Avatar Studio suite passes 25 tests. No browser, lobby, wallet, provider, RPC,
+proof, signature, funds or transaction was used.
+
+
+### 2026-08-30 — Fixed-room station activation rechecks authority after onChange
+
+`createFixedRoomController.update()` publishes a synchronous `onChange` snapshot
+when the player first approaches a station. Before the guard, that callback
+could destroy the controller or let Shell claim control, then the suspended
+`update()` resumed and still activated the station using the old authority.
+The result was a `station:activated` event and input suspension after teardown,
+or activation after Shell had already claimed the station.
+
+The update path now rechecks `destroyed`, `inRoom` and `controlOwner` after
+`onChange` delivery and before station admission. Normal activation ordering,
+station arming and Shell ownership are unchanged.
+
+*Verified:* public fixed-room regressions first failed on current `origin/main`
+when `onChange` destroyed the controller or synchronously transferred control
+to Shell; both emitted station activation despite the new authority. The
+corrected fixed-room suite passes 35 tests and the World suite passes 20 files
+/ 195 tests. No browser, lobby, wallet, provider, RPC, proof, signature, funds
+or transaction was used.
+
+
+### 2026-08-30 — PrivacyProvider renders only the current financial seam
+
+`PrivacyProvider` copied an explicit `operations` prop into state and exposed
+that state to its children. When a host replaced the seam, the provider
+therefore rendered one commit with the retired instance before its effect ran;
+the same stale instance remained visible while a requested lazy demo seam was
+loading. A child mounting in that window could begin reads or financial work
+against an authority the host had already replaced.
+
+The provider now treats an explicit `operations` prop as authoritative during
+render and bypasses any retained real seam while entering lazy demo mode. The
+demo import remains lazy and still renders the supplied fallback until it
+resolves; an explicit seam swap reaches the existing `PrivacyRuntime`
+composition immediately.
+
+*Verified:* public jsdom rerender regressions first observed the old seam when
+changing `operations` from instance A to B and when changing from a real seam
+to lazy demo. The corrected tests observe no stale child render and require
+the exact synchronous loading fallback for the real-to-demo transition. The
+focused PrivacyProvider suite passes 10 tests; the Web suite passes 43 files /
+498 tests; the full workspace passes 102 files / 1,590 tests. All workspace
+typechecks, the Web production build, 13 invariants and diff hygiene pass. No
+browser wallet, provider, RPC, proof, signature, funds or transaction was
+used.
+
+
+### 2026-08-30 — Stale prepare cleanup cannot mask session ownership
+
+When an in-flight `WalletSession.operations.prepare()` settled after the
+account changed, the session called the returned batch's `discard()` before
+returning its changed-session result. A cleanup implementation that threw
+could therefore replace the authoritative `user-rejected` outcome with a raw
+cleanup exception.
+
+Stale-result cleanup is now best-effort: the exact batch is still retired, but
+any cleanup exception is swallowed so the changed-session error remains the
+public result. Explicit caller `PreparedBatch.discard()` retains its prior
+propagation semantics.
+
+*Verified:* a public deferred preparation regression changes accounts before a
+batch whose `discard()` throws settles; it confirms one cleanup call and the
+expected `user-rejected` result. Privacy and repository gates are recorded on
+the final candidate. No browser, wallet, provider, RPC, proof, signature,
+funds or transaction was used.*
+
+
+### 2026-08-30 — WalletSession suppresses stale confirmation errors without masking uncertainty
+
+The WalletSession prepared-batch wrapper checked account ownership before
+calling `PreparedBatch.confirm()`, but did not recheck it when confirmation
+settled with an error. A wallet/network failure from an old account could
+therefore escape after a replacement account became authoritative, while the
+old batch was never disposed. The success path has the same stale-result rule:
+an old result must not be returned to the new account.
+
+The wrapper now owns both settlement paths: stale success and ordinary stale
+error discard the exact old batch and return the existing changed-session
+`user-rejected` error. The D-034 `submission-uncertain` error is the deliberate
+exception and is preserved unchanged after an account change, while the exact
+old batch is still retired. Current-session errors and results are unchanged.
+
+*Verified:* public session regressions cover stale success, stale ordinary
+error, and stale `submission-uncertain`; each runs against deferred confirmation
+settlement and asserts exact discard behavior. The focused WalletSession suite
+passes 27 tests; Privacy passes 9 files / 175 tests and the full workspace
+passes 102 files / 1,591 tests. Privacy typecheck, all 13 invariants and diff
+hygiene pass. No browser, wallet, provider, RPC, proof, signature, funds or
+transaction was used.*
+
+
+### 2026-08-30 — Bridge quote evidence must own a usable deposit address and source metadata
+
+`BridgeService` previously treated any truthy `depositAddress` from the
+untrusted 1Click response as executable evidence. A whitespace-only string or
+non-string runtime value could therefore be persisted, rendered as deposit
+instructions and passed back to the SDK for status/report calls. The service
+also copied `input.source` only after awaiting the quote: a caller mutating its
+source symbol or decimals during that await could persist metadata inconsistent
+with the signed quote's asset and amount.
+
+Signed quote validation and resume deserialization now require a nonempty,
+non-whitespace string no longer than 256 characters, and quote creation takes a
+shallow snapshot of the complete input and source metadata before the provider
+await. The bound is above every supported 1Click address shape (including the
+longest shielded UTXO forms); Stellar's memo remains separate deposit metadata.
+The signed route, quote request, status schema and persistence format are
+otherwise unchanged.
+
+*Verified:* public Bridge regressions were red before the fix for whitespace
+and overlong deposit addresses, persisted whitespace/overlong/non-string
+addresses, and source symbol/decimal mutation during a deferred quote. Green
+after the fix: the Bridge suite passes 1 file / 70 tests, including the
+existing ownership/status/evidence cases; package typecheck and diff hygiene
+pass. No browser, external provider, wallet, RPC, proof, signature, funds or
+transaction was used.
+
+
+### 2026-08-30 — Receipt identity follows the Starknet transaction felt
+
+The application receipt ledger claimed idempotence by transaction hash but
+compared raw strings. Equivalent Starknet hashes with different casing or
+leading-zero padding therefore produced duplicate receipts and required
+duplicate acknowledgement. Record and acknowledge now compare canonical
+nonzero felt identity while preserving the first exact string as displayed
+evidence. Malformed, zero or field-prime-and-above strings retain exact raw
+identity rather than being silently folded into a valid transaction.
+
+*Verified:* a public ledger regression records `0x000Ab` then `0xab`, proves
+only the first exact receipt remains, and acknowledges it through `0x00AB`.
+Raw-string comparison creates two receipts and fails the regression. The
+same suite proves case-distinct values above the Stark field prime remain two
+raw receipts and acknowledge independently; removing the prime bound folds
+them together. The focused ledger suite passes 9 tests; the full workspace passes 102 files /
+1,589 tests. Every workspace typecheck, the production build, all 13 invariants
+and diff hygiene pass. No browser, network, wallet, RPC, proof, signature,
+funds or transaction was used.*
+
+
+### 2026-08-30 — Browser submission receipts require a nonzero Stark felt
+
+The Backend validates paymaster submission hashes, but the browser privacy
+adapter independently trusted any response string and called `onAccepted`
+before validating it. A compromised or malformed same-origin response could
+therefore record zero, decimal text, malformed hex or an out-of-field value as
+a successful private transaction.
+
+The browser boundary now admits only a nonzero hexadecimal Stark-field felt
+before publishing acceptance. Invalid values are protocol failures and never
+reach `onAccepted`; lost responses retain the existing submission-uncertain
+contract, and valid accepted hashes remain authoritative.
+
+*Verified:* a public `BackendPrivacyClient.submit()` table covers zero,
+leading-zero zero, decimal, malformed hex, the field prime and a value above
+the field. All six previously resolved and called `onAccepted`; they now reject
+as `unknown` without publishing acceptance. Valid uppercase and leading-zero
+nonzero felts remain accepted. The accepted receipt fixture and forward-
+compatibility route receipts now use valid felts. The Privacy package passes 9
+files / 184 tests; the full workspace passes 102 files / 1,600 tests, all
+workspace typechecks, production build, all 13 invariants and diff hygiene. No browser, wallet, provider,
+RPC, proof, signature, funds or transaction was used.*
+
+### 2026-08-30 — A joined Lobby room owns lifecycle-registration failure
+
+Lobby publishes a newly joined room before registering its state, error and
+leave callbacks so synchronous SDK events can identify the room. If any of
+those registrations threw, the join rejected but left the published room,
+server identity and `connected` status intact. Callers then observed a phantom
+connected client whose failed room was never released.
+
+The join failure path now distinguishes a pre-room matchmaking failure from a
+failure after room publication. A still-current published room is atomically
+retired, its identity and reconciliation state are cleared, the client reports
+closed/error, peers are cleared, and that exact room is left once before the
+original registration error is rethrown. A failure before publication retains
+the established idle/retry behavior.
+
+*Verified:* public `LobbyClient.connect()` regressions inject synchronous
+failures into reconnection setup and each of `onStateChange`, `onError` and
+`onLeave` after `joinOrCreate()` returns. All four cases previously rejected
+while leaking the joined room (the lifecycle registrations also retained
+connected state); they now reject with the original error, leave the room
+exactly once, report closed and expose no game ID. Existing pre-welcome error
+and leave cases prove their callback-owned cleanup is not repeated. The focused
+Lobby client suite passes 50 tests; the full workspace passes 102 files / 1,592
+tests, all workspace typechecks, production build, all 13 invariants and diff
+hygiene. No browser, external lobby, wallet, RPC, proof, signature, funds or
+transaction was used.*
+
+### 2026-08-30 — Backend reads recheck cancellation after transport settlement
+
+The backend privacy adapter passes cancellation signals to fetch, but an
+injected or non-conforming transport can ignore them and resolve later. Pool
+config, public-key, relay-fee and swap-quote reads then returned stale results
+after their caller had cancelled. The adapter now rechecks cancellation after
+each awaited response and before parsing or publishing the value. Private
+submission intentionally does not use this guard: once a submission response
+contains an accepted transaction hash, receipt preservation remains
+authoritative over a late cancellation.
+
+*Verified:* one table-driven public `BackendPrivacyClient` regression defers a
+transport that ignores its signal, aborts each of the four cancellable methods,
+then resolves a valid response. All four cases returned stale data before the
+fix and now reject as `user-rejected`. The Privacy package passes 9 files / 176
+tests; the full workspace passes 102 files / 1,592 tests, all workspace
+typechecks, production build, all 13 invariants and diff hygiene. Injected fetch
+behavior and submission receipt tests remain green. No browser, wallet,
+provider, RPC, proof, signature, funds or transaction was used.*
+
+### 2026-08-30 — Presence setup and interior suspension retain transport ownership
+
+The Web Presence controller previously treated setup and interior suspension as
+single synchronous steps. A conforming client can replay its initial status and
+then synchronously report a drop while the controller is installing status
+delivery; setup still installed peer delivery and attempted to connect the
+retired client. Likewise, `suspend()` can synchronously report that the
+transport closed, but both the connected-status path and a just-settled join
+then overwrote `unavailable` with `suspended`.
+
+Setup now ignores only the mandatory first status replay, owns the rest of the
+installation with a retirement token, and stops before peer delivery or connect
+when a later callback drops the client. Connect and settlement have explicit
+owners, and both suspension paths recheck their exact client/attempt after the
+handoff. Reusing a client whose initial replay is already `closed` remains a
+valid explicit reconnect, and existing queued-reconnect behavior is unchanged.
+
+*Verified:* eight public `createPresenceController()` regressions cover an
+initial replay followed by a synchronous setup drop, a connected status whose
+interior suspension synchronously closes, and a resolved join whose interior
+suspension synchronously closes. They also cover direct building-entry
+suspension, a late status callback from a replaced client, synchronous
+reconnect reentry while the connecting state is published, destruction during
+that publication, and a building exit whose resume synchronously closes the
+transport. The focused Presence suite passes 42 tests; the full workspace passes 102 files / 1,596
+tests, all workspace typechecks,
+production build, all 13 invariants and diff hygiene. No browser, lobby server,
+wallet, provider, RPC, proof, signature, funds or transaction was used.*
+
+### 2026-08-29 — Same-wallet connection requests share one authority flight
+
+Wallet session generation correctly allowed only the newest connection attempt
+to publish authority, but two same-key calls still started two wallet workflows
+before the older result was retired. A rapid double-click could therefore open
+duplicate connection prompts for one selection. The session now shares the
+in-flight promise only for the same opaque wallet key; a different selection
+still supersedes the old attempt under the existing generation rules.
+
+*Verified:* public session regressions call `connect()` twice for the same
+discovered key while the adapter is deferred, and disconnect that pending
+attempt before reconnecting the same key. The first failed red with two
+adapter calls and now passes with one call and one connected authority; the
+second failed red by reusing the retired promise and now passes with two calls
+and the replacement connected authority. Discovery removal and terminal
+destroy also invalidate the pending flight. The existing different-wallet
+concurrency regression remains green. The focused session suite passes 26
+tests and the full workspace passes 102 files / 1,590 tests. All workspace
+typechecks, the production build, all 13 invariants and diff hygiene pass. No
+browser, live wallet, provider, RPC, proof, signature, funds or transaction was
+used. Removing the same-key flight owner or lifecycle invalidation each
+reproduces its matching regression.*
+
 ### 2026-08-29 — Fly sanitizes private-child response headers
 
 The Fly public edge previously copied every non-hop-by-hop response header
@@ -3046,6 +8858,10 @@ new CLI export was claimed. No runtime code, browser, Phaser scene, wallet,
 network or transaction was used.
 
 ### 2026-08-20 — StreetScene restarts own a fresh failure-safe lifecycle
+
+**The thrown-`create()` cleanup limitation below is superseded by the
+2026-08-30 construction-failure finding above; the restart and framework
+shutdown verification here remains valid.**
 
 Phaser may restart the same `StreetScene` instance, so `create()` now opens a
 new cleanup cycle before its first allocation: it clears the prior ground

@@ -83,21 +83,53 @@ export function createHost<T, P>(options: HostOptions<T, P>): Host<T, P> {
     if (stopping) throw new Error(lifecycleDuringStopError);
     const previousRefs = refs;
     const previousPending = pending;
+    const previousParent = activeParent;
+    let retargeted = false;
     if (
       instance !== null &&
       hasActiveParent &&
       !Object.is(activeParent, parent) &&
       options.retarget
     ) {
-      options.retarget(instance, parent, activeParent as P);
+      try {
+        options.retarget(instance, parent, activeParent as P);
+      } catch (error) {
+        refs = previousRefs;
+        pending = previousPending;
+        throw error;
+      }
       activeParent = parent;
+      retargeted = true;
     }
-    refs++;
     // A remount arriving before the deferred teardown ran: keep what we have.
     if (pending !== null) {
-      cancel(pending);
+      try {
+        cancel(pending);
+      } catch (error) {
+        if (retargeted && instance !== null && options.retarget && previousParent !== null) {
+          try {
+            // Cancellation failed, so the pending teardown still owns the
+            // instance. Compensate the speculative rebind before returning the
+            // failed acquire; otherwise the eventual stop runs against an
+            // owner that never acquired the host.
+            options.retarget(instance, previousParent, parent);
+          } catch (rollbackError) {
+            activeParent = previousParent;
+            throw new AggregateError(
+              [error, rollbackError],
+              'Host retarget rollback failed after teardown cancellation failure',
+            );
+          }
+          activeParent = previousParent;
+        }
+        throw error;
+      }
       pending = null;
     }
+    // Do not claim a lease until deferred teardown cancellation succeeds. If
+    // cancel throws, the failed acquire must leave the queued final release
+    // able to retire the instance.
+    refs++;
     if (instance === null) {
       starting = true;
       try {
@@ -120,7 +152,8 @@ export function createHost<T, P>(options: HostOptions<T, P>): Host<T, P> {
     if (stopping) throw new Error(lifecycleDuringStopError);
     refs = Math.max(0, refs - 1);
     if (refs > 0 || pending !== null || instance === null) return;
-    pending = defer(() => {
+    let callbackStarted = false;
+    const teardown = (): void | Promise<void> => {
       pending = null;
       // Re-check: a holder may have acquired while the teardown was queued.
       if (refs > 0 || instance === null) return;
@@ -140,7 +173,36 @@ export function createHost<T, P>(options: HostOptions<T, P>): Host<T, P> {
         throw error;
       }
       finish();
-    });
+    };
+    try {
+      const handle = defer(() => {
+        callbackStarted = true;
+        return teardown();
+      });
+      // A custom deferrer may execute synchronously. Do not retain a handle
+      // for work that already completed; stale pending state would make a
+      // later acquire cancel an unrelated task.
+      if (!callbackStarted) pending = handle;
+    } catch (error) {
+      // Scheduling can fail before it owns the callback. Fall back to teardown
+      // now so the final release cannot orphan the live instance.
+      if (!callbackStarted) {
+        try {
+          const result = teardown();
+          if (result !== undefined) {
+            void result.catch((teardownError) => {
+              queueMicrotask(() => { throw teardownError; });
+            });
+          }
+        } catch (teardownError) {
+          throw new AggregateError(
+            [error, teardownError],
+            'Host teardown scheduling and cleanup failed',
+          );
+        }
+      }
+      throw error;
+    }
   }
 
   return {

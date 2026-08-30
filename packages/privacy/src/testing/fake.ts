@@ -19,6 +19,8 @@ import type {
 } from '../operations.js';
 import { protectedMinimumOut } from '../protected-minimum.js';
 
+const STARK_FIELD_PRIME = (1n << 251n) + 17n * (1n << 192n) + 1n;
+
 /**
  * A deterministic, in-memory `PrivacyOperations`.
  *
@@ -124,32 +126,93 @@ export class FakePrivacyOperations implements PrivacyOperations {
   readonly submitted: Intent[][] = [];
 
   constructor(config: FakeConfig = {}) {
-    for (const [token, amount] of Object.entries(config.balances ?? {})) {
+    const balances = config.balances ?? {};
+    for (const token of Object.keys(balances)) {
+      const descriptor = Object.getOwnPropertyDescriptor(balances, token);
+      if (descriptor === undefined || !('value' in descriptor)) {
+        throw new PrivacyError('unknown', 'The fake starting balance is invalid.');
+      }
+      const amount = descriptor.value;
+      try {
+        if (BigInt(token) === 0n) throw new Error();
+        normalise(token);
+      } catch {
+        throw new PrivacyError('unknown', 'The fake starting balance token is invalid.');
+      }
+      if (typeof amount !== 'bigint' || amount < 0n) {
+        throw new PrivacyError('unknown', 'The fake starting balance amount must be a non-negative bigint.');
+      }
       this.spendable.set(token, amount);
     }
-    this.registeredAddrs = new Set(
-      (config.registered ?? []).map((a) => normalise(a)),
-    );
+    this.registeredAddrs = new Set((config.registered ?? []).map((address) => {
+      assertAddress(address, 'fake registered recipient');
+      return normalise(address);
+    }));
     this.pool = { ...DEFAULT_POOL, ...config.poolConfig };
+    let feeTokenValue: bigint;
+    try {
+      feeTokenValue = BigInt(this.pool.feeToken);
+    } catch {
+      throw new PrivacyError('unknown', 'The fake pool fee configuration is invalid.');
+    }
+    if (
+      typeof this.pool.feeAmount !== 'bigint'
+      || this.pool.feeAmount < 0n
+      || feeTokenValue <= 0n
+    ) {
+      throw new PrivacyError('unknown', 'The fake pool fee configuration is invalid.');
+    }
+    if (
+      !Number.isSafeInteger(this.pool.noteMaturityBlocks)
+      || this.pool.noteMaturityBlocks < 0
+      || !Number.isSafeInteger(this.pool.proofValidityBlocks)
+      || this.pool.proofValidityBlocks <= 0
+    ) {
+      throw new PrivacyError('unknown', 'The fake pool config has invalid lifecycle block windows.');
+    }
     this.cap = {
       supportsStrk20: true,
       walletApiVersion: '0.10.3',
       registration: 'registered',
       ...config.capability,
     };
-    this.latency = config.latencyMs ?? 0;
-    this.configuredSwapReview = config.swapReview;
+    if (
+      typeof this.cap.supportsStrk20 !== 'boolean'
+      || (this.cap.walletApiVersion !== null && typeof this.cap.walletApiVersion !== 'string')
+      || !['registered', 'unregistered', 'unknown'].includes(this.cap.registration)
+    ) {
+      throw new PrivacyError('unknown', 'The fake capability configuration is invalid.');
+    }
+    const latency = config.latencyMs ?? 0;
+    if (!Number.isSafeInteger(latency) || latency < 0) {
+      throw new PrivacyError('unknown', 'The fake latency must be a non-negative safe integer.');
+    }
+    this.latency = latency;
+    if (config.swapReview !== undefined) {
+      if (!Number.isSafeInteger(config.swapReview.expiresAt) || config.swapReview.expiresAt <= 0) {
+        throw new PrivacyError('unknown', 'The deterministic swap review is invalid.');
+      }
+      try {
+        protectedMinimumOut(config.swapReview.expectedAmountOut, config.swapReview.slippageBps);
+      } catch {
+        throw new PrivacyError('unknown', 'The deterministic swap review is invalid.');
+      }
+      this.configuredSwapReview = Object.freeze({ ...config.swapReview });
+    }
   }
 
   // -- test controls --------------------------------------------------------
 
   /** Make the next matching call fail. */
   injectFault(fault: Fault): void {
-    this.faults.push(fault);
+    this.faults.push(Object.freeze({ ...fault }));
   }
 
   /** Advance the chain. Matures any notes whose time has come. */
   advanceBlocks(n: number): void {
+    if (!Number.isSafeInteger(n) || n < 0) {
+      throw new PrivacyError('unknown', 'The block advance must be a non-negative safe integer.');
+    }
     this.block += n;
     const stillMaturing: MaturingNote[] = [];
     for (const note of this.maturing) {
@@ -170,6 +233,9 @@ export class FakePrivacyOperations implements PrivacyOperations {
    * reject when that breaches the ceiling — this is how you test it.
    */
   setPoolFee(feeAmount: bigint): void {
+    if (typeof feeAmount !== 'bigint' || feeAmount < 0n) {
+      throw new PrivacyError('unknown', 'The fake pool fee must be a non-negative bigint.');
+    }
     this.pool = { ...this.pool, feeAmount };
   }
 
@@ -181,29 +247,31 @@ export class FakePrivacyOperations implements PrivacyOperations {
 
   async capability(signal?: AbortSignal): Promise<WalletCapability> {
     await this.tick('capability', signal);
-    return { ...this.cap };
+    return Object.freeze({ ...this.cap });
   }
 
   async poolConfig(signal?: AbortSignal): Promise<PoolConfig> {
     await this.tick('poolConfig', signal);
-    return { ...this.pool };
+    return Object.freeze({ ...this.pool });
   }
 
   async balances(tokens?: Address[], signal?: AbortSignal): Promise<PrivateBalance[]> {
+    const requestedTokens = tokens === undefined ? undefined : [...tokens];
     await this.tick('balances', signal);
-    const keys = tokens?.length
-      ? tokens
+    const keys = requestedTokens?.length
+      ? requestedTokens
       : [...new Set([...this.spendable.keys(), ...this.maturing.map((n) => n.token)])];
-    return keys.map((token) => {
+    return Object.freeze(keys.map((token) => {
       const spendable = this.spendable.get(token) ?? 0n;
       const maturing = this.maturing
         .filter((n) => sameAddress(n.token, token))
         .reduce((sum, n) => sum + n.amount, 0n);
-      return { token, spendable, maturing, total: spendable + maturing, maturityKnown: true };
-    });
+      return Object.freeze({ token, spendable, maturing, total: spendable + maturing, maturityKnown: true });
+    })) as PrivateBalance[];
   }
 
   async recipientStatus(address: Address, signal?: AbortSignal): Promise<RecipientStatus> {
+    assertAddress(address, 'fake recipient');
     await this.tick('recipientStatus', signal);
     return this.registeredAddrs.has(normalise(address)) ? 'registered' : 'unregistered';
   }
@@ -224,8 +292,13 @@ export class FakePrivacyOperations implements PrivacyOperations {
     for (const intent of reviewed) {
       const amount = intent.kind === 'swap' ? intent.amountIn : intent.amount;
       if (amount <= 0n) throw new PrivacyError('unknown', 'Amounts must be positive.');
+      assertAddress(intent.kind === 'swap' ? intent.tokenIn : intent.token, 'fake intent token');
       if (intent.kind === 'swap' && intent.minAmountOut <= 0n) {
         throw new PrivacyError('unknown', 'Minimum output must be positive.');
+      }
+      if (intent.kind === 'swap') assertAddress(intent.tokenOut, 'fake swap output token');
+      if (intent.kind === 'unshield' || intent.kind === 'transfer') {
+        assertAddress(intent.recipient, 'fake intent recipient');
       }
     }
 
@@ -316,6 +389,7 @@ export class FakePrivacyOperations implements PrivacyOperations {
 
     const gasEstimate = relayFee;
     const { intents: canonicalIntents, swapReview } = this.canonicalizeIntents(reviewed);
+    const publishedWarnings = freezeWarnings(warnings);
     const self = this;
     let discarded = false;
     let confirmationAttempted = false;
@@ -327,16 +401,18 @@ export class FakePrivacyOperations implements PrivacyOperations {
       poolFee: feeAtPrepare,
       gasEstimate,
       totalCost: feeAtPrepare + gasEstimate,
-      warnings,
+      warnings: publishedWarnings,
       promptCount,
       ...(swapReview === undefined ? {} : { swapReview }),
       async confirm({ feeCeiling, onProgress, signal: sig }) {
         if (discarded) throw new PrivacyError('unknown', 'batch already discarded');
+        assertFeeCeilingInput(feeCeiling);
         if (confirmationAttempted) {
           throw new PrivacyError('unknown', 'This batch was already confirmed or attempted. Prepare a new batch.');
         }
         confirmationAttempted = true;
         await self.tick('confirm', sig);
+        if (discarded) throw new PrivacyError('unknown', 'batch already discarded');
 
         // The fee can move between prepare and confirm. This is the guard.
         const currentFee = self.pool.feeAmount + relayFee;
@@ -381,12 +457,12 @@ export class FakePrivacyOperations implements PrivacyOperations {
     const canonicalIntent: Intent = Object.freeze({ ...intent, minAmountOut: protectedMinimum });
     return {
       intents: Object.freeze([canonicalIntent]),
-      swapReview: {
+      swapReview: Object.freeze({
         expectedAmountOut: configured.expectedAmountOut,
         minimumAmountOut: canonicalIntent.minAmountOut,
         slippageBps: configured.slippageBps,
         expiresAt: configured.expiresAt,
-      },
+      }),
     };
   }
 
@@ -473,6 +549,11 @@ function freezeIntents(intents: readonly Intent[]): readonly Intent[] {
   return Object.freeze(intents.map((intent) => Object.freeze({ ...intent })));
 }
 
+/** Match production's immutable review disclosure boundary. */
+function freezeWarnings(warnings: readonly BatchWarning[]): readonly BatchWarning[] {
+  return Object.freeze(warnings.map((warning) => Object.freeze({ ...warning })));
+}
+
 /**
  * Addresses arrive padded and unpadded. Never compare with `===`.
  *
@@ -484,6 +565,17 @@ function normalise(address: string): string {
   return `0x${BigInt(address).toString(16)}`;
 }
 
+function assertAddress(address: unknown, label: string): asserts address is Address {
+  if (typeof address !== 'string' || !/^0x[0-9a-fA-F]+$/.test(address)) {
+    throw new PrivacyError('unknown', `Invalid ${label} address.`);
+  }
+  let value: bigint;
+  try { value = BigInt(address); } catch { throw new PrivacyError('unknown', `Invalid ${label} address.`); }
+  if (value <= 0n || value >= STARK_FIELD_PRIME) {
+    throw new PrivacyError('unknown', `Invalid ${label} address.`);
+  }
+}
+
 function sameAddress(a: string, b: string): boolean {
   try {
     return BigInt(a) === BigInt(b);
@@ -493,5 +585,15 @@ function sameAddress(a: string, b: string): boolean {
 }
 
 function emitProgress(callback: ProgressCallback | undefined, progress: OperationProgress): void {
-  try { callback?.(progress); } catch { /* Observers cannot alter a financial operation. */ }
+  try {
+    callback?.(Object.freeze({ ...progress }));
+  } catch {
+    /* Observers cannot alter a financial operation. */
+  }
+}
+
+function assertFeeCeilingInput(ceiling: unknown): asserts ceiling is bigint {
+  if (typeof ceiling !== 'bigint' || ceiling < 0n) {
+    throw new PrivacyError('unknown', 'The fee ceiling must be a non-negative bigint.');
+  }
 }

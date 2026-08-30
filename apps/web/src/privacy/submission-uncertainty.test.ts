@@ -2,6 +2,18 @@ import { describe, expect, it, vi } from 'vitest';
 import { createSubmissionUncertainty } from './submission-uncertainty.js';
 
 describe('submission uncertainty', () => {
+  it('publishes an immutable uncertainty API while retaining owned mutations', () => {
+    const uncertainty = createSubmissionUncertainty();
+    const originalRetain = uncertainty.retain;
+
+    expect(Object.isFrozen(uncertainty)).toBe(true);
+    expect(Reflect.set(uncertainty, 'retain', () => undefined)).toBe(false);
+    expect(Reflect.set(uncertainty, 'acknowledge', () => undefined)).toBe(false);
+    expect(uncertainty.retain).toBe(originalRetain);
+    uncertainty.retain();
+    expect(uncertainty.store.getState()).toEqual({ active: true, acknowledged: false });
+  });
+
   it('retains one session flag without retaining financial context', () => {
     const uncertainty = createSubmissionUncertainty();
     const changed = vi.fn();

@@ -32,6 +32,7 @@ import type {
 
 const REQUIRED_WALLET_API = '0.10.3';
 const STARK_FIELD_PRIME = (1n << 251n) + 17n * (1n << 192n) + 1n;
+const MAX_UINT256 = (1n << 256n) - 1n;
 
 export interface WalletApiPrivacyOperationsOptions {
   wallet: WalletStrk20Account;
@@ -49,13 +50,16 @@ export class WalletApiPrivacyOperations implements PrivacyOperations {
   private readonly supportedVersions: SupportedVersionsReader;
   private readonly policy: WalletRoutePolicy;
   private readonly now: () => number;
+  private readonly walletAddress: Address;
 
   constructor(options: WalletApiPrivacyOperationsOptions) {
     this.wallet = options.wallet;
+    assertAddress(options.wallet.address, 'wallet account');
+    this.walletAddress = options.wallet.address;
     this.pool = options.pool;
     this.submission = options.submission;
     this.supportedVersions = options.supportedVersions;
-    this.policy = options.policy;
+    this.policy = ownPolicy(options.policy);
     this.now = options.now ?? Date.now;
   }
 
@@ -64,16 +68,17 @@ export class WalletApiPrivacyOperations implements PrivacyOperations {
     try {
       const versions = await this.supportedVersions(signal);
       throwIfAborted(signal);
-      const supported = versions
-        .map((raw) => ({ raw, parsed: parseSemver(raw) }))
+      const ownedVersions = ownArrayElements(versions, 'capability response');
+      const supported = ownedVersions
+        .map((raw) => ({ raw, parsed: typeof raw === 'string' ? parseSemver(raw) : null }))
         .filter((version): version is { raw: string; parsed: Semver } => version.parsed !== null)
         .sort((left, right) => compareSemver(left.parsed, right.parsed));
       const highest = supported.at(-1) ?? null;
-      return {
+      return Object.freeze({
         supportsStrk20: highest !== null && compareSemver(highest.parsed, REQUIRED_VERSION) >= 0,
         walletApiVersion: highest?.raw ?? null,
         registration: 'unknown',
-      };
+      });
     } catch (error) {
       throw mapWalletError(error);
     }
@@ -84,7 +89,7 @@ export class WalletApiPrivacyOperations implements PrivacyOperations {
     try {
       const config = await this.pool.config(signal);
       throwIfAborted(signal);
-      return config;
+      return ownPoolConfig(config);
     } catch (error) {
       throw mapWalletError(error);
     }
@@ -92,16 +97,69 @@ export class WalletApiPrivacyOperations implements PrivacyOperations {
 
   async balances(tokens: string[] = [], signal?: AbortSignal): Promise<PrivateBalance[]> {
     throwIfAborted(signal);
+    let requestedTokens: string[];
     try {
-      const balances = await this.wallet.strk20Balances(tokens);
+      const ownedTokens = ownArrayElements(tokens, 'requested balance tokens');
+      if (ownedTokens.some((token) => typeof token !== 'string' || !isFelt(token))) {
+        throw new Error('invalid requested token');
+      }
+      requestedTokens = [...ownedTokens] as string[];
+    } catch {
+      throw new PrivacyError('unknown', 'The requested balance tokens are invalid.');
+    }
+    try {
+      const balances = await this.wallet.strk20Balances(requestedTokens);
       throwIfAborted(signal);
-      return balances.map(({ token, balance }) => ({
-        token,
-        total: BigInt(balance),
-        spendable: 0n,
-        maturing: 0n,
-        maturityKnown: false,
-      }));
+      const seenTokens = new Set<bigint>();
+      const published: PrivateBalance[] = [];
+      const entries = ownArrayElements(balances, 'balance response');
+      for (const entry of entries) {
+        let token: unknown;
+        let balance: unknown;
+        try {
+          if (!entry || typeof entry !== 'object' || Array.isArray(entry)) {
+            throw new Error('invalid balance entry');
+          }
+          if (Reflect.ownKeys(entry).length !== 2) throw new Error('invalid balance shape');
+          const tokenDescriptor = Object.getOwnPropertyDescriptor(entry, 'token');
+          const balanceDescriptor = Object.getOwnPropertyDescriptor(entry, 'balance');
+          if (
+            !tokenDescriptor
+            || !('value' in tokenDescriptor)
+            || !balanceDescriptor
+            || !('value' in balanceDescriptor)
+          ) {
+            throw new Error('missing balance data property');
+          }
+          token = tokenDescriptor.value;
+          balance = balanceDescriptor.value;
+        } catch {
+          throw new PrivacyError('unknown', 'The wallet returned an invalid balance.');
+        }
+        if (typeof token !== 'string' || !isFelt(token) || typeof balance !== 'string' || !isFelt(balance)) {
+          throw new PrivacyError('unknown', 'The wallet returned an invalid balance.');
+        }
+        const tokenIdentity = BigInt(token);
+        if (seenTokens.has(tokenIdentity)) {
+          throw new PrivacyError('unknown', 'The wallet returned a duplicate balance token.');
+        }
+        if (requestedTokens.length > 0 && !requestedTokens.some((requested) => sameAddress(requested, token))) {
+          throw new PrivacyError('unknown', 'The wallet returned an unrequested balance token.');
+        }
+        seenTokens.add(tokenIdentity);
+        const total = BigInt(balance);
+        if (total < 0n) {
+          throw new PrivacyError('unknown', 'The wallet returned an invalid balance.');
+        }
+        published.push(Object.freeze({
+          token,
+          total,
+          spendable: 0n,
+          maturing: 0n,
+          maturityKnown: false,
+        }));
+      }
+      return Object.freeze(published) as PrivateBalance[];
     } catch (error) {
       throw mapWalletError(error);
     }
@@ -123,6 +181,9 @@ export class WalletApiPrivacyOperations implements PrivacyOperations {
 
   async prepare(intents: Intent[], signal?: AbortSignal): Promise<PreparedBatch> {
     throwIfAborted(signal);
+    if (!Array.isArray(intents)) {
+      throw new PrivacyError('unknown', 'prepare called with an invalid intent container.');
+    }
     // Take ownership before validating, not after. Everything downstream — the
     // admission checks, the costing, the warnings the player reads, the
     // published batch and the actions `confirm()` finally proves — reads this
@@ -144,7 +205,7 @@ export class WalletApiPrivacyOperations implements PrivacyOperations {
     }
 
     const config = await this.poolConfig(signal);
-    const warnings = await this.warningsFor(reviewed, signal);
+    const warnings = freezeWarnings(await this.warningsFor(reviewed, signal));
     if (hasShield) return this.prepareShield(reviewed, config, warnings);
     if (kinds.has('swap')) {
       if (reviewed.length !== 1 || reviewed[0]?.kind !== 'swap') {
@@ -162,7 +223,7 @@ export class WalletApiPrivacyOperations implements PrivacyOperations {
   private async prepareSwap(
     intent: Extract<Intent, { kind: 'swap' }>,
     config: PoolConfig,
-    warnings: BatchWarning[],
+    warnings: readonly BatchWarning[],
     signal?: AbortSignal,
   ): Promise<PreparedBatch> {
     const swapPolicy = this.policy.swap;
@@ -173,7 +234,7 @@ export class WalletApiPrivacyOperations implements PrivacyOperations {
     if (!Number.isSafeInteger(swapPolicy.slippageBps) || swapPolicy.slippageBps <= 0) {
       throw new PrivacyError('unknown', 'The private swap slippage policy is invalid.');
     }
-    const plan = await prepareSwap({
+    const rawPlan = await prepareSwap({
       sellToken: intent.tokenIn,
       buyToken: intent.tokenOut,
       sellAmount: intent.amountIn,
@@ -182,7 +243,14 @@ export class WalletApiPrivacyOperations implements PrivacyOperations {
       signal,
     });
     throwIfAborted(signal);
-    this.validateSwapPlan(intent, config, plan, swapPolicy.expectedChainId);
+    const plan = ownSwapPlan(
+      rawPlan,
+      intent,
+      config,
+      swapPolicy.expectedChainId,
+      this.policy.maxRelayFee,
+      this.readNow(),
+    );
     const protectedMinimum = protectedMinimumOut(plan.buyAmount, swapPolicy.slippageBps);
     if (protectedMinimum < intent.minAmountOut) {
       throw new PrivacyError(
@@ -207,26 +275,35 @@ export class WalletApiPrivacyOperations implements PrivacyOperations {
       intents: Object.freeze([canonicalIntent]),
       poolFee: config.feeAmount,
       gasEstimate: plan.fee.amount,
-      totalCost: config.feeAmount + plan.fee.amount,
+      totalCost: checkedFeeTotal(config.feeAmount, plan.fee.amount),
       warnings,
       promptCount: 1,
-      swapReview: {
+      swapReview: Object.freeze({
         expectedAmountOut: plan.buyAmount,
         minimumAmountOut: canonicalIntent.minAmountOut,
         slippageBps: swapPolicy.slippageBps,
         expiresAt: plan.expiresAt,
-      },
+      }),
       async confirm({ feeCeiling, onProgress, signal: confirmSignal }) {
         if (discarded) throw new PrivacyError('unknown', 'batch already discarded');
+        assertFeeCeilingInput(feeCeiling);
         assertFirstConfirmation(confirmationAttempted);
         confirmationAttempted = true;
         throwIfAborted(confirmSignal);
         let acceptedResult: TxResult | undefined;
         try {
-          const current = await owner.pool.config(confirmSignal);
+          const current = ownPoolConfig(await owner.pool.config(confirmSignal));
           throwIfAborted(confirmSignal);
-          owner.validateSwapPlan(canonicalIntent, current, plan, swapPolicy.expectedChainId);
-          assertFeeCeiling(current.feeAmount + plan.fee.amount, feeCeiling);
+          validateOwnedSwapPlan(
+            plan,
+            canonicalIntent,
+            current,
+            swapPolicy.expectedChainId,
+            owner.policy.maxRelayFee,
+            owner.readNow(),
+          );
+          assertFeeCeiling(checkedFeeTotal(current.feeAmount, plan.fee.amount), feeCeiling);
+          assertNotDiscarded(discarded);
           // Snapshot the freshly validated calls, then hand the SDK its own
           // separate copy. Sharing one array would let an input-mutating SDK
           // corrupt the action *and* the authority the guard recomputes from,
@@ -243,14 +320,14 @@ export class WalletApiPrivacyOperations implements PrivacyOperations {
               recipient: plan.fee.recipient,
               amount: plan.fee.amount,
             },
-            takerAddress: owner.wallet.address,
+            takerAddress: owner.walletAddress,
           };
           const actions = buildStrk20Actions(avnuPlan);
           assertPreparedSwapActions(actions, {
             sellToken: canonicalIntent.tokenIn,
             sellAmount: canonicalIntent.amountIn,
             buyToken: canonicalIntent.tokenOut,
-            taker: owner.wallet.address,
+            taker: owner.walletAddress,
             executor: plan.executorAddress,
             executorCalls: reviewedCalls,
             fee: plan.fee,
@@ -259,6 +336,9 @@ export class WalletApiPrivacyOperations implements PrivacyOperations {
           emitProgress(onProgress, { stage: 'proving', message: 'Your wallet is generating a proof' });
           const artifact = await owner.wallet.strk20PrepareInvoke(actions, false);
           throwIfAborted(confirmSignal);
+          if (plan.expiresAt <= owner.readNow()) {
+            throw new PrivacyError('unknown', 'The private swap quote has expired.');
+          }
           emitProgress(onProgress, { stage: 'submitting', message: 'Submitting the quote-bound private swap' });
           const result = await owner.submission.submit({
             route: 'swap',
@@ -266,10 +346,12 @@ export class WalletApiPrivacyOperations implements PrivacyOperations {
             feeAuthorization: plan.fee.authorization,
             proofValidityBlocks: current.proofValidityBlocks,
             signal: confirmSignal,
-            onAccepted(result) { acceptedResult = result; },
+            onAccepted(result) { acceptedResult = readSubmissionResult(result); },
           });
+          const accepted = readSubmissionResult(result);
+          assertMatchingAcceptedResult(acceptedResult, accepted);
           emitProgress(onProgress, { stage: 'done', message: 'Done' });
-          return result;
+          return accepted;
         } catch (error) {
           if (acceptedResult) {
             emitProgress(onProgress, { stage: 'done', message: 'Done' });
@@ -283,41 +365,18 @@ export class WalletApiPrivacyOperations implements PrivacyOperations {
     };
   }
 
-  private validateSwapPlan(
-    intent: Extract<Intent, { kind: 'swap' }>,
-    config: PoolConfig,
-    plan: PreparedPrivateSwap,
-    expectedChainId: string,
-  ): void {
-    if (plan.chainId !== expectedChainId) {
-      throw new PrivacyError('unknown', 'The private swap quote is for the wrong network.');
+  private readNow(): number {
+    const value = this.now();
+    if (!Number.isSafeInteger(value) || value < 0) {
+      throw new PrivacyError('unknown', 'The private swap clock is invalid.');
     }
-    if (typeof plan.buyAmount !== 'bigint' || plan.buyAmount <= 0n) {
-      throw new PrivacyError('unknown', 'The private swap expected output is malformed.');
-    }
-    if (!Number.isSafeInteger(plan.expiresAt) || plan.expiresAt <= this.now()) {
-      throw new PrivacyError('unknown', 'The private swap quote has expired.');
-    }
-    if (plan.buyAmount < intent.minAmountOut) {
-      throw new PrivacyError('unknown', 'The private swap no longer meets the minimum output.');
-    }
-    assertAddress(plan.executorAddress, 'private swap executor');
-    if (plan.executorCalls.length === 0) {
-      throw new PrivacyError('unknown', 'The private swap contains no executor calls.');
-    }
-    for (const call of plan.executorCalls) {
-      assertAddress(call.contractAddress, 'private swap call target');
-      if (!call.entrypoint || call.calldata.some((felt) => !isFelt(felt))) {
-        throw new PrivacyError('unknown', 'The private swap contains malformed executor calls.');
-      }
-    }
-    this.validateRelayFee(plan.fee, config);
+    return value;
   }
 
   private prepareShield(
     intents: readonly Intent[],
     config: PoolConfig,
-    warnings: BatchWarning[],
+    warnings: readonly BatchWarning[],
   ): PreparedBatch {
     const wallet = this.wallet;
     const pool = this.pool;
@@ -334,21 +393,24 @@ export class WalletApiPrivacyOperations implements PrivacyOperations {
       promptCount: 1,
       async confirm({ feeCeiling, onProgress, signal }) {
         if (discarded) throw new PrivacyError('unknown', 'batch already discarded');
+        assertFeeCeilingInput(feeCeiling);
         assertFirstConfirmation(confirmationAttempted);
         confirmationAttempted = true;
         throwIfAborted(signal);
         try {
-          const current = await pool.config(signal);
+          const current = ownPoolConfig(await pool.config(signal));
           throwIfAborted(signal);
           assertFeeCeiling(current.feeAmount, feeCeiling);
+          assertNotDiscarded(discarded);
           emitProgress(onProgress, { stage: 'awaiting-approval', message: 'Confirm the shield in your wallet' });
           const result = await wallet.strk20InvokeTransaction(toActions(intents));
           // Once the wallet returns a transaction hash the public deposit may
           // already be on-chain. Do not turn that success into a retryable
           // cancellation merely because the caller aborted while it settled.
+          const transactionHash = readWalletTransactionHash(result);
           emitProgress(onProgress, { stage: 'confirming', message: 'Shield submitted' });
           emitProgress(onProgress, { stage: 'done', message: 'Done' });
-          return { transactionHash: result.transaction_hash };
+          return Object.freeze({ transactionHash });
         } catch (error) {
           emitProgress(onProgress, { stage: 'failed', message: 'Shield failed' });
           throw mapWalletError(error);
@@ -364,7 +426,7 @@ export class WalletApiPrivacyOperations implements PrivacyOperations {
     operationToken: string,
     config: PoolConfig,
     feeAtPrepare: RelayFeeQuote,
-    warnings: BatchWarning[],
+    warnings: readonly BatchWarning[],
   ): PreparedBatch {
     const owner = this;
     let discarded = false;
@@ -374,20 +436,21 @@ export class WalletApiPrivacyOperations implements PrivacyOperations {
       intents,
       poolFee: config.feeAmount,
       gasEstimate: feeAtPrepare.amount,
-      totalCost: config.feeAmount + feeAtPrepare.amount,
+      totalCost: checkedFeeTotal(config.feeAmount, feeAtPrepare.amount),
       warnings,
       promptCount: 1,
       async confirm({ feeCeiling, onProgress, signal }) {
         if (discarded) throw new PrivacyError('unknown', 'batch already discarded');
+        assertFeeCeilingInput(feeCeiling);
         assertFirstConfirmation(confirmationAttempted);
         confirmationAttempted = true;
         throwIfAborted(signal);
         let acceptedResult: TxResult | undefined;
         try {
-          const current = await owner.pool.config(signal);
+          const current = ownPoolConfig(await owner.pool.config(signal));
           throwIfAborted(signal);
           const relayFee = await owner.estimateRelay(route, operationToken, current, signal);
-          assertFeeCeiling(current.feeAmount + relayFee.amount, feeCeiling);
+          assertFeeCeiling(checkedFeeTotal(current.feeAmount, relayFee.amount), feeCeiling);
           const actions = [
             ...toActions(intents),
             {
@@ -399,19 +462,23 @@ export class WalletApiPrivacyOperations implements PrivacyOperations {
           ];
           emitProgress(onProgress, { stage: 'awaiting-approval', message: 'Confirm in your wallet' });
           emitProgress(onProgress, { stage: 'proving', message: 'Your wallet is generating a proof' });
+          assertNotDiscarded(discarded);
           const artifact = await owner.wallet.strk20PrepareInvoke(actions, false);
           throwIfAborted(signal);
           emitProgress(onProgress, { stage: 'submitting', message: 'Queued for private submission' });
+          assertNotDiscarded(discarded);
           const result = await owner.submission.submit({
             route,
             artifact,
             feeAuthorization: relayFee.authorization,
             proofValidityBlocks: current.proofValidityBlocks,
             signal,
-            onAccepted(result) { acceptedResult = result; },
+            onAccepted(result) { acceptedResult = readSubmissionResult(result); },
           });
+          const accepted = readSubmissionResult(result);
+          assertMatchingAcceptedResult(acceptedResult, accepted);
           emitProgress(onProgress, { stage: 'done', message: 'Done' });
-          return result;
+          return accepted;
         } catch (error) {
           if (acceptedResult) {
             emitProgress(onProgress, { stage: 'done', message: 'Done' });
@@ -438,21 +505,7 @@ export class WalletApiPrivacyOperations implements PrivacyOperations {
       signal,
     });
     throwIfAborted(signal);
-    this.validateRelayFee(fee, config);
-    return fee;
-  }
-
-  private validateRelayFee(fee: RelayFeeQuote, config: PoolConfig): void {
-    if (!sameAddress(fee.token, config.feeToken)) {
-      throw new PrivacyError('unknown', 'The relay returned an unexpected fee token.');
-    }
-    assertAddress(fee.recipient, 'relay fee recipient');
-    if (fee.amount <= 0n || fee.amount > this.policy.maxRelayFee) {
-      throw new PrivacyError('unknown', 'The relay fee exceeds the route policy.');
-    }
-    if (!fee.authorization || !Number.isSafeInteger(fee.expiresAtBlock) || fee.expiresAtBlock <= 0) {
-      throw new PrivacyError('unknown', 'The relay returned no valid fee authorization.');
-    }
+    return ownRelayFee(fee, config, this.policy.maxRelayFee);
   }
 
   private async warningsFor(intents: readonly Intent[], signal?: AbortSignal): Promise<BatchWarning[]> {
@@ -488,6 +541,31 @@ export class WalletApiPrivacyOperations implements PrivacyOperations {
   }
 }
 
+function ownArrayElements(value: unknown, label: string): readonly unknown[] {
+  try {
+    if (!Array.isArray(value)) throw new Error(`invalid ${label} container`);
+    const lengthDescriptor = Object.getOwnPropertyDescriptor(value, 'length');
+    if (
+      !lengthDescriptor
+      || !('value' in lengthDescriptor)
+      || !Number.isSafeInteger(lengthDescriptor.value)
+      || lengthDescriptor.value < 0
+      || Reflect.ownKeys(value).length !== lengthDescriptor.value + 1
+    ) {
+      throw new Error(`invalid ${label} shape`);
+    }
+    const owned: unknown[] = [];
+    for (let index = 0; index < lengthDescriptor.value; index += 1) {
+      const descriptor = Object.getOwnPropertyDescriptor(value, String(index));
+      if (!descriptor || !('value' in descriptor)) throw new Error(`missing ${label} item`);
+      owned.push(descriptor.value);
+    }
+    return Object.freeze(owned);
+  } catch {
+    throw new PrivacyError('unknown', `The wallet returned an invalid ${label}.`);
+  }
+}
+
 /**
  * Take exclusive ownership of the intents a caller asked for.
  *
@@ -502,17 +580,41 @@ function freezeIntents(intents: readonly Intent[]): readonly Intent[] {
   return Object.freeze(intents.map((intent) => Object.freeze({ ...intent })));
 }
 
+function freezeWarnings(warnings: readonly BatchWarning[]): readonly BatchWarning[] {
+  return Object.freeze(warnings.map((warning) => Object.freeze({ ...warning })));
+}
+
+function assertNotDiscarded(discarded: boolean): void {
+  if (discarded) throw new PrivacyError('unknown', 'batch already discarded');
+}
+
 function validateIntents(intents: readonly Intent[], policy: WalletRoutePolicy): void {
   if (intents.length === 0) throw new PrivacyError('unknown', 'prepare called with no intents');
   if (intents.length > policy.maxIntents) throw new PrivacyError('unknown', 'Too many intents in one batch.');
   for (const intent of intents) {
+    const expectedKeys = intent.kind === 'shield'
+      ? ['kind', 'token', 'amount']
+      : intent.kind === 'swap'
+        ? ['kind', 'tokenIn', 'tokenOut', 'amountIn', 'minAmountOut']
+        : ['kind', 'token', 'amount', 'recipient'];
+    if (
+      !hasOwnDataProperties(intent, expectedKeys)
+      || Reflect.ownKeys(intent).length !== expectedKeys.length
+    ) {
+      throw new PrivacyError('unknown', 'The intent has an invalid shape.');
+    }
     if (!policy.enabledRoutes.includes(intent.kind)) {
       throw new PrivacyError('unknown', `The ${intent.kind} route is disabled.`);
     }
     const amount = intent.kind === 'swap' ? intent.amountIn : intent.amount;
-    if (amount <= 0n) throw new PrivacyError('unknown', 'Amounts must be positive.');
-    if (intent.kind === 'swap' && intent.minAmountOut <= 0n) {
-      throw new PrivacyError('unknown', 'Minimum output must be positive.');
+    if (typeof amount !== 'bigint' || amount <= 0n || amount > MAX_UINT256) {
+      throw new PrivacyError('unknown', 'Amounts must be positive u256 values.');
+    }
+    if (
+      intent.kind === 'swap' &&
+      (typeof intent.minAmountOut !== 'bigint' || intent.minAmountOut <= 0n || intent.minAmountOut > MAX_UINT256)
+    ) {
+      throw new PrivacyError('unknown', 'Minimum output must be a positive u256 value.');
     }
     assertAddress(intent.kind === 'swap' ? intent.tokenIn : intent.token, 'token');
     const allowed = policy.allowedTokens[intent.kind];
@@ -701,6 +803,225 @@ function toActions(intents: readonly Intent[]): STRK20_ACTION[] {
   });
 }
 
+function ownPolicy(policy: WalletRoutePolicy): WalletRoutePolicy {
+  return Object.freeze({
+    maxIntents: policy.maxIntents,
+    maxRelayFee: policy.maxRelayFee,
+    enabledRoutes: Object.freeze([...policy.enabledRoutes]),
+    allowedTokens: Object.freeze({
+      shield: Object.freeze([...policy.allowedTokens.shield]),
+      unshield: Object.freeze([...policy.allowedTokens.unshield]),
+      transfer: Object.freeze([...policy.allowedTokens.transfer]),
+      swap: Object.freeze([...policy.allowedTokens.swap]),
+    }),
+    ...(policy.swap ? { swap: Object.freeze({ ...policy.swap }) } : {}),
+  });
+}
+
+function assertMatchingAcceptedResult(accepted: TxResult | undefined, settled: TxResult): void {
+  if (accepted && accepted.transactionHash !== settled.transactionHash) {
+    throw new PrivacyError('unknown', 'The private service returned conflicting transaction receipts.');
+  }
+}
+
+function ownSwapPlan(
+  value: unknown,
+  intent: Extract<Intent, { kind: 'swap' }>,
+  config: PoolConfig,
+  expectedChainId: string,
+  maxRelayFee: bigint,
+  now: number,
+): PreparedPrivateSwap {
+  let quoteId: unknown;
+  let buyAmount: unknown;
+  let expiresAt: unknown;
+  let chainId: unknown;
+  let executorAddress: unknown;
+  let executorCallsValue: unknown;
+  let feeValue: unknown;
+  try {
+    if (!value || typeof value !== 'object' || Array.isArray(value) || Reflect.ownKeys(value).length !== 7) {
+      throw new Error('invalid plan container');
+    }
+    const read = (key: PropertyKey): unknown => {
+      const descriptor = Object.getOwnPropertyDescriptor(value, key);
+      if (!descriptor || !('value' in descriptor)) throw new Error('missing plan data property');
+      return descriptor.value;
+    };
+    quoteId = read('quoteId');
+    buyAmount = read('buyAmount');
+    expiresAt = read('expiresAt');
+    chainId = read('chainId');
+    executorAddress = read('executorAddress');
+    executorCallsValue = read('executorCalls');
+    feeValue = read('fee');
+  } catch {
+    throw new PrivacyError('unknown', 'The private swap quote is malformed.');
+  }
+
+  const executorCalls = ownExecutorCalls(executorCallsValue);
+  const fee = ownRelayFee(feeValue, config, maxRelayFee);
+  const plan = Object.freeze({
+    quoteId,
+    buyAmount,
+    expiresAt,
+    chainId,
+    executorAddress,
+    executorCalls,
+    fee,
+  }) as PreparedPrivateSwap;
+  validateOwnedSwapPlan(plan, intent, config, expectedChainId, maxRelayFee, now);
+  return plan;
+}
+
+function ownExecutorCalls(value: unknown): PreparedPrivateSwap['executorCalls'] {
+  let length: number;
+  try {
+    if (!Array.isArray(value)) throw new Error('invalid call container');
+    const lengthDescriptor = Object.getOwnPropertyDescriptor(value, 'length');
+    if (!lengthDescriptor || !('value' in lengthDescriptor) || !Number.isSafeInteger(lengthDescriptor.value)) {
+      throw new Error('invalid call container length');
+    }
+    length = lengthDescriptor.value as number;
+    if (length === 0 || Reflect.ownKeys(value).length !== length + 1) {
+      throw new Error('invalid call container shape');
+    }
+  } catch {
+    throw new PrivacyError('unknown', 'The private swap contains malformed executor calls.');
+  }
+
+  const calls: PreparedPrivateSwap['executorCalls'] = [];
+  for (let index = 0; index < length; index += 1) {
+    let contractAddress: unknown;
+    let entrypoint: unknown;
+    let calldataValue: unknown;
+    try {
+      const descriptor = Object.getOwnPropertyDescriptor(value, String(index));
+      if (!descriptor || !('value' in descriptor)) throw new Error('missing call');
+      const call = descriptor.value;
+      if (!call || typeof call !== 'object' || Array.isArray(call) || Reflect.ownKeys(call).length !== 3) {
+        throw new Error('invalid call');
+      }
+      const read = (key: PropertyKey): unknown => {
+        const field = Object.getOwnPropertyDescriptor(call, key);
+        if (!field || !('value' in field)) throw new Error('missing call field');
+        return field.value;
+      };
+      contractAddress = read('contractAddress');
+      entrypoint = read('entrypoint');
+      calldataValue = read('calldata');
+    } catch {
+      throw new PrivacyError('unknown', 'The private swap contains malformed executor calls.');
+    }
+    const calldata = ownFeltArray(calldataValue);
+    calls.push(Object.freeze({ contractAddress, entrypoint, calldata }) as PreparedPrivateSwap['executorCalls'][number]);
+  }
+  return Object.freeze(calls) as PreparedPrivateSwap['executorCalls'];
+}
+
+function ownFeltArray(value: unknown): readonly string[] {
+  let length: number;
+  try {
+    if (!Array.isArray(value)) throw new Error('invalid calldata container');
+    const lengthDescriptor = Object.getOwnPropertyDescriptor(value, 'length');
+    if (!lengthDescriptor || !('value' in lengthDescriptor) || !Number.isSafeInteger(lengthDescriptor.value)) {
+      throw new Error('invalid calldata length');
+    }
+    length = lengthDescriptor.value as number;
+    if (Reflect.ownKeys(value).length !== length + 1) throw new Error('invalid calldata shape');
+  } catch {
+    throw new PrivacyError('unknown', 'The private swap contains malformed executor calls.');
+  }
+  const owned: string[] = [];
+  try {
+    for (let index = 0; index < length; index += 1) {
+      const descriptor = Object.getOwnPropertyDescriptor(value, String(index));
+      if (!descriptor || !('value' in descriptor) || typeof descriptor.value !== 'string') {
+        throw new Error('invalid calldata item');
+      }
+      owned.push(descriptor.value);
+    }
+  } catch {
+    throw new PrivacyError('unknown', 'The private swap contains malformed executor calls.');
+  }
+  return Object.freeze(owned);
+}
+
+function validateOwnedSwapPlan(
+  plan: PreparedPrivateSwap,
+  intent: Extract<Intent, { kind: 'swap' }>,
+  config: PoolConfig,
+  expectedChainId: string,
+  maxRelayFee: bigint,
+  now: number,
+): void {
+  if (typeof plan.quoteId !== 'string' || plan.quoteId.trim().length === 0) {
+    throw new PrivacyError('unknown', 'The private swap quote is malformed.');
+  }
+  if (plan.chainId !== expectedChainId) {
+    throw new PrivacyError('unknown', 'The private swap quote is for the wrong network.');
+  }
+  if (typeof plan.buyAmount !== 'bigint' || plan.buyAmount <= 0n || plan.buyAmount > MAX_UINT256) {
+    throw new PrivacyError('unknown', 'The private swap expected output is malformed.');
+  }
+  if (!Number.isSafeInteger(plan.expiresAt) || plan.expiresAt <= now) {
+    throw new PrivacyError('unknown', 'The private swap quote has expired.');
+  }
+  if (plan.buyAmount < intent.minAmountOut) {
+    throw new PrivacyError('unknown', 'The private swap no longer meets the minimum output.');
+  }
+  assertAddress(plan.executorAddress, 'private swap executor');
+  for (const call of plan.executorCalls) {
+    assertAddress(call.contractAddress, 'private swap call target');
+    if (
+      typeof call.entrypoint !== 'string'
+      || call.entrypoint.trim().length === 0
+      || call.calldata.some((felt) => !isFelt(felt))
+    ) {
+      throw new PrivacyError('unknown', 'The private swap contains malformed executor calls.');
+    }
+  }
+  ownRelayFee(plan.fee, config, maxRelayFee);
+}
+
+function ownRelayFee(value: unknown, config: PoolConfig, maxRelayFee: bigint): RelayFeeQuote {
+  let token: unknown;
+  let recipient: unknown;
+  let amount: unknown;
+  let authorization: unknown;
+  let expiresAtBlock: unknown;
+  try {
+    if (!value || typeof value !== 'object' || Array.isArray(value) || Reflect.ownKeys(value).length !== 5) {
+      throw new Error('invalid fee container');
+    }
+    const read = (key: PropertyKey): unknown => {
+      const descriptor = Object.getOwnPropertyDescriptor(value, key);
+      if (!descriptor || !('value' in descriptor)) throw new Error('missing fee data property');
+      return descriptor.value;
+    };
+    token = read('token');
+    recipient = read('recipient');
+    amount = read('amount');
+    authorization = read('authorization');
+    expiresAtBlock = read('expiresAtBlock');
+  } catch {
+    throw new PrivacyError('unknown', 'The relay returned an invalid fee quote.');
+  }
+  if (typeof token !== 'string' || !isFelt(token) || !sameAddress(token, config.feeToken)) {
+    throw new PrivacyError('unknown', 'The relay returned an unexpected fee token.');
+  }
+  if (typeof recipient !== 'string') throw new PrivacyError('unknown', 'Invalid relay fee recipient address.');
+  assertAddress(recipient, 'relay fee recipient');
+  if (typeof amount !== 'bigint' || amount <= 0n || amount > maxRelayFee) {
+    throw new PrivacyError('unknown', 'The relay fee exceeds the route policy.');
+  }
+  if (typeof authorization !== 'string' || authorization.trim().length === 0
+    || !Number.isSafeInteger(expiresAtBlock) || (expiresAtBlock as number) <= 0) {
+    throw new PrivacyError('unknown', 'The relay returned no valid fee authorization.');
+  }
+  return Object.freeze({ token, recipient, amount, authorization, expiresAtBlock: expiresAtBlock as number });
+}
+
 function tokenFor(intent: Intent): string {
   return intent.kind === 'swap' ? intent.tokenIn : intent.token;
 }
@@ -709,10 +1030,96 @@ function toFelt(value: bigint): string {
   return `0x${value.toString(16)}`;
 }
 
+function readWalletTransactionHash(value: unknown): string {
+  return readTransactionHash(value, 'transaction_hash', 'wallet');
+}
+
+function readSubmissionResult(value: unknown): TxResult {
+  return Object.freeze({
+    transactionHash: readTransactionHash(value, 'transactionHash', 'private service'),
+  });
+}
+
+function readTransactionHash(value: unknown, field: string, source: string): string {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    throw new PrivacyError('unknown', `The ${source} returned an invalid transaction result.`);
+  }
+  const descriptor = Object.getOwnPropertyDescriptor(value, field);
+  if (
+    !descriptor ||
+    !('value' in descriptor) ||
+    typeof descriptor.value !== 'string' ||
+    descriptor.value.length === 0 ||
+    /\s/.test(descriptor.value)
+  ) {
+    throw new PrivacyError('unknown', `The ${source} returned an invalid transaction result.`);
+  }
+  return descriptor.value;
+}
+
+function hasOwnDataProperties(value: unknown, keys: readonly PropertyKey[]): boolean {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return false;
+  return keys.every((key) => {
+    const descriptor = Object.getOwnPropertyDescriptor(value, key);
+    return Boolean(descriptor && 'value' in descriptor);
+  });
+}
+
 function assertAddress(address: string, label: string): void {
   if (!isFelt(address) || BigInt(address) === 0n) {
     throw new PrivacyError('unknown', `Invalid ${label} address.`);
   }
+}
+
+function ownPoolConfig(value: unknown): PoolConfig {
+  let feeAmount: unknown;
+  let feeToken: unknown;
+  let proofValidityBlocks: unknown;
+  let noteMaturityBlocks: unknown;
+  try {
+    if (!value || typeof value !== 'object' || Array.isArray(value) || Reflect.ownKeys(value).length !== 4) {
+      throw new Error('invalid config container');
+    }
+    const read = (key: PropertyKey): unknown => {
+      const descriptor = Object.getOwnPropertyDescriptor(value, key);
+      if (!descriptor || !('value' in descriptor)) throw new Error('missing data property');
+      return descriptor.value;
+    };
+    feeAmount = read('feeAmount');
+    feeToken = read('feeToken');
+    proofValidityBlocks = read('proofValidityBlocks');
+    noteMaturityBlocks = read('noteMaturityBlocks');
+  } catch {
+    throw new PrivacyError('unknown', 'The pool returned an invalid configuration.');
+  }
+  if (
+    typeof feeAmount !== 'bigint'
+    || feeAmount < 0n
+    || feeAmount > MAX_UINT256
+    || typeof feeToken !== 'string'
+    || !isFelt(feeToken)
+    || BigInt(feeToken) === 0n
+    || !Number.isSafeInteger(proofValidityBlocks)
+    || (proofValidityBlocks as number) <= 0
+    || !Number.isSafeInteger(noteMaturityBlocks)
+    || (noteMaturityBlocks as number) < 0
+  ) {
+    throw new PrivacyError('unknown', 'The pool returned an invalid configuration.');
+  }
+  return Object.freeze({
+    feeAmount,
+    feeToken,
+    proofValidityBlocks: proofValidityBlocks as number,
+    noteMaturityBlocks: noteMaturityBlocks as number,
+  });
+}
+
+function checkedFeeTotal(poolFee: bigint, relayFee: bigint): bigint {
+  const total = poolFee + relayFee;
+  if (total > MAX_UINT256) {
+    throw new PrivacyError('unknown', 'The combined private operation fee exceeds u256.');
+  }
+  return total;
 }
 
 function sameAddress(a: string, b: string): boolean {
@@ -720,12 +1127,20 @@ function sameAddress(a: string, b: string): boolean {
 }
 
 function isFelt(value: string): boolean {
-  return /^0x[0-9a-fA-F]{1,64}$/.test(value) && BigInt(value) < STARK_FIELD_PRIME;
+  return typeof value === 'string'
+    && /^0x[0-9a-fA-F]{1,64}$/.test(value)
+    && BigInt(value) < STARK_FIELD_PRIME;
 }
 
 function assertFeeCeiling(actual: bigint, ceiling: bigint): void {
   if (actual > ceiling) {
     throw new PrivacyError('unknown', `The current fee ${actual} is above the ceiling ${ceiling}.`);
+  }
+}
+
+function assertFeeCeilingInput(ceiling: unknown): asserts ceiling is bigint {
+  if (typeof ceiling !== 'bigint' || ceiling < 0n || ceiling > MAX_UINT256) {
+    throw new PrivacyError('unknown', 'The fee ceiling must be a u256 bigint.');
   }
 }
 
@@ -741,6 +1156,7 @@ interface Semver {
 const REQUIRED_VERSION = parseSemver(REQUIRED_WALLET_API)!;
 
 function parseSemver(value: string): Semver | null {
+  if (typeof value !== 'string') return null;
   const match = /^(?:v)?(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-([0-9A-Za-z.-]+))?$/.exec(value);
   if (!match) return null;
   const core = [Number(match[1]), Number(match[2]), Number(match[3])] as Semver['core'];
@@ -784,5 +1200,9 @@ function assertFirstConfirmation(attempted: boolean): void {
 }
 
 function emitProgress(callback: ProgressCallback | undefined, progress: OperationProgress): void {
-  try { callback?.(progress); } catch { /* Observers cannot alter a financial operation. */ }
+  try {
+    callback?.(Object.freeze({ ...progress }));
+  } catch {
+    /* Observers cannot alter a financial operation. */
+  }
 }

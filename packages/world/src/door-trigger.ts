@@ -46,6 +46,7 @@ export function createDoorTrigger(map: DistrictMap, out: WorldEmit): DoorTrigger
   // The door zone the player currently occupies, or null. Identity is the
   // building id: this map has exactly one door per building and no overlaps.
   let active: DoorZone | null = null;
+  let transition = 0;
 
   function sameZone(a: DoorZone | null, b: DoorZone | null): boolean {
     if (a === null || b === null) return a === b;
@@ -57,24 +58,46 @@ export function createDoorTrigger(map: DistrictMap, out: WorldEmit): DoorTrigger
       const next = doorAt(map, tile.x, tile.y);
       if (sameZone(active, next)) return;
 
+      const ownTransition = ++transition;
+      const previous = active;
+      const emit = (callback: () => void): void => {
+        try {
+          callback();
+        } catch (error) {
+          // Event delivery is an external lifecycle boundary. If it fails
+          // without a newer nested transition taking ownership, restore the
+          // prior occupancy so the caller can retry the transition.
+          if (transition === ownTransition) active = previous;
+          throw error;
+        }
+      };
+      // Commit the new occupancy before synchronous event delivery. A listener
+      // may immediately report another tile or reset the trigger; the version
+      // check below prevents this transition from overwriting that newer state.
+      active = next;
+
       // Leaving a door the player had actually entered. A locked door was never
       // entered, so there is nothing to exit.
-      if (active && !active.locked) {
-        out.emit('building:exited', { building: active.building });
+      if (previous && !previous.locked) {
+        emit(() => out.emit('building:exited', { building: previous.building }));
+        if (transition !== ownTransition) return;
       }
 
       if (next) {
         if (next.locked) {
-          out.emit('building:locked', { building: next.building, reason: 'coming-soon' });
+          emit(() => out.emit(
+            'building:locked',
+            { building: next.building, reason: 'coming-soon' },
+          ));
         } else {
-          out.emit('building:entered', { building: next.building });
+          emit(() => out.emit('building:entered', { building: next.building }));
         }
+        if (transition !== ownTransition) return;
       }
-
-      active = next;
     },
 
     reset() {
+      transition += 1;
       active = null;
     },
 

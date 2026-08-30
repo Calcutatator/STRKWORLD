@@ -1,6 +1,6 @@
 import type { Intent, OperationStage, PreparedBatch, PrivacyErrorKind, PrivacyOperations } from '@strkworld/privacy';
 import type { ReceiptLedger } from '../../receipts/receipt-ledger.js';
-import { createStore, type Store } from '../../store/store.js';
+import { createStore, type ReadableStore } from '../../store/store.js';
 import { formatTokenAmountExact, parseTokenAmount, sameAddress } from '../../format.js';
 import { COPY } from '../../copy.js';
 import { toFailure, type ShellFailure } from '../../privacy/errors.js';
@@ -10,15 +10,15 @@ import type { RouteGrade } from '../../privacy/register.js';
 import { catalogAsset, EXCHANGE_CATALOG, type ExchangeAsset } from './catalog.js';
 
 export interface ExchangeReview {
-  sell: string;
-  expectedBuy: string;
-  protectedMinimum: string;
-  slippage: string;
-  expiresAt: string;
-  poolFee: string;
-  networkCost: string;
-  total: string;
-  disclosures: readonly string[];
+  readonly sell: string;
+  readonly expectedBuy: string;
+  readonly protectedMinimum: string;
+  readonly slippage: string;
+  readonly expiresAt: string;
+  readonly poolFee: string;
+  readonly networkCost: string;
+  readonly total: string;
+  readonly disclosures: readonly string[];
 }
 
 export type ExchangeFlow =
@@ -29,18 +29,19 @@ export type ExchangeFlow =
   | { name: 'failed'; kind: PrivacyErrorKind; message: string; recovery: 'prepare-again' | 'close' };
 
 export interface ExchangeState {
-  door: DoorState;
-  balances: 'unrequested' | 'loading' | 'loaded' | 'failed';
-  sellChoices: readonly ExchangeAsset[];
-  sell: ExchangeAsset | null;
-  buy: ExchangeAsset | null;
-  amountText: string;
-  notice: string | null;
-  flow: ExchangeFlow;
+  readonly door: DoorState;
+  readonly balances: 'unrequested' | 'loading' | 'loaded' | 'failed';
+  readonly sellChoices: readonly ExchangeAsset[];
+  readonly sell: ExchangeAsset | null;
+  readonly buy: ExchangeAsset | null;
+  readonly amountText: string;
+  readonly notice: string | null;
+  readonly flow: ExchangeFlow;
 }
 
 export interface ExchangePanel {
-  readonly store: Store<ExchangeState>;
+  /** Read-only view; panel methods own every financial state transition. */
+  readonly store: ReadableStore<ExchangeState>;
   open(signal?: AbortSignal): Promise<void>;
   close(): void;
   refreshBalances(signal?: AbortSignal): Promise<void>;
@@ -66,14 +67,19 @@ export function createExchangePanel(options: {
   const feeTolerance = options.feeTolerance ?? 0n;
   const now = options.now ?? Date.now;
   const register = options.register ?? PRIVACY_REGISTER;
-  const store = createStore<ExchangeState>(initialState(register));
+  const stateStore = createStore<ExchangeState>(freezeExchangeState(initialState(register)));
+  const store: ReadableStore<ExchangeState> = Object.freeze({
+    getState: stateStore.getState,
+    getServerSnapshot: stateStore.getServerSnapshot,
+    subscribe: stateStore.subscribe,
+  });
   let prepared: PreparedBatch | null = null;
   let signingOwner: number | null = null;
   let signingBatch: PreparedBatch | null = null;
   let attempt = 0;
   let session = 0;
   let balanceRead = 0;
-  const patch = (next: Partial<ExchangeState>) => store.setState((state) => ({ ...state, ...next }));
+  const patch = (next: Partial<ExchangeState>) => stateStore.setState((state) => freezeExchangeState({ ...state, ...next }));
   const start = () => ++attempt;
   const live = (id: number) => attempt === id;
   const editComposition = (next: Partial<ExchangeState>) => {
@@ -116,7 +122,7 @@ export function createExchangePanel(options: {
     patch({ flow: { name: 'failed', kind: failure.kind, message: COPY.errors[failure.kind], recovery: failure.kind === 'submission-uncertain' ? 'close' : recovery } });
   };
 
-  return {
+  return Object.freeze<ExchangePanel>({
     store,
     async open(signal) {
       const id = start(); patch({ flow: { name: 'loading-pool' } });
@@ -127,7 +133,7 @@ export function createExchangePanel(options: {
         patch({ flow: receipt ? { name: 'submitted', transactionHash: receipt.transactionHash } : { name: 'composing' } });
       } catch (error) { fail(error, id, 'close'); }
     },
-    close() { start(); ++session; ++balanceRead; discard(); store.setState(initialState(register)); },
+    close() { start(); ++session; ++balanceRead; discard(); stateStore.setState(freezeExchangeState(initialState(register))); },
     async refreshBalances(signal) {
       const id = ++balanceRead; const currentSession = session;
       patch({ balances: 'loading', notice: null });
@@ -182,7 +188,7 @@ export function createExchangePanel(options: {
           slippage: `${(safeReview.slippageBps / 100).toFixed(2)}%`,
           expiresAt: new Date(safeReview.expiresAt).toISOString(),
           poolFee: fee(batch.poolFee), networkCost: fee(batch.gasEstimate), total: fee(batch.totalCost),
-          disclosures: disclosuresForIntents(batch.intents, PRIVACY_REGISTER),
+          disclosures: disclosuresForIntents(batch.intents, register),
         };
         patch({ flow: { name: 'review', summary } });
       } catch (error) { fail(error, id); }
@@ -245,7 +251,7 @@ export function createExchangePanel(options: {
     },
     cancelPrepared() { start(); discard(); patch({ flow: { name: 'composing' }, notice: null }); },
     acknowledge() { const flow = store.getState().flow; if (flow.name === 'submitted') { receipts.acknowledge(flow.transactionHash); patch({ flow: { name: 'composing' }, notice: null }); } },
-  };
+  });
 
   async function feeMovedPast(batch: PreparedBatch, signal?: AbortSignal): Promise<boolean> {
     try { const pool = await operations.poolConfig(signal); return pool.feeAmount + batch.gasEstimate > batch.totalCost + feeTolerance; }
@@ -255,6 +261,28 @@ export function createExchangePanel(options: {
 
 function initialState(register: readonly RouteGrade[]): ExchangeState {
   return { door: routeDoor('exchange.swap', register), balances: 'unrequested', sellChoices: [], sell: null, buy: null, amountText: '', notice: null, flow: { name: 'idle' } };
+}
+
+function freezeExchangeState(state: ExchangeState): ExchangeState {
+  const freezeAsset = (asset: ExchangeAsset | null): ExchangeAsset | null =>
+    asset === null ? null : Object.freeze({ ...asset });
+  const flow = state.flow.name === 'review' || state.flow.name === 'submitting'
+    ? Object.freeze({
+        ...state.flow,
+        summary: Object.freeze({
+          ...state.flow.summary,
+          disclosures: Object.freeze([...state.flow.summary.disclosures]),
+        }),
+      })
+    : Object.freeze({ ...state.flow });
+  return Object.freeze({
+    ...state,
+    door: Object.freeze({ ...state.door }),
+    sellChoices: Object.freeze(state.sellChoices.map((asset) => freezeAsset(asset)!)),
+    sell: freezeAsset(state.sell),
+    buy: freezeAsset(state.buy),
+    flow,
+  });
 }
 
 function validReview(intent: Intent | undefined, review: PreparedBatch['swapReview'], sell: ExchangeAsset, buy: ExchangeAsset, amountIn: bigint, now: number): intent is Extract<Intent, { kind: 'swap' }> {

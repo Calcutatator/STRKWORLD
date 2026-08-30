@@ -17,6 +17,18 @@ const swap = (): Intent => ({
 });
 
 describe('batch accumulator', () => {
+  it('publishes an immutable accumulator API while retaining owned mutation', () => {
+    const batch = createBatchAccumulator();
+    const originalAccept = batch.accept;
+
+    expect(Object.isFrozen(batch)).toBe(true);
+    expect(Reflect.set(batch, 'accept', () => ({ ok: true, value: [] }))).toBe(false);
+    expect(Reflect.set(batch, 'confirm', () => ({ ok: true, value: [] }))).toBe(false);
+    expect(batch.accept).toBe(originalAccept);
+    expect(batch.accept(transfer()).ok).toBe(true);
+    expect(batch.confirm().ok).toBe(true);
+  });
+
   it('collects several intents of one kind and emits them as one array', () => {
     const batch = createBatchAccumulator();
     batch.accept(transfer(1n));
@@ -112,6 +124,25 @@ describe('batch accumulator', () => {
     const batch = createBatchAccumulator();
     const result = batch.accept({ kind: 'transfer', token: TOKEN, amount: 1n });
     expect(!result.ok && result.rejection.reason).toBe('not-an-intent');
+  });
+
+  it('rejects accessor-backed fields without invoking their getters', () => {
+    const batch = createBatchAccumulator();
+    let reads = 0;
+    const accessorIntent = { kind: 'transfer', token: TOKEN, amount: 1n, recipient: BOB };
+    Object.defineProperty(accessorIntent, 'recipient', {
+      enumerable: true,
+      get() {
+        reads += 1;
+        throw new Error('recipient getter must not run');
+      },
+    });
+
+    expect(() => batch.accept(accessorIntent)).not.toThrow();
+    const result = batch.accept(accessorIntent);
+    expect(result.ok).toBe(false);
+    expect(!result.ok && result.rejection.reason).toBe('not-an-intent');
+    expect(reads).toBe(0);
   });
 
   it('rejects an amount that is not a bigint', () => {

@@ -38,6 +38,18 @@ describe('ProductionRoot', () => {
     expect(capabilityAdmits({ name: 'unsupported-wallet', walletApiVersion: '0.9.0' })).toBe(false);
     expect(capabilityAdmits({ name: 'unreachable' })).toBe(false);
     expect(capabilityAdmits({ name: 'not-registered' })).toBe(true);
+    expect(capabilityAdmits({ name: 'connected' } as never)).toBe(false);
+    expect(capabilityAdmits({
+      name: 'connected',
+      capability: { supportsStrk20: 'yes', walletApiVersion: {}, registration: 'registered' },
+      registrationConfirmed: true,
+    } as never)).toBe(false);
+    const inherited = Object.create({
+      name: 'connected',
+      capability: { supportsStrk20: true, walletApiVersion: '0.10.3', registration: 'registered' },
+      registrationConfirmed: true,
+    });
+    expect(capabilityAdmits(inherited as never)).toBe(false);
   });
 
   it('keeps the production app and its World out of the tree before wallet connection', () => {
@@ -131,6 +143,71 @@ describe('ProductionRoot', () => {
     expect(container.textContent).toContain(COPY.unsupported.title);
     expect(captured.current).toBeNull();
     expect(createPresence).not.toHaveBeenCalled();
+    await unmountReactRoot(root);
+    container.remove();
+  });
+
+  it('aborts capability detection when the connected gate is retired', async () => {
+    const operations = new FakePrivacyOperations();
+    const capturedSignals: AbortSignal[] = [];
+    const capability = new Promise<{
+      supportsStrk20: true;
+      walletApiVersion: string;
+      registration: 'unknown';
+    }>(() => undefined);
+    vi.spyOn(operations, 'capability').mockImplementation((signal) => {
+      if (signal) capturedSignals.push(signal);
+      return capability;
+    });
+    const session = reactiveSession('selection-required', null, operations);
+    const container = document.createElement('div');
+    document.body.appendChild(container);
+    const root = createRoot(container);
+
+    await act(async () => {
+      root.render(
+        <StrictMode>
+          <ProductionRoot
+            session={session}
+            worldOut={createEventBus<WorldEvents>()}
+            shellIn={createEventBus<ShellEvents>()}
+            createPresence={() => createPresenceController({})}
+            bridge={recoveryBridge()}
+          />
+        </StrictMode>,
+      );
+      await flushReact();
+    });
+
+    await act(async () => {
+      session.publish('connected', '0xabc');
+      await flushReact();
+    });
+
+    expect(session.getSnapshot().phase).toBe('connected');
+    expect(container.querySelector('[data-testid="wallet-capability-gate"]')).not.toBeNull();
+    expect(session.operations).toBe(operations);
+    expect(operations.capability).toHaveBeenCalledOnce();
+    expect(capturedSignals).toHaveLength(1);
+    expect(capturedSignals.at(-1)?.aborted).toBe(false);
+
+    await act(async () => {
+      session.publish('connected', '0xdef');
+      await flushReact();
+    });
+
+    expect(operations.capability).toHaveBeenCalledTimes(2);
+    expect(capturedSignals[0]?.aborted).toBe(true);
+    expect(capturedSignals.at(-1)?.aborted).toBe(false);
+
+    await act(async () => {
+      session.publish('selection-required', null);
+      await flushReact();
+    });
+    await flushReact();
+
+    expect(container.querySelector('[data-testid="wallet-entry-gate"]')).not.toBeNull();
+    expect(capturedSignals.at(-1)?.aborted).toBe(true);
     await unmountReactRoot(root);
     container.remove();
   });
@@ -304,6 +381,92 @@ describe('ProductionRoot', () => {
     container.remove();
   });
 
+  it('does not expose the previous session while replacing it with a disconnected session', async () => {
+    captured.current = null;
+    const container = document.createElement('div');
+    document.body.appendChild(container);
+    const root = createRoot(container);
+    const first = sessionAt('connected', '0xabc', new FakePrivacyOperations({
+      capability: {
+        supportsStrk20: true,
+        walletApiVersion: '0.10.3',
+        registration: 'unknown',
+      },
+    }));
+
+    await act(async () => {
+      root.render(
+        <ProductionRoot
+          session={first}
+          worldOut={createEventBus<WorldEvents>()}
+          shellIn={createEventBus<ShellEvents>()}
+          createPresence={() => createPresenceController({})}
+          bridge={recoveryBridge()}
+        />,
+      );
+      await flushReact();
+    });
+    expect(captured.current).not.toBeNull();
+
+    captured.current = null;
+    await act(async () => {
+      root.render(
+        <ProductionRoot
+          session={sessionAt('selection-required', null)}
+          worldOut={createEventBus<WorldEvents>()}
+          shellIn={createEventBus<ShellEvents>()}
+          createPresence={() => createPresenceController({})}
+          bridge={recoveryBridge()}
+        />,
+      );
+      await flushReact();
+    });
+
+    expect(container.querySelector('[data-testid="wallet-entry-gate"]')).not.toBeNull();
+    expect(captured.current).toBeNull();
+    await unmountReactRoot(root);
+    container.remove();
+  });
+
+  it('contains descriptor-valid hostile session snapshots at the production gate', () => {
+    const base = sessionAt('selection-required', null);
+    const raw = base.getSnapshot();
+    const hostile = new Proxy(raw, {
+      get(_target, key) {
+        throw new Error(`session snapshot get trap must not escape for ${String(key)}`);
+      },
+    });
+    const session = { ...base, getSnapshot: () => hostile };
+
+    expect(() => renderToStaticMarkup(
+      <ProductionRoot
+        session={session}
+        worldOut={createEventBus<WorldEvents>()}
+        shellIn={createEventBus<ShellEvents>()}
+        createPresence={() => createPresenceController({})}
+        bridge={recoveryBridge()}
+      />,
+    )).not.toThrow();
+  });
+
+  it('fails closed when a session snapshot read throws after connection', () => {
+    const base = sessionAt('connected', '0xabc');
+    const session = { ...base, getSnapshot: () => { throw new Error('snapshot unavailable'); } };
+
+    const markup = renderToStaticMarkup(
+      <ProductionRoot
+        session={session}
+        worldOut={createEventBus<WorldEvents>()}
+        shellIn={createEventBus<ShellEvents>()}
+        createPresence={() => createPresenceController({})}
+        bridge={recoveryBridge()}
+      />,
+    );
+
+    expect(markup).toContain('data-testid="wallet-entry-gate"');
+    expect(markup).not.toContain('production app');
+  });
+
 });
 
 function sessionAt(
@@ -333,8 +496,9 @@ function sessionAt(
 function reactiveSession(
   phase: 'connected' | 'selection-required',
   account: string | null,
+  operations = new FakePrivacyOperations(),
 ): WalletSession & { publish(nextPhase: 'connected' | 'selection-required', nextAccount: string | null): void } {
-  let current = sessionAt(phase, account);
+  let current = sessionAt(phase, account, operations);
   const listeners = new Set<() => void>();
   return {
     ...current,

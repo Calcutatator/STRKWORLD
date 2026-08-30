@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import type { PreparedBatch, PrivacyOperations } from '../operations.js';
 import { FakePrivacyOperations } from '../testing/fake.js';
+import { PrivacyError } from '../types.js';
 import {
   createProductionWalletSession,
   createWalletSession,
@@ -10,6 +11,390 @@ import {
 } from './session.js';
 
 describe('WalletSession', () => {
+  it.each([
+    ['NaN max intents', { maxIntents: Number.NaN }],
+    ['fractional max intents', { maxIntents: 1.5 }],
+    ['negative max intents', { maxIntents: -1 }],
+    ['unsafe max intents', { maxIntents: Number.MAX_SAFE_INTEGER + 1 }],
+    ['number relay fee', { maxRelayFee: 1 }],
+    ['negative relay fee', { maxRelayFee: -1n }],
+    ['unknown enabled route', { enabledRoutes: ['transfer', 'mint'] }],
+    ['duplicate enabled route', { enabledRoutes: ['transfer', 'transfer'] }],
+  ])('rejects a policy with %s before discovery', (_label, override) => {
+    const discovery = discoveryWith(wallet('Ready'));
+    const getWallets = vi.spyOn(discovery, 'getWallets');
+    const policy = { ...denyAllOptions().policy, ...override };
+
+    expect(() => createWalletSession(
+      { ...denyAllOptions(), policy: policy as never },
+      { discovery, connectWallet: async () => connection('0x111') },
+    )).toThrow(PrivacyError);
+    expect(getWallets).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ['decimal token', '123'],
+    ['zero token', '0x0'],
+    ['field-prime token', `0x${((1n << 251n) + 17n * (1n << 192n) + 1n).toString(16)}`],
+  ])('rejects a policy with a %s before discovery', (_label, token) => {
+    const discovery = discoveryWith(wallet('Ready'));
+    const getWallets = vi.spyOn(discovery, 'getWallets');
+    const policy = denyAllOptions().policy;
+
+    expect(() => createWalletSession(
+      { ...denyAllOptions(), policy: {
+        ...policy,
+        allowedTokens: { ...policy.allowedTokens, transfer: [token] },
+      } },
+      { discovery, connectWallet: async () => connection('0x111') },
+    )).toThrow(PrivacyError);
+    expect(getWallets).not.toHaveBeenCalled();
+  });
+
+  it('rejects numerically duplicate allowlisted tokens before discovery', () => {
+    const discovery = discoveryWith(wallet('Ready'));
+    const getWallets = vi.spyOn(discovery, 'getWallets');
+    const policy = denyAllOptions().policy;
+
+    expect(() => createWalletSession(
+      { ...denyAllOptions(), policy: {
+        ...policy,
+        allowedTokens: { ...policy.allowedTokens, transfer: ['0x1', '0x01'] },
+      } },
+      { discovery, connectWallet: async () => connection('0x111') },
+    )).toThrow(PrivacyError);
+    expect(getWallets).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ['missing swap policy', undefined],
+    ['malformed swap chain', { expectedChainId: 'mainnet', slippageBps: 100 }],
+    ['zero swap slippage', { expectedChainId: '0x534e5f4d41494e', slippageBps: 0 }],
+    ['excessive swap slippage', { expectedChainId: '0x534e5f4d41494e', slippageBps: 10_001 }],
+  ])('rejects an enabled swap with %s before discovery', (_label, swap) => {
+    const discovery = discoveryWith(wallet('Ready'));
+    const getWallets = vi.spyOn(discovery, 'getWallets');
+    const policy = denyAllOptions().policy;
+
+    expect(() => createWalletSession(
+      { ...denyAllOptions(), policy: { ...policy, enabledRoutes: ['swap'], swap } as never },
+      { discovery, connectWallet: async () => connection('0x111') },
+    )).toThrow(PrivacyError);
+    expect(getWallets).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ['decimal chain id', '2344859'],
+    ['zero chain id', '0x0'],
+    ['field-prime chain id', `0x${((1n << 251n) + 17n * (1n << 192n) + 1n).toString(16)}`],
+  ])('rejects a malformed configured %s before discovery or connection', (_label, expectedChainId) => {
+    const discovery = discoveryWith(wallet('Ready'));
+    const getWallets = vi.spyOn(discovery, 'getWallets');
+
+    expect(() => createWalletSession(
+      { ...denyAllOptions(), expectedChainId },
+      { discovery, connectWallet: async () => connection('0x111') },
+    )).toThrow(PrivacyError);
+    expect(getWallets).not.toHaveBeenCalled();
+  });
+
+  it.each([null, {}, 'wallet'] as const)(
+    'starts fail-closed when initial discovery is malformed: %p',
+    (initial) => {
+      const discovery: WalletDiscoveryPort = {
+        getWallets: () => initial as never,
+        subscribe: () => () => undefined,
+        refresh: () => undefined,
+      };
+
+      expect(() => createWalletSession(
+        denyAllOptions(),
+        { discovery, connectWallet: async () => connection('0x111') },
+      )).not.toThrow();
+      const session = createWalletSession(
+        denyAllOptions(),
+        { discovery, connectWallet: async () => connection('0x111') },
+      );
+      expect(session.getSnapshot()).toMatchObject({
+        phase: 'selection-required',
+        selectedKey: null,
+        account: null,
+        wallets: [],
+      });
+    },
+  );
+
+  it('publishes each discovered wallet authority exactly once', () => {
+    const selected = wallet('Ready');
+    const session = createWalletSession(
+      denyAllOptions(),
+      { discovery: discoveryWith(selected, selected), connectWallet: async () => connection('0x111') },
+    );
+
+    expect(session.getSnapshot().wallets).toHaveLength(1);
+    expect(session.getSnapshot().wallets[0]).toMatchObject({ name: 'Ready' });
+  });
+
+  it('drops a discovered wallet with accessor-backed display fields without invoking them', () => {
+    let getterCalled = false;
+    const malformed = {} as WalletHandle;
+    Object.defineProperty(malformed, 'name', {
+      configurable: true,
+      get() {
+        getterCalled = true;
+        throw new Error('wallet name getter must not run');
+      },
+    });
+    Object.defineProperty(malformed, 'icon', { configurable: true, value: 'data:image/svg+xml,wallet' });
+
+    expect(() => createWalletSession(
+      denyAllOptions(),
+      { discovery: discoveryWith(malformed), connectWallet: async () => connection('0x111') },
+    )).not.toThrow();
+    const session = createWalletSession(
+      denyAllOptions(),
+      { discovery: discoveryWith(malformed), connectWallet: async () => connection('0x111') },
+    );
+    expect(getterCalled).toBe(false);
+    expect(session.getSnapshot().wallets).toEqual([]);
+  });
+
+  it('deduplicates a repeated discovery notification without retiring the selected authority', async () => {
+    const selected = wallet('Ready');
+    const discovery = controllableDiscovery(selected);
+    const connected = connection('0x111');
+    const createOperations = vi.spyOn(connected, 'createOperations');
+    const session = createWalletSession(
+      denyAllOptions(),
+      { discovery: discovery.port, connectWallet: async () => connected },
+    );
+    await session.connect(session.getSnapshot().wallets[0]!.key);
+    const generation = session.getSnapshot().generation;
+
+    discovery.replace(selected, selected);
+
+    expect(session.getSnapshot()).toMatchObject({
+      phase: 'connected',
+      account: '0x111',
+      generation,
+    });
+    expect(session.getSnapshot().wallets).toHaveLength(1);
+    expect(createOperations).toHaveBeenCalledOnce();
+  });
+
+  it('shares same-key connection attempts instead of opening duplicate wallet workflows', async () => {
+    const selected = wallet('Ready');
+    let release!: (connection: WalletConnectionPort) => void;
+    const pending = new Promise<WalletConnectionPort>((resolve) => { release = resolve; });
+    const connectWallet = vi.fn(() => pending);
+    const session = createWalletSession(denyAllOptions(), {
+      discovery: discoveryWith(selected),
+      connectWallet,
+    });
+    const choice = session.getSnapshot().wallets[0]!;
+
+    const first = session.connect(choice.key);
+    const second = session.connect(choice.key);
+
+    expect(connectWallet).toHaveBeenCalledOnce();
+    release(connection('0x111'));
+    await expect(Promise.all([first, second])).resolves.toHaveLength(2);
+    expect(session.getSnapshot()).toMatchObject({ phase: 'connected', account: '0x111' });
+  });
+
+  it('rejects a connection snapshot whose authority fields are inherited', async () => {
+    const selected = wallet('Ready');
+    const port = connection('0x111');
+    port.getSnapshot = () => Object.create({
+      account: '0x111',
+      chainId: '0x534e5f4d41494e',
+    }) as never;
+    const session = createWalletSession(
+      denyAllOptions(),
+      { discovery: discoveryWith(selected), connectWallet: async () => port },
+    );
+
+    await expect(session.connect(session.getSnapshot().wallets[0]!.key)).rejects.toMatchObject({ kind: 'unknown' });
+    expect(session.getSnapshot()).toMatchObject({ phase: 'failed', account: null });
+  });
+
+  it('does not invoke an accessor-backed connection snapshot field', async () => {
+    const selected = wallet('Ready');
+    const port = connection('0x111');
+    const snapshot = { account: '0x111', chainId: '0x534e5f4d41494e' } as {
+      account: string;
+      chainId: string;
+    };
+    Object.defineProperty(snapshot, 'account', {
+      configurable: true,
+      get() { throw new Error('connection account getter must not run'); },
+    });
+    port.getSnapshot = () => snapshot;
+    const session = createWalletSession(
+      denyAllOptions(),
+      { discovery: discoveryWith(selected), connectWallet: async () => port },
+    );
+
+    await expect(session.connect(session.getSnapshot().wallets[0]!.key)).rejects.toMatchObject({ kind: 'unknown' });
+    expect(session.getSnapshot()).toMatchObject({ phase: 'failed', account: null });
+  });
+
+  it.each([
+    ['account', { toString: (): string => '0x111' }, '0x534e5f4d41494e'],
+    ['chain id', '0x111', { toString: (): string => '0x534e5f4d41494e' }],
+  ] as const)('rejects a coercible connection snapshot %s', async (_label, account, chainId) => {
+    const selected = wallet('Ready');
+    const port = connection('0x111');
+    port.getSnapshot = () => ({ account, chainId }) as never;
+    const session = createWalletSession(
+      denyAllOptions(),
+      { discovery: discoveryWith(selected), connectWallet: async () => port },
+    );
+
+    await expect(session.connect(session.getSnapshot().wallets[0]!.key)).rejects.toMatchObject({ kind: 'unknown' });
+    expect(session.getSnapshot()).toMatchObject({ phase: 'failed', account: null });
+  });
+
+  it('starts a fresh same-key connection after disconnect retires a pending one', async () => {
+    const selected = wallet('Ready');
+    let releaseFirst!: (connection: WalletConnectionPort) => void;
+    let releaseSecond!: (connection: WalletConnectionPort) => void;
+    const first = new Promise<WalletConnectionPort>((resolve) => { releaseFirst = resolve; });
+    const second = new Promise<WalletConnectionPort>((resolve) => { releaseSecond = resolve; });
+    const connectWallet = vi.fn()
+      .mockReturnValueOnce(first)
+      .mockReturnValueOnce(second);
+    const session = createWalletSession(denyAllOptions(), {
+      discovery: discoveryWith(selected),
+      connectWallet,
+    });
+    const choice = session.getSnapshot().wallets[0]!;
+
+    const stale = session.connect(choice.key);
+    const disconnecting = session.disconnect();
+    const current = session.connect(choice.key);
+    releaseFirst(connection('0x111'));
+    releaseSecond(connection('0x222'));
+
+    await disconnecting;
+    await stale;
+    await expect(current).resolves.toMatchObject({ phase: 'connected', account: '0x222' });
+    expect(connectWallet).toHaveBeenCalledTimes(2);
+  });
+
+  it('preserves the retired snapshot when stale connection cleanup throws', async () => {
+    const selected = wallet('Ready');
+    let release!: (connection: WalletConnectionPort) => void;
+    const pending = new Promise<WalletConnectionPort>((resolve) => { release = resolve; });
+    const stale = connection('0x111');
+    const destroy = vi.fn(() => { throw new Error('stale cleanup failed'); });
+    stale.destroy = destroy;
+    const session = createWalletSession(denyAllOptions(), {
+      discovery: discoveryWith(selected),
+      connectWallet: () => pending,
+    });
+    const connecting = session.connect(session.getSnapshot().wallets[0]!.key);
+
+    await session.disconnect();
+    release(stale);
+
+    await expect(connecting).resolves.toMatchObject({ phase: 'selection-required' });
+    expect(destroy).toHaveBeenCalledOnce();
+  });
+
+  it('preserves the mapped connection error when snapshot read and cleanup throw', async () => {
+    const selected = wallet('Ready');
+    const connected = connection('0x111');
+    const original = new Error('wallet snapshot unavailable');
+    connected.getSnapshot = () => { throw original; };
+    const destroy = vi.fn(() => { throw new Error('cleanup failed'); });
+    connected.destroy = destroy;
+    const session = createWalletSession(
+      denyAllOptions(),
+      { discovery: discoveryWith(selected), connectWallet: async () => connected },
+    );
+
+    await expect(session.connect(session.getSnapshot().wallets[0]!.key)).rejects.toMatchObject({
+      kind: 'unreachable',
+    });
+    expect(session.getSnapshot()).toMatchObject({ phase: 'failed', account: null });
+    await expect(session.operations.capability()).rejects.toMatchObject({ kind: 'user-rejected' });
+    expect(destroy).toHaveBeenCalledOnce();
+  });
+
+  it('publishes disconnected state when explicit unsubscribe cleanup throws', async () => {
+    const selected = wallet('Ready');
+    const connected = controllableConnection(
+      '0x111',
+      new FakePrivacyOperations(),
+      new FakePrivacyOperations(),
+    );
+    const cleanupError = new Error('unsubscribe failed');
+    connected.port.subscribe = () => () => { throw cleanupError; };
+    const session = createWalletSession(
+      denyAllOptions(),
+      { discovery: discoveryWith(selected), connectWallet: async () => connected.port },
+    );
+    await session.connect(session.getSnapshot().wallets[0]!.key);
+
+    await expect(session.disconnect()).rejects.toBe(cleanupError);
+    expect(session.getSnapshot()).toMatchObject({
+      phase: 'selection-required',
+      selectedKey: null,
+      account: null,
+    });
+    await expect(session.operations.capability()).rejects.toMatchObject({ kind: 'user-rejected' });
+  });
+
+  it('publishes disconnected state when explicit destroy cleanup throws', async () => {
+    const selected = wallet('Ready');
+    const connected = controllableConnection(
+      '0x111',
+      new FakePrivacyOperations(),
+      new FakePrivacyOperations(),
+    );
+    const destroyError = new Error('destroy failed');
+    connected.port.destroy = () => { throw destroyError; };
+    const session = createWalletSession(
+      denyAllOptions(),
+      { discovery: discoveryWith(selected), connectWallet: async () => connected.port },
+    );
+    await session.connect(session.getSnapshot().wallets[0]!.key);
+
+    expect(() => session.destroy()).toThrow(destroyError);
+    expect(session.getSnapshot()).toMatchObject({
+      phase: 'selection-required',
+      selectedKey: null,
+      account: null,
+    });
+    await expect(session.operations.capability()).rejects.toMatchObject({ kind: 'user-rejected' });
+    expect(() => session.destroy()).not.toThrow();
+  });
+
+  it('preserves falsey explicit cleanup errors', async () => {
+    const selected = wallet('Ready');
+    const connected = controllableConnection(
+      '0x111',
+      new FakePrivacyOperations(),
+      new FakePrivacyOperations(),
+    );
+    connected.port.subscribe = () => () => { throw null; };
+    const session = createWalletSession(
+      denyAllOptions(),
+      { discovery: discoveryWith(selected), connectWallet: async () => connected.port },
+    );
+    await session.connect(session.getSnapshot().wallets[0]!.key);
+
+    let caught: unknown = Symbol('not caught');
+    try {
+      await session.disconnect();
+    } catch (error) {
+      caught = error;
+    }
+    expect(caught).toBe(null);
+    expect(session.getSnapshot()).toMatchObject({ phase: 'selection-required', account: null });
+  });
+
   it('lets only the newest connection attempt publish financial authority', async () => {
     const first = wallet('First wallet');
     const second = wallet('Second wallet');
@@ -244,6 +629,616 @@ describe('WalletSession', () => {
     await expect(session.operations.capability()).resolves.toMatchObject({ walletApiVersion: '0.10.4' });
   });
 
+  it('does not confirm prepared work after the facade explicitly discarded it', async () => {
+    const selected = wallet('Ready');
+    const confirm = vi.fn(async () => ({ transactionHash: '0x1' }));
+    const discard = vi.fn();
+    const connected = controllableConnection(
+      '0x111', operationsWithBatch(batch(confirm, discard), '0.10.3'), new FakePrivacyOperations(),
+    );
+    const session = createWalletSession(
+      denyAllOptions(),
+      { discovery: discoveryWith(selected), connectWallet: async () => connected.port },
+    );
+    await session.connect(session.getSnapshot().wallets[0]!.key);
+    const prepared = await session.operations.prepare([]);
+
+    prepared.discard();
+
+    await expect(prepared.confirm({ feeCeiling: 0n })).rejects.toMatchObject({ kind: 'unknown' });
+    expect(confirm).not.toHaveBeenCalled();
+    expect(discard).toHaveBeenCalledOnce();
+  });
+
+  it('does not delegate the same session batch confirmation twice', async () => {
+    const selected = wallet('Ready');
+    const confirm = vi.fn(async () => ({ transactionHash: '0x1' }));
+    const connected = controllableConnection(
+      '0x111', operationsWithBatch({ ...batch(), confirm }, '0.10.3'), new FakePrivacyOperations(),
+    );
+    const session = createWalletSession(
+      denyAllOptions(),
+      { discovery: discoveryWith(selected), connectWallet: async () => connected.port },
+    );
+    await session.connect(session.getSnapshot().wallets[0]!.key);
+    const prepared = await session.operations.prepare([]);
+
+    await prepared.confirm({ feeCeiling: 0n });
+    await expect(prepared.confirm({ feeCeiling: 0n })).rejects.toMatchObject({ kind: 'unknown' });
+
+    expect(confirm).toHaveBeenCalledOnce();
+  });
+
+  it('owns the confirmed transaction receipt returned by the session facade', async () => {
+    const selected = wallet('Ready');
+    const mutable = { transactionHash: '0x1' };
+    const confirm = vi.fn(async () => mutable);
+    const connected = controllableConnection(
+      '0x111', operationsWithBatch({ ...batch(), confirm }, '0.10.3'), new FakePrivacyOperations(),
+    );
+    const session = createWalletSession(
+      denyAllOptions(),
+      { discovery: discoveryWith(selected), connectWallet: async () => connected.port },
+    );
+    await session.connect(session.getSnapshot().wallets[0]!.key);
+    const prepared = await session.operations.prepare([]);
+
+    const receipt = await prepared.confirm({ feeCeiling: 0n });
+    mutable.transactionHash = '0x2';
+
+    expect(Object.isFrozen(receipt)).toBe(true);
+    expect(receipt.transactionHash).toBe('0x1');
+  });
+
+  it('retires prepared work when confirmation returns a malformed receipt', async () => {
+    const selected = wallet('Ready');
+    const discard = vi.fn();
+    const confirm = vi.fn(async () => ({ transactionHash: 1 as never }));
+    const connected = controllableConnection(
+      '0x111', operationsWithBatch({ ...batch(undefined, discard), confirm }, '0.10.3'), new FakePrivacyOperations(),
+    );
+    const session = createWalletSession(
+      denyAllOptions(),
+      { discovery: discoveryWith(selected), connectWallet: async () => connected.port },
+    );
+    await session.connect(session.getSnapshot().wallets[0]!.key);
+    const prepared = await session.operations.prepare([]);
+
+    await expect(prepared.confirm({ feeCeiling: 0n })).rejects.toMatchObject({ kind: 'unknown' });
+
+    expect(discard).toHaveBeenCalledOnce();
+  });
+
+  it('rejects a zero transaction hash returned through the session facade', async () => {
+    const selected = wallet('Ready');
+    const discard = vi.fn();
+    const confirm = vi.fn(async () => ({ transactionHash: '0x0' }));
+    const connected = controllableConnection(
+      '0x111', operationsWithBatch({ ...batch(undefined, discard), confirm }, '0.10.3'), new FakePrivacyOperations(),
+    );
+    const session = createWalletSession(
+      denyAllOptions(),
+      { discovery: discoveryWith(selected), connectWallet: async () => connected.port },
+    );
+    await session.connect(session.getSnapshot().wallets[0]!.key);
+    const prepared = await session.operations.prepare([]);
+
+    await expect(prepared.confirm({ feeCeiling: 0n })).rejects.toMatchObject({ kind: 'unknown' });
+    expect(discard).toHaveBeenCalledOnce();
+  });
+
+  it('owns confirmation options before the underlying batch can observe caller mutation', async () => {
+    const selected = wallet('Ready');
+    let observedCeiling: bigint | undefined;
+    const options = { feeCeiling: 10n };
+    const confirm = vi.fn(async (received: typeof options) => {
+      await Promise.resolve();
+      observedCeiling = received.feeCeiling;
+      return { transactionHash: '0x1' };
+    });
+    const connected = controllableConnection(
+      '0x111', operationsWithBatch({ ...batch(), confirm }, '0.10.3'), new FakePrivacyOperations(),
+    );
+    const session = createWalletSession(
+      denyAllOptions(),
+      { discovery: discoveryWith(selected), connectWallet: async () => connected.port },
+    );
+    await session.connect(session.getSnapshot().wallets[0]!.key);
+    const prepared = await session.operations.prepare([]);
+
+    const confirming = prepared.confirm(options);
+    options.feeCeiling = 0n;
+    await confirming;
+
+    expect(observedCeiling).toBe(10n);
+  });
+
+  it('does not invoke an accessor-backed confirmation fee ceiling', async () => {
+    const selected = wallet('Ready');
+    let getterCalled = false;
+    const confirm = vi.fn(async () => ({ transactionHash: '0x1' }));
+    const connected = controllableConnection(
+      '0x111', operationsWithBatch({ ...batch(), confirm }, '0.10.3'), new FakePrivacyOperations(),
+    );
+    const session = createWalletSession(
+      denyAllOptions(),
+      { discovery: discoveryWith(selected), connectWallet: async () => connected.port },
+    );
+    await session.connect(session.getSnapshot().wallets[0]!.key);
+    const prepared = await session.operations.prepare([]);
+    const options = {} as { feeCeiling: bigint };
+    Object.defineProperty(options, 'feeCeiling', {
+      get() {
+        getterCalled = true;
+        throw new Error('fee getter must not run');
+      },
+    });
+
+    await expect(prepared.confirm(options)).rejects.toMatchObject({ kind: 'unknown' });
+    expect(getterCalled).toBe(false);
+    expect(confirm).not.toHaveBeenCalled();
+  });
+
+  it('does not publish accessor-backed prepared fields through the session facade', async () => {
+    const selected = wallet('Ready');
+    let getterCalled = false;
+    const malformed = batch();
+    Object.defineProperty(malformed, 'poolFee', {
+      get() {
+        getterCalled = true;
+        throw new Error('batch getter must not run');
+      },
+    });
+    const connected = controllableConnection(
+      '0x111', operationsWithBatch(malformed, '0.10.3'), new FakePrivacyOperations(),
+    );
+    const session = createWalletSession(
+      denyAllOptions(),
+      { discovery: discoveryWith(selected), connectWallet: async () => connected.port },
+    );
+    await session.connect(session.getSnapshot().wallets[0]!.key);
+
+    await expect(session.operations.prepare([])).rejects.toMatchObject({ kind: 'unknown' });
+    expect(getterCalled).toBe(false);
+  });
+
+  it('owns prepared intents before publishing them through the session facade', async () => {
+    const selected = wallet('Ready');
+    const intents = [{ kind: 'transfer' as const, token: '0x1', amount: 1n, recipient: '0x2' }];
+    const underlying = { ...batch(), intents };
+    const connected = controllableConnection(
+      '0x111', operationsWithBatch(underlying, '0.10.3'), new FakePrivacyOperations(),
+    );
+    const session = createWalletSession(
+      denyAllOptions(),
+      { discovery: discoveryWith(selected), connectWallet: async () => connected.port },
+    );
+    await session.connect(session.getSnapshot().wallets[0]!.key);
+    const prepared = await session.operations.prepare([]);
+
+    intents[0]!.amount = 99n;
+    intents.push({ kind: 'transfer', token: '0x1', amount: 2n, recipient: '0x2' });
+
+    expect(prepared.intents).toEqual([
+      { kind: 'transfer', token: '0x1', amount: 1n, recipient: '0x2' },
+    ]);
+    expect(Object.isFrozen(prepared.intents)).toBe(true);
+    expect(prepared.intents.every(Object.isFrozen)).toBe(true);
+  });
+
+  it('rejects a zero-amount prepared transfer before publishing review', async () => {
+    const selected = wallet('Ready');
+    const discard = vi.fn();
+    const intents = [{ kind: 'transfer' as const, token: '0x1', amount: 0n, recipient: '0x2' }];
+    const connected = controllableConnection(
+      '0x111', operationsWithBatch({ ...batch(undefined, discard), intents }, '0.10.3'), new FakePrivacyOperations(),
+    );
+    const session = createWalletSession(
+      denyAllOptions(),
+      { discovery: discoveryWith(selected), connectWallet: async () => connected.port },
+    );
+    await session.connect(session.getSnapshot().wallets[0]!.key);
+
+    await expect(session.operations.prepare([])).rejects.toMatchObject({ kind: 'unknown' });
+    expect(discard).toHaveBeenCalledOnce();
+  });
+
+  it('rejects a zero-amount prepared shield before publishing review', async () => {
+    const selected = wallet('Ready');
+    const discard = vi.fn();
+    const intents = [{ kind: 'shield' as const, token: '0x1', amount: 0n }];
+    const connected = controllableConnection(
+      '0x111', operationsWithBatch({ ...batch(undefined, discard), intents }, '0.10.3'), new FakePrivacyOperations(),
+    );
+    const session = createWalletSession(
+      denyAllOptions(),
+      { discovery: discoveryWith(selected), connectWallet: async () => connected.port },
+    );
+    await session.connect(session.getSnapshot().wallets[0]!.key);
+
+    await expect(session.operations.prepare([])).rejects.toMatchObject({ kind: 'unknown' });
+    expect(discard).toHaveBeenCalledOnce();
+  });
+
+  it('rejects a zero-recipient prepared unshield before publishing review', async () => {
+    const selected = wallet('Ready');
+    const discard = vi.fn();
+    const intents = [{ kind: 'unshield' as const, token: '0x1', amount: 1n, recipient: '0x0' }];
+    const connected = controllableConnection(
+      '0x111', operationsWithBatch({ ...batch(undefined, discard), intents }, '0.10.3'), new FakePrivacyOperations(),
+    );
+    const session = createWalletSession(
+      denyAllOptions(),
+      { discovery: discoveryWith(selected), connectWallet: async () => connected.port },
+    );
+    await session.connect(session.getSnapshot().wallets[0]!.key);
+
+    await expect(session.operations.prepare([])).rejects.toMatchObject({ kind: 'unknown' });
+    expect(discard).toHaveBeenCalledOnce();
+  });
+
+  it('rejects a zero-minimum prepared swap before publishing review', async () => {
+    const selected = wallet('Ready');
+    const discard = vi.fn();
+    const intents = [{
+      kind: 'swap' as const, tokenIn: '0x1', tokenOut: '0x2', amountIn: 1n, minAmountOut: 0n,
+    }];
+    const connected = controllableConnection(
+      '0x111', operationsWithBatch({ ...batch(undefined, discard), intents }, '0.10.3'), new FakePrivacyOperations(),
+    );
+    const session = createWalletSession(
+      denyAllOptions(),
+      { discovery: discoveryWith(selected), connectWallet: async () => connected.port },
+    );
+    await session.connect(session.getSnapshot().wallets[0]!.key);
+
+    await expect(session.operations.prepare([])).rejects.toMatchObject({ kind: 'unknown' });
+    expect(discard).toHaveBeenCalledOnce();
+  });
+
+  it('rejects mixed prepared route kinds before publishing review', async () => {
+    const selected = wallet('Ready');
+    const discard = vi.fn();
+    const intents = [
+      { kind: 'shield' as const, token: '0x1', amount: 1n },
+      { kind: 'transfer' as const, token: '0x1', amount: 1n, recipient: '0x2' },
+    ];
+    const connected = controllableConnection(
+      '0x111', operationsWithBatch({ ...batch(undefined, discard), intents }, '0.10.3'), new FakePrivacyOperations(),
+    );
+    const session = createWalletSession(
+      denyAllOptions(),
+      { discovery: discoveryWith(selected), connectWallet: async () => connected.port },
+    );
+    await session.connect(session.getSnapshot().wallets[0]!.key);
+
+    await expect(session.operations.prepare([])).rejects.toMatchObject({ kind: 'unknown' });
+    expect(discard).toHaveBeenCalledOnce();
+  });
+
+  it('owns prepared warnings before publishing them through the session facade', async () => {
+    const selected = wallet('Ready');
+    const warnings = [{ kind: 'multiple-prompts' as const, count: 2 }];
+    const underlying = { ...batch(), warnings };
+    const connected = controllableConnection(
+      '0x111', operationsWithBatch(underlying, '0.10.3'), new FakePrivacyOperations(),
+    );
+    const session = createWalletSession(
+      denyAllOptions(),
+      { discovery: discoveryWith(selected), connectWallet: async () => connected.port },
+    );
+    await session.connect(session.getSnapshot().wallets[0]!.key);
+    const prepared = await session.operations.prepare([]);
+
+    warnings[0]!.count = 9;
+    warnings.push({ kind: 'multiple-prompts', count: 3 });
+
+    expect(prepared.warnings).toEqual([{ kind: 'multiple-prompts', count: 2 }]);
+    expect(Object.isFrozen(prepared.warnings)).toBe(true);
+    expect(prepared.warnings.every(Object.isFrozen)).toBe(true);
+  });
+
+  it('rejects an invalid prepared warning before publishing review', async () => {
+    const selected = wallet('Ready');
+    const discard = vi.fn();
+    const warnings = [{ kind: 'multiple-prompts' as const, count: 1 }];
+    const connected = controllableConnection(
+      '0x111', operationsWithBatch({ ...batch(undefined, discard), warnings }, '0.10.3'), new FakePrivacyOperations(),
+    );
+    const session = createWalletSession(
+      denyAllOptions(),
+      { discovery: discoveryWith(selected), connectWallet: async () => connected.port },
+    );
+    await session.connect(session.getSnapshot().wallets[0]!.key);
+
+    await expect(session.operations.prepare([])).rejects.toMatchObject({ kind: 'unknown' });
+    expect(discard).toHaveBeenCalledOnce();
+  });
+
+  it('rejects an invalid funds-maturing warning before publishing review', async () => {
+    const selected = wallet('Ready');
+    const discard = vi.fn();
+    const warnings = [{ kind: 'funds-maturing' as const, maturingAmount: 1n, blocksRemaining: -1 }];
+    const connected = controllableConnection(
+      '0x111', operationsWithBatch({ ...batch(undefined, discard), warnings }, '0.10.3'), new FakePrivacyOperations(),
+    );
+    const session = createWalletSession(
+      denyAllOptions(),
+      { discovery: discoveryWith(selected), connectWallet: async () => connected.port },
+    );
+    await session.connect(session.getSnapshot().wallets[0]!.key);
+
+    await expect(session.operations.prepare([])).rejects.toMatchObject({ kind: 'unknown' });
+    expect(discard).toHaveBeenCalledOnce();
+  });
+
+  it('rejects an invalid leaves-below-fee warning before publishing review', async () => {
+    const selected = wallet('Ready');
+    const discard = vi.fn();
+    const warnings = [{ kind: 'leaves-below-fee' as const, remaining: -1n, feeEstimate: 1n }];
+    const connected = controllableConnection(
+      '0x111', operationsWithBatch({ ...batch(undefined, discard), warnings }, '0.10.3'), new FakePrivacyOperations(),
+    );
+    const session = createWalletSession(
+      denyAllOptions(),
+      { discovery: discoveryWith(selected), connectWallet: async () => connected.port },
+    );
+    await session.connect(session.getSnapshot().wallets[0]!.key);
+
+    await expect(session.operations.prepare([])).rejects.toMatchObject({ kind: 'unknown' });
+    expect(discard).toHaveBeenCalledOnce();
+  });
+
+  it('rejects an empty public-leg disclosure before publishing review', async () => {
+    const selected = wallet('Ready');
+    const discard = vi.fn();
+    const warnings = [{ kind: 'public-leg' as const, detail: '   ' }];
+    const connected = controllableConnection(
+      '0x111', operationsWithBatch({ ...batch(undefined, discard), warnings }, '0.10.3'), new FakePrivacyOperations(),
+    );
+    const session = createWalletSession(
+      denyAllOptions(),
+      { discovery: discoveryWith(selected), connectWallet: async () => connected.port },
+    );
+    await session.connect(session.getSnapshot().wallets[0]!.key);
+
+    await expect(session.operations.prepare([])).rejects.toMatchObject({ kind: 'unknown' });
+    expect(discard).toHaveBeenCalledOnce();
+  });
+
+  it('rejects an invalid recipient-unregistered warning before publishing review', async () => {
+    const selected = wallet('Ready');
+    const discard = vi.fn();
+    const warnings = [{ kind: 'recipient-unregistered' as const, recipient: '0x0' }];
+    const connected = controllableConnection(
+      '0x111', operationsWithBatch({ ...batch(undefined, discard), warnings }, '0.10.3'), new FakePrivacyOperations(),
+    );
+    const session = createWalletSession(
+      denyAllOptions(),
+      { discovery: discoveryWith(selected), connectWallet: async () => connected.port },
+    );
+    await session.connect(session.getSnapshot().wallets[0]!.key);
+
+    await expect(session.operations.prepare([])).rejects.toMatchObject({ kind: 'unknown' });
+    expect(discard).toHaveBeenCalledOnce();
+  });
+
+  it('rejects a sparse prepared-intents array before publishing review', async () => {
+    const selected = wallet('Ready');
+    const discard = vi.fn();
+    const intents = new Array(1) as PreparedBatch['intents'];
+    const underlying = { ...batch(undefined, discard), intents };
+    const connected = controllableConnection(
+      '0x111', operationsWithBatch(underlying, '0.10.3'), new FakePrivacyOperations(),
+    );
+    const session = createWalletSession(
+      denyAllOptions(),
+      { discovery: discoveryWith(selected), connectWallet: async () => connected.port },
+    );
+    await session.connect(session.getSnapshot().wallets[0]!.key);
+
+    await expect(session.operations.prepare([])).rejects.toMatchObject({ kind: 'unknown' });
+    expect(discard).toHaveBeenCalledOnce();
+  });
+
+  it('rejects inconsistent prepared cost totals before publishing review', async () => {
+    const selected = wallet('Ready');
+    const discard = vi.fn();
+    const underlying = { ...batch(undefined, discard), poolFee: 2n, gasEstimate: 3n, totalCost: 4n };
+    const connected = controllableConnection(
+      '0x111', operationsWithBatch(underlying, '0.10.3'), new FakePrivacyOperations(),
+    );
+    const session = createWalletSession(
+      denyAllOptions(),
+      { discovery: discoveryWith(selected), connectWallet: async () => connected.port },
+    );
+    await session.connect(session.getSnapshot().wallets[0]!.key);
+
+    await expect(session.operations.prepare([])).rejects.toMatchObject({ kind: 'unknown' });
+    expect(discard).toHaveBeenCalledOnce();
+  });
+
+  it('rejects a fractional prepared prompt count before publishing review', async () => {
+    const selected = wallet('Ready');
+    const discard = vi.fn();
+    const underlying = { ...batch(undefined, discard), promptCount: 1.5 };
+    const connected = controllableConnection(
+      '0x111', operationsWithBatch(underlying, '0.10.3'), new FakePrivacyOperations(),
+    );
+    const session = createWalletSession(
+      denyAllOptions(),
+      { discovery: discoveryWith(selected), connectWallet: async () => connected.port },
+    );
+    await session.connect(session.getSnapshot().wallets[0]!.key);
+
+    await expect(session.operations.prepare([])).rejects.toMatchObject({ kind: 'unknown' });
+    expect(discard).toHaveBeenCalledOnce();
+  });
+
+  it('owns swap review values before publishing them through the session facade', async () => {
+    const selected = wallet('Ready');
+    const review = {
+      expectedAmountOut: 100n,
+      minimumAmountOut: 90n,
+      slippageBps: 100,
+      expiresAt: 2_000,
+    };
+    const intents = [{ kind: 'swap' as const, tokenIn: '0x1', tokenOut: '0x2', amountIn: 1n, minAmountOut: 90n }];
+    const connected = controllableConnection(
+      '0x111', operationsWithBatch({ ...batch(), intents, swapReview: review }, '0.10.3'), new FakePrivacyOperations(),
+    );
+    const session = createWalletSession(
+      denyAllOptions(),
+      { discovery: discoveryWith(selected), connectWallet: async () => connected.port },
+    );
+    await session.connect(session.getSnapshot().wallets[0]!.key);
+    const prepared = await session.operations.prepare([]);
+
+    review.expectedAmountOut = 1n;
+
+    expect(prepared.swapReview?.expectedAmountOut).toBe(100n);
+    expect(Object.isFrozen(prepared.swapReview)).toBe(true);
+  });
+
+  it('rejects an invalid prepared swap review before publication', async () => {
+    const selected = wallet('Ready');
+    const discard = vi.fn();
+    const swapReview = {
+      expectedAmountOut: 100n,
+      minimumAmountOut: 101n,
+      slippageBps: 100,
+      expiresAt: 2_000,
+    };
+    const connected = controllableConnection(
+      '0x111', operationsWithBatch({ ...batch(undefined, discard), swapReview }, '0.10.3'), new FakePrivacyOperations(),
+    );
+    const session = createWalletSession(
+      denyAllOptions(),
+      { discovery: discoveryWith(selected), connectWallet: async () => connected.port },
+    );
+    await session.connect(session.getSnapshot().wallets[0]!.key);
+
+    await expect(session.operations.prepare([])).rejects.toMatchObject({ kind: 'unknown' });
+    expect(discard).toHaveBeenCalledOnce();
+  });
+
+  it('rejects swap review metadata on a non-swap prepared batch', async () => {
+    const selected = wallet('Ready');
+    const discard = vi.fn();
+    const intents = [{ kind: 'shield' as const, token: '0x1', amount: 1n }];
+    const swapReview = {
+      expectedAmountOut: 100n, minimumAmountOut: 90n, slippageBps: 100, expiresAt: 2_000,
+    };
+    const connected = controllableConnection(
+      '0x111', operationsWithBatch({ ...batch(undefined, discard), intents, swapReview }, '0.10.3'), new FakePrivacyOperations(),
+    );
+    const session = createWalletSession(
+      denyAllOptions(),
+      { discovery: discoveryWith(selected), connectWallet: async () => connected.port },
+    );
+    await session.connect(session.getSnapshot().wallets[0]!.key);
+
+    await expect(session.operations.prepare([])).rejects.toMatchObject({ kind: 'unknown' });
+    expect(discard).toHaveBeenCalledOnce();
+  });
+
+  it('retires malformed prepared work when facade validation rejects it', async () => {
+    const selected = wallet('Ready');
+    const discard = vi.fn();
+    const malformed = batch(undefined, discard);
+    delete (malformed as unknown as Record<string, unknown>).poolFee;
+    const connected = controllableConnection(
+      '0x111', operationsWithBatch(malformed, '0.10.3'), new FakePrivacyOperations(),
+    );
+    const session = createWalletSession(
+      denyAllOptions(),
+      { discovery: discoveryWith(selected), connectWallet: async () => connected.port },
+    );
+    await session.connect(session.getSnapshot().wallets[0]!.key);
+
+    await expect(session.operations.prepare([])).rejects.toMatchObject({ kind: 'unknown' });
+    expect(discard).toHaveBeenCalledOnce();
+  });
+
+  it('retires an old batch when confirmation succeeds after the account changes', async () => {
+    const selected = wallet('Ready');
+    let release!: (result: { transactionHash: string }) => void;
+    const pending = new Promise<{ transactionHash: string }>((resolve) => { release = resolve; });
+    const oldConfirm = vi.fn(() => pending);
+    const oldDiscard = vi.fn();
+    const connected = controllableConnection(
+      '0x111',
+      operationsWithBatch(batch(oldConfirm, oldDiscard), '0.10.3'),
+      operationsWithBatch(batch(), '0.10.4'),
+    );
+    const session = createWalletSession(
+      denyAllOptions(),
+      { discovery: discoveryWith(selected), connectWallet: async () => connected.port },
+    );
+    await session.connect(session.getSnapshot().wallets[0]!.key);
+    const prepared = await session.operations.prepare([]);
+
+    const confirming = prepared.confirm({ feeCeiling: 0n });
+    connected.changeAccount('0x222');
+    release({ transactionHash: '0xold' });
+
+    await expect(confirming).rejects.toMatchObject({ kind: 'user-rejected' });
+    expect(oldDiscard).toHaveBeenCalledTimes(1);
+  });
+
+  it('retires an old batch when confirmation fails after the account changes', async () => {
+    const selected = wallet('Ready');
+    let reject!: (error: unknown) => void;
+    const pending = new Promise<never>((_resolve, fail) => { reject = fail; });
+    const oldConfirm = vi.fn(() => pending);
+    const oldDiscard = vi.fn(() => { throw new Error('cleanup failed'); });
+    const connected = controllableConnection(
+      '0x111',
+      operationsWithBatch(batch(oldConfirm, oldDiscard), '0.10.3'),
+      operationsWithBatch(batch(), '0.10.4'),
+    );
+    const session = createWalletSession(
+      denyAllOptions(),
+      { discovery: discoveryWith(selected), connectWallet: async () => connected.port },
+    );
+    await session.connect(session.getSnapshot().wallets[0]!.key);
+    const prepared = await session.operations.prepare([]);
+
+    const confirming = prepared.confirm({ feeCeiling: 0n });
+    connected.changeAccount('0x222');
+    reject(new PrivacyError('unreachable', 'old account failure'));
+
+    await expect(confirming).rejects.toMatchObject({ kind: 'user-rejected' });
+    expect(oldDiscard).toHaveBeenCalledTimes(1);
+  });
+
+  it('preserves submission uncertainty after the account changes', async () => {
+    const selected = wallet('Ready');
+    let reject!: (error: unknown) => void;
+    const pending = new Promise<never>((_resolve, fail) => { reject = fail; });
+    const oldConfirm = vi.fn(() => pending);
+    const oldDiscard = vi.fn(() => { throw new Error('cleanup failed'); });
+    const uncertain = new PrivacyError('submission-uncertain', 'receipt status is unknown');
+    const connected = controllableConnection(
+      '0x111',
+      operationsWithBatch(batch(oldConfirm, oldDiscard), '0.10.3'),
+      operationsWithBatch(batch(), '0.10.4'),
+    );
+    const session = createWalletSession(
+      denyAllOptions(),
+      { discovery: discoveryWith(selected), connectWallet: async () => connected.port },
+    );
+    await session.connect(session.getSnapshot().wallets[0]!.key);
+    const prepared = await session.operations.prepare([]);
+
+    const confirming = prepared.confirm({ feeCeiling: 0n });
+    connected.changeAccount('0x222');
+    reject(uncertain);
+
+    await expect(confirming).rejects.toBe(uncertain);
+    expect(oldDiscard).toHaveBeenCalledTimes(1);
+  });
+
   it('keeps reviewed work owned across a duplicate account notification', async () => {
     const selected = wallet('Ready');
     const confirm = vi.fn(async () => ({ transactionHash: '0x1' }));
@@ -330,6 +1325,36 @@ describe('WalletSession', () => {
       release = resolve;
     });
     const discard = vi.fn();
+    const oldOperations: PrivacyOperations = {
+      ...operationsWithBatch(batch(), '0.10.3'),
+      prepare: () => pendingBatch,
+    };
+    const connected = controllableConnection(
+      '0x111',
+      oldOperations,
+      operationsWithBatch(batch(), '0.10.4'),
+    );
+    const session = createWalletSession(
+      denyAllOptions(),
+      { discovery: discoveryWith(selected), connectWallet: async () => connected.port },
+    );
+    await session.connect(session.getSnapshot().wallets[0]!.key);
+
+    const preparing = session.operations.prepare([]);
+    connected.changeAccount('0x222');
+    release(batch(undefined, discard));
+
+    await expect(preparing).rejects.toMatchObject({ kind: 'user-rejected' });
+    expect(discard).toHaveBeenCalledTimes(1);
+  });
+
+  it('preserves the changed-session error when stale batch cleanup throws', async () => {
+    const selected = wallet('Ready');
+    let release!: (prepared: PreparedBatch) => void;
+    const pendingBatch = new Promise<PreparedBatch>((resolve) => {
+      release = resolve;
+    });
+    const discard = vi.fn(() => { throw new Error('cleanup failed'); });
     const oldOperations: PrivacyOperations = {
       ...operationsWithBatch(batch(), '0.10.3'),
       prepare: () => pendingBatch,
@@ -529,6 +1554,104 @@ describe('WalletSession', () => {
     expect(session.getSnapshot()).toMatchObject({ phase: 'connected', account: '0x222' });
   });
 
+  it('keeps a synchronous account replacement during subscribe as the session authority', async () => {
+    const selected = wallet('Ready');
+    const state = {
+      account: '0x111',
+      chainId: '0x534e5f4d41494e',
+      operations: operationsWithBatch(batch(), '0.10.3'),
+    };
+    const replacement = operationsWithBatch(batch(), '0.10.4');
+    const cleanup = vi.fn();
+    const connected = synchronouslyChangingConnection(state, () => {
+      state.account = '0x222';
+      state.operations = replacement;
+    }, undefined, cleanup);
+    const session = createWalletSession(
+      denyAllOptions(),
+      { discovery: discoveryWith(selected), connectWallet: async () => connected },
+    );
+
+    await session.connect(session.getSnapshot().wallets[0]!.key);
+
+    expect(session.getSnapshot()).toMatchObject({ phase: 'connected', account: '0x222' });
+    await expect(session.operations.capability()).resolves.toMatchObject({ walletApiVersion: '0.10.4' });
+    await session.disconnect();
+    expect(cleanup).toHaveBeenCalledOnce();
+  });
+
+  it('does not reconnect a synchronously disconnected wallet after subscribe', async () => {
+    const selected = wallet('Ready');
+    const state = {
+      account: '0x111',
+      chainId: '0x534e5f4d41494e',
+      operations: new FakePrivacyOperations(),
+    };
+    const connected = synchronouslyChangingConnection(state, () => {
+      state.account = '';
+    });
+    const session = createWalletSession(
+      denyAllOptions(),
+      { discovery: discoveryWith(selected), connectWallet: async () => connected },
+    );
+
+    await session.connect(session.getSnapshot().wallets[0]!.key);
+
+    expect(session.getSnapshot()).toMatchObject({
+      phase: 'selection-required',
+      selectedKey: null,
+      account: null,
+    });
+    await expect(session.operations.capability()).rejects.toMatchObject({ kind: 'user-rejected' });
+  });
+
+  it('does not destroy a synchronously retired connection twice', async () => {
+    const selected = wallet('Ready');
+    const state = {
+      account: '0x111',
+      chainId: '0x534e5f4d41494e',
+      operations: new FakePrivacyOperations(),
+    };
+    const destroy = vi.fn(() => {
+      if (destroy.mock.calls.length > 1) throw new Error('connection destroyed twice');
+    });
+    const connected = synchronouslyChangingConnection(state, () => {
+      state.account = '';
+    }, destroy);
+    const session = createWalletSession(
+      denyAllOptions(),
+      { discovery: discoveryWith(selected), connectWallet: async () => connected },
+    );
+
+    await expect(session.connect(session.getSnapshot().wallets[0]!.key)).resolves.toMatchObject({
+      phase: 'selection-required',
+    });
+    expect(destroy).toHaveBeenCalledOnce();
+  });
+
+  it('does not retain cleanup for a connection retired during subscribe', async () => {
+    const selected = wallet('Ready');
+    const state = {
+      account: '0x111',
+      chainId: '0x534e5f4d41494e',
+      operations: new FakePrivacyOperations(),
+    };
+    const cleanup = vi.fn(() => { throw new Error('stale cleanup'); });
+    const connected = synchronouslyChangingConnection(state, () => {
+      state.account = '';
+    }, undefined, cleanup);
+    const session = createWalletSession(
+      denyAllOptions(),
+      { discovery: discoveryWith(selected), connectWallet: async () => connected },
+    );
+
+    await expect(session.connect(session.getSnapshot().wallets[0]!.key)).resolves.toMatchObject({
+      phase: 'selection-required',
+    });
+    await expect(session.disconnect()).resolves.toBeUndefined();
+    expect(cleanup).not.toHaveBeenCalled();
+  });
+
   it('keeps a wrong-network connection observable until it returns to mainnet', async () => {
     const selected = wallet('Ready');
     const connected = controllableConnection(
@@ -626,6 +1749,38 @@ describe('WalletSession', () => {
     await expect(session.operations.capability()).rejects.toMatchObject({ kind: 'user-rejected' });
   });
 
+  it('retires financial authority when discovery publishes a malformed wallet list', async () => {
+    const selected = wallet('Ready');
+    let publishDiscovery!: (wallets: readonly WalletHandle[]) => void;
+    const discovery: WalletDiscoveryPort = {
+      getWallets: () => [selected],
+      subscribe(listener) {
+        publishDiscovery = listener;
+        return () => undefined;
+      },
+      refresh: () => undefined,
+    };
+    const connected = connection('0x111');
+    const destroy = vi.spyOn(connected, 'destroy');
+    const session = createWalletSession(
+      denyAllOptions(),
+      { discovery, connectWallet: async () => connected },
+    );
+    await session.connect(session.getSnapshot().wallets[0]!.key);
+
+    for (const malformed of [null, {}, 'wallet'] as const) {
+      expect(() => publishDiscovery(malformed as never)).not.toThrow();
+      expect(session.getSnapshot()).toMatchObject({
+        phase: 'selection-required',
+        selectedKey: null,
+        account: null,
+        wallets: [],
+      });
+      await expect(session.operations.capability()).rejects.toMatchObject({ kind: 'user-rejected' });
+    }
+    expect(destroy).toHaveBeenCalledOnce();
+  });
+
   it('owns a caller-mutable route policy before constructing wallet operations', async () => {
     const selected = wallet('Ready');
     const policy = {
@@ -658,6 +1813,65 @@ describe('WalletSession', () => {
       allowedTokens: { shield: [], unshield: [], transfer: [], swap: [] },
     });
     expect(Object.isFrozen(receivedPolicy)).toBe(true);
+  });
+
+  it('rejects an accessor-backed route policy without invoking it', () => {
+    let getterCalled = false;
+    const policy = { ...denyAllOptions().policy } as Record<string, unknown>;
+    Object.defineProperty(policy, 'maxIntents', {
+      enumerable: true,
+      get() {
+        getterCalled = true;
+        throw new Error('policy getter must not run');
+      },
+    });
+
+    expect(() => createWalletSession(
+      { ...denyAllOptions(), policy: policy as never },
+      { discovery: discoveryWith(wallet('Ready')), connectWallet: async () => connection('0x111') },
+    )).toThrow(PrivacyError);
+    expect(getterCalled).toBe(false);
+  });
+
+  it('rejects a proxy-backed route policy when descriptor inspection throws', () => {
+    const policy = new Proxy(denyAllOptions().policy, {
+      getOwnPropertyDescriptor() {
+        throw new Error('policy descriptor trap must not escape');
+      },
+    });
+
+    expect(() => createWalletSession(
+      { ...denyAllOptions(), policy: policy as never },
+      { discovery: discoveryWith(wallet('Ready')), connectWallet: async () => connection('0x111') },
+    )).toThrow(PrivacyError);
+  });
+
+  it('snapshots a proxy-backed route policy without invoking property reads', () => {
+    const policy = new Proxy(denyAllOptions().policy, {
+      get(_target, key) {
+        throw new Error(`policy get trap must not run for ${String(key)}`);
+      },
+    });
+
+    expect(() => createWalletSession(
+      { ...denyAllOptions(), policy: policy as never },
+      { discovery: discoveryWith(wallet('Ready')), connectWallet: async () => connection('0x111') },
+    )).not.toThrow();
+  });
+
+  it('contains a proxy-backed route collection iterator failure', () => {
+    const enabledRoutes = new Proxy([] as ('transfer')[], {
+      get(target, key, receiver) {
+        if (key === Symbol.iterator) throw new Error('route iterator trap must not escape');
+        return Reflect.get(target, key, receiver);
+      },
+    });
+    const policy = { ...denyAllOptions().policy, enabledRoutes };
+
+    expect(() => createWalletSession(
+      { ...denyAllOptions(), policy: policy as never },
+      { discovery: discoveryWith(wallet('Ready')), connectWallet: async () => connection('0x111') },
+    )).toThrow(PrivacyError);
   });
 
   it('rejects an account outside the Stark field before publishing operations', async () => {
@@ -764,6 +1978,30 @@ function controllableConnection(
       chainId = next;
       listeners.forEach((listener) => listener());
     },
+  };
+}
+
+function synchronouslyChangingConnection(
+  state: { account: string; chainId: string; operations: PrivacyOperations },
+  onSubscribe: () => void,
+  destroy: () => void = () => undefined,
+  cleanup: () => void = () => undefined,
+): WalletConnectionPort {
+  const listeners = new Set<() => void>();
+  return {
+    getSnapshot: () => ({ account: state.account, chainId: state.chainId }),
+    createOperations: () => state.operations,
+    subscribe(listener) {
+      listeners.add(listener);
+      onSubscribe();
+      listener();
+      return () => {
+        cleanup();
+        listeners.delete(listener);
+      };
+    },
+    disconnect: async () => undefined,
+    destroy,
   };
 }
 

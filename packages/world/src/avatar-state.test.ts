@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import type { AvatarSpriteKey } from '@strkworld/shared';
 import {
   AVATAR_SPRITE_KEYS,
   DEFAULT_AVATAR_SPRITE,
@@ -28,5 +29,12 @@ describe('Avatar Studio cosmetic state registry', () => {
     expect(validateAvatarSprite(undefined)).toBe(DEFAULT_AVATAR_SPRITE);
     expect(isAvatarSpriteKey('avatar-16')).toBe(true);
     expect(isAvatarSpriteKey('avatar-0')).toBe(false);
+  });
+
+  it('keeps the runtime sprite registry immutable', () => {
+    expect(() => {
+      (AVATAR_SPRITE_KEYS as AvatarSpriteKey[])[0] = 'avatar-2';
+    }).toThrow();
+    expect(AVATAR_SPRITE_KEYS[0]).toBe('avatar-1');
   });
 });

@@ -75,7 +75,8 @@ export function moveWithCollisionSubsteps(options: CollisionSubstepOptions): Mov
     return current;
   }
 
-  const duration = Math.max(options.delta, 1);
+  if (options.delta === 0) return current;
+  const duration = options.delta;
   const speed = Math.hypot(velocity.x, velocity.y);
   if (speed === 0) return current;
 
@@ -162,9 +163,15 @@ export function createStreetMovementReporter(
   out: Pick<EventBus<WorldEvents>, 'emit'>,
 ): StreetMovementReporter {
   let facing: Facing = 'down';
+  let facingRevision = 0;
 
   const publish = (position: Position): void => {
-    out.emit('player:moved', { position, facing });
+    // The shell may have several synchronous listeners. Do not let one of
+    // them rewrite the caller's position or the payload observed by another.
+    out.emit('player:moved', Object.freeze({
+      position: Object.freeze({ ...position }),
+      facing,
+    }));
   };
 
   return {
@@ -179,8 +186,19 @@ export function createStreetMovementReporter(
     update(position, input) {
       // Vertical input wins when both axes are held. The important contract is
       // that a stopped player retains the last non-zero facing.
-      facing = resolveMovementFacing(input, facing);
-      publish(position);
+      const previous = facing;
+      const next = resolveMovementFacing(input, previous);
+      const ownRevision = ++facingRevision;
+      facing = next;
+      try {
+        publish(position);
+      } catch (error) {
+        // Movement publication is an external synchronous boundary. Restore a
+        // failed turn unless a nested update already established newer facing
+        // ownership while listeners were running.
+        if (facingRevision === ownRevision && facing === next) facing = previous;
+        throw error;
+      }
     },
   };
 }
@@ -193,6 +211,7 @@ export function createStreetMovementAdapter(
   out: Pick<EventBus<WorldEvents>, 'emit'>,
 ): StreetMovementAdapter {
   const reporter = createStreetMovementReporter(out);
+  let transitionRevision = 0;
   return {
     get facing() {
       return reporter.facing;
@@ -201,14 +220,18 @@ export function createStreetMovementAdapter(
       reporter.initial(position);
     },
     streetUpdate(position, input, afterMovement) {
+      const ownRevision = ++transitionRevision;
       reporter.update(position, input);
+      if (transitionRevision !== ownRevision) return;
       afterMovement();
     },
     interiorUpdate(afterMovement) {
       afterMovement();
     },
     exit(position, afterPlacement) {
+      const ownRevision = ++transitionRevision;
       reporter.update(position, { left: false, right: false, up: false, down: false });
+      if (transitionRevision !== ownRevision) return;
       afterPlacement();
     },
   };

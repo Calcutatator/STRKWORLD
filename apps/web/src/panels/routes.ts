@@ -19,6 +19,30 @@ import { COPY } from '../copy.js';
 
 export type LockReason = 'coming-soon' | 'unapproved-route' | 'unknown-route' | 'capability-unavailable';
 
+const ROUTE_GRADE_FIELDS = [
+  'building',
+  'route',
+  'grade',
+  'observable',
+  'disclosure',
+  'approvedBy',
+  'approvedOn',
+  'rationale',
+  'returnToPool',
+] as const;
+
+function isOwnRouteGrade(entry: unknown): entry is RouteGrade {
+  if (entry === null || typeof entry !== 'object') return false;
+  return ROUTE_GRADE_FIELDS.every((field) => {
+    const descriptor = Object.getOwnPropertyDescriptor(entry, field);
+    return descriptor !== undefined && 'value' in descriptor;
+  });
+}
+
+function isRouteRegister(value: unknown): value is readonly RouteGrade[] {
+  return Array.isArray(value);
+}
+
 export interface DoorState {
   open: boolean;
   reason: LockReason | null;
@@ -26,7 +50,7 @@ export interface DoorState {
   message: string;
 }
 
-const OPEN: DoorState = { open: true, reason: null, message: '' };
+const OPEN: DoorState = Object.freeze({ open: true, reason: null, message: '' });
 
 function locked(reason: LockReason): DoorState {
   const message =
@@ -37,14 +61,15 @@ function locked(reason: LockReason): DoorState {
         : reason === 'capability-unavailable'
           ? COPY.bridge.unavailable
         : COPY.locked.unknownRoute;
-  return { open: false, reason, message };
+  return Object.freeze({ open: false, reason, message });
 }
 
 export function findRoute(
   routeId: string,
   register: readonly RouteGrade[] = PRIVACY_REGISTER,
 ): RouteGrade | undefined {
-  return register.find((entry) => entry.route === routeId);
+  if (!isRouteRegister(register)) return undefined;
+  return register.find((entry) => isOwnRouteGrade(entry) && entry.route === routeId);
 }
 
 /**
@@ -81,7 +106,8 @@ export function buildingRoutes(
   building: BuildingId,
   register: readonly RouteGrade[] = PRIVACY_REGISTER,
 ): readonly RouteGrade[] {
-  return register.filter((entry) => entry.building === building);
+  if (!isRouteRegister(register)) return [];
+  return register.filter((entry) => isOwnRouteGrade(entry) && entry.building === building);
 }
 
 /**
@@ -108,12 +134,12 @@ export function buildingDoor(
  * Bank's transfer control drives that same pool-native route rather than
  * inventing an id the project lead never graded.
  */
-export const ROUTE_BY_INTENT_KIND: Record<Intent['kind'], string> = {
+export const ROUTE_BY_INTENT_KIND: Readonly<Record<Intent['kind'], string>> = Object.freeze({
   shield: 'bank.shield',
   unshield: 'bank.unshield',
   transfer: 'post-office.transfer',
   swap: 'exchange.swap',
-};
+});
 
 /**
  * The approved disclosures for the intents actually queued, de-duplicated.

@@ -49,6 +49,22 @@ describe('RemotePeerSource', () => {
     ]);
   });
 
+  it('sanitizes untrusted entries before replaying the retained source', () => {
+    const controller = createRemotePeerSource();
+    const seen: Array<readonly RemotePeerSnapshot[]> = [];
+    controller.source.subscribe((snapshot) => seen.push(snapshot));
+
+    controller.publish([
+      peer({ id: 'nan', x: Number.NaN }),
+      peer({ id: 'infinite', y: Number.POSITIVE_INFINITY }),
+      peer({ id: 'bad-facing', facing: 'diagonal' as never }),
+      peer({ id: 'bad id' }),
+      peer({ id: 'bad-sprite', sprite: 'not-allowlisted' }),
+    ]);
+
+    expect(seen.at(-1)).toEqual([peer({ id: 'bad-sprite', sprite: 'avatar-1' })]);
+  });
+
   it('makes unsubscribe idempotent and stops later delivery', () => {
     const controller = createRemotePeerSource();
     const source = controller.source;
@@ -258,9 +274,43 @@ describe('RemotePeerSource', () => {
     expect(first).toHaveBeenCalledTimes(1);
     expect(second).not.toHaveBeenCalled();
   });
+
+  it('drains a reentrant publication queued before reporting a listener error', () => {
+    const controller = createRemotePeerSource();
+    const source = controller.source;
+    const error = new Error('first publication failed');
+    const seen: number[] = [];
+    let reentered = false;
+    const listener = vi.fn((snapshot: readonly RemotePeerSnapshot[]) => {
+      const x = snapshot[0]?.x;
+      if (x !== undefined) seen.push(x);
+      if (!reentered && x === 40) {
+        reentered = true;
+        controller.publish([peer({ x: 80 })]);
+        throw error;
+      }
+    });
+    source.subscribe(listener);
+    listener.mockClear();
+
+    expect(() => controller.publish([peer({ x: 40 })])).toThrow(error);
+    expect(seen).toEqual([40, 80]);
+  });
 });
 
 describe('remote peer reconciliation', () => {
+  it('rejects peer identities and positions supplied through a prototype', () => {
+    const inherited = Object.create({
+      id: 'inherited-peer',
+      x: 40,
+      y: 72,
+      facing: 'down',
+      sprite: 'avatar-1',
+    }) as object;
+
+    expect(reconcileRemotePeers([inherited])).toEqual(new Map());
+  });
+
   it('validates coordinates, facing and opaque ids, with a safe sprite fallback', () => {
     const reconciled = reconcileRemotePeers([
       peer(),

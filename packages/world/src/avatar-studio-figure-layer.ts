@@ -26,6 +26,7 @@ export function createAvatarStudioFigureLayer(options: {
   readonly scene: Scene;
   readonly roomOrigin: { readonly x: number; readonly y: number };
 }): AvatarStudioFigureLayer {
+  const roomOrigin = Object.freeze({ ...options.roomOrigin });
   const sprites = new Map<number, Sprite>();
   let highlight: PhaserTypes.GameObjects.Rectangle | undefined;
   let destroyed = false;
@@ -34,8 +35,8 @@ export function createAvatarStudioFigureLayer(options: {
     for (const figure of AVATAR_STUDIO_DEFINITION.figures) {
       const sheet = resolveAvatarSheet(figure.sprite);
       const sprite = options.scene.add.sprite(
-        options.roomOrigin.x + (figure.x + 0.5) * AVATAR_STUDIO_TILE_SIZE,
-        options.roomOrigin.y + (figure.y + 0.5) * AVATAR_STUDIO_TILE_SIZE,
+        roomOrigin.x + (figure.x + 0.5) * AVATAR_STUDIO_TILE_SIZE,
+        roomOrigin.y + (figure.y + 0.5) * AVATAR_STUDIO_TILE_SIZE,
         sheet.textureKey,
         0,
       );
@@ -60,9 +61,10 @@ export function createAvatarStudioFigureLayer(options: {
     highlight.setDepth(2);
     highlight.setVisible(false);
   } catch (error) {
-    for (const sprite of sprites.values()) sprite.destroy();
+    // Construction failures must preserve the original error, but a secondary
+    // teardown failure must not strand any other object created before it.
+    destroyOwned(sprites.values(), highlight);
     sprites.clear();
-    highlight?.destroy();
     throw error;
   }
 
@@ -81,17 +83,44 @@ export function createAvatarStudioFigureLayer(options: {
       }
       ownedHighlight
         .setPosition(
-          options.roomOrigin.x + (selected.x + 0.5) * AVATAR_STUDIO_TILE_SIZE,
-          options.roomOrigin.y + (selected.y + 0.5) * AVATAR_STUDIO_TILE_SIZE,
+          roomOrigin.x + (selected.x + 0.5) * AVATAR_STUDIO_TILE_SIZE,
+          roomOrigin.y + (selected.y + 0.5) * AVATAR_STUDIO_TILE_SIZE,
         )
         .setVisible(true);
     },
     destroy(): void {
       if (destroyed) return;
       destroyed = true;
-      for (const sprite of sprites.values()) sprite.destroy();
+      const errors = destroyOwned(sprites.values(), ownedHighlight);
       sprites.clear();
-      ownedHighlight.destroy();
+      throwCleanupErrors(errors);
     },
   };
+}
+
+function destroyOwned(
+  sprites: Iterable<Sprite>,
+  highlight: PhaserTypes.GameObjects.Rectangle | undefined,
+): unknown[] {
+  const errors: unknown[] = [];
+  for (const sprite of sprites) {
+    try {
+      sprite.destroy();
+    } catch (error) {
+      errors.push(error);
+    }
+  }
+  if (highlight) {
+    try {
+      highlight.destroy();
+    } catch (error) {
+      errors.push(error);
+    }
+  }
+  return errors;
+}
+
+function throwCleanupErrors(errors: readonly unknown[]): void {
+  if (errors.length === 1) throw errors[0];
+  if (errors.length > 1) throw new AggregateError(errors, 'Avatar Studio figure cleanup failed');
 }

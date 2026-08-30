@@ -52,7 +52,7 @@ export class FakePublicShieldPlanner implements PublicShieldPlanner {
     if (input.expectedRecipient !== undefined && normalise(input.expectedRecipient, 'expected recipient') !== this.recipient) {
       throw new PrivacyError('unknown', 'The fake account does not match the expected recipient.');
     }
-    const gasEstimate = this.estimates[Math.min(this.calls++, this.estimates.length - 1)]!;
+    const gasEstimate = this.estimates[Math.min(this.calls, this.estimates.length - 1)]!;
     if (this.poolFee > MAX_U256 - gasEstimate) {
       throw new PrivacyError('unknown', 'The fake public reserve overflows uint256.');
     }
@@ -65,7 +65,7 @@ export class FakePublicShieldPlanner implements PublicShieldPlanner {
       throw new PrivacyError('unknown', 'The fake public shield arithmetic is inconsistent.');
     }
     if (signal?.aborted) throw new PrivacyError('user-rejected', 'Operation cancelled.');
-    return {
+    const plan = Object.freeze({
       token,
       recipient: this.recipient,
       available: input.available,
@@ -73,7 +73,9 @@ export class FakePublicShieldPlanner implements PublicShieldPlanner {
       poolFee: this.poolFee,
       gasEstimate,
       plannedReserve,
-    };
+    });
+    this.calls += 1;
+    return plan;
   }
 }
 

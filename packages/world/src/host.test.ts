@@ -100,6 +100,44 @@ describe('StrictMode double-mount', () => {
 });
 
 describe('teardown', () => {
+  it('does not orphan the instance when teardown scheduling fails', () => {
+    const schedulingError = new Error('teardown scheduling failed');
+    const stop = vi.fn();
+    const host = createHost<{ id: number }, string>({
+      start: () => ({ id: 1 }),
+      stop,
+      defer: () => { throw schedulingError; },
+    });
+
+    const instance = host.acquire('#host');
+    expect(() => host.release()).toThrow(schedulingError);
+    expect(stop).toHaveBeenCalledOnce();
+    expect(stop).toHaveBeenCalledWith(instance);
+    expect(host.current).toBeNull();
+    expect(host.refCount).toBe(0);
+  });
+
+  it('does not retain a completed handle from a synchronous deferrer', () => {
+    const cancel = vi.fn();
+    let stopped = 0;
+    const host = createHost<{ id: number }, string>({
+      start: () => ({ id: 1 }),
+      stop: () => { stopped += 1; },
+      defer: (fn) => {
+        fn();
+        return 'already-completed';
+      },
+      cancel,
+    });
+
+    host.acquire('#host');
+    host.release();
+    expect(stopped).toBe(1);
+    expect(host.current).toBeNull();
+
+    host.acquire('#host');
+    expect(cancel).not.toHaveBeenCalled();
+  });
   it('destroys once the last holder releases and the deferral runs', () => {
     const h = harness();
     h.host.acquire('#host');
@@ -518,6 +556,69 @@ describe('async teardown', () => {
 });
 
 describe('rapid churn', () => {
+  it('does not leave a retained instance rebound after teardown cancellation fails', () => {
+    const queue: Array<() => void> = [];
+    const cancelError = new Error('teardown cancellation failed');
+    const retarget = vi.fn((instance: { parent: string }, parent: string) => {
+      instance.parent = parent;
+    });
+    const stop = vi.fn();
+    const host = createHost<{ parent: string }, string>({
+      start: (parent) => ({ parent }),
+      retarget,
+      stop,
+      defer: (fn) => {
+        queue.push(fn);
+        return queue.length - 1;
+      },
+      cancel: () => { throw cancelError; },
+    });
+
+    const instance = host.acquire('old-owner');
+    host.release();
+
+    expect(() => host.acquire('new-owner')).toThrow(cancelError);
+    expect(instance.parent).toBe('old-owner');
+    expect(host.current).toBe(instance);
+    expect(host.refCount).toBe(0);
+    expect(retarget).toHaveBeenNthCalledWith(1, instance, 'new-owner', 'old-owner');
+    expect(retarget).toHaveBeenNthCalledWith(2, instance, 'old-owner', 'new-owner');
+
+    const teardown = queue.shift();
+    if (teardown === undefined) throw new Error('missing deferred teardown');
+    teardown();
+    expect(stop).toHaveBeenCalledOnce();
+    expect(host.current).toBeNull();
+  });
+
+  it('does not claim a lease when retained-instance retargeting fails', () => {
+    const queue: Array<() => void> = [];
+    const retargetError = new Error('scene restart failed');
+    const stop = vi.fn();
+    const host = createHost<{ parent: string }, string>({
+      start: (parent) => ({ parent }),
+      retarget: () => { throw retargetError; },
+      stop,
+      defer: (fn) => {
+        queue.push(fn);
+        return queue.length - 1;
+      },
+      cancel: (handle) => {
+        queue[handle as number] = () => {};
+      },
+    });
+
+    const first = host.acquire('old-wallet-tree');
+    host.release();
+    expect(() => host.acquire('new-wallet-tree')).toThrow(retargetError);
+    expect(host.current).toBe(first);
+    expect(host.refCount).toBe(0);
+    for (const fn of queue.splice(0, queue.length)) fn();
+    expect(stop).toHaveBeenCalledOnce();
+    expect(stop).toHaveBeenCalledWith(first);
+    expect(host.current).toBeNull();
+  });
+
   it('holds one instance through repeated same-tick remounts', () => {
     // HMR and StrictMode can both produce bursts of this shape.
     const h = harness();
@@ -540,6 +641,31 @@ describe('rapid churn', () => {
     expect(h.host.current).not.toBeNull();
     expect(h.stopped).toBe(0);
     expect(h.started).toBe(1);
+  });
+
+  it('rolls back a failed remount when deferred teardown cancellation throws', () => {
+    let pending: (() => void) | undefined;
+    let stopped = 0;
+    const cancelError = new Error('teardown cancellation failed');
+    const host = createHost<{ id: number }, string>({
+      start: () => ({ id: 1 }),
+      stop: () => { stopped += 1; },
+      defer: (fn) => {
+        pending = fn;
+        return 'pending';
+      },
+      cancel: () => { throw cancelError; },
+    });
+
+    const first = host.acquire('#host');
+    host.release();
+
+    expect(() => host.acquire('#host')).toThrow(cancelError);
+    expect(host.current).toBe(first);
+    expect(host.refCount).toBe(0);
+    pending?.();
+    expect(stopped).toBe(1);
+    expect(host.current).toBeNull();
   });
 });
 

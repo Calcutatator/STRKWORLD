@@ -29,7 +29,11 @@
  */
 
 import type { AvatarSpriteKey, EventBus, WorldEvents } from '@strkworld/shared';
-import { DEFAULT_AVATAR_SPRITE, pairedAvatarSprite } from './avatar-state.js';
+import {
+  DEFAULT_AVATAR_SPRITE,
+  isAvatarSpriteKey,
+  pairedAvatarSprite,
+} from './avatar-state.js';
 
 export interface AvatarOutfitSelection {
   /** What the local avatar is wearing right now. */
@@ -45,11 +49,37 @@ export function createAvatarOutfitSelection(options: {
   readonly initial?: AvatarSpriteKey;
 }): AvatarOutfitSelection {
   let selected = options.initial ?? DEFAULT_AVATAR_SPRITE;
+  let selectionRevision = 0;
+  let lastCommittedRevision = 0;
 
   const select = (sprite: AvatarSpriteKey): boolean => {
+    // The exported selection object can be reached from untyped runtime
+    // composition. Do not let a forged key become authoritative or cross the
+    // avatar:selected event boundary into the renderer.
+    if (!isAvatarSpriteKey(sprite)) return false;
     if (sprite === selected) return false;
+    const previous = selected;
+    const ownRevision = ++selectionRevision;
     selected = sprite;
-    options.out.emit('avatar:selected', { sprite: selected });
+    try {
+      options.out.emit('avatar:selected', { sprite: selected });
+      // A nested failed selection may have restored this candidate after
+      // changing the revision. It is still a successful outer delivery, but
+      // a nested successful selection must remain the latest owner.
+      if (selectionRevision === ownRevision && selected === sprite) {
+        lastCommittedRevision = ownRevision;
+      }
+    } catch (error) {
+      // Event delivery is an external lifecycle boundary. Roll back only if
+      // this candidate is still selected and no newer successful selection
+      // took ownership. A nested failed selection can restore this candidate
+      // while leaving a newer revision, so revision equality alone is not
+      // enough to decide whether rollback remains ours.
+      if (selected === sprite && lastCommittedRevision < ownRevision) {
+        selected = previous;
+      }
+      throw error;
+    }
     return true;
   };
 
@@ -92,6 +122,7 @@ export function createAvatarOutfitToggleBinding(options: {
   readonly toggle: () => void;
 }): AvatarOutfitToggleBinding {
   let destroyed = false;
+  let detached = false;
 
   const onKeyDown = (event: AvatarOutfitKeyEvent): void => {
     // One press per toggle: a held key repeats, and a keystroke aimed at a
@@ -101,13 +132,22 @@ export function createAvatarOutfitToggleBinding(options: {
     options.toggle();
   };
 
-  options.keyboard.on('keydown-F', onKeyDown);
+  try {
+    options.keyboard.on('keydown-F', onKeyDown);
+  } catch (error) {
+    try { options.keyboard.off('keydown-F', onKeyDown); } catch { /* preserve registration failure */ }
+    throw error;
+  }
 
   return {
     destroy(): void {
-      if (destroyed) return;
+      if (detached) return;
       destroyed = true;
       options.keyboard.off('keydown-F', onKeyDown);
+      // Mark the resource released only after the emitter confirms removal.
+      // If `off` throws, the inert listener remains owned and a later cleanup
+      // attempt must be allowed to retry it.
+      detached = true;
     },
   };
 }

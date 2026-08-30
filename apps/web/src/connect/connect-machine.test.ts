@@ -13,6 +13,37 @@ function deferred<T>(): { promise: Promise<T>; resolve(value: T): void; reject(e
 }
 
 describe('connect flow', () => {
+  it('publishes an immutable flow API while retaining owned transitions', async () => {
+    const flow = createConnectFlow(new FakePrivacyOperations());
+    const originalDisconnect = flow.disconnect;
+
+    expect(Object.isFrozen(flow)).toBe(true);
+    expect(Reflect.set(flow, 'disconnect', () => undefined)).toBe(false);
+    expect(Reflect.set(flow, 'recheck', async () => ({ name: 'disconnected' }))).toBe(false);
+    expect(flow.disconnect).toBe(originalDisconnect);
+    flow.disconnect();
+    expect(flow.store.getState()).toEqual({ name: 'disconnected' });
+  });
+
+  it('keeps the public connection state read-only and immutable', async () => {
+    const flow = createConnectFlow(new FakePrivacyOperations());
+
+    expect('setState' in flow.store).toBe(false);
+    expect(Object.isFrozen(flow.store.getState())).toBe(true);
+
+    const state = await flow.connect();
+    if (state.name !== 'connected') throw new Error('expected a connected wallet');
+    expect(flow.store.getState()).toBe(state);
+    expect(Object.isFrozen(state)).toBe(true);
+    expect(Object.isFrozen(state.capability)).toBe(true);
+    expect(Reflect.set(state, 'name', 'disconnected')).toBe(false);
+    expect(Reflect.set(state.capability, 'supportsStrk20', false)).toBe(false);
+    expect(flow.store.getState()).toMatchObject({
+      name: 'connected',
+      capability: { supportsStrk20: true },
+    });
+  });
+
   it('starts disconnected and reports it to the world', () => {
     const flow = createConnectFlow(new FakePrivacyOperations());
     expect(flow.store.getState().name).toBe('disconnected');

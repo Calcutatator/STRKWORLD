@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { FakePrivacyOperations, PrivacyError, type PreparedBatch, type PrivacyOperations } from '@strkworld/privacy';
 import { createReceiptLedger } from '../../receipts/receipt-ledger.js';
+import { PRIVACY_REGISTER } from '../../privacy/register.js';
 import { EXCHANGE_CATALOG } from './catalog.js';
 import { createExchangePanel } from './exchange-machine.js';
 
@@ -18,6 +19,66 @@ async function ready(machine = panel()) {
 }
 
 describe('Exchange machine', () => {
+  it('publishes an immutable panel API while retaining owned transitions', async () => {
+    const machine = panel();
+    const originalSetAmount = machine.setAmount;
+
+    expect(Object.isFrozen(machine)).toBe(true);
+    expect(Reflect.set(machine, 'setAmount', () => undefined)).toBe(false);
+    expect(Reflect.set(machine, 'confirm', async () => undefined)).toBe(false);
+    expect(machine.setAmount).toBe(originalSetAmount);
+    machine.setAmount('1');
+    expect(machine.store.getState().amountText).toBe('1');
+  });
+
+  it('exposes a read-only immutable state snapshot to panel consumers', async () => {
+    const machine = panel();
+    const state = machine.store.getState();
+
+    expect('setState' in machine.store).toBe(false);
+    expect(Object.isFrozen(state)).toBe(true);
+    expect(Reflect.set(state, 'amountText', 'forged')).toBe(false);
+    expect(machine.store.getState().amountText).toBe('');
+
+    await machine.open();
+    await machine.refreshBalances();
+    machine.setAmount('1');
+    await machine.prepare();
+    const reviewed = machine.store.getState();
+    expect(reviewed.flow.name).toBe('review');
+    if (reviewed.flow.name !== 'review') return;
+    expect(Object.isFrozen(reviewed.flow.summary)).toBe(true);
+    expect(Object.isFrozen(reviewed.flow.summary.disclosures)).toBe(true);
+    expect(Reflect.set(reviewed.flow.summary, 'sell', 'forged')).toBe(false);
+    expect(Reflect.set(reviewed.flow.summary.disclosures, '0', 'forged')).toBe(false);
+  });
+
+  it('uses the supplied route register for the swap disclosure', async () => {
+    const disclosure = 'Custom exchange disclosure.';
+    const register = PRIVACY_REGISTER.map((entry) => entry.route === 'exchange.swap'
+      ? { ...entry, disclosure }
+      : entry);
+    const machine = createExchangePanel({
+      operations: new FakePrivacyOperations({
+        balances: { [strk!.token]: 100n * 10n ** 18n },
+        swapReview: { expectedAmountOut: 2n * 10n ** 18n, slippageBps: 50, expiresAt: farFuture },
+      }),
+      receipts: createReceiptLedger(),
+      canStartFinancialAction: () => true,
+      register,
+    });
+
+    await machine.open();
+    await machine.refreshBalances();
+    machine.setAmount('1');
+    await machine.prepare();
+
+    const flow = machine.store.getState().flow;
+    expect(flow.name).toBe('review');
+    if (flow.name !== 'review') return;
+    expect(flow.summary.disclosures).toEqual([disclosure]);
+  });
+
   it('does not read balances until the player explicitly asks, then offers positive catalog assets only', async () => {
     const machine = panel(); await machine.open();
     expect(machine.store.getState().balances).toBe('unrequested');

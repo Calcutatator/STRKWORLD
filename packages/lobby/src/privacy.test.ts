@@ -168,6 +168,23 @@ describe('a client cannot set the room configuration', () => {
     expect(room.maxClients).toBe(10);
   });
 
+  it('owns the trusted config after defining a room class', () => {
+    const config = {
+      ...DEFAULT_ROOM_CONFIG,
+      spriteKeys: [...DEFAULT_ROOM_CONFIG.spriteKeys],
+      capacity: 10,
+    };
+    const RoomClass = definePresenceRoom(config);
+    Reflect.set(config, 'capacity', 99);
+    Reflect.set(config, 'defaultSprite', 'avatar-16');
+
+    const room = new RoomClass();
+    (room as unknown as { onCreate: (o: unknown) => void }).onCreate({});
+
+    expect(room.maxClients).toBe(10);
+    expect(room.counters).toEqual(expect.objectContaining({ present: 0 }));
+  });
+
   it('a hostile sprite allowlist never reaches an entry', () => {
     // The registry is what actually holds sprites; drive it with the config a
     // room would build from HOSTILE if it (wrongly) trusted onCreate options,
@@ -199,6 +216,11 @@ describe('a client cannot set the room configuration', () => {
     expect(config.interestRadius).toBeGreaterThanOrEqual(0);
     expect(config.minUpdateIntervalMs).toBeGreaterThanOrEqual(0);
     expect(config.maxMessagesPerSecond).toBeLessThanOrEqual(1000);
+  });
+
+  it('fails closed for a null override container', () => {
+    expect(() => resolveRoomConfig(null as never)).not.toThrow();
+    expect(resolveRoomConfig(null as never)).toEqual(DEFAULT_ROOM_CONFIG);
   });
 });
 

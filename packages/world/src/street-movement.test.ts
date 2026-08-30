@@ -32,6 +32,32 @@ describe('street movement seam', () => {
     expect(resolveMovementFacing(idle, 'right')).toBe('right');
   });
 
+  it('isolates movement payloads from synchronous listener mutation', () => {
+    const seen: Array<{ position: { x: number; y: number }; facing: string }> = [];
+    const listeners = [
+      (payload: { position: { x: number; y: number }; facing: string }) => {
+        expect(Reflect.set(payload.position, 'x', 999)).toBe(false);
+      },
+      (payload: { position: { x: number; y: number }; facing: string }) => {
+        seen.push(payload);
+      },
+    ];
+    const out = {
+      emit: (_event: keyof WorldEvents, payload: { position: { x: number; y: number }; facing: string }) => {
+        for (const listener of listeners) listener(payload);
+      },
+    };
+    const reporter = createStreetMovementReporter(out as never);
+    const position = { x: 784, y: 496 };
+
+    reporter.initial(position);
+
+    expect(seen).toEqual([{ position: { x: 784, y: 496 }, facing: 'down' }]);
+    expect(Object.isFrozen(seen[0])).toBe(true);
+    expect(Object.isFrozen(seen[0]?.position)).toBe(true);
+    expect(position).toEqual({ x: 784, y: 496 });
+  });
+
   it.each([
     ['right', { x: 160, y: 0 }, { x: 16, y: 0 }],
     ['left', { x: -160, y: 0 }, { x: -16, y: 0 }],
@@ -47,6 +73,19 @@ describe('street movement seam', () => {
         isSolidAt: () => false,
       }),
     ).toEqual({ x: 100 + expected.x, y: 100 + expected.y });
+  });
+
+  it('does not move on a zero-duration update', () => {
+    const position = moveWithCollisionSubsteps({
+      position: { x: 100, y: 100 },
+      velocity: { x: 160, y: 0 },
+      delta: 0,
+      tileSize: 32,
+      toTile: (x, y) => ({ x: Math.floor(x / 32), y: Math.floor(y / 32) }),
+      isSolidAt: () => false,
+    });
+
+    expect(position).toEqual({ x: 100, y: 100 });
   });
 
   it('preserves normal and sprint displacement at the movement speeds', () => {
@@ -201,6 +240,23 @@ describe('street movement seam', () => {
     ]);
   });
 
+  it('does not commit a new facing when movement publication fails', () => {
+    const error = new Error('movement publication failed');
+    let fail = true;
+    const reporter = createStreetMovementReporter({
+      emit: () => {
+        if (fail) throw error;
+      },
+    });
+
+    expect(() => reporter.update({ x: 100, y: 100 }, { ...idle, right: true })).toThrow(error);
+    expect(reporter.facing).toBe('down');
+
+    fail = false;
+    reporter.update({ x: 100, y: 100 }, { ...idle, right: true });
+    expect(reporter.facing).toBe('right');
+  });
+
   it('never adds building, room, station, mode, or financial fields', () => {
     const h = capture();
     h.reporter.update({ x: 1, y: 2 }, { ...idle, up: true });
@@ -226,6 +282,33 @@ describe('street movement seam', () => {
       'player:moved',
       'building:entered',
     ]);
+  });
+
+  it('does not run a stale movement callback after a nested update wins', () => {
+    const callbacks: string[] = [];
+    let nested = false;
+    let adapter!: ReturnType<typeof createStreetMovementAdapter>;
+    adapter = createStreetMovementAdapter({
+      emit: (event) => {
+        if (event === 'player:moved' && !nested) {
+          nested = true;
+          adapter.streetUpdate(
+            { x: 12, y: 20 },
+            { ...idle, left: true },
+            () => callbacks.push('new'),
+          );
+        }
+      },
+    });
+
+    adapter.streetUpdate(
+      { x: 11, y: 20 },
+      { ...idle, right: true },
+      () => callbacks.push('stale'),
+    );
+
+    expect(callbacks).toEqual(['new']);
+    expect(adapter.facing).toBe('left');
   });
 
   it('keeps interior updates silent and does not change street facing', () => {

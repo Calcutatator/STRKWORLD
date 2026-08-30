@@ -1,6 +1,40 @@
 import type { EventBus } from '@strkworld/shared';
 
 /**
+ * Copy event data before freezing it so a producer can safely reuse its own
+ * object after emit. Event payloads are plain records/arrays at this seam;
+ * primitive leaves remain unchanged and cycles retain their shape.
+ */
+function immutableSnapshot(value: unknown, seen = new Map<object, unknown>()): unknown {
+  if (value === null || typeof value !== 'object') return value;
+  if (seen.has(value)) return seen.get(value);
+
+  if (Array.isArray(value)) {
+    const copy: unknown[] = [];
+    seen.set(value, copy);
+    for (let index = 0; index < value.length; index += 1) {
+      const descriptor = Object.getOwnPropertyDescriptor(value, String(index));
+      if (descriptor && !('value' in descriptor)) {
+        throw new TypeError('event payload must contain data properties');
+      }
+      copy.push(immutableSnapshot(descriptor?.value, seen));
+    }
+    return Object.freeze(copy);
+  }
+
+  const copy: Record<string, unknown> = {};
+  seen.set(value, copy);
+  for (const key of Object.keys(value)) {
+    const descriptor = Object.getOwnPropertyDescriptor(value, key);
+    if (!descriptor || !('value' in descriptor)) {
+      throw new TypeError('event payload must contain data properties');
+    }
+    copy[key] = immutableSnapshot(descriptor.value, seen);
+  }
+  return Object.freeze(copy);
+}
+
+/**
  * The event bus implementation.
  *
  * Lives in the shell because the shell owns the channel and hands it to the
@@ -49,13 +83,22 @@ export function createEventBus<Events extends Record<string, unknown>>(): EventB
   function emit<K extends keyof Events>(event: K, payload: Events[K]): void {
     const eventListeners = listeners.get(event);
     if (!eventListeners) return;
+    let snapshot: Events[K];
+    try {
+      snapshot = immutableSnapshot(payload) as Events[K];
+    } catch {
+      // An accessor-backed or otherwise hostile payload is not a valid seam
+      // snapshot. Drop it before invoking any subscriber, and keep the
+      // producer's synchronous event loop alive.
+      return;
+    }
     // Snapshot ownership as well as handlers. A handler can unsubscribe or
     // replace another handler while this synchronous emission is in flight;
     // only the snapshot generation that is still current may be delivered.
     for (const [handler, token] of [...eventListeners]) {
       if (eventListeners.get(handler) !== token) continue;
       try {
-        (handler as (p: Events[K]) => void)(payload);
+        (handler as (p: Events[K]) => void)(snapshot);
       } catch (error) {
         // One bad listener must not stop the others. A thrown error in a HUD
         // handler should never stop the game loop receiving its events.

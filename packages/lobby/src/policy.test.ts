@@ -1,5 +1,12 @@
 import { describe, expect, it } from 'vitest';
-import { GAME_ID_PATTERN, WORLD_LIMIT } from './config';
+import {
+  DEFAULT_ROOM_CONFIG,
+  DEFAULT_SPRITE_KEYS,
+  GAME_ID_PATTERN,
+  MESSAGE,
+  SERVER_MESSAGE,
+  WORLD_LIMIT,
+} from './config';
 import {
   UpdateThrottle,
   createGameId,
@@ -14,9 +21,34 @@ import {
 
 const SPRITES = ['avatar-1', 'avatar-2'];
 
+describe('default lobby vocabulary ownership', () => {
+  it('does not expose a mutable default sprite allowlist', () => {
+    expect(Reflect.set(DEFAULT_SPRITE_KEYS, 0, 'not-a-sprite')).toBe(false);
+    expect(DEFAULT_SPRITE_KEYS[0]).toBe('avatar-1');
+    expect(DEFAULT_ROOM_CONFIG.spriteKeys[0]).toBe('avatar-1');
+  });
+
+  it('does not expose mutable wire protocol names', () => {
+    expect(Reflect.set(MESSAGE, 'move', 'untrusted-move')).toBe(false);
+    expect(Reflect.set(MESSAGE, 'resume', 'untrusted-resume')).toBe(false);
+    expect(Reflect.set(SERVER_MESSAGE, 'welcome', 'untrusted-welcome')).toBe(false);
+    expect(MESSAGE.move).toBe('move');
+    expect(MESSAGE.resume).toBe('resume');
+    expect(SERVER_MESSAGE.welcome).toBe('welcome');
+  });
+});
+
 describe('normalizeGameId', () => {
   it('accepts exactly 16 lowercase hex characters', () => {
     expect(normalizeGameId('0123456789abcdef')).toBe('0123456789abcdef');
+  });
+
+  it('rejects an injected randomness source with the wrong byte length', () => {
+    for (const bytes of [new Uint8Array(0), new Uint8Array(9)]) {
+      expect(() => createGameId(() => bytes)).toThrow(
+        'Lobby game id randomness must return exactly 8 bytes',
+      );
+    }
   });
 
   it('rejects anything else', () => {

@@ -20,9 +20,22 @@ function deferred<T>(): Deferred<T> {
 async function flushPromises(): Promise<void> {
   await Promise.resolve();
   await Promise.resolve();
+  await Promise.resolve();
 }
 
 describe('WorldHost acquisition lifecycle', () => {
+  it('publishes an immutable lease API while retaining owned acquisition', () => {
+    const manager = createWorldLeaseManager();
+    const originalAcquire = manager.acquire;
+
+    expect(Object.isFrozen(manager)).toBe(true);
+    expect(Reflect.set(manager, 'acquire', () => () => undefined)).toBe(false);
+    expect(manager.acquire).toBe(originalAcquire);
+    const cleanup = manager.acquire(() => Promise.resolve(() => undefined));
+    expect(typeof cleanup).toBe('function');
+    cleanup();
+  });
+
   it('single-flights overlapping leases and keeps one world alive', async () => {
     const gate = deferred<() => void>();
     let live = 0;
@@ -88,6 +101,34 @@ describe('WorldHost acquisition lifecycle', () => {
     await flushPromises();
     secondCleanup();
     expect(calls).toEqual(['first', 'released-first', 'second', 'released-second']);
+  });
+
+  it('replaces a live world after its old config releases ownership', async () => {
+    const calls: string[] = [];
+    const manager = createWorldLeaseManager();
+    const firstCleanup = manager.acquire(async () => {
+      calls.push('start-first');
+      return () => calls.push('release-first');
+    }, 'first');
+
+    await flushPromises();
+    const secondCleanup = manager.acquire(async () => {
+      calls.push('start-second');
+      return () => calls.push('release-second');
+    }, 'second');
+
+    expect(calls).toEqual(['start-first']);
+    firstCleanup();
+    await flushPromises();
+    expect(calls).toEqual(['start-first', 'release-first', 'start-second']);
+
+    secondCleanup();
+    expect(calls).toEqual([
+      'start-first',
+      'release-first',
+      'start-second',
+      'release-second',
+    ]);
   });
 
   it('starts the replacement after stale rejection and handles early cleanup', async () => {

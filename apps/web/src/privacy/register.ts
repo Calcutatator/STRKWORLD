@@ -10,5 +10,19 @@
  * When the `./privacy-grades` subpath lands, exactly one line below changes.
  */
 
-export { PRIVACY_REGISTER, isRoutePlayable } from '@strkworld/shared/src/privacy-grades.js';
+import {
+  PRIVACY_REGISTER as SHARED_PRIVACY_REGISTER,
+  isRoutePlayable,
+} from '@strkworld/shared/src/privacy-grades.js';
+import type { RouteGrade } from '@strkworld/shared/src/privacy-grades.js';
+
+// The shared package owns the authored values, but its readonly TypeScript
+// annotation is not a runtime boundary. The Web shell keeps its own frozen
+// projection so a same-bundle consumer cannot rewrite a route grade or replace
+// an entry after route admission has started.
+export const PRIVACY_REGISTER: readonly RouteGrade[] = Object.freeze(
+  SHARED_PRIVACY_REGISTER.map((entry) => Object.freeze({ ...entry })),
+);
+
+export { isRoutePlayable };
 export type { PrivacyGrade, RouteGrade } from '@strkworld/shared/src/privacy-grades.js';

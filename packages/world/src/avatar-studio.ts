@@ -26,7 +26,7 @@ export interface AvatarStudioDefinition {
   readonly figures: readonly AvatarStudioFigure[];
 }
 
-export const AVATAR_STUDIO_DEFINITION = {
+export const AVATAR_STUDIO_DEFINITION = freezeAvatarStudioDefinition({
   width: AVATAR_STUDIO_WIDTH,
   height: AVATAR_STUDIO_HEIGHT,
   spawn: { x: 9, y: 1 },
@@ -41,7 +41,20 @@ export const AVATAR_STUDIO_DEFINITION = {
     { figure: 7, sprite: 'avatar-7', x: 9, y: 6, width: 1, height: 1 },
     { figure: 8, sprite: 'avatar-8', x: 14, y: 6, width: 1, height: 1 },
   ],
-} as const satisfies AvatarStudioDefinition;
+} as const satisfies AvatarStudioDefinition);
+
+function freezeAvatarStudioDefinition(
+  definition: AvatarStudioDefinition,
+): AvatarStudioDefinition {
+  const figures = definition.figures.map((figure) => Object.freeze({ ...figure }));
+  return Object.freeze({
+    width: definition.width,
+    height: definition.height,
+    spawn: Object.freeze({ ...definition.spawn }),
+    exit: Object.freeze({ ...definition.exit }),
+    figures: Object.freeze(figures),
+  });
+}
 
 export interface AvatarStudioState {
   readonly inRoom: boolean;
@@ -117,46 +130,136 @@ export function createAvatarStudioPresentation(options: {
   readonly streetReturn: { x: number; y: number };
   readonly reportStreet: () => void;
 }): AvatarStudioPresentation {
+  const streetBounds = Object.freeze({ ...options.streetBounds });
+  const studioBounds = Object.freeze({ ...options.studioBounds });
+  const studioSpawn = Object.freeze({ ...options.studioSpawn });
+  const streetReturn = Object.freeze({ ...options.streetReturn });
   let destroyed = false;
+  let destroyPending = false;
+  let destroying = false;
+  let transitionRevision = 0;
   return {
     enter(): void {
-      if (destroyed) return;
+      if (destroyed || destroying) return;
+      const ownTransition = ++transitionRevision;
+      const isCurrent = (): boolean =>
+        !destroyed && !destroying && transitionRevision === ownTransition;
       const { port } = options;
-      port.setPlayerVelocity(0, 0);
-      port.setBodyEnabled(false);
-      port.setGroundVisible(false);
-      port.setDoorsVisible(false);
-      port.setRemoteVisible(false);
-      port.setLabelsVisible(false);
-      port.setRoomVisible(false);
-      port.setStudioVisible(true);
-      port.setWorldBounds(options.studioBounds);
-      port.setCameraBounds(options.studioBounds);
-      port.setPlayerPosition(options.studioSpawn);
+      try {
+        port.setPlayerVelocity(0, 0);
+        if (!isCurrent()) return;
+        port.setBodyEnabled(false);
+        if (!isCurrent()) return;
+        port.setGroundVisible(false);
+        if (!isCurrent()) return;
+        port.setDoorsVisible(false);
+        if (!isCurrent()) return;
+        port.setRemoteVisible(false);
+        if (!isCurrent()) return;
+        port.setLabelsVisible(false);
+        if (!isCurrent()) return;
+        port.setRoomVisible(false);
+        if (!isCurrent()) return;
+        port.setStudioVisible(true);
+        if (!isCurrent()) return;
+        port.setWorldBounds(studioBounds);
+        if (!isCurrent()) return;
+        port.setCameraBounds(studioBounds);
+        if (!isCurrent()) return;
+        port.setPlayerPosition(studioSpawn);
+      } catch (error) {
+        // Entry is a multi-port handoff. A later port can fail after earlier
+        // calls have already hidden the street or disabled the player. Restore
+        // the known street contract while preserving the original failure so a
+        // controller can retry the transition without a half-entered world.
+        if (isCurrent()) {
+          restoreStreetPresentation(port, streetBounds, streetReturn, isCurrent);
+        }
+        throw error;
+      }
     },
     exit(): void {
-      if (destroyed) return;
+      if (destroyed || destroying) return;
+      const ownTransition = ++transitionRevision;
+      const isCurrent = (): boolean =>
+        !destroyed && !destroying && transitionRevision === ownTransition;
       const { port } = options;
       port.setPlayerVelocity(0, 0);
+      if (!isCurrent()) return;
       port.setBodyEnabled(true);
+      if (!isCurrent()) return;
       port.setGroundVisible(true);
+      if (!isCurrent()) return;
       port.setDoorsVisible(true);
+      if (!isCurrent()) return;
       port.setRemoteVisible(true);
+      if (!isCurrent()) return;
       port.setLabelsVisible(true);
+      if (!isCurrent()) return;
       port.setRoomVisible(false);
+      if (!isCurrent()) return;
       port.setStudioVisible(false);
-      port.setWorldBounds(options.streetBounds);
-      port.setCameraBounds(options.streetBounds);
-      port.setPlayerPosition(options.streetReturn);
+      if (!isCurrent()) return;
+      port.setWorldBounds(streetBounds);
+      if (!isCurrent()) return;
+      port.setCameraBounds(streetBounds);
+      if (!isCurrent()) return;
+      port.setPlayerPosition(streetReturn);
+      if (!isCurrent()) return;
       port.resetDoors();
-      port.resumeStreet(options.streetReturn, options.reportStreet);
+      if (!isCurrent()) return;
+      port.resumeStreet(streetReturn, options.reportStreet);
     },
     destroy(): void {
-      if (destroyed) return;
+      if (destroying || (destroyed && !destroyPending)) return;
+      // Retain ownership when cleanup fails so a later Scene teardown can
+      // retry. Guard synchronous reentrancy while the port owns this attempt.
+      destroying = true;
       destroyed = true;
-      options.port.destroyStudio();
+      transitionRevision += 1;
+      try {
+        options.port.destroyStudio();
+        destroyPending = false;
+      } catch (error) {
+        // Keep the presentation retired while retaining the failed cleanup for
+        // an explicit retry. No new transition may use partial teardown state.
+        destroyPending = true;
+        throw error;
+      } finally {
+        destroying = false;
+      }
     },
   };
+}
+
+function restoreStreetPresentation(
+  port: AvatarStudioPresentationPort,
+  streetBounds: AvatarStudioBounds,
+  streetReturn: { readonly x: number; readonly y: number },
+  isCurrent: () => boolean,
+): void {
+  const attempts: Array<() => void> = [
+    () => port.setPlayerVelocity(0, 0),
+    () => port.setBodyEnabled(true),
+    () => port.setGroundVisible(true),
+    () => port.setDoorsVisible(true),
+    () => port.setRemoteVisible(true),
+    () => port.setLabelsVisible(true),
+    () => port.setRoomVisible(false),
+    () => port.setStudioVisible(false),
+    () => port.setWorldBounds(streetBounds),
+    () => port.setCameraBounds(streetBounds),
+    () => port.setPlayerPosition(streetReturn),
+  ];
+  for (const attempt of attempts) {
+    if (!isCurrent()) return;
+    try {
+      attempt();
+    } catch {
+      // The entry failure remains authoritative. Attempt every restoration
+      // action so one faulty port does not strand another resource.
+    }
+  }
 }
 
 export function validateAvatarStudioDefinition(definition: AvatarStudioDefinition): void {
@@ -282,11 +385,15 @@ export function avatarStudioTileColour(
 export function createAvatarStudioController(
   options: AvatarStudioControllerOptions,
 ): AvatarStudioController {
-  const definition = options.definition ?? AVATAR_STUDIO_DEFINITION;
-  validateAvatarStudioDefinition(definition);
+  const inputDefinition = options.definition ?? AVATAR_STUDIO_DEFINITION;
+  validateAvatarStudioDefinition(inputDefinition);
+  const definition = freezeAvatarStudioDefinition(inputDefinition);
   let inRoom = false;
   let highlightedFigure: number | null = null;
   let destroyed = false;
+  let destroyPending = false;
+  let destroying = false;
+  let updateRevision = 0;
 
   const state = (): AvatarStudioState => ({
     inRoom,
@@ -297,10 +404,26 @@ export function createAvatarStudioController(
 
   const leave = (): void => {
     if (!inRoom) return;
+    const previousHighlightedFigure = highlightedFigure;
     inRoom = false;
     highlightedFigure = null;
-    options.onExit?.();
+    try {
+      options.onExit?.();
+    } catch (error) {
+      // Studio presentation is an external lifecycle boundary. If it fails,
+      // keep this transition retryable unless the callback already retired or
+      // replaced the controller's ownership synchronously.
+      if (!destroyed && !inRoom) {
+        inRoom = true;
+        highlightedFigure = previousHighlightedFigure;
+      }
+      throw error;
+    }
+    if (destroyed || inRoom) return;
     publish();
+    // Exit publication is synchronous and may retire or replace the Studio
+    // before this turn resumes. Do not announce a stale exit.
+    if (destroyed || inRoom) return;
     options.out.emit('avatar-studio:exited', {});
   };
 
@@ -312,12 +435,58 @@ export function createAvatarStudioController(
       if (destroyed || inRoom) return;
       inRoom = true;
       highlightedFigure = null;
-      options.onEnter?.();
-      publish();
-      options.out.emit('avatar-studio:entered', {});
+      try {
+        options.onEnter?.();
+      } catch (error) {
+        // Presentation entry is an external lifecycle boundary. If it fails,
+        // do not leave the controller claiming a Studio it cannot operate; a
+        // later explicit enter can retry the same presentation transition.
+        inRoom = false;
+        highlightedFigure = null;
+        throw error;
+      }
+      if (destroyed || !inRoom) return;
+      try {
+        publish();
+      } catch (error) {
+        // State publication is an external lifecycle boundary too. If the
+        // renderer rejects the entered snapshot, restore the presentation so
+        // the controller remains outside and a later enter can retry cleanly.
+        if (!destroyed && inRoom) {
+          inRoom = false;
+          highlightedFigure = null;
+          try {
+            options.onExit?.();
+          } catch {
+            // Preserve the original publication error.
+          }
+        }
+        throw error;
+      }
+      // Entry publication is synchronous and may retire or replace the
+      // controller before this turn resumes. Do not announce a stale entry.
+      if (destroyed || !inRoom) return;
+      try {
+        options.out.emit('avatar-studio:entered', {});
+      } catch (error) {
+        // The announcement is an external lifecycle boundary too. If it
+        // rejects the completed handoff, compensate the presentation and
+        // leave entry retryable while preserving the announcement error.
+        if (!destroyed && inRoom) {
+          inRoom = false;
+          highlightedFigure = null;
+          try {
+            options.onExit?.();
+          } catch {
+            // Preserve the original announcement error.
+          }
+        }
+        throw error;
+      }
     },
     update(tile): void {
       if (destroyed || !inRoom) return;
+      const ownRevision = ++updateRevision;
       if (isAvatarStudioExit(definition, tile.x, tile.y)) {
         leave();
         return;
@@ -328,14 +497,35 @@ export function createAvatarStudioController(
         highlightedFigure = nextHighlight;
         publish();
       }
-      if (figure && options.selection.select(figure.sprite)) publish();
+      // onChange delivery is synchronous and may destroy the Studio before
+      // this update resumes. It may also synchronously run a newer update;
+      // do not let this stale frame select or publish over that newer state.
+      if (destroyed || !inRoom || updateRevision !== ownRevision) return;
+      if (figure && options.selection.select(figure.sprite)) {
+        // Selection delivery is synchronous and can destroy or leave the
+        // Studio; do not publish a snapshot for a retired lifecycle.
+        if (destroyed || !inRoom || updateRevision !== ownRevision) return;
+        publish();
+      }
     },
     destroy(): void {
-      if (destroyed) return;
+      if (destroying || (destroyed && !destroyPending)) return;
+      destroying = true;
       destroyed = true;
       inRoom = false;
       highlightedFigure = null;
-      options.onDestroy?.();
+      try {
+        options.onDestroy?.();
+        destroyPending = false;
+      } catch (error) {
+        // Keep the controller retired while retaining the failed cleanup for
+        // an explicit retry. Reentrant destroy calls during the callback are
+        // suppressed by `destroying` and cannot recurse.
+        destroyPending = true;
+        throw error;
+      } finally {
+        destroying = false;
+      }
     },
   };
 }

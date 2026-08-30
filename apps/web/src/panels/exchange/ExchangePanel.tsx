@@ -1,6 +1,7 @@
 import { useEffect, useMemo } from 'react';
 import { COPY } from '../../copy.js';
 import { usePrivacy } from '../../privacy/PrivacyProvider.js';
+import { PRIVACY_REGISTER, type RouteGrade } from '../../privacy/register.js';
 import { useStore } from '../../store/use-store.js';
 import { ConfirmGate } from '../ConfirmGate.js';
 import { LockedNotice } from '../LockedRoom.js';
@@ -8,18 +9,26 @@ import { PanelFrame } from '../PanelFrame.js';
 import { EXCHANGE_CATALOG } from './catalog.js';
 import { createExchangePanel, type ExchangePanel as ExchangeMachine, type ExchangeState } from './exchange-machine.js';
 import { WalletAttentionCue, walletOperationAttention } from '../../wallet/WalletAttentionCue.js';
+import { createPendingHudOwner } from '../pending-hud.js';
 
 /** Dedicated one-swap view; this deliberately has no batch/add vocabulary. */
-export function ExchangePanel({ onClose, panel: injected, experience = 'menu' }: { onClose: () => void; panel?: ExchangeMachine; experience?: 'menu' | 'station' }) {
-  const { operations, receipts, noteOperationError, submissionUncertainty } = usePrivacy();
+export function ExchangePanel({ onClose, panel: injected, experience = 'menu', register = PRIVACY_REGISTER }: { onClose: () => void; panel?: ExchangeMachine; experience?: 'menu' | 'station'; register?: readonly RouteGrade[] }) {
+  const { operations, receipts, noteOperationError, shellBus, submissionUncertainty } = usePrivacy();
   const owned = useMemo(() => injected ? null : createExchangePanel({
     operations, receipts, onError: noteOperationError,
+    register,
     canStartFinancialAction: () => { const state = submissionUncertainty.store.getState(); return !state.active || state.acknowledged; },
-  }), [injected, operations, receipts, noteOperationError, submissionUncertainty]);
+  }), [injected, operations, receipts, noteOperationError, submissionUncertainty, register]);
   const panel = injected ?? owned!;
   const state = useStore(panel.store);
   const uncertainty = useStore(submissionUncertainty.store);
+  const pendingHud = useMemo(() => createPendingHudOwner(shellBus), [shellBus]);
   useEffect(() => { if (!owned) return; void owned.open(); return () => owned.close(); }, [owned]);
+  const pending = state.flow.name === 'preparing' || state.flow.name === 'submitting';
+  useEffect(() => {
+    pendingHud.setBusy(pending);
+  }, [pendingHud, pending]);
+  useEffect(() => () => pendingHud.release(), [pendingHud]);
   const committing = state.flow.name === 'review' || state.flow.name === 'submitting';
   const blocked = uncertainty.active && !uncertainty.acknowledged;
   const walletAttention = walletOperationAttention(

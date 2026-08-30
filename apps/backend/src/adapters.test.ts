@@ -90,6 +90,86 @@ describe('AVNU private swap planner', () => {
     );
   });
 
+  it('does not construct executor calls after quote retrieval is cancelled', async () => {
+    const controller = new AbortController();
+    const reason = new Error('quote request cancelled');
+    const quoteToCalls = vi.fn(async () => ({
+      chainId: '0x534e5f4d41494e',
+      executorAddress: '0x999',
+      calls: [],
+    }));
+    const planner = new AvnuSwapPlanner({
+      chainId: '0x534e5f4d41494e',
+      now: () => 1_000,
+      functions: {
+        getQuotes: vi.fn(async () => {
+          controller.abort(reason);
+          return [{
+            quoteId: 'quote-cancelled',
+            sellTokenAddress: '0xabc',
+            buyTokenAddress: '0x4718',
+            sellAmount: 20n,
+            buyAmount: 95n,
+            expiry: 2,
+            chainId: '0x534e5f4d41494e',
+          }];
+        }) as never,
+        quoteToCalls: quoteToCalls as never,
+        toPaymasterCall: vi.fn() as never,
+      },
+    });
+
+    await expect(planner.prepare({
+      sellToken: '0xabc',
+      buyToken: '0x4718',
+      sellAmount: 20n,
+      minAmountOut: 90n,
+      slippageBps: 100,
+      signal: controller.signal,
+    })).rejects.toBe(reason);
+    expect(quoteToCalls).not.toHaveBeenCalled();
+  });
+
+  it('does not publish an executor plan after call construction is cancelled', async () => {
+    const controller = new AbortController();
+    const reason = new Error('executor construction cancelled');
+    const toPaymasterCall = vi.fn(() => ({ to: '0x111', selector: '0x555', calldata: ['0xaaa'] }));
+    const planner = new AvnuSwapPlanner({
+      chainId: '0x534e5f4d41494e',
+      now: () => 1_000,
+      functions: {
+        getQuotes: vi.fn(async () => [{
+          quoteId: 'quote-cancelled-after-calls',
+          sellTokenAddress: '0xabc',
+          buyTokenAddress: '0x4718',
+          sellAmount: 20n,
+          buyAmount: 95n,
+          expiry: 2,
+          chainId: '0x534e5f4d41494e',
+        }]) as never,
+        quoteToCalls: vi.fn(async () => {
+          controller.abort(reason);
+          return {
+            chainId: '0x534e5f4d41494e',
+            executorAddress: '0x999',
+            calls: [{ contractAddress: '0x111', entrypoint: 'swap', calldata: ['0xaaa'] }],
+          };
+        }) as never,
+        toPaymasterCall: toPaymasterCall as never,
+      },
+    });
+
+    await expect(planner.prepare({
+      sellToken: '0xabc',
+      buyToken: '0x4718',
+      sellAmount: 20n,
+      minAmountOut: 90n,
+      slippageBps: 100,
+      signal: controller.signal,
+    })).rejects.toBe(reason);
+    expect(toPaymasterCall).not.toHaveBeenCalled();
+  });
+
   it('rejects a quote below the requested minimum before call construction', async () => {
     const quoteToCalls = vi.fn();
     const planner = new AvnuSwapPlanner({
@@ -183,6 +263,56 @@ describe('AVNU private swap planner', () => {
 });
 
 describe('fixed Starknet RPC adapter', () => {
+  it('binds the default fetch to the global receiver without making a real request', async () => {
+    const originalFetch = Object.getOwnPropertyDescriptor(globalThis, 'fetch');
+    const calls: Array<{ url: string; init?: RequestInit }> = [];
+    const receiverSensitiveFetch = function (this: unknown, url: string, init?: RequestInit) {
+      if (this !== globalThis) throw new TypeError('Illegal invocation');
+      calls.push({ url, init });
+      return Promise.resolve(directResponse({ jsonrpc: '2.0', id: 1, result: 1000 }));
+    };
+    Object.defineProperty(globalThis, 'fetch', {
+      configurable: true,
+      enumerable: originalFetch?.enumerable ?? true,
+      writable: true,
+      value: receiverSensitiveFetch,
+    });
+
+    try {
+      const rpc = new StarknetRpcPoolPort({
+        rpcUrl: 'https://rpc.example',
+        poolAddress: '0x123',
+        feeToken: '0x4718',
+      });
+      await expect(rpc.getBlockNumber()).resolves.toBe(1000);
+      expect(calls).toHaveLength(1);
+      expect(calls[0]?.url).toBe('https://rpc.example');
+    } finally {
+      if (originalFetch) Object.defineProperty(globalThis, 'fetch', originalFetch);
+      else delete (globalThis as { fetch?: unknown }).fetch;
+    }
+  });
+
+  it('preserves injected fetcher call behavior and receiver', async () => {
+    let receiver: unknown;
+    const injected = vi.fn(async function (this: unknown, url: string, init?: RequestInit) {
+      receiver = this;
+      expect(url).toBe('https://rpc.example');
+      expect(init?.method).toBe('POST');
+      return directResponse({ jsonrpc: '2.0', id: 1, result: 1000 });
+    });
+    const rpc = new StarknetRpcPoolPort({
+      rpcUrl: 'https://rpc.example',
+      poolAddress: '0x123',
+      feeToken: '0x4718',
+      fetcher: injected,
+    });
+
+    await expect(rpc.getBlockNumber()).resolves.toBe(1000);
+    expect(injected).toHaveBeenCalledTimes(1);
+    expect(receiver).toBe(rpc);
+  });
+
   it('exposes pool config and public-key reads without accepting a client method', async () => {
     const requests: Array<{ method: string; params: unknown[] }> = [];
     const fetcher = vi.fn(async (_url: string, init?: RequestInit) => {

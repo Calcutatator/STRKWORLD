@@ -51,13 +51,14 @@ import {
   SERVER_MESSAGE,
   type LobbySprite,
 } from './config';
-import { normalizeGameId } from './policy';
-import type { LobbyState } from './state';
+import { normalizeCoordinate, normalizeFacing, normalizeGameId } from './policy';
+import type { LobbyState, PresenceEntry } from './state';
 
 export type { LobbySprite } from './config';
 
 const MAX_TIMER_DELAY_MS = 2_147_483_647;
 const INVALID_CLIENT_SEND_INTERVAL_ERROR = 'Lobby client send interval is invalid.';
+const INVALID_WELCOME_TIMEOUT_ERROR = 'Lobby welcome timeout is invalid.';
 const INVALID_RESUME_PLACEMENT_ERROR = 'Lobby resume placement is invalid.';
 const INVALID_WELCOME_ERROR = 'Lobby welcome identity is invalid.';
 
@@ -121,7 +122,8 @@ export interface LobbyClientOptions {
   minSendIntervalMs?: number;
   /**
    * How long `connect()` waits for the server's `welcome` (identity) message
-   * before proceeding without it, in ms. Defaults to 5000. On timeout the
+   * before proceeding without it, in nonnegative integer ms. Defaults to 5000.
+   * The value is bounded by the platform timer ceiling. On timeout the
    * connection is still usable; self-filtering just starts once the message
    * eventually arrives.
    */
@@ -179,7 +181,14 @@ export class LobbyClient {
 
   /** Pure. Opens no connection. */
   constructor(options: LobbyClientOptions) {
-    this.#options = options;
+    // Keep the connection plan owned by this client. The shell commonly keeps
+    // and reuses its mutable options object; retaining it here would let a
+    // later edit silently redirect a reconnect or change its placement and
+    // cosmetic identity after construction.
+    this.#options = Object.freeze({
+      ...options,
+      start: Object.freeze({ ...options.start }),
+    });
     const minSendIntervalMs = Math.max(
       options.minSendIntervalMs ?? MIN_CLIENT_SEND_INTERVAL_MS,
       MIN_CLIENT_SEND_INTERVAL_MS,
@@ -188,7 +197,15 @@ export class LobbyClient {
       throw new Error(INVALID_CLIENT_SEND_INTERVAL_ERROR);
     }
     this.#minSendIntervalMs = minSendIntervalMs;
-    this.#welcomeTimeoutMs = options.welcomeTimeoutMs ?? 5000;
+    const welcomeTimeoutMs = options.welcomeTimeoutMs ?? 5000;
+    if (
+      !Number.isSafeInteger(welcomeTimeoutMs) ||
+      welcomeTimeoutMs < 0 ||
+      welcomeTimeoutMs > MAX_TIMER_DELAY_MS
+    ) {
+      throw new Error(INVALID_WELCOME_TIMEOUT_ERROR);
+    }
+    this.#welcomeTimeoutMs = welcomeTimeoutMs;
   }
 
   /** The server-assigned identifier, or null before it has been received. */
@@ -213,6 +230,10 @@ export class LobbyClient {
 
     const generation = ++this.#joinGeneration;
     this.#setStatus('connecting');
+    // Status delivery is synchronous. A listener may retire this connection
+    // before the join attempt has been installed; do not start transport work
+    // for that superseded generation.
+    if (this.#joinGeneration !== generation || this.#status !== 'connecting') return;
     let interrupt!: (error: Error) => void;
     const interrupted = new Promise<never>((_resolve, reject) => {
       interrupt = reject;
@@ -237,7 +258,18 @@ export class LobbyClient {
    */
   updatePosition(x: number, y: number, facing: Facing = 'down'): void {
     if (this.#status !== 'connected' || this.#room === null) return;
-    this.#desired = { x: Math.round(x), y: Math.round(y), facing };
+    // Match the server's finite rounding and world-bound clamp before storing
+    // desired state. Without this, an out-of-bounds finite coordinate would be
+    // accepted locally, clamped remotely, and retried forever because the two
+    // values could never compare equal.
+    const normalizedX = normalizeCoordinate(x);
+    const normalizedY = normalizeCoordinate(y);
+    if (normalizedX === null || normalizedY === null) return;
+    this.#desired = {
+      x: normalizedX,
+      y: normalizedY,
+      facing: normalizeFacing(facing),
+    };
     this.#pump(performance.now());
   }
 
@@ -252,7 +284,11 @@ export class LobbyClient {
     if (this.#status !== 'connected' || this.#room === null) return;
     this.#cancelReconcile();
     this.#desired = null;
-    this.#room.send(MESSAGE.suspend);
+    const room = this.#room;
+    room.send(MESSAGE.suspend);
+    // A transport can report closure synchronously from send; do not let the
+    // suspended command overwrite that authoritative lifecycle state.
+    if (this.#room !== room || this.#status !== 'connected') return;
     this.#setStatus('suspended');
   }
 
@@ -273,18 +309,32 @@ export class LobbyClient {
     // The server rejects non-finite coordinates. Validate before claiming the
     // client is connected, otherwise a failed resume leaves this wrapper in a
     // false connected state while its server session remains suspended.
-    if (!Number.isFinite(placement.x) || !Number.isFinite(placement.y)) {
+    if (placement === null || typeof placement !== 'object') {
+      throw new Error(INVALID_RESUME_PLACEMENT_ERROR);
+    }
+    // Read only own data properties at this trust boundary. Ordinary property
+    // access would invoke an accessor (or a proxy trap) supplied by the
+    // caller, allowing a malformed placement to leak a raw exception before
+    // the controlled validation error below. Missing/invalid facing keeps the
+    // existing default-to-down behavior; coordinates remain required.
+    const x = normalizeCoordinate(ownDataField(placement, 'x'));
+    const y = normalizeCoordinate(ownDataField(placement, 'y'));
+    if (x === null || y === null) {
       throw new Error(INVALID_RESUME_PLACEMENT_ERROR);
     }
     const next: Required<Placement> = {
-      x: Math.round(placement.x),
-      y: Math.round(placement.y),
-      facing: placement.facing ?? 'down',
+      x,
+      y,
+      facing: normalizeFacing(ownDataField(placement, 'facing')),
     };
-    this.#room.send(MESSAGE.resume, {
+    const room = this.#room;
+    room.send(MESSAGE.resume, {
       ...next,
       sprite: sprite ?? this.#options.sprite ?? DEFAULT_SPRITE,
     });
+    // The transport may synchronously report its own closure while sending;
+    // do not let this stale command resurrect a disconnected client.
+    if (this.#room !== room || this.#status !== 'suspended') return;
     // The server writes this placement unconditionally on resume, so it is the
     // confirmed position; nothing to reconcile until the consumer moves again.
     this.#desired = null;
@@ -323,7 +373,7 @@ export class LobbyClient {
   onStatus(listener: StatusListener): () => void {
     const owner = Symbol('status listener');
     this.#statusListeners.set(listener, owner);
-    this.#notifyStatus(listener, { status: this.#status });
+    this.#notifyStatus(listener, Object.freeze({ status: this.#status }));
     return () => {
       if (this.#statusListeners.get(listener) === owner) {
         this.#statusListeners.delete(listener);
@@ -341,23 +391,21 @@ export class LobbyClient {
     if (room === null || this.#gameId === null) return [];
     const out: PeerSnapshot[] = [];
     room.state?.peers?.forEach((entry) => {
-      if (entry.gameId === this.#gameId) return;
-      out.push({
-        gameId: entry.gameId,
-        x: entry.position.x,
-        y: entry.position.y,
-        facing: entry.facing as Facing,
-        sprite: entry.sprite,
-      });
+      const snapshot = readPeerSnapshot(entry);
+      if (snapshot === null || snapshot.gameId === this.#gameId) return;
+      out.push(snapshot);
     });
-    return out;
+    // `onPeers` delivers one snapshot object to every listener. Freeze both
+    // layers so one subscriber cannot mutate what a later subscriber sees or
+    // alter the readonly value retained by a shell adapter.
+    return Object.freeze(out.map((entry) => Object.freeze(entry)));
   }
 
   /** Leave the room. The client can be connected again afterwards. */
   async disconnect(): Promise<void> {
     this.#cancelReconcile();
     this.#desired = null;
-    this.#joinGeneration += 1;
+    const disconnectGeneration = ++this.#joinGeneration;
     const attempt = this.#joinAttempt;
     this.#joinAttempt = null;
     attempt?.interrupt(new Error('Lobby join interrupted by disconnect()'));
@@ -365,12 +413,29 @@ export class LobbyClient {
     this.#room = null;
     this.#gameId = null;
     this.#setStatus('closed', 'client-left');
-    if (room !== null) await room.leave(true);
-    this.#emitPeers();
+    let leaveFailed = false;
+    let leaveError: unknown;
+    if (room !== null) {
+      try {
+        await room.leave(true);
+      } catch (error) {
+        // Local authority is already retired. Preserve the transport error,
+        // but do not let failed SDK cleanup strand stale peers downstream.
+        leaveFailed = true;
+        leaveError = error;
+      }
+    }
+    // A status listener may synchronously start a replacement connection from
+    // `client-left` while the old room's leave is pending. That replacement
+    // now owns peer delivery; do not let this stale disconnect continuation
+    // publish through its live stream when the old transport finally settles.
+    if (this.#joinGeneration === disconnectGeneration) this.#emitPeers();
+    if (leaveFailed) throw leaveError;
   }
 
   async #join(generation: number, interrupted: Promise<never>): Promise<void> {
     const sdk = new ColyseusClient(this.#options.endpoint);
+    let joinedRoom: ColyseusRoom<unknown, LobbyState> | null = null;
     try {
       const room = await sdk.joinOrCreate<LobbyState>(
         this.#options.roomName ?? DEFAULT_ROOM_NAME,
@@ -381,6 +446,7 @@ export class LobbyClient {
           sprite: this.#options.sprite ?? DEFAULT_SPRITE,
         },
       );
+      joinedRoom = room;
 
       // D-037 gives reconnect ownership to the Shell's explicit player
       // control. The pinned SDK enables a 15-attempt automatic retry loop on
@@ -405,7 +471,14 @@ export class LobbyClient {
           // first valid identity stable so a duplicate or conflicting replay
           // cannot make the client publish its own state as a peer.
           if (welcomeAccepted) return;
-          const gameId = normalizeGameId(payload?.gameId);
+          const payloadRecord =
+            payload !== null && typeof payload === 'object' ? payload : null;
+          const gameIdField = payloadRecord
+            ? Object.getOwnPropertyDescriptor(payloadRecord, 'gameId')
+            : undefined;
+          const gameId = normalizeGameId(
+            gameIdField && 'value' in gameIdField ? gameIdField.value : undefined,
+          );
           if (gameId === null) {
             this.#room = null;
             this.#gameId = null;
@@ -430,6 +503,10 @@ export class LobbyClient {
       this.#desired = null;
       this.#lastSentAt = null;
       this.#setStatus('connected');
+      // Status delivery is synchronous. A listener may retire this exact
+      // room before lifecycle callbacks are installed; do not attach stale
+      // handlers to a room that no longer belongs to this client.
+      if (!this.#isCurrentRoom(generation, room)) return;
       this.#emitPeers();
 
       room.onStateChange(() => {
@@ -466,13 +543,31 @@ export class LobbyClient {
         rejectWelcome(new Error('Lobby room left before welcome'));
       });
 
-      await Promise.race([this.#awaitWelcome(welcomed), interrupted]);
+      await this.#awaitWelcome(welcomed, interrupted);
       if (!this.#isCurrentRoom(generation, room)) {
         throw new Error('Lobby room closed before connect completed');
       }
     } catch (error) {
-      if (this.#joinGeneration === generation && this.#status === 'connecting') {
-        this.#setStatus('idle');
+      if (this.#joinGeneration === generation) {
+        const failedRoom = this.#room;
+        if (failedRoom !== null) {
+          this.#room = null;
+          this.#gameId = null;
+          this.#cancelReconcile();
+          this.#desired = null;
+          this.#setStatus('closed', 'error');
+          this.#emitPeers();
+          await failedRoom.leave(true).catch(() => undefined);
+        } else if (joinedRoom !== null && this.#status === 'connecting') {
+          this.#gameId = null;
+          this.#cancelReconcile();
+          this.#desired = null;
+          this.#setStatus('closed', 'error');
+          this.#emitPeers();
+          await joinedRoom.leave(true).catch(() => undefined);
+        } else if (this.#status === 'connecting') {
+          this.#setStatus('idle');
+        }
       }
       throw error;
     }
@@ -483,13 +578,13 @@ export class LobbyClient {
   }
 
   /** Resolve when the welcome message arrives, or after the timeout. */
-  async #awaitWelcome(welcomed: Promise<void>): Promise<void> {
+  async #awaitWelcome(welcomed: Promise<void>, interrupted: Promise<never>): Promise<void> {
     let timer: ReturnType<typeof setTimeout> | undefined;
     const timeout = new Promise<void>((resolve) => {
       timer = setTimeout(resolve, this.#welcomeTimeoutMs);
     });
     try {
-      await Promise.race([welcomed, timeout]);
+      await Promise.race([welcomed, timeout, interrupted]);
     } finally {
       if (timer !== undefined) clearTimeout(timer);
     }
@@ -517,7 +612,15 @@ export class LobbyClient {
 
     const elapsed = this.#lastSentAt === null ? null : now - this.#lastSentAt;
     if (elapsed === null || elapsed >= this.#minSendIntervalMs) {
-      this.#room.send(MESSAGE.move, desired);
+      const room = this.#room;
+      room.send(MESSAGE.move, desired);
+      // A transport can report closure synchronously from send. Do not stamp
+      // the retired room's send time or schedule work against its replacement.
+      if (this.#room !== room || this.#status !== 'connected') return;
+      // A synchronous state callback may have confirmed this exact move while
+      // the send was still on the stack. Do not leave a redundant timer behind
+      // after that nested pump already cleared the desired placement.
+      if (this.#desired === null) return;
       this.#lastSentAt = now;
       // Re-check after an interval: if the server accepted this move its state
       // change will clear #desired; if it was dropped by the server floor, we
@@ -536,11 +639,9 @@ export class LobbyClient {
     if (id === null || this.#room === null) return null;
     const entry = this.#room.state?.peers?.get(id);
     if (entry === undefined) return null;
-    return {
-      x: entry.position.x,
-      y: entry.position.y,
-      facing: entry.facing as Facing,
-    };
+    const snapshot = readPeerSnapshot(entry);
+    if (snapshot === null || snapshot.gameId !== id) return null;
+    return snapshot;
   }
 
   #scheduleReconcile(delay: number): void {
@@ -561,11 +662,11 @@ export class LobbyClient {
   #setStatus(status: LobbyStatus, reason?: LobbyStatusReason, code?: number): void {
     this.#status = status;
     if (this.#statusListeners.size === 0) return;
-    const event: LobbyStatusEvent = {
+    const event: LobbyStatusEvent = Object.freeze({
       status,
       ...(reason ? { reason } : {}),
       ...(code !== undefined ? { code } : {}),
-    };
+    });
     this.#statusDeliveries.push({ listeners: [...this.#statusListeners], event });
     if (this.#deliveringStatus) return;
 
@@ -621,6 +722,29 @@ export class LobbyClient {
     } catch {
       console.error('lobby client: status subscriber threw');
     }
+  }
+}
+
+function ownDataField(value: object, key: string): unknown {
+  try {
+    const descriptor = Object.getOwnPropertyDescriptor(value, key);
+    return descriptor && 'value' in descriptor ? descriptor.value : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+function readPeerSnapshot(entry: PresenceEntry): PeerSnapshot | null {
+  try {
+    return {
+      gameId: entry.gameId,
+      x: entry.position.x,
+      y: entry.position.y,
+      facing: entry.facing as Facing,
+      sprite: entry.sprite,
+    };
+  } catch {
+    return null;
   }
 }
 

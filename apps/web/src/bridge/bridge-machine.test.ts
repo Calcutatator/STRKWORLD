@@ -40,6 +40,35 @@ function harness(initial: BridgeRecord | null = null, planner: PublicShieldPlann
 }
 
 describe('Bridge shell machine', () => {
+  it('publishes an immutable panel API while retaining owned transitions', async () => {
+    const h = harness();
+    const originalDiscard = h.machine.discardRecord;
+
+    expect(Object.isFrozen(h.machine)).toBe(true);
+    expect(Reflect.set(h.machine, 'discardRecord', () => undefined)).toBe(false);
+    expect(Reflect.set(h.machine, 'planShield', async () => undefined)).toBe(false);
+    expect(h.machine.discardRecord).toBe(originalDiscard);
+    await h.machine.open();
+    h.machine.discardRecord();
+    expect(h.machine.store.getState().record).toBeNull();
+  });
+
+  it('exposes a read-only immutable state snapshot to panel consumers', async () => {
+    const h = harness(record());
+    await h.machine.open();
+    const state = h.machine.store.getState();
+
+    expect('setState' in h.machine.store).toBe(false);
+    expect(Object.isFrozen(state)).toBe(true);
+    expect(Object.isFrozen(state.sources)).toBe(true);
+    expect(Object.isFrozen(state.sources.assets)).toBe(true);
+    expect(Object.isFrozen(state.record)).toBe(true);
+    expect(Object.isFrozen(state.record?.signedQuote)).toBe(true);
+    expect(Object.isFrozen(state.record?.status)).toBe(true);
+    expect(Reflect.set(state.record!.status, 'leg', 'settled')).toBe(false);
+    expect(state.record!.status.leg).toBe('awaiting-deposit');
+  });
+
   it('opens local evidence and sources without quoting, polling or wallet work', async () => {
     const h = harness();
     await h.machine.open();
@@ -127,6 +156,31 @@ describe('Bridge shell machine', () => {
     expect(h.machine.store.getState()).toEqual(closedState);
   });
 
+  it('allows reopened saved preflight while a closed account read is still pending', async () => {
+    let releaseAccount!: (value: string | null) => void;
+    let reads = 0;
+    const planner: PublicShieldPlanner = { planMax: vi.fn(async ({ available }: PublicShieldPlanInput) => plan(available)) };
+    const h = harness(record(), planner, {
+      now: () => Date.parse('2030-01-01T00:00:00.000Z'),
+      readAccount: () => {
+        reads += 1;
+        if (reads === 1) return new Promise<string | null>((resolve) => { releaseAccount = resolve; });
+        return ACCOUNT;
+      },
+    });
+
+    const first = h.machine.preflightSavedQuote();
+    await Promise.resolve();
+    h.machine.close();
+    const second = h.machine.preflightSavedQuote();
+    await second;
+
+    expect(reads).toBe(3);
+    expect(planner.planMax).toHaveBeenCalledOnce();
+    releaseAccount(ACCOUNT);
+    await first;
+  });
+
   it('resumes a saved quote by refreshing status before exposing the next safe action', async () => {
     const h = harness(record());
     await h.machine.open();
@@ -136,6 +190,16 @@ describe('Bridge shell machine', () => {
       available: 1_900_000_000_000_000_000n,
       expectedRecipient: '0x123',
     }));
+    expect(h.machine.store.getState().instructionsVisible).toBe(true);
+  });
+
+  it('keeps the saved-quote resume callback usable when extracted', async () => {
+    const h = harness(record());
+    await h.machine.open();
+    const resumeSavedQuote = h.machine.resumeSavedQuote;
+
+    await resumeSavedQuote();
+
     expect(h.machine.store.getState().instructionsVisible).toBe(true);
   });
 
@@ -184,6 +248,33 @@ describe('Bridge shell machine', () => {
     expect(h.calls.watch).toBe(1);
     h.machine.close();
     expect(h.machine.store.getState().flow.name).toBe('idle');
+  });
+
+  it('allows a reopened panel to refresh while a closed refresh is still pending', async () => {
+    let releaseFirst!: (status: BridgeStatus) => void;
+    let releaseSecond!: (status: BridgeStatus) => void;
+    let refreshes = 0;
+    const h = harness(record());
+    h.service.refresh.mockImplementation(() => {
+      refreshes += 1;
+      return new Promise<BridgeStatus>((resolve) => {
+        if (refreshes === 1) releaseFirst = resolve;
+        else releaseSecond = resolve;
+      });
+    });
+
+    const first = h.machine.refresh();
+    await Promise.resolve();
+    h.machine.close();
+    const second = h.machine.refresh();
+    await Promise.resolve();
+
+    expect(refreshes).toBe(2);
+    releaseSecond({ leg: 'awaiting-deposit', message: 'new', pollingStopped: false });
+    await second;
+    releaseFirst({ leg: 'awaiting-deposit', message: 'stale', pollingStopped: false });
+    await first;
+    expect(h.machine.store.getState().flow).toEqual({ name: 'idle' });
   });
 
   it('aborts an in-flight watch when the panel closes', async () => {
@@ -423,6 +514,30 @@ describe('Bridge shell machine', () => {
     expect(h.machine.store.getState()).toEqual(closedState);
   });
 
+  it('allows reopened shield planning while a closed account read is pending', async () => {
+    let releaseAccount!: (value: string | null) => void;
+    let reads = 0;
+    const planner: PublicShieldPlanner = { planMax: vi.fn(async ({ available }: PublicShieldPlanInput) => plan(available)) };
+    const h = harness(record({ leg: 'settled', message: 'settled', pollingStopped: true, strkReceived: 1_234n }), planner, {
+      readAccount: () => {
+        reads += 1;
+        if (reads === 1) return new Promise<string | null>((resolve) => { releaseAccount = resolve; });
+        return ACCOUNT;
+      },
+    });
+
+    const first = h.machine.planShield();
+    await Promise.resolve();
+    h.machine.close();
+    const second = h.machine.planShield();
+    await second;
+
+    expect(reads).toBe(3);
+    expect(planner.planMax).toHaveBeenCalledOnce();
+    releaseAccount(ACCOUNT);
+    await first;
+  });
+
   it('invalidates a commit guard when the saved evidence is imported during planning', async () => {
     let release!: () => void;
     const planner: PublicShieldPlanner = { planMax: vi.fn(async ({ available }: PublicShieldPlanInput) => {
@@ -456,6 +571,39 @@ describe('Bridge shell machine', () => {
     if (action === 'discard') h.machine.discardRecord();
     release();
     expect(await revalidation).toBeNull();
+  });
+
+  it('allows reopened shield revalidation while a closed account read is pending', async () => {
+    let releaseAccount!: (value: string | null) => void;
+    let releasePlanner!: () => void;
+    let deferAccount = false;
+    let plannerCalls = 0;
+    const planner: PublicShieldPlanner = { planMax: vi.fn(async ({ available }: PublicShieldPlanInput) => {
+      plannerCalls += 1;
+      if (plannerCalls === 2) await new Promise<void>((resolve) => { releasePlanner = resolve; });
+      return plan(available);
+    }) };
+    const h = harness(record({ leg: 'settled', message: 'settled', pollingStopped: true, strkReceived: 1_234n }), planner, {
+      readAccount: () => deferAccount
+        ? new Promise<string | null>((resolve) => { releaseAccount = resolve; })
+        : ACCOUNT,
+    });
+
+    await h.machine.planShield();
+    deferAccount = true;
+    const first = h.machine.revalidateShieldPlan();
+    await Promise.resolve();
+    h.machine.close();
+    deferAccount = false;
+    const second = h.machine.revalidateShieldPlan();
+    await vi.waitFor(() => expect(planner.planMax).toHaveBeenCalledTimes(2));
+
+    releaseAccount(ACCOUNT);
+    await expect(first).resolves.toBeNull();
+    await expect(h.machine.revalidateShieldPlan()).resolves.toBeNull();
+    releasePlanner();
+    await expect(second).resolves.toEqual(expect.objectContaining({ available: 1_234n }));
+    expect(planner.planMax).toHaveBeenCalledTimes(2);
   });
 
   it('returns null when the active account changes while the commit guard awaits planning', async () => {

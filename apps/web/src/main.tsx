@@ -1,6 +1,5 @@
 import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
-import type { WalletSession } from '@strkworld/privacy';
 import type { ShellEvents, WorldEvents } from '@strkworld/shared';
 import { createEventBus } from './bus/event-bus.js';
 import { App } from './App.js';
@@ -9,6 +8,7 @@ import { createPresenceController, type PresenceController } from './presence/pr
 import { lobbyEndpoint } from './presence/config.js';
 import { installPresenceTeardown } from './presence/lifecycle.js';
 import { parseProductionWalletConfig, usesProductionWallet } from './production/config.js';
+import { startProductionWalletBootstrap } from './production/bootstrap.js';
 import { ProductionRoot } from './production/ProductionRoot.js';
 
 /**
@@ -44,7 +44,6 @@ const presenceLifecycle = {
 };
 installPresenceTeardown(presenceLifecycle, typeof window === 'undefined' ? undefined : window, hot);
 
-let walletSession: WalletSession | null = null;
 const container = document.getElementById('root');
 if (!container) {
   throw new Error('STRKWORLD: no #root element to mount into — check index.html.');
@@ -83,15 +82,16 @@ if (usesProductionWallet(environment)) {
     // Keep the Starknet/Wallet API implementation out of the initial shell
     // graph. Production still always takes this path; the dynamic boundary only
     // lets the city render its honest loading surface before chain code arrives.
-    void (async () => {
-      try {
+    startProductionWalletBootstrap({
+      load: async () => {
         const { createProductionWalletSession } = await import('@strkworld/privacy');
-        walletSession = createProductionWalletSession(config);
-        hot?.dispose(() => walletSession?.destroy());
+        return createProductionWalletSession(config);
+      },
+      render: (session) => {
         root.render(
           <StrictMode>
             <ProductionRoot
-              session={walletSession}
+              session={session}
               worldOut={worldOut}
               shellIn={shellIn}
               createPresence={createPresence}
@@ -99,10 +99,10 @@ if (usesProductionWallet(environment)) {
             />
           </StrictMode>,
         );
-      } catch {
-        renderWalletFailure();
-      }
-    })();
+      },
+      failure: renderWalletFailure,
+      hot,
+    });
   } catch {
     renderWalletFailure();
   }

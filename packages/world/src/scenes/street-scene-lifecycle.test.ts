@@ -59,6 +59,7 @@ function cycleResources() {
   const unsubscribe = vi.fn();
   return {
     avatarVisual: { cycle: Symbol('avatar-visual') },
+    player: destroyable(),
     unsubscribe,
     controller: { destroy: vi.fn(() => unsubscribe()) },
     studio: { state: { inRoom: true }, ...destroyable() },
@@ -136,8 +137,10 @@ interface StreetSceneHarness extends FakeScene {
   roomLabels: Map<string, { destroy(): void }>;
   exteriorLabels: Map<string, { destroy(): void }>;
   doorOverlays: Array<{ destroy(): void }>;
+  player: { destroy(): void };
   ground?: { destroy(): void };
   avatarVisual?: { cycle: symbol };
+  playerOwned: boolean;
   lastTile: { x: number; y: number };
 }
 
@@ -151,6 +154,7 @@ function createHarness(initialBus?: {
   let current = cycleResources();
   let currentBus = initialBus;
   let failure: 'early' | 'partial' | null = null;
+  let failureError: Error | undefined;
 
   if (initialBus) {
     scene.game = {
@@ -162,7 +166,11 @@ function createHarness(initialBus?: {
     if (failure === 'early') throw new Error('early create failure');
     scene.ground = current.ground;
   });
-  scene.createPlayer = vi.fn(() => { scene.avatarVisual = current.avatarVisual; });
+  scene.createPlayer = vi.fn(() => {
+    scene.player = current.player;
+    scene.playerOwned = true;
+    scene.avatarVisual = current.avatarVisual;
+  });
   scene.createCamera = vi.fn();
   scene.createDoorTriggers = vi.fn();
   scene.createDoorOverlays = vi.fn(() => { scene.doorOverlays = [current.overlay]; });
@@ -170,7 +178,10 @@ function createHarness(initialBus?: {
   scene.createAvatarOutfit = vi.fn(() => { scene.avatarOutfitToggle = current.outfitToggle; });
   scene.createFixedRooms = vi.fn(() => { scene.roomControllers = { bank: current.controller }; });
   scene.createAvatarStudio = vi.fn(() => {
-    if (failure === 'partial') throw new Error('partial create failure');
+    if (failure === 'partial') {
+      failureError = new Error('partial create failure');
+      throw failureError;
+    }
     scene.avatarStudio = current.studio;
     scene.avatarStudioPresentation = current.studioPresentation;
   });
@@ -200,6 +211,7 @@ function createHarness(initialBus?: {
     failAt(next: typeof failure) {
       failure = next;
     },
+    failureError: () => failureError,
     create() {
       scene.create();
     },
@@ -225,6 +237,34 @@ function expectCompleteCleanup(cycle: ReturnType<typeof cycleResources>): void {
 }
 
 describe('StreetScene lifecycle', () => {
+  it('retries the same Avatar Studio tile after selection delivery fails', () => {
+    const harness = createWorldPlayHarness();
+    harness.create();
+    harness.scene.avatarStudio.enter();
+
+    const error = new Error('selection delivery failed');
+    harness.failNextAvatarSelection(error);
+    harness.scene.player.x = 64 + (5 + 0.5) * 32;
+    harness.scene.player.y = 64 + (3 + 0.5) * 32;
+
+    expect(() => harness.scene.reportAvatarStudioTile()).toThrow(error);
+    expect(harness.scene.lastTile).toEqual({ x: -1, y: -1 });
+
+    expect(() => harness.scene.reportAvatarStudioTile()).not.toThrow();
+    expect(harness.selected()).toBe('avatar-2');
+  });
+
+  it('rolls back the rendered avatar when selection delivery fails after applying it', () => {
+    const harness = createWorldPlayHarness();
+    harness.create();
+    const error = new Error('selection delivery failed');
+    harness.failNextAvatarSelection(error);
+
+    expect(() => harness.press()).toThrow(error);
+    expect(harness.scene.avatarStudio.state.selected).toBe('avatar-1');
+    expect(harness.cycle().applied).toEqual(['avatar-9', 'avatar-1']);
+  });
+
   it('toggles the outfit outdoors, in the Studio and back, from one Scene-owned binding', () => {
     const harness = createWorldPlayHarness();
     harness.create();
@@ -366,6 +406,250 @@ describe('StreetScene lifecycle', () => {
     harness.press();
     stale({ repeat: false, target: null });
     expect(harness.cycle().applied).toEqual(['avatar-9']);
+  });
+
+  it('does not report a street tile after movement delivery retires the Scene', () => {
+    const harness = createWorldPlayHarness();
+    harness.create();
+
+    // A Shell/World listener can synchronously tear down the Scene while the
+    // movement event is being delivered. The post-event tile report belongs
+    // to that same Scene cycle and must not enter a room after cleanup.
+    expect(() => harness.retireDuringNextStreetMovement()).not.toThrow();
+    expect(harness.eventCount('building:entered')).toBe(0);
+  });
+
+  it('ignores a stale Scene update after shutdown', () => {
+    const harness = createWorldPlayHarness();
+    harness.create();
+    harness.shutdown();
+    const movedBefore = harness.eventCount('player:moved');
+
+    // Phaser normally stops its update loop during shutdown, but a queued
+    // update can still arrive at this public Scene boundary. It must not
+    // publish a movement sample from the retired cycle.
+    expect(() => harness.scene.update(0, 16)).not.toThrow();
+    expect(harness.eventCount('player:moved')).toBe(movedBefore);
+  });
+
+  it('cleans the prior cycle when shutdown-hook removal fails during restart', () => {
+    const harness = createHarness();
+    harness.create();
+    const completed = harness.current;
+    const error = new Error('shutdown hook removal failed');
+    vi.spyOn(harness.scene.events, 'off').mockImplementationOnce(() => {
+      throw error;
+    });
+
+    expect(() => harness.create()).toThrow(error);
+    expectCompleteCleanup(completed);
+  });
+
+  it('does not call the tile observer after door delivery retires the Scene', () => {
+    let tileReports = 0;
+    const SceneType = createStreetScene({
+      Phaser: { Scene: FakeScene } as never,
+      onTileChanged: () => { tileReports += 1; },
+    });
+    const scene = new SceneType() as unknown as {
+      map: ReturnType<typeof createStreetMap>;
+      player: { x: number; y: number };
+      lastTile: { x: number; y: number };
+      doors: { update(tile: { x: number; y: number }): void };
+      cleanedUp: boolean;
+      reportTile(): void;
+      cleanShutdown(): void;
+    };
+    scene.map = createStreetMap();
+    scene.player = { x: 0, y: 0 };
+    scene.lastTile = { x: -1, y: -1 };
+    scene.cleanedUp = false;
+    scene.doors = {
+      update: () => scene.cleanShutdown(),
+    };
+
+    expect(() => scene.reportTile()).not.toThrow();
+    expect(tileReports).toBe(0);
+  });
+
+  it('retries the tile observer after a failed movement handoff', () => {
+    let fail = true;
+    let tileReports = 0;
+    const SceneType = createStreetScene({
+      Phaser: { Scene: FakeScene } as never,
+      onTileChanged: () => {
+        tileReports += 1;
+        if (fail) throw new Error('tile observer failed');
+      },
+    });
+    const scene = new SceneType() as unknown as {
+      map: ReturnType<typeof createStreetMap>;
+      player: { x: number; y: number };
+      lastTile: { x: number; y: number };
+      doors: { update(tile: { x: number; y: number }): void };
+      cleanedUp: boolean;
+      reportTile(): void;
+    };
+    scene.map = createStreetMap();
+    scene.player = { x: 0, y: 0 };
+    scene.lastTile = { x: -1, y: -1 };
+    scene.cleanedUp = false;
+    scene.doors = { update: () => undefined };
+
+    expect(() => scene.reportTile()).toThrow('tile observer failed');
+    expect(scene.lastTile).toEqual({ x: -1, y: -1 });
+
+    fail = false;
+    expect(() => scene.reportTile()).not.toThrow();
+    expect(tileReports).toBe(2);
+    expect(scene.lastTile).toEqual({ x: 0, y: 0 });
+  });
+
+  it('retries Avatar Studio entry after a failed transition on the same tile', () => {
+    const harness = createWorldPlayHarness();
+    harness.create();
+    const error = new Error('studio entry failed');
+    const enter = vi.spyOn(harness.scene.avatarStudio, 'enter')
+      .mockImplementationOnce(() => { throw error; });
+    const player = harness.scene.player as { x: number; y: number };
+    player.x = 23 * 32 + 16;
+    player.y = 27 * 32 + 16;
+    harness.scene.cursors = {
+      left: { isDown: false },
+      right: { isDown: false },
+      up: { isDown: false },
+      down: { isDown: false },
+      shift: { isDown: false },
+    };
+
+    expect(() => harness.scene.update(0, 16)).toThrow(error);
+    expect(enter).toHaveBeenCalledOnce();
+    expect(harness.scene.avatarStudio.state.inRoom).toBe(false);
+
+    expect(() => harness.scene.update(0, 16)).not.toThrow();
+    expect(enter).toHaveBeenCalledTimes(2);
+    expect(harness.scene.avatarStudio.state.inRoom).toBe(true);
+    harness.shutdown();
+  });
+
+  it('retries room tile delivery after a failed station handoff', () => {
+    let fail = true;
+    const update = vi.fn(() => {
+      if (fail) throw new Error('room tile handoff failed');
+    });
+    const SceneType = createStreetScene({ Phaser: { Scene: FakeScene } as never });
+    const scene = new SceneType() as unknown as {
+      player: { x: number; y: number };
+      lastTile: { x: number; y: number };
+      cleanedUp: boolean;
+      activeRoom: 'bank';
+      roomControllers: { bank: { update: typeof update } };
+      reportRoomTile(): void;
+    };
+    scene.player = { x: 5 * 32 + 16, y: 10 * 32 + 16 };
+    scene.lastTile = { x: -1, y: -1 };
+    scene.cleanedUp = false;
+    scene.activeRoom = 'bank';
+    scene.roomControllers = { bank: { update } };
+
+    expect(() => scene.reportRoomTile()).toThrow('room tile handoff failed');
+    expect(scene.lastTile).toEqual({ x: -1, y: -1 });
+
+    fail = false;
+    expect(() => scene.reportRoomTile()).not.toThrow();
+    expect(update).toHaveBeenCalledTimes(2);
+    expect(scene.lastTile).toEqual({ x: 3, y: 8 });
+  });
+
+  it('does not retain Scene Studio mode when presentation entry fails', () => {
+    const harness = createWorldPlayHarness();
+    harness.create();
+    const error = new Error('studio presentation failed');
+    vi.spyOn(harness.scene.avatarStudioPresentation, 'enter').mockImplementationOnce(() => {
+      throw error;
+    });
+
+    expect(() => harness.scene.avatarStudio.enter()).toThrow(error);
+    expect(harness.scene.avatarStudio.state.inRoom).toBe(false);
+    expect(harness.scene.avatarStudioActive).toBe(false);
+
+    expect(() => harness.scene.avatarStudio.enter()).not.toThrow();
+    expect(harness.scene.avatarStudio.state.inRoom).toBe(true);
+    expect(harness.scene.avatarStudioActive).toBe(true);
+
+    harness.shutdown();
+  });
+
+  it('retains Scene Studio mode when presentation exit fails', () => {
+    const harness = createWorldPlayHarness();
+    harness.create();
+    harness.scene.avatarStudio.enter();
+    const error = new Error('studio presentation exit failed');
+    vi.spyOn(harness.scene.avatarStudioPresentation, 'exit').mockImplementationOnce(() => {
+      throw error;
+    });
+
+    expect(() => harness.scene.avatarStudio.update({ x: 8, y: 0 })).toThrow(error);
+    expect(harness.scene.avatarStudio.state.inRoom).toBe(true);
+    expect(harness.scene.avatarStudioActive).toBe(true);
+
+    expect(() => harness.scene.avatarStudio.update({ x: 8, y: 0 })).not.toThrow();
+    expect(harness.scene.avatarStudio.state.inRoom).toBe(false);
+    expect(harness.scene.avatarStudioActive).toBe(false);
+
+    harness.shutdown();
+  });
+
+  it('retries fixed-room entry after a failed transition on the same tile', () => {
+    const harness = createWorldPlayHarness();
+    harness.create();
+    const room = harness.room('bank');
+    const error = new Error('fixed-room entry failed');
+    const enter = vi.spyOn(room, 'enter')
+      .mockImplementationOnce(() => { throw error; });
+    const player = harness.scene.player as { x: number; y: number };
+    player.x = 5 * 32 + 16;
+    player.y = 10 * 32 + 16;
+    harness.scene.cursors = {
+      left: { isDown: false },
+      right: { isDown: false },
+      up: { isDown: false },
+      down: { isDown: false },
+      shift: { isDown: false },
+    };
+
+    expect(() => harness.scene.update(0, 16)).toThrow(error);
+    expect(enter).toHaveBeenCalledOnce();
+
+    // The player remains on the same door tile. A failed room handoff must
+    // remain retryable instead of being hidden by the Scene's tile sentinel.
+    expect(() => harness.scene.update(0, 16)).not.toThrow();
+    expect(enter).toHaveBeenCalledTimes(2);
+    expect(room.state.inRoom).toBe(true);
+    harness.shutdown();
+  });
+
+  it('does not retain an active room when controller entry fails', () => {
+    const harness = createWorldPlayHarness();
+    harness.create();
+    const room = harness.room('bank');
+    const error = new Error('fixed-room controller entry failed');
+    vi.spyOn(room, 'enter').mockImplementationOnce(() => { throw error; });
+    const player = harness.scene.player as { x: number; y: number };
+    player.x = 5 * 32 + 16;
+    player.y = 10 * 32 + 16;
+    harness.scene.cursors = {
+      left: { isDown: false },
+      right: { isDown: false },
+      up: { isDown: false },
+      down: { isDown: false },
+      shift: { isDown: false },
+    };
+
+    expect(() => harness.scene.update(0, 16)).toThrow(error);
+    expect(harness.scene.activeRoom).toBeUndefined();
+
+    harness.shutdown();
   });
 
   it('rebinds the outfit toggle through the production create order on a restart', () => {
@@ -519,7 +803,7 @@ describe('StreetScene lifecycle', () => {
     harness.nextCycle();
     harness.failAt('early');
     expect(() => harness.create()).toThrow('early create failure');
-    expect(harness.scene.events.count('shutdown')).toBe(1);
+    expect(harness.scene.events.count('shutdown')).toBe(0);
     harness.shutdown();
     harness.scene.cleanShutdown();
 
@@ -544,7 +828,7 @@ describe('StreetScene lifecycle', () => {
     const partial = harness.nextCycle();
     harness.failAt('partial');
     expect(() => harness.create()).toThrow('partial create failure');
-    expect(harness.scene.events.count('shutdown')).toBe(2);
+    expect(harness.scene.events.count('shutdown')).toBe(0);
     harness.shutdown();
     harness.scene.cleanShutdown();
 
@@ -564,6 +848,88 @@ describe('StreetScene lifecycle', () => {
     harness.create();
     harness.shutdown();
     expectCompleteCleanup(recovered);
+  });
+
+  it('cleans a failed create immediately when Phaser emits no shutdown', () => {
+    const harness = createHarness();
+    const partial = harness.nextCycle();
+    harness.failAt('partial');
+
+    expect(() => harness.create()).toThrow('partial create failure');
+
+    expect(partial.player.destroy).toHaveBeenCalledOnce();
+    expect(partial.ground.destroy).toHaveBeenCalledOnce();
+    expect(partial.controller.destroy).toHaveBeenCalledOnce();
+    expect(partial.unsubscribe).toHaveBeenCalledOnce();
+    expect(partial.input.resume).toHaveBeenCalledOnce();
+    expect(partial.overlay.destroy).toHaveBeenCalledOnce();
+    expect(partial.outfitToggle.destroy).toHaveBeenCalledOnce();
+    expect(harness.scene.remoteLayers[0]?.destroy).toHaveBeenCalledOnce();
+    expect(harness.scene.events.count('shutdown')).toBe(0);
+
+    // A later framework shutdown and explicit idempotence call cannot double
+    // destroy the failed cycle, and the same Scene can still recover.
+    harness.shutdown();
+    harness.scene.cleanShutdown();
+    expect(partial.player.destroy).toHaveBeenCalledOnce();
+    expect(partial.controller.destroy).toHaveBeenCalledOnce();
+
+    const recovered = harness.nextCycle();
+    harness.failAt(null);
+    harness.create();
+    harness.shutdown();
+    expectCompleteCleanup(recovered);
+  });
+
+  it('preserves the create error and continues cleanup when a destructor throws', () => {
+    const harness = createHarness();
+    const partial = harness.nextCycle();
+    const cleanupError = new Error('ground destroy failed');
+    partial.ground.destroy.mockImplementation(() => {
+      throw cleanupError;
+    });
+    harness.failAt('partial');
+
+    let thrown: unknown;
+    try {
+      harness.create();
+    } catch (error) {
+      thrown = error;
+    }
+
+    expect(thrown).toBe(harness.failureError());
+    expect(thrown).toBeInstanceOf(Error);
+    expect(partial.player.destroy).toHaveBeenCalledOnce();
+    expect(partial.ground.destroy).toHaveBeenCalledOnce();
+    expect(partial.controller.destroy).toHaveBeenCalledOnce();
+    expect(partial.unsubscribe).toHaveBeenCalledOnce();
+    expect(partial.input.resume).toHaveBeenCalledOnce();
+    expect(partial.overlay.destroy).toHaveBeenCalledOnce();
+    expect(partial.outfitToggle.destroy).toHaveBeenCalledOnce();
+    expect(harness.scene.remoteLayers[0]?.destroy).toHaveBeenCalledOnce();
+    expect(harness.scene.events.count('shutdown')).toBe(0);
+  });
+
+  it('propagates framework cleanup errors after attempting every teardown', () => {
+    const harness = createHarness();
+    const cycle = harness.nextCycle();
+    harness.create();
+    const cleanupError = new Error('ground destroy failed');
+    cycle.ground.destroy.mockImplementation(() => {
+      throw cleanupError;
+    });
+
+    expect(() => harness.shutdown()).toThrow(cleanupError);
+    expect(cycle.player.destroy).toHaveBeenCalledOnce();
+    expect(cycle.controller.destroy).toHaveBeenCalledOnce();
+    expect(cycle.unsubscribe).toHaveBeenCalledOnce();
+    expect(cycle.input.resume).toHaveBeenCalledOnce();
+    expect(cycle.overlay.destroy).toHaveBeenCalledOnce();
+    expect(cycle.outfitToggle.destroy).toHaveBeenCalledOnce();
+    expect(harness.scene.remoteLayers[0]?.destroy).toHaveBeenCalledOnce();
+    harness.scene.cleanShutdown();
+    expect(cycle.player.destroy).toHaveBeenCalledOnce();
+    expect(cycle.controller.destroy).toHaveBeenCalledOnce();
   });
 
   it('does not reuse a destroyed ground layer or stale tile on restart', () => {
@@ -605,8 +971,23 @@ function createWorldPlayHarness() {
   const keyboard = new LifecycleKeyboard();
   const emitted: Array<{ event: string; payload: unknown }> = [];
   const shellListeners = new Map<string, Set<(payload: unknown) => void>>();
+  let retireOnMovement = false;
+  let failNextAvatarSelection: Error | undefined;
   const bus = {
-    out: { emit: (event: string, payload: unknown) => emitted.push({ event, payload }) },
+    out: {
+      emit: (event: string, payload: unknown) => {
+        emitted.push({ event, payload });
+        if (event === 'avatar:selected' && failNextAvatarSelection !== undefined) {
+          const error = failNextAvatarSelection;
+          failNextAvatarSelection = undefined;
+          throw error;
+        }
+        if (retireOnMovement && event === 'player:moved') {
+          retireOnMovement = false;
+          scene.cleanShutdown();
+        }
+      },
+    },
     in: {
       on(event: string, handler: (payload: unknown) => void) {
         const handlers = shellListeners.get(event) ?? new Set();
@@ -619,7 +1000,7 @@ function createWorldPlayHarness() {
   const player = {
     x: 0,
     y: 0,
-    body: { setEnable: vi.fn() },
+    body: { setEnable: vi.fn(), setVelocity: vi.fn() },
     setVelocity: vi.fn(),
     setPosition: vi.fn((x: number, y: number) => {
       player.x = x;
@@ -644,7 +1025,10 @@ function createWorldPlayHarness() {
   scene.createPlayer = vi.fn(() => {
     const cycle = { applied: [] as AvatarSpriteKey[] };
     cycles.push(cycle);
-    scene.avatarVisual = { select: (sprite: AvatarSpriteKey) => cycle.applied.push(sprite) };
+    scene.avatarVisual = {
+      select: (sprite: AvatarSpriteKey) => cycle.applied.push(sprite),
+      update: vi.fn(),
+    };
   });
   scene.createInput = vi.fn(() => {
     scene.inputGate = createInputGate({
@@ -691,6 +1075,22 @@ function createWorldPlayHarness() {
     shellListenerCount: () =>
       [...shellListeners.values()].reduce((total, handlers) => total + handlers.size, 0),
     eventCount: (event: string) => emitted.filter((entry) => entry.event === event).length,
+    failNextAvatarSelection: (error: Error) => {
+      failNextAvatarSelection = error;
+    },
+    retireDuringNextStreetMovement: () => {
+      player.x = 5 * 32 + 16;
+      player.y = 10 * 32 + 16;
+      scene.cursors = {
+        left: { isDown: false },
+        right: { isDown: true },
+        up: { isDown: false },
+        down: { isDown: false },
+        shift: { isDown: false },
+      };
+      retireOnMovement = true;
+      scene.update(0, 16);
+    },
     room: (building: string): FixedRoomController => {
       const controller = scene.roomControllers[building];
       if (!controller) throw new Error(`Missing room controller for ${building}`);
@@ -717,15 +1117,26 @@ function createWorldPlayHarness() {
 
 interface WorldPlayScene extends FakeScene {
   map: ReturnType<typeof createStreetMap>;
-  player: unknown;
+  player: { x: number; y: number };
+  lastTile: { x: number; y: number };
+  cursors: {
+    left: { isDown: boolean };
+    right: { isDown: boolean };
+    up: { isDown: boolean };
+    down: { isDown: boolean };
+    shift: { isDown: boolean };
+  };
   input: { keyboard: LifecycleKeyboard };
   game: { registry: { get(key: string): unknown } };
   physics: { world: { setBounds: ReturnType<typeof vi.fn> } };
   cameras: { main: { setBounds: ReturnType<typeof vi.fn> } };
   doorOverlays: unknown[];
-  avatarVisual?: { select(sprite: AvatarSpriteKey): void };
+  avatarVisual?: { select(sprite: AvatarSpriteKey): void; update(input: unknown, sprinting: boolean): void };
   inputGate: InputGate;
   avatarStudio: AvatarStudioController;
+  avatarStudioActive: boolean;
+  activeRoom?: string;
+  avatarStudioPresentation: { enter(): void; exit(): void; destroy(): void };
   roomControllers: Partial<Record<string, FixedRoomController>>;
   create(): void;
   cleanShutdown(): void;
@@ -736,6 +1147,8 @@ interface WorldPlayScene extends FakeScene {
   createCamera(): void;
   createRoomVisuals(): void;
   createExteriorLabels(): void;
+  update(time: number, delta: number): void;
+  reportAvatarStudioTile(): void;
 }
 
 interface LifecycleKeyEvent {

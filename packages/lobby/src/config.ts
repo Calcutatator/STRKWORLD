@@ -131,7 +131,7 @@ export const GAME_ID_LENGTH = 16;
  * `startPresenceServer({ room: { spriteKeys } })` channel. An unrecognised
  * client value is replaced with the default rather than entering room state.
  */
-export const DEFAULT_SPRITE_KEYS = [
+export const DEFAULT_SPRITE_KEYS = Object.freeze([
   'avatar-1',
   'avatar-2',
   'avatar-3',
@@ -148,7 +148,7 @@ export const DEFAULT_SPRITE_KEYS = [
   'avatar-14',
   'avatar-15',
   'avatar-16',
-] as const satisfies readonly string[];
+] as const satisfies readonly string[]);
 
 /** One key in D-047's fixed browser-to-lobby cosmetic vocabulary. */
 export type LobbySprite = (typeof DEFAULT_SPRITE_KEYS)[number];
@@ -166,14 +166,14 @@ export const DEFAULT_FACING: Facing = 'down';
  * a client could tell the room anything else, which is the enforcement: the
  * room's surface has no field for it.
  */
-export const MESSAGE = {
+export const MESSAGE = Object.freeze({
   /** `{ x, y, facing }` — the only high-rate message. */
   move: 'move',
   /** No payload. The avatar disappears for everyone else. See D-019. */
   suspend: 'suspend',
   /** `{ x, y, facing, sprite }` — reappear after a suspend. */
   resume: 'resume',
-} as const;
+} as const);
 
 export type MessageType = (typeof MESSAGE)[keyof typeof MESSAGE];
 
@@ -182,10 +182,10 @@ export type MessageType = (typeof MESSAGE)[keyof typeof MESSAGE];
  * own server-assigned session identifier so the client can recognise its own
  * avatar in the shared state. Nothing about any other player rides here.
  */
-export const SERVER_MESSAGE = {
+export const SERVER_MESSAGE = Object.freeze({
   /** `{ gameId }` — sent once, right after a join is admitted. */
   welcome: 'welcome',
-} as const;
+} as const);
 
 export type ServerMessageType =
   (typeof SERVER_MESSAGE)[keyof typeof SERVER_MESSAGE];
@@ -256,6 +256,10 @@ function clamp(value: unknown, lo: number, hi: number, fallback: number): number
 export function resolveRoomConfig(
   overrides: PresenceRoomConfigOverrides = {},
 ): PresenceRoomConfig {
+  // This is an operator-facing seam, but it is still called from runtime
+  // composition code. Treat a malformed container as no overrides rather
+  // than allowing a null dereference to prevent the lobby from starting.
+  if (overrides === null || typeof overrides !== 'object') overrides = {};
   const spriteKeys =
     Array.isArray(overrides.spriteKeys) &&
     overrides.spriteKeys.length > 0 &&
