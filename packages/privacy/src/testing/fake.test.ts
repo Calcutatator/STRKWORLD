@@ -41,6 +41,17 @@ describe('fake lifecycle configuration', () => {
     expect(() => new FakePrivacyOperations({ balances: balances as never }))
       .toThrow(/starting balance/i);
   });
+
+  it.each([
+    ['negative maturity', { noteMaturityBlocks: -1 }],
+    ['fractional maturity', { noteMaturityBlocks: 1.5 }],
+    ['unsafe maturity', { noteMaturityBlocks: Number.MAX_SAFE_INTEGER + 1 }],
+    ['zero proof validity', { proofValidityBlocks: 0 }],
+    ['fractional proof validity', { proofValidityBlocks: 1.5 }],
+  ] as const)('rejects %s in pool config', (_label, poolConfig) => {
+    expect(() => new FakePrivacyOperations({ poolConfig }))
+      .toThrow(/pool config/i);
+  });
 });
 
 describe('the fee comes out of the balance being spent', () => {

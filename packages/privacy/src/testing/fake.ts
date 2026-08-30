@@ -140,6 +140,14 @@ export class FakePrivacyOperations implements PrivacyOperations {
       (config.registered ?? []).map((a) => normalise(a)),
     );
     this.pool = { ...DEFAULT_POOL, ...config.poolConfig };
+    if (
+      !Number.isSafeInteger(this.pool.noteMaturityBlocks)
+      || this.pool.noteMaturityBlocks < 0
+      || !Number.isSafeInteger(this.pool.proofValidityBlocks)
+      || this.pool.proofValidityBlocks <= 0
+    ) {
+      throw new PrivacyError('unknown', 'The fake pool config has invalid lifecycle block windows.');
+    }
     this.cap = {
       supportsStrk20: true,
       walletApiVersion: '0.10.3',
