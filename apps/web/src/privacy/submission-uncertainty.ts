@@ -34,7 +34,7 @@ export function createSubmissionUncertainty(): SubmissionUncertainty {
     subscribe: ownerStore.subscribe,
   });
 
-  return {
+  return Object.freeze({
     store,
     retain(): void {
       const state = ownerStore.getState();
@@ -46,5 +46,5 @@ export function createSubmissionUncertainty(): SubmissionUncertainty {
       if (!state.active || state.acknowledged) return;
       ownerStore.setState(uncertaintyState(true, true));
     },
-  };
+  });
 }
