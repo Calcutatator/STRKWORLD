@@ -442,6 +442,26 @@ describe('fixed room controller', () => {
     expect(h.events.filter((event) => event.event === 'station:activated')).toHaveLength(1);
   });
 
+  it('does not resume twice after station delivery destroys the controller', () => {
+    const h = harness();
+    h.controller.enter();
+    h.shell.emit('world:stations', {
+      building: 'post-office',
+      stations: [
+        {
+          station: 'post-office:transfer',
+          label: 'TRANSFER',
+          status: 'available',
+        },
+      ],
+    });
+    h.out.on('station:activated', () => h.controller.destroy());
+
+    h.controller.update({ x: 3, y: 4 });
+
+    expect(h.inputCalls).toEqual(['resume', 'suspend', 'resume']);
+  });
+
   it('ignores commands for another building and exits only once for a matching command', () => {
     const h = harness();
     h.controller.enter();

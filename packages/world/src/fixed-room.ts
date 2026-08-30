@@ -448,7 +448,7 @@ export function createFixedRoomController(
         });
         // EventBus delivery is synchronous. A stale/missing Shell claim must
         // not strand the player with World input suspended.
-        if (controlOwner === 'world') options.input.resume();
+        if (!destroyed && inRoom && ownsWorldControl()) options.input.resume();
       }
     },
     destroy(): void {
