@@ -121,9 +121,9 @@ export function stationSnapshot(
   register: readonly RouteGrade[] = PRIVACY_REGISTER,
   capabilities: StationCapabilities = {},
 ): ShellEvents['world:stations']['stations'] {
-  return STATIONS.filter((station) => station.building === building).map((definition) => ({
+  return Object.freeze(STATIONS.filter((station) => station.building === building).map((definition) => Object.freeze({
     station: definition.station,
     label: definition.label,
     status: resolveStation(building, definition.station, register, capabilities).status,
-  }));
+  })));
 }

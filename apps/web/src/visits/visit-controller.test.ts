@@ -444,6 +444,15 @@ describe('station registry', () => {
     });
   });
 
+  it('keeps published station snapshots immutable at the public seam', () => {
+    const snapshot = stationSnapshot('bank');
+    expect(Object.isFrozen(snapshot)).toBe(true);
+    expect(Object.isFrozen(snapshot[0])).toBe(true);
+    expect(Reflect.set(snapshot[0]!, 'status', 'locked')).toBe(false);
+    expect(Reflect.set(snapshot, 0, { ...snapshot[0]!, status: 'locked' })).toBe(false);
+    expect(stationSnapshot('bank')[0]?.status).toBe('available');
+  });
+
   it('publishes the Bridge station and fails closed without both runtime capabilities', () => {
     expect(stationSnapshot('bridge')).toEqual([
       { station: 'bridge:deposit', label: 'DEPOSIT', status: 'locked' },
