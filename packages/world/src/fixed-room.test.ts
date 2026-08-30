@@ -1197,6 +1197,30 @@ describe('fixed room controller', () => {
     expect(h.events).toEqual([]);
   });
 
+  it('does not commit Shell ownership when suspending input fails', () => {
+    const out = bus<WorldEvents>();
+    const shell = bus<ShellEvents>();
+    const suspensionError = new Error('input suspension failed');
+    const input = {
+      suspend: vi.fn(() => { throw suspensionError; }),
+      resume: vi.fn(),
+    };
+    const controller = createFixedRoomController({
+      definition: POST_OFFICE_ROOM_DEFINITION,
+      out,
+      in: shell,
+      input,
+    });
+    controller.enter();
+
+    expect(() => shell.emit('world:control-owner', {
+      building: 'post-office',
+      owner: 'shell',
+    })).toThrow(suspensionError);
+    expect(controller.state.controlOwner).toBe('world');
+    expect(input.suspend).toHaveBeenCalledOnce();
+  });
+
   it('rearms after leaving the station approach and resumes when no Shell claims', () => {
     const h = harness();
     h.controller.enter();

@@ -258,6 +258,72 @@ empty shell to fetchers, so a 200 there means nothing.
 
 ## 6. Findings log
 
+### 2026-08-30 — Web World-event consumers own and validate payloads
+
+The Web visit, panel and presence consumers previously narrowed World event
+payloads with an object check and then read typed fields normally. Runtime
+payloads can still be null, accessor-backed, proxy-hostile or contain unknown
+building/reason/facing values and non-finite coordinates. Those shapes could
+throw inside bus delivery, open a panel for a nonexistent building, or start
+lobby presence with an invalid placement.
+
+The Web boundary now reads only own data descriptors, contains descriptor
+traps, validates known building/lock/facing values, requires matching station
+prefixes and finite coordinates, and publishes an owned frozen snapshot to
+the existing consumers. Invalid events are ignored without changing the
+current visit, panel or presence authority. Valid event ordering and station
+registry fail-closed behavior are unchanged.
+
+*Verified:* public regressions were red before the decoder: malformed movement
+started a lobby join and accessor-backed visit/panel payloads were not owned at
+their consumption boundary. The corrected focused run passes 4 files / 116
+tests and Web typecheck. The full workspace gates are recorded in the owning
+commit. Deterministic in-memory buses only: no browser, lobby service, wallet,
+provider, RPC, proof, signature, funds or transaction was used.*
+
+### 2026-08-30 — Avatar Studio highlight publication must remain retryable
+
+`createAvatarStudioController.update()` assigned `highlightedFigure` before
+publishing the synchronous `onChange` snapshot. If that external publication
+threw, the controller retained a highlight the renderer had not accepted; the
+same tile then skipped publication on retry because the sentinel already
+matched.
+
+Highlight updates now use their own committed revision. A failed publication
+rolls back its candidate when no newer successful nested update owns it, while
+reentrant newer state remains authoritative. Successful highlighting and
+selection behavior are unchanged.
+
+*Verified:* a red-first public World regression makes highlight delivery throw
+on a figure tile; the old controller retained the unrendered figure and could
+not retry its highlight, while the corrected controller restores `null` and
+successfully republishes and selects the same tile. Focused Avatar Studio tests
+pass 47 tests and the World suite passes 25 files / 404 tests. No browser,
+lobby server, wallet, provider, RPC, proof, signature, funds or transaction was
+used.
+
+### 2026-08-30 — Fixed-room control ownership must follow the input handoff
+
+The `world:control-owner` Shell callback committed `controlOwner = 'shell'`
+before calling `input.suspend()`. If that external handoff threw before the
+input gate had disabled delivery, the controller reported Shell ownership even
+though World input remained active; a retry or later cleanup could then act on
+divergent ownership. The inverse `world` handoff had the same stale-state
+shape when input restoration failed.
+
+The callback now restores the prior owner when the requested input state was
+not established, while retaining the new owner when the concrete input gate
+reports a partial suspended state that owns retryable cleanup. Reentrant newer
+owner callbacks remain authoritative, and successful commands publish exactly
+as before.
+
+*Verified:* a public fixed-room regression first made `input.suspend()` throw
+without changing input state; the old callback left `controlOwner` as `shell`,
+while the corrected callback preserves `world` and rethrows the original error.
+The World package suite, typecheck, invariants, and diff hygiene pass. No
+browser, wallet, provider, RPC, proof, signature, funds, or transaction was
+used.
+
 ### 2026-08-30 — Fixed-room station render projection must validate matching fields
 
 `fixedRoomStationPresentations()` accepted a matching runtime station snapshot

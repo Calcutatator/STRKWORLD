@@ -29,6 +29,24 @@ describe('visit controller', () => {
     expect(controller.store.getState()).toEqual({ name: 'outside' });
   });
 
+  it('ignores accessor-backed World commands without invoking their fields', () => {
+    const world = createEventBus<WorldEvents>();
+    const shell = createEventBus<ShellEvents>();
+    const controller = createVisitController(shell);
+    controller.listen(world);
+    let read = false;
+    const hostile = {};
+    Object.defineProperty(hostile, 'building', { get() { read = true; throw new Error('read'); } });
+
+    world.emit('building:entered', hostile as never);
+    world.emit('building:locked', hostile as never);
+    world.emit('building:exited', hostile as never);
+    world.emit('station:activated', hostile as never);
+
+    expect(read).toBe(false);
+    expect(controller.store.getState()).toEqual({ name: 'outside' });
+  });
+
   it('publishes an immutable controller API while retaining owned transitions', () => {
     const world = createEventBus<WorldEvents>();
     const shell = createEventBus<ShellEvents>();

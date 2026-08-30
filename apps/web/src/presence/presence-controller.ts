@@ -9,6 +9,7 @@ import {
   type RemotePeerSource,
 } from '@strkworld/world';
 import { LobbyClient } from '@strkworld/lobby/client';
+import { ownMovementPayload } from '../bus/world-event-payload.js';
 
 export type PresenceAvailability = 'connecting' | 'connected' | 'suspended' | 'unavailable';
 export interface PresenceState { readonly status: PresenceAvailability; readonly canReconnect: boolean; }
@@ -338,7 +339,10 @@ export function createPresenceController({ endpoint, factory = (options) => new 
       }
     });
   };
-  const onMoved = ({ position, facing }: WorldEvents['player:moved']) => {
+  const onMoved = (value: WorldEvents['player:moved']) => {
+    const owned = ownMovementPayload(value);
+    if (!owned) return;
+    const { position, facing } = owned;
     placement = { x: position.x, y: position.y, facing };
     if (inside) return;
     if (state.status === 'connected') client?.updatePosition(position.x, position.y, facing);

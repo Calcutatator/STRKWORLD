@@ -33,6 +33,16 @@ describe('nextActiveRoom', () => {
     }
   });
 
+  it('ignores accessor-backed payload fields without invoking them', () => {
+    const current: ActiveRoom = { source: 'entered', building: 'bank' };
+    let read = false;
+    const payload = {};
+    Object.defineProperty(payload, 'building', { get() { read = true; throw new Error('read'); } });
+
+    expect(nextActiveRoom(current, { name: 'building:entered', payload } as never)).toBe(current);
+    expect(read).toBe(false);
+  });
+
   it('opens the entered building', () => {
     expect(nextActiveRoom(null, entered('bank'))).toEqual({ source: 'entered', building: 'bank' });
   });
