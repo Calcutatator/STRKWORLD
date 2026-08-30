@@ -31,6 +31,33 @@ function inheritResponseField(key: string, value: unknown): () => void {
 }
 
 describe('BackendPrivacyClient', () => {
+  it('owns submission artifact data before JSON serialization can substitute it', async () => {
+    const fetcher = vi.fn(async () => response({ transactionHash: '0xabc123' }));
+    const call = {
+      contract_address: '0x123', entry_point: 'apply_actions', calldata: ['0x1'],
+    };
+    let callReads = 0;
+    const artifact = new Proxy({
+      call,
+      proof: { data: 'proof', output: ['0x1'], proof_facts: ['0x2'] },
+    }, {
+      get(target, key, receiver) {
+        if (key === 'call') {
+          callReads += 1;
+          return { contract_address: '0x999', entry_point: 'forged', calldata: ['0x9'] };
+        }
+        return Reflect.get(target, key, receiver);
+      },
+    });
+    const client = new BackendPrivacyClient('https://backend.example', fetcher);
+
+    await client.submit({ route: 'transfer', artifact, feeAuthorization: 'auth', proofValidityBlocks: 450 });
+
+    const dispatched = fetcher.mock.calls[0] as unknown as [string, RequestInit];
+    expect(JSON.parse(String(dispatched[1].body))).toMatchObject({ artifact: { call } });
+    expect(callReads).toBe(0);
+  });
+
   it('invokes an injected transport without granting the client as receiver', async () => {
     let receiver: unknown = 'unset';
     const fetcher = async function (this: unknown): Promise<Response> {

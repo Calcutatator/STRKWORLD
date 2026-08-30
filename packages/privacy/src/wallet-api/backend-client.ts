@@ -89,7 +89,7 @@ export class BackendPrivacyClient implements PoolReadClient, PrivateSubmissionGa
 
   async submit(input: Parameters<PrivateSubmissionGateway['submit']>[0]): Promise<TxResult> {
     const route = ownInputField(input, 'route');
-    const artifact = ownInputField(input, 'artifact');
+    const artifact = ownJsonValue(ownInputField(input, 'artifact'));
     const feeAuthorization = ownInputField(input, 'feeAuthorization');
     const proofValidityBlocks = ownInputField(input, 'proofValidityBlocks');
     const signal = ownOptionalInputField(input, 'signal');
@@ -258,6 +258,54 @@ export class BackendPrivacyClient implements PoolReadClient, PrivateSubmissionGa
         error,
       );
     }
+  }
+}
+
+function ownJsonValue(value: unknown): unknown {
+  if (value === null || typeof value === 'string' || typeof value === 'boolean') return value;
+  if (typeof value === 'number') {
+    if (!Number.isFinite(value)) throw new PrivacyError('unknown', 'The private submission request is invalid.');
+    return value;
+  }
+  if (Array.isArray(value)) {
+    try {
+      const length = Object.getOwnPropertyDescriptor(value, 'length');
+      if (!length || !('value' in length) || !Number.isSafeInteger(length.value)
+        || Reflect.ownKeys(value).length !== length.value + 1) {
+        throw new Error('invalid artifact array');
+      }
+      const owned: unknown[] = [];
+      for (let index = 0; index < length.value; index += 1) {
+        const descriptor = Object.getOwnPropertyDescriptor(value, String(index));
+        if (!descriptor || !('value' in descriptor)) throw new Error('invalid artifact array item');
+        owned.push(ownJsonValue(descriptor.value));
+      }
+      return owned;
+    } catch (error) {
+      if (error instanceof PrivacyError) throw error;
+      throw new PrivacyError('unknown', 'The private submission request is invalid.', error);
+    }
+  }
+  if (!value || typeof value !== 'object') {
+    throw new PrivacyError('unknown', 'The private submission request is invalid.');
+  }
+  try {
+    const owned: Record<string, unknown> = {};
+    for (const key of Reflect.ownKeys(value)) {
+      if (typeof key !== 'string') throw new Error('invalid artifact key');
+      const descriptor = Object.getOwnPropertyDescriptor(value, key);
+      if (!descriptor || !('value' in descriptor)) throw new Error('invalid artifact field');
+      Object.defineProperty(owned, key, {
+        configurable: true,
+        enumerable: true,
+        writable: true,
+        value: ownJsonValue(descriptor.value),
+      });
+    }
+    return owned;
+  } catch (error) {
+    if (error instanceof PrivacyError) throw error;
+    throw new PrivacyError('unknown', 'The private submission request is invalid.', error);
   }
 }
 

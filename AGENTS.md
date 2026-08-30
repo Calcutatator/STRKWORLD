@@ -258,6 +258,29 @@ empty shell to fetchers, so a 200 there means nothing.
 
 ## 6. Findings log
 
+### 2026-08-30 — Submission artifacts are owned before serialization
+
+The private submission request owned its top-level artifact reference, but
+passed that caller object directly to `JSON.stringify`. Serialization performs
+ordinary recursive property reads, so a proxy, getter or concurrent mutation
+could replace the call or proof after top-level admission and change the
+artifact dispatched at the irreversible submission boundary.
+
+Submission now recursively copies the JSON data graph from own data-property
+descriptors before validation and transport. Arrays require exact dense indexed
+data, objects reject symbols and accessors, numeric values must be finite, and
+proxy traps fail before dispatch. JSON serialization sees only the owned plain
+graph; the wire shape and proof contents remain otherwise unchanged.
+
+*Verified:* a public BackendPrivacyClient regression supplies an artifact proxy
+whose own `call` descriptor targets `0x123/apply_actions` while ordinary reads
+substitute `0x999/forged`. The base dispatched the forged call; the corrected
+client dispatches the descriptor-owned call and invokes no proxy `get` trap.
+Focused Backend client verification passes 94 tests and privacy typecheck
+passes. Full workspace gates are recorded in the owning commit. Deterministic
+fakes only: no browser, external provider, RPC, wallet, proof, signature, funds
+or transaction was used.*
+
 ### 2026-08-30 — Failed presence suspension must retire street visibility
 
 When an interior entry called the live presence client's `suspend()` and that
