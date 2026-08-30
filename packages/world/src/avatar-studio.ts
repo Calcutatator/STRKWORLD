@@ -462,7 +462,23 @@ export function createAvatarStudioController(
       throw error;
     }
     if (destroyed || inRoom) return;
-    publish();
+    try {
+      publish();
+    } catch (error) {
+      // State publication is an external lifecycle boundary. If the outside
+      // snapshot is rejected, restore Studio ownership and presentation so a
+      // later exit can retry the same handoff instead of becoming a no-op.
+      if (!destroyed && !inRoom) {
+        inRoom = true;
+        highlightedFigure = previousHighlightedFigure;
+        try {
+          options.onEnter?.();
+        } catch {
+          // Preserve the original publication error.
+        }
+      }
+      throw error;
+    }
     // Exit publication is synchronous and may retire or replace the Studio
     // before this turn resumes. Do not announce a stale exit.
     if (destroyed || inRoom) return;
