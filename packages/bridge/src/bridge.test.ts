@@ -1908,6 +1908,8 @@ describe('bridge persistence', () => {
     ['non-string settlement hash', { leg: 'settled', message: 'settled', pollingStopped: true, settlementTxHash: {} }],
     ['non-bigint received amount', { leg: 'settled', message: 'settled', pollingStopped: true, strkReceived: '1' }],
     ['negative received amount', { leg: 'settled', message: 'settled', pollingStopped: true, strkReceived: -1n }],
+    ['received amount on a pending leg', { leg: 'awaiting-deposit', message: 'waiting', pollingStopped: false, strkReceived: 1n }],
+    ['settlement hash on a pending leg', { leg: 'awaiting-deposit', message: 'waiting', pollingStopped: false, settlementTxHash: '0xdestination' }],
   ] as const)('rejects a persisted status with %s', async (_label, malformedStatus) => {
     const client = new StubClient();
     const store = new MemoryBridgeStore();

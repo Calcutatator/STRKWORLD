@@ -87,6 +87,11 @@ function isBridgeStatus(value: unknown): value is BridgeStatus {
     typeof value.pollingStopped !== 'boolean'
   ) return false;
   if (
+    value.leg !== 'settled' &&
+    (Object.prototype.hasOwnProperty.call(value, 'settlementTxHash') ||
+      Object.prototype.hasOwnProperty.call(value, 'strkReceived'))
+  ) return false;
+  if (
     Object.prototype.hasOwnProperty.call(value, 'depositTxHash') &&
     !isBoundedHash(value.depositTxHash)
   ) return false;
