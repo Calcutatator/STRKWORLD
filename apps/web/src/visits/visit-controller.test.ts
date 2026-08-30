@@ -1,11 +1,34 @@
 import { describe, expect, it, vi } from 'vitest';
-import type { ShellEvents, WorldEvents } from '@strkworld/shared';
+import type { EventBus, ShellEvents, WorldEvents } from '@strkworld/shared';
 import { createEventBus } from '../bus/event-bus.js';
 import { PRIVACY_REGISTER, type RouteGrade } from '../privacy/register.js';
 import { createVisitController } from './visit-controller.js';
 import { resolveStation, stationSnapshot } from './station-registry.js';
 
 describe('visit controller', () => {
+  it('ignores null World commands without escaping the visit boundary', () => {
+    const handlers = new Map<keyof WorldEvents, (payload: unknown) => void>();
+    const world = {
+      on(event: keyof WorldEvents, handler: (payload: unknown) => void) {
+        handlers.set(event, handler);
+        return () => handlers.delete(event);
+      },
+    } as unknown as EventBus<WorldEvents>;
+    const shell = createEventBus<ShellEvents>();
+    const controller = createVisitController(shell);
+    controller.listen(world);
+
+    const emitMalformed = (event: keyof WorldEvents) => {
+      handlers.get(event)?.(null);
+    };
+
+    expect(() => emitMalformed('building:entered')).not.toThrow();
+    expect(() => emitMalformed('building:locked')).not.toThrow();
+    expect(() => emitMalformed('building:exited')).not.toThrow();
+    expect(() => emitMalformed('station:activated')).not.toThrow();
+    expect(controller.store.getState()).toEqual({ name: 'outside' });
+  });
+
   it('publishes an immutable controller API while retaining owned transitions', () => {
     const world = createEventBus<WorldEvents>();
     const shell = createEventBus<ShellEvents>();

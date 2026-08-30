@@ -127,13 +127,20 @@ export function createVisitController(
         if (cleanupFailure) throw cleanupFailure;
       };
       try {
-        stops.push(world.on('building:entered', ({ building }) => enter(building)));
-        stops.push(world.on('building:locked', ({ building, reason }) => {
+        stops.push(world.on('building:entered', (payload) => {
+          if (!payload || typeof payload !== 'object') return;
+          enter(payload.building);
+        }));
+        stops.push(world.on('building:locked', (payload) => {
+          if (!payload || typeof payload !== 'object') return;
+          const { building, reason } = payload;
           const state = store.getState();
           if (state.name === 'visiting') return;
           setState({ name: 'locked', building, reason });
         }));
-        stops.push(world.on('building:exited', ({ building }) => {
+        stops.push(world.on('building:exited', (payload) => {
+          if (!payload || typeof payload !== 'object') return;
+          const { building } = payload;
           const state = store.getState();
           if (state.name === 'visiting' && state.building === building) {
             // The World owns movement after the player leaves, even if the
@@ -142,7 +149,10 @@ export function createVisitController(
             setState({ name: 'outside' });
           }
         }));
-        stops.push(world.on('station:activated', ({ building, station }) => activate(building, station)));
+        stops.push(world.on('station:activated', (payload) => {
+          if (!payload || typeof payload !== 'object') return;
+          activate(payload.building, payload.station);
+        }));
       } catch (error) {
         try {
           stopWorld();
