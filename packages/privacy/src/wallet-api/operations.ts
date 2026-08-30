@@ -65,6 +65,9 @@ export class WalletApiPrivacyOperations implements PrivacyOperations {
     try {
       const versions = await this.supportedVersions(signal);
       throwIfAborted(signal);
+      if (!Array.isArray(versions)) {
+        throw new PrivacyError('unknown', 'The wallet returned an invalid capability response.');
+      }
       const supported = versions
         .map((raw) => ({ raw, parsed: parseSemver(raw) }))
         .filter((version): version is { raw: string; parsed: Semver } => version.parsed !== null)

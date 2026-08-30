@@ -1059,6 +1059,17 @@ describe('wallet error mapping', () => {
 });
 
 describe('Wallet API capability versions', () => {
+  it.each([
+    ['null', null],
+    ['object', {}],
+    ['primitive', 42],
+  ] as const)('rejects a non-array %s supported-version response as invalid wallet data', async (_label, response) => {
+    const { ops, supportedVersions } = fixture();
+    vi.mocked(supportedVersions).mockResolvedValue(response as never);
+
+    await expect(ops.capability()).rejects.toMatchObject({ kind: 'unknown' });
+  });
+
   it('does not treat malformed versions or a 0.10.3 prerelease as stable support', async () => {
     const { wallet, pool, gateway } = fixture();
     const ops = new WalletApiPrivacyOperations({
