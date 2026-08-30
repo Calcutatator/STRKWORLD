@@ -593,6 +593,17 @@ function validateIntents(intents: readonly Intent[], policy: WalletRoutePolicy):
   if (intents.length === 0) throw new PrivacyError('unknown', 'prepare called with no intents');
   if (intents.length > policy.maxIntents) throw new PrivacyError('unknown', 'Too many intents in one batch.');
   for (const intent of intents) {
+    const expectedKeys = intent.kind === 'shield'
+      ? ['kind', 'token', 'amount']
+      : intent.kind === 'swap'
+        ? ['kind', 'tokenIn', 'tokenOut', 'amountIn', 'minAmountOut']
+        : ['kind', 'token', 'amount', 'recipient'];
+    if (
+      !hasOwnDataProperties(intent, expectedKeys)
+      || Reflect.ownKeys(intent).length !== expectedKeys.length
+    ) {
+      throw new PrivacyError('unknown', 'The intent has an invalid shape.');
+    }
     if (!policy.enabledRoutes.includes(intent.kind)) {
       throw new PrivacyError('unknown', `The ${intent.kind} route is disabled.`);
     }

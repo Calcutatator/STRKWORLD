@@ -505,6 +505,15 @@ describe('WalletApiPrivacyOperations capability and reads', () => {
 });
 
 describe('Wallet API action routes', () => {
+  it.each([
+    ['shield', { kind: 'shield', token: TOKEN, amount: 1n, recipient: BOB }],
+    ['transfer', { kind: 'transfer', token: TOKEN, amount: 1n, recipient: BOB, memo: 'private' }],
+  ] as const)('rejects an intent with extra fields on the %s route', async (_label, intent) => {
+    const { ops } = fixture();
+
+    await expect(ops.prepare([intent as never])).rejects.toMatchObject({ kind: 'unknown' });
+  });
+
   it('owns the live relay quote before wallet proof generation', async () => {
     const { ops, wallet, gateway } = fixture();
     const liveFee = { token: STRK, recipient: FEE_RECIPIENT, amount: 1n, ...AUTH };
