@@ -63,6 +63,30 @@ describe('WalletSession', () => {
     expect(session.getSnapshot().wallets[0]).toMatchObject({ name: 'Ready' });
   });
 
+  it('drops a discovered wallet with accessor-backed display fields without invoking them', () => {
+    let getterCalled = false;
+    const malformed = {} as WalletHandle;
+    Object.defineProperty(malformed, 'name', {
+      configurable: true,
+      get() {
+        getterCalled = true;
+        throw new Error('wallet name getter must not run');
+      },
+    });
+    Object.defineProperty(malformed, 'icon', { configurable: true, value: 'data:image/svg+xml,wallet' });
+
+    expect(() => createWalletSession(
+      denyAllOptions(),
+      { discovery: discoveryWith(malformed), connectWallet: async () => connection('0x111') },
+    )).not.toThrow();
+    const session = createWalletSession(
+      denyAllOptions(),
+      { discovery: discoveryWith(malformed), connectWallet: async () => connection('0x111') },
+    );
+    expect(getterCalled).toBe(false);
+    expect(session.getSnapshot().wallets).toEqual([]);
+  });
+
   it('deduplicates a repeated discovery notification without retiring the selected authority', async () => {
     const selected = wallet('Ready');
     const discovery = controllableDiscovery(selected);

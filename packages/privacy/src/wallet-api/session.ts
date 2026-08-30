@@ -518,6 +518,12 @@ function ownDiscoveredWallets(value: unknown): WalletHandle[] {
   const seen = new Set<object>();
   return value.filter((wallet): wallet is WalletHandle => {
     if ((typeof wallet !== 'object' && typeof wallet !== 'function') || wallet === null) return false;
+    const name = Object.getOwnPropertyDescriptor(wallet, 'name');
+    const icon = Object.getOwnPropertyDescriptor(wallet, 'icon');
+    if (
+      !name || !('value' in name) || typeof name.value !== 'string'
+      || !icon || !('value' in icon) || typeof icon.value !== 'string'
+    ) return false;
     if (seen.has(wallet)) return false;
     seen.add(wallet);
     return true;
