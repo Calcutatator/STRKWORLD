@@ -167,6 +167,17 @@ describe('deterministic prepared swap review', () => {
 });
 
 describe('shielded funds are not immediately spendable', () => {
+  it.each([
+    ['negative', -1],
+    ['fractional', 1.5],
+    ['unsafe', Number.MAX_SAFE_INTEGER + 1],
+  ] as const)('rejects a %s block advance without moving chain state', (_label, blocks) => {
+    const ops = fresh();
+
+    expect(() => ops.advanceBlocks(blocks)).toThrow(/block advance/i);
+    expect(ops.currentBlock).toBe(0);
+  });
+
   it('holds a deposit as maturing until enough blocks pass', async () => {
     const ops = fresh(0n);
     const batch = await ops.prepare([{ kind: 'shield', token: STRK, amount: 50n * 10n ** 18n }]);

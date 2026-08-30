@@ -152,6 +152,9 @@ export class FakePrivacyOperations implements PrivacyOperations {
 
   /** Advance the chain. Matures any notes whose time has come. */
   advanceBlocks(n: number): void {
+    if (!Number.isSafeInteger(n) || n < 0) {
+      throw new PrivacyError('unknown', 'The block advance must be a non-negative safe integer.');
+    }
     this.block += n;
     const stillMaturing: MaturingNote[] = [];
     for (const note of this.maturing) {
