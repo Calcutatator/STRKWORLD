@@ -258,6 +258,25 @@ empty shell to fetchers, so a 200 there means nothing.
 
 ## 6. Findings log
 
+### 2026-08-30 — Lobby reconciliation avoids redundant timers after synchronous confirmation
+
+`LobbyClient.#pump()` sent a move and unconditionally scheduled its retry timer
+after the send returned. A transport/state callback can run synchronously from
+`room.send()` and update the local entry before that return; the nested pump
+then correctly clears the desired move, but the outer pump still left a stale
+reconciliation timer behind.
+
+The send path now checks whether the desired placement was cleared by that
+synchronous confirmation before stamping the send time or scheduling another
+timer. Asynchronous server updates, dropped-move retries, send-floor handling
+and transport-closure ownership are unchanged.
+
+*Verified:* a red-first public fake-room regression synchronously applied the
+move and emitted a state change from `room.send`; the old client created one
+redundant timer, while the corrected path sent once with no timer. Removing the
+post-send desired-state guard restores the failure. No browser, external
+lobby, wallet, provider, RPC, proof, signature, funds or transaction was used.
+
 ### 2026-08-30 — Lobby reconciliation verifies the entry identity
 
 `LobbyClient.#serverSelf()` looked up the local session key in the decoded

@@ -605,6 +605,10 @@ export class LobbyClient {
       // A transport can report closure synchronously from send. Do not stamp
       // the retired room's send time or schedule work against its replacement.
       if (this.#room !== room || this.#status !== 'connected') return;
+      // A synchronous state callback may have confirmed this exact move while
+      // the send was still on the stack. Do not leave a redundant timer behind
+      // after that nested pump already cleared the desired placement.
+      if (this.#desired === null) return;
       this.#lastSentAt = now;
       // Re-check after an interval: if the server accepted this move its state
       // change will clear #desired; if it was dropped by the server floor, we

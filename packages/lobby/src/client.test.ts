@@ -1214,6 +1214,43 @@ describe('presence', () => {
       joinOrCreate.mockRestore();
     }
   });
+
+  it('does not schedule reconciliation after a synchronous state update confirms the move', async () => {
+    const joined = fakeRoom();
+    const joinOrCreate = vi
+      .spyOn(ColyseusClient.prototype, 'joinOrCreate')
+      .mockResolvedValueOnce(joined.room as never);
+    const timer = vi.spyOn(globalThis, 'setTimeout');
+    const client = new LobbyClient({ endpoint: server.endpoint, start: { x: 0, y: 0 } });
+
+    try {
+      const connecting = client.connect();
+      await Promise.resolve();
+      joined.welcome({ gameId: '0123456789abcdef' });
+      await connecting;
+      timer.mockClear();
+      joined.send.mockImplementationOnce((message: string, payload: { x: number; y: number; facing: string }) => {
+        expect(message).toBe('move');
+        joined.room.state.peers.set('0123456789abcdef', {
+          gameId: '0123456789abcdef',
+          position: { x: payload.x, y: payload.y },
+          facing: payload.facing,
+          sprite: 'avatar-1',
+        } as never);
+        joined.stateChange();
+      });
+
+      client.updatePosition(10, 0, 'right');
+
+      expect(joined.send).toHaveBeenCalledTimes(1);
+      expect(timer).not.toHaveBeenCalled();
+    } finally {
+      await client.disconnect();
+      timer.mockRestore();
+      joinOrCreate.mockRestore();
+    }
+  });
+
   it('keeps reconciliation timers within the timer ceiling through clock rollback', async () => {
     const joined = fakeRoom();
     const joinOrCreate = vi
