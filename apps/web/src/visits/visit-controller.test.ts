@@ -6,6 +6,27 @@ import { createVisitController } from './visit-controller.js';
 import { resolveStation, stationSnapshot } from './station-registry.js';
 
 describe('visit controller', () => {
+  it('publishes an immutable controller API while retaining owned transitions', () => {
+    const world = createEventBus<WorldEvents>();
+    const shell = createEventBus<ShellEvents>();
+    const controller = createVisitController(shell);
+    const originalCloseSurface = controller.closeSurface;
+
+    expect(Object.isFrozen(controller)).toBe(true);
+    expect(Reflect.set(controller, 'closeSurface', () => undefined)).toBe(false);
+    expect(Reflect.set(controller, 'requestExit', () => undefined)).toBe(false);
+    expect(controller.closeSurface).toBe(originalCloseSurface);
+    controller.listen(world);
+    world.emit('building:entered', { building: 'bank' });
+    controller.openMenu();
+    controller.closeSurface();
+    expect(controller.store.getState()).toMatchObject({
+      name: 'visiting',
+      building: 'bank',
+      surface: { name: 'room' },
+    });
+  });
+
   it('keeps the public visit store read-only and immutable', () => {
     const world = createEventBus<WorldEvents>();
     const shell = createEventBus<ShellEvents>();

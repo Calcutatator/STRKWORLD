@@ -110,7 +110,7 @@ export function createVisitController(
     setState({ name: 'visiting', building, surface: { name: 'station', station } });
   }
 
-  return {
+  return Object.freeze<VisitController>({
     store,
 
     listen(world): () => void {
@@ -206,5 +206,5 @@ export function createVisitController(
       }
       this.closeSurface();
     },
-  };
+  });
 }
