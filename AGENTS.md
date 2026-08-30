@@ -258,6 +258,27 @@ empty shell to fetchers, so a 200 there means nothing.
 
 ## 6. Findings log
 
+### 2026-08-30 — Fixed-room Shell command fields must be accessor-safe
+
+The fixed-room controller used ordinary property access for the `building`
+and `owner` fields of Shell commands. A malformed cross-package payload with
+an accessor-backed field could therefore throw from the synchronous World
+listener before the building check ran, interrupting the scene's event bus.
+The existing null guard did not cover this case because optional chaining still
+invokes an accessor.
+
+Shell command handlers now read their discriminator and owner fields through
+the own-data-field boundary, which ignores accessors and contains descriptor
+failures. Station payload reads use the same safe path; valid command ordering,
+known-owner validation and null-payload behavior are unchanged.
+
+*Verified:* a red-first public fixed-room regression supplied a matching
+`world:control-owner` payload whose `building` getter threw; the old handler
+leaked that exact error, while the corrected handler ignored the command
+without invoking the getter or changing World ownership. Focused fixed-room
+tests pass 73 tests and World typecheck passes. No browser, lobby server,
+wallet, provider, RPC, proof, signature, funds or transaction was used.*
+
 ### 2026-08-30 — Avatar Studio figure visibility sync must be transactional
 
 `createAvatarStudioFigureLayer.sync()` applied visibility to eight figure

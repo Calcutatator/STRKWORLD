@@ -195,8 +195,12 @@ function ownDataField(value: unknown, key: string): unknown {
   if (value === null || (typeof value !== 'object' && typeof value !== 'function')) {
     return undefined;
   }
-  const descriptor = Object.getOwnPropertyDescriptor(value, key);
-  return descriptor && 'value' in descriptor ? descriptor.value : undefined;
+  try {
+    const descriptor = Object.getOwnPropertyDescriptor(value, key);
+    return descriptor && 'value' in descriptor ? descriptor.value : undefined;
+  } catch {
+    return undefined;
+  }
 }
 
 export const BANK_ROOM_DEFINITION = freezeAuthoredRoom({
@@ -474,20 +478,24 @@ export function createFixedRoomController(
   let updateRevision = 0;
   try {
     stopStations = options.in?.on('world:stations', (payload) => {
-    if (destroyed || !inRoom || payload?.building !== options.definition.building) return;
-    stations = normalizeFixedRoomStations(options.definition, payload?.stations);
+    if (destroyed || !inRoom || ownDataField(payload, 'building') !== options.definition.building) return;
+    stations = normalizeFixedRoomStations(
+      options.definition,
+      ownDataField(payload, 'stations') as ShellEvents['world:stations']['stations'] | undefined,
+    );
       publish();
     });
     stopOwner = options.in?.on('world:control-owner', (payload) => {
-    if (destroyed || !inRoom || payload?.building !== options.definition.building) return;
-      if (payload.owner !== 'world' && payload.owner !== 'shell') return;
-      controlOwner = payload.owner;
+    if (destroyed || !inRoom || ownDataField(payload, 'building') !== options.definition.building) return;
+      const owner = ownDataField(payload, 'owner');
+      if (owner !== 'world' && owner !== 'shell') return;
+      controlOwner = owner;
       if (controlOwner === 'shell') options.input.suspend();
       else options.input.resume();
       publish();
     });
     stopExit = options.in?.on('world:exit-building', (payload) => {
-    if (destroyed || !inRoom || payload?.building !== options.definition.building) return;
+    if (destroyed || !inRoom || ownDataField(payload, 'building') !== options.definition.building) return;
       leave();
     });
   } catch (error) {
