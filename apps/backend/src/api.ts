@@ -308,6 +308,8 @@ export class BackendApi {
       !plan.chainId ||
       !isFelt(plan.executorAddress) ||
       BigInt(plan.executorAddress) === 0n ||
+      typeof plan.buyAmount !== 'bigint' ||
+      plan.buyAmount > MAX_UINT256 ||
       plan.buyAmount < minAmountOut ||
       !Number.isSafeInteger(plan.expiresAt) ||
       plan.expiresAt <= this.clockNow() ||

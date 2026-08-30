@@ -633,6 +633,52 @@ describe('bounded private swap inputs', () => {
   });
 });
 
+describe('bounded private swap planner responses', () => {
+  it('accepts the maximum uint256 AVNU output at the response boundary', async () => {
+    const { api, swapPlanner } = fixture();
+    vi.spyOn(swapPlanner, 'prepare').mockImplementation(async () => ({
+      quoteId: 'quote-maximum',
+      buyAmount: MAX_UINT256,
+      expiresAt: 2_000,
+      chainId: '0x534e5f4d41494e4',
+      executorAddress: '0x999',
+      executorCalls: [{ contractAddress: '0x111', entrypoint: 'swap', selector: '0x555', calldata: ['0xaaa'] }],
+    }));
+
+    await expect(api.handle({
+      method: 'POST', path: '/v1/private/swaps/prepare',
+      body: {
+        v: 1, sellToken: '0xabc', buyToken: STRK,
+        sellAmount: '1', minAmountOut: '1', slippageBps: 100,
+      },
+    })).resolves.toMatchObject({ status: 200 });
+  });
+
+  it('rejects an over-uint256 AVNU output before fee authorization', async () => {
+    const { api, swapPlanner, paymaster, authorizations } = fixture();
+    vi.spyOn(swapPlanner, 'prepare').mockResolvedValue({
+      quoteId: 'quote-overflow',
+      buyAmount: MAX_UINT256 + 1n,
+      expiresAt: 2_000,
+      chainId: '0x534e5f4d41494e4',
+      executorAddress: '0x999',
+      executorCalls: [{ contractAddress: '0x111', entrypoint: 'swap', selector: '0x555', calldata: ['0xaaa'] }],
+    });
+    const buildFee = vi.spyOn(paymaster, 'buildFee');
+    const issue = vi.spyOn(authorizations, 'issue');
+
+    await expect(api.handle({
+      method: 'POST', path: '/v1/private/swaps/prepare',
+      body: {
+        v: 1, sellToken: '0xabc', buyToken: STRK,
+        sellAmount: '1', minAmountOut: '1', slippageBps: 100,
+      },
+    })).resolves.toMatchObject({ status: 409 });
+    expect(buildFee).not.toHaveBeenCalled();
+    expect(issue).not.toHaveBeenCalled();
+  });
+});
+
 describe('bounded private submission', () => {
   it('validates, jitters a pool-native artifact, rechecks freshness, and relays it', async () => {
     const { api, delays, submitted } = fixture();

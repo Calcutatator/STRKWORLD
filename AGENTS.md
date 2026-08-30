@@ -258,6 +258,46 @@ empty shell to fetchers, so a 200 there means nothing.
 
 ## 6. Findings log
 
+### 2026-08-30 — Fixed-room station activation does not resume after teardown
+
+`createFixedRoomController.update()` suspended input and emitted
+`station:activated`, then unconditionally resumed input when World still owned
+the room. A synchronous station listener could destroy the controller during
+that emission; destruction already resumed input, and the stale update then
+resumed it a second time after the lifecycle had ended.
+
+The post-event continuation now requires the controller to remain live, in the
+room and World-owned before restoring input. Normal activation ordering and
+Shell claims remain unchanged; teardown owns its single restoration.
+
+*Verified:* a red-first public regression destroys the controller from
+`station:activated`; before the guard the input sequence ended with two resumes
+after the suspension, while the corrected sequence has exactly one teardown
+resume. Removing the post-event lifecycle guard reproduces the failure. The
+focused fixed-room and Backend run passes 144 tests, and both affected package
+typechecks and diff hygiene pass. No browser, lobby, wallet, provider, RPC,
+proof, signature, funds or transaction was used.
+
+### 2026-08-30 — Private swap planner outputs must fit uint256
+
+`BackendApi.prepareSwap()` checked that an external planner's `buyAmount`
+met the requested minimum but did not enforce the STRK20 `u256` upper bound.
+An AVNU or planner response above `2^256 - 1` could therefore receive a fee
+authorization and cross the backend response boundary, even though the
+Wallet API cannot represent that output amount.
+
+Swap quote admission now requires a runtime bigint output no greater than
+`2^256 - 1` before paymaster fee construction or authorization issuance. The
+existing stale/invalid-quote response and the exact maximum boundary are
+unchanged.
+
+*Verified:* a red-first Backend regression supplied `2^256`; the old path
+returned `200` and issued a fee, while the corrected path returns `409` with
+zero paymaster and authorization calls. An exact-maximum output remains
+accepted. The focused fixed-room and Backend run passes 144 tests, and both
+affected package typechecks and diff hygiene pass. No browser, wallet,
+provider, RPC, proof, signature, funds or transaction was used.
+
 ### 2026-08-30 — Door-trigger transitions are reentrancy-owned
 
 `createDoorTrigger.update()` emitted building events before committing its new
