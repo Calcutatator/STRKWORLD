@@ -258,6 +258,24 @@ empty shell to fetchers, so a 200 there means nothing.
 
 ## 6. Findings log
 
+### 2026-08-30 — Bank mode route projection is immutable
+
+`ROUTE_BY_MODE` was exported as a mutable object. A same-bundle consumer could
+rewrite the route behind `shield`, `unshield`, or `transfer` after startup;
+Bank UI mode tabs and the machine both read this map when projecting doors and
+preparing the corresponding financial action. TypeScript's `Record` annotation
+did not protect this runtime route authority.
+
+The authored mode-to-route map is now a frozen `Readonly<Record<...>>`. The
+Bank mode set and route register remain unchanged; this only prevents a shared
+consumer from rewriting the approved route projection.
+
+*Verified:* a red-first public Bank regression observed that the map accepted a
+replacement on the prior integration head; the corrected regression rejects the
+rewrite and preserves `shield -> bank.shield`. The focused Bank machine suite
+passes 84/84; no browser, wallet, provider, RPC, proof, signature, funds or
+transaction was used.
+
 ### 2026-08-30 — Wallet capability versions require string runtime data
 
 `WalletApiPrivacyOperations.capability()` passed every value from the wallet's

@@ -16,6 +16,7 @@ import { createReceiptLedger } from '../../receipts/receipt-ledger.js';
 import { createSubmissionUncertainty } from '../../privacy/submission-uncertainty.js';
 import {
   createBankPanel,
+  ROUTE_BY_MODE,
   type BankPanel,
   type BankPanelOptions,
 } from './bank-machine.js';
@@ -29,6 +30,14 @@ const POOL_FEE = 6_000000000000000000n;
 const SHIELD_DISCLOSURE = PRIVACY_REGISTER.find((entry) => entry.route === 'bank.shield')!.disclosure;
 const strk = (whole: string) => parseTokenAmount(whole)!;
 const allowFinancialActions = () => true;
+
+describe('Bank route authority', () => {
+  it('keeps the mode-to-route map immutable at the public seam', () => {
+    expect(Object.isFrozen(ROUTE_BY_MODE)).toBe(true);
+    expect(Reflect.set(ROUTE_BY_MODE, 'shield', 'exchange.swap')).toBe(false);
+    expect(ROUTE_BY_MODE.shield).toBe('bank.shield');
+  });
+});
 
 function fake(overrides: ConstructorParameters<typeof FakePrivacyOperations>[0] = {}) {
   return new FakePrivacyOperations({

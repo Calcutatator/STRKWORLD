@@ -73,11 +73,11 @@ export type BankMode = 'shield' | 'unshield' | 'transfer';
 const ALL_BANK_MODES: readonly BankMode[] = ['shield', 'unshield', 'transfer'];
 
 /** The graded route each control drives. See `ROUTE_BY_INTENT_KIND`. */
-export const ROUTE_BY_MODE: Record<BankMode, string> = {
+export const ROUTE_BY_MODE: Readonly<Record<BankMode, string>> = Object.freeze({
   shield: ROUTE_BY_INTENT_KIND.shield,
   unshield: ROUTE_BY_INTENT_KIND.unshield,
   transfer: ROUTE_BY_INTENT_KIND.transfer,
-};
+});
 
 export type BalanceView =
   /** Never read, or invalidated by a submission. The player asks; we do not. */
