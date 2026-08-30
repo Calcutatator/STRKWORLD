@@ -407,6 +407,51 @@ describe('fixed room definitions', () => {
     expect(onExit).toHaveBeenCalledTimes(2);
   });
 
+  it('restores room presentation when exit fails after a partial handoff', () => {
+    const calls: string[] = [];
+    const port = {
+      setPlayerVelocity: () => { calls.push('velocity'); },
+      setBodyEnabled: (enabled: boolean) => { calls.push(`body:${enabled}`); },
+      setGroundVisible: (visible: boolean) => { calls.push(`ground:${visible}`); },
+      setDoorsVisible: (visible: boolean) => { calls.push(`doors:${visible}`); },
+      setRemoteVisible: (visible: boolean) => { calls.push(`remote:${visible}`); },
+      setLabelsVisible: (visible: boolean) => { calls.push(`labels:${visible}`); },
+      setRoomVisible: (visible: boolean) => { calls.push(`room:${visible}`); },
+      setWorldBounds: (room: boolean) => { calls.push(`world:${room}`); },
+      setCameraBounds: (room: boolean) => { calls.push(`camera:${room}`); },
+      setPlayerPosition: (room: boolean) => { calls.push(`position:${room}`); },
+      resetDoors: () => { calls.push('reset'); },
+      resumeStreet: () => { calls.push('resume'); },
+    };
+    const presentation = createFixedRoomPresentation(port);
+    const out = bus<WorldEvents>();
+    const shell = bus<ShellEvents>();
+    const error = new Error('room bounds failed');
+    const originalBounds = port.setWorldBounds;
+    let failExit = true;
+    port.setWorldBounds = (room) => {
+      if (!room && failExit) {
+        failExit = false;
+        throw error;
+      }
+      originalBounds(room);
+    };
+    const controller = createFixedRoomController({
+      definition: POST_OFFICE_ROOM_DEFINITION,
+      out,
+      in: shell,
+      input: { suspend: vi.fn(), resume: vi.fn() },
+      onEnter: () => presentation.enter(),
+      onExit: () => presentation.exit(),
+    });
+
+    controller.enter();
+    const exit = POST_OFFICE_ROOM_DEFINITION.exit;
+    expect(() => controller.update({ x: exit.x, y: exit.y })).toThrow(error);
+    expect(controller.state.inRoom).toBe(true);
+    expect(calls.at(-1)).toBe('position:true');
+  });
+
   it('rolls back room ownership when exit state publication fails', () => {
     const out = bus<WorldEvents>();
     const shell = bus<ShellEvents>();

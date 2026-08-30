@@ -533,6 +533,11 @@ export function createFixedRoomController(
         controlOwner = previousControlOwner;
         highlightedStation = previousHighlightedStation;
         approachArmed = previousApproachArmed;
+        try {
+          options.onEnter?.();
+        } catch {
+          // Preserve the original presentation exit error.
+        }
       }
       throw error;
     }

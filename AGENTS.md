@@ -258,6 +258,26 @@ empty shell to fetchers, so a 200 there means nothing.
 
 ## 6. Findings log
 
+### 2026-08-30 — Fixed-room exit compensation must restore partial presentation
+
+`createFixedRoomController.leave()` restored logical room ownership when its
+`onExit()` presentation callback threw, but did not invoke `onEnter()` to
+restore a presentation that had already applied only part of the outside
+handoff. The controller could therefore report `inRoom` while the renderer
+remained outside and partially transitioned.
+
+After restoring logical ownership, the exit failure path now attempts
+`onEnter()` compensation. The original exit error remains authoritative if
+compensation also fails, and a destroyed or synchronously re-entered controller
+is not compensated a second time.
+
+*Verified:* a public World regression makes the real fixed-room presentation
+throw after applying partial exit state. On the old path the final presentation
+operation remained `position:false` while the controller was inside; the
+corrected path restores `position:true` and preserves the original error.
+Focused fixed-room tests pass 71 tests. No browser, lobby server, wallet,
+provider, RPC, proof, signature, funds or transaction was used.
+
 ### 2026-08-30 — Fixed-room entry rollback can overwrite a reentrant retry
 
 `createFixedRoomPresentation` used a transition revision for its forward
