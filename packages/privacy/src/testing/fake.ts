@@ -126,7 +126,13 @@ export class FakePrivacyOperations implements PrivacyOperations {
   readonly submitted: Intent[][] = [];
 
   constructor(config: FakeConfig = {}) {
-    for (const [token, amount] of Object.entries(config.balances ?? {})) {
+    const balances = config.balances ?? {};
+    for (const token of Object.keys(balances)) {
+      const descriptor = Object.getOwnPropertyDescriptor(balances, token);
+      if (descriptor === undefined || !('value' in descriptor)) {
+        throw new PrivacyError('unknown', 'The fake starting balance is invalid.');
+      }
+      const amount = descriptor.value;
       try {
         if (BigInt(token) === 0n) throw new Error();
         normalise(token);

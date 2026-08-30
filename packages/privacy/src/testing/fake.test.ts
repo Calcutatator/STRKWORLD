@@ -21,6 +21,23 @@ function fresh(balance = 100n * 10n ** 18n) {
   });
 }
 
+describe('fake construction ownership', () => {
+  it('rejects an accessor-backed starting balance without invoking it', () => {
+    let getterCalled = false;
+    const balances = {} as Record<string, bigint>;
+    Object.defineProperty(balances, STRK, {
+      enumerable: true,
+      get() {
+        getterCalled = true;
+        throw new Error('balance getter must not run');
+      },
+    });
+
+    expect(() => new FakePrivacyOperations({ balances })).toThrow(PrivacyError);
+    expect(getterCalled).toBe(false);
+  });
+});
+
 describe('fake lifecycle configuration', () => {
   it.each([
     ['negative', -1],
