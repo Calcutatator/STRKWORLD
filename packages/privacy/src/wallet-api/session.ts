@@ -595,7 +595,7 @@ function ownPreparedBatch(
   }
   const swapReview = swapReviewDescriptor?.value === undefined
     ? undefined
-    : Object.freeze({ ...swapReviewDescriptor.value });
+    : ownSwapReview(swapReviewDescriptor.value, prepared);
   if (
     typeof prepared.poolFee !== 'bigint'
     || prepared.poolFee < 0n
@@ -706,6 +706,29 @@ function isNonzeroFelt(value: string): boolean {
   } catch {
     return false;
   }
+}
+
+function ownSwapReview(value: unknown, prepared: PreparedBatch): NonNullable<PreparedBatch['swapReview']> {
+  if (!hasOwnDataProperties(value, ['expectedAmountOut', 'minimumAmountOut', 'slippageBps', 'expiresAt'])) {
+    retireInvalidPrepared(prepared);
+    throw new PrivacyError('unknown', 'The wallet returned an invalid prepared swap review.');
+  }
+  const review = value as NonNullable<PreparedBatch['swapReview']>;
+  if (
+    typeof review.expectedAmountOut !== 'bigint'
+    || review.expectedAmountOut <= 0n
+    || typeof review.minimumAmountOut !== 'bigint'
+    || review.minimumAmountOut <= 0n
+    || review.minimumAmountOut > review.expectedAmountOut
+    || !Number.isSafeInteger(review.slippageBps)
+    || review.slippageBps <= 0
+    || !Number.isSafeInteger(review.expiresAt)
+    || review.expiresAt <= 0
+  ) {
+    retireInvalidPrepared(prepared);
+    throw new PrivacyError('unknown', 'The wallet returned an invalid prepared swap review.');
+  }
+  return Object.freeze({ ...review });
 }
 
 function denseDataArray(value: unknown): value is unknown[] {
