@@ -90,6 +90,18 @@ describe('WalletApiPrivacyOperations capability and reads', () => {
     expect(balances).not.toHaveBeenCalled();
   });
 
+  it.each([
+    ['null token container', null],
+    ['object token container', {}],
+    ['malformed token', ['not-a-felt']],
+  ] as const)('rejects a %s before asking the wallet for balances', async (_label, tokens) => {
+    const { ops, wallet } = fixture();
+    const balances = vi.spyOn(wallet, 'strk20Balances');
+
+    await expect(ops.balances(tokens as never)).rejects.toMatchObject({ kind: 'unknown' });
+    expect(balances).not.toHaveBeenCalled();
+  });
+
   it('rejects balance fields supplied only by the object prototype', async () => {
     const { ops, wallet } = fixture();
     const inherited = Object.create({ token: TOKEN, balance: '0x64' });

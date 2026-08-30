@@ -96,6 +96,9 @@ export class WalletApiPrivacyOperations implements PrivacyOperations {
 
   async balances(tokens: string[] = [], signal?: AbortSignal): Promise<PrivateBalance[]> {
     throwIfAborted(signal);
+    if (!Array.isArray(tokens) || tokens.some((token) => !isFelt(token))) {
+      throw new PrivacyError('unknown', 'The requested balance tokens are invalid.');
+    }
     try {
       const balances = await this.wallet.strk20Balances(tokens);
       throwIfAborted(signal);
