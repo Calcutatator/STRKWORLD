@@ -56,7 +56,7 @@ export class WalletApiPrivacyOperations implements PrivacyOperations {
     this.pool = options.pool;
     this.submission = options.submission;
     this.supportedVersions = options.supportedVersions;
-    this.policy = options.policy;
+    this.policy = ownPolicy(options.policy);
     this.now = options.now ?? Date.now;
   }
 
@@ -774,6 +774,21 @@ function toActions(intents: readonly Intent[]): STRK20_ACTION[] {
       };
       case 'swap': throw new PrivacyError('unknown', 'Swap actions require the AVNU route.');
     }
+  });
+}
+
+function ownPolicy(policy: WalletRoutePolicy): WalletRoutePolicy {
+  return Object.freeze({
+    maxIntents: policy.maxIntents,
+    maxRelayFee: policy.maxRelayFee,
+    enabledRoutes: Object.freeze([...policy.enabledRoutes]),
+    allowedTokens: Object.freeze({
+      shield: Object.freeze([...policy.allowedTokens.shield]),
+      unshield: Object.freeze([...policy.allowedTokens.unshield]),
+      transfer: Object.freeze([...policy.allowedTokens.transfer]),
+      swap: Object.freeze([...policy.allowedTokens.swap]),
+    }),
+    ...(policy.swap ? { swap: Object.freeze({ ...policy.swap }) } : {}),
   });
 }
 

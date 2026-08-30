@@ -79,6 +79,25 @@ function fixture() {
 }
 
 describe('WalletApiPrivacyOperations capability and reads', () => {
+  it('owns its route policy before caller mutation can enable a financial route', async () => {
+    const { wallet, pool, gateway, supportedVersions } = fixture();
+    const policy = {
+      maxIntents: 1,
+      maxRelayFee: 0n,
+      enabledRoutes: [] as ('shield')[],
+      allowedTokens: {
+        shield: [] as string[], unshield: [] as string[], transfer: [] as string[], swap: [] as string[],
+      },
+    };
+    const ops = new WalletApiPrivacyOperations({ wallet, pool, submission: gateway, supportedVersions, policy });
+
+    policy.enabledRoutes.push('shield');
+    policy.allowedTokens.shield.push(TOKEN);
+
+    await expect(ops.prepare([{ kind: 'shield', token: TOKEN, amount: 1n }]))
+      .rejects.toThrow(/route is disabled/i);
+  });
+
   it('detects support by version query without reading balances', async () => {
     const { ops, wallet, supportedVersions } = fixture();
     const balances = vi.spyOn(wallet, 'strk20Balances');
