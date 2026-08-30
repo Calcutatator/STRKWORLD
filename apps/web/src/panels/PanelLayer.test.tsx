@@ -162,6 +162,47 @@ describe('ActiveRoomView', () => {
 });
 
 describe('PanelLayer lifecycle', () => {
+  it('does not let a late callback from a replaced World bus reopen a stale room', () => {
+    const firstWorld = createEventBus<WorldEvents>();
+    const secondWorld = createEventBus<WorldEvents>();
+    let staleEntered!: (payload: WorldEvents['building:entered']) => void;
+    const originalOn = firstWorld.on;
+    firstWorld.on = (<K extends keyof WorldEvents>(event: K, handler: (payload: WorldEvents[K]) => void) => {
+      if (event === 'building:entered') staleEntered = handler as (payload: WorldEvents['building:entered']) => void;
+      return originalOn(event, handler);
+    }) as typeof firstWorld.on;
+    const shell = createEventBus<ShellEvents>();
+    const panels = {
+      bank: { building: 'bank' as const, title: 'Bank', Component: () => <p data-room="bank">bank</p> },
+      exchange: { building: 'exchange' as const, title: 'Exchange', Component: () => <p data-room="exchange">exchange</p> },
+    };
+    const container = document.createElement('div');
+    const root = createRoot(container);
+    const renderLayer = (world: typeof firstWorld) => (
+      <PrivacyProvider
+        operations={new FakePrivacyOperations()}
+        initialConnectState={{ name: 'connected', capability: { supportsStrk20: true, walletApiVersion: '1', registration: 'registered' }, registrationConfirmed: true }}
+        shellBus={shell}
+      >
+        <PanelLayer world={world} panels={panels} />
+      </PrivacyProvider>
+    );
+
+    act(() => root.render(renderLayer(firstWorld)));
+    act(() => firstWorld.emit('building:entered', { building: 'bank' }));
+    act(() => root.render(renderLayer(secondWorld)));
+    act(() => secondWorld.emit('building:entered', { building: 'exchange' }));
+    expect(container.querySelector('[data-room="exchange"]')).not.toBeNull();
+
+    // This represents an already-queued callback from the retired world. The
+    // event bus unsubscribe prevents future delivery, but cannot retract a
+    // callback the old world has already captured.
+    act(() => staleEntered({ building: 'bank' }));
+    expect(container.querySelector('[data-room="exchange"]')).not.toBeNull();
+    expect(container.querySelector('[data-room="bank"]')).toBeNull();
+    root.unmount();
+  });
+
   it('ignores a stale panel close callback after the world replaces the active room', () => {
     const world = createEventBus<WorldEvents>();
     const shell = createEventBus<ShellEvents>();

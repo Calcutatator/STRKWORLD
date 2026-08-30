@@ -258,6 +258,27 @@ empty shell to fetchers, so a 200 there means nothing.
 
 ## 6. Findings log
 
+### 2026-08-30 — PanelLayer retires callbacks from replaced World buses
+
+`PanelLayer` unsubscribed its three World listeners when the `world` prop
+changed, but had no ownership token on the callbacks themselves. A callback
+already captured by the old World could therefore run after a replacement bus
+was installed and reopen or close a room owned by the new bus. This is the
+same stale-completion shape as an async result: unsubscribe cannot retract a
+callback that has already escaped the bus.
+
+The effect now assigns each listener set a generation and invalidates that
+generation before cleanup. Every World callback checks ownership before
+publishing room state; ordinary events, room close behavior and StrictMode
+cleanup are unchanged.
+
+*Verified:* a public red-first PanelLayer regression enters Bank on World A,
+rebinds to World B and enters Exchange, then invokes an already-captured Bank
+callback from World A. The base reopens Bank; the corrected implementation
+keeps Exchange authoritative. Focused PanelLayer tests pass 16/16. No
+browser, wallet, provider, RPC, proof, signature, funds or transaction was
+used.
+
 ### 2026-08-30 — Relay estimate requests are owned before dispatch
 
 The Backend privacy client validated estimate request fields through ordinary

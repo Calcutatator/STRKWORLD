@@ -71,6 +71,7 @@ export function PanelLayer({
   const { connectState, shellBus } = usePrivacy();
   const [active, setActive] = useState<ActiveRoom | null>(null);
   const activeRef = useRef<ActiveRoom | null>(null);
+  const listenGeneration = useRef(0);
   const publishActive = (next: ActiveRoom | null): void => {
     // Keep the owner current before React schedules the render. A stale panel
     // callback can otherwise close the replacement room during that window.
@@ -84,6 +85,8 @@ export function PanelLayer({
     // every one, so no subscription outlives the effect that made it and the
     // bus never accumulates a second copy of these handlers.
     const stops: Array<() => void> = [];
+    const generation = ++listenGeneration.current;
+    const ownsListeners = (): boolean => listenGeneration.current === generation;
     const stopWorld = () => {
       let cleanupFailure: unknown;
       for (const stop of stops.splice(0)) {
@@ -96,17 +99,27 @@ export function PanelLayer({
       if (cleanupFailure) throw cleanupFailure;
     };
     try {
-      stops.push(world.on('building:entered', (payload) =>
-        publishActive(nextActiveRoom(activeRef.current, { name: 'building:entered', payload })),
-      ));
-      stops.push(world.on('building:locked', (payload) =>
-        publishActive(nextActiveRoom(activeRef.current, { name: 'building:locked', payload })),
-      ));
-      stops.push(world.on('building:exited', (payload) =>
-        publishActive(nextActiveRoom(activeRef.current, { name: 'building:exited', payload })),
-      ));
-      return stopWorld;
+      stops.push(world.on('building:entered', (payload) => {
+        if (!ownsListeners()) return;
+        publishActive(nextActiveRoom(activeRef.current, { name: 'building:entered', payload }));
+      }));
+      stops.push(world.on('building:locked', (payload) => {
+        if (!ownsListeners()) return;
+        publishActive(nextActiveRoom(activeRef.current, { name: 'building:locked', payload }));
+      }));
+      stops.push(world.on('building:exited', (payload) => {
+        if (!ownsListeners()) return;
+        publishActive(nextActiveRoom(activeRef.current, { name: 'building:exited', payload }));
+      }));
+      return () => {
+        // Unsubscribe stops future bus delivery, but cannot retract a callback
+        // the old World already captured. Retire this generation first so a
+        // late completion cannot reopen a room owned by a replacement bus.
+        if (ownsListeners()) listenGeneration.current += 1;
+        stopWorld();
+      };
     } catch (error) {
+      if (ownsListeners()) listenGeneration.current += 1;
       try {
         stopWorld();
       } catch {
