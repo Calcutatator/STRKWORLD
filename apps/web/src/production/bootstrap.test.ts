@@ -4,7 +4,13 @@ import { startProductionWalletBootstrap } from './bootstrap.js';
 
 function session(): WalletSession {
   return {
-    operations: {} as never,
+    operations: {
+      capability: async () => undefined,
+      poolConfig: async () => undefined,
+      balances: async () => undefined,
+      recipientStatus: async () => undefined,
+      prepare: async () => undefined,
+    } as never,
     getSnapshot: () => ({
       phase: 'selection-required',
       wallets: [],
@@ -19,6 +25,10 @@ function session(): WalletSession {
     disconnect: async () => undefined,
     destroy: vi.fn(),
   };
+}
+
+function sessionWithOperations(operations: unknown): WalletSession {
+  return { ...session(), operations: operations as never };
 }
 
 describe('production wallet bootstrap', () => {
@@ -195,5 +205,38 @@ describe('production wallet bootstrap', () => {
     dispose();
 
     expect(target.destroy).toHaveBeenCalledOnce();
+  });
+
+  it('fails closed when the loaded session carries malformed operations', async () => {
+    const render = vi.fn();
+    const failure = vi.fn();
+    startProductionWalletBootstrap({
+      load: async () => sessionWithOperations({}),
+      render,
+      failure,
+    });
+    await Promise.resolve();
+    await Promise.resolve();
+
+    expect(render).not.toHaveBeenCalled();
+    expect(failure).toHaveBeenCalledOnce();
+  });
+
+  it('contains an operations proxy whose descriptor inspection throws', async () => {
+    const render = vi.fn();
+    const failure = vi.fn();
+    const malformed = new Proxy({}, {
+      getOwnPropertyDescriptor: () => { throw new Error('operations descriptor trapped'); },
+    });
+    startProductionWalletBootstrap({
+      load: async () => sessionWithOperations(malformed),
+      render,
+      failure,
+    });
+    await Promise.resolve();
+    await Promise.resolve();
+
+    expect(render).not.toHaveBeenCalled();
+    expect(failure).toHaveBeenCalledOnce();
   });
 });

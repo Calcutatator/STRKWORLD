@@ -81,6 +81,15 @@ function isWalletSession(value: unknown): value is WalletSession {
     if (!operations || !('value' in operations) || !operations.value || typeof operations.value !== 'object') {
       return false;
     }
+    if (![
+      'capability',
+      'poolConfig',
+      'balances',
+      'recipientStatus',
+      'prepare',
+    ].every((key) => hasOwnDataMethod(operations.value, key))) {
+      return false;
+    }
     return [
       'getSnapshot',
       'subscribe',
@@ -89,13 +98,15 @@ function isWalletSession(value: unknown): value is WalletSession {
       'readAccount',
       'disconnect',
       'destroy',
-    ].every((key) => {
-      const descriptor = Object.getOwnPropertyDescriptor(value, key);
-      return Boolean(descriptor && 'value' in descriptor && typeof descriptor.value === 'function');
-    });
+    ].every((key) => hasOwnDataMethod(value, key));
   } catch {
     return false;
   }
+}
+
+function hasOwnDataMethod(value: object, key: string): boolean {
+  const descriptor = Object.getOwnPropertyDescriptor(value, key);
+  return Boolean(descriptor && 'value' in descriptor && typeof descriptor.value === 'function');
 }
 
 function destroyQuietly(session: unknown): void {

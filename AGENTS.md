@@ -258,6 +258,29 @@ empty shell to fetchers, so a 200 there means nothing.
 
 ## 6. Findings log
 
+### 2026-08-30 — Production bootstrap validates the privacy operations seam
+
+The production bootstrap validator checked that a loaded session had an
+object-shaped `operations` property, but did not validate the five methods of
+the `PrivacyOperations` seam. A value such as `operations: {}` therefore
+passed admission and was rendered as a usable wallet session; a proxy whose
+descriptor inspection throws could also escape the intended controlled
+failure path.
+
+Bootstrap admission now requires own data methods for `capability`,
+`poolConfig`, `balances`, `recipientStatus` and `prepare`, in addition to the
+existing WalletSession methods. Descriptor/proxy failures remain contained as
+a startup failure. The session and operation method values are not rebound or
+mutated, preserving the existing WalletSession receiver contract; teardown
+continues to use its captured data method.
+
+*Verified:* red-first bootstrap regressions first rendered a session carrying
+`operations: {}` and accepted an operations proxy that cannot be safely
+inspected; the corrected path renders neither and reports each failure once.
+Focused bootstrap tests pass 12 tests; workspace gates are recorded on the
+candidate. No browser, wallet,
+provider, RPC, proof, signature, funds or transaction was used.
+
 ### 2026-08-30 — Relay fee authority is an owned exact snapshot
 
 Relay fee validation checked own data descriptors but then re-read the provider
