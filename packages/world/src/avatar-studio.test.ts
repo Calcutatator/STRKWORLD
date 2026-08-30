@@ -262,6 +262,46 @@ describe('hidden Avatar Studio', () => {
     }
   });
 
+  it('stops a stale enter continuation when exit starts during presentation', () => {
+    let presentation!: ReturnType<typeof createAvatarStudioPresentation>;
+    const streetBounds = { x: 0, y: 0, width: 10, height: 10 };
+    const studioBounds = { x: 1, y: 1, width: 10, height: 10 };
+    const streetReturn = { x: 2, y: 2 };
+    const setWorldBounds = vi.fn();
+    const setPlayerPosition = vi.fn();
+    presentation = createAvatarStudioPresentation({
+      port: {
+        setPlayerVelocity: vi.fn(),
+        setBodyEnabled: vi.fn(),
+        setGroundVisible: vi.fn(),
+        setDoorsVisible: vi.fn(),
+        setRemoteVisible: vi.fn(),
+        setLabelsVisible: vi.fn(),
+        setRoomVisible: vi.fn(),
+        setStudioVisible: vi.fn((visible) => {
+          if (visible) presentation.exit();
+        }),
+        setWorldBounds,
+        setCameraBounds: vi.fn(),
+        setPlayerPosition,
+        resetDoors: vi.fn(),
+        resumeStreet: vi.fn(),
+        destroyStudio: vi.fn(),
+      },
+      streetBounds,
+      studioBounds,
+      studioSpawn: { x: 5, y: 5 },
+      streetReturn,
+      reportStreet: vi.fn(),
+    });
+
+    presentation.enter();
+
+    expect(setWorldBounds).toHaveBeenLastCalledWith(streetBounds);
+    expect(setWorldBounds).not.toHaveBeenLastCalledWith(studioBounds);
+    expect(setPlayerPosition).toHaveBeenLastCalledWith(streetReturn);
+  });
+
   it('retries controller-owned presentation cleanup after a failed destroy', () => {
     const cleanupError = new Error('controller presentation cleanup failed');
     const onDestroy = vi.fn().mockImplementationOnce(() => { throw cleanupError; });

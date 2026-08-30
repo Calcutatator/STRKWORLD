@@ -136,38 +136,42 @@ export function createAvatarStudioPresentation(options: {
   const streetReturn = Object.freeze({ ...options.streetReturn });
   let destroyed = false;
   let destroying = false;
+  let transitionRevision = 0;
   return {
     enter(): void {
       if (destroyed || destroying) return;
+      const ownTransition = ++transitionRevision;
+      const isCurrent = (): boolean =>
+        !destroyed && !destroying && transitionRevision === ownTransition;
       const { port } = options;
       try {
         port.setPlayerVelocity(0, 0);
-        if (destroyed || destroying) return;
+        if (!isCurrent()) return;
         port.setBodyEnabled(false);
-        if (destroyed) return;
+        if (!isCurrent()) return;
         port.setGroundVisible(false);
-        if (destroyed) return;
+        if (!isCurrent()) return;
         port.setDoorsVisible(false);
-        if (destroyed) return;
+        if (!isCurrent()) return;
         port.setRemoteVisible(false);
-        if (destroyed) return;
+        if (!isCurrent()) return;
         port.setLabelsVisible(false);
-        if (destroyed) return;
+        if (!isCurrent()) return;
         port.setRoomVisible(false);
-        if (destroyed) return;
+        if (!isCurrent()) return;
         port.setStudioVisible(true);
-        if (destroyed) return;
+        if (!isCurrent()) return;
         port.setWorldBounds(studioBounds);
-        if (destroyed) return;
+        if (!isCurrent()) return;
         port.setCameraBounds(studioBounds);
-        if (destroyed) return;
+        if (!isCurrent()) return;
         port.setPlayerPosition(studioSpawn);
       } catch (error) {
         // Entry is a multi-port handoff. A later port can fail after earlier
         // calls have already hidden the street or disabled the player. Restore
         // the known street contract while preserving the original failure so a
         // controller can retry the transition without a half-entered world.
-        if (!destroyed) {
+        if (isCurrent()) {
           restoreStreetPresentation(port, streetBounds, streetReturn, () => destroyed);
         }
         throw error;
@@ -175,31 +179,34 @@ export function createAvatarStudioPresentation(options: {
     },
     exit(): void {
       if (destroyed || destroying) return;
+      const ownTransition = ++transitionRevision;
+      const isCurrent = (): boolean =>
+        !destroyed && !destroying && transitionRevision === ownTransition;
       const { port } = options;
       port.setPlayerVelocity(0, 0);
-      if (destroyed) return;
+      if (!isCurrent()) return;
       port.setBodyEnabled(true);
-      if (destroyed) return;
+      if (!isCurrent()) return;
       port.setGroundVisible(true);
-      if (destroyed) return;
+      if (!isCurrent()) return;
       port.setDoorsVisible(true);
-      if (destroyed) return;
+      if (!isCurrent()) return;
       port.setRemoteVisible(true);
-      if (destroyed) return;
+      if (!isCurrent()) return;
       port.setLabelsVisible(true);
-      if (destroyed) return;
+      if (!isCurrent()) return;
       port.setRoomVisible(false);
-      if (destroyed) return;
+      if (!isCurrent()) return;
       port.setStudioVisible(false);
-      if (destroyed) return;
+      if (!isCurrent()) return;
       port.setWorldBounds(streetBounds);
-      if (destroyed) return;
+      if (!isCurrent()) return;
       port.setCameraBounds(streetBounds);
-      if (destroyed) return;
+      if (!isCurrent()) return;
       port.setPlayerPosition(streetReturn);
-      if (destroyed) return;
+      if (!isCurrent()) return;
       port.resetDoors();
-      if (destroyed) return;
+      if (!isCurrent()) return;
       port.resumeStreet(streetReturn, options.reportStreet);
     },
     destroy(): void {
@@ -207,6 +214,7 @@ export function createAvatarStudioPresentation(options: {
       // Retain ownership when cleanup fails so a later Scene teardown can
       // retry. Guard synchronous reentrancy while the port owns this attempt.
       destroying = true;
+      transitionRevision += 1;
       try {
         options.port.destroyStudio();
         destroyed = true;

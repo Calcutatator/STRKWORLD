@@ -258,6 +258,27 @@ empty shell to fetchers, so a 200 there means nothing.
 
 ## 6. Findings log
 
+### 2026-08-30 — Avatar Studio presentation transitions can overwrite reentrant ownership
+
+`createAvatarStudioPresentation.enter()` and `exit()` only checked whether the
+presentation was destroyed between port calls. A synchronous port callback
+could therefore start the opposite transition while a handoff was in flight;
+the older transition then resumed and overwrote the newer street/Studio
+bounds, visibility, or player position.
+
+Presentation enter/exit now own a transition revision and recheck it after
+each synchronous port call. A newer transition or destruction retires the old
+continuation; failed entry restoration is attempted only while that entry
+still owns the transition. Normal handoff ordering and retry behavior remain
+unchanged.
+
+*Verified:* a public World regression starts `exit()` from the Studio-visible
+port callback during `enter()`. On the old path the stale enter reapplied
+Studio bounds and position after the exit; the corrected path leaves the
+street bounds and return position authoritative. Focused Avatar Studio tests
+pass 43 tests. No browser, lobby server, wallet, provider, RPC, proof,
+signature, funds or transaction was used.
+
 ### 2026-08-30 — Failed station delivery must remain retryable
 
 `createFixedRoomController.update()` removed a station from
