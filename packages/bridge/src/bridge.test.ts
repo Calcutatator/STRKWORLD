@@ -1848,6 +1848,19 @@ describe('source registry and refund validation', () => {
     expect(assets.some((asset) => asset.assetId === 'nep141:inherited.omft.near')).toBe(false);
   });
 
+  it('ignores live token metadata whose blockchain only matches an inherited map key', async () => {
+    const assets = await loadSourceAssets({
+      getTokens: async () => [{
+        assetId: 'nep141:inherited-chain-key.omft.near',
+        symbol: 'INHERITED',
+        decimals: 6,
+        blockchain: 'toString',
+      }] as unknown as TokenResponse[],
+    });
+
+    expect(assets.some((asset) => asset.assetId === 'nep141:inherited-chain-key.omft.near')).toBe(false);
+  });
+
   it('ignores live token metadata containing only whitespace', async () => {
     const assets = await loadSourceAssets({
       getTokens: async () => [{

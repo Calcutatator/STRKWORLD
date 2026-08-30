@@ -78,7 +78,10 @@ export async function loadSourceAssets(client: TokenRegistryClient): Promise<Sou
     if (typeof token.assetId !== 'string' || typeof token.symbol !== 'string' || typeof token.blockchain !== 'string') {
       continue;
     }
-    const chainName = CHAIN_MAP[String(token.blockchain)];
+    const chainKey = String(token.blockchain);
+    const chainName = Object.prototype.hasOwnProperty.call(CHAIN_MAP, chainKey)
+      ? CHAIN_MAP[chainKey]
+      : undefined;
     if (
       !chainName ||
       !token.assetId ||
