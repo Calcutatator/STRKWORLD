@@ -117,20 +117,23 @@ export function BridgeProvider({
 
   const [loadedRuntime, setLoadedRuntime] = useState<{
     loader: BridgeRuntimeLoader;
+    generation: number;
     source: BridgeRuntimeSource;
   } | null>(null);
   const loadOwner = useRef<{
     loader: BridgeRuntimeLoader | undefined;
+    service: BridgeProviderProps['service'];
     generation: number;
     pending: boolean;
-  }>({ loader: loadRuntime, generation: 1, pending: false });
+  }>({ loader: loadRuntime, service, generation: 1, pending: false });
 
   // Props are authoritative during render. Do not initialize this owner in an
   // effect: React mounts child effects before parent effects, and BridgePanel
   // is the child that legitimately starts the first load.
-  if (loadOwner.current.loader !== loadRuntime) {
+  if (loadOwner.current.loader !== loadRuntime || loadOwner.current.service !== service) {
     loadOwner.current = {
       loader: loadRuntime,
+      service,
       generation: loadOwner.current.generation + 1,
       pending: false,
     };
@@ -146,13 +149,17 @@ export function BridgeProvider({
   }, [loadRuntime]);
 
   const load = useCallback(() => {
-    const currentRuntime = loadedRuntime && loadedRuntime.loader === loadRuntime ? loadedRuntime.source : null;
+    const currentRuntime = loadedRuntime
+      && loadedRuntime.loader === loadRuntime
+      && loadedRuntime.generation === loadOwner.current.generation
+      ? loadedRuntime.source
+      : null;
     if (!loadRuntime || service || currentRuntime || demoRejected || loadOwner.current.pending) return;
     const generation = loadOwner.current.generation;
     loadOwner.current.pending = true;
     void Promise.resolve().then(() => loadRuntime()).then((runtime) => {
       if (runtime && generation === loadOwner.current.generation) {
-        setLoadedRuntime({ loader: loadRuntime, source: runtime });
+        setLoadedRuntime({ loader: loadRuntime, generation, source: runtime });
       }
     }).catch(() => {
       // Optional Bridge recovery is isolated from wallet/app admission. A
@@ -162,7 +169,11 @@ export function BridgeProvider({
     });
   }, [loadRuntime, service, loadedRuntime, demoRejected]);
 
-  const currentRuntime = loadedRuntime && loadedRuntime.loader === loadRuntime ? loadedRuntime.source : null;
+  const currentRuntime = loadedRuntime
+    && loadedRuntime.loader === loadRuntime
+    && loadedRuntime.generation === loadOwner.current.generation
+    ? loadedRuntime.source
+    : null;
   const resolvedService = service ?? currentRuntime?.service;
   const resolvedSources = loadSources ?? currentRuntime?.loadSources;
   const directRuntime = useMemo(

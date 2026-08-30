@@ -169,6 +169,42 @@ describe('BridgeProvider', () => {
     await act(async () => root.unmount());
   });
 
+  it('does not resurrect an optional runtime after an explicit service replacement is removed', async () => {
+    let resolveFirst!: (value: { service: never; loadSources: () => Promise<never[]> }) => void;
+    const first = vi.fn(() => new Promise<{ service: never; loadSources: () => Promise<never[]> }>((resolve) => {
+      resolveFirst = resolve;
+    }));
+    const explicit = { owner: 'explicit' } as never;
+    const container = document.createElement('div');
+    const root = createRoot(container);
+
+    await act(async () => {
+      root.render(<BridgeProvider loadRuntime={first}><LoadProbe start /></BridgeProvider>);
+      await Promise.resolve();
+    });
+    expect(first).toHaveBeenCalledOnce();
+
+    await act(async () => {
+      root.render(<BridgeProvider service={explicit} loadRuntime={first}><LoadProbe start /></BridgeProvider>);
+      await Promise.resolve();
+    });
+    expect(container.innerHTML).toContain('data-owner="explicit"');
+
+    await act(async () => {
+      resolveFirst({ service: { owner: 'stale' } as never, loadSources: async () => [] });
+      await Promise.resolve();
+    });
+    expect(container.innerHTML).toContain('data-owner="explicit"');
+
+    await act(async () => {
+      root.render(<BridgeProvider loadRuntime={first}><LoadProbe start={false} /></BridgeProvider>);
+      await Promise.resolve();
+    });
+    expect(container.innerHTML).toContain('data-service="no"');
+    expect(container.innerHTML).not.toContain('data-owner="stale"');
+    await act(async () => root.unmount());
+  });
+
   it('isolates a rejected optional runtime loader from the mounted app', async () => {
     const loadRuntime = vi.fn(async () => { throw new Error('Bridge chunk unavailable'); });
     const container = document.createElement('div');
