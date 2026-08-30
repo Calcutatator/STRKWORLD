@@ -258,6 +258,29 @@ empty shell to fetchers, so a 200 there means nothing.
 
 ## 6. Findings log
 
+### 2026-08-30 — Remote avatar idle timers must commit with the new pose
+
+`createRemoteAvatarLayer.updateAvatar()` cancelled an existing movement-idle
+timer before presenting the replacement pose and scheduling its timer. If the
+replacement presentation failed, reconciliation correctly retained the last
+rendered peer snapshot, but the prior timer had already been removed. With no
+later lobby update, the avatar could remain in its old walking animation
+indefinitely instead of returning to idle.
+
+The update now keeps the prior timer until the replacement presentation and
+new timer have succeeded, then retires the old timer and publishes the new
+one together. A failed replacement leaves the prior timer owned; a failed new
+timer is cleaned up without publishing it. Existing position rollback,
+last-successful-snapshot retention, ordinary movement and teardown behavior
+are unchanged.
+
+*Verified:* a red-first public World regression starts a remote movement,
+fails the next pose presentation, and fires the prior idle timer. The old path
+had removed that timer and made no idle presentation; the corrected path keeps
+the timer and returns the sprite to idle. Focused remote-avatar tests pass 25
+tests. No browser, lobby server, wallet, provider, RPC, proof, signature,
+funds or transaction was used.
+
 ### 2026-08-30 — Fixed-room Shell command fields must be accessor-safe
 
 The fixed-room controller used ordinary property access for the `building`
