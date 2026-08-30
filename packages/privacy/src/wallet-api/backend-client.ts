@@ -194,10 +194,11 @@ export class BackendPrivacyClient implements PoolReadClient, PrivateSubmissionGa
       );
     }
     if (!response.ok) {
-      const failure = await response.json().catch(() => null) as { message?: unknown } | null;
+      const failure = await response.json().catch(() => null);
+      const message = readErrorMessage(failure);
       throw new PrivacyError(
         response.status === 503 ? 'unreachable' : 'unknown',
-        typeof failure?.message === 'string' ? failure.message : 'The private service rejected the request.',
+        message ?? 'The private service rejected the request.',
       );
     }
     try {
@@ -215,6 +216,14 @@ export class BackendPrivacyClient implements PoolReadClient, PrivateSubmissionGa
       );
     }
   }
+}
+
+function readErrorMessage(value: unknown): string | null {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
+  const descriptor = Object.getOwnPropertyDescriptor(value, 'message');
+  return descriptor && 'value' in descriptor && typeof descriptor.value === 'string'
+    ? descriptor.value
+    : null;
 }
 
 function throwIfAborted(signal?: AbortSignal): void {

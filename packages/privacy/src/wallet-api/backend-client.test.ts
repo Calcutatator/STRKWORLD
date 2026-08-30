@@ -458,6 +458,26 @@ describe('BackendPrivacyClient', () => {
     await expect(client.config()).rejects.toMatchObject({ kind: 'unreachable', message: 'paused' });
   });
 
+  it('does not invoke an accessor-backed backend error message', async () => {
+    let getterCalled = false;
+    const failure = {} as { message?: string };
+    Object.defineProperty(failure, 'message', {
+      enumerable: true,
+      get() {
+        getterCalled = true;
+        throw new Error('backend error getter must not run');
+      },
+    });
+    const client = new BackendPrivacyClient('https://backend.example', async () => ({
+      ok: false,
+      status: 400,
+      json: async () => failure,
+    }) as Response);
+
+    await expect(client.config()).rejects.toMatchObject({ kind: 'unknown' });
+    expect(getterCalled).toBe(false);
+  });
+
   it('reports an accepted private hash before returning the submission receipt', async () => {
     const client = new BackendPrivacyClient(
       'https://backend.example',
