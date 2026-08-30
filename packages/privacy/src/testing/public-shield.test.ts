@@ -78,6 +78,22 @@ describe('FakePublicShieldPlanner', () => {
     await expect(planner.planMax(input((1n << 256n) - 1n))).rejects.toMatchObject({ kind: 'unknown' });
   });
 
+  it('does not consume the next estimate when a plan is rejected', async () => {
+    const planner = new FakePublicShieldPlanner({
+      token: STRK,
+      recipient: '0xabc',
+      poolFee: 3n,
+      gasEstimate: [1n, 2n],
+    });
+
+    await expect(planner.planMax(input(4n))).rejects.toMatchObject({ kind: 'unknown' });
+    await expect(planner.planMax(input(100n))).resolves.toMatchObject({
+      gasEstimate: 1n,
+      plannedReserve: 4n,
+      amountToShield: 96n,
+    });
+  });
+
   it('accepts a zero pool fee while requiring a positive gas reserve', async () => {
     const planner = new FakePublicShieldPlanner({ token: STRK, recipient: '0xabc', poolFee: 0n, gasEstimate: 1n });
     await expect(planner.planMax(input(100n))).resolves.toMatchObject({
