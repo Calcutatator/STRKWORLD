@@ -258,6 +258,23 @@ empty shell to fetchers, so a 200 there means nothing.
 
 ## 6. Findings log
 
+### 2026-08-30 — Backend shutdown registration rolls back partial signal setup
+
+`registerBackendShutdown()` registered `SIGTERM` before `SIGINT` without a
+rollback boundary. If the second lifecycle registration threw, the function
+rejected while leaving the first signal hook installed, so a later retry could
+invoke a stale shutdown callback.
+
+Registration now detaches all previously installed hooks before propagating a
+registration error. Normal two-signal setup, idempotent shutdown and explicit
+disposal are unchanged.
+
+*Verified:* a public shutdown-lifecycle regression makes `SIGINT` registration
+throw after `SIGTERM` succeeds. The old path leaves one hook; the corrected
+path preserves the exact error and leaves no hooks. Backend server tests pass
+27 tests. No browser, provider, RPC, wallet, proof, signature, funds or
+transaction was used.*
+
 ### 2026-08-30 — Tiled property records fail closed without invoking accessors
 
 `flattenProperties()` previously read each raw Tiled property's `name` and

@@ -148,9 +148,15 @@ export function registerBackendShutdown(
     );
   };
   for (const signal of ['SIGTERM', 'SIGINT'] as const) {
-    const remove = lifecycle.listen(signal, shutdown);
-    if (active) removers.push(remove);
-    else remove();
+    try {
+      const remove = lifecycle.listen(signal, shutdown);
+      if (active) removers.push(remove);
+      else remove();
+    } catch (error) {
+      active = false;
+      detach();
+      throw error;
+    }
   }
   return dispose;
 }

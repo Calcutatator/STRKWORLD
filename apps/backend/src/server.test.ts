@@ -217,6 +217,18 @@ describe('production backend composition and HTTP listener', () => {
     listen.mockRestore();
     server.close();
   });
+
+  it('removes the error hook when the bound address is invalid', async () => {
+    const server = createServer();
+    const address = vi.spyOn(server, 'address').mockReturnValue('unexpected' as never);
+    const started = listenBackendServer(server, { port: 0 });
+    await new Promise<void>((resolve) => server.once('listening', resolve));
+
+    await expect(started).rejects.toThrow('Backend listener did not bind a TCP address.');
+    expect(server.listenerCount('error')).toBe(0);
+
+    address.mockRestore();
+  });
 });
 
 describe('production backend shutdown lifecycle', () => {
@@ -249,6 +261,22 @@ describe('production backend shutdown lifecycle', () => {
     expect(close).toHaveBeenCalledTimes(1);
     expect(harness.exit).toHaveBeenCalledTimes(1);
     expect(harness.exit).toHaveBeenCalledWith(0);
+  });
+
+  it('rolls back earlier signal hooks when shutdown registration fails', () => {
+    const failure = new Error('signal registration failed');
+    const listeners = new Set<() => void>();
+    const lifecycle = {
+      listen(signal: 'SIGTERM' | 'SIGINT', listener: () => void) {
+        if (signal === 'SIGINT') throw failure;
+        listeners.add(listener);
+        return () => listeners.delete(listener);
+      },
+      exit: vi.fn((_code: 0 | 1) => undefined),
+    };
+
+    expect(() => registerBackendShutdown(vi.fn(async () => undefined), lifecycle)).toThrow(failure);
+    expect(listeners).toHaveLength(0);
   });
 
   it('accepts shutdown while the running server is not available yet', async () => {
