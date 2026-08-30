@@ -383,6 +383,9 @@ export function createFixedRoomController(
   let stopStations: (() => void) | undefined;
   let stopOwner: (() => void) | undefined;
   let stopExit: (() => void) | undefined;
+  let destroyPending = false;
+  let destroying = false;
+  let inputCleanupPending = true;
   try {
     stopStations = options.in?.on('world:stations', (payload) => {
     if (destroyed || !inRoom || payload?.building !== options.definition.building) return;
@@ -546,7 +549,8 @@ export function createFixedRoomController(
       }
     },
     destroy(): void {
-      if (destroyed) return;
+      if (destroying || (destroyed && !destroyPending)) return;
+      destroying = true;
       destroyed = true;
       const errors: unknown[] = [];
       const attempt = (cleanup: () => void): void => {
@@ -556,17 +560,40 @@ export function createFixedRoomController(
           errors.push(error);
         }
       };
-      if (stopStations) attempt(stopStations);
-      if (stopOwner) attempt(stopOwner);
-      if (stopExit) attempt(stopExit);
+      if (stopStations) {
+        const stop = stopStations;
+        attempt(() => {
+          stop();
+          stopStations = undefined;
+        });
+      }
+      if (stopOwner) {
+        const stop = stopOwner;
+        attempt(() => {
+          stop();
+          stopOwner = undefined;
+        });
+      }
+      if (stopExit) {
+        const stop = stopExit;
+        attempt(() => {
+          stop();
+          stopExit = undefined;
+        });
+      }
       inRoom = false;
       controlOwner = 'world';
       highlightedStation = null;
-      attempt(() => options.input.resume());
-      if (errors.length === 1) throw errors[0];
-      if (errors.length > 1) {
-        throw new AggregateError(errors, 'Fixed-room cleanup failed');
+      if (inputCleanupPending) {
+        attempt(() => {
+          options.input.resume();
+          inputCleanupPending = false;
+        });
       }
+      destroyPending = errors.length > 0;
+      destroying = false;
+      if (errors.length === 1) throw errors[0];
+      if (errors.length > 1) throw new AggregateError(errors, 'Fixed-room cleanup failed');
     },
   };
 }

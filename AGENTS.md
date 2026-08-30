@@ -258,6 +258,26 @@ empty shell to fetchers, so a 200 there means nothing.
 
 ## 6. Findings log
 
+### 2026-08-30 — Fixed-room destruction retries failed cleanup ownership
+
+`createFixedRoomController().destroy()` marked the controller permanently
+destroyed before teardown. If a Shell-listener stop callback or input
+restoration threw, a later `destroy()` became a no-op even though that resource
+could still be attached or the keyboard could still be suspended.
+
+Destruction now retires the controller immediately but retains only failed
+cleanup callbacks for a later retry. Successful listener removal and input
+restoration are not repeated; reentrant destruction during one attempt is
+ignored. The first cleanup error remains unchanged, multiple errors remain an
+`AggregateError`, and successful destruction remains idempotent.
+
+*Verified:* red-first public regressions make a listener stop and input
+restoration fail once; the old controller cannot clean them on a second
+`destroy()`, while the corrected controller retries only those failures and
+completes cleanup. World tests pass 24 files / 332 tests; World typecheck and
+invariants pass. No browser, wallet, provider, RPC, proof, signature, funds
+or transaction was used.
+
 ### 2026-08-30 — Web event payload snapshots reject accessors at the boundary
 
 The Web event bus snapshotter previously read payload members through normal

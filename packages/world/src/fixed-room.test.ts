@@ -817,7 +817,45 @@ describe('fixed room controller', () => {
     expect(input.resume).toHaveBeenCalledOnce();
 
     controller.destroy();
+    expect(stops[0]).toHaveBeenCalledTimes(2);
+    for (const stop of stops.slice(1)) expect(stop).toHaveBeenCalledOnce();
+  });
+
+  it('retries failed listener and input cleanup after destroy', () => {
+    const out = bus<WorldEvents>();
+    const stops: Array<ReturnType<typeof vi.fn>> = [];
+    const shell = {
+      on: vi.fn(() => {
+        const stop = vi.fn();
+        stops.push(stop);
+        return stop;
+      }),
+    };
+    const cleanupError = new Error('listener cleanup failed');
+    const inputError = new Error('input restoration failed');
+    const input = {
+      suspend: vi.fn(),
+      resume: vi.fn().mockImplementationOnce(() => { throw inputError; }),
+    };
+    const controller = createFixedRoomController({
+      definition: POST_OFFICE_ROOM_DEFINITION,
+      out,
+      in: shell as never,
+      input,
+    });
+    // The first registered listener remains owned when its stop throws; the
+    // input cleanup also remains retryable after its first failure.
+    stops[0]!.mockImplementationOnce(() => { throw cleanupError; });
+
+    expect(() => controller.destroy()).toThrow(AggregateError);
+    expect(stops).toHaveLength(3);
     for (const stop of stops) expect(stop).toHaveBeenCalledOnce();
+    expect(input.resume).toHaveBeenCalledOnce();
+
+    expect(() => controller.destroy()).not.toThrow();
+    expect(stops[0]).toHaveBeenCalledTimes(2);
+    for (const stop of stops.slice(1)) expect(stop).toHaveBeenCalledOnce();
+    expect(input.resume).toHaveBeenCalledTimes(2);
   });
 
   it('stops the entry continuation when onEnter destroys the controller', () => {
