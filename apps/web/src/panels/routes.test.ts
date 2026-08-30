@@ -138,6 +138,12 @@ describe('room resolution', () => {
     expect(room.kind).toBe('locked');
     expect(room.kind === 'locked' && room.reason).toBe('unapproved-route');
   });
+
+  it('does not admit an inherited panel descriptor', () => {
+    const panels = Object.create({ exchange: 'forged-panel' }) as { exchange?: string };
+    const room = resolveRoom('exchange', panels);
+    expect(room.kind).toBe('unbuilt');
+  });
 });
 
 describe('disclosures for a batch', () => {

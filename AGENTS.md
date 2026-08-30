@@ -258,6 +258,26 @@ empty shell to fetchers, so a 200 there means nothing.
 
 ## 6. Findings log
 
+### 2026-08-30 — Room resolution ignores inherited panel descriptors
+
+`resolveRoom()` read `panels[building]` through ordinary prototype lookup. A
+prototype-polluted or otherwise non-record registry could therefore provide a
+panel for a building that was not actually present in the registry, causing
+the shell to render an injected room descriptor. The privacy door still runs
+first, but the panel registry is a separate composition boundary and must not
+accept inherited values as authored configuration.
+
+Room resolution now requires an own property before admitting a panel;
+inherited descriptors fall back to the existing `unbuilt` result. This keeps
+the default registry behavior unchanged while making the public resolver
+fail closed for hostile or malformed registry objects.
+
+*Verified:* a red-first public resolver regression supplied an `exchange`
+descriptor only through a custom prototype and received `panel` on the old
+path. The corrected resolver returns `unbuilt`. The focused routes suite
+passes 20/20; no browser, wallet, provider, RPC, proof, signature, funds or
+transaction was used.
+
 ### 2026-08-30 — World host remount cancellation failures preserve teardown
 
 `createHost.acquire()` incremented its lease before cancelling a deferred final
