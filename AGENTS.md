@@ -258,6 +258,25 @@ empty shell to fetchers, so a 200 there means nothing.
 
 ## 6. Findings log
 
+### 2026-08-30 — Batch intent validation ignores accessor-backed fields
+
+`createBatchAccumulator().accept()` previously read candidate intent fields
+through ordinary property access and spread the candidate after validation. An
+accessor-backed or proxy-shaped intent could therefore execute a getter or
+throw out of the accumulator instead of returning its typed rejection, at the
+financial boundary that must exclude arbitrary protocol-shaped input.
+
+The parser now reads only own data descriptors, captures those values into a
+fresh accepted record, and maps descriptor/proxy failures to the existing
+`not-an-intent` rejection. Plain game intents retain their existing shape,
+amount, route-mixing and batch-limit behavior.
+
+*Verified:* the red-first accumulator regression supplied an enumerable
+accessor-backed recipient whose getter threw; the old parser escaped the
+exception and invoked the getter, while the corrected parser returns
+`not-an-intent` without invoking it. No browser, wallet, provider, RPC, proof,
+signature, funds or transaction was used.
+
 ### 2026-08-30 — Lobby config resolution fails closed for malformed containers
 
 `resolveRoomConfig()` assumed its operator override argument was always a

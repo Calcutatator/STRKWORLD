@@ -126,6 +126,25 @@ describe('batch accumulator', () => {
     expect(!result.ok && result.rejection.reason).toBe('not-an-intent');
   });
 
+  it('rejects accessor-backed fields without invoking their getters', () => {
+    const batch = createBatchAccumulator();
+    let reads = 0;
+    const accessorIntent = { kind: 'transfer', token: TOKEN, amount: 1n, recipient: BOB };
+    Object.defineProperty(accessorIntent, 'recipient', {
+      enumerable: true,
+      get() {
+        reads += 1;
+        throw new Error('recipient getter must not run');
+      },
+    });
+
+    expect(() => batch.accept(accessorIntent)).not.toThrow();
+    const result = batch.accept(accessorIntent);
+    expect(result.ok).toBe(false);
+    expect(!result.ok && result.rejection.reason).toBe('not-an-intent');
+    expect(reads).toBe(0);
+  });
+
   it('rejects an amount that is not a bigint', () => {
     const batch = createBatchAccumulator();
     const result = batch.accept({ kind: 'shield', token: TOKEN, amount: 1 });
