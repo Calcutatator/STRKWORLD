@@ -166,6 +166,27 @@ describe('admission', () => {
 });
 
 describe('movement', () => {
+  it('rejects inherited or accessor-backed movement fields', () => {
+    const registry = new LobbyPresence();
+    const id = join(registry, 's1');
+    const inherited = Object.create({ x: 100, y: 100, facing: 'left' });
+
+    expect(registry.move('s1', inherited as never, 0)).toBe('rejected');
+    expect(registry.peers.get(id)?.position).toEqual({ x: 0, y: 0 });
+
+    let accessed = false;
+    const accessor = { y: 100, facing: 'left' };
+    Object.defineProperty(accessor, 'x', {
+      get: () => {
+        accessed = true;
+        return 100;
+      },
+    });
+    expect(registry.move('s1', accessor as never, 0)).toBe('rejected');
+    expect(accessed).toBe(false);
+    expect(registry.peers.get(id)?.position).toEqual({ x: 0, y: 0 });
+  });
+
   it('fails closed to the configured rate floor when it is not finite', () => {
     const registry = new LobbyPresence({ minUpdateIntervalMs: Number.NaN });
     const id = join(registry, 's1');
