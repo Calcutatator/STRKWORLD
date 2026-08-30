@@ -60,6 +60,17 @@ export function createDoorTrigger(map: DistrictMap, out: WorldEmit): DoorTrigger
 
       const ownTransition = ++transition;
       const previous = active;
+      const emit = (callback: () => void): void => {
+        try {
+          callback();
+        } catch (error) {
+          // Event delivery is an external lifecycle boundary. If it fails
+          // without a newer nested transition taking ownership, restore the
+          // prior occupancy so the caller can retry the transition.
+          if (transition === ownTransition) active = previous;
+          throw error;
+        }
+      };
       // Commit the new occupancy before synchronous event delivery. A listener
       // may immediately report another tile or reset the trigger; the version
       // check below prevents this transition from overwriting that newer state.
@@ -68,15 +79,18 @@ export function createDoorTrigger(map: DistrictMap, out: WorldEmit): DoorTrigger
       // Leaving a door the player had actually entered. A locked door was never
       // entered, so there is nothing to exit.
       if (previous && !previous.locked) {
-        out.emit('building:exited', { building: previous.building });
+        emit(() => out.emit('building:exited', { building: previous.building }));
         if (transition !== ownTransition) return;
       }
 
       if (next) {
         if (next.locked) {
-          out.emit('building:locked', { building: next.building, reason: 'coming-soon' });
+          emit(() => out.emit(
+            'building:locked',
+            { building: next.building, reason: 'coming-soon' },
+          ));
         } else {
-          out.emit('building:entered', { building: next.building });
+          emit(() => out.emit('building:entered', { building: next.building }));
         }
         if (transition !== ownTransition) return;
       }

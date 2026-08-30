@@ -30,6 +30,26 @@ function doorTile(building: string): { x: number; y: number } {
 const AWAY = { x: map.spawn.x, y: map.spawn.y }; // road, not a door
 
 describe('door triggers', () => {
+  it('rolls back occupancy when an entry event fails', () => {
+    let fail = true;
+    const events: Emitted[] = [];
+    const bus = {
+      emit<K extends keyof WorldEvents>(event: K, payload: WorldEvents[K]): void {
+        events.push({ event, payload } as Emitted);
+        if (fail && event === 'building:entered') throw new Error('entry consumer failed');
+      },
+    };
+    const trigger = createDoorTrigger(map, bus);
+
+    expect(() => trigger.update(doorTile('bank'))).toThrow('entry consumer failed');
+    expect(trigger.inside).toBeNull();
+
+    fail = false;
+    trigger.update(doorTile('bank'));
+    expect(trigger.inside).toBe('bank');
+    expect(events).toHaveLength(2);
+  });
+
   it('emits building:entered with the right id on entering an unlocked door', () => {
     const bus = fakeBus();
     const trigger = createDoorTrigger(map, bus);
