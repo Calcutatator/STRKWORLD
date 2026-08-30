@@ -33,6 +33,17 @@ const BRIDGE_STATUS_FIELDS = [
   'message',
   'pollingStopped',
 ] as const;
+const BRIDGE_RECORD_FIELDS = [
+  'v',
+  'createdAt',
+  'updatedAt',
+  'source',
+  'amountIn',
+  'starknetRecipient',
+  'refundAddress',
+  'signedQuote',
+  'status',
+] as const;
 
 export function serializeBridgeRecord(record: BridgeRecord): string {
   return JSON.stringify(record, (_key, value: unknown) =>
@@ -57,6 +68,10 @@ export function deserializeBridgeRecord(raw: string): BridgeRecord | null {
       }
       return entry;
     }) as BridgeRecord;
+    if (
+      !isRecord(value) ||
+      Object.keys(value).some((key) => !BRIDGE_RECORD_FIELDS.includes(key as typeof BRIDGE_RECORD_FIELDS[number]))
+    ) return null;
     if (
       !hasOwnDataProperty(value, 'v') ||
       !hasOwnDataProperty(value, 'signedQuote') ||

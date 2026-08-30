@@ -2062,6 +2062,23 @@ describe('bridge persistence', () => {
     expect(service.resume()).toBeNull();
   });
 
+  it('rejects a persisted record with an unknown root field', async () => {
+    const client = new StubClient();
+    const store = new MemoryBridgeStore();
+    const service = new BridgeService({ client, store, quoteVerifier: () => true, now: () => NOW });
+    const record = await service.createManualDeposit({
+      source: SOURCE,
+      amountIn: 1_000_000n,
+      starknetRecipient: '0x123',
+      refundAddress: request.refundTo,
+    });
+    const raw = store.serialize({ ...record, unexpected: 'forged' } as never);
+
+    expect(deserializeBridgeRecord(raw)).toBeNull();
+    store.save({ ...record, unexpected: 'forged' } as never);
+    expect(service.resume()).toBeNull();
+  });
+
   it('round-trips every valid bridge status shape', async () => {
     const validStatuses: BridgeStatus[] = [
       { leg: 'quoted', message: 'quoted', pollingStopped: false },
