@@ -258,6 +258,25 @@ empty shell to fetchers, so a 200 there means nothing.
 
 ## 6. Findings log
 
+### 2026-08-30 — Avatar Studio presentation entry rolls back partial handoffs
+
+`createAvatarStudioPresentation.enter()` performed a sequence of external
+visibility, physics, bounds and position calls without compensation. If a
+later port call threw, earlier calls could leave the player disabled and the
+street hidden even though the controller rolled back its logical `inRoom`
+state; the next frame then ran street movement against a half-entered world.
+
+Entry now attempts the known street restoration contract after any mid-handoff
+failure, preserving the original error and attempting every restoration action
+so a secondary port failure cannot skip the remaining repairs. A failed entry
+remains retryable once the external port recovers.
+
+*Verified:* a public presentation-port regression fails on the old path after
+`setWorldBounds` throws, leaving body/visibility state partially entered; the
+corrected path restores body, visibility, street bounds and position while
+preserving the exact error. Focused Avatar Studio tests pass 38/38. No browser,
+wallet, provider, RPC, proof, signature, funds or transaction was used.
+
 ### 2026-08-30 — Financial HUD pending state retains every mounted owner
 
 `BankPanel` and `ExchangePanel` each wrote the global `hud:pending` count as

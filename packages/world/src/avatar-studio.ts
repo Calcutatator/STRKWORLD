@@ -140,27 +140,38 @@ export function createAvatarStudioPresentation(options: {
     enter(): void {
       if (destroyed || destroying) return;
       const { port } = options;
-      port.setPlayerVelocity(0, 0);
-      if (destroyed || destroying) return;
-      port.setBodyEnabled(false);
-      if (destroyed) return;
-      port.setGroundVisible(false);
-      if (destroyed) return;
-      port.setDoorsVisible(false);
-      if (destroyed) return;
-      port.setRemoteVisible(false);
-      if (destroyed) return;
-      port.setLabelsVisible(false);
-      if (destroyed) return;
-      port.setRoomVisible(false);
-      if (destroyed) return;
-      port.setStudioVisible(true);
-      if (destroyed) return;
-      port.setWorldBounds(studioBounds);
-      if (destroyed) return;
-      port.setCameraBounds(studioBounds);
-      if (destroyed) return;
-      port.setPlayerPosition(studioSpawn);
+      try {
+        port.setPlayerVelocity(0, 0);
+        if (destroyed || destroying) return;
+        port.setBodyEnabled(false);
+        if (destroyed) return;
+        port.setGroundVisible(false);
+        if (destroyed) return;
+        port.setDoorsVisible(false);
+        if (destroyed) return;
+        port.setRemoteVisible(false);
+        if (destroyed) return;
+        port.setLabelsVisible(false);
+        if (destroyed) return;
+        port.setRoomVisible(false);
+        if (destroyed) return;
+        port.setStudioVisible(true);
+        if (destroyed) return;
+        port.setWorldBounds(studioBounds);
+        if (destroyed) return;
+        port.setCameraBounds(studioBounds);
+        if (destroyed) return;
+        port.setPlayerPosition(studioSpawn);
+      } catch (error) {
+        // Entry is a multi-port handoff. A later port can fail after earlier
+        // calls have already hidden the street or disabled the player. Restore
+        // the known street contract while preserving the original failure so a
+        // controller can retry the transition without a half-entered world.
+        if (!destroyed) {
+          restoreStreetPresentation(port, streetBounds, streetReturn, () => destroyed);
+        }
+        throw error;
+      }
     },
     exit(): void {
       if (destroyed || destroying) return;
@@ -204,6 +215,36 @@ export function createAvatarStudioPresentation(options: {
       }
     },
   };
+}
+
+function restoreStreetPresentation(
+  port: AvatarStudioPresentationPort,
+  streetBounds: AvatarStudioBounds,
+  streetReturn: { readonly x: number; readonly y: number },
+  isDestroyed: () => boolean,
+): void {
+  const attempts: Array<() => void> = [
+    () => port.setPlayerVelocity(0, 0),
+    () => port.setBodyEnabled(true),
+    () => port.setGroundVisible(true),
+    () => port.setDoorsVisible(true),
+    () => port.setRemoteVisible(true),
+    () => port.setLabelsVisible(true),
+    () => port.setRoomVisible(false),
+    () => port.setStudioVisible(false),
+    () => port.setWorldBounds(streetBounds),
+    () => port.setCameraBounds(streetBounds),
+    () => port.setPlayerPosition(streetReturn),
+  ];
+  for (const attempt of attempts) {
+    if (isDestroyed()) return;
+    try {
+      attempt();
+    } catch {
+      // The entry failure remains authoritative. Attempt every restoration
+      // action so one faulty port does not strand another resource.
+    }
+  }
 }
 
 export function validateAvatarStudioDefinition(definition: AvatarStudioDefinition): void {

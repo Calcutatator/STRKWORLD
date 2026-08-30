@@ -95,6 +95,75 @@ describe('hidden Avatar Studio', () => {
     expect(setPlayerPosition).toHaveBeenCalledWith({ x: 368, y: 112 });
   });
 
+  it('restores the street presentation when Studio entry fails mid-handoff', () => {
+    const streetBounds = { x: 0, y: 0, width: 1_536, height: 896 };
+    const studioBounds = { x: 64, y: 64, width: 576, height: 384 };
+    const studioSpawn = { x: 368, y: 112 };
+    const streetReturn = { x: 784, y: 496 };
+    const state = {
+      bodyEnabled: true,
+      groundVisible: true,
+      doorsVisible: true,
+      remoteVisible: true,
+      labelsVisible: true,
+      roomVisible: false,
+      studioVisible: false,
+      worldBounds: streetBounds,
+      cameraBounds: streetBounds,
+      playerPosition: streetReturn,
+    };
+    let failWorldBounds = true;
+    const presentation = createAvatarStudioPresentation({
+      port: {
+        setPlayerVelocity: vi.fn(),
+        setBodyEnabled: (enabled) => { state.bodyEnabled = enabled; },
+        setGroundVisible: (visible) => { state.groundVisible = visible; },
+        setDoorsVisible: (visible) => { state.doorsVisible = visible; },
+        setRemoteVisible: (visible) => { state.remoteVisible = visible; },
+        setLabelsVisible: (visible) => { state.labelsVisible = visible; },
+        setRoomVisible: (visible) => { state.roomVisible = visible; },
+        setStudioVisible: (visible) => { state.studioVisible = visible; },
+        setWorldBounds: (bounds) => {
+          if (failWorldBounds) {
+            failWorldBounds = false;
+            throw new Error('Studio bounds failed');
+          }
+          state.worldBounds = bounds;
+        },
+        setCameraBounds: (bounds) => { state.cameraBounds = bounds; },
+        setPlayerPosition: (position) => { state.playerPosition = position; },
+        resetDoors: vi.fn(),
+        resumeStreet: vi.fn(),
+        destroyStudio: vi.fn(),
+      },
+      streetBounds,
+      studioBounds,
+      studioSpawn,
+      streetReturn,
+      reportStreet: vi.fn(),
+    });
+
+    expect(() => presentation.enter()).toThrow('Studio bounds failed');
+    expect(state).toEqual({
+      bodyEnabled: true,
+      groundVisible: true,
+      doorsVisible: true,
+      remoteVisible: true,
+      labelsVisible: true,
+      roomVisible: false,
+      studioVisible: false,
+      worldBounds: streetBounds,
+      cameraBounds: streetBounds,
+      playerPosition: streetReturn,
+    });
+
+    expect(() => presentation.enter()).not.toThrow();
+    expect(state.bodyEnabled).toBe(false);
+    expect(state.studioVisible).toBe(true);
+    expect(state.worldBounds).toEqual(studioBounds);
+    expect(state.playerPosition).toEqual(studioSpawn);
+  });
+
   it('retries presentation cleanup after a failed destroy', () => {
     const cleanupError = new Error('studio cleanup failed');
     const destroyStudio = vi.fn().mockImplementationOnce(() => { throw cleanupError; });
