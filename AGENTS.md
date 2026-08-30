@@ -258,6 +258,25 @@ empty shell to fetchers, so a 200 there means nothing.
 
 ## 6. Findings log
 
+### 2026-08-30 — Lobby resume uses the server's bounded placement policy
+
+`LobbyClient.resume()` validated that coordinates were finite and rounded them,
+but did not apply the server's `WORLD_LIMIT` clamp used by `LobbyPresence` and
+by `updatePosition()`. A finite out-of-bounds resume therefore sent a placement
+such as `(9192, -9192)` while the server stored `(8192, -8192)`, leaving the
+client's reconnect handoff inconsistent with authoritative presence state.
+
+Resume now runs both coordinates through the shared finite-round-and-clamp
+policy before sending them. Invalid values still throw the existing resume
+placement error; in-bounds placement, facing, sprite and transport-closure
+ownership are unchanged.
+
+*Verified:* a red-first public fake-room regression requested an out-of-bounds
+resume and observed the old unbounded wire payload; the corrected path sends
+`(WORLD_LIMIT, -WORLD_LIMIT)`. The focused resume test and mutation check pass.
+No browser, external lobby, wallet, provider, RPC, proof, signature, funds or
+transaction was used.*
+
 ### 2026-08-30 — Lobby startup cleans up after bound-port inspection failure
 
 `startPresenceServer({ port: 0 })` successfully opened a listener and then

@@ -1356,6 +1356,34 @@ describe('presence', () => {
     expect(peers[0]?.facing).toBe('up');
   });
 
+  it('clamps an out-of-bounds resumed placement before sending it to the room', async () => {
+    const joined = fakeRoom();
+    const joinOrCreate = vi
+      .spyOn(ColyseusClient.prototype, 'joinOrCreate')
+      .mockImplementation(() => Promise.resolve(joined.room) as never);
+    const client = makeClient(20, 0);
+
+    try {
+      const connecting = client.connect();
+      await Promise.resolve();
+      joined.welcome({ gameId: '0123456789abcdef' });
+      await connecting;
+      client.suspend();
+
+      client.resume({ x: WORLD_LIMIT + 1_000, y: -WORLD_LIMIT - 1_000 });
+
+      expect(joined.send).toHaveBeenLastCalledWith('resume', {
+        x: WORLD_LIMIT,
+        y: -WORLD_LIMIT,
+        facing: 'down',
+        sprite: 'avatar-2',
+      });
+    } finally {
+      await client.disconnect();
+      joinOrCreate.mockRestore();
+    }
+  });
+
   it('does not restore connected status when transport leaves during resume send', async () => {
     const joined = fakeRoom();
     const joinOrCreate = vi
