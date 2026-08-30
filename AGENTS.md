@@ -264,6 +264,25 @@ empty shell to fetchers, so a 200 there means nothing.
 
 ## 6. Findings log
 
+### 2026-08-30 — Remote avatar ownership is registered before first presentation
+
+`createRemoteAvatarLayer.render()` created a new sprite, presented its first
+pose, and only then stored the avatar in its ownership map. If a Phaser
+presentation call or timer setup threw during that first update, the source
+publication failed with a live sprite that `destroy()` could not reach. A later
+snapshot created a second sprite while the first remained orphaned.
+
+New avatars are now registered before `updateAvatar()` runs. A failed first
+presentation therefore remains owned for teardown and can be retried by the
+next authoritative snapshot; existing-avatar updates, removal, and aggregate
+cleanup semantics are unchanged.
+
+*Verified:* a public regression makes the first new-avatar presentation throw,
+then republishes the same peer and confirms no second sprite is created; final
+destroy reaches the original sprite exactly once. The focused remote-avatar
+suite passes 11 tests. No browser, network, wallet, RPC, proof, signature,
+funds or transaction was used.*
+
 ### 2026-08-30 — Vite proxy-boundary tests must isolate dependency optimization
 
 The exact `/api` proxy test created a full Vite development server using the

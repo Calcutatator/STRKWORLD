@@ -157,6 +157,33 @@ describe('remote avatar layer', () => {
     expect(layer.peers.size).toBe(1);
   });
 
+  it('retains a new avatar when its first presentation throws, then recovers', () => {
+    const sourceController = createRemotePeerSource();
+    const fake = fakeScene();
+    const layer = createRemoteAvatarLayer({ scene: fake.scene as never, source: sourceController.source });
+    const presentationError = new Error('first presentation failed');
+
+    fake.scene.add.sprite.mockImplementationOnce((x, y, texture, frame) => {
+      const sprite = fakeSprite(x, y, texture);
+      sprite.frame = frame;
+      fake.objects.push(sprite);
+      sprite.setPosition.mockImplementationOnce(() => {
+        throw presentationError;
+      });
+      return sprite;
+    });
+
+    expect(() => sourceController.publish([peer()])).toThrow(presentationError);
+    expect(fake.scene.add.sprite).toHaveBeenCalledTimes(1);
+
+    expect(() => sourceController.publish([peer()])).not.toThrow();
+    expect(fake.scene.add.sprite).toHaveBeenCalledTimes(1);
+    expect(layer.peers.size).toBe(1);
+
+    layer.destroy();
+    expect(fake.objects[0]?.destroy).toHaveBeenCalledTimes(1);
+  });
+
   it('falls back an unknown opaque cosmetic key to avatar-1', () => {
     const sourceController = createRemotePeerSource([
       peer({ facing: 'up', sprite: 'not-allowlisted' }),
