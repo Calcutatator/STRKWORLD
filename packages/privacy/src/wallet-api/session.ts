@@ -258,6 +258,15 @@ export function createWalletSession(
 
   const discoveryCleanup = dependencies.discovery.subscribe((nextWallets) => {
     if (destroyed) return;
+    if (!Array.isArray(nextWallets)) {
+      wallets = [];
+      generation += 1;
+      connectFlight = null;
+      selectedKey = null;
+      retireConnectionBestEffort();
+      publish('selection-required', null);
+      return;
+    }
     wallets = [...nextWallets];
     if (selectedKey && !selectedWallet()) {
       generation += 1;

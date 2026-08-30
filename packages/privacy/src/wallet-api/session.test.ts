@@ -1047,6 +1047,38 @@ describe('WalletSession', () => {
     await expect(session.operations.capability()).rejects.toMatchObject({ kind: 'user-rejected' });
   });
 
+  it('retires financial authority when discovery publishes a malformed wallet list', async () => {
+    const selected = wallet('Ready');
+    let publishDiscovery!: (wallets: readonly WalletHandle[]) => void;
+    const discovery: WalletDiscoveryPort = {
+      getWallets: () => [selected],
+      subscribe(listener) {
+        publishDiscovery = listener;
+        return () => undefined;
+      },
+      refresh: () => undefined,
+    };
+    const connected = connection('0x111');
+    const destroy = vi.spyOn(connected, 'destroy');
+    const session = createWalletSession(
+      denyAllOptions(),
+      { discovery, connectWallet: async () => connected },
+    );
+    await session.connect(session.getSnapshot().wallets[0]!.key);
+
+    for (const malformed of [null, {}, 'wallet'] as const) {
+      expect(() => publishDiscovery(malformed as never)).not.toThrow();
+      expect(session.getSnapshot()).toMatchObject({
+        phase: 'selection-required',
+        selectedKey: null,
+        account: null,
+        wallets: [],
+      });
+      await expect(session.operations.capability()).rejects.toMatchObject({ kind: 'user-rejected' });
+    }
+    expect(destroy).toHaveBeenCalledOnce();
+  });
+
   it('owns a caller-mutable route policy before constructing wallet operations', async () => {
     const selected = wallet('Ready');
     const policy = {
