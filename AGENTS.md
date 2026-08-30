@@ -304,6 +304,27 @@ Session tests, privacy gates, typechecks, invariants and diff hygiene are
 recorded on the candidate. No browser, wallet, provider, RPC, proof,
 signature, funds or transaction was used.*
 
+### 2026-08-30 — Wallet session cleanup cannot mask connection authority
+
+Automatic cleanup of a stale or invalid WalletConnectionPort could throw from
+`destroy()`. A stale connect result then rejected with the cleanup error
+instead of preserving the already-retired session, and a `getSnapshot()`
+failure could remain stuck in `connecting` because cleanup threw before the
+failure state was published. Repeating cleanup could also invoke provider
+teardown twice.
+
+Automatic retirement now clears ownership first, attempts cleanup and destroy
+at most once, and suppresses cleanup errors. The original stale snapshot or
+mapped connection error remains authoritative. Explicit `disconnect()` and
+`destroy()` use a separate path that attempts both teardown steps and still
+surfaces the first explicit cleanup error.
+
+*Verified:* red-first public regressions make stale destroy throw after a
+pending connect is disconnected, and make both snapshot read and destroy
+throw. The corrected tests preserve the retired snapshot, publish `failed`,
+clear operations, and retain the mapped original error. No browser, wallet,
+provider, RPC, proof, signature, funds or transaction was used.*
+
 
 ## 6. Findings log
 

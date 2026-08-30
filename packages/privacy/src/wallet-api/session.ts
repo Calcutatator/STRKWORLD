@@ -94,6 +94,7 @@ export function createWalletSession(
   let connection: WalletConnectionPort | null = null;
   let operations: PrivacyOperations | null = null;
   let connectionCleanup: (() => void) | null = null;
+  const retiredConnections = new WeakSet<object>();
   let connectFlight: { key: string; promise: Promise<WalletSessionSnapshot> } | null = null;
   let destroyed = false;
   let snapshot = buildSnapshot('selection-required', null);
@@ -200,12 +201,50 @@ export function createWalletSession(
     },
   };
 
-  function retireConnection(): void {
+  function destroyConnection(owned: WalletConnectionPort, suppressErrors: boolean): void {
+    if (retiredConnections.has(owned)) return;
+    retiredConnections.add(owned);
+    try {
+      owned.destroy();
+    } catch (error) {
+      if (!suppressErrors) throw error;
+    }
+  }
+
+  function retireConnectionBestEffort(): void {
     operations = null;
-    connectionCleanup?.();
+    const cleanup = connectionCleanup;
+    const owned = connection;
     connectionCleanup = null;
-    connection?.destroy();
     connection = null;
+    try {
+      cleanup?.();
+    } catch {
+      // Automatic cleanup cannot mask the transition that retired it.
+    }
+    if (owned) destroyConnection(owned, true);
+  }
+
+  function retireConnectionExplicit(): void {
+    operations = null;
+    const cleanup = connectionCleanup;
+    const owned = connection;
+    connectionCleanup = null;
+    connection = null;
+    let firstError: unknown = null;
+    try {
+      cleanup?.();
+    } catch (error) {
+      firstError = error;
+    }
+    if (owned) {
+      try {
+        destroyConnection(owned, false);
+      } catch (error) {
+        firstError ??= error;
+      }
+    }
+    if (firstError) throw firstError;
   }
 
   function selectedWallet(): WalletHandle | null {
@@ -219,7 +258,7 @@ export function createWalletSession(
       generation += 1;
       connectFlight = null;
       selectedKey = null;
-      retireConnection();
+      retireConnectionBestEffort();
       publish('selection-required', null);
       return;
     }
@@ -251,7 +290,7 @@ export function createWalletSession(
       generation += 1;
       connectFlight = null;
       const owned = connection;
-      retireConnection();
+      retireConnectionExplicit();
       selectedKey = null;
       publish('selection-required', null);
       await owned?.disconnect();
@@ -262,7 +301,7 @@ export function createWalletSession(
       generation += 1;
       connectFlight = null;
       discoveryCleanup();
-      retireConnection();
+      retireConnectionExplicit();
       selectedKey = null;
       publish('selection-required', null);
       listeners.clear();
@@ -276,14 +315,14 @@ export function createWalletSession(
 
       const attempt = ++generation;
       selectedKey = key;
-      retireConnection();
+      retireConnectionBestEffort();
       publish('connecting', null);
       let attemptedConnection: WalletConnectionPort | null = null;
       try {
         const connected = await dependencies.connectWallet(wallet);
         attemptedConnection = connected;
         if (destroyed || attempt !== generation) {
-          connected.destroy();
+          destroyConnection(connected, true);
           return snapshot;
         }
         const next = connected.getSnapshot();
@@ -323,7 +362,7 @@ export function createWalletSession(
           operations = null;
           if (!changed.account) {
             selectedKey = null;
-            retireConnection();
+            retireConnectionBestEffort();
             publish('selection-required', null);
             return;
           }
@@ -357,9 +396,11 @@ export function createWalletSession(
         publish('connected', current.account);
         return snapshot;
       } catch (error) {
-        if (attemptedConnection && attemptedConnection !== connection) attemptedConnection.destroy();
+        if (attemptedConnection && attemptedConnection !== connection) {
+          destroyConnection(attemptedConnection, true);
+        }
         if (attempt === generation) {
-          retireConnection();
+          retireConnectionBestEffort();
           publish('failed', null);
         }
         throw mapWalletError(error);

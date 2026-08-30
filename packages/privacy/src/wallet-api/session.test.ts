@@ -58,6 +58,46 @@ describe('WalletSession', () => {
     expect(connectWallet).toHaveBeenCalledTimes(2);
   });
 
+  it('preserves the retired snapshot when stale connection cleanup throws', async () => {
+    const selected = wallet('Ready');
+    let release!: (connection: WalletConnectionPort) => void;
+    const pending = new Promise<WalletConnectionPort>((resolve) => { release = resolve; });
+    const stale = connection('0x111');
+    const destroy = vi.fn(() => { throw new Error('stale cleanup failed'); });
+    stale.destroy = destroy;
+    const session = createWalletSession(denyAllOptions(), {
+      discovery: discoveryWith(selected),
+      connectWallet: () => pending,
+    });
+    const connecting = session.connect(session.getSnapshot().wallets[0]!.key);
+
+    await session.disconnect();
+    release(stale);
+
+    await expect(connecting).resolves.toMatchObject({ phase: 'selection-required' });
+    expect(destroy).toHaveBeenCalledOnce();
+  });
+
+  it('preserves the mapped connection error when snapshot read and cleanup throw', async () => {
+    const selected = wallet('Ready');
+    const connected = connection('0x111');
+    const original = new Error('wallet snapshot unavailable');
+    connected.getSnapshot = () => { throw original; };
+    const destroy = vi.fn(() => { throw new Error('cleanup failed'); });
+    connected.destroy = destroy;
+    const session = createWalletSession(
+      denyAllOptions(),
+      { discovery: discoveryWith(selected), connectWallet: async () => connected },
+    );
+
+    await expect(session.connect(session.getSnapshot().wallets[0]!.key)).rejects.toMatchObject({
+      kind: 'unreachable',
+    });
+    expect(session.getSnapshot()).toMatchObject({ phase: 'failed', account: null });
+    await expect(session.operations.capability()).rejects.toMatchObject({ kind: 'user-rejected' });
+    expect(destroy).toHaveBeenCalledOnce();
+  });
+
   it('lets only the newest connection attempt publish financial authority', async () => {
     const first = wallet('First wallet');
     const second = wallet('Second wallet');
