@@ -68,7 +68,7 @@ export function createRemoteAvatarLayer({
       const avatar = avatars.get(id) ?? createAvatar(scene, layer, peer);
       const previous = peers.get(id);
       const moving = previous !== undefined && (previous.x !== peer.x || previous.y !== peer.y);
-      updateAvatar(scene, avatar, peer, moving);
+      updateAvatar(scene, avatar, peer, moving, () => !destroyed);
       avatars.set(id, avatar);
     }
     peers = next;
@@ -77,20 +77,32 @@ export function createRemoteAvatarLayer({
   const destroy = (): void => {
     if (destroyed) return;
     destroyed = true;
-    scene.events.off('shutdown', destroy);
+    const errors: unknown[] = [];
+    const attempt = (cleanup: () => void): void => {
+      try {
+        cleanup();
+      } catch (error) {
+        errors.push(error);
+      }
+    };
+
+    attempt(() => scene.events.off('shutdown', destroy));
     if (unsubscribe) {
       const stop = unsubscribe;
       unsubscribe = undefined;
-      stop();
+      attempt(stop);
     } else if (subscribing) {
       // A source may replay and trigger shutdown before subscribe() returns
       // its unsubscribe handle. The post-subscribe handoff owns that handle.
       unsubscribePending = true;
     }
-    for (const avatar of avatars.values()) destroyAvatar(avatar);
+    for (const avatar of avatars.values()) attempt(() => destroyAvatar(avatar));
     avatars.clear();
     peers = new Map();
-    layer.destroy();
+    attempt(() => layer.destroy());
+
+    if (errors.length === 1) throw errors[0];
+    if (errors.length > 1) throw new AggregateError(errors, 'Remote avatar cleanup failed');
   };
 
   // Scene shutdown is the lifecycle authority. `destroy()` is also exposed
@@ -145,6 +157,7 @@ function updateAvatar(
   avatar: RemoteAvatar,
   peer: RemotePeerSnapshot,
   moving: boolean,
+  isAlive: () => boolean,
 ): void {
   cancelIdle(avatar);
   avatar.sprite.setPosition(peer.x, peer.y);
@@ -159,6 +172,7 @@ function updateAvatar(
   const movementIdleMs = (animation.frames.length / animation.frameRate) * 1_000;
   avatar.idleTimer = scene.time.delayedCall(movementIdleMs, () => {
     avatar.idleTimer = undefined;
+    if (!isAlive()) return;
     avatar.visual.present({
       sprite: peer.sprite,
       facing: peer.facing,
@@ -174,6 +188,21 @@ function cancelIdle(avatar: RemoteAvatar): void {
 }
 
 function destroyAvatar(avatar: RemoteAvatar): void {
-  cancelIdle(avatar);
-  avatar.sprite.destroy();
+  const errors: unknown[] = [];
+  const timer = avatar.idleTimer;
+  avatar.idleTimer = undefined;
+  if (timer) {
+    try {
+      timer.remove(false);
+    } catch (error) {
+      errors.push(error);
+    }
+  }
+  try {
+    avatar.sprite.destroy();
+  } catch (error) {
+    errors.push(error);
+  }
+  if (errors.length === 1) throw errors[0];
+  if (errors.length > 1) throw new AggregateError(errors, 'Remote avatar cleanup failed');
 }

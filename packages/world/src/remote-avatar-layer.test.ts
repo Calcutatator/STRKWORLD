@@ -259,4 +259,53 @@ describe('remote avatar layer', () => {
     expect(fake.layer.destroy).toHaveBeenCalledTimes(1);
     expect(fake.scene.events.off).toHaveBeenCalledWith('shutdown', shutdown);
   });
+
+  it('destroys presentation objects even when source unsubscribe throws', () => {
+    const fake = fakeScene();
+    const unsubscribe = vi.fn(() => {
+      throw new Error('unsubscribe failed');
+    });
+    const source: RemotePeerSource = {
+      subscribe(listener) {
+        listener([peer(), peer({ id: 'peer-2' })]);
+        return unsubscribe;
+      },
+    };
+    const layer = createRemoteAvatarLayer({ scene: fake.scene as never, source });
+
+    expect(() => layer.destroy()).toThrow('unsubscribe failed');
+    expect(fake.objects[0]?.destroy).toHaveBeenCalledTimes(1);
+    expect(fake.objects[1]?.destroy).toHaveBeenCalledTimes(1);
+    expect(fake.layer.destroy).toHaveBeenCalledTimes(1);
+    expect(layer.peers.size).toBe(0);
+    layer.destroy();
+    expect(unsubscribe).toHaveBeenCalledTimes(1);
+    expect(fake.layer.destroy).toHaveBeenCalledTimes(1);
+  });
+
+  it('aggregates teardown failures after attempting every owned object', () => {
+    const fake = fakeScene();
+    const unsubscribe = vi.fn(() => {
+      throw new Error('unsubscribe failed');
+    });
+    const source: RemotePeerSource = {
+      subscribe(listener) {
+        listener([peer(), peer({ id: 'peer-2' })]);
+        return unsubscribe;
+      },
+    };
+    const layer = createRemoteAvatarLayer({ scene: fake.scene as never, source });
+    fake.objects[0]!.destroy.mockImplementationOnce(() => {
+      throw new Error('sprite failed');
+    });
+
+    expect(() => layer.destroy()).toThrow(AggregateError);
+    expect(fake.objects[0]?.destroy).toHaveBeenCalledTimes(1);
+    expect(fake.objects[1]?.destroy).toHaveBeenCalledTimes(1);
+    expect(fake.layer.destroy).toHaveBeenCalledTimes(1);
+    expect(layer.peers.size).toBe(0);
+    layer.destroy();
+    expect(unsubscribe).toHaveBeenCalledTimes(1);
+    expect(fake.layer.destroy).toHaveBeenCalledTimes(1);
+  });
 });

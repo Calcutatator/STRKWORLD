@@ -356,6 +356,31 @@ identity subset, timestamps and `amountIn`. It returned any decoded `status`,
 
 ## 6. Findings log
 
+### 2026-08-30 — Remote avatar teardown must survive unsubscribe errors
+
+`createRemoteAvatarLayer().destroy()` previously marked the layer destroyed and
+then called the retained source's unsubscribe before destroying any remote
+sprites or the Phaser layer. A source-owned unsubscribe failure therefore
+escaped part-way through teardown: every presentation object survived, while
+the destroyed flag made a later cleanup call a no-op. This is a public
+ownership seam because the source is injected by the Shell and the World must
+retire its own presentation even when an external cleanup callback fails.
+
+Teardown now attempts shutdown-listener removal, source unsubscribe, every
+remote avatar (including its idle timer), and the layer independently. It
+rethrows the one cleanup error unchanged or combines multiple failures in an
+`AggregateError`; state is cleared and later destroy calls remain idempotent.
+Idle callbacks also recheck the layer lifetime before touching a retired
+sprite. Synchronous source replay and the pending-unsubscribe handoff are
+unchanged.
+
+*Verified:* the public regression injects an unsubscribe failure after replaying
+two peers and confirms both sprites, the Phaser layer and retained peer state
+are cleaned; a second regression adds a sprite failure and confirms an
+`AggregateError` after all teardown attempts. The focused remote-avatar suite
+passes 10 tests. No browser, wallet, provider, RPC, proof, signature, funds
+or transaction was used.
+
 ### 2026-08-30 — StreetScene construction failures retire partial ownership immediately
 
 `StreetScene.create()` arms its World cleanup handler before construction, but

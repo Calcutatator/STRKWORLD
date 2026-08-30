@@ -345,7 +345,6 @@ export function createWalletSession(
         // built the replacement state (or retired it); the continuation
         // must not publish the stale pre-subscribe snapshot.
         if (destroyed || attempt !== generation || connection !== connected) {
-          if (connection !== connected) connected.destroy();
           return snapshot;
         }
         const current = connected.getSnapshot();

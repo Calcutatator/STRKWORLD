@@ -734,6 +734,30 @@ describe('WalletSession', () => {
     await expect(session.operations.capability()).rejects.toMatchObject({ kind: 'user-rejected' });
   });
 
+  it('does not destroy a synchronously retired connection twice', async () => {
+    const selected = wallet('Ready');
+    const state = {
+      account: '0x111',
+      chainId: '0x534e5f4d41494e',
+      operations: new FakePrivacyOperations(),
+    };
+    const destroy = vi.fn(() => {
+      if (destroy.mock.calls.length > 1) throw new Error('connection destroyed twice');
+    });
+    const connected = synchronouslyChangingConnection(state, () => {
+      state.account = '';
+    }, destroy);
+    const session = createWalletSession(
+      denyAllOptions(),
+      { discovery: discoveryWith(selected), connectWallet: async () => connected },
+    );
+
+    await expect(session.connect(session.getSnapshot().wallets[0]!.key)).resolves.toMatchObject({
+      phase: 'selection-required',
+    });
+    expect(destroy).toHaveBeenCalledOnce();
+  });
+
   it('keeps a wrong-network connection observable until it returns to mainnet', async () => {
     const selected = wallet('Ready');
     const connected = controllableConnection(
@@ -975,6 +999,7 @@ function controllableConnection(
 function synchronouslyChangingConnection(
   state: { account: string; chainId: string; operations: PrivacyOperations },
   onSubscribe: () => void,
+  destroy: () => void = () => undefined,
 ): WalletConnectionPort {
   const listeners = new Set<() => void>();
   return {
@@ -987,7 +1012,7 @@ function synchronouslyChangingConnection(
       return () => listeners.delete(listener);
     },
     disconnect: async () => undefined,
-    destroy: () => undefined,
+    destroy,
   };
 }
 
