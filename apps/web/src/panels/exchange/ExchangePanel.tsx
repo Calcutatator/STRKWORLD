@@ -11,7 +11,7 @@ import { WalletAttentionCue, walletOperationAttention } from '../../wallet/Walle
 
 /** Dedicated one-swap view; this deliberately has no batch/add vocabulary. */
 export function ExchangePanel({ onClose, panel: injected, experience = 'menu' }: { onClose: () => void; panel?: ExchangeMachine; experience?: 'menu' | 'station' }) {
-  const { operations, receipts, noteOperationError, submissionUncertainty } = usePrivacy();
+  const { operations, receipts, noteOperationError, shellBus, submissionUncertainty } = usePrivacy();
   const owned = useMemo(() => injected ? null : createExchangePanel({
     operations, receipts, onError: noteOperationError,
     canStartFinancialAction: () => { const state = submissionUncertainty.store.getState(); return !state.active || state.acknowledged; },
@@ -20,6 +20,13 @@ export function ExchangePanel({ onClose, panel: injected, experience = 'menu' }:
   const state = useStore(panel.store);
   const uncertainty = useStore(submissionUncertainty.store);
   useEffect(() => { if (!owned) return; void owned.open(); return () => owned.close(); }, [owned]);
+  useEffect(() => {
+    const busy = state.flow.name === 'preparing' || state.flow.name === 'submitting';
+    shellBus?.emit('hud:pending', { count: busy ? 1 : 0 });
+  }, [shellBus, state.flow]);
+  useEffect(() => () => {
+    shellBus?.emit('hud:pending', { count: 0 });
+  }, [shellBus]);
   const committing = state.flow.name === 'review' || state.flow.name === 'submitting';
   const blocked = uncertainty.active && !uncertainty.acknowledged;
   const walletAttention = walletOperationAttention(

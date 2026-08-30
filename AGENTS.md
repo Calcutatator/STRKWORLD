@@ -258,6 +258,25 @@ empty shell to fetchers, so a 200 there means nothing.
 
 ## 6. Findings log
 
+### 2026-08-30 — Exchange pending state reaches the world HUD
+
+`ExchangePanel` drove private swap preparation and wallet submission without
+publishing the shared `hud:pending` event. The Bank panel already publishes
+that event, and the shared contract describes it as the ambient in-flight
+operation indicator, so a swap could be awaiting wallet approval while the
+world HUD continued to report no pending action.
+
+The Exchange panel now publishes count `1` while its flow is `preparing` or
+`submitting`, and emits count `0` when the panel unmounts. The machine's
+financial state, wallet handoff and receipt behavior are unchanged.
+
+*Verified:* a red-first jsdom regression mounted an Exchange panel with a
+deferred confirmation, entered the wallet approval stage, and observed that
+the old panel emitted no pending count. The corrected lifecycle test observes
+`1`, unmounts before confirmation settles, observes the cleanup `0`, and then
+allows the original confirmation to settle. No browser, wallet, provider,
+RPC, proof, signature, funds or transaction was used.
+
 ### 2026-08-30 — Fixed-room destruction retries failed cleanup ownership
 
 `createFixedRoomController().destroy()` marked the controller permanently
