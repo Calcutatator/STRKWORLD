@@ -189,7 +189,16 @@ export async function startPresenceServer(
     // Node assigns an actual ephemeral port when asked to listen on zero, but
     // the requested value is still zero. Return the bound value so the
     // endpoint handed to the shell is usable rather than advertising :0.
-    const boundPort = port === 0 ? readBoundPort(server) : port;
+    let boundPort: number;
+    try {
+      boundPort = port === 0 ? readBoundPort(server) : port;
+    } catch (error) {
+      // Listening succeeded, so inspection failure must still retire this
+      // attempt before the startup error reaches the caller. Preserve the
+      // authoritative inspection failure if shutdown itself also fails.
+      await server.gracefullyShutdown(false).catch(() => undefined);
+      throw error;
+    }
     return {
       port: boundPort,
       roomName,

@@ -258,6 +258,25 @@ empty shell to fetchers, so a 200 there means nothing.
 
 ## 6. Findings log
 
+### 2026-08-30 — Lobby startup cleans up after bound-port inspection failure
+
+`startPresenceServer({ port: 0 })` successfully opened a listener and then
+read the transport's bound address. If that inspection returned a malformed
+or unavailable value, the function threw without closing the already-listening
+server, leaving an unreachable process-owned socket behind and making retries
+leak resources or fail with an occupied port.
+
+Startup now shuts down the just-bound server when bound-port inspection fails,
+while preserving the original inspection error. Normal ephemeral-port
+reporting, explicit ports, and consecutive-port bind failure cleanup are
+unchanged.
+
+*Verified:* a red-first public Lobby server regression forced the bound address
+to be invalid after listen; the old path made zero shutdown calls while the
+corrected path shuts down exactly once and preserves the exact error. Focused
+server tests pass. No browser, wallet, provider, RPC, proof, signature, funds
+or transaction was used.
+
 ### 2026-08-30 — Lobby port retry ranges stay inside the TCP ceiling
 
 `startPresenceServer()` validated the requested base port and the number of
