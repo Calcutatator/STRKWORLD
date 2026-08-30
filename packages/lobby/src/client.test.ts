@@ -15,7 +15,12 @@ import {
   MAX_MESSAGES_PER_SECOND,
   MIN_CLIENT_SEND_INTERVAL_MS,
 } from './config';
-import { LobbyClient, type LobbyStatusEvent, type PeerSnapshot } from './client';
+import {
+  LobbyClient,
+  type LobbyClientOptions,
+  type LobbyStatusEvent,
+  type PeerSnapshot,
+} from './client';
 import { startPresenceServer, type PresenceServer } from './server';
 import type { LobbyState } from './state';
 import vocabulary from './testing/forbidden-vocabulary.json';
@@ -498,6 +503,40 @@ describe('nothing connects by itself', () => {
 });
 
 describe('connect is idempotent', () => {
+  it('owns connection options after construction', async () => {
+    const joined = fakeRoom();
+    let joinOptions: unknown;
+    const joinOrCreate = vi
+      .spyOn(ColyseusClient.prototype, 'joinOrCreate')
+      .mockImplementation((_roomName, options) => {
+        joinOptions = options;
+        return Promise.resolve(joined.room) as never;
+      });
+    const options: LobbyClientOptions = {
+      endpoint: 'ws://test',
+      roomName: 'street',
+      start: { x: 20, y: 30, facing: 'right' as const },
+      sprite: 'avatar-2',
+    };
+
+    try {
+      const client = new LobbyClient(options);
+      options.roomName = 'attacker-room';
+      Reflect.set(options.start, 'x', 999);
+      Reflect.set(options.start, 'facing', 'up');
+      options.sprite = 'avatar-16';
+
+      const connecting = client.connect();
+      await Promise.resolve();
+      joined.welcome({ gameId: '0000000000000010' });
+      await connecting;
+
+      expect(joinOptions).toEqual({ x: 20, y: 30, facing: 'right', sprite: 'avatar-2' });
+    } finally {
+      joinOrCreate.mockRestore();
+    }
+  });
+
   it('disables the SDK automatic retry owner on the joined room', async () => {
     const joined = fakeRoom();
     const joinOrCreate = vi

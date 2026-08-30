@@ -181,7 +181,14 @@ export class LobbyClient {
 
   /** Pure. Opens no connection. */
   constructor(options: LobbyClientOptions) {
-    this.#options = options;
+    // Keep the connection plan owned by this client. The shell commonly keeps
+    // and reuses its mutable options object; retaining it here would let a
+    // later edit silently redirect a reconnect or change its placement and
+    // cosmetic identity after construction.
+    this.#options = Object.freeze({
+      ...options,
+      start: Object.freeze({ ...options.start }),
+    });
     const minSendIntervalMs = Math.max(
       options.minSendIntervalMs ?? MIN_CLIENT_SEND_INTERVAL_MS,
       MIN_CLIENT_SEND_INTERVAL_MS,
