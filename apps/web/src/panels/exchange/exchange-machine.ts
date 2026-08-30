@@ -122,7 +122,7 @@ export function createExchangePanel(options: {
     patch({ flow: { name: 'failed', kind: failure.kind, message: COPY.errors[failure.kind], recovery: failure.kind === 'submission-uncertain' ? 'close' : recovery } });
   };
 
-  return {
+  return Object.freeze<ExchangePanel>({
     store,
     async open(signal) {
       const id = start(); patch({ flow: { name: 'loading-pool' } });
@@ -251,7 +251,7 @@ export function createExchangePanel(options: {
     },
     cancelPrepared() { start(); discard(); patch({ flow: { name: 'composing' }, notice: null }); },
     acknowledge() { const flow = store.getState().flow; if (flow.name === 'submitted') { receipts.acknowledge(flow.transactionHash); patch({ flow: { name: 'composing' }, notice: null }); } },
-  };
+  });
 
   async function feeMovedPast(batch: PreparedBatch, signal?: AbortSignal): Promise<boolean> {
     try { const pool = await operations.poolConfig(signal); return pool.feeAmount + batch.gasEstimate > batch.totalCost + feeTolerance; }

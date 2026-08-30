@@ -18,6 +18,18 @@ async function ready(machine = panel()) {
 }
 
 describe('Exchange machine', () => {
+  it('publishes an immutable panel API while retaining owned transitions', async () => {
+    const machine = panel();
+    const originalSetAmount = machine.setAmount;
+
+    expect(Object.isFrozen(machine)).toBe(true);
+    expect(Reflect.set(machine, 'setAmount', () => undefined)).toBe(false);
+    expect(Reflect.set(machine, 'confirm', async () => undefined)).toBe(false);
+    expect(machine.setAmount).toBe(originalSetAmount);
+    machine.setAmount('1');
+    expect(machine.store.getState().amountText).toBe('1');
+  });
+
   it('exposes a read-only immutable state snapshot to panel consumers', async () => {
     const machine = panel();
     const state = machine.store.getState();
