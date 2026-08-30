@@ -137,6 +137,31 @@ describe('fixed room definitions', () => {
     expect(h.controller.state.inRoom).toBe(true);
   });
 
+  it('keeps room ownership when input restoration fails on exit so it can retry', () => {
+    const out = bus<WorldEvents>();
+    const shell = bus<ShellEvents>();
+    const error = new Error('input restoration failed');
+    const resume = vi.fn()
+      .mockImplementationOnce(() => {})
+      .mockImplementationOnce(() => { throw error; })
+      .mockImplementationOnce(() => {});
+    const controller = createFixedRoomController({
+      definition: POST_OFFICE_ROOM_DEFINITION,
+      out,
+      in: shell,
+      input: { suspend: vi.fn(), resume },
+    });
+
+    controller.enter();
+    const exit = POST_OFFICE_ROOM_DEFINITION.exit;
+    expect(() => controller.update({ x: exit.x, y: exit.y })).toThrow(error);
+    expect(controller.state.inRoom).toBe(true);
+
+    expect(() => controller.update({ x: exit.x, y: exit.y })).not.toThrow();
+    expect(controller.state.inRoom).toBe(false);
+    expect(resume).toHaveBeenCalledTimes(3);
+  });
+
   it('preserves both station delivery and input restoration failures', () => {
     const out = bus<WorldEvents>();
     const shell = bus<ShellEvents>();

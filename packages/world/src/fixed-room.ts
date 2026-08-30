@@ -401,11 +401,24 @@ export function createFixedRoomController(
 
   function leave(): void {
     if (!inRoom) return;
+    const previousControlOwner = controlOwner;
+    const previousHighlightedStation = highlightedStation;
+    const previousApproachArmed = approachArmed;
     inRoom = false;
     controlOwner = 'world';
     highlightedStation = null;
     approachArmed = new Set(options.definition.stations.map((station) => station.station));
-    options.input.resume();
+    try {
+      options.input.resume();
+    } catch (error) {
+      // Input restoration is an external lifecycle boundary. Keep the room
+      // owned when it fails so the same exit can retry the transition.
+      inRoom = true;
+      controlOwner = previousControlOwner;
+      highlightedStation = previousHighlightedStation;
+      approachArmed = previousApproachArmed;
+      throw error;
+    }
     options.onExit?.();
     if (destroyed || inRoom) return;
     publish();
