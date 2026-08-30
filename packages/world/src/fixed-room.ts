@@ -460,7 +460,18 @@ export function createFixedRoomController(
         approachArmed = new Set(options.definition.stations.map((station) => station.station));
         throw error;
       }
-      options.onEnter?.();
+      try {
+        options.onEnter?.();
+      } catch (error) {
+        // Room presentation is an external lifecycle boundary. If it fails,
+        // do not leave the controller claiming an interior it cannot operate;
+        // a later explicit enter can retry the same presentation transition.
+        inRoom = false;
+        controlOwner = 'world';
+        highlightedStation = null;
+        approachArmed = new Set(options.definition.stations.map((station) => station.station));
+        throw error;
+      }
       if (destroyed || !inRoom) return;
       publish();
     },

@@ -258,6 +258,25 @@ empty shell to fetchers, so a 200 there means nothing.
 
 ## 6. Findings log
 
+### 2026-08-30 — Fixed-room entry rolls back after presentation failure
+
+`createFixedRoomController.enter()` resumed input and marked the room owned
+before invoking its injected `onEnter` presentation callback. If that callback
+threw, the controller remained `inRoom` and a later doorway retry became a
+no-op, leaving the failed presentation transition unrecoverable.
+
+Entry now restores the controller's outside state when `onEnter` throws:
+`inRoom` is cleared, control returns to World, the highlight is cleared and
+station approach arming is reset. The original presentation error is
+preserved, input restoration and successful entry ordering are unchanged, and
+a later explicit entry retries the callback.
+
+*Verified:* a red-first public World regression makes the first `onEnter`
+callback throw, observes the old controller remain inside, then passes after
+the rollback and confirms a second entry invokes the callback. Focused fixed
+room tests pass 53 tests. No browser, wallet, provider, RPC, proof, signature,
+funds or transaction was used.
+
 ### 2026-08-30 — Web address identity rejects malformed runtime values
 
 `sameAddress()` used numeric comparison when possible but fell back to raw

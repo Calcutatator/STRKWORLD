@@ -74,6 +74,27 @@ function harness(
 }
 
 describe('fixed room definitions', () => {
+  it('rolls back room ownership when enter presentation fails', () => {
+    const out = bus<WorldEvents>();
+    const shell = bus<ShellEvents>();
+    const error = new Error('room presentation failed');
+    const onEnter = vi.fn().mockImplementationOnce(() => { throw error; });
+    const controller = createFixedRoomController({
+      definition: POST_OFFICE_ROOM_DEFINITION,
+      out,
+      in: shell,
+      input: { suspend: vi.fn(), resume: vi.fn() },
+      onEnter,
+    });
+
+    expect(() => controller.enter()).toThrow(error);
+    expect(controller.state.inRoom).toBe(false);
+    expect(controller.state.building).toBeNull();
+    expect(() => controller.enter()).not.toThrow();
+    expect(controller.state.inRoom).toBe(true);
+    expect(onEnter).toHaveBeenCalledTimes(2);
+  });
+
   it('rolls back room ownership when input restoration fails on entry', () => {
     const out = bus<WorldEvents>();
     const shell = bus<ShellEvents>();
