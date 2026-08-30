@@ -258,6 +258,23 @@ empty shell to fetchers, so a 200 there means nothing.
 
 ## 6. Findings log
 
+### 2026-08-30 — Room resolution checks structured panel identity
+
+`resolveRoom()` previously trusted that a panel stored under a building key
+belonged to that building. A miswired or forged structured descriptor could
+therefore put the Bank panel under Exchange (or another building), passing the
+door and rendering the wrong financial route.
+
+Room resolution now requires structured panel descriptors to carry an own data
+`building` field matching the requested key. Generic non-object test seams
+remain supported, while mismatched or accessor-backed descriptor identities
+fail closed as unbuilt.
+
+*Verified:* the red-first resolver regression placed the authored Bank
+descriptor under the Exchange key; the old resolver returned `panel`, while
+the corrected resolver returns the existing `unbuilt` result. No browser,
+wallet, provider, RPC, proof, signature, funds or transaction was used.
+
 ### 2026-08-30 — Avatar Studio tile delivery remains retryable after failure
 
 `StreetScene.reportAvatarStudioTile()` committed its `lastTile` sentinel

@@ -184,6 +184,12 @@ describe('room resolution', () => {
     expect(room.kind).toBe('unbuilt');
   });
 
+  it('does not render a structured panel under the wrong building key', () => {
+    const panels = { exchange: BUILDING_PANELS.bank };
+    const room = resolveRoom('exchange', panels);
+    expect(room).toMatchObject({ kind: 'unbuilt', building: 'exchange' });
+  });
+
   it.each([null, {}, 'not-a-registry'])('fails closed for a malformed panel registry container: %s', (malformed) => {
     const panels = malformed as unknown as { exchange?: string };
     expect(() => resolveRoom('exchange', panels)).not.toThrow();

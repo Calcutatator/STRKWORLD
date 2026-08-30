@@ -55,6 +55,15 @@ export function resolveRoom<TPanel>(
   if (!panel) {
     return { kind: 'unbuilt', building, message: COPY.unbuilt };
   }
-
+  if (!panelMatchesBuilding(panel, building)) {
+    return { kind: 'unbuilt', building, message: COPY.unbuilt };
+  }
   return { kind: 'panel', building, panel };
+}
+
+/** Structured building descriptors must agree with their registry key. */
+function panelMatchesBuilding(panel: unknown, building: BuildingId): boolean {
+  if (typeof panel !== 'object' || panel === null) return true;
+  const descriptor = Object.getOwnPropertyDescriptor(panel, 'building');
+  return Boolean(descriptor && 'value' in descriptor && descriptor.value === building);
 }
