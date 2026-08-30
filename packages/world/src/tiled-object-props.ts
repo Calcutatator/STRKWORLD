@@ -71,9 +71,16 @@ export function flattenProperties(properties?: TiledProperty[]): Record<string, 
   const flat: Record<string, unknown> = Object.create(null) as Record<string, unknown>;
   if (!Array.isArray(properties)) return flat;
   for (const prop of properties) {
-    if (prop && typeof prop.name === 'string') {
-      flat[prop.name] = prop.value;
-    }
+    if (prop === null || (typeof prop !== 'object' && typeof prop !== 'function')) continue;
+
+    // Parsed map data is an untrusted boundary. Read own data fields only so
+    // inherited/accessor-backed records cannot run code or throw during map
+    // construction.
+    const name = Object.getOwnPropertyDescriptor(prop, 'name');
+    const value = Object.getOwnPropertyDescriptor(prop, 'value');
+    if (!name || !('value' in name) || typeof name.value !== 'string') continue;
+    if (!value || !('value' in value)) continue;
+    flat[name.value] = value.value;
   }
   return flat;
 }

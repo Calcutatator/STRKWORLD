@@ -258,6 +258,25 @@ empty shell to fetchers, so a 200 there means nothing.
 
 ## 6. Findings log
 
+### 2026-08-30 — Tiled property records fail closed without invoking accessors
+
+`flattenProperties()` previously read each raw Tiled property's `name` and
+`value` through ordinary property access. A malformed or hostile runtime
+record with an accessor-backed field could therefore throw during map
+decoding, aborting the whole object layer instead of being skipped as the
+decoder contract promises.
+
+The flattener now accepts only own data descriptors for both fields. Missing,
+inherited and accessor-backed records are skipped without invoking getters;
+valid Tiled records, duplicate-name last-write behavior, null-prototype
+output, and non-array container handling are unchanged.
+
+*Verified:* a red-first public World regression supplied getter-backed `name`
+and `value` fields that throw if read; the old decoder invoked the getter and
+failed, while the corrected decoder returns an empty record and records zero
+getter reads. Focused Tiled-property tests pass 9/9. No browser, wallet,
+provider, RPC, proof, signature, funds or transaction was used.
+
 ### 2026-08-30 — Backend listener setup releases hooks after synchronous bind failure
 
 `listenBackendServer()` installed its `error` and `listening` handlers before

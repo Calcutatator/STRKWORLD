@@ -68,6 +68,32 @@ describe('flattenProperties', () => {
     expect(flattenProperties(raw)).toEqual({ building: 'post-office' });
   });
 
+  it('skips accessor-backed property records without invoking their getters', () => {
+    let nameReads = 0;
+    let valueReads = 0;
+    const hostileName = Object.defineProperty({}, 'name', {
+      configurable: true,
+      get() {
+        nameReads += 1;
+        throw new Error('name getter must not run');
+      },
+    });
+    const hostileValue = Object.defineProperty({ name: 'locked' }, 'value', {
+      configurable: true,
+      get() {
+        valueReads += 1;
+        throw new Error('value getter must not run');
+      },
+    });
+    const inherited = Object.create({ name: 'building', value: 'bank' }) as TiledProperty;
+
+    expect(
+      flattenProperties([hostileName as TiledProperty, hostileValue as TiledProperty, inherited]),
+    ).toEqual({});
+    expect(nameReads).toBe(0);
+    expect(valueReads).toBe(0);
+  });
+
   it('does not let prototype-sensitive names inject a building property', () => {
     const flat = flattenProperties([
       { name: '__proto__', type: 'object', value: { building: 'bank' } },
