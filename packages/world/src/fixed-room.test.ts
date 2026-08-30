@@ -137,6 +137,37 @@ describe('fixed room definitions', () => {
     expect(h.controller.state.inRoom).toBe(true);
   });
 
+  it('preserves both station delivery and input restoration failures', () => {
+    const out = bus<WorldEvents>();
+    const shell = bus<ShellEvents>();
+    const deliveryError = new Error('station consumer failed');
+    const restorationError = new Error('input restoration failed');
+    const resume = vi.fn()
+      .mockImplementationOnce(() => {})
+      .mockImplementationOnce(() => { throw restorationError; });
+    out.on('station:activated', () => { throw deliveryError; });
+    const controller = createFixedRoomController({
+      definition: POST_OFFICE_ROOM_DEFINITION,
+      out,
+      in: shell,
+      input: { suspend: vi.fn(), resume },
+    });
+    controller.enter();
+    shell.emit('world:stations', {
+      building: 'post-office',
+      stations: [{ station: 'post-office:transfer', label: 'TRANSFER', status: 'available' }],
+    });
+
+    let thrown: unknown;
+    try {
+      controller.update({ x: 3, y: 4 });
+    } catch (error) {
+      thrown = error;
+    }
+    expect(thrown).toBeInstanceOf(AggregateError);
+    expect((thrown as AggregateError).errors).toEqual([deliveryError, restorationError]);
+  });
+
   it('isolates station activation payloads from synchronous listener mutation', () => {
     const h = harness();
     const seen: Array<{ building: string; station: string }> = [];

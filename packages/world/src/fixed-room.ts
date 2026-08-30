@@ -470,17 +470,32 @@ export function createFixedRoomController(
           approachArmed.add(approached.station);
           throw error;
         }
+        let deliveryError: unknown;
+        let deliveryFailed = false;
         try {
           options.out.emit('station:activated', Object.freeze({
             building: options.definition.building,
             station: approached.station,
           }));
-        } finally {
+        } catch (error) {
+          deliveryError = error;
+          deliveryFailed = true;
+        }
+        try {
           // EventBus delivery is synchronous and may throw. A stale/missing
           // Shell claim or failed consumer must not strand the player with
           // World input suspended.
           if (!destroyed && inRoom && ownsWorldControl()) options.input.resume();
+        } catch (error) {
+          if (deliveryFailed) {
+            throw new AggregateError(
+              [deliveryError, error],
+              'Fixed-room station activation failed',
+            );
+          }
+          throw error;
         }
+        if (deliveryFailed) throw deliveryError;
       }
     },
     destroy(): void {
