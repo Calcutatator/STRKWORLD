@@ -258,6 +258,26 @@ empty shell to fetchers, so a 200 there means nothing.
 
 ## 6. Findings log
 
+### 2026-08-30 — Failed street movement publication can commit stale facing
+
+`createStreetMovementReporter.update()` changed its authoritative facing before
+publishing `player:moved`. If a synchronous shell listener threw, the failed
+movement still left the new facing committed even though the publication did
+not complete. A retry therefore started from state that belonged to an
+uncommitted turn; a nested newer update could also be incorrectly overwritten
+by a stale rollback.
+
+Movement publication now owns a facing revision and restores the previous
+facing only when the failed turn still owns it. A nested successful update
+remains authoritative, while the existing frozen payload and facing priority
+are unchanged.
+
+*Verified:* a red-first public World regression makes the movement listener
+throw on a right-facing update; the old path retained `right`, while the
+corrected path restores `down` and accepts the retry after recovery. Focused
+street-movement tests pass 20 tests. No browser, lobby server, wallet,
+provider, RPC, proof, signature, funds or transaction was used.
+
 ### 2026-08-30 — Fixed-room entry failure can leave a partial presentation live
 
 `createFixedRoomController.enter()` released logical room ownership when its

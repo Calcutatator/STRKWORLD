@@ -240,6 +240,23 @@ describe('street movement seam', () => {
     ]);
   });
 
+  it('does not commit a new facing when movement publication fails', () => {
+    const error = new Error('movement publication failed');
+    let fail = true;
+    const reporter = createStreetMovementReporter({
+      emit: () => {
+        if (fail) throw error;
+      },
+    });
+
+    expect(() => reporter.update({ x: 100, y: 100 }, { ...idle, right: true })).toThrow(error);
+    expect(reporter.facing).toBe('down');
+
+    fail = false;
+    reporter.update({ x: 100, y: 100 }, { ...idle, right: true });
+    expect(reporter.facing).toBe('right');
+  });
+
   it('never adds building, room, station, mode, or financial fields', () => {
     const h = capture();
     h.reporter.update({ x: 1, y: 2 }, { ...idle, up: true });

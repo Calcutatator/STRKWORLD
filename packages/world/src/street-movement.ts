@@ -163,6 +163,7 @@ export function createStreetMovementReporter(
   out: Pick<EventBus<WorldEvents>, 'emit'>,
 ): StreetMovementReporter {
   let facing: Facing = 'down';
+  let facingRevision = 0;
 
   const publish = (position: Position): void => {
     // The shell may have several synchronous listeners. Do not let one of
@@ -185,8 +186,19 @@ export function createStreetMovementReporter(
     update(position, input) {
       // Vertical input wins when both axes are held. The important contract is
       // that a stopped player retains the last non-zero facing.
-      facing = resolveMovementFacing(input, facing);
-      publish(position);
+      const previous = facing;
+      const next = resolveMovementFacing(input, previous);
+      const ownRevision = ++facingRevision;
+      facing = next;
+      try {
+        publish(position);
+      } catch (error) {
+        // Movement publication is an external synchronous boundary. Restore a
+        // failed turn unless a nested update already established newer facing
+        // ownership while listeners were running.
+        if (facingRevision === ownRevision && facing === next) facing = previous;
+        throw error;
+      }
     },
   };
 }
