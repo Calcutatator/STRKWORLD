@@ -283,6 +283,25 @@ the remaining 8 failures are existing local Vite-path and launcher timeout
 environment failures outside World. No browser, lobby service, wallet,
 provider, RPC, proof, signature, funds or transaction was used.
 
+### 2026-08-30 — Capability discovery contains malformed cancellation reads
+
+`createSupportedVersionsReader()` checked its optional cancellation input with
+ordinary `signal.aborted` access before and after the wallet capability query.
+A malformed proxy supplied at this exported reader boundary could throw from
+that getter, leaking an arbitrary exception before discovery or cancellation
+classification completed.
+
+Cancellation checks now treat a throwing signal read as aborted and fail closed
+with the existing `AbortError`; genuine signals and the wallet capability
+request remain unchanged. This does not add a proving, discovery-service or
+wallet-identity path.
+
+*Verified:* a red-first public reader regression supplied a proxy cancellation
+object whose `aborted` getter throws. The old reader leaked that raw exception;
+the corrected reader returns `AbortError` before touching the wallet provider.
+Removing the guarded check restores the failure. No browser, wallet, provider,
+RPC, proof, signature, funds or transaction was used.*
+
 ### 2026-08-30 — Fly retires private requests after public disconnects
 
 The Fly HTTP proxy destroyed its private-child request when the incoming body
