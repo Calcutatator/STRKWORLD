@@ -94,5 +94,5 @@ export function createEventBus<Events extends Record<string, unknown>>(): EventB
     listeners.clear();
   }
 
-  return { emit, on, once, off, clear };
+  return Object.freeze({ emit, on, once, off, clear });
 }
