@@ -425,8 +425,8 @@ function assertSignedQuote(
   }
   if (
     response.quote.amountIn !== input.amountIn.toString() ||
-    !isPositiveDecimal(response.quote.amountOut) ||
-    !isPositiveDecimal(response.quote.minAmountOut) ||
+    !isBoundedPositiveDecimal(response.quote.amountOut) ||
+    !isBoundedPositiveDecimal(response.quote.minAmountOut) ||
     BigInt(response.quote.minAmountOut) > BigInt(response.quote.amountOut) ||
     !Number.isFinite(response.quote.timeEstimate) ||
     response.quote.timeEstimate < 0
@@ -453,6 +453,12 @@ function assertSignedQuote(
 
 function isPositiveDecimal(value: string): boolean {
   return /^[1-9][0-9]*$/.test(value);
+}
+
+function isBoundedPositiveDecimal(value: string): boolean {
+  return isPositiveDecimal(value) &&
+    value.length <= MAX_BASE_UNIT_AMOUNT_DIGITS &&
+    BigInt(value) <= MAX_BASE_UNIT_AMOUNT;
 }
 
 function quoteExpired(record: BridgeRecord, now: number): boolean {

@@ -525,6 +525,28 @@ describe('BridgeService', () => {
     });
   });
 
+  it('rejects a signed quote output above the uint256 upper bound', async () => {
+    const client = new StubClient();
+    const store = new MemoryBridgeStore();
+    client.getQuote = async () => ({
+      ...signedQuote,
+      quote: {
+        ...signedQuote.quote,
+        amountOut: (1n << 256n).toString(),
+        minAmountOut: (1n << 256n).toString(),
+      },
+    });
+    const service = new BridgeService({ client, store, quoteVerifier: () => true, now: () => NOW });
+
+    await expect(service.createManualDeposit({
+      source: SOURCE,
+      amountIn: 1_000_000n,
+      starknetRecipient: '0x123',
+      refundAddress: request.refundTo,
+    })).rejects.toThrow('1Click returned invalid executable quote amounts.');
+    expect(store.load()).toBeNull();
+  });
+
   it.each([
     ['zero', '0'],
     ['negative', '-1'],
