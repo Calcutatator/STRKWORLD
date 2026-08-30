@@ -66,11 +66,11 @@ export interface BankRoomControllerOptions {
 
 export function createBankRoom(): BankRoomMap {
   const room = createFixedRoom(BANK_ROOM_DEFINITION);
-  return {
+  return Object.freeze({
     ...room,
     name: 'bank',
     station: BANK_ROOM_DEFINITION.stations[0]!,
-  };
+  });
 }
 
 export function bankRoomTileAt(room: BankRoomMap, x: number, y: number): BankRoomTile | null {

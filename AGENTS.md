@@ -258,6 +258,24 @@ empty shell to fetchers, so a 200 there means nothing.
 
 ## 6. Findings log
 
+### 2026-08-30 — Bank compatibility maps must retain runtime immutability
+
+`createBankRoom()` spread the already-frozen `FixedRoomMap` into a new
+compatibility object, then returned that outer object mutable. A consumer could
+therefore overwrite the public `name`, `building`, dimensions or station
+references despite the readonly map contract, leaving the Bank facade's
+metadata inconsistent with its fixed collision and station data.
+
+The compatibility facade now freezes its returned outer map as well as the
+deeply-owned data supplied by `createFixedRoom()`. Existing Bank geometry,
+station helpers and controller behavior are unchanged.
+
+*Verified:* a red-first public Bank regression observed that the returned map
+was mutable and allowed `name` replacement; the corrected map is frozen and
+rejects that mutation while retaining `bank`. Focused Bank tests and World
+typecheck pass. No browser, lobby server, wallet, provider, RPC, proof,
+signature, funds or transaction was used.*
+
 ### 2026-08-30 — Remote avatar idle timers must commit with the new pose
 
 `createRemoteAvatarLayer.updateAvatar()` cancelled an existing movement-idle

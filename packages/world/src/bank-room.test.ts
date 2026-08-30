@@ -52,6 +52,16 @@ function inputGate() {
 }
 
 describe('Bank room geometry', () => {
+  it('returns an immutable compatibility map', () => {
+    const room = createBankRoom();
+
+    expect(Object.isFrozen(room)).toBe(true);
+    expect(Reflect.set(room, 'name', 'forged')).toBe(false);
+    expect(Reflect.set(room, 'building', 'bridge')).toBe(false);
+    expect(room.name).toBe('bank');
+    expect(room.building).toBe('bank');
+  });
+
   it('is fixed, enclosed, and has a walkable physical exit', () => {
     const room = createBankRoom();
     expect(room.width).toBe(18);
