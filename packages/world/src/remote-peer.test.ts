@@ -15,6 +15,23 @@ const peer = (overrides: Partial<RemotePeerSnapshot> = {}): RemotePeerSnapshot =
 });
 
 describe('RemotePeerSource', () => {
+  it('fails closed when a malformed snapshot container is published', () => {
+    const controller = createRemotePeerSource([peer()]);
+    const seen: Array<readonly RemotePeerSnapshot[]> = [];
+    controller.source.subscribe((snapshot) => seen.push(snapshot));
+
+    expect(() => controller.publish(null as never)).not.toThrow();
+    expect(seen.at(-1)).toEqual([]);
+  });
+
+  it('fails closed when the retained source starts with a malformed container', () => {
+    const controller = createRemotePeerSource(null as never);
+    const seen: Array<readonly RemotePeerSnapshot[]> = [];
+    controller.source.subscribe((snapshot) => seen.push(snapshot));
+
+    expect(seen).toEqual([[]]);
+  });
+
   it('replays the latest immutable full snapshot synchronously', () => {
     const source = createRemotePeerSource([peer()]).source;
     const seen: Array<readonly RemotePeerSnapshot[]> = [];
@@ -299,6 +316,11 @@ describe('RemotePeerSource', () => {
 });
 
 describe('remote peer reconciliation', () => {
+  it.each([null, undefined, {}, 'peers'])('fails closed for a malformed snapshot container (%j)', (snapshot) => {
+    expect(() => reconcileRemotePeers(snapshot as never)).not.toThrow();
+    expect(reconcileRemotePeers(snapshot as never)).toEqual(new Map());
+  });
+
   it('rejects peer identities and positions supplied through a prototype', () => {
     const inherited = Object.create({
       id: 'inherited-peer',

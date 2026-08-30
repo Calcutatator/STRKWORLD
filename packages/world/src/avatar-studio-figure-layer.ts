@@ -73,20 +73,57 @@ export function createAvatarStudioFigureLayer(options: {
   return {
     sync(state): void {
       if (destroyed) return;
-      for (const sprite of sprites.values()) sprite.setVisible(state.visible);
-      const selected = AVATAR_STUDIO_DEFINITION.figures.find(
-        (figure) => figure.figure === state.highlightedFigure,
+      const previousVisibility = new Map(
+        [...sprites].map(([figure, sprite]) => [figure, sprite.visible] as const),
       );
-      if (!state.visible || !selected) {
-        ownedHighlight.setVisible(false);
-        return;
+      const previousHighlight = {
+        x: ownedHighlight.x,
+        y: ownedHighlight.y,
+        visible: ownedHighlight.visible,
+      };
+      try {
+        for (const sprite of sprites.values()) sprite.setVisible(state.visible);
+        const selected = AVATAR_STUDIO_DEFINITION.figures.find(
+          (figure) => figure.figure === state.highlightedFigure,
+        );
+        if (!state.visible || !selected) {
+          ownedHighlight.setVisible(false);
+          return;
+        }
+        ownedHighlight
+          .setPosition(
+            roomOrigin.x + (selected.x + 0.5) * AVATAR_STUDIO_TILE_SIZE,
+            roomOrigin.y + (selected.y + 0.5) * AVATAR_STUDIO_TILE_SIZE,
+          )
+          .setVisible(true);
+      } catch (error) {
+        const rollbackErrors: unknown[] = [];
+        for (const [figure, sprite] of sprites) {
+          if (sprite.visible === previousVisibility.get(figure)) continue;
+          try {
+            sprite.setVisible(previousVisibility.get(figure)!);
+          } catch (rollbackError) {
+            rollbackErrors.push(rollbackError);
+          }
+        }
+        try {
+          if (ownedHighlight.x !== previousHighlight.x || ownedHighlight.y !== previousHighlight.y) {
+            ownedHighlight.setPosition(previousHighlight.x, previousHighlight.y);
+          }
+          if (ownedHighlight.visible !== previousHighlight.visible) {
+            ownedHighlight.setVisible(previousHighlight.visible);
+          }
+        } catch (rollbackError) {
+          rollbackErrors.push(rollbackError);
+        }
+        if (rollbackErrors.length > 0) {
+          throw new AggregateError(
+            [error, ...rollbackErrors],
+            'Avatar Studio figure sync rollback failed',
+          );
+        }
+        throw error;
       }
-      ownedHighlight
-        .setPosition(
-          roomOrigin.x + (selected.x + 0.5) * AVATAR_STUDIO_TILE_SIZE,
-          roomOrigin.y + (selected.y + 0.5) * AVATAR_STUDIO_TILE_SIZE,
-        )
-        .setVisible(true);
     },
     destroy(): void {
       if (destroyed) return;
