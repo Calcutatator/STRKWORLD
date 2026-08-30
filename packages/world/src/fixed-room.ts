@@ -618,12 +618,21 @@ export function createFixedRoomController(
         options.onEnter?.();
       } catch (error) {
         // Room presentation is an external lifecycle boundary. If it fails,
-        // do not leave the controller claiming an interior it cannot operate;
-        // a later explicit enter can retry the same presentation transition.
+        // compensate any partial presentation before releasing logical room
+        // ownership. A later explicit enter can then retry the same complete
+        // transition instead of inheriting a half-entered renderer.
+        const shouldCompensate = !destroyed && inRoom;
         inRoom = false;
         controlOwner = 'world';
         highlightedStation = null;
         approachArmed = new Set(options.definition.stations.map((station) => station.station));
+        if (shouldCompensate) {
+          try {
+            options.onExit?.();
+          } catch {
+            // Preserve the original entry error.
+          }
+        }
         throw error;
       }
       if (destroyed || !inRoom) return;

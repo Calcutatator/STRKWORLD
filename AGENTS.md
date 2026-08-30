@@ -258,6 +258,26 @@ empty shell to fetchers, so a 200 there means nothing.
 
 ## 6. Findings log
 
+### 2026-08-30 — Fixed-room entry failure can leave a partial presentation live
+
+`createFixedRoomController.enter()` released logical room ownership when its
+`onEnter()` callback threw, but did not compensate the callback. The Scene's
+entry callback performs the presentation handoff before rendering the room;
+if that later render step throws, the controller could report the street while
+the Phaser presentation still showed the room.
+
+Entry failure now attempts the matching `onExit()` compensation while the
+controller still owns the room, preserving the original entry error if
+compensation also fails. A controller already destroyed or synchronously
+replaced by the failing callback remains authoritative and is not compensated
+again.
+
+*Verified:* a red-first public fixed-room regression completed the room
+presentation, then threw from `onEnter`; the old path left room visibility on,
+while the corrected path calls the paired exit and restores street visibility.
+The focused fixed-room suite passes 72 tests. No browser, lobby server,
+wallet, provider, RPC, proof, signature, funds or transaction was used.
+
 ### 2026-08-30 — Fixed-room exit compensation must restore partial presentation
 
 `createFixedRoomController.leave()` restored logical room ownership when its

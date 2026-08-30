@@ -159,6 +159,40 @@ function harness(
 }
 
 describe('fixed room definitions', () => {
+  it('compensates a partially entered presentation when onEnter fails', () => {
+    let roomVisible = false;
+    const presentation = createFixedRoomPresentation({
+      setPlayerVelocity: vi.fn(),
+      setBodyEnabled: vi.fn(),
+      setGroundVisible: vi.fn(),
+      setDoorsVisible: vi.fn(),
+      setRemoteVisible: vi.fn(),
+      setLabelsVisible: vi.fn(),
+      setRoomVisible: vi.fn((visible) => { roomVisible = visible; }),
+      setWorldBounds: vi.fn(),
+      setCameraBounds: vi.fn(),
+      setPlayerPosition: vi.fn(),
+      resetDoors: vi.fn(),
+      resumeStreet: vi.fn(),
+    });
+    const error = new Error('room render failed after presentation entry');
+    const controller = createFixedRoomController({
+      definition: POST_OFFICE_ROOM_DEFINITION,
+      out: bus<WorldEvents>(),
+      in: bus<ShellEvents>(),
+      input: { suspend: vi.fn(), resume: vi.fn() },
+      onEnter: () => {
+        presentation.enter();
+        throw error;
+      },
+      onExit: () => presentation.exit(),
+    });
+
+    expect(() => controller.enter()).toThrow(error);
+    expect(controller.state.inRoom).toBe(false);
+    expect(roomVisible).toBe(false);
+  });
+
   it('rolls back room ownership when enter presentation fails', () => {
     const out = bus<WorldEvents>();
     const shell = bus<ShellEvents>();
