@@ -258,6 +258,56 @@ empty shell to fetchers, so a 200 there means nothing.
 
 ## 6. Findings log
 
+
+## 6. Findings log
+
+### 2026-08-30 — Issued fee authorizations require a safe block expiry
+
+`BackendApi.fee()` and swap preparation formed authorization expiry with an
+unchecked `issuedAtBlock + proofValidityBlocks` number addition. Although the
+RPC adapter validates each input as a nonnegative safe integer, their sum can
+round above `Number.MAX_SAFE_INTEGER`. The API then returned `200` and issued
+an authorization whose expiry was unsafe; the later submission validator
+rejected that same authorization as a claim mismatch.
+
+Both issuance paths now reject an unsafe expiry before constructing or issuing
+the authorization. The exact safe-integer boundary remains accepted, and
+submission freshness behavior is unchanged.
+
+*Verified:* red-first public Backend regressions set the block to
+`Number.MAX_SAFE_INTEGER` with a one-block validity window and assert generic
+upstream failure plus zero authorization issuance for ordinary and swap
+routes. Matching cases at `Number.MAX_SAFE_INTEGER - 1` remain successful with
+the exact safe expiry. Backend focused tests and diff hygiene pass; no
+browser, external provider, RPC, wallet, proof, signature, funds or
+transaction was used.*
+
+
+## 6. Findings log
+
+
+## 6. Findings log
+
+### 2026-08-30 — Vite proxy-boundary tests must isolate dependency optimization
+
+The exact `/api` proxy test created a full Vite development server using the
+production development config, which includes Phaser dependency optimization.
+Vite's asynchronous scanner/esbuild lifecycle is independent of the HTTP
+requests and `vite.close()` waits for it; repeated isolated runs intermittently
+hung in teardown until the 15-second test timeout. This was a test-fixture
+lifecycle trap, not a proxy matcher failure.
+
+The test now disables dependency optimization only on its inline Vite server.
+It still exercises the real configured proxy and asserts `/api` reaches the
+fake backend while `/apis` and `/api2` do not. The production Vite config and
+runtime optimization remain unchanged.
+
+*Verified:* the unmodified fixture passed once and then timed out on its
+second repeated run at `vite.close()`. The corrected exact test passed five
+consecutive runs. No browser, external provider, RPC, wallet, proof,
+signature, funds or transaction was used.*
+
+
 ### 2026-08-30 — Relay authorizations must contain non-whitespace data
 
 `WalletApiPrivacyOperations.validateRelayFee()` previously rejected only an

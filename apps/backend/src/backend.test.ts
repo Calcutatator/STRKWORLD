@@ -193,6 +193,73 @@ describe('strict fee authorization', () => {
     });
   });
 
+  it('rejects an ordinary fee when the issued expiry exceeds the safe block bound', async () => {
+    const { api, setBlock, setProofValidityBlocks, authorizations } = fixture();
+    setBlock(Number.MAX_SAFE_INTEGER);
+    setProofValidityBlocks(1);
+    const issue = vi.spyOn(authorizations, 'issue');
+
+    await expect(api.handle({
+      method: 'POST',
+      path: '/v1/private/fees',
+      body: { v: 1, route: 'transfer', feeToken: STRK, operationToken: '0xabc' },
+    })).resolves.toMatchObject({ status: 502 });
+    expect(issue).not.toHaveBeenCalled();
+  });
+
+  it('accepts an ordinary fee whose issued expiry is exactly the safe bound', async () => {
+    const { api, setBlock, setProofValidityBlocks } = fixture();
+    setBlock(Number.MAX_SAFE_INTEGER - 1);
+    setProofValidityBlocks(1);
+
+    await expect(fee(api)).resolves.toMatchObject({
+      expiresAtBlock: Number.MAX_SAFE_INTEGER,
+    });
+  });
+
+  it('rejects a swap when the issued expiry exceeds the safe block bound', async () => {
+    const { api, setBlock, setProofValidityBlocks, authorizations } = fixture();
+    setBlock(Number.MAX_SAFE_INTEGER);
+    setProofValidityBlocks(1);
+    const issue = vi.spyOn(authorizations, 'issue');
+
+    await expect(api.handle({
+      method: 'POST',
+      path: '/v1/private/swaps/prepare',
+      body: {
+        v: 1,
+        sellToken: '0xabc',
+        buyToken: STRK,
+        sellAmount: '20',
+        minAmountOut: '90',
+        slippageBps: 100,
+      },
+    })).resolves.toMatchObject({ status: 502 });
+    expect(issue).not.toHaveBeenCalled();
+  });
+
+  it('accepts a swap whose issued expiry is exactly the safe bound', async () => {
+    const { api, setBlock, setProofValidityBlocks } = fixture();
+    setBlock(Number.MAX_SAFE_INTEGER - 1);
+    setProofValidityBlocks(1);
+
+    const response = await api.handle({
+      method: 'POST',
+      path: '/v1/private/swaps/prepare',
+      body: {
+        v: 1,
+        sellToken: '0xabc',
+        buyToken: STRK,
+        sellAmount: '20',
+        minAmountOut: '90',
+        slippageBps: 100,
+      },
+    });
+    expect(response.status).toBe(200);
+    expect((response.body as { fee: { expiresAtBlock: number } }).fee.expiresAtBlock)
+      .toBe(Number.MAX_SAFE_INTEGER);
+  });
+
   it.each([
     ['fractional string', '7.5'],
     ['nonnumeric string', 'not-a-number'],

@@ -163,6 +163,7 @@ export class BackendApi {
     if (feeAmount <= 0n || feeAmount > policy.maxRelayFee) {
       throw new ApiFailure(400, 'Paymaster fee exceeds the route ceiling.');
     }
+    const expiresAtBlock = safeBlockExpiry(block, poolConfig.proofValidityBlocks);
     const claims: FeeAuthorizationClaims = {
       v: 1,
       route,
@@ -172,7 +173,7 @@ export class BackendApi {
       recipient: fee.recipient,
       amount: feeAmount,
       issuedAtBlock: block,
-      expiresAtBlock: block + poolConfig.proofValidityBlocks,
+      expiresAtBlock,
     };
     return {
       status: 200,
@@ -345,6 +346,7 @@ export class BackendApi {
     if (invokePrefix.length + 13 > this.config.maxCalldataItems) {
       throw new ApiFailure(413, 'AVNU private executor plan is too large.');
     }
+    const expiresAtBlock = safeBlockExpiry(block, poolConfig.proofValidityBlocks);
     const claims: FeeAuthorizationClaims = {
       v: 1,
       route: 'swap',
@@ -354,7 +356,7 @@ export class BackendApi {
       recipient: fee.recipient,
       amount: feeAmount,
       issuedAtBlock: block,
-      expiresAtBlock: block + poolConfig.proofValidityBlocks,
+      expiresAtBlock,
       swap: {
         executor: plan.executorAddress,
         sellToken,
@@ -486,6 +488,14 @@ function requireProviderFeeAmount(value: unknown): bigint {
     throw new Error('Paymaster returned an invalid fee amount.');
   }
   return value;
+}
+
+function safeBlockExpiry(issuedAtBlock: number, validity: number): number {
+  const expiry = issuedAtBlock + validity;
+  if (!Number.isSafeInteger(expiry)) {
+    throw new Error('Pool proof-validity window exceeds the safe block bound.');
+  }
+  return expiry;
 }
 
 function requireBigintString(value: unknown, label: string): bigint {
