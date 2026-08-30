@@ -1222,6 +1222,38 @@ describe('presence controller', () => {
     stop();
   });
 
+  it('replaces a pending join when stale status cleanup throws', async () => {
+    const world = createEventBus<WorldEvents>();
+    const first = fakeClient();
+    const second = fakeClient();
+    const cleanupFailure = new Error('status cleanup failed');
+    let resolveInitial!: () => void;
+    first.client.onStatus = vi.fn((listener: StatusListener) => {
+      listener({ status: 'idle' });
+      return () => { throw cleanupFailure; };
+    });
+    first.client.connect = vi.fn(() => new Promise<void>((resolve) => {
+      resolveInitial = resolve;
+    }));
+    let created = 0;
+    const presence = createPresenceController({
+      endpoint: 'ws://example',
+      factory: vi.fn(() => (created++ === 0 ? first.client : second.client)),
+    });
+    const stop = presence.listen(world);
+
+    world.emit('player:moved', moved);
+    presence.reconnect();
+    resolveInitial();
+    await Promise.resolve();
+    await Promise.resolve();
+    await Promise.resolve();
+
+    expect(first.client.disconnect).toHaveBeenCalledOnce();
+    expect(second.client.connect).toHaveBeenCalledOnce();
+    stop();
+  });
+
   it('retries a failed join when reconnect was requested while it was settling', async () => {
     const world = createEventBus<WorldEvents>();
     const first = fakeClient();

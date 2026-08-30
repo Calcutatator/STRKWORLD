@@ -258,6 +258,29 @@ empty shell to fetchers, so a 200 there means nothing.
 
 ## 6. Findings log
 
+### 2026-08-30 — Presence replacement survives stale cleanup failure
+
+When a pending join settled successfully after an explicit reconnect request,
+the replacement branch invoked the stale status cleanup directly. If that
+cleanup threw, the continuation fell into generic connect-failure handling
+after clearing the reconnect request, so the old client was never disconnected
+and no replacement client was started. A queued success could therefore leave
+the controller unavailable without honoring the user's retry.
+
+The successful replacement handoff now detaches status ownership before
+invoking cleanup and contains both status and peer cleanup errors before
+retiring the stale client. The replacement still disconnects the old client
+before creating the new one; ordinary disconnect rejection and explicit retry
+semantics remain unchanged.
+
+*Verified:* a public regression defers the first join, requests reconnect,
+then resolves the join while its status cleanup throws. The old path performs
+no replacement; the corrected path disconnects the first client and connects
+the second. The focused presence suite passes 55 tests; full workspace tests
+and typechecks, the Web build, invariants, and diff hygiene are green. No
+browser, lobby server, wallet, provider, RPC, proof, signature, funds or
+transaction was used.
+
 ### 2026-08-30 — Wallet capability versions are owned before admission
 
 Capability detection validated that the wallet returned an array, but then

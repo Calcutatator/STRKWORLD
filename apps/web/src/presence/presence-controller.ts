@@ -254,9 +254,12 @@ export function createPresenceController({ endpoint, factory = (options) => new 
       if (destroyed) return next.disconnect();
       if (reconnectRequested && !inside) {
         reconnectRequested = false;
-        statusStop?.();
-        statusStop = null;
-        clearClientPeers();
+        deactivateClientStatus();
+        try {
+          clearClientPeers();
+        } catch {
+          // A stale peer subscriber must not block the requested replacement.
+        }
         client = null;
         clientSprite = null;
         return next.disconnect().then(() => {
