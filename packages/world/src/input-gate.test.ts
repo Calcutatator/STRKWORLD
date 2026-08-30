@@ -56,6 +56,26 @@ describe('suspend', () => {
     expect(calls.filter((c) => c === 'disableGlobalCapture')).toHaveLength(1);
   });
 
+  it('keeps suspension retryable when entry setup fails', () => {
+    const error = new Error('keyboard capture disable failed');
+    const disableGlobalCapture = vi.fn().mockImplementationOnce(() => {
+      throw error;
+    });
+    const keyboard: KeyboardLike = {
+      enabled: true,
+      disableGlobalCapture,
+      enableGlobalCapture: vi.fn(),
+      resetKeys: vi.fn(),
+    };
+    const gate = createInputGate(keyboard);
+
+    expect(() => gate.suspend()).toThrow(error);
+    expect(gate.suspended).toBe(false);
+    expect(() => gate.suspend()).not.toThrow();
+    expect(gate.suspended).toBe(true);
+    expect(disableGlobalCapture).toHaveBeenCalledTimes(2);
+  });
+
   it('attempts exit cleanup and input restoration when entry cleanup throws', () => {
     const { keyboard } = fakeKeyboard();
     const gate = createInputGate(keyboard);

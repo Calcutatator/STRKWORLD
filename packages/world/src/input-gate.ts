@@ -47,15 +47,24 @@ export interface InputGate {
 
 export function createInputGate(keyboard: KeyboardLike): InputGate {
   let suspended = false;
+  let suspending = false;
 
   return {
     suspend() {
-      if (suspended) return;
-      suspended = true;
+      if (suspended || suspending) return;
+      // Keep the transition in-flight until every keyboard operation succeeds.
+      // A Phaser callback or adapter can throw synchronously; leaving the gate
+      // marked suspended would make all later retries silently no-op.
+      suspending = true;
       // Order is load-bearing.
-      keyboard.disableGlobalCapture(); // stop swallowing keystrokes
-      keyboard.enabled = false; // stop delivering them to the game
-      keyboard.resetKeys(); // drop anything currently held
+      try {
+        keyboard.disableGlobalCapture(); // stop swallowing keystrokes
+        keyboard.enabled = false; // stop delivering them to the game
+        keyboard.resetKeys(); // drop anything currently held
+        suspended = true;
+      } finally {
+        suspending = false;
+      }
     },
 
     resume() {
