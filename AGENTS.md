@@ -258,6 +258,29 @@ empty shell to fetchers, so a 200 there means nothing.
 
 ## 6. Findings log
 
+### 2026-08-30 — Presence destroy must outlive status cleanup failures
+
+Presence controller destruction called the status-listener cleanup directly.
+If a host subscription threw while being removed, `destroy()` rejected before
+clearing peer delivery or disconnecting the lobby client, leaving a live
+transport and stale callbacks behind. Cleanup failures must not prevent the
+remaining owned resources from being retired.
+
+Destroy now records synchronous status/peer cleanup failures, attempts peer
+clear and client/replacement disconnect, and reports the recorded failures
+after all cleanup has settled. Normal single-failure and multi-failure
+reporting remain deterministic and repeated destroy calls reuse the same
+settled result.
+
+*Verified:* a public regression makes status-listener removal throw during
+destroy; the old path skipped disconnect and peer unsubscription, while the
+corrected path attempts both and preserves the cleanup error. The focused
+presence controller suite passes 60 tests; the full workspace passes 110 test
+files and 2,377 tests, all workspace typechecks pass, the Web production build
+passes, all 13 invariants hold, and diff hygiene passes. No browser, lobby
+server, wallet, provider, RPC, proof, signature, funds or transaction was
+used.
+
 ### 2026-08-30 — Private submission requests are owned before dispatch
 
 The Backend privacy client validated submission request fields through

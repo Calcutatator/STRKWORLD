@@ -1137,6 +1137,25 @@ describe('presence controller', () => {
     expect(made.client.disconnect).toHaveBeenCalledTimes(1);
   });
 
+  it('finishes presence cleanup when status listener removal throws', async () => {
+    const world = createEventBus<WorldEvents>();
+    const made = fakeClient();
+    const cleanupFailure = new Error('status listener removal failed');
+    made.client.onStatus = vi.fn((listener: StatusListener) => {
+      listener({ status: 'idle' });
+      return () => { throw cleanupFailure; };
+    });
+    const presence = createPresenceController({ endpoint: 'ws://example', factory: () => made.client });
+    const stop = presence.listen(world);
+    world.emit('player:moved', moved);
+    await drainAsyncWork();
+
+    await expect(presence.destroy()).rejects.toBe(cleanupFailure);
+    expect(made.client.disconnect).toHaveBeenCalledOnce();
+    expect(made.peerListenerCount()).toBe(0);
+    stop();
+  });
+
   it('rolls back world listeners when a later listener registration fails', () => {
     const world = createEventBus<WorldEvents>();
     const originalOn = world.on;

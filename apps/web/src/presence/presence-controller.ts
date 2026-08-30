@@ -473,9 +473,23 @@ export function createPresenceController({ endpoint, factory = (options) => new 
       if (destroying) return destroying;
       if (destroyed) return;
       destroyed = true;
-      statusStop?.();
+      const synchronousFailures: unknown[] = [];
+      try {
+        statusStop?.();
+      } catch (error) {
+        // Listener removal belongs to cleanup, but a host subscription may
+        // throw. Keep retiring the transport and report the failure after all
+        // owned resources have had their cleanup attempted.
+        synchronousFailures.push(error);
+      }
       statusStop = null;
-      clearClientPeers();
+      try {
+        clearClientPeers();
+      } catch (error) {
+        // A peer subscriber or unsubscribe can throw during the final clear;
+        // it must not strand the client or skip its disconnect.
+        synchronousFailures.push(error);
+      }
       const current = client;
       const currentDisconnect = current
         ? (() => {
@@ -497,6 +511,7 @@ export function createPresenceController({ endpoint, factory = (options) => new 
         const failures = results
           .filter((result): result is PromiseRejectedResult => result.status === 'rejected')
           .map((result) => result.reason);
+        failures.unshift(...synchronousFailures);
         if (failures.length === 1) throw failures[0];
         if (failures.length > 1) {
           throw new AggregateError(failures, 'Presence cleanup failed.');
