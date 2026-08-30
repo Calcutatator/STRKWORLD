@@ -258,6 +258,25 @@ empty shell to fetchers, so a 200 there means nothing.
 
 ## 6. Findings log
 
+### 2026-08-30 — Web address identity rejects malformed runtime values
+
+`sameAddress()` used numeric comparison when possible but fell back to raw
+string equality on conversion failure. Two identical malformed values such as
+`not-hex` were therefore treated as the same account or recipient. That could
+weaken Bridge and financial identity checks when a structural caller supplied
+runtime data outside the TypeScript address contract.
+
+The comparator now requires both inputs to have the accepted lowercase `0x`
+hexadecimal address shape before applying padding-tolerant numeric equality;
+malformed, decimal and uppercase-prefix values fail closed. Valid address
+spellings and all existing financial validation remain unchanged.
+
+*Verified:* the red-first Web formatting regression observed identical
+malformed, decimal and uppercase-prefix values comparing equal on the old
+path. The corrected comparator returns false while retaining padded/unpadded
+hex equality. No browser, wallet, provider, RPC, proof, signature, funds or
+transaction was used.
+
 ### 2026-08-30 — Visit Escape handlers retain their lifecycle owner when extracted
 
 `VisitController.handleEscape()` called `this.dismissLocked()` and
