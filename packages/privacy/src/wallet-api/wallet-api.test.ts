@@ -370,6 +370,15 @@ describe('WalletApiPrivacyOperations capability and reads', () => {
 
 describe('Wallet API action routes', () => {
   it.each([
+    ['a number shield amount', { kind: 'shield', token: TOKEN, amount: 20 }],
+    ['a string shield amount', { kind: 'shield', token: TOKEN, amount: '20' }],
+  ] as const)('rejects %s before publishing a prepared batch', async (_label, intent) => {
+    const { ops } = fixture();
+
+    await expect(ops.prepare([intent as never])).rejects.toMatchObject({ kind: 'unknown' });
+  });
+
+  it.each([
     ['null', null],
     ['missing transaction hash', {}],
     ['non-string transaction hash', { transaction_hash: 42 }],
@@ -927,6 +936,16 @@ describe('Wallet API action routes', () => {
  * pinned to reject before the wallet is asked to prove anything.
  */
 describe('quote-bound swap plan admission', () => {
+  it.each([
+    ['a number minimum output', 90],
+    ['a string minimum output', '90'],
+  ] as const)('rejects %s before accepting a swap review', async (_label, minAmountOut) => {
+    const { ops } = swapFixture();
+
+    await expect(ops.prepare([{ ...SWAP, minAmountOut } as never]))
+      .rejects.toMatchObject({ kind: 'unknown' });
+  });
+
   it('rejects executor call fields supplied only by the object prototype', async () => {
     const inheritedCall = Object.create({
       contractAddress: '0x111',
