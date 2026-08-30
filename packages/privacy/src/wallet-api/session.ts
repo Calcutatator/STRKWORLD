@@ -594,6 +594,17 @@ function ownPreparedBatch(
     throw new PrivacyError('unknown', 'The wallet returned an invalid prepared batch.');
   }
   const swapReview = swapReviewDescriptor?.value;
+  if (
+    typeof prepared.poolFee !== 'bigint'
+    || prepared.poolFee < 0n
+    || typeof prepared.gasEstimate !== 'bigint'
+    || prepared.gasEstimate < 0n
+    || typeof prepared.totalCost !== 'bigint'
+    || prepared.totalCost !== prepared.poolFee + prepared.gasEstimate
+  ) {
+    retireInvalidPrepared(prepared);
+    throw new PrivacyError('unknown', 'The wallet returned invalid prepared costs.');
+  }
   const intents = Object.freeze(prepared.intents.map((intent) => Object.freeze({ ...intent })));
   const warnings = Object.freeze(prepared.warnings.map((warning) => Object.freeze({ ...warning })));
   let discarded = false;
