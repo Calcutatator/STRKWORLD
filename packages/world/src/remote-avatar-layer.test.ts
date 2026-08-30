@@ -20,15 +20,19 @@ function fakeScene() {
   const timers: Array<ReturnType<typeof fakeTimer>> = [];
   const layer = {
     visible: true,
+    destroyed: false,
     setDepth: vi.fn(function setDepth(this: typeof layer) {
       return this;
     }),
     setVisible: vi.fn(function setVisible(this: typeof layer, visible: boolean) {
+      if (this.destroyed) throw new Error('layer is destroyed');
       this.visible = visible;
       return this;
     }),
     add: vi.fn(),
-    destroy: vi.fn(),
+    destroy: vi.fn(function destroy(this: typeof layer) {
+      this.destroyed = true;
+    }),
   };
   const scene = {
     add: {
@@ -239,6 +243,20 @@ describe('remote avatar layer', () => {
     sourceController.publish([]);
     expect(fake.objects[0]?.destroy).toHaveBeenCalledTimes(1);
     expect(layer.peers.size).toBe(0);
+  });
+
+  it('ignores visibility updates after the layer has been destroyed', () => {
+    const sourceController = createRemotePeerSource([peer()]);
+    const fake = fakeScene();
+    const layer = createRemoteAvatarLayer({ scene: fake.scene as never, source: sourceController.source });
+
+    layer.destroy();
+
+    // A retained Scene callback may arrive after teardown. Visibility is a
+    // presentation operation, so it must not call into a destroyed Phaser
+    // layer or turn an otherwise harmless stale callback into an exception.
+    expect(() => layer.setVisible(false)).not.toThrow();
+    expect(fake.layer.setVisible).toHaveBeenCalledTimes(0);
   });
 
   it('attempts every omitted avatar cleanup before rethrowing one error', () => {

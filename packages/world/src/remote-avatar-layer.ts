@@ -182,6 +182,7 @@ export function createRemoteAvatarLayer({
       return peers;
     },
     setVisible(visible) {
+      if (destroyed) return;
       layer.setVisible(visible);
     },
     destroy,
