@@ -475,6 +475,33 @@ describe('BackendPrivacyClient', () => {
     })).rejects.toMatchObject({ kind: 'unknown' });
   });
 
+  it('owns swap response array elements before a proxy can substitute them', async () => {
+    const calls = [{ contractAddress: '0x111', entrypoint: 'swap', calldata: ['0xaaa'] }];
+    const reads: PropertyKey[] = [];
+    const executorCalls = new Proxy(calls, {
+      get(target, key, receiver) {
+        reads.push(key);
+        if (key === '0') return { contractAddress: '0x222', entrypoint: 'forged', calldata: ['0xbbb'] };
+        return Reflect.get(target, key, receiver);
+      },
+    });
+    const client = new BackendPrivacyClient(
+      'https://backend.example',
+      async () => objectResponse({
+        quoteId: 'quote-1', buyAmount: '100', expiresAt: 2_000,
+        chainId: '0x534e5f4d41494e', executorAddress: '0x999', executorCalls,
+        fee: { token: '0x4718', recipient: '0x789', amount: '7', authorization: 'auth', expiresAtBlock: 1450 },
+      }),
+    );
+
+    await expect(client.prepareSwap({
+      sellToken: '0xabc', buyToken: '0x4718', sellAmount: 20n, minAmountOut: 90n, slippageBps: 100,
+    })).resolves.toMatchObject({
+      executorCalls: [{ contractAddress: '0x111', entrypoint: 'swap', calldata: ['0xaaa'] }],
+    });
+    expect(reads).toEqual([]);
+  });
+
   it('rejects an empty swap quote identifier', async () => {
     const client = new BackendPrivacyClient(
       'https://backend.example',

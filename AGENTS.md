@@ -258,6 +258,30 @@ empty shell to fetchers, so a 200 there means nothing.
 
 ## 6. Findings log
 
+### 2026-08-30 — Backend response arrays are owned before swap decoding
+
+The Backend privacy client checked swap response arrays for holes using own
+property descriptors, but returned the original provider array to callers that
+immediately traversed it with `map`. A stateful proxy could therefore expose a
+valid executor call or calldata value in its descriptor and substitute a
+different value during traversal, changing the immutable plan published to the
+Wallet API layer after the sparse-array check.
+
+The shared response-array decoder now owns its length and each indexed element
+from data-property descriptors, rejects holes and extra keys, contains proxy
+traps, and returns a separate array. Swap call and calldata parsing therefore
+operate only on the owned values; existing field validation and final freezing
+remain unchanged.
+
+*Verified:* a public BackendPrivacyClient regression supplies an executor-call
+array whose own descriptor targets `0x111/swap` while an ordinary index read
+substitutes `0x222/forged`. The base published the forged call; the corrected
+decoder publishes the descriptor-owned call and performs no provider array
+reads. Focused Backend client verification passes 88 tests and privacy
+typecheck passes. Full workspace gates are recorded in the owning commit.
+Deterministic fakes only: no browser, external provider, RPC, wallet, proof,
+signature, funds or transaction was used.*
+
 ### 2026-08-30 — Presence replacement continues after stale disconnect failure
 
 When a pending join settled successfully after an explicit reconnect request,

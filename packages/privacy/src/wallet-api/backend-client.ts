@@ -399,11 +399,34 @@ function asArray(value: unknown): unknown[] {
   // `Array.prototype.map` skips holes (and invokes indexed accessors). A
   // sparse or accessor-backed response would become a different, partially
   // unchecked action/calldata list after parsing.
-  for (let index = 0; index < value.length; index += 1) {
-    const descriptor = Object.getOwnPropertyDescriptor(value, String(index));
-    if (!descriptor || !('value' in descriptor)) {
+  let length: number;
+  try {
+    const lengthDescriptor = Object.getOwnPropertyDescriptor(value, 'length');
+    if (
+      !lengthDescriptor
+      || !('value' in lengthDescriptor)
+      || !Number.isSafeInteger(lengthDescriptor.value)
+      || lengthDescriptor.value < 0
+      || Reflect.ownKeys(value).length !== lengthDescriptor.value + 1
+    ) {
       throw new PrivacyError('unknown', 'The private service returned an invalid response.');
     }
+    length = lengthDescriptor.value as number;
+  } catch (error) {
+    if (error instanceof PrivacyError) throw error;
+    throw new PrivacyError('unknown', 'The private service returned an invalid response.', error);
   }
-  return value;
+  const owned: unknown[] = [];
+  try {
+    for (let index = 0; index < length; index += 1) {
+      const descriptor = Object.getOwnPropertyDescriptor(value, String(index));
+      if (!descriptor || !('value' in descriptor)) {
+        throw new Error('invalid response array item');
+      }
+      owned.push(descriptor.value);
+    }
+  } catch (error) {
+    throw new PrivacyError('unknown', 'The private service returned an invalid response.', error);
+  }
+  return owned;
 }
