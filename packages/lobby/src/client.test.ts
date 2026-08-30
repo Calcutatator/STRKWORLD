@@ -391,6 +391,40 @@ describe('identity is server-assigned', () => {
       joinOrCreate.mockRestore();
     }
   });
+
+  it('skips a peer whose decoded state accessor throws instead of leaking the exception', async () => {
+    const joined = fakeRoom();
+    const joinOrCreate = vi
+      .spyOn(ColyseusClient.prototype, 'joinOrCreate')
+      .mockResolvedValueOnce(joined.room as never);
+    const client = makeClient(20, 0);
+    const peer = {
+      gameId: 'fedcba9876543210',
+      position: { x: 40, y: 72 },
+      facing: 'left',
+      sprite: 'avatar-2',
+    } as Record<string, unknown>;
+    Object.defineProperty(peer, 'position', {
+      configurable: true,
+      get: () => {
+        throw new Error('malformed peer state');
+      },
+    });
+    joined.room.state.peers.set('fedcba9876543210', peer as never);
+
+    try {
+      const connecting = client.connect();
+      await Promise.resolve();
+      joined.welcome({ gameId: '0123456789abcdef' });
+      await connecting;
+
+      expect(() => client.peers()).not.toThrow();
+      expect(client.peers()).toEqual([]);
+    } finally {
+      await client.disconnect();
+      joinOrCreate.mockRestore();
+    }
+  });
 });
 
 describe('client send interval configuration', () => {

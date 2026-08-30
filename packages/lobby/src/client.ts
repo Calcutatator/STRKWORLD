@@ -52,7 +52,7 @@ import {
   type LobbySprite,
 } from './config';
 import { normalizeCoordinate, normalizeFacing, normalizeGameId } from './policy';
-import type { LobbyState } from './state';
+import type { LobbyState, PresenceEntry } from './state';
 
 export type { LobbySprite } from './config';
 
@@ -387,14 +387,9 @@ export class LobbyClient {
     if (room === null || this.#gameId === null) return [];
     const out: PeerSnapshot[] = [];
     room.state?.peers?.forEach((entry) => {
-      if (entry.gameId === this.#gameId) return;
-      out.push({
-        gameId: entry.gameId,
-        x: entry.position.x,
-        y: entry.position.y,
-        facing: entry.facing as Facing,
-        sprite: entry.sprite,
-      });
+      const snapshot = readPeerSnapshot(entry);
+      if (snapshot === null || snapshot.gameId === this.#gameId) return;
+      out.push(snapshot);
     });
     // `onPeers` delivers one snapshot object to every listener. Freeze both
     // layers so one subscriber cannot mutate what a later subscriber sees or
@@ -628,11 +623,9 @@ export class LobbyClient {
     if (id === null || this.#room === null) return null;
     const entry = this.#room.state?.peers?.get(id);
     if (entry === undefined) return null;
-    return {
-      x: entry.position.x,
-      y: entry.position.y,
-      facing: entry.facing as Facing,
-    };
+    const snapshot = readPeerSnapshot(entry);
+    if (snapshot === null) return null;
+    return snapshot;
   }
 
   #scheduleReconcile(delay: number): void {
@@ -722,6 +715,20 @@ function ownDataField(value: object, key: string): unknown {
     return descriptor && 'value' in descriptor ? descriptor.value : undefined;
   } catch {
     return undefined;
+  }
+}
+
+function readPeerSnapshot(entry: PresenceEntry): PeerSnapshot | null {
+  try {
+    return {
+      gameId: entry.gameId,
+      x: entry.position.x,
+      y: entry.position.y,
+      facing: entry.facing as Facing,
+      sprite: entry.sprite,
+    };
+  } catch {
+    return null;
   }
 }
 

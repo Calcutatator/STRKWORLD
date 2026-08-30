@@ -258,6 +258,25 @@ empty shell to fetchers, so a 200 there means nothing.
 
 ## 6. Findings log
 
+### 2026-08-30 — Lobby peer projection contains malformed decoded state
+
+`LobbyClient.peers()` and its reconciliation lookup read decoded room-state
+fields directly. A malformed state entry whose position accessor throws could
+therefore escape through a normal state-change projection or timer-driven move
+path and crash the consumer, even though the entry came from an untrusted wire
+boundary.
+
+Both paths now use a small guarded peer projection. A state entry that cannot
+be read is ignored, while valid Colyseus schema entries retain the same plain
+snapshot shape, self-filtering, reconciliation and immutable delivery
+behavior. No lobby financial data or new protocol fields are introduced.
+
+*Verified:* a red-first public fake-room regression injected an accessor-backed
+peer position and observed `peers()` throw; the corrected projection returns an
+empty snapshot. Removing the guard restores the failure. Valid real-server and
+schema-backed Lobby tests remain green. No browser, external lobby, wallet,
+provider, RPC, proof, signature, funds or transaction was used.
+
 ### 2026-08-30 — Lobby resume reads only own data placement fields
 
 `LobbyClient.resume()` used ordinary property access for the runtime placement
