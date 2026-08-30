@@ -382,6 +382,9 @@ function validateInput(input: CreateDepositInput): void {
   ) {
     throw new Error('The source asset metadata is invalid.');
   }
+  if (typeof input.amountIn !== 'bigint') {
+    throw new Error('Bridge amount must be a bigint.');
+  }
   if (input.amountIn <= 0n || input.amountIn > MAX_BASE_UNIT_AMOUNT) {
     throw new Error('Bridge amount must be a positive uint256.');
   }

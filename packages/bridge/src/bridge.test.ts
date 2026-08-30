@@ -123,6 +123,28 @@ function deferred<T>(): {
 }
 
 describe('BridgeService', () => {
+  it.each([
+    ['number', 1],
+    ['string', '1000000'],
+    ['coercible object', { toString: (): string => '1000000', valueOf: (): number => 1 }],
+  ] as const)('rejects a non-bigint bridge amount %s before requesting a quote', async (_label, amountIn) => {
+    const client = new StubClient();
+    const service = new BridgeService({
+      client,
+      store: new MemoryBridgeStore(),
+      quoteVerifier: () => true,
+      now: () => NOW,
+    });
+
+    await expect(service.createManualDeposit({
+      source: SOURCE,
+      amountIn: amountIn as never,
+      starknetRecipient: '0x123',
+      refundAddress: request.refundTo,
+    })).rejects.toThrow('Bridge amount must be a bigint.');
+    expect(client.quoteRequests).toHaveLength(0);
+  });
+
   it('rejects an amount above the uint256 bound before requesting a quote', async () => {
     const client = new StubClient();
     const service = new BridgeService({
