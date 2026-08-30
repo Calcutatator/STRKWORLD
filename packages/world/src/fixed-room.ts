@@ -462,7 +462,14 @@ export function createFixedRoomController(
       const station = stations.find((candidate) => candidate.station === nextHighlighted);
       if (approached && station?.status === 'available' && approachArmed.has(approached.station)) {
         approachArmed.delete(approached.station);
-        options.input.suspend();
+        try {
+          options.input.suspend();
+        } catch (error) {
+          // Input suspension is an external lifecycle boundary. Keep the
+          // station armed when it fails so the same approach can be retried.
+          approachArmed.add(approached.station);
+          throw error;
+        }
         try {
           options.out.emit('station:activated', Object.freeze({
             building: options.definition.building,

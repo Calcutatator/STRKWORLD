@@ -535,6 +535,37 @@ describe('fixed room controller', () => {
     expect(h.events.filter((event) => event.event === 'station:activated')).toHaveLength(1);
   });
 
+  it('rearms station activation when input suspension fails', () => {
+    const out = bus<WorldEvents>();
+    const shell = bus<ShellEvents>();
+    const error = new Error('input suspension failed');
+    let suspendAttempts = 0;
+    const suspend = vi.fn(() => {
+      suspendAttempts += 1;
+      if (suspendAttempts === 1) throw error;
+    });
+    const events: unknown[] = [];
+    out.on('station:activated', (payload) => events.push(payload));
+    const controller = createFixedRoomController({
+      definition: POST_OFFICE_ROOM_DEFINITION,
+      out,
+      in: shell,
+      input: { suspend, resume: vi.fn() },
+    });
+    controller.enter();
+    shell.emit('world:stations', {
+      building: 'post-office',
+      stations: [{ station: 'post-office:transfer', label: 'TRANSFER', status: 'available' }],
+    });
+
+    expect(() => controller.update({ x: 3, y: 4 })).toThrow(error);
+    expect(controller.state.inRoom).toBe(true);
+
+    controller.update({ x: 3, y: 4 });
+    expect(events).toHaveLength(1);
+    expect(suspend).toHaveBeenCalledTimes(2);
+  });
+
   it('does not resume twice after station delivery destroys the controller', () => {
     const h = harness();
     h.controller.enter();
