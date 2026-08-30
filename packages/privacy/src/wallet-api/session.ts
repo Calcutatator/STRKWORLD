@@ -894,8 +894,12 @@ function readConnectionSnapshot(value: unknown): WalletConnectionSnapshot {
 
 function hasOwnDataProperties(value: unknown, keys: readonly PropertyKey[]): boolean {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return false;
-  return keys.every((key) => {
-    const descriptor = Object.getOwnPropertyDescriptor(value, key);
-    return Boolean(descriptor && 'value' in descriptor);
-  });
+  try {
+    return keys.every((key) => {
+      const descriptor = Object.getOwnPropertyDescriptor(value, key);
+      return Boolean(descriptor && 'value' in descriptor);
+    });
+  } catch {
+    return false;
+  }
 }

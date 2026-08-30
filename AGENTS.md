@@ -258,6 +258,25 @@ empty shell to fetchers, so a 200 there means nothing.
 
 ## 6. Findings log
 
+### 2026-08-30 — Privacy policy validation contains descriptor-trap failures
+
+The WalletSession route-policy boundary used `Object.getOwnPropertyDescriptor()`
+to reject inherited and accessor-backed fields, but did not contain a proxy's
+descriptor trap. A malformed policy could therefore throw an arbitrary raw
+exception while the session was being constructed, before the intended
+controlled invalid-policy `PrivacyError` and before discovery began.
+
+The shared own-data validator now treats descriptor inspection failures as a
+failed validation. Existing inherited/accessor rejection, policy ownership and
+valid route behavior are unchanged; no wallet connection or operation is
+created for a malformed policy.
+
+*Verified:* a red-first public session regression supplied a proxy-backed policy
+whose descriptor trap throws; the old constructor leaked that exception, while
+the corrected path returns `PrivacyError`. Removing the validator catch
+restores the failure. No browser, wallet, provider, RPC, proof, signature,
+funds or transaction was used.
+
 ### 2026-08-30 — Lobby reconciliation avoids redundant timers after synchronous confirmation
 
 `LobbyClient.#pump()` sent a move and unconditionally scheduled its retry timer

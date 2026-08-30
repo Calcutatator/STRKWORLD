@@ -1761,6 +1761,19 @@ describe('WalletSession', () => {
     expect(getterCalled).toBe(false);
   });
 
+  it('rejects a proxy-backed route policy when descriptor inspection throws', () => {
+    const policy = new Proxy(denyAllOptions().policy, {
+      getOwnPropertyDescriptor() {
+        throw new Error('policy descriptor trap must not escape');
+      },
+    });
+
+    expect(() => createWalletSession(
+      { ...denyAllOptions(), policy: policy as never },
+      { discovery: discoveryWith(wallet('Ready')), connectWallet: async () => connection('0x111') },
+    )).toThrow(PrivacyError);
+  });
+
   it('rejects an account outside the Stark field before publishing operations', async () => {
     const selected = wallet('Ready');
     const starkPrime = (1n << 251n) + 17n * (1n << 192n) + 1n;
