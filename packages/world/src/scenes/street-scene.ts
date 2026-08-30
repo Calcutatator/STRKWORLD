@@ -213,6 +213,7 @@ export function createStreetScene({ Phaser, onTileChanged, remotePeers }: Street
     }
 
     override update(_time: number, delta: number): void {
+      if (this.cleanedUp) return;
       const room = this.activeRoomController();
       if (this.avatarStudioActive) {
         this.moveAvatarStudioPlayer(delta);

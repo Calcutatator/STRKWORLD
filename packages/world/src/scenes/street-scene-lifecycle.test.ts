@@ -391,6 +391,19 @@ describe('StreetScene lifecycle', () => {
     expect(harness.eventCount('building:entered')).toBe(0);
   });
 
+  it('ignores a stale Scene update after shutdown', () => {
+    const harness = createWorldPlayHarness();
+    harness.create();
+    harness.shutdown();
+    const movedBefore = harness.eventCount('player:moved');
+
+    // Phaser normally stops its update loop during shutdown, but a queued
+    // update can still arrive at this public Scene boundary. It must not
+    // publish a movement sample from the retired cycle.
+    expect(() => harness.scene.update(0, 16)).not.toThrow();
+    expect(harness.eventCount('player:moved')).toBe(movedBefore);
+  });
+
   it('rebinds the outfit toggle through the production create order on a restart', () => {
     // The ordering under test lives in create() itself: the Scene must make its
     // selection *before* it builds the Studio. Stubbing create() would hide a
