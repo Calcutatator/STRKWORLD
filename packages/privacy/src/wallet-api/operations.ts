@@ -73,11 +73,11 @@ export class WalletApiPrivacyOperations implements PrivacyOperations {
         .filter((version): version is { raw: string; parsed: Semver } => version.parsed !== null)
         .sort((left, right) => compareSemver(left.parsed, right.parsed));
       const highest = supported.at(-1) ?? null;
-      return {
+      return Object.freeze({
         supportsStrk20: highest !== null && compareSemver(highest.parsed, REQUIRED_VERSION) >= 0,
         walletApiVersion: highest?.raw ?? null,
         registration: 'unknown',
-      };
+      });
     } catch (error) {
       throw mapWalletError(error);
     }

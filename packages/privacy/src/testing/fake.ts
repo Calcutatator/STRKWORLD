@@ -181,7 +181,7 @@ export class FakePrivacyOperations implements PrivacyOperations {
 
   async capability(signal?: AbortSignal): Promise<WalletCapability> {
     await this.tick('capability', signal);
-    return { ...this.cap };
+    return Object.freeze({ ...this.cap });
   }
 
   async poolConfig(signal?: AbortSignal): Promise<PoolConfig> {

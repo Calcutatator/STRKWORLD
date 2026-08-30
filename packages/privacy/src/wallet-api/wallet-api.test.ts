@@ -90,6 +90,16 @@ describe('WalletApiPrivacyOperations capability and reads', () => {
     expect(balances).not.toHaveBeenCalled();
   });
 
+  it('publishes an immutable wallet capability snapshot', async () => {
+    const { ops } = fixture();
+
+    const capability = await ops.capability();
+
+    expect(Object.isFrozen(capability)).toBe(true);
+    expect(Reflect.set(capability, 'supportsStrk20', false)).toBe(false);
+    expect(capability.supportsStrk20).toBe(true);
+  });
+
   it.each([
     ['null token container', null],
     ['object token container', {}],

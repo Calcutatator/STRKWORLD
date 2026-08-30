@@ -387,6 +387,18 @@ describe('cancellation', () => {
   });
 });
 
+describe('published capability ownership', () => {
+  it('publishes an immutable simulated capability snapshot', async () => {
+    const ops = fresh();
+
+    const capability = await ops.capability();
+
+    expect(Object.isFrozen(capability)).toBe(true);
+    expect(Reflect.set(capability, 'registration', 'unregistered')).toBe(false);
+    expect(capability.registration).toBe('registered');
+  });
+});
+
 describe('balance query ownership', () => {
   it('snapshots requested tokens before the fake latency boundary', async () => {
     const ops = new FakePrivacyOperations({
