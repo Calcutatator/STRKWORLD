@@ -27,10 +27,10 @@ export interface BuildContext {
  * exercise the case that matters.
  */
 export function buildContextFrom(env: { PROD?: boolean; DEV?: boolean } | undefined): BuildContext {
-  if (!env) return { production: true };
+  if (!env) return Object.freeze({ production: true });
   // `!== false`, not `=== true`: a bundler that defines the object but not the
   // flag is still a context we cannot vouch for.
-  return { production: env.PROD !== false };
+  return Object.freeze({ production: env.PROD !== false });
 }
 
 export function detectBuildContext(): BuildContext {
