@@ -83,6 +83,8 @@ export async function loadSourceAssets(client: TokenRegistryClient): Promise<Sou
       !chainName ||
       !token.assetId ||
       !token.symbol ||
+      !/\S/.test(token.assetId) ||
+      !/\S/.test(token.symbol) ||
       !Number.isSafeInteger(token.decimals) ||
       token.decimals < 0 ||
       token.decimals > 36

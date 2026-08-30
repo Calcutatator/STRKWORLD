@@ -224,8 +224,13 @@ export function createStreetScene({ Phaser, onTileChanged, remotePeers }: Street
         return;
       }
       const input = this.movePlayer();
-      this.movement.streetUpdate({ x: this.player.x, y: this.player.y }, input, () =>
-        this.reportTile(),
+      this.movement.streetUpdate(
+        { x: this.player.x, y: this.player.y },
+        input,
+        () => {
+          if (this.cleanedUp) return;
+          this.reportTile();
+        },
       );
     }
 

@@ -1697,6 +1697,20 @@ describe('source registry and refund validation', () => {
     expect(assets.some((asset) => asset.assetId === 'nep141:inherited.omft.near')).toBe(false);
   });
 
+  it('ignores live token metadata containing only whitespace', async () => {
+    const assets = await loadSourceAssets({
+      getTokens: async () => [{
+        assetId: '   ',
+        symbol: '\t',
+        decimals: 6,
+        blockchain: 'arb',
+      }] as TokenResponse[],
+    });
+
+    expect(assets).toHaveLength(6);
+    expect(assets.some((asset) => asset.assetId.trim() === '')).toBe(false);
+  });
+
   it('merges live metadata over curated fallbacks without making live availability up', async () => {
     const live = [
       {

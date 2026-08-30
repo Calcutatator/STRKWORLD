@@ -380,6 +380,17 @@ describe('StreetScene lifecycle', () => {
     expect(harness.cycle().applied).toEqual(['avatar-9']);
   });
 
+  it('does not report a street tile after movement delivery retires the Scene', () => {
+    const harness = createWorldPlayHarness();
+    harness.create();
+
+    // A Shell/World listener can synchronously tear down the Scene while the
+    // movement event is being delivered. The post-event tile report belongs
+    // to that same Scene cycle and must not enter a room after cleanup.
+    expect(() => harness.retireDuringNextStreetMovement()).not.toThrow();
+    expect(harness.eventCount('building:entered')).toBe(0);
+  });
+
   it('rebinds the outfit toggle through the production create order on a restart', () => {
     // The ordering under test lives in create() itself: the Scene must make its
     // selection *before* it builds the Studio. Stubbing create() would hide a
@@ -699,8 +710,17 @@ function createWorldPlayHarness() {
   const keyboard = new LifecycleKeyboard();
   const emitted: Array<{ event: string; payload: unknown }> = [];
   const shellListeners = new Map<string, Set<(payload: unknown) => void>>();
+  let retireOnMovement = false;
   const bus = {
-    out: { emit: (event: string, payload: unknown) => emitted.push({ event, payload }) },
+    out: {
+      emit: (event: string, payload: unknown) => {
+        emitted.push({ event, payload });
+        if (retireOnMovement && event === 'player:moved') {
+          retireOnMovement = false;
+          scene.cleanShutdown();
+        }
+      },
+    },
     in: {
       on(event: string, handler: (payload: unknown) => void) {
         const handlers = shellListeners.get(event) ?? new Set();
@@ -713,7 +733,7 @@ function createWorldPlayHarness() {
   const player = {
     x: 0,
     y: 0,
-    body: { setEnable: vi.fn() },
+    body: { setEnable: vi.fn(), setVelocity: vi.fn() },
     setVelocity: vi.fn(),
     setPosition: vi.fn((x: number, y: number) => {
       player.x = x;
@@ -738,7 +758,10 @@ function createWorldPlayHarness() {
   scene.createPlayer = vi.fn(() => {
     const cycle = { applied: [] as AvatarSpriteKey[] };
     cycles.push(cycle);
-    scene.avatarVisual = { select: (sprite: AvatarSpriteKey) => cycle.applied.push(sprite) };
+    scene.avatarVisual = {
+      select: (sprite: AvatarSpriteKey) => cycle.applied.push(sprite),
+      update: vi.fn(),
+    };
   });
   scene.createInput = vi.fn(() => {
     scene.inputGate = createInputGate({
@@ -785,6 +808,19 @@ function createWorldPlayHarness() {
     shellListenerCount: () =>
       [...shellListeners.values()].reduce((total, handlers) => total + handlers.size, 0),
     eventCount: (event: string) => emitted.filter((entry) => entry.event === event).length,
+    retireDuringNextStreetMovement: () => {
+      player.x = 5 * 32 + 16;
+      player.y = 10 * 32 + 16;
+      scene.cursors = {
+        left: { isDown: false },
+        right: { isDown: true },
+        up: { isDown: false },
+        down: { isDown: false },
+        shift: { isDown: false },
+      };
+      retireOnMovement = true;
+      scene.update(0, 16);
+    },
     room: (building: string): FixedRoomController => {
       const controller = scene.roomControllers[building];
       if (!controller) throw new Error(`Missing room controller for ${building}`);
@@ -812,12 +848,19 @@ function createWorldPlayHarness() {
 interface WorldPlayScene extends FakeScene {
   map: ReturnType<typeof createStreetMap>;
   player: unknown;
+  cursors: {
+    left: { isDown: boolean };
+    right: { isDown: boolean };
+    up: { isDown: boolean };
+    down: { isDown: boolean };
+    shift: { isDown: boolean };
+  };
   input: { keyboard: LifecycleKeyboard };
   game: { registry: { get(key: string): unknown } };
   physics: { world: { setBounds: ReturnType<typeof vi.fn> } };
   cameras: { main: { setBounds: ReturnType<typeof vi.fn> } };
   doorOverlays: unknown[];
-  avatarVisual?: { select(sprite: AvatarSpriteKey): void };
+  avatarVisual?: { select(sprite: AvatarSpriteKey): void; update(input: unknown, sprinting: boolean): void };
   inputGate: InputGate;
   avatarStudio: AvatarStudioController;
   roomControllers: Partial<Record<string, FixedRoomController>>;
@@ -830,6 +873,7 @@ interface WorldPlayScene extends FakeScene {
   createCamera(): void;
   createRoomVisuals(): void;
   createExteriorLabels(): void;
+  update(time: number, delta: number): void;
 }
 
 interface LifecycleKeyEvent {
