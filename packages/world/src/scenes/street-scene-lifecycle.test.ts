@@ -532,6 +532,35 @@ describe('StreetScene lifecycle', () => {
     harness.shutdown();
   });
 
+  it('retries room tile delivery after a failed station handoff', () => {
+    let fail = true;
+    const update = vi.fn(() => {
+      if (fail) throw new Error('room tile handoff failed');
+    });
+    const SceneType = createStreetScene({ Phaser: { Scene: FakeScene } as never });
+    const scene = new SceneType() as unknown as {
+      player: { x: number; y: number };
+      lastTile: { x: number; y: number };
+      cleanedUp: boolean;
+      activeRoom: 'bank';
+      roomControllers: { bank: { update: typeof update } };
+      reportRoomTile(): void;
+    };
+    scene.player = { x: 5 * 32 + 16, y: 10 * 32 + 16 };
+    scene.lastTile = { x: -1, y: -1 };
+    scene.cleanedUp = false;
+    scene.activeRoom = 'bank';
+    scene.roomControllers = { bank: { update } };
+
+    expect(() => scene.reportRoomTile()).toThrow('room tile handoff failed');
+    expect(scene.lastTile).toEqual({ x: -1, y: -1 });
+
+    fail = false;
+    expect(() => scene.reportRoomTile()).not.toThrow();
+    expect(update).toHaveBeenCalledTimes(2);
+    expect(scene.lastTile).toEqual({ x: 3, y: 8 });
+  });
+
   it('does not retain Scene Studio mode when presentation entry fails', () => {
     const harness = createWorldPlayHarness();
     harness.create();

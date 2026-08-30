@@ -987,8 +987,17 @@ export function createStreetScene({ Phaser, onTileChanged, remotePeers }: Street
     private reportRoomTile(): void {
       const tile = worldToRoomTile(this.player.x, this.player.y);
       if (tile.x === this.lastTile.x && tile.y === this.lastTile.y) return;
+      const previousTile = this.lastTile;
       this.lastTile = tile;
-      this.activeRoomController()?.update(tile);
+      try {
+        this.activeRoomController()?.update(tile);
+      } catch (error) {
+        // Station activation is a synchronous shell handoff. Keep this tile
+        // retryable when delivery fails, unless a nested transition or Scene
+        // teardown has already replaced the sentinel with newer ownership.
+        if (!this.cleanedUp && this.lastTile === tile) this.lastTile = previousTile;
+        throw error;
+      }
     }
 
     private activeRoomController(): FixedRoomController | undefined {

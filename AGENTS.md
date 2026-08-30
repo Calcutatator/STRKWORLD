@@ -299,6 +299,28 @@ selects it while texture, origin, animation and body setup remain unchanged.
 The focused avatar-visual suite passes 13 tests. No browser, lobby, wallet,
 provider, RPC, proof, signature, funds or transaction was used.
 
+### 2026-08-30 — Room tile handoffs remain retryable after failure
+
+`StreetScene.reportRoomTile()` committed its `lastTile` sentinel before
+delegating to the active fixed-room controller. If station activation or its
+shell-owned synchronous handoff threw, the same tile was treated as already
+delivered on every later frame, so the player could not retry after the
+consumer recovered. Street and Avatar Studio tile reporting already preserve
+retryability at their external handoff boundaries; the room path must do the
+same.
+
+Room tile reporting now restores only its own prior sentinel when controller
+delivery fails, while a nested transition or Scene teardown remains
+authoritative. Normal de-duplication and station activation ordering are
+unchanged.
+
+*Verified:* a red-first public StreetScene regression makes the first room
+tile handoff throw, then retries the same `{x: 3, y: 8}` tile after recovery;
+the old path retained the tile and suppressed the retry, while the corrected
+path calls the controller twice and commits it only after successful delivery.
+The focused lifecycle suite passes 28 tests. No browser, lobby, wallet,
+provider, RPC, proof, signature, funds or transaction was used.
+
 ### 2026-08-30 — Fixed-room update can activate a stale station after reentrant publication
 
 `createFixedRoomController.update()` published a changed station highlight and
