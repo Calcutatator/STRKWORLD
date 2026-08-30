@@ -207,4 +207,10 @@ describe('disclosures for a batch', () => {
       expect(findRoute(ROUTE_BY_INTENT_KIND[kind]), kind).toBeDefined();
     }
   });
+
+  it('keeps the intent-to-route authority immutable at the public seam', () => {
+    expect(Object.isFrozen(ROUTE_BY_INTENT_KIND)).toBe(true);
+    expect(Reflect.set(ROUTE_BY_INTENT_KIND, 'shield', 'exchange.swap')).toBe(false);
+    expect(ROUTE_BY_INTENT_KIND.shield).toBe('bank.shield');
+  });
 });

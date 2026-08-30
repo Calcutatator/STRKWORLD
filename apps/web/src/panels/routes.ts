@@ -126,12 +126,12 @@ export function buildingDoor(
  * Bank's transfer control drives that same pool-native route rather than
  * inventing an id the project lead never graded.
  */
-export const ROUTE_BY_INTENT_KIND: Record<Intent['kind'], string> = {
+export const ROUTE_BY_INTENT_KIND: Readonly<Record<Intent['kind'], string>> = Object.freeze({
   shield: 'bank.shield',
   unshield: 'bank.unshield',
   transfer: 'post-office.transfer',
   swap: 'exchange.swap',
-};
+});
 
 /**
  * The approved disclosures for the intents actually queued, de-duplicated.

@@ -258,6 +258,24 @@ empty shell to fetchers, so a 200 there means nothing.
 
 ## 6. Findings log
 
+### 2026-08-30 — Intent route projection is immutable
+
+`ROUTE_BY_INTENT_KIND` was exported as a mutable object. A same-bundle
+consumer could rewrite the route associated with `shield`, `unshield`,
+`transfer`, or `swap`; disclosure derivation and private-route checks read this
+map when a batch reaches the commit surface. TypeScript's `Record` annotation
+did not protect this runtime privacy and route authority.
+
+The authored intent-to-route map is now a frozen `Readonly<Record<...>>`.
+Intent shapes, the approved register, and custom register fixtures remain
+unchanged; only mutation of the shared mapping is prevented.
+
+*Verified:* a red-first public route regression observed that the map accepted
+an `exchange.swap` replacement for `shield`; the corrected regression rejects
+the rewrite and preserves `shield -> bank.shield`. The focused routes suite
+passes 25/25; no browser, wallet, provider, RPC, proof, signature, funds or
+transaction was used.
+
 ### 2026-08-30 — World host release cannot orphan on teardown scheduling failure
 
 `createHost().release()` decremented its final lease before calling the
