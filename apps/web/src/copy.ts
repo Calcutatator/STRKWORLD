@@ -44,6 +44,11 @@ export const COPY = {
     tabTitle: '● Wallet needs you — STRKWORLD',
   },
 
+  demo: {
+    loadFailed: 'The local demo seam could not load.',
+    retry: 'Try again',
+  },
+
   unsupported: {
     title: 'This wallet cannot open the pool',
     body: 'Your wallet is connected but does not offer the STRK20 privacy methods this city runs on. Your funds are fine — the doors that need the pool stay shut until you connect a wallet that supports it.',

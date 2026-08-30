@@ -258,6 +258,26 @@ empty shell to fetchers, so a 200 there means nothing.
 
 ## 6. Findings log
 
+### 2026-08-30 — The lazy demo seam owns loader failures
+
+`PrivacyProvider` loaded the explicit local demo seam with a bare dynamic
+import promise. A missing chunk, a transient Vite restart or an offline local
+build therefore produced an unhandled rejection while the provider stayed on
+its loading fallback forever; the application's `ErrorBoundary` cannot catch
+an asynchronous loader rejection. The provider now routes the import through
+`privacy/demo-loader.ts`, consumes failures with a cancellation-aware catch,
+and renders a deterministic retry surface. A retry starts a new lazy attempt.
+An explicit `operations` prop remains authoritative during render, so a late
+failed or resolved demo attempt cannot mask a replacement real seam; cleanup
+also prevents a late rejection from updating an unmounted provider.
+
+*Verified:* public jsdom regressions cover rejected-load error UI, successful
+retry, replacement by an explicit seam before the old rejection settles, and
+late rejection after unmount. The focused loader suite passes 4 tests and the
+Web suite passes 43 files / 493 tests. No browser, wallet, provider, RPC,
+proof, signature, funds or transaction was used.
+
+
 ### 2026-08-30 — Avatar Studio does not select after callback teardown
 
 `createAvatarStudioController.update()` publishes a synchronous highlight

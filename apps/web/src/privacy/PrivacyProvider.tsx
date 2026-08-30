@@ -16,6 +16,7 @@ import type {
 } from '@strkworld/privacy';
 import type { EventBus, ShellEvents } from '@strkworld/shared';
 import { createConnectFlow, toWalletStatus, type ConnectFlow, type ConnectState } from '../connect/connect-machine.js';
+import { COPY } from '../copy.js';
 import { createReceiptLedger, type ReceiptLedger } from '../receipts/receipt-ledger.js';
 import { detectBuildContext, type BuildContext } from './build-context.js';
 import { useStore } from '../store/use-store.js';
@@ -24,6 +25,7 @@ import {
   type SubmissionUncertainty,
 } from './submission-uncertainty.js';
 import { toFailure } from './errors.js';
+import { loadDemoOperations } from './demo-loader.js';
 
 /**
  * Wallet and financial state for the whole shell.
@@ -94,6 +96,11 @@ export interface PrivacyProviderProps {
   children: ReactNode;
 }
 
+type ResolvedOperations = {
+  value: PrivacyOperations;
+  source: 'explicit' | 'demo';
+};
+
 export function PrivacyProvider({
   operations,
   walletSession,
@@ -121,31 +128,53 @@ export function PrivacyProvider({
     }
   }
 
-  const [resolved, setResolved] = useState<PrivacyOperations | null>(operations ?? null);
+  const [resolved, setResolved] = useState<ResolvedOperations | null>(
+    operations ? { value: operations, source: 'explicit' } : null,
+  );
+  const [demoLoadFailed, setDemoLoadFailed] = useState(false);
+  const [demoLoadAttempt, setDemoLoadAttempt] = useState(0);
 
   useEffect(() => {
     if (operations) {
-      setResolved(operations);
+      setResolved({ value: operations, source: 'explicit' });
+      setDemoLoadFailed(false);
       return;
     }
     let cancelled = false;
+    setDemoLoadFailed(false);
     // Dynamic import: `@strkworld/privacy` re-exports the wallet adapter, which
     // pulls `starknet`. Loading it eagerly would put roughly 900 kB of chain
     // code in the entry chunk of a shell that must be able to render a connect
     // screen without it.
-    void import('./demo-operations.js').then(({ createDemoOperations }) => {
-      if (!cancelled) setResolved(createDemoOperations());
+    void loadDemoOperations().then((demoOperations) => {
+      if (!cancelled) setResolved({ value: demoOperations, source: 'demo' });
+    }).catch(() => {
+      // A missing optional demo chunk must not become an unhandled rejection or
+      // leave the shell looking as though it is still loading forever.
+      if (!cancelled) setDemoLoadFailed(true);
     });
     return () => {
       cancelled = true;
     };
-  }, [operations]);
+  }, [operations, demoLoadAttempt]);
 
-  // An explicit seam is authoritative during render. Waiting for the effect
-  // below to copy it into `resolved` would expose a retired operations object
-  // to child render/effects for one commit. Likewise, entering lazy demo mode
-  // must not briefly keep serving the previous real seam while its chunk loads.
-  const effectiveOperations = operations ?? (demo ? null : resolved);
+  // An explicit seam is authoritative during render. This also prevents a
+  // prior lazy-demo failure from masking a newly supplied production seam.
+  const effectiveOperations = operations ?? (
+    demo
+      ? (resolved?.source === 'demo' ? resolved.value : null)
+      : resolved?.value
+  );
+  if (demoLoadFailed && !operations) {
+    return (
+      <section className="shell-crashed" role="alert">
+        <p>{COPY.demo.loadFailed}</p>
+        <button type="button" onClick={() => setDemoLoadAttempt((attempt) => attempt + 1)}>
+          {COPY.demo.retry}
+        </button>
+      </section>
+    );
+  }
   if (!effectiveOperations) return <>{fallback}</>;
 
   return (
