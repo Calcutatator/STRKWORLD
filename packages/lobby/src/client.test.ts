@@ -288,6 +288,66 @@ describe('identity is server-assigned', () => {
       joinOrCreate.mockRestore();
     }
   });
+
+  it('isolates peer snapshots from listener mutation', async () => {
+    const joined = fakeRoom();
+    const joinOrCreate = vi
+      .spyOn(ColyseusClient.prototype, 'joinOrCreate')
+      .mockResolvedValueOnce(joined.room as never);
+
+    try {
+      const client = makeClient(20, 0);
+      const ownId = '0123456789abcdef';
+      const peerId = 'fedcba9876543210';
+      joined.room.state.peers.set(peerId, {
+        gameId: peerId,
+        position: { x: 40, y: 72 },
+        facing: 'left',
+        sprite: 'avatar-2',
+      } as never);
+
+      const secondSnapshots: Array<readonly PeerSnapshot[]> = [];
+      let mutated = false;
+      client.onPeers((snapshot) => {
+        if (snapshot.length === 0 || mutated) return;
+        mutated = true;
+        // Deliberately probe the runtime boundary despite the readonly TS
+        // type. Frozen snapshots reject both item and array mutation.
+        try {
+          const mutable = snapshot as unknown as Array<Record<string, unknown>>;
+          mutable[0]!.x = 999;
+          mutable.push({
+            gameId: '0011223344556677',
+            x: 1,
+            y: 2,
+            facing: 'down',
+            sprite: 'avatar-1',
+          });
+        } catch {
+          // Expected once the immutable boundary is enforced.
+        }
+      });
+      client.onPeers((snapshot) => secondSnapshots.push(snapshot));
+
+      const connecting = client.connect();
+      await Promise.resolve();
+      joined.welcome({ gameId: ownId });
+      await connecting;
+
+      const delivered = secondSnapshots.at(-1);
+      expect(delivered).toEqual([{
+        gameId: peerId,
+        x: 40,
+        y: 72,
+        facing: 'left',
+        sprite: 'avatar-2',
+      }]);
+      expect(Object.isFrozen(delivered)).toBe(true);
+      expect(Object.isFrozen(delivered?.[0])).toBe(true);
+    } finally {
+      joinOrCreate.mockRestore();
+    }
+  });
 });
 
 describe('client send interval configuration', () => {

@@ -360,7 +360,10 @@ export class LobbyClient {
         sprite: entry.sprite,
       });
     });
-    return out;
+    // `onPeers` delivers one snapshot object to every listener. Freeze both
+    // layers so one subscriber cannot mutate what a later subscriber sees or
+    // alter the readonly value retained by a shell adapter.
+    return Object.freeze(out.map((entry) => Object.freeze(entry)));
   }
 
   /** Leave the room. The client can be connected again afterwards. */
