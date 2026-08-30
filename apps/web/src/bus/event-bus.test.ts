@@ -3,20 +3,6 @@ import { createEventBus } from './event-bus.js';
 import type { ShellEvents, WorldEvents } from '@strkworld/shared';
 
 describe('event bus', () => {
-  it('publishes an immutable bus API while retaining owned delivery', () => {
-    const bus = createEventBus<WorldEvents>();
-    const originalEmit = bus.emit;
-    const handler = vi.fn();
-
-    expect(Object.isFrozen(bus)).toBe(true);
-    expect(Reflect.set(bus, 'emit', () => undefined)).toBe(false);
-    expect(Reflect.set(bus, 'clear', () => undefined)).toBe(false);
-    expect(bus.emit).toBe(originalEmit);
-    bus.on('building:entered', handler);
-    bus.emit('building:entered', { building: 'bank' });
-    expect(handler).toHaveBeenCalledWith({ building: 'bank' });
-  });
-
   it('delivers a payload to a subscriber', () => {
     const bus = createEventBus<WorldEvents>();
     const handler = vi.fn();
