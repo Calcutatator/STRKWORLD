@@ -258,6 +258,25 @@ empty shell to fetchers, so a 200 there means nothing.
 
 ## 6. Findings log
 
+### 2026-08-30 — Web room resolution fails closed for malformed panel containers
+
+`resolveRoom()` already rejected inherited panel descriptors, but it assumed
+the caller supplied an object for the panel registry. A malformed `null`
+registry therefore threw from `hasOwnProperty.call()` while resolving a valid
+building, replacing the room decision with an ErrorBoundary surface instead
+of the existing unbuilt result.
+
+Room resolution now treats null and non-object registries as empty. Valid
+custom registries and the frozen authored registry are unchanged; malformed
+containers fail closed to the existing `unbuilt` result after the privacy door
+has run.
+
+*Verified:* red-first public resolver regressions supplied `null`, object and
+string registry containers. The old resolver threw for `null`; the corrected
+resolver returns `unbuilt` for all three. The focused routes suite passes
+32/32, and no browser, wallet, provider, RPC, proof, signature, funds or
+transaction was used.
+
 ### 2026-08-30 — Lobby disconnect publishes peer removal after leave failure
 
 `LobbyClient.disconnect()` retired its local room and identity before awaiting

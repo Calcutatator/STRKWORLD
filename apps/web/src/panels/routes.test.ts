@@ -183,6 +183,12 @@ describe('room resolution', () => {
     const room = resolveRoom('exchange', panels);
     expect(room.kind).toBe('unbuilt');
   });
+
+  it.each([null, {}, 'not-a-registry'])('fails closed for a malformed panel registry container: %s', (malformed) => {
+    const panels = malformed as unknown as { exchange?: string };
+    expect(() => resolveRoom('exchange', panels)).not.toThrow();
+    expect(resolveRoom('exchange', panels)).toMatchObject({ kind: 'unbuilt', building: 'exchange' });
+  });
 });
 
 describe('default panel registry', () => {

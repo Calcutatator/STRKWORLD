@@ -45,6 +45,10 @@ export function resolveRoom<TPanel>(
     };
   }
 
+  if (panels === null || typeof panels !== 'object') {
+    return { kind: 'unbuilt', building, message: COPY.unbuilt };
+  }
+
   const panel = Object.prototype.hasOwnProperty.call(panels, building)
     ? panels[building]
     : undefined;
