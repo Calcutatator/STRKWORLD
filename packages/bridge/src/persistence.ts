@@ -107,6 +107,7 @@ export function isUsableDepositAddress(value: unknown): value is string {
 
 function isBridgeStatus(value: unknown): value is BridgeStatus {
   if (!isRecord(value)) return false;
+  if (!['leg', 'message', 'pollingStopped'].every((key) => hasOwnDataProperty(value, key))) return false;
   if (Object.keys(value).some((key) => !BRIDGE_STATUS_FIELDS.includes(key as typeof BRIDGE_STATUS_FIELDS[number]))) {
     return false;
   }

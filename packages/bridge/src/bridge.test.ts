@@ -2165,6 +2165,42 @@ describe('bridge persistence', () => {
     }
   });
 
+  it.each([
+    ['leg', 'settled'],
+    ['message', 'inherited status'],
+    ['pollingStopped', true],
+  ] as const)('rejects a persisted status with inherited required field %s', async (field, inheritedValue) => {
+    const client = new StubClient();
+    const service = new BridgeService({
+      client,
+      store: new MemoryBridgeStore(),
+      quoteVerifier: () => true,
+      now: () => NOW,
+    });
+    const record = await service.createManualDeposit({
+      source: SOURCE,
+      amountIn: 1_000_000n,
+      starknetRecipient: '0x123',
+      refundAddress: request.refundTo,
+    });
+    const parsed = JSON.parse(serializeBridgeRecord(record)) as Record<string, unknown>;
+    delete (parsed.status as Record<string, unknown>)[field];
+    const raw = JSON.stringify(parsed);
+    const previous = Object.getOwnPropertyDescriptor(Object.prototype, field);
+    Object.defineProperty(Object.prototype, field, {
+      value: inheritedValue,
+      configurable: true,
+    });
+    let decoded: unknown;
+    try {
+      decoded = deserializeBridgeRecord(raw);
+    } finally {
+      if (previous) Object.defineProperty(Object.prototype, field, previous);
+      else delete (Object.prototype as Record<string, unknown>)[field];
+    }
+    expect(decoded).toBeNull();
+  });
+
   it.each(['source', 'starknetRecipient', 'refundAddress'] as const)(
     'rejects a persisted record missing required root field %s',
     async (field) => {
