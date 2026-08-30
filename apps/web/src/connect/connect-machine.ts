@@ -110,7 +110,7 @@ export function createConnectFlow(
     return promise;
   }
 
-  return {
+  return Object.freeze({
     store,
     connect: detect,
     recheck: detect,
@@ -141,7 +141,7 @@ export function createConnectFlow(
     status(): WalletStatus {
       return toWalletStatus(store.getState());
     },
-  };
+  });
 }
 
 function classify(capability: WalletCapability): ConnectState {

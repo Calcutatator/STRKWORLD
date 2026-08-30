@@ -13,6 +13,18 @@ function deferred<T>(): { promise: Promise<T>; resolve(value: T): void; reject(e
 }
 
 describe('connect flow', () => {
+  it('publishes an immutable flow API while retaining owned transitions', async () => {
+    const flow = createConnectFlow(new FakePrivacyOperations());
+    const originalDisconnect = flow.disconnect;
+
+    expect(Object.isFrozen(flow)).toBe(true);
+    expect(Reflect.set(flow, 'disconnect', () => undefined)).toBe(false);
+    expect(Reflect.set(flow, 'recheck', async () => ({ name: 'disconnected' }))).toBe(false);
+    expect(flow.disconnect).toBe(originalDisconnect);
+    flow.disconnect();
+    expect(flow.store.getState()).toEqual({ name: 'disconnected' });
+  });
+
   it('keeps the public connection state read-only and immutable', async () => {
     const flow = createConnectFlow(new FakePrivacyOperations());
 
