@@ -31,6 +31,34 @@ function inheritResponseField(key: string, value: unknown): () => void {
 }
 
 describe('BackendPrivacyClient', () => {
+  it('owns swap-prepare request fields before a caller proxy can substitute them', async () => {
+    const fetcher = vi.fn(async () => response({
+      quoteId: 'quote-1', buyAmount: '100', expiresAt: 2_000,
+      chainId: '0x534e5f4d41494e', executorAddress: '0x999', executorCalls: [],
+      fee: { token: '0x4718', recipient: '0x789', amount: '7', authorization: 'auth', expiresAtBlock: 1450 },
+    }));
+    const source = {
+      sellToken: '0xabc', buyToken: '0x4718', sellAmount: 20n, minAmountOut: 90n, slippageBps: 100,
+    };
+    let sellTokenReads = 0;
+    const input = new Proxy(source, {
+      get(target, key, receiver) {
+        if (key === 'sellToken') {
+          sellTokenReads += 1;
+          return sellTokenReads <= 2 ? '0xabc' : '0xdef';
+        }
+        return Reflect.get(target, key, receiver);
+      },
+    });
+    const client = new BackendPrivacyClient('https://backend.example', fetcher);
+
+    await client.prepareSwap(input);
+
+    const dispatched = fetcher.mock.calls[0] as unknown as [string, RequestInit];
+    expect(JSON.parse(String(dispatched[1].body))).toMatchObject({ sellToken: '0xabc' });
+    expect(sellTokenReads).toBe(0);
+  });
+
   it('owns submission request fields before a caller proxy can substitute them', async () => {
     const fetcher = vi.fn(async () => response({ transactionHash: '0xabc123' }));
     const source = {

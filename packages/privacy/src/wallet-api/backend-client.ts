@@ -132,29 +132,36 @@ export class BackendPrivacyClient implements PoolReadClient, PrivateSubmissionGa
       ? A[0]
       : never,
   ): Promise<PreparedPrivateSwap> {
+    const sellToken = ownInputField(input, 'sellToken');
+    const buyToken = ownInputField(input, 'buyToken');
+    const sellAmount = ownInputField(input, 'sellAmount');
+    const minAmountOut = ownInputField(input, 'minAmountOut');
+    const slippageBps = ownInputField(input, 'slippageBps');
+    const signal = ownOptionalInputField(input, 'signal');
     if (
-      typeof input.sellToken !== 'string'
-      || !isNonzeroFelt(input.sellToken)
-      || typeof input.buyToken !== 'string'
-      || !isNonzeroFelt(input.buyToken)
-      || typeof input.sellAmount !== 'bigint'
-      || input.sellAmount <= 0n
-      || typeof input.minAmountOut !== 'bigint'
-      || input.minAmountOut <= 0n
-      || !Number.isSafeInteger(input.slippageBps)
-      || input.slippageBps <= 0
+      typeof sellToken !== 'string'
+      || !isNonzeroFelt(sellToken)
+      || typeof buyToken !== 'string'
+      || !isNonzeroFelt(buyToken)
+      || typeof sellAmount !== 'bigint'
+      || sellAmount <= 0n
+      || typeof minAmountOut !== 'bigint'
+      || minAmountOut <= 0n
+      || !Number.isSafeInteger(slippageBps)
+      || (slippageBps as number) <= 0
+      || (signal !== undefined && !(signal instanceof AbortSignal))
     ) {
       throw new PrivacyError('unknown', 'The swap-prepare request is invalid.');
     }
     const raw = await this.post('/v1/private/swaps/prepare', {
       v: 1,
-      sellToken: input.sellToken,
-      buyToken: input.buyToken,
-      sellAmount: input.sellAmount.toString(),
-      minAmountOut: input.minAmountOut.toString(),
-      slippageBps: input.slippageBps,
-    }, input.signal);
-    throwIfAborted(input.signal);
+      sellToken,
+      buyToken,
+      sellAmount: sellAmount.toString(),
+      minAmountOut: minAmountOut.toString(),
+      slippageBps,
+    }, signal as AbortSignal | undefined);
+    throwIfAborted(signal as AbortSignal | undefined);
     const value = asRecord(raw);
     const fee = asRecord(ownField(value, 'fee'));
     const rawCalls = asArray(ownField(value, 'executorCalls'));

@@ -258,6 +258,28 @@ empty shell to fetchers, so a 200 there means nothing.
 
 ## 6. Findings log
 
+### 2026-08-30 — Private swap-prepare requests are owned before dispatch
+
+The Backend privacy client validated swap-prepare fields through ordinary
+property reads and then reread the caller object to build the quote request. A
+stateful proxy could therefore pass validation with one sell token, amount or
+slippage value and substitute another value at dispatch, divorcing the backend
+quote from the request that passed local admission.
+
+Swap preparation now reads both tokens, both amounts, slippage and the optional
+abort signal from own data-property descriptors exactly once. Validation,
+decimal serialization, dispatch and post-response cancellation use only those
+owned values. Inherited fields, accessors and descriptor traps fail before
+transport; the backend response ownership path is unchanged.
+
+*Verified:* a public BackendPrivacyClient regression supplies an input proxy
+whose sell-token descriptor is `0xabc` while ordinary reads later substitute
+`0xdef`. The base dispatched `0xdef`; the corrected client dispatches `0xabc`
+and invokes no proxy `get` trap. Focused Backend client verification passes 92
+tests and privacy typecheck passes. Full workspace gates are recorded in the
+owning commit. Deterministic fakes only: no browser, external provider, RPC,
+wallet, proof, signature, funds or transaction was used.*
+
 ### 2026-08-30 — Presence destroy must outlive status cleanup failures
 
 Presence controller destruction called the status-listener cleanup directly.
