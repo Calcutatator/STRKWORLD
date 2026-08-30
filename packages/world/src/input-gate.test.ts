@@ -89,6 +89,22 @@ describe('resume', () => {
 });
 
 describe('binding to building events', () => {
+  it('rolls back entry listener when exit registration throws', () => {
+    const { keyboard } = fakeKeyboard();
+    const gate = createInputGate(keyboard);
+    const offEnter = vi.fn();
+    const registrationError = new Error('exit listener registration failed');
+    const on = vi
+      .fn()
+      .mockReturnValueOnce(offEnter)
+      .mockImplementationOnce(() => {
+        throw registrationError;
+      });
+
+    expect(() => bindInputGate(gate, on as never)).toThrow(registrationError);
+    expect(offEnter).toHaveBeenCalledOnce();
+  });
+
   it('suspends on entry and resumes on exit', () => {
     const { keyboard } = fakeKeyboard();
     const gate = createInputGate(keyboard);

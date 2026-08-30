@@ -84,13 +84,31 @@ export function bindInputGate(
   gate: InputGate,
   on: (event: 'building:entered' | 'building:exited', handler: () => void) => () => void,
 ): () => void {
-  const offEnter = on('building:entered', () => gate.suspend());
-  const offExit = on('building:exited', () => gate.resume());
-  return () => {
-    offEnter();
-    offExit();
-    // Never leave the world unable to receive input because a panel unmounted
-    // in an unexpected order.
-    gate.resume();
-  };
+  let offEnter: (() => void) | undefined;
+  try {
+    offEnter = on('building:entered', () => gate.suspend());
+    const offExit = on('building:exited', () => gate.resume());
+    return () => {
+      offEnter?.();
+      offExit();
+      // Never leave the world unable to receive input because a panel unmounted
+      // in an unexpected order.
+      gate.resume();
+    };
+  } catch (error) {
+    // A bus may register the entry handler and then fail while installing the
+    // exit handler. The unreturned binding cannot clean itself up later, so
+    // roll back the acquired listener while preserving the original error.
+    try {
+      offEnter?.();
+    } catch {
+      // Cleanup cannot replace the registration failure.
+    }
+    try {
+      gate.resume();
+    } catch {
+      // Preserve the listener-registration failure if input restoration fails.
+    }
+    throw error;
+  }
 }

@@ -258,6 +258,23 @@ empty shell to fetchers, so a 200 there means nothing.
 
 ## 6. Findings log
 
+### 2026-08-30 — Input-gate binding rolls back partial event registration
+
+`bindInputGate()` previously registered the entry listener and then registered
+the exit listener without a rollback path. If the second `on()` call threw,
+the entry listener remained attached even though no unbind function was
+returned, leaving later building events able to suspend input permanently.
+
+The binding now rolls back the acquired entry listener, restores input, and
+preserves the original registration error if exit registration fails. Normal
+event handling and unbind idempotence remain unchanged.
+
+*Verified:* a red-first World regression makes exit-listener registration throw
+after entry registration and observes the entry stop callback was not called on
+the old path; the corrected test calls it once. Focused input-gate tests pass
+10/10. No browser, wallet, provider, RPC, proof, signature, funds or
+transaction was used.
+
 ### 2026-08-30 — Avatar outfit binding rolls back partial keyboard registration
 
 `createAvatarOutfitToggleBinding()` previously called `keyboard.on()` without
