@@ -697,6 +697,23 @@ describe('BridgeService', () => {
     expect(store.load()?.status.leg).toBe('awaiting-deposit');
   });
 
+  it.each([
+    ['null', null],
+    ['array', []],
+    ['primitive', 42],
+  ] as const)('rejects a status response with %s swap details', async (_label, swapDetails) => {
+    const client = new StubClient();
+    const store = new MemoryBridgeStore();
+    const service = new BridgeService({ client, store, quoteVerifier: () => true, now: () => NOW });
+    await service.createManualDeposit({ source: SOURCE, amountIn: 1_000_000n, starknetRecipient: '0x123', refundAddress: request.refundTo });
+    const response = status('PENDING_DEPOSIT' as never);
+    response.swapDetails = swapDetails as never;
+    client.statuses.push(response);
+
+    await expect(service.refresh()).rejects.toThrow('1Click returned invalid execution status data.');
+    expect(store.load()?.status.leg).toBe('awaiting-deposit');
+  });
+
   it('rejects a status response with inherited signed quote evidence', async () => {
     const client = new StubClient();
     const store = new MemoryBridgeStore();

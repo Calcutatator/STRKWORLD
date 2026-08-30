@@ -327,7 +327,8 @@ export class BridgeService {
       !hasOwnDataProperty(raw, 'status') ||
       !hasOwnDataProperty(raw, 'swapDetails') ||
       typeof raw.status !== 'string' ||
-      !isStatusQuoteResponse(raw.quoteResponse)
+      !isStatusQuoteResponse(raw.quoteResponse) ||
+      !isRecord(raw.swapDetails)
     ) throw invalidExecutionStatus();
     const quoteResponse = raw.quoteResponse;
     if (
