@@ -1,4 +1,4 @@
-import { useEffect, useState, type ReactElement } from 'react';
+import { useEffect, useRef, useState, type ReactElement } from 'react';
 import type { BuildingId, EventBus, WorldEvents } from '@strkworld/shared';
 import { COPY } from '../copy.js';
 import { ConnectRoom } from '../connect/ConnectRoom.js';
@@ -69,6 +69,13 @@ export function PanelLayer({
 }) {
   const { connectState, shellBus } = usePrivacy();
   const [active, setActive] = useState<ActiveRoom | null>(null);
+  const activeRef = useRef<ActiveRoom | null>(null);
+  const publishActive = (next: ActiveRoom | null): void => {
+    // Keep the owner current before React schedules the render. A stale panel
+    // callback can otherwise close the replacement room during that window.
+    activeRef.current = next;
+    setActive(next);
+  };
 
   useEffect(() => {
     // One effect, one cleanup. Under StrictMode this runs mount → cleanup →
@@ -89,13 +96,13 @@ export function PanelLayer({
     };
     try {
       stops.push(world.on('building:entered', (payload) =>
-        setActive((current) => nextActiveRoom(current, { name: 'building:entered', payload })),
+        publishActive(nextActiveRoom(activeRef.current, { name: 'building:entered', payload })),
       ));
       stops.push(world.on('building:locked', (payload) =>
-        setActive((current) => nextActiveRoom(current, { name: 'building:locked', payload })),
+        publishActive(nextActiveRoom(activeRef.current, { name: 'building:locked', payload })),
       ));
       stops.push(world.on('building:exited', (payload) =>
-        setActive((current) => nextActiveRoom(current, { name: 'building:exited', payload })),
+        publishActive(nextActiveRoom(activeRef.current, { name: 'building:exited', payload })),
       ));
       return stopWorld;
     } catch (error) {
@@ -111,6 +118,8 @@ export function PanelLayer({
   if (!active) return null;
 
   const close = (): void => {
+    if (activeRef.current !== active) return;
+    activeRef.current = null;
     setActive(null);
     // Ask the world to release the player. The world owns the avatar; the shell
     // only ever asks (D-010). `world:exit-building` is part of the frozen bus.

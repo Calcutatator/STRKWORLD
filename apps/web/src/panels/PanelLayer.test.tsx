@@ -4,7 +4,7 @@ import { createRoot } from 'react-dom/client';
 import { describe, expect, it, vi } from 'vitest';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { FakePrivacyOperations } from '@strkworld/privacy';
-import type { BuildingId, WorldEvents } from '@strkworld/shared';
+import type { BuildingId, ShellEvents, WorldEvents } from '@strkworld/shared';
 import { COPY } from '../copy.js';
 import { PrivacyProvider } from '../privacy/PrivacyProvider.js';
 import { createEventBus } from '../bus/event-bus.js';
@@ -148,6 +148,39 @@ describe('ActiveRoomView', () => {
 });
 
 describe('PanelLayer lifecycle', () => {
+  it('ignores a stale panel close callback after the world replaces the active room', () => {
+    const world = createEventBus<WorldEvents>();
+    const shell = createEventBus<ShellEvents>();
+    const exits: Array<{ building: BuildingId }> = [];
+    shell.on('world:exit-building', (payload) => exits.push(payload));
+    let staleClose!: () => void;
+    const panels = {
+      ...BUILDING_PANELS,
+      bank: { ...BUILDING_PANELS.bank!, Component: ({ onClose }: { onClose: () => void }) => { staleClose = onClose; return <p>bank test</p>; } },
+    };
+    const container = document.createElement('div');
+    const root = createRoot(container);
+
+    act(() => {
+      root.render(
+        <PrivacyProvider operations={new FakePrivacyOperations()} initialConnectState={{ name: 'connected', capability: { supportsStrk20: true, walletApiVersion: '1', registration: 'registered' }, registrationConfirmed: true }} shellBus={shell}>
+          <PanelLayer world={world} panels={panels} />
+        </PrivacyProvider>,
+      );
+    });
+    act(() => {
+      world.emit('building:entered', { building: 'bank' });
+    });
+    expect(staleClose).toBeTypeOf('function');
+
+    act(() => world.emit('building:entered', { building: 'exchange' }));
+    act(() => staleClose());
+
+    expect(exits).toEqual([]);
+    expect(container.innerHTML).toContain('Exchange');
+    root.unmount();
+  });
+
   it('rolls back world listeners when a later effect registration fails', () => {
     const world = createEventBus<WorldEvents>();
     const originalOn = world.on;
