@@ -347,9 +347,21 @@ export function createAvatarStudioController(
 
   const leave = (): void => {
     if (!inRoom) return;
+    const previousHighlightedFigure = highlightedFigure;
     inRoom = false;
     highlightedFigure = null;
-    options.onExit?.();
+    try {
+      options.onExit?.();
+    } catch (error) {
+      // Studio presentation is an external lifecycle boundary. If it fails,
+      // keep this transition retryable unless the callback already retired or
+      // replaced the controller's ownership synchronously.
+      if (!destroyed && !inRoom) {
+        inRoom = true;
+        highlightedFigure = previousHighlightedFigure;
+      }
+      throw error;
+    }
     if (destroyed || inRoom) return;
     publish();
     options.out.emit('avatar-studio:exited', {});

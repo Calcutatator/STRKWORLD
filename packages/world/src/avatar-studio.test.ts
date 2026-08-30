@@ -37,6 +37,26 @@ describe('hidden Avatar Studio', () => {
     expect(onEnter).toHaveBeenCalledTimes(2);
   });
 
+  it('keeps studio ownership when exit presentation fails so it can retry', () => {
+    const out: Pick<EventBus<WorldEvents>, 'emit'> = { emit: vi.fn() };
+    const error = new Error('studio exit presentation failed');
+    const onExit = vi.fn().mockImplementationOnce(() => { throw error; });
+    const controller = createAvatarStudioController({
+      out,
+      selection: createAvatarOutfitSelection({ out }),
+      onExit,
+    });
+
+    controller.enter();
+    const exit = AVATAR_STUDIO_DEFINITION.exit;
+    expect(() => controller.update({ x: exit.x, y: exit.y })).toThrow(error);
+    expect(controller.state.inRoom).toBe(true);
+
+    expect(() => controller.update({ x: exit.x, y: exit.y })).not.toThrow();
+    expect(controller.state.inRoom).toBe(false);
+    expect(onExit).toHaveBeenCalledTimes(2);
+  });
+
   it('owns injected presentation geometry after construction', () => {
     const studioBounds = { x: 64, y: 64, width: 576, height: 384 };
     const studioSpawn = { x: 368, y: 112 };

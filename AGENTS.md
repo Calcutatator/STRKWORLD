@@ -258,6 +258,25 @@ empty shell to fetchers, so a 200 there means nothing.
 
 ## 6. Findings log
 
+### 2026-08-30 — Avatar Studio exit presentation failure remains retryable
+
+`createAvatarStudioController.leave()` cleared Studio ownership before invoking
+the consumer-owned `onExit` callback. If that callback threw, the original
+error was propagated but the controller stayed outside the Studio, so a later
+exit retry became a no-op and could never complete the presentation handoff.
+
+Studio exit now restores the prior room ownership and highlighted figure when
+`onExit` throws, unless that callback synchronously destroyed or re-entered the
+controller. The existing post-callback ownership guard still suppresses stale
+publication/events, and normal exit ordering is unchanged.
+
+*Verified:* a red-first public Avatar Studio regression makes the first
+`onExit` callback throw, observes the old controller outside the Studio, then
+retries the same exit and confirms no second callback. The corrected path
+preserves the exact original error, keeps Studio ownership for retry, and
+completes the second exit. Focused Avatar Studio tests pass 35/35. No browser,
+wallet, provider, RPC, proof, signature, funds or transaction was used.
+
 ### 2026-08-30 — Bank mode configuration is snapshotted at construction
 
 `createBankPanel()` previously retained the caller's `allowedModes` array
