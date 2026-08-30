@@ -283,6 +283,33 @@ the remaining 8 failures are existing local Vite-path and launcher timeout
 environment failures outside World. No browser, lobby service, wallet,
 provider, RPC, proof, signature, funds or transaction was used.
 
+### 2026-08-30 — Fly static reads retain the validated file identity
+
+The Fly static edge resolved and validated a canonical file inside its static
+root, but then reopened that pathname to read the response. A file or symlink
+replacement between those operations could redirect the second open outside
+the root and publish bytes that had never passed containment validation.
+
+Static serving now opens the requested path with the platform `O_NOFOLLOW`
+flag where available, validates the opened descriptor as a regular file under
+the canonical root, and retains that descriptor through the read. Linux also
+verifies the descriptor target through `/proc/self/fd` where available. On
+platforms without that descriptor namespace, the nonzero `O_NOFOLLOW` guard
+remains the acquisition authority; if neither mechanism is available, the
+request fails closed. Every opened handle closes on success, identity failure,
+read failure or observation failure.
+SPA fallback, cache policy, content types and HEAD semantics are unchanged.
+
+*Verified:* a deterministic observation seam replaces a validated asset path
+with a symlink to an outside secret before the read. The base returned the
+outside bytes; the corrected edge returns the originally opened asset. Further
+regressions replace the path between resolution and descriptor acquisition and
+throw after acquisition; the edge rejects the replacement and releases the
+handle. A descriptor-lookup failure likewise returns `404` and releases the
+handle. Fly verification passes 4 files / 149 tests and all workspace
+typechecks pass. No browser, network service, provider, RPC, wallet, proof,
+signature, funds or transaction was used.*
+
 ### 2026-08-30 — Fly retires private requests after public disconnects
 
 The Fly HTTP proxy destroyed its private-child request when the incoming body

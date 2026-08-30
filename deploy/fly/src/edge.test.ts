@@ -104,6 +104,86 @@ describe('Fly edge public boundary', () => {
     expect(await route.text()).not.toContain('outside');
   });
 
+  it('does not follow a static file replaced after containment validation', async () => {
+    const root = await fixture();
+    const outside = await mkdtemp(join(tmpdir(), 'strkworld-edge-outside-'));
+    directories.push(outside);
+    await writeFile(join(outside, 'secret.js'), 'outside-secret');
+    const asset = join(root, 'assets', 'app-abc123.js');
+    let replaced = false;
+    const edge = createEdgeServer(
+      { staticRoot: root, backendPort: 1, lobbyPort: 1, publicOrigin: 'https://game.example' },
+      {
+        onStaticFileValidated: async (file) => {
+          if (replaced || file !== asset) return;
+          replaced = true;
+          await rm(asset);
+          await symlink(join(outside, 'secret.js'), asset);
+        },
+      },
+    );
+    const port = await listen(edge);
+
+    const response = await fetchEdge(port, '/assets/app-abc123.js');
+
+    expect(response.status).toBe(200);
+    expect(await response.text()).toBe('console.log(1);');
+  });
+
+  it('rejects a static path replaced between resolution and descriptor acquisition', async () => {
+    const root = await fixture();
+    const outside = await mkdtemp(join(tmpdir(), 'strkworld-edge-outside-'));
+    directories.push(outside);
+    await writeFile(join(outside, 'secret.js'), 'outside-secret');
+    const asset = join(root, 'assets', 'app-abc123.js');
+    let replaced = false;
+    const edge = createEdgeServer(
+      { staticRoot: root, backendPort: 1, lobbyPort: 1, publicOrigin: 'https://game.example' },
+      {
+        onStaticFileResolved: async () => {
+          if (replaced) return;
+          replaced = true;
+          await rm(asset);
+          await symlink(join(outside, 'secret.js'), asset);
+        },
+      },
+    );
+    const port = await listen(edge);
+
+    const response = await fetchEdge(port, '/assets/app-abc123.js');
+
+    expect(response.status).toBe(404);
+    expect(await response.text()).not.toContain('outside-secret');
+  });
+
+  it('closes an acquired static file when post-open observation rejects', async () => {
+    const root = await fixture();
+    const asset = join(root, 'assets', 'app-abc123.js');
+    const edge = createEdgeServer(
+      { staticRoot: root, backendPort: 1, lobbyPort: 1, publicOrigin: 'https://game.example' },
+      { onStaticFileValidated: () => { throw new Error('observer failed'); } },
+    );
+    const port = await listen(edge);
+
+    await expect(fetchEdge(port, '/assets/app-abc123.js')).resolves.toMatchObject({ status: 404 });
+    await expect(rm(asset)).resolves.toBeUndefined();
+  });
+
+  it('fails closed and releases the handle when descriptor identity is unavailable', async () => {
+    const root = await fixture();
+    const asset = join(root, 'assets', 'app-abc123.js');
+    const edge = createEdgeServer(
+      { staticRoot: root, backendPort: 1, lobbyPort: 1, publicOrigin: 'https://game.example' },
+      { resolveStaticDescriptor: async () => null },
+    );
+    const port = await listen(edge);
+
+    const response = await fetchEdge(port, '/assets/app-abc123.js');
+
+    expect(response.status).toBe(404);
+    await expect(rm(asset)).resolves.toBeUndefined();
+  });
+
   it('proxies API and matchmaking paths without adding CORS', async () => {
     const root = await fixture();
     const upstream = createServer((request, response) => {
