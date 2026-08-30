@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { GAME_ID_PATTERN, WORLD_LIMIT } from './config';
+import { DEFAULT_ROOM_CONFIG, DEFAULT_SPRITE_KEYS, GAME_ID_PATTERN, WORLD_LIMIT } from './config';
 import {
   UpdateThrottle,
   createGameId,
@@ -13,6 +13,14 @@ import {
 } from './policy';
 
 const SPRITES = ['avatar-1', 'avatar-2'];
+
+describe('default lobby vocabulary ownership', () => {
+  it('does not expose a mutable default sprite allowlist', () => {
+    expect(Reflect.set(DEFAULT_SPRITE_KEYS, 0, 'not-a-sprite')).toBe(false);
+    expect(DEFAULT_SPRITE_KEYS[0]).toBe('avatar-1');
+    expect(DEFAULT_ROOM_CONFIG.spriteKeys[0]).toBe('avatar-1');
+  });
+});
 
 describe('normalizeGameId', () => {
   it('accepts exactly 16 lowercase hex characters', () => {

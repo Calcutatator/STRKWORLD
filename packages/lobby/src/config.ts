@@ -131,7 +131,7 @@ export const GAME_ID_LENGTH = 16;
  * `startPresenceServer({ room: { spriteKeys } })` channel. An unrecognised
  * client value is replaced with the default rather than entering room state.
  */
-export const DEFAULT_SPRITE_KEYS = [
+export const DEFAULT_SPRITE_KEYS = Object.freeze([
   'avatar-1',
   'avatar-2',
   'avatar-3',
@@ -148,7 +148,7 @@ export const DEFAULT_SPRITE_KEYS = [
   'avatar-14',
   'avatar-15',
   'avatar-16',
-] as const satisfies readonly string[];
+] as const satisfies readonly string[]);
 
 /** One key in D-047's fixed browser-to-lobby cosmetic vocabulary. */
 export type LobbySprite = (typeof DEFAULT_SPRITE_KEYS)[number];
