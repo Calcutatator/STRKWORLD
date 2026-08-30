@@ -659,6 +659,47 @@ describe('fixed room controller', () => {
     expect(h.inputCalls).toEqual(['resume', 'suspend']);
   });
 
+  it('does not activate a stale station after onChange re-enters update', () => {
+    const definition: FixedRoomDefinition = {
+      ...POST_OFFICE_ROOM_DEFINITION,
+      stations: [
+        POST_OFFICE_ROOM_DEFINITION.stations[0]!,
+        {
+          station: 'post-office:second',
+          label: 'SECOND',
+          x: 13,
+          y: 3,
+          width: 2,
+          height: 1,
+        },
+      ],
+    };
+    let controller!: ReturnType<typeof createFixedRoomController>;
+    let reentered = false;
+    const h = harness(definition, (state) => {
+      if (!reentered && state.highlightedStation === 'post-office:transfer') {
+        reentered = true;
+        controller.update({ x: 13, y: 4 });
+      }
+    });
+    controller = h.controller;
+    h.controller.enter();
+    h.shell.emit('world:stations', {
+      building: 'post-office',
+      stations: [
+        { station: 'post-office:transfer', label: 'TRANSFER', status: 'available' },
+        { station: 'post-office:second', label: 'SECOND', status: 'available' },
+      ],
+    });
+
+    h.controller.update({ x: 3, y: 4 });
+
+    expect(h.events.map((event) => event.payload)).toEqual([
+      { building: 'post-office', station: 'post-office:second' },
+    ]);
+    expect(h.controller.state.highlightedStation).toBe('post-office:second');
+  });
+
   it('does not expose station admission through the public state snapshot', () => {
     const h = harness();
     h.controller.enter();

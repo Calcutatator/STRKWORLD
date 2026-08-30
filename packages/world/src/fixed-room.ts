@@ -389,6 +389,7 @@ export function createFixedRoomController(
   let destroyPending = false;
   let destroying = false;
   let inputCleanupPending = true;
+  let updateRevision = 0;
   try {
     stopStations = options.in?.on('world:stations', (payload) => {
     if (destroyed || !inRoom || payload?.building !== options.definition.building) return;
@@ -539,6 +540,7 @@ export function createFixedRoomController(
     },
     update(tile): void {
       if (destroyed || !inRoom || controlOwner === 'shell') return;
+      const ownRevision = ++updateRevision;
       if (isFixedRoomExit(room, tile.x, tile.y)) {
         leave();
         return;
@@ -553,8 +555,9 @@ export function createFixedRoomController(
         publish();
       }
       // onChange delivery is synchronous and may destroy the room or let
-      // Shell claim control before this update resumes.
-      if (destroyed || !inRoom || !ownsWorldControl()) return;
+      // Shell claim control before this update resumes. It may also run a
+      // newer update, so do not activate the stale station from this turn.
+      if (destroyed || !inRoom || !ownsWorldControl() || updateRevision !== ownRevision) return;
       const station = stations.find((candidate) => candidate.station === nextHighlighted);
       if (approached && station?.status === 'available' && approachArmed.has(approached.station)) {
         approachArmed.delete(approached.station);

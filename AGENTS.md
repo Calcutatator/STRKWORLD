@@ -258,6 +258,28 @@ empty shell to fetchers, so a 200 there means nothing.
 
 ## 6. Findings log
 
+### 2026-08-30 — Fixed-room update can activate a stale station after reentrant publication
+
+`createFixedRoomController.update()` published a changed station highlight and
+then continued using the outer approach. An `onChange` consumer could
+synchronously call `update()` for a different station: the nested update
+activated station B, then the outer turn resumed and activated stale station A.
+That produced two financial-building activation events for one latest movement
+state and could hand the Shell an obsolete station action.
+
+Each update now owns a monotonically increasing revision. After synchronous
+highlight publication, the controller verifies that its revision remains
+current, alongside the existing destroy, room and control-owner guards, before
+activating a station. Normal station approach ordering and input restoration
+are unchanged.
+
+*Verified:* a public World regression uses two non-overlapping Post Office
+stations and re-enters from station A's `onChange` callback into station B. On
+the old path both B and stale A activated; the corrected path emits only B and
+retains B as the highlighted station. Focused fixed-room tests pass 62 tests.
+No browser, lobby server, wallet, provider, RPC, proof, signature, funds or
+transaction was used.
+
 ### 2026-08-30 — Avatar Studio ignores a stale outer figure update after reentrant publication
 
 `createAvatarStudioController.update()` published the newly highlighted figure
