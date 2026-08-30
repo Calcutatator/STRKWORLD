@@ -178,7 +178,9 @@ class Cursor {
 
   number(label: string): number {
     const value = BigInt(this.felt());
-    if (value > BigInt(Number.MAX_SAFE_INTEGER)) throw new ApiFailure(400, `Invalid ${label}.`);
+    if (value < 0n || value > BigInt(Number.MAX_SAFE_INTEGER)) {
+      throw new ApiFailure(400, `Invalid ${label}.`);
+    }
     return Number(value);
   }
 

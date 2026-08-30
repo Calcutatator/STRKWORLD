@@ -258,6 +258,25 @@ empty shell to fetchers, so a 200 there means nothing.
 
 ## 6. Findings log
 
+### 2026-08-30 — Server-action span lengths must be nonnegative
+
+`decodeServerActions()` previously accepted negative values anywhere a Cairo
+span length was decoded. JavaScript's `Array.from({ length: -1 })` silently
+creates an empty array, so malformed calldata such as a `WriteOnce` action
+with span length `-1` passed the route decoder as a valid `other` action.
+
+`Cursor.number()` now rejects negative values as malformed before converting
+them to a JavaScript number. Existing maximum-length, truncation, variant and
+trailing-calldata checks are unchanged.
+
+*Verified:* a red-first public Backend regression first accepted
+`[action_count=1, variant=0, storage=0x1, span_length=-1]`; the corrected
+decoder returns the generic invalid-span-length error. Removing the
+nonnegative guard reproduces acceptance. The Backend suite passes 5 files /
+159 tests; package typecheck, invariant scan and `git diff --check` pass. No
+browser, external provider, RPC, wallet, proof, signature, funds or
+transaction was used.
+
 ### 2026-08-30 — Fixed-room shell decoders fail closed on null commands
 
 The fixed-room controller subscribed directly to the Shell event bus and

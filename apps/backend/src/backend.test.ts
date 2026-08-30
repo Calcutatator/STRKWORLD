@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import {
   BackendApi,
+  decodeServerActions,
   HmacAuthorizationCodec,
   MemoryAuthorizationCodec,
   validateServerActionRoute,
@@ -1384,6 +1385,11 @@ describe('quote-bound swap withdrawal matching', () => {
 });
 
 describe('privacy-safe RPC and operations', () => {
+  it('rejects negative server-action span lengths', () => {
+    expect(() => decodeServerActions(['0x1', '0x0', '0x1', '-1']))
+      .toThrow('Invalid span length.');
+  });
+
   it('bounds direct request deadlines to the Node timer ceiling', () => {
     expect(() => fixture({ requestTimeoutMs: 2_147_483_647 })).not.toThrow();
     expect(() => fixture({ requestTimeoutMs: 2_147_483_648 }))
