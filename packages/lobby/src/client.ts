@@ -435,7 +435,14 @@ export class LobbyClient {
           // first valid identity stable so a duplicate or conflicting replay
           // cannot make the client publish its own state as a peer.
           if (welcomeAccepted) return;
-          const gameId = normalizeGameId(payload?.gameId);
+          const payloadRecord =
+            payload !== null && typeof payload === 'object' ? payload : null;
+          const gameIdField = payloadRecord
+            ? Object.getOwnPropertyDescriptor(payloadRecord, 'gameId')
+            : undefined;
+          const gameId = normalizeGameId(
+            gameIdField && 'value' in gameIdField ? gameIdField.value : undefined,
+          );
           if (gameId === null) {
             this.#room = null;
             this.#gameId = null;

@@ -205,6 +205,43 @@ describe('identity is server-assigned', () => {
     expect(client.gameId).toMatch(/^[0-9a-f]{16}$/);
   });
 
+  it('rejects inherited or accessor-backed welcome identities', async () => {
+    const cases: unknown[] = [
+      Object.create({ gameId: '0123456789abcdef' }),
+    ];
+    let accessorRead = false;
+    const accessorPayload = {};
+    Object.defineProperty(accessorPayload, 'gameId', {
+      get: () => {
+        accessorRead = true;
+        return '0123456789abcdef';
+      },
+    });
+    cases.push(accessorPayload);
+
+    for (const payload of cases) {
+      const joined = fakeRoom();
+      const joinOrCreate = vi
+        .spyOn(ColyseusClient.prototype, 'joinOrCreate')
+        .mockResolvedValueOnce(joined.room as never);
+      const client = makeClient(20, 0);
+      try {
+        const connecting = client.connect();
+        await Promise.resolve();
+        joined.welcome(payload as never);
+
+        await expect(connecting).rejects.toThrow(/welcome/i);
+        expect(client.status).toBe('closed');
+        expect(client.gameId).toBeNull();
+        expect(joined.leave).toHaveBeenCalledOnce();
+      } finally {
+        joinOrCreate.mockRestore();
+      }
+    }
+
+    expect(accessorRead).toBe(false);
+  });
+
   it('gives two clients distinct server-assigned ids', async () => {
     const a = makeClient(0, 0);
     const b = makeClient(10, 0);
