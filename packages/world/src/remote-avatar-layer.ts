@@ -71,7 +71,7 @@ export function createRemoteAvatarLayer({
   let subscribing = false;
   let unsubscribePending = false;
 
-  const render = (snapshot: readonly RemotePeerSnapshot[]): void => {
+  const renderSnapshot = (snapshot: readonly RemotePeerSnapshot[]): void => {
     if (destroyed) return;
     const next = reconcileRemotePeers(snapshot, peers);
     const errors: unknown[] = [];
@@ -153,9 +153,38 @@ export function createRemoteAvatarLayer({
     if (errors.length > 1) throw new AggregateError(errors, 'Remote avatar reconciliation failed');
   };
 
+  const pendingRenders: Array<readonly RemotePeerSnapshot[]> = [];
+  let rendering = false;
+  const render = (snapshot: readonly RemotePeerSnapshot[]): void => {
+    if (destroyed) return;
+    // A custom source or presentation callback may synchronously deliver a
+    // second snapshot while the first one is still reconciling. Queue it so
+    // the outer render cannot commit an older map after the newer presentation
+    // has already been applied.
+    if (rendering) {
+      pendingRenders.push(snapshot);
+      return;
+    }
+    rendering = true;
+    pendingRenders.push(snapshot);
+    try {
+      while (!destroyed) {
+        const next = pendingRenders.shift();
+        if (next === undefined) break;
+        renderSnapshot(next);
+      }
+    } catch (error) {
+      pendingRenders.length = 0;
+      throw error;
+    } finally {
+      rendering = false;
+    }
+  };
+
   const destroy = (): void => {
     if (destroyed) return;
     destroyed = true;
+    pendingRenders.length = 0;
     const errors: unknown[] = [];
     const attempt = (cleanup: () => void): void => {
       try {

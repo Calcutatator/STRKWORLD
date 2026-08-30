@@ -320,6 +320,27 @@ retains the replacement render. Focused WalletSessionProvider tests pass
 recorded on the candidate. No browser, wallet, provider, RPC, proof,
 signature, funds or transaction was used.
 
+### 2026-08-30 — Remote avatar presentation serializes reentrant snapshots
+
+`createRemoteAvatarLayer()` reconciled a source snapshot directly from its
+listener. A source or presentation callback could synchronously deliver a
+newer full snapshot while that reconciliation was still rendering; the nested
+render updated the sprite and retained map, but the outer render then
+committed its older snapshot over the newer one. The World could therefore
+keep stale peer coordinates until another publication arrived.
+
+The layer now queues source callbacks that reenter during reconciliation and
+drains them in order before returning, clearing pending work on teardown or a
+render failure. Existing validation, failed-update retention, removal retry,
+and shutdown ownership remain unchanged.
+
+*Verified:* a red-first public World fake source reentered with an x=80
+snapshot while the initial x=40 snapshot was rendering; the old layer ended
+at x=40, while the corrected layer finishes with x=80 on both its retained
+map and sprite. The focused remote-avatar and remote-peer suites pass 38
+tests. No browser, lobby, wallet, provider, RPC, proof, signature, funds or
+transaction was used.
+
 ### 2026-08-30 — Wallet route policy is semantically validated before discovery
 
 The wallet session already copied policy data into an immutable snapshot, but
