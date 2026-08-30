@@ -147,6 +147,71 @@ describe('ProductionRoot', () => {
     container.remove();
   });
 
+  it('aborts capability detection when the connected gate is retired', async () => {
+    const operations = new FakePrivacyOperations();
+    const capturedSignals: AbortSignal[] = [];
+    const capability = new Promise<{
+      supportsStrk20: true;
+      walletApiVersion: string;
+      registration: 'unknown';
+    }>(() => undefined);
+    vi.spyOn(operations, 'capability').mockImplementation((signal) => {
+      if (signal) capturedSignals.push(signal);
+      return capability;
+    });
+    const session = reactiveSession('selection-required', null, operations);
+    const container = document.createElement('div');
+    document.body.appendChild(container);
+    const root = createRoot(container);
+
+    await act(async () => {
+      root.render(
+        <StrictMode>
+          <ProductionRoot
+            session={session}
+            worldOut={createEventBus<WorldEvents>()}
+            shellIn={createEventBus<ShellEvents>()}
+            createPresence={() => createPresenceController({})}
+            bridge={recoveryBridge()}
+          />
+        </StrictMode>,
+      );
+      await flushReact();
+    });
+
+    await act(async () => {
+      session.publish('connected', '0xabc');
+      await flushReact();
+    });
+
+    expect(session.getSnapshot().phase).toBe('connected');
+    expect(container.querySelector('[data-testid="wallet-capability-gate"]')).not.toBeNull();
+    expect(session.operations).toBe(operations);
+    expect(operations.capability).toHaveBeenCalledOnce();
+    expect(capturedSignals).toHaveLength(1);
+    expect(capturedSignals.at(-1)?.aborted).toBe(false);
+
+    await act(async () => {
+      session.publish('connected', '0xdef');
+      await flushReact();
+    });
+
+    expect(operations.capability).toHaveBeenCalledTimes(2);
+    expect(capturedSignals[0]?.aborted).toBe(true);
+    expect(capturedSignals.at(-1)?.aborted).toBe(false);
+
+    await act(async () => {
+      session.publish('selection-required', null);
+      await flushReact();
+    });
+    await flushReact();
+
+    expect(container.querySelector('[data-testid="wallet-entry-gate"]')).not.toBeNull();
+    expect(capturedSignals.at(-1)?.aborted).toBe(true);
+    await unmountReactRoot(root);
+    container.remove();
+  });
+
   it('passes the already-admitted capability into the financial composition', async () => {
     captured.current = null;
     const createPresence = vi.fn(() => createPresenceController({}));
@@ -345,8 +410,9 @@ function sessionAt(
 function reactiveSession(
   phase: 'connected' | 'selection-required',
   account: string | null,
+  operations = new FakePrivacyOperations(),
 ): WalletSession & { publish(nextPhase: 'connected' | 'selection-required', nextAccount: string | null): void } {
-  let current = sessionAt(phase, account);
+  let current = sessionAt(phase, account, operations);
   const listeners = new Set<() => void>();
   return {
     ...current,

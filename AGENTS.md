@@ -258,6 +258,28 @@ empty shell to fetchers, so a 200 there means nothing.
 
 ## 6. Findings log
 
+### 2026-08-30 — Production capability checks retire with their gate
+
+`WalletCapabilityGate` started capability detection without an owner signal.
+If the wallet session disconnected or changed network while that check was
+pending, the gate unmounted but the capability operation remained live beyond
+the admission it belonged to. That could leave wallet work running after the
+connected financial surface had been retired.
+
+The gate now creates one `AbortController` for each mounted detection attempt,
+passes its signal to `connect.connect`, and aborts it during cleanup. This is
+abort-only: it does not call `disconnect` during cleanup, so React StrictMode's
+probe does not invalidate a still-live flow and start another wallet query.
+The retired result cannot be consumed by a mounted capability gate, presence
+owner, or financial surface.
+
+*Verified:* a red-first `ProductionRoot` regression used a deferred capability
+operation, retired the connected session, and observed that the old gate passed
+no signal. The corrected path receives a live signal and aborts it when the
+session returns to the wallet gate. Focused ProductionRoot tests pass 10/10;
+no browser, wallet prompt, provider, RPC, proof, signature, funds or
+transaction was used.
+
 ### 2026-08-30 — Remote avatar visual construction retains partial ownership
 
 `createRemoteAvatarLayer` added a new sprite to the Phaser layer and then

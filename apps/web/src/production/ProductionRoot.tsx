@@ -3,7 +3,7 @@ import type { WalletSession, WalletSessionSnapshot } from '@strkworld/privacy';
 import { useEffect, useMemo, useState, useRef } from 'react';
 import { App } from '../App.js';
 import type { BridgeRuntimeLoader } from '../bridge/BridgeProvider.js';
-import { createConnectFlow, type ConnectState } from '../connect/connect-machine.js';
+import { createConnectFlow, type ConnectFlow, type ConnectState } from '../connect/connect-machine.js';
 import { COPY } from '../copy.js';
 import type { PresenceController } from '../presence/presence-controller.js';
 import { useStore } from '../store/use-store.js';
@@ -102,9 +102,30 @@ function WalletCapabilityGate({
     [session.operations, snapshot.generation, snapshot.account],
   );
   const state = useStore(connect.store);
+  const capabilityEffect = useRef<{ token: symbol; connect: ConnectFlow } | null>(null);
+  const capabilityController = useRef<AbortController | null>(null);
 
   useEffect(() => {
-    void connect.connect();
+    const previous = capabilityEffect.current;
+    const controller = previous?.connect === connect && capabilityController.current
+      ? capabilityController.current
+      : new AbortController();
+    capabilityController.current = controller;
+    const token = Symbol();
+    capabilityEffect.current = { token, connect };
+    void connect.connect(controller.signal);
+    return () => {
+      // React StrictMode probes cleanup and setup synchronously with the same
+      // flow. Let that probe keep sharing the in-flight query, while aborting
+      // a real retirement or a replacement flow on the next microtask.
+      queueMicrotask(() => {
+        const owner = capabilityEffect.current;
+        if (owner?.token === token || owner?.connect !== connect) {
+          controller.abort();
+          if (capabilityController.current === controller) capabilityController.current = null;
+        }
+      });
+    };
   }, [connect]);
 
   if (capabilityAdmits(state)) {
