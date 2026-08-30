@@ -258,6 +258,23 @@ empty shell to fetchers, so a 200 there means nothing.
 
 ## 6. Findings log
 
+### 2026-08-30 — Avatar Studio presentation stops after synchronous destroy
+
+`createAvatarStudioPresentation().enter()` and `.exit()` previously continued
+their ordered port calls after one port callback synchronously destroyed the
+presentation. A reentrant teardown could therefore restore or move the player,
+camera and presence after the presentation had already retired its ownership.
+
+Both transitions now recheck the presentation's destroyed state after every
+port operation and stop immediately when teardown occurs. Normal operation
+order and idempotent destruction remain unchanged.
+
+*Verified:* a red-first World regression destroys the presentation from the
+`setStudioVisible` callback and observes later bounds/position calls on the old
+path; the corrected test stops the transition. Focused Avatar Studio tests pass
+25/25. No browser, wallet, provider, RPC, proof, signature, funds or
+transaction was used.
+
 ### 2026-08-30 — Presence world-listener setup rolls back partial registration
 
 `PresenceController.listen()` previously registered six world handlers in a

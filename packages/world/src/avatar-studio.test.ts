@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import type { AvatarSpriteKey, EventBus, WorldEvents } from '@strkworld/shared';
 import { createAvatarOutfitSelection } from './avatar-outfit.js';
 import {
@@ -21,6 +21,43 @@ import { createStreetMap, tileToWorld } from './map/street.js';
 type Emitted = { [K in keyof WorldEvents]: { event: K; payload: WorldEvents[K] } }[keyof WorldEvents];
 
 describe('hidden Avatar Studio', () => {
+  it('stops an enter transition when a presentation callback destroys it', () => {
+    let presentation!: ReturnType<typeof createAvatarStudioPresentation>;
+    const destroyStudio = vi.fn();
+    const setWorldBounds = vi.fn();
+    const port: AvatarStudioPresentationPort = {
+      setPlayerVelocity: vi.fn(),
+      setBodyEnabled: vi.fn(),
+      setGroundVisible: vi.fn(),
+      setDoorsVisible: vi.fn(),
+      setRemoteVisible: vi.fn(),
+      setLabelsVisible: vi.fn(),
+      setRoomVisible: vi.fn(),
+      setStudioVisible: vi.fn(() => presentation.destroy()),
+      setWorldBounds,
+      setCameraBounds: vi.fn(),
+      setPlayerPosition: vi.fn(),
+      resetDoors: vi.fn(),
+      resumeStreet: vi.fn(),
+      destroyStudio,
+    };
+    presentation = createAvatarStudioPresentation({
+      port,
+      streetBounds: { x: 0, y: 0, width: 10, height: 10 },
+      studioBounds: { x: 1, y: 1, width: 10, height: 10 },
+      studioSpawn: { x: 5, y: 5 },
+      streetReturn: { x: 2, y: 2 },
+      reportStreet: vi.fn(),
+    });
+
+    presentation.enter();
+
+    expect(destroyStudio).toHaveBeenCalledOnce();
+    expect(setWorldBounds).not.toHaveBeenCalled();
+    expect(port.setCameraBounds).not.toHaveBeenCalled();
+    expect(port.setPlayerPosition).not.toHaveBeenCalled();
+  });
+
   it('has a fixed 18x12 envelope, eight cosy figures and no building/station seam', () => {
     expect(AVATAR_STUDIO_DEFINITION).toMatchObject({
       width: 18,

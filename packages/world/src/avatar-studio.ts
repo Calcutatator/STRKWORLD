@@ -123,32 +123,54 @@ export function createAvatarStudioPresentation(options: {
       if (destroyed) return;
       const { port } = options;
       port.setPlayerVelocity(0, 0);
+      if (destroyed) return;
       port.setBodyEnabled(false);
+      if (destroyed) return;
       port.setGroundVisible(false);
+      if (destroyed) return;
       port.setDoorsVisible(false);
+      if (destroyed) return;
       port.setRemoteVisible(false);
+      if (destroyed) return;
       port.setLabelsVisible(false);
+      if (destroyed) return;
       port.setRoomVisible(false);
+      if (destroyed) return;
       port.setStudioVisible(true);
+      if (destroyed) return;
       port.setWorldBounds(options.studioBounds);
+      if (destroyed) return;
       port.setCameraBounds(options.studioBounds);
+      if (destroyed) return;
       port.setPlayerPosition(options.studioSpawn);
     },
     exit(): void {
       if (destroyed) return;
       const { port } = options;
       port.setPlayerVelocity(0, 0);
+      if (destroyed) return;
       port.setBodyEnabled(true);
+      if (destroyed) return;
       port.setGroundVisible(true);
+      if (destroyed) return;
       port.setDoorsVisible(true);
+      if (destroyed) return;
       port.setRemoteVisible(true);
+      if (destroyed) return;
       port.setLabelsVisible(true);
+      if (destroyed) return;
       port.setRoomVisible(false);
+      if (destroyed) return;
       port.setStudioVisible(false);
+      if (destroyed) return;
       port.setWorldBounds(options.streetBounds);
+      if (destroyed) return;
       port.setCameraBounds(options.streetBounds);
+      if (destroyed) return;
       port.setPlayerPosition(options.streetReturn);
+      if (destroyed) return;
       port.resetDoors();
+      if (destroyed) return;
       port.resumeStreet(options.streetReturn, options.reportStreet);
     },
     destroy(): void {
