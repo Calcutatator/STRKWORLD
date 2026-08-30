@@ -65,7 +65,7 @@ export class FakePublicShieldPlanner implements PublicShieldPlanner {
       throw new PrivacyError('unknown', 'The fake public shield arithmetic is inconsistent.');
     }
     if (signal?.aborted) throw new PrivacyError('user-rejected', 'Operation cancelled.');
-    return {
+    return Object.freeze({
       token,
       recipient: this.recipient,
       available: input.available,
@@ -73,7 +73,7 @@ export class FakePublicShieldPlanner implements PublicShieldPlanner {
       poolFee: this.poolFee,
       gasEstimate,
       plannedReserve,
-    };
+    });
   }
 }
 

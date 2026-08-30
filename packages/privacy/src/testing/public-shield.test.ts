@@ -32,6 +32,22 @@ describe('FakePublicShieldPlanner', () => {
     });
   });
 
+  it('publishes an immutable public shield plan', async () => {
+    const planner = new FakePublicShieldPlanner({
+      token: STRK,
+      recipient: '0xabc',
+      poolFee: 3n,
+      gasEstimate: 1n,
+    });
+
+    const plan = await planner.planMax(input(100n));
+
+    expect(Object.isFrozen(plan)).toBe(true);
+    expect(Reflect.set(plan, 'amountToShield', 100n)).toBe(false);
+    expect(plan.amountToShield).toBe(96n);
+    expect(plan.plannedReserve).toBe(4n);
+  });
+
   it('fails closed for abort, account mismatch, non-positive remainder and invalid token', async () => {
     const planner = new FakePublicShieldPlanner({ token: STRK, recipient: '0xabc', poolFee: 3n, gasEstimate: 1n });
     const controller = new AbortController();
