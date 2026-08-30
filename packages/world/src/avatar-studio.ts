@@ -355,7 +355,12 @@ export function createAvatarStudioController(
       // onChange delivery is synchronous and may destroy the Studio before
       // this update resumes; do not select or emit after that lifecycle edge.
       if (destroyed || !inRoom) return;
-      if (figure && options.selection.select(figure.sprite)) publish();
+      if (figure && options.selection.select(figure.sprite)) {
+        // Selection delivery is synchronous and can destroy or leave the
+        // Studio; do not publish a snapshot for a retired lifecycle.
+        if (destroyed || !inRoom) return;
+        publish();
+      }
     },
     destroy(): void {
       if (destroyed) return;

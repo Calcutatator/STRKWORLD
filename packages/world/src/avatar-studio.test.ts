@@ -218,6 +218,31 @@ describe('hidden Avatar Studio', () => {
     expect(events.filter((event) => event.event === 'avatar:selected')).toEqual([]);
   });
 
+  it('does not publish after avatar selection destroys the controller', () => {
+    const snapshots: AvatarStudioState[] = [];
+    const out: Pick<EventBus<WorldEvents>, 'emit'> = {
+      emit: (event) => {
+        if (event === 'avatar:selected') controller.destroy();
+      },
+    };
+    const selection = createAvatarOutfitSelection({ out });
+    let controller!: ReturnType<typeof createAvatarStudioController>;
+    controller = createAvatarStudioController({
+      out,
+      selection,
+      onChange: (state) => snapshots.push(state),
+    });
+
+    controller.enter();
+    snapshots.length = 0;
+    controller.update({ x: 14, y: 6 });
+
+    expect(selection.selected).toBe('avatar-8');
+    expect(controller.state.inRoom).toBe(false);
+    expect(snapshots).toHaveLength(1);
+    expect(snapshots[0]).toMatchObject({ highlightedFigure: 8, inRoom: true });
+  });
+
   it('does not publish or announce entry after onEnter destroys the controller', () => {
     const events: Emitted[] = [];
     const snapshots: AvatarStudioState[] = [];

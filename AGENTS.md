@@ -258,6 +258,26 @@ empty shell to fetchers, so a 200 there means nothing.
 
 ## 6. Findings log
 
+### 2026-08-30 — Avatar Studio does not publish after selection teardown
+
+`createAvatarStudioController.update()` selected a contacted figure and then
+published a state snapshot. Selection emits synchronously through the shared
+outfit event bus, so an `avatar:selected` listener could destroy the Studio or
+leave it before the update resumed. The old continuation then published a
+snapshot for a controller that no longer owned the lifecycle.
+
+The update path now rechecks `destroyed` and `inRoom` after selection before
+publishing. The selection remains Scene-owned and still emits normally; only
+the stale post-selection publication is suppressed. This is distinct from the
+existing pre-selection guard, which protects against teardown during the
+highlight `onChange` callback.
+
+*Verified:* a red-first public regression made the `avatar:selected` delivery
+destroy the controller; before the guard the update produced two snapshots,
+while the corrected path retains only the highlight snapshot and still selects
+`avatar-8`. The focused Avatar Studio suite passes 29 tests. No browser,
+lobby, wallet, provider, RPC, proof, signature, funds or transaction was used.
+
 ### 2026-08-30 — Private swap request amounts must fit uint256
 
 `BackendApi.prepareSwap()` previously accepted any positive decimal string for
