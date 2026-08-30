@@ -97,6 +97,17 @@ describe('WalletApiPrivacyOperations capability and reads', () => {
     ]);
   });
 
+  it.each([
+    ['null', null],
+    ['object', {}],
+    ['primitive', 42],
+  ] as const)('rejects a non-array %s Wallet API balance response as an invalid wallet result', async (_label, response) => {
+    const { ops, wallet } = fixture();
+    vi.spyOn(wallet, 'strk20Balances').mockResolvedValue(response as never);
+
+    await expect(ops.balances([TOKEN])).rejects.toMatchObject({ kind: 'unknown' });
+  });
+
   it('rejects a negative wallet balance instead of publishing impossible funds', async () => {
     const { ops, wallet } = fixture();
     vi.spyOn(wallet, 'strk20Balances').mockResolvedValue([
