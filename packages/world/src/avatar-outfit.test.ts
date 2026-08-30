@@ -62,6 +62,33 @@ describe('World-local outfit selection', () => {
     selection.select('avatar-2');
     expect(new Set(events.map((emitted) => emitted.event))).toEqual(new Set(['avatar:selected']));
   });
+
+  it('retries listener cleanup when the first keyboard off call throws', () => {
+    const handlers = new Set<(event: KeyEvent) => void>();
+    let attempts = 0;
+    const keyboard = {
+      on: vi.fn((_event: string, handler: (event: KeyEvent) => void) => {
+        handlers.add(handler);
+      }),
+      off: vi.fn((_event: string, handler: (event: KeyEvent) => void) => {
+        attempts += 1;
+        if (attempts === 1) throw new Error('keyboard cleanup failed');
+        handlers.delete(handler);
+      }),
+    };
+    const binding = createAvatarOutfitToggleBinding({
+      keyboard: keyboard as never,
+      isActive: () => true,
+      toggle: vi.fn(),
+    });
+
+    expect(() => binding.destroy()).toThrow('keyboard cleanup failed');
+    expect(handlers).toHaveLength(1);
+
+    binding.destroy();
+    expect(handlers).toHaveLength(0);
+    expect(keyboard.off).toHaveBeenCalledTimes(2);
+  });
 });
 
 describe('World-local outfit toggle binding', () => {

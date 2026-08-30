@@ -258,6 +258,23 @@ empty shell to fetchers, so a 200 there means nothing.
 
 ## 6. Findings log
 
+### 2026-08-30 — Avatar outfit binding retries failed listener cleanup
+
+`createAvatarOutfitToggleBinding().destroy()` previously set its destroyed flag
+before calling the keyboard emitter's `off`. If an emitter threw during that
+cleanup, the listener could remain attached but every later `destroy()` call
+returned immediately, so the Scene permanently retained an inert input
+listener. The binding now keeps the handler inert immediately while tracking
+detachment separately; a failed `off` remains owned and a later destroy
+retries it, becoming idempotent only after successful removal.
+
+*Verified:* a receiver-owned keyboard fake that throws on its first `off`
+leaves one listener on the old implementation; the public regression now
+observes the throw, retries cleanup, and confirms zero listeners after the
+second call. The mutation restoring the destroyed-flag early return fails.
+The change is World-local and does not alter input or avatar-selection
+semantics. The focused outfit suite passes 9 tests.
+
 ### 2026-08-30 — Route resolvers require own route-grade fields
 
 The Web route resolver used ordinary property access on caller-supplied

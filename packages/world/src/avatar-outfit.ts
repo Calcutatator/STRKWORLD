@@ -92,6 +92,7 @@ export function createAvatarOutfitToggleBinding(options: {
   readonly toggle: () => void;
 }): AvatarOutfitToggleBinding {
   let destroyed = false;
+  let detached = false;
 
   const onKeyDown = (event: AvatarOutfitKeyEvent): void => {
     // One press per toggle: a held key repeats, and a keystroke aimed at a
@@ -110,9 +111,13 @@ export function createAvatarOutfitToggleBinding(options: {
 
   return {
     destroy(): void {
-      if (destroyed) return;
+      if (detached) return;
       destroyed = true;
       options.keyboard.off('keydown-F', onKeyDown);
+      // Mark the resource released only after the emitter confirms removal.
+      // If `off` throws, the inert listener remains owned and a later cleanup
+      // attempt must be allowed to retry it.
+      detached = true;
     },
   };
 }
