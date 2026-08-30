@@ -608,14 +608,14 @@ function validateIntents(intents: readonly Intent[], policy: WalletRoutePolicy):
       throw new PrivacyError('unknown', `The ${intent.kind} route is disabled.`);
     }
     const amount = intent.kind === 'swap' ? intent.amountIn : intent.amount;
-    if (typeof amount !== 'bigint' || amount <= 0n) {
-      throw new PrivacyError('unknown', 'Amounts must be positive bigints.');
+    if (typeof amount !== 'bigint' || amount <= 0n || amount > MAX_UINT256) {
+      throw new PrivacyError('unknown', 'Amounts must be positive u256 values.');
     }
     if (
       intent.kind === 'swap' &&
-      (typeof intent.minAmountOut !== 'bigint' || intent.minAmountOut <= 0n)
+      (typeof intent.minAmountOut !== 'bigint' || intent.minAmountOut <= 0n || intent.minAmountOut > MAX_UINT256)
     ) {
-      throw new PrivacyError('unknown', 'Minimum output must be positive.');
+      throw new PrivacyError('unknown', 'Minimum output must be a positive u256 value.');
     }
     assertAddress(intent.kind === 'swap' ? intent.tokenIn : intent.token, 'token');
     const allowed = policy.allowedTokens[intent.kind];

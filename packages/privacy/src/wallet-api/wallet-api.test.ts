@@ -20,6 +20,7 @@ const FEE_RECIPIENT = '0x789';
 const POOL_FEE = 6n * 10n ** 18n;
 const AUTH = { authorization: 'fee-auth', expiresAtBlock: 1_450 };
 const STARK_FIELD_PRIME = (1n << 251n) + 17n * (1n << 192n) + 1n;
+const MAX_UINT256 = (1n << 256n) - 1n;
 
 function fixture() {
   const invoked: STRK20_ACTION[][] = [];
@@ -79,6 +80,35 @@ function fixture() {
 }
 
 describe('WalletApiPrivacyOperations capability and reads', () => {
+  it.each([
+    ['shield amount', { kind: 'shield', token: TOKEN, amount: MAX_UINT256 + 1n }],
+    ['transfer amount', { kind: 'transfer', token: TOKEN, amount: MAX_UINT256 + 1n, recipient: BOB }],
+    ['unshield amount', { kind: 'unshield', token: TOKEN, amount: MAX_UINT256 + 1n, recipient: BOB }],
+    ['swap input', { kind: 'swap', tokenIn: TOKEN, tokenOut: STRK, amountIn: MAX_UINT256 + 1n, minAmountOut: 1n }],
+    ['swap minimum output', { kind: 'swap', tokenIn: TOKEN, tokenOut: STRK, amountIn: 1n, minAmountOut: MAX_UINT256 + 1n }],
+  ] as const)('rejects an out-of-u256 %s before any dependency call', async (_label, intent) => {
+    const { ops, pool, wallet, gateway } = fixture();
+    const config = vi.spyOn(pool, 'config');
+    const invoke = vi.spyOn(wallet, 'strk20InvokeTransaction');
+    const prepare = vi.spyOn(wallet, 'strk20PrepareInvoke');
+
+    await expect(ops.prepare([intent as Intent])).rejects.toMatchObject({ kind: 'unknown' });
+    expect(config).not.toHaveBeenCalled();
+    expect(invoke).not.toHaveBeenCalled();
+    expect(prepare).not.toHaveBeenCalled();
+    expect(gateway.estimate).not.toHaveBeenCalled();
+    expect(gateway.prepareSwap).toBeUndefined();
+  });
+
+  it('preserves the exact u256 maximum intent boundary', async () => {
+    const { ops, pool } = fixture();
+    const config = vi.spyOn(pool, 'config');
+
+    await expect(ops.prepare([{ kind: 'shield', token: TOKEN, amount: MAX_UINT256 }]))
+      .resolves.toMatchObject({ intents: [{ amount: MAX_UINT256 }] });
+    expect(config).toHaveBeenCalledOnce();
+  });
+
   it('owns its route policy before caller mutation can enable a financial route', async () => {
     const { wallet, pool, gateway, supportedVersions } = fixture();
     const policy = {

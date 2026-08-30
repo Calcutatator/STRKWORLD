@@ -258,6 +258,27 @@ empty shell to fetchers, so a 200 there means nothing.
 
 ## 6. Findings log
 
+### 2026-08-30 — Caller intent amounts are bounded to u256 before dependencies
+
+Wallet API intent validation required positive bigints but did not cap them at
+the protocol amount domain. Shield, transfer and unshield values at `2^256`
+could therefore survive preparation and later be serialized into an invalid
+action felt; swap input and minimum-output values relied on stricter downstream
+plan behavior rather than the common caller boundary.
+
+All caller-controlled amounts now require the inclusive `1..u256::MAX` range
+inside `validateIntents()`, before pool reads, registration checks, relay
+estimation, swap planning or wallet calls. The exact maximum remains valid.
+Route policy, batching, relay aggregation and swap token direction are
+unchanged.
+
+*Verified:* public regressions cover out-of-range shield, transfer, unshield,
+swap input and swap minimum output, assert no dependency call, and preserve the
+exact maximum boundary. The focused Wallet API suite passes 162 tests and
+privacy typecheck. Full workspace verification is recorded with the owning
+commit. Deterministic fakes only: no browser, wallet, provider, RPC, proof,
+signature, funds or transaction was used.*
+
 ### 2026-08-30 — Wallet route policy is semantically validated before discovery
 
 The wallet session already copied policy data into an immutable snapshot, but
