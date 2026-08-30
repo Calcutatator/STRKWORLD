@@ -3,6 +3,7 @@ import { Children, isValidElement, type ReactElement, type ReactNode, act } from
 import { createRoot } from 'react-dom/client';
 import { describe, expect, it, vi } from 'vitest';
 import type { WalletSessionSnapshot } from '@strkworld/privacy';
+import type { ConnectFlow, ConnectState } from './connect-machine.js';
 
 const harness = vi.hoisted(() => ({
   privacy: null as { connect: { connect: () => Promise<unknown> }; connectState: { name: 'disconnected' } } | null,
@@ -23,6 +24,40 @@ vi.mock('../wallet/WalletSessionProvider.js', () => ({
 import { ConnectRoom, ConnectRoomView } from './ConnectRoom.js';
 
 describe('ConnectRoomView', () => {
+  it('retains the ConnectFlow receiver after wallet selection', async () => {
+    let detectCalls = 0;
+    let connect!: Pick<ConnectFlow, 'connect' | 'recheck'>;
+    const connectedState: ConnectState = {
+      name: 'connected',
+      capability: { supportsStrk20: true, walletApiVersion: '0.10.3', registration: 'unknown' },
+      registrationConfirmed: false,
+    };
+    connect = {
+      connect(this: unknown) {
+        if (this !== connect) throw new Error('ConnectFlow receiver lost');
+        detectCalls += 1;
+        return Promise.resolve(connectedState);
+      },
+      recheck: async () => connectedState,
+    };
+    const snapshot: WalletSessionSnapshot = {
+      phase: 'selection-required',
+      wallets: [{ key: 'wallet-1', name: 'Ready', icon: 'data:image/svg+xml,ready' }],
+      selectedKey: null,
+      account: null,
+      generation: 0,
+    };
+    const view = ConnectRoomView({
+      connect,
+      connectState: { name: 'disconnected' },
+      wallet: { snapshot, connect: async () => undefined, refreshDiscovery: vi.fn() },
+    });
+
+    await findButton(view, 'Ready').props.onClick?.();
+
+    expect(detectCalls).toBe(1);
+  });
+
   it('connects only the wallet choice the player explicitly selects', async () => {
     const connectWallet = vi.fn(async () => undefined);
     const detectCapability = vi.fn(async () => ({

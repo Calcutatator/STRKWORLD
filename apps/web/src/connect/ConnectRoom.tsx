@@ -88,7 +88,7 @@ export function ConnectRoomView({
       return null;
 
     case 'disconnected':
-      if (wallet) return WalletSelection({ wallet, detect: connect.connect, isMounted });
+      if (wallet) return WalletSelection({ wallet, detect: () => connect.connect(), isMounted });
       return (
         <section className="room room-connect">
           <h2>{COPY.connect.title}</h2>
