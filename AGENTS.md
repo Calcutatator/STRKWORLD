@@ -258,6 +258,31 @@ empty shell to fetchers, so a 200 there means nothing.
 
 ## 6. Findings log
 
+### 2026-08-30 — Private submission requests are owned before dispatch
+
+The Backend privacy client validated submission request fields through
+ordinary property reads and then reread the same caller object while building
+the dispatched body. A stateful proxy could pass admission as an approved
+route and substitute another route, authorization or validity window at the
+irreversible submission boundary. The signal and acceptance observer were also
+looked up later rather than belonging to the admitted request snapshot.
+
+Submission now reads route, artifact, authorization, proof-validity window,
+optional signal and optional acceptance observer from own data-property
+descriptors exactly once. Validation, dispatch, uncertainty handling and
+accepted-receipt notification use only those owned locals. Inherited fields,
+accessors and descriptor traps fail before transport; the artifact retains its
+existing JSON serialization contract.
+
+*Verified:* a public BackendPrivacyClient regression supplies an input proxy
+whose route descriptor is `transfer` while successive ordinary reads return
+`transfer` then `swap`. The base dispatched `swap`; the corrected client
+dispatches `transfer` and invokes no proxy `get` trap. Focused Backend client
+verification passes 91 tests and privacy typecheck passes. Full workspace
+gates are recorded in the owning commit. Deterministic fakes only: no browser,
+external provider, RPC, wallet, proof, signature, funds or transaction was
+used.*
+
 ### 2026-08-30 — BridgePanel retires a nested shield form with its plan
 
 `BridgePanel` memoized the nested Bank used for a ready-to-shield Bridge plan,

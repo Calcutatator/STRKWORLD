@@ -86,32 +86,40 @@ export class BackendPrivacyClient implements PoolReadClient, PrivateSubmissionGa
   }
 
   async submit(input: Parameters<PrivateSubmissionGateway['submit']>[0]): Promise<TxResult> {
+    const route = ownInputField(input, 'route');
+    const artifact = ownInputField(input, 'artifact');
+    const feeAuthorization = ownInputField(input, 'feeAuthorization');
+    const proofValidityBlocks = ownInputField(input, 'proofValidityBlocks');
+    const signal = ownOptionalInputField(input, 'signal');
+    const onAccepted = ownOptionalInputField(input, 'onAccepted');
     if (
-      !['transfer', 'unshield', 'swap'].includes(input.route)
-      || !input.artifact
-      || typeof input.artifact !== 'object'
-      || Array.isArray(input.artifact)
-      || typeof input.feeAuthorization !== 'string'
-      || input.feeAuthorization.trim().length === 0
-      || !Number.isSafeInteger(input.proofValidityBlocks)
-      || input.proofValidityBlocks <= 0
+      (route !== 'transfer' && route !== 'unshield' && route !== 'swap')
+      || !artifact
+      || typeof artifact !== 'object'
+      || Array.isArray(artifact)
+      || typeof feeAuthorization !== 'string'
+      || feeAuthorization.trim().length === 0
+      || !Number.isSafeInteger(proofValidityBlocks)
+      || (proofValidityBlocks as number) <= 0
+      || (signal !== undefined && !(signal instanceof AbortSignal))
+      || (onAccepted !== undefined && typeof onAccepted !== 'function')
     ) {
       throw new PrivacyError('unknown', 'The private submission request is invalid.');
     }
     const value = asRecord(await this.post('/v1/private/submissions', {
       v: 1,
-      route: input.route,
-      artifact: input.artifact,
-      feeAuthorization: input.feeAuthorization,
-      proofValidityBlocks: input.proofValidityBlocks,
-    }, input.signal, 'submission-uncertain'));
+      route,
+      artifact,
+      feeAuthorization,
+      proofValidityBlocks,
+    }, signal as AbortSignal | undefined, 'submission-uncertain'));
     const transactionHash = asString(ownField(value, 'transactionHash'));
     if (!isNonzeroFelt(transactionHash)) {
       throw new PrivacyError('unknown', 'The private service returned an invalid response.');
     }
     const result = Object.freeze({ transactionHash });
     try {
-      input.onAccepted?.(result);
+      (onAccepted as ((result: TxResult) => void) | undefined)?.(result);
     } catch {
       // Acceptance observers cannot turn a validated accepted transaction
       // back into a rejected promise and invite an unsafe retry.

@@ -31,6 +31,36 @@ function inheritResponseField(key: string, value: unknown): () => void {
 }
 
 describe('BackendPrivacyClient', () => {
+  it('owns submission request fields before a caller proxy can substitute them', async () => {
+    const fetcher = vi.fn(async () => response({ transactionHash: '0xabc123' }));
+    const source = {
+      route: 'transfer' as const,
+      artifact: {
+        call: { contract_address: '0x123', entry_point: 'apply_actions', calldata: ['0x1'] },
+        proof: { data: 'proof', output: ['0x1'], proof_facts: ['0x2'] },
+      },
+      feeAuthorization: 'auth',
+      proofValidityBlocks: 450,
+    };
+    let routeReads = 0;
+    const input = new Proxy(source, {
+      get(target, key, receiver) {
+        if (key === 'route') {
+          routeReads += 1;
+          return routeReads === 1 ? 'transfer' : 'swap';
+        }
+        return Reflect.get(target, key, receiver);
+      },
+    });
+    const client = new BackendPrivacyClient('https://backend.example', fetcher);
+
+    await client.submit(input);
+
+    const dispatched = fetcher.mock.calls[0] as unknown as [string, RequestInit];
+    expect(JSON.parse(String(dispatched[1].body))).toMatchObject({ route: 'transfer' });
+    expect(routeReads).toBe(0);
+  });
+
   it('owns estimate request fields before a caller proxy can substitute them', async () => {
     const fetcher = vi.fn(async () => response({
       token: '0x4718', recipient: '0x789', amount: '7', authorization: 'auth', expiresAtBlock: 1450,
