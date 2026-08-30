@@ -138,7 +138,9 @@ export class FakePrivacyOperations implements PrivacyOperations {
       ...config.capability,
     };
     this.latency = config.latencyMs ?? 0;
-    this.configuredSwapReview = config.swapReview;
+    this.configuredSwapReview = config.swapReview === undefined
+      ? undefined
+      : Object.freeze({ ...config.swapReview });
   }
 
   // -- test controls --------------------------------------------------------

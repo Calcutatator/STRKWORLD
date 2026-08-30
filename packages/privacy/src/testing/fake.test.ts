@@ -107,6 +107,28 @@ describe('the gas estimate varies with the batch shape', () => {
 });
 
 describe('deterministic prepared swap review', () => {
+  it('owns configured swap review inputs before caller mutation', async () => {
+    const review = { expectedAmountOut: 101n, expiresAt: 2_000, slippageBps: 333 };
+    const ops = new FakePrivacyOperations({
+      balances: { [STRK]: 100n * 10n ** 18n, ['0x1234']: 100n * 10n ** 18n },
+      swapReview: review,
+    });
+
+    review.expectedAmountOut = 1_000n;
+    review.slippageBps = 9_000;
+    review.expiresAt = 9_999;
+
+    const batch = await ops.prepare([
+      { kind: 'swap', tokenIn: '0x1234', tokenOut: STRK, amountIn: 20n, minAmountOut: 1n },
+    ]);
+    expect(batch.swapReview).toEqual({
+      expectedAmountOut: 101n,
+      minimumAmountOut: 98n,
+      slippageBps: 333,
+      expiresAt: 2_000,
+    });
+  });
+
   it('uses only explicit review inputs and derives minimum output from the intent', async () => {
     const make = async () => {
       const ops = new FakePrivacyOperations({
