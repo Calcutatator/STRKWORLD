@@ -31,6 +31,12 @@ const ROUTE_GRADE_FIELDS = [
   'returnToPool',
 ] as const;
 
+function isOwnRouteGrade(entry: unknown): entry is RouteGrade {
+  return entry !== null &&
+    typeof entry === 'object' &&
+    ROUTE_GRADE_FIELDS.every((field) => Object.prototype.hasOwnProperty.call(entry, field));
+}
+
 export interface DoorState {
   open: boolean;
   reason: LockReason | null;
@@ -56,12 +62,7 @@ export function findRoute(
   routeId: string,
   register: readonly RouteGrade[] = PRIVACY_REGISTER,
 ): RouteGrade | undefined {
-  return register.find((entry) => (
-    entry !== null &&
-    typeof entry === 'object' &&
-    ROUTE_GRADE_FIELDS.every((field) => Object.prototype.hasOwnProperty.call(entry, field)) &&
-    entry.route === routeId
-  ));
+  return register.find((entry) => isOwnRouteGrade(entry) && entry.route === routeId);
 }
 
 /**
@@ -98,7 +99,7 @@ export function buildingRoutes(
   building: BuildingId,
   register: readonly RouteGrade[] = PRIVACY_REGISTER,
 ): readonly RouteGrade[] {
-  return register.filter((entry) => entry.building === building);
+  return register.filter((entry) => isOwnRouteGrade(entry) && entry.building === building);
 }
 
 /**

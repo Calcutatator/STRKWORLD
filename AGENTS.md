@@ -258,6 +258,42 @@ empty shell to fetchers, so a 200 there means nothing.
 
 ## 6. Findings log
 
+### 2026-08-30 — Lobby movement does not continue after synchronous transport closure
+
+`LobbyClient.#pump()` previously called `room.send('move', desired)` and then
+unconditionally stamped `lastSentAt` and scheduled reconciliation. A transport
+can synchronously invoke the room's `onLeave` callback from `send`; that retires
+the room and cancels existing reconciliation, but the stale continuation then
+installed a timer against the closed client. The client now rechecks both room
+identity and connected status after the send before recording send state or
+creating follow-up work.
+
+*Verified:* a deterministic fake room closes synchronously from its move send.
+The old path scheduled a 50ms reconciliation timer after the close; the public
+regression now observes the closed status and zero new timers. Removing the
+post-send ownership guard reproduces the failure. Normal movement and
+reconciliation behavior are unchanged. The focused Lobby client suite passes
+63 tests.
+
+### 2026-08-30 — Web route and building lookups reject inherited records
+
+The route gate used ordinary property access on caller-supplied `RouteGrade`
+entries. A malformed object could inherit its route id or approval fields and
+be treated as a playable route. `buildingRoutes()` had a separate version of
+the same flaw: an inherited building id could make `buildingDoor()` open even
+when `routeDoor()` rejected the corresponding entry.
+
+Both lookups now share an own-record guard requiring every `RouteGrade` field
+before admitting an entry. Authored register entries and custom valid fixtures
+retain their behavior, while inherited or partial descriptors fail closed as
+unknown/unbuilt route data.
+
+*Verified:* red-first public route regressions cover inherited route identity,
+inherited approval/disclosure fields, and inherited building identity. All
+three are admitted on the old path and rejected by the corrected lookups; the
+focused routes suite passes 24/24. No browser, wallet, provider, RPC, proof,
+signature, funds or transaction was used.
+
 ### 2026-08-30 — Private swap response amounts require decimal wire syntax
 
 `BackendPrivacyClient.prepareSwap()` previously converted the backend's

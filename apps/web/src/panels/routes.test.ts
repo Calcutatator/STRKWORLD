@@ -72,6 +72,14 @@ describe('route gate', () => {
     expect(routeDoor('vault.supply', [inherited]).open).toBe(false);
   });
 
+  it('does not admit a building whose identity is inherited', () => {
+    const inherited = Object.create(approvedDeviation) as RouteGrade;
+    for (const field of ['route', 'grade', 'observable', 'disclosure', 'approvedBy', 'approvedOn', 'rationale', 'returnToPool'] as const) {
+      Object.defineProperty(inherited, field, { value: approvedDeviation[field] });
+    }
+    expect(buildingDoor('vault', [inherited]).open).toBe(false);
+  });
+
   it('opens an approved and disclosed deviation', () => {
     expect(routeDoor('vault.supply', [approvedDeviation]).open).toBe(true);
   });
