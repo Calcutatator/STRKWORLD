@@ -1,3 +1,4 @@
+import { createServer } from 'node:http';
 import { describe, expect, it, vi } from 'vitest';
 import { parseBackendEnvironment } from './environment.js';
 import {
@@ -199,6 +200,22 @@ describe('production backend composition and HTTP listener', () => {
       await running.close();
     }
     expect(runtime.server.listening).toBe(false);
+  });
+
+  it('removes listener hooks when the transport throws synchronously', async () => {
+    const server = createServer();
+    const baselineListening = server.listenerCount('listening');
+    const failure = new Error('listen failed');
+    const listen = vi.spyOn(server, 'listen').mockImplementation((() => {
+      throw failure;
+    }) as never);
+
+    await expect(listenBackendServer(server, { port: 0 })).rejects.toBe(failure);
+    expect(server.listenerCount('error')).toBe(0);
+    expect(server.listenerCount('listening')).toBe(baselineListening);
+
+    listen.mockRestore();
+    server.close();
   });
 });
 

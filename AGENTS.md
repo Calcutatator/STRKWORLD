@@ -258,6 +258,23 @@ empty shell to fetchers, so a 200 there means nothing.
 
 ## 6. Findings log
 
+### 2026-08-30 — Backend listener setup releases hooks after synchronous bind failure
+
+`listenBackendServer()` installed its `error` and `listening` handlers before
+calling Node's `server.listen()`. A synchronous transport throw rejected the
+startup promise but left both handlers attached, so a later retry on the same
+server could invoke stale startup callbacks and retain the failed attempt.
+
+The bind call now removes both startup handlers before propagating a
+synchronous error. Normal asynchronous bind errors, successful listening and
+the existing close behavior are unchanged.
+
+*Verified:* a public listener regression makes an injected `server.listen()`
+throw synchronously and checks that the rejection preserves the exact error
+while no new `error` or `listening` hooks remain. The old path failed with one
+stale hook; the corrected Backend server suite passes 25 tests. No browser,
+provider, RPC, wallet, proof, signature, funds or transaction was used.*
+
 ### 2026-08-30 — Street tile observers retain retryable ownership after failure
 
 `StreetScene.reportTile()` rolled back its `lastTile` sentinel when the door

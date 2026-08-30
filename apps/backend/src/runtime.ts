@@ -113,7 +113,13 @@ export function listenBackendServer(
 
     server.once('error', onError);
     server.once('listening', onListening);
-    server.listen(options.port, '0.0.0.0');
+    try {
+      server.listen(options.port, '0.0.0.0');
+    } catch (error) {
+      server.off('error', onError);
+      server.off('listening', onListening);
+      reject(error);
+    }
   });
 }
 
