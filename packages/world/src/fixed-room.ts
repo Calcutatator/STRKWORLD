@@ -425,7 +425,18 @@ export function createFixedRoomController(
       highlightedStation = null;
       approachArmed = new Set(options.definition.stations.map((station) => station.station));
       stations = normalizeFixedRoomStations(options.definition, undefined);
-      options.input.resume();
+      try {
+        options.input.resume();
+      } catch (error) {
+        // Input restoration is an external lifecycle boundary. If it fails,
+        // do not leave the controller claiming an interior it cannot operate;
+        // a later explicit enter can retry the same restoration.
+        inRoom = false;
+        controlOwner = 'world';
+        highlightedStation = null;
+        approachArmed = new Set(options.definition.stations.map((station) => station.station));
+        throw error;
+      }
       options.onEnter?.();
       if (destroyed || !inRoom) return;
       publish();
