@@ -526,6 +526,29 @@ describe('presence controller', () => {
     stop();
   });
 
+  it('retires a suspended presence client when resuming for exit throws', async () => {
+    const world = createEventBus<WorldEvents>();
+    const made = fakeClient();
+    const resumeFailure = new Error('resume failed');
+    const presence = createPresenceController({ endpoint: 'ws://example', factory: () => made.client });
+    const stop = presence.listen(world);
+    world.emit('player:moved', moved);
+    await Promise.resolve();
+    world.emit('building:entered', { building: 'bank' });
+    vi.mocked(made.client.resume).mockImplementationOnce(() => { throw resumeFailure; });
+    const consoleError = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+
+    world.emit('building:exited', { building: 'bank' });
+
+    expect(presence.getState()).toEqual({ status: 'unavailable', canReconnect: true });
+    expect(made.client.disconnect).toHaveBeenCalledOnce();
+    presence.reconnect();
+    await Promise.resolve();
+    expect(made.client.connect).toHaveBeenCalledTimes(2);
+    consoleError.mockRestore();
+    stop();
+  });
+
   it('ignores a retired client status callback after replacement begins', async () => {
     const world = createEventBus<WorldEvents>();
     const first = fakeClient();

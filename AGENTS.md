@@ -258,6 +258,29 @@ empty shell to fetchers, so a 200 there means nothing.
 
 ## 6. Findings log
 
+### 2026-08-30 — Failed presence resume must expose reconnectability
+
+When an interior exit called the live presence client's `resume()` and that
+command threw without a lifecycle callback, the controller remained
+`suspended`. The avatar was absent from lobby state, but the UI's reconnect
+control is only available from `unavailable`, leaving the client with no
+explicit recovery path after a failed resume.
+
+The exit command is now fail-closed for its authoritative client and status
+generation: peer delivery is cleared, the client is retired and disconnected,
+and `unavailable` is published so the shell can offer an explicit fresh join.
+A command that already triggered a newer close/replacement transition remains
+owned by that newer transition.
+
+*Verified:* a public regression makes `resume()` throw during exit; the old
+path stayed suspended without disconnecting, while the corrected path reports
+unavailable, disconnects once, and permits explicit reconnect. The focused
+presence controller suite passes 62 tests; the full workspace passes 111 test
+files and 2,385 tests, all workspace typechecks pass, the Web production build
+passes, all 13 invariants hold, and diff hygiene passes. No browser, lobby
+server, wallet, provider, RPC, proof, signature, funds or transaction was
+used.
+
 ### 2026-08-30 — Backend response status metadata is one coherent snapshot
 
 The Backend privacy client resolved `ok` and `status` in separate prototype

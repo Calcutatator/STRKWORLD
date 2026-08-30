@@ -395,7 +395,31 @@ export function createPresenceController({ endpoint, factory = (options) => new 
     const ownedClient = client;
     if (ownedClient && state.status === 'suspended' && placement) {
       const generation = statusGeneration;
-      ownedClient.resume(placement, currentSprite);
+      try {
+        ownedClient.resume(placement, currentSprite);
+      } catch (error) {
+        // A failed resume leaves the avatar absent from the lobby, but the
+        // suspended state has no reconnect affordance. Retire this client so
+        // the shell can offer an explicit fresh join; only do so if the
+        // command did not already trigger a newer lifecycle transition.
+        if (client === ownedClient && statusGeneration === generation && state.status === 'suspended') {
+          deactivateClientStatus();
+          try {
+            clearClientPeers();
+          } catch {
+            // Preserve the command failure while still retiring the owner.
+          }
+          client = null;
+          clientSprite = null;
+          try {
+            void Promise.resolve(ownedClient.disconnect()).catch(() => undefined);
+          } catch {
+            // The command failure remains actionable after owner retirement.
+          }
+          setState({ status: 'unavailable', canReconnect: Boolean(endpoint) });
+        }
+        throw error;
+      }
       if (client !== ownedClient || statusGeneration !== generation) return;
       clientSprite = currentSprite;
       reconnectRequested = false;
