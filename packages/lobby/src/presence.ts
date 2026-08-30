@@ -15,13 +15,7 @@
 import { MapSchema } from '@colyseus/schema';
 import type { Facing, GameId } from '@strkworld/shared';
 import {
-  DEFAULT_SPRITE,
-  DEFAULT_SPRITE_KEYS,
-  INTEREST_RADIUS,
-  MAX_CLIENTS_PER_ROOM,
-  MAX_VISIBLE_PEERS,
-  MIN_UPDATE_INTERVAL_MS,
-  WORLD_LIMIT,
+  resolveRoomConfig,
 } from './config.js';
 import {
   UpdateThrottle,
@@ -144,14 +138,15 @@ export class LobbyPresence {
 
   constructor(options: LobbyPresenceOptions = {}) {
     this.state = new LobbyState();
-    this.#spriteKeys = Object.freeze([...(options.spriteKeys ?? DEFAULT_SPRITE_KEYS)]);
-    this.#defaultSprite = options.defaultSprite ?? DEFAULT_SPRITE;
-    this.#interestRadius = options.interestRadius ?? INTEREST_RADIUS;
-    this.#maxVisiblePeers = options.maxVisiblePeers ?? MAX_VISIBLE_PEERS;
-    this.#capacity = options.capacity ?? MAX_CLIENTS_PER_ROOM;
-    this.#worldLimit = options.worldLimit ?? WORLD_LIMIT;
+    const config = resolveRoomConfig(options);
+    this.#spriteKeys = config.spriteKeys;
+    this.#defaultSprite = config.defaultSprite;
+    this.#interestRadius = config.interestRadius;
+    this.#maxVisiblePeers = config.maxVisiblePeers;
+    this.#capacity = config.capacity;
+    this.#worldLimit = config.worldLimit;
     this.#throttle = new UpdateThrottle(
-      options.minUpdateIntervalMs ?? MIN_UPDATE_INTERVAL_MS,
+      config.minUpdateIntervalMs,
     );
     this.#random = options.random;
   }

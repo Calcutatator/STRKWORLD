@@ -166,6 +166,15 @@ describe('admission', () => {
 });
 
 describe('movement', () => {
+  it('fails closed to the configured rate floor when it is not finite', () => {
+    const registry = new LobbyPresence({ minUpdateIntervalMs: Number.NaN });
+    const id = join(registry, 's1');
+
+    expect(registry.move('s1', { x: 10, y: 0 }, 0)).toBe('applied');
+    expect(registry.move('s1', { x: 20, y: 0 }, 0)).toBe('throttled');
+    expect(registry.peers.get(id)?.position.x).toBe(10);
+  });
+
   it('applies a due update', () => {
     const registry = new LobbyPresence({ minUpdateIntervalMs: 50 });
     const id = join(registry, 's1');
