@@ -457,7 +457,7 @@ function isAllowedDisplayOrErrorName(
 
 const ALLOWED_DYNAMIC_PROPERTY_READS = new Set([
   'testing/fake.ts:this.faults[index]',
-  'testing/public-shield.ts:this.estimates[Math.min(this.calls++, this.estimates.length - 1)]',
+  'testing/public-shield.ts:this.estimates[Math.min(this.calls, this.estimates.length - 1)]',
   'wallet-api/errors.ts:CODE_TO_KIND[code as keyof typeof CODE_TO_KIND]',
   'wallet-api/operations.ts:policy.allowedTokens[intent.kind]',
   'wallet-api/operations.ts:actual[index]',
