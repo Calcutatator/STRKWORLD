@@ -454,7 +454,25 @@ export function createFixedRoomController(
       throw error;
     }
     if (destroyed || inRoom) return;
-    publish();
+    try {
+      publish();
+    } catch (error) {
+      // Exit state publication is an external lifecycle boundary. If the
+      // renderer rejects the outside snapshot, compensate the presentation
+      // and restore the prior room state so the exit can be retried.
+      if (!destroyed && !inRoom) {
+        inRoom = true;
+        controlOwner = previousControlOwner;
+        highlightedStation = previousHighlightedStation;
+        approachArmed = previousApproachArmed;
+        try {
+          options.onEnter?.();
+        } catch {
+          // Preserve the original publication error.
+        }
+      }
+      throw error;
+    }
     options.out.emit('building:exited', Object.freeze({
       building: options.definition.building,
     }));

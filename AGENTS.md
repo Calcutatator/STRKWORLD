@@ -411,6 +411,26 @@ listener registration and confirms the exact error is preserved while the
 created layer is destroyed once. Focused remote-avatar tests pass. No browser,
 wallet, provider, RPC, proof, signature, funds or transaction was used.
 
+### 2026-08-30 — Fixed-room exit rolls back failed state publication
+
+`FixedRoomController.leave()` relinquished room ownership and completed the
+presentation exit before publishing its outside snapshot. If the synchronous
+`onChange` renderer threw, the controller stayed outside while the failed
+transition could not be retried: a later exit update was ignored and no
+authoritative completion could be delivered.
+
+Exit publication now compensates the presentation and restores the prior room
+state when delivery fails, while preserving the original publication error. A
+reentrant destroy or transition remains authoritative, and a later explicit
+exit can retry after the renderer recovers.
+
+*Verified:* a red-first public World regression makes the first fixed-room
+exit state publication throw; the old path left the controller outside and
+blocked retry, while the corrected path re-enters for compensation, preserves
+the exact error, and completes the second exit. Focused fixed-room tests pass
+61/61. No browser, wallet, provider, RPC, proof, signature, funds or
+transaction was used.
+
 ### 2026-08-30 — Lobby resume uses the server's bounded placement policy
 
 `LobbyClient.resume()` validated that coordinates were finite and rounded them,

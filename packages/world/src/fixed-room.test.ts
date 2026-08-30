@@ -238,6 +238,42 @@ describe('fixed room definitions', () => {
     expect(onExit).toHaveBeenCalledTimes(2);
   });
 
+  it('rolls back room ownership when exit state publication fails', () => {
+    const out = bus<WorldEvents>();
+    const shell = bus<ShellEvents>();
+    const error = new Error('room exit state publication failed');
+    let shouldThrow = false;
+    const onChange = vi.fn(() => {
+      if (shouldThrow) {
+        shouldThrow = false;
+        throw error;
+      }
+    });
+    const onEnter = vi.fn();
+    const onExit = vi.fn();
+    const controller = createFixedRoomController({
+      definition: POST_OFFICE_ROOM_DEFINITION,
+      out,
+      in: shell,
+      input: { suspend: vi.fn(), resume: vi.fn() },
+      onEnter,
+      onExit,
+      onChange,
+    });
+
+    controller.enter();
+    shouldThrow = true;
+    const exit = POST_OFFICE_ROOM_DEFINITION.exit;
+    expect(() => controller.update({ x: exit.x, y: exit.y })).toThrow(error);
+    expect(controller.state.inRoom).toBe(true);
+    expect(onExit).toHaveBeenCalledOnce();
+    expect(onEnter).toHaveBeenCalledTimes(2);
+
+    expect(() => controller.update({ x: exit.x, y: exit.y })).not.toThrow();
+    expect(controller.state.inRoom).toBe(false);
+    expect(onExit).toHaveBeenCalledTimes(2);
+  });
+
   it('preserves both station delivery and input restoration failures', () => {
     const out = bus<WorldEvents>();
     const shell = bus<ShellEvents>();
