@@ -258,6 +258,26 @@ empty shell to fetchers, so a 200 there means nothing.
 
 ## 6. Findings log
 
+### 2026-08-30 — Lobby resume normalizes facing before crossing the wire
+
+`LobbyClient.resume()` forwarded its runtime `facing` value directly, even
+though `LobbyPresence.resume()` normalizes malformed facings to `down`. A
+malformed string or object could therefore cross the Lobby protocol while the
+server silently stored a different facing, unlike the already-normalized move
+path.
+
+Resume now uses the shared `normalizeFacing()` policy before sending. Valid
+facings, coordinate bounds, sprite selection, suspend/resume lifecycle and
+transport-closure ownership are unchanged; malformed facing values fall back
+to the established `down` value.
+
+*Verified:* red-first public fake-room regressions supplied an unknown string
+and a coercible object and observed the old values on the resume wire; the
+corrected path sends `down`. Removing the normalizer makes both regressions
+fail. Lobby and workspace tests, typechecks, build, invariants and diff
+checks pass. No browser, external lobby, wallet, provider, RPC, proof,
+signature, funds or transaction was used.*
+
 ### 2026-08-30 — StreetScene restart cleanup survives shutdown-hook removal failure
 
 `StreetScene.retireWorldOwnership()` removed the previous cycle's Phaser

@@ -313,7 +313,7 @@ export class LobbyClient {
     const next: Required<Placement> = {
       x,
       y,
-      facing: placement.facing ?? 'down',
+      facing: normalizeFacing(placement.facing),
     };
     const room = this.#room;
     room.send(MESSAGE.resume, {

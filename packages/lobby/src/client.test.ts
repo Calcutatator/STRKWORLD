@@ -1384,6 +1384,37 @@ describe('presence', () => {
     }
   });
 
+  it.each([
+    ['unknown string', 'diagonal'],
+    ['coercible object', { toString: (): string => 'left' }],
+  ] as const)('normalizes a malformed resumed %s facing before sending it to the room', async (_label, facing) => {
+    const joined = fakeRoom();
+    const joinOrCreate = vi
+      .spyOn(ColyseusClient.prototype, 'joinOrCreate')
+      .mockImplementation(() => Promise.resolve(joined.room) as never);
+    const client = makeClient(20, 0);
+
+    try {
+      const connecting = client.connect();
+      await Promise.resolve();
+      joined.welcome({ gameId: '0123456789abcdef' });
+      await connecting;
+      client.suspend();
+
+      client.resume({ x: 40, y: 40, facing: facing as never });
+
+      expect(joined.send).toHaveBeenLastCalledWith('resume', {
+        x: 40,
+        y: 40,
+        facing: 'down',
+        sprite: 'avatar-2',
+      });
+    } finally {
+      await client.disconnect();
+      joinOrCreate.mockRestore();
+    }
+  });
+
   it('does not restore connected status when transport leaves during resume send', async () => {
     const joined = fakeRoom();
     const joinOrCreate = vi
