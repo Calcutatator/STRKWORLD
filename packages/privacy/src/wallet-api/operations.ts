@@ -340,6 +340,13 @@ export class WalletApiPrivacyOperations implements PrivacyOperations {
     plan: PreparedPrivateSwap,
     expectedChainId: string,
   ): void {
+    try {
+      if (!plan || typeof plan !== 'object' || Array.isArray(plan) || Reflect.ownKeys(plan).length !== 7) {
+        throw new Error('invalid plan fields');
+      }
+    } catch {
+      throw new PrivacyError('unknown', 'The private swap quote is malformed.');
+    }
     if (plan.chainId !== expectedChainId) {
       throw new PrivacyError('unknown', 'The private swap quote is for the wrong network.');
     }
@@ -357,10 +364,14 @@ export class WalletApiPrivacyOperations implements PrivacyOperations {
       throw new PrivacyError('unknown', 'The private swap contains no executor calls.');
     }
     for (const call of plan.executorCalls) {
-      if (
-        !hasOwnDataProperties(call, ['contractAddress', 'entrypoint', 'calldata'])
-        || !Array.isArray(call.calldata)
-      ) {
+      let exact = false;
+      try {
+        exact = Reflect.ownKeys(call).length === 3
+          && hasOwnDataProperties(call, ['contractAddress', 'entrypoint', 'calldata']);
+      } catch {
+        exact = false;
+      }
+      if (!exact || !Array.isArray(call.calldata)) {
         throw new PrivacyError('unknown', 'The private swap contains malformed executor calls.');
       }
       assertAddress(call.contractAddress, 'private swap call target');

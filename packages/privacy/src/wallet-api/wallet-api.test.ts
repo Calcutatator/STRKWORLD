@@ -662,6 +662,39 @@ describe('WalletApiPrivacyOperations capability and reads', () => {
 });
 
 describe('Wallet API action routes', () => {
+  it.each([
+    ['extra root field', {
+      quoteId: 'quote-1', buyAmount: 95n, expiresAt: 2_000, chainId: '0x534e5f4d41494e',
+      executorAddress: '0x999', executorCalls: [{ contractAddress: '0x111', entrypoint: 'swap', calldata: ['0xaaa'] }],
+      fee: { token: STRK, recipient: FEE_RECIPIENT, amount: 1n, ...AUTH }, extra: true,
+    }],
+    ['extra executor-call field', {
+      quoteId: 'quote-1', buyAmount: 95n, expiresAt: 2_000, chainId: '0x534e5f4d41494e',
+      executorAddress: '0x999', executorCalls: [{ contractAddress: '0x111', entrypoint: 'swap', calldata: ['0xaaa'], extra: true }],
+      fee: { token: STRK, recipient: FEE_RECIPIENT, amount: 1n, ...AUTH },
+    }],
+    ['root ownKeys trap', new Proxy({}, { ownKeys() { throw new Error('keys trap'); } })],
+    ['call descriptor trap', {
+      quoteId: 'quote-1', buyAmount: 95n, expiresAt: 2_000, chainId: '0x534e5f4d41494e', executorAddress: '0x999',
+      executorCalls: [new Proxy({}, { getOwnPropertyDescriptor() { throw new Error('descriptor trap'); } })],
+      fee: { token: STRK, recipient: FEE_RECIPIENT, amount: 1n, ...AUTH },
+    }],
+  ])('rejects a swap plan with %s as an invalid provider result', async (_label, plan) => {
+    const { wallet, pool, gateway, supportedVersions } = fixture();
+    gateway.prepareSwap = vi.fn(async () => plan as never);
+    const ops = new WalletApiPrivacyOperations({
+      wallet, pool, submission: gateway, supportedVersions, now: () => 1_000,
+      policy: {
+        maxIntents: 1, maxRelayFee: 10n, enabledRoutes: ['swap'],
+        allowedTokens: { shield: [], unshield: [], transfer: [], swap: [TOKEN, STRK] },
+        swap: { expectedChainId: '0x534e5f4d41494e', slippageBps: 100 },
+      },
+    });
+
+    await expect(ops.prepare([{ kind: 'swap', tokenIn: TOKEN, tokenOut: STRK, amountIn: 20n, minAmountOut: 90n }]))
+      .rejects.toMatchObject({ kind: 'unknown' });
+  });
+
   it('owns relay fee descriptor values without invoking proxy get substitution', async () => {
     const { ops, gateway } = fixture();
     const target = { token: STRK, recipient: FEE_RECIPIENT, amount: 1n, ...AUTH };

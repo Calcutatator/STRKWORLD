@@ -281,6 +281,25 @@ Focused bootstrap tests pass 12 tests; workspace gates are recorded on the
 candidate. No browser, wallet,
 provider, RPC, proof, signature, funds or transaction was used.
 
+### 2026-08-30 — Swap plans and executor calls have exact provider shapes
+
+Swap validation required the fields it used but accepted extra root and nested
+executor-call fields. A nested descriptor trap could also escape as a raw
+provider error. That weakened the exact quote boundary and made malformed AVNU
+objects inconsistently classified.
+
+The existing mature validation/snapshot path now additionally requires exactly
+seven own root fields and three own fields per executor call. Root and nested
+ownKeys/descriptor traps are contained as the existing `unknown` invalid-plan
+failure. Quote semantics, owned relay fees, executor-call snapshotting and
+confirmation behavior are unchanged.
+
+*Verified:* public regressions were red for extra root/call fields and a nested
+descriptor trap; a root ownKeys trap remained fail-closed. The focused Wallet
+API suite passes 187 tests and privacy typecheck. Full workspace verification
+is recorded with the owning commit. Deterministic fakes only: no browser,
+wallet, provider, RPC, proof, signature, funds or transaction was used.*
+
 ### 2026-08-30 — Relay fee authority is an owned exact snapshot
 
 Relay fee validation checked own data descriptors but then re-read the provider
