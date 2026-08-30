@@ -31,6 +31,31 @@ function inheritResponseField(key: string, value: unknown): () => void {
 }
 
 describe('BackendPrivacyClient', () => {
+  it('owns the response body reader before a proxy can substitute it', async () => {
+    const source = {
+      ok: true,
+      status: 200,
+      json: async () => ({ publicKey: '0x123' }),
+    };
+    let reads = 0;
+    const responseValue = new Proxy(source, {
+      get(target, key, receiver) {
+        if (key === 'json') {
+          reads += 1;
+          return async () => ({ publicKey: '0x999' });
+        }
+        return Reflect.get(target, key, receiver);
+      },
+    });
+    const client = new BackendPrivacyClient(
+      'https://backend.example',
+      async () => responseValue as unknown as Response,
+    );
+
+    await expect(client.publicKey('0xabc')).resolves.toBe('0x123');
+    expect(reads).toBe(0);
+  });
+
   it('does not invoke an accessor-backed response ok flag after submission dispatch', async () => {
     let getterCalled = false;
     const responseValue = { status: 200, json: async () => ({ transactionHash: '0xabc123' }) };

@@ -209,7 +209,7 @@ export class BackendPrivacyClient implements PoolReadClient, PrivateSubmissionGa
       const status = ownResponseStatus(response);
       let failure: unknown;
       try {
-        failure = await response.json();
+        failure = await ownResponseJson(response)();
       } catch (error) {
         if (transportFailureKind === 'submission-uncertain') {
           throw new PrivacyError('submission-uncertain', 'The private submission response was lost.', error);
@@ -223,7 +223,7 @@ export class BackendPrivacyClient implements PoolReadClient, PrivateSubmissionGa
       );
     }
     try {
-      return await response.json();
+      return await ownResponseJson(response)();
     } catch (error) {
       if (error instanceof SyntaxError) {
         throw new PrivacyError('unknown', 'The private service returned an invalid response.', error);
@@ -237,6 +237,25 @@ export class BackendPrivacyClient implements PoolReadClient, PrivateSubmissionGa
       );
     }
   }
+}
+
+function ownResponseJson(response: Response): () => Promise<unknown> {
+  try {
+    let current: object | null = response;
+    while (current !== null) {
+      const descriptor = Object.getOwnPropertyDescriptor(current, 'json');
+      if (descriptor) {
+        if ('value' in descriptor && typeof descriptor.value === 'function') {
+          return descriptor.value.bind(response) as () => Promise<unknown>;
+        }
+        break;
+      }
+      current = Object.getPrototypeOf(current) as object | null;
+    }
+  } catch {
+    // Fall through to one controlled provider-response failure.
+  }
+  throw new PrivacyError('unknown', 'The private service returned an invalid response.');
 }
 
 function ownResponseOk(response: Response): boolean {

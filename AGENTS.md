@@ -258,6 +258,31 @@ empty shell to fetchers, so a 200 there means nothing.
 
 ## 6. Findings log
 
+### 2026-08-30 — Backend response body readers are descriptor-owned
+
+The Backend privacy client owned a response's `ok` and `status` values through
+descriptors, but invoked `response.json()` through ordinary property access
+after status admission. A stateful response proxy could therefore expose one
+body reader in its own descriptor and substitute another reader for successful
+or error parsing, changing the provider body that crossed the validated HTTP
+response boundary.
+
+Response parsing now resolves `json` from a data-property descriptor on the
+response or its prototype chain, binds that exact function to the response,
+and invokes only the owned reader. Accessors and proxy prototype/descriptor
+traps fail through the existing controlled invalid-response path. Native Fetch
+`Response` receiver behavior and submission-uncertainty classification remain
+unchanged.
+
+*Verified:* a public BackendPrivacyClient regression supplies a response proxy
+whose own `json` descriptor returns public key `0x123` while an ordinary read
+substitutes a reader returning `0x999`. The base published `0x999`; the
+corrected client publishes `0x123` and invokes no proxy `get` trap. Focused
+Backend client verification passes 89 tests and privacy typecheck passes. Full
+workspace gates are recorded in the owning commit. Deterministic fakes only:
+no browser, external provider, RPC, wallet, proof, signature, funds or
+transaction was used.*
+
 ### 2026-08-30 — Backend response arrays are owned before swap decoding
 
 The Backend privacy client checked swap response arrays for holes using own
