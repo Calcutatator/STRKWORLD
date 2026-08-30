@@ -64,4 +64,24 @@ describe('street Kenney door presentation', () => {
     expect(() => scene.drawGround()).toThrow(collisionError);
     expect(scene.ground).toBe(layer);
   });
+
+  it('retains room graphics before depth setup can throw', () => {
+    const depthError = new Error('room graphics depth setup failed');
+    const graphics = {
+      setDepth: vi.fn(() => {
+        throw depthError;
+      }),
+    };
+    const SceneType = createStreetScene({ Phaser: { Scene: class {} } as never });
+    const scene = new SceneType() as unknown as {
+      add: { graphics: ReturnType<typeof vi.fn> };
+      roomGraphics?: typeof graphics;
+      createRoomVisuals(): void;
+    };
+    scene.roomGraphics = undefined;
+    scene.add = { graphics: vi.fn(() => graphics) };
+
+    expect(() => scene.createRoomVisuals()).toThrow(depthError);
+    expect(scene.roomGraphics).toBe(graphics);
+  });
 });

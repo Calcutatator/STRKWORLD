@@ -564,9 +564,15 @@ export function createStreetScene({ Phaser, onTileChanged, remotePeers }: Street
     }
 
     private createRoomVisuals(): void {
-      this.roomGraphics = this.add.graphics().setDepth(1);
-      this.roomStationGraphics = this.add.graphics().setDepth(2);
-      this.avatarStudioGraphics = this.add.graphics().setDepth(1);
+      const roomGraphics = this.add.graphics();
+      this.roomGraphics = roomGraphics;
+      roomGraphics.setDepth(1);
+      const roomStationGraphics = this.add.graphics();
+      this.roomStationGraphics = roomStationGraphics;
+      roomStationGraphics.setDepth(2);
+      const avatarStudioGraphics = this.add.graphics();
+      this.avatarStudioGraphics = avatarStudioGraphics;
+      avatarStudioGraphics.setDepth(1);
       this.avatarStudioFigureLayer = createAvatarStudioFigureLayer({
         scene: this,
         roomOrigin: ROOM_ORIGIN,

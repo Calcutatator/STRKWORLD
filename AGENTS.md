@@ -258,6 +258,24 @@ empty shell to fetchers, so a 200 there means nothing.
 
 ## 6. Findings log
 
+### 2026-08-30 — Room graphics claim ownership before depth setup
+
+`StreetScene.createRoomVisuals()` previously assigned each graphics object
+only after `.setDepth()` returned. If a Phaser depth setter threw during Scene
+construction, the newly allocated graphic was absent from the Scene-owned
+fields and could not be reached by partial-create cleanup.
+
+Each room/studio graphics object is now assigned immediately after creation,
+before its depth setter runs. Rendering order and the existing cleanup path
+are unchanged; a failed setter leaves the allocation owned and recoverable.
+
+*Verified:* a red-first World presentation regression makes the first room
+graphics depth setter throw and observes the created object missing from Scene
+ownership on the old path. The corrected test retains it. The full World
+suite passes 24 files / 265 tests; World typecheck, invariants and diff
+hygiene pass. No browser, wallet, provider, RPC, proof, signature, funds or
+transaction was used.
+
 ### 2026-08-30 — Relay estimate amounts require decimal wire syntax
 
 `BackendPrivacyClient.estimate()` previously converted the backend's decimal
