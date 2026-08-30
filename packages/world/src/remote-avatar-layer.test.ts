@@ -114,6 +114,9 @@ function fakeSprite(x: number, y: number, texture: string) {
     setOrigin: vi.fn(function setOrigin(this: ReturnType<typeof fakeSprite>) {
       return this;
     }),
+    setVertexRoundMode: vi.fn(function setVertexRoundMode(this: ReturnType<typeof fakeSprite>) {
+      return this;
+    }),
     destroy: vi.fn(function destroy(this: ReturnType<typeof fakeSprite>) {
       this.destroyed = true;
     }),

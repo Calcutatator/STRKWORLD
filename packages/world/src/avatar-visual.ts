@@ -129,7 +129,7 @@ export interface AvatarVisualPose {
 
 type AvatarVisualTarget = Pick<
   PhaserTypes.GameObjects.Sprite,
-  'setTexture' | 'setOrigin' | 'play' | 'stop' | 'setFrame' | 'setData'
+  'setTexture' | 'setOrigin' | 'setVertexRoundMode' | 'play' | 'stop' | 'setFrame' | 'setData'
 >;
 
 export function resolveAvatarAnimation(
@@ -175,6 +175,12 @@ export function applyAvatarVisual(
   const facing = validateAvatarFacing(pose.facing);
   target.setTexture(sheet.textureKey);
   target.setOrigin(sheet.originX, sheet.originY);
+  // Phaser 4's default `safeAuto` vertex mode skips rounding when the camera
+  // applies its integer zoom. Pixel-art textures are nearest-filtered, but a
+  // fractional world position can still land on fractional screen vertices;
+  // fullAuto rounds the final transformed quad and keeps horizontal motion
+  // crisp at the World camera's 2x zoom.
+  target.setVertexRoundMode('fullAuto');
   if (pose.moving) {
     target.play(resolveAvatarAnimation(sheet.sprite, facing, pose.sprinting === true).key, true);
   } else {

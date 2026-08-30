@@ -174,6 +174,7 @@ describe('D-052 avatar visual catalog', () => {
 
     expect(target.setTexture).toHaveBeenLastCalledWith('avatar-7');
     expect(target.setOrigin).toHaveBeenLastCalledWith(0.5, 0.875);
+    expect(target.setVertexRoundMode).toHaveBeenLastCalledWith('fullAuto');
     expect(target.play).toHaveBeenLastCalledWith('avatar-7:right:sprint', true);
     expect(target.setData).toHaveBeenCalledWith('sprite', 'avatar-7');
     expect(target.setData).toHaveBeenCalledWith('facing', 'right');
@@ -277,6 +278,7 @@ function fakeAvatarTarget() {
   const target = {
     setTexture: vi.fn(() => target),
     setOrigin: vi.fn(() => target),
+    setVertexRoundMode: vi.fn(() => target),
     play: vi.fn(() => target),
     stop: vi.fn(() => target),
     setFrame: vi.fn(() => target),

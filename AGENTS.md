@@ -258,6 +258,28 @@ empty shell to fetchers, so a 200 there means nothing.
 
 ## 6. Findings log
 
+### 2026-08-30 — Avatar vertices must round after the camera zoom
+
+The World enabled Phaser's `pixelArt` mode and rounded the following camera,
+but Phaser 4's default `safeAuto` Game Object vertex mode does not round a
+textured sprite when the camera transform includes a zoom. Local and remote
+avatar positions are intentionally fractional during movement, so their
+transformed quads could still land between screen pixels and appear soft,
+especially during horizontal travel. The existing camera `lerpX = 1` fix
+removes camera easing but does not change this object-level rounding decision.
+
+The shared avatar presentation seam now sets every avatar sprite to Phaser's
+`fullAuto` vertex mode. This retains nearest-neighbour texture filtering and
+the existing camera/physics contracts while rounding the final transformed
+quad at the integer 2x camera zoom. All local, remote and Avatar Studio
+figures use this seam.
+
+*Verified:* a red-first public avatar presentation regression first observed
+that a resolved pose never selected `fullAuto`; after the change every pose
+selects it while texture, origin, animation and body setup remain unchanged.
+The focused avatar-visual suite passes 13 tests. No browser, lobby, wallet,
+provider, RPC, proof, signature, funds or transaction was used.
+
 ### 2026-08-30 — Fixed-room update can activate a stale station after reentrant publication
 
 `createFixedRoomController.update()` published a changed station highlight and

@@ -227,6 +227,7 @@ function fakeSprite(x: number, y: number, texture: string, frame: number) {
     frame,
     setTexture: vi.fn((_key: string) => sprite),
     setOrigin: vi.fn((_x: number, _y: number) => sprite),
+    setVertexRoundMode: vi.fn((_mode: string) => sprite),
     play: vi.fn((_key: string, _ignoreIfPlaying?: boolean) => sprite),
     stop: vi.fn(() => sprite),
     setFrame: vi.fn((nextFrame: number) => {
