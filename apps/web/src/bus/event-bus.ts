@@ -12,14 +12,24 @@ function immutableSnapshot(value: unknown, seen = new Map<object, unknown>()): u
   if (Array.isArray(value)) {
     const copy: unknown[] = [];
     seen.set(value, copy);
-    for (const item of value) copy.push(immutableSnapshot(item, seen));
+    for (let index = 0; index < value.length; index += 1) {
+      const descriptor = Object.getOwnPropertyDescriptor(value, String(index));
+      if (descriptor && !('value' in descriptor)) {
+        throw new TypeError('event payload must contain data properties');
+      }
+      copy.push(immutableSnapshot(descriptor?.value, seen));
+    }
     return Object.freeze(copy);
   }
 
   const copy: Record<string, unknown> = {};
   seen.set(value, copy);
   for (const key of Object.keys(value)) {
-    copy[key] = immutableSnapshot((value as Record<string, unknown>)[key], seen);
+    const descriptor = Object.getOwnPropertyDescriptor(value, key);
+    if (!descriptor || !('value' in descriptor)) {
+      throw new TypeError('event payload must contain data properties');
+    }
+    copy[key] = immutableSnapshot(descriptor.value, seen);
   }
   return Object.freeze(copy);
 }
@@ -73,7 +83,15 @@ export function createEventBus<Events extends Record<string, unknown>>(): EventB
   function emit<K extends keyof Events>(event: K, payload: Events[K]): void {
     const eventListeners = listeners.get(event);
     if (!eventListeners) return;
-    const snapshot = immutableSnapshot(payload) as Events[K];
+    let snapshot: Events[K];
+    try {
+      snapshot = immutableSnapshot(payload) as Events[K];
+    } catch {
+      // An accessor-backed or otherwise hostile payload is not a valid seam
+      // snapshot. Drop it before invoking any subscriber, and keep the
+      // producer's synchronous event loop alive.
+      return;
+    }
     // Snapshot ownership as well as handlers. A handler can unsubscribe or
     // replace another handler while this synchronous emission is in flight;
     // only the snapshot generation that is still current may be delivered.

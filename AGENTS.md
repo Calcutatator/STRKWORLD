@@ -258,6 +258,24 @@ empty shell to fetchers, so a 200 there means nothing.
 
 ## 6. Findings log
 
+### 2026-08-30 — Web event payload snapshots reject accessors at the boundary
+
+The Web event bus snapshotter previously read payload members through normal
+property access before entering its subscriber-isolation guard. An
+accessor-backed or hostile Proxy payload could therefore throw out of
+`emit()`, interrupting the producer before any subscriber ran.
+
+Event snapshots now traverse own data descriptors only. If snapshotting finds
+an accessor or another malformed object boundary, the event is dropped and
+`emit()` returns without invoking subscribers. Plain records, arrays, cycles,
+listener generation ownership and handler-error isolation are unchanged.
+
+*Verified:* a red-first public bus regression supplied an accessor-backed
+`hud:pending` payload whose getter threw; the old bus escaped the exception.
+The corrected bus drops it without invoking the subscriber. Focused event-bus
+tests pass 14/14. No browser, wallet, provider, RPC, proof, signature, funds
+or transaction was used.
+
 ### 2026-08-30 — Fixed-room Scene ownership rolls back after controller entry failure
 
 `StreetScene` provisionally set `activeRoom` before invoking a fixed-room

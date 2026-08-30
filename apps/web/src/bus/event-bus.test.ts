@@ -160,4 +160,21 @@ describe('event bus', () => {
     const bus = createEventBus<WorldEvents>();
     expect(() => bus.emit('building:exited', { building: 'vault' })).not.toThrow();
   });
+
+  it('drops accessor-backed payloads without escaping the producer boundary', () => {
+    const bus = createEventBus<ShellEvents>();
+    const handler = vi.fn();
+    bus.on('hud:pending', handler);
+    const payload = {} as { count: number };
+    Object.defineProperty(payload, 'count', {
+      configurable: true,
+      enumerable: true,
+      get() {
+        throw new Error('hostile payload accessor');
+      },
+    });
+
+    expect(() => bus.emit('hud:pending', payload)).not.toThrow();
+    expect(handler).not.toHaveBeenCalled();
+  });
 });
