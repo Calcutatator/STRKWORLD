@@ -317,6 +317,31 @@ describe('client send interval configuration', () => {
   });
 });
 
+describe('welcome timeout configuration', () => {
+  it.each([
+    Number.NaN,
+    Number.POSITIVE_INFINITY,
+    -1,
+    1.5,
+    2_147_483_648,
+    Number.MAX_SAFE_INTEGER,
+  ])('rejects timer-unsafe welcome timeout %s', (welcomeTimeoutMs) => {
+    expect(() => new LobbyClient({
+      endpoint: 'ws://127.0.0.1:2567',
+      start: { x: 0, y: 0 },
+      welcomeTimeoutMs,
+    })).toThrow('Lobby welcome timeout is invalid.');
+  });
+
+  it.each([0, 2_147_483_647])('accepts bounded integer welcome timeout %s', (welcomeTimeoutMs) => {
+    expect(() => new LobbyClient({
+      endpoint: 'ws://127.0.0.1:2567',
+      start: { x: 0, y: 0 },
+      welcomeTimeoutMs,
+    })).not.toThrow();
+  });
+});
+
 describe('nothing connects by itself', () => {
   it('constructs without opening a connection', async () => {
     const observer = makeClient(0, 0);

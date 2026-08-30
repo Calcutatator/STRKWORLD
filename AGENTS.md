@@ -258,6 +258,25 @@ empty shell to fetchers, so a 200 there means nothing.
 
 ## 6. Findings log
 
+### 2026-08-30 — Lobby welcome timeout is bounded by the platform timer contract
+
+`LobbyClient` copied `welcomeTimeoutMs` directly into `setTimeout`. NaN,
+infinity, negative or fractional values, and delays beyond the platform timer
+ceiling can clamp or wrap into an immediate timer, allowing `connect()` to
+proceed before the server-issued game identity arrives. That temporarily
+breaks the client's self-filtering guarantee and makes a configured timeout
+mean something different across runtimes.
+
+The constructor now requires a nonnegative safe integer at or below the
+platform timer ceiling. Zero remains an intentional opt-out and the exact
+ceiling remains valid; the documented option now states this bounded-integer
+contract.
+
+*Verified:* public Lobby-client cases reject NaN, infinity, -1, 1.5, one above
+the timer ceiling and `Number.MAX_SAFE_INTEGER`, while accepting zero and the
+exact ceiling. The focused Lobby client suite passes 58 tests. No browser,
+network, wallet, RPC, proof, signature, funds or transaction was used.*
+
 ### 2026-08-30 — Presence destroy completes ownership cleanup after disconnect failure
 
 `PresenceController.destroy()` used `Promise.all()` and performed its final

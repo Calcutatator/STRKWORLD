@@ -58,6 +58,7 @@ export type { LobbySprite } from './config';
 
 const MAX_TIMER_DELAY_MS = 2_147_483_647;
 const INVALID_CLIENT_SEND_INTERVAL_ERROR = 'Lobby client send interval is invalid.';
+const INVALID_WELCOME_TIMEOUT_ERROR = 'Lobby welcome timeout is invalid.';
 const INVALID_RESUME_PLACEMENT_ERROR = 'Lobby resume placement is invalid.';
 const INVALID_WELCOME_ERROR = 'Lobby welcome identity is invalid.';
 
@@ -121,7 +122,8 @@ export interface LobbyClientOptions {
   minSendIntervalMs?: number;
   /**
    * How long `connect()` waits for the server's `welcome` (identity) message
-   * before proceeding without it, in ms. Defaults to 5000. On timeout the
+   * before proceeding without it, in nonnegative integer ms. Defaults to 5000.
+   * The value is bounded by the platform timer ceiling. On timeout the
    * connection is still usable; self-filtering just starts once the message
    * eventually arrives.
    */
@@ -188,7 +190,15 @@ export class LobbyClient {
       throw new Error(INVALID_CLIENT_SEND_INTERVAL_ERROR);
     }
     this.#minSendIntervalMs = minSendIntervalMs;
-    this.#welcomeTimeoutMs = options.welcomeTimeoutMs ?? 5000;
+    const welcomeTimeoutMs = options.welcomeTimeoutMs ?? 5000;
+    if (
+      !Number.isSafeInteger(welcomeTimeoutMs) ||
+      welcomeTimeoutMs < 0 ||
+      welcomeTimeoutMs > MAX_TIMER_DELAY_MS
+    ) {
+      throw new Error(INVALID_WELCOME_TIMEOUT_ERROR);
+    }
+    this.#welcomeTimeoutMs = welcomeTimeoutMs;
   }
 
   /** The server-assigned identifier, or null before it has been received. */
