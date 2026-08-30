@@ -505,6 +505,33 @@ describe('WalletApiPrivacyOperations capability and reads', () => {
 });
 
 describe('Wallet API action routes', () => {
+  it('does not hand a discarded shield batch to the wallet after its fee read', async () => {
+    const { ops, pool, wallet } = fixture();
+    const originalConfig = pool.config;
+    let configCalls = 0;
+    let release!: () => void;
+    let started!: () => void;
+    const readStarted = new Promise<void>((resolve) => { started = resolve; });
+    const pending = new Promise<void>((resolve) => { release = resolve; });
+    vi.spyOn(pool, 'config').mockImplementation(async (signal) => {
+      configCalls += 1;
+      if (configCalls === 1) return originalConfig(signal);
+      started();
+      await pending;
+      return originalConfig(signal);
+    });
+    const invoke = vi.spyOn(wallet, 'strk20InvokeTransaction');
+    const batch = await ops.prepare([{ kind: 'shield', token: TOKEN, amount: 20n }]);
+
+    const confirming = batch.confirm({ feeCeiling: POOL_FEE });
+    await readStarted;
+    batch.discard();
+    release();
+
+    await expect(confirming).rejects.toThrow(/discarded/i);
+    expect(invoke).not.toHaveBeenCalled();
+  });
+
   it.each([
     ['negative bigint', -1n],
     ['number', 1],

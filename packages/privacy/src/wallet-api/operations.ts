@@ -394,6 +394,7 @@ export class WalletApiPrivacyOperations implements PrivacyOperations {
           const current = await pool.config(signal);
           throwIfAborted(signal);
           assertFeeCeiling(current.feeAmount, feeCeiling);
+          assertNotDiscarded(discarded);
           emitProgress(onProgress, { stage: 'awaiting-approval', message: 'Confirm the shield in your wallet' });
           const result = await wallet.strk20InvokeTransaction(toActions(intents));
           // Once the wallet returns a transaction hash the public deposit may
