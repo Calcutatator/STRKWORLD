@@ -32,7 +32,13 @@ export interface StationCapabilities {
   bridgePlannerAvailable?: boolean;
 }
 
-const STATIONS: readonly StationDefinition[] = [
+function freezeStationDefinition(definition: StationDefinition): StationDefinition {
+  Object.freeze(definition.routes);
+  if ('modes' in definition) Object.freeze(definition.modes);
+  return Object.freeze(definition);
+}
+
+const STATIONS: readonly StationDefinition[] = Object.freeze([
   {
     station: 'bank:shielding',
     building: 'bank',
@@ -65,7 +71,7 @@ const STATIONS: readonly StationDefinition[] = [
     routes: ['bridge.deposit'],
     view: 'bridge',
   },
-] as const;
+] as const).map((definition) => freezeStationDefinition(definition));
 
 export type StationResolution =
   | { status: 'available'; definition: StationDefinition }

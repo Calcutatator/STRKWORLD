@@ -429,6 +429,21 @@ describe('station registry', () => {
     });
   });
 
+  it('keeps resolved station definitions and their authority arrays immutable', () => {
+    const resolved = resolveStation('post-office', 'post-office:transfer');
+    expect(resolved.status).toBe('available');
+    if (resolved.status !== 'available') return;
+    expect(Object.isFrozen(resolved.definition)).toBe(true);
+    expect(Object.isFrozen(resolved.definition.routes)).toBe(true);
+    expect('modes' in resolved.definition && Object.isFrozen(resolved.definition.modes)).toBe(true);
+    expect(Reflect.set(resolved.definition, 'view', 'exchange')).toBe(false);
+    expect(Reflect.set(resolved.definition.routes, 0, 'exchange.swap')).toBe(false);
+    expect(resolveStation('post-office', 'post-office:transfer')).toMatchObject({
+      status: 'available',
+      definition: { view: 'bank', routes: ['post-office.transfer'] },
+    });
+  });
+
   it('publishes the Bridge station and fails closed without both runtime capabilities', () => {
     expect(stationSnapshot('bridge')).toEqual([
       { station: 'bridge:deposit', label: 'DEPOSIT', status: 'locked' },
