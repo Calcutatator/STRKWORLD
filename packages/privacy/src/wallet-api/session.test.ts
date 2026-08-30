@@ -1212,6 +1212,24 @@ describe('WalletSession', () => {
     expect(Object.isFrozen(receivedPolicy)).toBe(true);
   });
 
+  it('rejects an accessor-backed route policy without invoking it', () => {
+    let getterCalled = false;
+    const policy = { ...denyAllOptions().policy } as Record<string, unknown>;
+    Object.defineProperty(policy, 'maxIntents', {
+      enumerable: true,
+      get() {
+        getterCalled = true;
+        throw new Error('policy getter must not run');
+      },
+    });
+
+    expect(() => createWalletSession(
+      { ...denyAllOptions(), policy: policy as never },
+      { discovery: discoveryWith(wallet('Ready')), connectWallet: async () => connection('0x111') },
+    )).toThrow(PrivacyError);
+    expect(getterCalled).toBe(false);
+  });
+
   it('rejects an account outside the Stark field before publishing operations', async () => {
     const selected = wallet('Ready');
     const starkPrime = (1n << 251n) + 17n * (1n << 192n) + 1n;

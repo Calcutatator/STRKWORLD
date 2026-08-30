@@ -544,20 +544,35 @@ function chainIdOf(chain: string | undefined): string | null {
 }
 
 function ownPolicy(policy: WalletRoutePolicy): WalletRoutePolicy {
+  if (!hasOwnDataProperties(policy, ['maxIntents', 'maxRelayFee', 'enabledRoutes', 'allowedTokens'])) {
+    throw new PrivacyError('unknown', 'The wallet route policy is invalid.');
+  }
+  const allowedTokens = Object.getOwnPropertyDescriptor(policy, 'allowedTokens')!.value;
+  if (!hasOwnDataProperties(allowedTokens, ['shield', 'unshield', 'transfer', 'swap'])) {
+    throw new PrivacyError('unknown', 'The wallet route policy is invalid.');
+  }
+  const swapDescriptor = Object.getOwnPropertyDescriptor(policy, 'swap');
+  if (swapDescriptor && !('value' in swapDescriptor)) {
+    throw new PrivacyError('unknown', 'The wallet route policy is invalid.');
+  }
+  const swap = swapDescriptor?.value;
+  if (swap !== undefined && !hasOwnDataProperties(swap, ['expectedChainId', 'slippageBps'])) {
+    throw new PrivacyError('unknown', 'The wallet route policy is invalid.');
+  }
   return Object.freeze({
     maxIntents: policy.maxIntents,
     maxRelayFee: policy.maxRelayFee,
     enabledRoutes: Object.freeze([...policy.enabledRoutes]),
     allowedTokens: Object.freeze({
-      shield: Object.freeze([...policy.allowedTokens.shield]),
-      unshield: Object.freeze([...policy.allowedTokens.unshield]),
-      transfer: Object.freeze([...policy.allowedTokens.transfer]),
-      swap: Object.freeze([...policy.allowedTokens.swap]),
+      shield: Object.freeze([...allowedTokens.shield]),
+      unshield: Object.freeze([...allowedTokens.unshield]),
+      transfer: Object.freeze([...allowedTokens.transfer]),
+      swap: Object.freeze([...allowedTokens.swap]),
     }),
-    ...(policy.swap
+    ...(swap
       ? { swap: Object.freeze({
-          expectedChainId: policy.swap.expectedChainId,
-          slippageBps: policy.swap.slippageBps,
+          expectedChainId: swap.expectedChainId,
+          slippageBps: swap.slippageBps,
         }) }
       : {}),
   });
