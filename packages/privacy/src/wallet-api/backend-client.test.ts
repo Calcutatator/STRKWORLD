@@ -117,6 +117,27 @@ describe('BackendPrivacyClient', () => {
   });
 
   it.each([
+    ['negative proof-validity blocks', { proofValidityBlocks: -1, noteMaturityBlocks: 10 }],
+    ['negative note-maturity blocks', { proofValidityBlocks: 450, noteMaturityBlocks: -1 }],
+  ])('rejects %s from a pool configuration response', async (_label, blocks) => {
+    const client = new BackendPrivacyClient(
+      'https://backend.example',
+      async () => response({ feeAmount: '6', feeToken: '0x4718', ...blocks }),
+    );
+
+    await expect(client.config()).rejects.toMatchObject({ kind: 'unknown' });
+  });
+
+  it('accepts zero note-maturity blocks', async () => {
+    const client = new BackendPrivacyClient(
+      'https://backend.example',
+      async () => response({ feeAmount: '6', feeToken: '0x4718', proofValidityBlocks: 1, noteMaturityBlocks: 0 }),
+    );
+
+    await expect(client.config()).resolves.toMatchObject({ proofValidityBlocks: 1, noteMaturityBlocks: 0 });
+  });
+
+  it.each([
     ['zero', '0', true],
     ['leading zeros', '006', true],
     ['maximum uint256', MAX_UINT256.toString(), true],

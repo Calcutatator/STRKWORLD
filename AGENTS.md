@@ -258,6 +258,45 @@ empty shell to fetchers, so a 200 there means nothing.
 
 ## 6. Findings log
 
+### 2026-08-30 — World host remount cancellation failures preserve teardown
+
+`createHost.acquire()` incremented its lease before cancelling a deferred final
+teardown. If the injected/default cancellation boundary threw, the failed
+acquire left the host with a phantom reference; the queued stop then observed
+that reference and never destroyed the retained instance.
+
+The host now cancels the pending teardown before claiming the new lease. A
+cancellation failure therefore leaves the original reference count and queued
+cleanup untouched, while successful remounts retain the existing same-instance
+behavior.
+
+*Verified:* a red-first public host regression makes deferred cancellation
+throw during a remount; before the fix the failed acquire left `refCount === 1`
+and the queued stop was skipped, while the corrected path keeps zero refs and
+retires the instance. Removing the ordering change reproduces the failure. The
+focused Host suite passes 20 tests. No browser, lobby, wallet, provider, RPC,
+proof, signature, funds or transaction was used.
+
+### 2026-08-30 — Pool configuration block windows require nonnegative values
+
+`BackendPrivacyClient.config()` previously accepted any safe integer for the
+backend's `proofValidityBlocks` and `noteMaturityBlocks`, including negative
+values. A malformed successful pool-config response could therefore publish
+an impossible proof window or maturity period through the privacy seam; the
+later operation paths would receive invalid chain parameters instead of
+failing at the wire boundary.
+
+Config decoding now requires a positive proof-validity window and a
+nonnegative note-maturity window. Existing safe-integer checks and valid
+zero-maturity behavior remain unchanged; other response fields are untouched.
+
+*Verified:* red-first BackendPrivacyClient regressions supplied `-1` for each
+block field; both previously resolved and now reject with generic
+`PrivacyError('unknown')`. Removing either minimum guard independently
+reproduces its regression. The focused privacy and Host suites pass 67 tests,
+and both affected package typechecks and diff hygiene pass. No browser, wallet,
+provider, RPC, proof, signature, funds or transaction was used.
+
 ### 2026-08-30 — Route-door decisions are immutable snapshots
 
 `routeDoor()` and `buildingDoor()` returned a shared mutable `OPEN` object for
