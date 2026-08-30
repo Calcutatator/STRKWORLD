@@ -433,6 +433,29 @@ bootstrap tests pass 10 tests; workspace gates are recorded on the candidate.
 No browser, wallet, provider, RPC, proof, signature, funds or transaction was
 used.
 
+### 2026-08-30 — Presence drops and retries survive consumer cleanup errors
+
+Presence teardown previously let a remote-peer clear callback or stale status
+cleanup throw through lifecycle control. A dropped client could therefore
+remain reported as connected when clearing its retained peer source failed,
+and a synchronous `connect()` failure could not be retried if replacing the
+stale client encountered a throwing status cleanup.
+
+Drop handling now still publishes `unavailable` after best-effort peer
+cleanup, and stale-client replacement attempts status and peer cleanup before
+retiring the old owner and starting the explicit replacement. Failed setup
+rollback also preserves its original error when state subscribers throw after
+the owner has been retired. These cleanup-error suppressions do not change
+normal disconnect rejection handling.
+
+*Verified:* public regressions cover a synchronous connect failure with a
+throwing status cleanup and a remote-peer clear callback that throws during a
+drop. The old path either threw before retry or failed to publish unavailable;
+the corrected path remains unavailable and constructs/connects the replacement.
+The focused presence suite passes 53 tests; full workspace tests and
+typechecks, invariants, and diff hygiene are green. No browser, lobby server,
+wallet, provider, RPC, proof, signature, funds or transaction was used.
+
 ### 2026-08-30 — Presence setup preserves registration errors across throwing cleanup
 
 When peer-listener setup failed after status registration, the presence

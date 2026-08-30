@@ -74,8 +74,18 @@ export function createPresenceController({ endpoint, factory = (options) => new 
   };
   const unavailable = () => {
     if (destroyed) return;
-    clearClientPeers();
-    setState({ status: 'unavailable', canReconnect: Boolean(endpoint) });
+    try {
+      clearClientPeers();
+    } catch {
+      // A remote-peer subscriber must not block the presence state from
+      // becoming unavailable after the client has dropped.
+    }
+    try {
+      setState({ status: 'unavailable', canReconnect: Boolean(endpoint) });
+    } catch {
+      // State is assigned before subscriber delivery; keep the drop closed
+      // even if a consumer callback fails during that notification.
+    }
   };
   const onStatus = (event: LobbyStatusEvent) => {
     if (destroyed) return;
@@ -131,7 +141,12 @@ export function createPresenceController({ endpoint, factory = (options) => new 
         // Preserve the setup failure; a failed source notification must not
         // strand the failed client as the active presence owner.
       }
-      setState({ status: 'unavailable', canReconnect: Boolean(endpoint) });
+      try {
+        setState({ status: 'unavailable', canReconnect: Boolean(endpoint) });
+      } catch {
+        // Preserve the setup failure after state has been retired. Subscriber
+        // failures must not undo the ownership rollback.
+      }
     };
     try {
       stopStatus = ownedClient.onStatus((event) => {
@@ -320,9 +335,18 @@ export function createPresenceController({ endpoint, factory = (options) => new 
   const replaceStaleClient = () => {
     if (replacing || replacementDeferred || destroyed) return;
     const stale = client;
-    statusStop?.();
+    try {
+      statusStop?.();
+    } catch {
+      // A stale listener cleanup must not block the explicit replacement.
+    }
     statusStop = null;
-    clearClientPeers();
+    try {
+      clearClientPeers();
+    } catch {
+      // Continue retiring the stale client even if a peer subscriber throws.
+    }
+    peerStop = null;
     client = null;
     clientSprite = null;
     replacing = (async () => {

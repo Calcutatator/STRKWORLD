@@ -384,6 +384,74 @@ describe('presence controller', () => {
     stop();
   });
 
+  it('retries after a synchronous connect failure with a throwing status cleanup', async () => {
+    const world = createEventBus<WorldEvents>();
+    const first = fakeClient();
+    const second = fakeClient();
+    const connectFailure = new Error('connect failed synchronously');
+    const cleanupFailure = new Error('status cleanup failed');
+    let created = 0;
+    first.client.onStatus = vi.fn((listener: StatusListener) => {
+      listener({ status: 'idle' });
+      return () => { throw cleanupFailure; };
+    });
+    first.client.connect = vi.fn(() => { throw connectFailure; });
+    const presence = createPresenceController({
+      endpoint: 'ws://example',
+      factory: vi.fn(() => (created++ === 0 ? first.client : second.client)),
+    });
+    const stop = presence.listen(world);
+    const consoleError = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+
+    world.emit('player:moved', moved);
+    expect(presence.getState()).toEqual({ status: 'unavailable', canReconnect: true });
+
+    expect(() => presence.reconnect()).not.toThrow();
+    await Promise.resolve();
+    await Promise.resolve();
+
+    expect(created).toBe(2);
+    expect(second.client.connect).toHaveBeenCalledOnce();
+    consoleError.mockRestore();
+    stop();
+  });
+
+  it('keeps a drop unavailable when clearing remote peers throws', async () => {
+    const world = createEventBus<WorldEvents>();
+    const first = fakeClient();
+    const second = fakeClient();
+    let created = 0;
+    let throwOnClear = false;
+    first.client.connect = vi.fn(async () => {
+      first.emitStatus({ status: 'connected' });
+    });
+    const presence = createPresenceController({
+      endpoint: 'ws://example',
+      factory: vi.fn(() => (created++ === 0 ? first.client : second.client)),
+    });
+    const stopSource = presence.remotePeers.subscribe((peers) => {
+      if (throwOnClear && peers.length === 0) throw new Error('peer clear failed');
+    });
+    const stop = presence.listen(world);
+
+    world.emit('player:moved', moved);
+    await Promise.resolve();
+    first.publishPeers([{ gameId: 'peer-1', x: 40, y: 72, facing: 'down', sprite: 'avatar-1' }]);
+    throwOnClear = true;
+
+    expect(() => first.drop()).not.toThrow();
+    expect(presence.getState()).toEqual({ status: 'unavailable', canReconnect: true });
+
+    throwOnClear = false;
+    presence.reconnect();
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(created).toBe(2);
+    expect(second.client.connect).toHaveBeenCalledOnce();
+    stopSource();
+    stop();
+  });
+
   it('keeps a synchronous close authoritative when connected status suspends inside', async () => {
     const world = createEventBus<WorldEvents>();
     const made = controlledClient();
