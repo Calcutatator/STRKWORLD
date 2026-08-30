@@ -459,6 +459,21 @@ describe('invalid fake intents', () => {
     ])).rejects.toThrow(/positive/i);
     expect(ops.submitted).toHaveLength(0);
   });
+
+  it.each([
+    ['decimal token', { kind: 'shield', token: '123', amount: 1n }],
+    ['zero token', { kind: 'shield', token: '0x0', amount: 1n }],
+    ['field-prime token', {
+      kind: 'shield',
+      token: `0x${((1n << 251n) + 17n * (1n << 192n) + 1n).toString(16)}`,
+      amount: 1n,
+    }],
+    ['decimal recipient', { kind: 'unshield', token: STRK, amount: 1n, recipient: '273' }],
+  ] as const)('rejects a malformed %s before publishing a batch', async (_label, intent) => {
+    const ops = fresh();
+
+    await expect(ops.prepare([intent as Intent])).rejects.toMatchObject({ kind: 'unknown' });
+  });
 });
 
 describe('recipients must be registered', () => {

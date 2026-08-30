@@ -294,8 +294,13 @@ export class FakePrivacyOperations implements PrivacyOperations {
     for (const intent of reviewed) {
       const amount = intent.kind === 'swap' ? intent.amountIn : intent.amount;
       if (amount <= 0n) throw new PrivacyError('unknown', 'Amounts must be positive.');
+      assertAddress(intent.kind === 'swap' ? intent.tokenIn : intent.token, 'fake intent token');
       if (intent.kind === 'swap' && intent.minAmountOut <= 0n) {
         throw new PrivacyError('unknown', 'Minimum output must be positive.');
+      }
+      if (intent.kind === 'swap') assertAddress(intent.tokenOut, 'fake swap output token');
+      if (intent.kind === 'unshield' || intent.kind === 'transfer') {
+        assertAddress(intent.recipient, 'fake intent recipient');
       }
     }
 
