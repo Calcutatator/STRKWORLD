@@ -34,7 +34,7 @@ export class BackendPrivacyClient implements PoolReadClient, PrivateSubmissionGa
     const record = asRecord(value);
     return {
       feeAmount: asUint256(ownField(record, 'feeAmount')),
-      feeToken: asString(ownField(record, 'feeToken')),
+      feeToken: asFelt(ownField(record, 'feeToken')),
       proofValidityBlocks: asInteger(ownField(record, 'proofValidityBlocks')),
       noteMaturityBlocks: asInteger(ownField(record, 'noteMaturityBlocks')),
     };
@@ -225,6 +225,23 @@ function asBigInt(value: unknown): bigint {
   } catch {
     throw new PrivacyError('unknown', 'The private service returned an invalid response.');
   }
+}
+
+function asFelt(value: unknown): string {
+  const text = asString(value);
+  if (!/^0x[0-9a-fA-F]{1,64}$/.test(text)) {
+    throw new PrivacyError('unknown', 'The private service returned an invalid response.');
+  }
+  let parsed: bigint;
+  try {
+    parsed = BigInt(text);
+  } catch {
+    throw new PrivacyError('unknown', 'The private service returned an invalid response.');
+  }
+  if (parsed >= STARK_FIELD_PRIME) {
+    throw new PrivacyError('unknown', 'The private service returned an invalid response.');
+  }
+  return text;
 }
 
 function asDecimalBigInt(value: unknown): bigint {

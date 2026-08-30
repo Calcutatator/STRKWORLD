@@ -258,6 +258,26 @@ empty shell to fetchers, so a 200 there means nothing.
 
 ## 6. Findings log
 
+### 2026-08-30 — Pool fee tokens require canonical felt encoding at the browser boundary
+
+`BackendPrivacyClient.config()` previously treated the backend's `feeToken`
+as an arbitrary string. A malformed successful pool-config response could
+therefore publish decimal or uppercase-prefix encodings, or a value at/above
+the Stark field prime, as the configured fee token. Later route checks compare
+tokens numerically and do not repair that malformed configuration, so an
+invalid token representation could reach fee-action construction.
+
+Config parsing now requires the token to be a lowercase-`0x` Stark field felt
+before returning `PoolConfig`. Uppercase hexadecimal digits and zero remain
+valid under the existing felt rule; no route allowlist or nonzero policy is
+introduced here.
+
+*Verified:* red-first public BackendPrivacyClient regressions cover a decimal
+token, uppercase `0X` prefix and field-prime value; all three resolved on the
+old path and now reject with `kind: 'unknown'`. The focused backend-client
+suite passes 43 tests. No browser, external provider, RPC, wallet, proof,
+signature, funds or transaction was used.
+
 ### 2026-08-30 — Exterior labels claim ownership before styling
 
 `StreetScene.createExteriorLabels()` previously inserted each text object into

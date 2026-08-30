@@ -139,6 +139,19 @@ describe('BackendPrivacyClient', () => {
   });
 
   it.each([
+    ['decimal', '123'],
+    ['uppercase prefix', '0X7b'],
+    ['field prime', STARK_FIELD_PRIME.toString(16).replace(/^/, '0x')],
+  ])('rejects a noncanonical pool fee token (%s)', async (_label, feeToken) => {
+    const client = new BackendPrivacyClient(
+      'https://backend.example',
+      async () => response({ feeAmount: '6', feeToken, proofValidityBlocks: 450, noteMaturityBlocks: 10 }),
+    );
+
+    await expect(client.config()).rejects.toMatchObject({ kind: 'unknown' });
+  });
+
+  it.each([
     ['whitespace', ' '],
     ['signed', '+7'],
     ['fractional', '1.5'],
