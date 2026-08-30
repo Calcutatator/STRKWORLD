@@ -68,6 +68,22 @@ describe('WalletSession', () => {
     expect(session.getSnapshot()).toMatchObject({ phase: 'failed', account: null });
   });
 
+  it.each([
+    ['account', { toString: (): string => '0x111' }, '0x534e5f4d41494e'],
+    ['chain id', '0x111', { toString: (): string => '0x534e5f4d41494e' }],
+  ] as const)('rejects a coercible connection snapshot %s', async (_label, account, chainId) => {
+    const selected = wallet('Ready');
+    const port = connection('0x111');
+    port.getSnapshot = () => ({ account, chainId }) as never;
+    const session = createWalletSession(
+      denyAllOptions(),
+      { discovery: discoveryWith(selected), connectWallet: async () => port },
+    );
+
+    await expect(session.connect(session.getSnapshot().wallets[0]!.key)).rejects.toMatchObject({ kind: 'unknown' });
+    expect(session.getSnapshot()).toMatchObject({ phase: 'failed', account: null });
+  });
+
   it('starts a fresh same-key connection after disconnect retires a pending one', async () => {
     const selected = wallet('Ready');
     let releaseFirst!: (connection: WalletConnectionPort) => void;

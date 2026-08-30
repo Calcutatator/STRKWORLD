@@ -615,6 +615,9 @@ function readConnectionSnapshot(value: unknown): WalletConnectionSnapshot {
     throw new PrivacyError('unknown', 'The wallet returned an invalid connection snapshot.');
   }
   const { account, chainId } = value as WalletConnectionSnapshot;
+  if (typeof account !== 'string' || typeof chainId !== 'string') {
+    throw new PrivacyError('unknown', 'The wallet returned an invalid connection snapshot.');
+  }
   return { account, chainId };
 }
 
