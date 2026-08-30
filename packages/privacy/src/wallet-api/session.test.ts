@@ -557,6 +557,29 @@ describe('WalletSession', () => {
     await expect(session.operations.capability()).resolves.toMatchObject({ walletApiVersion: '0.10.4' });
   });
 
+  it('does not publish accessor-backed prepared fields through the session facade', async () => {
+    const selected = wallet('Ready');
+    let getterCalled = false;
+    const malformed = batch();
+    Object.defineProperty(malformed, 'poolFee', {
+      get() {
+        getterCalled = true;
+        throw new Error('batch getter must not run');
+      },
+    });
+    const connected = controllableConnection(
+      '0x111', operationsWithBatch(malformed, '0.10.3'), new FakePrivacyOperations(),
+    );
+    const session = createWalletSession(
+      denyAllOptions(),
+      { discovery: discoveryWith(selected), connectWallet: async () => connected.port },
+    );
+    await session.connect(session.getSnapshot().wallets[0]!.key);
+
+    await expect(session.operations.prepare([])).rejects.toMatchObject({ kind: 'unknown' });
+    expect(getterCalled).toBe(false);
+  });
+
   it('retires an old batch when confirmation succeeds after the account changes', async () => {
     const selected = wallet('Ready');
     let release!: (result: { transactionHash: string }) => void;

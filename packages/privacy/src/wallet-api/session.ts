@@ -583,6 +583,15 @@ function ownPreparedBatch(
   isCurrent: () => boolean,
   changedSessionError: () => PrivacyError,
 ): PreparedBatch {
+  const required = ['intents', 'poolFee', 'gasEstimate', 'totalCost', 'warnings', 'promptCount', 'confirm', 'discard'] as const;
+  if (!hasOwnDataProperties(prepared, required)) {
+    throw new PrivacyError('unknown', 'The wallet returned an invalid prepared batch.');
+  }
+  const swapReviewDescriptor = Object.getOwnPropertyDescriptor(prepared, 'swapReview');
+  if (swapReviewDescriptor && !('value' in swapReviewDescriptor)) {
+    throw new PrivacyError('unknown', 'The wallet returned an invalid prepared batch.');
+  }
+  const swapReview = swapReviewDescriptor?.value;
   let discarded = false;
   const discard = (): void => {
     if (discarded) return;
@@ -603,7 +612,7 @@ function ownPreparedBatch(
     totalCost: prepared.totalCost,
     warnings: prepared.warnings,
     promptCount: prepared.promptCount,
-    ...(prepared.swapReview ? { swapReview: prepared.swapReview } : {}),
+    ...(swapReview ? { swapReview } : {}),
     async confirm(options: Parameters<PreparedBatch['confirm']>[0]) {
       if (!isCurrent()) {
         retire();
