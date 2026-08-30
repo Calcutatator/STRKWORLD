@@ -469,7 +469,7 @@ export class WalletApiPrivacyOperations implements PrivacyOperations {
       throw new PrivacyError('unknown', 'The relay returned an unexpected fee token.');
     }
     assertAddress(fee.recipient, 'relay fee recipient');
-    if (fee.amount <= 0n || fee.amount > this.policy.maxRelayFee) {
+    if (typeof fee.amount !== 'bigint' || fee.amount <= 0n || fee.amount > this.policy.maxRelayFee) {
       throw new PrivacyError('unknown', 'The relay fee exceeds the route policy.');
     }
     if (

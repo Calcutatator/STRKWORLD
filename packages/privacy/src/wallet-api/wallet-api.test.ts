@@ -1071,6 +1071,15 @@ describe('quote-bound swap plan admission', () => {
     ['a nonpositive relay fee', {
       fee: { token: STRK, recipient: FEE_RECIPIENT, amount: 0n, ...AUTH },
     }, /route policy/i],
+    ['a string relay fee amount', {
+      fee: { token: STRK, recipient: FEE_RECIPIENT, amount: '1', ...AUTH },
+    }, /route policy/i],
+    ['a numeric relay fee amount', {
+      fee: { token: STRK, recipient: FEE_RECIPIENT, amount: 1, ...AUTH },
+    }, /route policy/i],
+    ['a coercible relay fee amount', {
+      fee: { token: STRK, recipient: FEE_RECIPIENT, amount: { valueOf: (): bigint => 1n }, ...AUTH },
+    }, /route policy/i],
     ['a zero fee recipient', {
       fee: { token: STRK, recipient: '0x0', amount: 1n, ...AUTH },
     }, /fee recipient/i],
