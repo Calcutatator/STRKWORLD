@@ -127,6 +127,31 @@ describe('Bridge shell machine', () => {
     expect(h.machine.store.getState()).toEqual(closedState);
   });
 
+  it('allows reopened saved preflight while a closed account read is still pending', async () => {
+    let releaseAccount!: (value: string | null) => void;
+    let reads = 0;
+    const planner: PublicShieldPlanner = { planMax: vi.fn(async ({ available }: PublicShieldPlanInput) => plan(available)) };
+    const h = harness(record(), planner, {
+      now: () => Date.parse('2030-01-01T00:00:00.000Z'),
+      readAccount: () => {
+        reads += 1;
+        if (reads === 1) return new Promise<string | null>((resolve) => { releaseAccount = resolve; });
+        return ACCOUNT;
+      },
+    });
+
+    const first = h.machine.preflightSavedQuote();
+    await Promise.resolve();
+    h.machine.close();
+    const second = h.machine.preflightSavedQuote();
+    await second;
+
+    expect(reads).toBe(3);
+    expect(planner.planMax).toHaveBeenCalledOnce();
+    releaseAccount(ACCOUNT);
+    await first;
+  });
+
   it('resumes a saved quote by refreshing status before exposing the next safe action', async () => {
     const h = harness(record());
     await h.machine.open();

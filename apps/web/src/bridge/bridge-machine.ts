@@ -153,7 +153,8 @@ export function createBridgePanel(options: BridgePanelOptions): BridgePanel {
   let attempt = 0;
   let watchController: AbortController | null = null;
   let quoteBusy = false;
-  let preflightBusy = false;
+  let preflightOwner = 0;
+  let preflightSequence = 0;
   let refreshOwner = 0;
   let refreshSequence = 0;
   let shieldBusy = false;
@@ -342,8 +343,9 @@ export function createBridgePanel(options: BridgePanelOptions): BridgePanel {
     },
 
     async preflightSavedQuote(): Promise<void> {
-      if (preflightBusy) return;
-      preflightBusy = true;
+      if (preflightOwner !== 0) return;
+      const owner = ++preflightSequence;
+      preflightOwner = owner;
       try {
       const planner = options.planner;
       const { record, review } = recordAndReview();
@@ -389,7 +391,7 @@ export function createBridgePanel(options: BridgePanelOptions): BridgePanel {
         }
       }
       } finally {
-        preflightBusy = false;
+        if (preflightOwner === owner) preflightOwner = 0;
       }
     },
 
@@ -407,6 +409,7 @@ export function createBridgePanel(options: BridgePanelOptions): BridgePanel {
       if (coordinator.quoteFlight) coordinator.quoteFlight.cancelled = true;
       nextSession();
       begin();
+      preflightOwner = 0;
       refreshOwner = 0;
       watchController?.abort();
       watchController = null;

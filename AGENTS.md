@@ -258,6 +258,26 @@ empty shell to fetchers, so a 200 there means nothing.
 
 ## 6. Findings log
 
+### 2026-08-30 — Bridge saved-quote preflight ownership is retired on close
+
+The Web Bridge panel used one `preflightBusy` flag for the lifetime of a
+machine. Closing the panel while its saved-quote account read was pending did
+not retire that flag, so a reopened panel could not begin its own preflight
+until the stale read settled. The session clock prevented stale publication,
+but also left the new recovery attempt silently unavailable.
+
+Preflight now has an owner token whose release is conditional on that token
+still being current; close retires the owner immediately, allowing a reopened
+panel to preflight while the old account read drains. Existing attempt/session
+guards still prevent stale account, planner or record results from publishing
+over the replacement attempt.
+
+*Verified:* a red-first Bridge regression starts deferred preflight A, closes
+the panel, starts preflight B and resolves B before stale A; on the old path B
+never read the account, while the corrected path runs B through planning and
+keeps the stale completion inert. Focused Bridge tests pass 43/43. No browser,
+wallet, provider, RPC, proof, signature, funds or transaction was used.
+
 ### 2026-08-30 — Bridge refresh ownership is retired on close
 
 The Web Bridge panel used one `refreshBusy` flag for the lifetime of a panel
