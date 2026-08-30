@@ -51,6 +51,7 @@ const DEFAULT_ALLOWED_ORIGINS: readonly string[] = [
 ];
 
 const INVALID_PORT_ATTEMPTS_ERROR = 'Lobby port attempts must be a positive safe integer.';
+const INVALID_BASE_PORT_ERROR = 'Lobby base port must be an integer from 0 through 65535.';
 
 export interface PresenceServerOptions {
   /** Defaults to 2567. */
@@ -138,6 +139,9 @@ export async function startPresenceServer(
 ): Promise<PresenceServer> {
   const basePort = options.port ?? DEFAULT_LOBBY_PORT;
   const roomName = options.roomName ?? DEFAULT_ROOM_NAME;
+  if (!Number.isSafeInteger(basePort) || basePort < 0 || basePort > 65_535) {
+    throw new Error(INVALID_BASE_PORT_ERROR);
+  }
   const attempts = options.portAttempts ?? 1;
   if (!Number.isSafeInteger(attempts) || attempts < 1) {
     throw new Error(INVALID_PORT_ATTEMPTS_ERROR);
