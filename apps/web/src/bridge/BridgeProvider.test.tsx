@@ -3,7 +3,7 @@ import { act, StrictMode, useEffect } from 'react';
 import { createRoot } from 'react-dom/client';
 import { describe, expect, it, vi } from 'vitest';
 import { renderToStaticMarkup } from 'react-dom/server';
-import { BridgeProvider, useBridge } from './BridgeProvider.js';
+import { BridgeProvider, useBridge, type BridgeRuntime } from './BridgeProvider.js';
 
 function Probe() {
   const bridge = useBridge();
@@ -23,6 +23,29 @@ function LoadProbe({ start }: { start: boolean }) {
 }
 
 describe('BridgeProvider', () => {
+  it('publishes an immutable runtime snapshot at the public context seam', () => {
+    let captured!: BridgeRuntime;
+    function Capture() {
+      captured = useBridge();
+      return null;
+    }
+    const service = {} as never;
+    const planner = { planMax: async () => { throw new Error('unused'); } };
+
+    renderToStaticMarkup(
+      <BridgeProvider service={service} planner={planner} account="0x123">
+        <Capture />
+      </BridgeProvider>,
+    );
+
+    expect(Object.isFrozen(captured)).toBe(true);
+    expect(Reflect.set(captured, 'account', null)).toBe(false);
+    expect(Reflect.set(captured, 'planner', null)).toBe(false);
+    expect(captured.account).toBe('0x123');
+    expect(captured.planner).toBe(planner);
+    expect(captured.available()).toBe(true);
+  });
+
   it('refuses the deterministic demo in production', () => {
     expect(() => renderToStaticMarkup(
       <BridgeProvider demo build={{ production: true }}><Probe /></BridgeProvider>,
