@@ -23,10 +23,10 @@ export function WalletSessionProvider({
     session.getSnapshot,
     session.getSnapshot,
   );
-  const value = useMemo<WalletSessionRuntime>(() => ({
+  const value = useMemo<WalletSessionRuntime>(() => Object.freeze({
     session,
     snapshot,
-    async connect(key) {
+    async connect(key: string) {
       await session.connect(key);
     },
     refreshDiscovery: () => session.refreshDiscovery(),
