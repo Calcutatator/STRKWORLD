@@ -282,10 +282,11 @@ export class WalletApiPrivacyOperations implements PrivacyOperations {
             feeAuthorization: plan.fee.authorization,
             proofValidityBlocks: current.proofValidityBlocks,
             signal: confirmSignal,
-            onAccepted(result) { acceptedResult = result; },
+            onAccepted(result) { acceptedResult = readSubmissionResult(result); },
           });
+          const accepted = readSubmissionResult(result);
           emitProgress(onProgress, { stage: 'done', message: 'Done' });
-          return result;
+          return accepted;
         } catch (error) {
           if (acceptedResult) {
             emitProgress(onProgress, { stage: 'done', message: 'Done' });
@@ -425,10 +426,11 @@ export class WalletApiPrivacyOperations implements PrivacyOperations {
             feeAuthorization: relayFee.authorization,
             proofValidityBlocks: current.proofValidityBlocks,
             signal,
-            onAccepted(result) { acceptedResult = result; },
+            onAccepted(result) { acceptedResult = readSubmissionResult(result); },
           });
+          const accepted = readSubmissionResult(result);
           emitProgress(onProgress, { stage: 'done', message: 'Done' });
-          return result;
+          return accepted;
         } catch (error) {
           if (acceptedResult) {
             emitProgress(onProgress, { stage: 'done', message: 'Done' });
@@ -732,10 +734,18 @@ function toFelt(value: bigint): string {
 }
 
 function readWalletTransactionHash(value: unknown): string {
+  return readTransactionHash(value, 'transaction_hash', 'wallet');
+}
+
+function readSubmissionResult(value: unknown): TxResult {
+  return { transactionHash: readTransactionHash(value, 'transactionHash', 'private service') };
+}
+
+function readTransactionHash(value: unknown, field: string, source: string): string {
   if (!value || typeof value !== 'object' || Array.isArray(value)) {
-    throw new PrivacyError('unknown', 'The wallet returned an invalid transaction result.');
+    throw new PrivacyError('unknown', `The ${source} returned an invalid transaction result.`);
   }
-  const descriptor = Object.getOwnPropertyDescriptor(value, 'transaction_hash');
+  const descriptor = Object.getOwnPropertyDescriptor(value, field);
   if (
     !descriptor ||
     !('value' in descriptor) ||
@@ -743,7 +753,7 @@ function readWalletTransactionHash(value: unknown): string {
     descriptor.value.length === 0 ||
     /\s/.test(descriptor.value)
   ) {
-    throw new PrivacyError('unknown', 'The wallet returned an invalid transaction result.');
+    throw new PrivacyError('unknown', `The ${source} returned an invalid transaction result.`);
   }
   return descriptor.value;
 }

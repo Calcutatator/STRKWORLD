@@ -90,6 +90,37 @@ describe('WalletApiPrivacyOperations capability and reads', () => {
     expect(balances).not.toHaveBeenCalled();
   });
 
+  it.each([
+    ['null', null],
+    ['missing transaction hash', {}],
+    ['non-string transaction hash', { transactionHash: 42 }],
+    ['empty transaction hash', { transactionHash: '' }],
+  ] as const)('rejects a %s private submission result as invalid service data', async (_label, response) => {
+    const { ops, gateway } = fixture();
+    vi.mocked(gateway.submit).mockResolvedValue(response as never);
+    const batch = await ops.prepare([{ kind: 'transfer', token: TOKEN, amount: 20n, recipient: BOB }]);
+
+    await expect(batch.confirm({ feeCeiling: POOL_FEE + 1n })).rejects.toMatchObject({ kind: 'unknown' });
+  });
+
+  it('rejects inherited or accessor-backed private transaction hashes without reading them', async () => {
+    const { ops, gateway } = fixture();
+    const inherited = Object.create({ transactionHash: '0xforged' });
+    const accessor = {} as { transactionHash?: string };
+    Object.defineProperty(accessor, 'transactionHash', {
+      configurable: true,
+      get() { throw new Error('transaction hash getter must not run'); },
+    });
+    vi.mocked(gateway.submit)
+      .mockResolvedValueOnce(inherited as never)
+      .mockResolvedValueOnce(accessor as never);
+
+    for (let attempt = 0; attempt < 2; attempt += 1) {
+      const batch = await ops.prepare([{ kind: 'transfer', token: TOKEN, amount: 20n, recipient: BOB }]);
+      await expect(batch.confirm({ feeCeiling: POOL_FEE + 1n })).rejects.toMatchObject({ kind: 'unknown' });
+    }
+  });
+
   it('marks the maturity split unknown because the Wallet API returns only an aggregate', async () => {
     const { ops } = fixture();
     await expect(ops.balances([TOKEN])).resolves.toEqual([
