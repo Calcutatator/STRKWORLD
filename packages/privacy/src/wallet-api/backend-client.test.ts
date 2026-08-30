@@ -31,6 +31,30 @@ function inheritResponseField(key: string, value: unknown): () => void {
 }
 
 describe('BackendPrivacyClient', () => {
+  it('owns estimate request fields before a caller proxy can substitute them', async () => {
+    const fetcher = vi.fn(async () => response({
+      token: '0x4718', recipient: '0x789', amount: '7', authorization: 'auth', expiresAtBlock: 1450,
+    }));
+    const source = { route: 'transfer' as const, feeToken: '0x4718', operationToken: '0xabc' };
+    let routeReads = 0;
+    const input = new Proxy(source, {
+      get(target, key, receiver) {
+        if (key === 'route') {
+          routeReads += 1;
+          return routeReads === 1 ? 'transfer' : 'unshield';
+        }
+        return Reflect.get(target, key, receiver);
+      },
+    });
+    const client = new BackendPrivacyClient('https://backend.example', fetcher);
+
+    await client.estimate(input);
+
+    const dispatched = fetcher.mock.calls[0] as unknown as [string, RequestInit];
+    expect(JSON.parse(String(dispatched[1].body))).toMatchObject({ route: 'transfer' });
+    expect(routeReads).toBe(0);
+  });
+
   it('owns the response body reader before a proxy can substitute it', async () => {
     const source = {
       ok: true,

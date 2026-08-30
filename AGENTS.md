@@ -258,6 +258,29 @@ empty shell to fetchers, so a 200 there means nothing.
 
 ## 6. Findings log
 
+### 2026-08-30 — Relay estimate requests are owned before dispatch
+
+The Backend privacy client validated estimate request fields through ordinary
+property reads and then read the same caller object again while constructing
+the HTTP body. A stateful proxy could therefore pass validation as one approved
+route and substitute another route or token at dispatch, breaking the rule that
+the validated request is the request sent to the private service.
+
+Estimate now reads required route/token fields and the optional abort signal
+from own data-property descriptors into local scalar owners before validation.
+The body, cancellation checks and response processing use only those owned
+values. Inherited fields, accessors and descriptor traps fail before transport;
+ordinary object callers and optional omitted signals remain supported.
+
+*Verified:* a public BackendPrivacyClient regression supplies an input proxy
+whose route descriptor is `transfer` while successive ordinary reads return
+`transfer` then `unshield`. The base dispatched `unshield`; the corrected
+client dispatches `transfer` and invokes no proxy `get` trap. Focused Backend
+client verification passes 90 tests and privacy typecheck passes. Full
+workspace gates are recorded in the owning commit. Deterministic fakes only:
+no browser, external provider, RPC, wallet, proof, signature, funds or
+transaction was used.*
+
 ### 2026-08-30 — Presence client factory failures stay fail-closed
 
 `PresenceController` contained transport `connect()` failures but invoked the

@@ -54,22 +54,27 @@ export class BackendPrivacyClient implements PoolReadClient, PrivateSubmissionGa
   }
 
   async estimate(input: Parameters<PrivateSubmissionGateway['estimate']>[0]): Promise<RelayFeeQuote> {
+    const route = ownInputField(input, 'route');
+    const feeToken = ownInputField(input, 'feeToken');
+    const operationToken = ownInputField(input, 'operationToken');
+    const signal = ownOptionalInputField(input, 'signal');
     if (
-      (input.route !== 'transfer' && input.route !== 'unshield')
-      || typeof input.feeToken !== 'string'
-      || !isNonzeroFelt(input.feeToken)
-      || typeof input.operationToken !== 'string'
-      || !isNonzeroFelt(input.operationToken)
+      (route !== 'transfer' && route !== 'unshield')
+      || typeof feeToken !== 'string'
+      || !isNonzeroFelt(feeToken)
+      || typeof operationToken !== 'string'
+      || !isNonzeroFelt(operationToken)
+      || (signal !== undefined && !(signal instanceof AbortSignal))
     ) {
       throw new PrivacyError('unknown', 'The relay estimate request is invalid.');
     }
     const raw = await this.post('/v1/private/fees', {
       v: 1,
-      route: input.route,
-      feeToken: input.feeToken,
-      operationToken: input.operationToken,
-    }, input.signal);
-    throwIfAborted(input.signal);
+      route,
+      feeToken,
+      operationToken,
+    }, signal as AbortSignal | undefined);
+    throwIfAborted(signal as AbortSignal | undefined);
     const value = asRecord(raw);
     return Object.freeze({
       token: asString(ownField(value, 'token')),
@@ -236,6 +241,33 @@ export class BackendPrivacyClient implements PoolReadClient, PrivateSubmissionGa
         error,
       );
     }
+  }
+}
+
+function ownInputField(input: unknown, key: string): unknown {
+  try {
+    if (!input || typeof input !== 'object' || Array.isArray(input)) {
+      throw new Error('invalid input');
+    }
+    const descriptor = Object.getOwnPropertyDescriptor(input, key);
+    if (!descriptor || !('value' in descriptor)) throw new Error('missing input field');
+    return descriptor.value;
+  } catch {
+    throw new PrivacyError('unknown', 'The private service request is invalid.');
+  }
+}
+
+function ownOptionalInputField(input: unknown, key: string): unknown {
+  try {
+    if (!input || typeof input !== 'object' || Array.isArray(input)) {
+      throw new Error('invalid input');
+    }
+    const descriptor = Object.getOwnPropertyDescriptor(input, key);
+    if (!descriptor) return undefined;
+    if (!('value' in descriptor)) throw new Error('invalid optional input field');
+    return descriptor.value;
+  } catch {
+    throw new PrivacyError('unknown', 'The private service request is invalid.');
   }
 }
 
