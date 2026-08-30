@@ -728,6 +728,18 @@ function validIntent(value: unknown): boolean {
       && amount && 'value' in amount && typeof amount.value === 'bigint' && amount.value > 0n
     );
   }
+  if (kind.value === 'swap') {
+    const tokenIn = Object.getOwnPropertyDescriptor(value, 'tokenIn');
+    const tokenOut = Object.getOwnPropertyDescriptor(value, 'tokenOut');
+    const amountIn = Object.getOwnPropertyDescriptor(value, 'amountIn');
+    const minimum = Object.getOwnPropertyDescriptor(value, 'minAmountOut');
+    return Boolean(
+      tokenIn && 'value' in tokenIn && typeof tokenIn.value === 'string' && isNonzeroFelt(tokenIn.value)
+      && tokenOut && 'value' in tokenOut && typeof tokenOut.value === 'string' && isNonzeroFelt(tokenOut.value)
+      && amountIn && 'value' in amountIn && typeof amountIn.value === 'bigint' && amountIn.value > 0n
+      && minimum && 'value' in minimum && typeof minimum.value === 'bigint' && minimum.value > 0n
+    );
+  }
   return true;
 }
 
