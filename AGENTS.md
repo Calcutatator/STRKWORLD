@@ -258,6 +258,26 @@ empty shell to fetchers, so a 200 there means nothing.
 
 ## 6. Findings log
 
+### 2026-08-30 — Avatar Studio does not select after callback teardown
+
+`createAvatarStudioController.update()` publishes a synchronous highlight
+change before selecting the contacted figure. Before the guard, an
+`onChange` callback could destroy the Studio during that publication, then the
+same update resumed and changed the shared outfit selection, emitting
+`avatar:selected` after the controller had left its lifecycle.
+
+The update path now rechecks `destroyed` and `inRoom` after highlight
+publication and before selection. The shared selection remains owned by the
+Scene; no separate Shell/control-owner state exists in Avatar Studio, so there
+is no additional ownership-transfer branch to guard.
+
+*Verified:* a public regression first failed on current `origin/main` when
+`onChange` destroyed the controller while highlighting figure 8; the old path
+changed the selection to `avatar-8` and emitted `avatar:selected`. The corrected
+Avatar Studio suite passes 25 tests. No browser, lobby, wallet, provider, RPC,
+proof, signature, funds or transaction was used.
+
+
 ### 2026-08-30 — Fixed-room station activation rechecks authority after onChange
 
 `createFixedRoomController.update()` publishes a synchronous `onChange` snapshot

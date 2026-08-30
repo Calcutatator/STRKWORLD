@@ -328,6 +328,9 @@ export function createAvatarStudioController(
         highlightedFigure = nextHighlight;
         publish();
       }
+      // onChange delivery is synchronous and may destroy the Studio before
+      // this update resumes; do not select or emit after that lifecycle edge.
+      if (destroyed || !inRoom) return;
       if (figure && options.selection.select(figure.sprite)) publish();
     },
     destroy(): void {

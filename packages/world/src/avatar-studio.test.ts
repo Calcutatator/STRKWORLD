@@ -157,6 +157,29 @@ describe('hidden Avatar Studio', () => {
     expect(events.at(-1)).toEqual({ event: 'avatar-studio:exited', payload: {} });
   });
 
+  it('does not select a figure after onChange destroys the controller', () => {
+    const events: Emitted[] = [];
+    const out: Pick<EventBus<WorldEvents>, 'emit'> = {
+      emit: (event, payload) => events.push({ event, payload } as Emitted),
+    };
+    const selection = createAvatarOutfitSelection({ out });
+    let controller!: ReturnType<typeof createAvatarStudioController>;
+    controller = createAvatarStudioController({
+      out,
+      selection,
+      onChange: (state) => {
+        if (state.highlightedFigure === 8) controller.destroy();
+      },
+    });
+
+    controller.enter();
+    controller.update({ x: 14, y: 6 });
+
+    expect(controller.state.inRoom).toBe(false);
+    expect(selection.selected).toBe('avatar-1');
+    expect(events.filter((event) => event.event === 'avatar:selected')).toEqual([]);
+  });
+
   it('reads and writes the Scene\'s outfit selection rather than its own copy', () => {
     // D-053: F is a Scene-owned binding. The Studio must therefore never hold
     // a second copy of the selection — it would go stale the moment the outfit
