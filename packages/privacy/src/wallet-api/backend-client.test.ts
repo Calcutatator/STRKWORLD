@@ -30,6 +30,24 @@ function inheritResponseField(key: string, value: unknown): () => void {
 }
 
 describe('BackendPrivacyClient', () => {
+  it('preserves submission uncertainty when an HTTP error body stream is lost', async () => {
+    const client = new BackendPrivacyClient('https://backend.example', async () => ({
+      ok: false,
+      status: 502,
+      json: async () => { throw new TypeError('response stream terminated'); },
+    }) as unknown as Response);
+
+    await expect(client.submit({
+      route: 'transfer',
+      artifact: {
+        call: { contract_address: '0x123', entry_point: 'apply_actions', calldata: ['0x1'] },
+        proof: { data: 'proof', output: ['0x1'], proof_facts: ['0x2'] },
+      },
+      feeAuthorization: 'auth',
+      proofValidityBlocks: 450,
+    })).rejects.toMatchObject({ kind: 'submission-uncertain' });
+  });
+
   it('rejects a blank backend base URL before dispatching transport', () => {
     const fetcher = vi.fn(async () => response({}));
 

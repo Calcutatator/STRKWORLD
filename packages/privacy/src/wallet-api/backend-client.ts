@@ -206,7 +206,15 @@ export class BackendPrivacyClient implements PoolReadClient, PrivateSubmissionGa
       );
     }
     if (!response.ok) {
-      const failure = await response.json().catch(() => null);
+      let failure: unknown;
+      try {
+        failure = await response.json();
+      } catch (error) {
+        if (transportFailureKind === 'submission-uncertain') {
+          throw new PrivacyError('submission-uncertain', 'The private submission response was lost.', error);
+        }
+        failure = null;
+      }
       const message = readErrorMessage(failure);
       throw new PrivacyError(
         response.status === 503 ? 'unreachable' : 'unknown',
