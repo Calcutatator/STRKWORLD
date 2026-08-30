@@ -339,6 +339,7 @@ export class FakePrivacyOperations implements PrivacyOperations {
         }
         confirmationAttempted = true;
         await self.tick('confirm', sig);
+        if (discarded) throw new PrivacyError('unknown', 'batch already discarded');
 
         // The fee can move between prepare and confirm. This is the guard.
         const currentFee = self.pool.feeAmount + relayFee;

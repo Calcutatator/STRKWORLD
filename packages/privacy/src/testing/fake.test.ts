@@ -262,6 +262,26 @@ describe('the fee can move between prepare and confirm', () => {
     })).resolves.toBeDefined();
     expect(ops.submitted).toHaveLength(1);
   });
+
+  it('does not settle a batch discarded while fake confirmation is pending', async () => {
+    const ops = new FakePrivacyOperations({
+      balances: { [STRK]: 100n * 10n ** 18n },
+      registered: [BOB],
+      latencyMs: 1,
+    });
+    const batch = await ops.prepare([
+      { kind: 'transfer', token: STRK, amount: 10n ** 18n, recipient: BOB },
+    ]);
+
+    const confirming = batch.confirm({ feeCeiling: CEILING });
+    batch.discard();
+
+    await expect(confirming).rejects.toMatchObject({ kind: 'unknown' });
+    expect(ops.submitted).toEqual([]);
+    await expect(ops.balances([STRK])).resolves.toEqual([
+      expect.objectContaining({ spendable: 100n * 10n ** 18n }),
+    ]);
+  });
 });
 
 describe('invalid fake intents', () => {
