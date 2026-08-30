@@ -13,7 +13,7 @@ import { PRIVACY_REGISTER, type RouteGrade } from '../../privacy/register.js';
 import { toFailure, type ShellFailure } from '../../privacy/errors.js';
 import { COPY } from '../../copy.js';
 import { formatTokenAmountExact, looksLikeAddress, parseTokenAmount, sameAddress } from '../../format.js';
-import { createStore, type Store } from '../../store/store.js';
+import { createStore, type ReadableStore } from '../../store/store.js';
 import {
   createBatchAccumulator,
   type BatchAccumulator,
@@ -81,90 +81,90 @@ export const ROUTE_BY_MODE: Readonly<Record<BankMode, string>> = Object.freeze({
 
 export type BalanceView =
   /** Never read, or invalidated by a submission. The player asks; we do not. */
-  | { status: 'unrequested' }
-  | { status: 'loading' }
+  | { readonly status: 'unrequested' }
+  | { readonly status: 'loading' }
   | {
-      status: 'loaded';
-      total: bigint;
+      readonly status: 'loaded';
+      readonly total: bigint;
       /**
        * False when the wallet exposes one aggregate per token — the shipped
        * Wallet API shape. `spendable` and `maturing` are then conservative
        * zeroes and MAX is unavailable rather than invented (D-022).
        */
-      maturityKnown: boolean;
-      spendable: bigint;
-      maturing: bigint;
+      readonly maturityKnown: boolean;
+      readonly spendable: bigint;
+      readonly maturing: bigint;
       /** Increments on each successful read. Deterministic, unlike a clock. */
-      readCount: number;
+      readonly readCount: number;
     }
-  | { status: 'failed'; kind: PrivacyErrorKind; message: string };
+  | { readonly status: 'failed'; readonly kind: PrivacyErrorKind; readonly message: string };
 
 /**
  * What the player agrees to. Costs come from the prepared batch, not from a
  * constant — the pool fee is governance-settable and has moved once already.
  */
 export interface PreparedSummary {
-  intents: readonly Intent[];
-  poolFee: bigint;
-  gasEstimate: bigint;
-  totalCost: bigint;
+  readonly intents: readonly Intent[];
+  readonly poolFee: bigint;
+  readonly gasEstimate: bigint;
+  readonly totalCost: bigint;
   /** The hard guard passed to `confirm`. Never signs above the quoted total. */
-  feeCeiling: bigint;
-  warnings: readonly BatchWarning[];
+  readonly feeCeiling: bigint;
+  readonly warnings: readonly BatchWarning[];
   /**
    * Approved disclosures for the routes in `intents`, verbatim from the
    * register. Carried on the summary so the commit surface cannot render
    * without them.
    */
-  disclosures: readonly string[];
+  readonly disclosures: readonly string[];
   /**
    * Whether any route in `intents` is a below-private deviation, and therefore
    * whether `disclosures` being empty is a bug rather than a fact. The commit
    * gate fails closed on the combination.
    */
-  requiresDisclosure: boolean;
+  readonly requiresDisclosure: boolean;
 }
 
 export type BankFlow =
-  | { name: 'idle' }
-  | { name: 'loading-pool' }
-  | { name: 'composing' }
-  | { name: 'preparing' }
-  | { name: 'review'; summary: PreparedSummary }
+  | { readonly name: 'idle' }
+  | { readonly name: 'loading-pool' }
+  | { readonly name: 'composing' }
+  | { readonly name: 'preparing' }
+  | { readonly name: 'review'; readonly summary: PreparedSummary }
   | {
-      name: 'submitting';
-      stage: OperationStage;
-      message: string;
+      readonly name: 'submitting';
+      readonly stage: OperationStage;
+      readonly message: string;
       /**
        * Carried through submission so the approved disclosures and the figures
        * stay on screen while the wallet works, rather than the panel swapping
        * out from under the player at the moment of commitment.
        */
-      summary: PreparedSummary;
+      readonly summary: PreparedSummary;
     }
-  | { name: 'submitted'; transactionHash: string }
+  | { readonly name: 'submitted'; readonly transactionHash: string }
   | {
-      name: 'failed';
-      kind: PrivacyErrorKind;
-      message: string;
+      readonly name: 'failed';
+      readonly kind: PrivacyErrorKind;
+      readonly message: string;
       /** A prepared batch is single-attempt, so recovery means preparing again. */
-      recovery: 'prepare-again' | 'close';
+      readonly recovery: 'prepare-again' | 'close';
     };
 
 export interface BankNotice {
-  tone: 'error' | 'info';
-  text: string;
+  readonly tone: 'error' | 'info';
+  readonly text: string;
 }
 
 export interface BankState {
-  mode: BankMode;
-  routeId: string;
-  door: DoorState;
+  readonly mode: BankMode;
+  readonly routeId: string;
+  readonly door: DoorState;
   /** Approved copy for the mode being composed. Null when the route is private. */
-  disclosure: string | null;
+  readonly disclosure: string | null;
   /** Approved copy for what is queued. The commit point renders these. */
-  batchDisclosures: readonly string[];
-  pool: PoolConfig | null;
+  readonly batchDisclosures: readonly string[];
+  readonly pool: PoolConfig | null;
   /** The game's money and its fee token, read live rather than hardcoded. */
   token: Address | null;
   balance: BalanceView;
@@ -180,14 +180,14 @@ export interface BankState {
    * means no maximum can be stated, which is the same answer D-022 forces for
    * unknown note maturity: not a guess, and not the total.
    */
-  quotedGasForNextIntent: bigint | null;
-  amountText: string;
-  recipientText: string;
-  batch: readonly Intent[];
+  readonly quotedGasForNextIntent: bigint | null;
+  readonly amountText: string;
+  readonly recipientText: string;
+  readonly batch: readonly Intent[];
   /** True while a queue action is resolving, so a second click cannot double it. */
-  adding: boolean;
-  notice: BankNotice | null;
-  flow: BankFlow;
+  readonly adding: boolean;
+  readonly notice: BankNotice | null;
+  readonly flow: BankFlow;
 }
 
 export interface BankPanelOptions {
@@ -229,7 +229,8 @@ export interface BankPanelOptions {
 }
 
 export interface BankPanel {
-  readonly store: Store<BankState>;
+  /** Read-only view; panel methods own every financial state transition. */
+  readonly store: ReadableStore<BankState>;
   open(signal?: AbortSignal): Promise<void>;
   close(): void;
   setMode(mode: BankMode): void;
@@ -280,7 +281,12 @@ export function createBankPanel(options: BankPanelOptions): BankPanel {
   }
   const accumulator = options.accumulator ?? createBatchAccumulator({ maxIntents: options.maxIntents });
 
-  const store = createStore<BankState>(initialState(initialMode, register));
+  const stateStore = createStore<BankState>(freezeBankState(initialState(initialMode, register)));
+  const store: ReadableStore<BankState> = Object.freeze({
+    getState: stateStore.getState,
+    getServerSnapshot: stateStore.getServerSnapshot,
+    subscribe: stateStore.subscribe,
+  });
   let prepared: PreparedBatch | null = null;
   /** The confirmation attempt that currently owns the wallet handoff. */
   let signingOwner: number | null = null;
@@ -326,7 +332,7 @@ export function createBankPanel(options: BankPanelOptions): BankPanel {
   };
 
   function patch(next: Partial<BankState>): void {
-    store.setState((previous) => ({ ...previous, ...next }));
+    stateStore.setState((previous) => freezeBankState({ ...previous, ...next }));
   }
 
   /**
@@ -471,7 +477,7 @@ export function createBankPanel(options: BankPanelOptions): BankPanel {
       invalidateReads();
       discardPrepared();
       accumulator.clear();
-      store.setState(initialState(store.getState().mode, register));
+      stateStore.setState(freezeBankState(initialState(store.getState().mode, register)));
     },
 
     setMode(mode: BankMode): void {
@@ -897,6 +903,35 @@ function initialState(mode: BankMode, register: readonly RouteGrade[]): BankStat
     notice: null,
     flow: { name: 'idle' },
   };
+}
+
+function freezeIntent(intent: Intent): Intent {
+  return Object.freeze({ ...intent }) as Intent;
+}
+
+function freezeBankState(state: BankState): BankState {
+  const balance = Object.freeze({ ...state.balance }) as BalanceView;
+  const flow = state.flow.name === 'review' || state.flow.name === 'submitting'
+    ? Object.freeze({
+        ...state.flow,
+        summary: Object.freeze({
+          ...state.flow.summary,
+          intents: Object.freeze(state.flow.summary.intents.map(freezeIntent)),
+          warnings: Object.freeze(state.flow.summary.warnings.map((warning) => Object.freeze({ ...warning }))),
+          disclosures: Object.freeze([...state.flow.summary.disclosures]),
+        }),
+      })
+    : Object.freeze({ ...state.flow });
+  return Object.freeze({
+    ...state,
+    door: Object.freeze({ ...state.door }),
+    batchDisclosures: Object.freeze([...state.batchDisclosures]),
+    pool: state.pool === null ? null : Object.freeze({ ...state.pool }),
+    balance,
+    batch: Object.freeze(state.batch.map(freezeIntent)),
+    notice: state.notice === null ? null : Object.freeze({ ...state.notice }),
+    flow,
+  });
 }
 
 /** Every pending string on screen comes from here — from a stage, never a count. */

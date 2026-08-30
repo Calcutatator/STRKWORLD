@@ -37,6 +37,22 @@ describe('Bank route authority', () => {
     expect(Reflect.set(ROUTE_BY_MODE, 'shield', 'exchange.swap')).toBe(false);
     expect(ROUTE_BY_MODE.shield).toBe('bank.shield');
   });
+
+  it('exposes a read-only immutable state snapshot to panel consumers', async () => {
+    const panel = await openPanel(fake());
+    const state = panel.store.getState();
+
+    expect('setState' in panel.store).toBe(false);
+    expect(Object.isFrozen(state)).toBe(true);
+    expect(Object.isFrozen(state.door)).toBe(true);
+    expect(Object.isFrozen(state.pool)).toBe(true);
+    expect(Object.isFrozen(state.balance)).toBe(true);
+    expect(Object.isFrozen(state.batch)).toBe(true);
+    expect(Reflect.set(state, 'mode', 'transfer')).toBe(false);
+    expect(Reflect.set(state.door, 'open', false)).toBe(false);
+    expect(Reflect.set(state.batch, '0', { kind: 'shield', token: STRK, amount: 1n })).toBe(false);
+    expect(panel.store.getState().mode).toBe('shield');
+  });
 });
 
 function fake(overrides: ConstructorParameters<typeof FakePrivacyOperations>[0] = {}) {
