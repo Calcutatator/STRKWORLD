@@ -1435,6 +1435,47 @@ describe('BridgeService', () => {
     expect(store.load()?.status).toMatchObject({ leg: 'awaiting-deposit', pollingStopped: true });
   });
 
+  it('keeps watcher ownership when an update callback mutates its status', async () => {
+    const client = new StubClient();
+    const store = new MemoryBridgeStore();
+    let now = NOW;
+    const service = new BridgeService({
+      client,
+      store,
+      quoteVerifier: () => true,
+      now: () => now,
+      sleep: async (ms) => { now += ms; },
+    });
+    await service.createManualDeposit({
+      source: SOURCE,
+      amountIn: 1_000_000n,
+      starknetRecipient: '0x123',
+      refundAddress: request.refundTo,
+    });
+    client.statuses.push(
+      status('PENDING_DEPOSIT' as never),
+      status('PENDING_DEPOSIT' as never),
+    );
+
+    const watched = await service.watch({
+      intervalMs: 10,
+      maxActiveMs: 10,
+      onUpdate: (value) => {
+        value.leg = 'settled';
+        value.message = 'forged by observer';
+      },
+    });
+
+    expect(watched).toMatchObject({
+      leg: 'awaiting-deposit',
+      pollingStopped: true,
+    });
+    expect(store.load()?.status).toMatchObject({
+      leg: 'awaiting-deposit',
+      pollingStopped: true,
+    });
+  });
+
   it('stops active polling when the wall clock rolls backwards', async () => {
     const client = new StubClient();
     const store = new MemoryBridgeStore();

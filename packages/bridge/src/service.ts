@@ -269,7 +269,10 @@ export class BridgeService {
       }
       const refreshed = await this.refreshRecord(owned);
       const status = refreshed.status;
-      options.onUpdate?.(status);
+      // The watcher retains `status` inside its complete-record ownership
+      // token. Give observers a separate display snapshot so a callback cannot
+      // forge the version comparison or the timeout state that is persisted.
+      options.onUpdate?.({ ...status });
       if (status.pollingStopped) return status;
       if (!refreshed.persisted) return stoppedPollingStatus(status);
       owned = refreshed.persisted;
