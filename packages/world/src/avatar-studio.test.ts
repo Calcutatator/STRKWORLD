@@ -190,6 +190,73 @@ describe('hidden Avatar Studio', () => {
     expect(state.playerPosition).toEqual(studioSpawn);
   });
 
+  it('restores the Studio presentation when exit fails mid-handoff', () => {
+    const studioBounds = { x: 64, y: 64, width: 576, height: 384 };
+    const streetBounds = { x: 0, y: 0, width: 1_536, height: 896 };
+    const studioSpawn = { x: 368, y: 112 };
+    const streetReturn = { x: 784, y: 496 };
+    const state = {
+      bodyEnabled: false,
+      groundVisible: false,
+      doorsVisible: false,
+      remoteVisible: false,
+      labelsVisible: false,
+      roomVisible: false,
+      studioVisible: true,
+      worldBounds: studioBounds,
+      cameraBounds: studioBounds,
+      playerPosition: studioSpawn,
+    };
+    const initial = structuredClone(state);
+    const error = new Error('Studio exit presentation failed');
+    let failExit = true;
+    const presentation = createAvatarStudioPresentation({
+      port: {
+        setPlayerVelocity: vi.fn(),
+        setBodyEnabled: (enabled) => { state.bodyEnabled = enabled; },
+        setGroundVisible: (visible) => { state.groundVisible = visible; },
+        setDoorsVisible: (visible) => {
+          state.doorsVisible = visible;
+          if (failExit && visible) {
+            failExit = false;
+            throw error;
+          }
+        },
+        setRemoteVisible: (visible) => { state.remoteVisible = visible; },
+        setLabelsVisible: (visible) => { state.labelsVisible = visible; },
+        setRoomVisible: (visible) => { state.roomVisible = visible; },
+        setStudioVisible: (visible) => { state.studioVisible = visible; },
+        setWorldBounds: (bounds) => { state.worldBounds = bounds; },
+        setCameraBounds: (bounds) => { state.cameraBounds = bounds; },
+        setPlayerPosition: (position) => { state.playerPosition = position; },
+        resetDoors: vi.fn(),
+        resumeStreet: vi.fn(),
+        destroyStudio: vi.fn(),
+      },
+      streetBounds,
+      studioBounds,
+      studioSpawn,
+      streetReturn,
+      reportStreet: vi.fn(),
+    });
+
+    expect(() => presentation.exit()).toThrow(error);
+    expect(state).toEqual(initial);
+
+    expect(() => presentation.exit()).not.toThrow();
+    expect(state).toMatchObject({
+      bodyEnabled: true,
+      groundVisible: true,
+      doorsVisible: true,
+      remoteVisible: true,
+      labelsVisible: true,
+      studioVisible: false,
+      worldBounds: streetBounds,
+      cameraBounds: streetBounds,
+      playerPosition: streetReturn,
+    });
+  });
+
   it('does not let failed-entry rollback overwrite a reentrant retry', () => {
     const streetBounds = { x: 0, y: 0, width: 10, height: 10 };
     const studioBounds = { x: 1, y: 1, width: 10, height: 10 };

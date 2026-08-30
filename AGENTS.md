@@ -340,6 +340,28 @@ without invoking the getter or changing World ownership. Focused fixed-room
 tests pass 73 tests and World typecheck passes. No browser, lobby server,
 wallet, provider, RPC, proof, signature, funds or transaction was used.*
 
+### 2026-08-30 — Avatar Studio exit presentation must roll back partial handoffs
+
+`createAvatarStudioPresentation.exit()` advanced the Phaser-facing port through
+the street handoff without compensation. If a setter threw after an earlier
+setter had already enabled the body or revealed street objects, the controller
+could restore logical Studio ownership while the visible World remained
+partially transitioned. Retrying then started from a mixed presentation.
+
+The exit path now restores the known Studio contract after a failure while the
+same transition still owns the presentation: disabled body, hidden street
+objects, visible Studio, Studio bounds/camera bounds and Studio spawn. Each
+restore operation is attempted, while reentrant newer transitions retain
+authority and the original exit error remains primary. Successful exit and
+existing entry rollback semantics are unchanged.
+
+*Verified:* a red-first public World regression makes the exit body/ground/door
+setters mutate state before a door setter throws; the old path left the street
+partially visible, while the corrected path restores the exact Studio state and
+the next exit retry completes. Focused Avatar Studio tests pass 46 tests. No
+browser, lobby server, wallet, provider, RPC, proof, signature, funds or
+transaction was used.
+
 ### 2026-08-30 — Avatar Studio figure visibility sync must be transactional
 
 `createAvatarStudioFigureLayer.sync()` applied visibility to eight figure
