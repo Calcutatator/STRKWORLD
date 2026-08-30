@@ -78,6 +78,18 @@ export class BackendPrivacyClient implements PoolReadClient, PrivateSubmissionGa
   }
 
   async submit(input: Parameters<PrivateSubmissionGateway['submit']>[0]): Promise<TxResult> {
+    if (
+      !['transfer', 'unshield', 'swap'].includes(input.route)
+      || !input.artifact
+      || typeof input.artifact !== 'object'
+      || Array.isArray(input.artifact)
+      || typeof input.feeAuthorization !== 'string'
+      || input.feeAuthorization.trim().length === 0
+      || !Number.isSafeInteger(input.proofValidityBlocks)
+      || input.proofValidityBlocks <= 0
+    ) {
+      throw new PrivacyError('unknown', 'The private submission request is invalid.');
+    }
     const value = asRecord(await this.post('/v1/private/submissions', {
       v: 1,
       route: input.route,

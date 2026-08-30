@@ -31,6 +31,29 @@ function inheritResponseField(key: string, value: unknown): () => void {
 
 describe('BackendPrivacyClient', () => {
   it.each([
+    ['unsupported route', { route: 'shield' }],
+    ['empty authorization', { feeAuthorization: '' }],
+    ['zero proof validity', { proofValidityBlocks: 0 }],
+    ['fractional proof validity', { proofValidityBlocks: 1.5 }],
+    ['null artifact', { artifact: null }],
+  ] as const)('rejects an invalid private submission before transport: %s', async (_label, patch) => {
+    const fetcher = vi.fn(async () => response({ transactionHash: '0x1' }));
+    const client = new BackendPrivacyClient('https://backend.example', fetcher);
+
+    await expect(client.submit({
+      route: 'transfer',
+      artifact: {
+        call: { contract_address: '0x123', entry_point: 'apply_actions', calldata: ['0x1'] },
+        proof: { data: 'proof', output: ['0x1'], proof_facts: ['0x2'] },
+      },
+      feeAuthorization: 'auth',
+      proofValidityBlocks: 450,
+      ...patch,
+    } as never)).rejects.toMatchObject({ kind: 'unknown' });
+    expect(fetcher).not.toHaveBeenCalled();
+  });
+
+  it.each([
     ['decimal sell token', { sellToken: '123' }],
     ['zero buy token', { buyToken: '0x0' }],
     ['zero sell amount', { sellAmount: 0n }],
