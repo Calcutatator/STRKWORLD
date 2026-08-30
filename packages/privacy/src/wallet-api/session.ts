@@ -594,6 +594,7 @@ function ownPreparedBatch(
     throw new PrivacyError('unknown', 'The wallet returned an invalid prepared batch.');
   }
   const swapReview = swapReviewDescriptor?.value;
+  const intents = Object.freeze(prepared.intents.map((intent) => Object.freeze({ ...intent })));
   let discarded = false;
   let confirmationAttempted = false;
   const discard = (): void => {
@@ -609,7 +610,7 @@ function ownPreparedBatch(
     }
   };
   return Object.freeze({
-    intents: prepared.intents,
+    intents,
     poolFee: prepared.poolFee,
     gasEstimate: prepared.gasEstimate,
     totalCost: prepared.totalCost,
