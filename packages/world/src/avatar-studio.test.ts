@@ -53,6 +53,25 @@ describe('hidden Avatar Studio', () => {
     expect(() => presentation.destroy()).not.toThrow();
     expect(destroyStudio).toHaveBeenCalledTimes(2);
   });
+  it('owns default and injected definitions after validation', () => {
+    expect(Object.isFrozen(AVATAR_STUDIO_DEFINITION)).toBe(true);
+    expect(Object.isFrozen(AVATAR_STUDIO_DEFINITION.figures)).toBe(true);
+    expect(Object.isFrozen(AVATAR_STUDIO_DEFINITION.figures[0])).toBe(true);
+
+    const definition = authoredDefinition({});
+    const out: Pick<EventBus<WorldEvents>, 'emit'> = { emit: vi.fn() };
+    const selection = createAvatarOutfitSelection({ out });
+    const controller = createAvatarStudioController({ definition, out, selection });
+    controller.enter();
+
+    const injectedFigure = definition.figures[0] as { sprite: AvatarSpriteKey; x: number };
+    injectedFigure.sprite = 'avatar-8';
+    injectedFigure.x = 14;
+    controller.update({ x: 2, y: 3 });
+
+    expect(selection.selected).toBe('avatar-1');
+  });
+
   it('stops an enter transition when a presentation callback destroys it', () => {
     let presentation!: ReturnType<typeof createAvatarStudioPresentation>;
     const destroyStudio = vi.fn();

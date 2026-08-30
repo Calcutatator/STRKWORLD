@@ -26,7 +26,7 @@ export interface AvatarStudioDefinition {
   readonly figures: readonly AvatarStudioFigure[];
 }
 
-export const AVATAR_STUDIO_DEFINITION = {
+export const AVATAR_STUDIO_DEFINITION = freezeAvatarStudioDefinition({
   width: AVATAR_STUDIO_WIDTH,
   height: AVATAR_STUDIO_HEIGHT,
   spawn: { x: 9, y: 1 },
@@ -41,7 +41,20 @@ export const AVATAR_STUDIO_DEFINITION = {
     { figure: 7, sprite: 'avatar-7', x: 9, y: 6, width: 1, height: 1 },
     { figure: 8, sprite: 'avatar-8', x: 14, y: 6, width: 1, height: 1 },
   ],
-} as const satisfies AvatarStudioDefinition;
+} as const satisfies AvatarStudioDefinition);
+
+function freezeAvatarStudioDefinition(
+  definition: AvatarStudioDefinition,
+): AvatarStudioDefinition {
+  const figures = definition.figures.map((figure) => Object.freeze({ ...figure }));
+  return Object.freeze({
+    width: definition.width,
+    height: definition.height,
+    spawn: Object.freeze({ ...definition.spawn }),
+    exit: Object.freeze({ ...definition.exit }),
+    figures: Object.freeze(figures),
+  });
+}
 
 export interface AvatarStudioState {
   readonly inRoom: boolean;
@@ -312,8 +325,9 @@ export function avatarStudioTileColour(
 export function createAvatarStudioController(
   options: AvatarStudioControllerOptions,
 ): AvatarStudioController {
-  const definition = options.definition ?? AVATAR_STUDIO_DEFINITION;
-  validateAvatarStudioDefinition(definition);
+  const inputDefinition = options.definition ?? AVATAR_STUDIO_DEFINITION;
+  validateAvatarStudioDefinition(inputDefinition);
+  const definition = freezeAvatarStudioDefinition(inputDefinition);
   let inRoom = false;
   let highlightedFigure: number | null = null;
   let destroyed = false;
