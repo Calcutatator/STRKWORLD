@@ -254,6 +254,17 @@ describe('StreetScene lifecycle', () => {
     expect(harness.selected()).toBe('avatar-2');
   });
 
+  it('rolls back the rendered avatar when selection delivery fails after applying it', () => {
+    const harness = createWorldPlayHarness();
+    harness.create();
+    const error = new Error('selection delivery failed');
+    harness.failNextAvatarSelection(error);
+
+    expect(() => harness.press()).toThrow(error);
+    expect(harness.scene.avatarStudio.state.selected).toBe('avatar-1');
+    expect(harness.cycle().applied).toEqual(['avatar-9', 'avatar-1']);
+  });
+
   it('toggles the outfit outdoors, in the Studio and back, from one Scene-owned binding', () => {
     const harness = createWorldPlayHarness();
     harness.create();

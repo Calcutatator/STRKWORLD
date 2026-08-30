@@ -124,6 +124,8 @@ export function createStreetScene({ Phaser, onTileChanged, remotePeers }: Street
     private player!: Sprite;
     private playerOwned = false;
     private avatarVisual?: LocalAvatarVisual;
+    private renderedAvatarSprite: AvatarSpriteKey = DEFAULT_AVATAR_SPRITE;
+    private avatarVisualRevision = 0;
     private cursors!: PhaserTypes.Types.Input.Keyboard.CursorKeys;
     private wasd!: Record<'up' | 'down' | 'left' | 'right', PhaserTypes.Input.Keyboard.Key>;
     private lastTile = { x: -1, y: -1 };
@@ -369,6 +371,8 @@ export function createStreetScene({ Phaser, onTileChanged, remotePeers }: Street
       this.player.setDepth(10);
       this.player.setCollideWorldBounds(true);
       this.avatarVisual = createLocalAvatarVisual(this.player, DEFAULT_AVATAR_SPRITE);
+      this.renderedAvatarSprite = DEFAULT_AVATAR_SPRITE;
+      this.avatarVisualRevision = 0;
       this.physics.world.setBounds(0, 0, this.map.width * TILE_SIZE, this.map.height * TILE_SIZE);
 
       if (this.ground) this.physics.add.collider(this.player, this.ground);
@@ -415,7 +419,29 @@ export function createStreetScene({ Phaser, onTileChanged, remotePeers }: Street
           // resolving late keeps this correct if that ordering ever shifts.
           emit: (event, payload) => {
             if (event === 'avatar:selected') {
-              this.applyAvatarSprite((payload as WorldEvents['avatar:selected']).sprite);
+              const sprite = (payload as WorldEvents['avatar:selected']).sprite;
+              const previousSprite = this.renderedAvatarSprite;
+              const previousRevision = this.avatarVisualRevision;
+              try {
+                this.applyAvatarSprite(sprite);
+                this.resolveWorldConfig()?.out?.emit(event, payload);
+              } catch (error) {
+                // Selection rolls back its logical state when shell delivery
+                // fails. Keep the Phaser visual in that same transaction, but
+                // do not undo a newer reentrant selection made by the shell.
+                if (
+                  this.avatarVisualRevision === previousRevision + 1 &&
+                  this.renderedAvatarSprite === sprite
+                ) {
+                  try {
+                    this.applyAvatarSprite(previousSprite);
+                  } catch {
+                    // Preserve the original shell/visual error.
+                  }
+                }
+                throw error;
+              }
+              return;
             }
             this.resolveWorldConfig()?.out?.emit(event, payload);
           },
@@ -920,6 +946,8 @@ export function createStreetScene({ Phaser, onTileChanged, remotePeers }: Street
 
     private applyAvatarSprite(sprite: AvatarSpriteKey): void {
       this.avatarVisual?.select(sprite);
+      this.renderedAvatarSprite = sprite;
+      this.avatarVisualRevision += 1;
     }
 
     private reportRoomTile(): void {

@@ -258,6 +258,26 @@ empty shell to fetchers, so a 200 there means nothing.
 
 ## 6. Findings log
 
+### 2026-08-30 — Avatar selection delivery must roll back the rendered sprite
+
+`StreetScene` applied the new avatar sprite before delivering the existing
+`avatar:selected` event to the Shell. The World selection rolls its logical
+key back when that external delivery throws, but the Phaser visual stayed on
+the new sprite. A synchronous Shell failure could therefore leave the Studio
+reporting cosy `avatar-1` while the player was visibly wearing fighting
+`avatar-9`; a later toggle started from the wrong visual state.
+
+The Scene now tracks the rendered sprite and application revision, and rolls
+the visual back when the same selection's delivery fails. A newer reentrant
+selection is left authoritative, and a rollback failure never masks the
+original delivery error.
+
+*Verified:* a public lifecycle regression first observed logical `avatar-1`
+with rendered `avatar-9` after a post-apply delivery failure; the corrected
+path reapplies `avatar-1` and preserves the original error. Focused StreetScene
+tests pass 25/25. No browser, wallet, provider, RPC, proof, signature, funds
+or transaction was used.
+
 ### 2026-08-30 — Street tile observers must not outlive Scene ownership
 
 `StreetScene.reportTile()` delivered the door transition first and then called
