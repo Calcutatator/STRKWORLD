@@ -371,6 +371,7 @@ export class LobbyClient {
 
   async #join(generation: number, interrupted: Promise<never>): Promise<void> {
     const sdk = new ColyseusClient(this.#options.endpoint);
+    let joinedRoom: ColyseusRoom<unknown, LobbyState> | null = null;
     try {
       const room = await sdk.joinOrCreate<LobbyState>(
         this.#options.roomName ?? DEFAULT_ROOM_NAME,
@@ -381,6 +382,7 @@ export class LobbyClient {
           sprite: this.#options.sprite ?? DEFAULT_SPRITE,
         },
       );
+      joinedRoom = room;
 
       // D-037 gives reconnect ownership to the Shell's explicit player
       // control. The pinned SDK enables a 15-attempt automatic retry loop on
@@ -471,8 +473,26 @@ export class LobbyClient {
         throw new Error('Lobby room closed before connect completed');
       }
     } catch (error) {
-      if (this.#joinGeneration === generation && this.#status === 'connecting') {
-        this.#setStatus('idle');
+      if (this.#joinGeneration === generation) {
+        const failedRoom = this.#room;
+        if (failedRoom !== null) {
+          this.#room = null;
+          this.#gameId = null;
+          this.#cancelReconcile();
+          this.#desired = null;
+          this.#setStatus('closed', 'error');
+          this.#emitPeers();
+          await failedRoom.leave(true).catch(() => undefined);
+        } else if (joinedRoom !== null && this.#status === 'connecting') {
+          this.#gameId = null;
+          this.#cancelReconcile();
+          this.#desired = null;
+          this.#setStatus('closed', 'error');
+          this.#emitPeers();
+          await joinedRoom.leave(true).catch(() => undefined);
+        } else if (this.#status === 'connecting') {
+          this.#setStatus('idle');
+        }
       }
       throw error;
     }

@@ -112,6 +112,60 @@ function fakeRoom(): {
   };
 }
 
+it.each(['onStateChange', 'onError', 'onLeave'] as const)(
+  'releases a joined room when %s registration fails',
+  async (registration) => {
+    const joined = fakeRoom();
+    vi.mocked(joined.room[registration]).mockImplementationOnce(() => {
+      throw new Error(`${registration} registration failed`);
+    });
+    const joinOrCreate = vi
+      .spyOn(ColyseusClient.prototype, 'joinOrCreate')
+      .mockResolvedValueOnce(joined.room as never);
+    const client = new LobbyClient({
+      endpoint: 'ws://example',
+      start: { x: 10, y: 20 },
+      welcomeTimeoutMs: 60_000,
+    });
+
+    try {
+      const connecting = client.connect();
+      joined.welcome({ gameId: '0000000000000001' });
+
+      await expect(connecting).rejects.toThrow(`${registration} registration failed`);
+      expect(joined.leave).toHaveBeenCalledOnce();
+      expect(joined.leave).toHaveBeenCalledWith(true);
+      expect(client.status).toBe('closed');
+      expect(client.gameId).toBeNull();
+    } finally {
+      joinOrCreate.mockRestore();
+    }
+  },
+);
+
+it('releases a joined room when disabling SDK reconnection fails', async () => {
+  const joined = fakeRoom();
+  Object.defineProperty(joined.room, 'reconnection', {
+    value: Object.defineProperty({}, 'enabled', {
+      set() { throw new Error('reconnection setup failed'); },
+    }),
+  });
+  const joinOrCreate = vi
+    .spyOn(ColyseusClient.prototype, 'joinOrCreate')
+    .mockResolvedValueOnce(joined.room as never);
+  const client = new LobbyClient({ endpoint: 'ws://example', start: { x: 10, y: 20 } });
+
+  try {
+    await expect(client.connect()).rejects.toThrow('reconnection setup failed');
+    expect(joined.leave).toHaveBeenCalledOnce();
+    expect(joined.leave).toHaveBeenCalledWith(true);
+    expect(client.status).toBe('closed');
+    expect(client.gameId).toBeNull();
+  } finally {
+    joinOrCreate.mockRestore();
+  }
+});
+
 /** Give the server a beat to prove it does *not* do something. */
 async function settle(): Promise<void> {
   await new Promise((resolve) => setTimeout(resolve, 250));

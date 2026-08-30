@@ -258,6 +258,33 @@ empty shell to fetchers, so a 200 there means nothing.
 
 ## 6. Findings log
 
+### 2026-08-30 — A joined Lobby room owns lifecycle-registration failure
+
+Lobby publishes a newly joined room before registering its state, error and
+leave callbacks so synchronous SDK events can identify the room. If any of
+those registrations threw, the join rejected but left the published room,
+server identity and `connected` status intact. Callers then observed a phantom
+connected client whose failed room was never released.
+
+The join failure path now distinguishes a pre-room matchmaking failure from a
+failure after room publication. A still-current published room is atomically
+retired, its identity and reconciliation state are cleared, the client reports
+closed/error, peers are cleared, and that exact room is left once before the
+original registration error is rethrown. A failure before publication retains
+the established idle/retry behavior.
+
+*Verified:* public `LobbyClient.connect()` regressions inject synchronous
+failures into reconnection setup and each of `onStateChange`, `onError` and
+`onLeave` after `joinOrCreate()` returns. All four cases previously rejected
+while leaking the joined room (the lifecycle registrations also retained
+connected state); they now reject with the original error, leave the room
+exactly once, report closed and expose no game ID. Existing pre-welcome error
+and leave cases prove their callback-owned cleanup is not repeated. The focused
+Lobby client suite passes 50 tests; the full workspace passes 102 files / 1,592
+tests, all workspace typechecks, production build, all 13 invariants and diff
+hygiene. No browser, external lobby, wallet, RPC, proof, signature, funds or
+transaction was used.*
+
 ### 2026-08-30 — Backend reads recheck cancellation after transport settlement
 
 The backend privacy adapter passes cancellation signals to fetch, but an
