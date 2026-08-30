@@ -210,6 +210,26 @@ describe('a shield is never bundled with what it funds', () => {
 });
 
 describe('the fee can move between prepare and confirm', () => {
+  it.each([
+    ['negative bigint', -1n],
+    ['number', 10],
+    ['string', '10'],
+  ] as const)('rejects an invalid %s fee ceiling before consuming confirmation state', async (_label, feeCeiling) => {
+    const ops = fresh();
+    const batch = await ops.prepare([
+      { kind: 'transfer', token: STRK, amount: 10n ** 18n, recipient: BOB },
+    ]);
+    ops.injectFault({ kind: 'unreachable', on: 'confirm' });
+
+    await expect(batch.confirm({ feeCeiling: feeCeiling as never })).rejects.toMatchObject({
+      kind: 'unknown',
+    });
+    await expect(batch.confirm({ feeCeiling: CEILING })).rejects.toMatchObject({
+      kind: 'unreachable',
+    });
+    expect(ops.submitted).toHaveLength(0);
+  });
+
   it('guards and charges the whole private fee quoted in totalCost', async () => {
     const ops = fresh();
     const batch = await ops.prepare([

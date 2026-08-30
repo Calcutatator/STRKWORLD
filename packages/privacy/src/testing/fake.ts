@@ -334,6 +334,7 @@ export class FakePrivacyOperations implements PrivacyOperations {
       ...(swapReview === undefined ? {} : { swapReview }),
       async confirm({ feeCeiling, onProgress, signal: sig }) {
         if (discarded) throw new PrivacyError('unknown', 'batch already discarded');
+        assertFeeCeilingInput(feeCeiling);
         if (confirmationAttempted) {
           throw new PrivacyError('unknown', 'This batch was already confirmed or attempted. Prepare a new batch.');
         }
@@ -505,5 +506,11 @@ function emitProgress(callback: ProgressCallback | undefined, progress: Operatio
     callback?.(Object.freeze({ ...progress }));
   } catch {
     /* Observers cannot alter a financial operation. */
+  }
+}
+
+function assertFeeCeilingInput(ceiling: unknown): asserts ceiling is bigint {
+  if (typeof ceiling !== 'bigint' || ceiling < 0n) {
+    throw new PrivacyError('unknown', 'The fee ceiling must be a non-negative bigint.');
   }
 }
