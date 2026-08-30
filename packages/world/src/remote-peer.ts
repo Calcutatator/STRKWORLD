@@ -131,19 +131,28 @@ export function createRemotePeerSource(
   function drain(): void {
     if (publishing) return;
     publishing = true;
+    const errors: unknown[] = [];
     try {
       while (pending.length > 0) {
         current = pending.shift()!;
         for (const [listener, token] of [...listeners]) {
-          if (listeners.get(listener) === token) listener(current);
+          if (listeners.get(listener) !== token) continue;
+          try {
+            listener(current);
+          } catch (error) {
+            // Stop this publication for the failing listener, but continue
+            // draining snapshots it queued before throwing. Those snapshots
+            // are newer authoritative state and must not be discarded.
+            errors.push(error);
+            break;
+          }
         }
       }
-    } catch (error) {
-      pending.length = 0;
-      throw error;
     } finally {
       publishing = false;
     }
+    if (errors.length === 1) throw errors[0];
+    if (errors.length > 1) throw new AggregateError(errors, 'Remote peer publication failed');
   }
 
   const source: RemotePeerSource = {

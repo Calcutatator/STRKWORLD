@@ -274,6 +274,28 @@ describe('RemotePeerSource', () => {
     expect(first).toHaveBeenCalledTimes(1);
     expect(second).not.toHaveBeenCalled();
   });
+
+  it('drains a reentrant publication queued before reporting a listener error', () => {
+    const controller = createRemotePeerSource();
+    const source = controller.source;
+    const error = new Error('first publication failed');
+    const seen: number[] = [];
+    let reentered = false;
+    const listener = vi.fn((snapshot: readonly RemotePeerSnapshot[]) => {
+      const x = snapshot[0]?.x;
+      if (x !== undefined) seen.push(x);
+      if (!reentered && x === 40) {
+        reentered = true;
+        controller.publish([peer({ x: 80 })]);
+        throw error;
+      }
+    });
+    source.subscribe(listener);
+    listener.mockClear();
+
+    expect(() => controller.publish([peer({ x: 40 })])).toThrow(error);
+    expect(seen).toEqual([40, 80]);
+  });
 });
 
 describe('remote peer reconciliation', () => {

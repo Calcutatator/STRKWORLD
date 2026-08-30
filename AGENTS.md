@@ -258,6 +258,26 @@ empty shell to fetchers, so a 200 there means nothing.
 
 ## 6. Findings log
 
+### 2026-08-30 — Remote peer sources retain queued state after listener errors
+
+`createRemotePeerSource()` queued reentrant publications while a listener was
+being delivered, but cleared that queue when the listener threw. A newer full
+snapshot produced during an older remote-avatar render could therefore be
+discarded by the source before the World layer saw it, leaving stale
+presentation state despite the source having accepted the newer update.
+
+The source now stops the failing listener's current delivery, continues
+draining queued authoritative snapshots, and rethrows the original error (or
+an aggregate when multiple queued deliveries fail) after the queue is
+exhausted. Listener generation checks, immutable snapshots, and ordinary
+error propagation remain unchanged.
+
+*Verified:* a red-first public World source regression queued x=80 while the
+x=40 listener delivery threw; the old source observed only x=40, while the
+corrected source observes x=40 then x=80 and still throws the original error.
+Removing queued-drain continuation restores the failure. No browser, lobby,
+wallet, provider, RPC, proof, signature, funds or transaction was used.
+
 ### 2026-08-30 — Remote avatar errors do not discard newer queued state
 
 The remote-avatar render queue preserved reentrant ordering, but its outer
