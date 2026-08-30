@@ -103,21 +103,21 @@ describe('Wallet Standard forward compatibility', () => {
           intent: { kind: 'unshield', token: TOKEN, amount: 10n, recipient: RECIPIENT },
           walletMethod: 'wallet_strk20PrepareInvoke',
           actionTypes: ['withdraw', 'withdraw'],
-          receipt: '0xunshield',
+          receipt: '0x102',
         },
         {
           name: 'transfer',
           intent: { kind: 'transfer', token: TOKEN, amount: 5n, recipient: RECIPIENT },
           walletMethod: 'wallet_strk20PrepareInvoke',
           actionTypes: ['transfer', 'withdraw'],
-          receipt: '0xtransfer',
+          receipt: '0x103',
         },
         {
           name: 'swap',
           intent: { kind: 'swap', tokenIn: TOKEN, tokenOut: STRK, amountIn: 20n, minAmountOut: 90n },
           walletMethod: 'wallet_strk20PrepareInvoke',
           actionTypes: ['withdraw', 'withdraw', 'transfer', 'invoke'],
-          receipt: '0xswap',
+          receipt: '0x104',
         },
       ];
 
@@ -307,7 +307,14 @@ function backendFetcher(requests: BackendRequest[]) {
         };
         break;
       case '/api/v1/private/submissions':
-        value = { transactionHash: `0x${String(body['route'])}` };
+        value = {
+          transactionHash: {
+            shield: '0x101',
+            unshield: '0x102',
+            transfer: '0x103',
+            swap: '0x104',
+          }[String(body['route'])],
+        };
         break;
       default:
         throw new Error(`Unexpected backend request: ${path}`);

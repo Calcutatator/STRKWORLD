@@ -1,6 +1,8 @@
 import { describe, expect, it, vi } from 'vitest';
 import { BackendPrivacyClient } from './backend-client.js';
 
+const STARK_FIELD_PRIME = (1n << 251n) + 17n * (1n << 192n) + 1n;
+
 function response(body: unknown, status = 200): Response {
   return new Response(JSON.stringify(body), {
     status,
@@ -87,7 +89,7 @@ describe('BackendPrivacyClient', () => {
   it('reports an accepted private hash before returning the submission receipt', async () => {
     const client = new BackendPrivacyClient(
       'https://backend.example',
-      async () => response({ transactionHash: '0xaccepted' }),
+      async () => response({ transactionHash: '0xabc123' }),
     );
     const onAccepted = vi.fn();
 
@@ -100,9 +102,53 @@ describe('BackendPrivacyClient', () => {
       feeAuthorization: 'auth',
       proofValidityBlocks: 450,
       onAccepted,
-    })).resolves.toEqual({ transactionHash: '0xaccepted' });
+    })).resolves.toEqual({ transactionHash: '0xabc123' });
     expect(onAccepted).toHaveBeenCalledOnce();
-    expect(onAccepted).toHaveBeenCalledWith({ transactionHash: '0xaccepted' });
+    expect(onAccepted).toHaveBeenCalledWith({ transactionHash: '0xabc123' });
+  });
+
+  it.each([
+    ['zero', '0x0'],
+    ['leading-zero zero', '0x000'],
+    ['decimal', '123'],
+    ['malformed hex', '0xaccepted'],
+    ['field prime', `0x${STARK_FIELD_PRIME.toString(16)}`],
+    ['above field', `0x${(STARK_FIELD_PRIME + 1n).toString(16)}`],
+  ])('rejects a %s private submission hash before reporting acceptance', async (_label, transactionHash) => {
+    const client = new BackendPrivacyClient(
+      'https://backend.example',
+      async () => response({ transactionHash }),
+    );
+    const onAccepted = vi.fn();
+
+    await expect(client.submit({
+      route: 'transfer',
+      artifact: {
+        call: { contract_address: '0x123', entry_point: 'apply_actions', calldata: ['0x1'] },
+        proof: { data: 'proof', output: ['0x1'], proof_facts: ['0x2'] },
+      },
+      feeAuthorization: 'auth',
+      proofValidityBlocks: 450,
+      onAccepted,
+    })).rejects.toMatchObject({ kind: 'unknown' });
+    expect(onAccepted).not.toHaveBeenCalled();
+  });
+
+  it.each(['0x00Ab', '0xABC'])('accepts a valid nonzero submission felt %s', async (transactionHash) => {
+    const client = new BackendPrivacyClient(
+      'https://backend.example',
+      async () => response({ transactionHash }),
+    );
+
+    await expect(client.submit({
+      route: 'transfer',
+      artifact: {
+        call: { contract_address: '0x123', entry_point: 'apply_actions', calldata: ['0x1'] },
+        proof: { data: 'proof', output: ['0x1'], proof_facts: ['0x2'] },
+      },
+      feeAuthorization: 'auth',
+      proofValidityBlocks: 450,
+    })).resolves.toEqual({ transactionHash });
   });
 
   it('marks a lost private-submit response after dispatch as submission uncertainty', async () => {

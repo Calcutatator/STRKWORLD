@@ -258,6 +258,29 @@ empty shell to fetchers, so a 200 there means nothing.
 
 ## 6. Findings log
 
+### 2026-08-30 — Browser submission receipts require a nonzero Stark felt
+
+The Backend validates paymaster submission hashes, but the browser privacy
+adapter independently trusted any response string and called `onAccepted`
+before validating it. A compromised or malformed same-origin response could
+therefore record zero, decimal text, malformed hex or an out-of-field value as
+a successful private transaction.
+
+The browser boundary now admits only a nonzero hexadecimal Stark-field felt
+before publishing acceptance. Invalid values are protocol failures and never
+reach `onAccepted`; lost responses retain the existing submission-uncertain
+contract, and valid accepted hashes remain authoritative.
+
+*Verified:* a public `BackendPrivacyClient.submit()` table covers zero,
+leading-zero zero, decimal, malformed hex, the field prime and a value above
+the field. All six previously resolved and called `onAccepted`; they now reject
+as `unknown` without publishing acceptance. Valid uppercase and leading-zero
+nonzero felts remain accepted. The accepted receipt fixture and forward-
+compatibility route receipts now use valid felts. The Privacy package passes 9
+files / 184 tests; the full workspace passes 102 files / 1,600 tests, all
+workspace typechecks, production build, all 13 invariants and diff hygiene. No browser, wallet, provider,
+RPC, proof, signature, funds or transaction was used.*
+
 ### 2026-08-30 — A joined Lobby room owns lifecycle-registration failure
 
 Lobby publishes a newly joined room before registering its state, error and

@@ -8,6 +8,7 @@ import type {
 } from './types.js';
 
 type FetchLike = (input: string, init?: RequestInit) => Promise<Response>;
+const STARK_FIELD_PRIME = (1n << 251n) + 17n * (1n << 192n) + 1n;
 
 /** Browser client for the narrow, no-logging backend API. */
 export class BackendPrivacyClient implements PoolReadClient, PrivateSubmissionGateway {
@@ -71,7 +72,11 @@ export class BackendPrivacyClient implements PoolReadClient, PrivateSubmissionGa
       feeAuthorization: input.feeAuthorization,
       proofValidityBlocks: input.proofValidityBlocks,
     }, input.signal, 'submission-uncertain'));
-    const result = { transactionHash: asString(value.transactionHash) };
+    const transactionHash = asString(value.transactionHash);
+    if (!isNonzeroFelt(transactionHash)) {
+      throw new PrivacyError('unknown', 'The private service returned an invalid response.');
+    }
+    const result = { transactionHash };
     input.onAccepted?.(result);
     return result;
   }
@@ -172,6 +177,12 @@ export class BackendPrivacyClient implements PoolReadClient, PrivateSubmissionGa
 
 function throwIfAborted(signal?: AbortSignal): void {
   if (signal?.aborted) throw new PrivacyError('user-rejected', 'Operation cancelled.', signal.reason);
+}
+
+function isNonzeroFelt(value: string): boolean {
+  return /^0x[0-9a-fA-F]{1,64}$/.test(value)
+    && BigInt(value) > 0n
+    && BigInt(value) < STARK_FIELD_PRIME;
 }
 
 function asRecord(value: unknown): Record<string, unknown> {
