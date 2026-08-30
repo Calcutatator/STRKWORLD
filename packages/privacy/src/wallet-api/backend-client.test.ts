@@ -9,6 +9,38 @@ function response(body: unknown, status = 200): Response {
 }
 
 describe('BackendPrivacyClient', () => {
+  it.each([
+    ['config', (client: BackendPrivacyClient, signal: AbortSignal) => client.config(signal), {
+      feeAmount: '6', feeToken: '0x4718', proofValidityBlocks: 450, noteMaturityBlocks: 10,
+    }],
+    ['public key', (client: BackendPrivacyClient, signal: AbortSignal) => client.publicKey('0x123', signal), {
+      publicKey: '0x456',
+    }],
+    ['relay estimate', (client: BackendPrivacyClient, signal: AbortSignal) => client.estimate({
+      route: 'transfer', feeToken: '0x4718', operationToken: '0xabc', signal,
+    }), {
+      token: '0x4718', recipient: '0x789', amount: '7', authorization: 'auth', expiresAtBlock: 1450,
+    }],
+    ['swap preparation', (client: BackendPrivacyClient, signal: AbortSignal) => client.prepareSwap({
+      sellToken: '0xabc', buyToken: '0x4718', sellAmount: 20n, minAmountOut: 90n, slippageBps: 100, signal,
+    }), {
+      quoteId: 'quote-1', buyAmount: '100', expiresAt: 2_000, chainId: '0x534e5f4d41494e',
+      executorAddress: '0x999', executorCalls: [],
+      fee: { token: '0x4718', recipient: '0x789', amount: '7', authorization: 'auth', expiresAtBlock: 1450 },
+    }],
+  ] as const)('does not return a stale %s result when its transport ignores cancellation', async (_name, read, body) => {
+    let resolveResponse!: (value: Response) => void;
+    const fetcher = vi.fn(() => new Promise<Response>((resolve) => { resolveResponse = resolve; }));
+    const client = new BackendPrivacyClient('https://backend.example', fetcher);
+    const controller = new AbortController();
+    const reading = read(client, controller.signal);
+
+    controller.abort(new DOMException('Caller disconnected.', 'AbortError'));
+    resolveResponse(response(body));
+
+    await expect(reading).rejects.toMatchObject({ kind: 'user-rejected' });
+  });
+
   it('calls the default browser fetch with its required global receiver', async () => {
     const browserFetch = vi.fn(function (this: unknown, _url: string, _init?: RequestInit) {
       if (this !== globalThis) throw new TypeError('Illegal invocation');

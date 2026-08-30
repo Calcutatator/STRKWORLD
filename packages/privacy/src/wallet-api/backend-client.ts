@@ -28,6 +28,7 @@ export class BackendPrivacyClient implements PoolReadClient, PrivateSubmissionGa
 
   async config(signal?: AbortSignal): Promise<PoolConfig> {
     const value = await this.post('/v1/rpc/pool-config', { v: 1 }, signal);
+    throwIfAborted(signal);
     const record = asRecord(value);
     return {
       feeAmount: BigInt(asString(record.feeAmount)),
@@ -38,17 +39,21 @@ export class BackendPrivacyClient implements PoolReadClient, PrivateSubmissionGa
   }
 
   async publicKey(address: string, signal?: AbortSignal): Promise<string> {
-    const value = asRecord(await this.post('/v1/rpc/public-key', { v: 1, address }, signal));
+    const raw = await this.post('/v1/rpc/public-key', { v: 1, address }, signal);
+    throwIfAborted(signal);
+    const value = asRecord(raw);
     return asString(value.publicKey);
   }
 
   async estimate(input: Parameters<PrivateSubmissionGateway['estimate']>[0]): Promise<RelayFeeQuote> {
-    const value = asRecord(await this.post('/v1/private/fees', {
+    const raw = await this.post('/v1/private/fees', {
       v: 1,
       route: input.route,
       feeToken: input.feeToken,
       operationToken: input.operationToken,
-    }, input.signal));
+    }, input.signal);
+    throwIfAborted(input.signal);
+    const value = asRecord(raw);
     return {
       token: asString(value.token),
       recipient: asString(value.recipient),
@@ -76,14 +81,16 @@ export class BackendPrivacyClient implements PoolReadClient, PrivateSubmissionGa
       ? A[0]
       : never,
   ): Promise<PreparedPrivateSwap> {
-    const value = asRecord(await this.post('/v1/private/swaps/prepare', {
+    const raw = await this.post('/v1/private/swaps/prepare', {
       v: 1,
       sellToken: input.sellToken,
       buyToken: input.buyToken,
       sellAmount: input.sellAmount.toString(),
       minAmountOut: input.minAmountOut.toString(),
       slippageBps: input.slippageBps,
-    }, input.signal));
+    }, input.signal);
+    throwIfAborted(input.signal);
+    const value = asRecord(raw);
     const fee = asRecord(value.fee);
     const rawCalls = asArray(value.executorCalls);
     return {
@@ -161,6 +168,10 @@ export class BackendPrivacyClient implements PoolReadClient, PrivateSubmissionGa
       );
     }
   }
+}
+
+function throwIfAborted(signal?: AbortSignal): void {
+  if (signal?.aborted) throw new PrivacyError('user-rejected', 'Operation cancelled.', signal.reason);
 }
 
 function asRecord(value: unknown): Record<string, unknown> {

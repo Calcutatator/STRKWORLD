@@ -258,6 +258,26 @@ empty shell to fetchers, so a 200 there means nothing.
 
 ## 6. Findings log
 
+### 2026-08-30 — Backend reads recheck cancellation after transport settlement
+
+The backend privacy adapter passes cancellation signals to fetch, but an
+injected or non-conforming transport can ignore them and resolve later. Pool
+config, public-key, relay-fee and swap-quote reads then returned stale results
+after their caller had cancelled. The adapter now rechecks cancellation after
+each awaited response and before parsing or publishing the value. Private
+submission intentionally does not use this guard: once a submission response
+contains an accepted transaction hash, receipt preservation remains
+authoritative over a late cancellation.
+
+*Verified:* one table-driven public `BackendPrivacyClient` regression defers a
+transport that ignores its signal, aborts each of the four cancellable methods,
+then resolves a valid response. All four cases returned stale data before the
+fix and now reject as `user-rejected`. The Privacy package passes 9 files / 176
+tests; the full workspace passes 102 files / 1,592 tests, all workspace
+typechecks, production build, all 13 invariants and diff hygiene. Injected fetch
+behavior and submission receipt tests remain green. No browser, wallet,
+provider, RPC, proof, signature, funds or transaction was used.*
+
 ### 2026-08-30 — Presence setup and interior suspension retain transport ownership
 
 The Web Presence controller previously treated setup and interior suspension as
