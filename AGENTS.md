@@ -258,6 +258,24 @@ empty shell to fetchers, so a 200 there means nothing.
 
 ## 6. Findings log
 
+### 2026-08-30 — Lobby disconnect publishes peer removal after leave failure
+
+`LobbyClient.disconnect()` retired its local room and identity before awaiting
+the SDK's `room.leave(true)`, but published the empty peer snapshot only after
+that promise resolved. If transport cleanup rejected, the client was already
+closed while peer subscribers retained the last visible avatars indefinitely.
+
+Disconnect now always emits the cleared peer snapshot after attempting room
+cleanup, then rethrows the original leave error. Local status and authority
+retirement remain immediate, successful cleanup is unchanged, and a failed SDK
+leave cannot strand stale World presentation state.
+
+*Verified:* a red-first public Lobby regression connected a fake room, exposed
+one peer, and rejected `room.leave(true)`. The old path left the listener's last
+snapshot populated; the corrected path delivers `[]` while preserving the
+exact rejection. The focused Lobby client suite passes 66 tests. No browser,
+World, wallet, provider, RPC, proof, signature, funds or transaction was used.
+
 ### 2026-08-30 — Web route resolvers fail closed for malformed register containers
 
 The Web route gate validated individual `RouteGrade` entries but assumed the

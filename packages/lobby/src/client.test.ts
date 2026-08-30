@@ -977,6 +977,42 @@ describe('connect is idempotent', () => {
   );
 });
 
+it('clears peer listeners even when room leave fails during disconnect', async () => {
+  const joined = fakeRoom();
+  const joinOrCreate = vi
+    .spyOn(ColyseusClient.prototype, 'joinOrCreate')
+    .mockResolvedValueOnce(joined.room as never);
+
+  try {
+    const client = makeClient(20, 0);
+    const peerSnapshots: Array<readonly PeerSnapshot[]> = [];
+    client.onPeers((peers) => peerSnapshots.push(peers));
+
+    const connecting = client.connect();
+    await Promise.resolve();
+    joined.welcome({ gameId: '0000000000000009' });
+    await connecting;
+    joined.room.state.peers.set('000000000000000a', {
+      gameId: '000000000000000a',
+      position: { x: 25, y: 30 },
+      facing: 'right',
+      sprite: 'avatar-2',
+    } as never);
+    joined.stateChange();
+    expect(peerSnapshots.at(-1)).toHaveLength(1);
+
+    const leaveError = new Error('transport leave failed');
+    joined.leave.mockRejectedValueOnce(leaveError);
+    await expect(client.disconnect()).rejects.toBe(leaveError);
+
+    expect(client.status).toBe('closed');
+    expect(client.gameId).toBeNull();
+    expect(peerSnapshots.at(-1)).toEqual([]);
+  } finally {
+    joinOrCreate.mockRestore();
+  }
+});
+
 describe('presence', () => {
   it('does not schedule reconciliation after move synchronously closes its room', async () => {
     const joined = fakeRoom();

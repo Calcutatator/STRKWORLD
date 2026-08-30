@@ -393,8 +393,20 @@ export class LobbyClient {
     this.#room = null;
     this.#gameId = null;
     this.#setStatus('closed', 'client-left');
-    if (room !== null) await room.leave(true);
+    let leaveFailed = false;
+    let leaveError: unknown;
+    if (room !== null) {
+      try {
+        await room.leave(true);
+      } catch (error) {
+        // Local authority is already retired. Preserve the transport error,
+        // but do not let failed SDK cleanup strand stale peers downstream.
+        leaveFailed = true;
+        leaveError = error;
+      }
+    }
     this.#emitPeers();
+    if (leaveFailed) throw leaveError;
   }
 
   async #join(generation: number, interrupted: Promise<never>): Promise<void> {
