@@ -37,6 +37,32 @@ describe('hidden Avatar Studio', () => {
     expect(onEnter).toHaveBeenCalledTimes(2);
   });
 
+  it('rolls back and permits retry when entry announcement fails', () => {
+    const announcementError = new Error('studio entry announcement failed');
+    let shouldThrow = true;
+    const out: Pick<EventBus<WorldEvents>, 'emit'> = {
+      emit: vi.fn((event) => {
+        if (event === 'avatar-studio:entered' && shouldThrow) {
+          shouldThrow = false;
+          throw announcementError;
+        }
+      }),
+    };
+    const onExit = vi.fn();
+    const controller = createAvatarStudioController({
+      out,
+      selection: createAvatarOutfitSelection({ out }),
+      onExit,
+    });
+
+    expect(() => controller.enter()).toThrow(announcementError);
+    expect(controller.state.inRoom).toBe(false);
+    expect(onExit).toHaveBeenCalledTimes(1);
+
+    expect(() => controller.enter()).not.toThrow();
+    expect(controller.state.inRoom).toBe(true);
+  });
+
   it('keeps studio ownership when exit presentation fails so it can retry', () => {
     const out: Pick<EventBus<WorldEvents>, 'emit'> = { emit: vi.fn() };
     const error = new Error('studio exit presentation failed');

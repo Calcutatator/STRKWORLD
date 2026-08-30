@@ -444,7 +444,23 @@ export function createAvatarStudioController(
         }
         throw error;
       }
-      options.out.emit('avatar-studio:entered', {});
+      try {
+        options.out.emit('avatar-studio:entered', {});
+      } catch (error) {
+        // The announcement is an external lifecycle boundary too. If it
+        // rejects the completed handoff, compensate the presentation and
+        // leave entry retryable while preserving the announcement error.
+        if (!destroyed && inRoom) {
+          inRoom = false;
+          highlightedFigure = null;
+          try {
+            options.onExit?.();
+          } catch {
+            // Preserve the original announcement error.
+          }
+        }
+        throw error;
+      }
     },
     update(tile): void {
       if (destroyed || !inRoom) return;

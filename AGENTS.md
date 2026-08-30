@@ -520,6 +520,25 @@ corrected path restores `{-1, -1}` and successfully reports the same tile on
 the next call. Focused StreetScene lifecycle tests pass 26/26. No browser,
 wallet, provider, RPC, proof, signature, funds or transaction was used.
 
+### 2026-08-30 — Avatar Studio entry rolls back failed semantic announcement
+
+`createAvatarStudioController.enter()` published the admitted Studio state and
+then announced `avatar-studio:entered` without treating the event bus as an
+external lifecycle boundary. If a synchronous listener threw, entry surfaced an
+error but left `inRoom = true` and the presentation entered; a later `enter()`
+was a no-op, so the failed transition could not be retried coherently.
+
+The announcement now compensates the presentation and restores outside state
+when delivery fails, while preserving the original announcement error. A
+reentrant destroy or prior lifecycle transition remains authoritative, and a
+later explicit enter can retry after the listener recovers.
+
+*Verified:* a public regression makes the first `avatar-studio:entered`
+announcement throw; the old path retained `inRoom` and blocked retry, while the
+corrected path calls presentation exit once, preserves the exact error, and
+successfully re-enters. Focused Avatar Studio tests pass 39/39. No browser,
+wallet, provider, RPC, proof, signature, funds or transaction was used.
+
 ### 2026-08-30 — Avatar Studio presentation entry rolls back partial handoffs
 
 `createAvatarStudioPresentation.enter()` performed a sequence of external
