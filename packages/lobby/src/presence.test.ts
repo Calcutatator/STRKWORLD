@@ -112,6 +112,22 @@ describe('admission', () => {
     });
   });
 
+  it.each([null, undefined])(
+    'fails closed for %s placement payloads on every public placement path',
+    (payload) => {
+      const registry = new LobbyPresence();
+      expect(registry.admit('malformed', payload as never)).toEqual({
+        ok: false,
+        reason: 'bad-placement',
+      });
+
+      join(registry, 's1');
+      expect(registry.move('s1', payload as never, 0)).toBe('rejected');
+      registry.suspend('s1');
+      expect(registry.resume('s1', payload as never, 0)).toBe(false);
+    },
+  );
+
   it('refuses once the room is full', () => {
     const registry = new LobbyPresence({ capacity: 2 });
     join(registry, 's1');

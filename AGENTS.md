@@ -258,6 +258,45 @@ empty shell to fetchers, so a 200 there means nothing.
 
 ## 6. Findings log
 
+### 2026-08-30 — Backend request records require own data fields
+
+`requireRecord()` previously used its allowed-key list only to reject unknown
+own enumerable fields; it did not require the listed request fields to exist
+as own data properties. A malformed direct API request could therefore supply
+`v` (or another required field) through a prototype and pass validation,
+reaching the RPC or financial handler with inherited input.
+
+Request validation now requires every declared field to be an own data
+property, rejecting missing and accessor-backed fields before endpoint work.
+The existing unknown-field, route, value, rate-limit and response contracts
+are unchanged.
+
+*Verified:* a red-first public Backend regression passes a pool-config request
+whose only `v` is inherited from a custom prototype; the old path returned
+`200` and called the RPC, while the corrected path returns generic `400` and
+does not call it. The mutation removing the own-field guard reproduces the
+failure. The Backend suite passes 5 files / 159 tests; package typecheck,
+invariants and `git diff --check` pass. No browser, external provider, RPC,
+wallet, proof, signature, funds or transaction was used.
+
+### 2026-08-30 — Lobby placement decoders fail closed on null payloads
+
+`LobbyPresence.admit()`, `.move()` and `.resume()` previously dereferenced
+placement fields directly. A malformed runtime `null` payload therefore threw
+a `TypeError` instead of taking the existing `bad-placement`, `rejected` or
+`false` paths, allowing one malformed payload to escape the Lobby boundary as
+an uncontrolled exception.
+
+Placement reads now use null-safe access so `null` and `undefined` payloads
+fail closed without mutating presence or rate-floor state. Valid placements and
+the existing finite-coordinate behavior are unchanged.
+
+*Verified:* a red-first Lobby regression supplied a `null` payload to every
+public placement path and observed the old dereference error; the corrected
+test returns `bad-placement`, `rejected` and `false`. Focused Lobby presence
+tests pass 32/32. No browser, wallet, provider, RPC, proof, signature, funds
+or transaction was used.
+
 ### 2026-08-30 — PanelLayer effect rolls back partial World listener setup
 
 `PanelLayer` previously acquired its three World listeners in one array

@@ -260,6 +260,19 @@ describe('strict fee authorization', () => {
       .toBe(Number.MAX_SAFE_INTEGER);
   });
 
+  it('rejects request versions supplied only through the prototype', async () => {
+    const { api, rpc } = fixture();
+    const getPoolConfig = vi.spyOn(rpc, 'getPoolConfig');
+    const body = Object.create({ v: 1 }) as Record<string, unknown>;
+
+    await expect(api.handle({
+      method: 'POST',
+      path: '/v1/rpc/pool-config',
+      body,
+    })).resolves.toMatchObject({ status: 400 });
+    expect(getPoolConfig).not.toHaveBeenCalled();
+  });
+
   it.each([
     ['fractional string', '7.5'],
     ['nonnumeric string', 'not-a-number'],

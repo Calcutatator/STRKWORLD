@@ -201,8 +201,8 @@ export class LobbyPresence {
     const entry = this.peers.get(session.gameId);
     if (entry === undefined) return 'absent';
 
-    const x = normalizeCoordinate(request.x, this.#worldLimit);
-    const y = normalizeCoordinate(request.y, this.#worldLimit);
+    const x = normalizeCoordinate(request?.x, this.#worldLimit);
+    const y = normalizeCoordinate(request?.y, this.#worldLimit);
     if (x === null || y === null) return 'rejected';
 
     if (!this.#throttle.accept(sessionKey, now)) {
@@ -212,7 +212,7 @@ export class LobbyPresence {
 
     entry.position.x = x;
     entry.position.y = y;
-    entry.facing = normalizeFacing(request.facing);
+    entry.facing = normalizeFacing(request?.facing);
     return 'applied';
   }
 
@@ -351,17 +351,17 @@ export class LobbyPresence {
 
   /** Build and store an entry, or report that the placement was unusable. */
   #place(gameId: GameId, request: PlacementRequest): boolean {
-    const x = normalizeCoordinate(request.x, this.#worldLimit);
-    const y = normalizeCoordinate(request.y, this.#worldLimit);
+    const x = normalizeCoordinate(request?.x, this.#worldLimit);
+    const y = normalizeCoordinate(request?.y, this.#worldLimit);
     if (x === null || y === null) return false;
 
     const entry = new PresenceEntry();
     entry.gameId = gameId;
     entry.position.x = x;
     entry.position.y = y;
-    entry.facing = normalizeFacing(request.facing) satisfies Facing;
+    entry.facing = normalizeFacing(request?.facing) satisfies Facing;
     entry.sprite = normalizeSprite(
-      request.sprite,
+      request?.sprite,
       this.#spriteKeys,
       this.#defaultSprite,
     );

@@ -17,7 +17,10 @@ export function requireRecord(value: unknown, keys: readonly string[]): Record<s
   if (Object.keys(record).some((key) => !keys.includes(key))) {
     throw new ApiFailure(400, 'Request contains an unknown field.');
   }
-  if (keys.some((key) => !Object.prototype.hasOwnProperty.call(record, key))) {
+  if (keys.some((key) => {
+    const descriptor = Object.getOwnPropertyDescriptor(record, key);
+    return !descriptor || !('value' in descriptor);
+  })) {
     throw new ApiFailure(400, 'Request is missing a required field.');
   }
   return record;
