@@ -754,6 +754,28 @@ describe('WalletSession', () => {
     expect(prepared.intents.every(Object.isFrozen)).toBe(true);
   });
 
+  it('owns prepared warnings before publishing them through the session facade', async () => {
+    const selected = wallet('Ready');
+    const warnings = [{ kind: 'multiple-prompts' as const, count: 2 }];
+    const underlying = { ...batch(), warnings };
+    const connected = controllableConnection(
+      '0x111', operationsWithBatch(underlying, '0.10.3'), new FakePrivacyOperations(),
+    );
+    const session = createWalletSession(
+      denyAllOptions(),
+      { discovery: discoveryWith(selected), connectWallet: async () => connected.port },
+    );
+    await session.connect(session.getSnapshot().wallets[0]!.key);
+    const prepared = await session.operations.prepare([]);
+
+    warnings[0]!.count = 9;
+    warnings.push({ kind: 'multiple-prompts', count: 3 });
+
+    expect(prepared.warnings).toEqual([{ kind: 'multiple-prompts', count: 2 }]);
+    expect(Object.isFrozen(prepared.warnings)).toBe(true);
+    expect(prepared.warnings.every(Object.isFrozen)).toBe(true);
+  });
+
   it('retires malformed prepared work when facade validation rejects it', async () => {
     const selected = wallet('Ready');
     const discard = vi.fn();

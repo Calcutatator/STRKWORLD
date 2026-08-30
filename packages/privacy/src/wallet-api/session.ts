@@ -595,6 +595,7 @@ function ownPreparedBatch(
   }
   const swapReview = swapReviewDescriptor?.value;
   const intents = Object.freeze(prepared.intents.map((intent) => Object.freeze({ ...intent })));
+  const warnings = Object.freeze(prepared.warnings.map((warning) => Object.freeze({ ...warning })));
   let discarded = false;
   let confirmationAttempted = false;
   const discard = (): void => {
@@ -614,7 +615,7 @@ function ownPreparedBatch(
     poolFee: prepared.poolFee,
     gasEstimate: prepared.gasEstimate,
     totalCost: prepared.totalCost,
-    warnings: prepared.warnings,
+    warnings,
     promptCount: prepared.promptCount,
     ...(swapReview ? { swapReview } : {}),
     async confirm(options: Parameters<PreparedBatch['confirm']>[0]) {
