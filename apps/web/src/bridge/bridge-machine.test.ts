@@ -40,6 +40,22 @@ function harness(initial: BridgeRecord | null = null, planner: PublicShieldPlann
 }
 
 describe('Bridge shell machine', () => {
+  it('exposes a read-only immutable state snapshot to panel consumers', async () => {
+    const h = harness(record());
+    await h.machine.open();
+    const state = h.machine.store.getState();
+
+    expect('setState' in h.machine.store).toBe(false);
+    expect(Object.isFrozen(state)).toBe(true);
+    expect(Object.isFrozen(state.sources)).toBe(true);
+    expect(Object.isFrozen(state.sources.assets)).toBe(true);
+    expect(Object.isFrozen(state.record)).toBe(true);
+    expect(Object.isFrozen(state.record?.signedQuote)).toBe(true);
+    expect(Object.isFrozen(state.record?.status)).toBe(true);
+    expect(Reflect.set(state.record!.status, 'leg', 'settled')).toBe(false);
+    expect(state.record!.status.leg).toBe('awaiting-deposit');
+  });
+
   it('opens local evidence and sources without quoting, polling or wallet work', async () => {
     const h = harness();
     await h.machine.open();

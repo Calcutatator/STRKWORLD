@@ -59,7 +59,7 @@ describe('BridgePanel', () => {
     expect(markup).not.toContain('Direct unauthenticated 1Click charges');
   });
 
-  it('keeps recovered status controls visible without re-exposing settled deposit instructions', () => {
+  it('keeps recovered status controls visible without re-exposing settled deposit instructions', async () => {
     const recovered: BridgeRecord = {
       v: 1,
       createdAt: 1,
@@ -78,7 +78,7 @@ describe('BridgePanel', () => {
       status: { leg: 'settled', message: 'settled', pollingStopped: true, strkReceived: 18n },
     };
     const machine = createBridgePanel({ service: { ...service, resume: () => recovered }, loadSources: async () => [], readAccount: () => '0x123', planner: null, now: () => Date.parse('2030-01-01T00:01:00.000Z') });
-    machine.store.setState((state) => ({ ...state, record: recovered, flow: { name: 'idle' } }));
+    await machine.open();
     const markup = renderToStaticMarkup(
       <PrivacyProvider operations={new FakePrivacyOperations()}>
         <BridgeProvider service={service} account="0x123" planner={null}>
@@ -92,7 +92,7 @@ describe('BridgePanel', () => {
     expect(markup).not.toContain('0xdeposit');
   });
 
-  it('offers one concise resume action for a restored awaiting-deposit quote', () => {
+  it('offers one concise resume action for a restored awaiting-deposit quote', async () => {
     const restored: BridgeRecord = {
       v: 1,
       createdAt: 1,
@@ -111,15 +111,7 @@ describe('BridgePanel', () => {
       status: { leg: 'awaiting-deposit', message: 'Waiting for deposit', pollingStopped: false },
     };
     const machine = createBridgePanel({ service: { ...service, resume: () => restored }, loadSources: async () => [], readAccount: () => '0x123', planner: { planMax: async () => { throw new Error('unused'); } }, now: () => Date.parse('2030-01-01T00:01:00.000Z') });
-    machine.store.setState((state) => ({ ...state, record: restored, quote: {
-      amountIn: restored.amountIn,
-      sourceSymbol: 'USDC',
-      sourceDecimals: 6,
-      expectedAmountOut: 20n,
-      minimumAmountOut: 19n,
-      deadline: '2030-01-01T00:30:00.000Z',
-      recipient: '0x123',
-    }, preflightAvailable: true, instructionsVisible: false, flow: { name: 'idle' } }));
+    await machine.open();
     const markup = renderToStaticMarkup(
       <PrivacyProvider operations={new FakePrivacyOperations()}>
         <BridgeProvider service={service} account="0x123" planner={{ planMax: async () => { throw new Error('unused'); } }}>

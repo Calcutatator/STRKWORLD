@@ -10,7 +10,7 @@ import type {
   PublicShieldPlan,
   PublicShieldPlanner,
 } from '@strkworld/privacy';
-import { createStore, type Store } from '../store/store.js';
+import { createStore, type ReadableStore } from '../store/store.js';
 import { COPY } from '../copy.js';
 import { formatTokenAmountExact } from '../format.js';
 import { sameAddress } from '../format.js';
@@ -40,40 +40,41 @@ export interface BridgeServicePort {
 }
 
 export type BridgeFlow =
-  | { name: 'idle' }
-  | { name: 'loading' }
-  | { name: 'quoting' }
-  | { name: 'preflighting' }
-  | { name: 'watching' }
-  | { name: 'planning-shield' }
-  | { name: 'ready-to-shield' }
-  | { name: 'failed'; message: string; retry: 'quote' | 'shield' | 'none' };
+  | { readonly name: 'idle' }
+  | { readonly name: 'loading' }
+  | { readonly name: 'quoting' }
+  | { readonly name: 'preflighting' }
+  | { readonly name: 'watching' }
+  | { readonly name: 'planning-shield' }
+  | { readonly name: 'ready-to-shield' }
+  | { readonly name: 'failed'; readonly message: string; readonly retry: 'quote' | 'shield' | 'none' };
 
 export interface BridgeQuoteReview {
-  amountIn: bigint;
-  sourceSymbol: string;
-  sourceDecimals: number;
-  expectedAmountOut: bigint;
-  minimumAmountOut: bigint;
-  deadline: string;
-  recipient: Address;
+  readonly amountIn: bigint;
+  readonly sourceSymbol: string;
+  readonly sourceDecimals: number;
+  readonly expectedAmountOut: bigint;
+  readonly minimumAmountOut: bigint;
+  readonly deadline: string;
+  readonly recipient: Address;
 }
 
 export interface BridgeState {
-  sources: { status: 'unrequested' | 'loading' | 'loaded' | 'failed'; assets: readonly SourceAsset[] };
-  record: BridgeRecord | null;
-  account: Address | null;
-  accountMatchesRecord: boolean;
-  quote: BridgeQuoteReview | null;
-  preflightAvailable: boolean;
-  instructionsVisible: boolean;
-  plan: PublicShieldPlan | null;
-  flow: BridgeFlow;
-  notice: { tone: 'info' | 'error'; text: string } | null;
+  readonly sources: { readonly status: 'unrequested' | 'loading' | 'loaded' | 'failed'; readonly assets: readonly SourceAsset[] };
+  readonly record: BridgeRecord | null;
+  readonly account: Address | null;
+  readonly accountMatchesRecord: boolean;
+  readonly quote: BridgeQuoteReview | null;
+  readonly preflightAvailable: boolean;
+  readonly instructionsVisible: boolean;
+  readonly plan: PublicShieldPlan | null;
+  readonly flow: BridgeFlow;
+  readonly notice: { readonly tone: 'info' | 'error'; readonly text: string } | null;
 }
 
 export interface BridgePanel {
-  readonly store: Store<BridgeState>;
+  /** Read-only view; panel methods own every recovery and bridge transition. */
+  readonly store: ReadableStore<BridgeState>;
   open(): Promise<void>;
   close(): void;
   createQuote(input: {
@@ -141,12 +142,28 @@ const initialState: BridgeState = {
   notice: null,
 };
 
+/** Clone provider-owned evidence before freezing it at the React seam. */
+function cloneAndFreeze<T>(value: T): T {
+  if (value === null || typeof value !== 'object') return value;
+  if (Array.isArray(value)) return Object.freeze(value.map((entry) => cloneAndFreeze(entry))) as T;
+  const copy: Record<string, unknown> = {};
+  for (const key of Object.keys(value)) {
+    copy[key] = cloneAndFreeze((value as Record<string, unknown>)[key]);
+  }
+  return Object.freeze(copy) as T;
+}
+
 /**
  * Manual Bridge state machine. It deliberately has no timer and no implicit
  * provider call: entering opens local evidence and source metadata only.
  */
 export function createBridgePanel(options: BridgePanelOptions): BridgePanel {
-  const store = createStore<BridgeState>(initialState);
+  const stateStore = createStore<BridgeState>(cloneAndFreeze(initialState));
+  const store: ReadableStore<BridgeState> = Object.freeze({
+    getState: stateStore.getState,
+    getServerSnapshot: stateStore.getServerSnapshot,
+    subscribe: stateStore.subscribe,
+  });
   const coordinator = coordinatorFor(options.service);
   const now = options.now ?? Date.now;
   let session = 0;
@@ -166,7 +183,7 @@ export function createBridgePanel(options: BridgePanelOptions): BridgePanel {
   const begin = (): number => (attempt += 1);
   const live = (id: number, currentSession: number): boolean => id === attempt && currentSession === session;
   const patch = (value: Partial<BridgeState>): void => {
-    store.setState((previous) => ({ ...previous, ...value }));
+    stateStore.setState((previous) => cloneAndFreeze({ ...previous, ...value }));
   };
   const fail = (message: string, retry: 'quote' | 'shield' | 'none'): void => {
     patch({ flow: { name: 'failed', message, retry }, notice: { tone: 'error', text: message } });
