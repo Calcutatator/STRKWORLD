@@ -217,6 +217,8 @@ export function createAvatarVisualController(
     sprinting: false,
   };
   let rendered = '';
+  let presenting = false;
+  let queuedState: AvatarVisualControllerState | null = null;
 
   const render = (nextState: AvatarVisualControllerState): void => {
     const key = `${nextState.sprite}:${nextState.facing}:${nextState.moving}:${nextState.sprinting}`;
@@ -232,15 +234,37 @@ export function createAvatarVisualController(
       moving: pose.moving,
       sprinting: pose.moving && pose.sprinting === true,
     };
+    // Phaser setters are synchronous but can call back into the shell. Queue
+    // a nested pose until the outer target mutation has completed; otherwise
+    // the outer call resumes and commits stale state over the newer pose (and
+    // can leave texture/frame/data from two different poses mixed together).
+    if (presenting) {
+      queuedState = nextState;
+      return;
+    }
+    presenting = true;
     try {
-      render(nextState);
-      state = nextState;
+      let candidate: AvatarVisualControllerState | null = nextState;
+      while (candidate !== null) {
+        queuedState = null;
+        try {
+          render(candidate);
+          state = candidate;
+        } catch (error) {
+          rendered = '';
+          queuedState = null;
+          throw error;
+        }
+        candidate = queuedState;
+      }
     } catch (error) {
       // A Phaser setter may partially mutate the target before throwing. The
       // logical state stays at the last successful pose, and the cache is
       // invalidated so a retry repairs the target rather than being skipped.
-      rendered = '';
       throw error;
+    } finally {
+      presenting = false;
+      queuedState = null;
     }
   };
 

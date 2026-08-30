@@ -246,6 +246,28 @@ describe('D-052 avatar visual catalog', () => {
     expect(target.setTexture).toHaveBeenLastCalledWith('avatar-1');
   });
 
+  it('does not let a reentrant selection commit an older outer pose', () => {
+    const target = fakeAvatarTarget();
+    let renderedTexture = '';
+    target.setTexture.mockImplementation(((texture: string) => {
+      renderedTexture = texture;
+      return target;
+    }) as never);
+    const controller = createAvatarVisualController(target as never);
+    target.setTexture.mockImplementation(((texture: string) => {
+      renderedTexture = texture;
+      if (texture === 'avatar-7') controller.select('avatar-8');
+      return target;
+    }) as never);
+
+    controller.select('avatar-7');
+
+    expect(controller.state.sprite).toBe('avatar-8');
+    expect(renderedTexture).toBe('avatar-8');
+    controller.present({ sprite: 'avatar-8', facing: 'down', moving: false });
+    expect(target.setTexture).toHaveBeenCalledTimes(3);
+  });
+
   it('does not commit local facing when a pose presentation fails', () => {
     const target = Object.assign(fakeAvatarTarget(), {
       body: { velocity: {}, setSize: vi.fn(), setOffset: vi.fn() },

@@ -280,6 +280,30 @@ Removing the descriptor projection restores the failure. Privacy tests pass 10
 files / 530 tests and package typecheck passes. No browser, wallet, provider,
 RPC, proof, signature, funds or transaction was used.*
 
+### 2026-08-30 — Avatar visual presentation must serialize reentrant poses
+
+`createAvatarVisualController.present()` called Phaser setters while leaving
+the controller open to synchronous reentrant `select()` or `update()` calls.
+The nested call could render and commit a newer pose, after which the outer
+call resumed and committed its stale candidate. Because the setter sequence
+was also interleaved, the target could retain a texture/frame/data combination
+from different poses while the controller's cache claimed it was coherent;
+the next identical update could then skip the repair.
+
+Presentation now serializes the target mutation: a nested pose is retained as
+the newest queued candidate and rendered only after the current setter sequence
+completes. Logical state and the render cache are committed in that same order;
+failed target calls still preserve the last successful pose and invalidate the
+cache for retry. Non-reentrant deduplication, animation cadence and local body
+behavior are unchanged.
+
+*Verified:* a red-first public World regression makes `setTexture()` select a
+second avatar synchronously during the first selection. The old controller
+finished with stale `avatar-7` state and a mixed target, while the corrected
+controller finishes with the queued `avatar-8` pose and does not re-render an
+unchanged pose. Avatar-visual tests pass 15 tests. No browser, lobby service,
+wallet, provider, RPC, proof, signature, funds or transaction was used.
+
 ### 2026-08-30 — Web World-event consumers own and validate payloads
 
 The Web visit, panel and presence consumers previously narrowed World event
