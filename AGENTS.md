@@ -258,6 +258,32 @@ empty shell to fetchers, so a 200 there means nothing.
 
 ## 6. Findings log
 
+### 2026-08-30 — PrivacyProvider renders only the current financial seam
+
+`PrivacyProvider` copied an explicit `operations` prop into state and exposed
+that state to its children. When a host replaced the seam, the provider
+therefore rendered one commit with the retired instance before its effect ran;
+the same stale instance remained visible while a requested lazy demo seam was
+loading. A child mounting in that window could begin reads or financial work
+against an authority the host had already replaced.
+
+The provider now treats an explicit `operations` prop as authoritative during
+render and bypasses any retained real seam while entering lazy demo mode. The
+demo import remains lazy and still renders the supplied fallback until it
+resolves; an explicit seam swap reaches the existing `PrivacyRuntime`
+composition immediately.
+
+*Verified:* public jsdom rerender regressions first observed the old seam when
+changing `operations` from instance A to B and when changing from a real seam
+to lazy demo. The corrected tests observe no stale child render and require
+the exact synchronous loading fallback for the real-to-demo transition. The
+focused PrivacyProvider suite passes 10 tests; the Web suite passes 43 files /
+498 tests; the full workspace passes 102 files / 1,590 tests. All workspace
+typechecks, the Web production build, 13 invariants and diff hygiene pass. No
+browser wallet, provider, RPC, proof, signature, funds or transaction was
+used.
+
+
 ### 2026-08-30 — Stale prepare cleanup cannot mask session ownership
 
 When an in-flight `WalletSession.operations.prepare()` settled after the

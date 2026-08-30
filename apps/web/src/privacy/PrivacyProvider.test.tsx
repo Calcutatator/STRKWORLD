@@ -1,4 +1,8 @@
-import { describe, expect, it, vi } from 'vitest';
+// @vitest-environment jsdom
+import { act, useLayoutEffect } from 'react';
+import { createRoot } from 'react-dom/client';
+import { flushSync } from 'react-dom';
+import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { FakePrivacyOperations } from '@strkworld/privacy';
 import {
@@ -9,12 +13,91 @@ import {
 } from './PrivacyProvider.js';
 import { createSubmissionUncertainty } from './submission-uncertainty.js';
 
+const previousActEnvironment = (globalThis as typeof globalThis & {
+  IS_REACT_ACT_ENVIRONMENT?: boolean;
+}).IS_REACT_ACT_ENVIRONMENT;
+beforeAll(() => {
+  Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true });
+});
+afterAll(() => {
+  if (previousActEnvironment === undefined) {
+    delete (globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT;
+  } else {
+    Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: previousActEnvironment });
+  }
+});
+
 function Probe() {
   const { connectState } = usePrivacy();
   return <p>{connectState.name}</p>;
 }
 
+function OperationProbe({ expected, stale }: { expected: object | null; stale: { current: boolean } }) {
+  const { operations } = usePrivacy();
+  if (operations !== expected) stale.current = true;
+  useLayoutEffect(() => {
+    if (operations !== expected) stale.current = true;
+  }, [expected, operations, stale]);
+  return null;
+}
+
 describe('PrivacyProvider', () => {
+  it('publishes a replacement financial seam before child render effects can use the old one', async () => {
+    const first = new FakePrivacyOperations();
+    const second = new FakePrivacyOperations();
+    const stale = { current: false };
+    const container = document.createElement('div');
+    const root = createRoot(container);
+
+    await act(async () => {
+      root.render(
+        <PrivacyProvider operations={first}>
+          <OperationProbe expected={first} stale={stale} />
+        </PrivacyProvider>,
+      );
+    });
+    stale.current = false;
+
+    flushSync(() => {
+      root.render(
+        <PrivacyProvider operations={second}>
+          <OperationProbe expected={second} stale={stale} />
+        </PrivacyProvider>,
+      );
+    });
+
+    expect(stale.current).toBe(false);
+    await act(async () => root.unmount());
+  });
+
+  it('does not expose a retired real seam while the lazy demo seam loads', async () => {
+    const first = new FakePrivacyOperations();
+    const stale = { current: false };
+    const container = document.createElement('div');
+    const root = createRoot(container);
+
+    await act(async () => {
+      root.render(
+        <PrivacyProvider operations={first}>
+          <OperationProbe expected={first} stale={stale} />
+        </PrivacyProvider>,
+      );
+    });
+    stale.current = false;
+
+    flushSync(() => {
+      root.render(
+        <PrivacyProvider demo fallback={<p>loading</p>}>
+          <OperationProbe expected={null} stale={stale} />
+        </PrivacyProvider>,
+      );
+    });
+
+    expect(container.innerHTML).toBe('<p>loading</p>');
+    expect(stale.current).toBe(false);
+    await act(async () => root.unmount());
+  });
+
   it('retires and rechecks capability only when the connected wallet authority changes', () => {
     const connected = {
       phase: 'connected' as const,

@@ -141,11 +141,16 @@ export function PrivacyProvider({
     };
   }, [operations]);
 
-  if (!resolved) return <>{fallback}</>;
+  // An explicit seam is authoritative during render. Waiting for the effect
+  // below to copy it into `resolved` would expose a retired operations object
+  // to child render/effects for one commit. Likewise, entering lazy demo mode
+  // must not briefly keep serving the previous real seam while its chunk loads.
+  const effectiveOperations = operations ?? (demo ? null : resolved);
+  if (!effectiveOperations) return <>{fallback}</>;
 
   return (
     <PrivacyRuntime
-      operations={resolved}
+      operations={effectiveOperations}
       walletSession={walletSession}
       initialConnectState={initialConnectState}
       shellBus={shellBus}
