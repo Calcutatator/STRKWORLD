@@ -534,6 +534,39 @@ describe('Bridge shell machine', () => {
     expect(await revalidation).toBeNull();
   });
 
+  it('allows reopened shield revalidation while a closed account read is pending', async () => {
+    let releaseAccount!: (value: string | null) => void;
+    let releasePlanner!: () => void;
+    let deferAccount = false;
+    let plannerCalls = 0;
+    const planner: PublicShieldPlanner = { planMax: vi.fn(async ({ available }: PublicShieldPlanInput) => {
+      plannerCalls += 1;
+      if (plannerCalls === 2) await new Promise<void>((resolve) => { releasePlanner = resolve; });
+      return plan(available);
+    }) };
+    const h = harness(record({ leg: 'settled', message: 'settled', pollingStopped: true, strkReceived: 1_234n }), planner, {
+      readAccount: () => deferAccount
+        ? new Promise<string | null>((resolve) => { releaseAccount = resolve; })
+        : ACCOUNT,
+    });
+
+    await h.machine.planShield();
+    deferAccount = true;
+    const first = h.machine.revalidateShieldPlan();
+    await Promise.resolve();
+    h.machine.close();
+    deferAccount = false;
+    const second = h.machine.revalidateShieldPlan();
+    await vi.waitFor(() => expect(planner.planMax).toHaveBeenCalledTimes(2));
+
+    releaseAccount(ACCOUNT);
+    await expect(first).resolves.toBeNull();
+    await expect(h.machine.revalidateShieldPlan()).resolves.toBeNull();
+    releasePlanner();
+    await expect(second).resolves.toEqual(expect.objectContaining({ available: 1_234n }));
+    expect(planner.planMax).toHaveBeenCalledTimes(2);
+  });
+
   it('returns null when the active account changes while the commit guard awaits planning', async () => {
     let reads = 0;
     let release!: () => void;

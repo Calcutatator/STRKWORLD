@@ -159,7 +159,8 @@ export function createBridgePanel(options: BridgePanelOptions): BridgePanel {
   let refreshSequence = 0;
   let shieldOwner = 0;
   let shieldSequence = 0;
-  let revalidateBusy = false;
+  let revalidateOwner = 0;
+  let revalidateSequence = 0;
 
   const nextSession = (): number => (session += 1);
   const begin = (): number => (attempt += 1);
@@ -413,6 +414,7 @@ export function createBridgePanel(options: BridgePanelOptions): BridgePanel {
       shieldOwner = 0;
       preflightOwner = 0;
       refreshOwner = 0;
+      revalidateOwner = 0;
       watchController?.abort();
       watchController = null;
       patch({ flow: { name: 'idle' } });
@@ -634,8 +636,9 @@ export function createBridgePanel(options: BridgePanelOptions): BridgePanel {
     },
 
     async revalidateShieldPlan(): Promise<PublicShieldPlan | null> {
-      if (revalidateBusy) return null;
-      revalidateBusy = true;
+      if (revalidateOwner !== 0) return null;
+      const owner = ++revalidateSequence;
+      revalidateOwner = owner;
       try {
       const planner = options.planner;
       const record = options.service.resume();
@@ -669,7 +672,7 @@ export function createBridgePanel(options: BridgePanelOptions): BridgePanel {
         return null;
       }
       } finally {
-        revalidateBusy = false;
+        if (revalidateOwner === owner) revalidateOwner = 0;
       }
     },
   };

@@ -258,6 +258,29 @@ empty shell to fetchers, so a 200 there means nothing.
 
 ## 6. Findings log
 
+### 2026-08-30 — Bridge shield-plan revalidation ownership is retired on close
+
+The Web Bridge panel used one `revalidateBusy` flag for the lifetime of a
+machine. Closing the panel while a settled-funds account read was pending did
+not retire that flag, so a reopened panel could not revalidate its current
+shield plan until stale work settled. The session clock prevented stale
+publication, but the replacement validation was silently unavailable in the
+meantime.
+
+Shield-plan revalidation now has an owner token whose release is conditional
+on that token still being current; close retires the owner immediately,
+allowing a reopened panel to validate while the old read drains. Existing
+attempt/session, account, evidence and plan guards still prevent stale results
+from becoming executable.
+
+*Verified:* a red-first public Bridge regression starts revalidation A with a
+deferred account read, closes the panel, starts revalidation B and resolves B
+before stale A. On the old path B returned `null` without planning; the
+corrected path completes B and stale A returns `null`. Removing the owner
+guard reproduces the failure. The focused Bridge suite passes 46/46; no
+browser, wallet, provider, RPC, proof, signature, funds or transaction was
+used.
+
 ### 2026-08-30 — Avatar Studio does not publish after selection teardown
 
 `createAvatarStudioController.update()` selected a contacted figure and then
