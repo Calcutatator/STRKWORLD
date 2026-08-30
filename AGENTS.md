@@ -374,6 +374,27 @@ resume send. Removing the container guard makes both regressions fail. No
 browser, external lobby, wallet, provider, RPC, proof, signature, funds or
 transaction was used.*
 
+### 2026-08-30 — Lobby connect honors synchronous retirement during status delivery
+
+`LobbyClient.connect()` published `connecting` before installing its join
+attempt. A synchronous status listener could call `disconnect()` during that
+publication, retiring the generation, but `connect()` then continued and
+opened a room for the already-closed client. The stale room was eventually
+left, but the public lifecycle call still performed an unauthorized transport
+join and briefly created a server-side presence entry.
+
+Connect now rechecks its generation and `connecting` status immediately after
+the synchronous status handoff, before constructing the join promise. A
+listener-retired attempt therefore resolves without opening transport, while
+ordinary concurrent connect and explicit reconnect behavior remain unchanged.
+
+*Verified:* a red-first public fake-room regression has a `connecting` status
+listener synchronously disconnect the client; the old path called
+`joinOrCreate()` and left the stale room, while the corrected path makes zero
+join or leave calls and remains `closed`. The focused Lobby client suite passes
+83/83. No browser, external lobby, wallet, provider, RPC, proof, signature,
+funds or transaction was used.*
+
 ### 2026-08-30 — Lobby resume normalizes facing before crossing the wire
 
 `LobbyClient.resume()` forwarded its runtime `facing` value directly, even

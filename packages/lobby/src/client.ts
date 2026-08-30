@@ -230,6 +230,10 @@ export class LobbyClient {
 
     const generation = ++this.#joinGeneration;
     this.#setStatus('connecting');
+    // Status delivery is synchronous. A listener may retire this connection
+    // before the join attempt has been installed; do not start transport work
+    // for that superseded generation.
+    if (this.#joinGeneration !== generation || this.#status !== 'connecting') return;
     let interrupt!: (error: Error) => void;
     const interrupted = new Promise<never>((_resolve, reject) => {
       interrupt = reject;
