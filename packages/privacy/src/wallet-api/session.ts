@@ -623,6 +623,10 @@ function ownPreparedBatch(
     retireInvalidPrepared(prepared);
     throw new PrivacyError('unknown', 'The wallet returned an invalid prepared intent.');
   }
+  if (new Set(prepared.intents.map((intent) => intent.kind)).size > 1) {
+    retireInvalidPrepared(prepared);
+    throw new PrivacyError('unknown', 'The wallet returned mixed prepared route kinds.');
+  }
   const swapIntents = prepared.intents.filter((intent) => intent.kind === 'swap');
   if ((swapReview !== undefined && (prepared.intents.length !== 1 || swapIntents.length !== 1))) {
     retireInvalidPrepared(prepared);
