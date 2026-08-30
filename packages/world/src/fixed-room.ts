@@ -589,6 +589,7 @@ export function createFixedRoomController(
           // World input suspended.
           if (!destroyed && inRoom && ownsWorldControl()) options.input.resume();
         } catch (error) {
+          if (deliveryFailed && !destroyed && inRoom) approachArmed.add(approached.station);
           if (deliveryFailed) {
             throw new AggregateError(
               [deliveryError, error],
@@ -597,7 +598,13 @@ export function createFixedRoomController(
           }
           throw error;
         }
-        if (deliveryFailed) throw deliveryError;
+        if (deliveryFailed) {
+          // A failed synchronous handoff did not complete station activation.
+          // Keep the same approach retryable unless this controller has
+          // already left its lifecycle; leaving or destruction owns reset.
+          if (!destroyed && inRoom) approachArmed.add(approached.station);
+          throw deliveryError;
+        }
       }
     },
     destroy(): void {

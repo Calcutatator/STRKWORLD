@@ -258,6 +258,32 @@ empty shell to fetchers, so a 200 there means nothing.
 
 ## 6. Findings log
 
+### 2026-08-30 — Failed station delivery must remain retryable
+
+`createFixedRoomController.update()` removed a station from
+`approachArmed` before suspending input and delivering `station:activated`.
+When a synchronous station consumer threw, input was restored and the error
+was reported, but the approach remained disarmed. The player could stay on
+the same approach tile and receive no second activation until leaving and
+re-entering it, turning a transient presentation/consumer failure into a
+stuck station interaction.
+
+Failed station delivery now rearms that station after the input-restoration
+attempt, including the aggregate delivery-plus-restoration failure path. The
+reset is skipped only when the controller has already been destroyed or left;
+those lifecycle transitions own their own reset. Successful activation,
+input-suspension failure, Shell control claims and normal leave behavior are
+unchanged.
+
+*Verified:* a red-first public fixed-room regression made the first
+`station:activated` consumer throw, then retried the same approach tile. On
+the old path only one delivery occurred; the corrected path delivers the
+second attempt and restores input after both attempts. Removing either
+rearm path reproduces the relevant failure. Focused fixed-room and World
+checks, typechecks, build, invariants and diff hygiene pass. No browser,
+lobby, wallet, provider, RPC, proof, signature, funds or transaction was
+used.
+
 ### 2026-08-30 — Avatar Studio exit can announce stale ownership after reentrant state publication
 
 `createAvatarStudioController.leave()` published the outside snapshot and then

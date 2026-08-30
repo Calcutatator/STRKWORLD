@@ -189,6 +189,63 @@ describe('fixed room definitions', () => {
     expect(h.controller.state.inRoom).toBe(true);
   });
 
+  it('rearms the station approach when station delivery throws', () => {
+    const h = harness();
+    h.controller.enter();
+    h.shell.emit('world:stations', {
+      building: 'post-office',
+      stations: [{
+        station: 'post-office:transfer',
+        label: 'TRANSFER',
+        status: 'available',
+      }],
+    });
+    let attempts = 0;
+    h.out.on('station:activated', () => {
+      attempts += 1;
+      if (attempts === 1) throw new Error('station consumer failed');
+    });
+
+    expect(() => h.controller.update({ x: 3, y: 4 })).toThrow('station consumer failed');
+    h.controller.update({ x: 3, y: 4 });
+
+    expect(attempts).toBe(2);
+    expect(h.inputCalls).toEqual(['resume', 'suspend', 'resume', 'suspend', 'resume']);
+  });
+
+  it('rearms after delivery and input restoration both fail', () => {
+    const out = bus<WorldEvents>();
+    const shell = bus<ShellEvents>();
+    const deliveryError = new Error('station consumer failed');
+    const restorationError = new Error('input restoration failed');
+    const resume = vi.fn()
+      .mockImplementationOnce(() => {})
+      .mockImplementationOnce(() => { throw restorationError; })
+      .mockImplementationOnce(() => {});
+    let attempts = 0;
+    out.on('station:activated', () => {
+      attempts += 1;
+      if (attempts === 1) throw deliveryError;
+    });
+    const controller = createFixedRoomController({
+      definition: POST_OFFICE_ROOM_DEFINITION,
+      out,
+      in: shell,
+      input: { suspend: vi.fn(), resume },
+    });
+    controller.enter();
+    shell.emit('world:stations', {
+      building: 'post-office',
+      stations: [{ station: 'post-office:transfer', label: 'TRANSFER', status: 'available' }],
+    });
+
+    expect(() => controller.update({ x: 3, y: 4 })).toThrow(AggregateError);
+    controller.update({ x: 3, y: 4 });
+
+    expect(attempts).toBe(2);
+    expect(resume).toHaveBeenCalledTimes(3);
+  });
+
   it('keeps room ownership when input restoration fails on exit so it can retry', () => {
     const out = bus<WorldEvents>();
     const shell = bus<ShellEvents>();
