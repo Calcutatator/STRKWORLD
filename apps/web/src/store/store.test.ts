@@ -2,6 +2,18 @@ import { describe, expect, it, vi } from 'vitest';
 import { createStore } from './store.js';
 
 describe('createStore', () => {
+  it('publishes an immutable store API while retaining its owned mutator', () => {
+    const store = createStore(0);
+    const originalSetState = store.setState;
+
+    expect(Object.isFrozen(store)).toBe(true);
+    expect(Reflect.set(store, 'setState', () => undefined)).toBe(false);
+    expect(Reflect.set(store, 'getState', () => 99)).toBe(false);
+    expect(store.setState).toBe(originalSetState);
+    store.setState(1);
+    expect(store.getState()).toBe(1);
+  });
+
   it('keeps a replacement subscription when an older unsubscribe settles later', () => {
     const store = createStore(0);
     const listener = vi.fn();
