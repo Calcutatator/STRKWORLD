@@ -245,6 +245,22 @@ describe('a shield is never bundled with what it funds', () => {
 describe('the fee can move between prepare and confirm', () => {
   it.each([
     ['negative bigint', -1n],
+    ['number', 1],
+    ['string', '1'],
+  ] as const)('rejects an invalid %s pool fee without changing confirmation cost', async (_label, fee) => {
+    const ops = fresh();
+    const batch = await ops.prepare([
+      { kind: 'transfer', token: STRK, amount: 10n ** 18n, recipient: BOB },
+    ]);
+
+    expect(() => ops.setPoolFee(fee as never)).toThrow(/pool fee/i);
+    await expect(batch.confirm({ feeCeiling: batch.totalCost })).resolves.toBeDefined();
+    const [balance] = await ops.balances([STRK]);
+    expect(balance?.spendable).toBe(100n * 10n ** 18n - 10n ** 18n - batch.totalCost);
+  });
+
+  it.each([
+    ['negative bigint', -1n],
     ['number', 10],
     ['string', '10'],
   ] as const)('rejects an invalid %s fee ceiling before consuming confirmation state', async (_label, feeCeiling) => {

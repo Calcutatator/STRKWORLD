@@ -175,6 +175,9 @@ export class FakePrivacyOperations implements PrivacyOperations {
    * reject when that breaches the ceiling — this is how you test it.
    */
   setPoolFee(feeAmount: bigint): void {
+    if (typeof feeAmount !== 'bigint' || feeAmount < 0n) {
+      throw new PrivacyError('unknown', 'The fake pool fee must be a non-negative bigint.');
+    }
     this.pool = { ...this.pool, feeAmount };
   }
 
