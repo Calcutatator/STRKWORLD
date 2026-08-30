@@ -205,7 +205,7 @@ export class BackendPrivacyClient implements PoolReadClient, PrivateSubmissionGa
         error,
       );
     }
-    if (!response.ok) {
+    if (!ownResponseOk(response)) {
       const status = ownResponseStatus(response);
       let failure: unknown;
       try {
@@ -237,6 +237,24 @@ export class BackendPrivacyClient implements PoolReadClient, PrivateSubmissionGa
       );
     }
   }
+}
+
+function ownResponseOk(response: Response): boolean {
+  try {
+    if (response instanceof Response) return response.ok;
+  } catch {
+    // Continue into descriptor-only validation for malformed implementations.
+  }
+  let current: object | null = response;
+  while (current !== null) {
+    const descriptor = Object.getOwnPropertyDescriptor(current, 'ok');
+    if (descriptor) {
+      if ('value' in descriptor && typeof descriptor.value === 'boolean') return descriptor.value;
+      break;
+    }
+    current = Object.getPrototypeOf(current) as object | null;
+  }
+  throw new PrivacyError('unknown', 'The private service returned an invalid response.');
 }
 
 function ownResponseStatus(response: Response): number {
