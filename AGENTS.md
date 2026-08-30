@@ -258,6 +258,25 @@ empty shell to fetchers, so a 200 there means nothing.
 
 ## 6. Findings log
 
+### 2026-08-30 — Fixed-room Scene ownership rolls back after controller entry failure
+
+`StreetScene` provisionally set `activeRoom` before invoking a fixed-room
+controller's `enter()`. If that controller entry threw, its own state rolled
+back to outside, but the Scene retained the building as active and subsequent
+updates could follow a stale interior ownership path.
+
+The Scene now clears that provisional `activeRoom` only when the same building
+handoff fails and no nested transition or teardown has replaced the ownership.
+The original error and the controller's retryable entry behavior are
+preserved; successful entry ordering is unchanged.
+
+*Verified:* a red-first public StreetScene regression makes fixed-room
+controller entry throw from a door transition and observes the old `activeRoom`
+leak. The corrected Scene clears it while preserving the exact error. World
+tests pass 24 files / 331 tests; World typecheck and invariants pass. No
+browser, wallet, provider, RPC, proof, signature, funds or transaction was
+used.
+
 ### 2026-08-30 — Avatar Studio Scene mode remains retryable after exit failure
 
 `StreetScene.exitAvatarStudioRoom()` cleared the Scene's

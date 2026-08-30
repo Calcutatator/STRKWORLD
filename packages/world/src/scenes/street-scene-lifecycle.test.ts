@@ -516,6 +516,29 @@ describe('StreetScene lifecycle', () => {
     harness.shutdown();
   });
 
+  it('does not retain an active room when controller entry fails', () => {
+    const harness = createWorldPlayHarness();
+    harness.create();
+    const room = harness.room('bank');
+    const error = new Error('fixed-room controller entry failed');
+    vi.spyOn(room, 'enter').mockImplementationOnce(() => { throw error; });
+    const player = harness.scene.player as { x: number; y: number };
+    player.x = 5 * 32 + 16;
+    player.y = 10 * 32 + 16;
+    harness.scene.cursors = {
+      left: { isDown: false },
+      right: { isDown: false },
+      up: { isDown: false },
+      down: { isDown: false },
+      shift: { isDown: false },
+    };
+
+    expect(() => harness.scene.update(0, 16)).toThrow(error);
+    expect(harness.scene.activeRoom).toBeUndefined();
+
+    harness.shutdown();
+  });
+
   it('rebinds the outfit toggle through the production create order on a restart', () => {
     // The ordering under test lives in create() itself: the Scene must make its
     // selection *before* it builds the Studio. Stubbing create() would hide a
@@ -999,6 +1022,7 @@ interface WorldPlayScene extends FakeScene {
   inputGate: InputGate;
   avatarStudio: AvatarStudioController;
   avatarStudioActive: boolean;
+  activeRoom?: string;
   avatarStudioPresentation: { enter(): void; exit(): void; destroy(): void };
   roomControllers: Partial<Record<string, FixedRoomController>>;
   create(): void;

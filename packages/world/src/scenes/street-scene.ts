@@ -461,10 +461,22 @@ export function createStreetScene({ Phaser, onTileChanged, remotePeers }: Street
           // controller that is still considered outside.
           if (event === 'building:entered') {
             const entered = payload as WorldEvents['building:entered'];
-            if (this.roomControllers[entered.building]) {
+            const controller = this.roomControllers[entered.building];
+            if (controller) {
               this.returnTile = this.roomDoorReturnTile(entered.building);
               this.activeRoom = entered.building;
-              this.roomControllers[entered.building]!.enter();
+              try {
+                controller.enter();
+              } catch (error) {
+                // The controller rolls back its own room state when its
+                // presentation handoff fails. Clear the Scene's provisional
+                // room ownership too, unless a nested transition or teardown
+                // has already replaced it.
+                if (this.activeRoom === entered.building && !this.cleanedUp) {
+                  this.activeRoom = undefined;
+                }
+                throw error;
+              }
             }
           } else if (event === 'building:exited') {
             this.inputGate.resume();
