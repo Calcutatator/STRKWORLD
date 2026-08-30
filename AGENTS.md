@@ -366,6 +366,28 @@ bootstrap tests pass 10 tests; workspace gates are recorded on the candidate.
 No browser, wallet, provider, RPC, proof, signature, funds or transaction was
 used.
 
+### 2026-08-30 — Presence setup preserves registration errors across throwing cleanup
+
+When peer-listener setup failed after status registration, the presence
+controller attempted to stop the status listener directly. A cleanup callback
+that threw masked the original peer-registration failure and prevented the
+failed client from being retired; an explicit reconnect then threw again from
+that stale cleanup instead of creating a replacement client.
+
+The failed setup path now attempts status cleanup best-effort, preserves the
+original peer setup error, and always retires the exact partially initialized
+client through the existing setup rollback. Normal teardown error behavior is
+unchanged; this suppression applies only while preserving a more authoritative
+setup failure.
+
+*Verified:* a public regression makes peer registration throw and makes the
+already-installed status cleanup throw. The old path throws the cleanup error
+on reconnect and never constructs the replacement; the corrected path retires
+the failed owner and reconnects through the second client. The focused
+presence suite passes 51 tests, with Web typecheck and diff hygiene green. No
+browser, lobby server, wallet, provider, RPC, proof, signature, funds or
+transaction was used.
+
 ### 2026-08-30 — Presence client setup failures retire the failed owner
 
 `PresenceController.ensureClient()` published a client reference before

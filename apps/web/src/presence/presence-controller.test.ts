@@ -352,6 +352,38 @@ describe('presence controller', () => {
     stop();
   });
 
+  it('recovers when failed peer setup has a throwing status cleanup', async () => {
+    const world = createEventBus<WorldEvents>();
+    const first = fakeClient();
+    const second = fakeClient();
+    const setupFailure = new Error('peer listener setup failed');
+    const cleanupFailure = new Error('status cleanup failed');
+    let created = 0;
+    first.client.onStatus = vi.fn((listener: StatusListener) => {
+      listener({ status: 'idle' });
+      return () => { throw cleanupFailure; };
+    });
+    first.client.onPeers = vi.fn(() => { throw setupFailure; });
+    const presence = createPresenceController({
+      endpoint: 'ws://example',
+      factory: vi.fn(() => (created++ === 0 ? first.client : second.client)),
+    });
+    const stop = presence.listen(world);
+    const consoleError = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+
+    world.emit('player:moved', moved);
+    expect(consoleError).toHaveBeenCalledOnce();
+
+    expect(() => presence.reconnect()).not.toThrow();
+    await Promise.resolve();
+    await Promise.resolve();
+
+    expect(created).toBe(2);
+    expect(second.client.connect).toHaveBeenCalledOnce();
+    consoleError.mockRestore();
+    stop();
+  });
+
   it('keeps a synchronous close authoritative when connected status suspends inside', async () => {
     const world = createEventBus<WorldEvents>();
     const made = controlledClient();

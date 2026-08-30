@@ -176,7 +176,11 @@ export function createPresenceController({ endpoint, factory = (options) => new 
       });
     } catch (error) {
       active = false;
-      statusStop?.();
+      try {
+        statusStop?.();
+      } catch {
+        // Preserve the peer setup error and continue retiring this owner.
+      }
       statusStop = null;
       retireSetup();
       throw error;
