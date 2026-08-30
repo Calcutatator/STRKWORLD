@@ -87,7 +87,6 @@ export function createWalletSession(
   const policy = ownPolicy(options.policy);
   const listeners = new Map<() => void, symbol>();
   const keys = new WeakMap<object, string>();
-  const walletIdentities = new WeakMap<object, { name: string; icon: string }>();
   let nextKey = 0;
   let wallets = [...dependencies.discovery.getWallets()];
   let generation = 0;
@@ -106,13 +105,7 @@ export function createWalletSession(
     if (existing) return existing;
     const key = `wallet-${++nextKey}`;
     keys.set(object, key);
-    walletIdentities.set(object, { name: wallet.name, icon: wallet.icon });
     return key;
-  }
-
-  function hasStableIdentity(wallet: WalletHandle): boolean {
-    const identity = walletIdentities.get(wallet as object);
-    return identity !== undefined && identity.name === wallet.name && identity.icon === wallet.icon;
   }
 
   function choices(): readonly WalletChoice[] {
@@ -347,11 +340,6 @@ export function createWalletSession(
       if (destroyed) throw new PrivacyError('unknown', 'The wallet session has ended.');
       const wallet = wallets.find((candidate) => keyFor(candidate) === key);
       if (!wallet) throw new PrivacyError('unreachable', 'The selected wallet is no longer available.');
-      if (!hasStableIdentity(wallet)) {
-        selectedKey = null;
-        publish('selection-required', null);
-        throw new PrivacyError('unreachable', 'The selected wallet changed. Choose it again.');
-      }
 
       const attempt = ++generation;
       selectedKey = key;

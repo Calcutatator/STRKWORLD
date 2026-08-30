@@ -284,44 +284,6 @@ describe('WalletSession', () => {
     await expect(session.operations.capability()).resolves.toMatchObject({ supportsStrk20: true });
   });
 
-  it('retires a wallet choice whose displayed identity changes before connect', async () => {
-    const selected = wallet('Ready');
-    const connectWallet = vi.fn(async () => connection('0x111'));
-    const session = createWalletSession(
-      denyAllOptions(),
-      { discovery: discoveryWith(selected), connectWallet },
-    );
-    const choice = session.getSnapshot().wallets[0]!;
-
-    (selected as { name: string }).name = 'Replacement wallet';
-    (selected as { icon: string }).icon = 'data:image/svg+xml,replacement';
-
-    await expect(session.connect(choice.key)).rejects.toMatchObject({ kind: 'unreachable' });
-    expect(connectWallet).not.toHaveBeenCalled();
-    expect(session.getSnapshot()).toMatchObject({
-      phase: 'selection-required',
-      selectedKey: null,
-      account: null,
-    });
-  });
-
-  it('allows a newly discovered replacement wallet to receive its own choice', async () => {
-    const original = wallet('Ready');
-    const replacement = wallet('Ready');
-    const discovery = controllableDiscovery(original);
-    const connectWallet = vi.fn(async () => connection('0x111'));
-    const session = createWalletSession(
-      denyAllOptions(),
-      { discovery: discovery.port, connectWallet },
-    );
-
-    discovery.replace(replacement);
-    const choice = session.getSnapshot().wallets[0]!;
-    await expect(session.connect(choice.key)).resolves.toMatchObject({ phase: 'connected' });
-
-    expect(connectWallet).toHaveBeenCalledWith(replacement);
-  });
-
   it('does not deliver an in-flight snapshot to a listener added during publish', () => {
     const selected = wallet('Ready');
     const discovery = controllableDiscovery(selected);
