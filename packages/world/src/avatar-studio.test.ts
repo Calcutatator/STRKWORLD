@@ -127,6 +127,46 @@ describe('hidden Avatar Studio', () => {
     expect(() => presentation.destroy()).not.toThrow();
     expect(destroyStudio).toHaveBeenCalledTimes(2);
   });
+
+  it('does not start a transition reentrantly while destroy is in flight', () => {
+    const build = (transition: 'enter' | 'exit') => {
+      let presentation!: ReturnType<typeof createAvatarStudioPresentation>;
+      const calls = {
+        setPlayerVelocity: vi.fn(),
+        setBodyEnabled: vi.fn(),
+        setGroundVisible: vi.fn(),
+        setDoorsVisible: vi.fn(),
+        setRemoteVisible: vi.fn(),
+        setLabelsVisible: vi.fn(),
+        setRoomVisible: vi.fn(),
+        setStudioVisible: vi.fn(),
+        setWorldBounds: vi.fn(),
+        setCameraBounds: vi.fn(),
+        setPlayerPosition: vi.fn(),
+        resetDoors: vi.fn(),
+        resumeStreet: vi.fn(),
+      };
+      presentation = createAvatarStudioPresentation({
+        port: {
+          ...calls,
+          destroyStudio: vi.fn(() => presentation[transition]()),
+        },
+        streetBounds: { x: 0, y: 0, width: 10, height: 10 },
+        studioBounds: { x: 1, y: 1, width: 10, height: 10 },
+        studioSpawn: { x: 5, y: 5 },
+        streetReturn: { x: 2, y: 2 },
+        reportStreet: vi.fn(),
+      });
+      return { presentation, calls };
+    };
+
+    for (const transition of ['enter', 'exit'] as const) {
+      const { presentation, calls } = build(transition);
+      presentation.destroy();
+      for (const call of Object.values(calls)) expect(call).not.toHaveBeenCalled();
+    }
+  });
+
   it('retries controller-owned presentation cleanup after a failed destroy', () => {
     const cleanupError = new Error('controller presentation cleanup failed');
     const onDestroy = vi.fn().mockImplementationOnce(() => { throw cleanupError; });

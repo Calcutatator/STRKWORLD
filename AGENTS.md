@@ -360,6 +360,27 @@ focused/full tests, typecheck, invariants and diff checks are recorded on this
 candidate. No browser, wallet, provider, RPC, proof, signature, funds or
 transaction was used.
 
+### 2026-08-30 — Avatar Studio presentation blocks transitions during teardown
+
+`createAvatarStudioPresentation.destroy()` marked the presentation destroyed
+only after calling the consumer-owned `port.destroyStudio()`. If that callback
+re-entered `enter()` or `exit()` synchronously, the presentation started a new
+transition while teardown was still in flight and could mutate already-retired
+Phaser state.
+
+Presentation transitions now treat the in-flight destroy operation as retired
+ownership and return immediately while `destroying` is true. The existing
+post-step destroyed guards, retry after a failed destroy, and normal entry/exit
+ordering are unchanged.
+
+*Verified:* a red-first public regression made `destroyStudio()` synchronously
+call both an extracted `enter()` and `exit()` transition; before the guard the
+port received transition calls during teardown, while after it received none.
+Removing the `destroying` guard fails the regression. Avatar Studio focused and
+full World tests, World typecheck, invariants and diff checks are recorded on
+this candidate. No browser, wallet, provider, RPC, proof, signature, funds or
+transaction was used.
+
 ### 2026-08-30 — Exchange pending state reaches the world HUD
 
 `ExchangePanel` drove private swap preparation and wallet submission without

@@ -138,10 +138,10 @@ export function createAvatarStudioPresentation(options: {
   let destroying = false;
   return {
     enter(): void {
-      if (destroyed) return;
+      if (destroyed || destroying) return;
       const { port } = options;
       port.setPlayerVelocity(0, 0);
-      if (destroyed) return;
+      if (destroyed || destroying) return;
       port.setBodyEnabled(false);
       if (destroyed) return;
       port.setGroundVisible(false);
@@ -163,7 +163,7 @@ export function createAvatarStudioPresentation(options: {
       port.setPlayerPosition(studioSpawn);
     },
     exit(): void {
-      if (destroyed) return;
+      if (destroyed || destroying) return;
       const { port } = options;
       port.setPlayerVelocity(0, 0);
       if (destroyed) return;
