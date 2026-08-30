@@ -474,6 +474,9 @@ export function createFixedRoomController(
       }
       throw error;
     }
+    // Exit publication is synchronous and may immediately re-enter the room.
+    // Do not announce an outside transition after that newer ownership wins.
+    if (destroyed || inRoom) return;
     options.out.emit('building:exited', Object.freeze({
       building: options.definition.building,
     }));

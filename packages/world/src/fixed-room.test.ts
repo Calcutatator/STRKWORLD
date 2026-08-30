@@ -274,6 +274,35 @@ describe('fixed room definitions', () => {
     expect(onExit).toHaveBeenCalledTimes(2);
   });
 
+  it('does not announce a stale exit after onChange re-enters the room', () => {
+    const out = bus<WorldEvents>();
+    const shell = bus<ShellEvents>();
+    const events: Array<keyof WorldEvents> = [];
+    out.on('building:exited', () => events.push('building:exited'));
+    let controller!: FixedRoomController;
+    let reentered = false;
+    controller = createFixedRoomController({
+      definition: POST_OFFICE_ROOM_DEFINITION,
+      out,
+      in: shell,
+      input: { suspend: vi.fn(), resume: vi.fn() },
+      onChange: (state) => {
+        if (!reentered && !state.inRoom) {
+          reentered = true;
+          controller.enter();
+        }
+      },
+    });
+    controller.enter();
+    controller.update({
+      x: POST_OFFICE_ROOM_DEFINITION.exit.x,
+      y: POST_OFFICE_ROOM_DEFINITION.exit.y,
+    });
+
+    expect(controller.state.inRoom).toBe(true);
+    expect(events).toEqual([]);
+  });
+
   it('preserves both station delivery and input restoration failures', () => {
     const out = bus<WorldEvents>();
     const shell = bus<ShellEvents>();

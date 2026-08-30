@@ -258,6 +258,25 @@ empty shell to fetchers, so a 200 there means nothing.
 
 ## 6. Findings log
 
+### 2026-08-30 — Fixed-room exit can announce stale ownership after reentrant state publication
+
+`createFixedRoomController.leave()` published the outside snapshot and then
+unconditionally emitted `building:exited`. An `onChange` consumer can
+synchronously call `enter()` while that outside snapshot is delivered. The
+controller is then back inside, but the outer exit still announces that it
+left, so the shell can hide the wrong room or retire the wrong presence state.
+
+The exit path now rechecks `destroyed` and `inRoom` after synchronous outside
+state publication and suppresses the stale announcement when newer room
+ownership has already won. Normal exit publication and event ordering are
+unchanged when no reentrant transition occurs.
+
+*Verified:* a public World regression re-enters from the outside
+`onChange` snapshot. On the old path `building:exited` was emitted despite the
+controller being inside; the corrected path emits no stale event and retains
+room ownership. Focused fixed-room tests pass 63 tests. No browser, lobby
+server, wallet, provider, RPC, proof, signature, funds or transaction was used.
+
 ### 2026-08-30 — Avatar vertices must round after the camera zoom
 
 The World enabled Phaser's `pixelArt` mode and rounded the following camera,
