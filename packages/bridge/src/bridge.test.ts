@@ -1039,6 +1039,24 @@ describe('BridgeService', () => {
     expect(store.load()).toBeNull();
   });
 
+  it('rejects coercible signed quote evidence before persistence', async () => {
+    const client = new StubClient();
+    const store = new MemoryBridgeStore();
+    client.getQuote = async () => ({
+      ...signedQuote,
+      timestamp: { toString: () => signedQuote.timestamp },
+    } as unknown as QuoteResponse);
+    const service = new BridgeService({ client, store, quoteVerifier: () => true, now: () => NOW });
+
+    await expect(service.createManualDeposit({
+      source: SOURCE,
+      amountIn: 1_000_000n,
+      starknetRecipient: '0x123',
+      refundAddress: request.refundTo,
+    })).rejects.toThrow('1Click returned invalid signed quote data.');
+    expect(store.load()).toBeNull();
+  });
+
   it('rejects a coercible origin transaction hash before notifying 1Click', async () => {
     const client = new StubClient();
     const store = new MemoryBridgeStore();

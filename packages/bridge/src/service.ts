@@ -568,6 +568,9 @@ function hasSignedQuoteShape(value: unknown): value is QuoteResponse {
   if (
     !isRecord(value) ||
     !hasOwnDataProperties(value, ['signature', 'timestamp', 'correlationId', 'quote', 'quoteRequest']) ||
+    typeof value.signature !== 'string' ||
+    typeof value.timestamp !== 'string' ||
+    typeof value.correlationId !== 'string' ||
     !isRecord(value.quote) ||
     !isRecord(value.quoteRequest) ||
     !hasOwnDataProperties(value.quote, [
