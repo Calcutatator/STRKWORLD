@@ -170,7 +170,7 @@ export class WalletApiPrivacyOperations implements PrivacyOperations {
     }
 
     const config = await this.poolConfig(signal);
-    const warnings = await this.warningsFor(reviewed, signal);
+    const warnings = freezeWarnings(await this.warningsFor(reviewed, signal));
     if (hasShield) return this.prepareShield(reviewed, config, warnings);
     if (kinds.has('swap')) {
       if (reviewed.length !== 1 || reviewed[0]?.kind !== 'swap') {
@@ -188,7 +188,7 @@ export class WalletApiPrivacyOperations implements PrivacyOperations {
   private async prepareSwap(
     intent: Extract<Intent, { kind: 'swap' }>,
     config: PoolConfig,
-    warnings: BatchWarning[],
+    warnings: readonly BatchWarning[],
     signal?: AbortSignal,
   ): Promise<PreparedBatch> {
     const swapPolicy = this.policy.swap;
@@ -350,7 +350,7 @@ export class WalletApiPrivacyOperations implements PrivacyOperations {
   private prepareShield(
     intents: readonly Intent[],
     config: PoolConfig,
-    warnings: BatchWarning[],
+    warnings: readonly BatchWarning[],
   ): PreparedBatch {
     const wallet = this.wallet;
     const pool = this.pool;
@@ -398,7 +398,7 @@ export class WalletApiPrivacyOperations implements PrivacyOperations {
     operationToken: string,
     config: PoolConfig,
     feeAtPrepare: RelayFeeQuote,
-    warnings: BatchWarning[],
+    warnings: readonly BatchWarning[],
   ): PreparedBatch {
     const owner = this;
     let discarded = false;
@@ -543,6 +543,10 @@ export class WalletApiPrivacyOperations implements PrivacyOperations {
  */
 function freezeIntents(intents: readonly Intent[]): readonly Intent[] {
   return Object.freeze(intents.map((intent) => Object.freeze({ ...intent })));
+}
+
+function freezeWarnings(warnings: readonly BatchWarning[]): readonly BatchWarning[] {
+  return Object.freeze(warnings.map((warning) => Object.freeze({ ...warning })));
 }
 
 function validateIntents(intents: readonly Intent[], policy: WalletRoutePolicy): void {

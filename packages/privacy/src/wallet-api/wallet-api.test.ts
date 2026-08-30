@@ -381,6 +381,20 @@ describe('WalletApiPrivacyOperations capability and reads', () => {
 });
 
 describe('Wallet API action routes', () => {
+  it('freezes prepared warnings so disclosure cannot be removed before confirmation', async () => {
+    const { ops } = fixture();
+    const batch = await ops.prepare([{ kind: 'shield', token: TOKEN, amount: 20n }]);
+
+    expect(Object.isFrozen(batch.warnings)).toBe(true);
+    expect(Object.isFrozen(batch.warnings[0])).toBe(true);
+    expect(() => {
+      (batch.warnings as unknown[]).pop();
+    }).toThrow(TypeError);
+    expect(() => {
+      (batch.warnings[0] as unknown as { kind: string }).kind = 'safe';
+    }).toThrow(TypeError);
+  });
+
   it.each([
     ['null', null],
     ['object', {}],
