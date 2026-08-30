@@ -365,19 +365,19 @@ export function createFixedRoomController(
   let stopExit: (() => void) | undefined;
   try {
     stopStations = options.in?.on('world:stations', (payload) => {
-      if (destroyed || !inRoom || payload.building !== options.definition.building) return;
-      stations = normalizeFixedRoomStations(options.definition, payload.stations);
+    if (destroyed || !inRoom || payload?.building !== options.definition.building) return;
+    stations = normalizeFixedRoomStations(options.definition, payload?.stations);
       publish();
     });
     stopOwner = options.in?.on('world:control-owner', (payload) => {
-      if (destroyed || !inRoom || payload.building !== options.definition.building) return;
+    if (destroyed || !inRoom || payload?.building !== options.definition.building) return;
       controlOwner = payload.owner;
       if (controlOwner === 'shell') options.input.suspend();
       else options.input.resume();
       publish();
     });
     stopExit = options.in?.on('world:exit-building', (payload) => {
-      if (destroyed || !inRoom || payload.building !== options.definition.building) return;
+    if (destroyed || !inRoom || payload?.building !== options.definition.building) return;
       leave();
     });
   } catch (error) {

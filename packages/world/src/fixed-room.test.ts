@@ -452,6 +452,19 @@ describe('fixed room controller', () => {
     expect(h.events).toEqual([{ event: 'building:exited', payload: { building: 'post-office' } }]);
   });
 
+  it.each([null, undefined])('fails closed when shell commands arrive with %s payloads', (payload) => {
+    const h = harness();
+    h.controller.enter();
+
+    expect(() => h.shell.emit('world:stations', payload as never)).not.toThrow();
+    expect(() => h.shell.emit('world:control-owner', payload as never)).not.toThrow();
+    expect(() => h.shell.emit('world:exit-building', payload as never)).not.toThrow();
+
+    expect(h.controller.state.inRoom).toBe(true);
+    expect(h.controller.state.controlOwner).toBe('world');
+    expect(h.events).toEqual([]);
+  });
+
   it('rearms after leaving the station approach and resumes when no Shell claims', () => {
     const h = harness();
     h.controller.enter();

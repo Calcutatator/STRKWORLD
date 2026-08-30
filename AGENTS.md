@@ -258,6 +258,26 @@ empty shell to fetchers, so a 200 there means nothing.
 
 ## 6. Findings log
 
+### 2026-08-30 — Fixed-room shell decoders fail closed on null commands
+
+The fixed-room controller subscribed directly to the Shell event bus and
+dereferenced `world:stations`, `world:control-owner` and
+`world:exit-building` payloads before checking their building. A malformed
+runtime `null` payload therefore threw from a synchronous callback instead of
+being ignored, allowing one bad cross-package command to escape the World
+boundary and interrupt the caller.
+
+The three handlers now use null-safe building and station reads. Malformed
+`null` and `undefined` commands are ignored without changing room state,
+input ownership or station admission; valid commands retain their existing
+ordering and behavior.
+
+*Verified:* a red-first fixed-room regression emitted a `null` payload through
+each Shell command and observed the old dereference error; the corrected test
+keeps the controller in the room with World ownership and no output events.
+Focused fixed-room tests pass 35/35. No browser, wallet, provider, RPC, proof,
+signature, funds or transaction was used.
+
 ### 2026-08-30 — Bridge input amounts must fit uint256
 
 `BridgeService.validateInput()` previously rejected only non-positive amounts.
