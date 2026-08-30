@@ -17,6 +17,7 @@ import { createSubmissionUncertainty } from '../../privacy/submission-uncertaint
 import {
   createBankPanel,
   ROUTE_BY_MODE,
+  type BankMode,
   type BankPanel,
   type BankPanelOptions,
 } from './bank-machine.js';
@@ -48,6 +49,16 @@ describe('Bank route authority', () => {
     expect(Object.isFrozen(ROUTE_BY_MODE)).toBe(true);
     expect(Reflect.set(ROUTE_BY_MODE, 'shield', 'exchange.swap')).toBe(false);
     expect(ROUTE_BY_MODE.shield).toBe('bank.shield');
+  });
+
+  it('keeps the allowed mode authority owned after construction', async () => {
+    const allowedModes: BankPanelOptions['allowedModes'] = ['shield'];
+    const panel = await openPanel(fake(), { allowedModes });
+
+    (allowedModes as BankMode[]).push('transfer');
+    panel.setMode('transfer');
+
+    expect(panel.store.getState().mode).toBe('shield');
   });
 
   it('exposes a read-only immutable state snapshot to panel consumers', async () => {

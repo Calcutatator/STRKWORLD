@@ -263,9 +263,9 @@ export function createBankPanel(options: BankPanelOptions): BankPanel {
   if (configuredModes !== undefined && !Array.isArray(configuredModes)) {
     throw new Error('BankPanel allowed modes must be an array');
   }
-  const allowedModes = (
-    configuredModes === undefined ? ALL_BANK_MODES : configuredModes
-  ) as readonly BankMode[];
+  const allowedModes = Object.freeze([
+    ...(configuredModes === undefined ? ALL_BANK_MODES : configuredModes),
+  ]) as readonly BankMode[];
   if (allowedModes.length === 0) throw new Error('BankPanel requires at least one allowed mode');
   const seenModes = new Set<BankMode>();
   for (const mode of allowedModes) {

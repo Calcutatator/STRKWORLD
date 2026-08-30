@@ -258,6 +258,22 @@ empty shell to fetchers, so a 200 there means nothing.
 
 ## 6. Findings log
 
+### 2026-08-30 — Bank mode configuration is snapshotted at construction
+
+`createBankPanel()` previously retained the caller's `allowedModes` array
+directly after validating it. A later mutation of that array could therefore
+rewrite which financial route the existing panel accepted, even though its
+machine and review state had already been constructed.
+
+The validated mode list is now copied and frozen at construction. The panel's
+mode authority cannot be changed through the caller's array; explicit panel
+recreation remains the way to supply a new mode set.
+
+*Verified:* a red-first Bank regression appended `transfer` to a panel created
+with only `shield`; the old machine then accepted the new route, while the
+corrected machine remains on the original Shield authority. No browser,
+wallet, provider, RPC, proof, signature, funds or transaction was used.
+
 ### 2026-08-30 — Fixed-room exit presentation failure remains retryable
 
 `FixedRoomController.leave()` relinquished room ownership before invoking the
