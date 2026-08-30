@@ -20,7 +20,21 @@ export function WalletSessionProvider({
 }) {
   const snapshotReader = useMemo(() => createSnapshotReader(session), [session]);
   const subscribe = useMemo(
-    () => (listener: () => void) => session.subscribe(listener),
+    () => (listener: () => void) => {
+      let unsubscribe: (() => void) | undefined;
+      try {
+        unsubscribe = session.subscribe(listener);
+      } catch {
+        return () => undefined;
+      }
+      return () => {
+        try {
+          unsubscribe?.();
+        } catch {
+          // A retired session cannot prevent its replacement from subscribing.
+        }
+      };
+    },
     [session],
   );
   const getSnapshot = useMemo(() => () => snapshotReader(), [snapshotReader]);

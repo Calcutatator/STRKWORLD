@@ -279,6 +279,27 @@ privacy typecheck. Full workspace verification is recorded with the owning
 commit. Deterministic fakes only: no browser, wallet, provider, RPC, proof,
 signature, funds or transaction was used.*
 
+### 2026-08-30 — Wallet session replacement survives old unsubscribe failures
+
+`WalletSessionProvider` passed the session's unsubscribe callback directly to
+`useSyncExternalStore`. When a session prop was replaced, a synchronous throw
+from the old session's cleanup aborted React's passive-effect transition
+before the replacement subscription was installed, leaving the new session
+without updates and surfacing a stale provider lifecycle failure.
+
+The provider now owns a guarded subscription wrapper: setup failures become a
+no-op cleanup, and retired-session unsubscribe failures are contained so a
+replacement can subscribe independently. Snapshot projection, session
+methods, and normal unsubscribe behavior are unchanged.
+
+*Verified:* a red-first public jsdom regression replaced a subscribed session
+whose unsubscribe throws and observed the old exception before the new
+session subscribed. The corrected provider invokes both subscriptions and
+retains the replacement render. Focused WalletSessionProvider tests pass
+3 tests; Web typecheck, full tests, build, invariants and diff hygiene are
+recorded on the candidate. No browser, wallet, provider, RPC, proof,
+signature, funds or transaction was used.
+
 ### 2026-08-30 — Wallet route policy is semantically validated before discovery
 
 The wallet session already copied policy data into an immutable snapshot, but

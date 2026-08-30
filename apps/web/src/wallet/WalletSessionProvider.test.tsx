@@ -1,5 +1,8 @@
+// @vitest-environment jsdom
+import { act } from 'react';
+import { createRoot } from 'react-dom/client';
 import { renderToStaticMarkup } from 'react-dom/server';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import type { WalletSession } from '@strkworld/privacy';
 import {
   WalletSessionProvider,
@@ -64,5 +67,34 @@ describe('WalletSessionProvider', () => {
     expect(() => renderToStaticMarkup(
       <WalletSessionProvider session={session}><span>ready</span></WalletSessionProvider>,
     )).not.toThrow();
+  });
+
+  it('keeps a replacement session subscribed when the old unsubscribe throws', async () => {
+    const first = sessionFixture();
+    const second = sessionFixture();
+    const firstUnsubscribe = vi.fn(() => {
+      throw new Error('old session unsubscribe failed');
+    });
+    const secondSubscribe = vi.fn(() => () => undefined);
+    first.subscribe = vi.fn(() => firstUnsubscribe);
+    second.subscribe = secondSubscribe;
+    const container = document.createElement('div');
+    document.body.appendChild(container);
+    const root = createRoot(container);
+
+    await act(async () => {
+      root.render(<WalletSessionProvider session={first}><span>ready</span></WalletSessionProvider>);
+      await Promise.resolve();
+    });
+    await act(async () => {
+      root.render(<WalletSessionProvider session={second}><span>ready</span></WalletSessionProvider>);
+      await Promise.resolve();
+    });
+
+    expect(firstUnsubscribe).toHaveBeenCalledOnce();
+    expect(secondSubscribe).toHaveBeenCalledOnce();
+    expect(container.textContent).toBe('ready');
+    root.unmount();
+    container.remove();
   });
 });
