@@ -54,6 +54,7 @@ export function createPresenceController({ endpoint, factory = (options) => new 
   let replacementDeferred = false;
   let setupOwner: { retired: boolean } | null = null;
   let statusGeneration = 0;
+  let unavailableDepth = 0;
   const listeners = new Map<() => void, symbol>();
   const peerChannel = createRemotePeerSource();
   const peerSource = peerChannel.source;
@@ -84,17 +85,33 @@ export function createPresenceController({ endpoint, factory = (options) => new 
   };
   const unavailable = () => {
     if (destroyed) return;
+    unavailableDepth += 1;
     try {
-      clearClientPeers();
-    } catch {
-      // A remote-peer subscriber must not block the presence state from
-      // becoming unavailable after the client has dropped.
+      try {
+        clearClientPeers();
+      } catch {
+        // A remote-peer subscriber must not block the presence state from
+        // becoming unavailable after the client has dropped.
+      }
+      try {
+        setState({ status: 'unavailable', canReconnect: Boolean(endpoint) });
+      } catch {
+        // State is assigned before subscriber delivery; keep the drop closed
+        // even if a consumer callback fails during that notification.
+      }
+    } finally {
+      unavailableDepth -= 1;
     }
-    try {
-      setState({ status: 'unavailable', canReconnect: Boolean(endpoint) });
-    } catch {
-      // State is assigned before subscriber delivery; keep the drop closed
-      // even if a consumer callback fails during that notification.
+    // A peer or state subscriber may synchronously request a reconnect while
+    // the failed owner's cleanup is publishing its empty snapshot. Hold that
+    // request until the unavailable transition has completed, so it retires
+    // the failed client instead of starting another join on the same owner.
+    if (
+      unavailableDepth === 0 && reconnectRequested && !inside && placement && !connecting
+    ) {
+      reconnectRequested = false;
+      if (client && state.status === 'unavailable') replaceStaleClient();
+      else connect();
     }
   };
   const onStatus = (event: LobbyStatusEvent) => {
@@ -423,7 +440,7 @@ export function createPresenceController({ endpoint, factory = (options) => new 
       // also not become a silent no-op: the first real placement (or a later
       // exit after one) will carry out the reconnect.
       reconnectRequested = true;
-      if (!placement) return;
+      if (!placement || unavailableDepth > 0) return;
       if (!inside && !connecting) {
         reconnectRequested = false;
         if (client && state.status === 'unavailable') replaceStaleClient();

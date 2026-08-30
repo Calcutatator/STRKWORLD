@@ -304,6 +304,26 @@ gates are recorded in the owning commit. Deterministic fakes only: no browser,
 external provider, RPC, wallet, proof, signature, funds or transaction was
 used.*
 
+### 2026-08-30 — Presence reconnect requests are deferred during drop publication
+
+Presence drop handling clears the retained peer snapshot before publishing the
+`unavailable` state. A peer subscriber can synchronously request reconnect
+during that clear; before this correction, the controller still looked
+`connecting` and started a second join on the failed client instead of
+retiring it and constructing the explicit replacement.
+
+Drop publication now tracks nested unavailable transitions and holds a
+reconnect request made by a peer or state subscriber until the transition has
+finished. The request then follows the existing stale-client replacement path;
+ordinary drops, failed-join retries, and peer cleanup remain unchanged.
+
+*Verified:* a public regression rejects a deferred join and requests reconnect
+from the retained-peer clear callback. The base invokes the failed client's
+`connect()` twice and never creates a replacement; the corrected path invokes
+it once, disconnects it once, and connects one fresh client. No browser, lobby
+server, wallet, provider, RPC, proof, signature, funds or transaction was
+used.
+
 ### 2026-08-30 — Wallet capability versions are owned before admission
 
 Capability detection validated that the wallet returned an array, but then

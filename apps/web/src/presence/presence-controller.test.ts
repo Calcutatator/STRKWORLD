@@ -1311,6 +1311,43 @@ describe('presence controller', () => {
     stop();
   });
 
+  it('defers a reconnect requested by peer cleanup until the failed client is retired', async () => {
+    const world = createEventBus<WorldEvents>();
+    const first = fakeClient();
+    const second = fakeClient();
+    let rejectInitial!: (error: unknown) => void;
+    first.client.connect = vi.fn(() => new Promise<void>((_resolve, reject) => { rejectInitial = reject; }));
+    const clients = [first, second];
+    let created = 0;
+    const presence = createPresenceController({
+      endpoint: 'ws://example',
+      factory: vi.fn(() => clients[created++]!.client),
+    });
+    let armed = false;
+    let requested = false;
+    const stopSource = presence.remotePeers.subscribe(() => {
+      if (armed && !requested) {
+        requested = true;
+        presence.reconnect();
+      }
+    });
+    const stop = presence.listen(world);
+
+    world.emit('player:moved', moved);
+    armed = true;
+    rejectInitial(new Error('server unavailable'));
+    await Promise.resolve();
+    await Promise.resolve();
+    await Promise.resolve();
+
+    expect(first.client.connect).toHaveBeenCalledOnce();
+    expect(first.client.disconnect).toHaveBeenCalledOnce();
+    expect(created).toBe(2);
+    expect(second.client.connect).toHaveBeenCalledOnce();
+    stopSource();
+    stop();
+  });
+
   it('does not resurrect a dropped pre-welcome connection inside a building', async () => {
     const world = createEventBus<WorldEvents>();
     let resolve!: () => void;
