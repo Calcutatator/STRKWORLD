@@ -322,14 +322,14 @@ owners, and both suspension paths recheck their exact client/attempt after the
 handoff. Reusing a client whose initial replay is already `closed` remains a
 valid explicit reconnect, and existing queued-reconnect behavior is unchanged.
 
-*Verified:* seven public `createPresenceController()` regressions cover an
+*Verified:* eight public `createPresenceController()` regressions cover an
 initial replay followed by a synchronous setup drop, a connected status whose
 interior suspension synchronously closes, and a resolved join whose interior
 suspension synchronously closes. They also cover direct building-entry
 suspension, a late status callback from a replaced client, synchronous
-reconnect reentry while the connecting state is published, and a building exit
-whose resume synchronously closes the transport. The focused
-Presence suite passes 41 tests; the full workspace passes 102 files / 1,595
+reconnect reentry while the connecting state is published, destruction during
+that publication, and a building exit whose resume synchronously closes the
+transport. The focused Presence suite passes 42 tests; the full workspace passes 102 files / 1,596
 tests, all workspace typechecks,
 production build, all 13 invariants and diff hygiene. No browser, lobby server,
 wallet, provider, RPC, proof, signature, funds or transaction was used.*
