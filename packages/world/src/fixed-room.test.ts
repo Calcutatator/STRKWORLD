@@ -93,6 +93,29 @@ describe('fixed room definitions', () => {
     expect(room.stations[0]).toMatchObject({ label: 'TRANSFER', x: 3 });
   });
 
+  it('restores input when station delivery throws', () => {
+    const h = harness();
+    h.controller.enter();
+    h.shell.emit('world:stations', {
+      building: 'post-office',
+      stations: [
+        {
+          station: 'post-office:transfer',
+          label: 'TRANSFER',
+          status: 'available',
+        },
+      ],
+    });
+    const deliveryError = new Error('station consumer failed');
+    h.out.on('station:activated', () => {
+      throw deliveryError;
+    });
+
+    expect(() => h.controller.update({ x: 3, y: 4 })).toThrow(deliveryError);
+    expect(h.inputCalls).toEqual(['resume', 'suspend', 'resume']);
+    expect(h.controller.state.inRoom).toBe(true);
+  });
+
   it('isolates station activation payloads from synchronous listener mutation', () => {
     const h = harness();
     const seen: Array<{ building: string; station: string }> = [];

@@ -452,13 +452,17 @@ export function createFixedRoomController(
       if (approached && station?.status === 'available' && approachArmed.has(approached.station)) {
         approachArmed.delete(approached.station);
         options.input.suspend();
-        options.out.emit('station:activated', Object.freeze({
-          building: options.definition.building,
-          station: approached.station,
-        }));
-        // EventBus delivery is synchronous. A stale/missing Shell claim must
-        // not strand the player with World input suspended.
-        if (!destroyed && inRoom && ownsWorldControl()) options.input.resume();
+        try {
+          options.out.emit('station:activated', Object.freeze({
+            building: options.definition.building,
+            station: approached.station,
+          }));
+        } finally {
+          // EventBus delivery is synchronous and may throw. A stale/missing
+          // Shell claim or failed consumer must not strand the player with
+          // World input suspended.
+          if (!destroyed && inRoom && ownsWorldControl()) options.input.resume();
+        }
       }
     },
     destroy(): void {
