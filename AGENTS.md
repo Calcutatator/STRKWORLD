@@ -258,6 +258,29 @@ empty shell to fetchers, so a 200 there means nothing.
 
 ## 6. Findings log
 
+### 2026-08-30 — Concurrent first World acquires must share lazy Phaser loading
+
+`runtime.ensureHost()` awaited the dynamic Phaser import before assigning the
+singleton `host`. Concurrent first `acquireWorld()` calls could therefore both
+observe an empty host and each construct a separate ref-count host and Phaser
+Game, while the module-level `host` retained only the later one. The first
+game then had no reachable release owner and StrictMode/concurrent composition
+could create duplicate canvases and World lifecycles.
+
+The runtime now retains one in-flight host-construction promise and all
+concurrent callers await it before acquiring the shared host. The promise is
+cleared after success or import failure so a failed lazy load remains
+retryable. Existing same-owner remount, retarget and deferred teardown
+semantics are unchanged.
+
+*Verified:* a red-first public runtime regression starts two `acquireWorld()`
+calls before lazy Phaser resolves; the old path initiates two independent
+dynamic imports and fails before the one-game assertion, while the corrected
+path coalesces both calls to one Game and returns the same instance. The
+focused runtime suites pass 6 tests; the World suite and full workspace gates
+are recorded on this candidate. No browser, lobby server, wallet, provider,
+RPC, proof, signature, funds or transaction was used.
+
 ### 2026-08-30 — Failed nested avatar selection can leave the outer candidate committed
 
 `createAvatarOutfitSelection.select()` used the selection revision to avoid
