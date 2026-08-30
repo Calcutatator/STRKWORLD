@@ -890,5 +890,9 @@ function assertFirstConfirmation(attempted: boolean): void {
 }
 
 function emitProgress(callback: ProgressCallback | undefined, progress: OperationProgress): void {
-  try { callback?.(progress); } catch { /* Observers cannot alter a financial operation. */ }
+  try {
+    callback?.(Object.freeze({ ...progress }));
+  } catch {
+    /* Observers cannot alter a financial operation. */
+  }
 }

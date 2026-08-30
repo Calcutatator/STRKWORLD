@@ -674,6 +674,26 @@ describe('Wallet API action routes', () => {
     expect(gateway.submit).toHaveBeenCalledTimes(1);
   });
 
+  it('publishes immutable progress snapshots to observers', async () => {
+    const { ops } = fixture();
+    const batch = await ops.prepare([
+      { kind: 'transfer', token: TOKEN, amount: 20n, recipient: BOB },
+    ]);
+    const progress: Array<{ stage: string; message: string }> = [];
+
+    await batch.confirm({
+      feeCeiling: POOL_FEE + 2n,
+      onProgress(update) { progress.push(update); },
+    });
+
+    expect(progress.length).toBeGreaterThan(0);
+    expect(progress.every(Object.isFrozen)).toBe(true);
+    const first = progress[0]!;
+    const original = { ...first };
+    expect(Reflect.set(first, 'stage', 'failed')).toBe(false);
+    expect(first).toEqual(original);
+  });
+
   it('does not prove a private transfer discarded from its progress callback', async () => {
     const { ops, wallet, gateway } = fixture();
     const prepareInvoke = vi.spyOn(wallet, 'strk20PrepareInvoke');

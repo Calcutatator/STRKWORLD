@@ -263,6 +263,23 @@ describe('the fee can move between prepare and confirm', () => {
     expect(ops.submitted).toHaveLength(1);
   });
 
+  it('publishes immutable simulated progress snapshots', async () => {
+    const ops = fresh();
+    const batch = await ops.prepare([
+      { kind: 'transfer', token: STRK, amount: 10n ** 18n, recipient: BOB },
+    ]);
+    const progress: Array<{ stage: string; message: string }> = [];
+
+    await batch.confirm({
+      feeCeiling: CEILING,
+      onProgress(update) { progress.push(update); },
+    });
+
+    expect(progress.length).toBeGreaterThan(0);
+    expect(progress.every(Object.isFrozen)).toBe(true);
+    expect(Reflect.set(progress[0]!, 'message', 'forged')).toBe(false);
+  });
+
   it('does not settle a batch discarded while fake confirmation is pending', async () => {
     const ops = new FakePrivacyOperations({
       balances: { [STRK]: 100n * 10n ** 18n },
