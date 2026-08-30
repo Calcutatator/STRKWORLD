@@ -258,6 +258,24 @@ empty shell to fetchers, so a 200 there means nothing.
 
 ## 6. Findings log
 
+### 2026-08-30 — Fixed-room entry rechecks ownership after onEnter
+
+`FixedRoomController.enter()` marked the room active, then invoked the
+consumer-owned `onEnter` callback before publishing state. If that callback
+synchronously destroyed the controller (for example during Scene teardown),
+the method still published a post-destroy snapshot describing an already
+retired transition.
+
+Entry now rechecks the controller's destroyed and in-room ownership after
+`onEnter` and stops the continuation when the callback retired it. Normal entry
+ordering and input restoration are unchanged.
+
+*Verified:* a red-first fixed-room regression made `onEnter` destroy the
+controller and observed one stale `onChange` publication; the corrected test
+publishes none and leaves the controller outside. Focused fixed-room tests pass
+34/34. No browser, wallet, provider, RPC, proof, signature, funds or
+transaction was used.
+
 ### 2026-08-30 — Server-action span decoding must be bounded by remaining calldata
 
 `Cursor.take()` previously allocated an array from the decoded span length

@@ -15,6 +15,7 @@ import {
   isFixedRoomSolidAt,
   normalizeFixedRoomStations,
   type FixedRoomDefinition,
+  type FixedRoomController,
   type FixedRoomState,
 } from './fixed-room.js';
 
@@ -522,6 +523,31 @@ describe('fixed room controller', () => {
     expect(h.inputCalls.length).toBe(calls);
     expect(h.inputCalls.at(-1)).toBe('resume');
     expect(h.events).toEqual([]);
+  });
+
+  it('stops the entry continuation when onEnter destroys the controller', () => {
+    const out = bus<WorldEvents>();
+    const shell = bus<ShellEvents>();
+    const inputCalls: string[] = [];
+    const changes: FixedRoomState[] = [];
+    let controller!: FixedRoomController;
+    controller = createFixedRoomController({
+      definition: POST_OFFICE_ROOM_DEFINITION,
+      out,
+      in: shell,
+      input: {
+        suspend: () => inputCalls.push('suspend'),
+        resume: () => inputCalls.push('resume'),
+      },
+      onEnter: () => controller.destroy(),
+      onChange: (state) => changes.push(state),
+    });
+
+    controller.enter();
+
+    expect(controller.state.inRoom).toBe(false);
+    expect(changes).toEqual([]);
+    expect(inputCalls).toEqual(['resume', 'resume']);
   });
 
   it('uses the Bridge building and station ids for admission, activation, and exit', () => {

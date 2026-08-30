@@ -416,6 +416,7 @@ export function createFixedRoomController(
       stations = normalizeFixedRoomStations(options.definition, undefined);
       options.input.resume();
       options.onEnter?.();
+      if (destroyed || !inRoom) return;
       publish();
     },
     update(tile): void {
