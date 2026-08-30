@@ -135,6 +135,7 @@ export function createAvatarStudioPresentation(options: {
   const studioSpawn = Object.freeze({ ...options.studioSpawn });
   const streetReturn = Object.freeze({ ...options.streetReturn });
   let destroyed = false;
+  let destroyPending = false;
   let destroying = false;
   let transitionRevision = 0;
   return {
@@ -210,14 +211,20 @@ export function createAvatarStudioPresentation(options: {
       port.resumeStreet(streetReturn, options.reportStreet);
     },
     destroy(): void {
-      if (destroyed || destroying) return;
+      if (destroying || (destroyed && !destroyPending)) return;
       // Retain ownership when cleanup fails so a later Scene teardown can
       // retry. Guard synchronous reentrancy while the port owns this attempt.
       destroying = true;
+      destroyed = true;
       transitionRevision += 1;
       try {
         options.port.destroyStudio();
-        destroyed = true;
+        destroyPending = false;
+      } catch (error) {
+        // Keep the presentation retired while retaining the failed cleanup for
+        // an explicit retry. No new transition may use partial teardown state.
+        destroyPending = true;
+        throw error;
       } finally {
         destroying = false;
       }

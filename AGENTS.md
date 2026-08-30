@@ -258,6 +258,25 @@ empty shell to fetchers, so a 200 there means nothing.
 
 ## 6. Findings log
 
+### 2026-08-30 — Avatar Studio destroy retry must retain retirement ownership
+
+`createAvatarStudioPresentation.destroy()` left `destroyed` false when
+`destroyStudio()` threw so a later teardown could retry. That also allowed a
+new `enter()` or `exit()` handoff to run against partially destroyed
+presentation objects before the retry, violating teardown ownership.
+
+Destroy now retires the presentation before invoking cleanup and tracks a
+pending cleanup failure separately. Enter/exit remain blocked while cleanup
+is pending; a subsequent destroy retries exactly once for that attempt and
+successful cleanup remains idempotent.
+
+*Verified:* a public World regression makes the first `destroyStudio()` throw,
+then attempts `enter()` before retrying destroy. On the old path the transition
+started; the corrected path performs no transition, preserves the original
+cleanup error, and permits the explicit retry. Focused Avatar Studio tests pass
+45 tests. No browser, lobby server, wallet, provider, RPC, proof, signature,
+funds or transaction was used.
+
 ### 2026-08-30 — Fixed-room presentation transitions own one generation
 
 Fixed-room entry and exit previously performed their Phaser presentation

@@ -275,6 +275,42 @@ describe('hidden Avatar Studio', () => {
     expect(destroyStudio).toHaveBeenCalledTimes(2);
   });
 
+  it('does not start a new transition while destroy cleanup is pending', () => {
+    const cleanupError = new Error('studio cleanup failed');
+    const destroyStudio = vi.fn().mockImplementationOnce(() => { throw cleanupError; });
+    const setPlayerVelocity = vi.fn();
+    const presentation = createAvatarStudioPresentation({
+      port: {
+        setPlayerVelocity,
+        setBodyEnabled: vi.fn(),
+        setGroundVisible: vi.fn(),
+        setDoorsVisible: vi.fn(),
+        setRemoteVisible: vi.fn(),
+        setLabelsVisible: vi.fn(),
+        setRoomVisible: vi.fn(),
+        setStudioVisible: vi.fn(),
+        setWorldBounds: vi.fn(),
+        setCameraBounds: vi.fn(),
+        setPlayerPosition: vi.fn(),
+        resetDoors: vi.fn(),
+        resumeStreet: vi.fn(),
+        destroyStudio,
+      },
+      streetBounds: { x: 0, y: 0, width: 10, height: 10 },
+      studioBounds: { x: 1, y: 1, width: 10, height: 10 },
+      studioSpawn: { x: 5, y: 5 },
+      streetReturn: { x: 2, y: 2 },
+      reportStreet: vi.fn(),
+    });
+
+    expect(() => presentation.destroy()).toThrow(cleanupError);
+    presentation.enter();
+
+    expect(setPlayerVelocity).not.toHaveBeenCalled();
+    expect(() => presentation.destroy()).not.toThrow();
+    expect(destroyStudio).toHaveBeenCalledTimes(2);
+  });
+
   it('does not start a transition reentrantly while destroy is in flight', () => {
     const build = (transition: 'enter' | 'exit') => {
       let presentation!: ReturnType<typeof createAvatarStudioPresentation>;
