@@ -23,6 +23,18 @@ async function flushPromises(): Promise<void> {
 }
 
 describe('WorldHost acquisition lifecycle', () => {
+  it('publishes an immutable lease API while retaining owned acquisition', () => {
+    const manager = createWorldLeaseManager();
+    const originalAcquire = manager.acquire;
+
+    expect(Object.isFrozen(manager)).toBe(true);
+    expect(Reflect.set(manager, 'acquire', () => () => undefined)).toBe(false);
+    expect(manager.acquire).toBe(originalAcquire);
+    const cleanup = manager.acquire(() => Promise.resolve(() => undefined));
+    expect(typeof cleanup).toBe('function');
+    cleanup();
+  });
+
   it('single-flights overlapping leases and keeps one world alive', async () => {
     const gate = deferred<() => void>();
     let live = 0;

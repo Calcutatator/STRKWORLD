@@ -104,7 +104,7 @@ export function createWorldLeaseManager() {
     return state;
   };
 
-  return {
+  return Object.freeze({
     acquire(acquire: () => Promise<WorldRelease>, key?: unknown): () => void {
       const state = current === null
         ? start(acquire, key)
@@ -121,7 +121,7 @@ export function createWorldLeaseManager() {
         releaseIfUnused(state);
       };
     },
-  };
+  });
 }
 
 export const worldLeaseManager = createWorldLeaseManager();
