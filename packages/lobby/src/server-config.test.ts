@@ -1,4 +1,5 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
+import { Server } from '@colyseus/core';
 import { startPresenceServer } from './server';
 
 describe('presence server options', () => {
@@ -21,6 +22,24 @@ describe('presence server options', () => {
       expect(new URL(server.endpoint).port).toBe(String(server.port));
     } finally {
       await server.shutdown();
+    }
+  });
+
+  it('rejects retry ranges that would exceed the TCP port ceiling before binding', async () => {
+    const listen = vi.spyOn(Server.prototype, 'listen');
+    listen.mockImplementation(async (port) => {
+      if (port === 65_535) {
+        throw Object.assign(new Error('occupied'), { code: 'EADDRINUSE' });
+      }
+      throw new Error(`invalid port ${port}`);
+    });
+    try {
+      await expect(
+        startPresenceServer({ hostname: '127.0.0.1', port: 65_535, portAttempts: 2 }),
+      ).rejects.toThrow('Lobby port retry range exceeds 65535.');
+      expect(listen).not.toHaveBeenCalled();
+    } finally {
+      listen.mockRestore();
     }
   });
 });

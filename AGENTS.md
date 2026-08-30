@@ -258,6 +258,27 @@ empty shell to fetchers, so a 200 there means nothing.
 
 ## 6. Findings log
 
+### 2026-08-30 — Lobby port retry ranges stay inside the TCP ceiling
+
+`startPresenceServer()` validated the requested base port and the number of
+retry attempts independently, then added the attempt offset without checking
+the resulting port. If the final valid port was occupied — for example,
+`port: 65535, portAttempts: 2` — startup attempted `65536` and leaked the
+platform's invalid-port error instead of rejecting the impossible retry plan
+before binding.
+
+Startup now rejects any retry range whose highest candidate exceeds `65535`,
+before CORS or transport setup. Valid explicit ports, port zero, and
+consecutive fallback ranges that remain within the TCP port space are
+unchanged.
+
+*Verified:* a red-first public server-options regression makes the mocked
+`65535` bind return `EADDRINUSE`; the old loop then calls `listen(65536)`, while
+the corrected path returns `Lobby port retry range exceeds 65535.` without a
+second bind. The focused Lobby server configuration suite passes 4 tests. No
+browser, external lobby, wallet, provider, RPC, proof, signature, funds or
+transaction was used.*
+
 ### 2026-08-30 — Remote-avatar layer setup retains the Phaser layer on depth failure
 
 `createRemoteAvatarLayer()` created its Phaser layer and immediately called

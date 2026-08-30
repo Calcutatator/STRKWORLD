@@ -54,6 +54,7 @@ const DEFAULT_ALLOWED_ORIGINS: readonly string[] = [
 
 const INVALID_PORT_ATTEMPTS_ERROR = 'Lobby port attempts must be a positive safe integer.';
 const INVALID_BASE_PORT_ERROR = 'Lobby base port must be an integer from 0 through 65535.';
+const INVALID_PORT_RANGE_ERROR = 'Lobby port retry range exceeds 65535.';
 
 export interface PresenceServerOptions {
   /** Defaults to 2567. */
@@ -147,6 +148,9 @@ export async function startPresenceServer(
   const attempts = options.portAttempts ?? 1;
   if (!Number.isSafeInteger(attempts) || attempts < 1) {
     throw new Error(INVALID_PORT_ATTEMPTS_ERROR);
+  }
+  if (attempts > 65_536 - basePort) {
+    throw new Error(INVALID_PORT_RANGE_ERROR);
   }
 
   // Off before anything binds, so no per-connection line can print even under
