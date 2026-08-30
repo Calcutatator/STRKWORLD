@@ -258,6 +258,26 @@ empty shell to fetchers, so a 200 there means nothing.
 
 ## 6. Findings log
 
+### 2026-08-30 — Pool and combined fees remain inside u256
+
+Pool configuration accepted any nonnegative bigint fee. A provider value at
+`2^256` could therefore be published as the pool fee and total cost, while two
+individually valid pool and relay fees could produce an out-of-domain combined
+cost at preparation or confirmation.
+
+Pool fees now require the inclusive u256 range. Private and swap preparation
+and their live confirmation rechecks use one checked pool-plus-relay helper,
+which rejects totals above `u256::MAX` before wallet handoff. The exact maximum
+total remains valid; zero governance pool fees and the existing relay-policy
+ceiling remain unchanged.
+
+*Verified:* public regressions were red for an oversized pool fee, an
+overflowing prepared total, and a live confirm-time overflow; the exact maximum
+boundary stayed green. The focused Wallet API suite passes 166 tests and
+privacy typecheck. Full workspace verification is recorded with the owning
+commit. Deterministic fakes only: no browser, wallet, provider, RPC, proof,
+signature, funds or transaction was used.*
+
 ### 2026-08-30 — Caller intent amounts are bounded to u256 before dependencies
 
 Wallet API intent validation required positive bigints but did not cap them at

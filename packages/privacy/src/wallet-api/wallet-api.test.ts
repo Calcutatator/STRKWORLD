@@ -294,6 +294,7 @@ describe('WalletApiPrivacyOperations capability and reads', () => {
 
   it.each([
     ['negative fee', { feeAmount: -1n }],
+    ['fee above u256', { feeAmount: MAX_UINT256 + 1n }],
     ['number fee', { feeAmount: 1 }],
     ['zero fee token', { feeToken: '0x0' }],
     ['decimal fee token', { feeToken: '123' }],
@@ -312,6 +313,53 @@ describe('WalletApiPrivacyOperations capability and reads', () => {
     } as never);
 
     await expect(ops.poolConfig()).rejects.toMatchObject({ kind: 'unknown' });
+  });
+
+  it('rejects individually valid pool and relay fees whose prepared total exceeds u256', async () => {
+    const { ops, pool, gateway, wallet } = fixture();
+    vi.spyOn(pool, 'config').mockResolvedValue({
+      feeAmount: MAX_UINT256,
+      feeToken: STRK,
+      proofValidityBlocks: 450,
+      noteMaturityBlocks: 10,
+    });
+    vi.mocked(gateway.estimate).mockResolvedValue({ token: STRK, recipient: FEE_RECIPIENT, amount: 1n, ...AUTH });
+    const prepare = vi.spyOn(wallet, 'strk20PrepareInvoke');
+
+    await expect(ops.prepare([{ kind: 'transfer', token: TOKEN, amount: 1n, recipient: BOB }]))
+      .rejects.toMatchObject({ kind: 'unknown' });
+    expect(prepare).not.toHaveBeenCalled();
+  });
+
+  it('rejects a live pool-plus-relay overflow before wallet confirmation', async () => {
+    const { ops, pool, gateway, wallet } = fixture();
+    let reads = 0;
+    vi.spyOn(pool, 'config').mockImplementation(async () => ({
+      feeAmount: reads++ === 0 ? POOL_FEE : MAX_UINT256,
+      feeToken: STRK,
+      proofValidityBlocks: 450,
+      noteMaturityBlocks: 10,
+    }));
+    vi.mocked(gateway.estimate).mockResolvedValue({ token: STRK, recipient: FEE_RECIPIENT, amount: 1n, ...AUTH });
+    const prepare = vi.spyOn(wallet, 'strk20PrepareInvoke');
+    const batch = await ops.prepare([{ kind: 'transfer', token: TOKEN, amount: 1n, recipient: BOB }]);
+
+    await expect(batch.confirm({ feeCeiling: MAX_UINT256 + 1n })).rejects.toMatchObject({ kind: 'unknown' });
+    expect(prepare).not.toHaveBeenCalled();
+  });
+
+  it('preserves an exact-u256 prepared fee total', async () => {
+    const { ops, pool, gateway } = fixture();
+    vi.spyOn(pool, 'config').mockResolvedValue({
+      feeAmount: MAX_UINT256 - 1n,
+      feeToken: STRK,
+      proofValidityBlocks: 450,
+      noteMaturityBlocks: 10,
+    });
+    vi.mocked(gateway.estimate).mockResolvedValue({ token: STRK, recipient: FEE_RECIPIENT, amount: 1n, ...AUTH });
+
+    await expect(ops.prepare([{ kind: 'transfer', token: TOKEN, amount: 1n, recipient: BOB }]))
+      .resolves.toMatchObject({ totalCost: MAX_UINT256 });
   });
 
   it.each([

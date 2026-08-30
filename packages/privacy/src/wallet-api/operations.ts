@@ -249,7 +249,7 @@ export class WalletApiPrivacyOperations implements PrivacyOperations {
       intents: Object.freeze([canonicalIntent]),
       poolFee: config.feeAmount,
       gasEstimate: plan.fee.amount,
-      totalCost: config.feeAmount + plan.fee.amount,
+      totalCost: checkedFeeTotal(config.feeAmount, plan.fee.amount),
       warnings,
       promptCount: 1,
       swapReview: Object.freeze({
@@ -269,7 +269,7 @@ export class WalletApiPrivacyOperations implements PrivacyOperations {
           const current = await owner.pool.config(confirmSignal);
           throwIfAborted(confirmSignal);
           owner.validateSwapPlan(canonicalIntent, current, plan, swapPolicy.expectedChainId);
-          assertFeeCeiling(current.feeAmount + plan.fee.amount, feeCeiling);
+          assertFeeCeiling(checkedFeeTotal(current.feeAmount, plan.fee.amount), feeCeiling);
           assertNotDiscarded(discarded);
           // Snapshot the freshly validated calls, then hand the SDK its own
           // separate copy. Sharing one array would let an input-mutating SDK
@@ -440,7 +440,7 @@ export class WalletApiPrivacyOperations implements PrivacyOperations {
       intents,
       poolFee: config.feeAmount,
       gasEstimate: feeAtPrepare.amount,
-      totalCost: config.feeAmount + feeAtPrepare.amount,
+      totalCost: checkedFeeTotal(config.feeAmount, feeAtPrepare.amount),
       warnings,
       promptCount: 1,
       async confirm({ feeCeiling, onProgress, signal }) {
@@ -454,7 +454,7 @@ export class WalletApiPrivacyOperations implements PrivacyOperations {
           const current = await owner.pool.config(signal);
           throwIfAborted(signal);
           const relayFee = await owner.estimateRelay(route, operationToken, current, signal);
-          assertFeeCeiling(current.feeAmount + relayFee.amount, feeCeiling);
+          assertFeeCeiling(checkedFeeTotal(current.feeAmount, relayFee.amount), feeCeiling);
           const actions = [
             ...toActions(intents),
             {
@@ -890,6 +890,7 @@ function validatePoolConfig(config: PoolConfig): void {
   if (
     typeof config?.feeAmount !== 'bigint'
     || config.feeAmount < 0n
+    || config.feeAmount > MAX_UINT256
     || typeof config.feeToken !== 'string'
     || !isFelt(config.feeToken)
     || BigInt(config.feeToken) === 0n
@@ -900,6 +901,14 @@ function validatePoolConfig(config: PoolConfig): void {
   ) {
     throw new PrivacyError('unknown', 'The pool returned an invalid configuration.');
   }
+}
+
+function checkedFeeTotal(poolFee: bigint, relayFee: bigint): bigint {
+  const total = poolFee + relayFee;
+  if (total > MAX_UINT256) {
+    throw new PrivacyError('unknown', 'The combined private operation fee exceeds u256.');
+  }
+  return total;
 }
 
 function sameAddress(a: string, b: string): boolean {
