@@ -227,8 +227,9 @@ export class BackendPrivacyClient implements PoolReadClient, PrivateSubmissionGa
         error,
       );
     }
-    if (!ownResponseOk(response)) {
-      const status = ownResponseStatus(response);
+    const responseMeta = ownResponseMeta(response);
+    if (!responseMeta.ok) {
+      const status = responseMeta.status;
       let failure: unknown;
       try {
         failure = await ownResponseJson(response)();
@@ -355,38 +356,40 @@ function ownResponseJson(response: Response): () => Promise<unknown> {
   throw new PrivacyError('unknown', 'The private service returned an invalid response.');
 }
 
-function ownResponseOk(response: Response): boolean {
+function ownResponseMeta(response: Response): { ok: boolean; status: number } {
   try {
-    if (response instanceof Response) return response.ok;
+    if (response instanceof Response) return { ok: response.ok, status: response.status };
   } catch {
     // Continue into descriptor-only validation for malformed implementations.
   }
-  let current: object | null = response;
-  while (current !== null) {
-    const descriptor = Object.getOwnPropertyDescriptor(current, 'ok');
-    if (descriptor) {
-      if ('value' in descriptor && typeof descriptor.value === 'boolean') return descriptor.value;
-      break;
-    }
-    current = Object.getPrototypeOf(current) as object | null;
-  }
-  throw new PrivacyError('unknown', 'The private service returned an invalid response.');
-}
-
-function ownResponseStatus(response: Response): number {
   try {
-    if (response instanceof Response) return response.status;
-  } catch {
-    // Continue into descriptor-only validation for malformed implementations.
-  }
-  let current: object | null = response;
-  while (current !== null) {
-    const descriptor = Object.getOwnPropertyDescriptor(current, 'status');
-    if (descriptor) {
-      if ('value' in descriptor && typeof descriptor.value === 'number') return descriptor.value;
-      break;
+    let current: object | null = response;
+    while (current !== null) {
+      const ok = Object.getOwnPropertyDescriptor(current, 'ok');
+      const status = Object.getOwnPropertyDescriptor(current, 'status');
+      if (ok || status) {
+        if (
+          ok && 'value' in ok && typeof ok.value === 'boolean'
+          && status && 'value' in status && typeof status.value === 'number'
+        ) {
+          return { ok: ok.value, status: status.value };
+        }
+        break;
+      }
+      const prototype = Object.getPrototypeOf(current) as object | null;
+      if (prototype === null) break;
+      const prototypeOk = Object.getOwnPropertyDescriptor(prototype, 'ok');
+      const prototypeStatus = Object.getOwnPropertyDescriptor(prototype, 'status');
+      if (
+        prototypeOk && 'value' in prototypeOk && typeof prototypeOk.value === 'boolean'
+        && prototypeStatus && 'value' in prototypeStatus && typeof prototypeStatus.value === 'number'
+      ) {
+        return { ok: prototypeOk.value, status: prototypeStatus.value };
+      }
+      current = Object.getPrototypeOf(prototype) as object | null;
     }
-    current = Object.getPrototypeOf(current) as object | null;
+  } catch {
+    // Fall through to a controlled invalid response.
   }
   throw new PrivacyError('unknown', 'The private service returned an invalid response.');
 }

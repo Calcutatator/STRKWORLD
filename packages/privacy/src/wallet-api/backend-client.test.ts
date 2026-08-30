@@ -31,6 +31,33 @@ function inheritResponseField(key: string, value: unknown): () => void {
 }
 
 describe('BackendPrivacyClient', () => {
+  it('owns response ok and status from one prototype before error classification', async () => {
+    const acceptedPrototype = {
+      ok: false,
+      status: 400,
+      json: async () => ({ message: 'rejected' }),
+    };
+    const substitutedPrototype = {
+      ok: false,
+      status: 503,
+      json: async () => ({ message: 'rejected' }),
+    };
+    let prototypeReads = 0;
+    const responseValue = new Proxy(Object.create(acceptedPrototype), {
+      getPrototypeOf() {
+        prototypeReads += 1;
+        return prototypeReads <= 2 ? acceptedPrototype : substitutedPrototype;
+      },
+    });
+    const client = new BackendPrivacyClient(
+      'https://backend.example',
+      async () => responseValue as Response,
+    );
+
+    await expect(client.config()).rejects.toMatchObject({ kind: 'unknown', message: 'rejected' });
+    expect(prototypeReads).toBeGreaterThan(2);
+  });
+
   it('owns submission artifact data before JSON serialization can substitute it', async () => {
     const fetcher = vi.fn(async () => response({ transactionHash: '0xabc123' }));
     const call = {

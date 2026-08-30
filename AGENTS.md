@@ -258,6 +258,31 @@ empty shell to fetchers, so a 200 there means nothing.
 
 ## 6. Findings log
 
+### 2026-08-30 — Backend response status metadata is one coherent snapshot
+
+The Backend privacy client resolved `ok` and `status` in separate prototype
+walks. A stateful response proxy could therefore report `ok: false` from one
+prototype, then substitute a different status prototype before error
+classification. A normal backend rejection could be reclassified as a service
+outage—or vice versa—without those two values ever coexisting on one response
+shape.
+
+Response metadata now resolves `ok` and `status` together from one object or
+one captured prototype. Native Fetch responses still use their platform
+getters, while malformed descriptor/prototype traps retain the controlled
+invalid-response path. Body-reader ownership and backend error messages remain
+unchanged.
+
+*Verified:* a public BackendPrivacyClient regression supplies a stateful
+prototype proxy whose admitted response metadata is `ok: false/status: 400`
+and whose later prototype is `status: 503`. The base classified the response
+as unreachable; the corrected client preserves the coherent 400 rejection as
+`unknown`, even though the prototype later changes. Focused Backend client
+verification passes 95 tests and privacy typecheck passes. Full workspace
+gates are recorded in the owning commit. Deterministic fakes only: no browser,
+external provider, RPC, wallet, proof, signature, funds or transaction was
+used.*
+
 ### 2026-08-30 — Submission artifacts are owned before serialization
 
 The private submission request owned its top-level artifact reference, but
