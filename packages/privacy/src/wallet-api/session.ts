@@ -593,7 +593,9 @@ function ownPreparedBatch(
     retireInvalidPrepared(prepared);
     throw new PrivacyError('unknown', 'The wallet returned an invalid prepared batch.');
   }
-  const swapReview = swapReviewDescriptor?.value;
+  const swapReview = swapReviewDescriptor?.value === undefined
+    ? undefined
+    : Object.freeze({ ...swapReviewDescriptor.value });
   if (
     typeof prepared.poolFee !== 'bigint'
     || prepared.poolFee < 0n

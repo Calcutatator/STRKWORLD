@@ -810,6 +810,30 @@ describe('WalletSession', () => {
     expect(discard).toHaveBeenCalledOnce();
   });
 
+  it('owns swap review values before publishing them through the session facade', async () => {
+    const selected = wallet('Ready');
+    const review = {
+      expectedAmountOut: 100n,
+      minimumAmountOut: 90n,
+      slippageBps: 100,
+      expiresAt: 2_000,
+    };
+    const connected = controllableConnection(
+      '0x111', operationsWithBatch({ ...batch(), swapReview: review }, '0.10.3'), new FakePrivacyOperations(),
+    );
+    const session = createWalletSession(
+      denyAllOptions(),
+      { discovery: discoveryWith(selected), connectWallet: async () => connected.port },
+    );
+    await session.connect(session.getSnapshot().wallets[0]!.key);
+    const prepared = await session.operations.prepare([]);
+
+    review.expectedAmountOut = 1n;
+
+    expect(prepared.swapReview?.expectedAmountOut).toBe(100n);
+    expect(Object.isFrozen(prepared.swapReview)).toBe(true);
+  });
+
   it('retires malformed prepared work when facade validation rejects it', async () => {
     const selected = wallet('Ready');
     const discard = vi.fn();
