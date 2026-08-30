@@ -405,7 +405,7 @@ export class LobbyClient {
   async disconnect(): Promise<void> {
     this.#cancelReconcile();
     this.#desired = null;
-    this.#joinGeneration += 1;
+    const disconnectGeneration = ++this.#joinGeneration;
     const attempt = this.#joinAttempt;
     this.#joinAttempt = null;
     attempt?.interrupt(new Error('Lobby join interrupted by disconnect()'));
@@ -425,7 +425,11 @@ export class LobbyClient {
         leaveError = error;
       }
     }
-    this.#emitPeers();
+    // A status listener may synchronously start a replacement connection from
+    // `client-left` while the old room's leave is pending. That replacement
+    // now owns peer delivery; do not let this stale disconnect continuation
+    // publish through its live stream when the old transport finally settles.
+    if (this.#joinGeneration === disconnectGeneration) this.#emitPeers();
     if (leaveFailed) throw leaveError;
   }
 

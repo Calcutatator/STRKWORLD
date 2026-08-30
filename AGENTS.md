@@ -281,6 +281,28 @@ passes 100 tests and package typecheck. Full workspace verification is recorded
 with the owning commit. Deterministic fakes only: no browser, wallet, provider,
 RPC, proof, signature, funds or transaction was used.*
 
+### 2026-08-30 — Lobby disconnect does not publish through a replacement room
+
+`LobbyClient.disconnect()` retired its room and emitted the `closed` status
+before awaiting `room.leave(true)`, allowing a synchronous status listener to
+start a replacement connection. The old disconnect continuation then emitted
+its cleared peer snapshot after the leave settled, even though the replacement
+room already owned the client's peer stream. That produced a duplicate,
+stale delivery through the live replacement connection and made the old
+transport operation observable after authority had moved on.
+
+Disconnect now records its generation and emits the post-cleanup empty peer
+snapshot only if that generation remains current. A replacement connection
+therefore owns all subsequent peer delivery, while ordinary disconnects and
+leave-error cleanup still publish the removal and preserve the original error.
+
+*Verified:* a red-first public fake-room regression deferred room A's leave,
+reconnected synchronously from the `client-left` status listener, and observed
+the replacement peer snapshot twice on the old path. The corrected path emits
+it once. Removing the generation guard restores the failure. No browser,
+external lobby, wallet, provider, RPC, proof, signature, funds or transaction
+was used.
+
 ### 2026-08-30 — Privacy route-policy snapshots must bypass proxy reads
 
 The WalletSession route-policy boundary validated own data descriptors, but

@@ -733,6 +733,60 @@ describe('connect is idempotent', () => {
     expect(observer.peers()).toHaveLength(1);
   });
 
+  it('does not publish a stale peer snapshot after client-left reconnects synchronously', async () => {
+    const firstRoom = fakeRoom();
+    const replacementRoom = fakeRoom();
+    const firstLeave = deferred<number>();
+    firstRoom.leave.mockImplementationOnce(() => firstLeave.promise);
+    const joinOrCreate = vi.spyOn(ColyseusClient.prototype, 'joinOrCreate');
+    joinOrCreate
+      .mockImplementationOnce(() => Promise.resolve(firstRoom.room) as never)
+      .mockImplementationOnce(() => Promise.resolve(replacementRoom.room) as never);
+
+    try {
+      const client = new LobbyClient({ endpoint: 'ws://example', start: { x: 20, y: 0 } });
+      const peerSnapshots: Array<readonly PeerSnapshot[]> = [];
+      client.onPeers((peers) => peerSnapshots.push(peers));
+      let replacementConnecting: Promise<void> | undefined;
+      client.onStatus((event) => {
+        if (event.status === 'closed' && event.reason === 'client-left') {
+          replacementConnecting = client.connect();
+        }
+      });
+
+      const firstConnecting = client.connect();
+      await Promise.resolve();
+      firstRoom.welcome({ gameId: '0000000000000011' });
+      await firstConnecting;
+
+      const disconnecting = client.disconnect();
+      await Promise.resolve();
+      await Promise.resolve();
+      replacementRoom.room.state.peers.set('0000000000000012', {
+        gameId: '0000000000000012',
+        position: { x: 25, y: 30 },
+        facing: 'right',
+        sprite: 'avatar-2',
+      } as never);
+      replacementRoom.welcome({ gameId: '0000000000000013' });
+      await replacementConnecting;
+
+      const replacementSnapshots = () =>
+        peerSnapshots.filter((peers) => peers.some((peer) => peer.gameId === '0000000000000012'));
+      expect(replacementSnapshots()).toHaveLength(1);
+
+      firstLeave.resolve(0);
+      await disconnecting;
+
+      // The old disconnect must not deliver again after its room leave settles:
+      // the replacement room now owns the client's peer stream.
+      expect(replacementSnapshots()).toHaveLength(1);
+    } finally {
+      firstLeave.resolve(0);
+      joinOrCreate.mockRestore();
+    }
+  });
+
   it('does not classify a replacement room drop as the prior local leave', async () => {
     const firstRoom = fakeRoom();
     const replacementRoom = fakeRoom();
