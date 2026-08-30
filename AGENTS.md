@@ -258,6 +258,29 @@ empty shell to fetchers, so a 200 there means nothing.
 
 ## 6. Findings log
 
+### 2026-08-30 — Remote avatar replay must own shutdown before subscribe returns
+
+`createRemoteAvatarLayer()` previously subscribed to the retained remote-peer
+source before registering the Scene `shutdown` listener. Subscription replays
+its current snapshot synchronously, so teardown raised during replay was
+missed; the layer stayed subscribed and its sprites survived the Scene's
+shutdown. The returned unsubscribe handle also does not exist until that
+replay returns.
+
+The layer now registers shutdown ownership before subscribing and keeps a
+pending-unsubscribe handoff for shutdown during synchronous replay. The handle
+is invoked exactly once after `subscribe()` returns, while later publications
+are ignored by the destroyed guard. Existing idempotent explicit and Scene
+shutdown cleanup remains unchanged.
+
+*Verified:* a public source fake that replays one peer, fires shutdown before
+returning its unsubscribe handle, and then publishes again first left the
+sprite, layer and subscription alive on `origin/main`. The corrected remote
+avatar suite passes 8 tests; the full World and workspace gates are recorded on
+the candidate. No browser, lobby, wallet, provider, RPC, proof, signature,
+funds or transaction was used.
+
+
 ### 2026-08-30 — The lazy demo seam owns loader failures
 
 `PrivacyProvider` loaded the explicit local demo seam with a bare dynamic

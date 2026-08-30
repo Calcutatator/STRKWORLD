@@ -51,6 +51,8 @@ export function createRemoteAvatarLayer({
   let peers: ReadonlyMap<string, RemotePeerSnapshot> = new Map();
   let destroyed = false;
   let unsubscribe: (() => void) | undefined;
+  let subscribing = false;
+  let unsubscribePending = false;
 
   const render = (snapshot: readonly RemotePeerSnapshot[]): void => {
     if (destroyed) return;
@@ -72,15 +74,19 @@ export function createRemoteAvatarLayer({
     peers = next;
   };
 
-  // The layer exists before subscribe, so a synchronous replay is safe.
-  if (source) unsubscribe = source.subscribe(render);
-
   const destroy = (): void => {
     if (destroyed) return;
     destroyed = true;
     scene.events.off('shutdown', destroy);
-    unsubscribe?.();
-    unsubscribe = undefined;
+    if (unsubscribe) {
+      const stop = unsubscribe;
+      unsubscribe = undefined;
+      stop();
+    } else if (subscribing) {
+      // A source may replay and trigger shutdown before subscribe() returns
+      // its unsubscribe handle. The post-subscribe handoff owns that handle.
+      unsubscribePending = true;
+    }
     for (const avatar of avatars.values()) destroyAvatar(avatar);
     avatars.clear();
     peers = new Map();
@@ -90,6 +96,27 @@ export function createRemoteAvatarLayer({
   // Scene shutdown is the lifecycle authority. `destroy()` is also exposed
   // for deterministic teardown and is idempotent when both paths run.
   scene.events.once('shutdown', destroy);
+
+  // The layer exists before subscribe, so a synchronous replay is safe. The
+  // shutdown listener is installed first because replay can run arbitrary
+  // presentation code before subscribe() returns.
+  if (source) {
+    subscribing = true;
+    try {
+      const stop = source.subscribe(render);
+      if (destroyed || unsubscribePending) {
+        unsubscribePending = false;
+        stop();
+      } else {
+        unsubscribe = stop;
+      }
+    } catch (error) {
+      if (!destroyed) destroy();
+      throw error;
+    } finally {
+      subscribing = false;
+    }
+  }
 
   return {
     get peers() {

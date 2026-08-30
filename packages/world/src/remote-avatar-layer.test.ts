@@ -1,5 +1,9 @@
 import { describe, expect, it, vi } from 'vitest';
-import { createRemotePeerSource, type RemotePeerSnapshot } from './remote-peer.js';
+import {
+  createRemotePeerSource,
+  type RemotePeerSnapshot,
+  type RemotePeerSource,
+} from './remote-peer.js';
 import { createRemoteAvatarLayer } from './remote-avatar-layer.js';
 
 const peer = (overrides: Partial<RemotePeerSnapshot> = {}): RemotePeerSnapshot => ({
@@ -208,6 +212,35 @@ describe('remote avatar layer', () => {
     sourceController.publish([]);
     expect(fake.objects[0]?.destroy).toHaveBeenCalledTimes(1);
     expect(layer.peers.size).toBe(0);
+  });
+
+  it('owns shutdown when source replay fires before subscribe returns', () => {
+    const fake = fakeScene();
+    let shutdown: (() => void) | undefined;
+    fake.scene.events.once.mockImplementation((_event: string, callback: () => void) => {
+      shutdown = callback;
+    });
+    let deliver: ((snapshot: readonly RemotePeerSnapshot[]) => void) | undefined;
+    const unsubscribe = vi.fn();
+    const source: RemotePeerSource = {
+      subscribe(listener) {
+        deliver = listener;
+        listener([peer()]);
+        shutdown?.();
+        return unsubscribe;
+      },
+    };
+
+    const layer = createRemoteAvatarLayer({ scene: fake.scene as never, source });
+
+    expect(unsubscribe).toHaveBeenCalledTimes(1);
+    expect(fake.objects[0]?.destroy).toHaveBeenCalledTimes(1);
+    expect(fake.layer.destroy).toHaveBeenCalledTimes(1);
+    expect(layer.peers.size).toBe(0);
+
+    const positionCalls = fake.objects[0]?.setPosition.mock.calls.length;
+    deliver?.([peer({ x: 500 })]);
+    expect(fake.objects[0]?.setPosition.mock.calls.length).toBe(positionCalls);
   });
 
   it('unsubscribes and destroys all presentation objects exactly once', () => {
