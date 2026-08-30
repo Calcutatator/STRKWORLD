@@ -318,6 +318,37 @@ describe('WalletApiPrivacyOperations capability and reads', () => {
 });
 
 describe('Wallet API action routes', () => {
+  it.each([
+    ['null', null],
+    ['missing transaction hash', {}],
+    ['non-string transaction hash', { transaction_hash: 42 }],
+    ['empty transaction hash', { transaction_hash: '' }],
+  ] as const)('rejects a %s shield response as invalid wallet data', async (_label, response) => {
+    const { ops, wallet } = fixture();
+    vi.spyOn(wallet, 'strk20InvokeTransaction').mockResolvedValue(response as never);
+    const batch = await ops.prepare([{ kind: 'shield', token: TOKEN, amount: 20n }]);
+
+    await expect(batch.confirm({ feeCeiling: POOL_FEE })).rejects.toMatchObject({ kind: 'unknown' });
+  });
+
+  it('rejects an inherited or accessor-backed shield transaction hash without reading it', async () => {
+    const { ops, wallet } = fixture();
+    const inherited = Object.create({ transaction_hash: '0xforged' });
+    const accessor = {} as { transaction_hash?: string };
+    Object.defineProperty(accessor, 'transaction_hash', {
+      configurable: true,
+      get() { throw new Error('transaction hash getter must not run'); },
+    });
+    vi.spyOn(wallet, 'strk20InvokeTransaction')
+      .mockResolvedValueOnce(inherited as never)
+      .mockResolvedValueOnce(accessor as never);
+
+    for (let attempt = 0; attempt < 2; attempt += 1) {
+      const batch = await ops.prepare([{ kind: 'shield', token: TOKEN, amount: 20n }]);
+      await expect(batch.confirm({ feeCeiling: POOL_FEE })).rejects.toMatchObject({ kind: 'unknown' });
+    }
+  });
+
   it('submits a shield through the wallet as one deposit action', async () => {
     const { ops, invoked } = fixture();
     const batch = await ops.prepare([{ kind: 'shield', token: TOKEN, amount: 20n }]);

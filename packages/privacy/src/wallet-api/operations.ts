@@ -362,9 +362,10 @@ export class WalletApiPrivacyOperations implements PrivacyOperations {
           // Once the wallet returns a transaction hash the public deposit may
           // already be on-chain. Do not turn that success into a retryable
           // cancellation merely because the caller aborted while it settled.
+          const transactionHash = readWalletTransactionHash(result);
           emitProgress(onProgress, { stage: 'confirming', message: 'Shield submitted' });
           emitProgress(onProgress, { stage: 'done', message: 'Done' });
-          return { transactionHash: result.transaction_hash };
+          return { transactionHash };
         } catch (error) {
           emitProgress(onProgress, { stage: 'failed', message: 'Shield failed' });
           throw mapWalletError(error);
@@ -728,6 +729,23 @@ function tokenFor(intent: Intent): string {
 
 function toFelt(value: bigint): string {
   return `0x${value.toString(16)}`;
+}
+
+function readWalletTransactionHash(value: unknown): string {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    throw new PrivacyError('unknown', 'The wallet returned an invalid transaction result.');
+  }
+  const descriptor = Object.getOwnPropertyDescriptor(value, 'transaction_hash');
+  if (
+    !descriptor ||
+    !('value' in descriptor) ||
+    typeof descriptor.value !== 'string' ||
+    descriptor.value.length === 0 ||
+    /\s/.test(descriptor.value)
+  ) {
+    throw new PrivacyError('unknown', 'The wallet returned an invalid transaction result.');
+  }
+  return descriptor.value;
 }
 
 function assertAddress(address: string, label: string): void {
