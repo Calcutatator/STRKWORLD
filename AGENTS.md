@@ -258,6 +258,27 @@ empty shell to fetchers, so a 200 there means nothing.
 
 ## 6. Findings log
 
+### 2026-08-30 — Fixed-room station render projection must validate matching fields
+
+`fixedRoomStationPresentations()` accepted a matching runtime station snapshot
+by station id and copied its `label` and `status` directly into the public
+render model. A malformed snapshot such as `{station: known, label: 42,
+status: 'forged'}` therefore crossed the World boundary and could reach Phaser
+despite the presentation contract requiring a nonblank string label and one of
+`available`/`locked`.
+
+The projection now reads station, label, and status through the existing
+own-data-field boundary helper, accepts only a nonblank string label and the
+two allowed statuses, and falls back to the authored label plus locked status
+otherwise. Unknown, duplicate, null, accessor-backed, and malformed station
+records remain fail-closed; valid custom labels/statuses are unchanged.
+
+*Verified:* a public fixed-room regression first exposed the invalid matching
+fields on the pre-fix head, then passed with the validation. Reverting the
+projection validation reproduces the failure. Focused fixed-room tests, the
+World package suite/typecheck, invariants, and diff hygiene pass. No browser,
+wallet, provider, RPC, proof, signature, funds, or transaction was used.
+
 ### 2026-08-30 — Backend cancellation accepts genuine cross-realm signals
 
 The browser backend client previously validated optional operation signals
@@ -339,6 +360,28 @@ leaked that exact error, while the corrected handler ignored the command
 without invoking the getter or changing World ownership. Focused fixed-room
 tests pass 73 tests and World typecheck passes. No browser, lobby server,
 wallet, provider, RPC, proof, signature, funds or transaction was used.*
+
+### 2026-08-30 — Avatar Studio exit presentation must roll back partial handoffs
+
+`createAvatarStudioPresentation.exit()` advanced the Phaser-facing port through
+the street handoff without compensation. If a setter threw after an earlier
+setter had already enabled the body or revealed street objects, the controller
+could restore logical Studio ownership while the visible World remained
+partially transitioned. Retrying then started from a mixed presentation.
+
+The exit path now restores the known Studio contract after a failure while the
+same transition still owns the presentation: disabled body, hidden street
+objects, visible Studio, Studio bounds/camera bounds and Studio spawn. Each
+restore operation is attempted, while reentrant newer transitions retain
+authority and the original exit error remains primary. Successful exit and
+existing entry rollback semantics are unchanged.
+
+*Verified:* a red-first public World regression makes the exit body/ground/door
+setters mutate state before a door setter throws; the old path left the street
+partially visible, while the corrected path restores the exact Studio state and
+the next exit retry completes. Focused Avatar Studio tests pass 46 tests. No
+browser, lobby server, wallet, provider, RPC, proof, signature, funds or
+transaction was used.
 
 ### 2026-08-30 — Avatar Studio figure visibility sync must be transactional
 

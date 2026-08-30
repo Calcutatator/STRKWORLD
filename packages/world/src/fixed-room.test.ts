@@ -102,6 +102,7 @@ describe('fixed room presentation transaction', () => {
     expect(() => h.presentation.enter()).toThrow(error);
     expect(h.calls.at(-1)).toBe('position:true');
   });
+
 });
 
 function bus<Events extends Record<string, unknown>>(): EventBus<Events> {
@@ -801,6 +802,27 @@ describe('fixed room definitions', () => {
     }).map(({ status, label }) => ({ status, label }))).toEqual(
       map.stations.map(({ label }) => ({ status: 'locked', label })),
     );
+  });
+
+  it('fails closed when a matching station snapshot has invalid presentation fields', () => {
+    const map = createFixedRoom(POST_OFFICE_ROOM_DEFINITION);
+
+    expect(fixedRoomStationPresentations(map, {
+      inRoom: true,
+      building: 'post-office',
+      controlOwner: 'world',
+      highlightedStation: null,
+      stations: [{
+        station: 'post-office:transfer',
+        label: 42,
+        status: 'forged',
+      }] as unknown as FixedRoomState['stations'],
+    })).toEqual([{
+      ...map.stations[0],
+      label: map.stations[0]!.label,
+      status: 'locked',
+      highlighted: false,
+    }]);
   });
 });
 

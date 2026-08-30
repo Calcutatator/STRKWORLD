@@ -415,12 +415,16 @@ export function fixedRoomStationPresentations(
   const snapshots = Array.isArray(state.stations) ? state.stations : [];
   return room.stations.map((station) => {
     const snapshot = snapshots.find((candidate) => (
-      candidate !== null && typeof candidate === 'object' && candidate.station === station.station
+      ownDataField(candidate, 'station') === station.station
     ));
+    const label = ownDataField(snapshot, 'label');
+    const status = ownDataField(snapshot, 'status');
+    const validLabel = typeof label === 'string' && label.trim().length > 0;
+    const validStatus = status === 'available' || status === 'locked';
     return {
       ...station,
-      label: snapshot?.label ?? station.label,
-      status: snapshot?.status ?? 'locked',
+      label: validLabel ? label : station.label,
+      status: snapshot && validLabel && validStatus ? status : 'locked',
       highlighted: state.highlightedStation === station.station,
     };
   });

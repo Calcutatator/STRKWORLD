@@ -184,31 +184,41 @@ export function createAvatarStudioPresentation(options: {
       const isCurrent = (): boolean =>
         !destroyed && !destroying && transitionRevision === ownTransition;
       const { port } = options;
-      port.setPlayerVelocity(0, 0);
-      if (!isCurrent()) return;
-      port.setBodyEnabled(true);
-      if (!isCurrent()) return;
-      port.setGroundVisible(true);
-      if (!isCurrent()) return;
-      port.setDoorsVisible(true);
-      if (!isCurrent()) return;
-      port.setRemoteVisible(true);
-      if (!isCurrent()) return;
-      port.setLabelsVisible(true);
-      if (!isCurrent()) return;
-      port.setRoomVisible(false);
-      if (!isCurrent()) return;
-      port.setStudioVisible(false);
-      if (!isCurrent()) return;
-      port.setWorldBounds(streetBounds);
-      if (!isCurrent()) return;
-      port.setCameraBounds(streetBounds);
-      if (!isCurrent()) return;
-      port.setPlayerPosition(streetReturn);
-      if (!isCurrent()) return;
-      port.resetDoors();
-      if (!isCurrent()) return;
-      port.resumeStreet(streetReturn, options.reportStreet);
+      try {
+        port.setPlayerVelocity(0, 0);
+        if (!isCurrent()) return;
+        port.setBodyEnabled(true);
+        if (!isCurrent()) return;
+        port.setGroundVisible(true);
+        if (!isCurrent()) return;
+        port.setDoorsVisible(true);
+        if (!isCurrent()) return;
+        port.setRemoteVisible(true);
+        if (!isCurrent()) return;
+        port.setLabelsVisible(true);
+        if (!isCurrent()) return;
+        port.setRoomVisible(false);
+        if (!isCurrent()) return;
+        port.setStudioVisible(false);
+        if (!isCurrent()) return;
+        port.setWorldBounds(streetBounds);
+        if (!isCurrent()) return;
+        port.setCameraBounds(streetBounds);
+        if (!isCurrent()) return;
+        port.setPlayerPosition(streetReturn);
+        if (!isCurrent()) return;
+        port.resetDoors();
+        if (!isCurrent()) return;
+        port.resumeStreet(streetReturn, options.reportStreet);
+      } catch (error) {
+        // Exit is a multi-port handoff just like entry. Restore the known
+        // Studio contract after a partial failure so the controller can keep
+        // ownership and retry from a coherent presentation.
+        if (isCurrent()) {
+          restoreStudioPresentation(port, studioBounds, studioSpawn, isCurrent);
+        }
+        throw error;
+      }
     },
     destroy(): void {
       if (destroying || (destroyed && !destroyPending)) return;
@@ -257,6 +267,36 @@ function restoreStreetPresentation(
       attempt();
     } catch {
       // The entry failure remains authoritative. Attempt every restoration
+      // action so one faulty port does not strand another resource.
+    }
+  }
+}
+
+function restoreStudioPresentation(
+  port: AvatarStudioPresentationPort,
+  studioBounds: AvatarStudioBounds,
+  studioSpawn: { readonly x: number; readonly y: number },
+  isCurrent: () => boolean,
+): void {
+  const attempts: Array<() => void> = [
+    () => port.setPlayerVelocity(0, 0),
+    () => port.setBodyEnabled(false),
+    () => port.setGroundVisible(false),
+    () => port.setDoorsVisible(false),
+    () => port.setRemoteVisible(false),
+    () => port.setLabelsVisible(false),
+    () => port.setRoomVisible(false),
+    () => port.setStudioVisible(true),
+    () => port.setWorldBounds(studioBounds),
+    () => port.setCameraBounds(studioBounds),
+    () => port.setPlayerPosition(studioSpawn),
+  ];
+  for (const attempt of attempts) {
+    if (!isCurrent()) return;
+    try {
+      attempt();
+    } catch {
+      // The exit failure remains authoritative. Attempt every restoration
       // action so one faulty port does not strand another resource.
     }
   }
