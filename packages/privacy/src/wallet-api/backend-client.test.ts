@@ -262,6 +262,39 @@ describe('BackendPrivacyClient', () => {
     }
   });
 
+  it.each(['executorCalls', 'calldata'] as const)('rejects a sparse %s response array', async (field) => {
+    const call = { contractAddress: '0x111', entrypoint: 'swap', calldata: ['0xaaa'] };
+    const body = {
+      quoteId: 'quote-1',
+      buyAmount: '100',
+      expiresAt: 2_000,
+      chainId: '0x534e5f4d41494e',
+      executorAddress: '0x999',
+      executorCalls: [call],
+      fee: {
+        token: '0x4718',
+        recipient: '0x789',
+        amount: '7',
+        authorization: 'auth',
+        expiresAtBlock: 1450,
+      },
+    } as { executorCalls: unknown[]; fee: Record<string, unknown> };
+    if (field === 'executorCalls') body.executorCalls = new Array(1);
+    else (body.executorCalls[0] as { calldata: unknown[] }).calldata = new Array(1);
+    const client = new BackendPrivacyClient(
+      'https://backend.example',
+      async () => objectResponse(body),
+    );
+
+    await expect(client.prepareSwap({
+      sellToken: '0xabc',
+      buyToken: '0x4718',
+      sellAmount: 20n,
+      minAmountOut: 90n,
+      slippageBps: 100,
+    })).rejects.toMatchObject({ kind: 'unknown' });
+  });
+
   it('rejects an empty swap quote identifier', async () => {
     const client = new BackendPrivacyClient(
       'https://backend.example',

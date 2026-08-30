@@ -281,5 +281,14 @@ function asArray(value: unknown): unknown[] {
   if (!Array.isArray(value)) {
     throw new PrivacyError('unknown', 'The private service returned an invalid response.');
   }
+  // `Array.prototype.map` skips holes (and invokes indexed accessors). A
+  // sparse or accessor-backed response would become a different, partially
+  // unchecked action/calldata list after parsing.
+  for (let index = 0; index < value.length; index += 1) {
+    const descriptor = Object.getOwnPropertyDescriptor(value, String(index));
+    if (!descriptor || !('value' in descriptor)) {
+      throw new PrivacyError('unknown', 'The private service returned an invalid response.');
+    }
+  }
   return value;
 }
