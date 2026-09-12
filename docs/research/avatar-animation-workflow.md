@@ -5,6 +5,14 @@
 tool installation, dependency adoption, asset change or runtime change is
 authorized by this note.
 
+**Status update, 2026-09-12:** the five-column guidance below remains the
+contract for Avatar 1 fighting and avatars 2–16. Avatar 1 cosy alone now uses
+the six-column geometry in the
+[D-052 August 28 amendment](../DECISIONS.md#d-052--avatar-animation-contract-and-avatar-studio-f-toggle).
+The [Avatar 1 restart research](avatar-1-restart-2026-09-12.md) supersedes this
+note's Avatar 1 cosy authoring guidance and restores the requested four-idle
+draft approval gate. Historical observations below retain their original date.
+
 ## Observed project evidence
 
 The supplied `Screen Recording 2026-08-20 at 11.46.57.mov` was inspected

@@ -1,0 +1,203 @@
+{
+  "status": "draft-awaiting-user-approval",
+  "created": "2026-09-12",
+  "sourceSha256": "833e7668362c0d1ab6915a8b4ec543fc7a646595becc6f026219fd24efb2c160",
+  "exportTool": "sharp 0.35.4 / libvips 8.18.6",
+  "grid": [
+    64,
+    64
+  ],
+  "feetPivot": [
+    32,
+    56
+  ],
+  "visibleHeight": 50,
+  "facingOrder": [
+    "down",
+    "left",
+    "right",
+    "up"
+  ],
+  "export": "Per-view alpha bounds; nearest resize to 50px height; sole registration; alpha threshold 128; shared 24-colour quantization with two reserved facial/outline colours; no pixel repairs.",
+  "opaquePalette": [
+    "094c50",
+    "0e0d0d",
+    "106a6c",
+    "13282b",
+    "1b1717",
+    "223e44",
+    "258d88",
+    "341d16",
+    "36565a",
+    "4d2a1d",
+    "5a7d7f",
+    "663924",
+    "86482a",
+    "916341",
+    "a75b33",
+    "a7744c",
+    "bfbdbb",
+    "c29566",
+    "cd713f",
+    "e3864e",
+    "f09c60",
+    "f0ae73",
+    "f7dfc1",
+    "fbbd82"
+  ],
+  "sheetSha256": "037999dcaa59cfd8fe7505727995d95fc09c5a4e3b2761cf2200dc7b6e93ca6b",
+  "cells": [
+    {
+      "direction": "down",
+      "sourceRegion": {
+        "left": 0,
+        "top": 0,
+        "width": 627,
+        "height": 627
+      },
+      "sourceOpaqueBounds": {
+        "left": 214,
+        "top": 49,
+        "width": 251,
+        "height": 537
+      },
+      "scaledWidth": 23,
+      "soleCentreX": 31.5,
+      "dimensions": [
+        64,
+        64
+      ],
+      "opaqueBounds": {
+        "left": 22,
+        "top": 7,
+        "width": 23,
+        "height": 50
+      },
+      "opaqueColours": 24,
+      "alphaValues": [
+        0,
+        255
+      ],
+      "connectedComponents8": 1,
+      "clipped": false,
+      "pngSha256": "8901a492edd83c3da08a538491f0f927f000c33c81704db5500ceedf2fd3a632",
+      "rgbaSha256": "7e32df05f599f3ff49714801da0a3df69c47d8edd89da64c74121ea6fd1fa900",
+      "mechanicalExport": "pass"
+    },
+    {
+      "direction": "left",
+      "sourceRegion": {
+        "left": 627,
+        "top": 0,
+        "width": 627,
+        "height": 627
+      },
+      "sourceOpaqueBounds": {
+        "left": 214,
+        "top": 59,
+        "width": 207,
+        "height": 532
+      },
+      "scaledWidth": 19,
+      "soleCentreX": 31.5,
+      "dimensions": [
+        64,
+        64
+      ],
+      "opaqueBounds": {
+        "left": 23,
+        "top": 7,
+        "width": 19,
+        "height": 50
+      },
+      "opaqueColours": 22,
+      "alphaValues": [
+        0,
+        255
+      ],
+      "connectedComponents8": 1,
+      "clipped": false,
+      "pngSha256": "172a5b44802d3f1b6910a9fc7ca3b790cf2c78dc2daf525879a3cdf6497e9e96",
+      "rgbaSha256": "c5d24bba1ded09b0fad511528de7bffd3c38531bc31d2892e208fec9f53ef9b6",
+      "mechanicalExport": "pass"
+    },
+    {
+      "direction": "right",
+      "sourceRegion": {
+        "left": 0,
+        "top": 627,
+        "width": 627,
+        "height": 627
+      },
+      "sourceOpaqueBounds": {
+        "left": 197,
+        "top": 43,
+        "width": 216,
+        "height": 531
+      },
+      "scaledWidth": 20,
+      "soleCentreX": 32,
+      "dimensions": [
+        64,
+        64
+      ],
+      "opaqueBounds": {
+        "left": 21,
+        "top": 7,
+        "width": 20,
+        "height": 50
+      },
+      "opaqueColours": 23,
+      "alphaValues": [
+        0,
+        255
+      ],
+      "connectedComponents8": 1,
+      "clipped": false,
+      "pngSha256": "a24c89bc54d8b1d54298ed5b9653f3dc91d91b903c49ac053e177393a7450991",
+      "rgbaSha256": "6c5a8ab95a477e027b623c29d08614609936afa9ad9f2856461158cbe87acb47",
+      "mechanicalExport": "pass"
+    },
+    {
+      "direction": "up",
+      "sourceRegion": {
+        "left": 627,
+        "top": 627,
+        "width": 627,
+        "height": 627
+      },
+      "sourceOpaqueBounds": {
+        "left": 181,
+        "top": 42,
+        "width": 232,
+        "height": 530
+      },
+      "scaledWidth": 22,
+      "soleCentreX": 31.5,
+      "dimensions": [
+        64,
+        64
+      ],
+      "opaqueBounds": {
+        "left": 20,
+        "top": 7,
+        "width": 22,
+        "height": 50
+      },
+      "opaqueColours": 22,
+      "alphaValues": [
+        0,
+        255
+      ],
+      "connectedComponents8": 1,
+      "clipped": false,
+      "pngSha256": "d795233d2d62a65dc36cd8d8e96b142d193a9dff2871f1c082f7277608f71b15",
+      "rgbaSha256": "bf2d7cf151b5780ccd9f41d25536ce1d77e2b28a44bdeee30956acb6cf590f8b",
+      "mechanicalExport": "pass"
+    }
+  ],
+  "mechanicalScope": "dimensions, binary alpha, feet line, safe bounds, palette count, component count, PNG/RGBA hashes",
+  "visualApproval": "pending-user",
+  "animation": "not-started",
+  "runtimeIntegration": "not-performed"
+}
