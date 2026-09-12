@@ -1,0 +1,133 @@
+{
+  "date": "2026-09-12",
+  "status": "installed-and-protocol-verified",
+  "blender": {
+    "version": "5.2.1 LTS",
+    "buildHash": "9e2066aef7ef",
+    "appPath": "/Applications/Blender.app",
+    "commandPath": "/opt/homebrew/bin/blender",
+    "installation": "Homebrew cask from download.blender.org",
+    "caskDmgSha256": "6409e21de80994db5f4c4a34486b6fd43cea21085b912f7491c53e923acb65a3"
+  },
+  "mcp": {
+    "package": "blender-mcp",
+    "version": "1.9.1",
+    "wheelSha256": "ede3aed34926f77142b8f00ee4f8544f68067d2dc747da8295d1c456171355b2",
+    "addonSha256": "f43469c8518c7021e0060e32cfe52e3beb126b0f62fbae7293106642a3ebda89",
+    "pythonVersion": "3.11.15",
+    "serverCommand": "/Users/james.wilcock/.codex/tools/blender-mcp/venv/bin/blender-mcp",
+    "codexServerName": "blender",
+    "bind": "127.0.0.1:9876",
+    "environment": {
+      "DISABLE_TELEMETRY": "true",
+      "BLENDER_MCP_DISABLE_TELEMETRY": "1",
+      "BLENDER_HOST": "127.0.0.1",
+      "BLENDER_PORT": "9876"
+    },
+    "handshake": {
+      "up_to_date": true,
+      "protocol_version": 5,
+      "expected_protocol_version": 5,
+      "addon_version": [
+        1,
+        6
+      ],
+      "capabilities": [
+        "drain_human_activity",
+        "execute_code",
+        "get_addon_info",
+        "get_object_info",
+        "get_scene_info",
+        "get_telemetry_consent",
+        "get_viewport_screenshot",
+        "get_world_state_snapshot",
+        "set_telemetry_consent"
+      ],
+      "blender_version": "5.2.1 LTS",
+      "source": "native",
+      "warning": null,
+      "telemetry_consent": false,
+      "update_command": "uvx blender-mcp install-addon",
+      "after_install": "If the addon file was updated: in Blender, Preferences \u2192 Add-ons \u2192 disable/enable 'Interface: Blender MCP', or restart Blender, then Start MCP Server."
+    },
+    "verification": "real MCP ClientSession over stdio, scene inspection, execute_blender_code, native SVG export, final get_scene_info",
+    "currentTaskNativeToolRegistry": "not-yet-reloaded"
+  },
+  "svgProbe": {
+    "fixture": "Blender built-in Grease Pencil monkey; not Avatar 1 artwork",
+    "svgViewport": {
+      "version": "1.1",
+      "x": "0px",
+      "y": "0px",
+      "width": "64.000000px",
+      "height": "64.000000px",
+      "viewBox": "0 0 64.000000 64.000000"
+    },
+    "vectorPathCount": 28,
+    "embeddedImageCount": 0,
+    "pngSize": [
+      64,
+      64
+    ],
+    "alphaPixels": {
+      "transparent": 3485,
+      "opaque": 460,
+      "partial": 151
+    },
+    "partialAlphaMeaning": "ordinary vector raster antialiasing; this is an export probe, not a production sprite alpha pass",
+    "visualInspection": "nonempty coherent fixture with transparent margins",
+    "scene": {
+      "name": "STRKWORLD SVG Setup Check",
+      "object_count": 2,
+      "objects": [
+        {
+          "name": "SVG Check Camera",
+          "type": "CAMERA",
+          "location": [
+            0.0,
+            -8.0,
+            0.0
+          ]
+        },
+        {
+          "name": "SVG Export Fixture - not avatar art",
+          "type": "GREASEPENCIL",
+          "location": [
+            0.0,
+            0.0,
+            0.0
+          ]
+        }
+      ],
+      "materials_count": 7
+    }
+  },
+  "files": {
+    "svg_export_probe.py": {
+      "bytes": 2348,
+      "sha256": "90a028590fd3c96109f6b00a99117f22219880d09b9beb7d0cfed09e99a02cbc"
+    },
+    "blender-svg-smoke.svg": {
+      "bytes": 55437,
+      "sha256": "b5bd037d683070287706fb413d9b0360a1cad5c87bda6df955992c3b1631370b"
+    },
+    "blender-svg-smoke-64.png": {
+      "bytes": 1660,
+      "sha256": "3b268ed7a674b884a896a81e94829571aa7fa58d9227cce2885614c5a567e03f"
+    },
+    "blender-svg-smoke-preview.png": {
+      "bytes": 4456,
+      "sha256": "b69e15b431de02f7c4d25ca1c2b74f748a97fe9df5c534e0ca7938a778be95d1"
+    },
+    "blender-svg-setup-check.blend": {
+      "bytes": 114105,
+      "sha256": "ef14b86c2b5a23e333e1f12c7b0142040545422a68a250d9f90e77b434ba2cb7"
+    }
+  },
+  "notVerified": [
+    "Codex current-task native tools after reload",
+    "new avatar artwork",
+    "animation",
+    "game integration"
+  ]
+}

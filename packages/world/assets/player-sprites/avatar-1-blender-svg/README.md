@@ -35,8 +35,10 @@ export/avatar-1.png
 export/manifest.json
 ```
 
-These paths are a delivery contract, not claims that assets already exist.
-No `.blend`, SVG avatar, Blender render or animation has been produced yet.
+These paths are an avatar delivery contract, not claims that avatar assets
+already exist. The `setup/` directory now contains a separate verified native
+Grease Pencil export fixture and `.blend`; no Avatar 1 SVG, rig or animation
+has been produced yet.
 
 ## Ordered stages
 
@@ -117,10 +119,27 @@ an MCP server plus a Blender add-on. Use local authoring and
 `DISABLE_TELEMETRY=true` when configuring this implementation. Asset-generation
 services and external models are unnecessary for this flow.
 
-Checked on 2026-09-12: no callable Blender MCP tool in this task, no Blender
-server in the inspected Codex MCP configuration, no `blender` on PATH and no
-Blender app at the standard system or user Applications locations. Setup and
-the live SVG export probe are therefore pending. No Blender/MCP installation,
-scene creation, rig, SVG export or export-parity claim has been made.
+**Setup completed on 2026-09-12:** Blender 5.2.1 LTS is installed at
+`/Applications/Blender.app`, with the `blender` command on PATH. The pinned
+`blender-mcp` 1.9.1 package and matching add-on are installed; Codex's `blender`
+MCP entry uses a dedicated Python 3.11 environment. The enabled add-on starts
+its socket automatically when GUI Blender opens. It listens only at
+`127.0.0.1:9876`. Both telemetry environment opt-outs are set and the saved
+Blender telemetry-consent preference is false.
+
+A real MCP stdio session verified protocol 5, Blender/add-on versions, scene
+inspection and command execution. It created a separate native Grease Pencil
+fixture, exported a 64×64 SVG containing 28 paths and zero embedded images,
+saved the `.blend`, and read back the scene. The SVG rendered to a nonempty
+transparent 64×64 PNG. Its 151 partial-alpha edge pixels are ordinary vector
+antialiasing, not a production sprite alpha pass. The source and outputs are
+recorded in [`setup/setup-report.json`](setup/setup-report.json).
+
+The active task's native tool inventory has not reloaded; restart Codex once
+to expose the new Blender tools here. Keep GUI Blender open while using MCP.
+The local SDK verification exercised the configured server's real MCP tools;
+it does not claim that the current task's tool inventory has already refreshed.
+
+For setup recovery and exact local paths, see [`setup/README.md`](setup/README.md).
 
 The machine-readable stage state is [`workflow.json`](workflow.json).

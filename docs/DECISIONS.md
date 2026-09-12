@@ -2590,7 +2590,8 @@ checks after the headless state and lifecycle regressions pass.
 
 **2026-09-12 · Directed by James · authoring-route amendment to D-052;
 supersedes the September 12 ImageGen/reduction draft workflow · setup and
-new asset execution pending**
+native SVG export verified later the same day; Codex tool reload and new
+avatar authoring remain pending**
 
 **Context.** James rejected the fresh Avatar 1 draft's in-game appearance,
 despite its mechanical export checks passing, and requested: “We should use
@@ -2613,12 +2614,22 @@ Then complete one walk direction, inspect its actual loop, and extend to the
 other directions. Save source/export parity evidence and keep user decisions
 separate from mechanical QA. The old draft is explicitly rejected.
 
-**Consequences.** Blender MCP and SVGs are now the requested authoring route,
-but no Blender installation, live MCP handshake, scene, rig or SVG export has
-yet been verified in this task. The source roles, availability state and
+**Consequences.** Blender MCP and SVGs are now the requested authoring route.
+The source roles, availability state and
 ordered steps are recorded in the
 [active workflow](../packages/world/assets/player-sprites/avatar-1-blender-svg/README.md).
 This is an Art-lane source change only. D-052's six-column Avatar 1 geometry,
 feet pivot, gameplay body, PNG delivery, playback cadence and the previously
 accepted `v1/avatar-1.png` remain current. There is no new runtime SVG loader,
 game integration, cross-lane API change or rendered acceptance.
+
+**Setup verification, 2026-09-12.** User-requested installation is complete:
+Blender 5.2.1 LTS, pinned Blender MCP 1.9.1, matching enabled add-on and local
+Codex MCP configuration. A real MCP session inspected Blender, executed the
+native Grease Pencil export probe and read back its scene. A 64×64 SVG with
+28 paths and zero embedded images rendered to a transparent 64×64 PNG.
+[Evidence](../packages/world/assets/player-sprites/avatar-1-blender-svg/setup/setup-report.json)
+records exact scope and hashes. The current Codex task still needs to reload
+its native tools; new Avatar 1 art, its rig, animation and game acceptance
+remain unperformed. The fixture's partial-alpha vector edges are not a
+production pixel-art approval.
