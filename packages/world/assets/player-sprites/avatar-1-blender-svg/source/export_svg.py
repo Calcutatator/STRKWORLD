@@ -61,6 +61,6 @@ for direction in ('down','left','right','up'):
 bpy.context.view_layer.objects.active=bpy.data.objects[prefix+'down']
 bpy.context.view_layer.update()
 bpy.ops.wm.save_as_mainfile(filepath=str(root/'source/avatar-1.blend'))
-report={'blender':bpy.app.version_string,'nativeMcpTools':True,'scene':scene.name,'camera':{'type':cam.data.type,'orthoScale':64,'location':list(cam.location)},'render':[64,64], 'frame':1,'exports':exports,'geometrySource':'source/authoring.py','palette':'source/palette.json','master':'source/avatar-1.blend','approval':'pending','animation':'not-started'}
+report={'blender':bpy.app.version_string,'nativeMcpTools':True,'scene':scene.name,'camera':{'type':cam.data.type,'orthoScale':64,'location':list(cam.location)},'render':[64,64], 'frame':1,'exports':exports,'geometrySource':'source/authoring.py','regionRecipe':'source/build_reference_vectors.py','reference':'reference/approved-concept-turnaround.png','construction':'source/construction/manifest.json','visibleGroupsOnly':True,'palette':'source/palette.json','master':'source/avatar-1.blend','approval':'pending','animation':'not-started'}
 (root/'source/blender-environment.json').write_text(json.dumps(report,indent=2)+'\n')
 print(json.dumps(report))

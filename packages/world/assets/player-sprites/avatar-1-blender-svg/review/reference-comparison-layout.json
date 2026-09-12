@@ -1,0 +1,112 @@
+{
+  "file": "review/reference-comparison.png",
+  "sha256": "b8d843815baa26d8384cfc87e13ab8e06c09a6f4266cf49f4e13e200dde13409",
+  "size": [
+    1664,
+    1360
+  ],
+  "placements": [
+    {
+      "direction": "down",
+      "figureHeight": 49,
+      "concept": {
+        "left": 160,
+        "top": 234,
+        "width": 140,
+        "height": 294
+      },
+      "export6x": {
+        "left": 424,
+        "top": 192,
+        "scale": 6
+      },
+      "native": {
+        "left": 266,
+        "top": 591,
+        "scale": 1
+      },
+      "game2x": {
+        "left": 508,
+        "top": 556,
+        "scale": 2
+      }
+    },
+    {
+      "direction": "left",
+      "figureHeight": 49,
+      "concept": {
+        "left": 972,
+        "top": 234,
+        "width": 132,
+        "height": 294
+      },
+      "export6x": {
+        "left": 1232,
+        "top": 192,
+        "scale": 6
+      },
+      "native": {
+        "left": 1074,
+        "top": 591,
+        "scale": 1
+      },
+      "game2x": {
+        "left": 1316,
+        "top": 556,
+        "scale": 2
+      }
+    },
+    {
+      "direction": "right",
+      "figureHeight": 49,
+      "concept": {
+        "left": 169,
+        "top": 826,
+        "width": 123,
+        "height": 294
+      },
+      "export6x": {
+        "left": 424,
+        "top": 784,
+        "scale": 6
+      },
+      "native": {
+        "left": 266,
+        "top": 1183,
+        "scale": 1
+      },
+      "game2x": {
+        "left": 508,
+        "top": 1148,
+        "scale": 2
+      }
+    },
+    {
+      "direction": "up",
+      "figureHeight": 49,
+      "concept": {
+        "left": 971,
+        "top": 826,
+        "width": 134,
+        "height": 294
+      },
+      "export6x": {
+        "left": 1232,
+        "top": 784,
+        "scale": 6
+      },
+      "native": {
+        "left": 1074,
+        "top": 1183,
+        "scale": 1
+      },
+      "game2x": {
+        "left": 1316,
+        "top": 1148,
+        "scale": 2
+      }
+    }
+  ],
+  "sourceResizedForSideBySideReview": true,
+  "exportPixelsChanged": false
+}

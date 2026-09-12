@@ -1,30 +1,102 @@
 {
-  "name": "Teal Scarf Runner — authored vector palette",
+  "name": "Approved concept reconstruction",
   "maximumColorsPerFrame": 24,
   "colors": [
-    {"name":"ink", "hex":"#172127"},
-    {"name":"hair_deep", "hex":"#3c251f"},
-    {"name":"hair_shadow", "hex":"#60351f"},
-    {"name":"hair", "hex":"#92501f"},
-    {"name":"hair_light", "hex":"#c17c2d"},
-    {"name":"hair_glint", "hex":"#e4a649"},
-    {"name":"skin_shadow", "hex":"#a8663e"},
-    {"name":"skin", "hex":"#d69b60"},
-    {"name":"skin_light", "hex":"#f3c987"},
-    {"name":"eye_light", "hex":"#fff0cf"},
-    {"name":"teal_deep", "hex":"#102f3a"},
-    {"name":"teal_shadow", "hex":"#124856"},
-    {"name":"teal", "hex":"#176373"},
-    {"name":"teal_light", "hex":"#248c99"},
-    {"name":"teal_glint", "hex":"#4ab2b5"},
-    {"name":"leather_deep", "hex":"#402c24"},
-    {"name":"leather_shadow", "hex":"#63422c"},
-    {"name":"leather", "hex":"#926038"},
-    {"name":"leather_light", "hex":"#be8b4b"},
-    {"name":"buckle", "hex":"#e3c277"},
-    {"name":"cloth_dark", "hex":"#193d48"},
-    {"name":"cloth", "hex":"#235565"},
-    {"name":"cloth_light", "hex":"#337b85"},
-    {"name":"cuff", "hex":"#b8a17b"}
+    {
+      "name": "02232a",
+      "hex": "#02232A"
+    },
+    {
+      "name": "023742",
+      "hex": "#023742"
+    },
+    {
+      "name": "024755",
+      "hex": "#024755"
+    },
+    {
+      "name": "025767",
+      "hex": "#025767"
+    },
+    {
+      "name": "026a7b",
+      "hex": "#026A7B"
+    },
+    {
+      "name": "048293",
+      "hex": "#048293"
+    },
+    {
+      "name": "050302",
+      "hex": "#050302"
+    },
+    {
+      "name": "090e0e",
+      "hex": "#090E0E"
+    },
+    {
+      "name": "240d02",
+      "hex": "#240D02"
+    },
+    {
+      "name": "282621",
+      "hex": "#282621"
+    },
+    {
+      "name": "3c1602",
+      "hex": "#3C1602"
+    },
+    {
+      "name": "532202",
+      "hex": "#532202"
+    },
+    {
+      "name": "583d1e",
+      "hex": "#583D1E"
+    },
+    {
+      "name": "6b2d03",
+      "hex": "#6B2D03"
+    },
+    {
+      "name": "7d582d",
+      "hex": "#7D582D"
+    },
+    {
+      "name": "833b06",
+      "hex": "#833B06"
+    },
+    {
+      "name": "9d4d0b",
+      "hex": "#9D4D0B"
+    },
+    {
+      "name": "a17844",
+      "hex": "#A17844"
+    },
+    {
+      "name": "ba6315",
+      "hex": "#BA6315"
+    },
+    {
+      "name": "c49f69",
+      "hex": "#C49F69"
+    },
+    {
+      "name": "da852e",
+      "hex": "#DA852E"
+    },
+    {
+      "name": "efab57",
+      "hex": "#EFAB57"
+    },
+    {
+      "name": "f5f2e6",
+      "hex": "#F5F2E6"
+    },
+    {
+      "name": "f6c47c",
+      "hex": "#F6C47C"
+    }
   ]
 }

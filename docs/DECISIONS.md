@@ -2591,7 +2591,8 @@ checks after the headless state and lifecycle regressions pass.
 **2026-09-12 · Directed by James · authoring-route amendment to D-052;
 supersedes the September 12 ImageGen/reduction draft workflow · setup and
 native SVG export and native Codex tools verified later the same day; four
-new idle views are ready for user approval, animation remains pending**
+idle-v1 rejected for reference drift; concept-derived idle-v2 passed
+reference-fidelity QA and awaits user approval; animation remains pending**
 
 **Context.** James rejected the fresh Avatar 1 draft's in-game appearance,
 despite its mechanical export checks passing, and requested: “We should use
@@ -2641,3 +2642,33 @@ four SVGs and PNGs byte-for-byte. The [review sheet](../packages/world/assets/pl
 shows 1×, 2× and 6× exact pixels. User approval is pending; rigging, animation,
 full-sheet delivery and game acceptance are not performed. This local export
 verification does not approve the artwork.
+
+
+**Reference-fidelity correction, 2026-09-12.** James rejected idle-v1 as
+“cursed” and required iteration until the sprite closely matches the concept
+before another approval request. The preceding internal visual QA was too
+permissive; the technical roundtrip did not establish resemblance. Preserve
+that rejected result at commit `110b26e` and its rejection record. The existing
+approved concept turnaround is the visual authority and construction source;
+the prior runtime PNG is a scale comparison only because its dark reduced
+face loses information. Reconstruct contiguous vector colour regions from the
+concept with documented game-cell registration, then use Blender MCP to
+create editable semantic groups and export the SVGs. This is a faithful vector
+reconstruction of existing concept art, not a claim of newly generated concept
+art or a finished rig. Review silhouette, facial features, proportions,
+clothing and equipment against the actual concept side by side before asking
+James again. Both rejected drafts are excluded as art sources.
+
+
+**Revised idle-v2 review, 2026-09-12.** The approved concept was sampled with
+source-aligned pupil positions, preserved enclosed sclera and exterior-only
+background removal. Contiguous colour regions were rebuilt in Blender and
+exported as real SVG paths. The resulting 64×64 PNGs exactly match the chosen
+construction cells, with one shared 24-colour palette and 49px visible figures
+registered to the existing y=56 contact line. Two independent visual reviews
+compared the actual exports to the concept, including game-scale previews,
+and found no remaining material identity/anatomy mismatch. Fine face, hair,
+finger and buckle details still simplify at that resolution. The source,
+failed iterations, comparisons and separate mechanical evidence are recorded
+in the active workflow. This establishes readiness to ask James for the idle
+approval; it does not approve animation or game integration.

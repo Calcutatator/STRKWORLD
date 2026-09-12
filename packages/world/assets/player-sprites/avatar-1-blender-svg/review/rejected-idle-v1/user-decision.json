@@ -1,0 +1,19 @@
+{
+  "schemaVersion": 1,
+  "draft": "idle-v1",
+  "status": "rejected",
+  "subject": "Avatar 1 down, left, right and up exact 64x64 idle cells",
+  "requestedApproval": "Approve identity, proportions, face and silhouette before animation.",
+  "userDecision": "James rejected idle-v1 as cursed and insufficiently faithful to the approved reference; requested more QA and iteration until close before approval.",
+  "review": "review/rejected-idle-v1/idle-approval.png",
+  "animationAuthorizedByThisGate": false,
+  "reviewSha256": "e64827dfa3e70465d6a841acfb359d4439b2f25ed1a81c68bca4a80705329bd5",
+  "frameSha256": {
+    "frames/down/idle.png": "ffe8ebcab8bb6866acc936081d39b738f60d431b9fb9f2806612809cccd56979",
+    "frames/left/idle.png": "42c8a3b61c658074deac459abd9c3c6da80f7342e46f0059435d6a77d0a4a35e",
+    "frames/right/idle.png": "cad5196ae185c72d913d9335fdc82bf78a5d5105778a879f248d36709e1e839b",
+    "frames/up/idle.png": "722c73b10fac1b1469df1c9c3f5db5d8040f09ce389027c6cb46f0bc8e363694"
+  },
+  "sourceCommit": "110b26e517e4e4236a1a867e6482945e2482bb93",
+  "originalReview": "review/idle-approval.png"
+}

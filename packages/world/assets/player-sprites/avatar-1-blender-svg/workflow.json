@@ -1,7 +1,7 @@
 {
   "version": 1,
   "avatar": "avatar-1",
-  "state": "four-idle-draft-awaiting-user-approval",
+  "state": "reference-faithful-idle-v2-awaiting-user-approval",
   "directionRecorded": "2026-09-12",
   "decision": "D-059",
   "rejectedDraft": "../avatar-1-restart-2026-09-12",
@@ -24,6 +24,12 @@
       "id": "four-idle-source-views",
       "status": "complete",
       "evidence": "review/source-parity.json"
+    },
+    {
+      "id": "reference-fidelity-visual-review",
+      "status": "pass-for-user-review",
+      "evidence": "review/visual-qa.json",
+      "grantsUserApproval": false
     },
     {
       "id": "user-approves-exact-idles",
@@ -103,11 +109,14 @@
     "nativeToolHandshakeVerified": true
   },
   "draft": {
-    "id": "idle-v1",
-    "review": "review/idle-approval.png",
+    "id": "idle-v2",
+    "review": "review/reference-comparison.png",
     "master": "source/avatar-1.blend",
     "mechanicalQa": "review/qa.json",
     "reopenedMasterParity": "review/reload-parity.json",
-    "userDecision": "review/user-decisions.json"
-  }
+    "userDecision": "review/user-decisions.json",
+    "exactCells": "review/idle-approval.png",
+    "visualQa": "review/visual-qa.json"
+  },
+  "reference": "reference/reference-manifest.json"
 }

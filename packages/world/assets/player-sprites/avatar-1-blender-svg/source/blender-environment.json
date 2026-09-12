@@ -20,29 +20,33 @@
     {
       "direction": "down",
       "svg": "svg/down/idle.svg",
-      "paths": 82,
+      "paths": 522,
       "images": 0
     },
     {
       "direction": "left",
       "svg": "svg/left/idle.svg",
-      "paths": 57,
+      "paths": 394,
       "images": 0
     },
     {
       "direction": "right",
       "svg": "svg/right/idle.svg",
-      "paths": 60,
+      "paths": 384,
       "images": 0
     },
     {
       "direction": "up",
       "svg": "svg/up/idle.svg",
-      "paths": 72,
+      "paths": 409,
       "images": 0
     }
   ],
   "geometrySource": "source/authoring.py",
+  "regionRecipe": "source/build_reference_vectors.py",
+  "reference": "reference/approved-concept-turnaround.png",
+  "construction": "source/construction/manifest.json",
+  "visibleGroupsOnly": true,
   "palette": "source/palette.json",
   "master": "source/avatar-1.blend",
   "approval": "pending",

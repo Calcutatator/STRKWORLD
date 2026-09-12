@@ -1,53 +1,53 @@
 {
   "status": "pass",
-  "procedure": "Save master, reopen via native Blender MCP, export existing Grease Pencil geometry without rerunning authoring.py, rasterize the exported SVGs.",
+  "procedure": "Save concept-derived vector master, reopen through native Blender MCP, export existing Grease Pencil compound regions without rebuilding, rasterize exported SVGs.",
   "files": [
     {
       "file": "svg/right/idle.svg",
-      "beforeSha256": "3cecbd07a6327ac66588eb1bddc9795882e73af288bb6c82e511e8b026c88ff8",
-      "afterSha256": "3cecbd07a6327ac66588eb1bddc9795882e73af288bb6c82e511e8b026c88ff8",
+      "beforeSha256": "843cd936f9f91060cd6aa6286b882e78d91209238e8aafc256a1bb682baef00d",
+      "afterSha256": "843cd936f9f91060cd6aa6286b882e78d91209238e8aafc256a1bb682baef00d",
       "sameBytes": true
     },
     {
       "file": "svg/left/idle.svg",
-      "beforeSha256": "322b78f8f91b0069ded41b3c8197073c451dbdbd73d5e70941bc1837d5af7157",
-      "afterSha256": "322b78f8f91b0069ded41b3c8197073c451dbdbd73d5e70941bc1837d5af7157",
+      "beforeSha256": "48a25c014f732b669e2f83c2f40686e49f774e6232ab06c84c39f0c83c71ff53",
+      "afterSha256": "48a25c014f732b669e2f83c2f40686e49f774e6232ab06c84c39f0c83c71ff53",
       "sameBytes": true
     },
     {
       "file": "svg/up/idle.svg",
-      "beforeSha256": "0240d3556d5f55a5009cd812f00b74c85e517ce0008cd5646e70bbf890208976",
-      "afterSha256": "0240d3556d5f55a5009cd812f00b74c85e517ce0008cd5646e70bbf890208976",
+      "beforeSha256": "36fb42aab39bf9406bb55f4262976c2d6f8084229cf1e05c5eb528911cbea2cb",
+      "afterSha256": "36fb42aab39bf9406bb55f4262976c2d6f8084229cf1e05c5eb528911cbea2cb",
       "sameBytes": true
     },
     {
       "file": "svg/down/idle.svg",
-      "beforeSha256": "e1c4af39fef8efd4cc8bffd0cca47e8c97b9e0041e8c0ab372c033a71c7dd550",
-      "afterSha256": "e1c4af39fef8efd4cc8bffd0cca47e8c97b9e0041e8c0ab372c033a71c7dd550",
+      "beforeSha256": "7061ccf2656d29c60824be8aa37cb40bb374f1c938007b6212a7c6df208a8c2e",
+      "afterSha256": "7061ccf2656d29c60824be8aa37cb40bb374f1c938007b6212a7c6df208a8c2e",
       "sameBytes": true
     },
     {
       "file": "frames/right/idle.png",
-      "beforeSha256": "cad5196ae185c72d913d9335fdc82bf78a5d5105778a879f248d36709e1e839b",
-      "afterSha256": "cad5196ae185c72d913d9335fdc82bf78a5d5105778a879f248d36709e1e839b",
+      "beforeSha256": "3a97a74118411534a3402989136ab3a515237949c92d3b96a4dff3e499b4756a",
+      "afterSha256": "3a97a74118411534a3402989136ab3a515237949c92d3b96a4dff3e499b4756a",
       "sameBytes": true
     },
     {
       "file": "frames/left/idle.png",
-      "beforeSha256": "42c8a3b61c658074deac459abd9c3c6da80f7342e46f0059435d6a77d0a4a35e",
-      "afterSha256": "42c8a3b61c658074deac459abd9c3c6da80f7342e46f0059435d6a77d0a4a35e",
+      "beforeSha256": "4e0bb3c51edf842cf369745cda373131bc06d9c6ce9a9409b6d5a7beb2ad42d7",
+      "afterSha256": "4e0bb3c51edf842cf369745cda373131bc06d9c6ce9a9409b6d5a7beb2ad42d7",
       "sameBytes": true
     },
     {
       "file": "frames/up/idle.png",
-      "beforeSha256": "722c73b10fac1b1469df1c9c3f5db5d8040f09ce389027c6cb46f0bc8e363694",
-      "afterSha256": "722c73b10fac1b1469df1c9c3f5db5d8040f09ce389027c6cb46f0bc8e363694",
+      "beforeSha256": "d659bffad5ef29d6f7a728866fdb636ed0567a88adfbdd10465f3cb17880d9de",
+      "afterSha256": "d659bffad5ef29d6f7a728866fdb636ed0567a88adfbdd10465f3cb17880d9de",
       "sameBytes": true
     },
     {
       "file": "frames/down/idle.png",
-      "beforeSha256": "ffe8ebcab8bb6866acc936081d39b738f60d431b9fb9f2806612809cccd56979",
-      "afterSha256": "ffe8ebcab8bb6866acc936081d39b738f60d431b9fb9f2806612809cccd56979",
+      "beforeSha256": "0e20f4b639acaf7eea1983b6898b21f0f3c15868b0f1b235a22411620b62e348",
+      "afterSha256": "0e20f4b639acaf7eea1983b6898b21f0f3c15868b0f1b235a22411620b62e348",
       "sameBytes": true
     }
   ]

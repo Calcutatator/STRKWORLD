@@ -1,0 +1,539 @@
+{
+  "status": "construction study only; not a replacement asset or approval",
+  "source": "../approved-concept-turnaround.png",
+  "sourceSha256": "f1de96b3038042aaca726c18ae87fe374e8dac2bbda7d0a2359d53f44ad08ed4",
+  "scriptSha256": "604b5fd2f9f2e71108b7a957a83b00c1eee3d825bf687f99e7ce7c1f6486d0f5",
+  "sourceDimensions": [
+    1774,
+    887
+  ],
+  "sourceOrder": [
+    "down",
+    "right",
+    "left",
+    "up"
+  ],
+  "gameOrder": [
+    "down",
+    "left",
+    "right",
+    "up"
+  ],
+  "backgroundRule": "4-connected flood fill from image borders through neutral pixels (minimum RGB >= 50 and RGB range <= 28). Only exterior flood becomes transparent, including gray antialias fringe; enclosed white eye sclera and the dark outline remain opaque. No foreground recoloring before sampling.",
+  "framingMask": "Original study bounds/boot anchor retained from exterior-neutral-bright flood at minimum RGB >= 222 and RGB range <= 24. Tightening gray-fringe removal does not change scale or sampling phase.",
+  "figureBounds": [
+    {
+      "direction": "down",
+      "minX": 247,
+      "minY": 264,
+      "maxX": 420,
+      "maxY": 628,
+      "feetX": 321.5,
+      "footBottomEdge": 629
+    },
+    {
+      "direction": "right",
+      "minX": 604,
+      "minY": 269,
+      "maxX": 753,
+      "maxY": 627,
+      "feetX": 694.5,
+      "footBottomEdge": 628
+    },
+    {
+      "direction": "left",
+      "minX": 1008,
+      "minY": 269,
+      "maxX": 1169,
+      "maxY": 628,
+      "feetX": 1066,
+      "footBottomEdge": 629
+    },
+    {
+      "direction": "up",
+      "minX": 1352,
+      "minY": 269,
+      "maxX": 1515,
+      "maxY": 628,
+      "feetX": 1443.5,
+      "footBottomEdge": 629
+    }
+  ],
+  "sourcePixelsPerOutputPixel": 7.3,
+  "targetDownVisibleHeight": 50,
+  "feetPivot": [
+    32,
+    56
+  ],
+  "alignment": "All views share down-derived scale. Boot-span midpoint maps to x32, with recorded sampling phase. Each initial raster is translated by an integer offset to bottommost support pixel y55 (support bottom edge y56); no silhouette height normalization.",
+  "palette": "concept-palette-24.json",
+  "methods": {
+    "nearest": "Cell-center nearest source sample; binary foreground mask.",
+    "area": "Exact source-pixel area-weighted mean RGB among foreground; at least 50 percent foreground coverage required.",
+    "dominant-24": "Same area/coverage rule; most-covered common-palette cluster wins instead of mean RGB.",
+    "nearest-24": "Cell-center nearest sample mapped to nearest of 24 actual source-color medoids."
+  },
+  "rawConceptCrops": [
+    {
+      "direction": "down",
+      "filename": "down-raw-concept-crop.png",
+      "sha256": "5be5e328c4ddef795c6949f05c0c1b0b1c8fee54fdd4d7b6f203b093cd078840",
+      "sourceRectangle": [
+        247,
+        264,
+        174,
+        365
+      ]
+    },
+    {
+      "direction": "right",
+      "filename": "right-raw-concept-crop.png",
+      "sha256": "273aedea402a8c56d69c73aaae6565dde63d8c652c6df4db29b38a338c1283ad",
+      "sourceRectangle": [
+        604,
+        269,
+        150,
+        359
+      ]
+    },
+    {
+      "direction": "left",
+      "filename": "left-raw-concept-crop.png",
+      "sha256": "7caa8a6d3d1ce52865ed44e0ef8bcc5fde41d251388c8171ac184aee75aa2146",
+      "sourceRectangle": [
+        1008,
+        269,
+        162,
+        360
+      ]
+    },
+    {
+      "direction": "up",
+      "filename": "up-raw-concept-crop.png",
+      "sha256": "8d82b86e354292d0c303351a53dbcc565d3123505a5e588b9dbef02be29322f9",
+      "sourceRectangle": [
+        1352,
+        269,
+        164,
+        360
+      ]
+    }
+  ],
+  "comparisons": [
+    {
+      "direction": "down",
+      "method": "nearest",
+      "rgbaSha256": "567f3f9e791d80055bd7f58a9799eab2afc4af5632b272c311096645158ef194",
+      "colors": 686,
+      "binaryAlpha": true,
+      "partialAlphaPixels": 0,
+      "visibleHeight": 50,
+      "bounds": [
+        22,
+        6,
+        44,
+        55
+      ]
+    },
+    {
+      "direction": "down",
+      "method": "area",
+      "rgbaSha256": "cc609747cfd868fcd054110147732d9f9b339c237821f6fa46c1983073cdbada",
+      "colors": 728,
+      "binaryAlpha": true,
+      "partialAlphaPixels": 0,
+      "visibleHeight": 50,
+      "bounds": [
+        22,
+        6,
+        44,
+        55
+      ]
+    },
+    {
+      "direction": "down",
+      "method": "dominant-24",
+      "rgbaSha256": "ec08b20cd2d89b1ef9b13859b80fce10e8c178d873ef537c01698abfa6b6b196",
+      "colors": 23,
+      "binaryAlpha": true,
+      "partialAlphaPixels": 0,
+      "visibleHeight": 50,
+      "bounds": [
+        22,
+        6,
+        44,
+        55
+      ]
+    },
+    {
+      "direction": "down",
+      "method": "nearest-24",
+      "rgbaSha256": "75b43b2f8cd02fc4c5655e0954b915df2692d5533c6c2e90b111cb4c2d339dd5",
+      "colors": 23,
+      "binaryAlpha": true,
+      "partialAlphaPixels": 0,
+      "visibleHeight": 50,
+      "bounds": [
+        22,
+        6,
+        44,
+        55
+      ]
+    },
+    {
+      "direction": "right",
+      "method": "nearest",
+      "rgbaSha256": "2dba52636821c05f2fdb92aeb6ed30006538b7e822250350e40b7e245efafab6",
+      "colors": 521,
+      "binaryAlpha": true,
+      "partialAlphaPixels": 0,
+      "visibleHeight": 49,
+      "bounds": [
+        20,
+        7,
+        39,
+        55
+      ]
+    },
+    {
+      "direction": "right",
+      "method": "area",
+      "rgbaSha256": "cd7022a82c03b71ad158f30a3102c95b563ac0174df30ca6ab825f0f6f9aed32",
+      "colors": 551,
+      "binaryAlpha": true,
+      "partialAlphaPixels": 0,
+      "visibleHeight": 49,
+      "bounds": [
+        20,
+        7,
+        39,
+        55
+      ]
+    },
+    {
+      "direction": "right",
+      "method": "dominant-24",
+      "rgbaSha256": "8d56d081a4ce5ed2688870bfd72e75cb903b2cdcdab11b2eece5a987d59bda4e",
+      "colors": 23,
+      "binaryAlpha": true,
+      "partialAlphaPixels": 0,
+      "visibleHeight": 49,
+      "bounds": [
+        20,
+        7,
+        39,
+        55
+      ]
+    },
+    {
+      "direction": "right",
+      "method": "nearest-24",
+      "rgbaSha256": "befc01ec1a8cd8ddee4c9c03cdff0082488a7518d89b8d901f141d338068bfc5",
+      "colors": 23,
+      "binaryAlpha": true,
+      "partialAlphaPixels": 0,
+      "visibleHeight": 49,
+      "bounds": [
+        20,
+        7,
+        39,
+        55
+      ]
+    },
+    {
+      "direction": "left",
+      "method": "nearest",
+      "rgbaSha256": "f0db2df375a07bdf1ed6af94b6f0235e905c6e4ff16299361c3e895dcfcd2377",
+      "colors": 537,
+      "binaryAlpha": true,
+      "partialAlphaPixels": 0,
+      "visibleHeight": 49,
+      "bounds": [
+        24,
+        7,
+        45,
+        55
+      ]
+    },
+    {
+      "direction": "left",
+      "method": "area",
+      "rgbaSha256": "ea919f2cc9e2c62c82f380eefa63a1793d2b126303cc9f0b06a0a8e79b1ff5d5",
+      "colors": 546,
+      "binaryAlpha": true,
+      "partialAlphaPixels": 0,
+      "visibleHeight": 49,
+      "bounds": [
+        24,
+        7,
+        45,
+        55
+      ]
+    },
+    {
+      "direction": "left",
+      "method": "dominant-24",
+      "rgbaSha256": "8ef27b8badfc16203435848cadab7daf45cdb7031510bbc7708eb919154ebe84",
+      "colors": 23,
+      "binaryAlpha": true,
+      "partialAlphaPixels": 0,
+      "visibleHeight": 49,
+      "bounds": [
+        24,
+        7,
+        45,
+        55
+      ]
+    },
+    {
+      "direction": "left",
+      "method": "nearest-24",
+      "rgbaSha256": "3094c0e22b8b7587f0b17c13e0f29d03ddfd937cb2f716db33e3aeb0a6164737",
+      "colors": 24,
+      "binaryAlpha": true,
+      "partialAlphaPixels": 0,
+      "visibleHeight": 49,
+      "bounds": [
+        24,
+        7,
+        45,
+        55
+      ]
+    },
+    {
+      "direction": "up",
+      "method": "nearest",
+      "rgbaSha256": "83ff60f793da66c1f8bc12089c0128e395a2acc67f1d3b28b03b9faf16839000",
+      "colors": 639,
+      "binaryAlpha": true,
+      "partialAlphaPixels": 0,
+      "visibleHeight": 49,
+      "bounds": [
+        20,
+        7,
+        41,
+        55
+      ]
+    },
+    {
+      "direction": "up",
+      "method": "area",
+      "rgbaSha256": "43337cd78a5be5961012fb6df06f97b62f8169965d6d5579a4487ddc15dba18b",
+      "colors": 668,
+      "binaryAlpha": true,
+      "partialAlphaPixels": 0,
+      "visibleHeight": 49,
+      "bounds": [
+        20,
+        7,
+        41,
+        55
+      ]
+    },
+    {
+      "direction": "up",
+      "method": "dominant-24",
+      "rgbaSha256": "824aad7aac397c9aec483dada63a16e4e2e553c1f6004fb0de743a10234bb96a",
+      "colors": 23,
+      "binaryAlpha": true,
+      "partialAlphaPixels": 0,
+      "visibleHeight": 49,
+      "bounds": [
+        20,
+        7,
+        41,
+        55
+      ]
+    },
+    {
+      "direction": "up",
+      "method": "nearest-24",
+      "rgbaSha256": "849145d6972c91e060e31926c95c4adcc85a8408316316e72ceea21e78a34079",
+      "colors": 23,
+      "binaryAlpha": true,
+      "partialAlphaPixels": 0,
+      "visibleHeight": 49,
+      "bounds": [
+        20,
+        7,
+        41,
+        55
+      ]
+    }
+  ],
+  "selectedConstructionCells": [
+    {
+      "direction": "down",
+      "method": "nearest-24",
+      "phaseX": 0.375,
+      "phaseY": -0.375,
+      "integerTranslateY": -1,
+      "sampledBottomRow": 56,
+      "finalBottomRow": 55,
+      "filename": "down-construction-64.png",
+      "sha256": "3f7431d0293aa4dd6d131344f1dfa96ffdd24dc75329ad661d37f0653cd950e8",
+      "rgbaSha256": "af097bf1dddf8bd234bb7e2d2ea348294a1d198f759a5d8c92235e5e45787f50",
+      "colors": 24,
+      "binaryAlpha": true,
+      "partialAlphaPixels": 0,
+      "visibleHeight": 49,
+      "bounds": [
+        22,
+        7,
+        44,
+        55
+      ]
+    },
+    {
+      "direction": "right",
+      "method": "nearest-24",
+      "phaseX": 0.375,
+      "phaseY": -0.375,
+      "integerTranslateY": -1,
+      "sampledBottomRow": 56,
+      "finalBottomRow": 55,
+      "filename": "right-construction-64.png",
+      "sha256": "cc55995f86c5ebf70801329c88ba36f1661d69cb17cebcedac833a897b2d92fd",
+      "rgbaSha256": "b855c120014a3eb70d7a3270995aad9b44bad6e77fe0195b14ba4c62dd80d15b",
+      "colors": 24,
+      "binaryAlpha": true,
+      "partialAlphaPixels": 0,
+      "visibleHeight": 49,
+      "bounds": [
+        19,
+        7,
+        39,
+        55
+      ]
+    },
+    {
+      "direction": "left",
+      "method": "nearest-24",
+      "phaseX": 0,
+      "phaseY": -0.375,
+      "integerTranslateY": -1,
+      "sampledBottomRow": 56,
+      "finalBottomRow": 55,
+      "filename": "left-construction-64.png",
+      "sha256": "01431e5b5dfae4bb7a4a269d7cf996255b56bc4b56fc3cb263a2dc1305a48a43",
+      "rgbaSha256": "000002683a56717d7d2be950ff1a8fb16c447fe98fc89ebc9752a7eddc56e865",
+      "colors": 24,
+      "binaryAlpha": true,
+      "partialAlphaPixels": 0,
+      "visibleHeight": 49,
+      "bounds": [
+        24,
+        7,
+        45,
+        55
+      ]
+    },
+    {
+      "direction": "up",
+      "method": "dominant-24",
+      "phaseX": 0,
+      "phaseY": 0,
+      "integerTranslateY": -1,
+      "sampledBottomRow": 56,
+      "finalBottomRow": 55,
+      "filename": "up-construction-64.png",
+      "sha256": "329c27fce7a5568eef6d02478db1330028fe5fcfe77842d3e67d21a2f7fa536c",
+      "rgbaSha256": "824aad7aac397c9aec483dada63a16e4e2e553c1f6004fb0de743a10234bb96a",
+      "colors": 23,
+      "binaryAlpha": true,
+      "partialAlphaPixels": 0,
+      "visibleHeight": 49,
+      "bounds": [
+        20,
+        7,
+        41,
+        55
+      ]
+    }
+  ],
+  "selectionNotes": "Down/right/left use source-aligned nearest-24 phases to sample the original black pupil clusters and white sclera on two consecutive rows. Back uses dominant source-palette coverage to preserve narrow outlines without area blur. No anatomy redrawn.",
+  "eyeSourceEvidence": {
+    "region": "Original down-facing concept; rows y359 through y367",
+    "leftPupilX": [
+      304,
+      308
+    ],
+    "rightPupilX": [
+      334,
+      338
+    ],
+    "selectedSamplePupils": [
+      [
+        306,
+        359
+      ],
+      [
+        306,
+        367
+      ],
+      [
+        335,
+        359
+      ],
+      [
+        335,
+        367
+      ]
+    ],
+    "selectedWhiteNeighbors": [
+      [
+        298,
+        359
+      ],
+      [
+        342,
+        359
+      ]
+    ],
+    "rightProfile": {
+      "pupilX": [
+        713,
+        717
+      ],
+      "pupilY": [
+        358,
+        367
+      ],
+      "selectedSamples": [
+        [
+          715,
+          358
+        ],
+        [
+          715,
+          366
+        ]
+      ]
+    },
+    "leftProfile": {
+      "pupilX": [
+        1046,
+        1049
+      ],
+      "pupilY": [
+        358,
+        367
+      ],
+      "selectedSamples": [
+        [
+          1047,
+          359
+        ],
+        [
+          1047,
+          367
+        ]
+      ]
+    },
+    "scope": "Source-pixel alignment evidence, not automatic visual approval."
+  },
+  "review": {
+    "file": "concept-sampling-comparison.png",
+    "sha256": "00e721b8c779762824252e6ae0a821846f6c0d809c3ac14566e1f45655474406"
+  }
+}

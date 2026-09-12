@@ -1,0 +1,21 @@
+{
+  "visualAuthority": {
+    "file": "reference/approved-concept-turnaround.png",
+    "sha256": "f1de96b3038042aaca726c18ae87fe374e8dac2bbda7d0a2359d53f44ad08ed4",
+    "origin": "Previously approved medium Teal Scarf Runner concept turnaround from task 01a01a58-1f53-7320-bbe2-4dd7fbb92615; original exec-037caa48-7ee1-4150-be7a-85741f8a6daa.png",
+    "newConceptGeneratedThisTurn": false,
+    "imageDirectionOrder": [
+      "down",
+      "right",
+      "left",
+      "up"
+    ]
+  },
+  "runtimeIdles": "Scale comparison only. Do not trace them: the darker reduced pixels lose facial information.",
+  "rejectedSources": [
+    "September 12 ImageGen/reduction draft",
+    "idle-v1 hand-invented Blender SVG draft at commit 110b26e"
+  ],
+  "revisionMethod": "Construct vector colour regions directly from the approved concept, with documented registration/resampling, then exact Blender SVG roundtrip.",
+  "qaRule": "Compare concept and final game cells side by side at equal visible height. Technical parity alone cannot pass visual fidelity."
+}

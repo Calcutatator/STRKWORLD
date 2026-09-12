@@ -1,0 +1,102 @@
+{
+  "source": "../approved-concept-turnaround.png",
+  "construction": "Weighted k-means; medoids selected from actual foreground source pixels; common palette across all directions",
+  "colors": [
+    {
+      "name": "concept-01",
+      "hex": "#050302"
+    },
+    {
+      "name": "concept-02",
+      "hex": "#090E0E"
+    },
+    {
+      "name": "concept-03",
+      "hex": "#240D02"
+    },
+    {
+      "name": "concept-04",
+      "hex": "#02232A"
+    },
+    {
+      "name": "concept-05",
+      "hex": "#3C1602"
+    },
+    {
+      "name": "concept-06",
+      "hex": "#282621"
+    },
+    {
+      "name": "concept-07",
+      "hex": "#532202"
+    },
+    {
+      "name": "concept-08",
+      "hex": "#023742"
+    },
+    {
+      "name": "concept-09",
+      "hex": "#6B2D03"
+    },
+    {
+      "name": "concept-10",
+      "hex": "#024755"
+    },
+    {
+      "name": "concept-11",
+      "hex": "#583D1E"
+    },
+    {
+      "name": "concept-12",
+      "hex": "#025767"
+    },
+    {
+      "name": "concept-13",
+      "hex": "#833B06"
+    },
+    {
+      "name": "concept-14",
+      "hex": "#026A7B"
+    },
+    {
+      "name": "concept-15",
+      "hex": "#9D4D0B"
+    },
+    {
+      "name": "concept-16",
+      "hex": "#7D582D"
+    },
+    {
+      "name": "concept-17",
+      "hex": "#048293"
+    },
+    {
+      "name": "concept-18",
+      "hex": "#BA6315"
+    },
+    {
+      "name": "concept-19",
+      "hex": "#A17844"
+    },
+    {
+      "name": "concept-20",
+      "hex": "#DA852E"
+    },
+    {
+      "name": "concept-21",
+      "hex": "#C49F69"
+    },
+    {
+      "name": "concept-22",
+      "hex": "#EFAB57"
+    },
+    {
+      "name": "concept-23",
+      "hex": "#F6C47C"
+    },
+    {
+      "name": "concept-24",
+      "hex": "#F5F2E6"
+    }
+  ]
+}

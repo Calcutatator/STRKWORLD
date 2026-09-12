@@ -1,0 +1,28 @@
+{
+  "sourceConcept": "f1de96b3038042aaca726c18ae87fe374e8dac2bbda7d0a2359d53f44ad08ed4",
+  "studyScript": "604b5fd2f9f2e71108b7a957a83b00c1eee3d825bf687f99e7ce7c1f6486d0f5",
+  "studyReportSha256": "97430f44988f140c99862b60ff39b4b03d484f46361d35c8bf7118ed612ae32e",
+  "files": {
+    "down": {
+      "selectedStudy": "reference/studies/down-construction-64.png",
+      "construction": "source/construction/down.png",
+      "sha256": "3f7431d0293aa4dd6d131344f1dfa96ffdd24dc75329ad661d37f0653cd950e8"
+    },
+    "left": {
+      "selectedStudy": "reference/studies/left-construction-64.png",
+      "construction": "source/construction/left.png",
+      "sha256": "01431e5b5dfae4bb7a4a269d7cf996255b56bc4b56fc3cb263a2dc1305a48a43"
+    },
+    "right": {
+      "selectedStudy": "reference/studies/right-construction-64.png",
+      "construction": "source/construction/right.png",
+      "sha256": "cc55995f86c5ebf70801329c88ba36f1661d69cb17cebcedac833a897b2d92fd"
+    },
+    "up": {
+      "selectedStudy": "reference/studies/up-construction-64.png",
+      "construction": "source/construction/up.png",
+      "sha256": "329c27fce7a5568eef6d02478db1330028fe5fcfe77842d3e67d21a2f7fa536c"
+    }
+  },
+  "purpose": "Construction template derived from the approved concept; later Blender SVG/PNG output must match these pixels. This does not establish user approval."
+}

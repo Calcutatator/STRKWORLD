@@ -1,17 +1,20 @@
 {
   "schemaVersion": 1,
-  "draft": "idle-v1",
+  "draft": "idle-v2",
   "status": "pending",
-  "subject": "Avatar 1 down, left, right and up exact 64x64 idle cells",
-  "requestedApproval": "Approve identity, proportions, face and silhouette before animation.",
+  "internalReferenceQa": "pass-for-user-review",
+  "subject": "Concept-derived Avatar 1 down, left, right and up exact 64x64 idle cells",
   "userDecision": null,
-  "review": "review/idle-approval.png",
+  "review": "review/reference-comparison.png",
+  "previousRejection": "review/rejected-idle-v1/user-decision.json",
   "animationAuthorizedByThisGate": false,
-  "reviewSha256": "e64827dfa3e70465d6a841acfb359d4439b2f25ed1a81c68bca4a80705329bd5",
+  "reviewSha256": "b8d843815baa26d8384cfc87e13ab8e06c09a6f4266cf49f4e13e200dde13409",
+  "exactCellSheet": "review/idle-approval.png",
+  "exactCellSheetSha256": "59472285345bba226e362eb0e0edc8cfda47ac551f5353a56b8194ab0a66975d",
   "frameSha256": {
-    "frames/down/idle.png": "ffe8ebcab8bb6866acc936081d39b738f60d431b9fb9f2806612809cccd56979",
-    "frames/left/idle.png": "42c8a3b61c658074deac459abd9c3c6da80f7342e46f0059435d6a77d0a4a35e",
-    "frames/right/idle.png": "cad5196ae185c72d913d9335fdc82bf78a5d5105778a879f248d36709e1e839b",
-    "frames/up/idle.png": "722c73b10fac1b1469df1c9c3f5db5d8040f09ce389027c6cb46f0bc8e363694"
+    "frames/down/idle.png": "0e20f4b639acaf7eea1983b6898b21f0f3c15868b0f1b235a22411620b62e348",
+    "frames/left/idle.png": "4e0bb3c51edf842cf369745cda373131bc06d9c6ce9a9409b6d5a7beb2ad42d7",
+    "frames/right/idle.png": "3a97a74118411534a3402989136ab3a515237949c92d3b96a4dff3e499b4756a",
+    "frames/up/idle.png": "d659bffad5ef29d6f7a728866fdb636ed0567a88adfbdd10465f3cb17880d9de"
   }
 }
