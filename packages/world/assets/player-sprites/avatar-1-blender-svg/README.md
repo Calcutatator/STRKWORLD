@@ -1,19 +1,25 @@
 # Avatar 1 — concept approval, Blender MCP and SVG workflow
 
-**Active stage: fresh concept art, followed by explicit user concept approval.**
-James corrected the process: the old turnaround was not concept art. We must
-create a fresh concept and obtain his approval before producing Blender/SVG
-sprites. `idle-v2` is superseded and unapproved because this gate was skipped.
+**Active stage: idle-v3 production from the approved fresh concept-v2.**
+James approved the exact concept with “Yes good concept move forward”. This
+authorizes four Blender/SVG idle facings and internal likeness QA. Final sprite
+cells, animation and game integration are not approved by the concept decision.
+`idle-v2` remains superseded and unapproved because it skipped the concept gate.
 See [D-059](../../../../../docs/DECISIONS.md#d-059--avatar-1-authoring-uses-blender-mcp-and-real-svg-pose-files).
 
 ## Current review and authority
 
-The [fresh concept candidate](concept/avatar-1-concept-v2.png) is ready for
-review, with its pending decision in [concept/approval.json](concept/approval.json).
-Internal review corrected scarf and buckle continuity before this candidate.
-The decision record binds any approval to the actual reviewed image. Concept creation is not concept approval. No concept has been approved
-for this restart, and no Blender character production may proceed until James
-explicitly approves one.
+The [approved fresh concept-v2](concept/avatar-1-concept-v2.png) is the visual
+authority for this restart. [Its approval record](concept/approval.json) binds
+James's explicit decision to SHA-256
+`8c0d58a07d1372d2e8c9bcdbddac6e997763a8ffd2b910be83e8ec47b69f1c92`.
+Internal review corrected scarf and buckle continuity before that approval.
+
+The new sprite revision is **idle-v3**, with separate `idle-v3/source/`,
+`idle-v3/svg/`, `idle-v3/frames/` and `idle-v3/review/` output directories.
+These are the active production destinations, not claims of completed assets.
+Compare every new idle against concept-v2, then obtain James's separate idle
+approval before animation. Do not overwrite or promote historical idle-v2.
 
 `reference/approved-concept-turnaround.png` is a historical sprite turnaround,
 not an approved concept. Its misleading old filename is retained to preserve
@@ -30,16 +36,13 @@ concepts; their hashes and technical results remain historical evidence only.
 
 ## Required production sequence
 
-1. **Create fresh concept art.** Produce a new character design proposal for
-   Avatar 1 from the current brief. Present the concept itself, with enough
-   detail to judge face, hair, proportions, clothing, equipment and overall
-   character. Do not substitute a sprite sheet, resampled prior turnaround
-   or vector conversion for this stage.
-2. **Obtain explicit concept approval.** Ask James to approve the fresh
-   concept and record the decision against its file hash in
-   `concept/approval.json`. If he requests changes, revise the concept and
-   return to this gate. No Blender/SVG sprite construction before approval.
-3. **Build the four Blender/SVG idles.** With the approved concept as the
+1. **Fresh concept creation — complete.** Concept-v2 is a new illustrated
+   character design, not a sprite sheet or conversion of the prior turnaround.
+2. **Explicit concept approval — complete.** James approved exact concept-v2
+   with “Yes good concept move forward”; `concept/approval.json` records the
+   reviewed hash. A later concept redesign requires renewed concept approval.
+3. **Build the four Blender/SVG idles — in progress.** In `idle-v3/`, with
+   approved concept-v2 as the
    visual authority, author layered Grease Pencil geometry through Blender
    MCP, save the editable `.blend` and export real vector SVGs. Derive the
    existing 64×64 PNG game cells from those SVGs. Do not silently reuse the
@@ -85,12 +88,12 @@ approved or its art was accepted:
 - `review/rejected-idle-v1/`: presented draft and rejection; its complete source
   remains at commit `110b26e`.
 
-The scripts under `source/` and `reference/studies/` are retained for that
-historical reproduction. Do not run them to advance the active concept stage.
-The old rasterizer accepts only a pending idle decision; the superseded
-idle-v2 decision intentionally prevents it from overwriting that review.
-After concept approval, start a distinct sprite revision with the approved
-concept's provenance before adapting these tools.
+The scripts under root `source/` and `reference/studies/` are retained for
+historical reproduction. Do not overwrite or reuse the old construction as
+idle-v3 artwork. The old rasterizer accepts only a pending idle decision; the
+superseded idle-v2 decision intentionally prevents it from overwriting that
+review. Any adapted tooling belongs in the distinct `idle-v3/` revision and
+must record approved concept-v2 as its visual authority.
 
 ## Source and runtime contracts
 
@@ -113,6 +116,6 @@ Historical setup evidence records Blender 5.2.1 LTS and Blender MCP 1.9.1,
 with native Codex tools, protocol 5, a matching add-on and telemetry disabled.
 [Setup instructions](setup/README.md) and [setup evidence](setup/setup-report.json)
 cover installation and the separate Grease Pencil export fixture. Those
-proofs establish tooling only and do not waive concept approval. Verify the
-live connection again when sprite production is authorized. The current
-stage state is in [workflow.json](workflow.json).
+proofs establish tooling only. Verify the live connection for the authorized
+idle-v3 production; this workflow update does not claim a new handshake or
+export result. The current stage state is in [workflow.json](workflow.json).

@@ -1,12 +1,22 @@
 {
   "schemaVersion": 2,
-  "status": "awaiting-fresh-user-approved-concept",
-  "visualAuthority": null,
+  "status": "fresh-concept-v2-approved-for-idle-production",
+  "visualAuthority": {
+    "file": "concept/avatar-1-concept-v2.png",
+    "sha256": "8c0d58a07d1372d2e8c9bcdbddac6e997763a8ffd2b910be83e8ec47b69f1c92",
+    "classification": "fresh illustrated concept art",
+    "revision": "concept-v2",
+    "approvalRecord": "concept/approval.json",
+    "approvedBy": "James",
+    "approvalDate": "2026-09-12",
+    "userQuote": "Yes good concept move forward",
+    "approvalScope": "Character design authority for new idle-v3 Blender/SVG construction; final sprite cells and animation require later approval."
+  },
   "requiredAuthority": {
     "kind": "fresh concept art explicitly approved by James",
     "expectedFile": "concept/avatar-1-concept-v2.png",
     "decisionRecord": "concept/approval.json",
-    "userApproval": "pending",
+    "userApproval": "approved",
     "sha256": "8c0d58a07d1372d2e8c9bcdbddac6e997763a8ffd2b910be83e8ec47b69f1c92"
   },
   "historicalTurnaround": {
@@ -32,5 +42,5 @@
   ],
   "runtimeIdles": "Existing accepted runtime assets remain current; they are not a substitute for fresh concept creation or concept approval.",
   "historicalRevisionMethod": "Idle-v2 sampled the historical turnaround and reconstructed vector colour regions, then verified the Blender/SVG roundtrip. This technical history grants no concept or art approval.",
-  "qaRule": "After explicit concept approval, compare actual SVG-derived game cells against that specific approved concept. Internal likeness QA precedes user idle approval; technical parity cannot waive either approval."
+  "qaRule": "Compare all four actual idle-v3 SVG-derived game cells against the exact approved concept-v2 image. Internal likeness QA precedes separate user idle approval; concept approval and technical parity do not authorize animation or approve final sprites."
 }

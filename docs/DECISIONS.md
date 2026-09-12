@@ -2589,10 +2589,11 @@ checks after the headless state and lifecycle regressions pass.
 ## D-059 — Avatar 1 authoring uses Blender MCP and real SVG pose files
 
 **2026-09-12 · Directed by James · authoring-route amendment to D-052;
-concept-first correction below supersedes the prior reference-authority and
-idle-review sequence · fresh concept-v2 awaits James's approval; concept art and explicit user concept approval
-must precede Blender/SVG sprite production · idle-v2 is superseded and
-unapproved because the concept gate was skipped; animation remains pending**
+concept-first correction supersedes the prior reference-authority and
+idle-review sequence · exact fresh concept-v2 approved by James; new idle-v3
+Blender/SVG construction and internal likeness QA authorized for four idles
+only · idle-v2 remains superseded and unapproved; animation is blocked until
+separate user idle approval**
 
 **Context.** James rejected the fresh Avatar 1 draft's in-game appearance,
 despite its mechanical export checks passing, and requested: “We should use
@@ -2708,3 +2709,24 @@ internally revised to align scarf attachment and harness details across its
 views. The current candidate is `concept/avatar-1-concept-v2.png`; its exact
 prompt history, internal design QA and pending hash-bound approval are saved
 under `concept/`. No Blender/SVG production has started from this design.
+
+
+**Fresh concept-v2 approval, 2026-09-12.** James explicitly approved the fresh
+concept with “Yes good concept move forward”. This completes the concept
+approval gate for `concept/avatar-1-concept-v2.png`, SHA-256
+`8c0d58a07d1372d2e8c9bcdbddac6e997763a8ffd2b910be83e8ec47b69f1c92`.
+The [concept approval record](../packages/world/assets/player-sprites/avatar-1-blender-svg/concept/approval.json)
+preserves that exact user response and hash. This amendment supersedes the
+pending concept status in the preceding correction without relaxing its
+concept-first sequence.
+
+Proceed with the four idle facings as a distinct `idle-v3` revision under
+`avatar-1-blender-svg/idle-v3/{source,svg,frames,review}`. Use the approved
+concept-v2 as the visual authority, author through Blender MCP, export real
+SVGs and derive the existing game-size PNG cells. Internally compare all four
+actual exports with the approved concept and iterate for likeness before
+presenting them for James's separate idle approval. Concept approval
+**authorizes idle construction only**; it does not approve final sprite cells,
+any animation, game integration or rendered acceptance. Historical idle-v2
+artwork, source and evidence remain preserved and unapproved. Animation stays
+blocked until the explicit user idle gate passes.

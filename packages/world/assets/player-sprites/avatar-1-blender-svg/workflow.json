@@ -1,18 +1,20 @@
 {
-  "version": 2,
+  "version": 3,
   "avatar": "avatar-1",
-  "state": "concept-v2-awaiting-user-approval",
+  "state": "concept-v2-approved-idle-v3-in-progress",
   "directionRecorded": "2026-09-12",
   "decision": "D-059",
   "rejectedDraft": "../avatar-1-restart-2026-09-12",
   "authoring": {
     "control": "Blender MCP",
     "art": "layered Grease Pencil vectors",
-    "animationMaster": "source/avatar-1.blend",
+    "animationMaster": "idle-v3/source/avatar-1.blend",
     "poseFormat": "SVG",
     "runtimeFormat": "PNG",
     "rasterImageGenerationFallback": false,
-    "embeddedRasterSvgAllowed": false
+    "embeddedRasterSvgAllowed": false,
+    "outputRoot": "idle-v3",
+    "currentScope": "four idle facings only"
   },
   "gates": [
     {
@@ -24,31 +26,41 @@
     },
     {
       "id": "user-approves-concept",
-      "status": "pending",
+      "status": "complete",
       "requiresExplicitUserApproval": true,
       "decisionRecord": "concept/approval.json",
-      "blocks": "all Blender/SVG sprite production"
+      "artifact": "concept/avatar-1-concept-v2.png",
+      "sha256": "8c0d58a07d1372d2e8c9bcdbddac6e997763a8ffd2b910be83e8ec47b69f1c92",
+      "userQuote": "Yes good concept move forward"
     },
     {
       "id": "four-idle-source-views",
-      "status": "not-started",
-      "dependsOn": "user-approves-concept"
+      "status": "in-progress",
+      "dependsOn": "user-approves-concept",
+      "revision": "idle-v3",
+      "outputRoot": "idle-v3"
     },
     {
       "id": "reference-fidelity-visual-review",
       "status": "not-started",
       "referenceMustBe": "explicitly user-approved fresh concept",
-      "grantsUserApproval": false
+      "grantsUserApproval": false,
+      "reference": "concept/avatar-1-concept-v2.png",
+      "referenceSha256": "8c0d58a07d1372d2e8c9bcdbddac6e997763a8ffd2b910be83e8ec47b69f1c92",
+      "dependsOn": "four-idle-source-views"
     },
     {
       "id": "user-approves-exact-idles",
-      "status": "not-started",
-      "requiresExplicitUserApproval": true
+      "status": "pending-idle-draft",
+      "requiresExplicitUserApproval": true,
+      "decisionRecord": "idle-v3/review/user-decisions.json",
+      "blocks": "all animation"
     },
     {
       "id": "one-complete-walk-direction",
       "status": "not-started",
-      "dependsOn": "user-approves-exact-idles"
+      "dependsOn": "user-approves-exact-idles",
+      "authorization": "blocked-pending-separate-idle-approval"
     },
     {
       "id": "remaining-directions",
@@ -119,7 +131,7 @@
   },
   "reference": "reference/reference-manifest.json",
   "correction": "Fresh concept art must be created and explicitly approved before Blender/SVG sprite production. The historical turnaround was not concept art.",
-  "spriteProductionAuthorized": false,
+  "spriteProductionAuthorized": true,
   "historicalDrafts": [
     {
       "id": "idle-v2",
@@ -136,16 +148,36 @@
     }
   ],
   "draft": {
-    "id": "concept-v2",
-    "stage": "fresh-concept",
-    "image": "concept/avatar-1-concept-v2.png",
-    "sha256": "8c0d58a07d1372d2e8c9bcdbddac6e997763a8ffd2b910be83e8ec47b69f1c92",
-    "userDecision": "concept/approval.json",
-    "userApproval": "pending"
+    "id": "idle-v3",
+    "stage": "four-idle-source-views",
+    "status": "in-progress",
+    "root": "idle-v3",
+    "plannedPaths": {
+      "source": "idle-v3/source",
+      "svg": "idle-v3/svg",
+      "frames": "idle-v3/frames",
+      "review": "idle-v3/review"
+    },
+    "concept": "concept/avatar-1-concept-v2.png",
+    "conceptSha256": "8c0d58a07d1372d2e8c9bcdbddac6e997763a8ffd2b910be83e8ec47b69f1c92",
+    "userDecision": "idle-v3/review/user-decisions.json",
+    "userIdleApproval": "pending",
+    "animationAuthorized": false,
+    "runtimeIntegrationAuthorized": false
   },
   "historicalToolingEvidence": {
     "status": "verified-before-concept-first-correction",
     "evidence": "setup/setup-report.json",
     "doesNotGrantConceptOrSpriteApproval": true
+  },
+  "spriteProductionScope": "idle-v3 four idle facings, Blender/SVG/PNG exports and internal likeness QA only",
+  "animationAuthorized": false,
+  "runtimeIntegrationAuthorized": false,
+  "concept": {
+    "revision": "concept-v2",
+    "artifact": "concept/avatar-1-concept-v2.png",
+    "sha256": "8c0d58a07d1372d2e8c9bcdbddac6e997763a8ffd2b910be83e8ec47b69f1c92",
+    "approval": "approved",
+    "decisionRecord": "concept/approval.json"
   }
 }

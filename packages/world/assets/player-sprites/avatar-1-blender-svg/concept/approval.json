@@ -2,7 +2,7 @@
   "version": 1,
   "avatar": "avatar-1",
   "revision": "concept-v2",
-  "status": "pending",
+  "status": "approved",
   "created": "2026-09-12",
   "decision": "D-059",
   "artifact": "avatar-1-concept-v2.png",
@@ -18,7 +18,18 @@
     "body proportions",
     "illustration design direction"
   ],
-  "userDecision": null,
+  "userDecision": {
+    "date": "2026-09-12",
+    "reviewer": "James",
+    "decision": "approved",
+    "quote": "Yes good concept move forward",
+    "artifact": "avatar-1-concept-v2.png",
+    "sha256": "8c0d58a07d1372d2e8c9bcdbddac6e997763a8ffd2b910be83e8ec47b69f1c92",
+    "scope": "Approve this exact fresh character concept and proceed to Blender MCP/SVG construction of four idle facings only.",
+    "approvesFinalSpriteCells": false,
+    "approvesAnimation": false,
+    "approvesRuntimeIntegration": false
+  },
   "generation": {
     "tool": "image_gen.imagegen",
     "mode": "built-in",
@@ -32,10 +43,12 @@
   },
   "productionGate": {
     "requiresExplicitUserApproval": true,
-    "blenderSpriteAuthoring": "not-started-for-this-concept",
-    "svgSpriteExport": "not-started-for-this-concept",
-    "animation": "not-started",
-    "nextAfterApproval": "Construct four idle facings with Blender MCP and real SVG exports; compare them against this exact approved concept and iterate internally before the separate idle approval."
+    "blenderSpriteAuthoring": "authorized-for-idle-v3",
+    "svgSpriteExport": "authorized-for-idle-v3",
+    "animation": "blocked-pending-separate-idle-approval",
+    "nextAfterApproval": "Produce idle-v3 under ../idle-v3, compare exact SVG-derived game cells with this approved concept, and obtain separate explicit user idle approval before animation.",
+    "conceptApprovalSatisfied": true,
+    "authorizationScope": "idle-v3 four idle facings and their SVG/PNG exports with internal likeness QA only"
   },
   "historicalArtifactDoesNotGrantApproval": "../reference/approved-concept-turnaround.png is an old sprite turnaround, previously misclassified as concept art. It was not used as an image input for this fresh concept.",
   "internalQa": "visual-qa.json"
