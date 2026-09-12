@@ -1,0 +1,50 @@
+{
+  "blender": "5.2.1 LTS",
+  "nativeMcpTools": true,
+  "scene": "AV1SVG | Idle authoring",
+  "camera": {
+    "type": "ORTHO",
+    "orthoScale": 64,
+    "location": [
+      0.0,
+      -128.0,
+      0.0
+    ]
+  },
+  "render": [
+    64,
+    64
+  ],
+  "frame": 1,
+  "exports": [
+    {
+      "direction": "down",
+      "svg": "svg/down/idle.svg",
+      "paths": 82,
+      "images": 0
+    },
+    {
+      "direction": "left",
+      "svg": "svg/left/idle.svg",
+      "paths": 57,
+      "images": 0
+    },
+    {
+      "direction": "right",
+      "svg": "svg/right/idle.svg",
+      "paths": 60,
+      "images": 0
+    },
+    {
+      "direction": "up",
+      "svg": "svg/up/idle.svg",
+      "paths": 72,
+      "images": 0
+    }
+  ],
+  "geometrySource": "source/authoring.py",
+  "palette": "source/palette.json",
+  "master": "source/avatar-1.blend",
+  "approval": "pending",
+  "animation": "not-started"
+}

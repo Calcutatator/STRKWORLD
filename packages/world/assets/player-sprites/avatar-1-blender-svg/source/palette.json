@@ -1,0 +1,30 @@
+{
+  "name": "Teal Scarf Runner — authored vector palette",
+  "maximumColorsPerFrame": 24,
+  "colors": [
+    {"name":"ink", "hex":"#172127"},
+    {"name":"hair_deep", "hex":"#3c251f"},
+    {"name":"hair_shadow", "hex":"#60351f"},
+    {"name":"hair", "hex":"#92501f"},
+    {"name":"hair_light", "hex":"#c17c2d"},
+    {"name":"hair_glint", "hex":"#e4a649"},
+    {"name":"skin_shadow", "hex":"#a8663e"},
+    {"name":"skin", "hex":"#d69b60"},
+    {"name":"skin_light", "hex":"#f3c987"},
+    {"name":"eye_light", "hex":"#fff0cf"},
+    {"name":"teal_deep", "hex":"#102f3a"},
+    {"name":"teal_shadow", "hex":"#124856"},
+    {"name":"teal", "hex":"#176373"},
+    {"name":"teal_light", "hex":"#248c99"},
+    {"name":"teal_glint", "hex":"#4ab2b5"},
+    {"name":"leather_deep", "hex":"#402c24"},
+    {"name":"leather_shadow", "hex":"#63422c"},
+    {"name":"leather", "hex":"#926038"},
+    {"name":"leather_light", "hex":"#be8b4b"},
+    {"name":"buckle", "hex":"#e3c277"},
+    {"name":"cloth_dark", "hex":"#193d48"},
+    {"name":"cloth", "hex":"#235565"},
+    {"name":"cloth_light", "hex":"#337b85"},
+    {"name":"cuff", "hex":"#b8a17b"}
+  ]
+}

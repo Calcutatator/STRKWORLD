@@ -1,7 +1,7 @@
 {
   "version": 1,
   "avatar": "avatar-1",
-  "state": "setup-verified-awaiting-codex-tool-reload",
+  "state": "four-idle-draft-awaiting-user-approval",
   "directionRecorded": "2026-09-12",
   "decision": "D-059",
   "rejectedDraft": "../avatar-1-restart-2026-09-12",
@@ -22,12 +22,14 @@
     },
     {
       "id": "four-idle-source-views",
-      "status": "not-started"
+      "status": "complete",
+      "evidence": "review/source-parity.json"
     },
     {
       "id": "user-approves-exact-idles",
-      "status": "not-started",
-      "requiresExplicitUserApproval": true
+      "status": "pending",
+      "requiresExplicitUserApproval": true,
+      "evidence": "review/user-decisions.json"
     },
     {
       "id": "one-complete-walk-direction",
@@ -89,14 +91,23 @@
   },
   "availability": {
     "checked": "2026-09-12",
-    "callableBlenderMcpTools": false,
+    "callableBlenderMcpTools": true,
     "blenderMcpConfigured": true,
     "blenderOnPath": true,
     "blenderAtStandardAppPaths": true,
     "liveHandshakeVerified": true,
     "svgExportVerified": true,
     "mcpProtocolCallsVerified": true,
-    "codexToolReloadRequired": true,
-    "report": "setup/setup-report.json"
+    "codexToolReloadRequired": false,
+    "report": "setup/setup-report.json",
+    "nativeToolHandshakeVerified": true
+  },
+  "draft": {
+    "id": "idle-v1",
+    "review": "review/idle-approval.png",
+    "master": "source/avatar-1.blend",
+    "mechanicalQa": "review/qa.json",
+    "reopenedMasterParity": "review/reload-parity.json",
+    "userDecision": "review/user-decisions.json"
   }
 }

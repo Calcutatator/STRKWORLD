@@ -1,0 +1,1046 @@
+{
+  "schemaVersion": 1,
+  "avatar": "avatar-1",
+  "pose": "idle",
+  "directions": [
+    "down",
+    "left",
+    "right",
+    "up"
+  ],
+  "mechanicalStatus": "pass",
+  "userIdleApproval": "pending",
+  "animationAcceptance": "not-tested",
+  "liveGameAcceptance": "not-tested",
+  "treatment": {
+    "rasterizer": "Sharp/libvips SVG rasterization at 72 DPI in the authored 64x64 viewport",
+    "perViewRescaling": false,
+    "alpha": "coverage >= 128 becomes 255; lower coverage becomes 0 with RGB zeroed",
+    "color": "nearest authored RGB by squared Euclidean sRGB distance; first palette entry wins ties",
+    "previews": "integer nearest-neighbour scaling of the final PNG pixels",
+    "geometry": "flat self-contained vectors; absolute path coordinates/control points inside [0,64]; no transforms, raster images, external resources or filters",
+    "approval": "mechanical conformance only; aesthetic approval and runtime acceptance remain separate"
+  },
+  "runtime": {
+    "node": "v24.19.0",
+    "platform": "darwin",
+    "arch": "arm64",
+    "sharp": {
+      "aom": "3.15.0",
+      "archive": "3.8.9",
+      "cairo": "1.18.4",
+      "cgif": "0.5.3",
+      "exif": "0.6.26",
+      "expat": "2.8.3",
+      "ffi": "3.8.0",
+      "fontconfig": "2.18.3",
+      "freetype": "2.14.3",
+      "fribidi": "1.0.16",
+      "glib": "2.89.4",
+      "harfbuzz": "14.3.1",
+      "heif": "1.23.2",
+      "highway": "1.4.0",
+      "imagequant": "2.4.1",
+      "lcms": "2.19.1",
+      "mozjpeg": "0826579",
+      "pango": "1.58.2",
+      "pixman": "0.46.4",
+      "png": "1.6.58",
+      "proxy-libintl": "0.5",
+      "rsvg": "2.62.91",
+      "tiff": "4.7.2",
+      "uhdr": "2.0.2",
+      "vips": "8.18.6",
+      "webp": "1.6.0",
+      "xml2": "2.15.3",
+      "zlib-ng": "2.3.3",
+      "sharp": "0.35.4"
+    }
+  },
+  "source": {
+    "script": "source/rasterize.cjs",
+    "scriptSha256": "72ae541e0d15cb1434cdf5ed079e2300ce598304be2e2782e5c152bc63545619",
+    "palette": "source/palette.json",
+    "paletteSha256": "bf4796b3ca9e83a0b4c593cc7de2208086142f185f0e2bf7197d2ac7aba4dd76",
+    "maximumColorsPerFrame": 24,
+    "authoredColors": [
+      {
+        "name": "ink",
+        "hex": "#172127"
+      },
+      {
+        "name": "hair_deep",
+        "hex": "#3C251F"
+      },
+      {
+        "name": "hair_shadow",
+        "hex": "#60351F"
+      },
+      {
+        "name": "hair",
+        "hex": "#92501F"
+      },
+      {
+        "name": "hair_light",
+        "hex": "#C17C2D"
+      },
+      {
+        "name": "hair_glint",
+        "hex": "#E4A649"
+      },
+      {
+        "name": "skin_shadow",
+        "hex": "#A8663E"
+      },
+      {
+        "name": "skin",
+        "hex": "#D69B60"
+      },
+      {
+        "name": "skin_light",
+        "hex": "#F3C987"
+      },
+      {
+        "name": "eye_light",
+        "hex": "#FFF0CF"
+      },
+      {
+        "name": "teal_deep",
+        "hex": "#102F3A"
+      },
+      {
+        "name": "teal_shadow",
+        "hex": "#124856"
+      },
+      {
+        "name": "teal",
+        "hex": "#176373"
+      },
+      {
+        "name": "teal_light",
+        "hex": "#248C99"
+      },
+      {
+        "name": "teal_glint",
+        "hex": "#4AB2B5"
+      },
+      {
+        "name": "leather_deep",
+        "hex": "#402C24"
+      },
+      {
+        "name": "leather_shadow",
+        "hex": "#63422C"
+      },
+      {
+        "name": "leather",
+        "hex": "#926038"
+      },
+      {
+        "name": "leather_light",
+        "hex": "#BE8B4B"
+      },
+      {
+        "name": "buckle",
+        "hex": "#E3C277"
+      },
+      {
+        "name": "cloth_dark",
+        "hex": "#193D48"
+      },
+      {
+        "name": "cloth",
+        "hex": "#235565"
+      },
+      {
+        "name": "cloth_light",
+        "hex": "#337B85"
+      },
+      {
+        "name": "cuff",
+        "hex": "#B8A17B"
+      }
+    ]
+  },
+  "frames": [
+    {
+      "svg": "svg/down/idle.svg",
+      "svgSha256": "e1c4af39fef8efd4cc8bffd0cca47e8c97b9e0041e8c0ab372c033a71c7dd550",
+      "renderedSvgSha256": "9f29652c6de9152359571ba52f8a048aafed4bbbe069a1963dfd7955293c7fd7",
+      "pathCount": 82,
+      "standardDoctypeStripped": true,
+      "frame": "frames/down/idle.png",
+      "pngSha256": "ffe8ebcab8bb6866acc936081d39b738f60d431b9fb9f2806612809cccd56979",
+      "rgbaSha256": "599a097d4607e1233186c378eae74c258e23d9894eda2a52da5a205f2c768b1e",
+      "rasterTreatment": {
+        "partialAlphaPixels": 141,
+        "discardedCoveredPixels": 55,
+        "remappedPixels": 842,
+        "maximumSquaredDistance": 2875,
+        "meanSquaredDistance": 129.91211401425178
+      },
+      "dimensions": [
+        64,
+        64
+      ],
+      "opaquePixels": 842,
+      "transparentPixels": 3254,
+      "partialAlphaPixels": 0,
+      "boundsInclusive": [
+        22,
+        6,
+        45,
+        55
+      ],
+      "visibleSize": [
+        24,
+        50
+      ],
+      "colorCount": 24,
+      "colors": [
+        {
+          "hex": "#102F3A",
+          "pixels": 40
+        },
+        {
+          "hex": "#124856",
+          "pixels": 31
+        },
+        {
+          "hex": "#172127",
+          "pixels": 261
+        },
+        {
+          "hex": "#176373",
+          "pixels": 21
+        },
+        {
+          "hex": "#193D48",
+          "pixels": 55
+        },
+        {
+          "hex": "#235565",
+          "pixels": 28
+        },
+        {
+          "hex": "#248C99",
+          "pixels": 13
+        },
+        {
+          "hex": "#337B85",
+          "pixels": 30
+        },
+        {
+          "hex": "#3C251F",
+          "pixels": 9
+        },
+        {
+          "hex": "#402C24",
+          "pixels": 48
+        },
+        {
+          "hex": "#4AB2B5",
+          "pixels": 2
+        },
+        {
+          "hex": "#60351F",
+          "pixels": 18
+        },
+        {
+          "hex": "#63422C",
+          "pixels": 55
+        },
+        {
+          "hex": "#92501F",
+          "pixels": 31
+        },
+        {
+          "hex": "#926038",
+          "pixels": 43
+        },
+        {
+          "hex": "#A8663E",
+          "pixels": 24
+        },
+        {
+          "hex": "#B8A17B",
+          "pixels": 15
+        },
+        {
+          "hex": "#BE8B4B",
+          "pixels": 37
+        },
+        {
+          "hex": "#C17C2D",
+          "pixels": 21
+        },
+        {
+          "hex": "#D69B60",
+          "pixels": 13
+        },
+        {
+          "hex": "#E3C277",
+          "pixels": 13
+        },
+        {
+          "hex": "#E4A649",
+          "pixels": 2
+        },
+        {
+          "hex": "#F3C987",
+          "pixels": 28
+        },
+        {
+          "hex": "#FFF0CF",
+          "pixels": 4
+        }
+      ],
+      "rowOpaqueCounts": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        1,
+        4,
+        9,
+        13,
+        13,
+        17,
+        19,
+        17,
+        18,
+        19,
+        20,
+        19,
+        16,
+        16,
+        16,
+        15,
+        14,
+        18,
+        22,
+        21,
+        21,
+        20,
+        20,
+        20,
+        22,
+        23,
+        24,
+        23,
+        21,
+        19,
+        19,
+        20,
+        21,
+        21,
+        21,
+        21,
+        19,
+        17,
+        14,
+        14,
+        14,
+        14,
+        14,
+        14,
+        13,
+        13,
+        13,
+        14,
+        14,
+        12,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "boundaryOpaquePixels": 0
+    },
+    {
+      "svg": "svg/left/idle.svg",
+      "svgSha256": "322b78f8f91b0069ded41b3c8197073c451dbdbd73d5e70941bc1837d5af7157",
+      "renderedSvgSha256": "604e0eae0ae54a6d5f93b2d831567de70f114ced79a1f74db048e5d8dde3c4a7",
+      "pathCount": 57,
+      "standardDoctypeStripped": true,
+      "frame": "frames/left/idle.png",
+      "pngSha256": "42c8a3b61c658074deac459abd9c3c6da80f7342e46f0059435d6a77d0a4a35e",
+      "rgbaSha256": "321244cc5bbe4e41b096b674b93eef80fee7ae25867d04109992dd1c4f39df7e",
+      "rasterTreatment": {
+        "partialAlphaPixels": 127,
+        "discardedCoveredPixels": 60,
+        "remappedPixels": 631,
+        "maximumSquaredDistance": 2875,
+        "meanSquaredDistance": 104.68304278922345
+      },
+      "dimensions": [
+        64,
+        64
+      ],
+      "opaquePixels": 631,
+      "transparentPixels": 3465,
+      "partialAlphaPixels": 0,
+      "boundsInclusive": [
+        22,
+        6,
+        44,
+        55
+      ],
+      "visibleSize": [
+        23,
+        50
+      ],
+      "colorCount": 23,
+      "colors": [
+        {
+          "hex": "#102F3A",
+          "pixels": 14
+        },
+        {
+          "hex": "#124856",
+          "pixels": 25
+        },
+        {
+          "hex": "#172127",
+          "pixels": 221
+        },
+        {
+          "hex": "#176373",
+          "pixels": 34
+        },
+        {
+          "hex": "#193D48",
+          "pixels": 29
+        },
+        {
+          "hex": "#235565",
+          "pixels": 16
+        },
+        {
+          "hex": "#248C99",
+          "pixels": 7
+        },
+        {
+          "hex": "#337B85",
+          "pixels": 11
+        },
+        {
+          "hex": "#3C251F",
+          "pixels": 6
+        },
+        {
+          "hex": "#402C24",
+          "pixels": 40
+        },
+        {
+          "hex": "#60351F",
+          "pixels": 28
+        },
+        {
+          "hex": "#63422C",
+          "pixels": 23
+        },
+        {
+          "hex": "#92501F",
+          "pixels": 28
+        },
+        {
+          "hex": "#926038",
+          "pixels": 20
+        },
+        {
+          "hex": "#A8663E",
+          "pixels": 23
+        },
+        {
+          "hex": "#B8A17B",
+          "pixels": 7
+        },
+        {
+          "hex": "#BE8B4B",
+          "pixels": 24
+        },
+        {
+          "hex": "#C17C2D",
+          "pixels": 27
+        },
+        {
+          "hex": "#D69B60",
+          "pixels": 29
+        },
+        {
+          "hex": "#E3C277",
+          "pixels": 6
+        },
+        {
+          "hex": "#E4A649",
+          "pixels": 3
+        },
+        {
+          "hex": "#F3C987",
+          "pixels": 8
+        },
+        {
+          "hex": "#FFF0CF",
+          "pixels": 2
+        }
+      ],
+      "rowOpaqueCounts": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        1,
+        2,
+        6,
+        13,
+        11,
+        17,
+        17,
+        15,
+        18,
+        20,
+        18,
+        17,
+        16,
+        15,
+        16,
+        17,
+        15,
+        13,
+        12,
+        13,
+        14,
+        15,
+        15,
+        15,
+        15,
+        16,
+        16,
+        15,
+        16,
+        15,
+        15,
+        16,
+        16,
+        16,
+        16,
+        12,
+        11,
+        8,
+        8,
+        8,
+        8,
+        8,
+        7,
+        7,
+        8,
+        7,
+        7,
+        9,
+        10,
+        10,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "boundaryOpaquePixels": 0
+    },
+    {
+      "svg": "svg/right/idle.svg",
+      "svgSha256": "3cecbd07a6327ac66588eb1bddc9795882e73af288bb6c82e511e8b026c88ff8",
+      "renderedSvgSha256": "f8208006edec53ac2cf9be8bc3444a146d54f0380c6c3ed0d216f55b726b331f",
+      "pathCount": 60,
+      "standardDoctypeStripped": true,
+      "frame": "frames/right/idle.png",
+      "pngSha256": "cad5196ae185c72d913d9335fdc82bf78a5d5105778a879f248d36709e1e839b",
+      "rgbaSha256": "d6077047b9ef6700407654170a72f20b537c4b22880138419ffc020781937ca8",
+      "rasterTreatment": {
+        "partialAlphaPixels": 133,
+        "discardedCoveredPixels": 62,
+        "remappedPixels": 636,
+        "maximumSquaredDistance": 2875,
+        "meanSquaredDistance": 110.36477987421384
+      },
+      "dimensions": [
+        64,
+        64
+      ],
+      "opaquePixels": 636,
+      "transparentPixels": 3460,
+      "partialAlphaPixels": 0,
+      "boundsInclusive": [
+        19,
+        6,
+        41,
+        55
+      ],
+      "visibleSize": [
+        23,
+        50
+      ],
+      "colorCount": 23,
+      "colors": [
+        {
+          "hex": "#102F3A",
+          "pixels": 15
+        },
+        {
+          "hex": "#124856",
+          "pixels": 22
+        },
+        {
+          "hex": "#172127",
+          "pixels": 233
+        },
+        {
+          "hex": "#176373",
+          "pixels": 30
+        },
+        {
+          "hex": "#193D48",
+          "pixels": 30
+        },
+        {
+          "hex": "#235565",
+          "pixels": 11
+        },
+        {
+          "hex": "#248C99",
+          "pixels": 10
+        },
+        {
+          "hex": "#337B85",
+          "pixels": 13
+        },
+        {
+          "hex": "#3C251F",
+          "pixels": 8
+        },
+        {
+          "hex": "#402C24",
+          "pixels": 37
+        },
+        {
+          "hex": "#60351F",
+          "pixels": 28
+        },
+        {
+          "hex": "#63422C",
+          "pixels": 23
+        },
+        {
+          "hex": "#92501F",
+          "pixels": 27
+        },
+        {
+          "hex": "#926038",
+          "pixels": 20
+        },
+        {
+          "hex": "#A8663E",
+          "pixels": 25
+        },
+        {
+          "hex": "#B8A17B",
+          "pixels": 7
+        },
+        {
+          "hex": "#BE8B4B",
+          "pixels": 22
+        },
+        {
+          "hex": "#C17C2D",
+          "pixels": 25
+        },
+        {
+          "hex": "#D69B60",
+          "pixels": 19
+        },
+        {
+          "hex": "#E3C277",
+          "pixels": 11
+        },
+        {
+          "hex": "#E4A649",
+          "pixels": 3
+        },
+        {
+          "hex": "#F3C987",
+          "pixels": 15
+        },
+        {
+          "hex": "#FFF0CF",
+          "pixels": 2
+        }
+      ],
+      "rowOpaqueCounts": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        1,
+        2,
+        6,
+        12,
+        11,
+        17,
+        17,
+        15,
+        18,
+        20,
+        18,
+        17,
+        16,
+        15,
+        16,
+        17,
+        15,
+        13,
+        12,
+        13,
+        14,
+        15,
+        15,
+        15,
+        15,
+        16,
+        16,
+        16,
+        15,
+        15,
+        15,
+        16,
+        16,
+        17,
+        17,
+        14,
+        11,
+        8,
+        8,
+        8,
+        8,
+        8,
+        7,
+        8,
+        8,
+        7,
+        7,
+        9,
+        11,
+        10,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "boundaryOpaquePixels": 0
+    },
+    {
+      "svg": "svg/up/idle.svg",
+      "svgSha256": "0240d3556d5f55a5009cd812f00b74c85e517ce0008cd5646e70bbf890208976",
+      "renderedSvgSha256": "bec3611130a51eb86d25d8f78315dd33fc0651eb8920113a30027824681cd14c",
+      "pathCount": 72,
+      "standardDoctypeStripped": true,
+      "frame": "frames/up/idle.png",
+      "pngSha256": "722c73b10fac1b1469df1c9c3f5db5d8040f09ce389027c6cb46f0bc8e363694",
+      "rgbaSha256": "cbc7a2274b30ccbb8b98e3301eccf90c3f547500fea065d7631d22385bd68e29",
+      "rasterTreatment": {
+        "partialAlphaPixels": 128,
+        "discardedCoveredPixels": 52,
+        "remappedPixels": 798,
+        "maximumSquaredDistance": 2875,
+        "meanSquaredDistance": 117.97747183979975
+      },
+      "dimensions": [
+        64,
+        64
+      ],
+      "opaquePixels": 799,
+      "transparentPixels": 3297,
+      "partialAlphaPixels": 0,
+      "boundsInclusive": [
+        18,
+        7,
+        41,
+        55
+      ],
+      "visibleSize": [
+        24,
+        49
+      ],
+      "colorCount": 22,
+      "colors": [
+        {
+          "hex": "#102F3A",
+          "pixels": 36
+        },
+        {
+          "hex": "#124856",
+          "pixels": 36
+        },
+        {
+          "hex": "#172127",
+          "pixels": 233
+        },
+        {
+          "hex": "#176373",
+          "pixels": 36
+        },
+        {
+          "hex": "#193D48",
+          "pixels": 52
+        },
+        {
+          "hex": "#235565",
+          "pixels": 26
+        },
+        {
+          "hex": "#248C99",
+          "pixels": 14
+        },
+        {
+          "hex": "#337B85",
+          "pixels": 29
+        },
+        {
+          "hex": "#3C251F",
+          "pixels": 25
+        },
+        {
+          "hex": "#402C24",
+          "pixels": 33
+        },
+        {
+          "hex": "#60351F",
+          "pixels": 27
+        },
+        {
+          "hex": "#63422C",
+          "pixels": 49
+        },
+        {
+          "hex": "#92501F",
+          "pixels": 60
+        },
+        {
+          "hex": "#926038",
+          "pixels": 30
+        },
+        {
+          "hex": "#A8663E",
+          "pixels": 19
+        },
+        {
+          "hex": "#B8A17B",
+          "pixels": 13
+        },
+        {
+          "hex": "#BE8B4B",
+          "pixels": 31
+        },
+        {
+          "hex": "#C17C2D",
+          "pixels": 38
+        },
+        {
+          "hex": "#D69B60",
+          "pixels": 1
+        },
+        {
+          "hex": "#E3C277",
+          "pixels": 5
+        },
+        {
+          "hex": "#E4A649",
+          "pixels": 2
+        },
+        {
+          "hex": "#F3C987",
+          "pixels": 4
+        }
+      ],
+      "rowOpaqueCounts": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        3,
+        8,
+        11,
+        14,
+        17,
+        16,
+        17,
+        18,
+        18,
+        18,
+        18,
+        18,
+        16,
+        15,
+        15,
+        14,
+        14,
+        15,
+        16,
+        18,
+        19,
+        18,
+        18,
+        19,
+        21,
+        23,
+        22,
+        21,
+        19,
+        19,
+        19,
+        20,
+        21,
+        21,
+        20,
+        20,
+        17,
+        14,
+        14,
+        14,
+        14,
+        14,
+        14,
+        13,
+        13,
+        13,
+        14,
+        14,
+        12,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "boundaryOpaquePixels": 0
+    }
+  ],
+  "review": {
+    "file": "review/idle-approval.png",
+    "dimensions": [
+      1688,
+      850
+    ],
+    "pngSha256": "e64827dfa3e70465d6a841acfb359d4439b2f25ed1a81c68bca4a80705329bd5",
+    "exactCompositeCropParity": true,
+    "placements": [
+      {
+        "direction": "down",
+        "scale": 6,
+        "left": 40,
+        "top": 162,
+        "background": "#E8E4DA"
+      },
+      {
+        "direction": "down",
+        "scale": 1,
+        "left": 100,
+        "top": 647,
+        "background": "#223932"
+      },
+      {
+        "direction": "down",
+        "scale": 2,
+        "left": 244,
+        "top": 615,
+        "background": "#223932"
+      },
+      {
+        "direction": "left",
+        "scale": 6,
+        "left": 448,
+        "top": 162,
+        "background": "#E8E4DA"
+      },
+      {
+        "direction": "left",
+        "scale": 1,
+        "left": 508,
+        "top": 647,
+        "background": "#223932"
+      },
+      {
+        "direction": "left",
+        "scale": 2,
+        "left": 652,
+        "top": 615,
+        "background": "#223932"
+      },
+      {
+        "direction": "right",
+        "scale": 6,
+        "left": 856,
+        "top": 162,
+        "background": "#E8E4DA"
+      },
+      {
+        "direction": "right",
+        "scale": 1,
+        "left": 916,
+        "top": 647,
+        "background": "#223932"
+      },
+      {
+        "direction": "right",
+        "scale": 2,
+        "left": 1060,
+        "top": 615,
+        "background": "#223932"
+      },
+      {
+        "direction": "up",
+        "scale": 6,
+        "left": 1264,
+        "top": 162,
+        "background": "#E8E4DA"
+      },
+      {
+        "direction": "up",
+        "scale": 1,
+        "left": 1324,
+        "top": 647,
+        "background": "#223932"
+      },
+      {
+        "direction": "up",
+        "scale": 2,
+        "left": 1468,
+        "top": 615,
+        "background": "#223932"
+      }
+    ]
+  }
+}

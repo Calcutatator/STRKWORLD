@@ -1,0 +1,3976 @@
+{
+  "schemaVersion": 1,
+  "avatar": "avatar-1",
+  "pose": "idle",
+  "mechanicalStatus": "pass",
+  "userIdleApproval": "pending",
+  "animationAcceptance": "not-tested",
+  "liveGameAcceptance": "not-tested",
+  "scope": "Ordered authored polygons and palette compared to native SVG paths; current artifact hashes recorded",
+  "tolerances": {
+    "coordinateAbsolute": 0.0001,
+    "colorChannelAbsolute": 1,
+    "colorReason": "Blender 5.2 native SVG export converts linear RGB to sRGB and truncates uint8 channels; allow at most one level of drift"
+  },
+  "limits": [
+    "This script does not open Blender; saved-master readback and reload provenance come from the supplied evidence files",
+    "PNG hashes and 64x64 headers are checked here; rasterization and review crop parity are recorded separately in review/qa.json",
+    "Mechanical parity does not establish aesthetic approval, animation quality, or game acceptance"
+  ],
+  "frames": {
+    "down": {
+      "pathCount": 82,
+      "authoredPolygonCount": 82,
+      "painterOrderAndVertices": "pass",
+      "opaqueFillsWithoutOutlines": "pass",
+      "maximumCoordinateError": 8.000000001118224e-06,
+      "maximumAbsoluteColorChannelError": 1,
+      "polygons": [
+        {
+          "index": 0,
+          "part": "scarf.tails",
+          "color": "ink",
+          "vertices": 7,
+          "maximumCoordinateError": 8.000000001118224e-06,
+          "authoredFill": "#172127",
+          "nativeSvgFill": "#162027",
+          "nativeMinusAuthoredChannels": [
+            -1,
+            -1,
+            0
+          ]
+        },
+        {
+          "index": 1,
+          "part": "scarf.tails",
+          "color": "teal",
+          "vertices": 8,
+          "maximumCoordinateError": 8.000000001118224e-06,
+          "authoredFill": "#176373",
+          "nativeSvgFill": "#166273",
+          "nativeMinusAuthoredChannels": [
+            -1,
+            -1,
+            0
+          ]
+        },
+        {
+          "index": 2,
+          "part": "scarf.tails",
+          "color": "teal_light",
+          "vertices": 4,
+          "maximumCoordinateError": 8.000000001118224e-06,
+          "authoredFill": "#248C99",
+          "nativeSvgFill": "#238C98",
+          "nativeMinusAuthoredChannels": [
+            -1,
+            0,
+            -1
+          ]
+        },
+        {
+          "index": 3,
+          "part": "scarf.tails",
+          "color": "teal_shadow",
+          "vertices": 4,
+          "maximumCoordinateError": 8.000000001118224e-06,
+          "authoredFill": "#124856",
+          "nativeSvgFill": "#124755",
+          "nativeMinusAuthoredChannels": [
+            0,
+            -1,
+            -1
+          ]
+        },
+        {
+          "index": 4,
+          "part": "leg.right",
+          "color": "ink",
+          "vertices": 7,
+          "maximumCoordinateError": 8.000000001118224e-06,
+          "authoredFill": "#172127",
+          "nativeSvgFill": "#162027",
+          "nativeMinusAuthoredChannels": [
+            -1,
+            -1,
+            0
+          ]
+        },
+        {
+          "index": 5,
+          "part": "leg.right",
+          "color": "cloth",
+          "vertices": 6,
+          "maximumCoordinateError": 8.000000001118224e-06,
+          "authoredFill": "#235565",
+          "nativeSvgFill": "#225464",
+          "nativeMinusAuthoredChannels": [
+            -1,
+            -1,
+            -1
+          ]
+        },
+        {
+          "index": 6,
+          "part": "leg.right",
+          "color": "cloth_light",
+          "vertices": 4,
+          "maximumCoordinateError": 8.000000001118224e-06,
+          "authoredFill": "#337B85",
+          "nativeSvgFill": "#337A84",
+          "nativeMinusAuthoredChannels": [
+            0,
+            -1,
+            -1
+          ]
+        },
+        {
+          "index": 7,
+          "part": "leg.right",
+          "color": "cloth_dark",
+          "vertices": 5,
+          "maximumCoordinateError": 8.000000001118224e-06,
+          "authoredFill": "#193D48",
+          "nativeSvgFill": "#183D47",
+          "nativeMinusAuthoredChannels": [
+            -1,
+            0,
+            -1
+          ]
+        },
+        {
+          "index": 8,
+          "part": "leg.left",
+          "color": "ink",
+          "vertices": 6,
+          "maximumCoordinateError": 8.000000001118224e-06,
+          "authoredFill": "#172127",
+          "nativeSvgFill": "#162027",
+          "nativeMinusAuthoredChannels": [
+            -1,
+            -1,
+            0
+          ]
+        },
+        {
+          "index": 9,
+          "part": "leg.left",
+          "color": "cloth",
+          "vertices": 5,
+          "maximumCoordinateError": 8.000000001118224e-06,
+          "authoredFill": "#235565",
+          "nativeSvgFill": "#225464",
+          "nativeMinusAuthoredChannels": [
+            -1,
+            -1,
+            -1
+          ]
+        },
+        {
+          "index": 10,
+          "part": "leg.left",
+          "color": "cloth_light",
+          "vertices": 4,
+          "maximumCoordinateError": 8.000000001118224e-06,
+          "authoredFill": "#337B85",
+          "nativeSvgFill": "#337A84",
+          "nativeMinusAuthoredChannels": [
+            0,
+            -1,
+            -1
+          ]
+        },
+        {
+          "index": 11,
+          "part": "leg.left",
+          "color": "cloth_dark",
+          "vertices": 5,
+          "maximumCoordinateError": 8.000000001118224e-06,
+          "authoredFill": "#193D48",
+          "nativeSvgFill": "#183D47",
+          "nativeMinusAuthoredChannels": [
+            -1,
+            0,
+            -1
+          ]
+        },
+        {
+          "index": 12,
+          "part": "boot.right",
+          "color": "ink",
+          "vertices": 7,
+          "maximumCoordinateError": 8.000000001118224e-06,
+          "authoredFill": "#172127",
+          "nativeSvgFill": "#162027",
+          "nativeMinusAuthoredChannels": [
+            -1,
+            -1,
+            0
+          ]
+        },
+        {
+          "index": 13,
+          "part": "boot.right",
+          "color": "leather",
+          "vertices": 6,
+          "maximumCoordinateError": 8.000000001118224e-06,
+          "authoredFill": "#926038",
+          "nativeSvgFill": "#915F37",
+          "nativeMinusAuthoredChannels": [
+            -1,
+            -1,
+            -1
+          ]
+        },
+        {
+          "index": 14,
+          "part": "boot.right",
+          "color": "leather_light",
+          "vertices": 4,
+          "maximumCoordinateError": 8.000000001118224e-06,
+          "authoredFill": "#BE8B4B",
+          "nativeSvgFill": "#BD8B4A",
+          "nativeMinusAuthoredChannels": [
+            -1,
+            0,
+            -1
+          ]
+        },
+        {
+          "index": 15,
+          "part": "boot.right",
+          "color": "cuff",
+          "vertices": 4,
+          "maximumCoordinateError": 8.000000001118224e-06,
+          "authoredFill": "#B8A17B",
+          "nativeSvgFill": "#B7A17A",
+          "nativeMinusAuthoredChannels": [
+            -1,
+            0,
+            -1
+          ]
+        },
+        {
+          "index": 16,
+          "part": "boot.right",
+          "color": "leather_shadow",
+          "vertices": 4,
+          "maximumCoordinateError": 8.000000001118224e-06,
+          "authoredFill": "#63422C",
+          "nativeSvgFill": "#62422B",
+          "nativeMinusAuthoredChannels": [
+            -1,
+            0,
+            -1
+          ]
+        },
+        {
+          "index": 17,
+          "part": "boot.left",
+          "color": "ink",
+          "vertices": 7,
+          "maximumCoordinateError": 8.000000001118224e-06,
+          "authoredFill": "#172127",
+          "nativeSvgFill": "#162027",
+          "nativeMinusAuthoredChannels": [
+            -1,
+            -1,
+            0
+          ]
+        },
+        {
+          "index": 18,
+          "part": "boot.left",
+          "color": "leather",
+          "vertices": 6,
+          "maximumCoordinateError": 8.000000001118224e-06,
+          "authoredFill": "#926038",
+          "nativeSvgFill": "#915F37",
+          "nativeMinusAuthoredChannels": [
+            -1,
+            -1,
+            -1
+          ]
+        },
+        {
+          "index": 19,
+          "part": "boot.left",
+          "color": "leather_light",
+          "vertices": 6,
+          "maximumCoordinateError": 8.000000001118224e-06,
+          "authoredFill": "#BE8B4B",
+          "nativeSvgFill": "#BD8B4A",
+          "nativeMinusAuthoredChannels": [
+            -1,
+            0,
+            -1
+          ]
+        },
+        {
+          "index": 20,
+          "part": "boot.left",
+          "color": "cuff",
+          "vertices": 4,
+          "maximumCoordinateError": 8.000000001118224e-06,
+          "authoredFill": "#B8A17B",
+          "nativeSvgFill": "#B7A17A",
+          "nativeMinusAuthoredChannels": [
+            -1,
+            0,
+            -1
+          ]
+        },
+        {
+          "index": 21,
+          "part": "torso",
+          "color": "ink",
+          "vertices": 11,
+          "maximumCoordinateError": 8.000000001118224e-06,
+          "authoredFill": "#172127",
+          "nativeSvgFill": "#162027",
+          "nativeMinusAuthoredChannels": [
+            -1,
+            -1,
+            0
+          ]
+        },
+        {
+          "index": 22,
+          "part": "torso",
+          "color": "cloth_dark",
+          "vertices": 9,
+          "maximumCoordinateError": 8.000000001118224e-06,
+          "authoredFill": "#193D48",
+          "nativeSvgFill": "#183D47",
+          "nativeMinusAuthoredChannels": [
+            -1,
+            0,
+            -1
+          ]
+        },
+        {
+          "index": 23,
+          "part": "torso",
+          "color": "teal",
+          "vertices": 5,
+          "maximumCoordinateError": 8.000000001118224e-06,
+          "authoredFill": "#176373",
+          "nativeSvgFill": "#166273",
+          "nativeMinusAuthoredChannels": [
+            -1,
+            -1,
+            0
+          ]
+        },
+        {
+          "index": 24,
+          "part": "torso",
+          "color": "cloth",
+          "vertices": 4,
+          "maximumCoordinateError": 8.000000001118224e-06,
+          "authoredFill": "#235565",
+          "nativeSvgFill": "#225464",
+          "nativeMinusAuthoredChannels": [
+            -1,
+            -1,
+            -1
+          ]
+        },
+        {
+          "index": 25,
+          "part": "harness",
+          "color": "leather_deep",
+          "vertices": 5,
+          "maximumCoordinateError": 8.000000001118224e-06,
+          "authoredFill": "#402C24",
+          "nativeSvgFill": "#402B23",
+          "nativeMinusAuthoredChannels": [
+            0,
+            -1,
+            -1
+          ]
+        },
+        {
+          "index": 26,
+          "part": "harness",
+          "color": "leather",
+          "vertices": 5,
+          "maximumCoordinateError": 8.000000001118224e-06,
+          "authoredFill": "#926038",
+          "nativeSvgFill": "#915F37",
+          "nativeMinusAuthoredChannels": [
+            -1,
+            -1,
+            -1
+          ]
+        },
+        {
+          "index": 27,
+          "part": "harness",
+          "color": "leather_deep",
+          "vertices": 4,
+          "maximumCoordinateError": 8.000000001118224e-06,
+          "authoredFill": "#402C24",
+          "nativeSvgFill": "#402B23",
+          "nativeMinusAuthoredChannels": [
+            0,
+            -1,
+            -1
+          ]
+        },
+        {
+          "index": 28,
+          "part": "harness",
+          "color": "leather",
+          "vertices": 4,
+          "maximumCoordinateError": 8.000000001118224e-06,
+          "authoredFill": "#926038",
+          "nativeSvgFill": "#915F37",
+          "nativeMinusAuthoredChannels": [
+            -1,
+            -1,
+            -1
+          ]
+        },
+        {
+          "index": 29,
+          "part": "harness",
+          "color": "leather_light",
+          "vertices": 4,
+          "maximumCoordinateError": 8.000000001118224e-06,
+          "authoredFill": "#BE8B4B",
+          "nativeSvgFill": "#BD8B4A",
+          "nativeMinusAuthoredChannels": [
+            -1,
+            0,
+            -1
+          ]
+        },
+        {
+          "index": 30,
+          "part": "arm.right",
+          "color": "ink",
+          "vertices": 7,
+          "maximumCoordinateError": 8.000000001118224e-06,
+          "authoredFill": "#172127",
+          "nativeSvgFill": "#162027",
+          "nativeMinusAuthoredChannels": [
+            -1,
+            -1,
+            0
+          ]
+        },
+        {
+          "index": 31,
+          "part": "arm.right",
+          "color": "skin",
+          "vertices": 6,
+          "maximumCoordinateError": 8.000000001118224e-06,
+          "authoredFill": "#D69B60",
+          "nativeSvgFill": "#D59B5F",
+          "nativeMinusAuthoredChannels": [
+            -1,
+            0,
+            -1
+          ]
+        },
+        {
+          "index": 32,
+          "part": "arm.right",
+          "color": "skin_light",
+          "vertices": 4,
+          "maximumCoordinateError": 8.000000001118224e-06,
+          "authoredFill": "#F3C987",
+          "nativeSvgFill": "#F2C886",
+          "nativeMinusAuthoredChannels": [
+            -1,
+            -1,
+            -1
+          ]
+        },
+        {
+          "index": 33,
+          "part": "arm.right",
+          "color": "skin_shadow",
+          "vertices": 6,
+          "maximumCoordinateError": 8.000000001118224e-06,
+          "authoredFill": "#A8663E",
+          "nativeSvgFill": "#A8653E",
+          "nativeMinusAuthoredChannels": [
+            0,
+            -1,
+            0
+          ]
+        },
+        {
+          "index": 34,
+          "part": "hand.right",
+          "color": "ink",
+          "vertices": 6,
+          "maximumCoordinateError": 8.000000001118224e-06,
+          "authoredFill": "#172127",
+          "nativeSvgFill": "#162027",
+          "nativeMinusAuthoredChannels": [
+            -1,
+            -1,
+            0
+          ]
+        },
+        {
+          "index": 35,
+          "part": "hand.right",
+          "color": "leather",
+          "vertices": 6,
+          "maximumCoordinateError": 8.000000001118224e-06,
+          "authoredFill": "#926038",
+          "nativeSvgFill": "#915F37",
+          "nativeMinusAuthoredChannels": [
+            -1,
+            -1,
+            -1
+          ]
+        },
+        {
+          "index": 36,
+          "part": "hand.right",
+          "color": "leather_light",
+          "vertices": 4,
+          "maximumCoordinateError": 8.000000001118224e-06,
+          "authoredFill": "#BE8B4B",
+          "nativeSvgFill": "#BD8B4A",
+          "nativeMinusAuthoredChannels": [
+            -1,
+            0,
+            -1
+          ]
+        },
+        {
+          "index": 37,
+          "part": "hand.right",
+          "color": "leather_shadow",
+          "vertices": 5,
+          "maximumCoordinateError": 8.000000001118224e-06,
+          "authoredFill": "#63422C",
+          "nativeSvgFill": "#62422B",
+          "nativeMinusAuthoredChannels": [
+            -1,
+            0,
+            -1
+          ]
+        },
+        {
+          "index": 38,
+          "part": "arm.left",
+          "color": "ink",
+          "vertices": 6,
+          "maximumCoordinateError": 8.000000001118224e-06,
+          "authoredFill": "#172127",
+          "nativeSvgFill": "#162027",
+          "nativeMinusAuthoredChannels": [
+            -1,
+            -1,
+            0
+          ]
+        },
+        {
+          "index": 39,
+          "part": "arm.left",
+          "color": "skin",
+          "vertices": 6,
+          "maximumCoordinateError": 8.000000001118224e-06,
+          "authoredFill": "#D69B60",
+          "nativeSvgFill": "#D59B5F",
+          "nativeMinusAuthoredChannels": [
+            -1,
+            0,
+            -1
+          ]
+        },
+        {
+          "index": 40,
+          "part": "arm.left",
+          "color": "skin_light",
+          "vertices": 4,
+          "maximumCoordinateError": 8.000000001118224e-06,
+          "authoredFill": "#F3C987",
+          "nativeSvgFill": "#F2C886",
+          "nativeMinusAuthoredChannels": [
+            -1,
+            -1,
+            -1
+          ]
+        },
+        {
+          "index": 41,
+          "part": "arm.left",
+          "color": "skin_shadow",
+          "vertices": 5,
+          "maximumCoordinateError": 8.000000001118224e-06,
+          "authoredFill": "#A8663E",
+          "nativeSvgFill": "#A8653E",
+          "nativeMinusAuthoredChannels": [
+            0,
+            -1,
+            0
+          ]
+        },
+        {
+          "index": 42,
+          "part": "satchel",
+          "color": "ink",
+          "vertices": 6,
+          "maximumCoordinateError": 8.000000001118224e-06,
+          "authoredFill": "#172127",
+          "nativeSvgFill": "#162027",
+          "nativeMinusAuthoredChannels": [
+            -1,
+            -1,
+            0
+          ]
+        },
+        {
+          "index": 43,
+          "part": "satchel",
+          "color": "leather_shadow",
+          "vertices": 6,
+          "maximumCoordinateError": 8.000000001118224e-06,
+          "authoredFill": "#63422C",
+          "nativeSvgFill": "#62422B",
+          "nativeMinusAuthoredChannels": [
+            -1,
+            0,
+            -1
+          ]
+        },
+        {
+          "index": 44,
+          "part": "satchel",
+          "color": "leather",
+          "vertices": 5,
+          "maximumCoordinateError": 8.000000001118224e-06,
+          "authoredFill": "#926038",
+          "nativeSvgFill": "#915F37",
+          "nativeMinusAuthoredChannels": [
+            -1,
+            -1,
+            -1
+          ]
+        },
+        {
+          "index": 45,
+          "part": "satchel",
+          "color": "buckle",
+          "vertices": 4,
+          "maximumCoordinateError": 8.000000001118224e-06,
+          "authoredFill": "#E3C277",
+          "nativeSvgFill": "#E2C177",
+          "nativeMinusAuthoredChannels": [
+            -1,
+            -1,
+            0
+          ]
+        },
+        {
+          "index": 46,
+          "part": "hand.left",
+          "color": "ink",
+          "vertices": 6,
+          "maximumCoordinateError": 8.000000001118224e-06,
+          "authoredFill": "#172127",
+          "nativeSvgFill": "#162027",
+          "nativeMinusAuthoredChannels": [
+            -1,
+            -1,
+            0
+          ]
+        },
+        {
+          "index": 47,
+          "part": "hand.left",
+          "color": "leather",
+          "vertices": 5,
+          "maximumCoordinateError": 8.000000001118224e-06,
+          "authoredFill": "#926038",
+          "nativeSvgFill": "#915F37",
+          "nativeMinusAuthoredChannels": [
+            -1,
+            -1,
+            -1
+          ]
+        },
+        {
+          "index": 48,
+          "part": "hand.left",
+          "color": "leather_light",
+          "vertices": 4,
+          "maximumCoordinateError": 8.000000001118224e-06,
+          "authoredFill": "#BE8B4B",
+          "nativeSvgFill": "#BD8B4A",
+          "nativeMinusAuthoredChannels": [
+            -1,
+            0,
+            -1
+          ]
+        },
+        {
+          "index": 49,
+          "part": "hand.left",
+          "color": "leather_shadow",
+          "vertices": 4,
+          "maximumCoordinateError": 8.000000001118224e-06,
+          "authoredFill": "#63422C",
+          "nativeSvgFill": "#62422B",
+          "nativeMinusAuthoredChannels": [
+            -1,
+            0,
+            -1
+          ]
+        },
+        {
+          "index": 50,
+          "part": "belt",
+          "color": "ink",
+          "vertices": 4,
+          "maximumCoordinateError": 8.000000001118224e-06,
+          "authoredFill": "#172127",
+          "nativeSvgFill": "#162027",
+          "nativeMinusAuthoredChannels": [
+            -1,
+            -1,
+            0
+          ]
+        },
+        {
+          "index": 51,
+          "part": "belt",
+          "color": "leather",
+          "vertices": 4,
+          "maximumCoordinateError": 8.000000001118224e-06,
+          "authoredFill": "#926038",
+          "nativeSvgFill": "#915F37",
+          "nativeMinusAuthoredChannels": [
+            -1,
+            -1,
+            -1
+          ]
+        },
+        {
+          "index": 52,
+          "part": "belt",
+          "color": "buckle",
+          "vertices": 4,
+          "maximumCoordinateError": 8.000000001118224e-06,
+          "authoredFill": "#E3C277",
+          "nativeSvgFill": "#E2C177",
+          "nativeMinusAuthoredChannels": [
+            -1,
+            -1,
+            0
+          ]
+        },
+        {
+          "index": 53,
+          "part": "belt",
+          "color": "leather_deep",
+          "vertices": 4,
+          "maximumCoordinateError": 8.000000001118224e-06,
+          "authoredFill": "#402C24",
+          "nativeSvgFill": "#402B23",
+          "nativeMinusAuthoredChannels": [
+            0,
+            -1,
+            -1
+          ]
+        },
+        {
+          "index": 54,
+          "part": "face",
+          "color": "ink",
+          "vertices": 8,
+          "maximumCoordinateError": 8.000000001118224e-06,
+          "authoredFill": "#172127",
+          "nativeSvgFill": "#162027",
+          "nativeMinusAuthoredChannels": [
+            -1,
+            -1,
+            0
+          ]
+        },
+        {
+          "index": 55,
+          "part": "face",
+          "color": "skin_shadow",
+          "vertices": 8,
+          "maximumCoordinateError": 8.000000001118224e-06,
+          "authoredFill": "#A8663E",
+          "nativeSvgFill": "#A8653E",
+          "nativeMinusAuthoredChannels": [
+            0,
+            -1,
+            0
+          ]
+        },
+        {
+          "index": 56,
+          "part": "face",
+          "color": "skin",
+          "vertices": 7,
+          "maximumCoordinateError": 8.000000001118224e-06,
+          "authoredFill": "#D69B60",
+          "nativeSvgFill": "#D59B5F",
+          "nativeMinusAuthoredChannels": [
+            -1,
+            0,
+            -1
+          ]
+        },
+        {
+          "index": 57,
+          "part": "face",
+          "color": "skin_light",
+          "vertices": 6,
+          "maximumCoordinateError": 8.000000001118224e-06,
+          "authoredFill": "#F3C987",
+          "nativeSvgFill": "#F2C886",
+          "nativeMinusAuthoredChannels": [
+            -1,
+            -1,
+            -1
+          ]
+        },
+        {
+          "index": 58,
+          "part": "face",
+          "color": "skin",
+          "vertices": 4,
+          "maximumCoordinateError": 8.000000001118224e-06,
+          "authoredFill": "#D69B60",
+          "nativeSvgFill": "#D59B5F",
+          "nativeMinusAuthoredChannels": [
+            -1,
+            0,
+            -1
+          ]
+        },
+        {
+          "index": 59,
+          "part": "face",
+          "color": "skin",
+          "vertices": 4,
+          "maximumCoordinateError": 8.000000001118224e-06,
+          "authoredFill": "#D69B60",
+          "nativeSvgFill": "#D59B5F",
+          "nativeMinusAuthoredChannels": [
+            -1,
+            0,
+            -1
+          ]
+        },
+        {
+          "index": 60,
+          "part": "face",
+          "color": "eye_light",
+          "vertices": 4,
+          "maximumCoordinateError": 8.000000001118224e-06,
+          "authoredFill": "#FFF0CF",
+          "nativeSvgFill": "#FEEFCE",
+          "nativeMinusAuthoredChannels": [
+            -1,
+            -1,
+            -1
+          ]
+        },
+        {
+          "index": 61,
+          "part": "face",
+          "color": "eye_light",
+          "vertices": 4,
+          "maximumCoordinateError": 8.000000001118224e-06,
+          "authoredFill": "#FFF0CF",
+          "nativeSvgFill": "#FEEFCE",
+          "nativeMinusAuthoredChannels": [
+            -1,
+            -1,
+            -1
+          ]
+        },
+        {
+          "index": 62,
+          "part": "face",
+          "color": "ink",
+          "vertices": 4,
+          "maximumCoordinateError": 8.000000001118224e-06,
+          "authoredFill": "#172127",
+          "nativeSvgFill": "#162027",
+          "nativeMinusAuthoredChannels": [
+            -1,
+            -1,
+            0
+          ]
+        },
+        {
+          "index": 63,
+          "part": "face",
+          "color": "ink",
+          "vertices": 4,
+          "maximumCoordinateError": 8.000000001118224e-06,
+          "authoredFill": "#172127",
+          "nativeSvgFill": "#162027",
+          "nativeMinusAuthoredChannels": [
+            -1,
+            -1,
+            0
+          ]
+        },
+        {
+          "index": 64,
+          "part": "face",
+          "color": "skin_shadow",
+          "vertices": 4,
+          "maximumCoordinateError": 8.000000001118224e-06,
+          "authoredFill": "#A8663E",
+          "nativeSvgFill": "#A8653E",
+          "nativeMinusAuthoredChannels": [
+            0,
+            -1,
+            0
+          ]
+        },
+        {
+          "index": 65,
+          "part": "face",
+          "color": "skin_shadow",
+          "vertices": 3,
+          "maximumCoordinateError": 8.000000001118224e-06,
+          "authoredFill": "#A8663E",
+          "nativeSvgFill": "#A8653E",
+          "nativeMinusAuthoredChannels": [
+            0,
+            -1,
+            0
+          ]
+        },
+        {
+          "index": 66,
+          "part": "hair",
+          "color": "ink",
+          "vertices": 29,
+          "maximumCoordinateError": 8.000000001118224e-06,
+          "authoredFill": "#172127",
+          "nativeSvgFill": "#162027",
+          "nativeMinusAuthoredChannels": [
+            -1,
+            -1,
+            0
+          ]
+        },
+        {
+          "index": 67,
+          "part": "hair",
+          "color": "hair_shadow",
+          "vertices": 28,
+          "maximumCoordinateError": 8.000000001118224e-06,
+          "authoredFill": "#60351F",
+          "nativeSvgFill": "#5F341E",
+          "nativeMinusAuthoredChannels": [
+            -1,
+            -1,
+            -1
+          ]
+        },
+        {
+          "index": 68,
+          "part": "hair",
+          "color": "hair",
+          "vertices": 20,
+          "maximumCoordinateError": 8.000000001118224e-06,
+          "authoredFill": "#92501F",
+          "nativeSvgFill": "#914F1E",
+          "nativeMinusAuthoredChannels": [
+            -1,
+            -1,
+            -1
+          ]
+        },
+        {
+          "index": 69,
+          "part": "hair",
+          "color": "hair_light",
+          "vertices": 7,
+          "maximumCoordinateError": 8.000000001118224e-06,
+          "authoredFill": "#C17C2D",
+          "nativeSvgFill": "#C07B2C",
+          "nativeMinusAuthoredChannels": [
+            -1,
+            -1,
+            -1
+          ]
+        },
+        {
+          "index": 70,
+          "part": "hair",
+          "color": "hair_light",
+          "vertices": 5,
+          "maximumCoordinateError": 8.000000001118224e-06,
+          "authoredFill": "#C17C2D",
+          "nativeSvgFill": "#C07B2C",
+          "nativeMinusAuthoredChannels": [
+            -1,
+            -1,
+            -1
+          ]
+        },
+        {
+          "index": 71,
+          "part": "hair",
+          "color": "hair_light",
+          "vertices": 6,
+          "maximumCoordinateError": 8.000000001118224e-06,
+          "authoredFill": "#C17C2D",
+          "nativeSvgFill": "#C07B2C",
+          "nativeMinusAuthoredChannels": [
+            -1,
+            -1,
+            -1
+          ]
+        },
+        {
+          "index": 72,
+          "part": "hair",
+          "color": "hair_light",
+          "vertices": 4,
+          "maximumCoordinateError": 8.000000001118224e-06,
+          "authoredFill": "#C17C2D",
+          "nativeSvgFill": "#C07B2C",
+          "nativeMinusAuthoredChannels": [
+            -1,
+            -1,
+            -1
+          ]
+        },
+        {
+          "index": 73,
+          "part": "hair",
+          "color": "hair_glint",
+          "vertices": 4,
+          "maximumCoordinateError": 7.999999999341867e-06,
+          "authoredFill": "#E4A649",
+          "nativeSvgFill": "#E3A648",
+          "nativeMinusAuthoredChannels": [
+            -1,
+            0,
+            -1
+          ]
+        },
+        {
+          "index": 74,
+          "part": "hair",
+          "color": "hair_glint",
+          "vertices": 4,
+          "maximumCoordinateError": 7.999999999341867e-06,
+          "authoredFill": "#E4A649",
+          "nativeSvgFill": "#E3A648",
+          "nativeMinusAuthoredChannels": [
+            -1,
+            0,
+            -1
+          ]
+        },
+        {
+          "index": 75,
+          "part": "hair",
+          "color": "hair_deep",
+          "vertices": 4,
+          "maximumCoordinateError": 8.000000001118224e-06,
+          "authoredFill": "#3C251F",
+          "nativeSvgFill": "#3C251E",
+          "nativeMinusAuthoredChannels": [
+            0,
+            0,
+            -1
+          ]
+        },
+        {
+          "index": 76,
+          "part": "hair",
+          "color": "hair_deep",
+          "vertices": 4,
+          "maximumCoordinateError": 8.000000001118224e-06,
+          "authoredFill": "#3C251F",
+          "nativeSvgFill": "#3C251E",
+          "nativeMinusAuthoredChannels": [
+            0,
+            0,
+            -1
+          ]
+        },
+        {
+          "index": 77,
+          "part": "scarf.wrap",
+          "color": "ink",
+          "vertices": 10,
+          "maximumCoordinateError": 8.000000001118224e-06,
+          "authoredFill": "#172127",
+          "nativeSvgFill": "#162027",
+          "nativeMinusAuthoredChannels": [
+            -1,
+            -1,
+            0
+          ]
+        },
+        {
+          "index": 78,
+          "part": "scarf.wrap",
+          "color": "teal",
+          "vertices": 10,
+          "maximumCoordinateError": 8.000000001118224e-06,
+          "authoredFill": "#176373",
+          "nativeSvgFill": "#166273",
+          "nativeMinusAuthoredChannels": [
+            -1,
+            -1,
+            0
+          ]
+        },
+        {
+          "index": 79,
+          "part": "scarf.wrap",
+          "color": "teal_light",
+          "vertices": 8,
+          "maximumCoordinateError": 8.000000001118224e-06,
+          "authoredFill": "#248C99",
+          "nativeSvgFill": "#238C98",
+          "nativeMinusAuthoredChannels": [
+            -1,
+            0,
+            -1
+          ]
+        },
+        {
+          "index": 80,
+          "part": "scarf.wrap",
+          "color": "teal_shadow",
+          "vertices": 5,
+          "maximumCoordinateError": 8.000000001118224e-06,
+          "authoredFill": "#124856",
+          "nativeSvgFill": "#124755",
+          "nativeMinusAuthoredChannels": [
+            0,
+            -1,
+            -1
+          ]
+        },
+        {
+          "index": 81,
+          "part": "scarf.wrap",
+          "color": "teal_glint",
+          "vertices": 5,
+          "maximumCoordinateError": 8.000000001118224e-06,
+          "authoredFill": "#4AB2B5",
+          "nativeSvgFill": "#49B2B4",
+          "nativeMinusAuthoredChannels": [
+            -1,
+            0,
+            -1
+          ]
+        }
+      ]
+    },
+    "left": {
+      "pathCount": 57,
+      "authoredPolygonCount": 57,
+      "painterOrderAndVertices": "pass",
+      "opaqueFillsWithoutOutlines": "pass",
+      "maximumCoordinateError": 8.000000001118224e-06,
+      "maximumAbsoluteColorChannelError": 1,
+      "polygons": [
+        {
+          "index": 0,
+          "part": "scarf.tails",
+          "color": "ink",
+          "vertices": 9,
+          "maximumCoordinateError": 8.000000001118224e-06,
+          "authoredFill": "#172127",
+          "nativeSvgFill": "#162027",
+          "nativeMinusAuthoredChannels": [
+            -1,
+            -1,
+            0
+          ]
+        },
+        {
+          "index": 1,
+          "part": "scarf.tails",
+          "color": "teal_shadow",
+          "vertices": 8,
+          "maximumCoordinateError": 8.000000001118224e-06,
+          "authoredFill": "#124856",
+          "nativeSvgFill": "#124755",
+          "nativeMinusAuthoredChannels": [
+            0,
+            -1,
+            -1
+          ]
+        },
+        {
+          "index": 2,
+          "part": "scarf.tails",
+          "color": "teal",
+          "vertices": 8,
+          "maximumCoordinateError": 8.000000001118224e-06,
+          "authoredFill": "#176373",
+          "nativeSvgFill": "#166273",
+          "nativeMinusAuthoredChannels": [
+            -1,
+            -1,
+            0
+          ]
+        },
+        {
+          "index": 3,
+          "part": "scarf.tails",
+          "color": "teal",
+          "vertices": 4,
+          "maximumCoordinateError": 8.000000001118224e-06,
+          "authoredFill": "#176373",
+          "nativeSvgFill": "#166273",
+          "nativeMinusAuthoredChannels": [
+            -1,
+            -1,
+            0
+          ]
+        },
+        {
+          "index": 4,
+          "part": "leg.far",
+          "color": "ink",
+          "vertices": 9,
+          "maximumCoordinateError": 8.000000001118224e-06,
+          "authoredFill": "#172127",
+          "nativeSvgFill": "#162027",
+          "nativeMinusAuthoredChannels": [
+            -1,
+            -1,
+            0
+          ]
+        },
+        {
+          "index": 5,
+          "part": "leg.far",
+          "color": "cloth_dark",
+          "vertices": 6,
+          "maximumCoordinateError": 8.000000001118224e-06,
+          "authoredFill": "#193D48",
+          "nativeSvgFill": "#183D47",
+          "nativeMinusAuthoredChannels": [
+            -1,
+            0,
+            -1
+          ]
+        },
+        {
+          "index": 6,
+          "part": "boot.far",
+          "color": "leather_shadow",
+          "vertices": 7,
+          "maximumCoordinateError": 8.000000001118224e-06,
+          "authoredFill": "#63422C",
+          "nativeSvgFill": "#62422B",
+          "nativeMinusAuthoredChannels": [
+            -1,
+            0,
+            -1
+          ]
+        },
+        {
+          "index": 7,
+          "part": "torso",
+          "color": "ink",
+          "vertices": 9,
+          "maximumCoordinateError": 8.000000001118224e-06,
+          "authoredFill": "#172127",
+          "nativeSvgFill": "#162027",
+          "nativeMinusAuthoredChannels": [
+            -1,
+            -1,
+            0
+          ]
+        },
+        {
+          "index": 8,
+          "part": "torso",
+          "color": "cloth",
+          "vertices": 9,
+          "maximumCoordinateError": 8.000000001118224e-06,
+          "authoredFill": "#235565",
+          "nativeSvgFill": "#225464",
+          "nativeMinusAuthoredChannels": [
+            -1,
+            -1,
+            -1
+          ]
+        },
+        {
+          "index": 9,
+          "part": "torso",
+          "color": "cloth_dark",
+          "vertices": 6,
+          "maximumCoordinateError": 8.000000001118224e-06,
+          "authoredFill": "#193D48",
+          "nativeSvgFill": "#183D47",
+          "nativeMinusAuthoredChannels": [
+            -1,
+            0,
+            -1
+          ]
+        },
+        {
+          "index": 10,
+          "part": "torso",
+          "color": "teal",
+          "vertices": 6,
+          "maximumCoordinateError": 8.000000001118224e-06,
+          "authoredFill": "#176373",
+          "nativeSvgFill": "#166273",
+          "nativeMinusAuthoredChannels": [
+            -1,
+            -1,
+            0
+          ]
+        },
+        {
+          "index": 11,
+          "part": "harness",
+          "color": "leather_deep",
+          "vertices": 6,
+          "maximumCoordinateError": 8.000000001118224e-06,
+          "authoredFill": "#402C24",
+          "nativeSvgFill": "#402B23",
+          "nativeMinusAuthoredChannels": [
+            0,
+            -1,
+            -1
+          ]
+        },
+        {
+          "index": 12,
+          "part": "harness",
+          "color": "leather",
+          "vertices": 6,
+          "maximumCoordinateError": 8.000000001118224e-06,
+          "authoredFill": "#926038",
+          "nativeSvgFill": "#915F37",
+          "nativeMinusAuthoredChannels": [
+            -1,
+            -1,
+            -1
+          ]
+        },
+        {
+          "index": 13,
+          "part": "leg.near",
+          "color": "ink",
+          "vertices": 7,
+          "maximumCoordinateError": 8.000000001118224e-06,
+          "authoredFill": "#172127",
+          "nativeSvgFill": "#162027",
+          "nativeMinusAuthoredChannels": [
+            -1,
+            -1,
+            0
+          ]
+        },
+        {
+          "index": 14,
+          "part": "leg.near",
+          "color": "cloth",
+          "vertices": 6,
+          "maximumCoordinateError": 8.000000001118224e-06,
+          "authoredFill": "#235565",
+          "nativeSvgFill": "#225464",
+          "nativeMinusAuthoredChannels": [
+            -1,
+            -1,
+            -1
+          ]
+        },
+        {
+          "index": 15,
+          "part": "leg.near",
+          "color": "cloth_light",
+          "vertices": 5,
+          "maximumCoordinateError": 8.000000001118224e-06,
+          "authoredFill": "#337B85",
+          "nativeSvgFill": "#337A84",
+          "nativeMinusAuthoredChannels": [
+            0,
+            -1,
+            -1
+          ]
+        },
+        {
+          "index": 16,
+          "part": "leg.near",
+          "color": "cloth_dark",
+          "vertices": 6,
+          "maximumCoordinateError": 8.000000001118224e-06,
+          "authoredFill": "#193D48",
+          "nativeSvgFill": "#183D47",
+          "nativeMinusAuthoredChannels": [
+            -1,
+            0,
+            -1
+          ]
+        },
+        {
+          "index": 17,
+          "part": "boot.near",
+          "color": "ink",
+          "vertices": 7,
+          "maximumCoordinateError": 8.000000001118224e-06,
+          "authoredFill": "#172127",
+          "nativeSvgFill": "#162027",
+          "nativeMinusAuthoredChannels": [
+            -1,
+            -1,
+            0
+          ]
+        },
+        {
+          "index": 18,
+          "part": "boot.near",
+          "color": "leather",
+          "vertices": 7,
+          "maximumCoordinateError": 8.000000001118224e-06,
+          "authoredFill": "#926038",
+          "nativeSvgFill": "#915F37",
+          "nativeMinusAuthoredChannels": [
+            -1,
+            -1,
+            -1
+          ]
+        },
+        {
+          "index": 19,
+          "part": "boot.near",
+          "color": "leather_light",
+          "vertices": 6,
+          "maximumCoordinateError": 8.000000001118224e-06,
+          "authoredFill": "#BE8B4B",
+          "nativeSvgFill": "#BD8B4A",
+          "nativeMinusAuthoredChannels": [
+            -1,
+            0,
+            -1
+          ]
+        },
+        {
+          "index": 20,
+          "part": "boot.near",
+          "color": "cuff",
+          "vertices": 4,
+          "maximumCoordinateError": 8.000000001118224e-06,
+          "authoredFill": "#B8A17B",
+          "nativeSvgFill": "#B7A17A",
+          "nativeMinusAuthoredChannels": [
+            -1,
+            0,
+            -1
+          ]
+        },
+        {
+          "index": 21,
+          "part": "boot.near",
+          "color": "leather_shadow",
+          "vertices": 4,
+          "maximumCoordinateError": 8.000000001118224e-06,
+          "authoredFill": "#63422C",
+          "nativeSvgFill": "#62422B",
+          "nativeMinusAuthoredChannels": [
+            -1,
+            0,
+            -1
+          ]
+        },
+        {
+          "index": 22,
+          "part": "belt",
+          "color": "ink",
+          "vertices": 7,
+          "maximumCoordinateError": 8.000000001118224e-06,
+          "authoredFill": "#172127",
+          "nativeSvgFill": "#162027",
+          "nativeMinusAuthoredChannels": [
+            -1,
+            -1,
+            0
+          ]
+        },
+        {
+          "index": 23,
+          "part": "belt",
+          "color": "leather",
+          "vertices": 4,
+          "maximumCoordinateError": 8.000000001118224e-06,
+          "authoredFill": "#926038",
+          "nativeSvgFill": "#915F37",
+          "nativeMinusAuthoredChannels": [
+            -1,
+            -1,
+            -1
+          ]
+        },
+        {
+          "index": 24,
+          "part": "belt",
+          "color": "buckle",
+          "vertices": 4,
+          "maximumCoordinateError": 8.000000001118224e-06,
+          "authoredFill": "#E3C277",
+          "nativeSvgFill": "#E2C177",
+          "nativeMinusAuthoredChannels": [
+            -1,
+            -1,
+            0
+          ]
+        },
+        {
+          "index": 25,
+          "part": "satchel.far",
+          "color": "leather_shadow",
+          "vertices": 5,
+          "maximumCoordinateError": 8.000000001118224e-06,
+          "authoredFill": "#63422C",
+          "nativeSvgFill": "#62422B",
+          "nativeMinusAuthoredChannels": [
+            -1,
+            0,
+            -1
+          ]
+        },
+        {
+          "index": 26,
+          "part": "arm.near",
+          "color": "ink",
+          "vertices": 8,
+          "maximumCoordinateError": 8.000000001118224e-06,
+          "authoredFill": "#172127",
+          "nativeSvgFill": "#162027",
+          "nativeMinusAuthoredChannels": [
+            -1,
+            -1,
+            0
+          ]
+        },
+        {
+          "index": 27,
+          "part": "arm.near",
+          "color": "skin",
+          "vertices": 8,
+          "maximumCoordinateError": 8.000000001118224e-06,
+          "authoredFill": "#D69B60",
+          "nativeSvgFill": "#D59B5F",
+          "nativeMinusAuthoredChannels": [
+            -1,
+            0,
+            -1
+          ]
+        },
+        {
+          "index": 28,
+          "part": "arm.near",
+          "color": "skin",
+          "vertices": 6,
+          "maximumCoordinateError": 8.000000001118224e-06,
+          "authoredFill": "#D69B60",
+          "nativeSvgFill": "#D59B5F",
+          "nativeMinusAuthoredChannels": [
+            -1,
+            0,
+            -1
+          ]
+        },
+        {
+          "index": 29,
+          "part": "arm.near",
+          "color": "skin_shadow",
+          "vertices": 7,
+          "maximumCoordinateError": 8.000000001118224e-06,
+          "authoredFill": "#A8663E",
+          "nativeSvgFill": "#A8653E",
+          "nativeMinusAuthoredChannels": [
+            0,
+            -1,
+            0
+          ]
+        },
+        {
+          "index": 30,
+          "part": "hand.near",
+          "color": "ink",
+          "vertices": 6,
+          "maximumCoordinateError": 8.000000001118224e-06,
+          "authoredFill": "#172127",
+          "nativeSvgFill": "#162027",
+          "nativeMinusAuthoredChannels": [
+            -1,
+            -1,
+            0
+          ]
+        },
+        {
+          "index": 31,
+          "part": "hand.near",
+          "color": "leather",
+          "vertices": 6,
+          "maximumCoordinateError": 8.000000001118224e-06,
+          "authoredFill": "#926038",
+          "nativeSvgFill": "#915F37",
+          "nativeMinusAuthoredChannels": [
+            -1,
+            -1,
+            -1
+          ]
+        },
+        {
+          "index": 32,
+          "part": "hand.near",
+          "color": "leather_light",
+          "vertices": 5,
+          "maximumCoordinateError": 8.000000001118224e-06,
+          "authoredFill": "#BE8B4B",
+          "nativeSvgFill": "#BD8B4A",
+          "nativeMinusAuthoredChannels": [
+            -1,
+            0,
+            -1
+          ]
+        },
+        {
+          "index": 33,
+          "part": "hand.near",
+          "color": "leather_shadow",
+          "vertices": 4,
+          "maximumCoordinateError": 8.000000001118224e-06,
+          "authoredFill": "#63422C",
+          "nativeSvgFill": "#62422B",
+          "nativeMinusAuthoredChannels": [
+            -1,
+            0,
+            -1
+          ]
+        },
+        {
+          "index": 34,
+          "part": "face",
+          "color": "ink",
+          "vertices": 11,
+          "maximumCoordinateError": 8.000000001118224e-06,
+          "authoredFill": "#172127",
+          "nativeSvgFill": "#162027",
+          "nativeMinusAuthoredChannels": [
+            -1,
+            -1,
+            0
+          ]
+        },
+        {
+          "index": 35,
+          "part": "face",
+          "color": "skin_shadow",
+          "vertices": 11,
+          "maximumCoordinateError": 8.000000001118224e-06,
+          "authoredFill": "#A8663E",
+          "nativeSvgFill": "#A8653E",
+          "nativeMinusAuthoredChannels": [
+            0,
+            -1,
+            0
+          ]
+        },
+        {
+          "index": 36,
+          "part": "face",
+          "color": "skin",
+          "vertices": 9,
+          "maximumCoordinateError": 8.000000001118224e-06,
+          "authoredFill": "#D69B60",
+          "nativeSvgFill": "#D59B5F",
+          "nativeMinusAuthoredChannels": [
+            -1,
+            0,
+            -1
+          ]
+        },
+        {
+          "index": 37,
+          "part": "face",
+          "color": "skin_light",
+          "vertices": 9,
+          "maximumCoordinateError": 8.000000001118224e-06,
+          "authoredFill": "#F3C987",
+          "nativeSvgFill": "#F2C886",
+          "nativeMinusAuthoredChannels": [
+            -1,
+            -1,
+            -1
+          ]
+        },
+        {
+          "index": 38,
+          "part": "face",
+          "color": "skin_light",
+          "vertices": 5,
+          "maximumCoordinateError": 8.000000001118224e-06,
+          "authoredFill": "#F3C987",
+          "nativeSvgFill": "#F2C886",
+          "nativeMinusAuthoredChannels": [
+            -1,
+            -1,
+            -1
+          ]
+        },
+        {
+          "index": 39,
+          "part": "face",
+          "color": "skin_shadow",
+          "vertices": 4,
+          "maximumCoordinateError": 8.000000001118224e-06,
+          "authoredFill": "#A8663E",
+          "nativeSvgFill": "#A8653E",
+          "nativeMinusAuthoredChannels": [
+            0,
+            -1,
+            0
+          ]
+        },
+        {
+          "index": 40,
+          "part": "face",
+          "color": "eye_light",
+          "vertices": 4,
+          "maximumCoordinateError": 8.000000001118224e-06,
+          "authoredFill": "#FFF0CF",
+          "nativeSvgFill": "#FEEFCE",
+          "nativeMinusAuthoredChannels": [
+            -1,
+            -1,
+            -1
+          ]
+        },
+        {
+          "index": 41,
+          "part": "face",
+          "color": "ink",
+          "vertices": 4,
+          "maximumCoordinateError": 8.000000001118224e-06,
+          "authoredFill": "#172127",
+          "nativeSvgFill": "#162027",
+          "nativeMinusAuthoredChannels": [
+            -1,
+            -1,
+            0
+          ]
+        },
+        {
+          "index": 42,
+          "part": "face",
+          "color": "skin_shadow",
+          "vertices": 4,
+          "maximumCoordinateError": 8.000000001118224e-06,
+          "authoredFill": "#A8663E",
+          "nativeSvgFill": "#A8653E",
+          "nativeMinusAuthoredChannels": [
+            0,
+            -1,
+            0
+          ]
+        },
+        {
+          "index": 43,
+          "part": "hair",
+          "color": "ink",
+          "vertices": 24,
+          "maximumCoordinateError": 8.000000001118224e-06,
+          "authoredFill": "#172127",
+          "nativeSvgFill": "#162027",
+          "nativeMinusAuthoredChannels": [
+            -1,
+            -1,
+            0
+          ]
+        },
+        {
+          "index": 44,
+          "part": "hair",
+          "color": "hair_shadow",
+          "vertices": 24,
+          "maximumCoordinateError": 8.000000001118224e-06,
+          "authoredFill": "#60351F",
+          "nativeSvgFill": "#5F341E",
+          "nativeMinusAuthoredChannels": [
+            -1,
+            -1,
+            -1
+          ]
+        },
+        {
+          "index": 45,
+          "part": "hair",
+          "color": "hair",
+          "vertices": 18,
+          "maximumCoordinateError": 8.000000001118224e-06,
+          "authoredFill": "#92501F",
+          "nativeSvgFill": "#914F1E",
+          "nativeMinusAuthoredChannels": [
+            -1,
+            -1,
+            -1
+          ]
+        },
+        {
+          "index": 46,
+          "part": "hair",
+          "color": "hair_light",
+          "vertices": 7,
+          "maximumCoordinateError": 8.000000001118224e-06,
+          "authoredFill": "#C17C2D",
+          "nativeSvgFill": "#C07B2C",
+          "nativeMinusAuthoredChannels": [
+            -1,
+            -1,
+            -1
+          ]
+        },
+        {
+          "index": 47,
+          "part": "hair",
+          "color": "hair_light",
+          "vertices": 7,
+          "maximumCoordinateError": 8.000000001118224e-06,
+          "authoredFill": "#C17C2D",
+          "nativeSvgFill": "#C07B2C",
+          "nativeMinusAuthoredChannels": [
+            -1,
+            -1,
+            -1
+          ]
+        },
+        {
+          "index": 48,
+          "part": "hair",
+          "color": "hair_light",
+          "vertices": 5,
+          "maximumCoordinateError": 8.000000001118224e-06,
+          "authoredFill": "#C17C2D",
+          "nativeSvgFill": "#C07B2C",
+          "nativeMinusAuthoredChannels": [
+            -1,
+            -1,
+            -1
+          ]
+        },
+        {
+          "index": 49,
+          "part": "hair",
+          "color": "hair_light",
+          "vertices": 5,
+          "maximumCoordinateError": 8.000000001118224e-06,
+          "authoredFill": "#C17C2D",
+          "nativeSvgFill": "#C07B2C",
+          "nativeMinusAuthoredChannels": [
+            -1,
+            -1,
+            -1
+          ]
+        },
+        {
+          "index": 50,
+          "part": "hair",
+          "color": "hair_glint",
+          "vertices": 4,
+          "maximumCoordinateError": 7.999999999341867e-06,
+          "authoredFill": "#E4A649",
+          "nativeSvgFill": "#E3A648",
+          "nativeMinusAuthoredChannels": [
+            -1,
+            0,
+            -1
+          ]
+        },
+        {
+          "index": 51,
+          "part": "hair",
+          "color": "hair_glint",
+          "vertices": 4,
+          "maximumCoordinateError": 7.999999999341867e-06,
+          "authoredFill": "#E4A649",
+          "nativeSvgFill": "#E3A648",
+          "nativeMinusAuthoredChannels": [
+            -1,
+            0,
+            -1
+          ]
+        },
+        {
+          "index": 52,
+          "part": "hair",
+          "color": "hair_deep",
+          "vertices": 6,
+          "maximumCoordinateError": 8.000000001118224e-06,
+          "authoredFill": "#3C251F",
+          "nativeSvgFill": "#3C251E",
+          "nativeMinusAuthoredChannels": [
+            0,
+            0,
+            -1
+          ]
+        },
+        {
+          "index": 53,
+          "part": "scarf.wrap",
+          "color": "ink",
+          "vertices": 8,
+          "maximumCoordinateError": 8.000000001118224e-06,
+          "authoredFill": "#172127",
+          "nativeSvgFill": "#162027",
+          "nativeMinusAuthoredChannels": [
+            -1,
+            -1,
+            0
+          ]
+        },
+        {
+          "index": 54,
+          "part": "scarf.wrap",
+          "color": "teal",
+          "vertices": 8,
+          "maximumCoordinateError": 8.000000001118224e-06,
+          "authoredFill": "#176373",
+          "nativeSvgFill": "#166273",
+          "nativeMinusAuthoredChannels": [
+            -1,
+            -1,
+            0
+          ]
+        },
+        {
+          "index": 55,
+          "part": "scarf.wrap",
+          "color": "teal_light",
+          "vertices": 8,
+          "maximumCoordinateError": 8.000000001118224e-06,
+          "authoredFill": "#248C99",
+          "nativeSvgFill": "#238C98",
+          "nativeMinusAuthoredChannels": [
+            -1,
+            0,
+            -1
+          ]
+        },
+        {
+          "index": 56,
+          "part": "scarf.wrap",
+          "color": "teal_shadow",
+          "vertices": 6,
+          "maximumCoordinateError": 8.000000001118224e-06,
+          "authoredFill": "#124856",
+          "nativeSvgFill": "#124755",
+          "nativeMinusAuthoredChannels": [
+            0,
+            -1,
+            -1
+          ]
+        }
+      ]
+    },
+    "right": {
+      "pathCount": 60,
+      "authoredPolygonCount": 60,
+      "painterOrderAndVertices": "pass",
+      "opaqueFillsWithoutOutlines": "pass",
+      "maximumCoordinateError": 8.000000001118224e-06,
+      "maximumAbsoluteColorChannelError": 1,
+      "polygons": [
+        {
+          "index": 0,
+          "part": "scarf.tails",
+          "color": "ink",
+          "vertices": 9,
+          "maximumCoordinateError": 8.000000001118224e-06,
+          "authoredFill": "#172127",
+          "nativeSvgFill": "#162027",
+          "nativeMinusAuthoredChannels": [
+            -1,
+            -1,
+            0
+          ]
+        },
+        {
+          "index": 1,
+          "part": "scarf.tails",
+          "color": "teal_shadow",
+          "vertices": 8,
+          "maximumCoordinateError": 8.000000001118224e-06,
+          "authoredFill": "#124856",
+          "nativeSvgFill": "#124755",
+          "nativeMinusAuthoredChannels": [
+            0,
+            -1,
+            -1
+          ]
+        },
+        {
+          "index": 2,
+          "part": "scarf.tails",
+          "color": "teal",
+          "vertices": 8,
+          "maximumCoordinateError": 8.000000001118224e-06,
+          "authoredFill": "#176373",
+          "nativeSvgFill": "#166273",
+          "nativeMinusAuthoredChannels": [
+            -1,
+            -1,
+            0
+          ]
+        },
+        {
+          "index": 3,
+          "part": "scarf.tails",
+          "color": "teal_light",
+          "vertices": 4,
+          "maximumCoordinateError": 8.000000001118224e-06,
+          "authoredFill": "#248C99",
+          "nativeSvgFill": "#238C98",
+          "nativeMinusAuthoredChannels": [
+            -1,
+            0,
+            -1
+          ]
+        },
+        {
+          "index": 4,
+          "part": "leg.far",
+          "color": "ink",
+          "vertices": 9,
+          "maximumCoordinateError": 8.000000001118224e-06,
+          "authoredFill": "#172127",
+          "nativeSvgFill": "#162027",
+          "nativeMinusAuthoredChannels": [
+            -1,
+            -1,
+            0
+          ]
+        },
+        {
+          "index": 5,
+          "part": "leg.far",
+          "color": "cloth_dark",
+          "vertices": 6,
+          "maximumCoordinateError": 8.000000001118224e-06,
+          "authoredFill": "#193D48",
+          "nativeSvgFill": "#183D47",
+          "nativeMinusAuthoredChannels": [
+            -1,
+            0,
+            -1
+          ]
+        },
+        {
+          "index": 6,
+          "part": "boot.far",
+          "color": "leather_shadow",
+          "vertices": 7,
+          "maximumCoordinateError": 8.000000001118224e-06,
+          "authoredFill": "#63422C",
+          "nativeSvgFill": "#62422B",
+          "nativeMinusAuthoredChannels": [
+            -1,
+            0,
+            -1
+          ]
+        },
+        {
+          "index": 7,
+          "part": "torso",
+          "color": "ink",
+          "vertices": 9,
+          "maximumCoordinateError": 8.000000001118224e-06,
+          "authoredFill": "#172127",
+          "nativeSvgFill": "#162027",
+          "nativeMinusAuthoredChannels": [
+            -1,
+            -1,
+            0
+          ]
+        },
+        {
+          "index": 8,
+          "part": "torso",
+          "color": "cloth",
+          "vertices": 9,
+          "maximumCoordinateError": 8.000000001118224e-06,
+          "authoredFill": "#235565",
+          "nativeSvgFill": "#225464",
+          "nativeMinusAuthoredChannels": [
+            -1,
+            -1,
+            -1
+          ]
+        },
+        {
+          "index": 9,
+          "part": "torso",
+          "color": "cloth_dark",
+          "vertices": 6,
+          "maximumCoordinateError": 8.000000001118224e-06,
+          "authoredFill": "#193D48",
+          "nativeSvgFill": "#183D47",
+          "nativeMinusAuthoredChannels": [
+            -1,
+            0,
+            -1
+          ]
+        },
+        {
+          "index": 10,
+          "part": "torso",
+          "color": "teal",
+          "vertices": 6,
+          "maximumCoordinateError": 8.000000001118224e-06,
+          "authoredFill": "#176373",
+          "nativeSvgFill": "#166273",
+          "nativeMinusAuthoredChannels": [
+            -1,
+            -1,
+            0
+          ]
+        },
+        {
+          "index": 11,
+          "part": "harness",
+          "color": "leather_deep",
+          "vertices": 6,
+          "maximumCoordinateError": 8.000000001118224e-06,
+          "authoredFill": "#402C24",
+          "nativeSvgFill": "#402B23",
+          "nativeMinusAuthoredChannels": [
+            0,
+            -1,
+            -1
+          ]
+        },
+        {
+          "index": 12,
+          "part": "harness",
+          "color": "leather",
+          "vertices": 6,
+          "maximumCoordinateError": 8.000000001118224e-06,
+          "authoredFill": "#926038",
+          "nativeSvgFill": "#915F37",
+          "nativeMinusAuthoredChannels": [
+            -1,
+            -1,
+            -1
+          ]
+        },
+        {
+          "index": 13,
+          "part": "leg.near",
+          "color": "ink",
+          "vertices": 7,
+          "maximumCoordinateError": 8.000000001118224e-06,
+          "authoredFill": "#172127",
+          "nativeSvgFill": "#162027",
+          "nativeMinusAuthoredChannels": [
+            -1,
+            -1,
+            0
+          ]
+        },
+        {
+          "index": 14,
+          "part": "leg.near",
+          "color": "cloth",
+          "vertices": 6,
+          "maximumCoordinateError": 8.000000001118224e-06,
+          "authoredFill": "#235565",
+          "nativeSvgFill": "#225464",
+          "nativeMinusAuthoredChannels": [
+            -1,
+            -1,
+            -1
+          ]
+        },
+        {
+          "index": 15,
+          "part": "leg.near",
+          "color": "cloth_light",
+          "vertices": 5,
+          "maximumCoordinateError": 8.000000001118224e-06,
+          "authoredFill": "#337B85",
+          "nativeSvgFill": "#337A84",
+          "nativeMinusAuthoredChannels": [
+            0,
+            -1,
+            -1
+          ]
+        },
+        {
+          "index": 16,
+          "part": "leg.near",
+          "color": "cloth_dark",
+          "vertices": 6,
+          "maximumCoordinateError": 8.000000001118224e-06,
+          "authoredFill": "#193D48",
+          "nativeSvgFill": "#183D47",
+          "nativeMinusAuthoredChannels": [
+            -1,
+            0,
+            -1
+          ]
+        },
+        {
+          "index": 17,
+          "part": "boot.near",
+          "color": "ink",
+          "vertices": 7,
+          "maximumCoordinateError": 8.000000001118224e-06,
+          "authoredFill": "#172127",
+          "nativeSvgFill": "#162027",
+          "nativeMinusAuthoredChannels": [
+            -1,
+            -1,
+            0
+          ]
+        },
+        {
+          "index": 18,
+          "part": "boot.near",
+          "color": "leather",
+          "vertices": 7,
+          "maximumCoordinateError": 8.000000001118224e-06,
+          "authoredFill": "#926038",
+          "nativeSvgFill": "#915F37",
+          "nativeMinusAuthoredChannels": [
+            -1,
+            -1,
+            -1
+          ]
+        },
+        {
+          "index": 19,
+          "part": "boot.near",
+          "color": "leather_light",
+          "vertices": 6,
+          "maximumCoordinateError": 8.000000001118224e-06,
+          "authoredFill": "#BE8B4B",
+          "nativeSvgFill": "#BD8B4A",
+          "nativeMinusAuthoredChannels": [
+            -1,
+            0,
+            -1
+          ]
+        },
+        {
+          "index": 20,
+          "part": "boot.near",
+          "color": "cuff",
+          "vertices": 4,
+          "maximumCoordinateError": 8.000000001118224e-06,
+          "authoredFill": "#B8A17B",
+          "nativeSvgFill": "#B7A17A",
+          "nativeMinusAuthoredChannels": [
+            -1,
+            0,
+            -1
+          ]
+        },
+        {
+          "index": 21,
+          "part": "boot.near",
+          "color": "leather_shadow",
+          "vertices": 4,
+          "maximumCoordinateError": 8.000000001118224e-06,
+          "authoredFill": "#63422C",
+          "nativeSvgFill": "#62422B",
+          "nativeMinusAuthoredChannels": [
+            -1,
+            0,
+            -1
+          ]
+        },
+        {
+          "index": 22,
+          "part": "belt",
+          "color": "ink",
+          "vertices": 7,
+          "maximumCoordinateError": 8.000000001118224e-06,
+          "authoredFill": "#172127",
+          "nativeSvgFill": "#162027",
+          "nativeMinusAuthoredChannels": [
+            -1,
+            -1,
+            0
+          ]
+        },
+        {
+          "index": 23,
+          "part": "belt",
+          "color": "leather",
+          "vertices": 4,
+          "maximumCoordinateError": 8.000000001118224e-06,
+          "authoredFill": "#926038",
+          "nativeSvgFill": "#915F37",
+          "nativeMinusAuthoredChannels": [
+            -1,
+            -1,
+            -1
+          ]
+        },
+        {
+          "index": 24,
+          "part": "belt",
+          "color": "buckle",
+          "vertices": 4,
+          "maximumCoordinateError": 8.000000001118224e-06,
+          "authoredFill": "#E3C277",
+          "nativeSvgFill": "#E2C177",
+          "nativeMinusAuthoredChannels": [
+            -1,
+            -1,
+            0
+          ]
+        },
+        {
+          "index": 25,
+          "part": "satchel",
+          "color": "ink",
+          "vertices": 6,
+          "maximumCoordinateError": 8.000000001118224e-06,
+          "authoredFill": "#172127",
+          "nativeSvgFill": "#162027",
+          "nativeMinusAuthoredChannels": [
+            -1,
+            -1,
+            0
+          ]
+        },
+        {
+          "index": 26,
+          "part": "satchel",
+          "color": "leather_shadow",
+          "vertices": 6,
+          "maximumCoordinateError": 8.000000001118224e-06,
+          "authoredFill": "#63422C",
+          "nativeSvgFill": "#62422B",
+          "nativeMinusAuthoredChannels": [
+            -1,
+            0,
+            -1
+          ]
+        },
+        {
+          "index": 27,
+          "part": "satchel",
+          "color": "leather",
+          "vertices": 5,
+          "maximumCoordinateError": 8.000000001118224e-06,
+          "authoredFill": "#926038",
+          "nativeSvgFill": "#915F37",
+          "nativeMinusAuthoredChannels": [
+            -1,
+            -1,
+            -1
+          ]
+        },
+        {
+          "index": 28,
+          "part": "satchel",
+          "color": "buckle",
+          "vertices": 4,
+          "maximumCoordinateError": 8.000000001118224e-06,
+          "authoredFill": "#E3C277",
+          "nativeSvgFill": "#E2C177",
+          "nativeMinusAuthoredChannels": [
+            -1,
+            -1,
+            0
+          ]
+        },
+        {
+          "index": 29,
+          "part": "arm.near",
+          "color": "ink",
+          "vertices": 8,
+          "maximumCoordinateError": 8.000000001118224e-06,
+          "authoredFill": "#172127",
+          "nativeSvgFill": "#162027",
+          "nativeMinusAuthoredChannels": [
+            -1,
+            -1,
+            0
+          ]
+        },
+        {
+          "index": 30,
+          "part": "arm.near",
+          "color": "skin",
+          "vertices": 8,
+          "maximumCoordinateError": 8.000000001118224e-06,
+          "authoredFill": "#D69B60",
+          "nativeSvgFill": "#D59B5F",
+          "nativeMinusAuthoredChannels": [
+            -1,
+            0,
+            -1
+          ]
+        },
+        {
+          "index": 31,
+          "part": "arm.near",
+          "color": "skin_light",
+          "vertices": 6,
+          "maximumCoordinateError": 8.000000001118224e-06,
+          "authoredFill": "#F3C987",
+          "nativeSvgFill": "#F2C886",
+          "nativeMinusAuthoredChannels": [
+            -1,
+            -1,
+            -1
+          ]
+        },
+        {
+          "index": 32,
+          "part": "arm.near",
+          "color": "skin_shadow",
+          "vertices": 7,
+          "maximumCoordinateError": 8.000000001118224e-06,
+          "authoredFill": "#A8663E",
+          "nativeSvgFill": "#A8653E",
+          "nativeMinusAuthoredChannels": [
+            0,
+            -1,
+            0
+          ]
+        },
+        {
+          "index": 33,
+          "part": "hand.near",
+          "color": "ink",
+          "vertices": 6,
+          "maximumCoordinateError": 8.000000001118224e-06,
+          "authoredFill": "#172127",
+          "nativeSvgFill": "#162027",
+          "nativeMinusAuthoredChannels": [
+            -1,
+            -1,
+            0
+          ]
+        },
+        {
+          "index": 34,
+          "part": "hand.near",
+          "color": "leather",
+          "vertices": 6,
+          "maximumCoordinateError": 8.000000001118224e-06,
+          "authoredFill": "#926038",
+          "nativeSvgFill": "#915F37",
+          "nativeMinusAuthoredChannels": [
+            -1,
+            -1,
+            -1
+          ]
+        },
+        {
+          "index": 35,
+          "part": "hand.near",
+          "color": "leather_light",
+          "vertices": 5,
+          "maximumCoordinateError": 8.000000001118224e-06,
+          "authoredFill": "#BE8B4B",
+          "nativeSvgFill": "#BD8B4A",
+          "nativeMinusAuthoredChannels": [
+            -1,
+            0,
+            -1
+          ]
+        },
+        {
+          "index": 36,
+          "part": "hand.near",
+          "color": "leather_shadow",
+          "vertices": 4,
+          "maximumCoordinateError": 8.000000001118224e-06,
+          "authoredFill": "#63422C",
+          "nativeSvgFill": "#62422B",
+          "nativeMinusAuthoredChannels": [
+            -1,
+            0,
+            -1
+          ]
+        },
+        {
+          "index": 37,
+          "part": "face",
+          "color": "ink",
+          "vertices": 11,
+          "maximumCoordinateError": 8.000000001118224e-06,
+          "authoredFill": "#172127",
+          "nativeSvgFill": "#162027",
+          "nativeMinusAuthoredChannels": [
+            -1,
+            -1,
+            0
+          ]
+        },
+        {
+          "index": 38,
+          "part": "face",
+          "color": "skin_shadow",
+          "vertices": 11,
+          "maximumCoordinateError": 8.000000001118224e-06,
+          "authoredFill": "#A8663E",
+          "nativeSvgFill": "#A8653E",
+          "nativeMinusAuthoredChannels": [
+            0,
+            -1,
+            0
+          ]
+        },
+        {
+          "index": 39,
+          "part": "face",
+          "color": "skin",
+          "vertices": 9,
+          "maximumCoordinateError": 8.000000001118224e-06,
+          "authoredFill": "#D69B60",
+          "nativeSvgFill": "#D59B5F",
+          "nativeMinusAuthoredChannels": [
+            -1,
+            0,
+            -1
+          ]
+        },
+        {
+          "index": 40,
+          "part": "face",
+          "color": "skin_light",
+          "vertices": 9,
+          "maximumCoordinateError": 8.000000001118224e-06,
+          "authoredFill": "#F3C987",
+          "nativeSvgFill": "#F2C886",
+          "nativeMinusAuthoredChannels": [
+            -1,
+            -1,
+            -1
+          ]
+        },
+        {
+          "index": 41,
+          "part": "face",
+          "color": "skin_light",
+          "vertices": 5,
+          "maximumCoordinateError": 8.000000001118224e-06,
+          "authoredFill": "#F3C987",
+          "nativeSvgFill": "#F2C886",
+          "nativeMinusAuthoredChannels": [
+            -1,
+            -1,
+            -1
+          ]
+        },
+        {
+          "index": 42,
+          "part": "face",
+          "color": "skin_shadow",
+          "vertices": 4,
+          "maximumCoordinateError": 8.000000001118224e-06,
+          "authoredFill": "#A8663E",
+          "nativeSvgFill": "#A8653E",
+          "nativeMinusAuthoredChannels": [
+            0,
+            -1,
+            0
+          ]
+        },
+        {
+          "index": 43,
+          "part": "face",
+          "color": "eye_light",
+          "vertices": 4,
+          "maximumCoordinateError": 8.000000001118224e-06,
+          "authoredFill": "#FFF0CF",
+          "nativeSvgFill": "#FEEFCE",
+          "nativeMinusAuthoredChannels": [
+            -1,
+            -1,
+            -1
+          ]
+        },
+        {
+          "index": 44,
+          "part": "face",
+          "color": "ink",
+          "vertices": 4,
+          "maximumCoordinateError": 8.000000001118224e-06,
+          "authoredFill": "#172127",
+          "nativeSvgFill": "#162027",
+          "nativeMinusAuthoredChannels": [
+            -1,
+            -1,
+            0
+          ]
+        },
+        {
+          "index": 45,
+          "part": "face",
+          "color": "skin_shadow",
+          "vertices": 4,
+          "maximumCoordinateError": 8.000000001118224e-06,
+          "authoredFill": "#A8663E",
+          "nativeSvgFill": "#A8653E",
+          "nativeMinusAuthoredChannels": [
+            0,
+            -1,
+            0
+          ]
+        },
+        {
+          "index": 46,
+          "part": "hair",
+          "color": "ink",
+          "vertices": 24,
+          "maximumCoordinateError": 8.000000001118224e-06,
+          "authoredFill": "#172127",
+          "nativeSvgFill": "#162027",
+          "nativeMinusAuthoredChannels": [
+            -1,
+            -1,
+            0
+          ]
+        },
+        {
+          "index": 47,
+          "part": "hair",
+          "color": "hair_shadow",
+          "vertices": 24,
+          "maximumCoordinateError": 8.000000001118224e-06,
+          "authoredFill": "#60351F",
+          "nativeSvgFill": "#5F341E",
+          "nativeMinusAuthoredChannels": [
+            -1,
+            -1,
+            -1
+          ]
+        },
+        {
+          "index": 48,
+          "part": "hair",
+          "color": "hair",
+          "vertices": 18,
+          "maximumCoordinateError": 8.000000001118224e-06,
+          "authoredFill": "#92501F",
+          "nativeSvgFill": "#914F1E",
+          "nativeMinusAuthoredChannels": [
+            -1,
+            -1,
+            -1
+          ]
+        },
+        {
+          "index": 49,
+          "part": "hair",
+          "color": "hair_light",
+          "vertices": 7,
+          "maximumCoordinateError": 8.000000001118224e-06,
+          "authoredFill": "#C17C2D",
+          "nativeSvgFill": "#C07B2C",
+          "nativeMinusAuthoredChannels": [
+            -1,
+            -1,
+            -1
+          ]
+        },
+        {
+          "index": 50,
+          "part": "hair",
+          "color": "hair_light",
+          "vertices": 7,
+          "maximumCoordinateError": 8.000000001118224e-06,
+          "authoredFill": "#C17C2D",
+          "nativeSvgFill": "#C07B2C",
+          "nativeMinusAuthoredChannels": [
+            -1,
+            -1,
+            -1
+          ]
+        },
+        {
+          "index": 51,
+          "part": "hair",
+          "color": "hair_light",
+          "vertices": 5,
+          "maximumCoordinateError": 8.000000001118224e-06,
+          "authoredFill": "#C17C2D",
+          "nativeSvgFill": "#C07B2C",
+          "nativeMinusAuthoredChannels": [
+            -1,
+            -1,
+            -1
+          ]
+        },
+        {
+          "index": 52,
+          "part": "hair",
+          "color": "hair_light",
+          "vertices": 5,
+          "maximumCoordinateError": 8.000000001118224e-06,
+          "authoredFill": "#C17C2D",
+          "nativeSvgFill": "#C07B2C",
+          "nativeMinusAuthoredChannels": [
+            -1,
+            -1,
+            -1
+          ]
+        },
+        {
+          "index": 53,
+          "part": "hair",
+          "color": "hair_glint",
+          "vertices": 4,
+          "maximumCoordinateError": 7.999999999341867e-06,
+          "authoredFill": "#E4A649",
+          "nativeSvgFill": "#E3A648",
+          "nativeMinusAuthoredChannels": [
+            -1,
+            0,
+            -1
+          ]
+        },
+        {
+          "index": 54,
+          "part": "hair",
+          "color": "hair_glint",
+          "vertices": 4,
+          "maximumCoordinateError": 7.999999999341867e-06,
+          "authoredFill": "#E4A649",
+          "nativeSvgFill": "#E3A648",
+          "nativeMinusAuthoredChannels": [
+            -1,
+            0,
+            -1
+          ]
+        },
+        {
+          "index": 55,
+          "part": "hair",
+          "color": "hair_deep",
+          "vertices": 6,
+          "maximumCoordinateError": 8.000000001118224e-06,
+          "authoredFill": "#3C251F",
+          "nativeSvgFill": "#3C251E",
+          "nativeMinusAuthoredChannels": [
+            0,
+            0,
+            -1
+          ]
+        },
+        {
+          "index": 56,
+          "part": "scarf.wrap",
+          "color": "ink",
+          "vertices": 8,
+          "maximumCoordinateError": 8.000000001118224e-06,
+          "authoredFill": "#172127",
+          "nativeSvgFill": "#162027",
+          "nativeMinusAuthoredChannels": [
+            -1,
+            -1,
+            0
+          ]
+        },
+        {
+          "index": 57,
+          "part": "scarf.wrap",
+          "color": "teal",
+          "vertices": 8,
+          "maximumCoordinateError": 8.000000001118224e-06,
+          "authoredFill": "#176373",
+          "nativeSvgFill": "#166273",
+          "nativeMinusAuthoredChannels": [
+            -1,
+            -1,
+            0
+          ]
+        },
+        {
+          "index": 58,
+          "part": "scarf.wrap",
+          "color": "teal_light",
+          "vertices": 8,
+          "maximumCoordinateError": 8.000000001118224e-06,
+          "authoredFill": "#248C99",
+          "nativeSvgFill": "#238C98",
+          "nativeMinusAuthoredChannels": [
+            -1,
+            0,
+            -1
+          ]
+        },
+        {
+          "index": 59,
+          "part": "scarf.wrap",
+          "color": "teal_shadow",
+          "vertices": 6,
+          "maximumCoordinateError": 8.000000001118224e-06,
+          "authoredFill": "#124856",
+          "nativeSvgFill": "#124755",
+          "nativeMinusAuthoredChannels": [
+            0,
+            -1,
+            -1
+          ]
+        }
+      ]
+    },
+    "up": {
+      "pathCount": 72,
+      "authoredPolygonCount": 72,
+      "painterOrderAndVertices": "pass",
+      "opaqueFillsWithoutOutlines": "pass",
+      "maximumCoordinateError": 8.000000001118224e-06,
+      "maximumAbsoluteColorChannelError": 1,
+      "polygons": [
+        {
+          "index": 0,
+          "part": "leg.right",
+          "color": "ink",
+          "vertices": 7,
+          "maximumCoordinateError": 8.000000001118224e-06,
+          "authoredFill": "#172127",
+          "nativeSvgFill": "#162027",
+          "nativeMinusAuthoredChannels": [
+            -1,
+            -1,
+            0
+          ]
+        },
+        {
+          "index": 1,
+          "part": "leg.right",
+          "color": "cloth",
+          "vertices": 6,
+          "maximumCoordinateError": 8.000000001118224e-06,
+          "authoredFill": "#235565",
+          "nativeSvgFill": "#225464",
+          "nativeMinusAuthoredChannels": [
+            -1,
+            -1,
+            -1
+          ]
+        },
+        {
+          "index": 2,
+          "part": "leg.right",
+          "color": "cloth_light",
+          "vertices": 4,
+          "maximumCoordinateError": 8.000000001118224e-06,
+          "authoredFill": "#337B85",
+          "nativeSvgFill": "#337A84",
+          "nativeMinusAuthoredChannels": [
+            0,
+            -1,
+            -1
+          ]
+        },
+        {
+          "index": 3,
+          "part": "leg.right",
+          "color": "cloth_dark",
+          "vertices": 5,
+          "maximumCoordinateError": 8.000000001118224e-06,
+          "authoredFill": "#193D48",
+          "nativeSvgFill": "#183D47",
+          "nativeMinusAuthoredChannels": [
+            -1,
+            0,
+            -1
+          ]
+        },
+        {
+          "index": 4,
+          "part": "leg.left",
+          "color": "ink",
+          "vertices": 6,
+          "maximumCoordinateError": 8.000000001118224e-06,
+          "authoredFill": "#172127",
+          "nativeSvgFill": "#162027",
+          "nativeMinusAuthoredChannels": [
+            -1,
+            -1,
+            0
+          ]
+        },
+        {
+          "index": 5,
+          "part": "leg.left",
+          "color": "cloth",
+          "vertices": 5,
+          "maximumCoordinateError": 8.000000001118224e-06,
+          "authoredFill": "#235565",
+          "nativeSvgFill": "#225464",
+          "nativeMinusAuthoredChannels": [
+            -1,
+            -1,
+            -1
+          ]
+        },
+        {
+          "index": 6,
+          "part": "leg.left",
+          "color": "cloth_light",
+          "vertices": 4,
+          "maximumCoordinateError": 8.000000001118224e-06,
+          "authoredFill": "#337B85",
+          "nativeSvgFill": "#337A84",
+          "nativeMinusAuthoredChannels": [
+            0,
+            -1,
+            -1
+          ]
+        },
+        {
+          "index": 7,
+          "part": "leg.left",
+          "color": "cloth_dark",
+          "vertices": 5,
+          "maximumCoordinateError": 8.000000001118224e-06,
+          "authoredFill": "#193D48",
+          "nativeSvgFill": "#183D47",
+          "nativeMinusAuthoredChannels": [
+            -1,
+            0,
+            -1
+          ]
+        },
+        {
+          "index": 8,
+          "part": "boot.right",
+          "color": "ink",
+          "vertices": 7,
+          "maximumCoordinateError": 8.000000001118224e-06,
+          "authoredFill": "#172127",
+          "nativeSvgFill": "#162027",
+          "nativeMinusAuthoredChannels": [
+            -1,
+            -1,
+            0
+          ]
+        },
+        {
+          "index": 9,
+          "part": "boot.right",
+          "color": "leather",
+          "vertices": 6,
+          "maximumCoordinateError": 8.000000001118224e-06,
+          "authoredFill": "#926038",
+          "nativeSvgFill": "#915F37",
+          "nativeMinusAuthoredChannels": [
+            -1,
+            -1,
+            -1
+          ]
+        },
+        {
+          "index": 10,
+          "part": "boot.right",
+          "color": "leather_light",
+          "vertices": 4,
+          "maximumCoordinateError": 8.000000001118224e-06,
+          "authoredFill": "#BE8B4B",
+          "nativeSvgFill": "#BD8B4A",
+          "nativeMinusAuthoredChannels": [
+            -1,
+            0,
+            -1
+          ]
+        },
+        {
+          "index": 11,
+          "part": "boot.right",
+          "color": "cuff",
+          "vertices": 4,
+          "maximumCoordinateError": 8.000000001118224e-06,
+          "authoredFill": "#B8A17B",
+          "nativeSvgFill": "#B7A17A",
+          "nativeMinusAuthoredChannels": [
+            -1,
+            0,
+            -1
+          ]
+        },
+        {
+          "index": 12,
+          "part": "boot.right",
+          "color": "leather_shadow",
+          "vertices": 4,
+          "maximumCoordinateError": 8.000000001118224e-06,
+          "authoredFill": "#63422C",
+          "nativeSvgFill": "#62422B",
+          "nativeMinusAuthoredChannels": [
+            -1,
+            0,
+            -1
+          ]
+        },
+        {
+          "index": 13,
+          "part": "boot.left",
+          "color": "ink",
+          "vertices": 7,
+          "maximumCoordinateError": 8.000000001118224e-06,
+          "authoredFill": "#172127",
+          "nativeSvgFill": "#162027",
+          "nativeMinusAuthoredChannels": [
+            -1,
+            -1,
+            0
+          ]
+        },
+        {
+          "index": 14,
+          "part": "boot.left",
+          "color": "leather",
+          "vertices": 6,
+          "maximumCoordinateError": 8.000000001118224e-06,
+          "authoredFill": "#926038",
+          "nativeSvgFill": "#915F37",
+          "nativeMinusAuthoredChannels": [
+            -1,
+            -1,
+            -1
+          ]
+        },
+        {
+          "index": 15,
+          "part": "boot.left",
+          "color": "leather_light",
+          "vertices": 6,
+          "maximumCoordinateError": 8.000000001118224e-06,
+          "authoredFill": "#BE8B4B",
+          "nativeSvgFill": "#BD8B4A",
+          "nativeMinusAuthoredChannels": [
+            -1,
+            0,
+            -1
+          ]
+        },
+        {
+          "index": 16,
+          "part": "boot.left",
+          "color": "cuff",
+          "vertices": 4,
+          "maximumCoordinateError": 8.000000001118224e-06,
+          "authoredFill": "#B8A17B",
+          "nativeSvgFill": "#B7A17A",
+          "nativeMinusAuthoredChannels": [
+            -1,
+            0,
+            -1
+          ]
+        },
+        {
+          "index": 17,
+          "part": "torso",
+          "color": "ink",
+          "vertices": 11,
+          "maximumCoordinateError": 8.000000001118224e-06,
+          "authoredFill": "#172127",
+          "nativeSvgFill": "#162027",
+          "nativeMinusAuthoredChannels": [
+            -1,
+            -1,
+            0
+          ]
+        },
+        {
+          "index": 18,
+          "part": "torso",
+          "color": "cloth_dark",
+          "vertices": 9,
+          "maximumCoordinateError": 8.000000001118224e-06,
+          "authoredFill": "#193D48",
+          "nativeSvgFill": "#183D47",
+          "nativeMinusAuthoredChannels": [
+            -1,
+            0,
+            -1
+          ]
+        },
+        {
+          "index": 19,
+          "part": "torso",
+          "color": "teal",
+          "vertices": 5,
+          "maximumCoordinateError": 8.000000001118224e-06,
+          "authoredFill": "#176373",
+          "nativeSvgFill": "#166273",
+          "nativeMinusAuthoredChannels": [
+            -1,
+            -1,
+            0
+          ]
+        },
+        {
+          "index": 20,
+          "part": "torso",
+          "color": "cloth",
+          "vertices": 4,
+          "maximumCoordinateError": 8.000000001118224e-06,
+          "authoredFill": "#235565",
+          "nativeSvgFill": "#225464",
+          "nativeMinusAuthoredChannels": [
+            -1,
+            -1,
+            -1
+          ]
+        },
+        {
+          "index": 21,
+          "part": "arm.right",
+          "color": "ink",
+          "vertices": 7,
+          "maximumCoordinateError": 8.000000001118224e-06,
+          "authoredFill": "#172127",
+          "nativeSvgFill": "#162027",
+          "nativeMinusAuthoredChannels": [
+            -1,
+            -1,
+            0
+          ]
+        },
+        {
+          "index": 22,
+          "part": "arm.right",
+          "color": "skin",
+          "vertices": 6,
+          "maximumCoordinateError": 8.000000001118224e-06,
+          "authoredFill": "#D69B60",
+          "nativeSvgFill": "#D59B5F",
+          "nativeMinusAuthoredChannels": [
+            -1,
+            0,
+            -1
+          ]
+        },
+        {
+          "index": 23,
+          "part": "arm.right",
+          "color": "skin_light",
+          "vertices": 4,
+          "maximumCoordinateError": 8.000000001118224e-06,
+          "authoredFill": "#F3C987",
+          "nativeSvgFill": "#F2C886",
+          "nativeMinusAuthoredChannels": [
+            -1,
+            -1,
+            -1
+          ]
+        },
+        {
+          "index": 24,
+          "part": "arm.right",
+          "color": "skin_shadow",
+          "vertices": 6,
+          "maximumCoordinateError": 8.000000001118224e-06,
+          "authoredFill": "#A8663E",
+          "nativeSvgFill": "#A8653E",
+          "nativeMinusAuthoredChannels": [
+            0,
+            -1,
+            0
+          ]
+        },
+        {
+          "index": 25,
+          "part": "hand.right",
+          "color": "ink",
+          "vertices": 6,
+          "maximumCoordinateError": 8.000000001118224e-06,
+          "authoredFill": "#172127",
+          "nativeSvgFill": "#162027",
+          "nativeMinusAuthoredChannels": [
+            -1,
+            -1,
+            0
+          ]
+        },
+        {
+          "index": 26,
+          "part": "hand.right",
+          "color": "leather",
+          "vertices": 6,
+          "maximumCoordinateError": 8.000000001118224e-06,
+          "authoredFill": "#926038",
+          "nativeSvgFill": "#915F37",
+          "nativeMinusAuthoredChannels": [
+            -1,
+            -1,
+            -1
+          ]
+        },
+        {
+          "index": 27,
+          "part": "hand.right",
+          "color": "leather_light",
+          "vertices": 4,
+          "maximumCoordinateError": 8.000000001118224e-06,
+          "authoredFill": "#BE8B4B",
+          "nativeSvgFill": "#BD8B4A",
+          "nativeMinusAuthoredChannels": [
+            -1,
+            0,
+            -1
+          ]
+        },
+        {
+          "index": 28,
+          "part": "hand.right",
+          "color": "leather_shadow",
+          "vertices": 5,
+          "maximumCoordinateError": 8.000000001118224e-06,
+          "authoredFill": "#63422C",
+          "nativeSvgFill": "#62422B",
+          "nativeMinusAuthoredChannels": [
+            -1,
+            0,
+            -1
+          ]
+        },
+        {
+          "index": 29,
+          "part": "arm.left",
+          "color": "ink",
+          "vertices": 6,
+          "maximumCoordinateError": 8.000000001118224e-06,
+          "authoredFill": "#172127",
+          "nativeSvgFill": "#162027",
+          "nativeMinusAuthoredChannels": [
+            -1,
+            -1,
+            0
+          ]
+        },
+        {
+          "index": 30,
+          "part": "arm.left",
+          "color": "skin",
+          "vertices": 6,
+          "maximumCoordinateError": 8.000000001118224e-06,
+          "authoredFill": "#D69B60",
+          "nativeSvgFill": "#D59B5F",
+          "nativeMinusAuthoredChannels": [
+            -1,
+            0,
+            -1
+          ]
+        },
+        {
+          "index": 31,
+          "part": "arm.left",
+          "color": "skin_light",
+          "vertices": 4,
+          "maximumCoordinateError": 8.000000001118224e-06,
+          "authoredFill": "#F3C987",
+          "nativeSvgFill": "#F2C886",
+          "nativeMinusAuthoredChannels": [
+            -1,
+            -1,
+            -1
+          ]
+        },
+        {
+          "index": 32,
+          "part": "arm.left",
+          "color": "skin_shadow",
+          "vertices": 5,
+          "maximumCoordinateError": 8.000000001118224e-06,
+          "authoredFill": "#A8663E",
+          "nativeSvgFill": "#A8653E",
+          "nativeMinusAuthoredChannels": [
+            0,
+            -1,
+            0
+          ]
+        },
+        {
+          "index": 33,
+          "part": "hand.left",
+          "color": "ink",
+          "vertices": 6,
+          "maximumCoordinateError": 8.000000001118224e-06,
+          "authoredFill": "#172127",
+          "nativeSvgFill": "#162027",
+          "nativeMinusAuthoredChannels": [
+            -1,
+            -1,
+            0
+          ]
+        },
+        {
+          "index": 34,
+          "part": "hand.left",
+          "color": "leather",
+          "vertices": 5,
+          "maximumCoordinateError": 8.000000001118224e-06,
+          "authoredFill": "#926038",
+          "nativeSvgFill": "#915F37",
+          "nativeMinusAuthoredChannels": [
+            -1,
+            -1,
+            -1
+          ]
+        },
+        {
+          "index": 35,
+          "part": "hand.left",
+          "color": "leather_light",
+          "vertices": 4,
+          "maximumCoordinateError": 8.000000001118224e-06,
+          "authoredFill": "#BE8B4B",
+          "nativeSvgFill": "#BD8B4A",
+          "nativeMinusAuthoredChannels": [
+            -1,
+            0,
+            -1
+          ]
+        },
+        {
+          "index": 36,
+          "part": "hand.left",
+          "color": "leather_shadow",
+          "vertices": 4,
+          "maximumCoordinateError": 8.000000001118224e-06,
+          "authoredFill": "#63422C",
+          "nativeSvgFill": "#62422B",
+          "nativeMinusAuthoredChannels": [
+            -1,
+            0,
+            -1
+          ]
+        },
+        {
+          "index": 37,
+          "part": "belt",
+          "color": "ink",
+          "vertices": 4,
+          "maximumCoordinateError": 8.000000001118224e-06,
+          "authoredFill": "#172127",
+          "nativeSvgFill": "#162027",
+          "nativeMinusAuthoredChannels": [
+            -1,
+            -1,
+            0
+          ]
+        },
+        {
+          "index": 38,
+          "part": "belt",
+          "color": "leather",
+          "vertices": 4,
+          "maximumCoordinateError": 8.000000001118224e-06,
+          "authoredFill": "#926038",
+          "nativeSvgFill": "#915F37",
+          "nativeMinusAuthoredChannels": [
+            -1,
+            -1,
+            -1
+          ]
+        },
+        {
+          "index": 39,
+          "part": "belt",
+          "color": "buckle",
+          "vertices": 4,
+          "maximumCoordinateError": 8.000000001118224e-06,
+          "authoredFill": "#E3C277",
+          "nativeSvgFill": "#E2C177",
+          "nativeMinusAuthoredChannels": [
+            -1,
+            -1,
+            0
+          ]
+        },
+        {
+          "index": 40,
+          "part": "belt",
+          "color": "leather_deep",
+          "vertices": 4,
+          "maximumCoordinateError": 8.000000001118224e-06,
+          "authoredFill": "#402C24",
+          "nativeSvgFill": "#402B23",
+          "nativeMinusAuthoredChannels": [
+            0,
+            -1,
+            -1
+          ]
+        },
+        {
+          "index": 41,
+          "part": "harness.back",
+          "color": "leather_deep",
+          "vertices": 4,
+          "maximumCoordinateError": 8.000000001118224e-06,
+          "authoredFill": "#402C24",
+          "nativeSvgFill": "#402B23",
+          "nativeMinusAuthoredChannels": [
+            0,
+            -1,
+            -1
+          ]
+        },
+        {
+          "index": 42,
+          "part": "harness.back",
+          "color": "leather",
+          "vertices": 4,
+          "maximumCoordinateError": 8.000000001118224e-06,
+          "authoredFill": "#926038",
+          "nativeSvgFill": "#915F37",
+          "nativeMinusAuthoredChannels": [
+            -1,
+            -1,
+            -1
+          ]
+        },
+        {
+          "index": 43,
+          "part": "harness.back",
+          "color": "leather_deep",
+          "vertices": 4,
+          "maximumCoordinateError": 8.000000001118224e-06,
+          "authoredFill": "#402C24",
+          "nativeSvgFill": "#402B23",
+          "nativeMinusAuthoredChannels": [
+            0,
+            -1,
+            -1
+          ]
+        },
+        {
+          "index": 44,
+          "part": "harness.back",
+          "color": "leather",
+          "vertices": 4,
+          "maximumCoordinateError": 8.000000001118224e-06,
+          "authoredFill": "#926038",
+          "nativeSvgFill": "#915F37",
+          "nativeMinusAuthoredChannels": [
+            -1,
+            -1,
+            -1
+          ]
+        },
+        {
+          "index": 45,
+          "part": "harness.back",
+          "color": "buckle",
+          "vertices": 4,
+          "maximumCoordinateError": 8.000000001118224e-06,
+          "authoredFill": "#E3C277",
+          "nativeSvgFill": "#E2C177",
+          "nativeMinusAuthoredChannels": [
+            -1,
+            -1,
+            0
+          ]
+        },
+        {
+          "index": 46,
+          "part": "belt.back",
+          "color": "leather",
+          "vertices": 4,
+          "maximumCoordinateError": 8.000000001118224e-06,
+          "authoredFill": "#926038",
+          "nativeSvgFill": "#915F37",
+          "nativeMinusAuthoredChannels": [
+            -1,
+            -1,
+            -1
+          ]
+        },
+        {
+          "index": 47,
+          "part": "belt.back",
+          "color": "leather_shadow",
+          "vertices": 4,
+          "maximumCoordinateError": 8.000000001118224e-06,
+          "authoredFill": "#63422C",
+          "nativeSvgFill": "#62422B",
+          "nativeMinusAuthoredChannels": [
+            -1,
+            0,
+            -1
+          ]
+        },
+        {
+          "index": 48,
+          "part": "belt.back",
+          "color": "leather_light",
+          "vertices": 4,
+          "maximumCoordinateError": 8.000000001118224e-06,
+          "authoredFill": "#BE8B4B",
+          "nativeSvgFill": "#BD8B4A",
+          "nativeMinusAuthoredChannels": [
+            -1,
+            0,
+            -1
+          ]
+        },
+        {
+          "index": 49,
+          "part": "satchel",
+          "color": "ink",
+          "vertices": 6,
+          "maximumCoordinateError": 8.000000001118224e-06,
+          "authoredFill": "#172127",
+          "nativeSvgFill": "#162027",
+          "nativeMinusAuthoredChannels": [
+            -1,
+            -1,
+            0
+          ]
+        },
+        {
+          "index": 50,
+          "part": "satchel",
+          "color": "leather",
+          "vertices": 6,
+          "maximumCoordinateError": 8.000000001118224e-06,
+          "authoredFill": "#926038",
+          "nativeSvgFill": "#915F37",
+          "nativeMinusAuthoredChannels": [
+            -1,
+            -1,
+            -1
+          ]
+        },
+        {
+          "index": 51,
+          "part": "satchel",
+          "color": "leather_light",
+          "vertices": 5,
+          "maximumCoordinateError": 8.000000001118224e-06,
+          "authoredFill": "#BE8B4B",
+          "nativeSvgFill": "#BD8B4A",
+          "nativeMinusAuthoredChannels": [
+            -1,
+            0,
+            -1
+          ]
+        },
+        {
+          "index": 52,
+          "part": "satchel",
+          "color": "buckle",
+          "vertices": 4,
+          "maximumCoordinateError": 8.000000001118224e-06,
+          "authoredFill": "#E3C277",
+          "nativeSvgFill": "#E2C177",
+          "nativeMinusAuthoredChannels": [
+            -1,
+            -1,
+            0
+          ]
+        },
+        {
+          "index": 53,
+          "part": "scarf.tails",
+          "color": "ink",
+          "vertices": 10,
+          "maximumCoordinateError": 8.000000001118224e-06,
+          "authoredFill": "#172127",
+          "nativeSvgFill": "#162027",
+          "nativeMinusAuthoredChannels": [
+            -1,
+            -1,
+            0
+          ]
+        },
+        {
+          "index": 54,
+          "part": "scarf.tails",
+          "color": "teal",
+          "vertices": 10,
+          "maximumCoordinateError": 8.000000001118224e-06,
+          "authoredFill": "#176373",
+          "nativeSvgFill": "#166273",
+          "nativeMinusAuthoredChannels": [
+            -1,
+            -1,
+            0
+          ]
+        },
+        {
+          "index": 55,
+          "part": "scarf.tails",
+          "color": "teal_light",
+          "vertices": 6,
+          "maximumCoordinateError": 8.000000001118224e-06,
+          "authoredFill": "#248C99",
+          "nativeSvgFill": "#238C98",
+          "nativeMinusAuthoredChannels": [
+            -1,
+            0,
+            -1
+          ]
+        },
+        {
+          "index": 56,
+          "part": "scarf.tails",
+          "color": "teal_shadow",
+          "vertices": 5,
+          "maximumCoordinateError": 8.000000001118224e-06,
+          "authoredFill": "#124856",
+          "nativeSvgFill": "#124755",
+          "nativeMinusAuthoredChannels": [
+            0,
+            -1,
+            -1
+          ]
+        },
+        {
+          "index": 57,
+          "part": "scarf.wrap",
+          "color": "ink",
+          "vertices": 9,
+          "maximumCoordinateError": 8.000000001118224e-06,
+          "authoredFill": "#172127",
+          "nativeSvgFill": "#162027",
+          "nativeMinusAuthoredChannels": [
+            -1,
+            -1,
+            0
+          ]
+        },
+        {
+          "index": 58,
+          "part": "scarf.wrap",
+          "color": "teal",
+          "vertices": 9,
+          "maximumCoordinateError": 8.000000001118224e-06,
+          "authoredFill": "#176373",
+          "nativeSvgFill": "#166273",
+          "nativeMinusAuthoredChannels": [
+            -1,
+            -1,
+            0
+          ]
+        },
+        {
+          "index": 59,
+          "part": "scarf.wrap",
+          "color": "teal_light",
+          "vertices": 8,
+          "maximumCoordinateError": 8.000000001118224e-06,
+          "authoredFill": "#248C99",
+          "nativeSvgFill": "#238C98",
+          "nativeMinusAuthoredChannels": [
+            -1,
+            0,
+            -1
+          ]
+        },
+        {
+          "index": 60,
+          "part": "scarf.wrap",
+          "color": "teal_shadow",
+          "vertices": 6,
+          "maximumCoordinateError": 4.000000000559112e-06,
+          "authoredFill": "#124856",
+          "nativeSvgFill": "#124755",
+          "nativeMinusAuthoredChannels": [
+            0,
+            -1,
+            -1
+          ]
+        },
+        {
+          "index": 61,
+          "part": "hair",
+          "color": "ink",
+          "vertices": 22,
+          "maximumCoordinateError": 8.000000001118224e-06,
+          "authoredFill": "#172127",
+          "nativeSvgFill": "#162027",
+          "nativeMinusAuthoredChannels": [
+            -1,
+            -1,
+            0
+          ]
+        },
+        {
+          "index": 62,
+          "part": "hair",
+          "color": "hair_shadow",
+          "vertices": 21,
+          "maximumCoordinateError": 8.000000001118224e-06,
+          "authoredFill": "#60351F",
+          "nativeSvgFill": "#5F341E",
+          "nativeMinusAuthoredChannels": [
+            -1,
+            -1,
+            -1
+          ]
+        },
+        {
+          "index": 63,
+          "part": "hair",
+          "color": "hair",
+          "vertices": 17,
+          "maximumCoordinateError": 8.000000001118224e-06,
+          "authoredFill": "#92501F",
+          "nativeSvgFill": "#914F1E",
+          "nativeMinusAuthoredChannels": [
+            -1,
+            -1,
+            -1
+          ]
+        },
+        {
+          "index": 64,
+          "part": "hair",
+          "color": "hair_light",
+          "vertices": 6,
+          "maximumCoordinateError": 8.000000001118224e-06,
+          "authoredFill": "#C17C2D",
+          "nativeSvgFill": "#C07B2C",
+          "nativeMinusAuthoredChannels": [
+            -1,
+            -1,
+            -1
+          ]
+        },
+        {
+          "index": 65,
+          "part": "hair",
+          "color": "hair_light",
+          "vertices": 7,
+          "maximumCoordinateError": 8.000000001118224e-06,
+          "authoredFill": "#C17C2D",
+          "nativeSvgFill": "#C07B2C",
+          "nativeMinusAuthoredChannels": [
+            -1,
+            -1,
+            -1
+          ]
+        },
+        {
+          "index": 66,
+          "part": "hair",
+          "color": "hair_light",
+          "vertices": 7,
+          "maximumCoordinateError": 8.000000001118224e-06,
+          "authoredFill": "#C17C2D",
+          "nativeSvgFill": "#C07B2C",
+          "nativeMinusAuthoredChannels": [
+            -1,
+            -1,
+            -1
+          ]
+        },
+        {
+          "index": 67,
+          "part": "hair",
+          "color": "hair_light",
+          "vertices": 6,
+          "maximumCoordinateError": 8.000000001118224e-06,
+          "authoredFill": "#C17C2D",
+          "nativeSvgFill": "#C07B2C",
+          "nativeMinusAuthoredChannels": [
+            -1,
+            -1,
+            -1
+          ]
+        },
+        {
+          "index": 68,
+          "part": "hair",
+          "color": "hair_glint",
+          "vertices": 4,
+          "maximumCoordinateError": 7.999999999341867e-06,
+          "authoredFill": "#E4A649",
+          "nativeSvgFill": "#E3A648",
+          "nativeMinusAuthoredChannels": [
+            -1,
+            0,
+            -1
+          ]
+        },
+        {
+          "index": 69,
+          "part": "hair",
+          "color": "hair_glint",
+          "vertices": 4,
+          "maximumCoordinateError": 8.000000001118224e-06,
+          "authoredFill": "#E4A649",
+          "nativeSvgFill": "#E3A648",
+          "nativeMinusAuthoredChannels": [
+            -1,
+            0,
+            -1
+          ]
+        },
+        {
+          "index": 70,
+          "part": "hair",
+          "color": "hair_deep",
+          "vertices": 5,
+          "maximumCoordinateError": 8.000000001118224e-06,
+          "authoredFill": "#3C251F",
+          "nativeSvgFill": "#3C251E",
+          "nativeMinusAuthoredChannels": [
+            0,
+            0,
+            -1
+          ]
+        },
+        {
+          "index": 71,
+          "part": "hair",
+          "color": "hair_deep",
+          "vertices": 6,
+          "maximumCoordinateError": 8.000000001118224e-06,
+          "authoredFill": "#3C251F",
+          "nativeSvgFill": "#3C251E",
+          "nativeMinusAuthoredChannels": [
+            0,
+            0,
+            -1
+          ]
+        }
+      ]
+    }
+  },
+  "files": {
+    "source/idle-geometry.json": {
+      "bytes": 127267,
+      "sha256": "4b166485b8c0bc4ac428ebdcf87e8f2ee8052f8a6a456c01c629691c930170be"
+    },
+    "source/palette.json": {
+      "bytes": 1134,
+      "sha256": "bf4796b3ca9e83a0b4c593cc7de2208086142f185f0e2bf7197d2ac7aba4dd76"
+    },
+    "source/authoring.py": {
+      "bytes": 20433,
+      "sha256": "a2d5568a2c7ace91674325cf220d48f634ce23ad93aa4b0f29a0d3e8f16540ae"
+    },
+    "source/export_svg.py": {
+      "bytes": 3281,
+      "sha256": "6bca4aa746fb2894f4ff500ccf578dc1d54e95873d0bc8cbbb3a4fe32fe46da5"
+    },
+    "source/rasterize.cjs": {
+      "bytes": 20296,
+      "sha256": "72ae541e0d15cb1434cdf5ed079e2300ce598304be2e2782e5c152bc63545619"
+    },
+    "source/verify_vectors.py": {
+      "bytes": 15818,
+      "sha256": "94a63ae4f8755e689fd1c24673e41a50df63f67882a0c956127cdd44962088fc"
+    },
+    "source/avatar-1.blend": {
+      "bytes": 170052,
+      "sha256": "364d27f70c2f6e45a8363fec56e61bfd39597511acdb291033c275cf45d46a19"
+    },
+    "svg/down/idle.svg": {
+      "bytes": 14768,
+      "sha256": "e1c4af39fef8efd4cc8bffd0cca47e8c97b9e0041e8c0ab372c033a71c7dd550"
+    },
+    "frames/down/idle.png": {
+      "bytes": 965,
+      "sha256": "ffe8ebcab8bb6866acc936081d39b738f60d431b9fb9f2806612809cccd56979"
+    },
+    "svg/left/idle.svg": {
+      "bytes": 11369,
+      "sha256": "322b78f8f91b0069ded41b3c8197073c451dbdbd73d5e70941bc1837d5af7157"
+    },
+    "frames/left/idle.png": {
+      "bytes": 801,
+      "sha256": "42c8a3b61c658074deac459abd9c3c6da80f7342e46f0059435d6a77d0a4a35e"
+    },
+    "svg/right/idle.svg": {
+      "bytes": 11829,
+      "sha256": "3cecbd07a6327ac66588eb1bddc9795882e73af288bb6c82e511e8b026c88ff8"
+    },
+    "frames/right/idle.png": {
+      "bytes": 804,
+      "sha256": "cad5196ae185c72d913d9335fdc82bf78a5d5105778a879f248d36709e1e839b"
+    },
+    "svg/up/idle.svg": {
+      "bytes": 13163,
+      "sha256": "0240d3556d5f55a5009cd812f00b74c85e517ce0008cd5646e70bbf890208976"
+    },
+    "frames/up/idle.png": {
+      "bytes": 871,
+      "sha256": "722c73b10fac1b1469df1c9c3f5db5d8040f09ce389027c6cb46f0bc8e363694"
+    },
+    "source/blender-environment.json": {
+      "bytes": 894,
+      "sha256": "4d1926980f8d9b6384552c3380b7a2ac638d9d73404181487caa60719579347d"
+    },
+    "source/blender-readback.json": {
+      "bytes": 157211,
+      "sha256": "c1bcad08a58665085769b0a37bc026b2fbd4e0113d39a76bff4d5ab5c81e83bf"
+    },
+    "review/qa.json": {
+      "bytes": 19897,
+      "sha256": "b944ea475b4c181f429749ae48af02a5479c593070810a2b3a11bdc815efbe55"
+    },
+    "review/idle-approval.png": {
+      "bytes": 56949,
+      "sha256": "e64827dfa3e70465d6a841acfb359d4439b2f25ed1a81c68bca4a80705329bd5"
+    },
+    "review/reload-parity.json": {
+      "bytes": 2220,
+      "sha256": "4c9f81188e6d2f6b11f3731314072a7de3ec08816e6ecec511fc09729bd0a551"
+    },
+    "review/user-decisions.json": {
+      "bytes": 836,
+      "sha256": "acb7419b1d924bfd842b73e37bdc2952495e39ead2b79ae73a6584e8e2a47e6c"
+    }
+  },
+  "blenderReadbackParity": {
+    "status": "pass",
+    "source": "source/blender-readback.json",
+    "blenderVersion": "5.2.1 LTS",
+    "views": {
+      "down": {
+        "polygonCount": 82,
+        "maximumCoordinateError": 9.536743306171047e-08,
+        "orderedPartsPaletteMaterialsAndFillState": "pass"
+      },
+      "left": {
+        "polygonCount": 57,
+        "maximumCoordinateError": 3.8146972514141453e-07,
+        "orderedPartsPaletteMaterialsAndFillState": "pass"
+      },
+      "right": {
+        "polygonCount": 60,
+        "maximumCoordinateError": 3.8146972514141453e-07,
+        "orderedPartsPaletteMaterialsAndFillState": "pass"
+      },
+      "up": {
+        "polygonCount": 72,
+        "maximumCoordinateError": 0.0,
+        "orderedPartsPaletteMaterialsAndFillState": "pass"
+      }
+    },
+    "scope": "Compare the supplied readback from the reopened master; this verifier does not call Blender"
+  },
+  "savedFileReloadEvidence": {
+    "status": "pass",
+    "source": "review/reload-parity.json",
+    "matchingCurrentFiles": 8,
+    "scope": "Validate supplied before/after hashes against current files; this verifier does not repeat the reload"
+  }
+}

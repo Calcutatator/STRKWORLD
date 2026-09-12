@@ -1,0 +1,100 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Generator: Blender, SVG Export for Grease Pencil - v2.1 -->
+<!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.1//EN" "http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd">
+<svg version="1.1" x="0px" y="0px" xmlns="http://www.w3.org/2000/svg" width="64.000000px" height="64.000000px" viewBox="0 0 64.000000 64.000000">
+	<clipPath id="clip-path.1">
+		<rect x="0" y="0" width="64" height="64" fill="none" />
+	</clipPath>
+	<g id="blender_frame.1" clip-path="url(#clip-path.1)">
+		<g id="blender_object.AV1SVG | right.1.uuid_0x0">
+			<g id="layer.scarf.tails.uuid_0x1">
+				<path d="M27,25.000008L29,28.000004L26,32.000008L25,37.000008L23,42.000008L20,43.000008L19,40.000008L20,35.000008L23,30.000004z" fill-rule="evenodd" fill="#162027" stroke="none" fill-opacity="1" />
+				<path d="M27,26.000008L28,28.000004L24,34.000008L24,38.000008L22,41.000008L21,41.000008L20.5,39.000008L22,34.000008z" fill-rule="evenodd" fill="#124755" stroke="none" fill-opacity="1" />
+				<path d="M27,27.000008L26,30.000004L23,34.000008L22,39.000008L21,40.000008L21,37.000008L22,33.000008L25,29.000004z" fill-rule="evenodd" fill="#166273" stroke="none" fill-opacity="1" />
+				<path d="M26,28.000004L25,31.000004L22,35.000008L23,31.000004z" fill-rule="evenodd" fill="#238C98" stroke="none" fill-opacity="1" />
+			</g>
+			<g id="layer.leg.far.uuid_0x2">
+				<path d="M29,39.000008L34,39.000008L35,46.000008L34,52.000008L35,54.000008L34,56.000008L28,56.000008L27,53.000008L28,46.000008z" fill-rule="evenodd" fill="#162027" stroke="none" fill-opacity="1" />
+				<path d="M30,40.000008L33,40.000008L34,46.000008L33,51.000008L29,52.000008L29,47.000008z" fill-rule="evenodd" fill="#183D47" stroke="none" fill-opacity="1" />
+			</g>
+			<g id="layer.boot.far.uuid_0x3">
+				<path d="M29,51.000008L33,51.000008L33,53.000008L34,54.000008L33,55.000008L28,55.000008L28,53.000008z" fill-rule="evenodd" fill="#62422B" stroke="none" fill-opacity="1" />
+			</g>
+			<g id="layer.torso.uuid_0x4">
+				<path d="M29,25.000008L35,25.000008L38,29.000004L37,36.000008L37,41.000008L34,43.000008L27,42.000008L27,36.000008L26,31.000004z" fill-rule="evenodd" fill="#162027" stroke="none" fill-opacity="1" />
+				<path d="M30,27.000008L34,27.000008L36,30.000004L35,36.000008L36,40.000008L33,42.000008L28,41.000008L29,36.000008L28,31.000004z" fill-rule="evenodd" fill="#225464" stroke="none" fill-opacity="1" />
+				<path d="M28,29.000004L30,29.000004L30,36.000008L29,41.000008L28,41.000008L29,36.000008z" fill-rule="evenodd" fill="#183D47" stroke="none" fill-opacity="1" />
+				<path d="M33,29.000004L35,30.000004L34,36.000008L35,39.000008L33,40.000008L32,35.000008z" fill-rule="evenodd" fill="#166273" stroke="none" fill-opacity="1" />
+			</g>
+			<g id="layer.harness.uuid_0x5">
+				<path d="M34,27.000008L36,28.000004L34,38.000008L31,41.000008L29,40.000008L33,35.000008z" fill-rule="evenodd" fill="#402B23" stroke="none" fill-opacity="1" />
+				<path d="M34,28.000004L35,29.000004L33,37.000008L30,40.000008L30,39.000008L32,36.000008z" fill-rule="evenodd" fill="#915F37" stroke="none" fill-opacity="1" />
+			</g>
+			<g id="layer.leg.near.uuid_0x6">
+				<path d="M30,40.000008L36,40.000008L36,47.000008L34,52.000008L29,53.000008L28,50.000004L29,45.000008z" fill-rule="evenodd" fill="#162027" stroke="none" fill-opacity="1" />
+				<path d="M31,41.000008L35,41.000008L35,46.000008L33,51.000008L30,51.000008L29.5,48.000008z" fill-rule="evenodd" fill="#225464" stroke="none" fill-opacity="1" />
+				<path d="M31,42.000008L33,42.000008L32,47.000008L30,49.000008L30,46.000008z" fill-rule="evenodd" fill="#337A84" stroke="none" fill-opacity="1" />
+				<path d="M34,42.000008L35,42.000008L35,47.000008L33,51.000008L31,51.000008L32,48.000008z" fill-rule="evenodd" fill="#183D47" stroke="none" fill-opacity="1" />
+			</g>
+			<g id="layer.boot.near.uuid_0x7">
+				<path d="M29,50.000004L34,50.000004L34,53.000008L38,54.000008L38,56.000008L28,56.000008L28,53.000008z" fill-rule="evenodd" fill="#162027" stroke="none" fill-opacity="1" />
+				<path d="M30,51.000008L33,51.000008L33,54.000008L37,54.000008L37,55.000008L29,55.000008L29,53.000008z" fill-rule="evenodd" fill="#915F37" stroke="none" fill-opacity="1" />
+				<path d="M30,52.000008L32,52.000008L32,54.000008L35,54.000008L35,55.000008L29,55.000008z" fill-rule="evenodd" fill="#BD8B4A" stroke="none" fill-opacity="1" />
+				<path d="M29,50.000004L34,50.000004L33.5,52.000008L30,52.000008z" fill-rule="evenodd" fill="#B7A17A" stroke="none" fill-opacity="1" />
+				<path d="M29,55.000008L37,55.000008L37,55.400005L29,55.400005z" fill-rule="evenodd" fill="#62422B" stroke="none" fill-opacity="1" />
+			</g>
+			<g id="layer.belt.uuid_0x8">
+				<path d="M28,37.000008L36,37.000008L38,38.000008L38,41.000008L35,41.000008L34,40.000008L28,40.000008z" fill-rule="evenodd" fill="#162027" stroke="none" fill-opacity="1" />
+				<path d="M29,38.000008L36,38.000008L36,39.000008L29,39.000008z" fill-rule="evenodd" fill="#915F37" stroke="none" fill-opacity="1" />
+				<path d="M35,38.000008L37,38.000008L37,40.000008L35,40.000008z" fill-rule="evenodd" fill="#E2C177" stroke="none" fill-opacity="1" />
+			</g>
+			<g id="layer.satchel.uuid_0x9">
+				<path d="M27,37.000008L32,37.000008L34,40.000008L33,44.000008L28,44.000008L26,41.000008z" fill-rule="evenodd" fill="#162027" stroke="none" fill-opacity="1" />
+				<path d="M28,38.000008L31,38.000008L33,40.000008L32,43.000008L28,43.000008L27,41.000008z" fill-rule="evenodd" fill="#62422B" stroke="none" fill-opacity="1" />
+				<path d="M27,38.000008L32,38.000008L33,40.000008L30,41.000008L27,40.000008z" fill-rule="evenodd" fill="#915F37" stroke="none" fill-opacity="1" />
+				<path d="M30,39.000008L31,39.000008L31,40.000008L30,40.000008z" fill-rule="evenodd" fill="#E2C177" stroke="none" fill-opacity="1" />
+			</g>
+			<g id="layer.arm.near.uuid_0xa">
+				<path d="M29,27.000008L33,28.000004L34,31.000004L33,36.000008L32,39.000008L28,38.000008L27,34.000008L27,30.000004z" fill-rule="evenodd" fill="#162027" stroke="none" fill-opacity="1" />
+				<path d="M29,29.000004L32,29.000004L33,31.000004L32,35.000008L31,37.000008L29,37.000008L28,34.000008L28,31.000004z" fill-rule="evenodd" fill="#D59B5F" stroke="none" fill-opacity="1" />
+				<path d="M29,29.000004L31,29.000004L31,32.000008L30,34.000008L28.5,34.000008L28.5,31.000004z" fill-rule="evenodd" fill="#F2C886" stroke="none" fill-opacity="1" />
+				<path d="M32,31.000004L33,31.000004L32,35.000008L31,37.000008L29,37.000008L29,36.000008L31,34.000008z" fill-rule="evenodd" fill="#A8653E" stroke="none" fill-opacity="1" />
+			</g>
+			<g id="layer.hand.near.uuid_0xb">
+				<path d="M28,36.000008L32,36.000008L33,40.000008L32,43.000008L28,43.000008L27,40.000008z" fill-rule="evenodd" fill="#162027" stroke="none" fill-opacity="1" />
+				<path d="M29,37.000008L31,37.000008L32,40.000008L31,42.000008L29,42.000008L28,40.000008z" fill-rule="evenodd" fill="#915F37" stroke="none" fill-opacity="1" />
+				<path d="M29,38.000008L30,38.000008L30,41.000008L29,41.000008L28.5,40.000008z" fill-rule="evenodd" fill="#BD8B4A" stroke="none" fill-opacity="1" />
+				<path d="M30,39.000008L32,39.000008L32,41.000008L30,41.000008z" fill-rule="evenodd" fill="#62422B" stroke="none" fill-opacity="1" />
+			</g>
+			<g id="layer.face.uuid_0xc">
+				<path d="M32,15.000008L38,16.000008L40,18.000008L40,20.000008L42,21.000008L41,23.000008L40,23.000008L40,25.000008L36,26.000008L31,24.000008L29,20.000008z" fill-rule="evenodd" fill="#162027" stroke="none" fill-opacity="1" />
+				<path d="M33,16.000008L38,17.000008L39,19.000008L39,21.000008L41,21.000008L40,22.000008L39,22.000008L39,24.000008L36,25.000008L32,23.000008L30,20.000008z" fill-rule="evenodd" fill="#A8653E" stroke="none" fill-opacity="1" />
+				<path d="M34,17.000008L38,18.000008L39,20.000008L38.5,21.000008L40,21.000008L39,22.000008L39,24.000008L36,24.000008L33,22.000008z" fill-rule="evenodd" fill="#D59B5F" stroke="none" fill-opacity="1" />
+				<path d="M36,18.000008L38,18.000008L39,20.000008L38,21.000008L40,21.000008L39,22.000008L38,22.000008L38,24.000008L36,23.000008z" fill-rule="evenodd" fill="#F2C886" stroke="none" fill-opacity="1" />
+				<path d="M31,20.000008L33,19.000008L34,20.000008L33,22.000008L31,22.000008z" fill-rule="evenodd" fill="#F2C886" stroke="none" fill-opacity="1" />
+				<path d="M32,20.000008L33,20.000008L33,21.000008L32,21.000008z" fill-rule="evenodd" fill="#A8653E" stroke="none" fill-opacity="1" />
+				<path d="M36,20.000008L39,20.000008L39,21.000008L36,21.000008z" fill-rule="evenodd" fill="#FEEFCE" stroke="none" fill-opacity="1" />
+				<path d="M37,20.000008L38,20.000008L38,22.000008L37,22.000008z" fill-rule="evenodd" fill="#162027" stroke="none" fill-opacity="1" />
+				<path d="M38,24.000008L39,24.000008L39,24.600006L38,24.600006z" fill-rule="evenodd" fill="#A8653E" stroke="none" fill-opacity="1" />
+			</g>
+			<g id="layer.hair.uuid_0xd">
+				<path d="M24,18.000008L22,15.000008L25,14.000008L23,12.000008L27,11.000008L26,9.000008L31,9.000008L34,6.0000076L34,9.000008L39,8.000008L38,11.000008L42,11.000008L40,14.000008L42,16.000008L40,18.000008L37,17.000008L36,18.000008L34,18.000008L34,22.000008L32,23.000008L31,25.000008L27,24.000008L25,22.000008L25,20.000008z" fill-rule="evenodd" fill="#162027" stroke="none" fill-opacity="1" />
+				<path d="M25,18.000008L24,16.000008L27,14.000008L25,12.000008L29,12.000008L28,10.000008L32,10.000008L33,8.000008L33,11.000008L37,10.000008L36,12.000008L40,12.000008L38,15.000008L40,16.000008L38,16.000008L36,17.000008L35,18.000008L34,17.000008L33,20.000008L31,20.000008L31,23.000008L28,23.000008L26,21.000008L26,19.000008z" fill-rule="evenodd" fill="#5F341E" stroke="none" fill-opacity="1" />
+				<path d="M25,16.000008L28,14.000008L27,13.000008L31,12.000008L30,11.000008L33,10.000008L33,12.000008L37,11.000008L35,14.000008L39,13.000008L36,16.000008L34,16.000008L32,19.000008L31,17.000008L29,20.000008L28,22.000008L27,20.000008L28,17.000008z" fill-rule="evenodd" fill="#914F1E" stroke="none" fill-opacity="1" />
+				<path d="M26,14.000008L29,13.000008L29,11.000008L32,11.000008L31,13.000008L28,16.000008L26,17.000008z" fill-rule="evenodd" fill="#C07B2C" stroke="none" fill-opacity="1" />
+				<path d="M34,11.000008L37,10.000008L35,13.000008L32,16.000008L31,18.000008L30,17.000008L31,14.000008z" fill-rule="evenodd" fill="#C07B2C" stroke="none" fill-opacity="1" />
+				<path d="M37,14.000008L39,13.000008L37,16.000008L35,17.000008L35,16.000008z" fill-rule="evenodd" fill="#C07B2C" stroke="none" fill-opacity="1" />
+				<path d="M28,17.000008L30,15.000008L29,19.000008L28,21.000008L27,20.000008z" fill-rule="evenodd" fill="#C07B2C" stroke="none" fill-opacity="1" />
+				<path d="M28,13.000008L30,12.000008L30,13.000008L27,15.000008z" fill-rule="evenodd" fill="#E3A648" stroke="none" fill-opacity="1" />
+				<path d="M33,12.000008L35,11.000008L34,13.000008L32,14.000008z" fill-rule="evenodd" fill="#E3A648" stroke="none" fill-opacity="1" />
+				<path d="M26,20.000008L28,22.000008L31,21.000008L30,24.000008L28,23.000008L26,22.000008z" fill-rule="evenodd" fill="#3C251E" stroke="none" fill-opacity="1" />
+			</g>
+			<g id="layer.scarf.wrap.uuid_0xe">
+				<path d="M28,23.000008L32,24.000008L35,25.000008L40,24.000008L40,28.000004L37,30.000004L32,30.000004L27,27.000008z" fill-rule="evenodd" fill="#162027" stroke="none" fill-opacity="1" />
+				<path d="M28,24.000008L32,25.000008L35,26.000008L39,25.000008L39,27.000008L36,29.000004L32,29.000004L28,27.000008z" fill-rule="evenodd" fill="#166273" stroke="none" fill-opacity="1" />
+				<path d="M28,24.000008L32,25.000008L35,26.000008L39,25.000008L39,26.000008L35,27.000008L32,26.000008L29,26.000008z" fill-rule="evenodd" fill="#238C98" stroke="none" fill-opacity="1" />
+				<path d="M28,26.000008L32,28.000004L37,28.000004L36,29.000004L32,29.000004L28,27.000008z" fill-rule="evenodd" fill="#124755" stroke="none" fill-opacity="1" />
+			</g>
+		</g>
+	</g>
+</svg>

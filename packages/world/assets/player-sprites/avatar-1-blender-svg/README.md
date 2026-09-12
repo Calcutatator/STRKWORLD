@@ -14,7 +14,7 @@ same SVGs directly at 64×64 for the existing PNG sprite runtime. The deliverabl
 includes both the `.blend` and the SVG files; Blender renders are not a second,
 unrelated approval path.
 
-Suggested working layout, to be populated during authoring:
+Working layout (only idle sources, frames and review are populated so far):
 
 ```text
 source/avatar-1.blend
@@ -35,10 +35,15 @@ export/avatar-1.png
 export/manifest.json
 ```
 
-These paths are an avatar delivery contract, not claims that avatar assets
-already exist. The `setup/` directory now contains a separate verified native
-Grease Pencil export fixture and `.blend`; no Avatar 1 SVG, rig or animation
-has been produced yet.
+**Current draft: idle-v1, awaiting James's approval.** Four fresh layered
+Grease Pencil views, four native SVGs and their exact 64×64 PNGs now exist.
+The [approval sheet](review/idle-approval.png) shows the final pixels at 1×,
+2× and 6×. The editable [Blender master](source/avatar-1.blend) contains named
+parts for all views. No rig or walk animation has been created yet. The
+`setup/` directory remains a separate export fixture, not avatar artwork.
+
+SVG sources: [down](svg/down/idle.svg), [left](svg/left/idle.svg),
+[right](svg/right/idle.svg), [up](svg/up/idle.svg).
 
 ## Ordered stages
 
@@ -135,11 +140,59 @@ transparent 64×64 PNG. Its 151 partial-alpha edge pixels are ordinary vector
 antialiasing, not a production sprite alpha pass. The source and outputs are
 recorded in [`setup/setup-report.json`](setup/setup-report.json).
 
-The active task's native tool inventory has not reloaded; restart Codex once
-to expose the new Blender tools here. Keep GUI Blender open while using MCP.
-The local SDK verification exercised the configured server's real MCP tools;
-it does not claim that the current task's tool inventory has already refreshed.
+**Restart verified, 2026-09-12:** the task's native Blender tools are now
+available. `get_addon_status` reported Blender 5.2.1 LTS, protocol 5, matching
+add-on and telemetry consent false. Native MCP calls authored the four views,
+exported them, saved the master, reopened it and re-exported existing geometry.
+Keep GUI Blender open while using MCP.
 
 For setup recovery and exact local paths, see [`setup/README.md`](setup/README.md).
 
 The machine-readable stage state is [`workflow.json`](workflow.json).
+
+## Reproduce and inspect the idle draft
+
+In GUI Blender, run `source/authoring.py` through Blender MCP with
+`AVATAR_SOURCE_DIR` set to this directory's absolute `source` path to rebuild
+from the original vector recipe. It replaces only `AV1SVG | ` scene/objects.
+**Do not run the authoring script to export hand-edited Blender artwork**:
+it reconstructs that named artwork from the recipe.
+
+Run `source/export_svg.py` to export the existing Grease Pencil geometry and
+save the master. It reasserts frame 1, square pixels, the 64×64 orthographic
+camera and the largest 3D view. Run `node source/rasterize.cjs` to derive the
+PNG cells and review sheet from those SVGs. The script uses bundled Sharp;
+`STRKWORLD_NODE_MODULES` can point to another module directory containing
+`sharp` and `sax`. `python3 source/verify_vectors.py` verifies the original
+recipe, saved-master readback, SVG paths/materials and recorded hashes.
+
+The export treatment is explicit and applied **before this draft's approval**:
+SVG is rasterized at the authored 64×64 size, alpha coverage below 128 is
+removed and other alpha becomes 255, then RGB maps to the closest of the 24
+authored colours. The PNG has no baked shadow. No individual view is fitted
+or rescaled. All visible feet end at row 55, for the y=56 contact line.
+Front/side hair silhouettes are 50px tall; the back is 49px after rasterization.
+
+Blender 5.2 needs a nonzero `fill_id` for each painted polygon and
+`hide_stroke=True` to export fills without unwanted rings. The SVG exporter
+ignores `material.show_stroke=False` for this purpose. This was verified
+against the installed API and actual exports. Native sRGB export truncates
+some channels by one; source parity allows at most one level per channel,
+while the PNG uses the exact authored palette.
+
+[Mechanical QA](review/qa.json) checks dimensions, transparency, palette and
+pixel-exact preview crops. [Source parity](review/source-parity.json) checks
+vector construction. [Reload parity](review/reload-parity.json) records
+byte-identical SVG and PNG files after reopening the saved `.blend` and
+exporting without rerunning the authoring script. These establish local
+source/export mechanics, not artistic approval or live-game acceptance.
+
+The face review corrected tall pale eye shapes by separating small dark pupils
+from the fringe. The scaffold keeps medium proportions, crossed leather
+harness and anatomical-left scarf tails plus a small hip pouch. The remaining
+art decision is James's review of the four exact idle cells.
+
+`review/user-decisions.json` is the explicit approval record. The rasterizer
+only writes when its status is `pending`; an approved or rejected review must
+be preserved and a new revision explicitly started before changing pixels.
+Animation, full-sheet delivery and game integration remain later gates.

@@ -2590,8 +2590,8 @@ checks after the headless state and lifecycle regressions pass.
 
 **2026-09-12 · Directed by James · authoring-route amendment to D-052;
 supersedes the September 12 ImageGen/reduction draft workflow · setup and
-native SVG export verified later the same day; Codex tool reload and new
-avatar authoring remain pending**
+native SVG export and native Codex tools verified later the same day; four
+new idle views are ready for user approval, animation remains pending**
 
 **Context.** James rejected the fresh Avatar 1 draft's in-game appearance,
 despite its mechanical export checks passing, and requested: “We should use
@@ -2629,7 +2629,15 @@ Codex MCP configuration. A real MCP session inspected Blender, executed the
 native Grease Pencil export probe and read back its scene. A 64×64 SVG with
 28 paths and zero embedded images rendered to a transparent 64×64 PNG.
 [Evidence](../packages/world/assets/player-sprites/avatar-1-blender-svg/setup/setup-report.json)
-records exact scope and hashes. The current Codex task still needs to reload
-its native tools; new Avatar 1 art, its rig, animation and game acceptance
-remain unperformed. The fixture's partial-alpha vector edges are not a
-production pixel-art approval.
+records exact scope and hashes. The subsequent Codex restart exposed the
+native Blender tools. The setup fixture's partial-alpha vector edges remain
+separate from the avatar's final binary-alpha export.
+
+**Idle draft, 2026-09-12.** Native Blender MCP authored four original Grease
+Pencil idle views and exported editable SVGs. Their exact 64×64 PNGs use the
+24-colour authored palette and binary alpha, with no per-view rescaling.
+Reopening the saved master and exporting existing geometry reproduced all
+four SVGs and PNGs byte-for-byte. The [review sheet](../packages/world/assets/player-sprites/avatar-1-blender-svg/review/idle-approval.png)
+shows 1×, 2× and 6× exact pixels. User approval is pending; rigging, animation,
+full-sheet delivery and game acceptance are not performed. This local export
+verification does not approve the artwork.

@@ -17,8 +17,9 @@ Installed for James on 2026-09-12:
 
 Open Blender normally; the enabled add-on starts the localhost connection.
 If it is stopped manually, use the 3D View sidebar's **MCP for Blender** panel
-to start it again. Codex needs one restart after this initial configuration
-addition; do not infer current-task tool availability from a config entry.
+to start it again. James restarted Codex on 2026-09-12; native Blender tools then connected
+successfully. Initial setup required that restart; no further restart is
+currently needed.
 
 The setup directory holds a native Grease Pencil monkey fixture, its `.blend`,
 the exported SVG, a 64×64 raster and an enlarged preview. This is a tool/export
