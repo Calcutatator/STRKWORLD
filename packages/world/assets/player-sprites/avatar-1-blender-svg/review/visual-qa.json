@@ -1,85 +1,106 @@
 {
   "revision": "idle-v2",
-  "status": "pass-for-user-review",
-  "userApproval": "pending",
+  "status": "superseded-unapproved-concept-gate-skipped",
+  "userApproval": "not-granted",
   "animation": "not-started",
   "gameAcceptance": "not-tested",
-  "reference": "reference/approved-concept-turnaround.png",
-  "referenceSha256": "f1de96b3038042aaca726c18ae87fe374e8dac2bbda7d0a2359d53f44ad08ed4",
-  "reviewedImages": [
-    "review/reference-comparison.png",
-    "review/idle-approval.png",
-    "reference/studies/concept-sampling-comparison.png"
-  ],
-  "failedIterations": [
-    {
-      "id": "idle-v1",
-      "result": "rejected-by-user",
-      "reason": "Loose invented vectors diverged in hair, face, outlines, leg/boot shapes and harness; prior internal QA assessed coherence instead of likeness.",
-      "evidence": "review/rejected-idle-v1/user-decision.json"
-    },
-    {
-      "id": "concept-sampling-initial",
-      "result": "failed-internal-visual-review",
-      "reason": "Default sampling missed narrow black pupils, some exterior neutral gray fringe remained, and pale sclera needed protection."
-    },
-    {
-      "id": "concept-sampling-provisional-phase",
-      "result": "failed-internal-visual-review",
-      "reason": "After background-bound changes, provisional down sampling made the face mottled and did not retain both clear pupils."
-    }
-  ],
-  "corrections": [
-    "Use the approved concept itself as the construction source; exclude both rejected drafts and the darker runtime reduction.",
-    "Flood-fill only exterior neutral background, preserving enclosed pale eye pixels and genuine dark contours.",
-    "Align down and profile sampling to the actual source pupil columns and rows, without painting a generic eye template.",
-    "Reconstruct contiguous colour-region contours, including holes, as Blender Grease Pencil polygons and native SVG paths.",
-    "Compare actual final SVG-derived PNGs beside the concept at equal visible height and at 1x/2x game scale."
-  ],
-  "criteria": [
-    {
-      "feature": "Hair",
-      "finding": "Swept pointed locks and asymmetric silhouette follow the concept; the invented cap/spoke outline is removed."
-    },
-    {
-      "feature": "Eyes and face",
-      "finding": "Front retains two dark vertical pupils with pale outer accents. Profiles retain the source eye, nose and jaw relationship."
-    },
-    {
-      "feature": "Proportions and stance",
-      "finding": "Head/body relationship, longer lower body, relaxed arms, knee/ankle separation and toe shapes follow the concept."
-    },
-    {
-      "feature": "Clothing and equipment",
-      "finding": "Thin crossed harness, substantial gloves, belt/cuffs and direction-specific scarf attachment follow the source."
-    },
-    {
-      "feature": "Small-scale readability",
-      "finding": "Both reviewers inspected the exact export sheet and source comparison. Coarse details remain visible rather than hidden by source-only previews."
-    }
-  ],
-  "independentReviews": [
-    {
-      "reviewer": "sprite_history_review",
-      "assessment": "Closely matches the approved concept within 64px; no remaining material identity or anatomy mismatch. Suitable for reference-faithful idle-draft review."
-    },
-    {
-      "reviewer": "blender_svg_workflow_review",
-      "assessment": "Closely retains proportions, silhouette and equipment; no malformed anatomy or previous invented/cartoon face. Ready to present as idle draft."
-    }
-  ],
-  "limitations": [
-    "Actual opaque silhouettes are 49px high within 64px cells.",
-    "Fine hair highlights, fingers/glove detail and buckle interior simplify at this scale.",
-    "Side profile nose/chin remains coarse at game resolution.",
-    "Visible vector editing groups are not a finished rig or hidden-surface reconstruction.",
-    "Internal visual review does not grant James approval or establish animation/game acceptance."
-  ],
-  "frameSha256": {
-    "frames/down/idle.png": "0e20f4b639acaf7eea1983b6898b21f0f3c15868b0f1b235a22411620b62e348",
-    "frames/left/idle.png": "4e0bb3c51edf842cf369745cda373131bc06d9c6ce9a9409b6d5a7beb2ad42d7",
-    "frames/right/idle.png": "3a97a74118411534a3402989136ab3a515237949c92d3b96a4dff3e499b4756a",
-    "frames/up/idle.png": "d659bffad5ef29d6f7a728866fdb636ed0567a88adfbdd10465f3cb17880d9de"
+  "supersession": {
+    "date": "2026-09-12",
+    "reason": "James clarified that fresh concept art and explicit concept approval must precede Blender/SVG sprite production. The reference in the prior review was a historical turnaround, not an approved concept.",
+    "historicalAssessmentScope": "The previous comparisons and reviewer opinions concern only resemblance to that old turnaround. They cannot pass the new concept or likeness gate.",
+    "replacementSequence": [
+      "fresh concept art",
+      "explicit user concept approval",
+      "Blender/SVG idles",
+      "internal likeness QA against the approved concept",
+      "explicit user idle approval",
+      "animation",
+      "game acceptance"
+    ]
   },
-  "comparisonSha256": "b8d843815baa26d8384cfc87e13ab8e06c09a6f4266cf49f4e13e200dde13409"
+  "historicalAssessment": {
+    "revision": "idle-v2",
+    "status": "pass-for-user-review",
+    "userApproval": "pending",
+    "animation": "not-started",
+    "gameAcceptance": "not-tested",
+    "reference": "reference/approved-concept-turnaround.png",
+    "referenceSha256": "f1de96b3038042aaca726c18ae87fe374e8dac2bbda7d0a2359d53f44ad08ed4",
+    "reviewedImages": [
+      "review/reference-comparison.png",
+      "review/idle-approval.png",
+      "reference/studies/concept-sampling-comparison.png"
+    ],
+    "failedIterations": [
+      {
+        "id": "idle-v1",
+        "result": "rejected-by-user",
+        "reason": "Loose invented vectors diverged in hair, face, outlines, leg/boot shapes and harness; prior internal QA assessed coherence instead of likeness.",
+        "evidence": "review/rejected-idle-v1/user-decision.json"
+      },
+      {
+        "id": "concept-sampling-initial",
+        "result": "failed-internal-visual-review",
+        "reason": "Default sampling missed narrow black pupils, some exterior neutral gray fringe remained, and pale sclera needed protection."
+      },
+      {
+        "id": "concept-sampling-provisional-phase",
+        "result": "failed-internal-visual-review",
+        "reason": "After background-bound changes, provisional down sampling made the face mottled and did not retain both clear pupils."
+      }
+    ],
+    "corrections": [
+      "Use the approved concept itself as the construction source; exclude both rejected drafts and the darker runtime reduction.",
+      "Flood-fill only exterior neutral background, preserving enclosed pale eye pixels and genuine dark contours.",
+      "Align down and profile sampling to the actual source pupil columns and rows, without painting a generic eye template.",
+      "Reconstruct contiguous colour-region contours, including holes, as Blender Grease Pencil polygons and native SVG paths.",
+      "Compare actual final SVG-derived PNGs beside the concept at equal visible height and at 1x/2x game scale."
+    ],
+    "criteria": [
+      {
+        "feature": "Hair",
+        "finding": "Swept pointed locks and asymmetric silhouette follow the concept; the invented cap/spoke outline is removed."
+      },
+      {
+        "feature": "Eyes and face",
+        "finding": "Front retains two dark vertical pupils with pale outer accents. Profiles retain the source eye, nose and jaw relationship."
+      },
+      {
+        "feature": "Proportions and stance",
+        "finding": "Head/body relationship, longer lower body, relaxed arms, knee/ankle separation and toe shapes follow the concept."
+      },
+      {
+        "feature": "Clothing and equipment",
+        "finding": "Thin crossed harness, substantial gloves, belt/cuffs and direction-specific scarf attachment follow the source."
+      },
+      {
+        "feature": "Small-scale readability",
+        "finding": "Both reviewers inspected the exact export sheet and source comparison. Coarse details remain visible rather than hidden by source-only previews."
+      }
+    ],
+    "independentReviews": [
+      {
+        "reviewer": "sprite_history_review",
+        "assessment": "Closely matches the approved concept within 64px; no remaining material identity or anatomy mismatch. Suitable for reference-faithful idle-draft review."
+      },
+      {
+        "reviewer": "blender_svg_workflow_review",
+        "assessment": "Closely retains proportions, silhouette and equipment; no malformed anatomy or previous invented/cartoon face. Ready to present as idle draft."
+      }
+    ],
+    "limitations": [
+      "Actual opaque silhouettes are 49px high within 64px cells.",
+      "Fine hair highlights, fingers/glove detail and buckle interior simplify at this scale.",
+      "Side profile nose/chin remains coarse at game resolution.",
+      "Visible vector editing groups are not a finished rig or hidden-surface reconstruction.",
+      "Internal visual review does not grant James approval or establish animation/game acceptance."
+    ],
+    "frameSha256": {
+      "frames/down/idle.png": "0e20f4b639acaf7eea1983b6898b21f0f3c15868b0f1b235a22411620b62e348",
+      "frames/left/idle.png": "4e0bb3c51edf842cf369745cda373131bc06d9c6ce9a9409b6d5a7beb2ad42d7",
+      "frames/right/idle.png": "3a97a74118411534a3402989136ab3a515237949c92d3b96a4dff3e499b4756a",
+      "frames/up/idle.png": "d659bffad5ef29d6f7a728866fdb636ed0567a88adfbdd10465f3cb17880d9de"
+    },
+    "comparisonSha256": "b8d843815baa26d8384cfc87e13ab8e06c09a6f4266cf49f4e13e200dde13409"
+  }
 }

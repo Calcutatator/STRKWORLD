@@ -21,7 +21,7 @@ the lane boundary — that is why the repo is shaped the way it is.
 | **Shell** | `apps/web` | Active; production wallet gate, transfer/shield policy parsing, recovery-only production Bridge runtime and all v1 room surfaces are complete; D-057 has accepted rendered Bank/Post Office/Exchange station integration, while the production Bridge planner/station, live routes and funded validation remain open |
 | **Backend** | `apps/backend` | Active; bounded APIs, same-origin local proxy, D-050 and hosted image smokes complete; host, domain, secrets, Alchemy controls, live staging and funded checks remain |
 | **Bridge** | `packages/bridge` | Active; manual/recovery flow and production saved-record runtime complete, production planner and funded-provider acceptance open |
-| **Art** | `packages/world/assets` | Existing runtime assets remain current. D-059 idle-v1 was rejected for reference drift. Concept-derived SVG idle-v2 now passes strict reference comparison and exact Blender/SVG/PNG parity; four idle views await user approval before animation. September 12 raster draft rejected. See [active workflow](../packages/world/assets/player-sprites/avatar-1-blender-svg/README.md). |
+| **Art** | `packages/world/assets` | Existing runtime assets remain current. D-059 requires fresh concept art and explicit user concept approval before Blender/SVG idles, then internal likeness QA, explicit user idle approval, animation and game acceptance. Idle-v2 is superseded and unapproved because the concept gate was skipped; prior technical proofs are historical. See [active workflow](../packages/world/assets/player-sprites/avatar-1-blender-svg/README.md). |
 | ~~Contracts~~ | — | **Dormant until post-v1** |
 
 ### Why Contracts is dormant
@@ -360,12 +360,12 @@ visible because the production planner capability is still absent. Subjective
 final-art acceptance remains open. These checks prove no live-wallet or funded
 behavior.
 
-James has delegated the intermediate D-052 art gates to orchestration. The Art
-lane should continue through internal identity, edge, movement, source/export
-and independent-review gates without returning each scaffold or contact sheet
-for user approval. Orchestration owns rejection and rework until the corrected
-assets and five-column runtime are integrated. The next user-facing checkpoint
-is one completed in-game review; final rendered acceptance remains user-owned.
+For historical D-052 work, James delegated intermediate art gates to
+orchestration. **The fresh Avatar 1 restart is now governed by D-059's
+concept-first correction:** James must explicitly approve fresh concept art
+before Blender/SVG idles, and approve the exact idles after internal likeness
+QA before animation. The earlier delegation does not waive either gate. Final
+rendered acceptance remains user-owned.
 
 **Must not:** import `starknet` or any wallet package. Put an address, balance,
 transaction hash, building name or entry event into lobby traffic. On local
@@ -652,10 +652,12 @@ is headlessly implemented and verified. Its rendered functional/interactive
 matrix was accepted on 2026-08-28; only subjective final-art review remains
 open.
 
-Intermediate D-052 art approval is orchestration-owned: do not block the lane
-on user review of model sheets, contacts or QA artifacts. Present the user only
-with the completed, independently reviewed, runtime-integrated correction for
-the required final localhost acceptance.
+The historical delegation of intermediate D-052 art approval is superseded
+for the fresh Avatar 1 restart by D-059's concept-first correction. Create
+fresh concept art and obtain James's explicit approval before Blender/SVG
+production. Internally verify the resulting idles against that approved
+concept, obtain James's idle approval, then animate. The separate final
+localhost acceptance remains user-owned.
 
 **Licence audit is the real work here.** Popular "free" packs are frequently
 non-commercial only, and this is a public project handling real funds. Audit

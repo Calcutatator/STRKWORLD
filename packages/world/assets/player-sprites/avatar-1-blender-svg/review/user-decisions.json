@@ -1,10 +1,16 @@
 {
   "schemaVersion": 1,
   "draft": "idle-v2",
-  "status": "pending",
-  "internalReferenceQa": "pass-for-user-review",
-  "subject": "Concept-derived Avatar 1 down, left, right and up exact 64x64 idle cells",
-  "userDecision": null,
+  "status": "superseded-unapproved-concept-gate-skipped",
+  "internalReferenceQa": "superseded-historical-assessment",
+  "subject": "Historical idle-v2 sprite cells derived from a prior turnaround incorrectly labelled approved concept art",
+  "userDecision": {
+    "date": "2026-09-12",
+    "decision": "restart-at-fresh-concept",
+    "reason": "James clarified that fresh concept art must be created and approved before Blender/SVG sprite production; the old turnaround was not concept art.",
+    "conceptApprovalGranted": false,
+    "idleApprovalGranted": false
+  },
   "review": "review/reference-comparison.png",
   "previousRejection": "review/rejected-idle-v1/user-decision.json",
   "animationAuthorizedByThisGate": false,
@@ -16,5 +22,9 @@
     "frames/left/idle.png": "4e0bb3c51edf842cf369745cda373131bc06d9c6ce9a9409b6d5a7beb2ad42d7",
     "frames/right/idle.png": "3a97a74118411534a3402989136ab3a515237949c92d3b96a4dff3e499b4756a",
     "frames/up/idle.png": "d659bffad5ef29d6f7a728866fdb636ed0567a88adfbdd10465f3cb17880d9de"
-  }
+  },
+  "supersededBy": "Fresh concept creation and concept/approval.json before a new sprite revision",
+  "conceptApprovalRequiredBeforeSpriteProduction": true,
+  "approvedForAnimation": false,
+  "approvedForIntegration": false
 }

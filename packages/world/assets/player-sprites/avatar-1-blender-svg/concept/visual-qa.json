@@ -1,0 +1,62 @@
+{
+  "version": 1,
+  "stage": "concept-design-only",
+  "revision": "concept-v2",
+  "reviewed": "2026-09-12",
+  "artifact": "avatar-1-concept-v2.png",
+  "sha256": "8c0d58a07d1372d2e8c9bcdbddac6e997763a8ffd2b910be83e8ec47b69f1c92",
+  "status": "ready-for-user-concept-review",
+  "grantsUserApproval": false,
+  "reviewers": [
+    "root visual inspection",
+    "independent sprite_history_review visual inspection"
+  ],
+  "checks": [
+    {
+      "item": "Fresh concept provenance",
+      "result": "The initial ImageGen call used a textual character brief and no input images; v2 edited that freshly generated concept only."
+    },
+    {
+      "item": "Anatomy and face",
+      "result": "Coherent complete limbs, hands and boots; appealing expressive face with clear irises. No material anatomy defect identified."
+    },
+    {
+      "item": "Character identity",
+      "result": "Amber swept hair, youthful face, teal costume and body design remain coherent across hero, rear and head study."
+    },
+    {
+      "item": "Scarf continuity",
+      "result": "Corrected rear tails to attach at viewer-left, matching the front hero's anatomical left."
+    },
+    {
+      "item": "Harness continuity",
+      "result": "Removed portrait-only square buckle; plain strap now matches the hero. Rear X construction remains plausible."
+    },
+    {
+      "item": "Pouch ownership",
+      "result": "Pouch is on the character's anatomical right in both full-body views."
+    }
+  ],
+  "iterations": [
+    {
+      "revision": "concept-v1",
+      "status": "superseded-internal-qa",
+      "issues": [
+        "Rear scarf tail attachment was on opposite anatomical side from hero.",
+        "Portrait added a prominent buckle not matching the hero's same-side strap."
+      ]
+    },
+    {
+      "revision": "concept-v2",
+      "status": "ready-for-user-concept-review",
+      "corrections": "Both costume continuity issues corrected with an ImageGen edit and visually rechecked.",
+      "remainingMaterialIssuesIdentified": []
+    }
+  ],
+  "limits": [
+    "Subjective concept-design review only.",
+    "No existing image was accepted as user-approved concept authority.",
+    "No sprite-scale, Blender, SVG, animation or game acceptance is claimed.",
+    "James must explicitly approve the reviewed concept hash before any sprite production."
+  ]
+}

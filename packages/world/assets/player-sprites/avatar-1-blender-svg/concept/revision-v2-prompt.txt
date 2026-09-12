@@ -1,0 +1,10 @@
+Use case: precise-object-edit
+Edit this fresh character concept sheet to fix costume continuity only. Preserve the character's face, hair, build, proportions, anatomy, colors, outfit design, poses, boots, gloves, title, sheet composition, detailed illustration quality and warm ivory background.
+
+Treat the large front three-quarter hero illustration on the LEFT as the costume authority. Leave that entire hero illustration unchanged.
+
+Two precise corrections:
+1. On the SMALL REAR FIGURE in the middle, move the two free teal scarf tails to emerge from the character's ANATOMICAL LEFT shoulder (the VIEWER'S LEFT side of that rear figure). Currently they wrongly emerge from viewer-right. Remove the old viewer-right flowing tails completely, revealing the correct tunic/arm/background beneath. Redraw those same two tapered ends flowing down and slightly left from the rear figure's viewer-left shoulder, with a clear consistent cloth connection at that shoulder. Keep the rear leather X harness and the pouch on viewer-right exactly as they are. Keep the rear figure's existing pose.
+2. In the large FACE PORTRAIT on the RIGHT, remove the conspicuous square buckle on the leather strap at the portrait's lower right. Replace that local buckle area with an uninterrupted simple brown leather strap matching the plain strap visible over the front hero's anatomical left shoulder. Preserve the portrait's face, hair and scarf exactly.
+
+No other design changes. This remains high-resolution hand-painted character concept art, not a sprite or vector.

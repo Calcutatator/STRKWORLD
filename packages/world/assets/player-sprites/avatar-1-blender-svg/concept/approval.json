@@ -1,0 +1,42 @@
+{
+  "version": 1,
+  "avatar": "avatar-1",
+  "revision": "concept-v2",
+  "status": "pending",
+  "created": "2026-09-12",
+  "decision": "D-059",
+  "artifact": "avatar-1-concept-v2.png",
+  "sha256": "8c0d58a07d1372d2e8c9bcdbddac6e997763a8ffd2b910be83e8ec47b69f1c92",
+  "dimensions": [
+    1536,
+    1024
+  ],
+  "approvalScope": [
+    "character identity and face",
+    "hair silhouette",
+    "outfit and equipment",
+    "body proportions",
+    "illustration design direction"
+  ],
+  "userDecision": null,
+  "generation": {
+    "tool": "image_gen.imagegen",
+    "mode": "built-in",
+    "intent": "edit",
+    "inputImages": [
+      "avatar-1-concept-v1.png"
+    ],
+    "initialGeneration": "concept-v1-record.json",
+    "prompt": "revision-v2-prompt.txt",
+    "originalOutput": "/Users/james.wilcock/.codex/generated_images/01a094c9-fd48-7940-871a-4e68ac52a933/exec-44bf8d46-a891-4f3a-a784-c85983dceb74.png"
+  },
+  "productionGate": {
+    "requiresExplicitUserApproval": true,
+    "blenderSpriteAuthoring": "not-started-for-this-concept",
+    "svgSpriteExport": "not-started-for-this-concept",
+    "animation": "not-started",
+    "nextAfterApproval": "Construct four idle facings with Blender MCP and real SVG exports; compare them against this exact approved concept and iterate internally before the separate idle approval."
+  },
+  "historicalArtifactDoesNotGrantApproval": "../reference/approved-concept-turnaround.png is an old sprite turnaround, previously misclassified as concept art. It was not used as an image input for this fresh concept.",
+  "internalQa": "visual-qa.json"
+}

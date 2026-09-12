@@ -1,140 +1,118 @@
-# Avatar 1 — concept, Blender MCP and SVG workflow
+# Avatar 1 — concept approval, Blender MCP and SVG workflow
 
-**Active revision: idle-v2.** James rejected both the September 12 raster
-restart and the hand-drawn `idle-v1` SVG draft. The latter's visual QA was too
-permissive: successful export did not establish a close match to the concept.
+**Active stage: fresh concept art, followed by explicit user concept approval.**
+James corrected the process: the old turnaround was not concept art. We must
+create a fresh concept and obtain his approval before producing Blender/SVG
+sprites. `idle-v2` is superseded and unapproved because this gate was skipped.
 See [D-059](../../../../../docs/DECISIONS.md#d-059--avatar-1-authoring-uses-blender-mcp-and-real-svg-pose-files).
 
-The existing [approved concept turnaround](reference/approved-concept-turnaround.png)
-is now the construction source and visual authority. No new concept image was
-generated for this revision. The darker old runtime idles are useful for scale
-comparison, but are not tracing sources. Neither rejected draft is an art source.
-Provenance is recorded in [reference-manifest.json](reference/reference-manifest.json).
+## Current review and authority
 
-## What to review
+The [fresh concept candidate](concept/avatar-1-concept-v2.png) is ready for
+review, with its pending decision in [concept/approval.json](concept/approval.json).
+Internal review corrected scarf and buckle continuity before this candidate.
+The decision record binds any approval to the actual reviewed image. Concept creation is not concept approval. No concept has been approved
+for this restart, and no Blender character production may proceed until James
+explicitly approves one.
 
-The [reference comparison](review/reference-comparison.png) pairs the approved
-concept with each SVG-derived sprite at equal visible height. The
-[exact-cell sheet](review/idle-approval.png) shows the actual transparent 64×64
-PNG cells at 1×, 2× and 6×. The latter is the pixel output that approval covers.
+`reference/approved-concept-turnaround.png` is a historical sprite turnaround,
+not an approved concept. Its misleading old filename is retained to preserve
+provenance and links, not to confer authority. Do not use it, the rejected
+raster restart, `idle-v1` or `idle-v2` as art sources for the fresh concept.
+[The reference manifest](reference/reference-manifest.json) records this
+correction. The currently accepted runtime asset remains unchanged.
 
-Editable sources: [Blender master](source/avatar-1.blend),
-[down SVG](svg/down/idle.svg), [left SVG](svg/left/idle.svg),
-[right SVG](svg/right/idle.svg), [up SVG](svg/up/idle.svg).
+The existing [reference comparison](review/reference-comparison.png),
+[exact-cell sheet](review/idle-approval.png), [Blender master](source/avatar-1.blend)
+and SVGs under `svg/` all belong to **historical idle-v2**. Their captions
+predate the correction. They are not active approval requests or approved
+concepts; their hashes and technical results remain historical evidence only.
 
-This is a vector reconstruction of existing approved concept art. Contiguous
-colour regions become actual Grease Pencil polygons, including compound paths
-with holes. Visible regions have named editing groups. This is not a claim of
-a newly designed character, clean anatomical rig, completed hidden surfaces or
-animation. Those later stages must preserve the approved idle pixels.
+## Required production sequence
 
-## Reference-first production sequence
+1. **Create fresh concept art.** Produce a new character design proposal for
+   Avatar 1 from the current brief. Present the concept itself, with enough
+   detail to judge face, hair, proportions, clothing, equipment and overall
+   character. Do not substitute a sprite sheet, resampled prior turnaround
+   or vector conversion for this stage.
+2. **Obtain explicit concept approval.** Ask James to approve the fresh
+   concept and record the decision against its file hash in
+   `concept/approval.json`. If he requests changes, revise the concept and
+   return to this gate. No Blender/SVG sprite construction before approval.
+3. **Build the four Blender/SVG idles.** With the approved concept as the
+   visual authority, author layered Grease Pencil geometry through Blender
+   MCP, save the editable `.blend` and export real vector SVGs. Derive the
+   existing 64×64 PNG game cells from those SVGs. Do not silently reuse the
+   superseded idle-v2 construction or treat its parity evidence as new work.
+4. **Perform internal likeness QA.** Compare the actual exported cells with
+   the approved concept at equal figure height and inspect 1×/2× game-scale
+   readability. Check facial features, hair, proportions, silhouette,
+   clothing and equipment in all four directions. Iterate internally until
+   they closely match. Technical SVG/PNG parity is a separate check and
+   cannot establish likeness or artistic approval.
+5. **Obtain explicit idle approval.** Present all four exact PNG idles and
+   their SVG sources together, with the approved concept for comparison.
+   Record James's decision separately from internal QA. Do not animate until
+   he approves these idles. Material redesign reopens the relevant concept
+   or idle gate.
+6. **Animate and verify.** Build a proper rig, part ownership and hidden
+   surfaces. Complete one walk direction with weight transfer, counter-swing,
+   planted feet and scarf follow-through before extending the other views.
+   Export all 24 poses, verify source/SVG/PNG/sheet/preview parity and obtain
+   the separate art handoff approval.
+7. **Perform game acceptance.** Integrate the approved art via the World lane
+   and give James a short current-checkout browser test. Concept approval,
+   idle approval and export checks do not establish live Phaser acceptance.
 
-1. Establish the concept and its provenance before building the sprite. Keep
-   it beside the work throughout QA. Compare the actual hair locks, face,
-   shoulders, torso/leg proportions, scarf, harness, gloves and boots.
-2. Register the concept to the game cell once. Inspect sampling and palette
-   studies before vector construction. Check that narrow dark pupils and
-   white sclera survive. Exterior background removal must not erase enclosed
-   white facial details. Keep the raw concept crops for comparison.
-3. Construct the four views in Blender through MCP and export real SVG paths.
-   Rasterize those SVGs and demand exact RGBA parity with the chosen
-   construction cells. Vector reconstruction must not introduce drift.
-4. Perform **reference-fidelity visual QA** on the actual exported sprites.
-   Compare all four directions side by side with the concept at equal visible
-   height, and inspect 1×/2× game-scale readability. A generic anatomical or
-   coherence pass is insufficient. Iterate internally until close before
-   asking James for approval. Preserve specific failures and their fixes.
-5. Ask James to approve the four exact idle views together. Record the result
-   separately from internal visual review and mechanical QA. No animation
-   until explicit user approval of this gate.
-6. Build proper direction-specific rig/part ownership and hidden surfaces.
-   Author one complete walk direction, including whole-body weight transfer,
-   counter-swing, foot contact and scarf follow-through. Review the whole loop
-   before extending it to the other directions. Material idle changes reopen
-   idle approval.
-7. Export all 24 poses, verify SVG/PNG/sheet/preview parity, then request the
-   separate art handoff approval. Game integration and James's browser
-   acceptance remain later World-lane work.
+## Historical idle-v2 evidence
 
-## Reproduce the source and exports
+`review/user-decisions.json` records idle-v2 as superseded and unapproved.
+`review/visual-qa.json` preserves the earlier internal assessment under that
+status. The assessment compared the output with a historical turnaround that
+we incorrectly called approved concept art; it does not pass the new concept
+or likeness gate.
 
-- `reference/studies/study.cjs` reads only the approved concept. It preserves
-  raw crops, compares resampling methods, selects source-aligned sampling
-  phases and a shared palette of up to 24 source-derived colours. The report
-  records source hashes, segmentation, scale, phases and foot registration.
-- `source/freeze_construction.py` copies the selected study cells to
-  `source/construction/` and freezes their provenance. Run only after the
-  construction study has been visually inspected.
-- `source/build_reference_vectors.py` traces the boundaries of contiguous
-  colour regions with holes. Run with a Python environment containing Pillow.
-  It writes `source/idle-geometry.json` and `source/palette.json`.
-- In GUI Blender, run `source/authoring.py` through Blender MCP with
-  `AVATAR_SOURCE_DIR` set to this directory's absolute `source` path. It
-  replaces only `AV1SVG | ` scene/objects and reconstructs the source polygons.
-  **Do not use this to export hand-edited art**; it rebuilds from the recipe.
-- `source/export_svg.py` exports existing geometry and saves the `.blend`.
-  It reasserts frame 1, the 64×64 orthographic camera, square pixels and the
-  largest 3D viewport. `source/readback.py` reads the saved/reopened geometry
-  for independent comparison.
-- `source/rasterize.cjs` derives the final PNG cells and exact-cell sheet from
-  the native SVGs. It uses Sharp and Sax; set `STRKWORLD_NODE_MODULES` to a
-  compatible module directory if the recorded bundled runtime is unavailable.
-- `source/make_reference_review.cjs` places the actual exported PNG cells next
-  to the original concept crops, without changing the exported pixels.
-- `source/verify_vectors.py` independently checks compound paths, source
-  coverage, native palette colours, Blender readback and exact decoded PNG
-  equality to the construction cells. The supplied reopened-master report
-  must match current artifact hashes.
+The old process sampled that turnaround, reconstructed contiguous colour
+regions as Grease Pencil polygons with holes, and exported SVGs. Technical
+proofs still show what that process did, but not that its reference was
+approved or its art was accepted:
 
-All construction cells have binary alpha. The integer-aligned region paths
-export back to those same pixels. The rasterizer's explicit alpha threshold
-(128) and nearest-palette mapping remain recorded, but are not used to hide a
-geometry or colour mismatch: zero pixel difference is required afterward.
+- `review/qa.json`: historical dimensions, alpha, palette and preview crops.
+- `review/source-parity.json`: historical construction/SVG/readback/RGBA parity.
+- `review/reload-parity.json`: historical reopening and re-export results.
+- `review/visual-qa.json`: superseded likeness assessment and failed iterations.
+- `reference/studies/`: historical sampling comparisons, not fresh concepts.
+- `review/rejected-idle-v1/`: presented draft and rejection; its complete source
+  remains at commit `110b26e`.
 
-Blender 5.2 requires a nonzero `fill_id` for each filled region; multiple
-boundary loops for its holes share the same id. Set `hide_stroke=True` to
-suppress unwanted rings. `material.show_stroke=False` alone is insufficient.
-The native exporter truncates sRGB bytes: a documented quarter-byte material
-bias puts each colour inside the intended integer bin and gives the exact
-palette hex. These details were checked against the installed API and actual
-exported artwork.
+The scripts under `source/` and `reference/studies/` are retained for that
+historical reproduction. Do not run them to advance the active concept stage.
+The old rasterizer accepts only a pending idle decision; the superseded
+idle-v2 decision intentionally prevents it from overwriting that review.
+After concept approval, start a distinct sprite revision with the approved
+concept's provenance before adapting these tools.
 
-## Contracts and evidence
+## Source and runtime contracts
 
-The runtime contract remains 64×64 cells, a feet contact line at `(32,56)`,
-a 24×24 gameplay body, down/left/right/up rows, six columns (idle,
-contact-left, passing-left, contact-right, passing-right, settle), 8 FPS walk
-and 12 FPS sprint. No new runtime SVG loader is part of this work. The
-previously approved runtime PNG remains unchanged.
+The approved concept determines appearance. Blender's `.blend` is the
+editable sprite/animation master; each SVG is an actual vector pose export;
+PNG cells are derived runtime outputs. SVGs must contain real paths/fills,
+not embedded raster images, external resources, filters or fonts. Preserve
+semantic editing groups, source hashes, export settings and review hashes.
 
-The concept sampling uses one common scale and recorded direction-specific
-subpixel alignment. Each initial idle is registered to last opaque row 55.
-Never normalize each animation frame's visible height; that would erase body
-bob and lifted feet. SVGs contain real flat-colour paths, no embedded raster,
-external resources, filters or fonts. No baked shadow is present.
+The runtime contract remains 64×64 cells, feet at `(32,56)`, a 24×24 gameplay
+body, down/left/right/up rows, six columns (idle, contact-left, passing-left,
+contact-right, passing-right, settle), 8 FPS walk and 12 FPS sprint. Retain
+binary alpha, no baked shadow and nearest-neighbour integer scaling. There
+is no new runtime SVG loader. Do not normalize every animation frame's visible
+height; body bob and lifted feet must survive.
 
-Evidence and decisions have separate roles:
+## Tooling evidence
 
-- `review/qa.json`: dimensions, alpha, palette, exact-cell preview crops.
-- `review/source-parity.json`: construction regions, SVGs, readback and RGBA.
-- `review/reload-parity.json`: reproducibility after reopening the saved master.
-- `review/visual-qa.json`: specific reference comparisons, failed iterations
-  and final internal visual assessment. This is not James's approval.
-- `review/user-decisions.json`: explicit user approval/rejection for this
-  revision, bound to the reviewed hashes. The rasterizer only writes while
-  this is pending. Preserve approved/rejected revisions before changing art.
-- `review/rejected-idle-v1/`: presented image and user rejection; the complete
-  old source is preserved at commit `110b26e`.
-
-## Blender setup
-
-Blender 5.2.1 LTS and pinned Blender MCP 1.9.1 are installed. After James's
-Codex restart, native tools connected and reported protocol 5, a matching
-add-on and telemetry consent false. Keep GUI Blender open. MCP listens on
-`127.0.0.1:9876` and both telemetry opt-outs are configured.
-
+Historical setup evidence records Blender 5.2.1 LTS and Blender MCP 1.9.1,
+with native Codex tools, protocol 5, a matching add-on and telemetry disabled.
 [Setup instructions](setup/README.md) and [setup evidence](setup/setup-report.json)
-cover installation and the separate Grease Pencil monkey export fixture.
-That fixture proves tooling only, not avatar quality. The current stage state
-is in [workflow.json](workflow.json).
+cover installation and the separate Grease Pencil export fixture. Those
+proofs establish tooling only and do not waive concept approval. Verify the
+live connection again when sprite production is authorized. The current
+stage state is in [workflow.json](workflow.json).

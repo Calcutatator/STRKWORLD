@@ -1,7 +1,7 @@
 {
-  "version": 1,
+  "version": 2,
   "avatar": "avatar-1",
-  "state": "reference-faithful-idle-v2-awaiting-user-approval",
+  "state": "concept-v2-awaiting-user-approval",
   "directionRecorded": "2026-09-12",
   "decision": "D-059",
   "rejectedDraft": "../avatar-1-restart-2026-09-12",
@@ -16,30 +16,39 @@
   },
   "gates": [
     {
-      "id": "tool-and-svg-export-probe",
+      "id": "fresh-concept-art",
       "status": "complete",
-      "evidence": "setup/setup-report.json"
+      "artifact": "concept/avatar-1-concept-v2.png",
+      "sha256": "8c0d58a07d1372d2e8c9bcdbddac6e997763a8ffd2b910be83e8ec47b69f1c92",
+      "internalQa": "concept/visual-qa.json"
+    },
+    {
+      "id": "user-approves-concept",
+      "status": "pending",
+      "requiresExplicitUserApproval": true,
+      "decisionRecord": "concept/approval.json",
+      "blocks": "all Blender/SVG sprite production"
     },
     {
       "id": "four-idle-source-views",
-      "status": "complete",
-      "evidence": "review/source-parity.json"
+      "status": "not-started",
+      "dependsOn": "user-approves-concept"
     },
     {
       "id": "reference-fidelity-visual-review",
-      "status": "pass-for-user-review",
-      "evidence": "review/visual-qa.json",
+      "status": "not-started",
+      "referenceMustBe": "explicitly user-approved fresh concept",
       "grantsUserApproval": false
     },
     {
       "id": "user-approves-exact-idles",
-      "status": "pending",
-      "requiresExplicitUserApproval": true,
-      "evidence": "review/user-decisions.json"
+      "status": "not-started",
+      "requiresExplicitUserApproval": true
     },
     {
       "id": "one-complete-walk-direction",
-      "status": "not-started"
+      "status": "not-started",
+      "dependsOn": "user-approves-exact-idles"
     },
     {
       "id": "remaining-directions",
@@ -108,15 +117,35 @@
     "report": "setup/setup-report.json",
     "nativeToolHandshakeVerified": true
   },
+  "reference": "reference/reference-manifest.json",
+  "correction": "Fresh concept art must be created and explicitly approved before Blender/SVG sprite production. The historical turnaround was not concept art.",
+  "spriteProductionAuthorized": false,
+  "historicalDrafts": [
+    {
+      "id": "idle-v2",
+      "review": "review/reference-comparison.png",
+      "master": "source/avatar-1.blend",
+      "mechanicalQa": "review/qa.json",
+      "reopenedMasterParity": "review/reload-parity.json",
+      "userDecision": "review/user-decisions.json",
+      "exactCells": "review/idle-approval.png",
+      "visualQa": "review/visual-qa.json",
+      "status": "superseded-unapproved-concept-gate-skipped",
+      "approvedForAnimation": false,
+      "approvedForIntegration": false
+    }
+  ],
   "draft": {
-    "id": "idle-v2",
-    "review": "review/reference-comparison.png",
-    "master": "source/avatar-1.blend",
-    "mechanicalQa": "review/qa.json",
-    "reopenedMasterParity": "review/reload-parity.json",
-    "userDecision": "review/user-decisions.json",
-    "exactCells": "review/idle-approval.png",
-    "visualQa": "review/visual-qa.json"
+    "id": "concept-v2",
+    "stage": "fresh-concept",
+    "image": "concept/avatar-1-concept-v2.png",
+    "sha256": "8c0d58a07d1372d2e8c9bcdbddac6e997763a8ffd2b910be83e8ec47b69f1c92",
+    "userDecision": "concept/approval.json",
+    "userApproval": "pending"
   },
-  "reference": "reference/reference-manifest.json"
+  "historicalToolingEvidence": {
+    "status": "verified-before-concept-first-correction",
+    "evidence": "setup/setup-report.json",
+    "doesNotGrantConceptOrSpriteApproval": true
+  }
 }

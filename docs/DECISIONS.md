@@ -2589,10 +2589,10 @@ checks after the headless state and lifecycle regressions pass.
 ## D-059 — Avatar 1 authoring uses Blender MCP and real SVG pose files
 
 **2026-09-12 · Directed by James · authoring-route amendment to D-052;
-supersedes the September 12 ImageGen/reduction draft workflow · setup and
-native SVG export and native Codex tools verified later the same day; four
-idle-v1 rejected for reference drift; concept-derived idle-v2 passed
-reference-fidelity QA and awaits user approval; animation remains pending**
+concept-first correction below supersedes the prior reference-authority and
+idle-review sequence · fresh concept-v2 awaits James's approval; concept art and explicit user concept approval
+must precede Blender/SVG sprite production · idle-v2 is superseded and
+unapproved because the concept gate was skipped; animation remains pending**
 
 **Context.** James rejected the fresh Avatar 1 draft's in-game appearance,
 despite its mechanical export checks passing, and requested: “We should use
@@ -2672,3 +2672,39 @@ finger and buckle details still simplify at that resolution. The source,
 failed iterations, comparisons and separate mechanical evidence are recorded
 in the active workflow. This establishes readiness to ask James for the idle
 approval; it does not approve animation or game integration.
+
+
+**Concept-first correction, 2026-09-12.** James clarified that fresh concept
+art must be created and approved before Blender/SVG sprite production. The
+old turnaround labelled an “approved concept” in the preceding records was
+not concept art. Those source-authority claims and the claim that idle-v2 was
+ready for approval are superseded by this correction. They remain historical
+records of the mistaken process, not instructions or evidence of concept
+approval. The existing filename `reference/approved-concept-turnaround.png`
+is retained for provenance only and grants it no concept authority.
+
+The required sequence is now: **fresh concept art → James's explicit concept
+approval → Blender MCP/SVG idle production → internal likeness QA against
+that approved concept → James's explicit idle approval → animation → game
+acceptance.** The fresh concept is a design proposal, not a sprite sheet or a
+relabelled prior turnaround. The reviewed concept candidate is
+`concept/avatar-1-concept-v2.png`; `concept/approval.json` records the pending
+concept decision and must bind any later approval to the actual reviewed
+artifact. Do not begin sprite construction, vector tracing or a Blender
+character rebuild until that explicit approval exists. Tool availability and
+historical export probes cannot satisfy the gate.
+
+Idle-v2 is superseded and unapproved because it skipped concept creation and
+approval. Preserve its source, exports, images, hashes and technical proofs as
+historical evidence. Its internal likeness reviews compared against the wrong
+class of reference and cannot authorize continued production. The old
+turnaround, idle-v1 and idle-v2 are not sources for the fresh concept. Once the
+concept is approved, likeness QA must compare the actual SVG-derived game
+cells with that approved image before the next idle approval request. Existing
+runtime assets and D-052's geometry remain current throughout this restart.
+
+The fresh ImageGen concept was generated without prior image inputs, then
+internally revised to align scarf attachment and harness details across its
+views. The current candidate is `concept/avatar-1-concept-v2.png`; its exact
+prompt history, internal design QA and pending hash-bound approval are saved
+under `concept/`. No Blender/SVG production has started from this design.

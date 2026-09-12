@@ -1,9 +1,22 @@
 {
-  "visualAuthority": {
+  "schemaVersion": 2,
+  "status": "awaiting-fresh-user-approved-concept",
+  "visualAuthority": null,
+  "requiredAuthority": {
+    "kind": "fresh concept art explicitly approved by James",
+    "expectedFile": "concept/avatar-1-concept-v2.png",
+    "decisionRecord": "concept/approval.json",
+    "userApproval": "pending",
+    "sha256": "8c0d58a07d1372d2e8c9bcdbddac6e997763a8ffd2b910be83e8ec47b69f1c92"
+  },
+  "historicalTurnaround": {
     "file": "reference/approved-concept-turnaround.png",
     "sha256": "f1de96b3038042aaca726c18ae87fe374e8dac2bbda7d0a2359d53f44ad08ed4",
-    "origin": "Previously approved medium Teal Scarf Runner concept turnaround from task 01a01a58-1f53-7320-bbe2-4dd7fbb92615; original exec-037caa48-7ee1-4150-be7a-85741f8a6daa.png",
-    "newConceptGeneratedThisTurn": false,
+    "origin": "Historical sprite turnaround from task 01a01a58-1f53-7320-bbe2-4dd7fbb92615; original exec-037caa48-7ee1-4150-be7a-85741f8a6daa.png",
+    "classification": "sprite turnaround; not concept art",
+    "conceptAuthority": false,
+    "approvedForThisRestart": false,
+    "filenameWarning": "The retained approved-concept-turnaround.png filename reflects the prior incorrect classification and is not evidence of concept approval.",
     "imageDirectionOrder": [
       "down",
       "right",
@@ -11,11 +24,13 @@
       "up"
     ]
   },
-  "runtimeIdles": "Scale comparison only. Do not trace them: the darker reduced pixels lose facial information.",
-  "rejectedSources": [
+  "excludedFreshConceptSources": [
+    "historical sprite turnaround reference/approved-concept-turnaround.png",
     "September 12 ImageGen/reduction draft",
-    "idle-v1 hand-invented Blender SVG draft at commit 110b26e"
+    "idle-v1 hand-invented Blender SVG draft at commit 110b26e",
+    "superseded idle-v2 turnaround-derived SVG draft"
   ],
-  "revisionMethod": "Construct vector colour regions directly from the approved concept, with documented registration/resampling, then exact Blender SVG roundtrip.",
-  "qaRule": "Compare concept and final game cells side by side at equal visible height. Technical parity alone cannot pass visual fidelity."
+  "runtimeIdles": "Existing accepted runtime assets remain current; they are not a substitute for fresh concept creation or concept approval.",
+  "historicalRevisionMethod": "Idle-v2 sampled the historical turnaround and reconstructed vector colour regions, then verified the Blender/SVG roundtrip. This technical history grants no concept or art approval.",
+  "qaRule": "After explicit concept approval, compare actual SVG-derived game cells against that specific approved concept. Internal likeness QA precedes user idle approval; technical parity cannot waive either approval."
 }
