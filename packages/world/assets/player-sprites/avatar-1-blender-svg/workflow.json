@@ -1,0 +1,48 @@
+{
+  "version": 1,
+  "avatar": "avatar-1",
+  "state": "awaiting-blender-mcp-setup",
+  "directionRecorded": "2026-09-12",
+  "decision": "D-059",
+  "rejectedDraft": "../avatar-1-restart-2026-09-12",
+  "authoring": {
+    "control": "Blender MCP",
+    "art": "layered Grease Pencil vectors",
+    "animationMaster": "source/avatar-1.blend",
+    "poseFormat": "SVG",
+    "runtimeFormat": "PNG",
+    "rasterImageGenerationFallback": false,
+    "embeddedRasterSvgAllowed": false
+  },
+  "gates": [
+    {"id": "tool-and-svg-export-probe", "status": "pending-setup"},
+    {"id": "four-idle-source-views", "status": "not-started"},
+    {"id": "user-approves-exact-idles", "status": "not-started", "requiresExplicitUserApproval": true},
+    {"id": "one-complete-walk-direction", "status": "not-started"},
+    {"id": "remaining-directions", "status": "not-started"},
+    {"id": "source-export-and-preview-parity", "status": "not-started"},
+    {"id": "user-art-handoff-approval", "status": "not-started", "requiresExplicitUserApproval": true},
+    {"id": "world-integration-and-user-browser-acceptance", "status": "not-started"}
+  ],
+  "runtimeContract": {
+    "cellSize": [64, 64],
+    "sheetSize": [384, 256],
+    "feetPivot": [32, 56],
+    "gameplayBody": [24, 24],
+    "directions": ["down", "left", "right", "up"],
+    "poses": ["idle", "contact-left", "passing-left", "contact-right", "passing-right", "settle"],
+    "walkFps": 8,
+    "sprintFps": 12,
+    "binaryAlpha": true,
+    "bakedShadow": false
+  },
+  "availability": {
+    "checked": "2026-09-12",
+    "callableBlenderMcpTools": false,
+    "blenderMcpConfigured": false,
+    "blenderOnPath": false,
+    "blenderAtStandardAppPaths": false,
+    "liveHandshakeVerified": false,
+    "svgExportVerified": false
+  }
+}

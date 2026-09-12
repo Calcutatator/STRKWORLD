@@ -1,5 +1,5 @@
 {
-  "status": "draft-awaiting-user-approval",
+  "status": "rejected-by-user",
   "created": "2026-09-12",
   "sourceSha256": "833e7668362c0d1ab6915a8b4ec543fc7a646595becc6f026219fd24efb2c160",
   "exportTool": "sharp 0.35.4 / libvips 8.18.6",
@@ -197,7 +197,7 @@
     }
   ],
   "mechanicalScope": "dimensions, binary alpha, feet line, safe bounds, palette count, component count, PNG/RGBA hashes",
-  "visualApproval": "pending-user",
+  "visualApproval": "rejected-by-user",
   "animation": "not-started",
   "runtimeIntegration": "not-performed"
 }

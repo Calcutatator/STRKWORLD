@@ -11,7 +11,9 @@ the six-column geometry in the
 [D-052 August 28 amendment](../DECISIONS.md#d-052--avatar-animation-contract-and-avatar-studio-f-toggle).
 The [Avatar 1 restart research](avatar-1-restart-2026-09-12.md) supersedes this
 note's Avatar 1 cosy authoring guidance and restores the requested four-idle
-draft approval gate. Historical observations below retain their original date.
+draft approval gate. That restart's raster-authoring route was subsequently
+rejected and replaced by [D-059's Blender MCP/SVG flow](../../packages/world/assets/player-sprites/avatar-1-blender-svg/README.md).
+Historical observations below retain their original date.
 
 ## Observed project evidence
 

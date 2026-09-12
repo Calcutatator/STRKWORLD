@@ -1,0 +1,12 @@
+{
+  "status": "rejected",
+  "date": "2026-09-12",
+  "reviewer": "James",
+  "reason": "The user rejected the in-game appearance of this generated and reduced raster draft.",
+  "userFeedback": "the in-game gen looks really bad.",
+  "nextDirection": "Use Blender MCP and create SVG files.",
+  "replacementWorkflow": "../../avatar-1-blender-svg/workflow.json",
+  "mechanicalChecksRemainHistoricalEvidence": true,
+  "approvedForAnimation": false,
+  "approvedForIntegration": false
+}

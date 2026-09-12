@@ -2171,7 +2171,9 @@ the Studio-only F scope is superseded by
 supersedes the animation-geometry and Avatar Studio toggle portions of
 [D-049](#d-049--avatar-art-uses-one-fixed-64x64-logical-canvas) · Avatar 1
 cosy rendered acceptance accepted 2026-08-28 by the status amendment below;
-Avatar 1 fighting and avatars 2-16 remain open**
+Avatar 1 fighting and avatars 2-16 remain open · fresh Avatar 1 authoring
+route amended by [D-059](#d-059--avatar-1-authoring-uses-blender-mcp-and-real-svg-pose-files),
+with runtime geometry and existing approved pixels retained**
 
 **Context.** The browser recording attempt failed to establish rendered
 acceptance. It is therefore not evidence that the integrated final art or its
@@ -2581,3 +2583,42 @@ account, balance, amount, route, transaction hash or wallet identity. Mock mode
 continues to complete without the cue lingering because it never waits on a
 human-owned prompt. Browser rendering and audibility remain local acceptance
 checks after the headless state and lifecycle regressions pass.
+
+---
+
+## D-059 — Avatar 1 authoring uses Blender MCP and real SVG pose files
+
+**2026-09-12 · Directed by James · authoring-route amendment to D-052;
+supersedes the September 12 ImageGen/reduction draft workflow · setup and
+new asset execution pending**
+
+**Context.** James rejected the fresh Avatar 1 draft's in-game appearance,
+despite its mechanical export checks passing, and requested: “We should use
+blender mcp and create svg files.” The prior result used a large generated
+turnaround reduced to game cells. It did not meet the artistic goal.
+
+**Decision.** Use Blender MCP for the next Avatar 1 authoring flow and deliver
+real editable SVG pose files. The working route is layered Grease Pencil
+vector artwork, a saved `.blend` animation master, SVG export per pose and
+deterministic rasterization of those same SVGs into the existing PNG runtime
+contract. Do not embed the rejected bitmap in an SVG, trace its pixels, or
+fall back silently to independently generated raster frames. Prove the
+installed Blender/MCP connection and a small SVG export before character
+authoring; configuration alone is not verification.
+
+The next artistic checkpoint remains four fresh idle facings together, with
+the exact 64×64 PNG outputs shown at native and game scale and their SVG
+sources available. James approves those small outputs before animation.
+Then complete one walk direction, inspect its actual loop, and extend to the
+other directions. Save source/export parity evidence and keep user decisions
+separate from mechanical QA. The old draft is explicitly rejected.
+
+**Consequences.** Blender MCP and SVGs are now the requested authoring route,
+but no Blender installation, live MCP handshake, scene, rig or SVG export has
+yet been verified in this task. The source roles, availability state and
+ordered steps are recorded in the
+[active workflow](../packages/world/assets/player-sprites/avatar-1-blender-svg/README.md).
+This is an Art-lane source change only. D-052's six-column Avatar 1 geometry,
+feet pivot, gameplay body, PNG delivery, playback cadence and the previously
+accepted `v1/avatar-1.png` remain current. There is no new runtime SVG loader,
+game integration, cross-lane API change or rendered acceptance.

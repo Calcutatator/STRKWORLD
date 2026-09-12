@@ -1,17 +1,19 @@
 # Avatar 1 fresh idle draft — 2026-09-12
 
-**Status: awaiting James's idle-set approval.** These are four fresh candidate
-idle cells for the Teal Scarf Runner, not a runtime replacement or animation.
-The existing approved `v1/avatar-1.png` remains unchanged.
+**Status: REJECTED by James on 2026-09-12 for the in-game appearance.** This
+raster draft is retained only as historical evidence. It must not be used as
+the reference for animation or integrated. The replacement is the
+[Blender MCP/SVG workflow](../avatar-1-blender-svg/README.md). The existing
+approved `v1/avatar-1.png` remains unchanged.
 
-Open [the approval image](review/approval.png). It shows the same exact cells
+The [historical review image](review/approval.png) shows the same exact cells
 at 4× on dark grey and 2× on a light background. The
 [native strip](avatar-1-idle-turnaround.png) is 256×64, ordered down, left,
 right, up. Individual transparent 64×64 PNGs are in `cells/`.
 
-Review face and hair readability, the teal scarf, leather accessories, medium
-proportions and consistency across all four facings. Approval of these pixels
-will establish the reference for movement. No movement frames are authored yet.
+The image's pending-approval caption records its state when first presented;
+the [subsequent user decision](review/user-decision.json) rejects this set.
+No movement frames were authored.
 
 ## Creation and export
 
@@ -38,12 +40,10 @@ for this draft. A final layered/tagged animation source is still to be made.
 Do not apply per-frame height normalization to future animation poses: doing
 so can erase intended body motion.
 
-To repeat the export, use Node.js with Sharp 0.35.4 available on its module
-search path, from this directory:
-
-```sh
-node source/export.cjs
-```
+The old exporter used Node.js with Sharp 0.35.4. It now refuses to run when
+the user-decision record marks the draft rejected, so a regeneration cannot
+silently restore a pending-approval state. The original converter and review
+remain available in commit `8c45d0e` for historical reproduction.
 
 The actual run used the bundled Codex Node and Sharp runtime; no project
 dependency or authoring application was installed. The script recreates the
@@ -59,9 +59,10 @@ hashes. Separate verification confirms that the strip's four crops reproduce
 the individual cells exactly. Mechanical checks do not approve anatomy,
 accessory consistency or animation.
 
-User approval is pending. Animation, full animation QA, layered animation
-source round-trip and live Phaser/browser acceptance have not been performed.
+User approval was rejected despite the mechanical checks passing. Animation,
+full animation QA, layered animation source round-trip and live Phaser/browser
+acceptance have not been performed.
 
 See [the flow review](../../../../../docs/research/avatar-1-restart-2026-09-12.md)
-for the recovered approval sequence, proposed improvements and current
-six-column Avatar 1 animation contract.
+for the recovered approval sequence and historical investigation. Follow the
+linked Blender MCP/SVG workflow for new authoring.

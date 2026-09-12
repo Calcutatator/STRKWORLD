@@ -20,6 +20,10 @@ function bounds(data, width, height) {
 }
 
 async function main() {
+  const decision = JSON.parse(await fs.readFile(path.join(root, 'review', 'user-decision.json'), 'utf8'));
+  if (decision.status === 'rejected') {
+    throw Error('This raster draft was rejected. Follow ../avatar-1-blender-svg/README.md; do not regenerate it as an approval candidate.');
+  }
   const source = await fs.readFile(path.join(__dirname, 'generated-turnaround.png'));
   const meta = await sharp(source).metadata();
   const half = meta.width / 2;

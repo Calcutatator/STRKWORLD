@@ -21,7 +21,7 @@ the lane boundary — that is why the repo is shaped the way it is.
 | **Shell** | `apps/web` | Active; production wallet gate, transfer/shield policy parsing, recovery-only production Bridge runtime and all v1 room surfaces are complete; D-057 has accepted rendered Bank/Post Office/Exchange station integration, while the production Bridge planner/station, live routes and funded validation remain open |
 | **Backend** | `apps/backend` | Active; bounded APIs, same-origin local proxy, D-050 and hosted image smokes complete; host, domain, secrets, Alchemy controls, live staging and funded checks remain |
 | **Bridge** | `packages/bridge` | Active; manual/recovery flow and production saved-record runtime complete, production planner and funded-provider acceptance open |
-| **Art** | `packages/world/assets` | D-052 final source/runtime corrections are merged through PR #33 and mechanically reviewed; rendered in-game visual acceptance remains |
+| **Art** | `packages/world/assets` | Existing runtime assets remain current. D-059 restarts Avatar 1 authoring with Blender MCP and real SVG pose files; connection/export probe pending, then four exact idle views for user approval. September 12 raster draft rejected. See [active workflow](../packages/world/assets/player-sprites/avatar-1-blender-svg/README.md). |
 | ~~Contracts~~ | — | **Dormant until post-v1** |
 
 ### Why Contracts is dormant

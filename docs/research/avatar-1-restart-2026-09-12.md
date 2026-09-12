@@ -1,9 +1,13 @@
 # Avatar 1 restart: authoring and review
 
-**Date:** 2026-09-12. **Status:** proposed production flow and first-draft
-review, requested by James. No runtime replacement, tool adoption or rendered
-acceptance is implied. Draft pixels and their actual checks are recorded in
-the [draft package](../../packages/world/assets/player-sprites/avatar-1-restart-2026-09-12/README.md).
+**Date:** 2026-09-12. **Status: SUPERSEDED for authoring.** James rejected
+the first draft's in-game appearance and directed Blender MCP plus SVG files.
+[D-059](../DECISIONS.md#d-059--avatar-1-authoring-uses-blender-mcp-and-real-svg-pose-files)
+records that direction; the [active workflow](../../packages/world/assets/player-sprites/avatar-1-blender-svg/README.md)
+replaces this note's image-generation/reduction route. The four-idle approval
+gate and runtime geometry remain. The following investigation and
+[rejected draft](../../packages/world/assets/player-sprites/avatar-1-restart-2026-09-12/README.md)
+are historical evidence, not instructions to repeat the rejected method.
 
 ## Recovered flow and diagnosis
 
