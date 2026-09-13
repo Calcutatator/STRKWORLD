@@ -2593,9 +2593,10 @@ concept-first correction supersedes the prior reference-authority and
 idle-review sequence · exact fresh concept-v2 approved by James; idle-v3's
 visual pass and handoff are withdrawn by the 2026-09-13 pre-handoff aesthetic
 QA correction below · idle-v4’s pass and approval request are also withdrawn by
-the subsequent 2026-09-13 quality correction; no candidate is ready · further
-refinement awaits rendering-style clarification · idle-v2 remains superseded
-and unapproved; animation is blocked until separate user idle approval**
+the subsequent 2026-09-13 quality correction · rendering-style clarification
+is resolved by the 2026-09-13 illustrated-vector and engine-QA amendment below:
+idle-v5 is in internal refinement, with no candidate ready · idle-v2 remains
+superseded and unapproved; animation is blocked until separate user idle approval**
 
 **Context.** James rejected the fresh Avatar 1 draft's in-game appearance,
 despite its mechanical export checks passing, and requested: “We should use
@@ -2824,7 +2825,9 @@ runtime asset remains unchanged; no animation, rig completion, browser
 automation, game integration, merge or production delivery is claimed.
 
 
-**Idle-v4 quality correction, 2026-09-13.** James challenged the handoff again:
+**Idle-v4 quality correction, 2026-09-13 — withdrawal stands; the pending
+rendering-style choice is resolved by the illustrated-vector and engine-QA
+amendment below.** James challenged the handoff again:
 “again, have youn looked at the in-game output and think this is of quality?”
 The producing agent reinspected the exported PNGs and could not support the
 previous readiness claim. The face and proportions remain below the approved
@@ -2848,3 +2851,74 @@ single resolution constraint is claimed to explain all of the quality
 failure. The standing pre-handoff aesthetic requirement remains in force.
 Animation, runtime integration and rendered acceptance remain separate,
 uncompleted gates.
+
+
+**Illustrated-vector and engine-QA amendment, 2026-09-13 — current direction.**
+James accepted the proposed genuinely higher-detail vector artwork at the
+same on-screen size and instructed: “brother then please do that. update your
+flow too please. I want you to be able to execute to a draft of an in-game
+that is aprovable. Look at it PLEASE EVERYTIME before sending me - is it
+obviously good enough? If no FIX IT.” This resolves the rendering-style
+clarification above. Continue construction and refinement in `idle-v5`; no
+further direction or approval is needed to build this draft or perform its
+necessary isolated Phaser/browser visual QA. The exact approved concept-v2
+remains the visual authority. The withdrawn v1–v4 artwork stays historical,
+and no new artistic pass or approval candidate is claimed by this amendment.
+
+Author illustrated vector forms on a **512×512 SVG canvas**, with semantic
+editable native Grease Pencil geometry created through Blender MCP and a
+saved `.blend` master. Export real vector SVG paths, then derive **256×256
+PNG cells at four times the logical source density**. Do not turn a 64×64
+pixel grid into enlarged polygons and present that as recovered detail.
+The logical cell remains **64×64 world units**, with feet at **(32,56)**,
+origin **(0.5,0.875)** and a **24×24 world-unit gameplay body**. Source
+coordinates and physics must account for density: PNG feet are at (128,224),
+while the displayed logical frame and contact position stay unchanged.
+
+For this draft, **smooth alpha, an appropriate unrestricted palette and
+linear avatar texture filtering are allowed**. These explicitly supersede
+the earlier 64-pixel raster, binary-alpha, 24-colour and nearest-neighbour
+requirements for the new illustrated avatar only. Other town textures keep
+their existing treatment. There is no baked shadow or per-facing auto-fit.
+The four facings remain down/left/right/up; future six-pose ordering, walk
+8 FPS and sprint 12 FPS remain unchanged unless separately directed.
+
+The Art lane may add an **isolated actual-Phaser draft preview**, using the
+real game's town assets, its camera zoom of **2**, the same logical avatar
+size and a verified density-aware 24×24 world-unit body. This preview is
+necessary evidence for the requested in-game draft. It may use the World
+engine and town assets for that purpose without changing gameplay, wallet
+or financial flows. It is not a production asset replacement or permission
+to merge, deploy, handle funds or claim acceptance of the canonical live
+game. The accepted runtime asset and shared local runtime remain current.
+
+Before **every** handoff, the **producing agent must personally inspect**
+the editable vector source, exact SVG-derived output and actual Phaser
+render at the real game CSS scale. Inspect all four turns on representative
+light and dark town surfaces; check the silhouette, natural pose, readable
+face, directional form, character identity, clear shading and edges. Compare
+with the approved concept at matched displayed figure height. Capture the
+actual engine view and record viewport/CSS scale, device pixel ratio, zoom,
+texture density, filtering, source hashes and the observed result. Export
+boards, source parity, a passing script or another agent's opinion cannot
+substitute for this direct inspection. Independent review can expose issues
+and improve the result; the producer owns the quality decision.
+
+Ask: **“Is this in-game result obviously good enough to approve?”** If the
+answer is no, uncertain because it has not been viewed, or qualified by
+known visible defects, keep it in internal refinement and fix it. Do not
+transfer those defects to James through an approval request. Any material
+art or render change invalidates the previous visual pass and requires
+inspection of the resulting engine view again. Freeze exact candidate
+hashes only after this gate passes; record user approval separately.
+
+The current sequence is **approved concept → illustrated Blender/SVG idle
+construction and refinement → producer inspection of source and actual
+Phaser render → explicit user approval of those exact idles → animation →
+separate animated-art and production-integration acceptance**. The isolated
+preview and its visual QA are authorized now. Animation and production
+integration remain unapproved. The execution status below records the current idle-v5 result.
+
+
+**D-059 execution status, 2026-09-14 — exact idle approval pending.**
+The Art lane completed detailed image-assisted vector reconstruction from the approved concept, authored and reopened the native Blender Grease Pencil master through MCP, and exported four real SVG/256px PNG idles. The producer personally inspected source, exact exports, a matched-height concept comparison and actual isolated Phaser/WebGL captures at zoom 2 on road, pavement and grass. This draft passes the producer quality question; user approval remains unset. Evidence, exact hashes and the procedural stale-evidence guard are in `idle-v5/review/visual-qa.json` and `idle-v5/source/verify_review.py`. The preview includes separate subtle contact-shadow ellipses, recorded in its rendering evidence; no shadow is baked into the SVG/PNG. The current source is editable filled-region illustration, not a rig: anatomical grouping and hidden surfaces remain required before animation. No animation, production asset replacement, merge or production integration was performed.

@@ -1,0 +1,110 @@
+{
+  "schemaVersion": 1,
+  "blender": "5.2.1 LTS",
+  "nativeMcpTools": true,
+  "scene": "AV1V5 | Idle authoring",
+  "camera": {
+    "type": "ORTHO",
+    "orthoScale": 512,
+    "location": [
+      0.0,
+      -1024.0,
+      0.0
+    ]
+  },
+  "render": [
+    512,
+    512
+  ],
+  "frame": 1,
+  "directions": [
+    "down",
+    "left",
+    "right",
+    "up"
+  ],
+  "exports": [
+    {
+      "direction": "down",
+      "svg": "svg/down/idle.svg",
+      "paths": 2009,
+      "images": 0,
+      "sha256": "74f827092bfd9da811aaaf8c618e78d339574f2da0e3b42a0b9ef1929f991d3b"
+    },
+    {
+      "direction": "left",
+      "svg": "svg/left/idle.svg",
+      "paths": 1458,
+      "images": 0,
+      "sha256": "69862d960d117796a6a0259628082677f7e6e939460e709019acb2a938b944f7"
+    },
+    {
+      "direction": "right",
+      "svg": "svg/right/idle.svg",
+      "paths": 1358,
+      "images": 0,
+      "sha256": "3c7fd42c260270590b05f7fee3a95fd3de5a193f208572e59d0ec5ef3d6cec26"
+    },
+    {
+      "direction": "up",
+      "svg": "svg/up/idle.svg",
+      "paths": 1825,
+      "images": 0,
+      "sha256": "017c59df766fb1ca6243e05fe511fea9d9ef61dcad7bd965ed569109f0683b30"
+    }
+  ],
+  "construction": "source/idle-geometry.json",
+  "geometrySha256": "1aaa6b0873f9066255c85820e5cf0dcbf100d9829270d5ec02279bc4fe342252",
+  "geometryProvenance": {
+    "method": "ImageGen construction studies registered at 1024px; shared detailed color palette; VTracer 0.6.15 spline reconstruction; adaptive Bezier sampling at 0.10 source-pixel tolerance. No 64px pixel-grid input.",
+    "constructionReferences": [
+      {
+        "file": "studies/front-illustrated-v1.png",
+        "sha256": "b1457e2b7e974c9dc603c3a683619e16dd735917c4442c91ece11f7838e94a03"
+      },
+      {
+        "file": "studies/illustrated-turnaround-v1.png",
+        "sha256": "2740a62eda02c9304f60a910e9bdf6ec3f92256d2369a4c4b444f2b7c2bac354"
+      }
+    ],
+    "inputFiles": [
+      {
+        "file": "source/vectors/down-bezier.svg",
+        "sha256": "e24763e9e8a28f0e837adbcd02a7cfac6ce09270b433b07e1b876b1b90df9086"
+      },
+      {
+        "file": "source/vectors/left-bezier.svg",
+        "sha256": "ef12d597228997125676106f689c0231d80ee21022e5437bd3502110e6027dda"
+      },
+      {
+        "file": "source/vectors/right-bezier.svg",
+        "sha256": "aff54d07e2912e305d0ecfe0331d62b7348b791db7a0ba655b9b626ac8eb8cda"
+      },
+      {
+        "file": "source/vectors/up-bezier.svg",
+        "sha256": "4c0e3d8966ade793ea778197a4eb42dd7b031429d1734f4bd0c3ebb2bc3fec0b"
+      }
+    ]
+  },
+  "palette": "source/palette.json",
+  "paletteSha256": "d6ddc6d0f6820f479162d72aa26cb91f54a90242e7354b20c4d74fbc629fc76a",
+  "reference": "../concept/avatar-1-concept-v2.png",
+  "conceptSha256": "8c0d58a07d1372d2e8c9bcdbddac6e997763a8ffd2b910be83e8ec47b69f1c92",
+  "constructionStudies": [
+    {
+      "relative": "studies/front-illustrated-v1.png",
+      "sha256": "b1457e2b7e974c9dc603c3a683619e16dd735917c4442c91ece11f7838e94a03",
+      "approval": "Not approved concept art; internal ImageGen construction study"
+    },
+    {
+      "relative": "studies/illustrated-turnaround-v1.png",
+      "sha256": "2740a62eda02c9304f60a910e9bdf6ec3f92256d2369a4c4b444f2b7c2bac354",
+      "approval": "Not approved concept art; internal ImageGen construction study"
+    }
+  ],
+  "master": "source/avatar-1.blend",
+  "masterSha256": "d178a6fc57249222c405c462a1dfa68b69f302297113ab23329f641637d8f106",
+  "approval": "internal-refinement",
+  "artisticQa": "not-assessed",
+  "animation": "not-started"
+}

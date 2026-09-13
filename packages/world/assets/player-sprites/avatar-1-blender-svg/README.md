@@ -1,149 +1,151 @@
 # Avatar 1 — concept approval, Blender MCP and SVG workflow
 
-**Active stage: idle-v4 is withdrawn; further refinement awaits rendering-style clarification.**
-Idle-v3 is withdrawn and unapproved. Its earlier visual pass was too
-permissive: renewed inspection found a rigid pose, lifeless face, muddy
-shading, flat cutout profiles and lost character identity at game size.
-James approved the exact concept with “Yes good concept move forward”. This
-authorizes four Blender/SVG idle facings and internal likeness QA. Final sprite
-cells, animation and game integration are not approved by the concept decision.
-`idle-v2` remains superseded and unapproved because it skipped the concept gate.
-See [D-059](../../../../../docs/DECISIONS.md#d-059--avatar-1-authoring-uses-blender-mcp-and-real-svg-pose-files).
+**Active stage: idle-v5 is ready for exact idle approval after producer inspection in actual Phaser.**
+James has accepted higher-detail illustrated vector artwork at the same
+on-screen size. The rendering-style clarification is resolved. Build and
+refine the draft, inspect its actual Phaser rendering, and fix visible
+quality problems before requesting approval. See
+[D-059](../../../../../docs/DECISIONS.md#d-059--avatar-1-authoring-uses-blender-mcp-and-real-svg-pose-files).
 
-## Current review and authority
+## Current authority and scope
 
 The [approved fresh concept-v2](concept/avatar-1-concept-v2.png) is the visual
-authority for this restart. [Its approval record](concept/approval.json) binds
-James's explicit decision to SHA-256
+authority. [Its approval record](concept/approval.json) binds James's
+“Yes good concept move forward” to SHA-256
 `8c0d58a07d1372d2e8c9bcdbddac6e997763a8ffd2b910be83e8ec47b69f1c92`.
-Internal review corrected scarf and buckle continuity before that approval.
+That approval remains valid. No idle, animation or production integration
+approval has been granted.
 
-The **idle-v4 approval request and artistic pass are withdrawn**. Renewed
-inspection of its exported PNGs found that the face and proportions still
-fall below the approved concept. The earlier claim of readiness cannot be
-supported. Its [exact idles](idle-v4/review/idle-approval.png),
-[concept comparison](idle-v4/review/reference-comparison.png),
-[editable sources](idle-v4/README.md) and hashes are historical evidence.
-The [withdrawn assessment](idle-v4/review/visual-qa.json) preserves the prior
-pass with its correction. Idle-v4 was never integrated or inspected inside
-the live game; viewing its export boards did not establish that acceptance.
+The [idle-v5 revision](idle-v5/README.md) owns the current construction and
+review evidence. Its [decision record](idle-v5/review/user-decisions.json)
+is pending and binds the exact reviewed draft. An isolated actual-Phaser draft
+preview and the browser inspection needed to judge this in-game draft are
+authorized. The accepted runtime asset and shared local runtime remain current.
 
-The pending clarification is whether the intended rendering should preserve
-the crisp illustrated concept look or use deliberate low-resolution pixel
-art. That decision path is paused while current runtime presentation and
-resolution constraints are investigated. No replacement method or revision
-has been chosen and no approval candidate is ready. The exact concept-v2
-approval remains valid; James has granted no idle approval.
-The [idle-v3 review](idle-v3/review/idle-approval.png),
-[concept comparison](idle-v3/review/reference-comparison.png) and
-[editable sources](idle-v3/README.md) remain historical evidence.
-Its [withdrawn visual assessment](idle-v3/review/visual-qa.json) preserves the
-prior assessment and the correction. Saved-master export parity remains
-technical evidence only. James has granted no idle approval.
+The **idle-v3 and idle-v4 artistic passes and approval requests are withdrawn**.
+Both fell below the approved concept. The v3 pose was rigid, the face
+lifeless, the shading muddy and the profiles flat; v4's face and proportions
+still failed. Neither revision established live-game quality. Their
+[withdrawn v3 assessment](idle-v3/review/visual-qa.json) and
+[withdrawn v4 assessment](idle-v4/review/visual-qa.json) preserve the previous
+claims with the correction. Their technical parity is historical evidence.
 
 `reference/approved-concept-turnaround.png` is a historical sprite turnaround,
-not an approved concept. Its misleading old filename is retained to preserve
-provenance and links, not to confer authority. Do not use it, the rejected
-raster restart, `idle-v1` or `idle-v2` as art sources for the fresh concept.
-[The reference manifest](reference/reference-manifest.json) records this
-correction. The currently accepted runtime asset remains unchanged.
-
-The existing [reference comparison](review/reference-comparison.png),
-[exact-cell sheet](review/idle-approval.png), [Blender master](source/avatar-1.blend)
-and SVGs under `svg/` all belong to **historical idle-v2**. Their captions
-predate the correction. They are not active approval requests or approved
-concepts; their hashes and technical results remain historical evidence only.
+not an approved concept. Its old filename preserves provenance only.
+[The reference manifest](reference/reference-manifest.json) records the
+correction. Do not use that turnaround, the rejected raster restart or
+withdrawn v1–v4 output as the art authority for idle-v5.
 
 ## Required production sequence
 
-1. **Fresh concept creation — complete.** Concept-v2 is a new illustrated
-   character design, not a sprite sheet or conversion of the prior turnaround.
-2. **Explicit concept approval — complete.** James approved exact concept-v2
-   with “Yes good concept move forward”; `concept/approval.json` records the
-   reviewed hash. A later concept redesign requires renewed concept approval.
-3. **Build and refine the four Blender/SVG idles — requires further refinement.** Use
-   approved concept-v2 as the
-   visual authority, author layered Grease Pencil geometry through Blender
-   MCP, save the editable `.blend` and export real vector SVGs. Derive the
-   existing 64×64 PNG game cells from those SVGs. Do not silently reuse the
-   superseded idle-v2 construction or treat its parity evidence as new work.
-4. **Perform internal aesthetic and likeness QA — idle-v4 failed; pass withdrawn.** Judge whether
-   the actual exported sprite looks good before any handoff. Compare it with
-   the approved concept at equal figure height and inspect exact 1×/2× cells.
-   Require a natural pose, readable expression, clear shading, convincing
-   directional form and the approved character's identity. Costume inventory
-   and export validity are insufficient. If the result looks rough, rigid,
-   muddy, lifeless or like a flat cutout, continue internal refinement.
-   Technical SVG/PNG parity cannot establish visual quality or approval.
-5. **Obtain explicit idle approval.** Present all four exact PNG idles and
-   their SVG sources together, with the approved concept for comparison,
-   only after the producing agent has passed the aesthetic review above.
-   Record James's decision separately from internal QA. Do not animate until
-   he approves these idles. Material redesign reopens the relevant concept
-   or idle gate.
-6. **Animate and verify.** Build a proper rig, part ownership and hidden
+1. **Fresh concept and explicit concept approval — complete.** Use exact
+   concept-v2. A material concept redesign requires renewed concept approval.
+2. **Build and refine illustrated Blender/SVG idles — complete for v5.** Author
+   genuinely detailed vector forms on a 512×512 canvas through Blender MCP,
+   save the editable native Grease Pencil `.blend` and export real SVG paths.
+   Derive 256×256 PNGs at four times the logical density. Enlarging a 64×64
+   colour grid into vector regions does not recover illustrated detail.
+3. **Inspect the source and actual engine result — required before every
+   handoff.** The producing agent must personally view the editable artwork,
+   exact exports and actual Phaser render at real game CSS scale, using all
+   four turns and representative light and dark town surfaces. Compare with
+   concept-v2 at matched displayed figure height. Check natural pose, readable
+   expression, clear shading, convincing directional form, clean edges and
+   retained character identity. Record the engine screenshot, viewport/CSS
+   scale, device pixel ratio, camera zoom, texture density, filtering and
+   inspected source hashes. An export board is not an engine inspection.
+4. **Apply the quality gate and iterate.** Ask: **“Is this in-game result
+   obviously good enough to approve?”** If no, if the result has not been
+   viewed, or if known visible defects qualify the answer, fix it and inspect
+   the new engine result again. Rough, rigid, muddy, lifeless, flat, distorted
+   or concept-inconsistent artwork stays in internal refinement. Independent
+   review can help find defects; it does not replace the producer's judgment.
+   Successful exports and matching costume details cannot establish quality.
+5. **Obtain explicit approval of the exact four idles.** Only after the
+   producer's source and actual-engine quality gates pass, freeze the four
+   source/export hashes and engine evidence. Show the in-game draft with
+   concept comparison and editable sources, then record James's separate
+   approval. Any subsequent material art or rendering change invalidates the
+   visual pass and requires another inspection. Do not animate before approval.
+6. **Animate and verify.** Establish the rig, part ownership and hidden
    surfaces. Complete one walk direction with weight transfer, counter-swing,
    planted feet and scarf follow-through before extending the other views.
-   Export all 24 poses, verify source/SVG/PNG/sheet/preview parity and obtain
-   the separate art handoff approval.
-7. **Perform game acceptance.** Integrate the approved art via the World lane
-   and give James a short current-checkout browser test. Concept approval,
-   idle approval and export checks do not establish live Phaser acceptance.
+   Verify all 24 poses and actual engine loops; apply the same producer
+   quality gate before the separate animated-art handoff approval.
+7. **Integrate and obtain production game acceptance.** Production replacement
+   remains a later World-lane step. Give James the current-checkout browser
+   test after approved integration. The isolated draft preview is evidence of
+   that draft's rendering, not acceptance of the canonical live game.
 
-## Historical idle-v2 evidence
+## Illustrated source and draft rendering contract
 
-`review/user-decisions.json` records idle-v2 as superseded and unapproved.
-`review/visual-qa.json` preserves the earlier internal assessment under that
-status. The assessment compared the output with a historical turnaround that
-we incorrectly called approved concept art; it does not pass the new concept
-or likeness gate.
+The approved concept determines appearance. The `.blend` is the editable
+master; each SVG is a real vector pose export and PNGs are derived from it.
+Preserve editable region geometry, source hashes, export settings and review
+hashes. Current v5 regions are an editable illustration, not an animation rig;
+animation requires anatomical part ownership and hidden-surface construction. SVGs must contain paths and fills, without embedded raster images,
+external resources, filters or fonts.
 
-The old process sampled that turnaround, reconstructed contiguous colour
-regions as Grease Pencil polygons with holes, and exported SVGs. Technical
-proofs still show what that process did, but not that its reference was
-approved or its art was accepted:
+| Property | Idle-v5 contract |
+|---|---|
+| Vector authoring canvas | 512×512 SVG units |
+| Derived PNG cell | 256×256 pixels; density 4 |
+| Displayed logical frame | 64×64 world units |
+| Feet pivot | (32,56) logical; (128,224) in the PNG; origin (0.5,0.875) |
+| Gameplay body | 24×24 world units, verified after density scaling |
+| Preview | Actual Phaser, real town assets, camera zoom 2 and real game CSS scale |
+| Alpha and palette | Smooth alpha; appropriate unrestricted palette |
+| Avatar filtering | Linear; existing town texture treatment stays current |
+| Shadow and registration | No baked shadow or per-facing auto-fit |
+| Directions | Down, left, right, up |
+| Later pose order | Idle, contact-left, passing-left, contact-right, passing-right, settle |
+| Later playback | Walk 8 FPS; sprint 12 FPS |
 
-- `review/qa.json`: historical dimensions, alpha, palette and preview crops.
-- `review/source-parity.json`: historical construction/SVG/readback/RGBA parity.
-- `review/reload-parity.json`: historical reopening and re-export results.
-- `review/visual-qa.json`: superseded likeness assessment and failed iterations.
-- `reference/studies/`: historical sampling comparisons, not fresh concepts.
-- `review/rejected-idle-v1/`: presented draft and rejection; its complete source
-  remains at commit `110b26e`.
+This draft explicitly supersedes the earlier 64-pixel raster, binary-alpha,
+24-colour and nearest-neighbour requirements for the illustrated avatar.
+It preserves logical size, contact position and gameplay body. A later
+six-column/four-row sheet at this density would be 1536×1024 pixels; animation
+is not authorized by this contract. Do not normalize every future frame's
+visible height: body bob and lifted feet must survive.
 
-The scripts under root `source/` and `reference/studies/` are retained for
-historical reproduction. Do not overwrite or reuse the old construction as
-new artwork. The old rasterizer accepts only a pending idle decision; the
-superseded idle-v2 decision intentionally prevents it from overwriting that
-review. Any adapted tooling belongs in the distinct active revision and
-must record approved concept-v2 as its visual authority.
+The isolated preview may use the World engine and town assets to verify the
+art. It must not replace production assets, alter financial flows or claim
+merge, deployment or canonical-game acceptance. See [workflow.json](workflow.json)
+for the separate authoring, preview, user-approval and integration states.
 
-## Source and runtime contracts
+## Historical evidence
 
-The approved concept determines appearance. Blender's `.blend` is the
-editable sprite/animation master; each SVG is an actual vector pose export;
-PNG cells are derived runtime outputs. SVGs must contain real paths/fills,
-not embedded raster images, external resources, filters or fonts. Preserve
-semantic editing groups, source hashes, export settings and review hashes.
+- [Idle-v4 exact exports](idle-v4/review/idle-approval.png),
+  [concept comparison](idle-v4/review/reference-comparison.png) and
+  [source record](idle-v4/README.md) are withdrawn and unapproved. Its
+  [rendering diagnosis](idle-v4/review/rendering-diagnosis.md) explains the
+  earlier source/presentation limits; its then-pending style question is
+  resolved by the current D-059 amendment.
+- [Idle-v3 exact exports](idle-v3/review/idle-approval.png),
+  [comparison](idle-v3/review/reference-comparison.png) and
+  [sources](idle-v3/README.md) remain withdrawn historical evidence.
+- Root `source/`, `svg/`, `review/` and `reference/studies/` belong to historical
+  idle-v2. [Its decision record](review/user-decisions.json) is superseded and
+  unapproved because it skipped the genuine concept gate. Old comparison
+  captions do not confer concept authority or revive the approval request.
+- `review/rejected-idle-v1/` preserves the rejected first result; its complete
+  source remains at commit `110b26e`.
 
-The runtime contract remains 64×64 cells, feet at `(32,56)`, a 24×24 gameplay
-body, down/left/right/up rows, six columns (idle, contact-left, passing-left,
-contact-right, passing-right, settle), 8 FPS walk and 12 FPS sprint. Retain
-binary alpha, no baked shadow and nearest-neighbour integer scaling. There
-is no new runtime SVG loader. Do not normalize every animation frame's visible
-height; body bob and lifted feet must survive.
+Historical scripts preserve reproducibility and must not overwrite withdrawn
+reviews. Adapted tooling belongs to idle-v5 and must record exact approved
+concept-v2 as its visual authority. Saved-master readback, SVG/PNG parity and
+file checks describe source integrity only; none grants artistic approval.
 
 ## Tooling evidence
 
-Historical setup evidence records Blender 5.2.1 LTS and Blender MCP 1.9.1,
-with native Codex tools, protocol 5, a matching add-on and telemetry disabled.
 [Setup instructions](setup/README.md) and [setup evidence](setup/setup-report.json)
-cover installation and the separate Grease Pencil export fixture. Those
-proofs establish tooling only. Verify the live connection for the authorized
-idle production; this workflow update does not claim a new handshake or
-export result. The current stage state is in [workflow.json](workflow.json).
+record Blender 5.2.1 LTS, Blender MCP 1.9.1, native Codex tools, protocol 5,
+a matching add-on and disabled telemetry. Verify the live connection for the
+current revision. Historical handshakes and export fixtures establish tooling,
+not a new construction result or a visual pass.
 
-The [rendering diagnosis](idle-v4/review/rendering-diagnosis.md) verifies that
-idle-v4 was never loaded by the game, explains the 64-pixel source and 2×
-camera constraint, and records the consequences of each rendering direction.
-It is not approval of a replacement method or runtime change.
+## Current draft review
+
+Open the [isolated Phaser preview](http://127.0.0.1:5173/), leave **Game size** selected, and switch the four facings and road/pavement/grass. **Close-up** is separately labelled. The preview runs four idles; movement does not claim walk animation.
+
+[Producer review](idle-v5/review/visual-qa.json), [engine capture](idle-v5/review/engine/phaser-road-viewport.png), [concept comparison](idle-v5/review/concept-comparison.png), and [source workflow](idle-v5/source/README.md) bind this candidate. Run `python3 idle-v5/source/verify_review.py` before sending it. This checks evidence freshness and the required producer judgment; it does not automate aesthetic judgment.

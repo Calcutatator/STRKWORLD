@@ -1,0 +1,73 @@
+{
+  "canvas": 1024,
+  "sourceCanvas": 512,
+  "paletteColors": 153,
+  "views": {
+    "down": {
+      "regions": 2009,
+      "points": 55696
+    },
+    "left": {
+      "regions": 1458,
+      "points": 40060
+    },
+    "right": {
+      "regions": 1358,
+      "points": 37491
+    },
+    "up": {
+      "regions": 1825,
+      "points": 49487
+    }
+  },
+  "registration": {
+    "down": [
+      "front-illustrated-v1.png",
+      [
+        0,
+        0,
+        1254,
+        1254
+      ],
+      600,
+      7,
+      1218
+    ],
+    "left": [
+      "illustrated-turnaround-v1.png",
+      [
+        0,
+        0,
+        525,
+        1086
+      ],
+      235,
+      15,
+      1058
+    ],
+    "right": [
+      "illustrated-turnaround-v1.png",
+      [
+        525,
+        0,
+        900,
+        1086
+      ],
+      725,
+      15,
+      1058
+    ],
+    "up": [
+      "illustrated-turnaround-v1.png",
+      [
+        900,
+        0,
+        1448,
+        1086
+      ],
+      1240,
+      15,
+      1053
+    ]
+  }
+}

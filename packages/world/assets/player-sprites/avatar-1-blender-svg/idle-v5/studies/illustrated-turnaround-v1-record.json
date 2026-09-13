@@ -1,0 +1,42 @@
+{
+  "status": "internal-construction-study-not-final-sprite",
+  "tool": "builtin image_gen.imagegen",
+  "generatedSource": "/Users/james.wilcock/.codex/generated_images/01a09c70-0234-7bd0-b259-1b65020b4fa0/exec-1de6d4a7-b88c-42d3-8e9d-f63621017030.png",
+  "prompt": "illustrated-turnaround-v1-prompt.txt",
+  "images": [
+    {
+      "path": "/Users/james.wilcock/Documents/STRKWORLD-avatar-1-restart-draft/packages/world/assets/player-sprites/avatar-1-blender-svg/concept/avatar-1-concept-v2.png",
+      "sha256": "8c0d58a07d1372d2e8c9bcdbddac6e997763a8ffd2b910be83e8ec47b69f1c92",
+      "width": 1536,
+      "height": 1024
+    },
+    {
+      "path": "/Users/james.wilcock/Documents/STRKWORLD-avatar-1-restart-draft/packages/world/assets/player-sprites/avatar-1-blender-svg/idle-v5/studies/front-illustrated-v1.png",
+      "sha256": "b1457e2b7e974c9dc603c3a683619e16dd735917c4442c91ece11f7838e94a03",
+      "width": 1254,
+      "height": 1254
+    },
+    {
+      "path": "/Users/james.wilcock/Documents/STRKWORLD-avatar-1-restart-draft/packages/world/assets/player-sprites/avatar-1-blender-svg/idle-v5/studies/illustrated-turnaround-v1.png",
+      "sha256": "2740a62eda02c9304f60a910e9bdf6ec3f92256d2369a4c4b444f2b7c2bac354",
+      "width": 1448,
+      "height": 1086
+    }
+  ],
+  "visualInspection": {
+    "inspection": "Generated output visually inspected after generation. Not a game-size or in-engine QA pass.",
+    "present": [
+      "Three intact views: left-facing, right-facing, back-facing",
+      "Single right-hip pouch occluded in left view and visible in right/back views",
+      "Two scarf tails visible per view; X harness on back",
+      "Clean silhouettes and readable individual facial features in side views"
+    ],
+    "limitations": [
+      "Arms and shoulders are broader and more muscular than the slim approved concept; do not amplify this in vector construction.",
+      "Side bodies are slightly opened toward camera rather than strict profile.",
+      "Camera elevation reads shallow; engine integration must verify ground registration and crown visibility.",
+      "Back hands are small and stylized; final vector hand contours should be simplified deliberately and inspected.",
+      "Fine texture and complex fabric folds will require selective reduction for game-size readability."
+    ]
+  }
+}

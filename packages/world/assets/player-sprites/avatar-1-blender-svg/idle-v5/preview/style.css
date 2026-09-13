@@ -1,0 +1,24 @@
+:root { color-scheme: dark; font: 14px/1.45 system-ui, sans-serif; color: #e9ece4; background: #151a19; }
+* { box-sizing: border-box; }
+body { margin: 0; }
+main { width: min(1200px, 100%); margin: 0 auto; padding: 24px; }
+header, nav, footer { display: flex; align-items: center; justify-content: space-between; gap: 16px; }
+header { margin-bottom: 20px; }
+.eyebrow { color: #98aaa3; font-size: 11px; letter-spacing: .15em; margin: 0 0 5px; }
+h1 { font-size: 23px; font-weight: 600; margin: 0; }
+.draft-label { border: 1px solid #4b5a50; border-radius: 20px; padding: 5px 11px; color: #acbbb1; font-size: 12px; }
+nav { flex-wrap: wrap; justify-content: flex-start; margin-bottom: 12px; gap: 10px 24px; }
+.controls { display: flex; gap: 4px; }
+button { background: #222a26; color: #aebcb4; border: 1px solid #35443b; border-radius: 5px; padding: 7px 11px; font: inherit; cursor: pointer; }
+button:hover { color: #fff; border-color: #82948a; }
+button[aria-pressed="true"] { background: #b9d9c8; color: #182c23; border-color: #b9d9c8; }
+button:focus-visible, #game:focus-visible { outline: 2px solid #e5bc72; outline-offset: 3px; }
+#game { width: 100%; height: min(62vh, 620px); min-height: 440px; overflow: hidden; background: #27332c; border: 1px solid #435248; border-radius: 6px; }
+/* CSS does not enlarge a low-resolution canvas. Phaser RESIZE follows this
+   element; evidence records the actual CSS/backing ratio before handoff. */
+#game canvas { display: block; image-rendering: auto; }
+footer { margin-top: 10px; color: #a5b5ab; font-size: 12px; flex-wrap: wrap; }
+details { color: #83998b; font-size: 12px; margin-top: 20px; }
+summary { cursor: pointer; }
+pre { white-space: pre-wrap; overflow-wrap: anywhere; padding: 14px; background: #101612; border: 1px solid #26362b; }
+@media (max-width: 680px) { main { padding: 14px; } nav { gap: 8px; } button { padding: 6px 8px; font-size: 12px; } .draft-label { display: none; } #game { min-height: 460px; } }

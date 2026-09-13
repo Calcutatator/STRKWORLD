@@ -1,0 +1,617 @@
+{
+  "maximumColorsPerFrame": 256,
+  "colors": [
+    {
+      "name": "fill-000",
+      "hex": "#1F1A16"
+    },
+    {
+      "name": "fill-001",
+      "hex": "#102226"
+    },
+    {
+      "name": "fill-002",
+      "hex": "#31747F"
+    },
+    {
+      "name": "fill-003",
+      "hex": "#3E8D97"
+    },
+    {
+      "name": "fill-004",
+      "hex": "#4C3E37"
+    },
+    {
+      "name": "fill-005",
+      "hex": "#F9B782"
+    },
+    {
+      "name": "fill-006",
+      "hex": "#76482D"
+    },
+    {
+      "name": "fill-007",
+      "hex": "#DD9766"
+    },
+    {
+      "name": "fill-008",
+      "hex": "#5F3D28"
+    },
+    {
+      "name": "fill-009",
+      "hex": "#523728"
+    },
+    {
+      "name": "fill-010",
+      "hex": "#4C4139"
+    },
+    {
+      "name": "fill-011",
+      "hex": "#2B5059"
+    },
+    {
+      "name": "fill-012",
+      "hex": "#347580"
+    },
+    {
+      "name": "fill-013",
+      "hex": "#37312B"
+    },
+    {
+      "name": "fill-014",
+      "hex": "#27484E"
+    },
+    {
+      "name": "fill-015",
+      "hex": "#5D483B"
+    },
+    {
+      "name": "fill-016",
+      "hex": "#29241F"
+    },
+    {
+      "name": "fill-017",
+      "hex": "#FABC85"
+    },
+    {
+      "name": "fill-018",
+      "hex": "#47362B"
+    },
+    {
+      "name": "fill-019",
+      "hex": "#5F3E2B"
+    },
+    {
+      "name": "fill-020",
+      "hex": "#F6B681"
+    },
+    {
+      "name": "fill-021",
+      "hex": "#4F4139"
+    },
+    {
+      "name": "fill-022",
+      "hex": "#824E30"
+    },
+    {
+      "name": "fill-023",
+      "hex": "#422C1F"
+    },
+    {
+      "name": "fill-024",
+      "hex": "#4D3122"
+    },
+    {
+      "name": "fill-025",
+      "hex": "#265963"
+    },
+    {
+      "name": "fill-026",
+      "hex": "#3C322D"
+    },
+    {
+      "name": "fill-027",
+      "hex": "#51433B"
+    },
+    {
+      "name": "fill-028",
+      "hex": "#F1B07C"
+    },
+    {
+      "name": "fill-029",
+      "hex": "#388691"
+    },
+    {
+      "name": "fill-030",
+      "hex": "#6F4229"
+    },
+    {
+      "name": "fill-031",
+      "hex": "#37828D"
+    },
+    {
+      "name": "fill-032",
+      "hex": "#27626C"
+    },
+    {
+      "name": "fill-033",
+      "hex": "#514339"
+    },
+    {
+      "name": "fill-034",
+      "hex": "#2A4B51"
+    },
+    {
+      "name": "fill-035",
+      "hex": "#244248"
+    },
+    {
+      "name": "fill-036",
+      "hex": "#2D5259"
+    },
+    {
+      "name": "fill-037",
+      "hex": "#6E4730"
+    },
+    {
+      "name": "fill-038",
+      "hex": "#463125"
+    },
+    {
+      "name": "fill-039",
+      "hex": "#2E6A75"
+    },
+    {
+      "name": "fill-040",
+      "hex": "#172527"
+    },
+    {
+      "name": "fill-041",
+      "hex": "#433831"
+    },
+    {
+      "name": "fill-042",
+      "hex": "#F0AB76"
+    },
+    {
+      "name": "fill-043",
+      "hex": "#4A3C34"
+    },
+    {
+      "name": "fill-044",
+      "hex": "#67432E"
+    },
+    {
+      "name": "fill-045",
+      "hex": "#D48F60"
+    },
+    {
+      "name": "fill-046",
+      "hex": "#B27951"
+    },
+    {
+      "name": "fill-047",
+      "hex": "#1D3539"
+    },
+    {
+      "name": "fill-048",
+      "hex": "#52443C"
+    },
+    {
+      "name": "fill-049",
+      "hex": "#573725"
+    },
+    {
+      "name": "fill-050",
+      "hex": "#382E28"
+    },
+    {
+      "name": "fill-051",
+      "hex": "#438F98"
+    },
+    {
+      "name": "fill-052",
+      "hex": "#463A33"
+    },
+    {
+      "name": "fill-053",
+      "hex": "#4799A1"
+    },
+    {
+      "name": "fill-054",
+      "hex": "#3D858F"
+    },
+    {
+      "name": "fill-055",
+      "hex": "#55443B"
+    },
+    {
+      "name": "fill-056",
+      "hex": "#2F2822"
+    },
+    {
+      "name": "fill-057",
+      "hex": "#54473E"
+    },
+    {
+      "name": "fill-058",
+      "hex": "#367B86"
+    },
+    {
+      "name": "fill-059",
+      "hex": "#744A31"
+    },
+    {
+      "name": "fill-060",
+      "hex": "#855D42"
+    },
+    {
+      "name": "fill-061",
+      "hex": "#213B40"
+    },
+    {
+      "name": "fill-062",
+      "hex": "#5F4230"
+    },
+    {
+      "name": "fill-063",
+      "hex": "#26201B"
+    },
+    {
+      "name": "fill-064",
+      "hex": "#346A74"
+    },
+    {
+      "name": "fill-065",
+      "hex": "#2C6974"
+    },
+    {
+      "name": "fill-066",
+      "hex": "#3C8B95"
+    },
+    {
+      "name": "fill-067",
+      "hex": "#39281D"
+    },
+    {
+      "name": "fill-068",
+      "hex": "#9F643F"
+    },
+    {
+      "name": "fill-069",
+      "hex": "#1E383E"
+    },
+    {
+      "name": "fill-070",
+      "hex": "#6C5C52"
+    },
+    {
+      "name": "fill-071",
+      "hex": "#33707B"
+    },
+    {
+      "name": "fill-072",
+      "hex": "#3B2C21"
+    },
+    {
+      "name": "fill-073",
+      "hex": "#335D65"
+    },
+    {
+      "name": "fill-074",
+      "hex": "#162F34"
+    },
+    {
+      "name": "fill-075",
+      "hex": "#2D4D53"
+    },
+    {
+      "name": "fill-076",
+      "hex": "#367F8A"
+    },
+    {
+      "name": "fill-077",
+      "hex": "#56473E"
+    },
+    {
+      "name": "fill-078",
+      "hex": "#94623F"
+    },
+    {
+      "name": "fill-079",
+      "hex": "#1E4952"
+    },
+    {
+      "name": "fill-080",
+      "hex": "#1B2F32"
+    },
+    {
+      "name": "fill-081",
+      "hex": "#764D34"
+    },
+    {
+      "name": "fill-082",
+      "hex": "#E1A06F"
+    },
+    {
+      "name": "fill-083",
+      "hex": "#342C26"
+    },
+    {
+      "name": "fill-084",
+      "hex": "#845537"
+    },
+    {
+      "name": "fill-085",
+      "hex": "#3F7A84"
+    },
+    {
+      "name": "fill-086",
+      "hex": "#C98154"
+    },
+    {
+      "name": "fill-087",
+      "hex": "#101110"
+    },
+    {
+      "name": "fill-088",
+      "hex": "#8F5736"
+    },
+    {
+      "name": "fill-089",
+      "hex": "#22515B"
+    },
+    {
+      "name": "fill-090",
+      "hex": "#523523"
+    },
+    {
+      "name": "fill-091",
+      "hex": "#482F20"
+    },
+    {
+      "name": "fill-092",
+      "hex": "#4B3B31"
+    },
+    {
+      "name": "fill-093",
+      "hex": "#342218"
+    },
+    {
+      "name": "fill-094",
+      "hex": "#643721"
+    },
+    {
+      "name": "fill-095",
+      "hex": "#3F352E"
+    },
+    {
+      "name": "fill-096",
+      "hex": "#213F45"
+    },
+    {
+      "name": "fill-097",
+      "hex": "#2B1B13"
+    },
+    {
+      "name": "fill-098",
+      "hex": "#2E221A"
+    },
+    {
+      "name": "fill-099",
+      "hex": "#1E3E45"
+    },
+    {
+      "name": "fill-100",
+      "hex": "#317A85"
+    },
+    {
+      "name": "fill-101",
+      "hex": "#504139"
+    },
+    {
+      "name": "fill-102",
+      "hex": "#2C5F6A"
+    },
+    {
+      "name": "fill-103",
+      "hex": "#5B3824"
+    },
+    {
+      "name": "fill-104",
+      "hex": "#583C2C"
+    },
+    {
+      "name": "fill-105",
+      "hex": "#40362E"
+    },
+    {
+      "name": "fill-106",
+      "hex": "#392318"
+    },
+    {
+      "name": "fill-107",
+      "hex": "#674129"
+    },
+    {
+      "name": "fill-108",
+      "hex": "#0E181A"
+    },
+    {
+      "name": "fill-109",
+      "hex": "#2C4146"
+    },
+    {
+      "name": "fill-110",
+      "hex": "#413731"
+    },
+    {
+      "name": "fill-111",
+      "hex": "#3B3530"
+    },
+    {
+      "name": "fill-112",
+      "hex": "#302B26"
+    },
+    {
+      "name": "fill-113",
+      "hex": "#857E77"
+    },
+    {
+      "name": "fill-114",
+      "hex": "#835133"
+    },
+    {
+      "name": "fill-115",
+      "hex": "#6B412A"
+    },
+    {
+      "name": "fill-116",
+      "hex": "#4D3F34"
+    },
+    {
+      "name": "fill-117",
+      "hex": "#224249"
+    },
+    {
+      "name": "fill-118",
+      "hex": "#2A606A"
+    },
+    {
+      "name": "fill-119",
+      "hex": "#663D27"
+    },
+    {
+      "name": "fill-120",
+      "hex": "#5B4A40"
+    },
+    {
+      "name": "fill-121",
+      "hex": "#6D513F"
+    },
+    {
+      "name": "fill-122",
+      "hex": "#201610"
+    },
+    {
+      "name": "fill-123",
+      "hex": "#5C3A27"
+    },
+    {
+      "name": "fill-124",
+      "hex": "#183D45"
+    },
+    {
+      "name": "fill-125",
+      "hex": "#453932"
+    },
+    {
+      "name": "fill-126",
+      "hex": "#3C312A"
+    },
+    {
+      "name": "fill-127",
+      "hex": "#FABF8B"
+    },
+    {
+      "name": "fill-128",
+      "hex": "#9C5832"
+    },
+    {
+      "name": "fill-129",
+      "hex": "#463C34"
+    },
+    {
+      "name": "fill-130",
+      "hex": "#5E4D42"
+    },
+    {
+      "name": "fill-131",
+      "hex": "#1D110B"
+    },
+    {
+      "name": "fill-132",
+      "hex": "#3A4F56"
+    },
+    {
+      "name": "fill-133",
+      "hex": "#284B54"
+    },
+    {
+      "name": "fill-134",
+      "hex": "#82492B"
+    },
+    {
+      "name": "fill-135",
+      "hex": "#ECA26F"
+    },
+    {
+      "name": "fill-136",
+      "hex": "#4A2C1D"
+    },
+    {
+      "name": "fill-137",
+      "hex": "#56311F"
+    },
+    {
+      "name": "fill-138",
+      "hex": "#AC663D"
+    },
+    {
+      "name": "fill-139",
+      "hex": "#784227"
+    },
+    {
+      "name": "fill-140",
+      "hex": "#2D727D"
+    },
+    {
+      "name": "fill-141",
+      "hex": "#28505A"
+    },
+    {
+      "name": "fill-142",
+      "hex": "#A5A39C"
+    },
+    {
+      "name": "fill-143",
+      "hex": "#F7B27B"
+    },
+    {
+      "name": "fill-144",
+      "hex": "#244951"
+    },
+    {
+      "name": "fill-145",
+      "hex": "#0D0D0B"
+    },
+    {
+      "name": "fill-146",
+      "hex": "#F9B57E"
+    },
+    {
+      "name": "fill-147",
+      "hex": "#452618"
+    },
+    {
+      "name": "fill-148",
+      "hex": "#473D37"
+    },
+    {
+      "name": "fill-149",
+      "hex": "#E2B68F"
+    },
+    {
+      "name": "fill-150",
+      "hex": "#E3BD9A"
+    },
+    {
+      "name": "fill-151",
+      "hex": "#CDCFCF"
+    },
+    {
+      "name": "fill-152",
+      "hex": "#92502D"
+    }
+  ]
+}

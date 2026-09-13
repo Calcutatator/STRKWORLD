@@ -1,0 +1,35 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Avatar 1 · In-game draft</title>
+    <link rel="stylesheet" href="./style.css" />
+  </head>
+  <body>
+    <main>
+      <header>
+        <div><p class="eyebrow">STRKWORLD / AVATAR 1</p><h1>In-game idle draft</h1></div>
+        <span class="draft-label">Idle draft · v5</span>
+      </header>
+      <nav aria-label="Draft controls">
+        <div class="controls" role="group" aria-label="Facing">
+          <button data-facing="down">Front</button><button data-facing="left">Left</button>
+          <button data-facing="right">Right</button><button data-facing="up">Back</button>
+          <button id="lineup" aria-pressed="true">All four</button>
+        </div>
+        <div class="controls" role="group" aria-label="Town surface">
+          <button data-surface="road" aria-pressed="true">Road</button>
+          <button data-surface="pavement">Pavement</button><button data-surface="grass">Grass</button>
+        </div>
+        <div class="controls" role="group" aria-label="Viewing scale">
+          <button data-zoom="2" aria-pressed="true">Game size</button><button data-zoom="4">Close-up</button>
+        </div>
+      </nav>
+      <div id="game" aria-label="Actual Phaser street preview" tabindex="0"></div>
+      <footer><span id="status" role="status">Loading the town and current draft…</span><span>WASD / arrows to move · Idle poses only</span></footer>
+      <details><summary>Inspection evidence</summary><pre id="evidence">Waiting for the engine.</pre></details>
+    </main>
+    <script type="module" src="./main.ts"></script>
+  </body>
+</html>

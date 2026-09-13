@@ -1,24 +1,25 @@
 {
-  "version": 4,
+  "version": 5,
   "avatar": "avatar-1",
-  "state": "refinement-awaiting-style-clarification",
+  "state": "idle-v5-awaiting-exact-idle-approval",
   "directionRecorded": "2026-09-13",
   "decision": "D-059",
   "rejectedDraft": "../avatar-1-restart-2026-09-12",
   "authoring": {
     "control": "Blender MCP",
-    "art": "layered Grease Pencil vectors",
+    "art": "higher-detail illustrated native Grease Pencil vectors",
     "animationMaster": null,
     "poseFormat": "SVG",
     "runtimeFormat": "PNG",
     "rasterImageGenerationFallback": false,
     "embeddedRasterSvgAllowed": false,
-    "outputRoot": null,
-    "currentScope": "Withdraw idle-v4; clarify rendering style and investigate current presentation constraints before further refinement",
+    "outputRoot": "idle-v5",
+    "currentScope": "Four illustrated idles completed and personally inspected in actual Phaser; awaiting user approval of this exact draft",
     "lastHistoricalMaster": "idle-v4/source/avatar-1.blend",
-    "artMaster": null,
-    "construction": "No replacement construction method selected; historical idle-v4 method is recorded with its artifacts.",
-    "sourceRasterEmbeddedInSvg": false
+    "artMaster": "idle-v5/source/avatar-1.blend",
+    "construction": "ImageGen construction studies from approved concept-v2; high-detail spline reconstruction; native Blender MCP Grease Pencil master and SVG exports; smooth 256px PNG textures at density4. No low-resolution pixel-grid input or embedded bitmaps.",
+    "sourceRasterEmbeddedInSvg": false,
+    "masterStatus": "native-blender-saved-reopened-and-verified"
   },
   "gates": [
     {
@@ -39,33 +40,65 @@
     },
     {
       "id": "four-idle-source-views",
-      "status": "withdrawn-requires-refinement",
+      "status": "complete",
       "dependsOn": "user-approves-concept",
-      "revision": "idle-v4",
-      "outputRoot": "idle-v4",
-      "master": "idle-v4/source/avatar-1.blend",
-      "technicalQa": "idle-v4/review/source-parity.json"
+      "revision": "idle-v5",
+      "outputRoot": "idle-v5",
+      "master": "idle-v5/source/avatar-1.blend",
+      "technicalQa": "idle-v5/review/source-parity.json"
     },
     {
       "id": "reference-fidelity-visual-review",
-      "status": "failed-aesthetic-review-withdrawn",
+      "status": "producer-inspected-pass-for-idle-draft",
       "referenceMustBe": "explicitly user-approved fresh concept",
       "grantsUserApproval": false,
       "reference": "concept/avatar-1-concept-v2.png",
       "referenceSha256": "8c0d58a07d1372d2e8c9bcdbddac6e997763a8ffd2b910be83e8ec47b69f1c92",
       "dependsOn": "four-idle-source-views",
-      "evidence": "idle-v4/review/visual-qa.json",
-      "evidenceScope": "Renewed PNG inspection revokes artistic readiness. Export boards were inspected; no live-game inspection or integration occurred."
+      "evidence": "idle-v5/review/visual-qa.json",
+      "evidenceScope": "Producer personally inspected native Blender views, exact exports, matched-height approved-concept comparison and actual Phaser captures; judgment is for this idle draft.",
+      "owner": "producing agent"
+    },
+    {
+      "id": "producer-actual-phaser-visual-review",
+      "status": "producer-inspected-pass-for-idle-draft",
+      "dependsOn": "reference-fidelity-visual-review",
+      "owner": "producing agent",
+      "requiresPersonalInspection": true,
+      "evidence": "idle-v5/review/visual-qa.json",
+      "grantsUserApproval": false,
+      "requiredViews": [
+        "down",
+        "left",
+        "right",
+        "up"
+      ],
+      "requiredSurfaces": [
+        "representative light town surface",
+        "representative dark town surface"
+      ],
+      "requiredEvidence": [
+        "actual Phaser screenshots at real game CSS scale",
+        "viewport and device pixel ratio",
+        "camera zoom 2",
+        "density 4 and linear avatar filtering",
+        "24x24 world-unit physics body",
+        "inspected source and export hashes",
+        "producer quality judgment and resolved defects"
+      ],
+      "failureAction": "Continue internal refinement; regenerate and personally inspect actual engine output after every material change. Never hand off known visual defects.",
+      "independentReviewSubstitutesForProducerInspection": false
     },
     {
       "id": "user-approves-exact-idles",
-      "status": "not-ready-approval-request-withdrawn",
+      "status": "pending",
       "requiresExplicitUserApproval": true,
-      "decisionRecord": "idle-v4/review/user-decisions.json",
+      "decisionRecord": "idle-v5/review/user-decisions.json",
       "blocks": "all animation",
-      "review": "idle-v4/review/idle-approval.png",
+      "review": "idle-v5/review/visual-qa.json",
       "lastWithdrawnDecisionRecord": "idle-v4/review/user-decisions.json",
-      "reviewIsHistorical": true
+      "reviewIsHistorical": false,
+      "dependsOn": "producer-actual-phaser-visual-review"
     },
     {
       "id": "one-complete-walk-direction",
@@ -80,7 +113,7 @@
     {
       "id": "source-export-and-preview-parity",
       "status": "not-started",
-      "scope": "Complete 24-pose animated sheet; separate idle-only parity already verified."
+      "scope": "Complete 24-pose animated sheet. Historical idle-only parity does not verify idle-v5."
     },
     {
       "id": "user-art-handoff-approval",
@@ -94,12 +127,12 @@
   ],
   "runtimeContract": {
     "cellSize": [
-      64,
-      64
+      256,
+      256
     ],
     "sheetSize": [
-      384,
-      256
+      1536,
+      1024
     ],
     "feetPivot": [
       32,
@@ -125,8 +158,42 @@
     ],
     "walkFps": 8,
     "sprintFps": 12,
-    "binaryAlpha": true,
-    "bakedShadow": false
+    "binaryAlpha": false,
+    "bakedShadow": false,
+    "scope": "Idle-v5 isolated illustrated draft; existing production asset is unchanged",
+    "logicalCellSize": [
+      64,
+      64
+    ],
+    "sheetSizeStatus": "future-animation-layout-not-produced-or-approved",
+    "sourceCanvas": [
+      512,
+      512
+    ],
+    "pixelDensity": 4,
+    "feetPivotSpace": "logical-world-units",
+    "pngFeetPivot": [
+      128,
+      224
+    ],
+    "origin": [
+      0.5,
+      0.875
+    ],
+    "gameplayBodySpace": "world-units-after-density-scaling",
+    "alpha": "smooth",
+    "paletteLimit": null,
+    "palette": "appropriate unrestricted illustrated palette",
+    "avatarTextureFilter": "linear",
+    "perFacingAutoFit": false,
+    "cameraZoom": 2,
+    "supersedesForThisDraft": [
+      "64-pixel output cells",
+      "binary alpha",
+      "24-colour cap",
+      "nearest-neighbour avatar filtering"
+    ],
+    "separatePreviewContactShadow": "Three low-opacity ellipses; exact parameters in preview/main.ts and engine evidence. Not baked into SVG/PNG."
   },
   "availability": {
     "checked": "2026-09-12",
@@ -208,13 +275,29 @@
       "priorStatus": "frozen-review-candidate"
     }
   ],
-  "draft": null,
+  "draft": {
+    "id": "idle-v5",
+    "stage": "exact-idle-approval",
+    "status": "awaiting-user-approval",
+    "root": "idle-v5",
+    "concept": "concept/avatar-1-concept-v2.png",
+    "conceptSha256": "8c0d58a07d1372d2e8c9bcdbddac6e997763a8ffd2b910be83e8ec47b69f1c92",
+    "userDecision": "idle-v5/review/user-decisions.json",
+    "userIdleApproval": "not-granted",
+    "approvalCandidateReady": true,
+    "producerSourceVisualQa": "pass-for-idle-draft",
+    "producerPhaserVisualQa": "pass-for-idle-draft",
+    "animationAuthorized": false,
+    "runtimeIntegrationAuthorized": false,
+    "isolatedPhaserPreviewAuthorized": true,
+    "review": "idle-v5/review/visual-qa.json"
+  },
   "historicalToolingEvidence": {
     "status": "verified-before-concept-first-correction",
     "evidence": "setup/setup-report.json",
     "doesNotGrantConceptOrSpriteApproval": true
   },
-  "spriteProductionScope": "Further idle refinement remains authorized by concept approval; rendering-style clarification is pending. No candidate is ready and no animation or runtime integration is authorized.",
+  "spriteProductionScope": "The illustrated four-idle draft and isolated actual-Phaser visual QA are complete. Exact idle user approval is pending; animation and production integration are not authorized.",
   "animationAuthorized": false,
   "runtimeIntegrationAuthorized": false,
   "concept": {
@@ -228,34 +311,76 @@
     "required": true,
     "owner": "producing agent",
     "actualExportScales": [
-      "1x",
-      "2x"
+      "64x64 logical-frame CSS scale",
+      "128x128 frame CSS scale at game zoom 2"
     ],
     "compareTo": "concept/avatar-1-concept-v2.png",
-    "requirement": "Judge whether the actual game-size sprite looks good and retains the approved character identity, with a natural pose, expressive readable face, clear shading and convincing directional form.",
+    "requirement": "The producer personally views source and actual engine output before every handoff. If quality is not obviously sufficient, fix it and inspect the new actual engine result again; retain approved concept identity, natural pose, readable face, directional form, clear shading and clean edges.",
     "continueRefiningIf": [
       "rough placeholder appearance",
       "rigid pose",
       "lifeless face",
       "muddy shading",
       "flat cutout profiles",
-      "lost concept identity"
+      "lost concept identity",
+      "distorted proportions",
+      "known visible defects",
+      "actual engine output not personally inspected",
+      "quality judgment remains uncertain"
     ],
     "technicalParityEstablishesArtisticQuality": false,
     "knownFailedCandidateMayBeHandedOff": false,
     "lastFailedRevision": "idle-v4",
     "lastFailureRecord": "idle-v4/review/visual-qa.json",
-    "latestPassedRevision": null,
-    "latestPassRecord": null
+    "latestPassedRevision": "idle-v5",
+    "latestPassRecord": "idle-v5/review/visual-qa.json",
+    "requiredInspectionTargets": [
+      "editable vector source",
+      "exact SVG-derived PNG outputs",
+      "actual Phaser render at real game CSS scale on light and dark town surfaces in all four turns"
+    ],
+    "question": "Is this in-game result obviously good enough to approve?",
+    "independentReviewSubstitutesForProducerInspection": false,
+    "materialChangeInvalidatesPriorVisualPass": true,
+    "requiredEngineEvidence": [
+      "actual engine screenshot",
+      "viewport/CSS scale",
+      "device pixel ratio",
+      "camera zoom",
+      "texture density",
+      "filtering",
+      "source and export hashes",
+      "observed quality judgment"
+    ]
   },
   "refinement": {
-    "status": "awaiting-style-clarification",
+    "status": "complete-for-idle-draft-pending-user-approval",
     "question": "Preserve the crisp illustrated concept look or use deliberate low-resolution pixel art?",
-    "userAnswer": null,
-    "dependentArtworkWork": "paused-pending-user-direction",
-    "independentWork": "Investigate current runtime presentation and resolution contracts",
-    "replacementMethod": null,
-    "replacementRevision": null,
-    "approvalCandidateReady": false
-  }
+    "userAnswer": "Accepted higher-detail illustrated vector artwork at the same on-screen size; execute and personally inspect the in-game result, fixing it before handoff if it is not obviously good enough.",
+    "userQuote": "brother then please do that.\n\nupdate your flow too please.\n\nI want you to be able to execute to a draft of an in-game that is aprovable. Look at it PLEASE EVERYTIME before sending me - is it obviously good enough? If no FIX IT.",
+    "clarificationResolved": true,
+    "dependentArtworkWork": "completed-four-idles",
+    "replacementMethod": "512x512 illustrated vector authoring through native Blender MCP; 256x256 SVG-derived PNG at density 4 in an isolated actual-Phaser preview",
+    "replacementRevision": "idle-v5",
+    "approvalCandidateReady": true
+  },
+  "isolatedPhaserPreviewAuthorized": true,
+  "isolatedPhaserPreviewScope": {
+    "engine": "actual Phaser",
+    "townAssets": "existing real game town assets",
+    "cameraZoom": 2,
+    "logicalCellSize": [
+      64,
+      64
+    ],
+    "requiredGameplayBodyWorldUnits": [
+      24,
+      24
+    ],
+    "browserVisualQaAuthorized": true,
+    "canonicalRuntimeReplacement": false,
+    "financialFlows": false,
+    "productionIntegrationApproved": false
+  },
+  "preHandoffVerifier": "idle-v5/source/verify_review.py"
 }

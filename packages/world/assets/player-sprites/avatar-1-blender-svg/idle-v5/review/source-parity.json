@@ -1,0 +1,296 @@
+{
+  "schemaVersion": 1,
+  "revision": "idle-v5",
+  "mechanicalStatus": "pass",
+  "stage": "internal-refinement",
+  "directions": [
+    "down",
+    "left",
+    "right",
+    "up"
+  ],
+  "conceptApproval": {
+    "status": "approved",
+    "sha256": "8c0d58a07d1372d2e8c9bcdbddac6e997763a8ffd2b910be83e8ec47b69f1c92",
+    "artifact": "../concept/avatar-1-concept-v2.png"
+  },
+  "artisticQuality": "not-assessed",
+  "userIdleApproval": "not-established",
+  "animationAcceptance": "not-tested",
+  "gameAcceptance": "not-tested",
+  "scope": "Current upstream input bindings and geometry/palette to supplied live GP readback and native SVG path/fill parity",
+  "coordinateTolerance": 0.0002,
+  "limits": [
+    "The coordinator performs reopening; this script does not independently open or parse .blend.",
+    "Construction-study hashes and declared high-detail input files are checked; the vectorizer is inventoried but not replayed here.",
+    "PNG headers and hashes are optional inventory only; this script does not compare PNG pixels.",
+    "A partial view inventory is a valid internal construction experiment, not a complete sprite set.",
+    "Technical parity says nothing about likeness, beauty, readability, visual QA, or readiness for handoff."
+  ],
+  "upstreamProvenance": {
+    "status": "hashes-match-current-inputs",
+    "constructionReferences": [
+      {
+        "file": "studies/front-illustrated-v1.png",
+        "sha256": "b1457e2b7e974c9dc603c3a683619e16dd735917c4442c91ece11f7838e94a03"
+      },
+      {
+        "file": "studies/illustrated-turnaround-v1.png",
+        "sha256": "2740a62eda02c9304f60a910e9bdf6ec3f92256d2369a4c4b444f2b7c2bac354"
+      }
+    ],
+    "cell": [
+      512,
+      512
+    ],
+    "feetPivot": [
+      256,
+      448
+    ],
+    "logicalCell": [
+      64,
+      64
+    ],
+    "files": [
+      "source/vectorize_studies.py",
+      "source/vectors/down-bezier.svg",
+      "source/vectors/left-bezier.svg",
+      "source/vectors/right-bezier.svg",
+      "source/vectors/up-bezier.svg"
+    ],
+    "scope": "Current declared study and construction input bytes; script hashes are inventory, not execution attestation",
+    "constructionReplay": "not-performed-by-this-check"
+  },
+  "blenderReadbackParity": {
+    "status": "pass",
+    "blender": "5.2.1 LTS",
+    "masterSha256": "d178a6fc57249222c405c462a1dfa68b69f302297113ab23329f641637d8f106",
+    "views": {
+      "down": {
+        "shapeCount": 2009,
+        "maximumCoordinateError": 7.617187520736479e-06,
+        "orderedPartsMaterialsContoursAndFillState": "pass"
+      },
+      "left": {
+        "shapeCount": 1458,
+        "maximumCoordinateError": 7.617187520736479e-06,
+        "orderedPartsMaterialsContoursAndFillState": "pass"
+      },
+      "right": {
+        "shapeCount": 1358,
+        "maximumCoordinateError": 7.617187520736479e-06,
+        "orderedPartsMaterialsContoursAndFillState": "pass"
+      },
+      "up": {
+        "shapeCount": 1825,
+        "maximumCoordinateError": 7.617187520736479e-06,
+        "orderedPartsMaterialsContoursAndFillState": "pass"
+      }
+    },
+    "packedReferences": [
+      {
+        "name": "AV1V5 | Approved concept reference",
+        "sha256": "8c0d58a07d1372d2e8c9bcdbddac6e997763a8ffd2b910be83e8ec47b69f1c92",
+        "approvalScope": "Approved concept identity; not sprite or animation approval",
+        "packed": true,
+        "packedBytesSha256": "8c0d58a07d1372d2e8c9bcdbddac6e997763a8ffd2b910be83e8ec47b69f1c92"
+      },
+      {
+        "name": "AV1V5 | ImageGen construction study NOT approved concept: front-illustrated-v1",
+        "sha256": "b1457e2b7e974c9dc603c3a683619e16dd735917c4442c91ece11f7838e94a03",
+        "approvalScope": "Not approved concept art; internal ImageGen construction study",
+        "packed": true,
+        "packedBytesSha256": "b1457e2b7e974c9dc603c3a683619e16dd735917c4442c91ece11f7838e94a03"
+      },
+      {
+        "name": "AV1V5 | ImageGen construction study NOT approved concept: illustrated-turnaround-v1",
+        "sha256": "2740a62eda02c9304f60a910e9bdf6ec3f92256d2369a4c4b444f2b7c2bac354",
+        "approvalScope": "Not approved concept art; internal ImageGen construction study",
+        "packed": true,
+        "packedBytesSha256": "2740a62eda02c9304f60a910e9bdf6ec3f92256d2369a4c4b444f2b7c2bac354"
+      }
+    ],
+    "provenanceLimit": "Coordinator-managed reload; this verifier checks its supplied live readback and current file hash"
+  },
+  "environmentEvidence": {
+    "status": "consistent-with-current-artifacts",
+    "nativeMcpToolsReported": true,
+    "scope": "Supplied native-MCP metadata consistency, not independent transport attestation"
+  },
+  "frames": {
+    "down": {
+      "pathCount": 2009,
+      "sourceShapeCount": 2009,
+      "embeddedImages": 0,
+      "orderedGeometryAndExactPaletteFills": "pass",
+      "maximumCoordinateError": 0.00010000000000331966,
+      "png": {
+        "file": "frames/down/idle.png",
+        "headerDimensions": [
+          256,
+          256
+        ],
+        "sourcePixelParity": "not-asserted"
+      }
+    },
+    "left": {
+      "pathCount": 1458,
+      "sourceShapeCount": 1458,
+      "embeddedImages": 0,
+      "orderedGeometryAndExactPaletteFills": "pass",
+      "maximumCoordinateError": 0.00010000000003174137,
+      "png": {
+        "file": "frames/left/idle.png",
+        "headerDimensions": [
+          256,
+          256
+        ],
+        "sourcePixelParity": "not-asserted"
+      }
+    },
+    "right": {
+      "pathCount": 1358,
+      "sourceShapeCount": 1358,
+      "embeddedImages": 0,
+      "orderedGeometryAndExactPaletteFills": "pass",
+      "maximumCoordinateError": 0.00010000000000331966,
+      "png": {
+        "file": "frames/right/idle.png",
+        "headerDimensions": [
+          256,
+          256
+        ],
+        "sourcePixelParity": "not-asserted"
+      }
+    },
+    "up": {
+      "pathCount": 1825,
+      "sourceShapeCount": 1825,
+      "embeddedImages": 0,
+      "orderedGeometryAndExactPaletteFills": "pass",
+      "maximumCoordinateError": 0.00010000000003174137,
+      "png": {
+        "file": "frames/up/idle.png",
+        "headerDimensions": [
+          256,
+          256
+        ],
+        "sourcePixelParity": "not-asserted"
+      }
+    }
+  },
+  "files": {
+    "source/idle-geometry.json": {
+      "bytes": 3679040,
+      "sha256": "1aaa6b0873f9066255c85820e5cf0dcbf100d9829270d5ec02279bc4fe342252"
+    },
+    "source/palette.json": {
+      "bytes": 9539,
+      "sha256": "d6ddc6d0f6820f479162d72aa26cb91f54a90242e7354b20c4d74fbc629fc76a"
+    },
+    "source/avatar-1.blend": {
+      "bytes": 14956125,
+      "sha256": "d178a6fc57249222c405c462a1dfa68b69f302297113ab23329f641637d8f106"
+    },
+    "source/blender-readback.json": {
+      "bytes": 7329949,
+      "sha256": "9634310857a9c6bf36b427c352e433bf169f191a3844c6b5c4a065c279cbdf96"
+    },
+    "source/blender-environment.json": {
+      "bytes": 3520,
+      "sha256": "eb1cdbbf08218b6d5bf5808d1721b9789749ef1e995fed3855d4179525bf0802"
+    },
+    "source/authoring.py": {
+      "bytes": 6729,
+      "sha256": "29893d93849a4a75838977702c8d812088714a675938ac8913ab3ea747af4a19"
+    },
+    "source/export_svg.py": {
+      "bytes": 5459,
+      "sha256": "5761717b8d087cadfb99d46b59539e8e9039d88f7a3d4c2014dcb3949d51b49b"
+    },
+    "source/readback.py": {
+      "bytes": 4244,
+      "sha256": "89bcf5fdfbb4a1d6a725ed36feff5d25485080316896a9dadbb3c92dec3f0965"
+    },
+    "source/source_contract.py": {
+      "bytes": 7404,
+      "sha256": "d9b36c3c1523a1a482e74d851abb136d6dd3a3ccf42f10f1249b730b692f5707"
+    },
+    "source/verify_source.py": {
+      "bytes": 18214,
+      "sha256": "5e83b0a24e1953903a5f22e02700e43c7259c9524a2326f105f6965aedad1e30"
+    },
+    "../concept/approval.json": {
+      "bytes": 2231,
+      "sha256": "094f7f8c2f6b185eda9bc9c1320cd2403e8be6644ccfef9cc88d6cca219ede51"
+    },
+    "../concept/avatar-1-concept-v2.png": {
+      "bytes": 2074060,
+      "sha256": "8c0d58a07d1372d2e8c9bcdbddac6e997763a8ffd2b910be83e8ec47b69f1c92"
+    },
+    "review/user-decisions.json": {
+      "bytes": 2459,
+      "sha256": "2b79c5e34ecfd3e2ed86053fdff6916dc9ff64255a8177ea6b288fbed0e74653"
+    },
+    "studies/front-illustrated-v1.png": {
+      "bytes": 1326455,
+      "sha256": "b1457e2b7e974c9dc603c3a683619e16dd735917c4442c91ece11f7838e94a03"
+    },
+    "studies/illustrated-turnaround-v1.png": {
+      "bytes": 1647612,
+      "sha256": "2740a62eda02c9304f60a910e9bdf6ec3f92256d2369a4c4b444f2b7c2bac354"
+    },
+    "source/vectorize_studies.py": {
+      "bytes": 5289,
+      "sha256": "921050688fe25720588cd4aaaa842e8d07eacffd751a3331bb2a6a2508b023d4"
+    },
+    "source/vectors/down-bezier.svg": {
+      "bytes": 1083793,
+      "sha256": "e24763e9e8a28f0e837adbcd02a7cfac6ce09270b433b07e1b876b1b90df9086"
+    },
+    "source/vectors/left-bezier.svg": {
+      "bytes": 780882,
+      "sha256": "ef12d597228997125676106f689c0231d80ee21022e5437bd3502110e6027dda"
+    },
+    "source/vectors/right-bezier.svg": {
+      "bytes": 726024,
+      "sha256": "aff54d07e2912e305d0ecfe0331d62b7348b791db7a0ba655b9b626ac8eb8cda"
+    },
+    "source/vectors/up-bezier.svg": {
+      "bytes": 956699,
+      "sha256": "4c0e3d8966ade793ea778197a4eb42dd7b031429d1734f4bd0c3ebb2bc3fec0b"
+    },
+    "svg/down/idle.svg": {
+      "bytes": 1288788,
+      "sha256": "74f827092bfd9da811aaaf8c618e78d339574f2da0e3b42a0b9ef1929f991d3b"
+    },
+    "frames/down/idle.png": {
+      "bytes": 33852,
+      "sha256": "916dc0ae9e5d3ddcb086690eb1b23f1fb783e706bc8b243ee6a15690a708da56"
+    },
+    "svg/left/idle.svg": {
+      "bytes": 926341,
+      "sha256": "69862d960d117796a6a0259628082677f7e6e939460e709019acb2a938b944f7"
+    },
+    "frames/left/idle.png": {
+      "bytes": 24042,
+      "sha256": "5899abd9ac4079943fc249432c9fa69cfdb54bb38d5639500ecacd5e7e4a95bb"
+    },
+    "svg/right/idle.svg": {
+      "bytes": 865735,
+      "sha256": "3c7fd42c260270590b05f7fee3a95fd3de5a193f208572e59d0ec5ef3d6cec26"
+    },
+    "frames/right/idle.png": {
+      "bytes": 22963,
+      "sha256": "76ff6dc5f5a2074c32a55701f3f4f29f7d8bcfc0ffbf39fedf05784c8d9a8131"
+    },
+    "svg/up/idle.svg": {
+      "bytes": 1151597,
+      "sha256": "017c59df766fb1ca6243e05fe511fea9d9ef61dcad7bd965ed569109f0683b30"
+    },
+    "frames/up/idle.png": {
+      "bytes": 30793,
+      "sha256": "6f5d3a95fe6e8b3f4a8a75d901eb553cd7704ca6b6dfaf08c29fb7cd6bbc049a"
+    }
+  }
+}

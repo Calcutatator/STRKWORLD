@@ -1,0 +1,44 @@
+{
+  "schemaVersion": 1,
+  "avatar": "avatar-1",
+  "revision": "idle-v5",
+  "status": "pending",
+  "userDecision": null,
+  "readyForReview": true,
+  "conceptApproval": "../../concept/approval.json",
+  "conceptSha256": "8c0d58a07d1372d2e8c9bcdbddac6e997763a8ffd2b910be83e8ec47b69f1c92",
+  "animationAuthorized": false,
+  "runtimeIntegrationAuthorized": false,
+  "isolatedPhaserPreviewAuthorized": true,
+  "internalSourceVisualQa": "producer-inspected-pass-for-idle-draft",
+  "internalPhaserVisualQa": "producer-inspected-pass-for-idle-draft",
+  "reviewedHashes": {
+    "frames/down/idle.png": "916dc0ae9e5d3ddcb086690eb1b23f1fb783e706bc8b243ee6a15690a708da56",
+    "frames/left/idle.png": "5899abd9ac4079943fc249432c9fa69cfdb54bb38d5639500ecacd5e7e4a95bb",
+    "frames/right/idle.png": "76ff6dc5f5a2074c32a55701f3f4f29f7d8bcfc0ffbf39fedf05784c8d9a8131",
+    "frames/up/idle.png": "6f5d3a95fe6e8b3f4a8a75d901eb553cd7704ca6b6dfaf08c29fb7cd6bbc049a",
+    "svg/down/idle.svg": "74f827092bfd9da811aaaf8c618e78d339574f2da0e3b42a0b9ef1929f991d3b",
+    "svg/left/idle.svg": "69862d960d117796a6a0259628082677f7e6e939460e709019acb2a938b944f7",
+    "svg/right/idle.svg": "3c7fd42c260270590b05f7fee3a95fd3de5a193f208572e59d0ec5ef3d6cec26",
+    "svg/up/idle.svg": "017c59df766fb1ca6243e05fe511fea9d9ef61dcad7bd965ed569109f0683b30",
+    "source/avatar-1.blend": "d178a6fc57249222c405c462a1dfa68b69f302297113ab23329f641637d8f106",
+    "source/idle-geometry.json": "1aaa6b0873f9066255c85820e5cf0dcbf100d9829270d5ec02279bc4fe342252",
+    "source/palette.json": "d6ddc6d0f6820f479162d72aa26cb91f54a90242e7354b20c4d74fbc629fc76a"
+  },
+  "engineReviewEvidence": "visual-qa.json",
+  "qualityGate": {
+    "owner": "producing agent",
+    "question": "Is this in-game result obviously good enough to approve?",
+    "requiresPersonalSourceAndActualEngineInspection": true,
+    "knownVisibleDefectsRequireContinuedRefinement": true,
+    "independentReviewSubstitutesForProducerInspection": false,
+    "materialChangeInvalidatesPriorVisualPass": true
+  },
+  "direction": {
+    "recorded": "2026-09-13",
+    "decision": "D-059 illustrated-vector and engine-QA amendment",
+    "renderingStyleClarification": "resolved",
+    "scope": "Illustrated four-idle draft built and personally inspected in Blender, exact SVG/PNG exports, and isolated actual Phaser town. Exact idle approval is pending; animation and production integration remain unapproved."
+  },
+  "reviewPrepared": "2026-09-14"
+}

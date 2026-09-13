@@ -1,0 +1,282 @@
+{
+  "schemaVersion": 1,
+  "revision": "idle-v5",
+  "directions": [
+    "down",
+    "left",
+    "right",
+    "up"
+  ],
+  "mechanicalStatus": "pass",
+  "artisticQuality": "not-assessed",
+  "userIdleApproval": "not-granted",
+  "animationAcceptance": "not-tested",
+  "liveGameAcceptance": "not-tested",
+  "registration": {
+    "sourceCell": [
+      512,
+      512
+    ],
+    "sourceFeet": [
+      256,
+      448
+    ],
+    "textureCell": [
+      256,
+      256
+    ],
+    "textureFeet": [
+      128,
+      224
+    ],
+    "logicalCell": [
+      64,
+      64
+    ],
+    "logicalFeet": [
+      32,
+      56
+    ],
+    "density": 4
+  },
+  "treatment": {
+    "rasterizer": "Sharp/libvips SVG rasterization at 512x512, Lanczos3 downsample to 256x256",
+    "alpha": "preserved smooth coverage; no binary-alpha threshold",
+    "color": "preserved sRGB fills and antialias blends; no palette remapping or output color cap",
+    "framing": "fixed common canvas; no direction-specific trim, fit, rotation, or scale",
+    "preview": "Exact exported textures, resampled to stated widths; static export preview is not live game evidence"
+  },
+  "runtime": {
+    "node": "v24.19.0",
+    "platform": "darwin",
+    "arch": "arm64",
+    "sharp": {
+      "aom": "3.15.0",
+      "archive": "3.8.9",
+      "cairo": "1.18.4",
+      "cgif": "0.5.3",
+      "exif": "0.6.26",
+      "expat": "2.8.3",
+      "ffi": "3.8.0",
+      "fontconfig": "2.18.3",
+      "freetype": "2.14.3",
+      "fribidi": "1.0.16",
+      "glib": "2.89.4",
+      "harfbuzz": "14.3.1",
+      "heif": "1.23.2",
+      "highway": "1.4.0",
+      "imagequant": "2.4.1",
+      "lcms": "2.19.1",
+      "mozjpeg": "0826579",
+      "pango": "1.58.2",
+      "pixman": "0.46.4",
+      "png": "1.6.58",
+      "proxy-libintl": "0.5",
+      "rsvg": "2.62.91",
+      "tiff": "4.7.2",
+      "uhdr": "2.0.2",
+      "vips": "8.18.6",
+      "webp": "1.6.0",
+      "xml2": "2.15.3",
+      "zlib-ng": "2.3.3",
+      "sharp": "0.35.4"
+    }
+  },
+  "source": {
+    "script": "source/rasterize.cjs",
+    "scriptSha256": "b8851ae4da8c4f02c9c2adbb1ba53dd6ff9c40a44804ee4842b60e906c89c4d0",
+    "directions": [
+      "down",
+      "left",
+      "right",
+      "up"
+    ],
+    "geometrySha256": "1aaa6b0873f9066255c85820e5cf0dcbf100d9829270d5ec02279bc4fe342252",
+    "paletteSha256": "d6ddc6d0f6820f479162d72aa26cb91f54a90242e7354b20c4d74fbc629fc76a",
+    "conceptSha256": "8c0d58a07d1372d2e8c9bcdbddac6e997763a8ffd2b910be83e8ec47b69f1c92"
+  },
+  "frames": [
+    {
+      "svg": "svg/down/idle.svg",
+      "svgSha256": "74f827092bfd9da811aaaf8c618e78d339574f2da0e3b42a0b9ef1929f991d3b",
+      "renderedSvgSha256": "ecf8ac127b71dea7e3bea1b4b9b6a9fbf79b25c30e8698a66b7d0e7cf97ad9f4",
+      "pathCount": 2009,
+      "standardDoctypeStripped": true,
+      "frame": "frames/down/idle.png",
+      "pngSha256": "916dc0ae9e5d3ddcb086690eb1b23f1fb783e706bc8b243ee6a15690a708da56",
+      "rgbaSha256": "148124aebbbefc1c43c502df6dea4e45db293651a0aa3dd2edf426f78a6460f2",
+      "dimensions": [
+        256,
+        256
+      ],
+      "coveredPixels": 11138,
+      "partialAlphaPixels": 1076,
+      "transparentPixels": 54398,
+      "boundsInclusive": [
+        82,
+        15,
+        203,
+        224
+      ],
+      "rgbaColorCount": 6444,
+      "boundaryCoveredPixels": 0
+    },
+    {
+      "svg": "svg/left/idle.svg",
+      "svgSha256": "69862d960d117796a6a0259628082677f7e6e939460e709019acb2a938b944f7",
+      "renderedSvgSha256": "304046b6123c22f2e691f414218825f1482c56e16231f963f91a0ee661ae0d3d",
+      "pathCount": 1458,
+      "standardDoctypeStripped": true,
+      "frame": "frames/left/idle.png",
+      "pngSha256": "5899abd9ac4079943fc249432c9fa69cfdb54bb38d5639500ecacd5e7e4a95bb",
+      "rgbaSha256": "938e79a9ce8024a75f4fb9a285a4f8aad16ad7ff6ca04ea2c4a1ef3acc32cd50",
+      "dimensions": [
+        256,
+        256
+      ],
+      "coveredPixels": 7496,
+      "partialAlphaPixels": 730,
+      "transparentPixels": 58040,
+      "boundsInclusive": [
+        101,
+        16,
+        181,
+        224
+      ],
+      "rgbaColorCount": 4996,
+      "boundaryCoveredPixels": 0
+    },
+    {
+      "svg": "svg/right/idle.svg",
+      "svgSha256": "3c7fd42c260270590b05f7fee3a95fd3de5a193f208572e59d0ec5ef3d6cec26",
+      "renderedSvgSha256": "fcc0359fd01a61a907b0e2b3d07782bcae71efbd28a353482f50771cacda95b1",
+      "pathCount": 1358,
+      "standardDoctypeStripped": true,
+      "frame": "frames/right/idle.png",
+      "pngSha256": "76ff6dc5f5a2074c32a55701f3f4f29f7d8bcfc0ffbf39fedf05784c8d9a8131",
+      "rgbaSha256": "19273f9e9516d10a5af69fa04b9efa48bf204e2bb43eddfca7dd79a37a15779b",
+      "dimensions": [
+        256,
+        256
+      ],
+      "coveredPixels": 7160,
+      "partialAlphaPixels": 633,
+      "transparentPixels": 58376,
+      "boundsInclusive": [
+        90,
+        15,
+        153,
+        224
+      ],
+      "rgbaColorCount": 4695,
+      "boundaryCoveredPixels": 0
+    },
+    {
+      "svg": "svg/up/idle.svg",
+      "svgSha256": "017c59df766fb1ca6243e05fe511fea9d9ef61dcad7bd965ed569109f0683b30",
+      "renderedSvgSha256": "b48c172e482ddc0cd6c601d86119f8615d9047d4636d2df10893edf90ff824e4",
+      "pathCount": 1825,
+      "standardDoctypeStripped": true,
+      "frame": "frames/up/idle.png",
+      "pngSha256": "6f5d3a95fe6e8b3f4a8a75d901eb553cd7704ca6b6dfaf08c29fb7cd6bbc049a",
+      "rgbaSha256": "6854476728c90a8a46522b4a5ba8974b32acd4c2bb53ea5fcc15c23456222d28",
+      "dimensions": [
+        256,
+        256
+      ],
+      "coveredPixels": 10082,
+      "partialAlphaPixels": 900,
+      "transparentPixels": 55454,
+      "boundsInclusive": [
+        65,
+        15,
+        161,
+        222
+      ],
+      "rgbaColorCount": 6033,
+      "boundaryCoveredPixels": 0
+    }
+  ],
+  "review": {
+    "file": "review/idle-inspection.png",
+    "pngSha256": "7ae8c24ddccbb1cbdc649107d1194bd073f26b873e5109078fc488fc4513f7c0",
+    "dimensions": [
+      1336,
+      668
+    ],
+    "panels": [
+      {
+        "direction": "down",
+        "left": 54,
+        "top": 142,
+        "size": 256
+      },
+      {
+        "direction": "down",
+        "left": 64,
+        "top": 490,
+        "size": 64
+      },
+      {
+        "direction": "down",
+        "left": 172,
+        "top": 463,
+        "size": 128
+      },
+      {
+        "direction": "left",
+        "left": 378,
+        "top": 142,
+        "size": 256
+      },
+      {
+        "direction": "left",
+        "left": 388,
+        "top": 490,
+        "size": 64
+      },
+      {
+        "direction": "left",
+        "left": 496,
+        "top": 463,
+        "size": 128
+      },
+      {
+        "direction": "right",
+        "left": 702,
+        "top": 142,
+        "size": 256
+      },
+      {
+        "direction": "right",
+        "left": 712,
+        "top": 490,
+        "size": 64
+      },
+      {
+        "direction": "right",
+        "left": 820,
+        "top": 463,
+        "size": 128
+      },
+      {
+        "direction": "up",
+        "left": 1026,
+        "top": 142,
+        "size": 256
+      },
+      {
+        "direction": "up",
+        "left": 1036,
+        "top": 490,
+        "size": 64
+      },
+      {
+        "direction": "up",
+        "left": 1144,
+        "top": 463,
+        "size": 128
+      }
+    ]
+  }
+}
