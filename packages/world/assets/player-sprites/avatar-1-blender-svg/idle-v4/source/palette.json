@@ -1,0 +1,102 @@
+{
+  "name": "Teal runner - bright shared production palette",
+  "maximumColorsPerFrame": 24,
+  "colors": [
+    {
+      "name": "ink",
+      "hex": "#281F2A"
+    },
+    {
+      "name": "hairDeep",
+      "hex": "#513029"
+    },
+    {
+      "name": "hairShade",
+      "hex": "#78432A"
+    },
+    {
+      "name": "hair",
+      "hex": "#A45D31"
+    },
+    {
+      "name": "hairLight",
+      "hex": "#CF8B47"
+    },
+    {
+      "name": "hairGlint",
+      "hex": "#EAA85D"
+    },
+    {
+      "name": "skinShade",
+      "hex": "#BB7549"
+    },
+    {
+      "name": "skin",
+      "hex": "#EBA169"
+    },
+    {
+      "name": "skinLight",
+      "hex": "#FED197"
+    },
+    {
+      "name": "skinGlint",
+      "hex": "#FEE5BA"
+    },
+    {
+      "name": "tealDeep",
+      "hex": "#132F3B"
+    },
+    {
+      "name": "tealDark",
+      "hex": "#1C4853"
+    },
+    {
+      "name": "teal",
+      "hex": "#226976"
+    },
+    {
+      "name": "tealLight",
+      "hex": "#318C9B"
+    },
+    {
+      "name": "tealGlint",
+      "hex": "#4DB3BF"
+    },
+    {
+      "name": "leatherDeep",
+      "hex": "#45302A"
+    },
+    {
+      "name": "leatherDark",
+      "hex": "#69432E"
+    },
+    {
+      "name": "leather",
+      "hex": "#946038"
+    },
+    {
+      "name": "leatherLight",
+      "hex": "#C18A4C"
+    },
+    {
+      "name": "clothDeep",
+      "hex": "#252733"
+    },
+    {
+      "name": "cloth",
+      "hex": "#41404A"
+    },
+    {
+      "name": "clothLight",
+      "hex": "#5C575C"
+    },
+    {
+      "name": "metal",
+      "hex": "#E6B667"
+    },
+    {
+      "name": "leatherGlint",
+      "hex": "#D29B56"
+    }
+  ]
+}

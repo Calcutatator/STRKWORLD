@@ -1,6 +1,9 @@
 # Avatar 1 — concept approval, Blender MCP and SVG workflow
 
-**Active stage: idle-v3 is ready for James’s separate idle approval.**
+**Active stage: rebuilt idle-v4 is frozen for James’s separate idle approval.**
+Idle-v3 is withdrawn and unapproved. Its earlier visual pass was too
+permissive: renewed inspection found a rigid pose, lifeless face, muddy
+shading, flat cutout profiles and lost character identity at game size.
 James approved the exact concept with “Yes good concept move forward”. This
 authorizes four Blender/SVG idle facings and internal likeness QA. Final sprite
 cells, animation and game integration are not approved by the concept decision.
@@ -15,13 +18,20 @@ James's explicit decision to SHA-256
 `8c0d58a07d1372d2e8c9bcdbddac6e997763a8ffd2b910be83e8ec47b69f1c92`.
 Internal review corrected scarf and buckle continuity before that approval.
 
-The new sprite revision is **idle-v3**, with separate `idle-v3/source/`,
-`idle-v3/svg/`, `idle-v3/frames/` and `idle-v3/review/` output directories.
-The [exact idle review](idle-v3/review/idle-approval.png),
+The rebuilt revision is **idle-v4**. The producing agent inspected its actual
+SVG-derived cells at 1×/2× against the concept, rejected the initial facial
+rendering, and refined the heads before passing it for user review. The
+[exact idles](idle-v4/review/idle-approval.png), [concept comparison](idle-v4/review/reference-comparison.png)
+and [editable Blender/SVG sources](idle-v4/README.md) are ready.
+New concept-derived construction studies guide explicit colour-region vectors;
+[provenance and QA](idle-v4/review/visual-qa.json) distinguish those studies from
+the approved concept and final native Blender exports.
+The [idle-v3 review](idle-v3/review/idle-approval.png),
 [concept comparison](idle-v3/review/reference-comparison.png) and
-[editable sources](idle-v3/README.md) are ready. Internal visual QA and
-saved-master export parity pass. James’s separate idle approval is pending
-before animation. Do not overwrite or promote historical idle-v2.
+[editable sources](idle-v3/README.md) remain historical evidence.
+Its [withdrawn visual assessment](idle-v3/review/visual-qa.json) preserves the
+prior assessment and the correction. Saved-master export parity remains
+technical evidence only. James has granted no idle approval.
 
 `reference/approved-concept-turnaround.png` is a historical sprite turnaround,
 not an approved concept. Its misleading old filename is retained to preserve
@@ -43,20 +53,23 @@ concepts; their hashes and technical results remain historical evidence only.
 2. **Explicit concept approval — complete.** James approved exact concept-v2
    with “Yes good concept move forward”; `concept/approval.json` records the
    reviewed hash. A later concept redesign requires renewed concept approval.
-3. **Build the four Blender/SVG idles — complete for review.** In `idle-v3/`, with
+3. **Build and refine the four Blender/SVG idles — complete for review.** In `idle-v4/`, with
    approved concept-v2 as the
    visual authority, author layered Grease Pencil geometry through Blender
    MCP, save the editable `.blend` and export real vector SVGs. Derive the
    existing 64×64 PNG game cells from those SVGs. Do not silently reuse the
    superseded idle-v2 construction or treat its parity evidence as new work.
-4. **Perform internal likeness QA — passed for user review.** Compare the actual exported cells with
-   the approved concept at equal figure height and inspect 1×/2× game-scale
-   readability. Check facial features, hair, proportions, silhouette,
-   clothing and equipment in all four directions. Iterate internally until
-   they closely match. Technical SVG/PNG parity is a separate check and
-   cannot establish likeness or artistic approval.
+4. **Perform internal aesthetic and likeness QA — passed for idle-v4 review.** Judge whether
+   the actual exported sprite looks good before any handoff. Compare it with
+   the approved concept at equal figure height and inspect exact 1×/2× cells.
+   Require a natural pose, readable expression, clear shading, convincing
+   directional form and the approved character's identity. Costume inventory
+   and export validity are insufficient. If the result looks rough, rigid,
+   muddy, lifeless or like a flat cutout, continue internal refinement.
+   Technical SVG/PNG parity cannot establish visual quality or approval.
 5. **Obtain explicit idle approval.** Present all four exact PNG idles and
-   their SVG sources together, with the approved concept for comparison.
+   their SVG sources together, with the approved concept for comparison,
+   only after the producing agent has passed the aesthetic review above.
    Record James's decision separately from internal QA. Do not animate until
    he approves these idles. Material redesign reopens the relevant concept
    or idle gate.
@@ -92,9 +105,9 @@ approved or its art was accepted:
 
 The scripts under root `source/` and `reference/studies/` are retained for
 historical reproduction. Do not overwrite or reuse the old construction as
-idle-v3 artwork. The old rasterizer accepts only a pending idle decision; the
+new artwork. The old rasterizer accepts only a pending idle decision; the
 superseded idle-v2 decision intentionally prevents it from overwriting that
-review. Any adapted tooling belongs in the distinct `idle-v3/` revision and
+review. Any adapted tooling belongs in the distinct active revision and
 must record approved concept-v2 as its visual authority.
 
 ## Source and runtime contracts
@@ -119,5 +132,5 @@ with native Codex tools, protocol 5, a matching add-on and telemetry disabled.
 [Setup instructions](setup/README.md) and [setup evidence](setup/setup-report.json)
 cover installation and the separate Grease Pencil export fixture. Those
 proofs establish tooling only. Verify the live connection for the authorized
-idle-v3 production; this workflow update does not claim a new handshake or
+idle production; this workflow update does not claim a new handshake or
 export result. The current stage state is in [workflow.json](workflow.json).

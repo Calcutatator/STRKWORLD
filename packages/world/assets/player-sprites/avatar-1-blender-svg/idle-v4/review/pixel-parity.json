@@ -1,0 +1,40 @@
+{
+  "status": "pass",
+  "scope": "Exact artist colour grid versus PNG derived from native Blender SVG; technical only",
+  "artistGridSha256": "d89d9c41c5dee73cb30dab4e3f50d81a47ce610453217c0277a15a42d2d3bb87",
+  "views": {
+    "down": {
+      "rgbaParity": true,
+      "pngSha256": "7c3848e85189f615bc091b7f2b2b2579992f411fd6c85dea4277eab935748e8d",
+      "rgbaSha256": "c7887afcc6ea516ac9d3f6ae97e5507c538a1679a7b25337f5b232eb33296d78",
+      "opaquePixels": 1019,
+      "colors": 23,
+      "lastOpaqueRow": 55
+    },
+    "left": {
+      "rgbaParity": true,
+      "pngSha256": "f0b10934fee3873975c6c37641cf46edb9de81e4e52cbe34c79c256e7a4a7911",
+      "rgbaSha256": "415eec84f0207e0745c8ab04868946c2659e5bb7b5a6e0e2af6416523cce7ed3",
+      "opaquePixels": 784,
+      "colors": 24,
+      "lastOpaqueRow": 55
+    },
+    "right": {
+      "rgbaParity": true,
+      "pngSha256": "88618a8219050b59c68d2e560ea902f760fe83ce8677c5b198b525a109331009",
+      "rgbaSha256": "53523251d62ab0c20f4aa50996f147d8cfbee9edbb150f7ce108e94ebb824063",
+      "opaquePixels": 774,
+      "colors": 22,
+      "lastOpaqueRow": 55
+    },
+    "up": {
+      "rgbaParity": true,
+      "pngSha256": "701a89f05ce1508e9aaa158da1357be5c683012b880ef61cb951e98aebd3c223",
+      "rgbaSha256": "f1a94dcb34d0d5cfcb9b88745c45737eabcb52751cb61d6e35ad00f47c224aa2",
+      "opaquePixels": 830,
+      "colors": 23,
+      "lastOpaqueRow": 55
+    }
+  },
+  "artisticQa": "separate visual inspection required"
+}

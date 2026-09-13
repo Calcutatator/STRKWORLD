@@ -1,0 +1,10 @@
+{
+  "svg/down/idle.svg": "ff9372cc5305d97c9963e115482cb45eabad85df4edebfad194ad886d7bb6ad9",
+  "frames/down/idle.png": "7c3848e85189f615bc091b7f2b2b2579992f411fd6c85dea4277eab935748e8d",
+  "svg/left/idle.svg": "d40033c2e4fd9afd40d2ced48ddaae9ab3a062b28d71395eb78c3d0d1e548c57",
+  "frames/left/idle.png": "f0b10934fee3873975c6c37641cf46edb9de81e4e52cbe34c79c256e7a4a7911",
+  "svg/right/idle.svg": "acd343ecc1fcad033085970344deee01443ce2dced55d8369f51d70fcf02c5e9",
+  "frames/right/idle.png": "88618a8219050b59c68d2e560ea902f760fe83ce8677c5b198b525a109331009",
+  "svg/up/idle.svg": "b7f887efb9ff42228ab26a51aee0a8dbb92536538c3709aa98771554c1c59291",
+  "frames/up/idle.png": "701a89f05ce1508e9aaa158da1357be5c683012b880ef61cb951e98aebd3c223"
+}

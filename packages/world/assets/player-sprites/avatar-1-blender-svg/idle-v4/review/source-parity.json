@@ -1,0 +1,317 @@
+{
+  "schemaVersion": 1,
+  "revision": "idle-v4",
+  "mechanicalStatus": "pass",
+  "stage": "internal-refinement",
+  "directions": [
+    "down",
+    "left",
+    "right",
+    "up"
+  ],
+  "conceptApproval": {
+    "status": "approved",
+    "sha256": "8c0d58a07d1372d2e8c9bcdbddac6e997763a8ffd2b910be83e8ec47b69f1c92",
+    "artifact": "../concept/avatar-1-concept-v2.png"
+  },
+  "artisticQuality": "not-assessed",
+  "userIdleApproval": "not-established",
+  "animationAcceptance": "not-tested",
+  "gameAcceptance": "not-tested",
+  "scope": "Current upstream input bindings and geometry/palette to supplied live GP readback and native SVG path/fill parity",
+  "coordinateTolerance": 0.0002,
+  "limits": [
+    "The coordinator performs reopening; this script does not independently open or parse .blend.",
+    "Upstream grid, study and applied-patch hashes are checked; the sampling, edits and tracing scripts are inventoried but not replayed here.",
+    "PNG headers and hashes are optional inventory only; this script does not compare PNG pixels.",
+    "A partial view inventory is a valid internal construction experiment, not a complete sprite set.",
+    "Technical parity says nothing about likeness, beauty, readability, visual QA, or readiness for handoff."
+  ],
+  "upstreamProvenance": {
+    "status": "hashes-match-current-inputs",
+    "artistGridSha256": "d89d9c41c5dee73cb30dab4e3f50d81a47ce610453217c0277a15a42d2d3bb87",
+    "constructionReferences": [
+      {
+        "file": "studies/front-construction-v2.png",
+        "sha256": "76949d7ecdbf32c474e2de5a44603142433dd7417b964b02938f8e7d0de6c606"
+      },
+      {
+        "file": "studies/coarse-turnaround-construction-v1.png",
+        "sha256": "acf45f98c149e9156e56134c0ecaa6ec9d580aef76e19f45cfb3be8f11b9f7a0"
+      }
+    ],
+    "headRefinement": {
+      "file": "source/head-refinement.json",
+      "sha256": "051deed6713260979d878062b8baa56f4a324fb0988cfcdf21883e73ed64e47a"
+    },
+    "cell": [
+      64,
+      64
+    ],
+    "feetPivot": [
+      32,
+      56
+    ],
+    "files": [
+      "source/artist-grid.json",
+      "source/art-palette.json",
+      "source/grid_from_studies.cjs",
+      "source/refine_grid.cjs",
+      "source/apply_head_refinement.cjs",
+      "source/trace_grid.py",
+      "source/rasterize.cjs",
+      "source/verify_pixels.cjs",
+      "source/head-refinement.json"
+    ],
+    "scope": "Current grid, palette, study and applied-patch bindings; script hashes are inventory, not execution attestation",
+    "constructionReplay": "not-performed-by-this-check"
+  },
+  "blenderReadbackParity": {
+    "status": "pass",
+    "blender": "5.2.1 LTS",
+    "masterSha256": "b2bb752173132ebfb0e6ac2c1c8c3c4d23a693873186ff799373688a9f283d8c",
+    "views": {
+      "down": {
+        "shapeCount": 481,
+        "maximumCoordinateError": 0.0,
+        "orderedPartsMaterialsContoursAndFillState": "pass"
+      },
+      "left": {
+        "shapeCount": 425,
+        "maximumCoordinateError": 0.0,
+        "orderedPartsMaterialsContoursAndFillState": "pass"
+      },
+      "right": {
+        "shapeCount": 417,
+        "maximumCoordinateError": 0.0,
+        "orderedPartsMaterialsContoursAndFillState": "pass"
+      },
+      "up": {
+        "shapeCount": 472,
+        "maximumCoordinateError": 0.0,
+        "orderedPartsMaterialsContoursAndFillState": "pass"
+      }
+    },
+    "packedReferences": [
+      {
+        "name": "AV1V4 | Approved concept reference",
+        "sha256": "8c0d58a07d1372d2e8c9bcdbddac6e997763a8ffd2b910be83e8ec47b69f1c92",
+        "approvalScope": "Approved concept identity; not sprite or animation approval",
+        "packed": true,
+        "packedBytesSha256": "8c0d58a07d1372d2e8c9bcdbddac6e997763a8ffd2b910be83e8ec47b69f1c92"
+      },
+      {
+        "name": "AV1V4 | ImageGen construction study NOT approved concept: front-construction-v2",
+        "sha256": "76949d7ecdbf32c474e2de5a44603142433dd7417b964b02938f8e7d0de6c606",
+        "approvalScope": "Not approved concept art; internal ImageGen construction study",
+        "packed": true,
+        "packedBytesSha256": "76949d7ecdbf32c474e2de5a44603142433dd7417b964b02938f8e7d0de6c606"
+      },
+      {
+        "name": "AV1V4 | ImageGen construction study NOT approved concept: coarse-turnaround-construction-v1",
+        "sha256": "acf45f98c149e9156e56134c0ecaa6ec9d580aef76e19f45cfb3be8f11b9f7a0",
+        "approvalScope": "Not approved concept art; internal ImageGen construction study",
+        "packed": true,
+        "packedBytesSha256": "acf45f98c149e9156e56134c0ecaa6ec9d580aef76e19f45cfb3be8f11b9f7a0"
+      }
+    ],
+    "provenanceLimit": "Coordinator-managed reload; this verifier checks its supplied live readback and current file hash"
+  },
+  "environmentEvidence": {
+    "status": "consistent-with-current-artifacts",
+    "nativeMcpToolsReported": true,
+    "scope": "Supplied native-MCP metadata consistency, not independent transport attestation"
+  },
+  "frames": {
+    "down": {
+      "pathCount": 481,
+      "sourceShapeCount": 481,
+      "embeddedImages": 0,
+      "orderedGeometryAndExactPaletteFills": "pass",
+      "maximumCoordinateError": 8.000000001118224e-06,
+      "png": {
+        "file": "frames/down/idle.png",
+        "headerDimensions": [
+          64,
+          64
+        ],
+        "sourcePixelParity": "not-asserted"
+      }
+    },
+    "left": {
+      "pathCount": 425,
+      "sourceShapeCount": 425,
+      "embeddedImages": 0,
+      "orderedGeometryAndExactPaletteFills": "pass",
+      "maximumCoordinateError": 8.000000001118224e-06,
+      "png": {
+        "file": "frames/left/idle.png",
+        "headerDimensions": [
+          64,
+          64
+        ],
+        "sourcePixelParity": "not-asserted"
+      }
+    },
+    "right": {
+      "pathCount": 417,
+      "sourceShapeCount": 417,
+      "embeddedImages": 0,
+      "orderedGeometryAndExactPaletteFills": "pass",
+      "maximumCoordinateError": 8.000000001118224e-06,
+      "png": {
+        "file": "frames/right/idle.png",
+        "headerDimensions": [
+          64,
+          64
+        ],
+        "sourcePixelParity": "not-asserted"
+      }
+    },
+    "up": {
+      "pathCount": 472,
+      "sourceShapeCount": 472,
+      "embeddedImages": 0,
+      "orderedGeometryAndExactPaletteFills": "pass",
+      "maximumCoordinateError": 8.000000001118224e-06,
+      "png": {
+        "file": "frames/up/idle.png",
+        "headerDimensions": [
+          64,
+          64
+        ],
+        "sourcePixelParity": "not-asserted"
+      }
+    }
+  },
+  "files": {
+    "source/idle-geometry.json": {
+      "bytes": 202094,
+      "sha256": "c4dfbb45be1d1fc18a2e35f0443ed034c479b810bc7c89c8c52b87906fbb7aa0"
+    },
+    "source/palette.json": {
+      "bytes": 1601,
+      "sha256": "80792b93dedc0a62356f5a8db8f80a694952e8454ec330b32fff3294c7a7c643"
+    },
+    "source/avatar-1.blend": {
+      "bytes": 6900880,
+      "sha256": "b2bb752173132ebfb0e6ac2c1c8c3c4d23a693873186ff799373688a9f283d8c"
+    },
+    "source/blender-readback.json": {
+      "bytes": 589538,
+      "sha256": "ad399918863e45155ba5f08cec9494a7e55e8a5fb0be02c788226dd70fda58d4"
+    },
+    "source/blender-environment.json": {
+      "bytes": 3529,
+      "sha256": "a3409c79df9dfdc08ae9ca878120cc8cc4d861b4b04ef719b77ce624e65f6a35"
+    },
+    "source/authoring.py": {
+      "bytes": 6350,
+      "sha256": "b1d8e7292bee12f8696e0e0f761c4b19dd52cefff0a57844bc1dc01d75c46a1b"
+    },
+    "source/export_svg.py": {
+      "bytes": 5293,
+      "sha256": "9a2c119fdb70c859f2c5277d425ccdad782fa052f657239ea49cf433180dee28"
+    },
+    "source/readback.py": {
+      "bytes": 4218,
+      "sha256": "32b3fd644f0343a2218703dd8626c1aeaeb153407dd151b6303e9d304e022b27"
+    },
+    "source/source_contract.py": {
+      "bytes": 8705,
+      "sha256": "07bfd5210f9fe75f9f528f84440dae8c849acf5b432339a0d3aba8c4c70ec8d3"
+    },
+    "source/verify_source.py": {
+      "bytes": 18011,
+      "sha256": "8ee13a6836a884f07c2444e347ea1a4815d8567ab8271e193c2aeef28e2f4ca2"
+    },
+    "../concept/approval.json": {
+      "bytes": 2231,
+      "sha256": "094f7f8c2f6b185eda9bc9c1320cd2403e8be6644ccfef9cc88d6cca219ede51"
+    },
+    "../concept/avatar-1-concept-v2.png": {
+      "bytes": 2074060,
+      "sha256": "8c0d58a07d1372d2e8c9bcdbddac6e997763a8ffd2b910be83e8ec47b69f1c92"
+    },
+    "review/user-decisions.json": {
+      "bytes": 1644,
+      "sha256": "2f8e6ccc28a363767a26d4d57f8bc15b104d39ba26f5fbf1f56ee50ef29ed2b0"
+    },
+    "studies/front-construction-v2.png": {
+      "bytes": 818923,
+      "sha256": "76949d7ecdbf32c474e2de5a44603142433dd7417b964b02938f8e7d0de6c606"
+    },
+    "studies/coarse-turnaround-construction-v1.png": {
+      "bytes": 1290724,
+      "sha256": "acf45f98c149e9156e56134c0ecaa6ec9d580aef76e19f45cfb3be8f11b9f7a0"
+    },
+    "source/artist-grid.json": {
+      "bytes": 298120,
+      "sha256": "d89d9c41c5dee73cb30dab4e3f50d81a47ce610453217c0277a15a42d2d3bb87"
+    },
+    "source/art-palette.json": {
+      "bytes": 1581,
+      "sha256": "005088395d7eab5b782f6f2d14df8c1870d1a9cdf05c6b4909c5df7676951767"
+    },
+    "source/grid_from_studies.cjs": {
+      "bytes": 3351,
+      "sha256": "631243d97e4fccb89af0383ab701df80c727c85250d06f15c08624c1209b066d"
+    },
+    "source/refine_grid.cjs": {
+      "bytes": 1008,
+      "sha256": "b83c24eda616278921d7e13404ef3bb61be4e9071decaa47f9c365f5788af67f"
+    },
+    "source/apply_head_refinement.cjs": {
+      "bytes": 1441,
+      "sha256": "10e950b51c5ed4aa00f44be8130988164eb389f4d65a216b9d1cfa0b0e9d81a3"
+    },
+    "source/trace_grid.py": {
+      "bytes": 5278,
+      "sha256": "206f25b33ab4eb83655b663a7f00446d5e5fa75f5bbae078214e4c32cc182f97"
+    },
+    "source/rasterize.cjs": {
+      "bytes": 20650,
+      "sha256": "a9fb5db4b09a01e01221cc1b3acabfcdddb93c940ea15714a2ffa346817f3c32"
+    },
+    "source/verify_pixels.cjs": {
+      "bytes": 1937,
+      "sha256": "28ee9dd30457a7a6444c028a529db0ef8f8b9a42cce1b41054e472ec073ec083"
+    },
+    "source/head-refinement.json": {
+      "bytes": 38672,
+      "sha256": "051deed6713260979d878062b8baa56f4a324fb0988cfcdf21883e73ed64e47a"
+    },
+    "svg/down/idle.svg": {
+      "bytes": 98324,
+      "sha256": "ff9372cc5305d97c9963e115482cb45eabad85df4edebfad194ad886d7bb6ad9"
+    },
+    "frames/down/idle.png": {
+      "bytes": 1145,
+      "sha256": "7c3848e85189f615bc091b7f2b2b2579992f411fd6c85dea4277eab935748e8d"
+    },
+    "svg/left/idle.svg": {
+      "bytes": 86481,
+      "sha256": "d40033c2e4fd9afd40d2ced48ddaae9ab3a062b28d71395eb78c3d0d1e548c57"
+    },
+    "frames/left/idle.png": {
+      "bytes": 1018,
+      "sha256": "f0b10934fee3873975c6c37641cf46edb9de81e4e52cbe34c79c256e7a4a7911"
+    },
+    "svg/right/idle.svg": {
+      "bytes": 84726,
+      "sha256": "acd343ecc1fcad033085970344deee01443ce2dced55d8369f51d70fcf02c5e9"
+    },
+    "frames/right/idle.png": {
+      "bytes": 1014,
+      "sha256": "88618a8219050b59c68d2e560ea902f760fe83ce8677c5b198b525a109331009"
+    },
+    "svg/up/idle.svg": {
+      "bytes": 95354,
+      "sha256": "b7f887efb9ff42228ab26a51aee0a8dbb92536538c3709aa98771554c1c59291"
+    },
+    "frames/up/idle.png": {
+      "bytes": 1055,
+      "sha256": "701a89f05ce1508e9aaa158da1357be5c683012b880ef61cb951e98aebd3c223"
+    }
+  }
+}

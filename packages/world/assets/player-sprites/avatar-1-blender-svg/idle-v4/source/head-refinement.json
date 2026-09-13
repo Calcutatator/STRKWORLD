@@ -1,0 +1,1199 @@
+{
+  "schemaVersion": 1,
+  "baseGridSha256": "0d166f1bb285b7a0b0cd4013f6b788979f2d10a30e5ff5a43d282312fb546e2c",
+  "scope": "Head pixels only; existing body and registration preserved",
+  "views": {
+    "down": [
+      {
+        "x": 31,
+        "y": 4,
+        "color": "hairDeep",
+        "reason": "Consolidate inconsistent warm shades into a coherent hair palette while retaining swept lock contours"
+      },
+      {
+        "x": 29,
+        "y": 5,
+        "color": "hair",
+        "reason": "Consolidate inconsistent warm shades into a coherent hair palette while retaining swept lock contours"
+      },
+      {
+        "x": 30,
+        "y": 5,
+        "color": "hairDeep",
+        "reason": "Consolidate inconsistent warm shades into a coherent hair palette while retaining swept lock contours"
+      },
+      {
+        "x": 34,
+        "y": 5,
+        "color": "hairDeep",
+        "reason": "Consolidate inconsistent warm shades into a coherent hair palette while retaining swept lock contours"
+      },
+      {
+        "x": 32,
+        "y": 6,
+        "color": "hairDeep",
+        "reason": "Consolidate inconsistent warm shades into a coherent hair palette while retaining swept lock contours"
+      },
+      {
+        "x": 34,
+        "y": 6,
+        "color": "hairDeep",
+        "reason": "Consolidate inconsistent warm shades into a coherent hair palette while retaining swept lock contours"
+      },
+      {
+        "x": 32,
+        "y": 7,
+        "color": "hair",
+        "reason": "Consolidate inconsistent warm shades into a coherent hair palette while retaining swept lock contours"
+      },
+      {
+        "x": 33,
+        "y": 7,
+        "color": "hair",
+        "reason": "Consolidate inconsistent warm shades into a coherent hair palette while retaining swept lock contours"
+      },
+      {
+        "x": 34,
+        "y": 7,
+        "color": "hair",
+        "reason": "Consolidate inconsistent warm shades into a coherent hair palette while retaining swept lock contours"
+      },
+      {
+        "x": 35,
+        "y": 7,
+        "color": "hair",
+        "reason": "Consolidate inconsistent warm shades into a coherent hair palette while retaining swept lock contours"
+      },
+      {
+        "x": 36,
+        "y": 7,
+        "color": "hairDeep",
+        "reason": "Consolidate inconsistent warm shades into a coherent hair palette while retaining swept lock contours"
+      },
+      {
+        "x": 39,
+        "y": 7,
+        "color": "hairDeep",
+        "reason": "Consolidate inconsistent warm shades into a coherent hair palette while retaining swept lock contours"
+      },
+      {
+        "x": 26,
+        "y": 8,
+        "color": "hairDeep",
+        "reason": "Consolidate inconsistent warm shades into a coherent hair palette while retaining swept lock contours"
+      },
+      {
+        "x": 29,
+        "y": 8,
+        "color": "hair",
+        "reason": "Consolidate inconsistent warm shades into a coherent hair palette while retaining swept lock contours"
+      },
+      {
+        "x": 33,
+        "y": 8,
+        "color": "hairLight",
+        "reason": "Join adjacent highlights into readable swept hair locks"
+      },
+      {
+        "x": 34,
+        "y": 8,
+        "color": "hairLight",
+        "reason": "Join adjacent highlights into readable swept hair locks"
+      },
+      {
+        "x": 24,
+        "y": 9,
+        "color": "hair",
+        "reason": "Consolidate inconsistent warm shades into a coherent hair palette while retaining swept lock contours"
+      },
+      {
+        "x": 27,
+        "y": 9,
+        "color": "hairLight",
+        "reason": "Join adjacent highlights into readable swept hair locks"
+      },
+      {
+        "x": 28,
+        "y": 9,
+        "color": "hairLight",
+        "reason": "Join adjacent highlights into readable swept hair locks"
+      },
+      {
+        "x": 32,
+        "y": 9,
+        "color": "hair",
+        "reason": "Consolidate inconsistent warm shades into a coherent hair palette while retaining swept lock contours"
+      },
+      {
+        "x": 33,
+        "y": 9,
+        "color": "hairLight",
+        "reason": "Join adjacent highlights into readable swept hair locks"
+      },
+      {
+        "x": 34,
+        "y": 9,
+        "color": "hair",
+        "reason": "Join adjacent highlights into readable swept hair locks"
+      },
+      {
+        "x": 35,
+        "y": 9,
+        "color": "hairLight",
+        "reason": "Consolidate inconsistent warm shades into a coherent hair palette while retaining swept lock contours"
+      },
+      {
+        "x": 36,
+        "y": 9,
+        "color": "hair",
+        "reason": "Consolidate inconsistent warm shades into a coherent hair palette while retaining swept lock contours"
+      },
+      {
+        "x": 29,
+        "y": 10,
+        "color": "hairLight",
+        "reason": "Join adjacent highlights into readable swept hair locks"
+      },
+      {
+        "x": 32,
+        "y": 10,
+        "color": "hair",
+        "reason": "Consolidate inconsistent warm shades into a coherent hair palette while retaining swept lock contours"
+      },
+      {
+        "x": 35,
+        "y": 10,
+        "color": "hair",
+        "reason": "Join adjacent highlights into readable swept hair locks"
+      },
+      {
+        "x": 37,
+        "y": 10,
+        "color": "hair",
+        "reason": "Consolidate inconsistent warm shades into a coherent hair palette while retaining swept lock contours"
+      },
+      {
+        "x": 28,
+        "y": 11,
+        "color": "hair",
+        "reason": "Consolidate inconsistent warm shades into a coherent hair palette while retaining swept lock contours"
+      },
+      {
+        "x": 30,
+        "y": 11,
+        "color": "hairLight",
+        "reason": "Consolidate inconsistent warm shades into a coherent hair palette while retaining swept lock contours"
+      },
+      {
+        "x": 31,
+        "y": 11,
+        "color": "hairLight",
+        "reason": "Consolidate inconsistent warm shades into a coherent hair palette while retaining swept lock contours"
+      },
+      {
+        "x": 32,
+        "y": 11,
+        "color": "hairDeep",
+        "reason": "Consolidate inconsistent warm shades into a coherent hair palette while retaining swept lock contours"
+      },
+      {
+        "x": 33,
+        "y": 11,
+        "color": "hair",
+        "reason": "Consolidate inconsistent warm shades into a coherent hair palette while retaining swept lock contours"
+      },
+      {
+        "x": 34,
+        "y": 11,
+        "color": "hair",
+        "reason": "Consolidate inconsistent warm shades into a coherent hair palette while retaining swept lock contours"
+      },
+      {
+        "x": 36,
+        "y": 11,
+        "color": "hairShade",
+        "reason": "Join adjacent highlights into readable swept hair locks"
+      },
+      {
+        "x": 28,
+        "y": 12,
+        "color": "hair",
+        "reason": "Consolidate inconsistent warm shades into a coherent hair palette while retaining swept lock contours"
+      },
+      {
+        "x": 29,
+        "y": 12,
+        "color": "skinShade",
+        "reason": "Open the face beneath the fringe and define eyes, cheek, smile and chin as deliberate pixel clusters"
+      },
+      {
+        "x": 32,
+        "y": 12,
+        "color": "hairShade",
+        "reason": "Open the face beneath the fringe and define eyes, cheek, smile and chin as deliberate pixel clusters"
+      },
+      {
+        "x": 33,
+        "y": 12,
+        "color": "hair",
+        "reason": "Open the face beneath the fringe and define eyes, cheek, smile and chin as deliberate pixel clusters"
+      },
+      {
+        "x": 34,
+        "y": 12,
+        "color": "hair",
+        "reason": "Open the face beneath the fringe and define eyes, cheek, smile and chin as deliberate pixel clusters"
+      },
+      {
+        "x": 35,
+        "y": 12,
+        "color": "hairShade",
+        "reason": "Open the face beneath the fringe and define eyes, cheek, smile and chin as deliberate pixel clusters"
+      },
+      {
+        "x": 36,
+        "y": 12,
+        "color": "hair",
+        "reason": "Consolidate inconsistent warm shades into a coherent hair palette while retaining swept lock contours"
+      },
+      {
+        "x": 24,
+        "y": 13,
+        "color": "hairLight",
+        "reason": "Consolidate inconsistent warm shades into a coherent hair palette while retaining swept lock contours"
+      },
+      {
+        "x": 28,
+        "y": 13,
+        "color": "hair",
+        "reason": "Consolidate inconsistent warm shades into a coherent hair palette while retaining swept lock contours"
+      },
+      {
+        "x": 29,
+        "y": 13,
+        "color": "skinLight",
+        "reason": "Open the face beneath the fringe and define eyes, cheek, smile and chin as deliberate pixel clusters"
+      },
+      {
+        "x": 30,
+        "y": 13,
+        "color": "skinShade",
+        "reason": "Open the face beneath the fringe and define eyes, cheek, smile and chin as deliberate pixel clusters"
+      },
+      {
+        "x": 31,
+        "y": 13,
+        "color": "skinLight",
+        "reason": "Open the face beneath the fringe and define eyes, cheek, smile and chin as deliberate pixel clusters"
+      },
+      {
+        "x": 33,
+        "y": 13,
+        "color": "skinLight",
+        "reason": "Open the face beneath the fringe and define eyes, cheek, smile and chin as deliberate pixel clusters"
+      },
+      {
+        "x": 34,
+        "y": 13,
+        "color": "skinShade",
+        "reason": "Open the face beneath the fringe and define eyes, cheek, smile and chin as deliberate pixel clusters"
+      },
+      {
+        "x": 35,
+        "y": 13,
+        "color": "skin",
+        "reason": "Open the face beneath the fringe and define eyes, cheek, smile and chin as deliberate pixel clusters"
+      },
+      {
+        "x": 36,
+        "y": 13,
+        "color": "hair",
+        "reason": "Consolidate inconsistent warm shades into a coherent hair palette while retaining swept lock contours"
+      },
+      {
+        "x": 27,
+        "y": 14,
+        "color": "hairLight",
+        "reason": "Consolidate inconsistent warm shades into a coherent hair palette while retaining swept lock contours"
+      },
+      {
+        "x": 28,
+        "y": 14,
+        "color": "hairDeep",
+        "reason": "Consolidate inconsistent warm shades into a coherent hair palette while retaining swept lock contours"
+      },
+      {
+        "x": 35,
+        "y": 14,
+        "color": "skin",
+        "reason": "Open the face beneath the fringe and define eyes, cheek, smile and chin as deliberate pixel clusters"
+      },
+      {
+        "x": 36,
+        "y": 14,
+        "color": "hairDeep",
+        "reason": "Consolidate inconsistent warm shades into a coherent hair palette while retaining swept lock contours"
+      },
+      {
+        "x": 33,
+        "y": 15,
+        "color": "skinShade",
+        "reason": "Open the face beneath the fringe and define eyes, cheek, smile and chin as deliberate pixel clusters"
+      },
+      {
+        "x": 29,
+        "y": 16,
+        "color": "tealDark",
+        "reason": "Open the face beneath the fringe and define eyes, cheek, smile and chin as deliberate pixel clusters"
+      },
+      {
+        "x": 31,
+        "y": 16,
+        "color": "skinShade",
+        "reason": "Open the face beneath the fringe and define eyes, cheek, smile and chin as deliberate pixel clusters"
+      },
+      {
+        "x": 33,
+        "y": 16,
+        "color": "skinLight",
+        "reason": "Open the face beneath the fringe and define eyes, cheek, smile and chin as deliberate pixel clusters"
+      },
+      {
+        "x": 35,
+        "y": 16,
+        "color": "tealDark",
+        "reason": "Open the face beneath the fringe and define eyes, cheek, smile and chin as deliberate pixel clusters"
+      },
+      {
+        "x": 30,
+        "y": 17,
+        "color": "tealDark",
+        "reason": "Open the face beneath the fringe and define eyes, cheek, smile and chin as deliberate pixel clusters"
+      },
+      {
+        "x": 31,
+        "y": 17,
+        "color": "skin",
+        "reason": "Open the face beneath the fringe and define eyes, cheek, smile and chin as deliberate pixel clusters"
+      },
+      {
+        "x": 32,
+        "y": 17,
+        "color": "skinLight",
+        "reason": "Open the face beneath the fringe and define eyes, cheek, smile and chin as deliberate pixel clusters"
+      },
+      {
+        "x": 33,
+        "y": 17,
+        "color": "skinShade",
+        "reason": "Open the face beneath the fringe and define eyes, cheek, smile and chin as deliberate pixel clusters"
+      },
+      {
+        "x": 34,
+        "y": 17,
+        "color": "tealDark",
+        "reason": "Open the face beneath the fringe and define eyes, cheek, smile and chin as deliberate pixel clusters"
+      }
+    ],
+    "left": [
+      {
+        "x": 33,
+        "y": 4,
+        "color": "hairDeep",
+        "reason": "Consolidate inconsistent warm shades into a coherent hair palette while retaining swept lock contours"
+      },
+      {
+        "x": 35,
+        "y": 5,
+        "color": "hairDeep",
+        "reason": "Consolidate inconsistent warm shades into a coherent hair palette while retaining swept lock contours"
+      },
+      {
+        "x": 27,
+        "y": 6,
+        "color": "hairDeep",
+        "reason": "Consolidate inconsistent warm shades into a coherent hair palette while retaining swept lock contours"
+      },
+      {
+        "x": 28,
+        "y": 6,
+        "color": "hairDeep",
+        "reason": "Consolidate inconsistent warm shades into a coherent hair palette while retaining swept lock contours"
+      },
+      {
+        "x": 34,
+        "y": 6,
+        "color": "hair",
+        "reason": "Consolidate inconsistent warm shades into a coherent hair palette while retaining swept lock contours"
+      },
+      {
+        "x": 39,
+        "y": 6,
+        "color": "hairDeep",
+        "reason": "Consolidate inconsistent warm shades into a coherent hair palette while retaining swept lock contours"
+      },
+      {
+        "x": 27,
+        "y": 7,
+        "color": "hairDeep",
+        "reason": "Consolidate inconsistent warm shades into a coherent hair palette while retaining swept lock contours"
+      },
+      {
+        "x": 28,
+        "y": 7,
+        "color": "hair",
+        "reason": "Consolidate inconsistent warm shades into a coherent hair palette while retaining swept lock contours"
+      },
+      {
+        "x": 34,
+        "y": 7,
+        "color": "hair",
+        "reason": "Consolidate inconsistent warm shades into a coherent hair palette while retaining swept lock contours"
+      },
+      {
+        "x": 35,
+        "y": 7,
+        "color": "hair",
+        "reason": "Consolidate inconsistent warm shades into a coherent hair palette while retaining swept lock contours"
+      },
+      {
+        "x": 36,
+        "y": 7,
+        "color": "hair",
+        "reason": "Consolidate inconsistent warm shades into a coherent hair palette while retaining swept lock contours"
+      },
+      {
+        "x": 37,
+        "y": 7,
+        "color": "hairDeep",
+        "reason": "Consolidate inconsistent warm shades into a coherent hair palette while retaining swept lock contours"
+      },
+      {
+        "x": 28,
+        "y": 8,
+        "color": "hairLight",
+        "reason": "Join adjacent highlights into readable swept hair locks"
+      },
+      {
+        "x": 36,
+        "y": 8,
+        "color": "hair",
+        "reason": "Consolidate inconsistent warm shades into a coherent hair palette while retaining swept lock contours"
+      },
+      {
+        "x": 37,
+        "y": 8,
+        "color": "hairDeep",
+        "reason": "Consolidate inconsistent warm shades into a coherent hair palette while retaining swept lock contours"
+      },
+      {
+        "x": 25,
+        "y": 9,
+        "color": "hairDeep",
+        "reason": "Consolidate inconsistent warm shades into a coherent hair palette while retaining swept lock contours"
+      },
+      {
+        "x": 29,
+        "y": 9,
+        "color": "hairLight",
+        "reason": "Join adjacent highlights into readable swept hair locks"
+      },
+      {
+        "x": 31,
+        "y": 9,
+        "color": "hair",
+        "reason": "Consolidate inconsistent warm shades into a coherent hair palette while retaining swept lock contours"
+      },
+      {
+        "x": 33,
+        "y": 9,
+        "color": "hairLight",
+        "reason": "Join adjacent highlights into readable swept hair locks"
+      },
+      {
+        "x": 34,
+        "y": 9,
+        "color": "hairLight",
+        "reason": "Join adjacent highlights into readable swept hair locks"
+      },
+      {
+        "x": 36,
+        "y": 9,
+        "color": "hair",
+        "reason": "Consolidate inconsistent warm shades into a coherent hair palette while retaining swept lock contours"
+      },
+      {
+        "x": 27,
+        "y": 10,
+        "color": "hair",
+        "reason": "Consolidate inconsistent warm shades into a coherent hair palette while retaining swept lock contours"
+      },
+      {
+        "x": 34,
+        "y": 10,
+        "color": "hairLight",
+        "reason": "Join adjacent highlights into readable swept hair locks"
+      },
+      {
+        "x": 35,
+        "y": 10,
+        "color": "hair",
+        "reason": "Join adjacent highlights into readable swept hair locks"
+      },
+      {
+        "x": 39,
+        "y": 10,
+        "color": "hair",
+        "reason": "Consolidate inconsistent warm shades into a coherent hair palette while retaining swept lock contours"
+      },
+      {
+        "x": 27,
+        "y": 11,
+        "color": "hair",
+        "reason": "Consolidate inconsistent warm shades into a coherent hair palette while retaining swept lock contours"
+      },
+      {
+        "x": 33,
+        "y": 11,
+        "color": "hairDeep",
+        "reason": "Consolidate inconsistent warm shades into a coherent hair palette while retaining swept lock contours"
+      },
+      {
+        "x": 25,
+        "y": 12,
+        "color": "hairDeep",
+        "reason": "Consolidate inconsistent warm shades into a coherent hair palette while retaining swept lock contours"
+      },
+      {
+        "x": 27,
+        "y": 12,
+        "color": "hair",
+        "reason": "Consolidate inconsistent warm shades into a coherent hair palette while retaining swept lock contours"
+      },
+      {
+        "x": 34,
+        "y": 12,
+        "color": "hair",
+        "reason": "Consolidate inconsistent warm shades into a coherent hair palette while retaining swept lock contours"
+      },
+      {
+        "x": 35,
+        "y": 13,
+        "color": "hair",
+        "reason": "Consolidate inconsistent warm shades into a coherent hair palette while retaining swept lock contours"
+      },
+      {
+        "x": 38,
+        "y": 13,
+        "color": "hairDeep",
+        "reason": "Consolidate inconsistent warm shades into a coherent hair palette while retaining swept lock contours"
+      },
+      {
+        "x": 34,
+        "y": 14,
+        "color": "hair",
+        "reason": "Consolidate inconsistent warm shades into a coherent hair palette while retaining swept lock contours"
+      }
+    ],
+    "right": [
+      {
+        "x": 34,
+        "y": 4,
+        "color": "hairDeep",
+        "reason": "Consolidate inconsistent warm shades into a coherent hair palette while retaining swept lock contours"
+      },
+      {
+        "x": 31,
+        "y": 5,
+        "color": "hairDeep",
+        "reason": "Consolidate inconsistent warm shades into a coherent hair palette while retaining swept lock contours"
+      },
+      {
+        "x": 32,
+        "y": 5,
+        "color": "hairDeep",
+        "reason": "Consolidate inconsistent warm shades into a coherent hair palette while retaining swept lock contours"
+      },
+      {
+        "x": 30,
+        "y": 6,
+        "color": "hairDeep",
+        "reason": "Consolidate inconsistent warm shades into a coherent hair palette while retaining swept lock contours"
+      },
+      {
+        "x": 31,
+        "y": 6,
+        "color": "hair",
+        "reason": "Consolidate inconsistent warm shades into a coherent hair palette while retaining swept lock contours"
+      },
+      {
+        "x": 38,
+        "y": 6,
+        "color": "hairDeep",
+        "reason": "Consolidate inconsistent warm shades into a coherent hair palette while retaining swept lock contours"
+      },
+      {
+        "x": 27,
+        "y": 7,
+        "color": "hairDeep",
+        "reason": "Consolidate inconsistent warm shades into a coherent hair palette while retaining swept lock contours"
+      },
+      {
+        "x": 30,
+        "y": 7,
+        "color": "hair",
+        "reason": "Consolidate inconsistent warm shades into a coherent hair palette while retaining swept lock contours"
+      },
+      {
+        "x": 37,
+        "y": 7,
+        "color": "hairDeep",
+        "reason": "Consolidate inconsistent warm shades into a coherent hair palette while retaining swept lock contours"
+      },
+      {
+        "x": 32,
+        "y": 8,
+        "color": "hair",
+        "reason": "Consolidate inconsistent warm shades into a coherent hair palette while retaining swept lock contours"
+      },
+      {
+        "x": 34,
+        "y": 8,
+        "color": "hairDeep",
+        "reason": "Consolidate inconsistent warm shades into a coherent hair palette while retaining swept lock contours"
+      },
+      {
+        "x": 36,
+        "y": 8,
+        "color": "hair",
+        "reason": "Consolidate inconsistent warm shades into a coherent hair palette while retaining swept lock contours"
+      },
+      {
+        "x": 39,
+        "y": 8,
+        "color": "hairDeep",
+        "reason": "Consolidate inconsistent warm shades into a coherent hair palette while retaining swept lock contours"
+      },
+      {
+        "x": 29,
+        "y": 9,
+        "color": "hairLight",
+        "reason": "Consolidate inconsistent warm shades into a coherent hair palette while retaining swept lock contours"
+      },
+      {
+        "x": 31,
+        "y": 9,
+        "color": "hairLight",
+        "reason": "Join adjacent highlights into readable swept hair locks"
+      },
+      {
+        "x": 33,
+        "y": 9,
+        "color": "hair",
+        "reason": "Consolidate inconsistent warm shades into a coherent hair palette while retaining swept lock contours"
+      },
+      {
+        "x": 34,
+        "y": 9,
+        "color": "hairLight",
+        "reason": "Join adjacent highlights into readable swept hair locks"
+      },
+      {
+        "x": 38,
+        "y": 9,
+        "color": "hair",
+        "reason": "Consolidate inconsistent warm shades into a coherent hair palette while retaining swept lock contours"
+      },
+      {
+        "x": 39,
+        "y": 9,
+        "color": "hairDeep",
+        "reason": "Consolidate inconsistent warm shades into a coherent hair palette while retaining swept lock contours"
+      },
+      {
+        "x": 25,
+        "y": 10,
+        "color": "hairDeep",
+        "reason": "Consolidate inconsistent warm shades into a coherent hair palette while retaining swept lock contours"
+      },
+      {
+        "x": 26,
+        "y": 10,
+        "color": "hair",
+        "reason": "Consolidate inconsistent warm shades into a coherent hair palette while retaining swept lock contours"
+      },
+      {
+        "x": 31,
+        "y": 10,
+        "color": "hair",
+        "reason": "Join adjacent highlights into readable swept hair locks"
+      },
+      {
+        "x": 32,
+        "y": 10,
+        "color": "hairLight",
+        "reason": "Join adjacent highlights into readable swept hair locks"
+      },
+      {
+        "x": 35,
+        "y": 10,
+        "color": "hairLight",
+        "reason": "Join adjacent highlights into readable swept hair locks"
+      },
+      {
+        "x": 38,
+        "y": 10,
+        "color": "hairDeep",
+        "reason": "Consolidate inconsistent warm shades into a coherent hair palette while retaining swept lock contours"
+      },
+      {
+        "x": 29,
+        "y": 11,
+        "color": "hairDeep",
+        "reason": "Consolidate inconsistent warm shades into a coherent hair palette while retaining swept lock contours"
+      },
+      {
+        "x": 30,
+        "y": 11,
+        "color": "hair",
+        "reason": "Consolidate inconsistent warm shades into a coherent hair palette while retaining swept lock contours"
+      },
+      {
+        "x": 31,
+        "y": 11,
+        "color": "hairDeep",
+        "reason": "Consolidate inconsistent warm shades into a coherent hair palette while retaining swept lock contours"
+      },
+      {
+        "x": 32,
+        "y": 11,
+        "color": "hair",
+        "reason": "Consolidate inconsistent warm shades into a coherent hair palette while retaining swept lock contours"
+      },
+      {
+        "x": 35,
+        "y": 11,
+        "color": "hair",
+        "reason": "Join adjacent highlights into readable swept hair locks"
+      },
+      {
+        "x": 39,
+        "y": 11,
+        "color": "hairDeep",
+        "reason": "Consolidate inconsistent warm shades into a coherent hair palette while retaining swept lock contours"
+      },
+      {
+        "x": 40,
+        "y": 11,
+        "color": "hairDeep",
+        "reason": "Consolidate inconsistent warm shades into a coherent hair palette while retaining swept lock contours"
+      },
+      {
+        "x": 33,
+        "y": 12,
+        "color": "hairShade",
+        "reason": "Open the face beneath the fringe and define eyes, cheek, smile and chin as deliberate pixel clusters"
+      },
+      {
+        "x": 34,
+        "y": 12,
+        "color": "skinShade",
+        "reason": "Open the face beneath the fringe and define eyes, cheek, smile and chin as deliberate pixel clusters"
+      },
+      {
+        "x": 35,
+        "y": 12,
+        "color": "skinLight",
+        "reason": "Open the face beneath the fringe and define eyes, cheek, smile and chin as deliberate pixel clusters"
+      },
+      {
+        "x": 36,
+        "y": 12,
+        "color": "hairDeep",
+        "reason": "Open the face beneath the fringe and define eyes, cheek, smile and chin as deliberate pixel clusters"
+      },
+      {
+        "x": 27,
+        "y": 13,
+        "color": "hairDeep",
+        "reason": "Consolidate inconsistent warm shades into a coherent hair palette while retaining swept lock contours"
+      },
+      {
+        "x": 32,
+        "y": 13,
+        "color": "hairDeep",
+        "reason": "Consolidate inconsistent warm shades into a coherent hair palette while retaining swept lock contours"
+      },
+      {
+        "x": 33,
+        "y": 13,
+        "color": "skinShade",
+        "reason": "Open the face beneath the fringe and define eyes, cheek, smile and chin as deliberate pixel clusters"
+      },
+      {
+        "x": 34,
+        "y": 13,
+        "color": "skinLight",
+        "reason": "Open the face beneath the fringe and define eyes, cheek, smile and chin as deliberate pixel clusters"
+      },
+      {
+        "x": 36,
+        "y": 13,
+        "color": "skinLight",
+        "reason": "Open the face beneath the fringe and define eyes, cheek, smile and chin as deliberate pixel clusters"
+      },
+      {
+        "x": 37,
+        "y": 13,
+        "color": "hairShade",
+        "reason": "Open the face beneath the fringe and define eyes, cheek, smile and chin as deliberate pixel clusters"
+      },
+      {
+        "x": 28,
+        "y": 14,
+        "color": "hairDeep",
+        "reason": "Consolidate inconsistent warm shades into a coherent hair palette while retaining swept lock contours"
+      },
+      {
+        "x": 32,
+        "y": 14,
+        "color": "skinShade",
+        "reason": "Open the face beneath the fringe and define eyes, cheek, smile and chin as deliberate pixel clusters"
+      },
+      {
+        "x": 33,
+        "y": 14,
+        "color": "skin",
+        "reason": "Open the face beneath the fringe and define eyes, cheek, smile and chin as deliberate pixel clusters"
+      },
+      {
+        "x": 34,
+        "y": 14,
+        "color": "skinLight",
+        "reason": "Open the face beneath the fringe and define eyes, cheek, smile and chin as deliberate pixel clusters"
+      },
+      {
+        "x": 35,
+        "y": 14,
+        "color": "ink",
+        "reason": "Open the face beneath the fringe and define eyes, cheek, smile and chin as deliberate pixel clusters"
+      },
+      {
+        "x": 36,
+        "y": 14,
+        "color": "skinLight",
+        "reason": "Open the face beneath the fringe and define eyes, cheek, smile and chin as deliberate pixel clusters"
+      },
+      {
+        "x": 37,
+        "y": 14,
+        "color": "skinLight",
+        "reason": "Open the face beneath the fringe and define eyes, cheek, smile and chin as deliberate pixel clusters"
+      },
+      {
+        "x": 31,
+        "y": 15,
+        "color": "skinShade",
+        "reason": "Open the face beneath the fringe and define eyes, cheek, smile and chin as deliberate pixel clusters"
+      },
+      {
+        "x": 32,
+        "y": 15,
+        "color": "skin",
+        "reason": "Open the face beneath the fringe and define eyes, cheek, smile and chin as deliberate pixel clusters"
+      },
+      {
+        "x": 35,
+        "y": 15,
+        "color": "ink",
+        "reason": "Open the face beneath the fringe and define eyes, cheek, smile and chin as deliberate pixel clusters"
+      },
+      {
+        "x": 37,
+        "y": 15,
+        "color": "skin",
+        "reason": "Open the face beneath the fringe and define eyes, cheek, smile and chin as deliberate pixel clusters"
+      },
+      {
+        "x": 32,
+        "y": 16,
+        "color": "tealDark",
+        "reason": "Open the face beneath the fringe and define eyes, cheek, smile and chin as deliberate pixel clusters"
+      },
+      {
+        "x": 33,
+        "y": 16,
+        "color": "skinShade",
+        "reason": "Open the face beneath the fringe and define eyes, cheek, smile and chin as deliberate pixel clusters"
+      },
+      {
+        "x": 36,
+        "y": 16,
+        "color": "skinShade",
+        "reason": "Open the face beneath the fringe and define eyes, cheek, smile and chin as deliberate pixel clusters"
+      },
+      {
+        "x": 37,
+        "y": 16,
+        "color": "tealDark",
+        "reason": "Open the face beneath the fringe and define eyes, cheek, smile and chin as deliberate pixel clusters"
+      },
+      {
+        "x": 33,
+        "y": 17,
+        "color": "tealDark",
+        "reason": "Open the face beneath the fringe and define eyes, cheek, smile and chin as deliberate pixel clusters"
+      },
+      {
+        "x": 34,
+        "y": 17,
+        "color": "skinShade",
+        "reason": "Open the face beneath the fringe and define eyes, cheek, smile and chin as deliberate pixel clusters"
+      },
+      {
+        "x": 35,
+        "y": 17,
+        "color": "skin",
+        "reason": "Open the face beneath the fringe and define eyes, cheek, smile and chin as deliberate pixel clusters"
+      }
+    ],
+    "up": [
+      {
+        "x": 33,
+        "y": 4,
+        "color": "hairDeep",
+        "reason": "Consolidate inconsistent warm shades into a coherent hair palette while retaining swept lock contours"
+      },
+      {
+        "x": 29,
+        "y": 6,
+        "color": "hairDeep",
+        "reason": "Consolidate inconsistent warm shades into a coherent hair palette while retaining swept lock contours"
+      },
+      {
+        "x": 33,
+        "y": 6,
+        "color": "hairDeep",
+        "reason": "Consolidate inconsistent warm shades into a coherent hair palette while retaining swept lock contours"
+      },
+      {
+        "x": 34,
+        "y": 6,
+        "color": "hairDeep",
+        "reason": "Consolidate inconsistent warm shades into a coherent hair palette while retaining swept lock contours"
+      },
+      {
+        "x": 28,
+        "y": 7,
+        "color": "hairDeep",
+        "reason": "Consolidate inconsistent warm shades into a coherent hair palette while retaining swept lock contours"
+      },
+      {
+        "x": 36,
+        "y": 7,
+        "color": "hairDeep",
+        "reason": "Consolidate inconsistent warm shades into a coherent hair palette while retaining swept lock contours"
+      },
+      {
+        "x": 37,
+        "y": 7,
+        "color": "hairDeep",
+        "reason": "Consolidate inconsistent warm shades into a coherent hair palette while retaining swept lock contours"
+      },
+      {
+        "x": 30,
+        "y": 8,
+        "color": "hair",
+        "reason": "Consolidate inconsistent warm shades into a coherent hair palette while retaining swept lock contours"
+      },
+      {
+        "x": 31,
+        "y": 8,
+        "color": "hairDeep",
+        "reason": "Consolidate inconsistent warm shades into a coherent hair palette while retaining swept lock contours"
+      },
+      {
+        "x": 32,
+        "y": 8,
+        "color": "hair",
+        "reason": "Consolidate inconsistent warm shades into a coherent hair palette while retaining swept lock contours"
+      },
+      {
+        "x": 33,
+        "y": 8,
+        "color": "hair",
+        "reason": "Consolidate inconsistent warm shades into a coherent hair palette while retaining swept lock contours"
+      },
+      {
+        "x": 35,
+        "y": 8,
+        "color": "hair",
+        "reason": "Consolidate inconsistent warm shades into a coherent hair palette while retaining swept lock contours"
+      },
+      {
+        "x": 26,
+        "y": 9,
+        "color": "hairDeep",
+        "reason": "Consolidate inconsistent warm shades into a coherent hair palette while retaining swept lock contours"
+      },
+      {
+        "x": 28,
+        "y": 9,
+        "color": "hairLight",
+        "reason": "Join adjacent highlights into readable swept hair locks"
+      },
+      {
+        "x": 32,
+        "y": 9,
+        "color": "hairDeep",
+        "reason": "Consolidate inconsistent warm shades into a coherent hair palette while retaining swept lock contours"
+      },
+      {
+        "x": 33,
+        "y": 9,
+        "color": "hairLight",
+        "reason": "Join adjacent highlights into readable swept hair locks"
+      },
+      {
+        "x": 36,
+        "y": 9,
+        "color": "hair",
+        "reason": "Consolidate inconsistent warm shades into a coherent hair palette while retaining swept lock contours"
+      },
+      {
+        "x": 37,
+        "y": 9,
+        "color": "hairDeep",
+        "reason": "Consolidate inconsistent warm shades into a coherent hair palette while retaining swept lock contours"
+      },
+      {
+        "x": 28,
+        "y": 10,
+        "color": "hairLight",
+        "reason": "Join adjacent highlights into readable swept hair locks"
+      },
+      {
+        "x": 33,
+        "y": 10,
+        "color": "hair",
+        "reason": "Consolidate inconsistent warm shades into a coherent hair palette while retaining swept lock contours"
+      },
+      {
+        "x": 34,
+        "y": 10,
+        "color": "hairLight",
+        "reason": "Join adjacent highlights into readable swept hair locks"
+      },
+      {
+        "x": 35,
+        "y": 10,
+        "color": "hair",
+        "reason": "Join adjacent highlights into readable swept hair locks"
+      },
+      {
+        "x": 38,
+        "y": 10,
+        "color": "hairDeep",
+        "reason": "Consolidate inconsistent warm shades into a coherent hair palette while retaining swept lock contours"
+      },
+      {
+        "x": 26,
+        "y": 11,
+        "color": "hair",
+        "reason": "Consolidate inconsistent warm shades into a coherent hair palette while retaining swept lock contours"
+      },
+      {
+        "x": 29,
+        "y": 11,
+        "color": "hair",
+        "reason": "Join adjacent highlights into readable swept hair locks"
+      },
+      {
+        "x": 30,
+        "y": 11,
+        "color": "hairLight",
+        "reason": "Join adjacent highlights into readable swept hair locks"
+      },
+      {
+        "x": 32,
+        "y": 11,
+        "color": "hair",
+        "reason": "Consolidate inconsistent warm shades into a coherent hair palette while retaining swept lock contours"
+      },
+      {
+        "x": 35,
+        "y": 11,
+        "color": "hairLight",
+        "reason": "Join adjacent highlights into readable swept hair locks"
+      },
+      {
+        "x": 27,
+        "y": 12,
+        "color": "hair",
+        "reason": "Consolidate inconsistent warm shades into a coherent hair palette while retaining swept lock contours"
+      },
+      {
+        "x": 35,
+        "y": 12,
+        "color": "hairDeep",
+        "reason": "Consolidate inconsistent warm shades into a coherent hair palette while retaining swept lock contours"
+      },
+      {
+        "x": 36,
+        "y": 12,
+        "color": "hair",
+        "reason": "Consolidate inconsistent warm shades into a coherent hair palette while retaining swept lock contours"
+      },
+      {
+        "x": 37,
+        "y": 12,
+        "color": "hair",
+        "reason": "Consolidate inconsistent warm shades into a coherent hair palette while retaining swept lock contours"
+      },
+      {
+        "x": 30,
+        "y": 13,
+        "color": "hair",
+        "reason": "Consolidate inconsistent warm shades into a coherent hair palette while retaining swept lock contours"
+      },
+      {
+        "x": 33,
+        "y": 13,
+        "color": "hair",
+        "reason": "Join adjacent highlights into readable swept hair locks"
+      },
+      {
+        "x": 35,
+        "y": 13,
+        "color": "hair",
+        "reason": "Consolidate inconsistent warm shades into a coherent hair palette while retaining swept lock contours"
+      },
+      {
+        "x": 26,
+        "y": 14,
+        "color": "hairLight",
+        "reason": "Consolidate inconsistent warm shades into a coherent hair palette while retaining swept lock contours"
+      },
+      {
+        "x": 32,
+        "y": 14,
+        "color": "hairDeep",
+        "reason": "Consolidate inconsistent warm shades into a coherent hair palette while retaining swept lock contours"
+      },
+      {
+        "x": 28,
+        "y": 15,
+        "color": "hairDeep",
+        "reason": "Consolidate inconsistent warm shades into a coherent hair palette while retaining swept lock contours"
+      },
+      {
+        "x": 33,
+        "y": 16,
+        "color": "hairDeep",
+        "reason": "Consolidate inconsistent warm shades into a coherent hair palette while retaining swept lock contours"
+      }
+    ]
+  },
+  "originalProposalBaseGridSha256": "c103647b560971013453cb1c21c32245d919cb81debdb4c8ede4c206162938e0",
+  "baseRebinding": "The native SVG exporter truncates an sRGB 255 channel to 254. Palette maxima now use 254; regenerated sampling changes one shoulder pixel (40,19) from metal to skinLight. Head patch coordinates and colors are unchanged."
+}

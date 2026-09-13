@@ -1,8 +1,10 @@
 # Avatar 1 — approved-concept idle draft
 
-**Status: awaiting James’s separate idle approval.** Internal visual review and saved-master export verification passed on 2026-09-13.
+**Status: withdrawn and unapproved; visual QA failed on renewed inspection, 2026-09-13.** The earlier readiness claim is superseded by the correction in [D-059](../../../../../../docs/DECISIONS.md#d-059--avatar-1-authoring-uses-blender-mcp-and-real-svg-pose-files). This revision is historical evidence, not an active approval request.
 
-This revision is based on the [fresh concept approved by James](../concept/avatar-1-concept-v2.png), SHA-256 `8c0d58a07d1372d2e8c9bcdbddac6e997763a8ffd2b910be83e8ec47b69f1c92`. His approval covers the concept. The four exported idle views require a separate approval before animation.
+The pose is rigid, the face is lifeless, the shading is muddy and the profiles look like flat cutouts. At game size, the character loses the appeal and identity of the approved concept. The prior assessment treated costume details and successful exports as sufficient QA. Its record and hashes are preserved in `review/visual-qa.json`; that artistic pass is revoked. Saved-master export parity remains technical evidence only.
+
+This revision is based on the [fresh concept approved by James](../concept/avatar-1-concept-v2.png), SHA-256 `8c0d58a07d1372d2e8c9bcdbddac6e997763a8ffd2b910be83e8ec47b69f1c92`. His approval covers the concept. Internal refinement continues in idle-v4 before another approval request. No idle, animation or runtime integration approval has been granted.
 
 ## Editable sources
 
@@ -17,6 +19,11 @@ The saved Blender master includes the packed approved concept as an in-scene ref
 The first internal render needed changes to its eyes, hair, tunic hem, scarf and torso/leg balance. The original render and source are preserved in `review/iterations/01`. After silhouette revisions, one common coordinate correction across all views brought the waist, head and leg proportions closer to the approved concept. `review/proportion-registration.json` records that operation. Final path JSON already contains those coordinates; do not apply the transform again. Subsequent native-pixel eye and scarf refinements are documented in the visual QA record.
 
 ## Reproduce
+
+These commands document the historical pipeline. Its pending-decision guards
+now intentionally reject this withdrawn revision. Preserve the saved evidence;
+continue active construction in idle-v4 without reopening an approval request
+for idle-v3.
 
 1. Run `python3 source/build_geometry.py`. It verifies the approved concept hash and a pending idle decision before sampling the authored curves. It writes `source/idle-geometry.json` and `source/palette.json`.
 2. In GUI Blender through MCP, set `AVATAR_SOURCE_DIR` to this revision's absolute `source` directory and execute `source/authoring.py`. It creates only the `AV1V3 | ` objects and scene, preserving the historical revision.

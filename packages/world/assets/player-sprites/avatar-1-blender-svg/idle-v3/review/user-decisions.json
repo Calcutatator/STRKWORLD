@@ -1,16 +1,16 @@
 {
   "schemaVersion": 1,
   "draft": "idle-v3",
-  "status": "pending",
+  "status": "withdrawn-unapproved-requires-refinement",
   "conceptApproval": "../../concept/approval.json",
   "conceptSha256": "8c0d58a07d1372d2e8c9bcdbddac6e997763a8ffd2b910be83e8ec47b69f1c92",
   "userDecision": null,
   "animationAuthorizedByThisGate": false,
   "subject": "Four exact SVG-derived 64x64 idle-v3 cells: down, left, right, up",
-  "readyForReview": "2026-09-13",
+  "readyForReview": null,
   "review": "review/idle-approval.png",
   "referenceComparison": "review/reference-comparison.png",
-  "internalVisualQa": "pass-for-user-idle-review",
+  "internalVisualQa": "failed-aesthetic-review-withdrawn",
   "visualQa": "review/visual-qa.json",
   "reviewedHashes": {
     "review/idle-approval.png": "779c679a01291b67a03941358f48b73e8e9f93f5c8c21f67b442b871407659d3",
@@ -26,5 +26,18 @@
     "frames/right/idle.png": "5ef9eacb00c833e03a007afd9d04624e4e0bbc2a53d3b4bdd24b991a29611d27",
     "frames/up/idle.png": "e310cfa75e2f39656e58ead0f43c536e423f757d97351fcf56b58683a6e4b444"
   },
-  "runtimeIntegrationAuthorizedByThisGate": false
+  "runtimeIntegrationAuthorizedByThisGate": false,
+  "priorReadiness": {
+    "status": "pending",
+    "userDecision": null,
+    "readyForReview": "2026-09-13",
+    "internalVisualQa": "pass-for-user-idle-review"
+  },
+  "withdrawal": {
+    "recorded": "2026-09-13",
+    "userInstruction": "sir - you need to check before giving me the hand off????\n\nplease before handoff, ask yourself that question. If its anything like what you just described you MUST continue refinement - not handing it off to me....",
+    "reason": "The prior QA bar was too permissive. The actual visual result is not good enough for handoff.",
+    "nextRevision": "idle-v4",
+    "approvalCandidateReady": false
+  }
 }

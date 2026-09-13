@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "revision": "idle-v3",
   "reviewed": "2026-09-13",
-  "status": "pass-for-user-idle-review",
+  "status": "failed-aesthetic-review-withdrawn",
   "concept": "../concept/avatar-1-concept-v2.png",
   "conceptSha256": "8c0d58a07d1372d2e8c9bcdbddac6e997763a8ffd2b910be83e8ec47b69f1c92",
   "reviewedHashes": {
@@ -20,59 +20,111 @@
     "frames/up/idle.png": "e310cfa75e2f39656e58ead0f43c536e423f757d97351fcf56b58683a6e4b444"
   },
   "reviewers": [
-    "root visual inspection",
-    "independent final_idle_visual_qa",
-    "prior independent blender_svg_workflow_review",
-    "bounded front/back and profile author reviews"
+    "root renewed visual inspection following user feedback"
   ],
-  "scope": "Likeness and readability of these four idle cells against the explicitly approved concept, including actual 1x/2x pixels.",
+  "scope": "Correction of the prior idle-v3 handoff after renewed visual inspection and the user requiring continued refinement.",
   "grantsUserApproval": false,
   "findings": [
     {
-      "feature": "body and face",
-      "result": "Coherent slim adult proportions; common shorter torso and longer legs now closer to concept. Visible dark pupils avoid blank pale eyes."
+      "feature": "overall quality",
+      "result": "Rough placeholder appearance falls well below the approved concept. No idle-v3 candidate is ready for approval."
     },
     {
-      "feature": "hair",
-      "result": "Swept amber-brown silhouette and temple/nape locks retained within the 64px cell."
+      "feature": "pose and face",
+      "result": "Rigid pose and a lifeless face lose the concept character and expression."
     },
     {
-      "feature": "clothing",
-      "result": "Sleeveless petrol tunic, asymmetric overlapping lower panel, diagonal front and crossed rear harness, gloves and cuffed boots retained."
+      "feature": "shading and profiles",
+      "result": "Muddy shading and flat cutout profiles weaken form and readability."
     },
     {
-      "feature": "scarf",
-      "result": "Two longer flowing cloth ends; profile interiors widened until teal fabric remains visible at game scale."
-    },
-    {
-      "feature": "equipment ownership",
-      "result": "Pouch remains on wearer-right; scarf attachment remains wearer-left. Profiles are separately authored for asymmetric equipment."
+      "feature": "actual game-size identity",
+      "result": "The tiny figure loses the appealing identity of the approved concept. Matching costume details and valid exports did not establish adequate artwork."
     }
   ],
   "iterations": [
     {
-      "id": "01",
-      "status": "revised",
-      "evidence": "iterations/01/assessment.json"
-    },
-    {
-      "id": "02",
-      "status": "revised",
-      "evidence": "iterations/02/assessment.json"
-    },
-    {
       "id": "03",
-      "status": "pass-for-user-idle-review",
-      "changes": [
-        "Single-pixel iris coverage after common proportion correction.",
-        "Wider profile scarf cloth interiors, preserving two tails."
-      ],
-      "remainingMaterialIssuesIdentified": []
+      "status": "failed-aesthetic-review-withdrawn",
+      "supersedes": "priorAssessment.iterations[2]",
+      "remainingMaterialIssuesIdentified": [
+        "rigid pose",
+        "lifeless face",
+        "muddy shading",
+        "flat cutout profiles",
+        "loss of approved concept identity at game size"
+      ]
     }
   ],
   "limits": [
-    "Final 64px art is simpler and flatter than the painted concept. Fine expression, fingers, stitching and small buckle details simplify.",
-    "User idle approval is still pending.",
+    "Historical export, geometry and exact-preview parity remain technical evidence only.",
+    "No user idle approval was granted.",
     "No animation, runtime replacement, browser or live-game acceptance has been performed."
-  ]
+  ],
+  "priorAssessment": {
+    "reviewed": "2026-09-13",
+    "status": "pass-for-user-idle-review",
+    "reviewers": [
+      "root visual inspection",
+      "independent final_idle_visual_qa",
+      "prior independent blender_svg_workflow_review",
+      "bounded front/back and profile author reviews"
+    ],
+    "scope": "Likeness and readability of these four idle cells against the explicitly approved concept, including actual 1x/2x pixels.",
+    "findings": [
+      {
+        "feature": "body and face",
+        "result": "Coherent slim adult proportions; common shorter torso and longer legs now closer to concept. Visible dark pupils avoid blank pale eyes."
+      },
+      {
+        "feature": "hair",
+        "result": "Swept amber-brown silhouette and temple/nape locks retained within the 64px cell."
+      },
+      {
+        "feature": "clothing",
+        "result": "Sleeveless petrol tunic, asymmetric overlapping lower panel, diagonal front and crossed rear harness, gloves and cuffed boots retained."
+      },
+      {
+        "feature": "scarf",
+        "result": "Two longer flowing cloth ends; profile interiors widened until teal fabric remains visible at game scale."
+      },
+      {
+        "feature": "equipment ownership",
+        "result": "Pouch remains on wearer-right; scarf attachment remains wearer-left. Profiles are separately authored for asymmetric equipment."
+      }
+    ],
+    "iterations": [
+      {
+        "id": "01",
+        "status": "revised",
+        "evidence": "iterations/01/assessment.json"
+      },
+      {
+        "id": "02",
+        "status": "revised",
+        "evidence": "iterations/02/assessment.json"
+      },
+      {
+        "id": "03",
+        "status": "pass-for-user-idle-review",
+        "changes": [
+          "Single-pixel iris coverage after common proportion correction.",
+          "Wider profile scarf cloth interiors, preserving two tails."
+        ],
+        "remainingMaterialIssuesIdentified": []
+      }
+    ],
+    "limits": [
+      "Final 64px art is simpler and flatter than the painted concept. Fine expression, fingers, stitching and small buckle details simplify.",
+      "User idle approval is still pending.",
+      "No animation, runtime replacement, browser or live-game acceptance has been performed."
+    ]
+  },
+  "withdrawal": {
+    "recorded": "2026-09-13",
+    "reason": "The prior QA bar was too permissive. The actual visual result is not good enough for handoff.",
+    "userInstruction": "sir - you need to check before giving me the hand off????\n\nplease before handoff, ask yourself that question. If its anything like what you just described you MUST continue refinement - not handing it off to me....",
+    "nextWork": "Continue internal refinement in idle-v4. Do not hand off a known rough or unattractive result.",
+    "approvalCandidateReady": false
+  }
 }

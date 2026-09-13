@@ -1,0 +1,28 @@
+{
+  "schemaVersion": 1,
+  "avatar": "avatar-1",
+  "revision": "idle-v4",
+  "status": "pending",
+  "userDecision": null,
+  "readyForReview": true,
+  "conceptApproval": "../../concept/approval.json",
+  "animationAuthorized": false,
+  "runtimeIntegrationAuthorized": false,
+  "readyForReviewDate": "2026-09-13",
+  "reviewedHashes": {
+    "svg/down/idle.svg": "ff9372cc5305d97c9963e115482cb45eabad85df4edebfad194ad886d7bb6ad9",
+    "frames/down/idle.png": "7c3848e85189f615bc091b7f2b2b2579992f411fd6c85dea4277eab935748e8d",
+    "svg/left/idle.svg": "d40033c2e4fd9afd40d2ced48ddaae9ab3a062b28d71395eb78c3d0d1e548c57",
+    "frames/left/idle.png": "f0b10934fee3873975c6c37641cf46edb9de81e4e52cbe34c79c256e7a4a7911",
+    "svg/right/idle.svg": "acd343ecc1fcad033085970344deee01443ce2dced55d8369f51d70fcf02c5e9",
+    "frames/right/idle.png": "88618a8219050b59c68d2e560ea902f760fe83ce8677c5b198b525a109331009",
+    "svg/up/idle.svg": "b7f887efb9ff42228ab26a51aee0a8dbb92536538c3709aa98771554c1c59291",
+    "frames/up/idle.png": "701a89f05ce1508e9aaa158da1357be5c683012b880ef61cb951e98aebd3c223",
+    "source/avatar-1.blend": "b2bb752173132ebfb0e6ac2c1c8c3c4d23a693873186ff799373688a9f283d8c",
+    "source/artist-grid.json": "d89d9c41c5dee73cb30dab4e3f50d81a47ce610453217c0277a15a42d2d3bb87",
+    "source/head-refinement.json": "051deed6713260979d878062b8baa56f4a324fb0988cfcdf21883e73ed64e47a",
+    "review/idle-approval.png": "6188aeac6354a4d088c647d7e39d12bee17c89067810c1b092385cfa3edf5ac1",
+    "review/reference-comparison.png": "c8231541e9721bdd5183e68bd40334cdb9f496f6bf612d90bb7daa79fe7707e6"
+  },
+  "internalVisualQa": "passed-for-idle-review"
+}

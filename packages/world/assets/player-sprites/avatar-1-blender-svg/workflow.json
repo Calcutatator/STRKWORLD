@@ -1,20 +1,24 @@
 {
-  "version": 3,
+  "version": 4,
   "avatar": "avatar-1",
-  "state": "idle-v3-awaiting-user-approval",
-  "directionRecorded": "2026-09-12",
+  "state": "idle-v4-awaiting-user-idle-approval",
+  "directionRecorded": "2026-09-13",
   "decision": "D-059",
   "rejectedDraft": "../avatar-1-restart-2026-09-12",
   "authoring": {
     "control": "Blender MCP",
     "art": "layered Grease Pencil vectors",
-    "animationMaster": "idle-v3/source/avatar-1.blend",
+    "animationMaster": null,
     "poseFormat": "SVG",
     "runtimeFormat": "PNG",
     "rasterImageGenerationFallback": false,
     "embeddedRasterSvgAllowed": false,
-    "outputRoot": "idle-v3",
-    "currentScope": "four idle facings only"
+    "outputRoot": "idle-v4",
+    "currentScope": "Four rebuilt idle facings, visually inspected and frozen for separate user approval",
+    "lastHistoricalMaster": "idle-v3/source/avatar-1.blend",
+    "artMaster": "idle-v4/source/avatar-1.blend",
+    "construction": "New ImageGen construction studies from approved concept; explicit colour-index refinement; native Blender Grease Pencil vectors and SVG exports",
+    "sourceRasterEmbeddedInSvg": false
   },
   "gates": [
     {
@@ -35,30 +39,32 @@
     },
     {
       "id": "four-idle-source-views",
-      "status": "complete",
+      "status": "complete-for-idle-review",
       "dependsOn": "user-approves-concept",
-      "revision": "idle-v3",
-      "outputRoot": "idle-v3",
-      "evidence": "idle-v3/review/source-parity.json",
-      "reopenedMasterParity": "idle-v3/review/reload-parity.json"
+      "revision": "idle-v4",
+      "outputRoot": "idle-v4",
+      "master": "idle-v4/source/avatar-1.blend",
+      "technicalQa": "idle-v4/review/source-parity.json"
     },
     {
       "id": "reference-fidelity-visual-review",
-      "status": "pass-for-user-review",
+      "status": "passed-for-idle-review",
       "referenceMustBe": "explicitly user-approved fresh concept",
       "grantsUserApproval": false,
       "reference": "concept/avatar-1-concept-v2.png",
       "referenceSha256": "8c0d58a07d1372d2e8c9bcdbddac6e997763a8ffd2b910be83e8ec47b69f1c92",
       "dependsOn": "four-idle-source-views",
-      "evidence": "idle-v3/review/visual-qa.json"
+      "evidence": "idle-v4/review/visual-qa.json",
+      "evidenceScope": "Actual final SVG-derived cells inspected at 1x/2x against approved concept after internal head refinement"
     },
     {
       "id": "user-approves-exact-idles",
       "status": "pending",
       "requiresExplicitUserApproval": true,
-      "decisionRecord": "idle-v3/review/user-decisions.json",
+      "decisionRecord": "idle-v4/review/user-decisions.json",
       "blocks": "all animation",
-      "review": "idle-v3/review/idle-approval.png"
+      "review": "idle-v4/review/idle-approval.png",
+      "lastWithdrawnDecisionRecord": "idle-v3/review/user-decisions.json"
     },
     {
       "id": "one-complete-walk-direction",
@@ -151,38 +157,61 @@
       "status": "superseded-unapproved-concept-gate-skipped",
       "approvedForAnimation": false,
       "approvedForIntegration": false
+    },
+    {
+      "id": "idle-v3",
+      "stage": "failed-aesthetic-review",
+      "status": "withdrawn-unapproved-requires-refinement",
+      "root": "idle-v3",
+      "concept": "concept/avatar-1-concept-v2.png",
+      "conceptSha256": "8c0d58a07d1372d2e8c9bcdbddac6e997763a8ffd2b910be83e8ec47b69f1c92",
+      "userDecision": "idle-v3/review/user-decisions.json",
+      "userIdleApproval": "not-granted",
+      "animationAuthorized": false,
+      "runtimeIntegrationAuthorized": false,
+      "review": "idle-v3/review/idle-approval.png",
+      "comparison": "idle-v3/review/reference-comparison.png",
+      "technicalQa": "idle-v3/review/qa.json",
+      "visualQa": "idle-v3/review/visual-qa.json",
+      "sourceParity": "idle-v3/review/source-parity.json",
+      "reloadParity": "idle-v3/review/reload-parity.json",
+      "paths": {
+        "source": "idle-v3/source",
+        "svg": "idle-v3/svg",
+        "frames": "idle-v3/frames",
+        "review": "idle-v3/review"
+      },
+      "approvedForAnimation": false,
+      "approvedForIntegration": false,
+      "priorStatus": "awaiting-user-approval"
     }
   ],
   "draft": {
-    "id": "idle-v3",
-    "stage": "user-approves-exact-idles",
-    "status": "awaiting-user-approval",
-    "root": "idle-v3",
+    "id": "idle-v4",
+    "stage": "awaiting-user-idle-approval",
+    "status": "frozen-review-candidate",
+    "root": "idle-v4",
     "concept": "concept/avatar-1-concept-v2.png",
     "conceptSha256": "8c0d58a07d1372d2e8c9bcdbddac6e997763a8ffd2b910be83e8ec47b69f1c92",
-    "userDecision": "idle-v3/review/user-decisions.json",
+    "userDecision": "idle-v4/review/user-decisions.json",
     "userIdleApproval": "pending",
     "animationAuthorized": false,
     "runtimeIntegrationAuthorized": false,
-    "review": "idle-v3/review/idle-approval.png",
-    "comparison": "idle-v3/review/reference-comparison.png",
-    "technicalQa": "idle-v3/review/qa.json",
-    "visualQa": "idle-v3/review/visual-qa.json",
-    "sourceParity": "idle-v3/review/source-parity.json",
-    "reloadParity": "idle-v3/review/reload-parity.json",
-    "paths": {
-      "source": "idle-v3/source",
-      "svg": "idle-v3/svg",
-      "frames": "idle-v3/frames",
-      "review": "idle-v3/review"
-    }
+    "approvalCandidateReady": true,
+    "methodAndResults": "Image-assisted vector reconstruction with explicit head refinement; actual native Blender master and SVG-derived PNG cells passed separate artistic inspection and technical parity.",
+    "review": "idle-v4/review/idle-approval.png",
+    "comparison": "idle-v4/review/reference-comparison.png",
+    "visualQa": "idle-v4/review/visual-qa.json",
+    "sourceParity": "idle-v4/review/source-parity.json",
+    "pixelParity": "idle-v4/review/pixel-parity.json",
+    "reloadParity": "idle-v4/review/reload-parity.json"
   },
   "historicalToolingEvidence": {
     "status": "verified-before-concept-first-correction",
     "evidence": "setup/setup-report.json",
     "doesNotGrantConceptOrSpriteApproval": true
   },
-  "spriteProductionScope": "idle-v3 four idle facings, Blender/SVG/PNG exports and internal likeness QA only",
+  "spriteProductionScope": "Idle-v4 frozen for explicit idle approval after visual refinement; no animation or runtime integration.",
   "animationAuthorized": false,
   "runtimeIntegrationAuthorized": false,
   "concept": {
@@ -191,5 +220,29 @@
     "sha256": "8c0d58a07d1372d2e8c9bcdbddac6e997763a8ffd2b910be83e8ec47b69f1c92",
     "approval": "approved",
     "decisionRecord": "concept/approval.json"
+  },
+  "preHandoffAestheticQa": {
+    "required": true,
+    "owner": "producing agent",
+    "actualExportScales": [
+      "1x",
+      "2x"
+    ],
+    "compareTo": "concept/avatar-1-concept-v2.png",
+    "requirement": "Judge whether the actual game-size sprite looks good and retains the approved character identity, with a natural pose, expressive readable face, clear shading and convincing directional form.",
+    "continueRefiningIf": [
+      "rough placeholder appearance",
+      "rigid pose",
+      "lifeless face",
+      "muddy shading",
+      "flat cutout profiles",
+      "lost concept identity"
+    ],
+    "technicalParityEstablishesArtisticQuality": false,
+    "knownFailedCandidateMayBeHandedOff": false,
+    "lastFailedRevision": "idle-v3",
+    "lastFailureRecord": "idle-v3/review/visual-qa.json",
+    "latestPassedRevision": "idle-v4",
+    "latestPassRecord": "idle-v4/review/visual-qa.json"
   }
 }

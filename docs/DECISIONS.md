@@ -2590,10 +2590,11 @@ checks after the headless state and lifecycle regressions pass.
 
 **2026-09-12 · Directed by James · authoring-route amendment to D-052;
 concept-first correction supersedes the prior reference-authority and
-idle-review sequence · exact fresh concept-v2 approved by James; new idle-v3
-Blender/SVG idles passed internal likeness and saved-master export checks;
-exact idle-v3 cells await user approval · idle-v2 remains superseded and unapproved; animation is blocked until
-separate user idle approval**
+idle-review sequence · exact fresh concept-v2 approved by James; idle-v3's
+visual pass and handoff are withdrawn by the 2026-09-13 pre-handoff aesthetic
+QA correction below · rebuilt idle-v4 passed internal aesthetic review after
+head refinement and is frozen for separate user idle approval · idle-v2 remains superseded and unapproved; animation is
+blocked until separate user idle approval**
 
 **Context.** James rejected the fresh Avatar 1 draft's in-game appearance,
 despite its mechanical export checks passing, and requested: “We should use
@@ -2732,7 +2733,8 @@ artwork, source and evidence remain preserved and unapproved. Animation stays
 blocked until the explicit user idle gate passes.
 
 
-**Idle-v3 review candidate, 2026-09-13.** The four views were authored as
+**Idle-v3 review candidate, 2026-09-13 — visual pass and readiness superseded
+by the pre-handoff aesthetic QA correction below.** The four views were authored as
 509 native Grease Pencil fill shapes from new curved vector paths, using
 the approved concept-v2 as the packed Blender reference. Internal iterations
 corrected pupil coverage, swept hair, the diagonal tunic hem, scarf length
@@ -2750,3 +2752,70 @@ reproduces all four SVGs and PNGs byte-for-byte; exact 1×/2×/6× review crop
 parity, binary alpha and the shared 24-colour limit pass. User idle approval
 remains pending. No animation, runtime change or live game acceptance is
 claimed by these source and visual checks.
+
+
+**Pre-handoff aesthetic QA correction, 2026-09-13 — standing requirement;
+initial no-candidate state advanced by the idle-v4 execution record below.** James challenged the
+appearance again and directed: “please before handoff, ask yourself that
+question. If its anything like what you just described you MUST continue
+refinement - not handing it off to me....” Renewed inspection found that
+idle-v3 looks like a rough placeholder: its pose is rigid, its face is
+lifeless, its shading is muddy and its profiles resemble flat cutouts. The
+actual game-size figure loses the appeal and identity of the approved
+concept. The prior assessment was too permissive and mistook costume
+inventory and successful exports for sufficient visual QA.
+
+Withdraw idle-v3 from approval and revoke its artistic pass. Preserve its
+artifacts, exact hashes, prior assessment and source/export parity as
+historical evidence. Technical parity still describes those files; it cannot
+establish quality or authorize animation. The concept-v2 approval remains
+valid. No idle approval has been granted.
+
+Continue internal refinement in a distinct idle-v4 revision. Its method and
+results have not yet been recorded; no replacement candidate is claimed to
+be ready. Before any future handoff, the producing agent must inspect the
+actual 1×/2× exported cells, compare them with the approved concept, and
+judge whether they look good: natural pose, readable expression, clear
+shading, convincing directional form and retained character identity. Any
+rough, rigid, muddy, lifeless or cutout result must stay in internal
+refinement. An approval request must not offload known artistic defects to
+James. Aesthetic review and technical export verification are separate
+requirements. Animation and runtime integration remain unauthorized until
+their separate user gates are met.
+
+
+**Idle-v4 rebuild and pre-handoff review, 2026-09-13.** The prior no-candidate
+state is superseded by this completed idle-only draft. New ImageGen
+construction studies use the approved concept as their authority. Fine-detail
+sampling failed internal review because the eyes disappeared at game size.
+A deliberately coarse construction study was registered into an explicit
+colour-index design, rebuilt as contiguous editable vector regions in Blender
+Grease Pencil through MCP, and exported as real SVG paths. The studies are
+packed and labelled internal, separately from the approved concept. This is
+image-assisted vector reconstruction; the PNGs are derived from native SVGs,
+and no raster is embedded in an SVG.
+
+The first native export had coherent body, stance, costume and directional
+volume, but front/right faces were too blank and hair highlights fragmented.
+It stayed in internal refinement. A further 197 head-pixel edits exposed the
+faces, separated eyes from the fringe, shaped the right cheek/nose/jaw and
+consolidated swept hair locks. The producing agent inspected the rebuilt
+exports at 1×/2× against the approved concept and judged them appealing and
+coherent, with no remaining rough, rigid, muddy or cutout defect. Independent
+inspection of those same final exports found no aesthetic blocker to idle
+review. The compact game proportions read younger than the painted concept;
+character identity and equipment are retained.
+
+The [exact four-idle review](../packages/world/assets/player-sprites/avatar-1-blender-svg/idle-v4/review/idle-approval.png)
+and [concept comparison](../packages/world/assets/player-sprites/avatar-1-blender-svg/idle-v4/review/reference-comparison.png)
+are frozen, with hashes in the [pending decision record](../packages/world/assets/player-sprites/avatar-1-blender-svg/idle-v4/review/user-decisions.json).
+Technical verification separately passes 1,795 ordered vector regions through
+actual saved-master readback and SVG geometry/fills, exact colour-grid to PNG
+pixel parity, 64×64/binary-alpha/palette/framing checks and 1×/2×/6× review crop
+parity. Reopening the saved `.blend` and exporting the existing artwork
+reproduced all four SVGs and all four PNGs byte-for-byte. Thirteen repository
+invariants pass. These checks do not grant user approval.
+
+James’s separate idle approval is pending before animation. The accepted
+runtime asset remains unchanged; no animation, rig completion, browser
+automation, game integration, merge or production delivery is claimed.

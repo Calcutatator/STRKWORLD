@@ -1,0 +1,57 @@
+{
+  "schemaVersion": 1,
+  "revision": "idle-v4",
+  "status": "passed-for-idle-review",
+  "readyForReview": true,
+  "userIdleApproval": null,
+  "authority": "Approved concept-v2, SHA-256 8c0d58a07d1372d2e8c9bcdbddac6e997763a8ffd2b910be83e8ec47b69f1c92",
+  "iterations": [
+    {
+      "id": "fine-reference-sampling",
+      "result": "failed",
+      "finding": "Better stance than withdrawn v3, but fine painted pixel details wash out at 64px. The face loses its eyes and expression."
+    },
+    {
+      "id": "coarse-vector-export-1",
+      "result": "continue-refinement",
+      "inspected": [
+        "review/idle-approval.png",
+        "frames/down/idle.png",
+        "frames/left/idle.png",
+        "frames/right/idle.png",
+        "frames/up/idle.png"
+      ],
+      "finding": "Body silhouette, stance, materials and kit continuity now work as a coherent RPG interpretation. Front/right faces remain too blank under the fringe; right cheek/nose is a pale wedge. Hair highlights are fragmented. Refine heads before handoff."
+    },
+    {
+      "id": "coarse-vector-export-2-head-refinement",
+      "result": "passed-for-idle-review",
+      "changes": "197 head pixel refinements consolidate swept hair locks, open the front face, separate eyes from fringe, shape the right cheek/nose/jaw and retain a slight front smile. Rebuilt and re-exported through native Blender MCP.",
+      "actualExportFinding": "The producing agent finds an appealing, coherent RPG character: readable faces, natural weight and stance, clear materials, directional volume and retained concept identity. The final independent inspection found no aesthetic defect that blocks presenting the idle draft.",
+      "scaleAssessment": "At 2x, front eyes and slight smile read, and the right eye/nose/jaw are distinct. At 1x, expression is subtle but character and facing stay clear.",
+      "interpretation": "Shorter game proportions make the sprite younger-looking than the painted adult concept; outfit, hair, warm expression and character identity remain recognizable.",
+      "userApproval": "Not granted; requires separate explicit approval of these exact idles."
+    }
+  ],
+  "rule": "Inspect actual exported 1x/2x cells and concept comparison. If the art still looks rough, rigid, muddy, flat or loses character identity, continue internal refinement. A valid export is not an artistic pass.",
+  "reviewedHashes": {
+    "svg/down/idle.svg": "ff9372cc5305d97c9963e115482cb45eabad85df4edebfad194ad886d7bb6ad9",
+    "frames/down/idle.png": "7c3848e85189f615bc091b7f2b2b2579992f411fd6c85dea4277eab935748e8d",
+    "svg/left/idle.svg": "d40033c2e4fd9afd40d2ced48ddaae9ab3a062b28d71395eb78c3d0d1e548c57",
+    "frames/left/idle.png": "f0b10934fee3873975c6c37641cf46edb9de81e4e52cbe34c79c256e7a4a7911",
+    "svg/right/idle.svg": "acd343ecc1fcad033085970344deee01443ce2dced55d8369f51d70fcf02c5e9",
+    "frames/right/idle.png": "88618a8219050b59c68d2e560ea902f760fe83ce8677c5b198b525a109331009",
+    "svg/up/idle.svg": "b7f887efb9ff42228ab26a51aee0a8dbb92536538c3709aa98771554c1c59291",
+    "frames/up/idle.png": "701a89f05ce1508e9aaa158da1357be5c683012b880ef61cb951e98aebd3c223",
+    "source/avatar-1.blend": "b2bb752173132ebfb0e6ac2c1c8c3c4d23a693873186ff799373688a9f283d8c",
+    "source/artist-grid.json": "d89d9c41c5dee73cb30dab4e3f50d81a47ce610453217c0277a15a42d2d3bb87",
+    "source/head-refinement.json": "051deed6713260979d878062b8baa56f4a324fb0988cfcdf21883e73ed64e47a",
+    "review/idle-approval.png": "6188aeac6354a4d088c647d7e39d12bee17c89067810c1b092385cfa3edf5ac1",
+    "review/reference-comparison.png": "c8231541e9721bdd5183e68bd40334cdb9f496f6bf612d90bb7daa79fe7707e6"
+  },
+  "date": "2026-09-13",
+  "reviewers": [
+    "Producing agent: inspected actual native SVG-derived PNGs at 1x/2x and concept comparison",
+    "Independent visual reviewer: inspected the same final export boards"
+  ]
+}

@@ -1,0 +1,102 @@
+{
+  "schemaVersion": 1,
+  "blender": "5.2.1 LTS",
+  "nativeMcpTools": true,
+  "scene": "AV1V4 | Idle authoring",
+  "camera": {
+    "type": "ORTHO",
+    "orthoScale": 64,
+    "location": [
+      0.0,
+      -128.0,
+      0.0
+    ]
+  },
+  "render": [
+    64,
+    64
+  ],
+  "frame": 1,
+  "directions": [
+    "down",
+    "left",
+    "right",
+    "up"
+  ],
+  "exports": [
+    {
+      "direction": "down",
+      "svg": "svg/down/idle.svg",
+      "paths": 481,
+      "images": 0,
+      "sha256": "ff9372cc5305d97c9963e115482cb45eabad85df4edebfad194ad886d7bb6ad9"
+    },
+    {
+      "direction": "left",
+      "svg": "svg/left/idle.svg",
+      "paths": 425,
+      "images": 0,
+      "sha256": "d40033c2e4fd9afd40d2ced48ddaae9ab3a062b28d71395eb78c3d0d1e548c57"
+    },
+    {
+      "direction": "right",
+      "svg": "svg/right/idle.svg",
+      "paths": 417,
+      "images": 0,
+      "sha256": "acd343ecc1fcad033085970344deee01443ce2dced55d8369f51d70fcf02c5e9"
+    },
+    {
+      "direction": "up",
+      "svg": "svg/up/idle.svg",
+      "paths": 472,
+      "images": 0,
+      "sha256": "b7f887efb9ff42228ab26a51aee0a8dbb92536538c3709aa98771554c1c59291"
+    }
+  ],
+  "construction": "source/idle-geometry.json",
+  "geometrySha256": "c4dfbb45be1d1fc18a2e35f0443ed034c479b810bc7c89c8c52b87906fbb7aa0",
+  "geometryProvenance": {
+    "method": "New concept-derived ImageGen low-resolution construction references, deliberately registered as an editable colour-index design and reconstructed into vector regions",
+    "conceptSha256": "8c0d58a07d1372d2e8c9bcdbddac6e997763a8ffd2b910be83e8ec47b69f1c92",
+    "constructionReferences": [
+      {
+        "file": "studies/front-construction-v2.png",
+        "sha256": "76949d7ecdbf32c474e2de5a44603142433dd7417b964b02938f8e7d0de6c606"
+      },
+      {
+        "file": "studies/coarse-turnaround-construction-v1.png",
+        "sha256": "acf45f98c149e9156e56134c0ecaa6ec9d580aef76e19f45cfb3be8f11b9f7a0"
+      }
+    ],
+    "sampling": "source/grid_from_studies.cjs",
+    "palette": "Authored shared 24-colour palette, nearest sRGB source mapping, no dithering",
+    "approval": "Internal refinement; studies are not approved concept art or user-approved idles",
+    "headRefinement": {
+      "file": "source/head-refinement.json",
+      "sha256": "051deed6713260979d878062b8baa56f4a324fb0988cfcdf21883e73ed64e47a"
+    },
+    "artistGridSha256": "d89d9c41c5dee73cb30dab4e3f50d81a47ce610453217c0277a15a42d2d3bb87",
+    "semanticGroups": "Visible editing partitions only; no hidden anatomy or rig yet"
+  },
+  "palette": "source/palette.json",
+  "paletteSha256": "80792b93dedc0a62356f5a8db8f80a694952e8454ec330b32fff3294c7a7c643",
+  "reference": "../concept/avatar-1-concept-v2.png",
+  "conceptSha256": "8c0d58a07d1372d2e8c9bcdbddac6e997763a8ffd2b910be83e8ec47b69f1c92",
+  "constructionStudies": [
+    {
+      "relative": "studies/front-construction-v2.png",
+      "sha256": "76949d7ecdbf32c474e2de5a44603142433dd7417b964b02938f8e7d0de6c606",
+      "approval": "Not approved concept art; internal ImageGen construction study"
+    },
+    {
+      "relative": "studies/coarse-turnaround-construction-v1.png",
+      "sha256": "acf45f98c149e9156e56134c0ecaa6ec9d580aef76e19f45cfb3be8f11b9f7a0",
+      "approval": "Not approved concept art; internal ImageGen construction study"
+    }
+  ],
+  "master": "source/avatar-1.blend",
+  "masterSha256": "b2bb752173132ebfb0e6ac2c1c8c3c4d23a693873186ff799373688a9f283d8c",
+  "approval": "internal-refinement",
+  "artisticQa": "not-assessed",
+  "animation": "not-started"
+}
