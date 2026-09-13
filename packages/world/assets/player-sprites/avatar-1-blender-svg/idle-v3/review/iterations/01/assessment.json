@@ -1,0 +1,18 @@
+{
+  "status": "requires-likeness-revision",
+  "reviewers": [
+    "root",
+    "independent blender_svg_workflow_review",
+    "front-back author",
+    "profile author"
+  ],
+  "issues": [
+    "Pupil coverage disappears at64px in both front and profiles.",
+    "Profile tail layering can read as three tails rather than two.",
+    "Second down/up tail is too occluded to read as distinct.",
+    "Tunic hem too straight and short; asymmetric overlapping upper-thigh panel needs emphasis.",
+    "Hair too compact; strengthen swept fringe and longer temple/ear locks.",
+    "Scarf flowing silhouette needs greater visible length."
+  ],
+  "technicalScope": "Initial 510-shape source/readback/SVG parity passed; that did not establish likeness."
+}

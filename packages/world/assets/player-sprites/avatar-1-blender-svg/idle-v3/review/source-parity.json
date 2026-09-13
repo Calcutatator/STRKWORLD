@@ -1,0 +1,219 @@
+{
+  "schemaVersion": 1,
+  "revision": "idle-v3",
+  "mechanicalStatus": "pass",
+  "conceptApproval": {
+    "status": "approved",
+    "artifact": "../concept/avatar-1-concept-v2.png",
+    "sha256": "8c0d58a07d1372d2e8c9bcdbddac6e997763a8ffd2b910be83e8ec47b69f1c92",
+    "record": "../concept/approval.json",
+    "scope": "Concept identity only; no sprite, animation or game approval"
+  },
+  "userIdleApproval": "not-established-by-this-verifier",
+  "animationAcceptance": "not-tested",
+  "gameAcceptance": "not-tested",
+  "scope": "Source contours/materials to supplied reopened-master readback and native SVG geometry/fill parity; current artifact hashes",
+  "coordinateTolerance": 0.0002,
+  "contourEquivalence": "Exact shape paint order; cyclic start, winding and contour order may differ within even-odd fills. Vertex count and coordinates must match.",
+  "sourceToPngPixelParity": "not-asserted: smooth vector rasterization and deliberate binary-alpha/palette treatment are separate from source contour parity",
+  "limits": [
+    "No Blender or MCP call is performed; reopening provenance is supplied by the coordinator and evidence files.",
+    "The report binds the declared reopened master path and current binary hash; it does not independently parse .blend contents.",
+    "PNG header dimensions and file hashes are recorded; PNG pixels are not decoded and SVG rasterization is not rerun.",
+    "No likeness, artistic approval, animation, or live-game claim follows from mechanical parity."
+  ],
+  "blenderReadbackParity": {
+    "status": "pass",
+    "reopenedMaster": "/Users/james.wilcock/Documents/STRKWORLD-avatar-1-restart-draft/packages/world/assets/player-sprites/avatar-1-blender-svg/idle-v3/source/avatar-1.blend",
+    "masterSha256": "c9d87a4734a6e7d2a1fa051b2d15b9d692a6531d486b3b53cf79c226627955ca",
+    "blender": "5.2.1 LTS",
+    "views": {
+      "down": {
+        "shapeCount": 127,
+        "maximumCoordinateError": 9.531018854147533e-07,
+        "orderedPartsMaterialsContoursAndFillState": "pass"
+      },
+      "left": {
+        "shapeCount": 132,
+        "maximumCoordinateError": 9.533691409657763e-07,
+        "orderedPartsMaterialsContoursAndFillState": "pass"
+      },
+      "right": {
+        "shapeCount": 140,
+        "maximumCoordinateError": 9.533691409657763e-07,
+        "orderedPartsMaterialsContoursAndFillState": "pass"
+      },
+      "up": {
+        "shapeCount": 110,
+        "maximumCoordinateError": 9.536418019706616e-07,
+        "orderedPartsMaterialsContoursAndFillState": "pass"
+      }
+    },
+    "provenanceLimit": "Checks the supplied readback's declared master path and geometry; the coordinator performed reopening. This script does not independently open or parse the .blend."
+  },
+  "environmentEvidence": {
+    "status": "consistent-with-current-artifacts",
+    "nativeMcpToolsReported": true,
+    "scope": "Validate supplied native-MCP environment metadata, not independent MCP transport attestation"
+  },
+  "frames": {
+    "down": {
+      "pathCount": 127,
+      "sourceShapeCount": 127,
+      "embeddedImages": 0,
+      "orderedGeometryAndExactPaletteFills": "pass",
+      "maximumCoordinateError": 1.2468750000493856e-05,
+      "png": {
+        "file": "frames/down/idle.png",
+        "headerDimensions": [
+          64,
+          64
+        ],
+        "sourcePixelParity": "not-asserted"
+      }
+    },
+    "left": {
+      "pathCount": 132,
+      "sourceShapeCount": 132,
+      "embeddedImages": 0,
+      "orderedGeometryAndExactPaletteFills": "pass",
+      "maximumCoordinateError": 1.2500594531061893e-05,
+      "png": {
+        "file": "frames/left/idle.png",
+        "headerDimensions": [
+          64,
+          64
+        ],
+        "sourcePixelParity": "not-asserted"
+      }
+    },
+    "right": {
+      "pathCount": 140,
+      "sourceShapeCount": 140,
+      "embeddedImages": 0,
+      "orderedGeometryAndExactPaletteFills": "pass",
+      "maximumCoordinateError": 1.2500594531061893e-05,
+      "png": {
+        "file": "frames/right/idle.png",
+        "headerDimensions": [
+          64,
+          64
+        ],
+        "sourcePixelParity": "not-asserted"
+      }
+    },
+    "up": {
+      "pathCount": 110,
+      "sourceShapeCount": 110,
+      "embeddedImages": 0,
+      "orderedGeometryAndExactPaletteFills": "pass",
+      "maximumCoordinateError": 1.1999999999900979e-05,
+      "png": {
+        "file": "frames/up/idle.png",
+        "headerDimensions": [
+          64,
+          64
+        ],
+        "sourcePixelParity": "not-asserted"
+      }
+    }
+  },
+  "files": {
+    "source/idle-geometry.json": {
+      "bytes": 923923,
+      "sha256": "e51e976e378b5acdaaa3eff3354e54aab602f51c911d3a526261da889d6e8f7c"
+    },
+    "source/palette.json": {
+      "bytes": 1537,
+      "sha256": "8dd1a99ad33efac2efdebc109a5996a49efb23f6d471ba59bfb6017b9bd55c1f"
+    },
+    "source/design-contract.json": {
+      "bytes": 2708,
+      "sha256": "127f75b5d80e874df205c767575c3f19a559300a108999635583dfc01b5d75f5"
+    },
+    "source/avatar-1.blend": {
+      "bytes": 2503020,
+      "sha256": "c9d87a4734a6e7d2a1fa051b2d15b9d692a6531d486b3b53cf79c226627955ca"
+    },
+    "source/blender-readback.json": {
+      "bytes": 1036940,
+      "sha256": "81f063f2cca80de09e4d3eb37621dda58832511e14c1aa1247b2c500f382b2e4"
+    },
+    "source/blender-environment.json": {
+      "bytes": 1159,
+      "sha256": "11a1a1723d8d5553af15e7ec4341d4f3c54b6a579f922a2f39adfd04bc8760b1"
+    },
+    "source/readback.py": {
+      "bytes": 1289,
+      "sha256": "18edee2e4653d0b2207920e5a3817675fdc8ba0fc327805b26085404c1f89d1e"
+    },
+    "source/verify_source.py": {
+      "bytes": 19644,
+      "sha256": "b74dcbaa1339045d13933058a07722d35014a5561528b5d0708811dd6a66fc5c"
+    },
+    "source/authoring.py": {
+      "bytes": 4848,
+      "sha256": "bbb76fabcc406f7e10e0c07ffc6ffd0502d3221139c1c299d013628eccbf7f36"
+    },
+    "source/export_svg.py": {
+      "bytes": 3799,
+      "sha256": "82806651459df788a1bd33597b264fde6b2535fc217c38543d753d0ed1d1a23c"
+    },
+    "source/build_geometry.py": {
+      "bytes": 3999,
+      "sha256": "2a0939b9330d7e6d1db60ecb02bea2fe19730e90c9452b04f168ae1e256829bc"
+    },
+    "source/rasterize.cjs": {
+      "bytes": 20629,
+      "sha256": "bd1b0b8f4bc6176caec70d2b49ff8447dc60c10f324159bef955548ef6d532c1"
+    },
+    "source/front-back.json": {
+      "bytes": 45763,
+      "sha256": "ba4c1ac9541b40558ee0fe009b2fc7771db3ed524cba38e92176185dfd757f81"
+    },
+    "source/profiles.json": {
+      "bytes": 52423,
+      "sha256": "d2449e0111ce97af5e9ee46b5659b59cacffd79644b56b58cabeef2f256d4c3e"
+    },
+    "../concept/approval.json": {
+      "bytes": 2231,
+      "sha256": "094f7f8c2f6b185eda9bc9c1320cd2403e8be6644ccfef9cc88d6cca219ede51"
+    },
+    "../concept/avatar-1-concept-v2.png": {
+      "bytes": 2074060,
+      "sha256": "8c0d58a07d1372d2e8c9bcdbddac6e997763a8ffd2b910be83e8ec47b69f1c92"
+    },
+    "svg/down/idle.svg": {
+      "bytes": 127476,
+      "sha256": "8c9d2d92bec2e3ac178b83d7c96569a6cb8bc9d0012c0760726176e237848642"
+    },
+    "frames/down/idle.png": {
+      "bytes": 889,
+      "sha256": "ffa1de608659fd184078bc785a329a18ad4a5c9e87ba0066449deccf829be843"
+    },
+    "svg/left/idle.svg": {
+      "bytes": 150672,
+      "sha256": "f864a6a13db1e9047b643dd8475b98512c94ddfdcc7718b402c9be09af50764e"
+    },
+    "frames/left/idle.png": {
+      "bytes": 746,
+      "sha256": "9d8a8ed1b0952abb9537962a4c163106f570c8d382a7655fb0a45cc5e13957ce"
+    },
+    "svg/right/idle.svg": {
+      "bytes": 154777,
+      "sha256": "68e4ea6d51a77040884cd7bb5ed1a8f9f5d6cc32967a9c811917732561775560"
+    },
+    "frames/right/idle.png": {
+      "bytes": 739,
+      "sha256": "5ef9eacb00c833e03a007afd9d04624e4e0bbc2a53d3b4bdd24b991a29611d27"
+    },
+    "svg/up/idle.svg": {
+      "bytes": 123360,
+      "sha256": "7ed04e55e5443ed1173888f28e0a577ef6872d8ca25f1750a5d296417d977e49"
+    },
+    "frames/up/idle.png": {
+      "bytes": 877,
+      "sha256": "e310cfa75e2f39656e58ead0f43c536e423f757d97351fcf56b58683a6e4b444"
+    }
+  }
+}

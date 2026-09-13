@@ -1,7 +1,7 @@
 {
   "version": 3,
   "avatar": "avatar-1",
-  "state": "concept-v2-approved-idle-v3-in-progress",
+  "state": "idle-v3-awaiting-user-approval",
   "directionRecorded": "2026-09-12",
   "decision": "D-059",
   "rejectedDraft": "../avatar-1-restart-2026-09-12",
@@ -35,26 +35,30 @@
     },
     {
       "id": "four-idle-source-views",
-      "status": "in-progress",
+      "status": "complete",
       "dependsOn": "user-approves-concept",
       "revision": "idle-v3",
-      "outputRoot": "idle-v3"
+      "outputRoot": "idle-v3",
+      "evidence": "idle-v3/review/source-parity.json",
+      "reopenedMasterParity": "idle-v3/review/reload-parity.json"
     },
     {
       "id": "reference-fidelity-visual-review",
-      "status": "not-started",
+      "status": "pass-for-user-review",
       "referenceMustBe": "explicitly user-approved fresh concept",
       "grantsUserApproval": false,
       "reference": "concept/avatar-1-concept-v2.png",
       "referenceSha256": "8c0d58a07d1372d2e8c9bcdbddac6e997763a8ffd2b910be83e8ec47b69f1c92",
-      "dependsOn": "four-idle-source-views"
+      "dependsOn": "four-idle-source-views",
+      "evidence": "idle-v3/review/visual-qa.json"
     },
     {
       "id": "user-approves-exact-idles",
-      "status": "pending-idle-draft",
+      "status": "pending",
       "requiresExplicitUserApproval": true,
       "decisionRecord": "idle-v3/review/user-decisions.json",
-      "blocks": "all animation"
+      "blocks": "all animation",
+      "review": "idle-v3/review/idle-approval.png"
     },
     {
       "id": "one-complete-walk-direction",
@@ -68,7 +72,8 @@
     },
     {
       "id": "source-export-and-preview-parity",
-      "status": "not-started"
+      "status": "not-started",
+      "scope": "Complete 24-pose animated sheet; separate idle-only parity already verified."
     },
     {
       "id": "user-art-handoff-approval",
@@ -127,7 +132,8 @@
     "mcpProtocolCallsVerified": true,
     "codexToolReloadRequired": false,
     "report": "setup/setup-report.json",
-    "nativeToolHandshakeVerified": true
+    "nativeToolHandshakeVerified": true,
+    "lastNativeToolRecheck": "2026-09-13"
   },
   "reference": "reference/reference-manifest.json",
   "correction": "Fresh concept art must be created and explicitly approved before Blender/SVG sprite production. The historical turnaround was not concept art.",
@@ -149,21 +155,27 @@
   ],
   "draft": {
     "id": "idle-v3",
-    "stage": "four-idle-source-views",
-    "status": "in-progress",
+    "stage": "user-approves-exact-idles",
+    "status": "awaiting-user-approval",
     "root": "idle-v3",
-    "plannedPaths": {
-      "source": "idle-v3/source",
-      "svg": "idle-v3/svg",
-      "frames": "idle-v3/frames",
-      "review": "idle-v3/review"
-    },
     "concept": "concept/avatar-1-concept-v2.png",
     "conceptSha256": "8c0d58a07d1372d2e8c9bcdbddac6e997763a8ffd2b910be83e8ec47b69f1c92",
     "userDecision": "idle-v3/review/user-decisions.json",
     "userIdleApproval": "pending",
     "animationAuthorized": false,
-    "runtimeIntegrationAuthorized": false
+    "runtimeIntegrationAuthorized": false,
+    "review": "idle-v3/review/idle-approval.png",
+    "comparison": "idle-v3/review/reference-comparison.png",
+    "technicalQa": "idle-v3/review/qa.json",
+    "visualQa": "idle-v3/review/visual-qa.json",
+    "sourceParity": "idle-v3/review/source-parity.json",
+    "reloadParity": "idle-v3/review/reload-parity.json",
+    "paths": {
+      "source": "idle-v3/source",
+      "svg": "idle-v3/svg",
+      "frames": "idle-v3/frames",
+      "review": "idle-v3/review"
+    }
   },
   "historicalToolingEvidence": {
     "status": "verified-before-concept-first-correction",

@@ -1,0 +1,1191 @@
+{
+  "down": [
+    {
+      "part": "scarf.tail.outer.outline",
+      "color": "ink",
+      "d": "M35.8 16 Q39.3 18.3 40.8 22.1 Q42.6 25.3 45.9 27.5 L44.1 29.6 L42.9 29.3 Q40.5 27.6 39.3 24.2 Q37.9 20.2 35.1 19 Z"
+    },
+    {
+      "part": "scarf.tail.outer",
+      "color": "teal",
+      "d": "M36.1 16.8 Q39.1 19.3 40.4 22.7 Q42.5 26.1 44.8 27.6 L43.6 28.6 Q40.7 26.1 39 22.6 Q37.2 19.9 35.7 19 Z"
+    },
+    {
+      "part": "scarf.tail.outer.light",
+      "color": "tealLight",
+      "d": "M36.8 17.9 Q39 20 40.1 23 Q41.8 26 44.1 27.7 L43.3 27.9 Q41.1 26.1 39.2 22.8 Z"
+    },
+    {
+      "part": "scarf.tail.inner.outline",
+      "color": "ink",
+      "d": "M35.6 17 Q39.1 19.7 39.8 23.5 Q40.7 27.1 43.2 30.1 Q45.1 32.1 45.4 35.3 L44.2 34.7 L43.5 36.1 Q42.5 33 40.7 30.4 Q38.4 27.3 37.9 23.8 L34.4 19 Z"
+    },
+    {
+      "part": "scarf.tail.inner",
+      "color": "tealDark",
+      "d": "M35.8 17.9 Q38.6 20.4 39.2 23.9 Q40.1 27.3 42.6 30.6 Q44.1 32.6 44.5 34.4 L43.9 34.8 Q42.9 32.4 41.3 30 Q39.1 27.1 38.5 23.7 L35.1 19 Z"
+    },
+    {
+      "part": "scarf.tail.inner.fold",
+      "color": "tealLight",
+      "d": "M37.1 20 Q39 22 39.2 25 Q40.1 28.1 42.2 31.1 L43.4 33.3 Q40.8 30.8 39.3 27.8 Q38.1 24.7 37.1 20 Z"
+    },
+    {
+      "part": "trousers.outline",
+      "color": "ink",
+      "d": "M27.4 30.8 Q31.8 30 36.7 31 L37.9 35.8 L37 41.5 L37.4 44.7 L36.6 48.2 L33.1 48.3 L32.7 43.7 L32 38.2 L30.9 43.5 L30.6 48.4 L26.5 48.2 L26.4 44 L27 39.6 L26.4 35.6 Z"
+    },
+    {
+      "part": "trousers.rightleg",
+      "color": "cloth",
+      "d": "M27.9 32.4 L31.7 33 L31.3 38.6 L29.7 43 L29.8 47.5 L27.1 47.5 L27.2 43.5 L27.8 39.6 L27.1 36 Z"
+    },
+    {
+      "part": "trousers.leftleg",
+      "color": "clothDeep",
+      "d": "M32.3 32.8 L35.9 32.3 L37 36.2 L36.1 41.6 L36.7 44.4 L35.9 47.6 L33.8 47.5 L33.4 42.8 L32.8 39 Z"
+    },
+    {
+      "part": "trousers.right.thighplane",
+      "color": "clothLight",
+      "d": "M27.9 34 L29.9 34.5 L29.5 38.1 L28.4 41.2 L27.8 42.4 L28.4 37.8 Z"
+    },
+    {
+      "part": "trousers.right.kneefold",
+      "color": "ink",
+      "d": "M27.1 42.9 L29.9 41.9 L30 42.5 L28.2 43.9 L29.8 44.7 L29.7 45.4 L27.4 44.3 Z"
+    },
+    {
+      "part": "trousers.right.shinlight",
+      "color": "clothLight",
+      "d": "M27.9 44.7 L28.9 45.2 L29.2 47.3 L27.8 47.3 Z"
+    },
+    {
+      "part": "trousers.left.thighplane",
+      "color": "cloth",
+      "d": "M33.5 35 L35.6 34 L35.9 37.3 L35.1 40.5 L35.5 42.6 L34.5 42 L34.1 39 Z"
+    },
+    {
+      "part": "trousers.left.kneefold",
+      "color": "clothLight",
+      "d": "M34.6 42.6 L36.3 43.3 L35.8 44.1 L34.1 44.7 L34 44 Z"
+    },
+    {
+      "part": "trousers.left.lowerfold",
+      "color": "ink",
+      "d": "M34.7 45 L36.6 44.3 L36.3 45.1 L35 45.8 L36.2 46.3 L36 46.8 L34.4 45.9 Z"
+    },
+    {
+      "part": "boot.right.outline",
+      "color": "ink",
+      "d": "M26.1 46.5 L30.9 46.6 L30.6 49.5 L30.2 52.6 L30.7 54.8 L30.1 56 L24.9 56 Q24.1 55.3 24.6 54.1 L26.1 52.7 L25.9 49 Z"
+    },
+    {
+      "part": "boot.right.shaft",
+      "color": "leatherDark",
+      "d": "M26.6 48.8 L30.1 48.9 L29.7 52.9 L28.5 54 L26 54 L26.7 51.6 Z"
+    },
+    {
+      "part": "boot.right.shaftlight",
+      "color": "leather",
+      "d": "M26.9 49.2 L28.6 49.4 L28 51 L28.9 51.8 L27.1 52.9 L26.5 52.8 L27 50.9 Z"
+    },
+    {
+      "part": "boot.right.vamp",
+      "color": "leather",
+      "d": "M26.8 52.8 L29.4 53.3 L30 54.7 L29.4 55.3 L25.2 55.3 L25.4 54.4 Z"
+    },
+    {
+      "part": "boot.right.toelight",
+      "color": "leatherLight",
+      "d": "M25.8 54.3 Q27.4 53.7 28.9 54.4 L29.2 54.8 L25.4 55 Z"
+    },
+    {
+      "part": "boot.right.sole",
+      "color": "leatherDeep",
+      "d": "M24.9 55 L30.1 55 L30 55.8 L25 55.8 Z"
+    },
+    {
+      "part": "boot.right.cuff.outline",
+      "color": "ink",
+      "d": "M25.5 46.3 Q28.2 47.1 31.1 46.3 L30.7 49.2 Q28.2 49.8 25.8 48.8 Z"
+    },
+    {
+      "part": "boot.right.cuff",
+      "color": "leather",
+      "d": "M26.1 47 Q28.1 47.7 30.4 47 L30.1 48.7 Q28 49.2 26.4 48.4 Z"
+    },
+    {
+      "part": "boot.right.cuff.edge",
+      "color": "leatherLight",
+      "d": "M26.1 46.9 Q28.3 47.5 30.6 46.8 L30.5 47.5 Q28.3 48.1 26.2 47.4 Z"
+    },
+    {
+      "part": "boot.right.wrap",
+      "color": "leatherLight",
+      "d": "M26.4 51.2 L29.9 50.3 L29.8 50.9 L26.3 51.8 Z"
+    },
+    {
+      "part": "boot.left.outline",
+      "color": "ink",
+      "d": "M33.1 46.5 L37.7 46.2 L38 49.1 L37.5 52.5 L39.2 54 L39.5 55.2 L38.8 56 L33.8 56 L33.2 55.1 L33.7 52.4 Z"
+    },
+    {
+      "part": "boot.left.shaft",
+      "color": "leatherDark",
+      "d": "M33.8 48.8 L37.2 48.8 L36.8 52.5 L38.2 54 L35 54 L34.1 52.8 Z"
+    },
+    {
+      "part": "boot.left.shaftlight",
+      "color": "leather",
+      "d": "M34.3 49.3 L35.6 49.2 L35.3 51.5 L36.4 52.4 L35.2 53.1 L34.5 52.6 Z"
+    },
+    {
+      "part": "boot.left.vamp",
+      "color": "leather",
+      "d": "M34.7 53.1 L37.2 52.9 L38.8 54.4 L38.8 55.1 L34.2 55.2 L34 54.5 Z"
+    },
+    {
+      "part": "boot.left.toelight",
+      "color": "leatherLight",
+      "d": "M35.2 54 Q36.8 53.6 38.3 54.5 L38.4 54.8 L34.7 54.7 Z"
+    },
+    {
+      "part": "boot.left.sole",
+      "color": "leatherDeep",
+      "d": "M33.9 55 L39 55 L38.7 55.8 L34.1 55.8 Z"
+    },
+    {
+      "part": "boot.left.cuff.outline",
+      "color": "ink",
+      "d": "M32.8 46.2 Q35.1 47 37.7 46 L38.1 48.7 Q35.7 49.7 33.2 49.1 Z"
+    },
+    {
+      "part": "boot.left.cuff",
+      "color": "leather",
+      "d": "M33.5 47 Q35.1 47.7 37.1 46.9 L37.5 48.3 Q35.5 49 33.8 48.5 Z"
+    },
+    {
+      "part": "boot.left.cuff.edge",
+      "color": "leatherLight",
+      "d": "M33.4 46.9 Q35.2 47.5 37.2 46.8 L37.4 47.5 Q35.4 48.2 33.5 47.5 Z"
+    },
+    {
+      "part": "boot.left.wrap",
+      "color": "leatherLight",
+      "d": "M34 50.1 L37.1 51.2 L37 51.8 L34.1 50.8 Z"
+    },
+    {
+      "part": "tunic.outline",
+      "color": "ink",
+      "d": "M27.4 16.8 Q31.9 15.6 36.4 16.9 Q38.2 18.8 37.5 23.1 L36.8 28.2 Q37.4 32.8 39 39.1 Q35.2 38 31.7 36.3 L26.8 37.2 L26 36.1 L27 31.2 L26.5 24.7 Q25.9 20.4 27.4 16.8 Z"
+    },
+    {
+      "part": "tunic.upper",
+      "color": "tealDark",
+      "d": "M27.8 17.8 Q31.8 16.9 35.8 17.7 Q37.2 19.6 36.7 23 L36 28.2 L36.8 31.1 L27.9 31.2 L27.7 27.8 L27.1 24 Q26.8 20 27.8 17.8 Z"
+    },
+    {
+      "part": "tunic.front.lightplane",
+      "color": "teal",
+      "d": "M28.4 19.2 L31.3 19.1 L31.2 24.4 L30.1 28 L31.8 30.7 L28.2 30.6 L28.5 26.7 L27.8 22.3 Z"
+    },
+    {
+      "part": "tunic.leftshadow",
+      "color": "tealDeep",
+      "d": "M34.1 18.7 L35.9 18.1 L36.7 21.3 L36.1 26.6 L36 29.7 L32.8 30.4 L34.1 25.4 Z"
+    },
+    {
+      "part": "tunic.chestfold",
+      "color": "tealLight",
+      "d": "M28.6 20.2 L30.1 20.7 L29.6 22.7 L28.9 25.6 L28.4 24.7 Z"
+    },
+    {
+      "part": "tunic.midfold",
+      "color": "teal",
+      "d": "M31.8 24 L34.5 23.2 L33.3 25.8 L35.1 28.7 L33.1 27.9 Z"
+    },
+    {
+      "part": "tunic.waistfold",
+      "color": "tealDeep",
+      "d": "M27.7 29.3 L31.1 28.6 L32.4 30.7 L28 30.8 Z"
+    },
+    {
+      "part": "tunic.skirt.left",
+      "color": "teal",
+      "d": "M32.2 31.5 L36.6 31.6 Q36.9 34.9 38.1 38.1 Q34.8 37.3 31.5 35.7 Z"
+    },
+    {
+      "part": "tunic.skirt.right",
+      "color": "tealDark",
+      "d": "M28 31.4 L31.9 31.6 L31.2 35.8 L27 36.4 Z"
+    },
+    {
+      "part": "tunic.skirt.left.fold",
+      "color": "tealDark",
+      "d": "M35.2 32.3 L36.2 32.5 Q36.5 35 37.3 37 L33.1 35.8 L34.6 35.3 Z"
+    },
+    {
+      "part": "tunic.skirt.seam",
+      "color": "tealLight",
+      "d": "M31.9 31.9 L32.4 31.9 L31.8 35.4 Q35.1 37.1 38.2 37.9 L38.4 38.3 Q34.5 37.3 31.3 35.8 Z"
+    },
+    {
+      "part": "arm.right.outline",
+      "color": "ink",
+      "d": "M27.6 17.7 Q25.6 17.1 24.7 19.3 L24.1 23.8 L23.4 28.6 L23.2 31.2 L26.1 32 L26.9 27.8 L27.7 23.3 Q28.4 19.4 27.6 17.7 Z"
+    },
+    {
+      "part": "arm.right.skin",
+      "color": "skinShade",
+      "d": "M26.9 18.4 Q25.6 18.1 25.1 20.3 L24.7 24.2 L24.1 28.8 L24 30.7 L25.5 31 L26.3 27.4 L27.1 23.1 Q27.7 20.2 26.9 18.4 Z"
+    },
+    {
+      "part": "arm.right.light",
+      "color": "skin",
+      "d": "M26.2 18.8 Q25.3 19.5 25.3 22.6 L25.8 24.8 L24.8 27.7 L24.5 29.7 L25.3 29.9 L26.2 25.8 L26.5 22.9 L26.9 20.2 Z"
+    },
+    {
+      "part": "arm.right.shoulderlight",
+      "color": "skinLight",
+      "d": "M26.4 18.8 Q25.7 19.2 25.7 20.4 L25.7 22 L26.4 21.1 L26.8 19.5 Z"
+    },
+    {
+      "part": "arm.right.elbow",
+      "color": "skinDeep",
+      "d": "M24.5 25.2 L25.6 26 L25.2 27 L24.2 27.8 Z"
+    },
+    {
+      "part": "arm.left.outline",
+      "color": "ink",
+      "d": "M36.3 17.6 Q38.3 17.3 39.2 19.5 L39.7 24.5 L40.3 28.5 L40.7 31.2 L37.8 32 L37.1 27.3 L36.2 23.1 Q35.5 19.7 36.3 17.6 Z"
+    },
+    {
+      "part": "arm.left.skin",
+      "color": "skinShade",
+      "d": "M36.9 18.3 Q38 18.2 38.5 20.3 L39 24.7 L39.7 28.8 L39.9 30.7 L38.5 31 L37.8 27 L36.9 22.9 Q36.3 20.1 36.9 18.3 Z"
+    },
+    {
+      "part": "arm.left.light",
+      "color": "skin",
+      "d": "M37.1 18.8 Q38.2 19.3 38.1 21.4 L38.6 24.3 L38.2 25.4 L37.5 23.3 L37 20.6 Z"
+    },
+    {
+      "part": "arm.left.forearmlight",
+      "color": "skin",
+      "d": "M38.4 26.4 L39 27.1 L39.5 30 L38.9 30.3 Z"
+    },
+    {
+      "part": "arm.left.elbowshadow",
+      "color": "skinDeep",
+      "d": "M38.5 24.3 L39.1 25.2 L39.3 27.3 L38.3 26 Z"
+    },
+    {
+      "part": "harness.main.outline",
+      "color": "ink",
+      "d": "M27.1 17.6 L28.6 17.1 Q30.5 21 36.9 27.9 L36.9 30.5 L35.6 29.9 Q30.8 24.3 26.8 18.7 Z"
+    },
+    {
+      "part": "harness.main",
+      "color": "leather",
+      "d": "M27.6 17.8 L28.2 17.8 Q31.1 22.4 36.3 28.2 L36.3 29.3 Q31.1 23.6 27.5 18.6 Z"
+    },
+    {
+      "part": "harness.main.edge",
+      "color": "leatherLight",
+      "d": "M27.6 17.8 L28 17.7 Q31.4 22.7 36.4 28.4 L36.1 28.8 Q30.6 22.7 27.6 17.8 Z"
+    },
+    {
+      "part": "harness.return.outline",
+      "color": "ink",
+      "d": "M27.3 18 L28.3 19.3 L27.9 24.3 L27.4 27.1 L26.2 28.2 L25.8 26.8 L26.7 23.9 Z"
+    },
+    {
+      "part": "harness.return",
+      "color": "leatherDark",
+      "d": "M27.4 19.2 L27.7 20 L27.2 24.6 L26.6 26.9 L26.5 26.6 L27 23.4 Z"
+    },
+    {
+      "part": "harness.buckle.outline",
+      "color": "ink",
+      "d": "M29.1 20.5 L30.3 21.6 L29.2 22.9 L28 21.8 Z"
+    },
+    {
+      "part": "harness.buckle.metal",
+      "color": "metal",
+      "d": "M29.1 20.9 L29.9 21.6 L29.2 22.5 L28.4 21.8 Z"
+    },
+    {
+      "part": "harness.buckle.hole",
+      "color": "leatherDeep",
+      "d": "M29.1 21.4 L29.4 21.7 L29.1 22 L28.8 21.7 Z"
+    },
+    {
+      "part": "harness.centerbuckle",
+      "color": "metal",
+      "d": "M32.5 24.1 L33.6 25.3 L32.7 26.2 L31.6 25 Z"
+    },
+    {
+      "part": "harness.centerbuckle.hole",
+      "color": "leatherDark",
+      "d": "M32.5 24.6 L33 25.2 L32.7 25.7 L32.1 25 Z"
+    },
+    {
+      "part": "belt.outline",
+      "color": "ink",
+      "d": "M27 30.3 Q32.1 29.7 37 30.4 L37.3 32.4 Q32 31.9 26.8 32.7 Z"
+    },
+    {
+      "part": "belt.leather",
+      "color": "leather",
+      "d": "M27.5 30.9 Q32 30.3 36.6 31 L36.6 31.8 Q32 31.4 27.4 32 Z"
+    },
+    {
+      "part": "belt.loweredge",
+      "color": "leatherDeep",
+      "d": "M27 32 L37 31.8 L37.2 32.3 Q32.2 32 27 32.6 Z"
+    },
+    {
+      "part": "belt.buckle",
+      "color": "metal",
+      "d": "M31.2 30.4 L33.5 30.4 L33.6 32.3 L31.1 32.3 Z"
+    },
+    {
+      "part": "belt.buckle.inset",
+      "color": "leatherDeep",
+      "d": "M31.7 30.9 L33 30.9 L33 31.9 L31.7 31.9 Z"
+    },
+    {
+      "part": "belt.buckle.glint",
+      "color": "metalLight",
+      "d": "M31.3 30.5 L33.3 30.5 L33.3 30.9 L31.3 30.9 Z"
+    },
+    {
+      "part": "pouch.right.outline",
+      "color": "ink",
+      "d": "M24.9 31.1 Q26.6 30.7 28.4 31.2 L28.2 35.9 Q26.6 37 24.5 36.1 L24.1 34.8 Z"
+    },
+    {
+      "part": "pouch.right.body",
+      "color": "leatherDark",
+      "d": "M25.2 31.9 L27.8 31.8 L27.7 35.5 Q26.4 36.3 25 35.7 L24.8 34.4 Z"
+    },
+    {
+      "part": "pouch.right.frontplane",
+      "color": "leather",
+      "d": "M25.2 33.1 L27.3 33.3 L27.2 35.4 L25.4 35.5 Z"
+    },
+    {
+      "part": "pouch.right.flap",
+      "color": "leather",
+      "d": "M24.9 31.8 L28 31.7 L27.5 33.4 L25 33.6 Z"
+    },
+    {
+      "part": "pouch.right.flapedge",
+      "color": "leatherDeep",
+      "d": "M25 33 L27.6 32.9 L27.4 33.6 L25.1 33.8 Z"
+    },
+    {
+      "part": "pouch.right.fastener",
+      "color": "metal",
+      "d": "M26 32.4 L26.8 32.4 L26.7 33.1 L26.1 33.1 Z"
+    },
+    {
+      "part": "glove.right.outline",
+      "color": "ink",
+      "d": "M23.4 29.5 L26.3 30.1 L25.9 33.6 L25.5 36.1 L24.5 37 L22.9 36 L22.5 34.9 L23 32.9 Z"
+    },
+    {
+      "part": "glove.right.bracer",
+      "color": "leatherDark",
+      "d": "M23.8 30.2 L25.6 30.6 L25.2 33.4 L23.4 33.1 Z"
+    },
+    {
+      "part": "glove.right.bracerplane",
+      "color": "leather",
+      "d": "M23.8 30.5 L24.6 30.6 L24.4 32.7 L23.5 32.7 Z"
+    },
+    {
+      "part": "glove.right.wristband",
+      "color": "leather",
+      "d": "M23.1 32.7 L25.7 33.1 L25.5 33.9 L23 33.5 Z"
+    },
+    {
+      "part": "glove.right.palm",
+      "color": "leatherDeep",
+      "d": "M23.3 33.7 L25.2 34 L25 35.4 L24.4 36.2 L23.4 35.6 L23.1 35 Z"
+    },
+    {
+      "part": "glove.right.fingers",
+      "color": "skinShade",
+      "d": "M23 35.1 L23.6 35.2 L24.1 35.8 L24.4 35.8 L24.8 35.5 L25 35.8 L24.6 36.5 L24 36.5 L23.3 35.9 Z"
+    },
+    {
+      "part": "glove.right.thumb",
+      "color": "skin",
+      "d": "M25.1 33.9 L25.5 34.5 L25.3 35.3 L24.9 35.1 Z"
+    },
+    {
+      "part": "glove.left.outline",
+      "color": "ink",
+      "d": "M37.7 30 L40.5 29.4 L41 32.8 L41.5 34.7 L41.1 36 L39.6 37 L38.4 36.4 L38.3 33.6 Z"
+    },
+    {
+      "part": "glove.left.bracer",
+      "color": "leatherDark",
+      "d": "M38.4 30.5 L40 30.1 L40.5 33.2 L38.9 33.5 Z"
+    },
+    {
+      "part": "glove.left.bracerplane",
+      "color": "leather",
+      "d": "M38.6 30.6 L39.4 30.5 L39.9 32.9 L39.1 33.1 Z"
+    },
+    {
+      "part": "glove.left.wristband",
+      "color": "leather",
+      "d": "M38.5 33 L40.8 32.5 L40.9 33.3 L38.6 33.8 Z"
+    },
+    {
+      "part": "glove.left.palm",
+      "color": "leatherDeep",
+      "d": "M38.9 33.9 L40.6 33.5 L40.9 35 L40 36.1 L39.2 36.1 L38.8 35.3 Z"
+    },
+    {
+      "part": "glove.left.fingers",
+      "color": "skinShade",
+      "d": "M39.3 35.7 L40 35.9 L40.8 35.1 L41 35.4 L40.5 36.2 L39.8 36.6 L39.2 36.4 Z"
+    },
+    {
+      "part": "glove.left.thumb",
+      "color": "skin",
+      "d": "M38.9 34 L39.2 34.7 L39 35.4 L38.6 35.1 Z"
+    },
+    {
+      "part": "neck.outline",
+      "color": "ink",
+      "d": "M29.6 12.7 L34.2 12.6 L34.6 16.3 L29.5 16.5 Z"
+    },
+    {
+      "part": "neck.skin",
+      "color": "skinShade",
+      "d": "M30.3 13.2 L33.5 13.2 L33.8 15.8 L30.2 15.8 Z"
+    },
+    {
+      "part": "neck.shadow",
+      "color": "skinDeep",
+      "d": "M30.2 13.5 L33.5 13.3 L33.5 14.8 L31.5 15.2 L30.3 14.7 Z"
+    },
+    {
+      "part": "scarf.collar.outline",
+      "color": "ink",
+      "d": "M28.5 14 Q31 14.7 34.8 13.9 L37.2 15.6 L36.4 18.3 L32.8 19.6 L28.2 18.4 L26.8 16 Z"
+    },
+    {
+      "part": "scarf.collar",
+      "color": "teal",
+      "d": "M28.8 14.7 Q31.5 15.3 34.6 14.6 L36.3 15.8 L35.7 17.7 L32.7 18.8 L28.7 17.7 L27.7 16.1 Z"
+    },
+    {
+      "part": "scarf.collar.shadow",
+      "color": "tealDeep",
+      "d": "M28 16.3 Q31.2 17.4 35.9 16.6 L35.5 17.8 L32.7 19 L28.7 17.7 Z"
+    },
+    {
+      "part": "scarf.collar.fold",
+      "color": "tealLight",
+      "d": "M28.7 14.9 Q30.8 16.2 35.5 15.4 L36 15.9 Q31.8 17 28 15.8 Z"
+    },
+    {
+      "part": "scarf.collar.lowerfold",
+      "color": "teal",
+      "d": "M29.4 17.4 L33 17.9 L35.8 16.9 L35.4 17.7 L32.8 18.5 Z"
+    },
+    {
+      "part": "scarf.collar.glint",
+      "color": "tealGlint",
+      "d": "M28.5 15.1 Q30.1 15.7 31.6 15.8 L30.7 16 L28.1 15.6 Z"
+    },
+    {
+      "part": "face.outline",
+      "color": "ink",
+      "d": "M28.4 8.5 Q31.5 7.1 35.1 8.6 L36 10.9 L35.1 13.2 L33.2 14.8 L31 14.9 L28.9 13.6 L28.1 11.5 Z"
+    },
+    {
+      "part": "face.skin",
+      "color": "skin",
+      "d": "M28.9 9.1 Q31.7 7.9 34.8 9.1 L35.3 11 L34.6 12.9 L33 14.2 L31.1 14.3 L29.4 13.1 L28.8 11.3 Z"
+    },
+    {
+      "part": "face.shadow.right",
+      "color": "skinShade",
+      "d": "M33.9 8.8 L35 9.3 L35.4 11.2 L34.6 13.1 L33 14.3 L32.3 14.3 L33.4 13.2 L34.1 11.7 Z"
+    },
+    {
+      "part": "face.cheeklight",
+      "color": "skinLight",
+      "d": "M29.1 10.8 L31.1 10.4 L31.4 12.2 L30.8 13.1 L29.5 12.7 Z"
+    },
+    {
+      "part": "ear.right",
+      "color": "skinShade",
+      "d": "M28.8 10.5 Q27.6 10 27.7 11.5 L28.7 12.5 L29.1 12 Z"
+    },
+    {
+      "part": "ear.left",
+      "color": "skinDeep",
+      "d": "M35.1 10.5 Q36.2 10.1 36.1 11.5 L35.1 12.5 L34.8 11.9 Z"
+    },
+    {
+      "part": "eye.right.light",
+      "color": "skinLight",
+      "d": "M29.2 10.7 L30.6 10.6 L30.6 11.9 L29.4 11.8 Z"
+    },
+    {
+      "part": "eye.right.pupil",
+      "color": "ink",
+      "d": "M30.02 10.95 Q30.5 10.81 30.98 10.95 L30.98 12.02 Q30.5 12.12 30.02 12.02 Z"
+    },
+    {
+      "part": "eye.left.light",
+      "color": "skinLight",
+      "d": "M32.9 10.6 L34.3 10.7 L34.1 11.8 L32.9 11.9 Z"
+    },
+    {
+      "part": "eye.left.pupil",
+      "color": "ink",
+      "d": "M33.02 10.95 Q33.5 10.81 33.98 10.95 L33.98 12.02 Q33.5 12.12 33.02 12.02 Z"
+    },
+    {
+      "part": "brow.right",
+      "color": "hairDeep",
+      "d": "M29.2 10.2 Q30 9.93 31.1 10.22 L31.05 10.64 Q30 10.39 29.2 10.61 Z"
+    },
+    {
+      "part": "brow.left",
+      "color": "hairDeep",
+      "d": "M32.8 10.2 Q33.6 9.96 34.4 10.28 L34.35 10.65 Q33.6 10.43 32.8 10.61 Z"
+    },
+    {
+      "part": "face.nose",
+      "color": "skinShade",
+      "d": "M31.6 11.7 L31.9 12.5 L32.4 12.6 L31.9 12.9 L31.4 12.5 Z"
+    },
+    {
+      "part": "face.mouth",
+      "color": "skinDeep",
+      "d": "M31.1 13.3 Q32 13.6 32.9 13.2 L32.8 13.6 L31.5 13.7 Z"
+    },
+    {
+      "part": "hair.silhouette",
+      "color": "ink",
+      "d": "M28.7 5.9 L28.2 4.7 L30.6 5.6 Q31 4.6 31.8 4 L32 5.5 L34.1 4.7 L33.5 6 L35.9 5.3 L35.2 6.9 L37.2 7.1 L36.4 8.1 L37.4 9.1 L36.1 9.4 Q36.7 11.6 35.6 13.6 L35 12.6 L35.1 11.1 L34.4 9.1 L33 9.8 L32.7 8.3 L31.4 10.3 L30.9 9.1 L29.8 10.7 L29.3 9.5 L28.7 11.1 Q28.9 12.5 27.9 13.5 L27.2 12.4 L27.5 10.6 L27.5 9.3 L26.5 9.5 L27.1 8.2 L26.4 7.7 L28 7.1 L27.3 6.1 Z"
+    },
+    {
+      "part": "hair.main",
+      "color": "hairDark",
+      "d": "M29 6.3 L29 5.5 L30.9 6.2 L31.6 4.9 L31.8 6.1 L33.1 5.6 L32.8 6.6 L35 6 L34.5 7.2 L36.3 7.5 L35.8 8.1 L36.5 8.8 L35.5 9.2 L35.8 10.1 L34.6 8.5 L32.7 9.1 L32.5 7.5 L31.3 9.5 L30.7 8.5 L29.9 9.8 L29.3 8.7 L28.2 10.5 L27.9 9.9 L28.1 8.7 L27.4 8.8 L27.9 7.7 L27.2 7.6 L28.7 7.3 L28.1 6.5 Z"
+    },
+    {
+      "part": "hair.crown",
+      "color": "hair",
+      "d": "M29.1 6.3 Q31.6 5.3 33.5 6 L35.2 6.1 Q34.3 7.4 32.6 7.7 Q30.6 7.4 28.5 8.9 L28.1 8.3 Z"
+    },
+    {
+      "part": "hair.fringe.right",
+      "color": "hair",
+      "d": "M31.8 6.5 Q29.5 7.4 28.1 10.8 L28.5 9.1 L27.9 9.6 Q28.1 7.7 31.8 6.5 Z"
+    },
+    {
+      "part": "hair.fringe.center",
+      "color": "hairLight",
+      "d": "M32 6.1 Q30.1 7.6 29.9 9.9 L30.6 8.9 L31.7 7.6 L31.3 9.5 L32.5 7.6 L33.1 6.1 Z"
+    },
+    {
+      "part": "hair.fringe.left",
+      "color": "hair",
+      "d": "M32.6 6.7 Q34.6 7.4 35.8 9.7 L34.6 8.5 L33 9.1 L33.8 7.9 Z"
+    },
+    {
+      "part": "hair.lock.left",
+      "color": "hairLight",
+      "d": "M33.2 6.2 L35.2 5.9 L34.4 7.1 L36.2 7.6 L34.8 7.9 L33.8 7.3 Z"
+    },
+    {
+      "part": "hair.lock.right",
+      "color": "hairLight",
+      "d": "M28.8 6.5 L30.3 6.9 L28.8 7.7 L27.5 7.8 L28.4 7.1 Z"
+    },
+    {
+      "part": "hair.crown.glint",
+      "color": "hairGlint",
+      "d": "M31.1 5.8 L31.6 5.4 L31.4 6.5 L30.6 7.1 L30.2 7.2 Z"
+    },
+    {
+      "part": "hair.center.glint",
+      "color": "hairGlint",
+      "d": "M32.1 6.5 L32.3 7.1 L31.5 8.3 L31.7 7.4 Z"
+    },
+    {
+      "part": "hair.rightdark",
+      "color": "hairDeep",
+      "d": "M27.7 8.4 L28.2 8.4 L28.1 10.6 L28.2 12.1 L27.8 12.7 L27.6 11.7 Z"
+    },
+    {
+      "part": "hair.leftdark",
+      "color": "hairDeep",
+      "d": "M35.4 8.5 L36.1 9.3 L35.9 11.6 L35.6 12.8 L35.3 12 L35.4 10.2 L34.9 9 Z"
+    }
+  ],
+  "up": [
+    {
+      "part": "scarf.tail.outer.outline",
+      "color": "ink",
+      "d": "M28.2 16 Q24.6 18.9 23.1 22.5 Q21.1 25.6 18.5 28 L20.3 30 L21.3 29.5 Q23.5 27 25 23.8 Q26.3 20.3 29 18.9 Z"
+    },
+    {
+      "part": "scarf.tail.outer",
+      "color": "teal",
+      "d": "M28 16.9 Q25 19.1 23.6 22.9 Q21.9 25.8 19.5 28 L20.6 29.1 Q23.1 26.4 24.5 23.4 Q26.2 20.5 28.4 18.6 Z"
+    },
+    {
+      "part": "scarf.tail.outer.light",
+      "color": "tealLight",
+      "d": "M27.3 17.8 Q24.9 20.1 23.8 23.2 Q22.1 26.6 20.4 28 L20.5 28.6 Q23 26.3 24.6 22.9 Z"
+    },
+    {
+      "part": "scarf.tail.inner.outline",
+      "color": "ink",
+      "d": "M28.7 17 Q25.1 19.8 24.4 23.6 Q23.6 27.2 21.1 30.4 Q19.4 32.6 18.9 35.7 L20 35 L20.8 36.4 Q21.7 33.2 23.4 30.7 Q25.6 27.7 26.2 23.8 L29.9 19 Z"
+    },
+    {
+      "part": "scarf.tail.inner",
+      "color": "tealDark",
+      "d": "M28.2 18 Q25.6 20.6 25 23.9 Q24.2 27.6 21.7 30.8 Q20.3 32.8 19.8 34.9 L20.4 35.1 Q21.3 32.8 22.9 30.3 Q25 27.3 25.6 23.5 L29 18.9 Z"
+    },
+    {
+      "part": "scarf.tail.inner.light",
+      "color": "tealLight",
+      "d": "M26.9 20.1 Q25.1 22.2 24.9 25.1 Q24 28.4 22.1 31.4 L20.9 33.7 Q23.5 31 24.9 28 Q26.1 24.8 26.9 20.1 Z"
+    },
+    {
+      "part": "trousers.outline",
+      "color": "ink",
+      "d": "M27.3 31 L36.7 31 L37.8 35.5 L37 41.6 L37.5 44.2 L37 48.4 L33.2 48.4 L32.8 43.8 L32 38.2 L31.2 43.8 L30.7 48.4 L26.6 48.4 L26.5 44.2 L27.1 40 L26.2 35.4 Z"
+    },
+    {
+      "part": "trousers.leftleg",
+      "color": "cloth",
+      "d": "M27.8 32.5 L31.4 33 L31.1 38.3 L30.1 43.9 L30.1 47.7 L27.2 47.7 L27.2 44 L27.8 40 L27 35.4 Z"
+    },
+    {
+      "part": "trousers.rightleg",
+      "color": "clothDeep",
+      "d": "M32.5 33 L36.1 32.5 L37 35.6 L36.2 41.5 L36.8 44.2 L36.3 47.7 L33.9 47.7 L33.5 43.8 L32.9 38.1 Z"
+    },
+    {
+      "part": "trousers.left.light",
+      "color": "clothLight",
+      "d": "M27.9 35.4 L29.2 34.8 L29.6 38.6 L28.5 41.9 L27.8 43.1 L28.6 38.5 Z"
+    },
+    {
+      "part": "trousers.left.kneefold",
+      "color": "ink",
+      "d": "M27.1 42.5 L30.4 43.2 L30.2 43.8 L28.2 43.6 L29.9 44.7 L29.7 45.3 L27.2 43.8 Z"
+    },
+    {
+      "part": "trousers.left.calf",
+      "color": "clothLight",
+      "d": "M27.9 44.9 L29.2 45.4 L29.5 47.5 L27.8 47.5 Z"
+    },
+    {
+      "part": "trousers.right.light",
+      "color": "cloth",
+      "d": "M33.7 34.9 L35.5 34.4 L36.2 36.2 L35.3 40.1 L35.6 42.6 L34.1 41.6 Z"
+    },
+    {
+      "part": "trousers.right.kneefold",
+      "color": "clothLight",
+      "d": "M34.4 42.2 L36.7 43.3 L36.4 44 L34.4 43.1 Z"
+    },
+    {
+      "part": "trousers.right.calffold",
+      "color": "ink",
+      "d": "M34 44.7 L36.6 44.6 L35.5 45.5 L36.5 46.6 L36.1 47 L34.5 45.7 Z"
+    },
+    {
+      "part": "boot.left.outline",
+      "color": "ink",
+      "d": "M26 46.5 L31 46.5 L30.7 50.1 L30.6 53.3 L30.8 55.1 L30 56 L25.5 56 L24.6 55.4 L25.1 54.1 L26 52.9 L25.6 49 Z"
+    },
+    {
+      "part": "boot.left.shaft",
+      "color": "leatherDark",
+      "d": "M26.6 48.9 L30.1 48.9 L30 53.3 L29.3 54.4 L26.1 54.4 L26.7 51.9 Z"
+    },
+    {
+      "part": "boot.left.shaftplane",
+      "color": "leather",
+      "d": "M26.8 49.4 L28.2 49.4 L28.4 52.9 L27.6 54 L26.4 53.7 L27.1 51.7 Z"
+    },
+    {
+      "part": "boot.left.heelseam",
+      "color": "leatherDeep",
+      "d": "M28.5 49.7 L29.1 49.8 L28.9 54.6 L28.3 54.6 Z"
+    },
+    {
+      "part": "boot.left.heel",
+      "color": "leather",
+      "d": "M26 53.8 Q28.1 53.2 30 54 L30.1 55.1 L25.7 55.2 L25.3 54.8 Z"
+    },
+    {
+      "part": "boot.left.heel.light",
+      "color": "leatherLight",
+      "d": "M26.3 54 L28 54 L28.2 54.7 L25.9 54.8 Z"
+    },
+    {
+      "part": "boot.left.sole",
+      "color": "leatherDeep",
+      "d": "M25.4 55 L30.2 55 L29.9 55.8 L25.7 55.8 Z"
+    },
+    {
+      "part": "boot.left.cuff.outline",
+      "color": "ink",
+      "d": "M25.6 46.4 Q28.2 47 31.2 46.2 L30.8 49.2 Q28.2 49.8 25.7 48.7 Z"
+    },
+    {
+      "part": "boot.left.cuff",
+      "color": "leather",
+      "d": "M26.2 47.1 Q28.3 47.8 30.5 47 L30.2 48.6 Q28.1 49 26.3 48.1 Z"
+    },
+    {
+      "part": "boot.left.cuff.light",
+      "color": "leatherLight",
+      "d": "M26.1 46.9 Q28.5 47.4 30.6 46.8 L30.5 47.5 Q28.4 48.1 26.2 47.4 Z"
+    },
+    {
+      "part": "boot.left.anklewrap",
+      "color": "leatherLight",
+      "d": "M26.4 51.8 L29.9 52.4 L29.9 53 L26.3 52.4 Z"
+    },
+    {
+      "part": "boot.right.outline",
+      "color": "ink",
+      "d": "M33.1 46.4 L37.7 46.3 L38 49.4 L37.5 52.9 L38.7 54 L39.1 55.4 L38.4 56 L33.8 56 L33.3 55.1 L33.7 52.8 Z"
+    },
+    {
+      "part": "boot.right.shaft",
+      "color": "leatherDark",
+      "d": "M33.8 48.9 L37.1 48.9 L36.9 52.9 L38 54.4 L34.3 54.4 L34.3 51.9 Z"
+    },
+    {
+      "part": "boot.right.shaftplane",
+      "color": "leather",
+      "d": "M34.2 49.3 L35.6 49.4 L35.4 52.4 L36.4 53.9 L34.7 53.8 L34.5 51.6 Z"
+    },
+    {
+      "part": "boot.right.heelseam",
+      "color": "leatherDeep",
+      "d": "M36 49.5 L36.6 49.5 L36.4 54.7 L35.8 54.7 Z"
+    },
+    {
+      "part": "boot.right.heel",
+      "color": "leather",
+      "d": "M34.3 53.8 Q36.3 53.2 37.8 54 L38.3 54.9 L38.1 55.2 L34.2 55.2 Z"
+    },
+    {
+      "part": "boot.right.heel.light",
+      "color": "leatherLight",
+      "d": "M34.5 54 L36.5 54 L36.9 54.6 L34.5 54.8 Z"
+    },
+    {
+      "part": "boot.right.sole",
+      "color": "leatherDeep",
+      "d": "M33.9 55 L38.6 55 L38.2 55.8 L34.1 55.8 Z"
+    },
+    {
+      "part": "boot.right.cuff.outline",
+      "color": "ink",
+      "d": "M32.8 46.3 Q35.2 47.1 37.8 46.2 L38.1 48.7 Q35.7 49.7 33.3 49.2 Z"
+    },
+    {
+      "part": "boot.right.cuff",
+      "color": "leather",
+      "d": "M33.5 47.1 Q35.2 47.7 37.1 46.9 L37.4 48.3 Q35.5 49.1 33.8 48.5 Z"
+    },
+    {
+      "part": "boot.right.cuff.light",
+      "color": "leatherLight",
+      "d": "M33.4 46.9 Q35.5 47.6 37.3 46.8 L37.5 47.5 Q35.4 48.3 33.5 47.5 Z"
+    },
+    {
+      "part": "boot.right.anklewrap",
+      "color": "leatherLight",
+      "d": "M34 52.2 L37.1 51.5 L37.2 52.1 L34.1 52.8 Z"
+    },
+    {
+      "part": "tunic.outline",
+      "color": "ink",
+      "d": "M27.5 16.9 Q31.9 15.8 36.5 16.8 Q38.4 19 37.4 24 L36.9 29 L37.8 33.3 L38.4 37.1 L33.3 36.3 Q29.9 38.4 25.7 39.2 L26.9 32 L26.5 26.2 Q25.7 20 27.5 16.9 Z"
+    },
+    {
+      "part": "tunic.back",
+      "color": "tealDark",
+      "d": "M28.2 17.6 Q32.2 16.7 35.9 17.6 Q37.4 19.7 36.6 23.8 L36.1 28.9 L36.8 31.4 L27.8 31.3 L27.3 26.1 Q26.7 20.6 28.2 17.6 Z"
+    },
+    {
+      "part": "tunic.leftplane",
+      "color": "teal",
+      "d": "M28.1 18.6 L30.9 18.5 L31.4 23.6 L30.4 27.1 L31.7 30.9 L28.1 30.6 L28 26.2 L27.4 21.5 Z"
+    },
+    {
+      "part": "tunic.centerseam",
+      "color": "tealDeep",
+      "d": "M31.8 18.4 L32.4 18.4 L32.1 30.8 L31.7 30.7 Z"
+    },
+    {
+      "part": "tunic.rightplane",
+      "color": "tealDeep",
+      "d": "M34.4 18.8 L36.1 18 L36.9 20.7 L36.1 27.1 L36.2 30.5 L33.5 30.9 L34.4 25 Z"
+    },
+    {
+      "part": "tunic.back.shoulderlight",
+      "color": "tealLight",
+      "d": "M28.2 18.9 L30.5 19 L30.7 19.6 L28.1 19.5 Z"
+    },
+    {
+      "part": "tunic.back.fold",
+      "color": "teal",
+      "d": "M32.7 25.2 L34.7 24 L33.8 27.7 L35.5 29.9 L33.2 29.1 Z"
+    },
+    {
+      "part": "tunic.hem.left",
+      "color": "teal",
+      "d": "M27.7 31.5 L32.8 31.8 L32.6 35.7 Q29.6 37.7 26.5 38.2 Z"
+    },
+    {
+      "part": "tunic.hem.right",
+      "color": "tealDark",
+      "d": "M33.1 31.6 L36.6 31.7 L37.5 36.1 L33.3 35.7 L31.6 36.5 Z"
+    },
+    {
+      "part": "tunic.hem.seam",
+      "color": "tealLight",
+      "d": "M32.5 32.1 L33 32.1 L32.9 36.1 Q29.9 38 26.3 38.7 L26.4 38.2 Q29.6 37.5 32.4 35.8 Z"
+    },
+    {
+      "part": "tunic.hem.rightfold",
+      "color": "tealDeep",
+      "d": "M34.4 32.3 L35.9 32.7 L36.8 35.4 L33.7 35.2 Z"
+    },
+    {
+      "part": "arm.left.outline",
+      "color": "ink",
+      "d": "M27.5 17.7 Q25.8 17.1 24.8 19.4 L24.1 24 L23.5 28.6 L23.3 31 L26.3 31.8 L26.9 27.6 L27.5 24 Q28.5 20 27.5 17.7 Z"
+    },
+    {
+      "part": "arm.left.skin",
+      "color": "skinShade",
+      "d": "M26.9 18.5 Q25.7 18.3 25.2 20.2 L24.8 24.1 L24.2 28.7 L24.1 30.5 L25.6 31 L26.2 27.4 L26.9 23.7 Q27.7 20.1 26.9 18.5 Z"
+    },
+    {
+      "part": "arm.left.light",
+      "color": "skin",
+      "d": "M26.2 19 Q25.6 19.5 25.5 22.1 L25.9 24.5 L25.1 27.2 L24.7 29.8 L25.4 30 L26.2 25.9 L26.7 22.8 L26.8 20.3 Z"
+    },
+    {
+      "part": "arm.left.shoulderlight",
+      "color": "skinLight",
+      "d": "M26.3 18.9 Q25.6 19.9 25.8 21.2 L26.4 21.7 L26.8 19.9 Z"
+    },
+    {
+      "part": "arm.left.elbow",
+      "color": "skinDeep",
+      "d": "M24.7 25.6 L25.5 25.8 L25.3 27.1 L24.3 27.6 Z"
+    },
+    {
+      "part": "arm.right.outline",
+      "color": "ink",
+      "d": "M36.4 17.6 Q38.3 17.3 39.2 19.4 L39.9 24.3 L40.4 28.6 L40.6 31.1 L37.8 31.8 L37.3 27.6 L36.4 23.5 Q35.6 20.1 36.4 17.6 Z"
+    },
+    {
+      "part": "arm.right.skin",
+      "color": "skinShade",
+      "d": "M37 18.4 Q38.1 18.2 38.5 20.2 L39.2 24.4 L39.8 28.9 L39.9 30.6 L38.5 31 L37.9 27.2 L37.1 23.3 Q36.4 20.4 37 18.4 Z"
+    },
+    {
+      "part": "arm.right.light",
+      "color": "skin",
+      "d": "M37.1 18.9 Q38.1 19.6 38 21.2 L38.7 24.3 L38.3 25.3 L37.5 23.4 L37 21 Z"
+    },
+    {
+      "part": "arm.right.forearmlight",
+      "color": "skin",
+      "d": "M38.6 26.5 L39.1 27.3 L39.5 30 L38.9 30.3 Z"
+    },
+    {
+      "part": "arm.right.elbow",
+      "color": "skinDeep",
+      "d": "M38.6 24.8 L39.4 26.5 L39.5 27.7 L38.5 26.4 Z"
+    },
+    {
+      "part": "harness.crossA.outline",
+      "color": "ink",
+      "d": "M27.6 17.4 L29 17.1 Q30.7 21.6 36.8 26.2 L36.7 28 L35.3 27.7 Q29.9 23.7 27 18.8 Z"
+    },
+    {
+      "part": "harness.crossA",
+      "color": "leather",
+      "d": "M28 17.8 L28.6 17.7 Q31 22.1 36.1 26.6 L36.1 27.1 Q30.1 23.1 27.8 18.6 Z"
+    },
+    {
+      "part": "harness.crossA.light",
+      "color": "leatherLight",
+      "d": "M28.1 18 L28.6 17.9 Q31.2 22.4 36.2 26.7 L35.9 27 Q30.7 22.6 28.1 18 Z"
+    },
+    {
+      "part": "harness.crossB.outline",
+      "color": "ink",
+      "d": "M35.3 17.2 L36.8 17.7 Q35.7 22.2 27.4 28.9 L26.8 27.1 Q31.9 23.1 35.3 17.2 Z"
+    },
+    {
+      "part": "harness.crossB",
+      "color": "leatherDark",
+      "d": "M35.8 17.8 L36.2 18.2 Q34.6 22.3 27.8 28 L27.6 27.4 Q32.7 23.2 35.8 17.8 Z"
+    },
+    {
+      "part": "harness.crossB.light",
+      "color": "leather",
+      "d": "M35.8 18 L36.1 18.3 Q33.7 23.1 28 27.6 L27.9 27.2 Q32.9 23 35.8 18 Z"
+    },
+    {
+      "part": "harness.back.connector",
+      "color": "leatherLight",
+      "d": "M31.5 22.1 L33.8 23.7 L32.1 25.7 L30.3 24 Z"
+    },
+    {
+      "part": "harness.back.connector.inset",
+      "color": "leatherDark",
+      "d": "M31.6 22.8 L33 23.8 L32.1 24.9 L31 24 Z"
+    },
+    {
+      "part": "harness.back.pin",
+      "color": "metal",
+      "d": "M31.8 23.4 L32.4 23.8 L32 24.4 L31.5 24 Z"
+    },
+    {
+      "part": "belt.outline",
+      "color": "ink",
+      "d": "M27 30.3 Q32.4 29.7 37.1 30.4 L37.3 32.5 Q32 31.8 26.8 32.5 Z"
+    },
+    {
+      "part": "belt.leather",
+      "color": "leather",
+      "d": "M27.6 30.9 Q32.2 30.3 36.5 31 L36.6 31.9 Q32.1 31.4 27.4 31.9 Z"
+    },
+    {
+      "part": "belt.topedge",
+      "color": "leatherLight",
+      "d": "M27.5 30.8 Q32.1 30.1 36.6 30.8 L36.6 31.1 Q32.1 30.6 27.4 31.2 Z"
+    },
+    {
+      "part": "belt.rearloops",
+      "color": "leatherDeep",
+      "d": "M29 30.5 L29.8 30.4 L29.8 32 L29 32 Z M34.3 30.5 L35.1 30.5 L35.2 32 L34.4 31.9 Z"
+    },
+    {
+      "part": "pouch.right.outline",
+      "color": "ink",
+      "d": "M36.1 31 Q37.8 30.7 39.6 31.4 L40 34.7 L39.3 36.4 Q37.5 36.9 35.9 35.9 Z"
+    },
+    {
+      "part": "pouch.right.body",
+      "color": "leatherDark",
+      "d": "M36.7 31.7 L39 31.9 L39.3 34.6 L38.9 35.8 L36.5 35.4 Z"
+    },
+    {
+      "part": "pouch.right.frontplane",
+      "color": "leather",
+      "d": "M37.1 33.2 L38.9 33.4 L38.8 35.4 L36.9 35.2 Z"
+    },
+    {
+      "part": "pouch.right.flap",
+      "color": "leather",
+      "d": "M36.5 31.5 L39.2 31.9 L39.2 33.6 L36.5 33.4 Z"
+    },
+    {
+      "part": "pouch.right.flapedge",
+      "color": "leatherDeep",
+      "d": "M36.5 33 L39.2 33.1 L39.1 33.8 L36.6 33.6 Z"
+    },
+    {
+      "part": "pouch.right.fastener",
+      "color": "metal",
+      "d": "M37.7 32.3 L38.4 32.3 L38.5 33 L37.8 33 Z"
+    },
+    {
+      "part": "glove.left.outline",
+      "color": "ink",
+      "d": "M23.4 29.5 L26.3 30 L25.9 33.8 L25.6 36.2 L24.6 37 L23 36.2 L22.5 35 L23 32.8 Z"
+    },
+    {
+      "part": "glove.left.bracer",
+      "color": "leatherDark",
+      "d": "M23.9 30.2 L25.6 30.6 L25.2 33.4 L23.4 33 Z"
+    },
+    {
+      "part": "glove.left.bracerlight",
+      "color": "leather",
+      "d": "M23.8 30.5 L24.6 30.6 L24.3 32.7 L23.6 32.6 Z"
+    },
+    {
+      "part": "glove.left.band",
+      "color": "leather",
+      "d": "M23.1 32.8 L25.7 33.1 L25.5 33.9 L23 33.5 Z"
+    },
+    {
+      "part": "glove.left.hand",
+      "color": "leatherDeep",
+      "d": "M23.4 33.8 L25.2 34 L25 35.6 L24.3 36.4 L23.4 35.8 L23.1 35 Z"
+    },
+    {
+      "part": "glove.left.fingers",
+      "color": "skinShade",
+      "d": "M23.1 35.3 L23.7 35.6 L24.4 36 L24.8 35.6 L25 35.9 L24.6 36.6 L24.1 36.6 L23.3 36 Z"
+    },
+    {
+      "part": "glove.right.outline",
+      "color": "ink",
+      "d": "M37.8 30 L40.6 29.5 L41 32.7 L41.5 35 L41.1 36.3 L39.6 37 L38.5 36.3 L38.2 33.5 Z"
+    },
+    {
+      "part": "glove.right.bracer",
+      "color": "leatherDark",
+      "d": "M38.5 30.6 L40 30.2 L40.5 33 L38.9 33.4 Z"
+    },
+    {
+      "part": "glove.right.bracerlight",
+      "color": "leather",
+      "d": "M38.6 30.7 L39.4 30.5 L39.9 32.9 L39.1 33.2 Z"
+    },
+    {
+      "part": "glove.right.band",
+      "color": "leather",
+      "d": "M38.5 33.1 L40.8 32.6 L40.9 33.4 L38.6 33.8 Z"
+    },
+    {
+      "part": "glove.right.hand",
+      "color": "leatherDeep",
+      "d": "M38.9 33.9 L40.6 33.6 L40.9 35.2 L40 36.2 L39.2 36.2 L38.8 35.2 Z"
+    },
+    {
+      "part": "glove.right.fingers",
+      "color": "skinShade",
+      "d": "M39.3 35.8 L40 36 L40.9 35.2 L41 35.6 L40.4 36.3 L39.8 36.7 L39.2 36.4 Z"
+    },
+    {
+      "part": "neck.outline",
+      "color": "ink",
+      "d": "M29.8 12.8 L34.2 12.8 L34.6 16.2 L29.4 16.1 Z"
+    },
+    {
+      "part": "neck.skin",
+      "color": "skinShade",
+      "d": "M30.4 13.2 L33.6 13.2 L33.9 15.6 L30.1 15.6 Z"
+    },
+    {
+      "part": "neck.shadow",
+      "color": "skinDeep",
+      "d": "M30.3 13.4 L33.5 13.4 L33.8 14.5 L30.1 14.7 Z"
+    },
+    {
+      "part": "scarf.collar.outline",
+      "color": "ink",
+      "d": "M28.4 13.9 Q32 14.7 35.8 14 L37.4 15.8 L36.1 18.1 L32.3 19.2 L28.3 18.1 L26.9 15.6 Z"
+    },
+    {
+      "part": "scarf.collar",
+      "color": "teal",
+      "d": "M28.8 14.6 Q32 15.5 35.4 14.7 L36.5 15.9 L35.6 17.5 L32.2 18.4 L28.9 17.4 L27.8 15.8 Z"
+    },
+    {
+      "part": "scarf.collar.shadow",
+      "color": "tealDeep",
+      "d": "M28.1 16.1 Q31.7 17.2 36.2 16.4 L35.4 17.6 L32.3 18.6 L28.9 17.6 Z"
+    },
+    {
+      "part": "scarf.collar.fold",
+      "color": "tealLight",
+      "d": "M28.8 14.9 Q32.5 16.2 35.8 15.2 L36.2 15.8 Q31.9 16.8 28.3 15.7 Z"
+    },
+    {
+      "part": "scarf.collar.lowerfold",
+      "color": "teal",
+      "d": "M29.1 17 L32.2 17.7 L35.5 16.9 L34.9 17.6 L32.2 18.1 Z"
+    },
+    {
+      "part": "scarf.collar.glint",
+      "color": "tealGlint",
+      "d": "M28.7 15 L30.4 15.5 L31.1 15.8 L29.4 15.7 L28.5 15.4 Z"
+    },
+    {
+      "part": "hair.silhouette",
+      "color": "ink",
+      "d": "M28.8 5.9 L28.3 4.8 L30.8 5.5 L31.8 4 L32.2 5.5 L34.1 4.9 L33.5 6.1 L35.8 5.6 L35.2 7 L37.2 7.1 L36.4 8.3 L37.3 9.1 L36.2 9.6 L36.3 11.6 L35.4 11.3 L35.2 13.8 L34.4 13.1 L33.5 14.7 L32.5 13.7 L31.4 14.6 L30.6 13.4 L29.4 13.9 L28.8 12.7 L27.7 13.5 L27.8 11.7 L27 11.3 L27.4 9.6 L26.6 8.1 L28 7.3 L27.4 6.2 Z"
+    },
+    {
+      "part": "hair.main",
+      "color": "hairDark",
+      "d": "M29.1 6.4 L29.1 5.7 L31 6.2 L31.6 5 L31.9 6.2 L33.2 5.8 L32.9 6.6 L34.9 6.2 L34.5 7.4 L36.3 7.5 L35.8 8.4 L36.3 8.9 L35.6 9.4 L35.5 10.5 L34.7 10.3 L34.4 12.1 L33.6 11.9 L33 13.2 L32.1 12.6 L31.4 13.2 L30.8 12.1 L29.7 12.4 L29.2 11 L28.3 11.2 L28.6 10 L27.8 9.7 L28.2 8.7 L27.5 8.2 L28.8 7.5 L28.2 6.7 Z"
+    },
+    {
+      "part": "hair.crown",
+      "color": "hair",
+      "d": "M29.1 6.7 Q31.7 5.4 34.1 6.9 L35.7 7.6 L34.1 8.4 L32 7.4 L29.5 8.8 L27.9 8.5 Z"
+    },
+    {
+      "part": "hair.rear.leftlock",
+      "color": "hair",
+      "d": "M29.8 7.3 Q28.5 9.4 29.5 12.8 L28.6 11.8 L28.3 12.6 L28.3 10.1 Z"
+    },
+    {
+      "part": "hair.rear.centerlock",
+      "color": "hairLight",
+      "d": "M31.3 7.1 Q30.3 9.5 31.3 13.5 L30.2 12.2 L29.9 10 L30.6 7.6 Z"
+    },
+    {
+      "part": "hair.rear.centerdark",
+      "color": "hairDeep",
+      "d": "M31.9 7.6 Q31.5 11.2 32.6 13.8 L33 13.1 L32.8 10.3 Z"
+    },
+    {
+      "part": "hair.rear.rightlock",
+      "color": "hair",
+      "d": "M33 7.8 Q34.9 9.8 34.5 12.9 L33.8 12.2 L33.4 13.5 L33.4 10.3 L32.7 9.1 Z"
+    },
+    {
+      "part": "hair.rear.outerlock",
+      "color": "hairLight",
+      "d": "M34 7.3 L35.9 7.6 L34.8 8.6 L35.4 9.5 L34.7 9.8 L33.6 8.2 Z"
+    },
+    {
+      "part": "hair.rear.leftglint",
+      "color": "hairLight",
+      "d": "M29 6.8 L30.4 7.3 L28.7 8.4 L27.8 8.5 L28.7 7.6 Z"
+    },
+    {
+      "part": "hair.crown.glint",
+      "color": "hairGlint",
+      "d": "M31.2 5.8 L31.7 5.3 L31.6 6.5 L30.4 7.4 L30 7.5 Z"
+    },
+    {
+      "part": "hair.rear.lightstreak",
+      "color": "hairGlint",
+      "d": "M31 7.5 L31 8.3 L30.6 10.2 L30.4 9.3 Z"
+    },
+    {
+      "part": "hair.nape.shadow",
+      "color": "hairDeep",
+      "d": "M29.6 11.4 L30.4 11.9 L31.4 13.9 L30.7 13 L29.7 13.4 Z M33.4 11.7 L34.8 11.4 L34.6 13 L33.6 14.1 Z"
+    }
+  ]
+}

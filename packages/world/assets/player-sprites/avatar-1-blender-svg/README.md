@@ -1,6 +1,6 @@
 # Avatar 1 — concept approval, Blender MCP and SVG workflow
 
-**Active stage: idle-v3 production from the approved fresh concept-v2.**
+**Active stage: idle-v3 is ready for James’s separate idle approval.**
 James approved the exact concept with “Yes good concept move forward”. This
 authorizes four Blender/SVG idle facings and internal likeness QA. Final sprite
 cells, animation and game integration are not approved by the concept decision.
@@ -17,9 +17,11 @@ Internal review corrected scarf and buckle continuity before that approval.
 
 The new sprite revision is **idle-v3**, with separate `idle-v3/source/`,
 `idle-v3/svg/`, `idle-v3/frames/` and `idle-v3/review/` output directories.
-These are the active production destinations, not claims of completed assets.
-Compare every new idle against concept-v2, then obtain James's separate idle
-approval before animation. Do not overwrite or promote historical idle-v2.
+The [exact idle review](idle-v3/review/idle-approval.png),
+[concept comparison](idle-v3/review/reference-comparison.png) and
+[editable sources](idle-v3/README.md) are ready. Internal visual QA and
+saved-master export parity pass. James’s separate idle approval is pending
+before animation. Do not overwrite or promote historical idle-v2.
 
 `reference/approved-concept-turnaround.png` is a historical sprite turnaround,
 not an approved concept. Its misleading old filename is retained to preserve
@@ -41,13 +43,13 @@ concepts; their hashes and technical results remain historical evidence only.
 2. **Explicit concept approval — complete.** James approved exact concept-v2
    with “Yes good concept move forward”; `concept/approval.json` records the
    reviewed hash. A later concept redesign requires renewed concept approval.
-3. **Build the four Blender/SVG idles — in progress.** In `idle-v3/`, with
+3. **Build the four Blender/SVG idles — complete for review.** In `idle-v3/`, with
    approved concept-v2 as the
    visual authority, author layered Grease Pencil geometry through Blender
    MCP, save the editable `.blend` and export real vector SVGs. Derive the
    existing 64×64 PNG game cells from those SVGs. Do not silently reuse the
    superseded idle-v2 construction or treat its parity evidence as new work.
-4. **Perform internal likeness QA.** Compare the actual exported cells with
+4. **Perform internal likeness QA — passed for user review.** Compare the actual exported cells with
    the approved concept at equal figure height and inspect 1×/2× game-scale
    readability. Check facial features, hair, proportions, silhouette,
    clothing and equipment in all four directions. Iterate internally until

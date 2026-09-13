@@ -1,0 +1,101 @@
+{
+  "maximumColorsPerFrame": 24,
+  "colors": [
+    {
+      "name": "ink",
+      "hex": "#2B2325"
+    },
+    {
+      "name": "hairDeep",
+      "hex": "#422C25"
+    },
+    {
+      "name": "hairDark",
+      "hex": "#633B28"
+    },
+    {
+      "name": "hair",
+      "hex": "#89502E"
+    },
+    {
+      "name": "hairLight",
+      "hex": "#B47039"
+    },
+    {
+      "name": "hairGlint",
+      "hex": "#C89255"
+    },
+    {
+      "name": "skinDeep",
+      "hex": "#B47B55"
+    },
+    {
+      "name": "skinShade",
+      "hex": "#D29B70"
+    },
+    {
+      "name": "skin",
+      "hex": "#EBBA87"
+    },
+    {
+      "name": "skinLight",
+      "hex": "#F4D09B"
+    },
+    {
+      "name": "tealDeep",
+      "hex": "#193C43"
+    },
+    {
+      "name": "tealDark",
+      "hex": "#22515A"
+    },
+    {
+      "name": "teal",
+      "hex": "#2D6C75"
+    },
+    {
+      "name": "tealLight",
+      "hex": "#3E8690"
+    },
+    {
+      "name": "tealGlint",
+      "hex": "#62A5AD"
+    },
+    {
+      "name": "leatherDeep",
+      "hex": "#49392C"
+    },
+    {
+      "name": "leatherDark",
+      "hex": "#684B34"
+    },
+    {
+      "name": "leather",
+      "hex": "#89623F"
+    },
+    {
+      "name": "leatherLight",
+      "hex": "#B0814A"
+    },
+    {
+      "name": "clothDeep",
+      "hex": "#303132"
+    },
+    {
+      "name": "cloth",
+      "hex": "#424140"
+    },
+    {
+      "name": "clothLight",
+      "hex": "#58534B"
+    },
+    {
+      "name": "metal",
+      "hex": "#CA9A56"
+    },
+    {
+      "name": "metalLight",
+      "hex": "#E1B973"
+    }
+  ]
+}

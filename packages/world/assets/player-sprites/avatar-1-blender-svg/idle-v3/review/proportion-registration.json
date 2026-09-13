@@ -1,0 +1,60 @@
+{
+  "reason": "Initial common body landmarks made the torso too long and legs too short versus the approved concept. Correct every direction together before idle approval.",
+  "verticalKnots": [
+    [
+      0,
+      0
+    ],
+    [
+      4,
+      4
+    ],
+    [
+      14.5,
+      12.5
+    ],
+    [
+      18,
+      15.5
+    ],
+    [
+      31.5,
+      26
+    ],
+    [
+      36,
+      34
+    ],
+    [
+      43,
+      40
+    ],
+    [
+      47,
+      45.5
+    ],
+    [
+      56,
+      56
+    ],
+    [
+      64,
+      64
+    ]
+  ],
+  "headWidthScale": 0.92,
+  "headScaleCenterX": 32,
+  "method": "Apply the same monotone piecewise-linear Y mapping to authored path endpoints and control points. Narrow only head feature paths. Final path JSON contains corrected coordinates; this is not a raster or per-frame normalization.",
+  "inputs": "iterations/02-before-proportion-registration/",
+  "files": {
+    "front-back.json": {
+      "beforeSha256": "fbb897a6a6652142ebdf59cb46a60f546558edab25e142ee509897a120e4261b",
+      "afterSha256": "568ca26e67a205df252656ecbc4daa88a167add1f02d0f6f0baa0e1c89522332"
+    },
+    "profiles.json": {
+      "beforeSha256": "c72f04d035312842df35697d2f81d5749db7c3afd262e38d1c83b53ac96b3751",
+      "afterSha256": "50824f981ab1f465741e533fa5aa63669525b743e25466b89fe5d94c1d78702c"
+    }
+  },
+  "userConceptHash": "8c0d58a07d1372d2e8c9bcdbddac6e997763a8ffd2b910be83e8ec47b69f1c92"
+}

@@ -1,0 +1,17 @@
+{
+  "status": "requires-small-scale-refinement",
+  "improved": [
+    "Adult head/torso/leg proportions aligned across four views.",
+    "Asymmetric tunic panel and longer hair silhouette closer to concept.",
+    "Exactly two long scarf ends."
+  ],
+  "remaining": [
+    "Pupils straddle rows after common registration; align a readable dark pixel in each eye.",
+    "Profile tails too thin and dark at1x/2x; widen cloth interior."
+  ],
+  "reviewers": [
+    "root",
+    "independent blender_svg_workflow_review",
+    "sprite_history_review"
+  ]
+}

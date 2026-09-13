@@ -1,0 +1,55 @@
+{
+  "blender": "5.2.1 LTS",
+  "nativeMcpTools": true,
+  "scene": "AV1V3 | Idle authoring",
+  "camera": {
+    "type": "ORTHO",
+    "orthoScale": 64,
+    "location": [
+      0.0,
+      -128.0,
+      0.0
+    ]
+  },
+  "render": [
+    64,
+    64
+  ],
+  "frame": 1,
+  "exports": [
+    {
+      "direction": "down",
+      "svg": "svg/down/idle.svg",
+      "paths": 127,
+      "images": 0
+    },
+    {
+      "direction": "left",
+      "svg": "svg/left/idle.svg",
+      "paths": 132,
+      "images": 0
+    },
+    {
+      "direction": "right",
+      "svg": "svg/right/idle.svg",
+      "paths": 140,
+      "images": 0
+    },
+    {
+      "direction": "up",
+      "svg": "svg/up/idle.svg",
+      "paths": 110,
+      "images": 0
+    }
+  ],
+  "geometrySource": "source/authoring.py",
+  "regionRecipe": "source/build_geometry.py",
+  "reference": "../concept/avatar-1-concept-v2.png",
+  "conceptSha256": "8c0d58a07d1372d2e8c9bcdbddac6e997763a8ffd2b910be83e8ec47b69f1c92",
+  "construction": "source/idle-geometry.json",
+  "visibleGroupsOnly": true,
+  "palette": "source/palette.json",
+  "master": "source/avatar-1.blend",
+  "approval": "pending",
+  "animation": "not-started"
+}

@@ -2591,8 +2591,8 @@ checks after the headless state and lifecycle regressions pass.
 **2026-09-12 · Directed by James · authoring-route amendment to D-052;
 concept-first correction supersedes the prior reference-authority and
 idle-review sequence · exact fresh concept-v2 approved by James; new idle-v3
-Blender/SVG construction and internal likeness QA authorized for four idles
-only · idle-v2 remains superseded and unapproved; animation is blocked until
+Blender/SVG idles passed internal likeness and saved-master export checks;
+exact idle-v3 cells await user approval · idle-v2 remains superseded and unapproved; animation is blocked until
 separate user idle approval**
 
 **Context.** James rejected the fresh Avatar 1 draft's in-game appearance,
@@ -2730,3 +2730,23 @@ presenting them for James's separate idle approval. Concept approval
 any animation, game integration or rendered acceptance. Historical idle-v2
 artwork, source and evidence remain preserved and unapproved. Animation stays
 blocked until the explicit user idle gate passes.
+
+
+**Idle-v3 review candidate, 2026-09-13.** The four views were authored as
+509 native Grease Pencil fill shapes from new curved vector paths, using
+the approved concept-v2 as the packed Blender reference. Internal iterations
+corrected pupil coverage, swept hair, the diagonal tunic hem, scarf length
+and width, and the shared torso/leg proportions. Independent final visual
+review found no remaining material likeness or anatomy issue at the target
+scale; fine painted detail simplifies in the 64×64 cells.
+
+The exact [idle review](../packages/world/assets/player-sprites/avatar-1-blender-svg/idle-v3/review/idle-approval.png)
+and [concept comparison](../packages/world/assets/player-sprites/avatar-1-blender-svg/idle-v3/review/reference-comparison.png)
+are ready for James’s separate approval. The new master, four real native
+SVG exports, final PNG cells, reviewed hashes and failed iterations are saved
+under `idle-v3/`. Source/readback/SVG geometry and fill checks pass for all
+509 shapes. Reopening the saved master and exporting existing drawings
+reproduces all four SVGs and PNGs byte-for-byte; exact 1×/2×/6× review crop
+parity, binary alpha and the shared 24-colour limit pass. User idle approval
+remains pending. No animation, runtime change or live game acceptance is
+claimed by these source and visual checks.

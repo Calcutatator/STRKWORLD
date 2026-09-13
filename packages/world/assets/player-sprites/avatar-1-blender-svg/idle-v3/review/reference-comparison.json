@@ -1,0 +1,36 @@
+{
+  "concept": "../concept/avatar-1-concept-v2.png",
+  "conceptSha256": "8c0d58a07d1372d2e8c9bcdbddac6e997763a8ffd2b910be83e8ec47b69f1c92",
+  "reviewSha256": "854060554fdbd855ad9848390c256b4e4ddbc5726fa2f34a742fcc183e2e76b7",
+  "placements": [
+    {
+      "direction": "down",
+      "x": 1232,
+      "y": 128,
+      "scale": 6,
+      "pngSha256": "ffa1de608659fd184078bc785a329a18ad4a5c9e87ba0066449deccf829be843"
+    },
+    {
+      "direction": "left",
+      "x": 1632,
+      "y": 128,
+      "scale": 6,
+      "pngSha256": "9d8a8ed1b0952abb9537962a4c163106f570c8d382a7655fb0a45cc5e13957ce"
+    },
+    {
+      "direction": "right",
+      "x": 1232,
+      "y": 536,
+      "scale": 6,
+      "pngSha256": "5ef9eacb00c833e03a007afd9d04624e4e0bbc2a53d3b4bdd24b991a29611d27"
+    },
+    {
+      "direction": "up",
+      "x": 1632,
+      "y": 536,
+      "scale": 6,
+      "pngSha256": "e310cfa75e2f39656e58ead0f43c536e423f757d97351fcf56b58683a6e4b444"
+    }
+  ],
+  "scope": "Reference comparison only. Exact native/game-scale pixel proof in qa.json."
+}

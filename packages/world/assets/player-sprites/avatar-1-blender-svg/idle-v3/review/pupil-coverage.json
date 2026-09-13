@@ -1,0 +1,59 @@
+{
+  "checked": "2026-09-13",
+  "status": "pass",
+  "scope": "Exact final PNG iris coverage after source refinement; visual QA remains separate.",
+  "results": [
+    {
+      "direction": "down",
+      "pixel": [
+        30,
+        10
+      ],
+      "rgba": [
+        43,
+        35,
+        37,
+        255
+      ]
+    },
+    {
+      "direction": "down",
+      "pixel": [
+        33,
+        10
+      ],
+      "rgba": [
+        43,
+        35,
+        37,
+        255
+      ]
+    },
+    {
+      "direction": "left",
+      "pixel": [
+        29,
+        9
+      ],
+      "rgba": [
+        43,
+        35,
+        37,
+        255
+      ]
+    },
+    {
+      "direction": "right",
+      "pixel": [
+        34,
+        9
+      ],
+      "rgba": [
+        43,
+        35,
+        37,
+        255
+      ]
+    }
+  ]
+}

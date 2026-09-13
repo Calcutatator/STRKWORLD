@@ -1,0 +1,18 @@
+{
+  "checked": "2026-09-13",
+  "status": "pass",
+  "method": "Opened saved .blend via native Blender MCP, exported existing drawings without rebuilding, rerasterized native SVGs.",
+  "master": "source/avatar-1.blend",
+  "masterSha256": "c9d87a4734a6e7d2a1fa051b2d15b9d692a6531d486b3b53cf79c226627955ca",
+  "unchangedExports": {
+    "svg/down/idle.svg": "8c9d2d92bec2e3ac178b83d7c96569a6cb8bc9d0012c0760726176e237848642",
+    "svg/left/idle.svg": "f864a6a13db1e9047b643dd8475b98512c94ddfdcc7718b402c9be09af50764e",
+    "svg/right/idle.svg": "68e4ea6d51a77040884cd7bb5ed1a8f9f5d6cc32967a9c811917732561775560",
+    "svg/up/idle.svg": "7ed04e55e5443ed1173888f28e0a577ef6872d8ca25f1750a5d296417d977e49",
+    "frames/down/idle.png": "ffa1de608659fd184078bc785a329a18ad4a5c9e87ba0066449deccf829be843",
+    "frames/left/idle.png": "9d8a8ed1b0952abb9537962a4c163106f570c8d382a7655fb0a45cc5e13957ce",
+    "frames/right/idle.png": "5ef9eacb00c833e03a007afd9d04624e4e0bbc2a53d3b4bdd24b991a29611d27",
+    "frames/up/idle.png": "e310cfa75e2f39656e58ead0f43c536e423f757d97351fcf56b58683a6e4b444"
+  },
+  "scope": "All four native SVGs and four final PNGs are byte-identical before/after reopen. This is reproducibility, not artistic approval."
+}
