@@ -2,13 +2,12 @@
   "schemaVersion": 1,
   "avatar": "avatar-1",
   "revision": "idle-v4",
-  "status": "pending",
+  "status": "withdrawn-unapproved-requires-refinement",
   "userDecision": null,
-  "readyForReview": true,
+  "readyForReview": false,
   "conceptApproval": "../../concept/approval.json",
   "animationAuthorized": false,
   "runtimeIntegrationAuthorized": false,
-  "readyForReviewDate": "2026-09-13",
   "reviewedHashes": {
     "svg/down/idle.svg": "ff9372cc5305d97c9963e115482cb45eabad85df4edebfad194ad886d7bb6ad9",
     "frames/down/idle.png": "7c3848e85189f615bc091b7f2b2b2579992f411fd6c85dea4277eab935748e8d",
@@ -24,5 +23,18 @@
     "review/idle-approval.png": "6188aeac6354a4d088c647d7e39d12bee17c89067810c1b092385cfa3edf5ac1",
     "review/reference-comparison.png": "c8231541e9721bdd5183e68bd40334cdb9f496f6bf612d90bb7daa79fe7707e6"
   },
-  "internalVisualQa": "passed-for-idle-review"
+  "internalVisualQa": "failed-aesthetic-review-withdrawn",
+  "priorReadiness": {
+    "status": "pending",
+    "readyForReview": true,
+    "readyForReviewDate": "2026-09-13",
+    "internalVisualQa": "passed-for-idle-review"
+  },
+  "withdrawal": {
+    "recorded": "2026-09-13",
+    "userInstruction": "again, have youn looked at the in-game output and think this is of quality?",
+    "reason": "Renewed inspection of the exported PNGs does not support the prior readiness claim: the face and proportions still fall below the approved concept. The candidate was never integrated or inspected inside the live game.",
+    "approvalCandidateReady": false,
+    "nextWork": "Clarify whether the intended rendering preserves the crisp illustrated concept look or uses deliberate low-resolution pixel art. Runtime presentation and resolution constraints are being investigated; no replacement method or candidate is selected."
+  }
 }

@@ -1,36 +1,15 @@
 {
   "schemaVersion": 1,
   "revision": "idle-v4",
-  "status": "passed-for-idle-review",
-  "readyForReview": true,
+  "status": "failed-aesthetic-review-withdrawn",
+  "readyForReview": false,
   "userIdleApproval": null,
   "authority": "Approved concept-v2, SHA-256 8c0d58a07d1372d2e8c9bcdbddac6e997763a8ffd2b910be83e8ec47b69f1c92",
   "iterations": [
     {
-      "id": "fine-reference-sampling",
-      "result": "failed",
-      "finding": "Better stance than withdrawn v3, but fine painted pixel details wash out at 64px. The face loses its eyes and expression."
-    },
-    {
-      "id": "coarse-vector-export-1",
-      "result": "continue-refinement",
-      "inspected": [
-        "review/idle-approval.png",
-        "frames/down/idle.png",
-        "frames/left/idle.png",
-        "frames/right/idle.png",
-        "frames/up/idle.png"
-      ],
-      "finding": "Body silhouette, stance, materials and kit continuity now work as a coherent RPG interpretation. Front/right faces remain too blank under the fringe; right cheek/nose is a pale wedge. Hair highlights are fragmented. Refine heads before handoff."
-    },
-    {
-      "id": "coarse-vector-export-2-head-refinement",
-      "result": "passed-for-idle-review",
-      "changes": "197 head pixel refinements consolidate swept hair locks, open the front face, separate eyes from fringe, shape the right cheek/nose/jaw and retain a slight front smile. Rebuilt and re-exported through native Blender MCP.",
-      "actualExportFinding": "The producing agent finds an appealing, coherent RPG character: readable faces, natural weight and stance, clear materials, directional volume and retained concept identity. The final independent inspection found no aesthetic defect that blocks presenting the idle draft.",
-      "scaleAssessment": "At 2x, front eyes and slight smile read, and the right eye/nose/jaw are distinct. At 1x, expression is subtle but character and facing stay clear.",
-      "interpretation": "Shorter game proportions make the sprite younger-looking than the painted adult concept; outfit, hair, warm expression and character identity remain recognizable.",
-      "userApproval": "Not granted; requires separate explicit approval of these exact idles."
+      "id": "renewed-export-inspection",
+      "result": "failed-aesthetic-review-withdrawn",
+      "finding": "Renewed inspection of the exported PNGs does not support the prior readiness claim: the face and proportions still fall below the approved concept. The candidate was never integrated or inspected inside the live game."
     }
   ],
   "rule": "Inspect actual exported 1x/2x cells and concept comparison. If the art still looks rough, rigid, muddy, flat or loses character identity, continue internal refinement. A valid export is not an artistic pass.",
@@ -51,7 +30,65 @@
   },
   "date": "2026-09-13",
   "reviewers": [
-    "Producing agent: inspected actual native SVG-derived PNGs at 1x/2x and concept comparison",
-    "Independent visual reviewer: inspected the same final export boards"
-  ]
+    "Producing agent renewed inspection following the user quality challenge"
+  ],
+  "findings": [
+    {
+      "feature": "face and proportions",
+      "result": "Below the approved concept; the prior artistic pass and approval handoff cannot be defended."
+    },
+    {
+      "feature": "scope of inspection",
+      "result": "Exported PNGs and review boards were inspected. Idle-v4 was never integrated or inspected inside the live game."
+    }
+  ],
+  "limits": [
+    "Source, SVG, PNG and review-crop parity remain historical technical evidence only.",
+    "No user idle approval has been granted.",
+    "No animation, runtime integration or live-game acceptance has been performed."
+  ],
+  "priorAssessment": {
+    "status": "passed-for-idle-review",
+    "readyForReview": true,
+    "iterations": [
+      {
+        "id": "fine-reference-sampling",
+        "result": "failed",
+        "finding": "Better stance than withdrawn v3, but fine painted pixel details wash out at 64px. The face loses its eyes and expression."
+      },
+      {
+        "id": "coarse-vector-export-1",
+        "result": "continue-refinement",
+        "inspected": [
+          "review/idle-approval.png",
+          "frames/down/idle.png",
+          "frames/left/idle.png",
+          "frames/right/idle.png",
+          "frames/up/idle.png"
+        ],
+        "finding": "Body silhouette, stance, materials and kit continuity now work as a coherent RPG interpretation. Front/right faces remain too blank under the fringe; right cheek/nose is a pale wedge. Hair highlights are fragmented. Refine heads before handoff."
+      },
+      {
+        "id": "coarse-vector-export-2-head-refinement",
+        "result": "passed-for-idle-review",
+        "changes": "197 head pixel refinements consolidate swept hair locks, open the front face, separate eyes from fringe, shape the right cheek/nose/jaw and retain a slight front smile. Rebuilt and re-exported through native Blender MCP.",
+        "actualExportFinding": "The producing agent finds an appealing, coherent RPG character: readable faces, natural weight and stance, clear materials, directional volume and retained concept identity. The final independent inspection found no aesthetic defect that blocks presenting the idle draft.",
+        "scaleAssessment": "At 2x, front eyes and slight smile read, and the right eye/nose/jaw are distinct. At 1x, expression is subtle but character and facing stay clear.",
+        "interpretation": "Shorter game proportions make the sprite younger-looking than the painted adult concept; outfit, hair, warm expression and character identity remain recognizable.",
+        "userApproval": "Not granted; requires separate explicit approval of these exact idles."
+      }
+    ],
+    "date": "2026-09-13",
+    "reviewers": [
+      "Producing agent: inspected actual native SVG-derived PNGs at 1x/2x and concept comparison",
+      "Independent visual reviewer: inspected the same final export boards"
+    ]
+  },
+  "withdrawal": {
+    "recorded": "2026-09-13",
+    "userInstruction": "again, have youn looked at the in-game output and think this is of quality?",
+    "reason": "Renewed inspection of the exported PNGs does not support the prior readiness claim: the face and proportions still fall below the approved concept. The candidate was never integrated or inspected inside the live game.",
+    "approvalCandidateReady": false,
+    "nextWork": "Clarify whether the intended rendering preserves the crisp illustrated concept look or uses deliberate low-resolution pixel art. Runtime presentation and resolution constraints are being investigated; no replacement method or candidate is selected."
+  }
 }

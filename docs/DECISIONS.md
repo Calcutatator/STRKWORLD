@@ -2592,9 +2592,10 @@ checks after the headless state and lifecycle regressions pass.
 concept-first correction supersedes the prior reference-authority and
 idle-review sequence · exact fresh concept-v2 approved by James; idle-v3's
 visual pass and handoff are withdrawn by the 2026-09-13 pre-handoff aesthetic
-QA correction below · rebuilt idle-v4 passed internal aesthetic review after
-head refinement and is frozen for separate user idle approval · idle-v2 remains superseded and unapproved; animation is
-blocked until separate user idle approval**
+QA correction below · idle-v4’s pass and approval request are also withdrawn by
+the subsequent 2026-09-13 quality correction; no candidate is ready · further
+refinement awaits rendering-style clarification · idle-v2 remains superseded
+and unapproved; animation is blocked until separate user idle approval**
 
 **Context.** James rejected the fresh Avatar 1 draft's in-game appearance,
 despite its mechanical export checks passing, and requested: “We should use
@@ -2755,7 +2756,8 @@ claimed by these source and visual checks.
 
 
 **Pre-handoff aesthetic QA correction, 2026-09-13 — standing requirement;
-initial no-candidate state advanced by the idle-v4 execution record below.** James challenged the
+initial no-candidate state advanced by the idle-v4 execution record and
+restored by the subsequent idle-v4 quality correction below.** James challenged the
 appearance again and directed: “please before handoff, ask yourself that
 question. If its anything like what you just described you MUST continue
 refinement - not handing it off to me....” Renewed inspection found that
@@ -2784,7 +2786,8 @@ requirements. Animation and runtime integration remain unauthorized until
 their separate user gates are met.
 
 
-**Idle-v4 rebuild and pre-handoff review, 2026-09-13.** The prior no-candidate
+**Idle-v4 rebuild and pre-handoff review, 2026-09-13 — artistic pass and
+readiness superseded by the idle-v4 quality correction below.** The prior no-candidate
 state is superseded by this completed idle-only draft. New ImageGen
 construction studies use the approved concept as their authority. Fine-detail
 sampling failed internal review because the eyes disappeared at game size.
@@ -2819,3 +2822,29 @@ invariants pass. These checks do not grant user approval.
 James’s separate idle approval is pending before animation. The accepted
 runtime asset remains unchanged; no animation, rig completion, browser
 automation, game integration, merge or production delivery is claimed.
+
+
+**Idle-v4 quality correction, 2026-09-13.** James challenged the handoff again:
+“again, have youn looked at the in-game output and think this is of quality?”
+The producing agent reinspected the exported PNGs and could not support the
+previous readiness claim. The face and proportions remain below the approved
+concept. Withdraw idle-v4's artistic pass and approval request. Preserve its
+sources, exports, hashes, earlier assessment and technical parity as
+historical evidence, with the corrected status in the
+[decision record](../packages/world/assets/player-sprites/avatar-1-blender-svg/idle-v4/review/user-decisions.json)
+and [visual assessment](../packages/world/assets/player-sprites/avatar-1-blender-svg/idle-v4/review/visual-qa.json).
+
+The scope of earlier inspection was exported PNGs and review boards. Idle-v4
+was never integrated or inspected inside the live game; no live-game quality
+claim is supported. The concept-v2 approval remains valid, no user idle
+approval has been granted and no candidate is ready for another handoff.
+
+Further refinement awaits James's rendering-style clarification: preserve
+the crisp illustrated concept look or use deliberate low-resolution pixel
+art. That choice is pending, not inferred from silence. Independent
+investigation of the current runtime presentation and resolution contracts
+continues. No replacement method or new revision has been selected, and no
+single resolution constraint is claimed to explain all of the quality
+failure. The standing pre-handoff aesthetic requirement remains in force.
+Animation, runtime integration and rendered acceptance remain separate,
+uncompleted gates.

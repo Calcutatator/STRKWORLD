@@ -1,11 +1,19 @@
 # Avatar 1 — rebuilt idle draft v4
 
-This revision replaces the withdrawn idle-v3 construction. Internal aesthetic
-review now passes after head refinement; the exact files are frozen for James’s
-separate idle approval. See [the review](review/idle-approval.png) and
-[concept comparison](review/reference-comparison.png). The exact approved
-concept-v2 remains the appearance authority. No idle approval, animation
-approval or game acceptance is recorded here.
+**Withdrawn and unapproved.** Renewed inspection found that the face and
+proportions in these exported PNGs still fall below the approved concept.
+The prior aesthetic pass and approval request are withdrawn. The
+[review](review/idle-approval.png), [concept comparison](review/reference-comparison.png),
+sources, exact hashes and technical checks remain historical evidence;
+[the QA record](review/visual-qa.json) preserves the earlier assessment and
+its correction. This revision was never integrated or inspected inside the
+live game. No idle approval, animation approval or game acceptance exists.
+
+The exact approved concept-v2 remains the appearance authority. Further
+refinement awaits clarification between preserving the crisp illustrated
+concept look and deliberate low-resolution pixel art; current runtime
+presentation and resolution constraints are under investigation. No
+replacement method, revision or ready candidate is claimed.
 
 The initial fine-detail reference again lost its eyes and expression when
 reduced to a 64-pixel cell, so it failed internal review. A second, deliberately
@@ -39,7 +47,7 @@ hidden-surface or walk-cycle acceptance.
 - `svg/{down,left,right,up}/idle.svg`: native Blender pose exports.
 - `frames/{down,left,right,up}/idle.png`: derived 64 × 64 runtime cells.
 
-Frozen review assets cannot be overwritten by the construction tools. Start a
+These withdrawn historical assets cannot be overwritten by the construction tools. Start a
 new internal revision for further art changes. In an internal revision, run `source/grid_from_studies.cjs`, then
 `source/refine_grid.cjs` and `source/apply_head_refinement.cjs`,
 then `source/trace_grid.py`. Use the native MCP author/export/reopen/readback
@@ -63,7 +71,7 @@ muddy colours, flat profiles or loss of identity require continued internal
 refinement. Do not ask James to discover those defects. The first v4 check
 kept the revision internal because front/right faces lacked expression and
 hair highlights were fragmented; `review/visual-qa.json` records subsequent
-inspection and the actual status.
+inspection, the withdrawn pass and the renewed failure.
 
 The accepted runtime asset remains untouched. No browser automation,
 animation, runtime integration or production delivery is implied.

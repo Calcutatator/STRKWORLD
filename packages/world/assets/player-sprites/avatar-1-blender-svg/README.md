@@ -1,6 +1,6 @@
 # Avatar 1 — concept approval, Blender MCP and SVG workflow
 
-**Active stage: rebuilt idle-v4 is frozen for James’s separate idle approval.**
+**Active stage: idle-v4 is withdrawn; further refinement awaits rendering-style clarification.**
 Idle-v3 is withdrawn and unapproved. Its earlier visual pass was too
 permissive: renewed inspection found a rigid pose, lifeless face, muddy
 shading, flat cutout profiles and lost character identity at game size.
@@ -18,14 +18,22 @@ James's explicit decision to SHA-256
 `8c0d58a07d1372d2e8c9bcdbddac6e997763a8ffd2b910be83e8ec47b69f1c92`.
 Internal review corrected scarf and buckle continuity before that approval.
 
-The rebuilt revision is **idle-v4**. The producing agent inspected its actual
-SVG-derived cells at 1×/2× against the concept, rejected the initial facial
-rendering, and refined the heads before passing it for user review. The
-[exact idles](idle-v4/review/idle-approval.png), [concept comparison](idle-v4/review/reference-comparison.png)
-and [editable Blender/SVG sources](idle-v4/README.md) are ready.
-New concept-derived construction studies guide explicit colour-region vectors;
-[provenance and QA](idle-v4/review/visual-qa.json) distinguish those studies from
-the approved concept and final native Blender exports.
+The **idle-v4 approval request and artistic pass are withdrawn**. Renewed
+inspection of its exported PNGs found that the face and proportions still
+fall below the approved concept. The earlier claim of readiness cannot be
+supported. Its [exact idles](idle-v4/review/idle-approval.png),
+[concept comparison](idle-v4/review/reference-comparison.png),
+[editable sources](idle-v4/README.md) and hashes are historical evidence.
+The [withdrawn assessment](idle-v4/review/visual-qa.json) preserves the prior
+pass with its correction. Idle-v4 was never integrated or inspected inside
+the live game; viewing its export boards did not establish that acceptance.
+
+The pending clarification is whether the intended rendering should preserve
+the crisp illustrated concept look or use deliberate low-resolution pixel
+art. That decision path is paused while current runtime presentation and
+resolution constraints are investigated. No replacement method or revision
+has been chosen and no approval candidate is ready. The exact concept-v2
+approval remains valid; James has granted no idle approval.
 The [idle-v3 review](idle-v3/review/idle-approval.png),
 [concept comparison](idle-v3/review/reference-comparison.png) and
 [editable sources](idle-v3/README.md) remain historical evidence.
@@ -53,13 +61,13 @@ concepts; their hashes and technical results remain historical evidence only.
 2. **Explicit concept approval — complete.** James approved exact concept-v2
    with “Yes good concept move forward”; `concept/approval.json` records the
    reviewed hash. A later concept redesign requires renewed concept approval.
-3. **Build and refine the four Blender/SVG idles — complete for review.** In `idle-v4/`, with
+3. **Build and refine the four Blender/SVG idles — requires further refinement.** Use
    approved concept-v2 as the
    visual authority, author layered Grease Pencil geometry through Blender
    MCP, save the editable `.blend` and export real vector SVGs. Derive the
    existing 64×64 PNG game cells from those SVGs. Do not silently reuse the
    superseded idle-v2 construction or treat its parity evidence as new work.
-4. **Perform internal aesthetic and likeness QA — passed for idle-v4 review.** Judge whether
+4. **Perform internal aesthetic and likeness QA — idle-v4 failed; pass withdrawn.** Judge whether
    the actual exported sprite looks good before any handoff. Compare it with
    the approved concept at equal figure height and inspect exact 1×/2× cells.
    Require a natural pose, readable expression, clear shading, convincing
@@ -134,3 +142,8 @@ cover installation and the separate Grease Pencil export fixture. Those
 proofs establish tooling only. Verify the live connection for the authorized
 idle production; this workflow update does not claim a new handshake or
 export result. The current stage state is in [workflow.json](workflow.json).
+
+The [rendering diagnosis](idle-v4/review/rendering-diagnosis.md) verifies that
+idle-v4 was never loaded by the game, explains the 64-pixel source and 2×
+camera constraint, and records the consequences of each rendering direction.
+It is not approval of a replacement method or runtime change.
