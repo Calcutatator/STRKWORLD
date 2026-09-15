@@ -2593,8 +2593,9 @@ concept-v2 remains approved for character identity/costume · idle-v5 is
 rejected and its artistic pass/approval request withdrawn by the 2026-09-15
 original sprite design restoration below · the original medium sprite
 reference governs style/proportions/game viewpoint, not fresh concept art ·
-internal sprite design translation is required before renewed four-idle
-production · no replacement candidate or new pixel density is selected ·
+the corrected reference roles/direction are approved by “yes looks good”
+under the subsequent 2026-09-15 amendment · idle-v6 awaits exact four-idle approval under the subsequent production record
+with the native64 implementation contract; no exact-idle candidate is approved ·
 v1–v4 remain unapproved; animation requires separate exact idle approval**
 
 **Context.** James rejected the fresh Avatar 1 draft's in-game appearance,
@@ -2930,7 +2931,8 @@ The Art lane completed detailed image-assisted vector reconstruction from the ap
 
 
 **Original sprite design restoration and idle-v5 rejection, 2026-09-15 —
-current direction.** James rejected v5: “this is not the same design as what
+reference roles and rejection remain current; the unselected implementation
+parameters are advanced by the direction approval/native64 amendment below.** James rejected v5: “this is not the same design as what
 we originally requested - I assume only concept art in which this makes no
 sense to show in-game...” Withdraw the v5 artistic pass and approval request
 and record the exact idle decision as **rejected**. Preserve its source,
@@ -2980,3 +2982,74 @@ translation against original sprite style → four-idle Blender/SVG production
 and refinement → direct source and engine visual QA → explicit exact-idle
 approval → animation → later animated-art and production acceptance**.
 No replacement artwork, candidate or approval is produced by this correction.
+
+
+**Corrected direction approval and native64 sprite implementation, 2026-09-15
+— current direction.** James responded “yes looks good” to the corrected
+reference-separation and direction page. This approves the distinct roles of
+the original medium sprite reference and the approved character concept,
+and authorizes internal refinement under that direction. It does not approve
+the rejected v5 idles or any exact replacement idles. V5 remains rejected
+with its historical files, reviewed hashes, assessment and timestamps intact.
+
+Proceed in a distinct **idle-v6** revision. The internal sprite design
+translation gate remains required before four-idle production. Use the
+original medium reference for sprite proportions, warm lower-resolution
+16-bit JRPG treatment and elevated game viewpoint, and exact concept-v2 for
+character identity/costume. Both comparisons are mandatory at the intended
+game scale. The direction approval does not pre-pass the internal visual gate.
+
+Within that original brief, select **native 64×64 pixel-aligned SVG/Blender
+Grease Pencil construction** and derived 64×64 PNG cells at **density 1**.
+Target an idle figure **50 pixels high**, occupying **y=6 through y=55**,
+with feet at **(32,56)** and origin **(0.5,0.875)**. Keep the **24×24 world-unit
+body** and inspect the actual game rendering at **camera zoom 2**. Use
+**binary alpha**, **nearest avatar filtering** and one global maximum of
+**32 opaque authored colours** across the four idles. The originally accepted
+actual idles used 24–28 colours; 32 is limited implementation headroom, not
+a requirement to add detail or a substitute for deliberate readable clusters.
+Transparent pixels do not count toward that opaque-colour ceiling.
+
+Generative images may be used as **internal construction studies only**.
+The deliverables are native editable vector sources through Blender MCP,
+real SVG paths without embedded rasters, and their exact derived game cells.
+Preserve the simple expressive face, original medium proportions, elevated
+viewpoint, clean contours and limited detail; mechanical compliance cannot
+establish those qualities.
+
+Before any exact-idle handoff, the producer must personally inspect both
+reference comparisons, the actual sources/exports and the actual Phaser
+result at game scale, then keep refining if it is not obviously good enough.
+`idle-v6/review/user-decisions.json` records **direction approval only**,
+`userDecision: null`, no ready candidate and no internal visual pass.
+Animation remains blocked until James explicitly approves the exact four
+v6 idles. Production integration and later animated-art acceptance remain
+separate gates. No completed v6 artwork or quality pass is claimed by this
+implementation record.
+
+
+**2026-09-15 · Idle-v6 production record — exact idle approval pending**
+
+The corrected direction was translated into four native64 pixel sprites.
+Internal ImageGen construction studies supplied fresh front and turnaround
+material; a shared palette, explicit grid registration and deliberate front
+face/scarf edits produced the authored clusters. Native Blender MCP created
+and exported the Grease Pencil regions, then the saved master was reopened
+and read back. The four SVG-derived PNGs match the source pixels exactly,
+with binary alpha and 27 rendered opaque colors across all four cells.
+
+The producer personally inspected the source and actual Phaser output at
+1280×900, DPR1, camera zoom2, density1 and NEAREST filtering on road, pavement
+and grass. The review checks both original sprite style and concept identity.
+The medium silhouette, simple face, scarf, asymmetrical pouch, back harness
+and boot grounding remain readable in every facing. An independent actual
+engine review found no blocking visible defect. This artistic judgment is
+recorded separately from technical parity in
+`idle-v6/review/visual-qa.json`; it is not user approval.
+
+The isolated review at `http://127.0.0.1:5173/` now serves this exact candidate.
+The source/export hashes are frozen; the read-only pre-handoff verifier rejects
+stale evidence, missing producer inspection or visible blocking defects.
+V5 remains rejected, animation has not started, and the canonical production
+avatar/runtime have not been replaced. The next gate is explicit approval of
+these exact four idles, followed by one complete walk direction.

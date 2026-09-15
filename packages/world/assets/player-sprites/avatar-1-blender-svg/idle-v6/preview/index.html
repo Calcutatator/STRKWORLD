@@ -1,0 +1,50 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Avatar 1 · In-game draft</title>
+    <link rel="stylesheet" href="./style.css" />
+  </head>
+  <body>
+    <main>
+      <header>
+        <div><p class="eyebrow">STRKWORLD / AVATAR 1</p><h1>In-game idle draft</h1></div>
+        <span class="draft-label">Internal refinement · v6</span>
+      </header>
+      <p id="review-context">Internal draft for visual inspection. These four idles have not been approved.</p>
+      <nav aria-label="Draft controls">
+        <div class="controls" role="group" aria-label="Facing">
+          <button data-facing="down">Front</button><button data-facing="left">Left</button>
+          <button data-facing="right">Right</button><button data-facing="up">Back</button>
+          <button id="lineup" aria-pressed="true">All four</button>
+        </div>
+        <div class="controls" role="group" aria-label="Town surface">
+          <button data-surface="road" aria-pressed="true">Road</button>
+          <button data-surface="pavement">Pavement</button><button data-surface="grass">Grass</button>
+        </div>
+        <div class="controls" role="group" aria-label="Viewing scale">
+          <button data-zoom="2" aria-pressed="true">Game size</button><button data-zoom="4">Close-up</button>
+        </div>
+      </nav>
+      <div class="preview-layout">
+        <div id="game" aria-label="Actual Phaser street preview" tabindex="0"></div>
+        <aside class="reference-sidebar" aria-label="Approved visual references and their roles">
+          <figure>
+            <h2>Original sprite style</h2>
+            <a data-reference-link="style" target="_blank" rel="noopener"><img data-reference="style" alt="Originally approved medium Avatar 1 sprite turnaround" /></a>
+            <figcaption>Style, medium proportions and elevated game viewpoint. Match the readable pixel shapes and simple face.</figcaption>
+          </figure>
+          <figure>
+            <h2>Approved character concept</h2>
+            <a data-reference-link="concept" target="_blank" rel="noopener"><img data-reference="concept" alt="Approved Teal Scarf Runner character concept" /></a>
+            <figcaption>Character identity and costume. Translate the design into the sprite style; this illustration is not a game idle.</figcaption>
+          </figure>
+        </aside>
+      </div>
+      <footer><span id="status" role="status">Loading the town and current draft…</span><span>WASD / arrows to move · Idle poses only</span></footer>
+      <details><summary>Inspection evidence</summary><pre id="evidence">Waiting for the engine.</pre></details>
+    </main>
+    <script type="module" src="./main.ts"></script>
+  </body>
+</html>

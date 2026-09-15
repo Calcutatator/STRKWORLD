@@ -1,0 +1,174 @@
+{
+  "schemaVersion": 1,
+  "revision": "idle-v6",
+  "reviewedAt": "2026-09-15T16:46:57.376068+00:00",
+  "producerQuestion": "Is this in-game result obviously good enough to approve?",
+  "answer": "yes",
+  "producerPersonallyInspected": true,
+  "comparedBothReferences": true,
+  "blockingDefects": [],
+  "producerFindings": {
+    "style": "The final native64 figures restore the original medium JRPG sprite silhouette, large expressive head, narrow articulated body and warm deliberate pixel clusters. They read as game sprites at the actual camera scale.",
+    "identity": "Copper spiky hair, warm simple face, teal wrap scarf, sleeveless petrol tunic, charcoal trousers, brown gloves, cuffed boots and wearer-right pouch remain coherent with concept-v2.",
+    "frontFace": "The initial sampled eyes lost their shapes. The final authored dark eye clusters and simpler face planes are clear at nearest game scale without adding illustrated facial noise.",
+    "directions": "Front, left, right and back have consistent hair mass, shoulder, waist and sole registration. The two scarf tails stay wearer-left; the pouch stays wearer-right and the back X harness remains readable.",
+    "gameContext": "Personally inspected all four final idles on road, pavement and grass in actual Phaser at 1280x900 DPR1 camera2. No clipping, smoothing blur, flattened profile, stray alpha speckles or visible grounding defect remains.",
+    "nativeSource": "Personally inspected the current native Blender front viewport, all four exact SVG-derived PNGs and the game screenshots. Saved master was explicitly reopened before readback; pixel parity covers every final cell.",
+    "independentReview": "A second reviewer independently viewed the actual grids and all three internal game captures and found no blocking defect. This supplements the producer inspection."
+  },
+  "resolvedDefects": [
+    {
+      "stage": "front-native-grid",
+      "issue": "Source sampling lost stable eye clusters and left a noisy face/scarf boundary",
+      "resolution": "Rebuilt eye and face clusters plus scarf edge explicitly in refine_grid.py, inspected the result before export and again in Phaser"
+    }
+  ],
+  "scope": "Four static idles in an isolated actual-Phaser preview. Technical parity does not grant artistic or user approval. Animation, rig completeness and production integration are not claimed.",
+  "userIdleApproval": "pending",
+  "animationAuthorized": false,
+  "runtimeIntegrationAuthorized": false,
+  "inspectionContract": {
+    "sourceCanvas": [
+      64,
+      64
+    ],
+    "textureCell": [
+      64,
+      64
+    ],
+    "logicalCell": [
+      64,
+      64
+    ],
+    "cssCell": [
+      128,
+      128
+    ],
+    "density": 1,
+    "cameraZoom": 2,
+    "viewport": [
+      1280,
+      900
+    ],
+    "devicePixelRatio": 1,
+    "filter": "NEAREST",
+    "physicsBodyWorld": [
+      24,
+      24
+    ],
+    "renderedColorsGlobal": 27
+  },
+  "sourceReferenceRoles": {
+    "../reference/approved-concept-turnaround.png": "original sprite style, medium proportions and elevated game viewpoint",
+    "../concept/avatar-1-concept-v2.png": "character identity and costume"
+  },
+  "engineInspections": [
+    {
+      "surface": "road",
+      "viewport": "review/phaser-road-viewport.png",
+      "canvas": "review/phaser-road-canvas.png",
+      "evidence": "review/phaser-road-evidence.raw.json",
+      "personallyInspected": true,
+      "judgment": "pass"
+    },
+    {
+      "surface": "pavement",
+      "viewport": "review/phaser-pavement-viewport.png",
+      "canvas": "review/phaser-pavement-canvas.png",
+      "evidence": "review/phaser-pavement-evidence.raw.json",
+      "personallyInspected": true,
+      "judgment": "pass"
+    },
+    {
+      "surface": "grass",
+      "viewport": "review/phaser-grass-viewport.png",
+      "canvas": "review/phaser-grass-canvas.png",
+      "evidence": "review/phaser-grass-evidence.raw.json",
+      "personallyInspected": true,
+      "judgment": "pass"
+    }
+  ],
+  "movementSmokeCheck": {
+    "method": "local keyboard event held200ms in isolated preview",
+    "before": [
+      648,
+      500
+    ],
+    "after": [
+      616,
+      500
+    ],
+    "facing": "left",
+    "errors": [],
+    "animationTested": false
+  },
+  "fileInventory": {
+    "source/idle-geometry.json": "f147122caa247214816eb4e34e9865a511ca2c5c1cb69274f25c46c3edc12870",
+    "source/palette.json": "610e8960a521e2e726503da48b9371edb144e4c75487a30dc034a2f7d27ce0a3",
+    "source/avatar-1.blend": "16b2f544caaafd7e3b1cddce7452bae4352771dcf13bcf33aee0a07718baf3d4",
+    "source/blender-readback.json": "a4e56511616d677ca07ea6e8e25f545690f7993641114dabad71b61ffe7d9ab5",
+    "source/blender-environment.json": "594115abb92a67aa9d7c4e46c12f8ffac728f05250b48774408dd7b4c59a3085",
+    "source/authoring.py": "70699c5df28557f9fc0365557abbf60f967d56aa1f7035d7958c6014714ded53",
+    "source/export_svg.py": "b76156349b0ac52371c3c9b214fdb427a4c281b4877e82840c32708d4b1c913a",
+    "source/readback.py": "6c8970b16098bc0a3eb226c4564f200d066a4c5eb430500d12629c95f4a83ab9",
+    "source/source_contract.py": "97d79d62602b2ea89b34e62f8a9c751fe0c9ec5b1514588f8ae300273df600c4",
+    "source/verify_source.py": "c6643e7efb3c0a977ce37ccc340532ac44ed25314011f9c184cc5167784a5220",
+    "../concept/approval.json": "094f7f8c2f6b185eda9bc9c1320cd2403e8be6644ccfef9cc88d6cca219ede51",
+    "../concept/avatar-1-concept-v2.png": "8c0d58a07d1372d2e8c9bcdbddac6e997763a8ffd2b910be83e8ec47b69f1c92",
+    "../reference/approved-concept-turnaround.png": "f1de96b3038042aaca726c18ae87fe374e8dac2bbda7d0a2359d53f44ad08ed4",
+    "../reference/reference-manifest.json": "eb38501975fea753ef670cd79fb1a70071125658de5fab5660b5ebaaead79a05",
+    "review/user-decisions.json": "4debd215f903f6dc16d324bc1e514b07b1d49375594c5d92a079b6f671988f39",
+    "studies/front-pixel-v1.png": "a33f29c982065aea3528d201be566e73db0c8a77786c6a171206db4671d0c4d0",
+    "studies/turnaround-pixel-v1.png": "d90c0c5969d3c2057b9403d586e03d14024724858ecdd1c5ce856b15725ca860",
+    "svg/down/idle.svg": "340376dfd855f8ecf3c6e3f4daad34b72b9c22817bcd5d0d6eafa2d18c0ad563",
+    "frames/down/idle.png": "cb1a399c3514ef24ec42a3adccd3dcfb120fea86e68e72642833eca7f0ccf150",
+    "svg/left/idle.svg": "3842282f6f021305f13ed0c880934c28157e1552281d2b53430230bfef5f3687",
+    "frames/left/idle.png": "212c5c4d8822d549ddd56df2dc567bad68b88ed61c7b74020539ee57fd4fbd81",
+    "svg/right/idle.svg": "27b6b852069f96e70c69c5c9e1c2d6404fcce5fe6db308f11a013629bcb7fd3d",
+    "frames/right/idle.png": "62160da9e1fed0980f8b9197d5d880771d882630a1632277ab9afa785eb5c413",
+    "svg/up/idle.svg": "19f71e7c932123d28c776e1772a8f09e8c608333bcf684743262c788fb49696d",
+    "frames/up/idle.png": "ea72776ad4c74aca49c24b7cdc2ec8805ab4d07c0c0212e877235643729069ed",
+    "source/construct_grid.py": "0608dc05fe3c54267799948f0ffe743a400cb4d36ff4e224d5bda8b88c660e4b",
+    "source/rasterize.cjs": "8d0e03fea8a6cda20e24db84d50f09fbf4bf12694048cf0aadd146581a593137",
+    "source/trace_grid.py": "80623171ade0b13f7a5dc43095034262e9ccb73f0de0c40de2d1743587127a97",
+    "source/README.md": "908b8c712fbece3299e846498279b33c92fd23121a99fb211863f0a22fcd3370",
+    "source/verify_review.py": "a6c50dbf16f0d2dc6dd92c8e286dba3b4ad5718917a2ab857668931f1580131e",
+    "source/artist-grid.json": "171912a6d8e2727ee496f95236e33281544e27ef9b4615f74f6f4ee5a62fac1f",
+    "source/refine_grid.py": "b80b15287832da5e7d7d262aa136e5246f8d2f758fff50821880ff9b1b84bc2d",
+    "preview/index.html": "27c97c88e5bd79ec80ab1a50db6e462f6ab62af41f3b918eb3ac479a1aad7038",
+    "preview/main.ts": "ad6f7462c9a3ea395c2db0eb53b8d383396fcc1d8c61d8ca2ac8115910be03b4",
+    "preview/README.md": "b98eb062da86ad6b56b7805c06d23be0c32adff22fabb536e973b44b3bd7e47b",
+    "preview/style.css": "4600de7f025808c2bca27cbd46dffbc275c66105ba6b1290033940ae38c9b45b",
+    "preview/serve.mjs": "5ea107b63048c88b3f59324607e49b53434a7038deb1306e4a855c70880020f7",
+    "studies/down-grid.png": "530b2b5da8633496a01fd98f3b39e734e2d22389fddff38d2abf20a5cc962f59",
+    "studies/up-light-8x.png": "00645d397b24924f1242e7b4fe3e5f6115a161c64036a5cbb1b355b948041340",
+    "studies/down-grid-8x.png": "3f76ea40118cf7b8cba16a7d996e7d6a39e0fc0d41a60eac45c5b5315aacecba",
+    "studies/up-grid.png": "34a91408c56c7f21a4434f7275c404a516f46101835138b84a37b38aa31e6454",
+    "studies/down-light-8x.png": "ff0e2d279f8148081d8da7bcaab8db32f22d9da840884e8b86c06d214070e781",
+    "studies/right-light-8x.png": "20176a57032d8f1500d3d96d919b8676e1cb0601b43a8f6f2e174936c229dae8",
+    "studies/up-grid-8x.png": "ecf000c3307a91233bd0057a2b19d188788bd6453049acb6a3b1fec2817c80a0",
+    "studies/provenance.md": "77ad517c8ed79e1e806bd42b0026ef5ba9012446041b70693fd651b04baaa17a",
+    "studies/four-grids-4x.png": "8eb1655de592ad4189dd5f701d710e77ca93ec3372d1f29817b9036f6ed3a90d",
+    "studies/right-grid.png": "a903f9cb3d3644062b124d46a7a336dfb35edea06c0ae68b4cdd5afc6278f474",
+    "studies/left-grid.png": "91de856234311274ba6dc5a3c7607e5e43d0e84336c19993ae77f182022f26cd",
+    "studies/right-grid-8x.png": "a8555a135e4933f7ec9ff28983ba8a93dffd01c6a3a618237951101cd5ba98bc",
+    "studies/left-grid-8x.png": "b2f21785b441667480ba7e292211a4a38327a2f273d49bb4d3546ae6a962d915",
+    "studies/left-light-8x.png": "c4d31ccc827c2015deb7b0da40a602257daee02a4fee5b347fa0cd661ce25508",
+    "review/source-parity.json": "41628ef68cbec8e926da9035c48e4de44a3aa37cdb489d930ae874466b70bee3",
+    "review/phaser-road-evidence.raw.json": "1d23ee985a16df1591d442bd773350b8ccc57fc8f3a98bdce59c8026fe048f9a",
+    "review/independent-visual-qa.json": "3159e8df233d94bd39ccdc097655d99928ada1e5620f269b88022615c89cbf51",
+    "review/phaser-internal-grass.png": "2cb31b2f84ba3666c185e4582a5dcc7c815f6b8d7009785e8e67fd8dbe95677a",
+    "review/phaser-road-canvas.png": "7f025973030951250fae0613ce77cafeb8478b764a4e55d15e50744919982574",
+    "review/phaser-grass-canvas.png": "b490235b2a4977a84a7b7d1c77feee47643faedba45f5fe8de1e99d4d3de5e74",
+    "review/phaser-internal-road.png": "b252f3b4d316ce4218fd36d076ab264222f7c603ea1800999a4edeec2d88658b",
+    "review/phaser-pavement-canvas.png": "41ba3841036f9d4d14407de0f112d9f3257a86025169ec658f4758c346f02ac2",
+    "review/phaser-road-viewport.png": "23988ce7cec061b90dc7c7f11edae86e8861c3a922f92c15256e7c309c9f275b",
+    "review/phaser-pavement-evidence.raw.json": "517abba8945a322d14ec2a9b132cc8c17ee7e41722ebd75c42bd009063f24e4a",
+    "review/phaser-pavement-viewport.png": "df594ab770a1a30bc206995b986daadcaf68144ac28d33d0e9156a76de266881",
+    "review/raster-qa.json": "cf8d2bf87ae3370906052cb5291cdccbaf37e928b27afbd7adf79c3ee24767b8",
+    "review/phaser-grass-viewport.png": "8a00680cbd6baa618408a57f42c3effb64870cb8d717f5db6a206baa01f28f73",
+    "review/idle-inspection.png": "cbc2b8648b1a31817173304a0a60188779274491e14f482c5cb47c297fb2c47e",
+    "review/phaser-grass-evidence.raw.json": "f3df80a2320c687b15588e1b90b70ee98927fa4360e39934396df0d323d0d123",
+    "review/phaser-internal-pavement.png": "f98da2013f8fabcd697ac4896dcb48a9f49e7ed87bcb051b89dee67416bed5c3"
+  }
+}

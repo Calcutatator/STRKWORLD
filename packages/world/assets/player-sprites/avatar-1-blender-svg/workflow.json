@@ -1,7 +1,7 @@
 {
-  "version": 6,
+  "version": 7,
   "avatar": "avatar-1",
-  "state": "idle-v5-rejected-sprite-design-translation-required",
+  "state": "idle-v6-awaiting-exact-idle-approval",
   "directionRecorded": "2026-09-15",
   "decision": "D-059",
   "rejectedDraft": "../avatar-1-restart-2026-09-12",
@@ -13,13 +13,15 @@
     "runtimeFormat": "PNG",
     "rasterImageGenerationFallback": false,
     "embeddedRasterSvgAllowed": false,
-    "outputRoot": null,
-    "currentScope": "Restore the original medium sprite style and elevated game viewpoint through an internal design-translation gate before renewed four-idle production",
+    "outputRoot": "idle-v6",
+    "currentScope": "Four exact native64 idles frozen for user approval after source and actual Phaser visual review",
     "lastHistoricalMaster": "idle-v5/source/avatar-1.blend",
-    "artMaster": null,
-    "construction": "Replacement construction and pixel-density parameters are not selected; rejected idle-v5 remains historical evidence.",
+    "artMaster": "idle-v6/source/avatar-1.blend",
+    "construction": "Native 64x64 pixel-aligned SVG and Blender Grease Pencil geometry, 50px target visible idle height at y6..55, global maximum 32 opaque authored colors, binary-alpha 64x64 PNG output. Both reference roles are mandatory; generative images may be internal construction studies only.",
     "sourceRasterEmbeddedInSvg": false,
-    "masterStatus": "no-replacement-master-produced"
+    "masterStatus": "native-master-exported-reopened-and-verified",
+    "generativeImageRole": "internal construction studies only; native editable vectors remain deliverables",
+    "generativeImagesAreApprovalCandidates": false
   },
   "gates": [
     {
@@ -39,12 +41,24 @@
       "userQuote": "Yes good concept move forward"
     },
     {
-      "id": "sprite-design-translation",
-      "status": "required-not-started",
+      "id": "user-confirms-reference-roles-and-sprite-direction",
+      "status": "complete",
       "dependsOn": "user-approves-concept",
+      "requiresExplicitUserApproval": true,
+      "userQuote": "yes looks good",
+      "recorded": "2026-09-15",
+      "scope": "Corrected reference-separation and original medium sprite direction shown on the direction page; authorizes internal idle-v6 refinement only",
+      "decisionRecord": "idle-v6/review/user-decisions.json",
+      "grantsExactIdleApproval": false,
+      "grantsAnimationAuthorization": false
+    },
+    {
+      "id": "sprite-design-translation",
+      "status": "producer-passed",
+      "dependsOn": "user-confirms-reference-roles-and-sprite-direction",
       "owner": "producing agent",
       "grantsUserApproval": false,
-      "evidence": null,
+      "evidence": "idle-v6/review/visual-qa.json",
       "identityReference": "concept/avatar-1-concept-v2.png",
       "styleReference": "reference/approved-concept-turnaround.png",
       "styleReferenceSha256": "f1de96b3038042aaca726c18ae87fe374e8dac2bbda7d0a2359d53f44ad08ed4",
@@ -57,28 +71,29 @@
         "Limited detail appropriate to the original sprite style",
         "Approved concept-v2 character identity and costume retained"
       ],
-      "failureAction": "Refine internally before constructing the complete four-idle set; no approval handoff for a failed translation."
+      "failureAction": "Refine internally before constructing the complete four-idle set; no approval handoff for a failed translation.",
+      "revision": "idle-v6"
     },
     {
       "id": "four-idle-source-views",
-      "status": "not-started-requires-design-translation",
+      "status": "complete",
       "dependsOn": "sprite-design-translation",
-      "revision": null,
-      "outputRoot": null,
-      "master": null,
-      "technicalQa": null,
+      "revision": "idle-v6",
+      "outputRoot": "idle-v6",
+      "master": "idle-v6/source/avatar-1.blend",
+      "technicalQa": "idle-v6/review/source-parity.json",
       "lastRejectedRevision": "idle-v5"
     },
     {
       "id": "reference-fidelity-visual-review",
-      "status": "not-passed-prior-v5-pass-withdrawn",
+      "status": "producer-passed",
       "referenceMustBe": "Approved character concept for identity/costume plus original medium sprite reference for style/proportions/viewpoint",
       "grantsUserApproval": false,
       "reference": "concept/avatar-1-concept-v2.png",
       "referenceSha256": "8c0d58a07d1372d2e8c9bcdbddac6e997763a8ffd2b910be83e8ec47b69f1c92",
       "dependsOn": "four-idle-source-views",
-      "evidence": null,
-      "evidenceScope": "No replacement result exists. Prior idle-v5 pass is withdrawn after user rejection of its sprite design translation.",
+      "evidence": "idle-v6/review/visual-qa.json",
+      "evidenceScope": "Exact v6 SVG-derived pixel sprites compared against both authorities and personally inspected in actual Phaser at camera2 on road, pavement and grass",
       "owner": "producing agent",
       "styleReference": "reference/approved-concept-turnaround.png",
       "styleReferenceSha256": "f1de96b3038042aaca726c18ae87fe374e8dac2bbda7d0a2359d53f44ad08ed4",
@@ -86,11 +101,11 @@
     },
     {
       "id": "producer-actual-phaser-visual-review",
-      "status": "not-passed-prior-v5-pass-withdrawn",
+      "status": "producer-passed",
       "dependsOn": "reference-fidelity-visual-review",
       "owner": "producing agent",
       "requiresPersonalInspection": true,
-      "evidence": null,
+      "evidence": "idle-v6/review/visual-qa.json",
       "grantsUserApproval": false,
       "requiredViews": [
         "down",
@@ -106,7 +121,7 @@
         "actual Phaser screenshots at real game CSS scale",
         "viewport and device pixel ratio",
         "camera zoom 2",
-        "recorded source density and filtering for the actual inspected draft",
+        "native 64x64 texture at density 1, binary alpha and nearest filtering",
         "24x24 world-unit physics body",
         "inspected source and export hashes",
         "producer quality judgment and resolved defects",
@@ -114,17 +129,18 @@
       ],
       "failureAction": "Continue internal refinement; regenerate and personally inspect actual engine output after every material change. Never hand off known visual defects.",
       "independentReviewSubstitutesForProducerInspection": false,
-      "lastFailureEvidence": "idle-v5/review/visual-qa.json"
+      "lastFailureEvidence": "idle-v5/review/visual-qa.json",
+      "evidenceScope": "Exact v6 SVG-derived pixel sprites compared against both authorities and personally inspected in actual Phaser at camera2 on road, pavement and grass"
     },
     {
       "id": "user-approves-exact-idles",
-      "status": "not-ready-latest-draft-rejected",
+      "status": "pending",
       "requiresExplicitUserApproval": true,
-      "decisionRecord": null,
+      "decisionRecord": "idle-v6/review/user-decisions.json",
       "blocks": "all animation",
-      "review": null,
+      "review": "idle-v6/review/visual-qa.json",
       "lastWithdrawnDecisionRecord": "idle-v5/review/user-decisions.json",
-      "reviewIsHistorical": true,
+      "reviewIsHistorical": false,
       "dependsOn": "producer-actual-phaser-visual-review"
     },
     {
@@ -140,7 +156,7 @@
     {
       "id": "source-export-and-preview-parity",
       "status": "not-started",
-      "scope": "Complete 24-pose animated sheet. Historical idle-only parity does not verify idle-v5."
+      "scope": "Future complete 24-pose animated sheet. Historical idle-only parity does not verify idle-v6."
     },
     {
       "id": "user-art-handoff-approval",
@@ -153,26 +169,71 @@
     }
   ],
   "runtimeContract": {
-    "scope": "Existing production geometry remains current; replacement pixel-density, alpha, palette and filtering parameters are not selected",
-    "status": "replacement-rendering-parameters-not-selected",
+    "scope": "Idle-v6 implementation within the original medium sprite brief; production replacement remains unapproved",
+    "status": "frozen-idle-review-contract",
+    "sourceCanvas": [
+      64,
+      64
+    ],
+    "pixelAlignedVectorGeometry": true,
+    "cellSize": [
+      64,
+      64
+    ],
     "logicalCellSize": [
       64,
       64
+    ],
+    "pixelDensity": 1,
+    "idleVisibleHeightTarget": 50,
+    "idleVisibleYInclusiveTarget": [
+      6,
+      55
     ],
     "feetPivot": [
       32,
       56
     ],
+    "pngFeetPivot": [
+      32,
+      56
+    ],
+    "origin": [
+      0.5,
+      0.875
+    ],
     "gameplayBody": [
       24,
       24
     ],
+    "gameplayBodySpace": "world units",
     "directions": [
       "down",
       "left",
       "right",
       "up"
     ],
+    "paletteLimit": 32,
+    "paletteScope": "one global palette of at most 32 opaque authored colors across all four idles; transparent pixels do not count",
+    "binaryAlpha": true,
+    "alpha": "0 or 255 only",
+    "avatarTextureFilter": "nearest",
+    "cameraZoom": 2,
+    "bakedShadow": false,
+    "perFacingAutoFit": false,
+    "poses": [
+      "idle",
+      "contact-left",
+      "passing-left",
+      "contact-right",
+      "passing-right",
+      "settle"
+    ],
+    "sheetSize": [
+      384,
+      256
+    ],
+    "sheetSizeStatus": "future-animation-layout-not-produced-or-approved",
     "walkFps": 8,
     "sprintFps": 12
   },
@@ -277,13 +338,33 @@
       "evidenceScope": "Historical native source/export/engine evidence; positive artistic assessment withdrawn. Original hashes and timestamps are retained in revision records."
     }
   ],
-  "draft": null,
+  "draft": {
+    "id": "idle-v6",
+    "stage": "awaiting-user-approval",
+    "status": "pending",
+    "root": "idle-v6",
+    "concept": "concept/avatar-1-concept-v2.png",
+    "conceptSha256": "8c0d58a07d1372d2e8c9bcdbddac6e997763a8ffd2b910be83e8ec47b69f1c92",
+    "spriteStyleReference": "reference/approved-concept-turnaround.png",
+    "spriteStyleSha256": "f1de96b3038042aaca726c18ae87fe374e8dac2bbda7d0a2359d53f44ad08ed4",
+    "userDecision": "idle-v6/review/user-decisions.json",
+    "userIdleApproval": "not-granted",
+    "approvalCandidateReady": true,
+    "spriteDesignTranslationQa": "producer-passed",
+    "producerSourceVisualQa": "passed",
+    "producerPhaserVisualQa": "passed",
+    "animationAuthorized": false,
+    "runtimeIntegrationAuthorized": false,
+    "isolatedPhaserPreviewAuthorized": true,
+    "review": "idle-v6/review/visual-qa.json",
+    "sourceParity": "idle-v6/review/source-parity.json"
+  },
   "historicalToolingEvidence": {
     "status": "verified-before-concept-first-correction",
     "evidence": "setup/setup-report.json",
     "doesNotGrantConceptOrSpriteApproval": true
   },
-  "spriteProductionScope": "Internal sprite design translation and later idle refinement remain authorized within the original brief. The warm lower-resolution medium-proportioned JRPG sprite design must be restored before four-idle production. No replacement candidate, new pixel density, animation or production integration is approved.",
+  "spriteProductionScope": "Four native64 pixel idles are ready for exact user approval after source and actual Phaser review. Animation and production integration remain blocked.",
   "animationAuthorized": false,
   "runtimeIntegrationAuthorized": false,
   "concept": {
@@ -326,8 +407,8 @@
     "knownFailedCandidateMayBeHandedOff": false,
     "lastFailedRevision": "idle-v5",
     "lastFailureRecord": "idle-v5/review/visual-qa.json",
-    "latestPassedRevision": null,
-    "latestPassRecord": null,
+    "latestPassedRevision": "idle-v6",
+    "latestPassRecord": "idle-v6/review/visual-qa.json",
     "requiredInspectionTargets": [
       "internal sprite design translation compared against original sprite style and approved concept identity",
       "editable vector source",
@@ -345,18 +426,20 @@
       "texture density",
       "filtering",
       "source and export hashes",
-      "observed quality judgment"
+      "observed quality judgment",
+      "global maximum 32 opaque colors, binary-alpha native64 output and 50px idle-height target"
     ]
   },
   "refinement": {
-    "status": "sprite-design-translation-required",
-    "userQuote": "this is not the same design as what we originally requested - I assume only concept art in which this makes no sense to show in-game...",
+    "status": "four-idles-ready-for-user-review",
+    "userQuote": "yes looks good",
+    "approvalScope": "direction only; exact four-idle approval remains separate",
     "clarificationResolved": true,
-    "dependentArtworkWork": "internal design translation required before renewed four-idle production",
-    "replacementMethod": null,
-    "replacementRevision": null,
-    "replacementPixelDensity": null,
-    "approvalCandidateReady": false
+    "dependentArtworkWork": "Await exact four-idle user approval before the first complete walk direction",
+    "replacementMethod": "Native 64x64 pixel-aligned Blender Grease Pencil/SVG, maximum 32 opaque colors globally, binary-alpha PNGs and nearest filtering; 50px idle target at y6..55",
+    "replacementRevision": "idle-v6",
+    "replacementPixelDensity": 1,
+    "approvalCandidateReady": true
   },
   "isolatedPhaserPreviewAuthorized": true,
   "isolatedPhaserPreviewScope": {
@@ -376,7 +459,7 @@
     "financialFlows": false,
     "productionIntegrationApproved": false
   },
-  "preHandoffVerifier": null,
+  "preHandoffVerifier": "idle-v6/source/verify_review.py",
   "historicalRuntimeContracts": {
     "idle-v5": {
       "cellSize": [
@@ -471,5 +554,19 @@
   },
   "historicalPreHandoffVerifiers": [
     "idle-v5/source/verify_review.py"
-  ]
+  ],
+  "directionApproval": {
+    "status": "approved",
+    "recorded": "2026-09-15",
+    "userQuote": "yes looks good",
+    "scope": "Corrected reference-separation and original medium sprite direction shown on the direction page; authorizes internal idle-v6 refinement only",
+    "identityReference": "concept/avatar-1-concept-v2.png",
+    "identityReferenceSha256": "8c0d58a07d1372d2e8c9bcdbddac6e997763a8ffd2b910be83e8ec47b69f1c92",
+    "styleReference": "reference/approved-concept-turnaround.png",
+    "styleReferenceSha256": "f1de96b3038042aaca726c18ae87fe374e8dac2bbda7d0a2359d53f44ad08ed4",
+    "grantsExactIdleApproval": false,
+    "grantsAnimationAuthorization": false,
+    "rejectedIdleV5RemainsRejected": true,
+    "referencePathBase": "avatar-1-blender-svg/"
+  }
 }

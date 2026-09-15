@@ -1,0 +1,134 @@
+{
+  "schemaVersion": 1,
+  "reviewedAt": "2026-09-15T16:42:21.182304+00:00",
+  "reviewer": "/root/recover_original_sprite_design",
+  "reviewerPriorContribution": "Generated the internal turnaround construction study. Did not author the native-grid translation, Blender export or engine preview. This is a separate review of those stages, not a claim of independence from the raw study.",
+  "status": "no-visible-blocker-in-inspected-idles",
+  "approvalScope": "Recommendation that the four exact idle sprites are suitable for user review; not user approval.",
+  "method": "Personally viewed all three supplied actual Phaser screenshots at their 1280x900 presentation, compared them with the original approved medium sprite reference and approved character concept, and previously inspected all four exact native grids at nearest-neighbour 8x enlargement. Artistic findings are visual judgments, not conclusions inferred from a technical gate.",
+  "captureSettingsReportedByProducer": {
+    "viewport": [
+      1280,
+      900
+    ],
+    "devicePixelRatio": 1,
+    "cameraZoom": 2,
+    "avatarFilter": "NEAREST"
+  },
+  "inputs": [
+    {
+      "role": "engine-road",
+      "file": "idle-v6/review/phaser-internal-road.png",
+      "sha256": "b252f3b4d316ce4218fd36d076ab264222f7c603ea1800999a4edeec2d88658b"
+    },
+    {
+      "role": "engine-pavement",
+      "file": "idle-v6/review/phaser-internal-pavement.png",
+      "sha256": "f98da2013f8fabcd697ac4896dcb48a9f49e7ed87bcb051b89dee67416bed5c3"
+    },
+    {
+      "role": "engine-grass",
+      "file": "idle-v6/review/phaser-internal-grass.png",
+      "sha256": "2cb31b2f84ba3666c185e4582a5dcc7c815f6b8d7009785e8e67fd8dbe95677a"
+    },
+    {
+      "role": "sprite-style-reference",
+      "file": "reference/approved-concept-turnaround.png",
+      "sha256": "f1de96b3038042aaca726c18ae87fe374e8dac2bbda7d0a2359d53f44ad08ed4"
+    },
+    {
+      "role": "character-concept",
+      "file": "concept/avatar-1-concept-v2.png",
+      "sha256": "8c0d58a07d1372d2e8c9bcdbddac6e997763a8ffd2b910be83e8ec47b69f1c92"
+    },
+    {
+      "role": "native-grid-contact",
+      "file": "idle-v6/studies/four-grids-4x.png",
+      "sha256": "8eb1655de592ad4189dd5f701d710e77ca93ec3372d1f29817b9036f6ed3a90d"
+    },
+    {
+      "role": "export-down",
+      "file": "idle-v6/frames/down/idle.png",
+      "sha256": "cb1a399c3514ef24ec42a3adccd3dcfb120fea86e68e72642833eca7f0ccf150"
+    },
+    {
+      "role": "export-left",
+      "file": "idle-v6/frames/left/idle.png",
+      "sha256": "212c5c4d8822d549ddd56df2dc567bad68b88ed61c7b74020539ee57fd4fbd81"
+    },
+    {
+      "role": "export-right",
+      "file": "idle-v6/frames/right/idle.png",
+      "sha256": "62160da9e1fed0980f8b9197d5d880771d882630a1632277ab9afa785eb5c413"
+    },
+    {
+      "role": "export-up",
+      "file": "idle-v6/frames/up/idle.png",
+      "sha256": "ea72776ad4c74aca49c24b7cdc2ec8805ab4d07c0c0212e877235643729069ed"
+    },
+    {
+      "role": "native-grid-down",
+      "file": "idle-v6/studies/down-grid.png",
+      "sha256": "530b2b5da8633496a01fd98f3b39e734e2d22389fddff38d2abf20a5cc962f59"
+    },
+    {
+      "role": "native-grid-left",
+      "file": "idle-v6/studies/left-grid.png",
+      "sha256": "91de856234311274ba6dc5a3c7607e5e43d0e84336c19993ae77f182022f26cd"
+    },
+    {
+      "role": "native-grid-right",
+      "file": "idle-v6/studies/right-grid.png",
+      "sha256": "a903f9cb3d3644062b124d46a7a336dfb35edea06c0ae68b4cdd5afc6278f474"
+    },
+    {
+      "role": "native-grid-up",
+      "file": "idle-v6/studies/up-grid.png",
+      "sha256": "34a91408c56c7f21a4434f7275c404a516f46101835138b84a37b38aa31e6454"
+    }
+  ],
+  "findings": [
+    {
+      "category": "sprite-style-and-proportions",
+      "assessment": "meets-original-reference",
+      "observation": "All four rendered figures read as medium JRPG pixel sprites with an expressive larger head, clear torso and waist, articulated legs and boots. They do not read as the adult illustration simply reduced into the town."
+    },
+    {
+      "category": "concept-identity",
+      "assessment": "retained-at-sprite-scale",
+      "observation": "Copper hair, teal scarf, sleeveless petrol tunic, charcoal trousers, brown gloves and cuffed boots remain recognizable. Pouch placement stays wearer-right and scarf ends wearer-left across the facings."
+    },
+    {
+      "category": "front-face",
+      "assessment": "coherent-at-inspected-game-size",
+      "observation": "The front face remains a readable small sprite face in all three screenshots. The dark eyes and fringe do not form an obvious displaced eye, grimace or split face at this presentation size. Illustration-level facial detail is intentionally absent."
+    },
+    {
+      "category": "facing-consistency",
+      "assessment": "coherent",
+      "observation": "The front, two side profiles and back read as one character. No duplicate body, detached hand, missing boot or accidental back-facing facial feature is visible."
+    },
+    {
+      "category": "road-readability",
+      "assessment": "readable",
+      "observation": "Hair, teal scarf, arms and the boot silhouette remain separated from the slate road; the charcoal legs remain legible within the character."
+    },
+    {
+      "category": "pavement-readability",
+      "assessment": "readable",
+      "observation": "The dark contour holds the skin, brown boots and hair against beige paving. No light fringe or missing outline is visible."
+    },
+    {
+      "category": "grass-readability",
+      "assessment": "readable",
+      "observation": "The teal scarf and dark silhouette remain distinct against green grass. Legs and grounded boots are legible."
+    }
+  ],
+  "blockingVisibleDefects": [],
+  "scopeLimitations": [
+    "Four static idles only; no walk cycle, animation continuity or motion readability was reviewed.",
+    "Reviewed the supplied actual-engine screenshots, not an independently opened live browser session.",
+    "No claim of production integration, runtime behaviour acceptance or user approval.",
+    "This review applies only to the recorded input hashes; changed artwork or captures require another visual review."
+  ]
+}

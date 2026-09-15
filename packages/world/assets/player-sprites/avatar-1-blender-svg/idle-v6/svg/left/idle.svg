@@ -1,0 +1,1101 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Generator: Blender, SVG Export for Grease Pencil - v2.1 -->
+<!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.1//EN" "http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd">
+<svg version="1.1" x="0px" y="0px" xmlns="http://www.w3.org/2000/svg" width="64.000000px" height="64.000000px" viewBox="0 0 64.000000 64.000000">
+	<clipPath id="clip-path.1">
+		<rect x="0" y="0" width="64" height="64" fill="none" />
+	</clipPath>
+	<g id="blender_frame.1" clip-path="url(#clip-path.1)">
+		<g id="blender_object.AV1V6 | left.1.uuid_0x0">
+			<g id="layer.000_arm.screen-left.uuid_0x1">
+				<path d="M26,25.000046L27,25.000046L27,27.000046L26,27.000046z" fill-rule="evenodd" fill="#201B1D" stroke="none" fill-opacity="1" />
+			</g>
+			<g id="layer.001_arm.screen-left.uuid_0x2">
+				<path d="M26,32.000046L27,32.000046L27,35.000046L26,35.000046z" fill-rule="evenodd" fill="#201B1D" stroke="none" fill-opacity="1" />
+			</g>
+			<g id="layer.002_arm.screen-left.uuid_0x3">
+				<path d="M27,32.000046L28,32.000046L28,33.000046L27,33.000046z" fill-rule="evenodd" fill="#EFB870" stroke="none" fill-opacity="1" />
+			</g>
+			<g id="layer.003_arm.screen-right.uuid_0x4">
+				<path d="M38,31.000046L39,31.000046L39,32.000046L38,32.000046z" fill-rule="evenodd" fill="#201B1D" stroke="none" fill-opacity="1" />
+			</g>
+			<g id="layer.004_arm.screen-right.uuid_0x5">
+				<path d="M39,27.000046L40,27.000046L40,28.000046L39,28.000046z" fill-rule="evenodd" fill="#201B1D" stroke="none" fill-opacity="1" />
+			</g>
+			<g id="layer.005_arm.screen-right.uuid_0x6">
+				<path d="M39,33.000046L40,33.000046L40,34.000046L39,34.000046z" fill-rule="evenodd" fill="#201B1D" stroke="none" fill-opacity="1" />
+			</g>
+			<g id="layer.006_arm.screen-right.uuid_0x7">
+				<path d="M40,24.000046L42,24.000046L42,25.000046L40,25.000046z" fill-rule="evenodd" fill="#201B1D" stroke="none" fill-opacity="1" />
+			</g>
+			<g id="layer.007_arm.screen-right.uuid_0x8">
+				<path d="M40,28.000046L42,28.000046L42,29.000046L41,29.000046L41,30.000046L40,30.000046z" fill-rule="evenodd" fill="#201B1D" stroke="none" fill-opacity="1" />
+			</g>
+			<g id="layer.008_arm.screen-right.uuid_0x9">
+				<path d="M41,30.000046L42,30.000046L42,31.000046L41,31.000046z" fill-rule="evenodd" fill="#201B1D" stroke="none" fill-opacity="1" />
+			</g>
+			<g id="layer.009_arm.screen-right.uuid_0xa">
+				<path d="M42,29.000046L44,29.000046L44,30.000046L42,30.000046z" fill-rule="evenodd" fill="#201B1D" stroke="none" fill-opacity="1" />
+			</g>
+			<g id="layer.010_arm.screen-right.uuid_0xb">
+				<path d="M43,25.000046L44,25.000046L44,26.000046L43,26.000046z" fill-rule="evenodd" fill="#201B1D" stroke="none" fill-opacity="1" />
+			</g>
+			<g id="layer.011_arm.screen-right.uuid_0xc">
+				<path d="M43,33.000046L44,33.000046L44,34.000046L43,34.000046z" fill-rule="evenodd" fill="#201B1D" stroke="none" fill-opacity="1" />
+			</g>
+			<g id="layer.012_arm.screen-right.uuid_0xd">
+				<path d="M43,37.000046L44,37.000046L44,39.000046L43,39.000046z" fill-rule="evenodd" fill="#201B1D" stroke="none" fill-opacity="1" />
+			</g>
+			<g id="layer.013_arm.screen-right.uuid_0xe">
+				<path d="M44,34.000046L45,34.000046L45,37.000046L44,37.000046z" fill-rule="evenodd" fill="#201B1D" stroke="none" fill-opacity="1" />
+			</g>
+			<g id="layer.014_arm.screen-right.uuid_0xf">
+				<path d="M45,27.000046L46,27.000046L46,28.000046L45,28.000046z" fill-rule="evenodd" fill="#201B1D" stroke="none" fill-opacity="1" />
+			</g>
+			<g id="layer.015_arm.screen-right.uuid_0x10">
+				<path d="M46,30.000046L47,30.000046L47,32.000046L46,32.000046z" fill-rule="evenodd" fill="#201B1D" stroke="none" fill-opacity="1" />
+			</g>
+			<g id="layer.016_arm.screen-right.uuid_0x11">
+				<path d="M32,27.000046L33,27.000046L33,28.000046L32,28.000046z" fill-rule="evenodd" fill="#D28B4B" stroke="none" fill-opacity="1" />
+			</g>
+			<g id="layer.017_arm.screen-right.uuid_0x12">
+				<path d="M32,39.000046L33,39.000046L33,40.000046L32,40.000046z" fill-rule="evenodd" fill="#D28B4B" stroke="none" fill-opacity="1" />
+			</g>
+			<g id="layer.018_arm.screen-right.uuid_0x13">
+				<path d="M33,30.000046L34,30.000046L34,31.000046L33,31.000046z" fill-rule="evenodd" fill="#D28B4B" stroke="none" fill-opacity="1" />
+			</g>
+			<g id="layer.019_arm.screen-right.uuid_0x14">
+				<path d="M35,28.000046L36,28.000046L36,29.000046L35,29.000046z" fill-rule="evenodd" fill="#D28B4B" stroke="none" fill-opacity="1" />
+			</g>
+			<g id="layer.020_arm.screen-right.uuid_0x15">
+				<path d="M33,25.000046L34,25.000046L34,26.000046L33,26.000046z" fill-rule="evenodd" fill="#EFB870" stroke="none" fill-opacity="1" />
+			</g>
+			<g id="layer.021_arm.screen-right.uuid_0x16">
+				<path d="M33,29.000046L34,29.000046L34,30.000046L33,30.000046z" fill-rule="evenodd" fill="#EFB870" stroke="none" fill-opacity="1" />
+			</g>
+			<g id="layer.022_arm.screen-right.uuid_0x17">
+				<path d="M35,29.000046L36,29.000046L36,30.000046L35,30.000046z" fill-rule="evenodd" fill="#EFB870" stroke="none" fill-opacity="1" />
+			</g>
+			<g id="layer.023_arm.screen-right.uuid_0x18">
+				<path d="M33,26.000046L36,26.000046L36,27.000046L35,27.000046L35,28.000046L33,28.000046z" fill-rule="evenodd" fill="#FED393" stroke="none" fill-opacity="1" />
+			</g>
+			<g id="layer.024_arm.screen-right.uuid_0x19">
+				<path d="M34,29.000046L35,29.000046L35,31.000046L34,31.000046z" fill-rule="evenodd" fill="#FED393" stroke="none" fill-opacity="1" />
+			</g>
+			<g id="layer.025_arm.screen-right.uuid_0x1a">
+				<path d="M34,32.000046L35,32.000046L35,33.000046L34,33.000046z" fill-rule="evenodd" fill="#FED393" stroke="none" fill-opacity="1" />
+			</g>
+			<g id="layer.026_arm.screen-right.uuid_0x1b">
+				<path d="M35,31.000046L36,31.000046L36,32.000046L35,32.000046z" fill-rule="evenodd" fill="#FED393" stroke="none" fill-opacity="1" />
+			</g>
+			<g id="layer.027_arm.screen-right.uuid_0x1c">
+				<path d="M38,26.000046L39,26.000046L39,27.000046L38,27.000046z" fill-rule="evenodd" fill="#17313A" stroke="none" fill-opacity="1" />
+			</g>
+			<g id="layer.028_arm.screen-right.uuid_0x1d">
+				<path d="M40,27.000046L41,27.000046L41,28.000046L40,28.000046z" fill-rule="evenodd" fill="#17313A" stroke="none" fill-opacity="1" />
+			</g>
+			<g id="layer.029_arm.screen-right.uuid_0x1e">
+				<path d="M40,34.000046L41,34.000046L41,35.000046L40,35.000046z" fill-rule="evenodd" fill="#17313A" stroke="none" fill-opacity="1" />
+			</g>
+			<g id="layer.030_arm.screen-right.uuid_0x1f">
+				<path d="M41,36.000046L42,36.000046L42,37.000046L41,37.000046z" fill-rule="evenodd" fill="#17313A" stroke="none" fill-opacity="1" />
+			</g>
+			<g id="layer.031_arm.screen-right.uuid_0x20">
+				<path d="M42,37.000046L43,37.000046L43,38.000046L42,38.000046z" fill-rule="evenodd" fill="#17313A" stroke="none" fill-opacity="1" />
+			</g>
+			<g id="layer.032_arm.screen-right.uuid_0x21">
+				<path d="M45,30.000046L46,30.000046L46,31.000046L45,31.000046z" fill-rule="evenodd" fill="#17313A" stroke="none" fill-opacity="1" />
+			</g>
+			<g id="layer.033_boot.screen-left.uuid_0x22">
+				<path d="M27,50.000046L28,50.000046L28,51.000046L27,51.000046z" fill-rule="evenodd" fill="#201B1D" stroke="none" fill-opacity="1" />
+			</g>
+			<g id="layer.034_boot.screen-left.uuid_0x23">
+				<path d="M28,53.000046L29,53.000046L29,55.000046L32,55.000046L32,56.000046L28,56.000046z" fill-rule="evenodd" fill="#201B1D" stroke="none" fill-opacity="1" />
+			</g>
+			<g id="layer.035_boot.screen-left.uuid_0x24">
+				<path d="M29,49.000046L30,49.000046L30,50.000046L29,50.000046z" fill-rule="evenodd" fill="#201B1D" stroke="none" fill-opacity="1" />
+			</g>
+			<g id="layer.036_boot.screen-left.uuid_0x25">
+				<path d="M29,52.000046L30,52.000046L30,53.000046L29,53.000046z" fill-rule="evenodd" fill="#201B1D" stroke="none" fill-opacity="1" />
+			</g>
+			<g id="layer.037_boot.screen-left.uuid_0x26">
+				<path d="M30,48.000046L31,48.000046L31,49.000046L30,49.000046z" fill-rule="evenodd" fill="#201B1D" stroke="none" fill-opacity="1" />
+			</g>
+			<g id="layer.038_boot.screen-left.uuid_0x27">
+				<path d="M31,49.000046L32,49.000046L32,52.000046L31,52.000046z" fill-rule="evenodd" fill="#201B1D" stroke="none" fill-opacity="1" />
+			</g>
+			<g id="layer.039_boot.screen-left.uuid_0x28">
+				<path d="M27,51.000046L28,51.000046L28,52.000046L27,52.000046z" fill-rule="evenodd" fill="#4B2919" stroke="none" fill-opacity="1" />
+			</g>
+			<g id="layer.040_boot.screen-left.uuid_0x29">
+				<path d="M29,54.000046L30,54.000046L30,55.000046L29,55.000046z" fill-rule="evenodd" fill="#4B2919" stroke="none" fill-opacity="1" />
+			</g>
+			<g id="layer.041_boot.screen-left.uuid_0x2a">
+				<path d="M30,49.000046L31,49.000046L31,50.000046L30,50.000046z" fill-rule="evenodd" fill="#4B2919" stroke="none" fill-opacity="1" />
+			</g>
+			<g id="layer.042_boot.screen-left.uuid_0x2b">
+				<path d="M30,51.000046L31,51.000046L31,52.000046L32,52.000046L32,53.000046L30,53.000046z" fill-rule="evenodd" fill="#4B2919" stroke="none" fill-opacity="1" />
+			</g>
+			<g id="layer.043_boot.screen-left.uuid_0x2c">
+				<path d="M28,51.000046L30,51.000046L30,52.000046L28,52.000046z" fill-rule="evenodd" fill="#754020" stroke="none" fill-opacity="1" />
+			</g>
+			<g id="layer.044_boot.screen-left.uuid_0x2d">
+				<path d="M30,50.000046L31,50.000046L31,51.000046L30,51.000046z" fill-rule="evenodd" fill="#754020" stroke="none" fill-opacity="1" />
+			</g>
+			<g id="layer.045_boot.screen-left.uuid_0x2e">
+				<path d="M30,54.000046L32,54.000046L32,55.000046L30,55.000046z" fill-rule="evenodd" fill="#754020" stroke="none" fill-opacity="1" />
+			</g>
+			<g id="layer.046_boot.screen-left.uuid_0x2f">
+				<path d="M31,48.000046L32,48.000046L32,49.000046L31,49.000046z" fill-rule="evenodd" fill="#754020" stroke="none" fill-opacity="1" />
+			</g>
+			<g id="layer.047_boot.screen-left.uuid_0x30">
+				<path d="M29,53.000046L30,53.000046L30,54.000046L29,54.000046z" fill-rule="evenodd" fill="#A75B27" stroke="none" fill-opacity="1" />
+			</g>
+			<g id="layer.048_boot.screen-left.uuid_0x31">
+				<path d="M31,53.000046L32,53.000046L32,54.000046L31,54.000046z" fill-rule="evenodd" fill="#A75B27" stroke="none" fill-opacity="1" />
+			</g>
+			<g id="layer.049_boot.screen-left.uuid_0x32">
+				<path d="M30,53.000046L31,53.000046L31,54.000046L30,54.000046z" fill-rule="evenodd" fill="#CE8238" stroke="none" fill-opacity="1" />
+			</g>
+			<g id="layer.050_boot.screen-left.uuid_0x33">
+				<path d="M27,52.000046L29,52.000046L29,53.000046L27,53.000046z" fill-rule="evenodd" fill="#30221B" stroke="none" fill-opacity="1" />
+			</g>
+			<g id="layer.051_boot.screen-left.uuid_0x34">
+				<path d="M28,50.000046L30,50.000046L30,51.000046L28,51.000046z" fill-rule="evenodd" fill="#30221B" stroke="none" fill-opacity="1" />
+			</g>
+			<g id="layer.052_boot.screen-right.uuid_0x35">
+				<path d="M32,51.000046L33,51.000046L33,52.000046L32,52.000046z" fill-rule="evenodd" fill="#201B1D" stroke="none" fill-opacity="1" />
+			</g>
+			<g id="layer.053_boot.screen-right.uuid_0x36">
+				<path d="M32,55.000046L34,55.000046L34,56.000046L32,56.000046z" fill-rule="evenodd" fill="#201B1D" stroke="none" fill-opacity="1" />
+			</g>
+			<g id="layer.054_boot.screen-right.uuid_0x37">
+				<path d="M35,49.000046L37,49.000046L37,50.000046L35,50.000046z" fill-rule="evenodd" fill="#201B1D" stroke="none" fill-opacity="1" />
+			</g>
+			<g id="layer.055_boot.screen-right.uuid_0x38">
+				<path d="M36,52.000046L37,52.000046L37,55.000046L36,55.000046z" fill-rule="evenodd" fill="#201B1D" stroke="none" fill-opacity="1" />
+			</g>
+			<g id="layer.056_boot.screen-right.uuid_0x39">
+				<path d="M32,50.000046L33,50.000046L33,51.000046L32,51.000046z" fill-rule="evenodd" fill="#4B2919" stroke="none" fill-opacity="1" />
+			</g>
+			<g id="layer.057_boot.screen-right.uuid_0x3a">
+				<path d="M32,54.000046L35,54.000046L35,55.000046L32,55.000046z" fill-rule="evenodd" fill="#4B2919" stroke="none" fill-opacity="1" />
+			</g>
+			<g id="layer.058_boot.screen-right.uuid_0x3b">
+				<path d="M34,49.000046L35,49.000046L35,50.000046L36,50.000046L36,51.000046L34,51.000046z" fill-rule="evenodd" fill="#4B2919" stroke="none" fill-opacity="1" />
+			</g>
+			<g id="layer.059_boot.screen-right.uuid_0x3c">
+				<path d="M34,52.000046L35,52.000046L35,53.000046L34,53.000046z" fill-rule="evenodd" fill="#4B2919" stroke="none" fill-opacity="1" />
+			</g>
+			<g id="layer.060_boot.screen-right.uuid_0x3d">
+				<path d="M32,52.000046L33,52.000046L33,53.000046L35,53.000046L35,52.000046L36,52.000046L36,55.000046L35,55.000046L35,54.000046L32,54.000046z" fill-rule="evenodd" fill="#754020" stroke="none" fill-opacity="1" />
+			</g>
+			<g id="layer.061_boot.screen-right.uuid_0x3e">
+				<path d="M33,50.000046L34,50.000046L34,51.000046L33,51.000046z" fill-rule="evenodd" fill="#754020" stroke="none" fill-opacity="1" />
+			</g>
+			<g id="layer.062_boot.screen-right.uuid_0x3f">
+				<path d="M34,51.000046L35,51.000046L35,52.000046L34,52.000046z" fill-rule="evenodd" fill="#754020" stroke="none" fill-opacity="1" />
+			</g>
+			<g id="layer.063_boot.screen-right.uuid_0x40">
+				<path d="M33,51.000046L34,51.000046L34,53.000046L33,53.000046z" fill-rule="evenodd" fill="#A75B27" stroke="none" fill-opacity="1" />
+			</g>
+			<g id="layer.064_boot.screen-right.uuid_0x41">
+				<path d="M32,49.000046L33,49.000046L33,50.000046L32,50.000046z" fill-rule="evenodd" fill="#61422C" stroke="none" fill-opacity="1" />
+			</g>
+			<g id="layer.065_boot.screen-right.uuid_0x42">
+				<path d="M36,48.000046L37,48.000046L37,49.000046L36,49.000046z" fill-rule="evenodd" fill="#61422C" stroke="none" fill-opacity="1" />
+			</g>
+			<g id="layer.066_boot.screen-right.uuid_0x43">
+				<path d="M33,49.000046L34,49.000046L34,50.000046L33,50.000046z" fill-rule="evenodd" fill="#886035" stroke="none" fill-opacity="1" />
+			</g>
+			<g id="layer.067_boot.screen-right.uuid_0x44">
+				<path d="M35,48.000046L36,48.000046L36,49.000046L35,49.000046z" fill-rule="evenodd" fill="#886035" stroke="none" fill-opacity="1" />
+			</g>
+			<g id="layer.068_boot.screen-right.uuid_0x45">
+				<path d="M34,48.000046L35,48.000046L35,49.000046L34,49.000046z" fill-rule="evenodd" fill="#B2844E" stroke="none" fill-opacity="1" />
+			</g>
+			<g id="layer.069_boot.screen-right.uuid_0x46">
+				<path d="M32,48.000046L34,48.000046L34,49.000046L32,49.000046z" fill-rule="evenodd" fill="#D4A96C" stroke="none" fill-opacity="1" />
+			</g>
+			<g id="layer.070_boot.screen-right.uuid_0x47">
+				<path d="M35,51.000046L36,51.000046L36,52.000046L35,52.000046z" fill-rule="evenodd" fill="#30221B" stroke="none" fill-opacity="1" />
+			</g>
+			<g id="layer.071_head.face.uuid_0x48">
+				<path d="M26,19.000046L27,19.000046L27,21.000046L26,21.000046z" fill-rule="evenodd" fill="#201B1D" stroke="none" fill-opacity="1" />
+			</g>
+			<g id="layer.072_head.face.uuid_0x49">
+				<path d="M26,22.000046L27,22.000046L27,24.000046L26,24.000046z" fill-rule="evenodd" fill="#201B1D" stroke="none" fill-opacity="1" />
+			</g>
+			<g id="layer.073_head.face.uuid_0x4a">
+				<path d="M28,22.000046L30,22.000046L30,23.000046L28,23.000046z" fill-rule="evenodd" fill="#201B1D" stroke="none" fill-opacity="1" />
+			</g>
+			<g id="layer.074_head.face.uuid_0x4b">
+				<path d="M31,18.000046L33,18.000046L33,19.000046L31,19.000046z" fill-rule="evenodd" fill="#201B1D" stroke="none" fill-opacity="1" />
+			</g>
+			<g id="layer.075_head.face.uuid_0x4c">
+				<path d="M31,21.000046L32,21.000046L32,22.000046L31,22.000046z" fill-rule="evenodd" fill="#201B1D" stroke="none" fill-opacity="1" />
+			</g>
+			<g id="layer.076_head.face.uuid_0x4d">
+				<path d="M34,18.000046L35,18.000046L35,19.000046L34,19.000046z" fill-rule="evenodd" fill="#201B1D" stroke="none" fill-opacity="1" />
+			</g>
+			<g id="layer.077_head.face.uuid_0x4e">
+				<path d="M34,20.000046L35,20.000046L35,19.000046L37,19.000046L37,21.000046L34,21.000046z" fill-rule="evenodd" fill="#201B1D" stroke="none" fill-opacity="1" />
+			</g>
+			<g id="layer.078_head.face.uuid_0x4f">
+				<path d="M35,22.000046L37,22.000046L37,21.000046L38,21.000046L38,23.000046L35,23.000046z" fill-rule="evenodd" fill="#201B1D" stroke="none" fill-opacity="1" />
+			</g>
+			<g id="layer.079_head.face.uuid_0x50">
+				<path d="M37,18.000046L38,18.000046L38,19.000046L37,19.000046z" fill-rule="evenodd" fill="#201B1D" stroke="none" fill-opacity="1" />
+			</g>
+			<g id="layer.080_head.face.uuid_0x51">
+				<path d="M39,23.000046L40,23.000046L40,24.000046L39,24.000046z" fill-rule="evenodd" fill="#201B1D" stroke="none" fill-opacity="1" />
+			</g>
+			<g id="layer.081_head.face.uuid_0x52">
+				<path d="M27,18.000046L28,18.000046L28,19.000046L27,19.000046z" fill-rule="evenodd" fill="#A96539" stroke="none" fill-opacity="1" />
+			</g>
+			<g id="layer.082_head.face.uuid_0x53">
+				<path d="M31,19.000046L33,19.000046L33,20.000046L31,20.000046z" fill-rule="evenodd" fill="#D28B4B" stroke="none" fill-opacity="1" />
+			</g>
+			<g id="layer.083_head.face.uuid_0x54">
+				<path d="M33,17.000046L34,17.000046L34,18.000046L33,18.000046z" fill-rule="evenodd" fill="#D28B4B" stroke="none" fill-opacity="1" />
+			</g>
+			<g id="layer.084_head.face.uuid_0x55">
+				<path d="M27,20.000046L28,20.000046L28,21.000046L27,21.000046z" fill-rule="evenodd" fill="#EFB870" stroke="none" fill-opacity="1" />
+			</g>
+			<g id="layer.085_head.face.uuid_0x56">
+				<path d="M28,15.000046L29,15.000046L29,16.000046L28,16.000046z" fill-rule="evenodd" fill="#EFB870" stroke="none" fill-opacity="1" />
+			</g>
+			<g id="layer.086_head.face.uuid_0x57">
+				<path d="M28,21.000046L29,21.000046L29,22.000046L28,22.000046z" fill-rule="evenodd" fill="#EFB870" stroke="none" fill-opacity="1" />
+			</g>
+			<g id="layer.087_head.face.uuid_0x58">
+				<path d="M27,19.000046L28,19.000046L28,20.000046L27,20.000046z" fill-rule="evenodd" fill="#FED393" stroke="none" fill-opacity="1" />
+			</g>
+			<g id="layer.088_head.face.uuid_0x59">
+				<path d="M28,20.000046L29,20.000046L29,19.000046L30,19.000046L30,21.000046L28,21.000046z" fill-rule="evenodd" fill="#FED393" stroke="none" fill-opacity="1" />
+			</g>
+			<g id="layer.089_head.hair.uuid_0x5a">
+				<path d="M23,10.000046L26,10.000046L26,11.000046L25,11.000046L25,12.000046L24,12.000046L24,11.000046L23,11.000046z" fill-rule="evenodd" fill="#201B1D" stroke="none" fill-opacity="1" />
+			</g>
+			<g id="layer.090_head.hair.uuid_0x5b">
+				<path d="M23,14.000046L25,14.000046L25,15.000046L24,15.000046L24,16.000046L23,16.000046z" fill-rule="evenodd" fill="#201B1D" stroke="none" fill-opacity="1" />
+			</g>
+			<g id="layer.091_head.hair.uuid_0x5c">
+				<path d="M26,9.000046L27,9.000046L27,10.000046L26,10.000046z" fill-rule="evenodd" fill="#201B1D" stroke="none" fill-opacity="1" />
+			</g>
+			<g id="layer.092_head.hair.uuid_0x5d">
+				<path d="M26,15.000046L27,15.000046L27,17.000046L26,17.000046z" fill-rule="evenodd" fill="#201B1D" stroke="none" fill-opacity="1" />
+			</g>
+			<g id="layer.093_head.hair.uuid_0x5e">
+				<path d="M28,16.000046L29,16.000046L29,15.000046L30,15.000046L30,16.000046L31,16.000046L31,17.000046L29,17.000046L29,18.000046L28,18.000046z" fill-rule="evenodd" fill="#201B1D" stroke="none" fill-opacity="1" />
+			</g>
+			<g id="layer.094_head.hair.uuid_0x5f">
+				<path d="M29,8.000046L30,8.000046L30,9.000046L29,9.000046z" fill-rule="evenodd" fill="#201B1D" stroke="none" fill-opacity="1" />
+			</g>
+			<g id="layer.095_head.hair.uuid_0x60">
+				<path d="M30,7.000046L31,7.000046L31,8.000046L30,8.000046z" fill-rule="evenodd" fill="#201B1D" stroke="none" fill-opacity="1" />
+			</g>
+			<g id="layer.096_head.hair.uuid_0x61">
+				<path d="M30,9.000046L31,9.000046L31,10.000046L30,10.000046z" fill-rule="evenodd" fill="#201B1D" stroke="none" fill-opacity="1" />
+			</g>
+			<g id="layer.097_head.hair.uuid_0x62">
+				<path d="M31,8.000046L32,8.000046L32,9.000046L31,9.000046z" fill-rule="evenodd" fill="#201B1D" stroke="none" fill-opacity="1" />
+			</g>
+			<g id="layer.098_head.hair.uuid_0x63">
+				<path d="M31,17.000046L32,17.000046L32,18.000046L31,18.000046z" fill-rule="evenodd" fill="#201B1D" stroke="none" fill-opacity="1" />
+			</g>
+			<g id="layer.099_head.hair.uuid_0x64">
+				<path d="M32,7.000046L33,7.000046L33,8.000046L32,8.000046z" fill-rule="evenodd" fill="#201B1D" stroke="none" fill-opacity="1" />
+			</g>
+			<g id="layer.100_head.hair.uuid_0x65">
+				<path d="M33,8.000046L34,8.000046L34,7.000046L36,7.000046L36,8.000046L35,8.000046L35,10.000046L34,10.000046L34,9.000046L33,9.000046z" fill-rule="evenodd" fill="#201B1D" stroke="none" fill-opacity="1" />
+			</g>
+			<g id="layer.101_head.hair.uuid_0x66">
+				<path d="M33,16.000046L34,16.000046L34,17.000046L33,17.000046z" fill-rule="evenodd" fill="#201B1D" stroke="none" fill-opacity="1" />
+			</g>
+			<g id="layer.102_head.hair.uuid_0x67">
+				<path d="M34,17.000046L35,17.000046L35,18.000046L34,18.000046z" fill-rule="evenodd" fill="#201B1D" stroke="none" fill-opacity="1" />
+			</g>
+			<g id="layer.103_head.hair.uuid_0x68">
+				<path d="M36,8.000046L37,8.000046L37,10.000046L36,10.000046z" fill-rule="evenodd" fill="#201B1D" stroke="none" fill-opacity="1" />
+			</g>
+			<g id="layer.104_head.hair.uuid_0x69">
+				<path d="M37,10.000046L38,10.000046L38,11.000046L37,11.000046z" fill-rule="evenodd" fill="#201B1D" stroke="none" fill-opacity="1" />
+			</g>
+			<g id="layer.105_head.hair.uuid_0x6a">
+				<path d="M38,11.000046L39,11.000046L39,12.000046L38,12.000046z" fill-rule="evenodd" fill="#201B1D" stroke="none" fill-opacity="1" />
+			</g>
+			<g id="layer.106_head.hair.uuid_0x6b">
+				<path d="M38,16.000046L39,16.000046L39,17.000046L38,17.000046z" fill-rule="evenodd" fill="#201B1D" stroke="none" fill-opacity="1" />
+			</g>
+			<g id="layer.107_head.hair.uuid_0x6c">
+				<path d="M39,12.000046L40,12.000046L40,13.000046L39,13.000046z" fill-rule="evenodd" fill="#201B1D" stroke="none" fill-opacity="1" />
+			</g>
+			<g id="layer.108_head.hair.uuid_0x6d">
+				<path d="M39,14.000046L40,14.000046L40,15.000046L39,15.000046z" fill-rule="evenodd" fill="#201B1D" stroke="none" fill-opacity="1" />
+			</g>
+			<g id="layer.109_head.hair.uuid_0x6e">
+				<path d="M39,17.000046L40,17.000046L40,18.000046L39,18.000046z" fill-rule="evenodd" fill="#201B1D" stroke="none" fill-opacity="1" />
+			</g>
+			<g id="layer.110_head.hair.uuid_0x6f">
+				<path d="M40,13.000046L41,13.000046L41,14.000046L40,14.000046z" fill-rule="evenodd" fill="#201B1D" stroke="none" fill-opacity="1" />
+			</g>
+			<g id="layer.111_head.hair.uuid_0x70">
+				<path d="M25,12.000046L26,12.000046L26,13.000046L25,13.000046z" fill-rule="evenodd" fill="#4B2919" stroke="none" fill-opacity="1" />
+			</g>
+			<g id="layer.112_head.hair.uuid_0x71">
+				<path d="M25,14.000046L26,14.000046L26,15.000046L25,15.000046z" fill-rule="evenodd" fill="#4B2919" stroke="none" fill-opacity="1" />
+			</g>
+			<g id="layer.113_head.hair.uuid_0x72">
+				<path d="M26,8.000046L27,8.000046L27,9.000046L26,9.000046z" fill-rule="evenodd" fill="#4B2919" stroke="none" fill-opacity="1" />
+			</g>
+			<g id="layer.114_head.hair.uuid_0x73">
+				<path d="M26,11.000046L27,11.000046L27,12.000046L26,12.000046z" fill-rule="evenodd" fill="#4B2919" stroke="none" fill-opacity="1" />
+			</g>
+			<g id="layer.115_head.hair.uuid_0x74">
+				<path d="M28,13.000046L29,13.000046L29,15.000046L28,15.000046z" fill-rule="evenodd" fill="#4B2919" stroke="none" fill-opacity="1" />
+			</g>
+			<g id="layer.116_head.hair.uuid_0x75">
+				<path d="M29,11.000046L30,11.000046L30,12.000046L29,12.000046z" fill-rule="evenodd" fill="#4B2919" stroke="none" fill-opacity="1" />
+			</g>
+			<g id="layer.117_head.hair.uuid_0x76">
+				<path d="M30,15.000046L31,15.000046L31,16.000046L30,16.000046z" fill-rule="evenodd" fill="#4B2919" stroke="none" fill-opacity="1" />
+			</g>
+			<g id="layer.118_head.hair.uuid_0x77">
+				<path d="M31,7.000046L32,7.000046L32,8.000046L31,8.000046z" fill-rule="evenodd" fill="#4B2919" stroke="none" fill-opacity="1" />
+			</g>
+			<g id="layer.119_head.hair.uuid_0x78">
+				<path d="M32,10.000046L33,10.000046L33,11.000046L32,11.000046z" fill-rule="evenodd" fill="#4B2919" stroke="none" fill-opacity="1" />
+			</g>
+			<g id="layer.120_head.hair.uuid_0x79">
+				<path d="M32,15.000046L34,15.000046L34,16.000046L33,16.000046L33,17.000046L32,17.000046z" fill-rule="evenodd" fill="#4B2919" stroke="none" fill-opacity="1" />
+			</g>
+			<g id="layer.121_head.hair.uuid_0x7a">
+				<path d="M32,20.000046L33,20.000046L33,21.000046L32,21.000046z" fill-rule="evenodd" fill="#4B2919" stroke="none" fill-opacity="1" />
+			</g>
+			<g id="layer.122_head.hair.uuid_0x7b">
+				<path d="M33,11.000046L34,11.000046L34,12.000046L33,12.000046z" fill-rule="evenodd" fill="#4B2919" stroke="none" fill-opacity="1" />
+			</g>
+			<g id="layer.123_head.hair.uuid_0x7c">
+				<path d="M34,10.000046L35,10.000046L35,11.000046L34,11.000046z" fill-rule="evenodd" fill="#4B2919" stroke="none" fill-opacity="1" />
+			</g>
+			<g id="layer.124_head.hair.uuid_0x7d">
+				<path d="M34,16.000046L35,16.000046L35,17.000046L34,17.000046z" fill-rule="evenodd" fill="#4B2919" stroke="none" fill-opacity="1" />
+			</g>
+			<g id="layer.125_head.hair.uuid_0x7e">
+				<path d="M34,19.000046L35,19.000046L35,20.000046L34,20.000046z" fill-rule="evenodd" fill="#4B2919" stroke="none" fill-opacity="1" />
+			</g>
+			<g id="layer.126_head.hair.uuid_0x7f">
+				<path d="M35,11.000046L36,11.000046L36,10.000046L37,10.000046L37,11.000046L38,11.000046L38,12.000046L35,12.000046z" fill-rule="evenodd" fill="#4B2919" stroke="none" fill-opacity="1" />
+			</g>
+			<g id="layer.127_head.hair.uuid_0x80">
+				<path d="M35,13.000046L36,13.000046L36,14.000046L37,14.000046L37,15.000046L36,15.000046L36,16.000046L35,16.000046z" fill-rule="evenodd" fill="#4B2919" stroke="none" fill-opacity="1" />
+			</g>
+			<g id="layer.128_head.hair.uuid_0x81">
+				<path d="M35,17.000046L36,17.000046L36,16.000046L37,16.000046L37,15.000046L38,15.000046L38,14.000046L39,14.000046L39,16.000046L38,16.000046L38,17.000046L37,17.000046L37,18.000046L36,18.000046L36,19.000046L35,19.000046z" fill-rule="evenodd" fill="#4B2919" stroke="none" fill-opacity="1" />
+			</g>
+			<g id="layer.129_head.hair.uuid_0x82">
+				<path d="M37,13.000046L38,13.000046L38,14.000046L37,14.000046z" fill-rule="evenodd" fill="#4B2919" stroke="none" fill-opacity="1" />
+			</g>
+			<g id="layer.130_head.hair.uuid_0x83">
+				<path d="M39,13.000046L40,13.000046L40,14.000046L39,14.000046z" fill-rule="evenodd" fill="#4B2919" stroke="none" fill-opacity="1" />
+			</g>
+			<g id="layer.131_head.hair.uuid_0x84">
+				<path d="M25,11.000046L26,11.000046L26,12.000046L25,12.000046z" fill-rule="evenodd" fill="#754020" stroke="none" fill-opacity="1" />
+			</g>
+			<g id="layer.132_head.hair.uuid_0x85">
+				<path d="M25,13.000046L26,13.000046L26,14.000046L25,14.000046z" fill-rule="evenodd" fill="#754020" stroke="none" fill-opacity="1" />
+			</g>
+			<g id="layer.133_head.hair.uuid_0x86">
+				<path d="M25,15.000046L26,15.000046L26,16.000046L25,16.000046z" fill-rule="evenodd" fill="#754020" stroke="none" fill-opacity="1" />
+			</g>
+			<g id="layer.134_head.hair.uuid_0x87">
+				<path d="M26,12.000046L27,12.000046L27,13.000046L26,13.000046z" fill-rule="evenodd" fill="#754020" stroke="none" fill-opacity="1" />
+			</g>
+			<g id="layer.135_head.hair.uuid_0x88">
+				<path d="M27,9.000046L28,9.000046L28,10.000046L29,10.000046L29,11.000046L28,11.000046L28,12.000046L27,12.000046z" fill-rule="evenodd" fill="#754020" stroke="none" fill-opacity="1" />
+			</g>
+			<g id="layer.136_head.hair.uuid_0x89">
+				<path d="M27,17.000046L28,17.000046L28,18.000046L27,18.000046z" fill-rule="evenodd" fill="#754020" stroke="none" fill-opacity="1" />
+			</g>
+			<g id="layer.137_head.hair.uuid_0x8a">
+				<path d="M27,21.000046L28,21.000046L28,22.000046L27,22.000046z" fill-rule="evenodd" fill="#754020" stroke="none" fill-opacity="1" />
+			</g>
+			<g id="layer.138_head.hair.uuid_0x8b">
+				<path d="M28,8.000046L29,8.000046L29,9.000046L28,9.000046z" fill-rule="evenodd" fill="#754020" stroke="none" fill-opacity="1" />
+			</g>
+			<g id="layer.139_head.hair.uuid_0x8c">
+				<path d="M29,14.000046L30,14.000046L30,15.000046L29,15.000046z" fill-rule="evenodd" fill="#754020" stroke="none" fill-opacity="1" />
+			</g>
+			<g id="layer.140_head.hair.uuid_0x8d">
+				<path d="M30,11.000046L31,11.000046L31,13.000046L30,13.000046z" fill-rule="evenodd" fill="#754020" stroke="none" fill-opacity="1" />
+			</g>
+			<g id="layer.141_head.hair.uuid_0x8e">
+				<path d="M30,21.000046L31,21.000046L31,22.000046L30,22.000046z" fill-rule="evenodd" fill="#754020" stroke="none" fill-opacity="1" />
+			</g>
+			<g id="layer.142_head.hair.uuid_0x8f">
+				<path d="M31,10.000046L32,10.000046L32,11.000046L31,11.000046z" fill-rule="evenodd" fill="#754020" stroke="none" fill-opacity="1" />
+			</g>
+			<g id="layer.143_head.hair.uuid_0x90">
+				<path d="M31,13.000046L32,13.000046L32,14.000046L31,14.000046z" fill-rule="evenodd" fill="#754020" stroke="none" fill-opacity="1" />
+			</g>
+			<g id="layer.144_head.hair.uuid_0x91">
+				<path d="M31,16.000046L32,16.000046L32,17.000046L31,17.000046z" fill-rule="evenodd" fill="#754020" stroke="none" fill-opacity="1" />
+			</g>
+			<g id="layer.145_head.hair.uuid_0x92">
+				<path d="M33,9.000046L34,9.000046L34,10.000046L33,10.000046z" fill-rule="evenodd" fill="#754020" stroke="none" fill-opacity="1" />
+			</g>
+			<g id="layer.146_head.hair.uuid_0x93">
+				<path d="M33,14.000046L34,14.000046L34,15.000046L33,15.000046z" fill-rule="evenodd" fill="#754020" stroke="none" fill-opacity="1" />
+			</g>
+			<g id="layer.147_head.hair.uuid_0x94">
+				<path d="M34,11.000046L35,11.000046L35,13.000046L34,13.000046z" fill-rule="evenodd" fill="#754020" stroke="none" fill-opacity="1" />
+			</g>
+			<g id="layer.148_head.hair.uuid_0x95">
+				<path d="M35,9.000046L36,9.000046L36,11.000046L35,11.000046z" fill-rule="evenodd" fill="#754020" stroke="none" fill-opacity="1" />
+			</g>
+			<g id="layer.149_head.hair.uuid_0x96">
+				<path d="M35,16.000046L36,16.000046L36,17.000046L35,17.000046z" fill-rule="evenodd" fill="#754020" stroke="none" fill-opacity="1" />
+			</g>
+			<g id="layer.150_head.hair.uuid_0x97">
+				<path d="M36,12.000046L38,12.000046L38,13.000046L36,13.000046z" fill-rule="evenodd" fill="#754020" stroke="none" fill-opacity="1" />
+			</g>
+			<g id="layer.151_head.hair.uuid_0x98">
+				<path d="M36,15.000046L37,15.000046L37,16.000046L36,16.000046z" fill-rule="evenodd" fill="#754020" stroke="none" fill-opacity="1" />
+			</g>
+			<g id="layer.152_head.hair.uuid_0x99">
+				<path d="M37,14.000046L38,14.000046L38,15.000046L37,15.000046z" fill-rule="evenodd" fill="#754020" stroke="none" fill-opacity="1" />
+			</g>
+			<g id="layer.153_head.hair.uuid_0x9a">
+				<path d="M38,13.000046L39,13.000046L39,14.000046L38,14.000046z" fill-rule="evenodd" fill="#754020" stroke="none" fill-opacity="1" />
+			</g>
+			<g id="layer.154_head.hair.uuid_0x9b">
+				<path d="M24,13.000046L25,13.000046L25,14.000046L24,14.000046z" fill-rule="evenodd" fill="#A75B27" stroke="none" fill-opacity="1" />
+			</g>
+			<g id="layer.155_head.hair.uuid_0x9c">
+				<path d="M26,13.000046L27,13.000046L27,12.000046L28,12.000046L28,11.000046L29,11.000046L29,12.000046L30,12.000046L30,14.000046L29,14.000046L29,13.000046L28,13.000046L28,14.000046L27,14.000046L27,15.000046L26,15.000046z" fill-rule="evenodd" fill="#A75B27" stroke="none" fill-opacity="1" />
+			</g>
+			<g id="layer.156_head.hair.uuid_0x9d">
+				<path d="M27,8.000046L28,8.000046L28,9.000046L27,9.000046z" fill-rule="evenodd" fill="#A75B27" stroke="none" fill-opacity="1" />
+			</g>
+			<g id="layer.157_head.hair.uuid_0x9e">
+				<path d="M27,15.000046L28,15.000046L28,16.000046L27,16.000046z" fill-rule="evenodd" fill="#A75B27" stroke="none" fill-opacity="1" />
+			</g>
+			<g id="layer.158_head.hair.uuid_0x9f">
+				<path d="M29,9.000046L30,9.000046L30,11.000046L29,11.000046z" fill-rule="evenodd" fill="#A75B27" stroke="none" fill-opacity="1" />
+			</g>
+			<g id="layer.159_head.hair.uuid_0xa0">
+				<path d="M30,14.000046L31,14.000046L31,15.000046L30,15.000046z" fill-rule="evenodd" fill="#A75B27" stroke="none" fill-opacity="1" />
+			</g>
+			<g id="layer.160_head.hair.uuid_0xa1">
+				<path d="M31,11.000046L33,11.000046L33,12.000046L32,12.000046L32,13.000046L31,13.000046z" fill-rule="evenodd" fill="#A75B27" stroke="none" fill-opacity="1" />
+			</g>
+			<g id="layer.161_head.hair.uuid_0xa2">
+				<path d="M31,15.000046L32,15.000046L32,16.000046L31,16.000046z" fill-rule="evenodd" fill="#A75B27" stroke="none" fill-opacity="1" />
+			</g>
+			<g id="layer.162_head.hair.uuid_0xa3">
+				<path d="M32,8.000046L33,8.000046L33,10.000046L32,10.000046z" fill-rule="evenodd" fill="#A75B27" stroke="none" fill-opacity="1" />
+			</g>
+			<g id="layer.163_head.hair.uuid_0xa4">
+				<path d="M32,13.000046L33,13.000046L33,14.000046L32,14.000046z" fill-rule="evenodd" fill="#A75B27" stroke="none" fill-opacity="1" />
+			</g>
+			<g id="layer.164_head.hair.uuid_0xa5">
+				<path d="M33,10.000046L34,10.000046L34,11.000046L33,11.000046z" fill-rule="evenodd" fill="#A75B27" stroke="none" fill-opacity="1" />
+			</g>
+			<g id="layer.165_head.hair.uuid_0xa6">
+				<path d="M33,12.000046L34,12.000046L34,13.000046L33,13.000046z" fill-rule="evenodd" fill="#A75B27" stroke="none" fill-opacity="1" />
+			</g>
+			<g id="layer.166_head.hair.uuid_0xa7">
+				<path d="M33,18.000046L34,18.000046L34,19.000046L33,19.000046z" fill-rule="evenodd" fill="#A75B27" stroke="none" fill-opacity="1" />
+			</g>
+			<g id="layer.167_head.hair.uuid_0xa8">
+				<path d="M34,14.000046L35,14.000046L35,16.000046L34,16.000046z" fill-rule="evenodd" fill="#A75B27" stroke="none" fill-opacity="1" />
+			</g>
+			<g id="layer.168_head.hair.uuid_0xa9">
+				<path d="M35,8.000046L36,8.000046L36,9.000046L35,9.000046z" fill-rule="evenodd" fill="#A75B27" stroke="none" fill-opacity="1" />
+			</g>
+			<g id="layer.169_head.hair.uuid_0xaa">
+				<path d="M35,12.000046L36,12.000046L36,13.000046L35,13.000046z" fill-rule="evenodd" fill="#A75B27" stroke="none" fill-opacity="1" />
+			</g>
+			<g id="layer.170_head.hair.uuid_0xab">
+				<path d="M36,13.000046L37,13.000046L37,14.000046L36,14.000046z" fill-rule="evenodd" fill="#A75B27" stroke="none" fill-opacity="1" />
+			</g>
+			<g id="layer.171_head.hair.uuid_0xac">
+				<path d="M28,9.000046L29,9.000046L29,10.000046L28,10.000046z" fill-rule="evenodd" fill="#CE8238" stroke="none" fill-opacity="1" />
+			</g>
+			<g id="layer.172_head.hair.uuid_0xad">
+				<path d="M30,10.000046L31,10.000046L31,11.000046L30,11.000046z" fill-rule="evenodd" fill="#CE8238" stroke="none" fill-opacity="1" />
+			</g>
+			<g id="layer.173_head.hair.uuid_0xae">
+				<path d="M30,13.000046L31,13.000046L31,14.000046L30,14.000046z" fill-rule="evenodd" fill="#CE8238" stroke="none" fill-opacity="1" />
+			</g>
+			<g id="layer.174_head.hair.uuid_0xaf">
+				<path d="M30,17.000046L31,17.000046L31,19.000046L30,19.000046z" fill-rule="evenodd" fill="#CE8238" stroke="none" fill-opacity="1" />
+			</g>
+			<g id="layer.175_head.hair.uuid_0xb0">
+				<path d="M31,14.000046L32,14.000046L32,15.000046L31,15.000046z" fill-rule="evenodd" fill="#CE8238" stroke="none" fill-opacity="1" />
+			</g>
+			<g id="layer.176_head.hair.uuid_0xb1">
+				<path d="M31,20.000046L32,20.000046L32,21.000046L31,21.000046z" fill-rule="evenodd" fill="#CE8238" stroke="none" fill-opacity="1" />
+			</g>
+			<g id="layer.177_head.hair.uuid_0xb2">
+				<path d="M32,12.000046L33,12.000046L33,13.000046L32,13.000046z" fill-rule="evenodd" fill="#CE8238" stroke="none" fill-opacity="1" />
+			</g>
+			<g id="layer.178_head.hair.uuid_0xb3">
+				<path d="M33,13.000046L34,13.000046L34,14.000046L33,14.000046z" fill-rule="evenodd" fill="#CE8238" stroke="none" fill-opacity="1" />
+			</g>
+			<g id="layer.179_head.hair.uuid_0xb4">
+				<path d="M27,16.000046L28,16.000046L28,17.000046L27,17.000046z" fill-rule="evenodd" fill="#EDAA58" stroke="none" fill-opacity="1" />
+			</g>
+			<g id="layer.180_head.hair.uuid_0xb5">
+				<path d="M29,21.000046L30,21.000046L30,22.000046L29,22.000046z" fill-rule="evenodd" fill="#EDAA58" stroke="none" fill-opacity="1" />
+			</g>
+			<g id="layer.181_head.hair.uuid_0xb6">
+				<path d="M30,20.000046L31,20.000046L31,21.000046L30,21.000046z" fill-rule="evenodd" fill="#EDAA58" stroke="none" fill-opacity="1" />
+			</g>
+			<g id="layer.182_head.hair.uuid_0xb7">
+				<path d="M33,19.000046L34,19.000046L34,20.000046L33,20.000046z" fill-rule="evenodd" fill="#EDAA58" stroke="none" fill-opacity="1" />
+			</g>
+			<g id="layer.183_head.hair.uuid_0xb8">
+				<path d="M27,23.000046L28,23.000046L28,24.000046L27,24.000046z" fill-rule="evenodd" fill="#0B3B49" stroke="none" fill-opacity="1" />
+			</g>
+			<g id="layer.184_head.hair.uuid_0xb9">
+				<path d="M33,22.000046L34,22.000046L34,23.000046L33,23.000046z" fill-rule="evenodd" fill="#0B3B49" stroke="none" fill-opacity="1" />
+			</g>
+			<g id="layer.185_head.hair.uuid_0xba">
+				<path d="M36,21.000046L37,21.000046L37,22.000046L36,22.000046z" fill-rule="evenodd" fill="#0B3B49" stroke="none" fill-opacity="1" />
+			</g>
+			<g id="layer.186_head.hair.uuid_0xbb">
+				<path d="M36,23.000046L37,23.000046L37,24.000046L36,24.000046z" fill-rule="evenodd" fill="#0B3B49" stroke="none" fill-opacity="1" />
+			</g>
+			<g id="layer.187_head.hair.uuid_0xbc">
+				<path d="M27,22.000046L28,22.000046L28,23.000046L27,23.000046z" fill-rule="evenodd" fill="#105664" stroke="none" fill-opacity="1" />
+			</g>
+			<g id="layer.188_head.hair.uuid_0xbd">
+				<path d="M31,23.000046L32,23.000046L32,24.000046L31,24.000046z" fill-rule="evenodd" fill="#105664" stroke="none" fill-opacity="1" />
+			</g>
+			<g id="layer.189_head.hair.uuid_0xbe">
+				<path d="M32,21.000046L33,21.000046L33,23.000046L32,23.000046z" fill-rule="evenodd" fill="#105664" stroke="none" fill-opacity="1" />
+			</g>
+			<g id="layer.190_head.hair.uuid_0xbf">
+				<path d="M34,21.000046L36,21.000046L36,22.000046L34,22.000046z" fill-rule="evenodd" fill="#105664" stroke="none" fill-opacity="1" />
+			</g>
+			<g id="layer.191_head.hair.uuid_0xc0">
+				<path d="M34,23.000046L36,23.000046L36,24.000046L34,24.000046z" fill-rule="evenodd" fill="#105664" stroke="none" fill-opacity="1" />
+			</g>
+			<g id="layer.192_head.hair.uuid_0xc1">
+				<path d="M37,23.000046L39,23.000046L39,24.000046L37,24.000046z" fill-rule="evenodd" fill="#105664" stroke="none" fill-opacity="1" />
+			</g>
+			<g id="layer.193_head.hair.uuid_0xc2">
+				<path d="M29,23.000046L30,23.000046L30,24.000046L29,24.000046z" fill-rule="evenodd" fill="#17788A" stroke="none" fill-opacity="1" />
+			</g>
+			<g id="layer.194_head.hair.uuid_0xc3">
+				<path d="M31,22.000046L32,22.000046L32,23.000046L31,23.000046z" fill-rule="evenodd" fill="#17788A" stroke="none" fill-opacity="1" />
+			</g>
+			<g id="layer.195_head.hair.uuid_0xc4">
+				<path d="M33,21.000046L34,21.000046L34,22.000046L33,22.000046z" fill-rule="evenodd" fill="#17788A" stroke="none" fill-opacity="1" />
+			</g>
+			<g id="layer.196_head.hair.uuid_0xc5">
+				<path d="M33,23.000046L34,23.000046L34,24.000046L33,24.000046z" fill-rule="evenodd" fill="#17788A" stroke="none" fill-opacity="1" />
+			</g>
+			<g id="layer.197_head.hair.uuid_0xc6">
+				<path d="M28,23.000046L29,23.000046L29,24.000046L28,24.000046z" fill-rule="evenodd" fill="#2995A2" stroke="none" fill-opacity="1" />
+			</g>
+			<g id="layer.198_head.hair.uuid_0xc7">
+				<path d="M30,22.000046L31,22.000046L31,23.000046L30,23.000046z" fill-rule="evenodd" fill="#2995A2" stroke="none" fill-opacity="1" />
+			</g>
+			<g id="layer.199_head.hair.uuid_0xc8">
+				<path d="M32,23.000046L33,23.000046L33,24.000046L32,24.000046z" fill-rule="evenodd" fill="#2995A2" stroke="none" fill-opacity="1" />
+			</g>
+			<g id="layer.200_head.hair.uuid_0xc9">
+				<path d="M30,23.000046L31,23.000046L31,24.000046L30,24.000046z" fill-rule="evenodd" fill="#17313A" stroke="none" fill-opacity="1" />
+			</g>
+			<g id="layer.201_head.hair.uuid_0xca">
+				<path d="M34,22.000046L35,22.000046L35,23.000046L34,23.000046z" fill-rule="evenodd" fill="#17313A" stroke="none" fill-opacity="1" />
+			</g>
+			<g id="layer.202_head.hair.uuid_0xcb">
+				<path d="M28,19.000046L29,19.000046L29,20.000046L28,20.000046z" fill-rule="evenodd" fill="#EBC77E" stroke="none" fill-opacity="1" />
+			</g>
+			<g id="layer.203_head.hair.uuid_0xcc">
+				<path d="M30,19.000046L31,19.000046L31,20.000046L30,20.000046z" fill-rule="evenodd" fill="#EBC77E" stroke="none" fill-opacity="1" />
+			</g>
+			<g id="layer.204_head.hair.uuid_0xcd">
+				<path d="M29,17.000046L30,17.000046L30,19.000046L29,19.000046z" fill-rule="evenodd" fill="#F5E0B3" stroke="none" fill-opacity="1" />
+			</g>
+			<g id="layer.205_head.hair.uuid_0xce">
+				<path d="M25,16.000046L26,16.000046L26,17.000046L25,17.000046z" fill-rule="evenodd" fill="#30221B" stroke="none" fill-opacity="1" />
+			</g>
+			<g id="layer.206_head.hair.uuid_0xcf">
+				<path d="M26,10.000046L27,10.000046L27,11.000046L26,11.000046z" fill-rule="evenodd" fill="#30221B" stroke="none" fill-opacity="1" />
+			</g>
+			<g id="layer.207_head.hair.uuid_0xd0">
+				<path d="M27,14.000046L28,14.000046L28,15.000046L27,15.000046z" fill-rule="evenodd" fill="#30221B" stroke="none" fill-opacity="1" />
+			</g>
+			<g id="layer.208_head.hair.uuid_0xd1">
+				<path d="M28,18.000046L29,18.000046L29,19.000046L28,19.000046z" fill-rule="evenodd" fill="#30221B" stroke="none" fill-opacity="1" />
+			</g>
+			<g id="layer.209_head.hair.uuid_0xd2">
+				<path d="M31,9.000046L32,9.000046L32,10.000046L31,10.000046z" fill-rule="evenodd" fill="#30221B" stroke="none" fill-opacity="1" />
+			</g>
+			<g id="layer.210_head.hair.uuid_0xd3">
+				<path d="M32,14.000046L33,14.000046L33,15.000046L32,15.000046z" fill-rule="evenodd" fill="#30221B" stroke="none" fill-opacity="1" />
+			</g>
+			<g id="layer.211_head.hair.uuid_0xd4">
+				<path d="M32,17.000046L33,17.000046L33,18.000046L32,18.000046z" fill-rule="evenodd" fill="#30221B" stroke="none" fill-opacity="1" />
+			</g>
+			<g id="layer.212_head.hair.uuid_0xd5">
+				<path d="M33,20.000046L34,20.000046L34,21.000046L33,21.000046z" fill-rule="evenodd" fill="#30221B" stroke="none" fill-opacity="1" />
+			</g>
+			<g id="layer.213_head.hair.uuid_0xd6">
+				<path d="M34,13.000046L35,13.000046L35,14.000046L34,14.000046z" fill-rule="evenodd" fill="#30221B" stroke="none" fill-opacity="1" />
+			</g>
+			<g id="layer.214_head.hair.uuid_0xd7">
+				<path d="M36,18.000046L37,18.000046L37,19.000046L36,19.000046z" fill-rule="evenodd" fill="#30221B" stroke="none" fill-opacity="1" />
+			</g>
+			<g id="layer.215_head.hair.uuid_0xd8">
+				<path d="M37,17.000046L39,17.000046L39,18.000046L37,18.000046z" fill-rule="evenodd" fill="#30221B" stroke="none" fill-opacity="1" />
+			</g>
+			<g id="layer.216_head.hair.uuid_0xd9">
+				<path d="M38,12.000046L39,12.000046L39,13.000046L38,13.000046z" fill-rule="evenodd" fill="#30221B" stroke="none" fill-opacity="1" />
+			</g>
+			<g id="layer.217_head.hair.uuid_0xda">
+				<path d="M39,15.000046L40,15.000046L40,16.000046L39,16.000046z" fill-rule="evenodd" fill="#30221B" stroke="none" fill-opacity="1" />
+			</g>
+			<g id="layer.218_leg.screen-left.uuid_0xdb">
+				<path d="M28,45.000046L29,45.000046L29,47.000046L28,47.000046z" fill-rule="evenodd" fill="#201B1D" stroke="none" fill-opacity="1" />
+			</g>
+			<g id="layer.219_leg.screen-left.uuid_0xdc">
+				<path d="M29,42.000046L30,42.000046L30,43.000046L31,43.000046L31,45.000046L32,45.000046L32,47.000046L31,47.000046L31,46.000046L30,46.000046L30,45.000046L29,45.000046z" fill-rule="evenodd" fill="#201B1D" stroke="none" fill-opacity="1" />
+			</g>
+			<g id="layer.220_leg.screen-left.uuid_0xdd">
+				<path d="M29,47.000046L31,47.000046L31,48.000046L29,48.000046z" fill-rule="evenodd" fill="#201B1D" stroke="none" fill-opacity="1" />
+			</g>
+			<g id="layer.221_leg.screen-left.uuid_0xde">
+				<path d="M30,46.000046L31,46.000046L31,47.000046L30,47.000046z" fill-rule="evenodd" fill="#4B2919" stroke="none" fill-opacity="1" />
+			</g>
+			<g id="layer.222_leg.screen-left.uuid_0xdf">
+				<path d="M30,42.000046L31,42.000046L31,43.000046L30,43.000046z" fill-rule="evenodd" fill="#29282D" stroke="none" fill-opacity="1" />
+			</g>
+			<g id="layer.223_leg.screen-left.uuid_0xe0">
+				<path d="M31,44.000046L32,44.000046L32,45.000046L31,45.000046z" fill-rule="evenodd" fill="#29282D" stroke="none" fill-opacity="1" />
+			</g>
+			<g id="layer.224_leg.screen-left.uuid_0xe1">
+				<path d="M31,42.000046L32,42.000046L32,44.000046L31,44.000046z" fill-rule="evenodd" fill="#3E3D44" stroke="none" fill-opacity="1" />
+			</g>
+			<g id="layer.225_leg.screen-left.uuid_0xe2">
+				<path d="M29,46.000046L30,46.000046L30,47.000046L29,47.000046z" fill-rule="evenodd" fill="#886035" stroke="none" fill-opacity="1" />
+			</g>
+			<g id="layer.226_leg.screen-left.uuid_0xe3">
+				<path d="M31,47.000046L32,47.000046L32,48.000046L31,48.000046z" fill-rule="evenodd" fill="#B2844E" stroke="none" fill-opacity="1" />
+			</g>
+			<g id="layer.227_leg.screen-left.uuid_0xe4">
+				<path d="M29,45.000046L30,45.000046L30,46.000046L29,46.000046z" fill-rule="evenodd" fill="#9A713B" stroke="none" fill-opacity="1" />
+			</g>
+			<g id="layer.228_leg.screen-right.uuid_0xe5">
+				<path d="M32,45.000046L33,45.000046L33,46.000046L32,46.000046z" fill-rule="evenodd" fill="#201B1D" stroke="none" fill-opacity="1" />
+			</g>
+			<g id="layer.229_leg.screen-right.uuid_0xe6">
+				<path d="M34,42.000046L36,42.000046L36,47.000046L34,47.000046L34,46.000046L35,46.000046L35,45.000046L34,45.000046L34,44.000046L35,44.000046L35,43.000046L34,43.000046z" fill-rule="evenodd" fill="#201B1D" stroke="none" fill-opacity="1" />
+			</g>
+			<g id="layer.230_leg.screen-right.uuid_0xe7">
+				<path d="M36,46.000046L37,46.000046L37,48.000046L36,48.000046z" fill-rule="evenodd" fill="#754020" stroke="none" fill-opacity="1" />
+			</g>
+			<g id="layer.231_leg.screen-right.uuid_0xe8">
+				<path d="M32,46.000046L34,46.000046L34,47.000046L32,47.000046z" fill-rule="evenodd" fill="#29282D" stroke="none" fill-opacity="1" />
+			</g>
+			<g id="layer.232_leg.screen-right.uuid_0xe9">
+				<path d="M33,42.000046L34,42.000046L34,43.000046L35,43.000046L35,44.000046L34,44.000046L34,45.000046L33,45.000046z" fill-rule="evenodd" fill="#29282D" stroke="none" fill-opacity="1" />
+			</g>
+			<g id="layer.233_leg.screen-right.uuid_0xea">
+				<path d="M32,42.000046L33,42.000046L33,45.000046L32,45.000046z" fill-rule="evenodd" fill="#3E3D44" stroke="none" fill-opacity="1" />
+			</g>
+			<g id="layer.234_leg.screen-right.uuid_0xeb">
+				<path d="M33,45.000046L35,45.000046L35,46.000046L33,46.000046z" fill-rule="evenodd" fill="#3E3D44" stroke="none" fill-opacity="1" />
+			</g>
+			<g id="layer.235_leg.screen-right.uuid_0xec">
+				<path d="M35,47.000046L36,47.000046L36,48.000046L35,48.000046z" fill-rule="evenodd" fill="#B2844E" stroke="none" fill-opacity="1" />
+			</g>
+			<g id="layer.236_leg.screen-right.uuid_0xed">
+				<path d="M32,47.000046L35,47.000046L35,48.000046L32,48.000046z" fill-rule="evenodd" fill="#9A713B" stroke="none" fill-opacity="1" />
+			</g>
+			<g id="layer.237_scarf.tails.wearer-left.uuid_0xee">
+				<path d="M37,26.000046L38,26.000046L38,28.000046L37,28.000046z" fill-rule="evenodd" fill="#0B3B49" stroke="none" fill-opacity="1" />
+			</g>
+			<g id="layer.238_scarf.tails.wearer-left.uuid_0xef">
+				<path d="M38,25.000046L39,25.000046L39,26.000046L38,26.000046z" fill-rule="evenodd" fill="#0B3B49" stroke="none" fill-opacity="1" />
+			</g>
+			<g id="layer.239_scarf.tails.wearer-left.uuid_0xf0">
+				<path d="M38,29.000046L39,29.000046L39,31.000046L38,31.000046z" fill-rule="evenodd" fill="#0B3B49" stroke="none" fill-opacity="1" />
+			</g>
+			<g id="layer.240_scarf.tails.wearer-left.uuid_0xf1">
+				<path d="M39,26.000046L40,26.000046L40,27.000046L39,27.000046z" fill-rule="evenodd" fill="#0B3B49" stroke="none" fill-opacity="1" />
+			</g>
+			<g id="layer.241_scarf.tails.wearer-left.uuid_0xf2">
+				<path d="M39,28.000046L40,28.000046L40,29.000046L39,29.000046z" fill-rule="evenodd" fill="#0B3B49" stroke="none" fill-opacity="1" />
+			</g>
+			<g id="layer.242_scarf.tails.wearer-left.uuid_0xf3">
+				<path d="M39,32.000046L40,32.000046L40,33.000046L39,33.000046z" fill-rule="evenodd" fill="#0B3B49" stroke="none" fill-opacity="1" />
+			</g>
+			<g id="layer.243_scarf.tails.wearer-left.uuid_0xf4">
+				<path d="M40,33.000046L41,33.000046L41,34.000046L40,34.000046z" fill-rule="evenodd" fill="#0B3B49" stroke="none" fill-opacity="1" />
+			</g>
+			<g id="layer.244_scarf.tails.wearer-left.uuid_0xf5">
+				<path d="M41,31.000046L42,31.000046L42,32.000046L41,32.000046z" fill-rule="evenodd" fill="#0B3B49" stroke="none" fill-opacity="1" />
+			</g>
+			<g id="layer.245_scarf.tails.wearer-left.uuid_0xf6">
+				<path d="M41,35.000046L42,35.000046L42,36.000046L41,36.000046z" fill-rule="evenodd" fill="#0B3B49" stroke="none" fill-opacity="1" />
+			</g>
+			<g id="layer.246_scarf.tails.wearer-left.uuid_0xf7">
+				<path d="M42,28.000046L43,28.000046L43,29.000046L42,29.000046z" fill-rule="evenodd" fill="#0B3B49" stroke="none" fill-opacity="1" />
+			</g>
+			<g id="layer.247_scarf.tails.wearer-left.uuid_0xf8">
+				<path d="M42,32.000046L43,32.000046L43,33.000046L42,33.000046z" fill-rule="evenodd" fill="#0B3B49" stroke="none" fill-opacity="1" />
+			</g>
+			<g id="layer.248_scarf.tails.wearer-left.uuid_0xf9">
+				<path d="M43,34.000046L44,34.000046L44,35.000046L43,35.000046z" fill-rule="evenodd" fill="#0B3B49" stroke="none" fill-opacity="1" />
+			</g>
+			<g id="layer.249_scarf.tails.wearer-left.uuid_0xfa">
+				<path d="M43,36.000046L44,36.000046L44,37.000046L43,37.000046z" fill-rule="evenodd" fill="#0B3B49" stroke="none" fill-opacity="1" />
+			</g>
+			<g id="layer.250_scarf.tails.wearer-left.uuid_0xfb">
+				<path d="M44,26.000046L45,26.000046L45,27.000046L44,27.000046z" fill-rule="evenodd" fill="#0B3B49" stroke="none" fill-opacity="1" />
+			</g>
+			<g id="layer.251_scarf.tails.wearer-left.uuid_0xfc">
+				<path d="M44,29.000046L45,29.000046L45,30.000046L44,30.000046z" fill-rule="evenodd" fill="#0B3B49" stroke="none" fill-opacity="1" />
+			</g>
+			<g id="layer.252_scarf.tails.wearer-left.uuid_0xfd">
+				<path d="M38,27.000046L39,27.000046L39,29.000046L38,29.000046z" fill-rule="evenodd" fill="#105664" stroke="none" fill-opacity="1" />
+			</g>
+			<g id="layer.253_scarf.tails.wearer-left.uuid_0xfe">
+				<path d="M39,24.000046L40,24.000046L40,26.000046L39,26.000046z" fill-rule="evenodd" fill="#105664" stroke="none" fill-opacity="1" />
+			</g>
+			<g id="layer.254_scarf.tails.wearer-left.uuid_0xff">
+				<path d="M39,29.000046L40,29.000046L40,30.000046L41,30.000046L41,31.000046L40,31.000046L40,32.000046L39,32.000046z" fill-rule="evenodd" fill="#105664" stroke="none" fill-opacity="1" />
+			</g>
+			<g id="layer.255_scarf.tails.wearer-left.uuid_0x100">
+				<path d="M40,32.000046L42,32.000046L42,34.000046L43,34.000046L43,35.000046L41,35.000046L41,33.000046L40,33.000046z" fill-rule="evenodd" fill="#105664" stroke="none" fill-opacity="1" />
+			</g>
+			<g id="layer.256_scarf.tails.wearer-left.uuid_0x101">
+				<path d="M42,25.000046L43,25.000046L43,26.000046L42,26.000046z" fill-rule="evenodd" fill="#105664" stroke="none" fill-opacity="1" />
+			</g>
+			<g id="layer.257_scarf.tails.wearer-left.uuid_0x102">
+				<path d="M42,36.000046L43,36.000046L43,37.000046L42,37.000046z" fill-rule="evenodd" fill="#105664" stroke="none" fill-opacity="1" />
+			</g>
+			<g id="layer.258_scarf.tails.wearer-left.uuid_0x103">
+				<path d="M43,26.000046L44,26.000046L44,27.000046L43,27.000046z" fill-rule="evenodd" fill="#105664" stroke="none" fill-opacity="1" />
+			</g>
+			<g id="layer.259_scarf.tails.wearer-left.uuid_0x104">
+				<path d="M43,28.000046L44,28.000046L44,29.000046L43,29.000046z" fill-rule="evenodd" fill="#105664" stroke="none" fill-opacity="1" />
+			</g>
+			<g id="layer.260_scarf.tails.wearer-left.uuid_0x105">
+				<path d="M43,35.000046L44,35.000046L44,36.000046L43,36.000046z" fill-rule="evenodd" fill="#105664" stroke="none" fill-opacity="1" />
+			</g>
+			<g id="layer.261_scarf.tails.wearer-left.uuid_0x106">
+				<path d="M45,28.000046L46,28.000046L46,29.000046L45,29.000046z" fill-rule="evenodd" fill="#105664" stroke="none" fill-opacity="1" />
+			</g>
+			<g id="layer.262_scarf.tails.wearer-left.uuid_0x107">
+				<path d="M38,24.000046L39,24.000046L39,25.000046L38,25.000046z" fill-rule="evenodd" fill="#17788A" stroke="none" fill-opacity="1" />
+			</g>
+			<g id="layer.263_scarf.tails.wearer-left.uuid_0x108">
+				<path d="M40,25.000046L42,25.000046L42,26.000046L43,26.000046L43,27.000046L45,27.000046L45,29.000046L44,29.000046L44,28.000046L41,28.000046L41,27.000046L40,27.000046z" fill-rule="evenodd" fill="#17788A" stroke="none" fill-opacity="1" />
+			</g>
+			<g id="layer.264_scarf.tails.wearer-left.uuid_0x109">
+				<path d="M40,31.000046L41,31.000046L41,32.000046L40,32.000046z" fill-rule="evenodd" fill="#17788A" stroke="none" fill-opacity="1" />
+			</g>
+			<g id="layer.265_scarf.tails.wearer-left.uuid_0x10a">
+				<path d="M42,33.000046L43,33.000046L43,34.000046L42,34.000046z" fill-rule="evenodd" fill="#17788A" stroke="none" fill-opacity="1" />
+			</g>
+			<g id="layer.266_scarf.tails.wearer-left.uuid_0x10b">
+				<path d="M42,35.000046L43,35.000046L43,36.000046L42,36.000046z" fill-rule="evenodd" fill="#17788A" stroke="none" fill-opacity="1" />
+			</g>
+			<g id="layer.267_scarf.tails.wearer-left.uuid_0x10c">
+				<path d="M45,29.000046L46,29.000046L46,30.000046L45,30.000046z" fill-rule="evenodd" fill="#17788A" stroke="none" fill-opacity="1" />
+			</g>
+			<g id="layer.268_torso.tunic-and-harness.uuid_0x10d">
+				<path d="M27,24.000046L28,24.000046L28,25.000046L27,25.000046z" fill-rule="evenodd" fill="#201B1D" stroke="none" fill-opacity="1" />
+			</g>
+			<g id="layer.269_torso.tunic-and-harness.uuid_0x10e">
+				<path d="M27,27.000046L28,27.000046L28,30.000046L27,30.000046z" fill-rule="evenodd" fill="#201B1D" stroke="none" fill-opacity="1" />
+			</g>
+			<g id="layer.270_torso.tunic-and-harness.uuid_0x10f">
+				<path d="M29,26.000046L32,26.000046L32,28.000046L31,28.000046L31,27.000046L29,27.000046z" fill-rule="evenodd" fill="#201B1D" stroke="none" fill-opacity="1" />
+			</g>
+			<g id="layer.271_torso.tunic-and-harness.uuid_0x110">
+				<path d="M32,29.000046L33,29.000046L33,30.000046L32,30.000046z" fill-rule="evenodd" fill="#201B1D" stroke="none" fill-opacity="1" />
+			</g>
+			<g id="layer.272_torso.tunic-and-harness.uuid_0x111">
+				<path d="M33,24.000046L35,24.000046L35,25.000046L33,25.000046z" fill-rule="evenodd" fill="#201B1D" stroke="none" fill-opacity="1" />
+			</g>
+			<g id="layer.273_torso.tunic-and-harness.uuid_0x112">
+				<path d="M36,26.000046L37,26.000046L37,29.000046L36,29.000046z" fill-rule="evenodd" fill="#201B1D" stroke="none" fill-opacity="1" />
+			</g>
+			<g id="layer.274_torso.tunic-and-harness.uuid_0x113">
+				<path d="M37,29.000046L38,29.000046L38,30.000046L37,30.000046z" fill-rule="evenodd" fill="#201B1D" stroke="none" fill-opacity="1" />
+			</g>
+			<g id="layer.275_torso.tunic-and-harness.uuid_0x114">
+				<path d="M28,27.000046L29,27.000046L29,28.000046L28,28.000046z" fill-rule="evenodd" fill="#4B2919" stroke="none" fill-opacity="1" />
+			</g>
+			<g id="layer.276_torso.tunic-and-harness.uuid_0x115">
+				<path d="M29,27.000046L30,27.000046L30,28.000046L29,28.000046z" fill-rule="evenodd" fill="#754020" stroke="none" fill-opacity="1" />
+			</g>
+			<g id="layer.277_torso.tunic-and-harness.uuid_0x116">
+				<path d="M32,28.000046L33,28.000046L33,29.000046L32,29.000046z" fill-rule="evenodd" fill="#754020" stroke="none" fill-opacity="1" />
+			</g>
+			<g id="layer.278_torso.tunic-and-harness.uuid_0x117">
+				<path d="M28,29.000046L29,29.000046L29,30.000046L28,30.000046z" fill-rule="evenodd" fill="#A75B27" stroke="none" fill-opacity="1" />
+			</g>
+			<g id="layer.279_torso.tunic-and-harness.uuid_0x118">
+				<path d="M32,25.000046L33,25.000046L33,26.000046L32,26.000046z" fill-rule="evenodd" fill="#A75B27" stroke="none" fill-opacity="1" />
+			</g>
+			<g id="layer.280_torso.tunic-and-harness.uuid_0x119">
+				<path d="M35,25.000046L36,25.000046L36,26.000046L35,26.000046z" fill-rule="evenodd" fill="#A75B27" stroke="none" fill-opacity="1" />
+			</g>
+			<g id="layer.281_torso.tunic-and-harness.uuid_0x11a">
+				<path d="M32,26.000046L33,26.000046L33,27.000046L32,27.000046z" fill-rule="evenodd" fill="#EDAA58" stroke="none" fill-opacity="1" />
+			</g>
+			<g id="layer.282_torso.tunic-and-harness.uuid_0x11b">
+				<path d="M33,28.000046L35,28.000046L35,29.000046L33,29.000046z" fill-rule="evenodd" fill="#EDAA58" stroke="none" fill-opacity="1" />
+			</g>
+			<g id="layer.283_torso.tunic-and-harness.uuid_0x11c">
+				<path d="M34,25.000046L35,25.000046L35,26.000046L34,26.000046z" fill-rule="evenodd" fill="#EDAA58" stroke="none" fill-opacity="1" />
+			</g>
+			<g id="layer.284_torso.tunic-and-harness.uuid_0x11d">
+				<path d="M35,27.000046L36,27.000046L36,28.000046L35,28.000046z" fill-rule="evenodd" fill="#EDAA58" stroke="none" fill-opacity="1" />
+			</g>
+			<g id="layer.285_torso.tunic-and-harness.uuid_0x11e">
+				<path d="M27,26.000046L29,26.000046L29,27.000046L27,27.000046z" fill-rule="evenodd" fill="#0B3B49" stroke="none" fill-opacity="1" />
+			</g>
+			<g id="layer.286_torso.tunic-and-harness.uuid_0x11f">
+				<path d="M29,24.000046L30,24.000046L30,25.000046L29,25.000046z" fill-rule="evenodd" fill="#0B3B49" stroke="none" fill-opacity="1" />
+			</g>
+			<g id="layer.287_torso.tunic-and-harness.uuid_0x120">
+				<path d="M30,25.000046L31,25.000046L31,26.000046L30,26.000046z" fill-rule="evenodd" fill="#0B3B49" stroke="none" fill-opacity="1" />
+			</g>
+			<g id="layer.288_torso.tunic-and-harness.uuid_0x121">
+				<path d="M30,29.000046L32,29.000046L32,30.000046L30,30.000046z" fill-rule="evenodd" fill="#0B3B49" stroke="none" fill-opacity="1" />
+			</g>
+			<g id="layer.289_torso.tunic-and-harness.uuid_0x122">
+				<path d="M36,24.000046L37,24.000046L37,25.000046L36,25.000046z" fill-rule="evenodd" fill="#0B3B49" stroke="none" fill-opacity="1" />
+			</g>
+			<g id="layer.290_torso.tunic-and-harness.uuid_0x123">
+				<path d="M27,25.000046L28,25.000046L28,26.000046L27,26.000046z" fill-rule="evenodd" fill="#105664" stroke="none" fill-opacity="1" />
+			</g>
+			<g id="layer.291_torso.tunic-and-harness.uuid_0x124">
+				<path d="M28,24.000046L29,24.000046L29,25.000046L28,25.000046z" fill-rule="evenodd" fill="#105664" stroke="none" fill-opacity="1" />
+			</g>
+			<g id="layer.292_torso.tunic-and-harness.uuid_0x125">
+				<path d="M30,27.000046L31,27.000046L31,29.000046L30,29.000046z" fill-rule="evenodd" fill="#105664" stroke="none" fill-opacity="1" />
+			</g>
+			<g id="layer.293_torso.tunic-and-harness.uuid_0x126">
+				<path d="M32,24.000046L33,24.000046L33,25.000046L32,25.000046z" fill-rule="evenodd" fill="#105664" stroke="none" fill-opacity="1" />
+			</g>
+			<g id="layer.294_torso.tunic-and-harness.uuid_0x127">
+				<path d="M29,25.000046L30,25.000046L30,26.000046L29,26.000046z" fill-rule="evenodd" fill="#17788A" stroke="none" fill-opacity="1" />
+			</g>
+			<g id="layer.295_torso.tunic-and-harness.uuid_0x128">
+				<path d="M28,25.000046L29,25.000046L29,26.000046L28,26.000046z" fill-rule="evenodd" fill="#2995A2" stroke="none" fill-opacity="1" />
+			</g>
+			<g id="layer.296_torso.tunic-and-harness.uuid_0x129">
+				<path d="M30,24.000046L32,24.000046L32,25.000046L30,25.000046z" fill-rule="evenodd" fill="#2995A2" stroke="none" fill-opacity="1" />
+			</g>
+			<g id="layer.297_torso.tunic-and-harness.uuid_0x12a">
+				<path d="M29,28.000046L30,28.000046L30,30.000046L29,30.000046z" fill-rule="evenodd" fill="#17313A" stroke="none" fill-opacity="1" />
+			</g>
+			<g id="layer.298_torso.tunic-and-harness.uuid_0x12b">
+				<path d="M31,25.000046L32,25.000046L32,26.000046L31,26.000046z" fill-rule="evenodd" fill="#17313A" stroke="none" fill-opacity="1" />
+			</g>
+			<g id="layer.299_torso.tunic-and-harness.uuid_0x12c">
+				<path d="M31,28.000046L32,28.000046L32,29.000046L31,29.000046z" fill-rule="evenodd" fill="#17313A" stroke="none" fill-opacity="1" />
+			</g>
+			<g id="layer.300_torso.tunic-and-harness.uuid_0x12d">
+				<path d="M35,24.000046L36,24.000046L36,25.000046L35,25.000046z" fill-rule="evenodd" fill="#17313A" stroke="none" fill-opacity="1" />
+			</g>
+			<g id="layer.301_torso.tunic-and-harness.uuid_0x12e">
+				<path d="M36,25.000046L37,25.000046L37,24.000046L38,24.000046L38,26.000046L36,26.000046z" fill-rule="evenodd" fill="#17313A" stroke="none" fill-opacity="1" />
+			</g>
+			<g id="layer.302_torso.tunic-and-harness.uuid_0x12f">
+				<path d="M37,28.000046L38,28.000046L38,29.000046L37,29.000046z" fill-rule="evenodd" fill="#17313A" stroke="none" fill-opacity="1" />
+			</g>
+			<g id="layer.303_torso.tunic-and-harness.uuid_0x130">
+				<path d="M28,28.000046L29,28.000046L29,29.000046L28,29.000046z" fill-rule="evenodd" fill="#61422C" stroke="none" fill-opacity="1" />
+			</g>
+			<g id="layer.304_torso.tunic-and-harness.uuid_0x131">
+				<path d="M36,29.000046L37,29.000046L37,30.000046L36,30.000046z" fill-rule="evenodd" fill="#30221B" stroke="none" fill-opacity="1" />
+			</g>
+			<g id="layer.305_tunic.hem-and-belt.uuid_0x132">
+				<path d="M27,30.000046L28,30.000046L28,31.000046L29,31.000046L29,32.000046L30,32.000046L30,33.000046L28,33.000046L28,32.000046L27,32.000046z" fill-rule="evenodd" fill="#201B1D" stroke="none" fill-opacity="1" />
+			</g>
+			<g id="layer.306_tunic.hem-and-belt.uuid_0x133">
+				<path d="M27,33.000046L28,33.000046L28,34.000046L27,34.000046z" fill-rule="evenodd" fill="#201B1D" stroke="none" fill-opacity="1" />
+			</g>
+			<g id="layer.307_tunic.hem-and-belt.uuid_0x134">
+				<path d="M27,35.000046L28,35.000046L28,39.000046L27,39.000046z" fill-rule="evenodd" fill="#201B1D" stroke="none" fill-opacity="1" />
+			</g>
+			<g id="layer.308_tunic.hem-and-belt.uuid_0x135">
+				<path d="M28,34.000046L33,34.000046L33,38.000046L32,38.000046L32,35.000046L30,35.000046L30,37.000046L31,37.000046L31,38.000046L30,38.000046L30,39.000046L29,39.000046L29,35.000046L28,35.000046z" fill-rule="evenodd" fill="#201B1D" stroke="none" fill-opacity="1" />
+			</g>
+			<g id="layer.309_tunic.hem-and-belt.uuid_0x136">
+				<path d="M28,40.000046L30,40.000046L30,42.000046L29,42.000046L29,41.000046L28,41.000046z" fill-rule="evenodd" fill="#201B1D" stroke="none" fill-opacity="1" />
+			</g>
+			<g id="layer.310_tunic.hem-and-belt.uuid_0x137">
+				<path d="M31,31.000046L32,31.000046L32,30.000046L33,30.000046L33,32.000046L34,32.000046L34,33.000046L32,33.000046L32,32.000046L31,32.000046z" fill-rule="evenodd" fill="#201B1D" stroke="none" fill-opacity="1" />
+			</g>
+			<g id="layer.311_tunic.hem-and-belt.uuid_0x138">
+				<path d="M31,38.000046L32,38.000046L32,41.000046L31,41.000046z" fill-rule="evenodd" fill="#201B1D" stroke="none" fill-opacity="1" />
+			</g>
+			<g id="layer.312_tunic.hem-and-belt.uuid_0x139">
+				<path d="M32,41.000046L33,41.000046L33,42.000046L32,42.000046z" fill-rule="evenodd" fill="#201B1D" stroke="none" fill-opacity="1" />
+			</g>
+			<g id="layer.313_tunic.hem-and-belt.uuid_0x13a">
+				<path d="M34,33.000046L36,33.000046L36,34.000046L34,34.000046z" fill-rule="evenodd" fill="#201B1D" stroke="none" fill-opacity="1" />
+			</g>
+			<g id="layer.314_tunic.hem-and-belt.uuid_0x13b">
+				<path d="M35,41.000046L36,41.000046L36,42.000046L35,42.000046z" fill-rule="evenodd" fill="#201B1D" stroke="none" fill-opacity="1" />
+			</g>
+			<g id="layer.315_tunic.hem-and-belt.uuid_0x13c">
+				<path d="M36,35.000046L37,35.000046L37,41.000046L36,41.000046z" fill-rule="evenodd" fill="#201B1D" stroke="none" fill-opacity="1" />
+			</g>
+			<g id="layer.316_tunic.hem-and-belt.uuid_0x13d">
+				<path d="M28,33.000046L29,33.000046L29,34.000046L28,34.000046z" fill-rule="evenodd" fill="#4B2919" stroke="none" fill-opacity="1" />
+			</g>
+			<g id="layer.317_tunic.hem-and-belt.uuid_0x13e">
+				<path d="M30,31.000046L31,31.000046L31,33.000046L30,33.000046z" fill-rule="evenodd" fill="#4B2919" stroke="none" fill-opacity="1" />
+			</g>
+			<g id="layer.318_tunic.hem-and-belt.uuid_0x13f">
+				<path d="M32,38.000046L33,38.000046L33,39.000046L32,39.000046z" fill-rule="evenodd" fill="#4B2919" stroke="none" fill-opacity="1" />
+			</g>
+			<g id="layer.319_tunic.hem-and-belt.uuid_0x140">
+				<path d="M32,40.000046L33,40.000046L33,41.000046L32,41.000046z" fill-rule="evenodd" fill="#4B2919" stroke="none" fill-opacity="1" />
+			</g>
+			<g id="layer.320_tunic.hem-and-belt.uuid_0x141">
+				<path d="M33,31.000046L34,31.000046L34,32.000046L33,32.000046z" fill-rule="evenodd" fill="#4B2919" stroke="none" fill-opacity="1" />
+			</g>
+			<g id="layer.321_tunic.hem-and-belt.uuid_0x142">
+				<path d="M33,36.000046L34,36.000046L34,37.000046L35,37.000046L35,38.000046L33,38.000046z" fill-rule="evenodd" fill="#4B2919" stroke="none" fill-opacity="1" />
+			</g>
+			<g id="layer.322_tunic.hem-and-belt.uuid_0x143">
+				<path d="M33,39.000046L34,39.000046L34,40.000046L33,40.000046z" fill-rule="evenodd" fill="#4B2919" stroke="none" fill-opacity="1" />
+			</g>
+			<g id="layer.323_tunic.hem-and-belt.uuid_0x144">
+				<path d="M34,35.000046L36,35.000046L36,36.000046L34,36.000046z" fill-rule="evenodd" fill="#4B2919" stroke="none" fill-opacity="1" />
+			</g>
+			<g id="layer.324_tunic.hem-and-belt.uuid_0x145">
+				<path d="M36,34.000046L37,34.000046L37,35.000046L36,35.000046z" fill-rule="evenodd" fill="#4B2919" stroke="none" fill-opacity="1" />
+			</g>
+			<g id="layer.325_tunic.hem-and-belt.uuid_0x146">
+				<path d="M28,30.000046L29,30.000046L29,31.000046L28,31.000046z" fill-rule="evenodd" fill="#754020" stroke="none" fill-opacity="1" />
+			</g>
+			<g id="layer.326_tunic.hem-and-belt.uuid_0x147">
+				<path d="M29,31.000046L30,31.000046L30,32.000046L29,32.000046z" fill-rule="evenodd" fill="#754020" stroke="none" fill-opacity="1" />
+			</g>
+			<g id="layer.327_tunic.hem-and-belt.uuid_0x148">
+				<path d="M29,33.000046L32,33.000046L32,34.000046L29,34.000046z" fill-rule="evenodd" fill="#754020" stroke="none" fill-opacity="1" />
+			</g>
+			<g id="layer.328_tunic.hem-and-belt.uuid_0x149">
+				<path d="M33,33.000046L34,33.000046L34,35.000046L33,35.000046z" fill-rule="evenodd" fill="#754020" stroke="none" fill-opacity="1" />
+			</g>
+			<g id="layer.329_tunic.hem-and-belt.uuid_0x14a">
+				<path d="M33,38.000046L34,38.000046L34,39.000046L33,39.000046z" fill-rule="evenodd" fill="#754020" stroke="none" fill-opacity="1" />
+			</g>
+			<g id="layer.330_tunic.hem-and-belt.uuid_0x14b">
+				<path d="M35,34.000046L36,34.000046L36,35.000046L35,35.000046z" fill-rule="evenodd" fill="#754020" stroke="none" fill-opacity="1" />
+			</g>
+			<g id="layer.331_tunic.hem-and-belt.uuid_0x14c">
+				<path d="M35,36.000046L36,36.000046L36,37.000046L35,37.000046z" fill-rule="evenodd" fill="#754020" stroke="none" fill-opacity="1" />
+			</g>
+			<g id="layer.332_tunic.hem-and-belt.uuid_0x14d">
+				<path d="M35,38.000046L36,38.000046L36,40.000046L35,40.000046z" fill-rule="evenodd" fill="#754020" stroke="none" fill-opacity="1" />
+			</g>
+			<g id="layer.333_tunic.hem-and-belt.uuid_0x14e">
+				<path d="M29,30.000046L30,30.000046L30,31.000046L29,31.000046z" fill-rule="evenodd" fill="#A75B27" stroke="none" fill-opacity="1" />
+			</g>
+			<g id="layer.334_tunic.hem-and-belt.uuid_0x14f">
+				<path d="M34,34.000046L35,34.000046L35,35.000046L34,35.000046z" fill-rule="evenodd" fill="#A75B27" stroke="none" fill-opacity="1" />
+			</g>
+			<g id="layer.335_tunic.hem-and-belt.uuid_0x150">
+				<path d="M34,36.000046L35,36.000046L35,37.000046L34,37.000046z" fill-rule="evenodd" fill="#A75B27" stroke="none" fill-opacity="1" />
+			</g>
+			<g id="layer.336_tunic.hem-and-belt.uuid_0x151">
+				<path d="M34,38.000046L35,38.000046L35,40.000046L34,40.000046z" fill-rule="evenodd" fill="#A75B27" stroke="none" fill-opacity="1" />
+			</g>
+			<g id="layer.337_tunic.hem-and-belt.uuid_0x152">
+				<path d="M34,41.000046L35,41.000046L35,42.000046L34,42.000046z" fill-rule="evenodd" fill="#A75B27" stroke="none" fill-opacity="1" />
+			</g>
+			<g id="layer.338_tunic.hem-and-belt.uuid_0x153">
+				<path d="M33,41.000046L34,41.000046L34,42.000046L33,42.000046z" fill-rule="evenodd" fill="#CE8238" stroke="none" fill-opacity="1" />
+			</g>
+			<g id="layer.339_tunic.hem-and-belt.uuid_0x154">
+				<path d="M34,31.000046L35,31.000046L35,32.000046L34,32.000046z" fill-rule="evenodd" fill="#EDAA58" stroke="none" fill-opacity="1" />
+			</g>
+			<g id="layer.340_tunic.hem-and-belt.uuid_0x155">
+				<path d="M28,35.000046L29,35.000046L29,36.000046L28,36.000046z" fill-rule="evenodd" fill="#0B3B49" stroke="none" fill-opacity="1" />
+			</g>
+			<g id="layer.341_tunic.hem-and-belt.uuid_0x156">
+				<path d="M28,38.000046L29,38.000046L29,39.000046L28,39.000046z" fill-rule="evenodd" fill="#0B3B49" stroke="none" fill-opacity="1" />
+			</g>
+			<g id="layer.342_tunic.hem-and-belt.uuid_0x157">
+				<path d="M31,30.000046L32,30.000046L32,31.000046L31,31.000046z" fill-rule="evenodd" fill="#0B3B49" stroke="none" fill-opacity="1" />
+			</g>
+			<g id="layer.343_tunic.hem-and-belt.uuid_0x158">
+				<path d="M31,37.000046L32,37.000046L32,38.000046L31,38.000046z" fill-rule="evenodd" fill="#0B3B49" stroke="none" fill-opacity="1" />
+			</g>
+			<g id="layer.344_tunic.hem-and-belt.uuid_0x159">
+				<path d="M28,36.000046L29,36.000046L29,38.000046L28,38.000046z" fill-rule="evenodd" fill="#105664" stroke="none" fill-opacity="1" />
+			</g>
+			<g id="layer.345_tunic.hem-and-belt.uuid_0x15a">
+				<path d="M30,35.000046L31,35.000046L31,36.000046L32,36.000046L32,37.000046L30,37.000046z" fill-rule="evenodd" fill="#105664" stroke="none" fill-opacity="1" />
+			</g>
+			<g id="layer.346_tunic.hem-and-belt.uuid_0x15b">
+				<path d="M28,39.000046L29,39.000046L29,40.000046L28,40.000046z" fill-rule="evenodd" fill="#17313A" stroke="none" fill-opacity="1" />
+			</g>
+			<g id="layer.347_tunic.hem-and-belt.uuid_0x15c">
+				<path d="M30,30.000046L31,30.000046L31,31.000046L30,31.000046z" fill-rule="evenodd" fill="#17313A" stroke="none" fill-opacity="1" />
+			</g>
+			<g id="layer.348_tunic.hem-and-belt.uuid_0x15d">
+				<path d="M31,35.000046L32,35.000046L32,36.000046L31,36.000046z" fill-rule="evenodd" fill="#17313A" stroke="none" fill-opacity="1" />
+			</g>
+			<g id="layer.349_tunic.hem-and-belt.uuid_0x15e">
+				<path d="M29,39.000046L30,39.000046L30,40.000046L29,40.000046z" fill-rule="evenodd" fill="#29282D" stroke="none" fill-opacity="1" />
+			</g>
+			<g id="layer.350_tunic.hem-and-belt.uuid_0x15f">
+				<path d="M30,38.000046L31,38.000046L31,39.000046L30,39.000046z" fill-rule="evenodd" fill="#29282D" stroke="none" fill-opacity="1" />
+			</g>
+			<g id="layer.351_tunic.hem-and-belt.uuid_0x160">
+				<path d="M37,30.000046L38,30.000046L38,31.000046L37,31.000046z" fill-rule="evenodd" fill="#29282D" stroke="none" fill-opacity="1" />
+			</g>
+			<g id="layer.352_tunic.hem-and-belt.uuid_0x161">
+				<path d="M30,39.000046L31,39.000046L31,41.000046L32,41.000046L32,42.000046L30,42.000046z" fill-rule="evenodd" fill="#3E3D44" stroke="none" fill-opacity="1" />
+			</g>
+			<g id="layer.353_tunic.hem-and-belt.uuid_0x162">
+				<path d="M27,34.000046L28,34.000046L28,35.000046L27,35.000046z" fill-rule="evenodd" fill="#D4A96C" stroke="none" fill-opacity="1" />
+			</g>
+			<g id="layer.354_tunic.hem-and-belt.uuid_0x163">
+				<path d="M33,40.000046L34,40.000046L34,41.000046L33,41.000046z" fill-rule="evenodd" fill="#EBC77E" stroke="none" fill-opacity="1" />
+			</g>
+			<g id="layer.355_tunic.hem-and-belt.uuid_0x164">
+				<path d="M35,30.000046L36,30.000046L36,31.000046L35,31.000046z" fill-rule="evenodd" fill="#EBC77E" stroke="none" fill-opacity="1" />
+			</g>
+			<g id="layer.356_tunic.hem-and-belt.uuid_0x165">
+				<path d="M35,32.000046L36,32.000046L36,33.000046L35,33.000046z" fill-rule="evenodd" fill="#EBC77E" stroke="none" fill-opacity="1" />
+			</g>
+			<g id="layer.357_tunic.hem-and-belt.uuid_0x166">
+				<path d="M31,32.000046L32,32.000046L32,33.000046L31,33.000046z" fill-rule="evenodd" fill="#30221B" stroke="none" fill-opacity="1" />
+			</g>
+			<g id="layer.358_tunic.hem-and-belt.uuid_0x167">
+				<path d="M32,33.000046L33,33.000046L33,34.000046L32,34.000046z" fill-rule="evenodd" fill="#30221B" stroke="none" fill-opacity="1" />
+			</g>
+			<g id="layer.359_tunic.hem-and-belt.uuid_0x168">
+				<path d="M33,35.000046L34,35.000046L34,36.000046L33,36.000046z" fill-rule="evenodd" fill="#30221B" stroke="none" fill-opacity="1" />
+			</g>
+			<g id="layer.360_tunic.hem-and-belt.uuid_0x169">
+				<path d="M34,40.000046L36,40.000046L36,41.000046L34,41.000046z" fill-rule="evenodd" fill="#30221B" stroke="none" fill-opacity="1" />
+			</g>
+			<g id="layer.361_tunic.hem-and-belt.uuid_0x16a">
+				<path d="M35,37.000046L36,37.000046L36,38.000046L35,38.000046z" fill-rule="evenodd" fill="#30221B" stroke="none" fill-opacity="1" />
+			</g>
+			<g id="layer.362_tunic.hem-and-belt.uuid_0x16b">
+				<path d="M36,30.000046L37,30.000046L37,34.000046L36,34.000046z" fill-rule="evenodd" fill="#30221B" stroke="none" fill-opacity="1" />
+			</g>
+		</g>
+	</g>
+</svg>

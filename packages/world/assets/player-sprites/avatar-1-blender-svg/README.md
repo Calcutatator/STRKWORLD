@@ -1,12 +1,21 @@
 # Avatar 1 — concept, sprite design and Blender/SVG workflow
 
-**Active stage: idle-v5 is rejected; internal sprite design translation is
-required. No replacement candidate has been produced or approved.**
-The detailed illustration shown in the v5 engine preview did not match the
-originally requested game-sprite design. Its artistic pass and approval
-request are withdrawn. See
+**Active stage: idle-v6 is ready for exact four-idle approval.** The producing
+agent inspected the native source, exact SVG-derived pixels and actual Phaser
+output at game size on road, pavement and grass; no blocking defect remains.
+User approval is still pending. James confirmed the corrected reference-separation and
+original medium sprite direction with “yes looks good”. This authorizes v6
+construction and refinement. Exact four-idle approval remains a separate gate.
+The [v6 decision record](idle-v6/review/user-decisions.json) records that scope.
+Open the [actual idle preview](http://127.0.0.1:5173/) at **All four → Game size**.
+[Producer visual QA](idle-v6/review/visual-qa.json),
+[exact outputs and source](idle-v6/README.md), and
+[independent engine review](idle-v6/review/independent-visual-qa.json) are retained.
+
+Idle-v5 remains rejected; its artistic pass and approval request remain
+withdrawn. See
 [D-059](../../../../../docs/DECISIONS.md#d-059--avatar-1-authoring-uses-blender-mcp-and-real-svg-pose-files)
-and the [recorded rejection](idle-v5/review/user-decisions.json).
+and the [recorded v5 rejection](idle-v5/review/user-decisions.json).
 
 ## Two references, with distinct roles
 
@@ -45,8 +54,7 @@ rendered output; they did not establish an appropriate artistic result.
 1. **Fresh concept and explicit concept approval — complete.** Exact
    concept-v2 remains the identity/costume authority. A material character
    redesign reopens the concept approval gate.
-2. **Translate the character into the original sprite design — required
-   before four-idle production.** Internally compare the design with both
+2. **Translate the character into the original sprite design — v6 producer pass.** Internally compare the design with both
    references. Preserve the original medium proportions and elevated game
    viewpoint while translating the approved concept's identity and costume
    into a simple expressive face, readable clusters, clean contours and
@@ -57,8 +65,9 @@ rendered output; they did not establish an appropriate artistic result.
 3. **Build and refine the four Blender/SVG idles.** Use native editable
    Grease Pencil geometry through Blender MCP, save the `.blend` and export
    real SVG paths with derived PNGs. The tool choice must serve the approved
-   sprite design. Replacement source density, alpha, palette and filtering
-   parameters have not been selected by the v5 rejection correction.
+   sprite design. V6 uses the native 64×64 construction contract below.
+   Generative images are internal construction studies; the deliverables are
+   native editable vector sources and their exact derived game outputs.
 4. **Personally inspect the source and actual engine result.** Before every
    handoff, the producing agent must view the source, exact exports and
    actual Phaser output at real game CSS scale, across all four facings and
@@ -92,11 +101,33 @@ Preserve editable geometry, source hashes, export settings and review records.
 SVGs must contain real paths/fills without embedded raster images, external
 resources, filters or fonts.
 
-The accepted production asset and shared runtime remain current. Existing
-logical size, foot contact and gameplay body remain unchanged. No replacement
-pixel density or other rendering parameters are chosen here. The rejected
-v5 canvas/output/filtering choices are retained in its historical records
-only; they are not the current replacement contract.
+The accepted production asset and shared runtime remain current. V6 keeps
+existing logical size, foot contact and gameplay body. Its implementation
+contract restores native game pixels within the confirmed original brief:
+
+| Property | Idle-v6 internal construction contract |
+|---|---|
+| Native vector/source canvas | 64×64; pixel-aligned SVG and Blender Grease Pencil geometry |
+| Derived PNG and logical frame | 64×64; density 1 |
+| Target visible idle figure | 50 pixels high, opaque target rows y=6 through y=55 |
+| Feet pivot and origin | (32,56); origin (0.5,0.875) |
+| Gameplay body | 24×24 world units |
+| Palette | One global maximum of 32 opaque authored colours across the four idles |
+| Alpha and avatar filtering | Binary alpha; nearest filtering |
+| Actual engine inspection | Real town context, camera zoom 2 and real game CSS scale |
+| Registration | No baked shadow or per-facing auto-fit |
+
+The global 32-colour maximum provides limited headroom over the originally
+accepted actual idles' 24–28 colours; it is a ceiling, not a target to fill.
+The pixel/height constraints do not replace visual judgment of the original
+medium proportions, elevated viewpoint, readable clusters or expressive face.
+Both reference comparisons remain mandatory. Any generated images are
+internal studies only; final SVGs must have native paths with no embedded
+rasters. V5's rejected parameters remain in its historical records.
+
+The future six-pose order and 8 FPS walk / 12 FPS sprint remain current.
+Animation stays blocked until James explicitly approves the exact four v6
+idles after their source and in-game visual quality gates pass.
 
 Isolated actual-Phaser visual QA remains part of draft production. It must use
 the real town context and displayed game scale, without changing financial

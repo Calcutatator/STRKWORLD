@@ -1,0 +1,134 @@
+{
+  "name": "Teal runner - bright shared production palette",
+  "maximumColorsGlobal": 32,
+  "colors": [
+    {
+      "name": "ink.0",
+      "hex": "#201b1d"
+    },
+    {
+      "name": "ink.1",
+      "hex": "#332324"
+    },
+    {
+      "name": "hair.0",
+      "hex": "#4b2919"
+    },
+    {
+      "name": "hair.1",
+      "hex": "#754020"
+    },
+    {
+      "name": "hair.2",
+      "hex": "#a75b27"
+    },
+    {
+      "name": "hair.3",
+      "hex": "#ce8238"
+    },
+    {
+      "name": "hair.4",
+      "hex": "#edaa58"
+    },
+    {
+      "name": "skin.0",
+      "hex": "#a96539"
+    },
+    {
+      "name": "skin.1",
+      "hex": "#d28b4b"
+    },
+    {
+      "name": "skin.2",
+      "hex": "#efb870"
+    },
+    {
+      "name": "skin.3",
+      "hex": "#fed393"
+    },
+    {
+      "name": "scarf.0",
+      "hex": "#0b3b49"
+    },
+    {
+      "name": "scarf.1",
+      "hex": "#105664"
+    },
+    {
+      "name": "scarf.2",
+      "hex": "#17788a"
+    },
+    {
+      "name": "scarf.3",
+      "hex": "#2995a2"
+    },
+    {
+      "name": "scarf.4",
+      "hex": "#56b4b9"
+    },
+    {
+      "name": "petrol.0",
+      "hex": "#17313a"
+    },
+    {
+      "name": "petrol.1",
+      "hex": "#204653"
+    },
+    {
+      "name": "petrol.2",
+      "hex": "#2e5d69"
+    },
+    {
+      "name": "charcoal.0",
+      "hex": "#29282d"
+    },
+    {
+      "name": "charcoal.1",
+      "hex": "#3e3d44"
+    },
+    {
+      "name": "charcoal.2",
+      "hex": "#575458"
+    },
+    {
+      "name": "charcoal.3",
+      "hex": "#716966"
+    },
+    {
+      "name": "leather.0",
+      "hex": "#422c24"
+    },
+    {
+      "name": "leather.1",
+      "hex": "#61422c"
+    },
+    {
+      "name": "leather.2",
+      "hex": "#886035"
+    },
+    {
+      "name": "leather.3",
+      "hex": "#b2844e"
+    },
+    {
+      "name": "leather.4",
+      "hex": "#d4a96c"
+    },
+    {
+      "name": "gold.0",
+      "hex": "#9a713b"
+    },
+    {
+      "name": "gold.1",
+      "hex": "#ebc77e"
+    },
+    {
+      "name": "eye.0",
+      "hex": "#f5e0b3"
+    },
+    {
+      "name": "eye.1",
+      "hex": "#30221b"
+    }
+  ]
+}

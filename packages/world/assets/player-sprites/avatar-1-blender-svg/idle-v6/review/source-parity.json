@@ -1,0 +1,427 @@
+{
+  "schemaVersion": 1,
+  "revision": "idle-v6",
+  "mechanicalStatus": "pass",
+  "stage": "internal-refinement",
+  "directions": [
+    "down",
+    "left",
+    "right",
+    "up"
+  ],
+  "conceptApproval": {
+    "status": "approved",
+    "sha256": "8c0d58a07d1372d2e8c9bcdbddac6e997763a8ffd2b910be83e8ec47b69f1c92",
+    "artifact": "../concept/avatar-1-concept-v2.png"
+  },
+  "spriteStyleAuthority": {
+    "sha256": "f1de96b3038042aaca726c18ae87fe374e8dac2bbda7d0a2359d53f44ad08ed4",
+    "artifact": "../reference/approved-concept-turnaround.png",
+    "scope": "Original medium JRPG sprite style and proportions; no v6 pixel approval"
+  },
+  "pixelContract": {
+    "cell": [
+      64,
+      64
+    ],
+    "feetPivot": [
+      32,
+      56
+    ],
+    "pngDensity": 1,
+    "maximumOpaqueColorsGlobal": 32,
+    "renderedOpaqueColorsGlobal": 27,
+    "alpha": "binary",
+    "authoredPaletteColors": 32
+  },
+  "artisticQuality": "not-assessed",
+  "userIdleApproval": "not-established",
+  "animationAcceptance": "not-tested",
+  "gameAcceptance": "not-tested",
+  "scope": "Both reference bindings, geometry/palette to live GP readback and native SVG parity, plus exact PNG pixels when present",
+  "coordinateTolerance": 0.0002,
+  "limits": [
+    "The coordinator performs reopening; this script does not independently open or parse .blend.",
+    "Construction-study hashes and declared pixel-art input files are checked; construction scripts are inventoried but not replayed here.",
+    "PNGs are optional during native source construction; every present PNG is checked against all 4096 source pixel centers.",
+    "A partial view inventory is a valid internal construction experiment, not a complete sprite set.",
+    "Technical parity says nothing about likeness, beauty, readability, visual QA, or readiness for handoff."
+  ],
+  "upstreamProvenance": {
+    "status": "hashes-match-current-inputs",
+    "constructionReferences": [
+      {
+        "file": "studies/front-pixel-v1.png",
+        "sha256": "a33f29c982065aea3528d201be566e73db0c8a77786c6a171206db4671d0c4d0"
+      },
+      {
+        "file": "studies/turnaround-pixel-v1.png",
+        "sha256": "d90c0c5969d3c2057b9403d586e03d14024724858ecdd1c5ce856b15725ca860"
+      }
+    ],
+    "cell": [
+      64,
+      64
+    ],
+    "feetPivot": [
+      32,
+      56
+    ],
+    "logicalCell": [
+      64,
+      64
+    ],
+    "pngDensity": 1,
+    "files": [],
+    "scope": "Current declared study and construction input bytes; script hashes are inventory, not execution attestation",
+    "constructionReplay": "not-performed-by-this-check"
+  },
+  "blenderReadbackParity": {
+    "status": "pass",
+    "blender": "5.2.1 LTS",
+    "masterSha256": "16b2f544caaafd7e3b1cddce7452bae4352771dcf13bcf33aee0a07718baf3d4",
+    "views": {
+      "down": {
+        "shapeCount": 477,
+        "maximumCoordinateError": 0.0,
+        "orderedPartsMaterialsContoursAndFillState": "pass"
+      },
+      "left": {
+        "shapeCount": 363,
+        "maximumCoordinateError": 0.0,
+        "orderedPartsMaterialsContoursAndFillState": "pass"
+      },
+      "right": {
+        "shapeCount": 364,
+        "maximumCoordinateError": 0.0,
+        "orderedPartsMaterialsContoursAndFillState": "pass"
+      },
+      "up": {
+        "shapeCount": 439,
+        "maximumCoordinateError": 0.0,
+        "orderedPartsMaterialsContoursAndFillState": "pass"
+      }
+    },
+    "packedReferences": [
+      {
+        "name": "AV1V6 | Approved concept reference",
+        "sha256": "8c0d58a07d1372d2e8c9bcdbddac6e997763a8ffd2b910be83e8ec47b69f1c92",
+        "approvalScope": "Approved concept identity; not sprite or animation approval",
+        "packed": true,
+        "packedBytesSha256": "8c0d58a07d1372d2e8c9bcdbddac6e997763a8ffd2b910be83e8ec47b69f1c92"
+      },
+      {
+        "name": "AV1V6 | Approved medium JRPG sprite style reference",
+        "sha256": "f1de96b3038042aaca726c18ae87fe374e8dac2bbda7d0a2359d53f44ad08ed4",
+        "approvalScope": "Approved original sprite style and medium proportions; not approval of v6 pixels",
+        "packed": true,
+        "packedBytesSha256": "f1de96b3038042aaca726c18ae87fe374e8dac2bbda7d0a2359d53f44ad08ed4"
+      },
+      {
+        "name": "AV1V6 | Internal construction study: front-pixel-v1",
+        "sha256": "a33f29c982065aea3528d201be566e73db0c8a77786c6a171206db4671d0c4d0",
+        "approvalScope": "Internal construction study; not an approved sprite or concept",
+        "packed": true,
+        "packedBytesSha256": "a33f29c982065aea3528d201be566e73db0c8a77786c6a171206db4671d0c4d0"
+      },
+      {
+        "name": "AV1V6 | Internal construction study: turnaround-pixel-v1",
+        "sha256": "d90c0c5969d3c2057b9403d586e03d14024724858ecdd1c5ce856b15725ca860",
+        "approvalScope": "Internal construction study; not an approved sprite or concept",
+        "packed": true,
+        "packedBytesSha256": "d90c0c5969d3c2057b9403d586e03d14024724858ecdd1c5ce856b15725ca860"
+      }
+    ],
+    "provenanceLimit": "Coordinator-managed reload; this verifier checks its supplied live readback and current file hash"
+  },
+  "environmentEvidence": {
+    "status": "consistent-with-current-artifacts",
+    "nativeMcpToolsReported": true,
+    "scope": "Supplied native-MCP metadata consistency, not independent transport attestation"
+  },
+  "frames": {
+    "down": {
+      "pathCount": 477,
+      "sourceShapeCount": 477,
+      "embeddedImages": 0,
+      "orderedGeometryAndExactPaletteFills": "pass",
+      "maximumCoordinateError": 4.6000000001100716e-05,
+      "png": {
+        "file": "frames/down/idle.png",
+        "dimensions": [
+          64,
+          64
+        ],
+        "pngDensity": 1,
+        "alpha": "binary",
+        "opaqueColors": [
+          "#0B3B49",
+          "#105664",
+          "#17313A",
+          "#17788A",
+          "#201B1D",
+          "#29282D",
+          "#2995A2",
+          "#30221B",
+          "#3E3D44",
+          "#4B2919",
+          "#575458",
+          "#61422C",
+          "#754020",
+          "#886035",
+          "#9A713B",
+          "#A75B27",
+          "#A96539",
+          "#B2844E",
+          "#CE8238",
+          "#D28B4B",
+          "#D4A96C",
+          "#EBC77E",
+          "#EDAA58",
+          "#EFB870",
+          "#FED393"
+        ],
+        "opaqueColorCount": 25,
+        "sourcePixelParity": "pass",
+        "comparison": "All 4096 pixel centers compared against ordered source polygons with even-odd fills"
+      }
+    },
+    "left": {
+      "pathCount": 363,
+      "sourceShapeCount": 363,
+      "embeddedImages": 0,
+      "orderedGeometryAndExactPaletteFills": "pass",
+      "maximumCoordinateError": 4.6000000001100716e-05,
+      "png": {
+        "file": "frames/left/idle.png",
+        "dimensions": [
+          64,
+          64
+        ],
+        "pngDensity": 1,
+        "alpha": "binary",
+        "opaqueColors": [
+          "#0B3B49",
+          "#105664",
+          "#17313A",
+          "#17788A",
+          "#201B1D",
+          "#29282D",
+          "#2995A2",
+          "#30221B",
+          "#3E3D44",
+          "#4B2919",
+          "#61422C",
+          "#754020",
+          "#886035",
+          "#9A713B",
+          "#A75B27",
+          "#A96539",
+          "#B2844E",
+          "#CE8238",
+          "#D28B4B",
+          "#D4A96C",
+          "#EBC77E",
+          "#EDAA58",
+          "#EFB870",
+          "#F5E0B3",
+          "#FED393"
+        ],
+        "opaqueColorCount": 25,
+        "sourcePixelParity": "pass",
+        "comparison": "All 4096 pixel centers compared against ordered source polygons with even-odd fills"
+      }
+    },
+    "right": {
+      "pathCount": 364,
+      "sourceShapeCount": 364,
+      "embeddedImages": 0,
+      "orderedGeometryAndExactPaletteFills": "pass",
+      "maximumCoordinateError": 4.6000000001100716e-05,
+      "png": {
+        "file": "frames/right/idle.png",
+        "dimensions": [
+          64,
+          64
+        ],
+        "pngDensity": 1,
+        "alpha": "binary",
+        "opaqueColors": [
+          "#0B3B49",
+          "#105664",
+          "#17313A",
+          "#17788A",
+          "#201B1D",
+          "#29282D",
+          "#2995A2",
+          "#30221B",
+          "#3E3D44",
+          "#4B2919",
+          "#61422C",
+          "#754020",
+          "#886035",
+          "#9A713B",
+          "#A75B27",
+          "#B2844E",
+          "#CE8238",
+          "#D28B4B",
+          "#D4A96C",
+          "#EBC77E",
+          "#EDAA58",
+          "#EFB870",
+          "#F5E0B3",
+          "#FED393"
+        ],
+        "opaqueColorCount": 24,
+        "sourcePixelParity": "pass",
+        "comparison": "All 4096 pixel centers compared against ordered source polygons with even-odd fills"
+      }
+    },
+    "up": {
+      "pathCount": 439,
+      "sourceShapeCount": 439,
+      "embeddedImages": 0,
+      "orderedGeometryAndExactPaletteFills": "pass",
+      "maximumCoordinateError": 4.6000000001100716e-05,
+      "png": {
+        "file": "frames/up/idle.png",
+        "dimensions": [
+          64,
+          64
+        ],
+        "pngDensity": 1,
+        "alpha": "binary",
+        "opaqueColors": [
+          "#0B3B49",
+          "#105664",
+          "#17313A",
+          "#17788A",
+          "#201B1D",
+          "#29282D",
+          "#30221B",
+          "#3E3D44",
+          "#422C24",
+          "#4B2919",
+          "#61422C",
+          "#754020",
+          "#886035",
+          "#9A713B",
+          "#A75B27",
+          "#B2844E",
+          "#CE8238",
+          "#D28B4B",
+          "#D4A96C",
+          "#EBC77E",
+          "#EDAA58",
+          "#EFB870",
+          "#FED393"
+        ],
+        "opaqueColorCount": 23,
+        "sourcePixelParity": "pass",
+        "comparison": "All 4096 pixel centers compared against ordered source polygons with even-odd fills"
+      }
+    }
+  },
+  "files": {
+    "source/idle-geometry.json": {
+      "bytes": 178769,
+      "sha256": "f147122caa247214816eb4e34e9865a511ca2c5c1cb69274f25c46c3edc12870"
+    },
+    "source/palette.json": {
+      "bytes": 2068,
+      "sha256": "610e8960a521e2e726503da48b9371edb144e4c75487a30dc034a2f7d27ce0a3"
+    },
+    "source/avatar-1.blend": {
+      "bytes": 19454889,
+      "sha256": "16b2f544caaafd7e3b1cddce7452bae4352771dcf13bcf33aee0a07718baf3d4"
+    },
+    "source/blender-readback.json": {
+      "bytes": 534096,
+      "sha256": "a4e56511616d677ca07ea6e8e25f545690f7993641114dabad71b61ffe7d9ab5"
+    },
+    "source/blender-environment.json": {
+      "bytes": 3649,
+      "sha256": "594115abb92a67aa9d7c4e46c12f8ffac728f05250b48774408dd7b4c59a3085"
+    },
+    "source/authoring.py": {
+      "bytes": 7204,
+      "sha256": "70699c5df28557f9fc0365557abbf60f967d56aa1f7035d7958c6014714ded53"
+    },
+    "source/export_svg.py": {
+      "bytes": 5906,
+      "sha256": "b76156349b0ac52371c3c9b214fdb427a4c281b4877e82840c32708d4b1c913a"
+    },
+    "source/readback.py": {
+      "bytes": 4505,
+      "sha256": "6c8970b16098bc0a3eb226c4564f200d066a4c5eb430500d12629c95f4a83ab9"
+    },
+    "source/source_contract.py": {
+      "bytes": 8673,
+      "sha256": "97d79d62602b2ea89b34e62f8a9c751fe0c9ec5b1514588f8ae300273df600c4"
+    },
+    "source/verify_source.py": {
+      "bytes": 22128,
+      "sha256": "c6643e7efb3c0a977ce37ccc340532ac44ed25314011f9c184cc5167784a5220"
+    },
+    "../concept/approval.json": {
+      "bytes": 2231,
+      "sha256": "094f7f8c2f6b185eda9bc9c1320cd2403e8be6644ccfef9cc88d6cca219ede51"
+    },
+    "../concept/avatar-1-concept-v2.png": {
+      "bytes": 2074060,
+      "sha256": "8c0d58a07d1372d2e8c9bcdbddac6e997763a8ffd2b910be83e8ec47b69f1c92"
+    },
+    "../reference/approved-concept-turnaround.png": {
+      "bytes": 1125809,
+      "sha256": "f1de96b3038042aaca726c18ae87fe374e8dac2bbda7d0a2359d53f44ad08ed4"
+    },
+    "../reference/reference-manifest.json": {
+      "bytes": 3786,
+      "sha256": "eb38501975fea753ef670cd79fb1a70071125658de5fab5660b5ebaaead79a05"
+    },
+    "review/user-decisions.json": {
+      "bytes": 4964,
+      "sha256": "4debd215f903f6dc16d324bc1e514b07b1d49375594c5d92a079b6f671988f39"
+    },
+    "studies/front-pixel-v1.png": {
+      "bytes": 361411,
+      "sha256": "a33f29c982065aea3528d201be566e73db0c8a77786c6a171206db4671d0c4d0"
+    },
+    "studies/turnaround-pixel-v1.png": {
+      "bytes": 569464,
+      "sha256": "d90c0c5969d3c2057b9403d586e03d14024724858ecdd1c5ce856b15725ca860"
+    },
+    "svg/down/idle.svg": {
+      "bytes": 95035,
+      "sha256": "340376dfd855f8ecf3c6e3f4daad34b72b9c22817bcd5d0d6eafa2d18c0ad563"
+    },
+    "frames/down/idle.png": {
+      "bytes": 1020,
+      "sha256": "cb1a399c3514ef24ec42a3adccd3dcfb120fea86e68e72642833eca7f0ccf150"
+    },
+    "svg/left/idle.svg": {
+      "bytes": 72545,
+      "sha256": "3842282f6f021305f13ed0c880934c28157e1552281d2b53430230bfef5f3687"
+    },
+    "frames/left/idle.png": {
+      "bytes": 851,
+      "sha256": "212c5c4d8822d549ddd56df2dc567bad68b88ed61c7b74020539ee57fd4fbd81"
+    },
+    "svg/right/idle.svg": {
+      "bytes": 72105,
+      "sha256": "27b6b852069f96e70c69c5c9e1c2d6404fcce5fe6db308f11a013629bcb7fd3d"
+    },
+    "frames/right/idle.png": {
+      "bytes": 814,
+      "sha256": "62160da9e1fed0980f8b9197d5d880771d882630a1632277ab9afa785eb5c413"
+    },
+    "svg/up/idle.svg": {
+      "bytes": 88283,
+      "sha256": "19f71e7c932123d28c776e1772a8f09e8c608333bcf684743262c788fb49696d"
+    },
+    "frames/up/idle.png": {
+      "bytes": 919,
+      "sha256": "ea72776ad4c74aca49c24b7cdc2ec8805ab4d07c0c0212e877235643729069ed"
+    }
+  }
+}

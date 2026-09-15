@@ -1,0 +1,132 @@
+{
+  "schemaVersion": 1,
+  "avatar": "avatar-1",
+  "revision": "idle-v6",
+  "status": "pending",
+  "userDecision": null,
+  "readyForReview": true,
+  "conceptApproval": "../../concept/approval.json",
+  "conceptSha256": "8c0d58a07d1372d2e8c9bcdbddac6e997763a8ffd2b910be83e8ec47b69f1c92",
+  "spriteStyleReference": "../../reference/approved-concept-turnaround.png",
+  "spriteStyleSha256": "f1de96b3038042aaca726c18ae87fe374e8dac2bbda7d0a2359d53f44ad08ed4",
+  "directionApproval": {
+    "status": "approved",
+    "recorded": "2026-09-15",
+    "userQuote": "yes looks good",
+    "scope": "Corrected reference-separation and original medium sprite direction shown on the direction page; authorizes internal idle-v6 refinement only",
+    "identityReference": "concept/avatar-1-concept-v2.png",
+    "identityReferenceSha256": "8c0d58a07d1372d2e8c9bcdbddac6e997763a8ffd2b910be83e8ec47b69f1c92",
+    "styleReference": "reference/approved-concept-turnaround.png",
+    "styleReferenceSha256": "f1de96b3038042aaca726c18ae87fe374e8dac2bbda7d0a2359d53f44ad08ed4",
+    "grantsExactIdleApproval": false,
+    "grantsAnimationAuthorization": false,
+    "rejectedIdleV5RemainsRejected": true,
+    "referencePathBase": "avatar-1-blender-svg/"
+  },
+  "animationAuthorized": false,
+  "runtimeIntegrationAuthorized": false,
+  "isolatedPhaserPreviewAuthorized": true,
+  "spriteDesignTranslationQa": "producer-passed",
+  "internalSourceVisualQa": "producer-passed",
+  "internalPhaserVisualQa": "producer-passed",
+  "reviewedHashes": {
+    "source/artist-grid.json": "171912a6d8e2727ee496f95236e33281544e27ef9b4615f74f6f4ee5a62fac1f",
+    "source/idle-geometry.json": "f147122caa247214816eb4e34e9865a511ca2c5c1cb69274f25c46c3edc12870",
+    "source/palette.json": "610e8960a521e2e726503da48b9371edb144e4c75487a30dc034a2f7d27ce0a3",
+    "source/avatar-1.blend": "16b2f544caaafd7e3b1cddce7452bae4352771dcf13bcf33aee0a07718baf3d4",
+    "svg/right/idle.svg": "27b6b852069f96e70c69c5c9e1c2d6404fcce5fe6db308f11a013629bcb7fd3d",
+    "svg/left/idle.svg": "3842282f6f021305f13ed0c880934c28157e1552281d2b53430230bfef5f3687",
+    "svg/up/idle.svg": "19f71e7c932123d28c776e1772a8f09e8c608333bcf684743262c788fb49696d",
+    "svg/down/idle.svg": "340376dfd855f8ecf3c6e3f4daad34b72b9c22817bcd5d0d6eafa2d18c0ad563",
+    "frames/right/idle.png": "62160da9e1fed0980f8b9197d5d880771d882630a1632277ab9afa785eb5c413",
+    "frames/left/idle.png": "212c5c4d8822d549ddd56df2dc567bad68b88ed61c7b74020539ee57fd4fbd81",
+    "frames/up/idle.png": "ea72776ad4c74aca49c24b7cdc2ec8805ab4d07c0c0212e877235643729069ed",
+    "frames/down/idle.png": "cb1a399c3514ef24ec42a3adccd3dcfb120fea86e68e72642833eca7f0ccf150"
+  },
+  "engineReviewEvidence": "visual-qa.json",
+  "qualityGate": {
+    "owner": "producing agent",
+    "question": "Is this in-game result obviously good enough to approve?",
+    "requiresBothReferenceComparisons": true,
+    "requiresPersonalSourceAndActualEngineInspection": true,
+    "knownVisibleDefectsRequireContinuedRefinement": true,
+    "independentReviewSubstitutesForProducerInspection": false,
+    "materialChangeInvalidatesPriorVisualPass": true
+  },
+  "constructionContract": {
+    "scope": "Idle-v6 implementation within the original medium sprite brief; production replacement remains unapproved",
+    "status": "selected-for-internal-idle-refinement",
+    "sourceCanvas": [
+      64,
+      64
+    ],
+    "pixelAlignedVectorGeometry": true,
+    "cellSize": [
+      64,
+      64
+    ],
+    "logicalCellSize": [
+      64,
+      64
+    ],
+    "pixelDensity": 1,
+    "idleVisibleHeightTarget": 50,
+    "idleVisibleYInclusiveTarget": [
+      6,
+      55
+    ],
+    "feetPivot": [
+      32,
+      56
+    ],
+    "pngFeetPivot": [
+      32,
+      56
+    ],
+    "origin": [
+      0.5,
+      0.875
+    ],
+    "gameplayBody": [
+      24,
+      24
+    ],
+    "gameplayBodySpace": "world units",
+    "directions": [
+      "down",
+      "left",
+      "right",
+      "up"
+    ],
+    "paletteLimit": 32,
+    "paletteScope": "one global palette of at most 32 opaque authored colors across all four idles; transparent pixels do not count",
+    "binaryAlpha": true,
+    "alpha": "0 or 255 only",
+    "avatarTextureFilter": "nearest",
+    "cameraZoom": 2,
+    "bakedShadow": false,
+    "perFacingAutoFit": false,
+    "poses": [
+      "idle",
+      "contact-left",
+      "passing-left",
+      "contact-right",
+      "passing-right",
+      "settle"
+    ],
+    "sheetSize": [
+      384,
+      256
+    ],
+    "sheetSizeStatus": "future-animation-layout-not-produced-or-approved",
+    "walkFps": 8,
+    "sprintFps": 12
+  },
+  "direction": {
+    "recorded": "2026-09-15",
+    "decision": "D-059 corrected direction approval and native64 sprite implementation",
+    "userQuote": "yes looks good",
+    "scope": "Approval of the corrected direction/reference page authorizes internal refinement. Exact idle-v6 four-idle approval is not granted. Rejected idle-v5 remains rejected."
+  },
+  "reviewRequestedAt": "2026-09-15"
+}
