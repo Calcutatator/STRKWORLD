@@ -1,0 +1,48 @@
+{
+  "schemaVersion": 1,
+  "revision": "idle-v6",
+  "reviewedAt": "2026-09-15T18:20:59.361895+00:00",
+  "status": "producer-quality-failure",
+  "triggerUserQuote": "ok so view the original sprite style. Doe sthe in-game look good? Or does it look broken?",
+  "userDecision": null,
+  "producerAnswer": "Visibly degraded and not good enough to approve.",
+  "comparedAtMatchedVisibleHeight": true,
+  "comparison": "matched-height-reassessment.png",
+  "comparisonRegistration": "matched-height-registration.json",
+  "referenceRoles": {
+    "../reference/approved-concept-turnaround.png": "sprite style, proportions and cluster clarity",
+    "../concept/avatar-1-concept-v2.png": "identity and costume"
+  },
+  "findings": [
+    "Original has strong connected torso, leg and boot shapes; current torso and limbs read thin and fragmented.",
+    "Original face has a clear expression framed by intentional hair clusters; the current face reads as a bright patch under noisy dark hair.",
+    "Current gloves, cuffs, knees, straps and hair contain scattered isolated highlights rather than the reference\u2019s larger coherent shapes.",
+    "The teal scarf no longer reads as the same clean wrapped mass. Matching character colours and accessories did not establish style quality."
+  ],
+  "verifiedCause": {
+    "source": "source/construct_grid.py",
+    "method": "Point samples the813px-high front construction study to50rows, then chooses the nearest authored palette colour independently for each sample.",
+    "subsequentEdits": "refine_grid.py edits six front face/scarf rows; no whole-body construction or other-view pixel refinement is recorded.",
+    "effect": "The source study\u2019s intentional drawing structure is lost, and native Blender/SVG export faithfully preserves the sampled defects.",
+    "rendererFaultEstablished": false
+  },
+  "priorQaError": "The prior review accepted broad costume similarity and technical parity without an equal-height original-style comparison. Its artistic pass was incorrect and is withdrawn.",
+  "requiredRepair": "Rebuild the intended silhouette, face and major material clusters on the final native grid; assess the complete figure beside the reference at matched visible height before adding detail.",
+  "currentSpriteBytesChanged": false,
+  "replacementSpriteProducedByThisAssessment": false,
+  "animationAuthorized": false,
+  "runtimeIntegrationAuthorized": false,
+  "inputHashes": {
+    "../reference/approved-concept-turnaround.png": "f1de96b3038042aaca726c18ae87fe374e8dac2bbda7d0a2359d53f44ad08ed4",
+    "../concept/avatar-1-concept-v2.png": "8c0d58a07d1372d2e8c9bcdbddac6e997763a8ffd2b910be83e8ec47b69f1c92",
+    "review/matched-height-reassessment.png": "62da4b00c142be9a5c72e94fd5b944eab5d2f55719aed43dd2c941b86f89dd5a",
+    "review/matched-height-registration.json": "ec1cde805a3f378db044aca41390c5f5a24153dd271567b27d190148829a298f",
+    "review/phaser-road-viewport.png": "23988ce7cec061b90dc7c7f11edae86e8861c3a922f92c15256e7c309c9f275b",
+    "source/construct_grid.py": "0608dc05fe3c54267799948f0ffe743a400cb4d36ff4e224d5bda8b88c660e4b",
+    "source/refine_grid.py": "b80b15287832da5e7d7d262aa136e5246f8d2f758fff50821880ff9b1b84bc2d",
+    "frames/down/idle.png": "cb1a399c3514ef24ec42a3adccd3dcfb120fea86e68e72642833eca7f0ccf150",
+    "frames/left/idle.png": "212c5c4d8822d549ddd56df2dc567bad68b88ed61c7b74020539ee57fd4fbd81",
+    "frames/right/idle.png": "62160da9e1fed0980f8b9197d5d880771d882630a1632277ab9afa785eb5c413",
+    "frames/up/idle.png": "ea72776ad4c74aca49c24b7cdc2ec8805ab4d07c0c0212e877235643729069ed"
+  }
+}

@@ -2,9 +2,9 @@
   "schemaVersion": 1,
   "avatar": "avatar-1",
   "revision": "idle-v6",
-  "status": "pending",
+  "status": "withdrawn-quality-failed",
   "userDecision": null,
-  "readyForReview": true,
+  "readyForReview": false,
   "conceptApproval": "../../concept/approval.json",
   "conceptSha256": "8c0d58a07d1372d2e8c9bcdbddac6e997763a8ffd2b910be83e8ec47b69f1c92",
   "spriteStyleReference": "../../reference/approved-concept-turnaround.png",
@@ -26,9 +26,9 @@
   "animationAuthorized": false,
   "runtimeIntegrationAuthorized": false,
   "isolatedPhaserPreviewAuthorized": true,
-  "spriteDesignTranslationQa": "producer-passed",
-  "internalSourceVisualQa": "producer-passed",
-  "internalPhaserVisualQa": "producer-passed",
+  "spriteDesignTranslationQa": "withdrawn-quality-failed",
+  "internalSourceVisualQa": "withdrawn-quality-failed",
+  "internalPhaserVisualQa": "withdrawn-quality-failed",
   "reviewedHashes": {
     "source/artist-grid.json": "171912a6d8e2727ee496f95236e33281544e27ef9b4615f74f6f4ee5a62fac1f",
     "source/idle-geometry.json": "f147122caa247214816eb4e34e9865a511ca2c5c1cb69274f25c46c3edc12870",
@@ -51,7 +51,9 @@
     "requiresPersonalSourceAndActualEngineInspection": true,
     "knownVisibleDefectsRequireContinuedRefinement": true,
     "independentReviewSubstitutesForProducerInspection": false,
-    "materialChangeInvalidatesPriorVisualPass": true
+    "materialChangeInvalidatesPriorVisualPass": true,
+    "requiresMatchedVisibleHeightComparison": true,
+    "matchedVisibleHeightComparison": "Place the original sprite reference beside the exact native output at the same visible character height before judging aesthetics; a large reference beside a tiny game figure is insufficient."
   },
   "constructionContract": {
     "scope": "Idle-v6 implementation within the original medium sprite brief; production replacement remains unapproved",
@@ -128,5 +130,27 @@
     "userQuote": "yes looks good",
     "scope": "Approval of the corrected direction/reference page authorizes internal refinement. Exact idle-v6 four-idle approval is not granted. Rejected idle-v5 remains rejected."
   },
-  "reviewRequestedAt": "2026-09-15"
+  "reviewRequestedAt": "2026-09-15",
+  "priorReadiness": {
+    "status": "pending",
+    "userDecision": null,
+    "readyForReview": true,
+    "spriteDesignTranslationQa": "producer-passed",
+    "internalSourceVisualQa": "producer-passed",
+    "internalPhaserVisualQa": "producer-passed",
+    "reviewRequestedAt": "2026-09-15"
+  },
+  "withdrawal": {
+    "recorded": "2026-09-15",
+    "actor": "producer",
+    "userQuote": "ok so view the original sprite style. Doe sthe in-game look good? Or does it look broken?",
+    "userRejectionRecorded": false,
+    "reason": "Producer and fresh independent reassessment at matched visible character height found v6 visibly degraded against the original sprite style: noisy clusters, a spindly silhouette, a muddy face and jagged legs. The previous artistic pass was wrong.",
+    "reassessment": "reassessment.json",
+    "originalConceptApprovalRemainsValid": true,
+    "originalSpriteDirectionApprovalRemainsValid": true,
+    "historicalReviewedHashesPreserved": true,
+    "replacementCandidateReady": false,
+    "subsequentWork": "Rebuild intentional native-pixel silhouette, face and major material clusters; point-sampling an oversized pseudo-pixel ImageGen study and patching only the face failed. No new method contract or revision parameters are selected."
+  }
 }

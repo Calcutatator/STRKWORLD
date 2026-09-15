@@ -1,0 +1,17 @@
+{
+  "referenceBoundsInclusive": [
+    248,
+    264,
+    420,
+    627
+  ],
+  "nativeBoundsInclusive": [
+    21,
+    6,
+    47,
+    55
+  ],
+  "displayedFigureHeight": 300,
+  "filter": "nearest",
+  "purpose": "Diagnostic comparison only; unchanged reference and exported art."
+}

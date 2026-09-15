@@ -2594,8 +2594,9 @@ rejected and its artistic pass/approval request withdrawn by the 2026-09-15
 original sprite design restoration below · the original medium sprite
 reference governs style/proportions/game viewpoint, not fresh concept art ·
 the corrected reference roles/direction are approved by “yes looks good”
-under the subsequent 2026-09-15 amendment · idle-v6 awaits exact four-idle approval under the subsequent production record
-with the native64 implementation contract; no exact-idle candidate is approved ·
+under the subsequent 2026-09-15 amendment · idle-v6's artistic pass and approval
+request are withdrawn by the producer under the matched-height quality
+correction below; exact user decision remains unset and no candidate is ready ·
 v1–v4 remain unapproved; animation requires separate exact idle approval**
 
 **Context.** James rejected the fresh Avatar 1 draft's in-game appearance,
@@ -3028,7 +3029,8 @@ separate gates. No completed v6 artwork or quality pass is claimed by this
 implementation record.
 
 
-**2026-09-15 · Idle-v6 production record — exact idle approval pending**
+**2026-09-15 · Idle-v6 production record — artistic pass and approval request
+withdrawn by the producer under the matched-height quality correction below**
 
 The corrected direction was translated into four native64 pixel sprites.
 Internal ImageGen construction studies supplied fresh front and turnaround
@@ -3053,3 +3055,43 @@ stale evidence, missing producer inspection or visible blocking defects.
 V5 remains rejected, animation has not started, and the canonical production
 avatar/runtime have not been replaced. The next gate is explicit approval of
 these exact four idles, followed by one complete walk direction.
+
+
+**2026-09-15 · Idle-v6 producer withdrawal and matched-height quality
+correction — current readiness state**
+
+James asked: “ok so view the original sprite style. Doe sthe in-game look
+good? Or does it look broken?” The producer and a fresh independent reviewer
+compared the original sprite reference and exact native output at matched
+visible character height. V6 is visibly degraded against the reference:
+noisy clusters, a spindly silhouette, a muddy face and jagged legs. The
+producer's previous artistic pass was wrong. Withdraw that pass and the
+exact-idle approval request as **withdrawn-quality-failed**. This is a
+**producer withdrawal**, not a recorded user rejection; `userDecision` stays
+null and `readyForReview` becomes false.
+
+The original approved concept and sprite-style/direction approvals remain
+valid. Preserve the previous reviewed hashes, source/export bytes, engine
+captures and prior assessment. Historical source-pixel parity remains valid
+technical evidence about those output bytes; it does not support artistic
+readiness. The corrected reassessment is recorded in
+`idle-v6/review/reassessment.json`, with the prior producer assessment retained
+in `idle-v6/review/visual-qa.json`. No new exact-idle approval, animation or
+production integration is granted.
+
+Before any subsequent aesthetic pass, place the **original sprite reference
+and exact native output side by side at the same visible character height**
+and record the displayed subject heights. A large reference beside a tiny
+game figure is not a valid likeness or style comparison. Also inspect the
+exact native pixels and actual game-scale Phaser result. Preserve both
+reference roles: original medium proportions/style/viewpoint and approved
+concept identity/costume. Any failed comparison requires continued internal
+refinement before another handoff.
+
+Subsequent work must rebuild intentional native-pixel silhouette, face and
+major material clusters. Point-sampling oversized pseudo-pixel ImageGen
+studies and patching only the face failed. This correction records the
+failure and the required visual outcome; it selects no new method contract
+or revision parameters and claims no replacement artwork or ready candidate.
+Animation remains blocked until an exact four-idle result passes the visual
+gates and receives explicit user approval.

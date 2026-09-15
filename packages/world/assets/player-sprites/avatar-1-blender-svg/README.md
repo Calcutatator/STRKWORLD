@@ -1,16 +1,19 @@
 # Avatar 1 — concept, sprite design and Blender/SVG workflow
 
-**Active stage: idle-v6 is ready for exact four-idle approval.** The producing
-agent inspected the native source, exact SVG-derived pixels and actual Phaser
-output at game size on road, pavement and grass; no blocking defect remains.
-User approval is still pending. James confirmed the corrected reference-separation and
-original medium sprite direction with “yes looks good”. This authorizes v6
-construction and refinement. Exact four-idle approval remains a separate gate.
-The [v6 decision record](idle-v6/review/user-decisions.json) records that scope.
-Open the [actual idle preview](http://127.0.0.1:5173/) at **All four → Game size**.
-[Producer visual QA](idle-v6/review/visual-qa.json),
-[exact outputs and source](idle-v6/README.md), and
-[independent engine review](idle-v6/review/independent-visual-qa.json) are retained.
+**Active stage: idle-v6 is withdrawn after failed quality reassessment. No
+candidate is ready for approval.** The producer and a fresh independent
+reviewer compared the original sprite style and exact output at matched
+visible character height. V6 is visibly degraded: noisy clusters, a spindly
+silhouette, a muddy face and jagged legs. The previous artistic pass was wrong.
+The producer has withdrawn the approval request; no user rejection is recorded.
+
+The original concept and sprite-direction approvals remain valid. The
+[v6 decision record](idle-v6/review/user-decisions.json) keeps the exact-idle
+user decision unset and preserves its previously reviewed hashes. The
+[reassessment](idle-v6/review/reassessment.json) and [matched-height comparison](idle-v6/review/matched-height-reassessment.png) records the corrected judgment;
+the previous assessment is preserved in [visual QA](idle-v6/review/visual-qa.json).
+The source and engine artifacts remain historical evidence. Their pixel
+parity does not establish artistic quality or revive the withdrawn handoff.
 
 Idle-v5 remains rejected; its artistic pass and approval request remain
 withdrawn. See
@@ -59,8 +62,10 @@ rendered output; they did not establish an appropriate artistic result.
    viewpoint while translating the approved concept's identity and costume
    into a simple expressive face, readable clusters, clean contours and
    limited detail. Judge it as an actual warm 16-bit JRPG game cutout at the
-   intended displayed size. A literal scaled concept illustration fails this
-   gate. Refine internally until the translation works; do not ask the user
+   intended displayed size. Rebuild intentional native-pixel silhouette,
+   face and major material clusters. Point-sampling oversized pseudo-pixel
+   ImageGen studies and patching only the face failed to create coherent v6
+   artwork. A literal scaled concept illustration also fails this gate. Refine internally until the translation works; do not ask the user
    to approve a known mismatch.
 3. **Build and refine the four Blender/SVG idles.** Use native editable
    Grease Pencil geometry through Blender MCP, save the `.blend` and export
@@ -78,8 +83,12 @@ rendered output; they did not establish an appropriate artistic result.
 5. **Apply the quality gate and keep refining failures.** Ask: **“Is this
    in-game result obviously good enough to approve?”** A no, an unviewed
    result, uncertainty, or a known design/quality defect requires more work
-   and a new inspection. Independent review can find problems; the producer
-   owns the judgment. Matching clothes, clean exports and engine screenshots
+   and a new inspection. Before any aesthetic pass, place the **original
+   sprite reference and exact native output side by side at the same visible
+   character height**. Record those displayed subject heights. A large
+   reference beside a tiny game figure does not establish resemblance.
+   Also inspect exact native pixels and the actual game-scale engine result.
+   Independent review can find problems; the producer owns the judgment. Matching clothes, clean exports and engine screenshots
    cannot substitute for the correct sprite design.
 6. **Obtain explicit approval of the exact four idles.** Freeze the reviewed
    source/export hashes and engine evidence only after the internal design
@@ -137,6 +146,11 @@ historical inspection. [Workflow state](workflow.json) keeps those gates separat
 
 ## Historical evidence
 
+- [Idle-v6 sources and record](idle-v6/README.md) are withdrawn by the producer
+  after failed quality reassessment. Exact user approval remains unset.
+  Prior reviewed source/export hashes and technical pixel-parity evidence
+  are retained; no new method contract or revision parameters are selected
+  by this correction.
 - [Idle-v5 sources and record](idle-v5/README.md),
   [exact export inspection](idle-v5/review/idle-inspection.png),
   [engine capture](idle-v5/review/engine/phaser-road-viewport.png) and
