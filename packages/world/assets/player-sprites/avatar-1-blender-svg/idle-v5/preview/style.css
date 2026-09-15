@@ -22,3 +22,14 @@ details { color: #83998b; font-size: 12px; margin-top: 20px; }
 summary { cursor: pointer; }
 pre { white-space: pre-wrap; overflow-wrap: anywhere; padding: 14px; background: #101612; border: 1px solid #26362b; }
 @media (max-width: 680px) { main { padding: 14px; } nav { gap: 8px; } button { padding: 6px 8px; font-size: 12px; } .draft-label { display: none; } #game { min-height: 460px; } }
+
+[hidden] { display: none !important; }
+#game.design-correction { height: auto; min-height: 0; padding: 24px; background: #1c2420; }
+.correction-intro { font-size: 18px; max-width: 760px; margin: 0 0 24px; }
+.reference-pair { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; }
+.reference-pair figure { margin: 0; }
+.reference-pair h2 { font-size: 17px; font-weight: 600; margin: 0 0 12px; }
+.reference-pair img { display: block; width: 100%; height: 280px; object-fit: contain; background: #f4f1e9; border-radius: 4px; }
+.reference-pair figcaption { color: #becbc3; padding: 12px 0; }
+.correction-next { margin: 12px 0 0; max-width: 900px; }
+@media (max-width: 760px) { .reference-pair { grid-template-columns: 1fr; } .reference-pair img { height: auto; } }

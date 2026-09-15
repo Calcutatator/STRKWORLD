@@ -291,10 +291,37 @@ function inspectionEvidence() {
   };
 }
 
+function showWithdrawnDesign() {
+  document.title = 'Avatar 1 · Sprite design correction';
+  document.querySelector('h1')!.textContent = 'Sprite design correction';
+  document.querySelector('.draft-label')!.textContent = 'v5 withdrawn';
+  document.querySelector('nav')!.hidden = true;
+  document.querySelector('footer')!.hidden = true;
+  document.querySelector('details')!.hidden = true;
+  host.classList.add('design-correction');
+  host.setAttribute('aria-label', 'Original sprite style and approved character concept');
+  host.removeAttribute('tabindex');
+  host.innerHTML = `
+    <p class="correction-intro">The illustrated v5 draft is withdrawn. It did not match the original JRPG sprite design.</p>
+    <div class="reference-pair">
+      <figure><h2>Original sprite style</h2><img data-reference="sprite" alt="Previously approved medium Avatar 1 pixel-art turnaround" />
+        <figcaption>Medium proportions, clear pixel shapes and a simple, expressive face. This is the in-game visual language.</figcaption></figure>
+      <figure><h2>Approved character concept</h2><img data-reference="concept" alt="Approved illustrated Teal Scarf Runner character concept" />
+        <figcaption>Reference for character identity and clothing. This illustration is not the finished game sprite.</figcaption></figure>
+    </div>
+    <p class="correction-next">The missing step is to translate the approved character into the original sprite style, then inspect that actual sprite in the game. No replacement sprite is awaiting approval.</p>`;
+  host.querySelector<HTMLImageElement>('[data-reference="sprite"]')!.src = metadata.references.sprite;
+  host.querySelector<HTMLImageElement>('[data-reference="concept"]')!.src = metadata.references.concept;
+}
+
 async function boot() {
   const response = await fetch('/__preview_meta', { cache: 'no-store' });
   metadata = await response.json();
   if (!response.ok) throw new Error(metadata.error || 'Could not read draft provenance.');
+  if (metadata.reviewStatus === 'rejected' || metadata.reviewStatus?.startsWith('withdrawn')) {
+    showWithdrawnDesign();
+    return;
+  }
   const missing = FACINGS.filter((facing) => !metadata.frames[facing]?.present);
   if (missing.length) throw new Error(`Draft frames still being authored: ${missing.join(', ')}.`);
   scene = new DraftScene();

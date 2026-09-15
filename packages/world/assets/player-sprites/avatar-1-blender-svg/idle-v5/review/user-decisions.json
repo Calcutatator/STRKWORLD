@@ -2,16 +2,16 @@
   "schemaVersion": 1,
   "avatar": "avatar-1",
   "revision": "idle-v5",
-  "status": "pending",
-  "userDecision": null,
-  "readyForReview": true,
+  "status": "rejected",
+  "userDecision": "rejected",
+  "readyForReview": false,
   "conceptApproval": "../../concept/approval.json",
   "conceptSha256": "8c0d58a07d1372d2e8c9bcdbddac6e997763a8ffd2b910be83e8ec47b69f1c92",
   "animationAuthorized": false,
   "runtimeIntegrationAuthorized": false,
   "isolatedPhaserPreviewAuthorized": true,
-  "internalSourceVisualQa": "producer-inspected-pass-for-idle-draft",
-  "internalPhaserVisualQa": "producer-inspected-pass-for-idle-draft",
+  "internalSourceVisualQa": "withdrawn-design-translation-failed",
+  "internalPhaserVisualQa": "withdrawn-design-translation-failed",
   "reviewedHashes": {
     "frames/down/idle.png": "916dc0ae9e5d3ddcb086690eb1b23f1fb783e706bc8b243ee6a15690a708da56",
     "frames/left/idle.png": "5899abd9ac4079943fc249432c9fa69cfdb54bb38d5639500ecacd5e7e4a95bb",
@@ -38,7 +38,39 @@
     "recorded": "2026-09-13",
     "decision": "D-059 illustrated-vector and engine-QA amendment",
     "renderingStyleClarification": "resolved",
-    "scope": "Illustrated four-idle draft built and personally inspected in Blender, exact SVG/PNG exports, and isolated actual Phaser town. Exact idle approval is pending; animation and production integration remain unapproved."
+    "scope": "Idle-v5 is rejected. Concept-v2 remains character identity/costume authority; the original medium sprite reference governs sprite style, proportions and game viewpoint. An internal sprite design translation gate must pass before renewed four-idle production. No replacement candidate or new pixel-density parameters are selected.",
+    "supersededBy": "D-059 original sprite design restoration and idle-v5 rejection, 2026-09-15"
   },
-  "reviewPrepared": "2026-09-14"
+  "reviewPrepared": "2026-09-14",
+  "priorReadiness": {
+    "status": "pending",
+    "userDecision": null,
+    "readyForReview": true,
+    "internalSourceVisualQa": "producer-inspected-pass-for-idle-draft",
+    "internalPhaserVisualQa": "producer-inspected-pass-for-idle-draft",
+    "direction": {
+      "recorded": "2026-09-13",
+      "decision": "D-059 illustrated-vector and engine-QA amendment",
+      "renderingStyleClarification": "resolved",
+      "scope": "Illustrated four-idle draft built and personally inspected in Blender, exact SVG/PNG exports, and isolated actual Phaser town. Exact idle approval is pending; animation and production integration remain unapproved."
+    },
+    "reviewPrepared": "2026-09-14"
+  },
+  "rejection": {
+    "recorded": "2026-09-15",
+    "userQuote": "this is not the same design as what we originally requested - I assume only concept art in which this makes no sense to show in-game...",
+    "reason": "The draft translates approved character concept art into a literal full-height illustration instead of the originally requested medium-proportioned 16-bit JRPG game sprite.",
+    "knownBlockingDefects": [
+      "Style mismatch: literal detailed illustration does not follow the requested warm lower-resolution 16-bit JRPG game cutout treatment.",
+      "Viewpoint mismatch: full-height illustration presentation does not establish the elevated game viewpoint in the original sprite reference.",
+      "Detail mismatch: retained fine illustrative detail replaces deliberate readable clusters, clean contours and a simple expressive game-size face.",
+      "Proportion mismatch: the full-height illustrated figure does not follow the originally approved medium Avatar 1 sprite proportions."
+    ],
+    "conceptApprovalRemainsValid": true,
+    "originalSpriteStyleReference": "../../reference/approved-concept-turnaround.png",
+    "originalSpriteStyleSha256": "f1de96b3038042aaca726c18ae87fe374e8dac2bbda7d0a2359d53f44ad08ed4",
+    "approvalCandidateReady": false,
+    "replacementCandidate": null,
+    "priorHashesAndTimestampsPreserved": true
+  }
 }

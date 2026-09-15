@@ -21,6 +21,11 @@ const sourcePaths = [
 ];
 
 function metadata() {
+  const review = JSON.parse(readFileSync(resolve(previewRoot, '../review/user-decisions.json'), 'utf8'));
+  const referenceUrl = (relative) => {
+    const path = resolve(previewRoot, relative);
+    return `/@fs/${path}?v=${digest(readFileSync(path))}`;
+  };
   const frames = Object.fromEntries(facings.map((facing) => {
     const path = resolve(previewRoot, `../frames/${facing}/idle.png`);
     if (!existsSync(path)) return [facing, { path, present: false }];
@@ -32,7 +37,9 @@ function metadata() {
   return {
     preview: 'idle-v5-isolated-phaser-draft', repositoryRoot,
     phaserVersion: JSON.parse(readFileSync(resolve(dependencyRoot, 'phaser/package.json'), 'utf8')).version,
-    frames,
+    frames, reviewStatus: review.status,
+    references: { sprite: referenceUrl('../../reference/approved-concept-turnaround.png'),
+      concept: referenceUrl('../../concept/avatar-1-concept-v2.png') },
     townSources: sourcePaths.map((path) => ({ path, sha256: digest(readFileSync(resolve(repositoryRoot, path))) })),
     previewSources: ['main.ts', 'style.css', 'index.html', 'serve.mjs'].map((path) => ({ path, sha256: digest(readFileSync(resolve(previewRoot, path))) })),
     authoringStage: 'isolated-idle-draft',

@@ -1,46 +1,60 @@
-# Avatar 1 idle-v5 — illustrated vector refinement
+# Avatar 1 idle-v5 — rejected illustrated draft
 
-**Status: producer-inspected idle draft; pending explicit user approval.**
+**Status: rejected on 2026-09-15. The artistic pass and approval request are
+withdrawn; no replacement candidate is ready.**
 
-This revision applies the user-approved higher-detail illustrated-vector
-route in [D-059](../../../../../../docs/DECISIONS.md#d-059--avatar-1-authoring-uses-blender-mcp-and-real-svg-pose-files).
-The [approved concept-v2](../concept/avatar-1-concept-v2.png) remains the
-visual authority, bound to SHA-256
-`8c0d58a07d1372d2e8c9bcdbddac6e997763a8ffd2b910be83e8ec47b69f1c92`.
+James rejected the design: “this is not the same design as what we originally
+requested - I assume only concept art in which this makes no sense to show
+in-game...” The [decision record](review/user-decisions.json) preserves that
+quote, the original reviewed hashes and preparation timestamp. The
+[corrected visual assessment](review/visual-qa.json) answers the quality
+question with **no** and retains the complete previous assessment under
+`priorAssessment` with its original inspection timestamp and evidence.
 
-Author detailed editable native Grease Pencil forms through Blender MCP on a
-512×512 vector canvas, export real SVGs, and derive 256×256 PNGs at density 4.
-Render a 64×64 logical frame with feet at (32,56), origin (0.5,0.875), and a
-verified 24×24 world-unit body. Smooth alpha, an appropriate unrestricted
-palette and linear avatar texture filtering are allowed by the amendment.
+The draft was a detailed full-height illustration. Its style, viewpoint,
+detail and proportions did not match the originally requested warm,
+lower-resolution 16-bit JRPG game cutout. The
+[originally approved medium Avatar 1 sprite reference](../reference/approved-concept-turnaround.png)
+is the authority for sprite style, proportions and elevated game viewpoint.
+The [original brief recovery note](../reference/original-style-recovery.md)
+records the primary instructions and approval.
+Its old filename does not make it fresh concept art. Avatar 1 uses medium
+sprite proportions; only Avatars 6 and 14 were intentionally chibi.
 
-The necessary isolated actual-Phaser preview uses the real town assets and
-camera zoom 2. It is authorized to demonstrate this draft at real game CSS
-scale. Production asset replacement, shared-runtime changes and financial
-flows are outside this draft.
+The [approved concept-v2](../concept/avatar-1-concept-v2.png), SHA-256
+`8c0d58a07d1372d2e8c9bcdbddac6e997763a8ffd2b910be83e8ec47b69f1c92`,
+remains the character identity/costume authority. Concept approval did not
+approve literal illustration proportions or treatment for the in-game sprite.
+The [D-059 correction](../../../../../../docs/DECISIONS.md#d-059--avatar-1-authoring-uses-blender-mcp-and-real-svg-pose-files)
+and [active workflow](../README.md) now require an internal **sprite design
+translation** gate before renewed four-idle production, comparing against
+both references. No new pixel-density parameters are selected here.
 
-Before every handoff, the producing agent must personally inspect the source,
-exact exports and actual Phaser rendering for all four turns on light and
-dark town surfaces, comparing the figure with the approved concept. Record
-actual engine screenshots, viewport/CSS scale, device pixel ratio, zoom,
-density, filtering, exact source/export hashes and the producer's observed
-quality judgment. Independent review and technical parity support this work;
-they do not replace direct inspection.
+## Historical construction and evidence
 
-Ask: **“Is this in-game result obviously good enough to approve?”** If no,
-if it has not been viewed, or if known visible defects qualify the answer,
-continue refinement. Any material artwork/rendering change requires another
-inspection. Do not freeze or send an approval candidate until this gate passes.
+V5 used 512×512 native Grease Pencil vectors through Blender MCP, real SVG
+exports, and smooth 256×256 PNGs at density 4. Its isolated Phaser preview
+rendered a 64×64 logical frame at camera zoom 2, with feet at (32,56), origin
+(0.5,0.875), and a 24×24 world-unit body. These are the rejected revision's
+historical parameters; they are not a newly selected replacement contract.
 
-[User decisions](review/user-decisions.json) remain separate from internal
-QA. No idle approval, animation authorization or production integration
-approval exists for this revision. Follow the [active workflow](../README.md).
+The native Blender source, SVG/PNG files, engine captures and original
+technical reports are preserved. No visual artifacts or historical capture
+timestamps are changed by the rejection correction. Those checks demonstrated
+the authoring/export path and actual engine rendering. They could not establish
+that the sprite design matched the original brief. The former positive
+producer judgment has therefore been withdrawn.
 
-## Before-handoff evidence guard
+No idle approval, animation authorization or production integration approval
+exists for this revision. Its preview and captures are historical evidence,
+not an active approval handoff. The accepted production asset remains current.
 
-After personally inspecting the final source and actual engine result, record
-that judgment in `review/visual-qa.json`. Run the read-only check from this
-revision directory:
+## Historical pre-handoff evidence guard
+
+The former handoff check is retained for reproducibility. It must now reject
+`review/visual-qa.json`, whose answer is no after the user rejection. Do not
+rewrite the rejection, prior assessment or historical reports to restore a
+pass. Run the read-only check from this revision directory:
 
 ```sh
 python3 source/verify_review.py
@@ -48,11 +62,11 @@ python3 source/verify_review.py
 
 This is a procedural guard against missing or stale review evidence. It cannot
 judge beauty, establish that someone actually looked at an image, or grant
-user approval. It never rewrites the review or changes any status. A failure
-keeps the draft in refinement; re-export, re-capture and personally inspect
-changed artwork before recording a new affirmative judgment.
+user approval. It never rewrites the review or changes any status. For this rejected revision, failure is the expected result. A future draft
+must follow the current workflow and pass its internal sprite design
+translation and direct visual inspection gates.
 
-The review record uses this schema. Every `sha256` and map value is the
+The former positive-review schema is documented below as historical tooling. Every `sha256` and map value is the
 lowercase SHA-256 of the exact existing file; paths are relative to idle-v5.
 Placeholder hashes below are intentionally invalid and cannot pass.
 
@@ -115,11 +129,11 @@ avatar filtering and no engine errors. Viewport/canvas dimensions and device
 pixel ratio must match the screenshot dimensions. Recorded frame, preview-code
 and town-source hashes must match current files.
 
-The guard also binds the inspection board to `review/raster-qa.json` and all
+For a positive candidate, the guard also binds the inspection board to `review/raster-qa.json` and all
 current SVG/PNG inputs, and checks every inventoried input in
-`review/source-parity.json`. Re-run `source/verify_source.py` after changes to
-its inputs, including `review/user-decisions.json`, then bind the new report
-hash. Keep `userApproval` and the separate `userDecision` unset for this
+`review/source-parity.json`. The historical source report binds the former user-decision bytes; it is
+not regenerated after this rejection. Updating a later candidate would
+require fresh source verification and new evidence bindings. Keep `userApproval` and the separate `userDecision` unset for this
 pre-handoff check; animation and production integration remain unauthorized.
 Do not record an affirmative visual answer until the producer has actually
 made that judgment by looking at the resulting engine captures.

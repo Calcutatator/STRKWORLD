@@ -1,5 +1,12 @@
 # Avatar 1 isolated Phaser draft
 
+**Status: v5 withdrawn for design mismatch on 2026-09-15.** The current page
+shows the original sprite-style reference and approved character concept,
+without mounting Phaser or asking for sprite approval. The previous in-game
+render and captures remain historical. The renderer below is retained for
+provenance; a rejected/withdrawn decision prevents it from booting.
+
+
 This page renders the current four `idle-v5/frames/*/idle.png` files through
 the installed Phaser 4.2.1 WebGL engine in the real street map. It is an
 internal art preview authorized by D-059. It does not change the accepted

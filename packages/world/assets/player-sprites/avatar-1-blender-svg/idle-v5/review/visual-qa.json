@@ -1,114 +1,143 @@
 {
   "schemaVersion": 1,
   "revision": "idle-v5",
-  "inspectedAt": "2026-09-13T21:11:06.771322+00:00",
+  "status": "rejected-artistic-pass-withdrawn",
+  "correctedAt": "2026-09-15",
   "producer": "root",
-  "producerPersonallyInspected": true,
+  "producerPersonallyInspected": false,
   "question": "Is this in-game result obviously good enough to approve?",
-  "answer": "yes",
-  "knownBlockingDefects": [],
+  "answer": "no",
+  "knownBlockingDefects": [
+    "Style mismatch: literal detailed illustration does not follow the requested warm lower-resolution 16-bit JRPG game cutout treatment.",
+    "Viewpoint mismatch: full-height illustration presentation does not establish the elevated game viewpoint in the original sprite reference.",
+    "Detail mismatch: retained fine illustrative detail replaces deliberate readable clusters, clean contours and a simple expressive game-size face.",
+    "Proportion mismatch: the full-height illustrated figure does not follow the originally approved medium Avatar 1 sprite proportions."
+  ],
   "userApproval": null,
-  "scope": "Four idle directions in the isolated actual Phaser street preview; not animation or canonical production integration.",
-  "sourceEvidence": {
-    "file": "review/idle-inspection.png",
-    "sha256": "7ae8c24ddccbb1cbdc649107d1194bd073f26b873e5109078fc488fc4513f7c0"
+  "userDecision": "rejected",
+  "animationAuthorized": false,
+  "runtimeIntegrationAuthorized": false,
+  "scope": "User rejection and recovered original sprite brief supersede the prior positive assessment. This correction claims no new image or browser inspection. Historical source, engine captures, reviewed hashes and inspection timestamps remain in priorAssessment.",
+  "rejection": {
+    "userQuote": "this is not the same design as what we originally requested - I assume only concept art in which this makes no sense to show in-game...",
+    "decision": "D-059 original sprite design restoration and idle-v5 rejection, 2026-09-15",
+    "conceptIdentityApprovalRemainsValid": true,
+    "originalSpriteStyleReference": "../../reference/approved-concept-turnaround.png",
+    "originalSpriteStyleSha256": "f1de96b3038042aaca726c18ae87fe374e8dac2bbda7d0a2359d53f44ad08ed4",
+    "replacementCandidate": null
   },
-  "sourceParity": {
-    "file": "review/source-parity.json",
-    "sha256": "c28e5b41e4229445c6ab4018034c9680a84c611e77396235dd37fc90f94ac5ff"
-  },
-  "reviewedArtifacts": {
-    "frames/down/idle.png": "916dc0ae9e5d3ddcb086690eb1b23f1fb783e706bc8b243ee6a15690a708da56",
-    "frames/left/idle.png": "5899abd9ac4079943fc249432c9fa69cfdb54bb38d5639500ecacd5e7e4a95bb",
-    "frames/right/idle.png": "76ff6dc5f5a2074c32a55701f3f4f29f7d8bcfc0ffbf39fedf05784c8d9a8131",
-    "frames/up/idle.png": "6f5d3a95fe6e8b3f4a8a75d901eb553cd7704ca6b6dfaf08c29fb7cd6bbc049a",
-    "svg/down/idle.svg": "74f827092bfd9da811aaaf8c618e78d339574f2da0e3b42a0b9ef1929f991d3b",
-    "svg/left/idle.svg": "69862d960d117796a6a0259628082677f7e6e939460e709019acb2a938b944f7",
-    "svg/right/idle.svg": "3c7fd42c260270590b05f7fee3a95fd3de5a193f208572e59d0ec5ef3d6cec26",
-    "svg/up/idle.svg": "017c59df766fb1ca6243e05fe511fea9d9ef61dcad7bd965ed569109f0683b30",
-    "source/avatar-1.blend": "d178a6fc57249222c405c462a1dfa68b69f302297113ab23329f641637d8f106",
-    "source/idle-geometry.json": "1aaa6b0873f9066255c85820e5cf0dcbf100d9829270d5ec02279bc4fe342252",
-    "source/palette.json": "d6ddc6d0f6820f479162d72aa26cb91f54a90242e7354b20c4d74fbc629fc76a",
-    "review/engine/phaser-closeup-viewport.png": "5936764dda741b56e4bf51efada201b2a144e2d82b3f3005729d7d0cc6837462",
-    "review/engine/phaser-closeup-evidence.raw.json": "10d5776608aa83a0c88a3999e51261f927f53e887774bbbf90a09f33055614f2",
-    "review/concept-comparison.png": "d27c7f073db656a705eb80d56bbf93f37a4d4968e887cfd22317393fb0134561"
-  },
-  "conceptComparison": {
-    "file": "review/concept-comparison.png",
-    "sha256": "d27c7f073db656a705eb80d56bbf93f37a4d4968e887cfd22317393fb0134561"
-  },
-  "engineEvidence": [
-    {
-      "surface": "road",
-      "viewport": {
-        "file": "review/engine/phaser-road-viewport.png",
-        "sha256": "fe44fc9a5cdbce8c8e6e14e26e0e20af0cfe19922024e95e8b57bbdd005fc775"
-      },
-      "canvas": {
-        "file": "review/engine/phaser-road-canvas.png",
-        "sha256": "210373c51cbfb09c6bc59adf6280a47ddfb14a1f0ea91d2277da6413fc0de243"
-      },
-      "metadata": {
-        "file": "review/engine/phaser-road-evidence.raw.json",
-        "sha256": "8f273e3a19573dd9544450cb3ea6564b2c99e20b32c0b60740a036b7d6e65b8f"
-      }
+  "priorAssessment": {
+    "schemaVersion": 1,
+    "revision": "idle-v5",
+    "inspectedAt": "2026-09-13T21:11:06.771322+00:00",
+    "producer": "root",
+    "producerPersonallyInspected": true,
+    "question": "Is this in-game result obviously good enough to approve?",
+    "answer": "yes",
+    "knownBlockingDefects": [],
+    "userApproval": null,
+    "scope": "Four idle directions in the isolated actual Phaser street preview; not animation or canonical production integration.",
+    "sourceEvidence": {
+      "file": "review/idle-inspection.png",
+      "sha256": "7ae8c24ddccbb1cbdc649107d1194bd073f26b873e5109078fc488fc4513f7c0"
     },
-    {
-      "surface": "pavement",
-      "viewport": {
-        "file": "review/engine/phaser-pavement-viewport.png",
-        "sha256": "44f57e455e2506c11a4cf66f6ffee6e6079f22334bc4a4d446e0039b1e9d880e"
-      },
-      "canvas": {
-        "file": "review/engine/phaser-pavement-canvas.png",
-        "sha256": "c0c3da06ce595a42c142bab021443ccdb8bfcd0a90e4dc65b36f2125544e0fca"
-      },
-      "metadata": {
-        "file": "review/engine/phaser-pavement-evidence.raw.json",
-        "sha256": "3f77d2785b13bb21c187823f1a8299516283bc281742dc232cae700b9bc0405c"
-      }
+    "sourceParity": {
+      "file": "review/source-parity.json",
+      "sha256": "c28e5b41e4229445c6ab4018034c9680a84c611e77396235dd37fc90f94ac5ff"
     },
-    {
-      "surface": "grass",
-      "viewport": {
-        "file": "review/engine/phaser-grass-viewport.png",
-        "sha256": "b2e4dbb587be92d8831531a2871ef9d71c5818e0a387f1eb4eb751d6b86322d8"
+    "reviewedArtifacts": {
+      "frames/down/idle.png": "916dc0ae9e5d3ddcb086690eb1b23f1fb783e706bc8b243ee6a15690a708da56",
+      "frames/left/idle.png": "5899abd9ac4079943fc249432c9fa69cfdb54bb38d5639500ecacd5e7e4a95bb",
+      "frames/right/idle.png": "76ff6dc5f5a2074c32a55701f3f4f29f7d8bcfc0ffbf39fedf05784c8d9a8131",
+      "frames/up/idle.png": "6f5d3a95fe6e8b3f4a8a75d901eb553cd7704ca6b6dfaf08c29fb7cd6bbc049a",
+      "svg/down/idle.svg": "74f827092bfd9da811aaaf8c618e78d339574f2da0e3b42a0b9ef1929f991d3b",
+      "svg/left/idle.svg": "69862d960d117796a6a0259628082677f7e6e939460e709019acb2a938b944f7",
+      "svg/right/idle.svg": "3c7fd42c260270590b05f7fee3a95fd3de5a193f208572e59d0ec5ef3d6cec26",
+      "svg/up/idle.svg": "017c59df766fb1ca6243e05fe511fea9d9ef61dcad7bd965ed569109f0683b30",
+      "source/avatar-1.blend": "d178a6fc57249222c405c462a1dfa68b69f302297113ab23329f641637d8f106",
+      "source/idle-geometry.json": "1aaa6b0873f9066255c85820e5cf0dcbf100d9829270d5ec02279bc4fe342252",
+      "source/palette.json": "d6ddc6d0f6820f479162d72aa26cb91f54a90242e7354b20c4d74fbc629fc76a",
+      "review/engine/phaser-closeup-viewport.png": "5936764dda741b56e4bf51efada201b2a144e2d82b3f3005729d7d0cc6837462",
+      "review/engine/phaser-closeup-evidence.raw.json": "10d5776608aa83a0c88a3999e51261f927f53e887774bbbf90a09f33055614f2",
+      "review/concept-comparison.png": "d27c7f073db656a705eb80d56bbf93f37a4d4968e887cfd22317393fb0134561"
+    },
+    "conceptComparison": {
+      "file": "review/concept-comparison.png",
+      "sha256": "d27c7f073db656a705eb80d56bbf93f37a4d4968e887cfd22317393fb0134561"
+    },
+    "engineEvidence": [
+      {
+        "surface": "road",
+        "viewport": {
+          "file": "review/engine/phaser-road-viewport.png",
+          "sha256": "fe44fc9a5cdbce8c8e6e14e26e0e20af0cfe19922024e95e8b57bbdd005fc775"
+        },
+        "canvas": {
+          "file": "review/engine/phaser-road-canvas.png",
+          "sha256": "210373c51cbfb09c6bc59adf6280a47ddfb14a1f0ea91d2277da6413fc0de243"
+        },
+        "metadata": {
+          "file": "review/engine/phaser-road-evidence.raw.json",
+          "sha256": "8f273e3a19573dd9544450cb3ea6564b2c99e20b32c0b60740a036b7d6e65b8f"
+        }
       },
-      "canvas": {
-        "file": "review/engine/phaser-grass-canvas.png",
-        "sha256": "693569c918c7cb995fede9c4caaef0bf9a338736f9a8b52172948682ddeb5eaf"
+      {
+        "surface": "pavement",
+        "viewport": {
+          "file": "review/engine/phaser-pavement-viewport.png",
+          "sha256": "44f57e455e2506c11a4cf66f6ffee6e6079f22334bc4a4d446e0039b1e9d880e"
+        },
+        "canvas": {
+          "file": "review/engine/phaser-pavement-canvas.png",
+          "sha256": "c0c3da06ce595a42c142bab021443ccdb8bfcd0a90e4dc65b36f2125544e0fca"
+        },
+        "metadata": {
+          "file": "review/engine/phaser-pavement-evidence.raw.json",
+          "sha256": "3f77d2785b13bb21c187823f1a8299516283bc281742dc232cae700b9bc0405c"
+        }
       },
-      "metadata": {
-        "file": "review/engine/phaser-grass-evidence.raw.json",
-        "sha256": "cd6003d22ab007e27adb1e92f8fcc35ae2e30cd52caf9bfa4bbb0ffd7e255f3e"
+      {
+        "surface": "grass",
+        "viewport": {
+          "file": "review/engine/phaser-grass-viewport.png",
+          "sha256": "b2e4dbb587be92d8831531a2871ef9d71c5818e0a387f1eb4eb751d6b86322d8"
+        },
+        "canvas": {
+          "file": "review/engine/phaser-grass-canvas.png",
+          "sha256": "693569c918c7cb995fede9c4caaef0bf9a338736f9a8b52172948682ddeb5eaf"
+        },
+        "metadata": {
+          "file": "review/engine/phaser-grass-evidence.raw.json",
+          "sha256": "cd6003d22ab007e27adb1e92f8fcc35ae2e30cd52caf9bfa4bbb0ffd7e255f3e"
+        }
       }
+    ],
+    "personalObservations": {
+      "source": "Personally viewed the approved concept and both new construction studies, all four native Blender GP views, exact SVG-derived texture contact sheet, and a matched-height concept/front-export comparison. The warm young-adult identity, copper hair, teal wrap, asymmetric scarf ends, leather harness and pouch are retained.",
+      "actualGameScale": "Personally viewed all four turns on the actual Phaser road, pavement and grass captures at 1280x900 DPR1, camera zoom2, 128 CSS-pixel cells and approximately104 CSS-pixel visible figures. Limbs remain distinct, silhouette reads naturally, edges are clean and the face does not form an uncanny mask. Close-up retains expression; fine facial expression is not claimed to be legible at normal town scale.",
+      "directions": "Left/right show coherent profile depth and intact relaxed hands, with the pouch on wearer-right and two scarf tails attached wearer-left. Back retains X harness and matching boots/kit. No malformed limbs, grid-shaped blocks, detached scarf fragments, clipped hair or stray opaque background are visible.",
+      "grounding": "Personally rechecked final engine rendering after adding subtle separate contact shadows. All four figures sit coherently on each selected surface; the final road lineup was repositioned away from pavement approaches.",
+      "judgment": "The result is a coherent illustrated RPG idle draft, close enough to the approved concept to request exact idle approval. It is not a completed animation or integrated production sprite."
+    },
+    "refinementsCompleted": [
+      "Replaced withdrawn 64px-grid construction with 1024px registered study tracing and smooth 512px native vector artwork.",
+      "Preserved detailed authored fills and antialiased alpha instead of 24-color/binary-alpha/nearest avatar export.",
+      "Fixed native Blender camera clipping so the saved source is visible in the viewport.",
+      "Added a modest separate runtime contact shadow, cleaned direction-label rendering and checked the actual final composite again.",
+      "Moved surface-comparison positions until every direction was visible on the intended ground surface."
+    ],
+    "independentReview": "A separate critical reviewer also viewed concept, source exports and actual engine images. Its opinion did not replace producer inspection or confer user approval.",
+    "futureStageRequirements": [
+      "Exact user idle approval before animation",
+      "Anatomical part grouping and hidden surfaces before rig/pose construction",
+      "Actual animated Phaser loops and producer quality review before animated handoff"
+    ],
+    "closeupEvidence": {
+      "viewport": "review/engine/phaser-closeup-viewport.png",
+      "metadata": "review/engine/phaser-closeup-evidence.raw.json",
+      "cameraZoom": 4,
+      "personallyInspected": true,
+      "scope": "Supplemental detail inspection; actual game-size acceptance uses the separate zoom2 captures."
     }
-  ],
-  "personalObservations": {
-    "source": "Personally viewed the approved concept and both new construction studies, all four native Blender GP views, exact SVG-derived texture contact sheet, and a matched-height concept/front-export comparison. The warm young-adult identity, copper hair, teal wrap, asymmetric scarf ends, leather harness and pouch are retained.",
-    "actualGameScale": "Personally viewed all four turns on the actual Phaser road, pavement and grass captures at 1280x900 DPR1, camera zoom2, 128 CSS-pixel cells and approximately104 CSS-pixel visible figures. Limbs remain distinct, silhouette reads naturally, edges are clean and the face does not form an uncanny mask. Close-up retains expression; fine facial expression is not claimed to be legible at normal town scale.",
-    "directions": "Left/right show coherent profile depth and intact relaxed hands, with the pouch on wearer-right and two scarf tails attached wearer-left. Back retains X harness and matching boots/kit. No malformed limbs, grid-shaped blocks, detached scarf fragments, clipped hair or stray opaque background are visible.",
-    "grounding": "Personally rechecked final engine rendering after adding subtle separate contact shadows. All four figures sit coherently on each selected surface; the final road lineup was repositioned away from pavement approaches.",
-    "judgment": "The result is a coherent illustrated RPG idle draft, close enough to the approved concept to request exact idle approval. It is not a completed animation or integrated production sprite."
-  },
-  "refinementsCompleted": [
-    "Replaced withdrawn 64px-grid construction with 1024px registered study tracing and smooth 512px native vector artwork.",
-    "Preserved detailed authored fills and antialiased alpha instead of 24-color/binary-alpha/nearest avatar export.",
-    "Fixed native Blender camera clipping so the saved source is visible in the viewport.",
-    "Added a modest separate runtime contact shadow, cleaned direction-label rendering and checked the actual final composite again.",
-    "Moved surface-comparison positions until every direction was visible on the intended ground surface."
-  ],
-  "independentReview": "A separate critical reviewer also viewed concept, source exports and actual engine images. Its opinion did not replace producer inspection or confer user approval.",
-  "futureStageRequirements": [
-    "Exact user idle approval before animation",
-    "Anatomical part grouping and hidden surfaces before rig/pose construction",
-    "Actual animated Phaser loops and producer quality review before animated handoff"
-  ],
-  "closeupEvidence": {
-    "viewport": "review/engine/phaser-closeup-viewport.png",
-    "metadata": "review/engine/phaser-closeup-evidence.raw.json",
-    "cameraZoom": 4,
-    "personallyInspected": true,
-    "scope": "Supplemental detail inspection; actual game-size acceptance uses the separate zoom2 captures."
   }
 }

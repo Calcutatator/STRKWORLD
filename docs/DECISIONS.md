@@ -2589,14 +2589,13 @@ checks after the headless state and lifecycle regressions pass.
 ## D-059 — Avatar 1 authoring uses Blender MCP and real SVG pose files
 
 **2026-09-12 · Directed by James · authoring-route amendment to D-052;
-concept-first correction supersedes the prior reference-authority and
-idle-review sequence · exact fresh concept-v2 approved by James; idle-v3's
-visual pass and handoff are withdrawn by the 2026-09-13 pre-handoff aesthetic
-QA correction below · idle-v4’s pass and approval request are also withdrawn by
-the subsequent 2026-09-13 quality correction · rendering-style clarification
-is resolved by the 2026-09-13 illustrated-vector and engine-QA amendment below:
-idle-v5 is in internal refinement, with no candidate ready · idle-v2 remains
-superseded and unapproved; animation is blocked until separate user idle approval**
+concept-v2 remains approved for character identity/costume · idle-v5 is
+rejected and its artistic pass/approval request withdrawn by the 2026-09-15
+original sprite design restoration below · the original medium sprite
+reference governs style/proportions/game viewpoint, not fresh concept art ·
+internal sprite design translation is required before renewed four-idle
+production · no replacement candidate or new pixel density is selected ·
+v1–v4 remain unapproved; animation requires separate exact idle approval**
 
 **Context.** James rejected the fresh Avatar 1 draft's in-game appearance,
 despite its mechanical export checks passing, and requested: “We should use
@@ -2678,7 +2677,9 @@ in the active workflow. This establishes readiness to ask James for the idle
 approval; it does not approve animation or game integration.
 
 
-**Concept-first correction, 2026-09-12.** James clarified that fresh concept
+**Concept-first correction, 2026-09-12 — fresh-concept requirement remains;
+the original turnaround's separate sprite-style authority is clarified by
+the 2026-09-15 original sprite design restoration below.** James clarified that fresh concept
 art must be created and approved before Blender/SVG sprite production. The
 old turnaround labelled an “approved concept” in the preceding records was
 not concept art. Those source-authority claims and the claim that idle-v2 was
@@ -2853,7 +2854,10 @@ Animation, runtime integration and rendered acceptance remain separate,
 uncompleted gates.
 
 
-**Illustrated-vector and engine-QA amendment, 2026-09-13 — current direction.**
+**Illustrated-vector and engine-QA amendment, 2026-09-13 — v5 implementation
+attempt; its interpretation of sprite style/proportion authority is superseded
+by the 2026-09-15 original sprite design restoration below. Direct engine
+inspection remains required.**
 James accepted the proposed genuinely higher-detail vector artwork at the
 same on-screen size and instructed: “brother then please do that. update your
 flow too please. I want you to be able to execute to a draft of an in-game
@@ -2920,5 +2924,59 @@ preview and its visual QA are authorized now. Animation and production
 integration remain unapproved. The execution status below records the current idle-v5 result.
 
 
-**D-059 execution status, 2026-09-14 — exact idle approval pending.**
+**D-059 execution status, 2026-09-14 — artistic pass and approval request
+withdrawn by the 2026-09-15 original sprite design restoration below.**
 The Art lane completed detailed image-assisted vector reconstruction from the approved concept, authored and reopened the native Blender Grease Pencil master through MCP, and exported four real SVG/256px PNG idles. The producer personally inspected source, exact exports, a matched-height concept comparison and actual isolated Phaser/WebGL captures at zoom 2 on road, pavement and grass. This draft passes the producer quality question; user approval remains unset. Evidence, exact hashes and the procedural stale-evidence guard are in `idle-v5/review/visual-qa.json` and `idle-v5/source/verify_review.py`. The preview includes separate subtle contact-shadow ellipses, recorded in its rendering evidence; no shadow is baked into the SVG/PNG. The current source is editable filled-region illustration, not a rig: anatomical grouping and hidden surfaces remain required before animation. No animation, production asset replacement, merge or production integration was performed.
+
+
+**Original sprite design restoration and idle-v5 rejection, 2026-09-15 —
+current direction.** James rejected v5: “this is not the same design as what
+we originally requested - I assume only concept art in which this makes no
+sense to show in-game...” Withdraw the v5 artistic pass and approval request
+and record the exact idle decision as **rejected**. Preserve its source,
+SVG/PNG outputs, engine captures, original hashes and timestamps. The entire
+previous visual assessment remains under `priorAssessment` in
+`idle-v5/review/visual-qa.json`; the current answer to the pre-handoff quality
+question is **no**. Style, perspective, detail and proportion mismatches are
+blocking defects. No user idle approval or animation authorization exists.
+
+The recovered original brief requests **warm, lower-resolution 16-bit JRPG
+actual game cutouts**. The originally approved **medium Avatar 1 sprite** at
+`reference/approved-concept-turnaround.png` is a legitimate authority for
+sprite style, proportions and elevated game viewpoint. Its SHA-256 is
+`f1de96b3038042aaca726c18ae87fe374e8dac2bbda7d0a2359d53f44ad08ed4`.
+[The original brief recovery note](../packages/world/assets/player-sprites/avatar-1-blender-svg/reference/original-style-recovery.md)
+records the primary user messages and original medium-sprite approval.
+It is still not fresh concept art; correcting that label must not remove
+its separate sprite-style authority. Only Avatars 6 and 14 were intentionally
+chibi. Avatar 1 must retain the original medium sprite proportions.
+
+Exact approved `concept/avatar-1-concept-v2.png` remains the authority for
+**character identity and costume**. Its approval did not approve literal
+full-height illustration proportions or presentation as the game sprite.
+The earlier single-reference interpretation and v5's readiness claim are
+superseded by this dual-reference correction. V5's higher-density vector
+rendering choices are preserved as historical implementation parameters; no
+replacement pixel-density, alpha, palette or filtering parameters are chosen
+by this correction. Existing production geometry and assets remain current.
+
+Add an internal **sprite design translation** gate after concept approval
+and before four-idle production. Compare the proposed game cutout with the
+original medium sprite reference for proportions, elevated viewpoint, simple
+expressive face, deliberate readable clusters, clean contours and limited
+detail, and with approved concept-v2 for identity/costume. A scaled detailed
+concept illustration fails this gate even when its clothes match and the
+files export correctly. Refine internally until both roles are satisfied.
+This internal gate does not grant user approval or create a new user
+checkpoint before the required exact-idle approval.
+
+Native Blender MCP, editable SVG paths, source parity and actual Phaser
+inspection remain production and verification tools. A successful tool path
+or clean engine screenshot is not an artistic pass. Before every handoff,
+the producer must personally inspect the actual source and engine output
+against **both** authorities at game scale and keep refining any mismatch.
+The procedure is now **approved identity concept → internal sprite design
+translation against original sprite style → four-idle Blender/SVG production
+and refinement → direct source and engine visual QA → explicit exact-idle
+approval → animation → later animated-art and production acceptance**.
+No replacement artwork, candidate or approval is produced by this correction.
