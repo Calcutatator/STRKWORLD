@@ -1,0 +1,184 @@
+import { describe, expect, it, vi } from 'vitest';
+import { createDomKeyboard, type DomEventHost } from './dom-keyboard.js';
+import { createInputGate } from './input-gate.js';
+
+type Listener = Parameters<DomEventHost['addEventListener']>[1];
+
+function fakeHost(): DomEventHost & {
+  dispatch(type: string, event?: Record<string, unknown>): void;
+  count(type: string): number;
+  visibilityState?: string;
+} {
+  const listeners = new Map<string, Set<Listener>>();
+  return {
+    addEventListener(type, listener) {
+      if (!listeners.has(type)) listeners.set(type, new Set());
+      listeners.get(type)!.add(listener);
+    },
+    removeEventListener(type, listener) {
+      listeners.get(type)?.delete(listener);
+    },
+    dispatch(type, event = {}) {
+      for (const listener of [...(listeners.get(type) ?? [])]) listener(event);
+    },
+    count(type) {
+      return listeners.get(type)?.size ?? 0;
+    },
+  };
+}
+
+function key(code: string, extra: Record<string, unknown> = {}) {
+  return { code, repeat: false, target: null, preventDefault: vi.fn(), ...extra };
+}
+
+function setup() {
+  const window = fakeHost();
+  const document = fakeHost();
+  const keyboard = createDomKeyboard({ window, document });
+  return { window, document, keyboard };
+}
+
+describe('DOM World keyboard', () => {
+  it('merges arrows and WASD into held movement', () => {
+    const { window, keyboard } = setup();
+    window.dispatch('keydown', key('ArrowUp'));
+    window.dispatch('keydown', key('KeyD'));
+    expect(keyboard.held).toEqual({ up: true, down: false, left: false, right: true });
+    window.dispatch('keyup', key('ArrowUp'));
+    expect(keyboard.held).toEqual({ up: false, down: false, left: false, right: true });
+  });
+
+  it('reads either Shift key as sprint', () => {
+    const { window, keyboard } = setup();
+    window.dispatch('keydown', key('ShiftRight'));
+    expect(keyboard.sprinting).toBe(true);
+    window.dispatch('keyup', key('ShiftRight'));
+    expect(keyboard.sprinting).toBe(false);
+  });
+
+  it('delivers and reads nothing while disabled', () => {
+    const { window, keyboard } = setup();
+    window.dispatch('keydown', key('KeyW'));
+    keyboard.enabled = false;
+    expect(keyboard.held.up).toBe(false);
+    window.dispatch('keydown', key('KeyS'));
+    keyboard.enabled = true;
+    // W was held before the gate closed and was never released; S arrived
+    // while disabled and must not have been recorded.
+    expect(keyboard.held).toEqual({ up: true, down: false, left: false, right: false });
+  });
+
+  it('captures World keys only while global capture is on', () => {
+    const { window, keyboard } = setup();
+    const captured = key('ArrowDown');
+    window.dispatch('keydown', captured);
+    expect(captured.preventDefault).toHaveBeenCalledOnce();
+
+    keyboard.disableGlobalCapture();
+    const released = key('ArrowLeft');
+    window.dispatch('keydown', released);
+    expect(released.preventDefault).not.toHaveBeenCalled();
+
+    const letter = key('KeyQ');
+    keyboard.enableGlobalCapture();
+    window.dispatch('keydown', letter);
+    expect(letter.preventDefault).not.toHaveBeenCalled();
+  });
+
+  it('never reads a keystroke aimed at an editable element as movement', () => {
+    const { window, keyboard } = setup();
+    const typed = key('KeyW', { target: { tagName: 'INPUT' } });
+    window.dispatch('keydown', typed);
+    expect(keyboard.held.up).toBe(false);
+    expect(typed.preventDefault).not.toHaveBeenCalled();
+    window.dispatch('keydown', key('KeyA', { target: { isContentEditable: true } }));
+    window.dispatch('keydown', key('KeyS', { target: { closest: () => ({}) } }));
+    expect(keyboard.held).toEqual({ up: false, down: false, left: false, right: false });
+  });
+
+  it('honours a release over any target, so keys cannot stick behind a panel', () => {
+    const { window, keyboard } = setup();
+    window.dispatch('keydown', key('KeyD'));
+    window.dispatch('keyup', key('KeyD', { target: { tagName: 'TEXTAREA' } }));
+    expect(keyboard.held.right).toBe(false);
+  });
+
+  it('clears held keys on window blur and when the tab is hidden', () => {
+    const { window, document, keyboard } = setup();
+    window.dispatch('keydown', key('KeyW'));
+    window.dispatch('blur');
+    expect(keyboard.held.up).toBe(false);
+
+    window.dispatch('keydown', key('KeyA'));
+    document.visibilityState = 'visible';
+    document.dispatch('visibilitychange');
+    expect(keyboard.held.left).toBe(true);
+    document.visibilityState = 'hidden';
+    document.dispatch('visibilitychange');
+    expect(keyboard.held.left).toBe(false);
+  });
+
+  it('emits keydown-F with the native repeat and target only while enabled', () => {
+    const { window, keyboard } = setup();
+    const handler = vi.fn();
+    keyboard.on('keydown-F', handler);
+    const target = { tagName: 'DIV' };
+    window.dispatch('keydown', key('KeyF', { repeat: true, target }));
+    expect(handler).toHaveBeenCalledWith({ repeat: true, target });
+
+    keyboard.enabled = false;
+    window.dispatch('keydown', key('KeyF'));
+    expect(handler).toHaveBeenCalledOnce();
+
+    keyboard.enabled = true;
+    keyboard.off('keydown-F', handler);
+    window.dispatch('keydown', key('KeyF'));
+    expect(handler).toHaveBeenCalledOnce();
+  });
+
+  it('runs every F handler before surfacing a handler failure', () => {
+    const { window, keyboard } = setup();
+    const failure = new Error('shell delivery failed');
+    const later = vi.fn();
+    keyboard.on('keydown-F', () => {
+      throw failure;
+    });
+    keyboard.on('keydown-F', later);
+    expect(() => window.dispatch('keydown', key('KeyF'))).toThrow(failure);
+    expect(later).toHaveBeenCalledOnce();
+  });
+
+  it('satisfies the input gate contract: suspend releases capture, delivery and held state', () => {
+    const { window, keyboard } = setup();
+    const gate = createInputGate(keyboard);
+    window.dispatch('keydown', key('KeyW'));
+
+    gate.suspend();
+    expect(keyboard.enabled).toBe(false);
+    expect(keyboard.held.up).toBe(false);
+    const typed = key('ArrowUp');
+    window.dispatch('keydown', typed);
+    expect(typed.preventDefault).not.toHaveBeenCalled();
+
+    gate.resume();
+    expect(keyboard.enabled).toBe(true);
+    // Held state was cleared by the suspend; nothing walks on resume.
+    expect(keyboard.held).toEqual({ up: false, down: false, left: false, right: false });
+  });
+
+  it('detaches every listener on destroy and stays inert', () => {
+    const { window, document, keyboard } = setup();
+    const handler = vi.fn();
+    keyboard.on('keydown-F', handler);
+    keyboard.destroy();
+    keyboard.destroy();
+    expect(window.count('keydown')).toBe(0);
+    expect(window.count('keyup')).toBe(0);
+    expect(window.count('blur')).toBe(0);
+    expect(document.count('visibilitychange')).toBe(0);
+    window.dispatch('keydown', key('KeyF'));
+    expect(handler).not.toHaveBeenCalled();
+    expect(keyboard.held.up).toBe(false);
+    expect(keyboard.sprinting).toBe(false);
+  });
+});

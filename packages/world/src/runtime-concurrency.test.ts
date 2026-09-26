@@ -1,28 +1,15 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { EventBus, ShellEvents, WorldEvents } from '@strkworld/shared';
 
-const games: unknown[] = [];
+const engines: unknown[] = [];
 
-vi.mock('phaser', () => {
-  class Scene {}
-  class Game {
-    registry = { set: vi.fn() };
-
-    constructor(config: { callbacks?: { preBoot?: (game: Game) => void } }) {
-      games.push(this);
-      config.callbacks?.preBoot?.(this);
-    }
-
-    destroy(): void {}
-  }
-
-  return {
-    Game,
-    Scene,
-    WEBGL: 2,
-    Scale: { RESIZE: 5, CENTER_BOTH: 1 },
-  };
-});
+vi.mock('./three/world-engine.js', () => ({
+  createWorldEngine: () => {
+    const engine = { rebind: vi.fn(), resize: vi.fn(), destroy: vi.fn() };
+    engines.push(engine);
+    return engine;
+  },
+}));
 
 function fakeBus(): { out: EventBus<WorldEvents>; in: EventBus<ShellEvents> } {
   return {
@@ -79,7 +66,7 @@ describe('world runtime lazy host ownership', () => {
   beforeEach(() => {
     vi.resetModules();
     vi.useFakeTimers();
-    games.length = 0;
+    engines.length = 0;
   });
 
   afterEach(async () => {
@@ -87,31 +74,26 @@ describe('world runtime lazy host ownership', () => {
     vi.useRealTimers();
   });
 
-  it('coalesces concurrent first acquires while Phaser is lazy-loading', async () => {
-    const { acquireWorld, releaseWorld } = await import('./runtime.js');
+  it('coalesces concurrent first acquires while the engine is lazy-loading', async () => {
+    const { acquireWorld, releaseWorld, worldDebugState } = await import('./runtime.js');
     const parent = fakeParent();
     const bus = fakeBus();
 
-    const firstAcquire = acquireWorld(parent, bus);
-    const secondAcquire = acquireWorld(parent, bus);
-    const [firstGame, secondGame] = await Promise.all([
-      firstAcquire,
-      secondAcquire,
-    ]);
+    await Promise.all([acquireWorld(parent, bus), acquireWorld(parent, bus)]);
 
-    expect(secondGame).toBe(firstGame);
-    expect(games).toHaveLength(1);
+    expect(engines).toHaveLength(1);
+    expect(worldDebugState()).toEqual({ refCount: 2, alive: true });
 
     releaseWorld();
     releaseWorld();
     await vi.runAllTimersAsync();
   });
 
-  it('retires an acquire released while Phaser is lazy-loading', async () => {
+  it('retires an acquire released while the engine is lazy-loading', async () => {
     const { acquireWorld, releaseWorld, worldDebugState } = await import('./runtime.js');
     const acquire = acquireWorld(fakeParent(), fakeBus());
 
-    // The owner can unmount before the lazy Phaser import settles. That
+    // The owner can unmount before the lazy engine import settles. That
     // release must apply to the late lease rather than becoming a no-op.
     releaseWorld();
     await acquire;

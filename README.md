@@ -1,6 +1,6 @@
 # STRKWORLD
 
-**A 2D top-down city where the buildings are Starknet privacy protocols.**
+**A 3D walkable city where the buildings are Starknet privacy protocols.**
 
 Walk around a shared pseudonymous world, step into a building, and use a real
 privacy-preserving protocol with real funds on Starknet mainnet. One balance,
@@ -77,8 +77,9 @@ packages/
   bridge/       One-way cross-chain funding via NEAR Intents. Public rails —
                 shielding is a separate step.
 
-  world/        The game. Phaser scenes, movement, collision, tilemaps,
-                sprites. Knows nothing about wallets or money.
+  world/        The game. A Three.js 3D renderer over a tile-authored
+                world: movement, collision, rooms, avatars (D-059).
+                Knows nothing about wallets or money.
 
   lobby/        Multiplayer presence. Colyseus server broadcasting ephemeral
                 positions. Structurally incapable of seeing an address.

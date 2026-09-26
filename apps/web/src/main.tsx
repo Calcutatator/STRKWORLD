@@ -21,7 +21,7 @@ import { ProductionRoot } from './production/ProductionRoot.js';
  * double-mount, which would otherwise hand the world a fresh bus on the second
  * pass and strand every subscription made against the first.
  *
- * The world's own lifecycle (Phaser, WebGL) is ref-counted inside
+ * The world's own lifecycle (Three.js, WebGL) is ref-counted inside
  * `@strkworld/world` precisely so that double-mount is safe; nothing here needs
  * to defend against it beyond keeping these two references fixed.
  */

@@ -1714,7 +1714,9 @@ pre-launch checks. Rendered game acceptance remains user-owned.
 
 ## D-044 — Kenney Urban CC0 is the placeholder art base
 
-**2026-08-19 · Accepted by the user · placeholder scope only**
+**2026-08-19 · SUPERSEDED by [D-059](#d-059--the-world-renders-in-3d-with-threejs) — the 3D World is drawn from
+procedural geometry and no longer slices the Kenney 2D atlas · previously accepted
+by the user, placeholder scope only**
 
 **Context.** The World tracer currently uses procedural and placeholder
 presentation. Art needs a commercially safe base for roads, grass, pavement
@@ -1929,7 +1931,9 @@ orientation; rendered acceptance is required again after implementation.
 
 ## D-049 — Avatar art uses one fixed 64x64 logical canvas
 
-**2026-08-20 · PARTIALLY SUPERSEDED by
+**2026-08-20 · PARTIALLY SUPERSEDED by [D-059](#d-059--the-world-renders-in-3d-with-threejs) for in-World
+rendering (avatars are procedural 3D figures; these sheets remain the colour
+reference and D-058's wallet-cue source) and by
 [D-052](#d-052--avatar-animation-contract-and-avatar-studio-f-toggle) for
 animation geometry and the Avatar Studio fighting-toggle status; 2026-08-19
 accepted by the user; 2026-08-20 art-production amendment authorizes all eight
@@ -2165,8 +2169,9 @@ or funded-route readiness.
 
 ## D-052 — Avatar animation contract and Avatar Studio F toggle
 
-**2026-08-20 · PARTIALLY SUPERSEDED — the animation contract remains accepted;
-the Studio-only F scope is superseded by
+**2026-08-20 · PARTIALLY SUPERSEDED — the sprite-sheet animation contract is
+superseded for in-World rendering by [D-059](#d-059--the-world-renders-in-3d-with-threejs) (procedural 3D
+walk cycle); the Studio-only F scope is superseded by
 [D-053](#d-053--the-f-outfit-toggle-follows-the-local-avatar-throughout-world-play) ·
 supersedes the animation-geometry and Avatar Studio toggle portions of
 [D-049](#d-049--avatar-art-uses-one-fixed-64x64-logical-canvas) · Avatar 1
@@ -2581,3 +2586,73 @@ account, balance, amount, route, transaction hash or wallet identity. Mock mode
 continues to complete without the cue lingering because it never waits on a
 human-owned prompt. Browser rendering and audibility remain local acceptance
 checks after the headless state and lifecycle regressions pass.
+
+---
+
+## D-059 — The World renders in 3D with Three.js
+
+**2026-09-27 · Accepted by the user · supersedes D-044's placeholder art base ·
+partially supersedes D-049 and D-052 for in-World avatars · amends the Phaser
+mechanism named in D-008, D-030 and D-039**
+
+**Context.** The user asked for STRKWORLD to become a 3D-rendered, simple game
+world you can walk around in, entirely in the browser, built on the same
+technology as a reference browser game made with Claude in one day. The
+reference site could not be inspected from the development machine, so the
+stack is the conventional one for that kind of build: vanilla Three.js on Vite
+and TypeScript. Offered a flag-gated rollout or a direct replacement, the user
+chose the quickest path to ship ("remove whatever you need or replace whatever
+you want"), low-poly 3D figures for avatars, and procedural geometry for the
+first art pass.
+
+**Decision.**
+
+- `packages/world` renders with Three.js 0.186 instead of Phaser 4. The engine
+  loads behind the same lazy `./runtime` seam — `acquireWorld` /
+  `releaseWorld`, the ref-counted host, retarget on a new Shell binding — and
+  keeps one WebGL context per mount. `acquireWorld` now resolves to `void`;
+  nothing in the Shell used the Phaser `Game` it returned.
+- Gameplay stays tile-authored in 2D pixel space and is now engine-agnostic.
+  `world-session.ts` carries StreetScene's orchestration, create/teardown
+  order and rollback rules over unchanged and drives a narrow
+  `WorldSessionView`. The street uses the same substep tile collision the
+  interiors already used (`moveWithCollisionSubsteps` with `isSolidAt` and the
+  same 24 px body), replacing Arcade physics. One tile is one world unit; +X is
+  east and +Z is south.
+- No seam changes shape. `packages/shared`, the lobby protocol and the Shell
+  are untouched. `Facing` stays four cardinal values on the wire; the avatar's
+  continuous yaw is presentation only.
+- Camera: third-person follow, north-up by default so the district reads as it
+  did in 2D; drag to orbit, wheel to zoom. Movement keys are camera-relative,
+  and the reported facing is the cardinal nearest the intended World-space
+  direction, with exact diagonals resolving vertically as before. The camera
+  never turns on its own, so a key held through a room or Studio handoff cannot
+  walk the player straight back out.
+- Art: procedural low-poly geometry and no new third-party assets. Avatars are
+  procedural blocky figures, one look per existing opaque avatar key, coloured
+  from the approved D-049 sheets, so the lobby's cosmetic allowlist is
+  unchanged. Buildings that stand between the camera and the player fade.
+- Input: a DOM keyboard replaces Phaser's KeyboardPlugin behind the same
+  `KeyboardLike` input-gate contract, and also clears held keys on window blur
+  and when the tab is hidden.
+- Other players are interpolated between lobby snapshots and face their
+  direction of travel. They remain presentation-only (D-038).
+
+**Consequences.**
+
+- The Phaser dependency, StreetScene, the Kenney atlas slicer and the
+  sprite-sheet renderers are removed. The approved 2D sheets stay: they are
+  the colour reference for the 3D looks and the source of D-058's
+  wallet-attention cue.
+- Still WebGL on one canvas under `.world-host`; no COOP/COEP, no
+  SharedArrayBuffer and no WASM, so D-005 is unaffected.
+- Frame stages are isolated. A failing session update, animation or camera
+  step is reported (rate-limited) and the frame still renders; the session's
+  rollback rules retry the handoff on the next frame.
+- A perspective camera sees further than the lobby's 640 px interest radius, so
+  a distant peer can appear at the edge of the fog.
+- Visual acceptance stays with the user at localhost:5173, as for every
+  rendered change. Headless tests cover the session (the StreetScene lifecycle
+  suite, ported), the keyboard, the camera math and scene construction.
+- A later Art decision may swap procedural geometry for a CC0 model pack; it
+  must record provenance the way D-044 did.

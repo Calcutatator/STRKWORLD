@@ -1,0 +1,2157 @@
+import {
+  Box3,
+  ConeGeometry,
+  CylinderGeometry,
+  Group,
+  IcosahedronGeometry,
+  InstancedMesh,
+  Matrix4,
+  Mesh,
+  MeshBasicMaterial,
+  PlaneGeometry,
+  Quaternion,
+  Vector3,
+  Color,
+} from 'three';
+import type { Material, Object3D } from 'three';
+import type { BuildingId } from '@strkworld/shared';
+import {
+  isSolidAt,
+  type BuildingExteriorLabel,
+  type DistrictMap,
+  type DoorZone,
+  type TileKind,
+} from '../map/street.js';
+import {
+  EXCHANGE_TICKER,
+  GeometryBin,
+  PALETTE,
+  ResourceBag,
+  aoPaint,
+  beamGeometry,
+  boxGeometry,
+  buildingTheme,
+  clamp01,
+  coneGeometry,
+  createOpacityFader,
+  createTickerStrip,
+  cylinderGeometry,
+  faceBox,
+  faceDisc,
+  faceQuad,
+  faceTorus,
+  flatPolygon,
+  flatQuad,
+  flushBin,
+  hash01,
+  jitterColor,
+  mixColor,
+  pick,
+  prismX,
+  prismZ,
+  shade,
+  sphereGeometry,
+  standardMaterial,
+  unlitMaterial,
+  valueNoise,
+  type BuildingTheme,
+  type Face,
+  type Paint,
+  type Vec3,
+} from './palette.js';
+import type { LabelFactory, Occluder, OccluderBounds, StreetView, TextLabel } from './types.js';
+
+/**
+ * The district as a low-poly golden-hour street (D-059).
+ *
+ * Presentation only: collision stays tile-based in the session, so nothing
+ * here may put a volume where the player can walk. Volumes live on solid
+ * building tiles or outside the map; inside walkable bounds there are only
+ * flat things — paint, paving, flowers, light pools. Buildings are derived
+ * from connected solid tiles, so the street follows the map, not a copy of it.
+ */
+
+/** Height of raised pavement; `streetSurfaceHeightAt` reports it per tile. */
+export const PAVEMENT_HEIGHT = 0.08;
+const KERB_HEIGHT = 0.1;
+const KERB_WIDTH = 0.12;
+/** How far ground, road and meadow run past the map before the fog takes over. */
+const OUTSKIRT = 40;
+/** Doors sit this far behind the facade row's north edge, in the solid wall row. */
+const DOOR_RECESS = 0.2;
+/** Walls sit inside the footprint so cornices and sills stay on solid tiles. */
+const SIDE_INSET = 0.1;
+const JAMB = 0.12;
+
+const BODY = 'body';
+const GLASS = 'glass';
+const LIT = 'lit';
+const GLOW = 'glow';
+const BEACON = 'beacon';
+
+type Animator = (elapsedMs: number) => void;
+
+/** A street occluder that also names the building it fades. */
+export interface BuildingOccluder extends Occluder {
+  readonly building: BuildingId | null;
+  readonly object: Object3D;
+}
+
+/**
+ * Walking-surface height of a street tile: raised pavement is
+ * `PAVEMENT_HEIGHT`, everything else 0. Lets a presenter lift the avatar's
+ * feet onto the kerb instead of sinking them into it.
+ */
+export function streetSurfaceHeightAt(map: DistrictMap, tileX: number, tileY: number): number {
+  return classifyTile(map, Math.floor(tileX), Math.floor(tileY)) === 'sidewalk' ? PAVEMENT_HEIGHT : 0;
+}
+
+export function buildStreet(map: DistrictMap, labels: LabelFactory): StreetView {
+  const res = new ResourceBag();
+  const ground = new Group();
+  ground.name = 'street:ground';
+  const doors = new Group();
+  doors.name = 'street:doors';
+  const signs = new Group();
+  signs.name = 'street:labels';
+  const textLabels: TextLabel[] = [];
+  const animators: Animator[] = [];
+  const occluders: BuildingOccluder[] = [];
+
+  try {
+    const kinds = classifyGround(map);
+    buildGround(map, kinds, res, ground);
+
+    const footprints = findFootprints(map);
+    const built = new Map<Footprint, BuiltBuilding>();
+    for (const footprint of footprints) {
+      const building = buildBuilding(footprint, res);
+      built.set(footprint, building);
+      ground.add(building.group);
+      occluders.push(building.occluder);
+      animators.push(building.animate);
+    }
+
+    for (const door of map.doors) {
+      const footprint = footprints.find((candidate) => doorInside(candidate, door));
+      const portal = buildDoorPortal(door, footprint ? built.get(footprint) : undefined, res);
+      doors.add(portal.group);
+      animators.push(portal.animate);
+    }
+
+    for (const exterior of map.exteriorLabels) {
+      const footprint = footprints.find((candidate) => labelInside(candidate, exterior));
+      const placement = footprint ? built.get(footprint)?.sign : undefined;
+      const theme = buildingTheme(exterior.building);
+      const label = labels.sign(exterior.text, {
+        width: theme.sign.width,
+        height: theme.sign.height,
+        background: theme.sign.background,
+        foreground: theme.sign.foreground,
+        accent: theme.sign.accent,
+      });
+      textLabels.push(label);
+      const position = placement ?? { x: exterior.x, y: 3, z: exterior.y + 0.5 };
+      label.object.position.set(position.x, position.y, position.z);
+      label.object.userData['building'] = exterior.building;
+      signs.add(label.object);
+    }
+
+    buildDecor(map, kinds, res, ground, animators);
+  } catch (error) {
+    for (const label of textLabels) {
+      try {
+        label.dispose();
+      } catch {
+        // The construction error stays authoritative.
+      }
+    }
+    res.dispose();
+    throw error;
+  }
+
+  let elapsed = 0;
+  let disposed = false;
+  return {
+    ground,
+    doors,
+    labels: signs,
+    occluders,
+    update(deltaMs) {
+      if (disposed) return;
+      const dt = Number.isFinite(deltaMs) && deltaMs > 0 ? Math.min(deltaMs, 250) : 0;
+      elapsed += dt;
+      for (const animate of animators) animate(elapsed);
+    },
+    dispose() {
+      if (disposed) return;
+      disposed = true;
+      const errors: unknown[] = [];
+      for (const label of textLabels) {
+        try {
+          label.dispose();
+        } catch (error) {
+          errors.push(error);
+        }
+      }
+      textLabels.length = 0;
+      for (const group of [ground, doors, signs]) {
+        group.removeFromParent();
+        group.clear();
+      }
+      res.dispose();
+      if (errors.length === 1) throw errors[0];
+      if (errors.length > 1) throw new AggregateError(errors, 'Street disposal failed');
+    },
+  };
+}
+
+// ---------------------------------------------------------------------------
+// Tile classification
+// ---------------------------------------------------------------------------
+
+/**
+ * What the ground looks like, which the tile kind alone does not say: a
+ * pavement strip crossing the road is a zebra crossing at road level, a
+ * pavement run through grass is a garden path, the rest is raised kerbed
+ * pavement.
+ */
+type GroundKind = 'grass' | 'road' | 'sidewalk' | 'crossing' | 'path' | 'solid';
+
+function kindAt(map: DistrictMap, x: number, y: number): TileKind | undefined {
+  return map.tiles[y]?.[x];
+}
+
+function classifyGround(map: DistrictMap): GroundKind[][] {
+  const rows: GroundKind[][] = [];
+  for (let y = 0; y < map.height; y++) {
+    const row: GroundKind[] = [];
+    for (let x = 0; x < map.width; x++) row.push(classifyTile(map, x, y));
+    rows.push(row);
+  }
+  return rows;
+}
+
+function classifyTile(map: DistrictMap, x: number, y: number): GroundKind {
+  const kind = kindAt(map, x, y);
+  if (kind === undefined || isSolidAt(map, x, y)) return 'solid';
+  if (kind === 'road') return 'road';
+  if (kind !== 'pavement') return 'grass';
+  const [west, east] = runEnds(map, x, y, 1, 0);
+  const [north, south] = runEnds(map, x, y, 0, 1);
+  if ((west === 'road' && east === 'road') || (north === 'road' && south === 'road')) return 'crossing';
+  if ((west === 'grass' && east === 'grass') || (north === 'grass' && south === 'grass')) return 'path';
+  return 'sidewalk';
+}
+
+/** The tile kinds just past both ends of the pavement run through (x, y). */
+function runEnds(
+  map: DistrictMap,
+  x: number,
+  y: number,
+  dx: number,
+  dy: number,
+): [TileKind | undefined, TileKind | undefined] {
+  let ax = x;
+  let ay = y;
+  while (kindAt(map, ax, ay) === 'pavement') {
+    ax -= dx;
+    ay -= dy;
+  }
+  let bx = x;
+  let by = y;
+  while (kindAt(map, bx, by) === 'pavement') {
+    bx += dx;
+    by += dy;
+  }
+  return [kindAt(map, ax, ay), kindAt(map, bx, by)];
+}
+
+interface Span {
+  readonly x0: number;
+  readonly x1: number;
+}
+
+/** Rows that are mostly road, grouped into east-west bands. */
+function roadBands(map: DistrictMap, kinds: GroundKind[][]): { r0: number; r1: number }[] {
+  const bands: { r0: number; r1: number }[] = [];
+  let start = -1;
+  for (let y = 0; y <= map.height; y++) {
+    const row = kinds[y];
+    const roadCount = row ? row.filter((kind) => kind === 'road' || kind === 'crossing').length : 0;
+    const isRoad = row !== undefined && roadCount * 2 >= map.width;
+    if (isRoad && start < 0) start = y;
+    if (!isRoad && start >= 0) {
+      bands.push({ r0: start, r1: y - 1 });
+      start = -1;
+    }
+  }
+  return bands;
+}
+
+function crossingRuns(kinds: GroundKind[][], band: { r0: number; r1: number }, width: number): Span[] {
+  const runs: Span[] = [];
+  let start = -1;
+  for (let x = 0; x <= width; x++) {
+    let crossing = false;
+    for (let y = band.r0; y <= band.r1 && x < width; y++) {
+      if (kinds[y]?.[x] === 'crossing') crossing = true;
+    }
+    if (crossing && start < 0) start = x;
+    if (!crossing && start >= 0) {
+      runs.push({ x0: start, x1: x });
+      start = -1;
+    }
+  }
+  return runs;
+}
+
+/** Rows whose map-edge tile is road or pavement: the band the outskirts continue. */
+function edgeBand(map: DistrictMap, kinds: GroundKind[][]): { top: number; bottom: number } | null {
+  let top = -1;
+  let bottom = -1;
+  for (let y = 0; y < map.height; y++) {
+    const west = kinds[y]?.[0];
+    const east = kinds[y]?.[map.width - 1];
+    const paved = (kind: GroundKind | undefined) =>
+      kind === 'road' || kind === 'sidewalk' || kind === 'crossing';
+    if (paved(west) || paved(east)) {
+      if (top < 0) top = y;
+      bottom = y + 1;
+    }
+  }
+  return top < 0 ? null : { top, bottom };
+}
+
+// ---------------------------------------------------------------------------
+// Ground
+// ---------------------------------------------------------------------------
+
+function grassColor(x: number, z: number, seed: number): Color {
+  const warm = valueNoise(x / 13 + 40, z / 13, 5);
+  const patch = valueNoise(x / 6, z / 6, 3) - 0.5;
+  return shade(mixColor(PALETTE.grassCool, PALETTE.grassWarm, warm), patch * 0.08 + (seed - 0.5) * 0.025);
+}
+
+function buildGround(map: DistrictMap, kinds: GroundKind[][], res: ResourceBag, parent: Group): void {
+  const bin = new GeometryBin();
+  try {
+    for (let y = 0; y < map.height; y++) {
+      for (let x = 0; x < map.width; x++) {
+        switch (kinds[y]![x]!) {
+          case 'grass':
+            grassTile(bin, x, y);
+            break;
+          case 'road':
+          case 'crossing':
+            roadTile(bin, x, y);
+            break;
+          case 'sidewalk':
+            sidewalkTile(bin, kinds, x, y);
+            break;
+          case 'path':
+            grassTile(bin, x, y);
+            pathStone(bin, x, y);
+            break;
+          case 'solid':
+            bin.add('sidewalk', flatQuad(x, y, x + 1, y + 1, 0), PALETTE.apron);
+            break;
+        }
+      }
+    }
+    paintRoadMarkings(map, kinds, bin);
+    buildOutskirts(map, kinds, bin);
+    scatterGroundDecals(map, kinds, bin);
+
+    const groundMaterial = res.material(standardMaterial({ roughness: 0.94 }));
+    const paintMaterial = res.material(standardMaterial({ roughness: 0.7 }));
+    flushBin(bin, 'grass', groundMaterial, res, parent, { name: 'street:grass', receive: true });
+    flushBin(bin, 'road', groundMaterial, res, parent, { name: 'street:road', receive: true });
+    flushBin(bin, 'sidewalk', groundMaterial, res, parent, { name: 'street:pavement', receive: true });
+    // Paint is a decal: it never casts, but it darkens with the road it lies on.
+    flushBin(bin, 'paint', paintMaterial, res, parent, { name: 'street:markings', receive: true });
+    flushBin(bin, 'decal', groundMaterial, res, parent, { name: 'street:decals', receive: true });
+  } finally {
+    bin.dispose();
+  }
+}
+
+/** In-map lawns get soft mowing stripes: a tended park, not wild meadow. */
+function grassTile(bin: GeometryBin, x: number, y: number): void {
+  const stripe = Math.floor(x / 2) % 2 === 0 ? 0.02 : -0.012;
+  bin.add('grass', flatQuad(x, y, x + 1, y + 1, 0), shade(grassColor(x + 0.5, y + 0.5, hash01(x, y, 1)), stripe));
+}
+
+function roadTile(bin: GeometryBin, x: number, y: number): void {
+  bin.add('road', flatQuad(x, y, x + 1, y + 1, 0), jitterColor(PALETTE.asphalt, hash01(x, y, 2), 0.012));
+  if (hash01(x, y, 3) < 0.05) {
+    const a = 0.15 + hash01(x, y, 4) * 0.3;
+    const b = 0.15 + hash01(x, y, 5) * 0.3;
+    bin.add('road', flatQuad(x + a, y + b, x + a + 0.4, y + b + 0.3, 0.005), shade(PALETTE.asphalt, -0.035));
+  }
+}
+
+function sidewalkTile(bin: GeometryBin, kinds: GroundKind[][], x: number, y: number): void {
+  for (let sy = 0; sy < 2; sy++) {
+    for (let sx = 0; sx < 2; sx++) {
+      const seed = hash01(x * 2 + sx, y * 2 + sy, 4);
+      const base = seed < 0.5 ? PALETTE.sidewalk : PALETTE.sidewalkAlt;
+      bin.add(
+        'sidewalk',
+        flatQuad(x + sx * 0.5, y + sy * 0.5, x + sx * 0.5 + 0.5, y + sy * 0.5 + 0.5, PAVEMENT_HEIGHT),
+        jitterColor(base, hash01(x * 2 + sx, y * 2 + sy, 5), 0.02),
+      );
+    }
+  }
+  const sides: Array<[number, number, 'n' | 's' | 'w' | 'e']> = [
+    [0, -1, 'n'],
+    [0, 1, 's'],
+    [-1, 0, 'w'],
+    [1, 0, 'e'],
+  ];
+  for (const [dx, dy, side] of sides) {
+    const neighbour = kinds[y + dy]?.[x + dx];
+    // Off-map pavement continues into the outskirts; walls cover their own edge.
+    if (neighbour === undefined || neighbour === 'sidewalk' || neighbour === 'solid') continue;
+    const dropped = neighbour === 'crossing';
+    const height = dropped ? PAVEMENT_HEIGHT + 0.004 : KERB_HEIGHT;
+    const k = KERB_WIDTH;
+    const edge =
+      side === 'n'
+        ? boxGeometry(x, 0, y, x + 1, height, y + k)
+        : side === 's'
+          ? boxGeometry(x, 0, y + 1 - k, x + 1, height, y + 1)
+          : side === 'w'
+            ? boxGeometry(x, 0, y, x + k, height, y + 1)
+            : boxGeometry(x + 1 - k, 0, y, x + 1, height, y + 1);
+    bin.add('sidewalk', edge, PALETTE.kerb);
+    if (dropped) {
+      // Tactile paving where the kerb drops to a crossing.
+      const t = 0.34;
+      const strip =
+        side === 'n'
+          ? flatQuad(x + 0.06, y + k, x + 0.94, y + k + t, PAVEMENT_HEIGHT + 0.008)
+          : side === 's'
+            ? flatQuad(x + 0.06, y + 1 - k - t, x + 0.94, y + 1 - k, PAVEMENT_HEIGHT + 0.008)
+            : side === 'w'
+              ? flatQuad(x + k, y + 0.06, x + k + t, y + 0.94, PAVEMENT_HEIGHT + 0.008)
+              : flatQuad(x + 1 - k - t, y + 0.06, x + 1 - k, y + 0.94, PAVEMENT_HEIGHT + 0.008);
+      bin.add('sidewalk', strip, PALETTE.tactile);
+    }
+  }
+}
+
+function pathStone(bin: GeometryBin, x: number, y: number): void {
+  const inset = 0.07 + hash01(x, y, 6) * 0.05;
+  const shift = (hash01(x, y, 7) - 0.5) * 0.08;
+  bin.add(
+    'sidewalk',
+    boxGeometry(x + inset + shift, 0, y + 0.1, x + 1 - inset + shift, 0.045, y + 0.9),
+    jitterColor(PALETTE.pathStone, hash01(x, y, 8), 0.05),
+  );
+}
+
+function paintRoadMarkings(map: DistrictMap, kinds: GroundKind[][], bin: GeometryBin): void {
+  const y = 0.012;
+  for (const band of roadBands(map, kinds)) {
+    const crossings = crossingRuns(kinds, band, map.width);
+    const centre = (band.r0 + band.r1 + 1) / 2;
+    const top = band.r0 + 0.14;
+    const bottom = band.r1 + 1 - 0.14;
+    for (let x = -OUTSKIRT; x < map.width + OUTSKIRT; x += 1.2) {
+      const a = x + 0.25;
+      const b = x + 0.95;
+      if (crossings.some((run) => b > run.x0 - 1.4 && a < run.x1 + 1.4)) continue;
+      bin.add('paint', flatQuad(a, centre - 0.05, b, centre + 0.05, y), PALETTE.paintCentre);
+    }
+    for (const [za, zb] of [
+      [top, top + 0.07],
+      [bottom - 0.07, bottom],
+    ] as const) {
+      let start = -OUTSKIRT;
+      for (const run of crossings) {
+        if (run.x0 - 0.1 > start) bin.add('paint', flatQuad(start, za, run.x0 - 0.1, zb, y), PALETTE.paint);
+        start = run.x1 + 0.1;
+      }
+      bin.add('paint', flatQuad(start, za, map.width + OUTSKIRT, zb, y), PALETTE.paint);
+    }
+    for (const run of crossings) {
+      for (let row = band.r0; row <= band.r1; row++) {
+        for (const offset of [0.125, 0.625]) {
+          bin.add('paint', flatQuad(run.x0 + 0.12, row + offset, run.x1 - 0.12, row + offset + 0.25, y), PALETTE.paint);
+        }
+      }
+      // Stop lines: eastbound traffic (south half) meets the crossing from the
+      // west, westbound (north half) from the east.
+      bin.add('paint', flatQuad(run.x0 - 1.1, centre + 0.08, run.x0 - 0.96, bottom - 0.08, y), PALETTE.paint);
+      bin.add('paint', flatQuad(run.x1 + 0.96, top + 0.08, run.x1 + 1.1, centre - 0.08, y), PALETTE.paint);
+    }
+  }
+}
+
+function buildOutskirts(map: DistrictMap, kinds: GroundKind[][], bin: GeometryBin): void {
+  const W = map.width;
+  const H = map.height;
+  meadow(bin, -OUTSKIRT, -OUTSKIRT, W + OUTSKIRT, 0, 2, 2);
+  meadow(bin, -OUTSKIRT, H, W + OUTSKIRT, H + OUTSKIRT, 2, 2);
+  for (let y = 0; y < H; y++) {
+    for (const side of [-1, 1] as const) {
+      const edgeX = side < 0 ? 0 : W - 1;
+      const kind = kinds[y]?.[edgeX];
+      const x0 = side < 0 ? -OUTSKIRT : W;
+      const x1 = side < 0 ? 0 : W + OUTSKIRT;
+      if (kind === 'road' || kind === 'crossing') {
+        for (let x = x0; x < x1; x += 2) {
+          bin.add('road', flatQuad(x, y, x + 2, y + 1, 0), jitterColor(PALETTE.asphalt, hash01(x, y, 12), 0.012));
+        }
+      } else if (kind === 'sidewalk') {
+        for (let x = x0; x < x1; x += 1) {
+          for (let sy = 0; sy < 2; sy++) {
+            const seed = hash01(x, y * 2 + sy, 13);
+            bin.add(
+              'sidewalk',
+              flatQuad(x, y + sy * 0.5, x + 1, y + sy * 0.5 + 0.5, PAVEMENT_HEIGHT),
+              jitterColor(seed < 0.5 ? PALETTE.sidewalk : PALETTE.sidewalkAlt, hash01(x, y, 14), 0.02),
+            );
+          }
+        }
+        for (const dy of [-1, 1]) {
+          const neighbour = kinds[y + dy]?.[edgeX];
+          if (neighbour === 'sidewalk') continue;
+          const z0 = dy < 0 ? y : y + 1 - KERB_WIDTH;
+          bin.add('sidewalk', boxGeometry(x0, 0, z0, x1, KERB_HEIGHT, z0 + KERB_WIDTH), PALETTE.kerb);
+        }
+      } else {
+        meadow(bin, x0, y, x1, y + 1, 2, 1);
+      }
+    }
+  }
+}
+
+function meadow(bin: GeometryBin, x0: number, z0: number, x1: number, z1: number, cw: number, ch: number): void {
+  for (let z = z0; z < z1; z += ch) {
+    for (let x = x0; x < x1; x += cw) {
+      const xb = Math.min(x1, x + cw);
+      const zb = Math.min(z1, z + ch);
+      bin.add('grass', flatQuad(x, z, xb, zb, 0), grassColor((x + xb) / 2, (z + zb) / 2, hash01(x, z, 15)));
+    }
+  }
+}
+
+/** Flowers and grass tufts: under 0.1 tall, so walking over them reads as grass. */
+function scatterGroundDecals(map: DistrictMap, kinds: GroundKind[][], bin: GeometryBin): void {
+  for (let y = 0; y < map.height; y++) {
+    for (let x = 0; x < map.width; x++) {
+      if (kinds[y]![x] !== 'grass') continue;
+      const roll = hash01(x, y, 21);
+      if (roll < 0.09) flowerCluster(bin, x, y);
+      else if (roll < 0.26) tuft(bin, x + 0.2 + hash01(x, y, 22) * 0.6, y + 0.2 + hash01(x, y, 23) * 0.6, x * 31 + y);
+    }
+  }
+  // A few beds just outside the map where the camera sees them.
+  for (let y = map.height + 1; y < map.height + 6; y++) {
+    for (let x = -6; x < map.width + 6; x++) {
+      if (hash01(x, y, 24) < 0.12) flowerCluster(bin, x, y);
+    }
+  }
+}
+
+function flowerCluster(bin: GeometryBin, x: number, y: number): void {
+  const count = 4 + Math.floor(hash01(x, y, 25) * 4);
+  const colour = pick(PALETTE.flowers, hash01(x, y, 26));
+  for (let i = 0; i < count; i++) {
+    const px = x + 0.2 + hash01(x, y, 30 + i) * 0.6;
+    const pz = y + 0.2 + hash01(x, y, 40 + i) * 0.6;
+    bin.add('decal', flatPolygon(hexagon(px, pz, 0.075), 0.012), PALETTE.leaf);
+    const petal = i % 3 === 2 ? pick(PALETTE.flowers, hash01(x, y, 50 + i)) : colour;
+    bin.add('decal', flatPolygon(hexagon(px, pz, 0.045), 0.03 + hash01(x, y, 60 + i) * 0.02), petal);
+  }
+}
+
+function hexagon(x: number, z: number, radius: number): [number, number][] {
+  const points: [number, number][] = [];
+  for (let i = 0; i < 6; i++) {
+    const angle = (i / 6) * Math.PI * 2;
+    points.push([x + Math.cos(angle) * radius, z + Math.sin(angle) * radius]);
+  }
+  return points;
+}
+
+function tuft(bin: GeometryBin, x: number, z: number, seed: number): void {
+  for (let i = 0; i < 3; i++) {
+    const angle = (i / 3) * Math.PI * 2 + hash01(seed, i, 27);
+    const blade = new ConeGeometry(0.03, 0.09, 3)
+      .rotateZ(Math.cos(angle) * 0.35)
+      .rotateX(Math.sin(angle) * 0.35)
+      .translate(x + Math.cos(angle) * 0.04, 0.045, z + Math.sin(angle) * 0.04);
+    bin.add('decal', blade, jitterColor(PALETTE.tuft, hash01(seed, i, 28), 0.05));
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Buildings
+// ---------------------------------------------------------------------------
+
+interface Footprint {
+  readonly index: number;
+  readonly building: BuildingId | null;
+  /** Tile bounds; min inclusive, max exclusive — which is also world units. */
+  readonly minX: number;
+  readonly maxX: number;
+  readonly minY: number;
+  readonly maxY: number;
+  readonly gaps: readonly Span[];
+  readonly door: DoorZone | null;
+  readonly label: BuildingExteriorLabel | null;
+  /** A rectangle solid everywhere except door gaps in its southern row. */
+  readonly standard: boolean;
+  hasTile(x: number, y: number): boolean;
+}
+
+/** Connected components of solid tiles, north to south, west to east. */
+function findFootprints(map: DistrictMap): Footprint[] {
+  const key = (x: number, y: number) => y * map.width + x;
+  const seen = new Set<number>();
+  const components: { tiles: Set<number>; minX: number; maxX: number; minY: number; maxY: number }[] = [];
+  for (let y = 0; y < map.height; y++) {
+    for (let x = 0; x < map.width; x++) {
+      if (seen.has(key(x, y)) || !isSolidAt(map, x, y)) continue;
+      const tiles = new Set<number>();
+      let minX = x;
+      let maxX = x + 1;
+      let minY = y;
+      let maxY = y + 1;
+      const queue: [number, number][] = [[x, y]];
+      seen.add(key(x, y));
+      while (queue.length > 0) {
+        const [cx, cy] = queue.pop()!;
+        tiles.add(key(cx, cy));
+        minX = Math.min(minX, cx);
+        maxX = Math.max(maxX, cx + 1);
+        minY = Math.min(minY, cy);
+        maxY = Math.max(maxY, cy + 1);
+        for (const [nx, ny] of [
+          [cx + 1, cy],
+          [cx - 1, cy],
+          [cx, cy + 1],
+          [cx, cy - 1],
+        ] as const) {
+          if (nx < 0 || ny < 0 || nx >= map.width || ny >= map.height) continue;
+          if (seen.has(key(nx, ny)) || !isSolidAt(map, nx, ny)) continue;
+          seen.add(key(nx, ny));
+          queue.push([nx, ny]);
+        }
+      }
+      components.push({ tiles, minX, maxX, minY, maxY });
+    }
+  }
+  components.sort((a, b) => a.minY - b.minY || a.minX - b.minX);
+  return components.map((component, index) => {
+    const { minX, maxX, minY, maxY, tiles } = component;
+    const facadeRow = maxY - 1;
+    let standard = maxY - minY >= 2 && maxX - minX >= 3;
+    for (let y = minY; y < facadeRow && standard; y++) {
+      for (let x = minX; x < maxX; x++) if (!tiles.has(key(x, y))) standard = false;
+    }
+    const gaps: Span[] = [];
+    let start = -1;
+    for (let x = minX; x <= maxX; x++) {
+      const open = x < maxX && !tiles.has(key(x, facadeRow));
+      if (open && start < 0) start = x;
+      if (!open && start >= 0) {
+        gaps.push({ x0: start, x1: x });
+        start = -1;
+      }
+    }
+    const inside = (x: number, y: number) => x >= minX && x <= maxX && y >= minY && y <= maxY;
+    const door =
+      map.doors.find(
+        (candidate) =>
+          candidate.x >= minX &&
+          candidate.x + candidate.width <= maxX &&
+          candidate.y >= minY &&
+          candidate.y + candidate.height <= maxY,
+      ) ?? null;
+    const label = map.exteriorLabels.find((candidate) => inside(candidate.x, candidate.y)) ?? null;
+    return {
+      index,
+      building: door?.building ?? label?.building ?? null,
+      minX,
+      maxX,
+      minY,
+      maxY,
+      gaps,
+      door,
+      label,
+      standard,
+      hasTile: (x: number, y: number) =>
+        x >= 0 && x < map.width && y >= 0 && y < map.height && tiles.has(key(x, y)),
+    };
+  });
+}
+
+function doorInside(footprint: Footprint, door: DoorZone): boolean {
+  return (
+    door.x >= footprint.minX &&
+    door.x + door.width <= footprint.maxX &&
+    door.y >= footprint.minY &&
+    door.y + door.height <= footprint.maxY
+  );
+}
+
+function labelInside(footprint: Footprint, label: BuildingExteriorLabel): boolean {
+  return (
+    label.x >= footprint.minX &&
+    label.x <= footprint.maxX &&
+    label.y >= footprint.minY &&
+    label.y <= footprint.maxY
+  );
+}
+
+interface SignPlacement {
+  readonly x: number;
+  readonly y: number;
+  readonly z: number;
+}
+
+interface BuiltBuilding {
+  readonly group: Group;
+  readonly occluder: BuildingOccluder;
+  readonly doorTop: number;
+  readonly sign: SignPlacement;
+  readonly animate: Animator;
+}
+
+interface BuildingCtx {
+  readonly fp: Footprint;
+  readonly theme: BuildingTheme;
+  readonly bins: GeometryBin;
+  readonly res: ResourceBag;
+  readonly group: Group;
+  readonly x0: number;
+  readonly x1: number;
+  readonly z0: number;
+  /** South edge of the facade row: the street-facing line. */
+  readonly zf: number;
+  /** North edge of the facade row, where doors stand. */
+  readonly rowZ: number;
+  readonly gaps: readonly Span[];
+  /** The door's gap (the alcove), if any. */
+  readonly gap: Span | null;
+  readonly doorCentre: number;
+}
+
+interface StyleResult {
+  readonly doorTop: number;
+  readonly sign: SignPlacement;
+  readonly fadeMaterials?: readonly Material[];
+  readonly animate?: Animator;
+}
+
+type Style = (ctx: BuildingCtx) => StyleResult;
+
+const STYLES: Readonly<Record<BuildingTheme['style'], Style>> = {
+  bank: bankStyle,
+  exchange: exchangeStyle,
+  'post-office': postOfficeStyle,
+  bridge: bridgeStyle,
+  vault: vaultStyle,
+  generic: genericStyle,
+};
+
+function buildBuilding(fp: Footprint, res: ResourceBag): BuiltBuilding {
+  const theme = buildingTheme(fp.building);
+  const group = new Group();
+  group.name = `building:${fp.building ?? fp.index}`;
+  group.userData['building'] = fp.building;
+  const bins = new GeometryBin();
+  try {
+    const doorGap =
+      (fp.door && fp.gaps.find((gap) => fp.door!.x < gap.x1 && fp.door!.x + fp.door!.width > gap.x0)) ??
+      [...fp.gaps].sort((a, b) => b.x1 - b.x0 - (a.x1 - a.x0))[0] ??
+      null;
+    const ctx: BuildingCtx = {
+      fp,
+      theme,
+      bins,
+      res,
+      group,
+      x0: fp.minX,
+      x1: fp.maxX,
+      z0: fp.minY,
+      zf: fp.maxY,
+      rowZ: fp.maxY - 1,
+      gaps: fp.gaps,
+      gap: doorGap,
+      doorCentre: doorGap ? (doorGap.x0 + doorGap.x1) / 2 : (fp.minX + fp.maxX) / 2,
+    };
+    const style = fp.standard ? STYLES[theme.style](ctx) : fallbackStyle(ctx);
+
+    // Per-building materials: fading one building must never fade another.
+    const fade: Material[] = [...(style.fadeMaterials ?? [])];
+    const name = group.name;
+    const addMesh = <M extends Material>(key: string, make: () => M, cast: boolean, receive: boolean): M | null => {
+      if (!bins.has(key)) return null;
+      const material = res.material(make());
+      flushBin(bins, key, material, res, group, { name: `${name}:${key}`, cast, receive });
+      fade.push(material);
+      return material;
+    };
+    addMesh(BODY, () => standardMaterial({ roughness: 0.84 }), true, true);
+    addMesh(GLASS, () => standardMaterial({ roughness: 0.28, metalness: 0.15 }), false, true);
+    addMesh(LIT, () => standardMaterial({ roughness: 0.5, emissive: theme.windowGlow, emissiveIntensity: 1.25 }), false, false);
+    addMesh(GLOW, () => standardMaterial({ roughness: 0.5, emissive: theme.glow, emissiveIntensity: 1.6 }), false, false);
+    const beacon = addMesh(
+      BEACON,
+      () => standardMaterial({ roughness: 0.5, emissive: theme.beacon, emissiveIntensity: 2 }),
+      false,
+      false,
+    );
+
+    group.updateMatrixWorld(true);
+    const box = new Box3().setFromObject(group);
+    const bounds: OccluderBounds = Object.freeze({
+      minX: fp.minX,
+      maxX: fp.maxX,
+      minZ: fp.minY,
+      maxZ: fp.maxY,
+      height: Number.isFinite(box.max.y) ? box.max.y : theme.height,
+    });
+    const occluder: BuildingOccluder = Object.freeze({
+      building: fp.building,
+      object: group,
+      bounds,
+      setOpacity: createOpacityFader(fade),
+    });
+    const phase = hash01(fp.index, 3, 71) * Math.PI * 2;
+    const animate: Animator = (elapsed) => {
+      if (beacon) beacon.emissiveIntensity = Math.sin(elapsed / 1000 * 3.1 + phase) > 0.55 ? 3 : 0.25;
+      style.animate?.(elapsed);
+    };
+    return { group, occluder, doorTop: style.doorTop, sign: style.sign, animate };
+  } finally {
+    bins.dispose();
+  }
+}
+
+// -- shared building parts ---------------------------------------------------
+
+function isLit(ctx: BuildingCtx, k: number): boolean {
+  return hash01(ctx.fp.index + 1, k, 17) < ctx.theme.litRatio;
+}
+
+function overlapsGap(ctx: BuildingCtx, a: number, b: number): boolean {
+  return ctx.gaps.some((gap) => a < gap.x1 && b > gap.x0);
+}
+
+/** The facade row's solid runs: the complement of its gaps. */
+function solidRuns(ctx: BuildingCtx): Span[] {
+  const runs: Span[] = [];
+  let cursor = ctx.x0;
+  for (const gap of ctx.gaps) {
+    if (gap.x0 > cursor) runs.push({ x0: cursor, x1: gap.x0 });
+    cursor = Math.max(cursor, gap.x1);
+  }
+  if (cursor < ctx.x1) runs.push({ x0: cursor, x1: ctx.x1 });
+  return runs;
+}
+
+function sideFaces(ctx: BuildingCtx): Face[] {
+  return [
+    { normal: 'x-', plane: ctx.x0 + SIDE_INSET },
+    { normal: 'x+', plane: ctx.x1 - SIDE_INSET },
+  ];
+}
+
+/** Centres for windows of `width` spread evenly across [a, b]. */
+function distribute(a: number, b: number, width: number, minGap: number): number[] {
+  const span = b - a;
+  if (span < width) return [];
+  const count = Math.max(1, Math.floor((span + minGap) / (width + minGap)));
+  const step = span / count;
+  return Array.from({ length: count }, (_, i) => a + step * (i + 0.5));
+}
+
+/**
+ * The building mass with a one-tile entrance alcove per door gap: a back
+ * block, front blocks either side of each gap, a lintel over it, and jambs
+ * framing a door that stands in the solid wall row behind the alcove.
+ */
+function massing(
+  ctx: BuildingCtx,
+  height: number,
+  frontInset: number,
+  doorTop: number,
+  paint: Paint,
+  bin = BODY,
+): number {
+  const { x0, x1, z0, zf, rowZ } = ctx;
+  const front = zf - frontInset;
+  const doorBack = rowZ - DOOR_RECESS;
+  ctx.bins.add(bin, boxGeometry(x0 + SIDE_INSET, 0, z0 + SIDE_INSET, x1 - SIDE_INSET, height, doorBack), paint);
+  for (const run of solidRuns(ctx)) {
+    const a = run.x0 <= x0 ? x0 + SIDE_INSET : run.x0;
+    const b = run.x1 >= x1 ? x1 - SIDE_INSET : run.x1;
+    if (b - a > 0.01) ctx.bins.add(bin, boxGeometry(a, 0, doorBack, b, height, front), paint);
+  }
+  for (const gap of ctx.gaps) {
+    ctx.bins.add(bin, boxGeometry(gap.x0, doorTop, doorBack, gap.x1, height, front), paint);
+    ctx.bins.add(BODY, boxGeometry(gap.x0, 0, doorBack, gap.x0 + JAMB, doorTop, rowZ), ctx.theme.trim);
+    ctx.bins.add(BODY, boxGeometry(gap.x1 - JAMB, 0, doorBack, gap.x1, doorTop, rowZ), ctx.theme.trim);
+  }
+  return front;
+}
+
+/** A horizontal band on the front, sides and back; split around door gaps below the lintel. */
+function band(
+  ctx: BuildingCtx,
+  y0: number,
+  y1: number,
+  out: number,
+  color: Paint,
+  front: number,
+  doorTop: number,
+): void {
+  const xa = ctx.x0 + SIDE_INSET;
+  const xb = ctx.x1 - SIDE_INSET;
+  const za = ctx.z0 + SIDE_INSET;
+  if (y0 < doorTop) {
+    for (const run of solidRuns(ctx)) {
+      const a = Math.max(run.x0, xa - out);
+      const b = Math.min(run.x1, xb + out);
+      if (b - a > 0.01) ctx.bins.add(BODY, boxGeometry(a, y0, front - 0.01, b, y1, front + out), color);
+    }
+  } else {
+    ctx.bins.add(BODY, boxGeometry(xa - out, y0, front - 0.01, xb + out, y1, front + out), color);
+  }
+  ctx.bins.add(BODY, boxGeometry(xa - out, y0, za - out, xa + 0.01, y1, front), color);
+  ctx.bins.add(BODY, boxGeometry(xb - 0.01, y0, za - out, xb + out, y1, front), color);
+  ctx.bins.add(BODY, boxGeometry(xa, y0, za - out, xb, y1, za + 0.01), color);
+}
+
+function roofSlab(ctx: BuildingCtx, height: number, front: number, color: number): void {
+  ctx.bins.add(
+    BODY,
+    boxGeometry(ctx.x0 + SIDE_INSET, height - 0.02, ctx.z0 + SIDE_INSET, ctx.x1 - SIDE_INSET, height + 0.03, front),
+    color,
+  );
+}
+
+function parapet(ctx: BuildingCtx, height: number, rise: number, thickness: number, color: number, front: number): void {
+  const xa = ctx.x0 + SIDE_INSET;
+  const xb = ctx.x1 - SIDE_INSET;
+  const za = ctx.z0 + SIDE_INSET;
+  const top = height + rise;
+  ctx.bins.add(BODY, boxGeometry(xa, height, front - thickness, xb, top, front), color);
+  ctx.bins.add(BODY, boxGeometry(xa, height, za, xb, top, za + thickness), color);
+  ctx.bins.add(BODY, boxGeometry(xa, height, za, xa + thickness, top, front), color);
+  ctx.bins.add(BODY, boxGeometry(xb - thickness, height, za, xb, top, front), color);
+}
+
+interface WindowOptions {
+  readonly frame?: number;
+  readonly mullion?: boolean;
+  readonly sill?: boolean;
+  readonly keystone?: boolean;
+}
+
+/** Glass flush on the wall, a proud frame, a sill: reads as a window from any angle. */
+function windowOnFace(
+  ctx: BuildingCtx,
+  face: Face,
+  cu: number,
+  v0: number,
+  width: number,
+  height: number,
+  lit: boolean,
+  options: WindowOptions = {},
+): void {
+  const t = ctx.theme;
+  const frame = options.frame ?? t.trim;
+  const u0 = cu - width / 2;
+  const u1 = cu + width / 2;
+  const v1 = v0 + height;
+  const f = 0.06;
+  const d = 0.045;
+  const seed = hash01(Math.round(cu * 10), Math.round(v0 * 10), ctx.fp.index + 7);
+  ctx.bins.add(
+    lit ? LIT : GLASS,
+    faceBox(face, u0, v0, 0, u1, v1, 0.015),
+    lit ? jitterColor(t.windowLit, seed, 0.05) : jitterColor(t.windowDark, seed, 0.04),
+  );
+  ctx.bins.add(BODY, faceBox(face, u0 - f, v0, 0, u0, v1, d), frame);
+  ctx.bins.add(BODY, faceBox(face, u1, v0, 0, u1 + f, v1, d), frame);
+  ctx.bins.add(BODY, faceBox(face, u0 - f, v1, 0, u1 + f, v1 + f, d), frame);
+  if (options.mullion) {
+    ctx.bins.add(BODY, faceBox(face, cu - 0.018, v0, 0, cu + 0.018, v1, d * 0.8), frame);
+    const mid = v0 + height * 0.62;
+    ctx.bins.add(BODY, faceBox(face, u0, mid - 0.018, 0, u1, mid + 0.018, d * 0.8), frame);
+  }
+  if (options.sill !== false) {
+    ctx.bins.add(BODY, faceBox(face, u0 - f - 0.03, v0 - 0.07, 0, u1 + f + 0.03, v0, d + 0.05), frame);
+  }
+  if (options.keystone) {
+    ctx.bins.add(BODY, faceBox(face, cu - 0.08, v1 + f, 0, cu + 0.08, v1 + f + 0.16, d + 0.01), frame);
+  }
+}
+
+/** A wall lantern; shallow facades get a flatter one so it stays on solid tiles. */
+function sconce(ctx: BuildingCtx, x: number, y: number, front: number): void {
+  const depth = Math.min(0.22, ctx.zf - front - 0.01);
+  if (depth < 0.06) return;
+  const face: Face = { normal: 'z+', plane: front };
+  const dark = 0x2b2826;
+  ctx.bins.add(BODY, faceBox(face, x - 0.05, y - 0.08, 0, x + 0.05, y + 0.3, 0.03), dark);
+  ctx.bins.add(BODY, faceBox(face, x - 0.09, y, 0.02, x + 0.09, y + 0.03, depth), dark);
+  ctx.bins.add(GLOW, faceBox(face, x - 0.065, y + 0.03, 0.035, x + 0.065, y + 0.22, depth - 0.015), ctx.theme.glow);
+  ctx.bins.add(BODY, faceBox(face, x - 0.09, y + 0.22, 0.02, x + 0.09, y + 0.26, depth), dark);
+}
+
+/** Two leaves with lit glass: the building is open. */
+function doubleDoor(ctx: BuildingCtx, gap: Span, doorTop: number): void {
+  const t = ctx.theme;
+  const back = ctx.rowZ - DOOR_RECESS + 0.02;
+  const face = ctx.rowZ - 0.02;
+  const a = gap.x0 + JAMB;
+  const b = gap.x1 - JAMB;
+  const mid = (a + b) / 2;
+  for (const [l, r] of [
+    [a, mid - 0.01],
+    [mid + 0.01, b],
+  ] as const) {
+    ctx.bins.add(BODY, boxGeometry(l, 0, back, r, doorTop - 0.04, face), t.door);
+    ctx.bins.add(LIT, boxGeometry(l + 0.1, 0.95, face, r - 0.1, doorTop - 0.3, face + 0.012), t.windowLit);
+    const handle = l < mid ? r - 0.09 : l + 0.09;
+    ctx.bins.add(BODY, boxGeometry(handle - 0.025, 0.95, face, handle + 0.025, 1.25, face + 0.045), t.accent);
+  }
+  ctx.bins.add(BODY, boxGeometry(a, doorTop - 0.04, back, b, doorTop, face), t.trim);
+}
+
+// -- styles -------------------------------------------------------------------
+
+/** Cream stone, a gold-trimmed colonnade and pediment centred on the door, a dome. */
+function bankStyle(ctx: BuildingCtx): StyleResult {
+  const t = ctx.theme;
+  const H = t.height;
+  const doorTop = 2.3;
+  const front = massing(ctx, H, 0.55, doorTop, aoPaint(t.wall));
+  const gc = ctx.doorCentre;
+  if (ctx.gap) doubleDoor(ctx, ctx.gap, doorTop);
+
+  const half = Math.max(1, Math.min(3, gc - ctx.x0, ctx.x1 - gc));
+  const px0 = gc - half;
+  const px1 = gc + half;
+  const colZ = (front + ctx.zf) / 2;
+  for (const run of solidRuns(ctx)) {
+    const a = Math.max(run.x0, px0);
+    const b = Math.min(run.x1, px1);
+    if (b - a < 0.05) continue;
+    ctx.bins.add(BODY, boxGeometry(a, 0, front, b, 0.22, ctx.zf - 0.01), t.wallAlt);
+    ctx.bins.add(BODY, boxGeometry(a, 0.22, front, b, 0.32, ctx.zf - 0.06), t.trim);
+  }
+  const columns = [gc - 2.6, gc - 1.35, gc + 1.35, gc + 2.6].filter(
+    (x) => x - 0.25 >= px0 - 1e-6 && x + 0.25 <= px1 + 1e-6 && !overlapsGap(ctx, x - 0.25, x + 0.25),
+  );
+  for (const x of columns) {
+    ctx.bins.add(BODY, boxGeometry(x - 0.23, 0.32, colZ - 0.23, x + 0.23, 0.42, colZ + 0.23), t.wallAlt);
+    ctx.bins.add(BODY, cylinderGeometry(x, 0.42, colZ, 0.15, 0.17, 3.2 - 0.42, 10), t.trim);
+    ctx.bins.add(BODY, boxGeometry(x - 0.24, 3.2, colZ - 0.24, x + 0.24, 3.35, colZ + 0.24), t.trim);
+  }
+  // Entablature with a gold frieze band, then the pediment and its gold rakes.
+  ctx.bins.add(BODY, boxGeometry(px0, 3.35, front - 0.12, px1, 3.9, ctx.zf - 0.03), t.trim);
+  ctx.bins.add(BODY, boxGeometry(px0, 3.46, ctx.zf - 0.03, px1, 3.54, ctx.zf), t.accent);
+  const peak = 3.9 + half * 0.36;
+  ctx.bins.add(BODY, prismZ([[px0, 3.9], [px1, 3.9], [gc, peak]], front - 0.1, ctx.zf - 0.04), t.trim);
+  const rakeZ = ctx.zf - 0.05;
+  ctx.bins.add(BODY, beamGeometry([px0 + 0.03, 3.93, rakeZ], [gc, peak - 0.01, rakeZ], 0.03, 0.07), t.accent);
+  ctx.bins.add(BODY, beamGeometry([px1 - 0.03, 3.93, rakeZ], [gc, peak - 0.01, rakeZ], 0.03, 0.07), t.accent);
+  const tympanum: Face = { normal: 'z+', plane: ctx.zf - 0.04 };
+  const emblemY = 3.9 + (peak - 3.9) * 0.42;
+  ctx.bins.add(GLOW, faceDisc(tympanum, gc, emblemY, 0, 0.22, 0.025, 14), t.accent);
+  ctx.bins.add(BODY, faceTorus(tympanum, gc, emblemY, 0.012, 0.28, 0.022, { tubularSegments: 16 }), t.accent);
+
+  // The sign hangs between the inner columns from two gold rods.
+  const signY = 2.85;
+  const signZ = ctx.zf - 0.07;
+  for (const dx of [-0.75, 0.75]) {
+    ctx.bins.add(
+      BODY,
+      boxGeometry(gc + dx - 0.012, signY + t.sign.height / 2 - 0.02, signZ - 0.012, gc + dx + 0.012, 3.36, signZ + 0.012),
+      t.accent,
+    );
+  }
+
+  const face: Face = { normal: 'z+', plane: front };
+  const sorted = [...columns].sort((a, b) => a - b);
+  let k = 0;
+  for (let i = 0; i + 1 < sorted.length; i++) {
+    const a = sorted[i]!;
+    const b = sorted[i + 1]!;
+    if (overlapsGap(ctx, a, b)) continue;
+    windowOnFace(ctx, face, (a + b) / 2, 0.75, 0.52, 1.8, isLit(ctx, k++), { mullion: true, keystone: true });
+  }
+  for (const [a, b] of [
+    [ctx.x0 + SIDE_INSET, px0],
+    [px1, ctx.x1 - SIDE_INSET],
+  ] as const) {
+    if (b - a >= 0.75) windowOnFace(ctx, face, (a + b) / 2, 0.75, 0.5, 1.8, isLit(ctx, k++), { mullion: true, keystone: true });
+  }
+  for (const side of sideFaces(ctx)) {
+    for (const z of distribute(ctx.z0 + 0.8, front - 0.6, 0.52, 1.1)) {
+      windowOnFace(ctx, side, z, 0.75, 0.52, 1.8, isLit(ctx, k++), { mullion: true, keystone: true });
+    }
+  }
+
+  band(ctx, H - 0.24, H + 0.06, 0.1, t.trim, front, doorTop);
+  band(ctx, H - 0.3, H - 0.24, 0.06, t.accent, front, doorTop);
+  roofSlab(ctx, H, front, t.roof);
+  const domeZ = (ctx.z0 + front) / 2;
+  ctx.bins.add(BODY, cylinderGeometry(gc, H, domeZ, 1.05, 1.05, 0.42, 14), t.trim);
+  ctx.bins.add(BODY, cylinderGeometry(gc, H + 0.42, domeZ, 1.09, 1.09, 0.08, 14), t.accent);
+  ctx.bins.add(
+    BODY,
+    sphereGeometry(gc, H + 0.5, domeZ, 1, { widthSegments: 14, heightSegments: 5, hemisphere: true }),
+    0xf1e9d6,
+  );
+  ctx.bins.add(BODY, cylinderGeometry(gc, H + 1.45, domeZ, 0.16, 0.18, 0.3, 8), t.trim);
+  ctx.bins.add(GLOW, coneGeometry(gc, H + 1.75, domeZ, 0.12, 0.3, 8), t.accent);
+  return { doorTop, sign: { x: gc, y: signY, z: signZ } };
+}
+
+/** Teal glass curtain wall on slab bands, a lit lobby, and a scrolling rooftop ticker. */
+function exchangeStyle(ctx: BuildingCtx): StyleResult {
+  const t = ctx.theme;
+  const H = t.height;
+  const doorTop = 2.4;
+  const front = massing(ctx, H, 0.45, doorTop, (_x, y) => shade(t.wall, 0.05 * (y / H) - 0.02), GLASS);
+  const gc = ctx.doorCentre;
+  const xa = ctx.x0 + SIDE_INSET;
+  const xb = ctx.x1 - SIDE_INSET;
+  const za = ctx.z0 + SIDE_INSET;
+
+  band(ctx, 0, 0.35, 0.03, t.wallAlt, front, doorTop);
+  const levels = [2.55, 3.6, 4.6];
+  for (const y of levels) band(ctx, y - 0.07, y + 0.07, 0.05, t.trim, front, doorTop);
+  band(ctx, H - 0.1, H + 0.2, 0.06, t.trim, front, doorTop);
+
+  const bays = 8;
+  const step = (xb - xa) / bays;
+  for (let i = 0; i <= bays; i++) {
+    const x = xa + i * step;
+    const y0 = overlapsGap(ctx, x - 0.05, x + 0.05) ? levels[0]! + 0.07 : 0.35;
+    ctx.bins.add(BODY, boxGeometry(x - 0.03, y0, front, x + 0.03, H - 0.1, front + 0.04), t.trim);
+  }
+  const rows: ReadonlyArray<readonly [number, number]> = [
+    [0.4, 2.46],
+    [2.64, 3.51],
+    [3.69, 4.51],
+    [4.69, H - 0.12],
+  ];
+  let k = 0;
+  rows.forEach(([y0, y1], row) => {
+    for (let i = 0; i < bays; i++) {
+      const a = xa + i * step + 0.05;
+      const c = xa + (i + 1) * step - 0.05;
+      k++;
+      if (row === 0 && overlapsGap(ctx, a, c)) continue;
+      if (!isLit(ctx, k)) continue;
+      ctx.bins.add(LIT, boxGeometry(a, y0 + 0.04, front, c, y1 - 0.04, front + 0.015), jitterColor(t.windowLit, hash01(ctx.fp.index, k, 9), 0.06));
+    }
+  });
+  for (const side of sideFaces(ctx)) {
+    const count = Math.max(2, Math.round((front - za) / 1.1));
+    const sideStep = (front - za) / count;
+    for (let i = 0; i <= count; i++) {
+      const u = za + i * sideStep;
+      ctx.bins.add(BODY, faceBox(side, u - 0.03, 0.35, 0, u + 0.03, H - 0.1, 0.04), t.trim);
+    }
+    for (const [y0, y1] of rows) {
+      for (let i = 0; i < count; i++) {
+        k++;
+        if (!isLit(ctx, k)) continue;
+        ctx.bins.add(
+          LIT,
+          faceBox(side, za + i * sideStep + 0.05, y0 + 0.04, 0, za + (i + 1) * sideStep - 0.05, y1 - 0.04, 0.015),
+          jitterColor(t.windowLit, hash01(ctx.fp.index, k, 9), 0.06),
+        );
+      }
+    }
+  }
+
+  if (ctx.gap) {
+    const g = ctx.gap;
+    doubleDoor(ctx, g, doorTop);
+    ctx.bins.add(BODY, boxGeometry(g.x0 - 0.45, 2.47, front - 0.02, g.x1 + 0.45, 2.6, ctx.zf - 0.02), t.trim);
+    ctx.bins.add(GLOW, boxGeometry(g.x0 - 0.4, 2.44, ctx.zf - 0.1, g.x1 + 0.4, 2.47, ctx.zf - 0.04), t.glow);
+    // Planters either side of the entrance, on the solid facade row.
+    for (const [a, b] of [
+      [g.x0 - 0.95, g.x0 - 0.2],
+      [g.x1 + 0.2, g.x1 + 0.95],
+    ] as const) {
+      if (overlapsGap(ctx, a, b) || a < ctx.x0 || b > ctx.x1) continue;
+      ctx.bins.add(BODY, boxGeometry(a, 0, front + 0.02, b, 0.42, ctx.zf - 0.03), 0x9aa4a8);
+      const cx = (a + b) / 2;
+      const cz = (front + ctx.zf) / 2;
+      for (const dx of [-0.18, 0.16]) {
+        ctx.bins.add(
+          BODY,
+          sphereGeometry(cx + dx, 0.58, cz, 0.2, { widthSegments: 6, heightSegments: 4, scaleY: 0.9 }),
+          jitterColor(PALETTE.hedgeLight, hash01(Math.round(cx * 10), Math.round(dx * 100), 3), 0.05),
+        );
+      }
+    }
+  }
+
+  roofSlab(ctx, H, front, t.roof);
+  // Plant on the roof, visible from the follow camera's high angle.
+  ctx.bins.add(BODY, boxGeometry(ctx.x0 + 0.8, H, ctx.z0 + 0.8, ctx.x0 + 2.2, H + 0.5, ctx.z0 + 1.9), 0x9aa6ab);
+  ctx.bins.add(BODY, cylinderGeometry(ctx.x0 + 1.5, H + 0.5, ctx.z0 + 1.35, 0.4, 0.4, 0.04, 10), 0x3a4449);
+  ctx.bins.add(BODY, boxGeometry(ctx.x0 + 4.2, H, ctx.z0 + 0.7, ctx.x0 + 5.1, H + 0.35, ctx.z0 + 1.4), 0x8d999e);
+  const mastX = ctx.x1 - 1;
+  const mastZ = ctx.z0 + 1.2;
+  ctx.bins.add(BODY, cylinderGeometry(mastX, H, mastZ, 0.035, 0.05, 1.25, 6), t.trim);
+  ctx.bins.add(BEACON, sphereGeometry(mastX, H + 1.3, mastZ, 0.08, { widthSegments: 6, heightSegments: 4 }), t.beacon);
+
+  // Ticker: a dark board on legs along the roof's front edge, LED face scrolling.
+  const boardA = ctx.x0 + 0.55;
+  const boardB = ctx.x1 - 0.55;
+  const boardBack = front - 0.45;
+  const boardFront = front - 0.2;
+  for (const x of [boardA + 0.45, boardB - 0.6]) {
+    ctx.bins.add(BODY, boxGeometry(x, H, boardBack + 0.05, x + 0.15, H + 0.42, boardFront - 0.05), 0x2a3035);
+  }
+  ctx.bins.add(BODY, boxGeometry(boardA, H + 0.4, boardBack, boardB, H + 1.1, boardFront), 0x151b1f);
+  ctx.bins.add(GLOW, boxGeometry(boardA + 0.05, H + 0.36, boardFront - 0.06, boardB - 0.05, H + 0.4, boardFront), t.glow);
+  const faceWidth = boardB - boardA - 0.16;
+  const faceHeight = 0.54;
+  const tickerStrip = createTickerStrip(EXCHANGE_TICKER);
+  const strip = ctx.res.texture(tickerStrip.texture);
+  const stripImage = { width: tickerStrip.width, height: tickerStrip.height };
+  const pixelSize = faceHeight / stripImage.height;
+  strip.repeat.set(faceWidth / pixelSize / stripImage.width, 1);
+  const tickerMaterial = ctx.res.material(new MeshBasicMaterial({ map: strip, toneMapped: false }));
+  const tickerGeometry = ctx.res.geometry(new PlaneGeometry(faceWidth, faceHeight));
+  const ticker = new Mesh(tickerGeometry, tickerMaterial);
+  ticker.name = `${ctx.group.name}:ticker`;
+  ticker.position.set((boardA + boardB) / 2, H + 0.75, boardFront + 0.005);
+  ctx.group.add(ticker);
+  const pixelsPerSecond = 9;
+  return {
+    doorTop,
+    sign: { x: gc, y: 3.07, z: front + 0.07 },
+    fadeMaterials: [tickerMaterial],
+    animate: (elapsed) => {
+      strip.offset.x = ((elapsed / 1000) * pixelsPerSecond / stripImage.width) % 1;
+    },
+  };
+}
+
+/** Red brick, blue trim, a striped awning over the door, a pillar box, a slate gable. */
+function postOfficeStyle(ctx: BuildingCtx): StyleResult {
+  const t = ctx.theme;
+  const H = t.height;
+  const doorTop = 2.2;
+  const front = massing(ctx, H, 0.5, doorTop, aoPaint(t.wall, 0.08));
+  const gc = ctx.doorCentre;
+  band(ctx, 0, 0.32, 0.03, t.wallAlt, front, doorTop);
+  band(ctx, H - 0.2, H, 0.04, t.accent, front, doorTop);
+  for (const side of sideFaces(ctx)) {
+    ctx.bins.add(BODY, faceBox(side, ctx.z0 + SIDE_INSET, 1.98, 0, front, 2.06, 0.03), t.accent);
+  }
+
+  const face: Face = { normal: 'z+', plane: front };
+  let k = 0;
+  if (ctx.gap) {
+    const g = ctx.gap;
+    doubleDoor(ctx, g, doorTop);
+    awning(ctx, g.x0 - 0.3, g.x1 + 0.3, front, 2.62, 2.3, t.accent, t.trim);
+    pillarBox(ctx, g.x1 + 0.45, front + 0.26);
+    sconce(ctx, g.x0 - 0.2, 1.72, front);
+    sconce(ctx, g.x1 + 0.2, 1.72, front);
+  }
+  const clearance = (x: number) => (ctx.gap && x > ctx.gap.x1 - 0.01 && x < ctx.gap.x1 + 0.9 ? 0.75 : 0);
+  for (const run of solidRuns(ctx)) {
+    const a = Math.max(run.x0, ctx.x0 + SIDE_INSET) + 0.15 + clearance(run.x0);
+    const b = Math.min(run.x1, ctx.x1 - SIDE_INSET) - 0.15;
+    const centre = (a + b) / 2;
+    if (b - a < 0.8) continue;
+    windowOnFace(ctx, face, centre, 0.75, 0.7, 1.05, isLit(ctx, k++), { mullion: true });
+    flowerBox(ctx, face, centre, 0.7, 0.68);
+  }
+  const signHalf = t.sign.width / 2 + 0.2;
+  for (const [a, b] of [
+    [ctx.x0 + SIDE_INSET + 0.15, gc - signHalf],
+    [gc + signHalf, ctx.x1 - SIDE_INSET - 0.15],
+  ] as const) {
+    for (const x of distribute(a, b, 0.5, 0.35)) {
+      windowOnFace(ctx, face, x, 2.75, 0.5, 0.62, isLit(ctx, k++), { mullion: true });
+    }
+  }
+  for (const side of sideFaces(ctx)) {
+    for (const z of distribute(ctx.z0 + 0.7, front - 0.5, 0.6, 1.0)) {
+      windowOnFace(ctx, side, z, 0.75, 0.6, 1.0, isLit(ctx, k++), { mullion: true });
+      windowOnFace(ctx, side, z, 2.6, 0.55, 0.65, isLit(ctx, k++), { mullion: true });
+    }
+  }
+
+  // Slate gable, ridge running east-west, brick gable ends under the overhang.
+  const za = ctx.z0 + 0.02;
+  const zb = Math.min(ctx.zf - 0.02, front + 0.4);
+  const zr = (za + zb) / 2;
+  const yr = H + 1.4;
+  const th = 0.18;
+  ctx.bins.add(BODY, prismX([[zb, H - 0.05 - th], [zb, H - 0.05], [zr, yr], [zr, yr - th]], ctx.x0, ctx.x1), t.roof);
+  ctx.bins.add(BODY, prismX([[za, H - 0.05 - th], [zr, yr - th], [zr, yr], [za, H - 0.05]], ctx.x0, ctx.x1), shade(t.roof, -0.04));
+  ctx.bins.add(BODY, boxGeometry(ctx.x0, yr - 0.05, zr - 0.09, ctx.x1, yr + 0.06, zr + 0.09), shade(t.roof, -0.08));
+  ctx.bins.add(
+    BODY,
+    prismX([[ctx.z0 + SIDE_INSET, H - 0.05], [front, H - 0.05], [zr, yr - th - 0.02]], ctx.x0 + SIDE_INSET, ctx.x1 - SIDE_INSET),
+    t.wall,
+  );
+  for (let i = 1; i <= 4; i++) {
+    const f = i / 5;
+    const y = H - 0.05 + (yr - H + 0.05) * f;
+    const z = zb + (zr - zb) * f;
+    ctx.bins.add(BODY, beamGeometry([ctx.x0, y, z], [ctx.x1, y, z], 0.05, 0.035), shade(t.roof, -0.07));
+  }
+  const chimneyX = ctx.x0 + (ctx.x1 - ctx.x0) * 0.78;
+  ctx.bins.add(BODY, boxGeometry(chimneyX, H + 0.4, za + 1.4, chimneyX + 0.5, H + 1.95, za + 1.9), t.wallAlt);
+  ctx.bins.add(BODY, boxGeometry(chimneyX - 0.05, H + 1.95, za + 1.35, chimneyX + 0.55, H + 2.05, za + 1.95), 0x3a3434);
+  return { doorTop, sign: { x: gc, y: 3.05, z: front + 0.03 } };
+}
+
+function awning(
+  ctx: BuildingCtx,
+  xa: number,
+  xb: number,
+  wallZ: number,
+  yWall: number,
+  yFront: number,
+  stripeA: number,
+  stripeB: number,
+): void {
+  const zFront = ctx.zf - 0.03;
+  const count = Math.max(4, Math.round((xb - xa) / 0.28));
+  const width = (xb - xa) / count;
+  for (let i = 0; i < count; i++) {
+    const a = xa + i * width;
+    const b = a + width;
+    const colour = i % 2 === 0 ? stripeA : stripeB;
+    ctx.bins.add(BODY, prismX([[wallZ, yWall], [zFront, yFront], [zFront, yFront - 0.05], [wallZ, yWall - 0.05]], a, b), colour);
+    ctx.bins.add(BODY, boxGeometry(a, yFront - 0.2, zFront - 0.02, b, yFront - 0.04, zFront), colour);
+  }
+  for (const x of [xa + 0.03, xb - 0.03]) {
+    ctx.bins.add(BODY, beamGeometry([x, yWall - 0.35, wallZ], [x, yFront - 0.05, zFront - 0.05], 0.03, 0.03), 0x2b2b30);
+  }
+}
+
+function flowerBox(ctx: BuildingCtx, face: Face, cu: number, width: number, v: number): void {
+  ctx.bins.add(BODY, faceBox(face, cu - width / 2 - 0.05, v - 0.16, 0, cu + width / 2 + 0.05, v, 0.2), 0x6b4a2f);
+  for (let i = 0; i < 5; i++) {
+    const u = cu - width / 2 + (i + 0.5) * (width / 5);
+    const colour = pick(PALETTE.flowers, hash01(i, Math.round(cu * 10), 3));
+    ctx.bins.add(BODY, faceBox(face, u - 0.075, v, 0.03, u + 0.075, v + 0.05, 0.17), PALETTE.leaf);
+    ctx.bins.add(BODY, faceBox(face, u - 0.055, v + 0.05, 0.05, u + 0.055, v + 0.12, 0.15), colour);
+  }
+}
+
+/** A red pillar box standing on the solid facade row, beside the door. */
+function pillarBox(ctx: BuildingCtx, x: number, z: number): void {
+  const red = 0xc8302c;
+  const dark = 0x2a2a2e;
+  ctx.bins.add(BODY, cylinderGeometry(x, 0, z, 0.22, 0.22, 0.08, 10), dark);
+  ctx.bins.add(BODY, cylinderGeometry(x, 0.08, z, 0.19, 0.2, 0.92, 10), red);
+  ctx.bins.add(BODY, cylinderGeometry(x, 1, z, 0.215, 0.215, 0.06, 10), red);
+  ctx.bins.add(BODY, sphereGeometry(x, 1.06, z, 0.2, { widthSegments: 10, heightSegments: 3, hemisphere: true, scaleY: 0.6 }), red);
+  ctx.bins.add(BODY, boxGeometry(x - 0.11, 0.78, z + 0.15, x + 0.11, 0.82, z + 0.205), dark);
+  ctx.bins.add(BODY, boxGeometry(x - 0.07, 0.52, z + 0.16, x + 0.07, 0.64, z + 0.2), 0xf3ead6);
+}
+
+/** Corrugated blue-grey steel, a hazard-striped girder door and a Warren roof truss. */
+function bridgeStyle(ctx: BuildingCtx): StyleResult {
+  const t = ctx.theme;
+  const H = t.height;
+  const doorTop = 2.5;
+  const front = massing(ctx, H, 0.12, doorTop, aoPaint(t.wall, 0.06));
+  const gc = ctx.doorCentre;
+  const xa = ctx.x0 + SIDE_INSET;
+  const xb = ctx.x1 - SIDE_INSET;
+  const za = ctx.z0 + SIDE_INSET;
+  band(ctx, 0, 0.45, 0.04, t.trim, front, doorTop);
+
+  for (let x = xa + 0.2; x < xb - 0.1; x += 0.32) {
+    const nearDoor = ctx.gap !== null && x > ctx.gap.x0 - 0.3 && x < ctx.gap.x1 + 0.3;
+    const y0 = nearDoor ? doorTop + 0.36 : 0.45;
+    ctx.bins.add(BODY, boxGeometry(x - 0.035, y0, front, x + 0.035, H - 0.25, front + 0.035), t.wallAlt);
+  }
+  for (const side of sideFaces(ctx)) {
+    for (let z = za + 0.2; z < front - 0.1; z += 0.35) {
+      ctx.bins.add(BODY, faceBox(side, z - 0.035, 0.45, 0, z + 0.035, H - 0.25, 0.035), t.wallAlt);
+    }
+  }
+  for (const [a, b] of [
+    [ctx.x0, ctx.x0 + 0.24],
+    [ctx.x1 - 0.24, ctx.x1],
+  ] as const) {
+    ctx.bins.add(BODY, boxGeometry(a, 0, front - 0.14, b, H + 0.12, ctx.zf - 0.02), t.trim);
+    ctx.bins.add(BODY, boxGeometry(a, 0, ctx.z0, b, H + 0.12, ctx.z0 + 0.24), t.trim);
+  }
+
+  if (ctx.gap) {
+    const g = ctx.gap;
+    for (const [a, b] of [
+      [g.x0 - 0.22, g.x0],
+      [g.x1, g.x1 + 0.22],
+    ] as const) {
+      ctx.bins.add(BODY, boxGeometry(a, 0, front - 0.05, b, doorTop + 0.35, ctx.zf - 0.03), t.trim);
+      for (let i = 0; i < 6; i++) {
+        const y = 0.12 + i * 0.2;
+        ctx.bins.add(BODY, boxGeometry(a + 0.01, y, ctx.zf - 0.03, b - 0.01, y + 0.1, ctx.zf - 0.012), i % 2 === 0 ? t.accent : 0x23282e);
+      }
+    }
+    ctx.bins.add(BODY, boxGeometry(g.x0 - 0.22, doorTop, front - 0.05, g.x1 + 0.22, doorTop + 0.35, ctx.zf - 0.03), t.trim);
+    for (let x = g.x0 - 0.1; x <= g.x1 + 0.1; x += 0.25) {
+      ctx.bins.add(BODY, boxGeometry(x - 0.025, doorTop + 0.15, ctx.zf - 0.03, x + 0.025, doorTop + 0.2, ctx.zf - 0.015), 0x5d6d7c);
+    }
+    const back = ctx.rowZ - DOOR_RECESS + 0.02;
+    const doorFace = ctx.rowZ - 0.02;
+    const a = g.x0 + JAMB;
+    const b = g.x1 - JAMB;
+    ctx.bins.add(BODY, boxGeometry(a, 0, back, b, doorTop - 0.02, doorFace), t.door);
+    for (let i = 0; i < 5; i++) {
+      const y = 0.3 + i * 0.42;
+      ctx.bins.add(BODY, boxGeometry(a + 0.05, y, doorFace, b - 0.05, y + 0.05, doorFace + 0.02), shade(t.door, 0.06));
+    }
+    ctx.bins.add(LIT, boxGeometry((a + b) / 2 - 0.32, 1.42, doorFace, (a + b) / 2 + 0.32, 1.78, doorFace + 0.012), t.windowLit);
+    ctx.bins.add(BODY, boxGeometry(b - 0.2, 0.9, doorFace, b - 0.14, 1.3, doorFace + 0.04), t.accent);
+    sconce(ctx, g.x0 - 0.42, 2.05, front);
+    sconce(ctx, g.x1 + 0.42, 2.05, front);
+  }
+
+  const face: Face = { normal: 'z+', plane: front };
+  const signHalf = t.sign.width / 2 + 0.15;
+  let k = 0;
+  for (const [a, b] of [
+    [xa + 0.25, gc - signHalf],
+    [gc + signHalf, xb - 0.25],
+  ] as const) {
+    for (const x of distribute(a, b, 0.55, 0.2)) {
+      windowOnFace(ctx, face, x, 3.0, 0.55, 0.7, isLit(ctx, k++), { frame: t.trim, sill: false });
+    }
+  }
+  for (const run of solidRuns(ctx)) {
+    const a = Math.max(run.x0, xa + 0.2) + (ctx.gap && run.x0 === ctx.gap.x1 ? 0.35 : 0);
+    const b = Math.min(run.x1, xb - 0.2) - (ctx.gap && run.x1 === ctx.gap.x0 ? 0.35 : 0) - 0.14;
+    for (const x of distribute(a, b, 0.7, 0.35)) {
+      windowOnFace(ctx, face, x, 0.9, 0.7, 0.85, isLit(ctx, k++), { frame: t.trim, mullion: true });
+    }
+  }
+  for (const side of sideFaces(ctx)) {
+    for (const z of distribute(za + 0.4, front - 0.4, 0.55, 0.25)) {
+      windowOnFace(ctx, side, z, 3.0, 0.55, 0.7, isLit(ctx, k++), { frame: t.trim, sill: false });
+    }
+  }
+
+  roofSlab(ctx, H, front, t.roof);
+  parapet(ctx, H, 0.18, 0.12, t.trim, front);
+  const steel = 0x7d93a6;
+  const txa = ctx.x0 + 0.4;
+  const txb = ctx.x1 - 0.4;
+  const trussZ = [ctx.z0 + 1, front - 1] as const;
+  const yb = H + 0.28;
+  const yt = H + 1.25;
+  const panels = 7;
+  const pw = (txb - txa) / panels;
+  for (const z of trussZ) {
+    ctx.bins.add(BODY, beamGeometry([txa, yb, z], [txb, yb, z], 0.1, 0.1), steel);
+    ctx.bins.add(BODY, beamGeometry([txa, yt, z], [txb, yt, z], 0.12, 0.12), steel);
+    for (let i = 0; i < panels; i++) {
+      const a = txa + i * pw;
+      const up = i % 2 === 0;
+      ctx.bins.add(BODY, beamGeometry([a, up ? yb : yt, z], [a + pw, up ? yt : yb, z], 0.07, 0.07), steel);
+    }
+    ctx.bins.add(BODY, beamGeometry([txa, yb, z], [txa, yt, z], 0.08, 0.08), steel);
+    ctx.bins.add(BODY, beamGeometry([txb, yb, z], [txb, yt, z], 0.08, 0.08), steel);
+    for (const x of [txa, (txa + txb) / 2, txb]) {
+      ctx.bins.add(BODY, boxGeometry(x - 0.07, H, z - 0.07, x + 0.07, yb, z + 0.07), shade(steel, -0.1));
+    }
+  }
+  for (let i = 0; i <= panels; i++) {
+    const x = txa + i * pw;
+    ctx.bins.add(BODY, beamGeometry([x, yt, trussZ[0]], [x, yt, trussZ[1]], 0.06, 0.06), steel);
+  }
+  ctx.bins.add(
+    BEACON,
+    sphereGeometry((txa + txb) / 2, yt + 0.14, trussZ[1], 0.09, { widthSegments: 6, heightSegments: 4 }),
+    t.beacon,
+  );
+  return { doorTop, sign: { x: gc, y: 3.3, z: ctx.zf - 0.06 } };
+}
+
+/** Charcoal stone, iron straps, crenellations, and a chained, padlocked vault door. */
+function vaultStyle(ctx: BuildingCtx): StyleResult {
+  const t = ctx.theme;
+  const H = t.height;
+  const doorTop = 2.3;
+  const front = massing(ctx, H, 0.1, doorTop, aoPaint(t.wall, 0.05));
+  const gc = ctx.doorCentre;
+  const xa = ctx.x0 + SIDE_INSET;
+  const xb = ctx.x1 - SIDE_INSET;
+  const blocked = (a: number, b: number) =>
+    ctx.gap !== null && a < ctx.gap.x1 + 0.3 && b > ctx.gap.x0 - 0.3;
+
+  // Rusticated base: staggered stone blocks.
+  const rows: ReadonlyArray<readonly [number, number]> = [
+    [0, 0.42],
+    [0.44, 0.86],
+    [0.88, 1.3],
+  ];
+  rows.forEach(([y0, y1], row) => {
+    let x = xa + (row % 2 === 0 ? 0 : 0.42);
+    let i = 0;
+    while (x < xb - 0.05) {
+      const w = 0.8 + hash01(ctx.fp.index, row * 40 + i, 81) * 0.2;
+      const a = x + 0.02;
+      const b = Math.min(xb, x + w) - 0.02;
+      if (b - a > 0.1 && !blocked(a, b)) {
+        ctx.bins.add(BODY, boxGeometry(a, y0, front, b, y1, front + 0.05), jitterColor(t.wallAlt, hash01(ctx.fp.index, row * 40 + i, 82), 0.03));
+      }
+      x += w;
+      i++;
+    }
+  });
+  for (const run of solidRuns(ctx)) {
+    const a = Math.max(run.x0, xa);
+    const b = Math.min(run.x1, xb);
+    const trimA = ctx.gap && run.x1 === ctx.gap.x0 ? 0.3 : 0;
+    const trimB = ctx.gap && run.x0 === ctx.gap.x1 ? 0.3 : 0;
+    if (b - trimA - (a + trimB) > 0.1) {
+      ctx.bins.add(BODY, boxGeometry(a + trimB, 1.32, front, b - trimA, 1.42, front + 0.06), t.trim);
+    }
+  }
+  ctx.bins.add(BODY, boxGeometry(xa, H - 0.35, front, xb, H - 0.22, front + 0.06), t.trim);
+  for (let x = xa + 0.2; x < xb - 0.1; x += 0.4) {
+    ctx.bins.add(BODY, boxGeometry(x - 0.03, H - 0.31, front + 0.06, x + 0.03, H - 0.26, front + 0.085), 0x6a6f78);
+  }
+
+  const face: Face = { normal: 'z+', plane: front };
+  const signHalf = t.sign.width / 2 + 0.2;
+  for (const [a, b] of [
+    [xa + 0.3, gc - signHalf],
+    [gc + signHalf, xb - 0.3],
+  ] as const) {
+    for (const x of distribute(a, b, 0.2, 0.7)) {
+      windowOnFace(ctx, face, x, 2.0, 0.2, 1.1, false, { frame: t.trim, sill: false });
+      for (const dx of [-0.05, 0.05]) {
+        ctx.bins.add(BODY, boxGeometry(x + dx - 0.012, 2.0, front, x + dx + 0.012, 3.1, front + 0.03), 0x1a1c20);
+      }
+    }
+  }
+
+  if (ctx.gap) {
+    const g = ctx.gap;
+    for (const [a, b] of [
+      [g.x0 - 0.28, g.x0],
+      [g.x1, g.x1 + 0.28],
+    ] as const) {
+      ctx.bins.add(BODY, boxGeometry(a, 0, front - 0.02, b, doorTop + 0.3, ctx.zf - 0.04), t.trim);
+    }
+    ctx.bins.add(BODY, boxGeometry(g.x0 - 0.28, doorTop, front - 0.02, g.x1 + 0.28, doorTop + 0.3, ctx.zf - 0.04), t.trim);
+    for (let x = g.x0 - 0.15; x <= g.x1 + 0.15; x += 0.3) {
+      ctx.bins.add(BODY, boxGeometry(x - 0.03, doorTop + 0.12, ctx.zf - 0.04, x + 0.03, doorTop + 0.18, ctx.zf - 0.02), 0x6a6f78);
+    }
+    vaultDoor(ctx, g, doorTop);
+    sconce(ctx, g.x0 - 0.5, 1.58, front);
+    sconce(ctx, g.x1 + 0.5, 1.58, front);
+  }
+
+  roofSlab(ctx, H, front, t.roof);
+  parapet(ctx, H, 0.12, 0.2, t.trim, front);
+  for (let x = xa; x + 0.35 <= xb + 1e-6; x += 0.7) {
+    ctx.bins.add(BODY, boxGeometry(x, H + 0.12, front - 0.2, x + 0.35, H + 0.45, front), t.trim);
+    ctx.bins.add(BODY, boxGeometry(x, H + 0.12, ctx.z0 + SIDE_INSET, x + 0.35, H + 0.45, ctx.z0 + SIDE_INSET + 0.2), t.trim);
+  }
+  ctx.bins.add(BODY, boxGeometry(ctx.x0 + 1.2, H, ctx.z0 + 1.2, ctx.x0 + 2, H + 0.25, ctx.z0 + 2), 0x2a2d31);
+  return { doorTop, sign: { x: gc, y: 2.95, z: ctx.zf - 0.03 } };
+}
+
+/** A heavy steel door with a bolt ring, chained in an X and padlocked. */
+function vaultDoor(ctx: BuildingCtx, gap: Span, doorTop: number): void {
+  const t = ctx.theme;
+  const back = ctx.rowZ - DOOR_RECESS;
+  const doorFace = ctx.rowZ - 0.1;
+  const a = gap.x0 + JAMB;
+  const b = gap.x1 - JAMB;
+  const cx = (a + b) / 2;
+  const cy = 1.2;
+  ctx.bins.add(BODY, boxGeometry(a, 0, back, b, doorTop - 0.02, doorFace), t.door);
+  const plane: Face = { normal: 'z+', plane: doorFace };
+  ctx.bins.add(BODY, faceTorus(plane, cx, cy, 0.05, 0.62, 0.045, { tubularSegments: 18 }), 0x4a4e56);
+  for (let i = 0; i < 8; i++) {
+    const angle = (i / 8) * Math.PI * 2;
+    const u = cx + Math.cos(angle) * 0.62;
+    const v = cy + Math.sin(angle) * 0.62;
+    ctx.bins.add(BODY, faceBox(plane, u - 0.05, v - 0.05, 0, u + 0.05, v + 0.05, 0.1), 0x5a5f68);
+  }
+  ctx.bins.add(BODY, faceDisc(plane, cx, cy, 0, 0.12, 0.08, 10), 0x5a5f68);
+
+  // Chains in an X: alternate links lie flat and stand on edge.
+  const chain = 0x4a4d52;
+  const corners: ReadonlyArray<readonly [Vec3, Vec3]> = [
+    [[a + 0.15, doorTop - 0.25, 0], [b - 0.15, 0.35, 0]],
+    [[b - 0.15, doorTop - 0.25, 0], [a + 0.15, 0.35, 0]],
+  ];
+  const linkZ = doorFace + 0.055;
+  for (const [start, end] of corners) {
+    const dx = end[0] - start[0];
+    const dy = end[1] - start[1];
+    const length = Math.hypot(dx, dy);
+    const angle = Math.atan2(dy, dx);
+    const count = Math.floor(length / 0.1);
+    for (let i = 0; i <= count; i++) {
+      const f = i / count;
+      const link = faceTorus({ normal: 'z+', plane: 0 }, 0, 0, 0, 0.045, 0.013, { radialSegments: 4, tubularSegments: 8 });
+      link.scale(1.35, 1, 1);
+      if (i % 2 === 1) link.rotateX(Math.PI / 2);
+      link.rotateZ(angle);
+      link.translate(start[0] + dx * f, start[1] + dy * f, linkZ);
+      ctx.bins.add(BODY, link, chain);
+    }
+  }
+  // Padlock where the chains cross.
+  const lockY = (doorTop - 0.25 + 0.35) / 2;
+  ctx.bins.add(BODY, boxGeometry(cx - 0.13, lockY - 0.16, doorFace + 0.02, cx + 0.13, lockY + 0.1, ctx.rowZ + 0.025), t.accent);
+  ctx.bins.add(BODY, faceTorus({ normal: 'z+', plane: doorFace + 0.075 }, cx, lockY + 0.1, 0, 0.085, 0.022, { arc: Math.PI, tubularSegments: 8 }), 0x8d9096);
+  ctx.bins.add(BODY, boxGeometry(cx - 0.02, lockY - 0.08, ctx.rowZ + 0.025, cx + 0.02, lockY, ctx.rowZ + 0.03), 0x151515);
+}
+
+function genericStyle(ctx: BuildingCtx): StyleResult {
+  const t = ctx.theme;
+  const H = t.height;
+  const doorTop = 2.2;
+  const front = massing(ctx, H, 0.2, doorTop, aoPaint(t.wall));
+  const gc = ctx.doorCentre;
+  if (ctx.gap) doubleDoor(ctx, ctx.gap, doorTop);
+  band(ctx, 0, 0.3, 0.03, t.wallAlt, front, doorTop);
+  const face: Face = { normal: 'z+', plane: front };
+  let k = 0;
+  for (const run of solidRuns(ctx)) {
+    for (const x of distribute(run.x0 + 0.25, run.x1 - 0.25, 0.6, 0.4)) {
+      windowOnFace(ctx, face, x, 0.8, 0.6, 1.0, isLit(ctx, k++), { mullion: true });
+    }
+  }
+  const signHalf = t.sign.width / 2 + 0.2;
+  for (const [a, b] of [
+    [ctx.x0 + 0.3, gc - signHalf],
+    [gc + signHalf, ctx.x1 - 0.3],
+  ] as const) {
+    for (const x of distribute(a, b, 0.6, 0.4)) windowOnFace(ctx, face, x, 2.7, 0.6, 0.8, isLit(ctx, k++), { mullion: true });
+  }
+  band(ctx, H - 0.2, H + 0.05, 0.08, t.trim, front, doorTop);
+  roofSlab(ctx, H, front, t.roof);
+  return { doorTop, sign: { x: gc, y: 3.0, z: front + 0.03 } };
+}
+
+/** Irregular footprints: honest per-row blocks and nothing that could cover a walkable tile. */
+function fallbackStyle(ctx: BuildingCtx): StyleResult {
+  const t = ctx.theme;
+  const { fp } = ctx;
+  for (let y = fp.minY; y < fp.maxY; y++) {
+    let start = -1;
+    for (let x = fp.minX; x <= fp.maxX; x++) {
+      const solid = x < fp.maxX && fp.hasTile(x, y);
+      if (solid && start < 0) start = x;
+      if (!solid && start >= 0) {
+        ctx.bins.add(BODY, boxGeometry(start, 0, y, x, t.height, y + 1), aoPaint(t.wall));
+        start = -1;
+      }
+    }
+  }
+  return {
+    doorTop: 2.2,
+    sign: { x: fp.label?.x ?? (fp.minX + fp.maxX) / 2, y: Math.min(t.height - 0.5, 2.9), z: fp.maxY + 0.02 },
+  };
+}
+
+// ---------------------------------------------------------------------------
+// Door portals
+// ---------------------------------------------------------------------------
+
+function buildDoorPortal(
+  door: DoorZone,
+  built: BuiltBuilding | undefined,
+  res: ResourceBag,
+): { group: Group; animate: Animator } {
+  const group = new Group();
+  group.name = `door:${door.building}`;
+  group.userData['building'] = door.building;
+  group.userData['locked'] = door.locked;
+  group.userData['kind'] = 'door-portal';
+  group.position.set(door.x + door.width / 2, 0, door.y + door.height / 2);
+
+  const theme = buildingTheme(door.building);
+  const colour = new Color(theme.portal);
+  const doorTop = built?.doorTop ?? 2.3;
+  const half = door.width / 2;
+  // The door stands at the back of the zone: the facade row's north edge.
+  const dz = -door.height / 2;
+  const frameMaterial = res.material(
+    standardMaterial({ color: 0x1d1a17, vertexColors: false, emissive: theme.portal, emissiveIntensity: door.locked ? 0.6 : 1.8 }),
+  );
+  const lightMaterial = res.material(unlitMaterial({ additive: true }));
+  const bin = new GeometryBin();
+  try {
+    bin.add('frame', boxGeometry(-half + 0.03, 0, dz - 0.01, -half + 0.09, doorTop, dz + 0.03), 0xffffff);
+    bin.add('frame', boxGeometry(half - 0.09, 0, dz - 0.01, half - 0.03, doorTop, dz + 0.03), 0xffffff);
+    bin.add('frame', boxGeometry(-half + 0.03, doorTop - 0.06, dz - 0.01, half - 0.03, doorTop, dz + 0.03), 0xffffff);
+    const curtain = door.locked ? 0.2 : 0.5;
+    const top = doorTop - 0.06;
+    bin.addRGBA('light', faceQuad({ normal: 'z+', plane: dz + 0.035 }, -half + 0.12, 0.02, half - 0.12, top, 0), (_x, y) => [
+      colour.r,
+      colour.g,
+      colour.b,
+      curtain * Math.pow(1 - clamp01(y / top), 1.4),
+    ]);
+    const spill = door.locked ? 0.18 : 0.42;
+    const reach = 1.9;
+    bin.addRGBA(
+      'light',
+      flatPolygon(
+        [
+          [-half + 0.02, dz + 0.02],
+          [half - 0.02, dz + 0.02],
+          [half + 0.45, dz + reach],
+          [-half - 0.45, dz + reach],
+        ],
+        PAVEMENT_HEIGHT + 0.008,
+      ),
+      (_x, _y, z) => [colour.r, colour.g, colour.b, spill * Math.pow(1 - clamp01((z - dz) / reach), 1.6)],
+    );
+    flushBin(bin, 'frame', frameMaterial, res, group, { name: `${group.name}:frame` });
+    flushBin(bin, 'light', lightMaterial, res, group, { name: `${group.name}:light`, renderOrder: 2 });
+  } finally {
+    bin.dispose();
+  }
+  const base = door.locked ? 0.6 : 1.8;
+  const amplitude = door.locked ? 0.15 : 0.45;
+  const speed = door.locked ? 0.8 : 2.2;
+  const phase = hash01(door.x, door.y, 5) * Math.PI * 2;
+  return {
+    group,
+    animate: (elapsed) => {
+      const s = Math.sin((elapsed / 1000) * speed + phase);
+      frameMaterial.emissiveIntensity = base + amplitude * s;
+      lightMaterial.opacity = 0.82 + 0.18 * s;
+    },
+  };
+}
+
+// ---------------------------------------------------------------------------
+// Decor: volumes only outside the map
+// ---------------------------------------------------------------------------
+
+function buildDecor(
+  map: DistrictMap,
+  kinds: GroundKind[][],
+  res: ResourceBag,
+  parent: Group,
+  animators: Animator[],
+): void {
+  const band = edgeBand(map, kinds);
+  const bin = new GeometryBin();
+  try {
+    hedges(map, band, bin);
+    if (band) barriers(map, band, bin);
+    southBushes(map, bin);
+    backdropCity(map, bin);
+    hills(map, bin);
+    studioArch(map, bin);
+
+    const decorMaterial = res.material(standardMaterial({ roughness: 0.9 }));
+    const farMaterial = res.material(standardMaterial({ roughness: 0.95 }));
+    const farWindows = res.material(
+      standardMaterial({ roughness: 0.6, emissive: PALETTE.backdropWindow, emissiveIntensity: 0.9 }),
+    );
+    const fairy = res.material(unlitMaterial());
+    const archGlow = res.material(unlitMaterial({ additive: true }));
+    flushBin(bin, 'decor', decorMaterial, res, parent, { name: 'street:decor', cast: true, receive: true });
+    flushBin(bin, 'far', farMaterial, res, parent, { name: 'street:backdrop' });
+    flushBin(bin, 'far-lit', farWindows, res, parent, { name: 'street:backdrop-windows' });
+    flushBin(bin, 'fairy', fairy, res, parent, { name: 'street:fairy-lights' });
+    flushBin(bin, 'arch-glow', archGlow, res, parent, { name: 'street:arch-glow', renderOrder: 2 });
+    animators.push((elapsed) => {
+      fairy.color.setScalar(0.78 + 0.22 * Math.sin((elapsed / 1000) * 2.6));
+      archGlow.opacity = 0.7 + 0.3 * Math.sin((elapsed / 1000) * 1.3);
+    });
+  } finally {
+    bin.dispose();
+  }
+  trees(map, band, res, parent);
+  if (band) lamps(map, band, res, parent);
+}
+
+type Band = { top: number; bottom: number } | null;
+
+function hedgeRun(bin: GeometryBin, x0: number, z0: number, x1: number, z1: number, height: number, seed: number): void {
+  const alongX = x1 - x0 >= z1 - z0;
+  const length = alongX ? x1 - x0 : z1 - z0;
+  if (length <= 0.05) return;
+  const count = Math.max(1, Math.round(length / 1.6));
+  for (let i = 0; i < count; i++) {
+    const a = i / count;
+    const b = (i + 1) / count;
+    const h = height * (0.92 + 0.16 * hash01(i, seed, 31));
+    const colour = jitterColor(hash01(i, seed, 32) < 0.5 ? PALETTE.hedge : PALETTE.hedgeLight, hash01(i, seed, 33), 0.03);
+    const [sa, sb, ta, tb] = alongX
+      ? [x0 + (x1 - x0) * a, x0 + (x1 - x0) * b, z0, z1]
+      : [z0 + (z1 - z0) * a, z0 + (z1 - z0) * b, x0, x1];
+    const body = alongX ? boxGeometry(sa, 0, ta, sb, h, tb) : boxGeometry(ta, 0, sa, tb, h, sb);
+    bin.add('decor', body, colour);
+    const cap = alongX
+      ? boxGeometry(sa + 0.04, h, ta + 0.08, sb - 0.04, h + 0.12, tb - 0.08)
+      : boxGeometry(ta + 0.08, h, sa + 0.04, tb - 0.08, h + 0.12, sb - 0.04);
+    bin.add('decor', cap, shade(colour, 0.03));
+  }
+}
+
+function hedges(map: DistrictMap, band: Band, bin: GeometryBin): void {
+  const W = map.width;
+  const H = map.height;
+  const entrance = map.avatarStudioEntrance;
+  hedgeRun(bin, -1, -1, W + 1, -0.15, 0.95, 1);
+  hedgeRun(bin, -1, H + 0.15, entrance.x - 0.65, H + 0.8, 0.55, 2);
+  hedgeRun(bin, entrance.x + entrance.width + 0.65, H + 0.15, W + 1, H + 0.8, 0.55, 3);
+  for (const [x0, x1, seed] of [
+    [-1, -0.15, 4],
+    [W + 0.15, W + 1, 6],
+  ] as const) {
+    if (band) {
+      hedgeRun(bin, x0, -0.15, x1, band.top - 0.1, 0.95, seed);
+      hedgeRun(bin, x0, band.bottom + 0.1, x1, H + 0.15, 0.75, seed + 1);
+    } else {
+      hedgeRun(bin, x0, -0.15, x1, H + 0.15, 0.9, seed);
+    }
+  }
+}
+
+/** Road-closed barriers where the street leaves the map. */
+function barriers(map: DistrictMap, band: { top: number; bottom: number }, bin: GeometryBin): void {
+  for (const x of [-0.6, map.width + 0.6]) {
+    const za = band.top + 0.15;
+    const zb = band.bottom - 0.15;
+    const count = Math.max(2, Math.round((zb - za) / 0.45));
+    for (let i = 0; i < count; i++) {
+      const a = za + ((zb - za) * i) / count;
+      const b = za + ((zb - za) * (i + 1)) / count;
+      bin.add('decor', boxGeometry(x - 0.05, 0.52, a, x + 0.05, 0.78, b), i % 2 === 0 ? PALETTE.barrierRed : PALETTE.barrierWhite);
+    }
+    for (let z = za + 0.3; z < zb; z += 1.6) {
+      bin.add('decor', beamGeometry([x - 0.25, 0, z], [x, 0.8, z], 0.05, 0.05), 0x55595e);
+      bin.add('decor', beamGeometry([x + 0.25, 0, z], [x, 0.8, z], 0.05, 0.05), 0x55595e);
+      bin.add('fairy', sphereGeometry(x, 0.86, z, 0.06, { widthSegments: 6, heightSegments: 4 }), 0xffb347);
+    }
+  }
+}
+
+function southBushes(map: DistrictMap, bin: GeometryBin): void {
+  const H = map.height;
+  const entrance = map.avatarStudioEntrance;
+  for (let z = H + 1.3; z < H + 5.5; z += 1.4) {
+    for (let x = -8; x < map.width + 8; x += 1.6) {
+      const seed = hash01(Math.round(x * 10), Math.round(z * 10), 61);
+      if (seed < 0.55) continue;
+      const px = x + hash01(Math.round(x * 10), Math.round(z * 10), 62) * 0.8;
+      const pz = z + hash01(Math.round(x * 10), Math.round(z * 10), 63) * 0.6;
+      if (pz < H + 3.2 && px > entrance.x - 2 && px < entrance.x + entrance.width + 2) continue;
+      const r = 0.35 + hash01(Math.round(x * 10), Math.round(z * 10), 64) * 0.25;
+      const bush = new IcosahedronGeometry(r, 0).scale(1, 0.65, 1).translate(px, r * 0.4, pz);
+      bin.add('decor', bush, jitterColor(pick([PALETTE.hedge, PALETTE.hedgeLight, PALETTE.tuft], seed), seed, 0.04));
+    }
+  }
+}
+
+/** The city continuing to the north: simple blocks with lit windows, softened by fog. */
+function backdropCity(map: DistrictMap, bin: GeometryBin): void {
+  const W = map.width;
+  const rows = [
+    { zFront: -3.2, depth: [2.5, 4.2], height: [3.2, 7.5] },
+    { zFront: -9.5, depth: [3, 5], height: [6, 12] },
+  ] as const;
+  let seed = 1;
+  for (const row of rows) {
+    let x = -18 + hash01(seed, 0, 41) * 2;
+    while (x < W + 18) {
+      const w = 2.6 + hash01(seed, 1, 41) * 3.6;
+      const d = row.depth[0] + hash01(seed, 2, 41) * (row.depth[1] - row.depth[0]);
+      const h = row.height[0] + hash01(seed, 3, 41) * (row.height[1] - row.height[0]);
+      const colour = pick(PALETTE.backdrop, hash01(seed, 4, 41));
+      const zb = row.zFront;
+      const za = zb - d;
+      bin.add('far', boxGeometry(x, 0, za, x + w, h, zb), aoPaint(colour, 0.08));
+      bin.add('far', boxGeometry(x - 0.05, h, za - 0.05, x + w + 0.05, h + 0.18, zb + 0.05), shade(colour, -0.12));
+      if (hash01(seed, 5, 41) < 0.4) {
+        const tx = x + w * (0.3 + hash01(seed, 7, 41) * 0.4);
+        const tz = za + d * 0.4;
+        bin.add('far', cylinderGeometry(tx, h + 0.18, tz, 0.45, 0.45, 0.9, 8), 0x9a7d62);
+        bin.add('far', coneGeometry(tx, h + 1.08, tz, 0.55, 0.45, 8), 0x6f5a48);
+      } else if (hash01(seed, 8, 41) < 0.6) {
+        bin.add('far', boxGeometry(x + w * 0.2, h + 0.18, za + 0.4, x + w * 0.45, h + 0.7, za + 1.2), shade(colour, -0.06));
+      }
+      const face: Face = { normal: 'z+', plane: zb };
+      const cols = Math.max(1, Math.floor((w - 0.6) / 0.85));
+      const floors = Math.max(1, Math.floor((h - 1.2) / 1.05));
+      for (let r = 0; r < floors; r++) {
+        for (let c = 0; c < cols; c++) {
+          const u = x + 0.3 + (c + 0.5) * ((w - 0.6) / cols);
+          const v = 0.9 + r * 1.05;
+          const lit = hash01(seed, r * 31 + c, 43) < 0.32;
+          bin.add(
+            lit ? 'far-lit' : 'far',
+            faceQuad(face, u - 0.2, v, u + 0.2, v + 0.55, 0.01),
+            lit ? jitterColor(PALETTE.backdropWindow, hash01(seed, r * 31 + c, 44), 0.06) : PALETTE.backdropWindowDark,
+          );
+        }
+      }
+      x += w + 0.5 + hash01(seed, 6, 41) * 1.6;
+      seed++;
+    }
+  }
+}
+
+function hills(map: DistrictMap, bin: GeometryBin): void {
+  const W = map.width;
+  const H = map.height;
+  const spots: ReadonlyArray<readonly [number, number, number, number]> = [
+    [-30, -30, 16, 0.32],
+    [0, -40, 18, 0.28],
+    [30, -34, 14, 0.36],
+    [58, -38, 17, 0.3],
+    [W + 36, -26, 15, 0.3],
+    [-40, 6, 13, 0.3],
+    [-38, 38, 14, 0.28],
+    [W + 40, 4, 14, 0.32],
+    [W + 38, 36, 13, 0.3],
+    [8, H + 36, 16, 0.25],
+    [40, H + 40, 18, 0.25],
+  ];
+  spots.forEach(([x, z, radius, scaleY], i) => {
+    bin.add(
+      'far',
+      sphereGeometry(x, 0, z, radius, { widthSegments: 9, heightSegments: 4, hemisphere: true, scaleY }),
+      jitterColor(pick(PALETTE.hills, hash01(i, 1, 91)), hash01(i, 2, 91), 0.04),
+    );
+  });
+}
+
+/** The hidden Studio's only marker: a hedge arch with fairy lights, just off the map. */
+function studioArch(map: DistrictMap, bin: GeometryBin): void {
+  const entrance = map.avatarStudioEntrance;
+  const H = map.height;
+  const xa = entrance.x;
+  const xb = entrance.x + entrance.width;
+  const z0 = H + 0.08;
+  const z1 = H + 0.62;
+  const zc = (z0 + z1) / 2;
+  const top = 1.85;
+  bin.add('decor', boxGeometry(xa - 0.62, 0, z0, xa - 0.04, top, z1), PALETTE.hedge);
+  bin.add('decor', boxGeometry(xb + 0.04, 0, z0, xb + 0.62, top, z1), PALETTE.hedge);
+  const cx = (xa + xb) / 2;
+  const rx = (xb - xa) / 2 + 0.33;
+  const ry = 0.75;
+  const segments = 7;
+  for (let i = 0; i < segments; i++) {
+    const ta = Math.PI - (Math.PI * i) / segments;
+    const tb = Math.PI - (Math.PI * (i + 1)) / segments;
+    const pa: Vec3 = [cx + rx * Math.cos(ta), top + ry * Math.sin(ta), zc];
+    const pb: Vec3 = [cx + rx * Math.cos(tb), top + ry * Math.sin(tb), zc];
+    const dx = pb[0] - pa[0];
+    const dy = pb[1] - pa[1];
+    const len = Math.hypot(dx, dy);
+    const ex = (dx / len) * 0.12;
+    const ey = (dy / len) * 0.12;
+    bin.add(
+      'decor',
+      beamGeometry([pa[0] - ex, pa[1] - ey, zc], [pb[0] + ex, pb[1] + ey, zc], z1 - z0, 0.5),
+      jitterColor(PALETTE.hedge, hash01(i, 4, 97), 0.03),
+    );
+  }
+  for (let i = 0; i <= 12; i++) {
+    const angle = Math.PI - (Math.PI * i) / 12;
+    const x = cx + (rx - 0.27) * Math.cos(angle);
+    const y = top + (ry - 0.2) * Math.sin(angle);
+    bin.add('fairy', sphereGeometry(x, y, z1 + 0.03, 0.045, { widthSegments: 5, heightSegments: 3 }), i % 3 === 0 ? 0xffd9a0 : PALETTE.fairyLight);
+  }
+  for (const x of [xa - 0.02, xb + 0.02]) {
+    for (let y = 0.35; y < top; y += 0.35) {
+      bin.add('fairy', sphereGeometry(x, y, z1 + 0.03, 0.04, { widthSegments: 5, heightSegments: 3 }), PALETTE.fairyLight);
+    }
+  }
+  const glow = new Color(0xffe3a8);
+  bin.addRGBA('arch-glow', flatPolygon([[xa, H + 0.01], [xb, H + 0.01], [xb + 0.3, H + 0.9], [xa - 0.3, H + 0.9]], 0.02), (_x, _y, z) => [
+    glow.r,
+    glow.g,
+    glow.b,
+    0.28 * (1 - clamp01((z - H) / 0.9)),
+  ]);
+}
+
+const scratchMatrix = new Matrix4();
+const scratchQuat = new Quaternion();
+const scratchPosition = new Vector3();
+const scratchScale = new Vector3();
+const UP = new Vector3(0, 1, 0);
+
+interface TreeSpot {
+  readonly x: number;
+  readonly z: number;
+  readonly scale: number;
+  readonly yaw: number;
+  readonly pine: boolean;
+  readonly seed: number;
+}
+
+/** Groves off the map's east, west and far south edges, instanced per part. */
+function trees(map: DistrictMap, band: Band, res: ResourceBag, parent: Group): void {
+  const W = map.width;
+  const H = map.height;
+  const spots: TreeSpot[] = [];
+  const push = (x: number, z: number, seed: number): void => {
+    spots.push({
+      x,
+      z,
+      scale: 0.8 + hash01(seed, 1, 101) * 0.55,
+      yaw: hash01(seed, 2, 101) * Math.PI * 2,
+      pine: hash01(seed, 3, 101) < 0.35,
+      seed,
+    });
+  };
+  let seed = 1;
+  for (const side of [-1, 1] as const) {
+    for (let gz = -12; gz <= H + 14; gz += 2.7) {
+      for (let gx = 0; gx < 4; gx++) {
+        seed++;
+        if (hash01(seed, 0, 102) < 0.3) continue;
+        const offset = 3.4 + gx * 2.6 + hash01(seed, 4, 102) * 1.2;
+        const x = side < 0 ? -offset : W + offset;
+        const z = gz + (hash01(seed, 5, 102) - 0.5) * 1.6;
+        if (band && gx < 3 && z > band.top - 1.5 && z < band.bottom + 1.5) continue;
+        push(x, z, seed);
+      }
+    }
+  }
+  for (let x = 1; x < W; x += 3.3) {
+    seed++;
+    if (hash01(seed, 0, 103) < 0.25) continue;
+    push(x + (hash01(seed, 1, 103) - 0.5) * 1.2, -2.2 + (hash01(seed, 2, 103) - 0.5) * 0.3, seed);
+  }
+  for (let gz = H + 10; gz < H + 18; gz += 2.8) {
+    for (let x = -10; x < W + 10; x += 2.9) {
+      seed++;
+      if (hash01(seed, 0, 104) < 0.45) continue;
+      push(x + hash01(seed, 1, 104) * 1.2, gz + hash01(seed, 2, 104) * 1.2, seed);
+    }
+  }
+
+  const round = spots.filter((spot) => !spot.pine);
+  const pines = spots.filter((spot) => spot.pine);
+  const trunkGeometry = res.geometry(new CylinderGeometry(0.09, 0.13, 1, 6).translate(0, 0.5, 0));
+  const canopyGeometry = res.geometry(new IcosahedronGeometry(1, 0));
+  const pineGeometry = res.geometry(new ConeGeometry(1, 1, 7).translate(0, 0.5, 0));
+  const trunkMaterial = res.material(standardMaterial({ color: PALETTE.trunk, vertexColors: false }));
+  const leafMaterial = res.material(standardMaterial({ color: 0xffffff, vertexColors: false, roughness: 0.9 }));
+
+  const trunks = res.disposable(new InstancedMesh(trunkGeometry, trunkMaterial, Math.max(1, spots.length)));
+  trunks.name = 'street:tree-trunks';
+  trunks.castShadow = true;
+  spots.forEach((spot, i) => {
+    const height = (spot.pine ? 0.6 : 1.1) * spot.scale;
+    scratchQuat.setFromAxisAngle(UP, spot.yaw);
+    scratchMatrix.compose(scratchPosition.set(spot.x, 0, spot.z), scratchQuat, scratchScale.set(spot.scale, height, spot.scale));
+    trunks.setMatrixAt(i, scratchMatrix);
+  });
+  trunks.count = spots.length;
+
+  const canopies = res.disposable(new InstancedMesh(canopyGeometry, leafMaterial, Math.max(1, round.length)));
+  canopies.name = 'street:tree-canopies';
+  canopies.castShadow = true;
+  round.forEach((spot, i) => {
+    const r = 1.05 * spot.scale;
+    scratchQuat.setFromAxisAngle(UP, spot.yaw);
+    scratchMatrix.compose(scratchPosition.set(spot.x, 1.1 * spot.scale + r * 0.55, spot.z), scratchQuat, scratchScale.set(r, r * 0.9, r));
+    canopies.setMatrixAt(i, scratchMatrix);
+    const autumn = hash01(spot.seed, 6, 105) < 0.12;
+    canopies.setColorAt(
+      i,
+      jitterColor(autumn ? PALETTE.canopies[4]! : pick(PALETTE.canopies.slice(0, 4), hash01(spot.seed, 7, 105)), hash01(spot.seed, 8, 105), 0.04),
+    );
+  });
+  canopies.count = round.length;
+
+  const cones = res.disposable(new InstancedMesh(pineGeometry, leafMaterial, Math.max(1, pines.length * 2)));
+  cones.name = 'street:pine-canopies';
+  cones.castShadow = true;
+  pines.forEach((spot, i) => {
+    const s = spot.scale;
+    const colour = jitterColor(pick(PALETTE.pines, hash01(spot.seed, 9, 105)), hash01(spot.seed, 10, 105), 0.04);
+    scratchQuat.setFromAxisAngle(UP, spot.yaw);
+    scratchMatrix.compose(scratchPosition.set(spot.x, 0.5 * s, spot.z), scratchQuat, scratchScale.set(0.95 * s, 1.6 * s, 0.95 * s));
+    cones.setMatrixAt(i * 2, scratchMatrix);
+    cones.setColorAt(i * 2, colour);
+    scratchMatrix.compose(scratchPosition.set(spot.x, 1.35 * s, spot.z), scratchQuat, scratchScale.set(0.68 * s, 1.3 * s, 0.68 * s));
+    cones.setMatrixAt(i * 2 + 1, scratchMatrix);
+    cones.setColorAt(i * 2 + 1, shade(colour, 0.03));
+  });
+  cones.count = pines.length * 2;
+
+  for (const mesh of [trunks, canopies, cones]) {
+    mesh.instanceMatrix.needsUpdate = true;
+    if (mesh.instanceColor) mesh.instanceColor.needsUpdate = true;
+    mesh.computeBoundingSphere();
+    parent.add(mesh);
+  }
+}
+
+/** Street lamps on the pavement where the road runs off the map. */
+function lamps(map: DistrictMap, band: { top: number; bottom: number }, res: ResourceBag, parent: Group): void {
+  const W = map.width;
+  const bin = new GeometryBin();
+  let postGeometry: ReturnType<GeometryBin['take']> = null;
+  try {
+    const dark = PALETTE.lampPost;
+    bin.add('post', cylinderGeometry(0, 0, 0, 0.1, 0.12, 0.18, 8), dark);
+    bin.add('post', cylinderGeometry(0, 0.18, 0, 0.045, 0.055, 2.55, 6), dark);
+    bin.add('post', beamGeometry([0, 2.62, -0.02], [0, 2.72, 0.46], 0.04, 0.04), dark);
+    bin.add('post', boxGeometry(-0.13, 2.7, 0.33, 0.13, 2.76, 0.59), dark);
+    postGeometry = bin.take('post');
+  } finally {
+    bin.dispose();
+  }
+  if (!postGeometry) return;
+  res.geometry(postGeometry);
+  const headGeometry = res.geometry(boxGeometry(-0.1, 2.56, 0.36, 0.1, 2.7, 0.56));
+  const spots: { x: number; z: number; yaw: number }[] = [];
+  for (let k = 0; k < 4; k++) {
+    for (const x of [-3 - k * 6.5, W + 3 + k * 6.5]) {
+      spots.push({ x, z: band.top + 0.3, yaw: 0 });
+      spots.push({ x, z: band.bottom - 0.3, yaw: Math.PI });
+    }
+  }
+  const postMaterial = res.material(standardMaterial({ roughness: 0.6 }));
+  const headMaterial = res.material(unlitMaterial({ color: PALETTE.lampGlow, vertexColors: false }));
+  const posts = res.disposable(new InstancedMesh(postGeometry, postMaterial, spots.length));
+  const heads = res.disposable(new InstancedMesh(headGeometry, headMaterial, spots.length));
+  posts.name = 'street:lamp-posts';
+  heads.name = 'street:lamp-heads';
+  posts.castShadow = true;
+  spots.forEach((spot, i) => {
+    scratchQuat.setFromAxisAngle(UP, spot.yaw);
+    scratchMatrix.compose(scratchPosition.set(spot.x, 0, spot.z), scratchQuat, scratchScale.set(1, 1, 1));
+    posts.setMatrixAt(i, scratchMatrix);
+    heads.setMatrixAt(i, scratchMatrix);
+  });
+  for (const mesh of [posts, heads]) {
+    mesh.instanceMatrix.needsUpdate = true;
+    mesh.computeBoundingSphere();
+    parent.add(mesh);
+  }
+}

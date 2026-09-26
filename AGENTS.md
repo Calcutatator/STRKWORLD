@@ -9,7 +9,8 @@ at the bottom is the part that grows.
 
 ## 1. What this project is
 
-A 2D top-down browser game where buildings are Starknet privacy protocols.
+A 3D walkable browser game where buildings are Starknet privacy protocols
+(Three.js over a tile-authored world, D-059).
 Real funds, Starknet **mainnet**, from day one. Players hold funds in the
 STRK20 privacy pool.
 
@@ -257,6 +258,57 @@ empty shell to fetchers, so a 200 there means nothing.
 ---
 
 ## 6. Findings log
+
+### 2026-09-27 — The World is a tile-authored session drawn by Three.js (D-059)
+
+Phaser is gone. `world-session.ts` now owns what StreetScene orchestrated —
+create/teardown order, movement, retryable tile reports, door/room/Studio
+transitions, outfit selection and the input gate — and drives a narrow
+`WorldSessionView`; `three/` draws it. Gameplay coordinates did not change:
+one 32 px tile is one world unit, +X east, +Z south, so no seam, lobby message
+or Shell file changed shape.
+
+Three behaviours differ from the Phaser build and are deliberate. The street
+uses the substep tile collision the interiors already used, with the same
+24 px body; out-of-bounds tiles are solid, so bounds and door/Studio
+reachability match, but corners no longer get Arcade's nudge. Movement keys are
+camera-relative, and the wire facing is derived from the intended World
+velocity, so opposing keys now cancel for facing too (up+down+left faces
+`left`; up+down alone keeps the last facing, where the Scene turned `up`). And
+the camera never rotates on its own, so a key held through a room or Studio
+teleport keeps pointing away from the exit.
+
+*Verified:* the StreetScene lifecycle suite was ported 1:1 to
+`world-session.test.ts` (67 tests; 69 of 70 deliberate session mutations fail a
+test — the survivor was a redundant idempotence guard). Workspace typecheck,
+119 test files / 2,581 tests, production build, all invariants and the D-005
+live header gate pass. The production build keeps `three` confined to the lazy
+`world-engine` chunk (681 kB, 183 kB gzip, down from Phaser's ~353 kB gzip);
+no other chunk contains `WebGLRenderer`. In the dev preview, holding up from
+spawn walked through the Post Office door into its rendered interior with the
+Shell's Game Mode controls and no console errors.
+
+### 2026-09-27 — three r186: `transparent` changes the program; canvas textures cannot grow
+
+Two renderer traps hit while building the 3D World:
+
+- Toggling `material.transparent` changes the compiled program, because
+  `opaque` is a program parameter (`WebGLPrograms.js:264`). A fader that flips
+  it without `material.needsUpdate = true` keeps drawing with the old program.
+  `createOpacityFader` flips it only when crossing 1, so per-frame fades stay
+  uniform updates.
+- The GPU texture cache key has no image dimensions
+  (`WebGLTextures.js:528-547`), so a `CanvasTexture` whose canvas grows after
+  upload is not reallocated. The label factory creates a new texture when a
+  label's canvas has to grow.
+
+Also: `WebGLAnimation` requests the next frame *before* invoking the loop
+callback (`WebGLAnimation.js:10`), so an exception does not stop
+`setAnimationLoop` — but it does skip the rest of that frame. The engine
+guards each frame stage separately so a failing update still renders.
+
+*Verified:* read in the installed `three@0.186.1` sources at the cited lines;
+the fader and label tests in `packages/world/src/three` cover both behaviours.
 
 ### 2026-08-30 — Input-gate handoffs must honor reentrant desired state
 
