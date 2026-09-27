@@ -260,8 +260,10 @@ empty shell to fetchers, so a 200 there means nothing.
 
 ### 2026-09-27 — The shared block sandbox is a lobby-authority seam (D-060)
 
-The lobby room owns anonymous block state (colour stacks per street tile) and
-each player's carried colour, the only sandbox field on a presence entry. The
+The lobby room owns block state with no identity field (colour stacks per
+street tile) and each player's carried colour, the only sandbox field on a
+presence entry — not unlinkable, since a nearby observer can correlate a
+peer's carried colour with a column change (D-060). The
 World never imports the lobby: it receives a World-owned `SandboxChannel`
 through `WorldConfig`, and the Shell's sandbox controller backs that channel
 with whichever lobby client is connected, or with the same pure rules
@@ -288,6 +290,25 @@ typecheck, 131 files / 2,786 tests, production build (`three` only in the
 `world-engine` chunk, no Colyseus server code in any browser chunk), all
 invariants including the lobby money-word scan, and the live D-005 header
 gate. Live: two browser tabs connected to the dev lobby.
+
+### 2026-09-27 — Colyseus corrupts a late joiner's state past 8 KB unless the encode buffer is raised
+
+A joiner's full state is encoded into `Encoder.BUFFER_SIZE` (8 KB by default
+in `@colyseus/schema` 4.0.30). When the state is larger, the shared encode
+grows into a new buffer, but the per-client `StateView` encode is still handed
+the old 8 KB one (`SchemaSerializer.getFullState` → `encodeAllView`), so
+everything past 8 KB reaches the joiner as zeros. The client decodes it
+without failing: the room looks connected while the joiner sees a partial,
+wrong board (and the server logs `buffer overflow` per join). The unfiltered
+sandbox board makes this reachable in ordinary play — a full board is ~24 KB,
+~33.5 KB with 128 visible peers. The lobby raises the buffer to 64 KB before
+any room exists and again before a room assigns its state.
+
+*Verified:* an independent security review reproduced it against a real
+server (900 blocks on 526 tiles → a late joiner saw 256 blocks on 117 tiles);
+`packages/lobby/src/sandbox-capacity.test.ts` fills a real room to 900 blocks
+over all 784 tiles and asserts a new joiner's board is identical with no
+overflow warning — red with the reservation disabled, green with it.
 
 ### 2026-09-27 — Colyseus room lifetime and patch-order traps
 

@@ -362,7 +362,7 @@ export class LobbyClient {
     // suspended command overwrite that authoritative lifecycle state.
     if (this.#room !== room || this.#status !== 'connected') return;
     this.#setStatus('suspended');
-    // The server discards a carried block on suspend; stop reporting it now
+    // The server puts a carried block back on suspend; stop reporting it now
     // rather than when the patch that erases our entry arrives.
     this.#emitSandbox();
   }

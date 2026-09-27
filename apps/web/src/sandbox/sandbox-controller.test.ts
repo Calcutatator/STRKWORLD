@@ -128,16 +128,24 @@ describe('sandbox controller (D-060)', () => {
     expect(world.last().carrying).toBeNull();
   });
 
-  it('ignores requests while the player is inside a building, and drops what they carry', () => {
+  it('ignores requests while the player is inside a building, and returns what they carry', () => {
     const world = setup();
     world.move({ x: X, y: Y });
     for (let i = 0; i < 5; i += 1) world.timers.runNext();
     const target = world.drops[0]!;
     world.move({ x: target.x - 1, y: target.y });
+    const blocks = () => world.last().columns.reduce((sum, column) => sum + column.colours.length, 0);
+    const total = blocks();
     world.controller.channel.pick(target);
     expect(world.last().carrying).not.toBeNull();
+    const dropsBefore = world.drops.length;
     world.world.emit('building:entered', { building: 'bank' });
     expect(world.last().carrying).toBeNull();
+    // Conserved: the block fell back onto the board, away from the player.
+    expect(blocks()).toBe(total);
+    expect(world.drops.length).toBe(dropsBefore + 1);
+    const returned = world.drops.at(-1)!;
+    expect(Math.max(Math.abs(returned.x - (target.x - 1)), Math.abs(returned.y - target.y))).toBeGreaterThan(1);
     const before = world.snapshots.length;
     world.controller.channel.pick(target);
     expect(world.snapshots.length).toBe(before);

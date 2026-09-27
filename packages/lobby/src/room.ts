@@ -40,8 +40,8 @@
  */
 
 import { Room, ServerError, type Client, type Delayed } from '@colyseus/core';
-import { StateView } from '@colyseus/schema';
-import type { GameId } from '@strkworld/shared';
+import { Encoder, StateView } from '@colyseus/schema';
+import type { GameId, SandboxTile } from '@strkworld/shared';
 import {
   DEFAULT_ROOM_CONFIG,
   MESSAGE,
@@ -55,6 +55,40 @@ import {
   type PresenceCounters,
 } from './presence.js';
 import type { LobbyState, PresenceEntry } from './state.js';
+
+/**
+ * The size every room state encode buffer starts at, in bytes.
+ *
+ * ⚠ Not a tuning knob — a correctness floor. `@colyseus/core@0.17.50`'s
+ * `SchemaSerializer.getFullState` (the full state a joining client receives)
+ * encodes the shared state into a `fullEncodeBuffer` it allocated once, at
+ * `Encoder.BUFFER_SIZE` (8 KB by default). When that overflows,
+ * `@colyseus/schema@4.0.30`'s `Encoder.encode` re-encodes into a grown copy
+ * and returns it — but the serializer keeps its reference to the old buffer
+ * and hands *that* to the per-client `encodeAllView`, so every shared byte
+ * past 8 KB reaches the joiner as zeros. With `peers` filtered by a
+ * `StateView`, every joiner takes that path. D-060's sandbox alone is about
+ * 24 KB at its worst (900 blocks over all 784 tiles), about 33.5 KB with 128
+ * visible peers: a late joiner would see a corrupted sandbox (and the server
+ * logs "buffer overflow" per join). 64 KB keeps the whole worst case inside
+ * the first buffer, so the stale-buffer path is never taken.
+ */
+export const STATE_ENCODE_BUFFER_BYTES = 64 * 1024;
+
+/**
+ * Raise `Encoder.BUFFER_SIZE` to `STATE_ENCODE_BUFFER_BYTES` if it is lower.
+ *
+ * Process-wide and read only when a room's serializer and encoder are built
+ * (its first `state` assignment), so it must run before any room exists:
+ * `startPresenceServer` calls it before defining the room, and `onCreate`
+ * calls it again before assigning state, for rooms composed without it.
+ * Idempotent; never lowers a larger value set elsewhere.
+ */
+export function reserveStateEncodeBuffer(): void {
+  if (!(Encoder.BUFFER_SIZE >= STATE_ENCODE_BUFFER_BYTES)) {
+    Encoder.BUFFER_SIZE = STATE_ENCODE_BUFFER_BYTES;
+  }
+}
 
 /**
  * Close code used when a join is refused.
@@ -94,7 +128,13 @@ export class PresenceRoom extends Room<{ state: LobbyState }> {
    */
   override onCreate(_untrustedOptions?: unknown): void {
     const config = this.roomConfig;
-    this.#registry = new LobbyPresence(config);
+    // Before `this.state` is assigned: that builds the serializer, which
+    // sizes its full-state buffer from Encoder.BUFFER_SIZE exactly once.
+    reserveStateEncodeBuffer();
+    this.#registry = new LobbyPresence({
+      ...config,
+      onSandboxDrop: (tile) => this.#broadcastDrop(tile),
+    });
     this.state = this.#registry.state;
 
     this.maxClients = config.capacity;
@@ -185,10 +225,11 @@ export class PresenceRoom extends Room<{ state: LobbyState }> {
    * A room clock timeout rather than an interval, re-armed after every drop,
    * so the delay can switch from fast to slow as the sandbox fills. Called
    * after every change to who is on the street — which is also every moment
-   * a carried block can be discarded — and idempotent.
+   * a carried block can leave the game (put back where no tile is allowed) —
+   * and idempotent.
    *
    * A pending drop is only ever brought forward, never pushed back: when a
-   * discard takes the sandbox back under the fast limit, a drop armed with
+   * lost block takes the sandbox back under the fast limit, a drop armed with
    * the slow delay is re-armed with the fast one if that lands sooner.
    */
   #scheduleSpawn(): void {
@@ -209,24 +250,28 @@ export class PresenceRoom extends Room<{ state: LobbyState }> {
   #spawnTick(): void {
     this.#spawnTimer = undefined;
     try {
-      if (this.#registry.hasLivePlayers) {
-        const tile = this.#registry.spawnBlock();
-        if (tile !== null) {
-          // After the next patch, so a client already holds the block in its
-          // state by the time the hint arrives. The payload is the tile alone.
-          this.broadcast(
-            SERVER_MESSAGE.sandboxDrop,
-            { x: tile.x, y: tile.y },
-            { afterNextPatch: true },
-          );
-        }
-      }
+      // A landed block reaches clients through `#broadcastDrop`.
+      if (this.#registry.hasLivePlayers) this.#registry.spawnBlock();
     } catch {
       // The room clock runs this outside any handler; an escape would take
       // the process down with every room in it. A fixed, content-free line.
       console.error('lobby: sandbox drop failed');
     }
     this.#scheduleSpawn();
+  }
+
+  /**
+   * Tell every client a block fell onto `tile` — a spawn, or a carried block
+   * put back when its carrier left the street. After the next patch, so a
+   * client already holds the block by the time the hint arrives; the payload
+   * is the tile alone, whoever caused it.
+   */
+  #broadcastDrop(tile: SandboxTile): void {
+    this.broadcast(
+      SERVER_MESSAGE.sandboxDrop,
+      { x: tile.x, y: tile.y },
+      { afterNextPatch: true },
+    );
   }
 
   /**

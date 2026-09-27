@@ -4,9 +4,9 @@
  *
  * One server for the file, as the matchmaker is a process-global (see the
  * AGENTS.md finding). It is tuned so every room receives exactly one sky drop
- * shortly after the first player arrives, and then none for an hour unless a
- * discard takes the room back under the fast limit — which makes "the carried
- * block was discarded" observable from outside: the sky refills.
+ * shortly after the first player arrives, and then no new block for an hour:
+ * blocks are conserved, so any later drop is a carried block coming back when
+ * its carrier leaves the street.
  *
  * Every test starts from a fresh room: `afterEach` disposes whatever rooms
  * remain, because an emptied room otherwise lingers for its seat-reservation
@@ -359,29 +359,41 @@ describe('pick and place through the room', () => {
   });
 });
 
-describe('a carried block leaves with its carrier', () => {
-  it('is discarded on suspend: the sky refills and resume starts empty-handed', async () => {
+describe('a carried block goes back to the sky with its carrier (conservation)', () => {
+  it('falls back on suspend, keeping its colour and away from the carrier, and resume starts empty-handed', async () => {
     const a = makeClient();
     const b = makeClient(WAITING.x + 40, WAITING.y);
+    const drops: SandboxTile[] = [];
+    b.onSandboxDrop((tile) => drops.push(tile));
     await a.connect();
     await b.connect();
     const column = await onlyColumn(a);
     const colour = column.colours[0] as number;
     const stand = neighbours(column)[0] as SandboxTile;
     const spot = await gather(b, a, stand);
+    drops.length = 0;
 
     a.pickBlock({ x: column.x, y: column.y });
     await waitFor(() => peerOf(b, a)?.carrying, (value) => value === colour, 'b to see a carrying');
+    await waitFor(() => b.sandbox().columns, (list) => list.length === 0, 'the stack to go');
 
     a.suspend();
     expect(a.sandbox().carrying).toBeNull();
-    // Had the block survived, the room would still be at its one-block fast
-    // limit and the next drop an hour away.
-    const refill = await waitFor(
-      () => b.sandbox().columns,
+    // Not destroyed: it falls from the sky, announced like any drop, and never
+    // onto or beside the tile its carrier left from.
+    const hint = (await waitFor(
+      () => drops[0],
+      (tile) => tile !== undefined,
+      'the block to fall back',
+    )) as SandboxTile;
+    const returned = await waitFor(
+      () => plain(b.sandbox().columns),
       (list) => list.length === 1,
-      'the sky to refill after the discard',
+      'the returned block on the board',
     );
+    expect(returned).toEqual([{ x: hint.x, y: hint.y, colours: [colour] }]);
+    expect(Math.max(Math.abs(hint.x - stand.x), Math.abs(hint.y - stand.y))).toBeGreaterThan(1);
+    expect(drops).toHaveLength(1);
 
     a.resume({ x: spot.x, y: spot.y, facing: 'right' });
     await waitFor(() => peerOf(b, a), (peer) => peer !== undefined, 'a to reappear');
@@ -391,21 +403,25 @@ describe('a carried block leaves with its carrier', () => {
     // And nothing is left in hand to place.
     await sleep(SANDBOX_CLIENT_ACTION_INTERVAL_MS + 20);
     const target = neighbours(stand).find(
-      (tile) => !sameTile(tile, column) && !sameTile(tile, refill[0] as SandboxTile),
+      (tile) => !sameTile(tile, column) && !sameTile(tile, hint),
     ) as SandboxTile;
     a.placeBlock(target);
     await sleep(400);
-    expect(plain(b.sandbox().columns)).toEqual(plain(refill));
+    expect(plain(b.sandbox().columns)).toEqual(returned);
   });
 
-  it('is discarded on leave, so the sky refills', async () => {
+  it('falls back on leave, keeping its colour and away from where the carrier stood', async () => {
     const a = makeClient();
     const b = makeClient(WAITING.x + 40, WAITING.y);
+    const drops: SandboxTile[] = [];
+    b.onSandboxDrop((tile) => drops.push(tile));
     await a.connect();
     await b.connect();
     const column = await onlyColumn(a);
     const colour = column.colours[0] as number;
-    await gather(b, a, neighbours(column)[0] as SandboxTile);
+    const stand = neighbours(column)[0] as SandboxTile;
+    await gather(b, a, stand);
+    drops.length = 0;
 
     a.pickBlock({ x: column.x, y: column.y });
     await waitFor(() => peerOf(b, a)?.carrying, (value) => value === colour, 'b to see a carrying');
@@ -418,6 +434,16 @@ describe('a carried block leaves with its carrier', () => {
       (present) => !present,
       'a to leave',
     );
-    await waitFor(() => b.sandbox().columns, (list) => list.length === 1, 'the sky to refill after the leave');
+    const hint = (await waitFor(
+      () => drops[0],
+      (tile) => tile !== undefined,
+      'the block to fall back',
+    )) as SandboxTile;
+    await waitFor(
+      () => plain(b.sandbox().columns),
+      (list) => JSON.stringify(list) === JSON.stringify([{ x: hint.x, y: hint.y, colours: [colour] }]),
+      'the returned block on the board',
+    );
+    expect(Math.max(Math.abs(hint.x - stand.x), Math.abs(hint.y - stand.y))).toBeGreaterThan(1);
   });
 });

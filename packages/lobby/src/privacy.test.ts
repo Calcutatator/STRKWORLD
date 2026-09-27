@@ -20,6 +20,7 @@
  * `why` note inside the fixture.
  */
 
+import type { Client } from '@colyseus/core';
 import { Encoder, Metadata, Reflection } from '@colyseus/schema';
 import { describe, expect, it } from 'vitest';
 import {
@@ -30,7 +31,12 @@ import {
   type SandboxColumn,
   type SandboxTile,
 } from '@strkworld/shared';
-import { DEFAULT_ROOM_CONFIG, resolveRoomConfig } from './config';
+import {
+  DEFAULT_ROOM_CONFIG,
+  SANDBOX_MIN_ACTION_INTERVAL_MS,
+  resolveRoomConfig,
+  type PresenceRoomConfig,
+} from './config';
 import { LobbyPresence } from './presence';
 import { PresenceRoom, definePresenceRoom } from './room';
 import {
@@ -190,21 +196,49 @@ describe('a client cannot set the room configuration', () => {
     maxMessagesPerSecond: 100000,
     spriteKeys: ['0xdeadbeefcafef00d 12.5 STRK to the Bank'],
     defaultSprite: '0xdeadbeefcafef00d 12.5 STRK to the Bank',
+    // D-060: a hostile creator would love a sky that rains blocks every 50 ms
+    // and a pick/place floor switched off.
+    sandboxSpawnIntervalMs: 50,
+    sandboxSlowSpawnIntervalMs: 50,
+    sandboxFastSpawnLimit: 900,
+    sandboxActionIntervalMs: 0,
   };
+
+  /**
+   * Admit one connection into a room built outside a server and read the delay
+   * its spawner armed — the room's effective sky-drop pace.
+   */
+  function armedDropDelays(room: PresenceRoom): number[] {
+    const probe = { sessionId: 'probe', send: () => undefined } as unknown as Client;
+    room.onJoin(probe, { x: 0, y: 0 });
+    const timers = (room.clock as unknown as { delayed: Array<{ active: boolean; time: number }> })
+      .delayed;
+    return timers.filter((timer) => timer.active).map((timer) => timer.time);
+  }
+
+  function trustedConfigOf(room: PresenceRoom): PresenceRoomConfig {
+    return (room as unknown as { roomConfig: PresenceRoomConfig }).roomConfig;
+  }
 
   it('the base room ignores hostile onCreate options entirely', () => {
     const room = new PresenceRoom();
     (room as unknown as { onCreate: (o: unknown) => void }).onCreate(HOSTILE);
     // Capacity is the trusted default, not 99999 (the live-reproduced value).
     expect(room.maxClients).toBe(DEFAULT_ROOM_CONFIG.capacity);
+    // The sky keeps the trusted pace and the floor stays on.
+    expect(armedDropDelays(room)).toEqual([DEFAULT_ROOM_CONFIG.sandboxSpawnIntervalMs]);
+    expect(trustedConfigOf(room)).toEqual(DEFAULT_ROOM_CONFIG);
+    expect(trustedConfigOf(room).sandboxActionIntervalMs).toBe(SANDBOX_MIN_ACTION_INTERVAL_MS);
   });
 
   it('a configured room uses the operator config, not hostile options', () => {
-    const config = resolveRoomConfig({ capacity: 10 });
+    const config = resolveRoomConfig({ capacity: 10, sandboxSpawnIntervalMs: 900 });
     const RoomClass = definePresenceRoom(config);
     const room = new RoomClass();
     (room as unknown as { onCreate: (o: unknown) => void }).onCreate(HOSTILE);
     expect(room.maxClients).toBe(10);
+    expect(armedDropDelays(room)).toEqual([900]);
+    expect(trustedConfigOf(room)).toEqual(config);
   });
 
   it('owns the trusted config after defining a room class', () => {
@@ -445,7 +479,6 @@ describe('the block sandbox is anonymous (D-060)', () => {
     const scripted: number[] = [];
     const seeded = mulberry32(60);
     const registry = new LobbyPresence({
-      sandboxActionIntervalMs: 0,
       sandboxRandom: () => (scripted.length > 0 ? (scripted.shift() as number) : seeded()),
     });
     const encoder = new Encoder(registry.state);
@@ -576,5 +609,51 @@ describe('the block sandbox is anonymous (D-060)', () => {
     // The sequence really exercised the sandbox, not just the guards.
     expect(registry.sandboxColumns().length).toBeGreaterThan(0);
     expect(everyId.size).toBeGreaterThan(0);
+  });
+
+  it('never drops a returned block where its carrier left the street', () => {
+    // A carried block falls back when its carrier suspends (enters a building)
+    // or leaves. Landing on or beside their last tile would mark the spot.
+    const drops: SandboxTile[] = [];
+    const registry = new LobbyPresence({
+      sandboxRandom: mulberry32(1919),
+      onSandboxDrop: (tile) => drops.push(tile),
+    });
+    for (let n = 0; n < 300; n += 1) registry.spawnBlock();
+    const id = join(registry, 'carrier', 0, 0);
+    const encoder = new Encoder(registry.state);
+    const observer = sharedObserver(encoder);
+    let now = 1000;
+    let returned = 0;
+    for (let round = 0; round < 400 && returned < 100; round += 1) {
+      const columns = registry.sandboxColumns();
+      const column = columns[round % columns.length] as SandboxColumn;
+      const heights = new Map(columns.map((c) => [`${c.x},${c.y}`, c.colours.length]));
+      const spot = [[1, 0], [-1, 0], [0, 1], [0, -1]]
+        .map(([dx, dy]) => ({ x: column.x + (dx as number), y: column.y + (dy as number) }))
+        .find((tile) => {
+          const level = heights.get(`${tile.x},${tile.y}`) ?? 0;
+          const inside = tile.x >= SANDBOX_AREA.x && tile.x < SANDBOX_AREA.x + SANDBOX_AREA.width &&
+            tile.y >= SANDBOX_AREA.y && tile.y < SANDBOX_AREA.y + SANDBOX_AREA.height;
+          return inside && column.colours.length >= level - 1 && column.colours.length <= level + 2;
+        });
+      now += 200;
+      if (spot === undefined) continue;
+      registry.move('carrier', centre(spot.x, spot.y), now);
+      if (registry.pickBlock('carrier', { x: column.x, y: column.y }, now) !== 'applied') continue;
+      drops.length = 0;
+      registry.suspend('carrier');
+      expect(drops).toHaveLength(1);
+      const landed = drops[0] as SandboxTile;
+      expect(Object.keys(landed).sort()).toEqual(['x', 'y']);
+      expect(Math.max(Math.abs(landed.x - spot.x), Math.abs(landed.y - spot.y))).toBeGreaterThan(1);
+      registry.resume('carrier', { x: 0, y: 0 }, now);
+      returned += 1;
+    }
+    expect(returned).toBe(100);
+    expect(registry.sandboxBlocks).toBe(300);
+    const wire = observer.patch();
+    expect(wire).not.toContain(id);
+    expect(JSON.stringify(observer.read())).not.toContain(id);
   });
 });

@@ -54,6 +54,8 @@ interface Rig {
   drop(tile: SandboxTile, colour: number, players?: readonly SandboxPlayer[]): void;
   /** Build a stack bottom-up. */
   stack(tile: SandboxTile, colours: readonly number[]): void;
+  /** The open tiles a drop may land on, in the documented `(y, x)` order. */
+  open(players?: readonly SandboxPlayer[]): SandboxTile[];
 }
 
 /**
@@ -107,6 +109,7 @@ function rig(fallback: () => number = () => 0.5): Rig {
     stack: (tile, colours) => {
       for (const colour of colours) drop(tile, colour);
     },
+    open: (players = []) => openTiles(players),
   };
 }
 
@@ -497,11 +500,29 @@ describe('pick', () => {
     expect(sandbox.pick(at(LEFT - 1, 6, 'b'), { x: LEFT, y: 6 }, [])).toBe(false);
   });
 
-  it('ignores other players when picking; only placing checks occupancy', () => {
+  it('refuses to pull a block out from under another player (D-060)', () => {
     const { sandbox, drop } = rig();
     drop({ x: 60, y: 10 }, 5);
-    const standing = at(60, 10, 'other');
-    expect(sandbox.pick(at(61, 10), { x: 60, y: 10 }, [standing])).toBe(true);
+    const standing = at(60, 10, 'other', 10, -10);
+    expect(sandbox.pick(at(61, 10), { x: 60, y: 10 }, [standing])).toBe(false);
+    expect(sandbox.carrying('me')).toBeNull();
+    expect(heightAt(sandbox, 60, 10)).toBe(1);
+    // Once they step off, the block is fair game; unlocatable entries block nothing.
+    expect(
+      sandbox.pick(at(61, 10), { x: 60, y: 10 }, [
+        at(62, 12, 'other'),
+        { key: 'ghost', x: Number.NaN, y: 0 },
+        null as never,
+      ]),
+    ).toBe(true);
+  });
+
+  it('fails closed when the other players are not an array', () => {
+    const { sandbox, drop } = rig();
+    drop({ x: 60, y: 10 }, 5);
+    expect(sandbox.pick(at(61, 10), { x: 60, y: 10 }, null as never)).toBe(false);
+    expect(sandbox.pick(at(61, 10), { x: 60, y: 10 }, { length: 0 } as never)).toBe(false);
+    expect(heightAt(sandbox, 60, 10)).toBe(1);
   });
 });
 
@@ -603,6 +624,154 @@ describe('place', () => {
     expect(sandbox.place(player, { x: 60, y: 6 }, [])).toBe(true);
     expect(heightAt(sandbox, 60, 6)).toBe(SANDBOX_MAX_HEIGHT);
     expect(sandbox.totalBlocks).toBe(3 * SANDBOX_MAX_HEIGHT - 2);
+  });
+});
+
+describe('returnCarried', () => {
+  /** A rig where 'me' carries `colour`, picked from (60, 12) while standing on (60, 11). */
+  function carrier(colour: number, fallback?: () => number): Rig {
+    const r = rig(fallback);
+    r.drop({ x: 60, y: 12 }, colour);
+    if (!r.sandbox.pick(at(60, 11), { x: 60, y: 12 }, [])) throw new Error('setup pick failed');
+    return r;
+  }
+
+  it('drops the carried block back from the sky, keeping its colour and the total', () => {
+    const r = carrier(6);
+    const leaver = at(60, 11);
+    const open = r.open([leaver]);
+    const target = open.findIndex((tile) => tile.x === 70 && tile.y === 20);
+    r.draws.push((target + 0.5) / open.length);
+    const calls = r.calls();
+
+    const tile = r.sandbox.returnCarried('me', [leaver]);
+
+    expect(tile).toEqual({ x: 70, y: 20 });
+    expect(Object.isFrozen(tile)).toBe(true);
+    expect(Object.keys(tile as object).sort()).toEqual(['x', 'y']);
+    expect(r.calls() - calls).toBe(1); // the tile only: the colour is kept
+    expect(r.sandbox.carrying('me')).toBeNull();
+    expect(r.sandbox.columns()).toEqual([{ x: 70, y: 20, colours: [6] }]);
+    expect(r.sandbox.totalBlocks).toBe(1);
+  });
+
+  it('never lands within one tile of any listed player, the carrier included', () => {
+    const random = mulberry32(606);
+    for (let trial = 0; trial < 300; trial += 1) {
+      const r = rig(random);
+      const spot = {
+        x: LEFT + 1 + Math.floor(random() * (SANDBOX_AREA.width - 2)),
+        y: TOP + 1 + Math.floor(random() * (SANDBOX_AREA.height - 2)),
+      };
+      const neighbour = { x: spot.x + 1, y: spot.y };
+      const colour = trial % SANDBOX_COLOURS;
+      r.drop(neighbour, colour);
+      const player = at(spot.x, spot.y, 'me', Math.floor(random() * 31) - 15, Math.floor(random() * 31) - 15);
+      expect(r.sandbox.pick(player, neighbour, [])).toBe(true);
+      const bystander = at(
+        LEFT + Math.floor(random() * SANDBOX_AREA.width),
+        TOP + Math.floor(random() * SANDBOX_AREA.height),
+        'bystander',
+      );
+
+      const tile = r.sandbox.returnCarried('me', [player, bystander]);
+
+      expect(tile).not.toBeNull();
+      const landed = tile as SandboxTile;
+      for (const who of [player, bystander]) {
+        const there = sandboxTileAt(who.x, who.y) as SandboxTile;
+        const distance = Math.max(Math.abs(landed.x - there.x), Math.abs(landed.y - there.y));
+        expect(distance, `trial ${trial} landed next to ${who.key}`).toBeGreaterThan(1);
+      }
+      expect(r.sandbox.columns()).toEqual([{ x: landed.x, y: landed.y, colours: [colour] }]);
+    }
+  });
+
+  it('never lands on a full stack', () => {
+    const r = carrier(3);
+    r.stack({ x: LEFT, y: TOP }, Array.from({ length: SANDBOX_MAX_HEIGHT }, () => 1));
+    // Only the 3x3 corner around (55, 1) is open, and (54, 0) in it is full.
+    const players = [...coveringGrid().filter((player) => player.key !== 'p55,1'), at(60, 11)];
+    r.draws.push(0);
+    expect(r.sandbox.returnCarried('me', players)).toEqual({ x: LEFT + 1, y: TOP });
+    expect(heightAt(r.sandbox, LEFT, TOP)).toBe(SANDBOX_MAX_HEIGHT);
+  });
+
+  it('discards the block, without drawing, when no tile is allowed', () => {
+    const r = carrier(3);
+    const calls = r.calls();
+    expect(r.sandbox.returnCarried('me', [...coveringGrid(), at(60, 11)])).toBeNull();
+    expect(r.calls()).toBe(calls);
+    expect(r.sandbox.carrying('me')).toBeNull();
+    expect(r.sandbox.totalBlocks).toBe(0);
+    expect(r.sandbox.columns()).toEqual([]);
+  });
+
+  it('discards the block, without drawing, when the players are not an array', () => {
+    const r = carrier(3);
+    const calls = r.calls();
+    expect(r.sandbox.returnCarried('me', null as never)).toBeNull();
+    expect(r.calls()).toBe(calls);
+    expect(r.sandbox.carrying('me')).toBeNull();
+    expect(r.sandbox.totalBlocks).toBe(0);
+  });
+
+  it('does nothing, without drawing, for a key that carries nothing', () => {
+    const r = carrier(3);
+    const calls = r.calls();
+    const before = r.sandbox.columns();
+    expect(r.sandbox.returnCarried('nobody', [])).toBeNull();
+    expect(r.sandbox.returnCarried(42 as never, [])).toBeNull();
+    expect(r.calls()).toBe(calls);
+    expect(r.sandbox.columns()).toBe(before);
+    expect(r.sandbox.carrying('me')).toBe(3);
+    expect(r.sandbox.totalBlocks).toBe(1);
+  });
+
+  it('leaves the block carried when the random source throws', () => {
+    let draws = 0;
+    const sandbox = createSandboxAuthority({
+      random: () => {
+        draws += 1;
+        if (draws === 3) throw new Error('no entropy');
+        return 0;
+      },
+    });
+    expect(sandbox.spawn([])).toEqual({ x: LEFT, y: TOP });
+    expect(sandbox.pick(at(LEFT + 1, TOP), { x: LEFT, y: TOP }, [])).toBe(true);
+    expect(() => sandbox.returnCarried('me', [at(LEFT + 1, TOP)])).toThrow('no entropy');
+    expect(sandbox.carrying('me')).toBe(0);
+    expect(sandbox.columns()).toEqual([]);
+    expect(sandbox.totalBlocks).toBe(1);
+  });
+
+  it('conserves every block through any number of pick-and-leave cycles', () => {
+    const r = rig(mulberry32(5150));
+    for (let n = 0; n < 100; n += 1) expect(r.sandbox.spawn([])).not.toBeNull();
+    let cycles = 0;
+    for (let round = 0; round < 400 && cycles < 200; round += 1) {
+      // Any stack with a neighbouring tile it can be reached from.
+      const reachable = r.sandbox.columns().flatMap((column) =>
+        [[1, 0], [-1, 0], [0, 1], [0, -1]]
+          .map(([dx, dy]) => ({ x: column.x + (dx as number), y: column.y + (dy as number) }))
+          .filter((spot) => isSandboxTile(spot.x, spot.y))
+          .filter((spot) => {
+            const level = heightAt(r.sandbox, spot.x, spot.y);
+            return column.colours.length >= level - 1 && column.colours.length <= level + 2;
+          })
+          .map((spot) => ({ column, spot })),
+      );
+      const choice = reachable[round % reachable.length];
+      if (choice === undefined) break;
+      const player = at(choice.spot.x, choice.spot.y);
+      expect(r.sandbox.pick(player, choice.column, [])).toBe(true);
+      expect(r.sandbox.returnCarried('me', [player])).not.toBeNull();
+      expect(r.sandbox.totalBlocks).toBe(100);
+      cycles += 1;
+    }
+    expect(cycles).toBe(200);
+    const blocks = r.sandbox.columns().reduce((sum, column) => sum + column.colours.length, 0);
+    expect(blocks).toBe(100);
   });
 });
 

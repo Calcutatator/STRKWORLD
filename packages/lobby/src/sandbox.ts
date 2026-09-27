@@ -8,8 +8,8 @@
  * two can never disagree about more than the tile being written.
  *
  * Everything here is keyed by the caller's connection key, which never leaves
- * the server. The mirror holds tiles and colours only, so nothing written
- * through this class can attribute a block to a player.
+ * the server. The mirror holds tiles and colours only: no identity field is
+ * written through this class. (Timing is another matter — see state.ts.)
  */
 
 import type { MapSchema } from '@colyseus/schema';
@@ -126,17 +126,22 @@ export class LobbySandbox {
   }
 
   /**
-   * Discard what `key` carries. Used on suspend: the action floor is kept, so
-   * a suspend/resume cycle cannot reset it.
+   * Put back what `key` carries: a sky drop onto a random allowed tile away
+   * from `players` (which must include the carrier's last position). Returns
+   * the tile, or null when nothing fell. Used on suspend: the action floor is
+   * kept, so a suspend/resume cycle cannot reset it.
    */
-  release(key: string): void {
-    this.#authority.release(key);
+  returnCarried(key: string, players: readonly SandboxPlayer[]): SandboxTile | null {
+    const tile = this.#authority.returnCarried(key, players);
+    if (tile !== null) this.#copy(tile);
+    return tile;
   }
 
-  /** Discard what `key` carries and forget its floor. Used on leave. */
-  forget(key: string): void {
-    this.#authority.release(key);
+  /** Put back what `key` carries, as `returnCarried`, and forget its floor. Used on leave. */
+  forget(key: string, players: readonly SandboxPlayer[]): SandboxTile | null {
+    const tile = this.returnCarried(key, players);
     this.#throttle.forget(key);
+    return tile;
   }
 
   /** How long the spawner should wait before the next drop. */

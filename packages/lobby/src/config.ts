@@ -260,7 +260,11 @@ export interface PresenceRoomConfig {
   readonly sandboxSlowSpawnIntervalMs: number;
   /** D-060: block total (placed + carried) at which drops switch to the slow delay. */
   readonly sandboxFastSpawnLimit: number;
-  /** D-060: per-session floor between two accepted sandbox actions. */
+  /**
+   * D-060: per-session floor between two accepted sandbox actions. Clamped to
+   * `[50, SANDBOX_CLIENT_ACTION_INTERVAL_MS]`: never off, and never above the
+   * client's own floor, or honest held actions would be dropped silently.
+   */
   readonly sandboxActionIntervalMs: number;
 }
 
@@ -287,6 +291,9 @@ export const DEFAULT_ROOM_CONFIG: PresenceRoomConfig = Object.freeze({
 /** Bounds on the sandbox spawner delays: never a busy loop, never longer than an hour. */
 const MIN_SANDBOX_SPAWN_INTERVAL_MS = 50;
 const MAX_SANDBOX_SPAWN_INTERVAL_MS = 3_600_000;
+
+/** The lowest server sandbox floor an operator may set: the floor is never off. */
+const MIN_SANDBOX_ACTION_INTERVAL_MS = 50;
 
 function clamp(value: unknown, lo: number, hi: number, fallback: number): number {
   if (typeof value !== 'number' || !Number.isFinite(value)) return fallback;
@@ -358,10 +365,12 @@ export function resolveRoomConfig(
       SANDBOX_MAX_BLOCKS,
       SANDBOX_FAST_SPAWN_LIMIT,
     ),
+    // The client holds its own actions to SANDBOX_CLIENT_ACTION_INTERVAL_MS;
+    // a server floor above that would silently drop what it faithfully sends.
     sandboxActionIntervalMs: clamp(
       overrides.sandboxActionIntervalMs,
-      0,
-      10_000,
+      MIN_SANDBOX_ACTION_INTERVAL_MS,
+      SANDBOX_CLIENT_ACTION_INTERVAL_MS,
       SANDBOX_MIN_ACTION_INTERVAL_MS,
     ),
   });

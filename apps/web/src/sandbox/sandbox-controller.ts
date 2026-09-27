@@ -202,10 +202,13 @@ export function createSandboxController(options: SandboxControllerOptions = {}):
 
   const leaveStreet = (): void => {
     away = true;
-    // The lobby discards a carried block on suspend; mirror that when solo.
+    // Blocks are conserved (D-060): like the lobby on suspend, a carried block
+    // falls back onto the board, away from where the player stood.
     if (!lobby && authority.carrying(LOCAL_PLAYER) !== null) {
-      authority.release(LOCAL_PLAYER);
+      const tile = player ? authority.returnCarried(LOCAL_PLAYER, [player]) : null;
+      if (!player) authority.release(LOCAL_PLAYER);
       publish(authority.snapshotFor(LOCAL_PLAYER));
+      if (tile) emitDrop(tile);
     }
   };
 

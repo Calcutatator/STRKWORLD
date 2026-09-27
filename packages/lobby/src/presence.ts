@@ -4,7 +4,7 @@
  *
  * This owns a real Colyseus state instance but knows nothing about sockets,
  * clients or the matchmaker, so every rule that matters — admission,
- * throttling, suspend, interest, and the block sandbox's actions and discards
+ * throttling, suspend, interest, and the block sandbox's actions and returns
  * (D-060) — is exercisable in a plain unit test against the same objects that
  * get encoded in production.
  *
@@ -118,6 +118,13 @@ export interface LobbyPresenceOptions {
    * lands is public and cosmetic, so it needs no cryptographic source.
    */
   sandboxRandom?: () => number;
+  /**
+   * Told about every block that falls from the sky — a spawn, or a carried
+   * block put back when its carrier leaves the street — after it is in state.
+   * The room broadcasts it as the `sandbox:drop` hint. Tile only: nothing
+   * about who caused it.
+   */
+  onSandboxDrop?: (tile: SandboxTile) => void;
 }
 
 interface Session {
@@ -140,6 +147,7 @@ export class LobbyPresence {
   readonly #random: ((bytes: Uint8Array) => Uint8Array) | undefined;
   /** D-060: the room's block sandbox, mirrored into `state.sandbox`. */
   readonly #sandbox: LobbySandbox;
+  readonly #onSandboxDrop: ((tile: SandboxTile) => void) | undefined;
 
   /**
    * Connection key to session. Lives only as long as the connection: it is
@@ -179,6 +187,7 @@ export class LobbyPresence {
         fastSpawnLimit: config.sandboxFastSpawnLimit,
       },
     );
+    this.#onSandboxDrop = options.onSandboxDrop;
   }
 
   get peers(): MapSchema<PresenceEntry> {
@@ -256,15 +265,19 @@ export class LobbyPresence {
    * outside the rate limit. The sandbox action floor is kept for the same
    * reason.
    *
-   * A sandbox block the player was carrying is discarded (D-060): it leaves
-   * the world with them, and `resume` starts empty-handed.
+   * A sandbox block the player was carrying is put back (D-060): it falls
+   * from the sky onto a random allowed tile — never within a tile of where
+   * the player stood, so the drop cannot mark where they left the street —
+   * and `resume` starts empty-handed.
    */
   suspend(sessionKey: string): boolean {
     const session = this.#sessions.get(sessionKey);
     if (session === undefined || session.suspended) return false;
+    // Every live position, the leaver's included, before their entry goes.
+    const players = this.#livePlayers();
     session.suspended = true;
     this.peers.delete(session.gameId);
-    this.#sandbox.release(sessionKey);
+    this.#announce(this.#sandbox.returnCarried(sessionKey, players));
     this.#suspensions += 1;
     return true;
   }
@@ -303,15 +316,16 @@ export class LobbyPresence {
 
   /**
    * Forget a connection completely. Called on leave and on dispose. A carried
-   * sandbox block is discarded with it (D-060).
+   * sandbox block is put back as on suspend (D-060).
    */
   release(sessionKey: string): void {
     const session = this.#sessions.get(sessionKey);
     if (session === undefined) return;
+    const players = this.#livePlayers();
     this.peers.delete(session.gameId);
     this.#sessions.delete(sessionKey);
     this.#throttle.forget(sessionKey);
-    this.#sandbox.forget(sessionKey);
+    this.#announce(this.#sandbox.forget(sessionKey, players));
     this.#departed += 1;
   }
 
@@ -337,10 +351,13 @@ export class LobbyPresence {
 
   /**
    * Drop one block from the sky, never within a tile of a live player. Null
-   * when no block may fall (cap reached, nowhere allowed).
+   * when no block may fall (cap reached, nowhere allowed). Announced through
+   * `onSandboxDrop` like every sky drop.
    */
   spawnBlock(): SandboxTile | null {
-    return this.#sandbox.spawn(this.#livePlayers());
+    const tile = this.#sandbox.spawn(this.#livePlayers());
+    this.#announce(tile);
+    return tile;
   }
 
   /** Whether any session is on the street — the spawner runs only then. */
@@ -400,6 +417,10 @@ export class LobbyPresence {
       entry.carrying = normalizeSandboxColour(this.#sandbox.carrying(sessionKey)) ?? -1;
     }
     return outcome;
+  }
+
+  #announce(tile: SandboxTile | null): void {
+    if (tile !== null) this.#onSandboxDrop?.(tile);
   }
 
   /** Every live entry as a sandbox player, optionally leaving one session out. */

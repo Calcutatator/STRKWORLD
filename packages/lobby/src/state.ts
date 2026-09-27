@@ -8,10 +8,14 @@
  * — so the way to be sure the lobby never sees money is to keep this list
  * short, not to be careful everywhere else.
  *
- * The one thing beside presence is D-060's block sandbox: anonymous stacks of
- * palette indices keyed by street tile. A column names a tile and its colours
- * and nothing else — no player, no identifier, no time — so it cannot
- * attribute a block to anyone.
+ * The one thing beside presence is D-060's block sandbox: stacks of palette
+ * indices keyed by street tile. A column names a tile and its colours and
+ * nothing else — no player, no identifier, no time — so block state carries
+ * no identity field. That is not the same as being unattributable: an
+ * observer inside the presence interest radius can correlate a peer's
+ * `carrying` change with a neighbouring column change in the same patch, and
+ * any observer learns that someone was within reach of a tile that changed.
+ * Neither says anything about money; see README.md.
  *
  * `privacy.test.ts` reads the field sets back out of the schema at runtime and
  * compares them with the frozen types, so drift fails a test rather than

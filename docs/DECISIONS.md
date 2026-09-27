@@ -2683,14 +2683,20 @@ then asked for it to be multiplayer too.
   player, and validates every pick and place: the target must be inside the
   area, next to the requester, not under another player, within reach (block
   tops from one below to two above the level the player stands on) and within
-  the height and block caps. A rejected request changes nothing. A carried
-  block is discarded when its carrier disconnects or suspends presence.
+  the height and block caps. A rejected request changes nothing. Blocks are
+  conserved: when a carrier disconnects or suspends presence, the block they
+  held returns to the board as a sky drop on a random open tile — never at the
+  carrier's position, which would reveal where they went.
 - Solo play runs the same pure rules locally in the Shell, so the sandbox works
   without a lobby.
 - The lobby schema gains exactly one presence field, `carrying` (an opaque
   colour index, or −1), plus anonymous block state. Neither is financial:
   invariant 2 holds — no address, balance, transaction, token or building name
-  enters lobby traffic, and block state carries no player identity.
+  enters lobby traffic, and block state carries no identity field. It is not
+  unlinkable, though: an observer inside the presence interest radius can
+  correlate a peer's `carrying` change with a neighbouring column change in the
+  same patch, and anyone learns that someone was within reach of a changed
+  tile.
 - The World stays lobby-free. It receives a World-owned `SandboxChannel`
   through `WorldConfig`, like D-038's peer source, reads stack heights for
   movement and emits pick/place intents. Walking keeps the tile collision and
@@ -2711,3 +2717,13 @@ then asked for it to be multiplayer too.
 - No persistence: block state lives as long as the lobby room.
 - Sandbox messages have their own rate limit; the existing hard message
   ceiling still disconnects floods.
+- Reach and step checks bind honest clients; a hostile client can claim any
+  in-bounds position (presence already trusts positions within its clamps), so
+  on the server they are advisory. Block conservation bounds the damage: a
+  hostile player can rearrange blocks but not destroy them.
+- The board is player-written content visible to the whole room. Colluding
+  clients could encode data in it, as they already could in positions; nothing
+  here makes that financial.
+- Late joiners receive the whole board in one state encode, so the lobby
+  raises Colyseus's encode buffer above the worst-case board (see the lobby
+  findings).

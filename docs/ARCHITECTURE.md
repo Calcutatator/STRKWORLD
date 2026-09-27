@@ -356,7 +356,9 @@ a presence entry. The Shell's sandbox controller adopts each lobby client and
 exposes one stable World-owned `SandboxChannel`; with no lobby connection it
 runs the same pure rules (`@strkworld/lobby/sandbox`, which imports only
 `@strkworld/shared`) locally. The World reads heights and sends pick/place
-intents; it never imports the lobby, and block state never carries identity.
+intents; it never imports the lobby. Block state has no identity field, but
+it is not unlinkable: a nearby observer can correlate a peer's carried colour
+with a column change (D-060).
 
 Remote peers are retained state rather than one-shot commands. D-038 gives
 them a separate World-owned replaying source so a snapshot cannot be lost

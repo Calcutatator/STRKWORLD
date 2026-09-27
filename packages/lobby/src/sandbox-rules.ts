@@ -5,7 +5,7 @@
  * room runs one instance per room and the Shell runs one locally for solo
  * play, so both paths apply exactly the same rules. Nothing here imports
  * Colyseus, touches the network or reads a clock; the only nondeterminism is
- * the injectable `random` source used by `spawn`.
+ * the injectable `random` source used by `spawn` and `returnCarried`.
  *
  * ## Coordinates
  *
@@ -22,12 +22,26 @@
  * package uses for interest. From anywhere inside your own tile that box holds
  * all eight neighbouring tile centres, so the tile you face is always in range.
  *
+ * ## Occupancy
+ *
+ * Nobody picks from or places onto the tile another player stands on: a
+ * neighbour cannot pull the block out from under someone, nor bury them.
+ *
+ * ## Conservation
+ *
+ * Blocks are never destroyed by play. A carried block whose carrier leaves
+ * the street is put back with `returnCarried` — it falls from the sky onto a
+ * random allowed tile, as a spawn would — and is discarded only when no tile
+ * is allowed at all. So the reach and step rules can be ignored by a hostile
+ * client without it being able to empty the sandbox: blocks move, the total
+ * stays.
+ *
  * ## Anonymity
  *
  * Stacks carry colours only. The `key` of a `SandboxPlayer` exists solely so
  * the authority can remember who holds which carried block; it never appears
- * in `columns()` or in a spawn result, and a snapshot only ever reports the
- * requesting key's own carried colour.
+ * in `columns()`, a spawn or a return result, and a snapshot only ever
+ * reports the requesting key's own carried colour.
  */
 
 import {
@@ -77,9 +91,15 @@ export interface SandboxAuthority {
   snapshotFor(key: string): SandboxSnapshot;
   /** Placed plus carried blocks. Never exceeds `SANDBOX_MAX_BLOCKS`. */
   readonly totalBlocks: number;
-  /** Take the top block of a neighbouring stack. False, and nothing changes, when a rule fails. */
+  /**
+   * Take the top block of a neighbouring stack that no player in `others`
+   * stands on. False, and nothing changes, when a rule fails.
+   */
   pick(player: SandboxPlayer, tile: SandboxTile, others: readonly SandboxPlayer[]): boolean;
-  /** Put the carried block on a neighbouring stack. False, and nothing changes, when a rule fails. */
+  /**
+   * Put the carried block on a neighbouring stack that no player in `others`
+   * stands on. False, and nothing changes, when a rule fails.
+   */
   place(player: SandboxPlayer, tile: SandboxTile, others: readonly SandboxPlayer[]): boolean;
   /**
    * Drop one block of a random colour onto a random allowed tile: inside the
@@ -92,15 +112,29 @@ export interface SandboxAuthority {
    * scripted `random` places blocks exactly.
    */
   spawn(players: readonly SandboxPlayer[]): SandboxTile | null;
-  /** Discard the block `key` is carrying, if any. */
+  /**
+   * Put back the block `key` carries: it falls from the sky, keeping its
+   * colour, onto a random tile chosen by the spawn rules — inside the area,
+   * more than one tile from every player in `players`, below the height cap.
+   * Returns that tile, and `key` then carries nothing.
+   *
+   * Include the carrier's last position in `players`: the block must never
+   * land where its carrier stood, or the drop would mark where they left the
+   * street. Returns null when `key` carries nothing; when no tile is allowed
+   * (or `players` is not an array) the block is discarded instead and null is
+   * returned. Draws once — the tile — and never when nothing falls.
+   */
+  returnCarried(key: string, players: readonly SandboxPlayer[]): SandboxTile | null;
+  /** Discard the block `key` is carrying, if any. Prefer `returnCarried`. */
   release(key: string): void;
 }
 
 export interface SandboxAuthorityOptions {
   /**
    * Uniform `[0, 1)` source. Defaults to `Math.random`. `spawn` draws exactly
-   * twice per new block — first the tile, then the colour — and never when it
-   * returns null. Out-of-range samples are clamped rather than trusted.
+   * twice per new block — first the tile, then the colour — and
+   * `returnCarried` once, the tile; neither draws when it returns null.
+   * Out-of-range samples are clamped rather than trusted.
    */
   readonly random?: () => number;
 }
@@ -215,12 +249,15 @@ class Authority implements SandboxAuthority {
     return Object.freeze({ columns: this.columns(), carrying: this.carrying(key) });
   }
 
-  pick(player: SandboxPlayer, tile: SandboxTile, _others: readonly SandboxPlayer[]): boolean {
+  pick(player: SandboxPlayer, tile: SandboxTile, others: readonly SandboxPlayer[]): boolean {
     const actor = readPlayer(player);
     const target = readTile(tile);
     if (actor === null || target === null) return false;
     if (this.#carried.has(actor.key)) return false;
     if (!inRange(actor, target)) return false;
+    // Nobody pulls the floor out from under someone standing on it. As with
+    // place, a list that cannot be read fails closed.
+    if (!Array.isArray(others) || isOccupied(target, others)) return false;
 
     const key = sandboxTileKey(target.x, target.y);
     const stack = this.#stacks.get(key);
@@ -258,8 +295,48 @@ class Authority implements SandboxAuthority {
 
   spawn(players: readonly SandboxPlayer[]): SandboxTile | null {
     if (this.totalBlocks >= SANDBOX_MAX_BLOCKS) return null;
-    if (!Array.isArray(players)) return null;
+    const open = this.#openTiles(players);
+    if (open === null || open.length === 0) return null;
 
+    // Both draws happen before any mutation, so a throwing source leaves the
+    // sandbox exactly as it was.
+    const tile = open[drawIndex(this.#random, open.length)] as SandboxTile;
+    const colour = drawIndex(this.#random, SANDBOX_COLOURS);
+    this.#push(tile, colour);
+    return Object.freeze({ x: tile.x, y: tile.y });
+  }
+
+  returnCarried(key: string, players: readonly SandboxPlayer[]): SandboxTile | null {
+    if (typeof key !== 'string') return null;
+    const colour = this.#carried.get(key);
+    if (colour === undefined) return null;
+    const open = this.#openTiles(players);
+    if (open === null || open.length === 0) {
+      // Nowhere it may fall, or no way to know where the players are: it
+      // leaves the game rather than landing on someone.
+      this.#carried.delete(key);
+      return null;
+    }
+    // The draw happens before any mutation, so a throwing source leaves the
+    // block where it was: still carried.
+    const tile = open[drawIndex(this.#random, open.length)] as SandboxTile;
+    this.#push(tile, colour);
+    this.#carried.delete(key);
+    return Object.freeze({ x: tile.x, y: tile.y });
+  }
+
+  release(key: string): void {
+    if (typeof key !== 'string') return;
+    this.#carried.delete(key);
+  }
+
+  /**
+   * Tiles a block may fall onto, in `(y, x)` order: inside the area, more than
+   * one tile (Chebyshev) from every locatable player, below the height cap.
+   * Null when `players` is not an array — avoidance cannot be verified.
+   */
+  #openTiles(players: readonly SandboxPlayer[]): SandboxTile[] | null {
+    if (!Array.isArray(players)) return null;
     const blocked = new Set<string>();
     for (const candidate of players as readonly unknown[]) {
       const player = readPlayer(candidate);
@@ -272,7 +349,6 @@ class Authority implements SandboxAuthority {
         }
       }
     }
-
     const open: SandboxTile[] = [];
     for (let y = SANDBOX_AREA.y; y < SANDBOX_AREA.y + SANDBOX_AREA.height; y += 1) {
       for (let x = SANDBOX_AREA.x; x < SANDBOX_AREA.x + SANDBOX_AREA.width; x += 1) {
@@ -282,19 +358,7 @@ class Authority implements SandboxAuthority {
         open.push({ x, y });
       }
     }
-    if (open.length === 0) return null;
-
-    // Both draws happen before any mutation, so a throwing source leaves the
-    // sandbox exactly as it was.
-    const tile = open[drawIndex(this.#random, open.length)] as SandboxTile;
-    const colour = drawIndex(this.#random, SANDBOX_COLOURS);
-    this.#push(tile, colour);
-    return Object.freeze({ x: tile.x, y: tile.y });
-  }
-
-  release(key: string): void {
-    if (typeof key !== 'string') return;
-    this.#carried.delete(key);
+    return open;
   }
 
   #push(tile: SandboxTile, colour: number): void {

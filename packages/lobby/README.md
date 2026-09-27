@@ -28,9 +28,10 @@ side channel. So the constraint is structural rather than a matter of care:
 - Player identity is an **ephemeral per-session `gameId`**, minted on the
   **server**, never derived from an address, discarded on disconnect. A
   client-supplied identifier is ignored.
-- Sandbox state is **anonymous**: stacks of palette indices keyed by tile. No
-  column, drop or sandbox message names a player; the only per-player sandbox
-  field is `carrying` on that player's own presence entry.
+- Sandbox state carries **no identity field**: stacks of palette indices keyed
+  by tile. No column, drop or sandbox message names a player; the only
+  per-player sandbox field is `carrying` on that player's own presence entry.
+  That is weaker than "unattributable" — see "What the sandbox reveals" below.
 - No persistence. When the room empties, nothing remains — blocks included.
 
 If a feature seems to need an address in the lobby, it needs a different
@@ -221,7 +222,7 @@ isolated behind a fixed content-free diagnostic).
   columns beyond the 900-block cap are not drawn. Sorted by `(y, x)`.
 - **Own `carrying`** is read from this client's **own presence entry**. It is
   null unless the client is connected with a server identity, so it drops to
-  null the moment `suspend()` is called (the server discards the block then)
+  null the moment `suspend()` is called (the server puts the block back then)
   and stays null after `resume` until a new pick lands.
 - **`pickBlock(tile)` / `placeBlock(tile)`** send `{ x, y }` and nothing else.
   They are no-ops unless connected (not suspended) and for anything but an
@@ -254,6 +255,7 @@ const sandbox = createSandboxAuthority();          // { random } injectable
 sandbox.pick({ key: 'me', x, y }, tile, []);       // false: nothing changed
 sandbox.place({ key: 'me', x, y }, tile, others);
 sandbox.spawn([{ key: 'me', x, y }]);              // tile or null
+sandbox.returnCarried('me', [{ key: 'me', x, y }]); // leaving the street
 sandbox.snapshotFor('me');                         // frozen SandboxSnapshot
 setTimeout(tick, sandboxSpawnDelay(sandbox.totalBlocks));
 ```
@@ -265,21 +267,53 @@ until a stack changes, so `next.columns === prev.columns && next.carrying ===
 prev.carrying` is a cheap change test; `snapshotFor` itself returns a new
 object on every call. The Shell runs its own drop timer with
 `sandboxSpawnDelay(totalBlocks)` and passes the local player to `spawn`, so
-solo drops also avoid them.
+solo drops also avoid them. When the player leaves the street carrying a
+block, the Shell calls `returnCarried(key, players)` — with the player's last
+position among `players` — and shows the returned tile as a drop, exactly as
+the room does.
 
 **The rules.** A player's tile is `floor(x / 32), floor(y / 32)`; their level
 is the stack height on that tile (0 outside the area). A target must be inside
 `SANDBOX_AREA`, not the player's own tile, and have its centre within
 `SANDBOX_ACTION_RANGE` (48 px) of the player's position as a **square box**
 (Chebyshev, like interest) — which from anywhere in your tile covers all eight
-neighbours. **Pick**: not carrying; the stack is at least 1 high and its top
-is within `level − 1 … level + 2`; takes the top colour. **Place**: carrying;
-no *other* player's tile; the new height is at most 256 and within
-`level − 1 … level + 2`; pushes the carried colour. Pick ignores other players.
-**Spawn**: only below 900 blocks (carried blocks count); uniform over tiles more
-than one tile (Chebyshev) from every player's tile and below the height cap,
-enumerated in `(y, x)` order; colour uniform over the 8-colour palette. A
+neighbours, and it is never a tile another player stands on (D-060: nobody
+picks from or places onto the tile under someone). **Pick**: not carrying;
+the stack is at least 1 high and its top is within `level − 1 … level + 2`;
+takes the top colour. **Place**: carrying; the new height is at most 256 and
+within `level − 1 … level + 2`; pushes the carried colour. **Spawn**: only
+below 900 blocks (carried blocks count); uniform over tiles more than one tile
+(Chebyshev) from every player's tile and below the height cap, enumerated in
+`(y, x)` order; colour uniform over the 8-colour palette. **Return**
+(`returnCarried`): the carried block falls onto a tile chosen by the spawn
+rules, keeping its colour; it is discarded only if no tile is allowed. A
 rejected action changes nothing.
+
+### What the sandbox reveals, and what it trusts
+
+- **The rules are advisory against a hostile client.** Reach, adjacency and the
+  one-block step are judged from the position the client reports. The server
+  does not enforce movement continuity — legitimate jumps exist (leaving a
+  building interior or the Avatar Studio puts you somewhere new) — so a
+  hostile client can teleport beside any stack or stand "on" a tower it never
+  climbed, and act from there. What bounds the damage is **conservation**:
+  play never destroys a block. Picking only moves one into a hand, and a
+  carried block goes back to the sky when its carrier suspends or leaves, so
+  the most a griefer can do is rearrange the board, a block at a time, at the
+  150 ms action floor, never below the fixed total.
+- **The board is player-written content, visible to the whole room.** Blocks
+  can spell words, draw symbols or write any pattern a player chooses —
+  including text that means something off the board. The lobby does not and
+  cannot vet it. It never records who placed what, but what is on the board is
+  public to everyone in the room, so treat it like any shared canvas.
+- **"No identity field" is not "unattributable".** Columns and drop hints name
+  no one. But an observer inside the presence interest radius sees a peer's
+  `carrying` change in the same patch as a neighbouring column, and so can
+  tell who took or placed which block; and every observer learns that someone
+  was within reach of a tile that changed. A block put back when its carrier
+  leaves lands at a random allowed tile, never within a tile of where they
+  stood, so the drop does not mark where they entered a building — but its
+  timing coincides with their leaving. None of this involves money.
 
 ---
 
@@ -336,7 +370,9 @@ could forget to apply: an entry reaches a client only while it is in that
 client's view.
 
 **Sandbox actions.** At most one accepted pick or place per session per 150 ms
-(`sandboxActionIntervalMs`); anything earlier is dropped silently. The payload
+(`sandboxActionIntervalMs`, which an operator may set only within 50–200 ms:
+never off, and never above the client's own floor, or honest held actions
+would be dropped); anything earlier is dropped silently. The payload
 is validated before the floor (a malformed one costs nothing and changes
 nothing), and a well-formed request the rules refuse still consumes the floor.
 The floor survives suspend/resume, like the move floor. The client holds itself
@@ -348,11 +384,22 @@ under the hard ceiling of 40, which still disconnects a flood of any kind.
 the street (none while everyone is suspended or gone): every 1.5 s until the
 sandbox holds 120 blocks, then every 5 s, up to the 900-block cap. A drop never
 lands within one tile of a live player. When a carrier suspends or leaves, the
-block they held is discarded; if that takes the sandbox back under 120 blocks,
-a pending slow drop is brought forward (never pushed back). All four numbers
-are trusted operator config (`sandboxSpawnIntervalMs`,
-`sandboxSlowSpawnIntervalMs`, `sandboxFastSpawnLimit`,
-`sandboxActionIntervalMs`), clamped by `resolveRoomConfig`.
+block they held is put back: it falls from the sky onto a random allowed tile —
+never within a tile of where they stood — keeping its colour, with the usual
+`sandbox:drop` hint. Only if no tile is allowed is it discarded; if that takes
+the sandbox back under 120 blocks, a pending slow drop is brought forward
+(never pushed back). All four numbers are trusted operator config
+(`sandboxSpawnIntervalMs`, `sandboxSlowSpawnIntervalMs`,
+`sandboxFastSpawnLimit`, `sandboxActionIntervalMs`), clamped by
+`resolveRoomConfig`.
+
+**Joiners get the whole state.** The server reserves a 64 KB state encode
+buffer (`Encoder.BUFFER_SIZE`) before any room exists. Colyseus sizes a room's
+full-state buffer once, and past it hands the per-client view encode a stale
+copy, so a joiner receives everything beyond the default 8 KB as zeros. A full
+sandbox is about 24 KB, and about 33.5 KB with 128 visible peers. See
+`STATE_ENCODE_BUFFER_BYTES` in `room.ts`; `sandbox-capacity.test.ts` holds the
+worst case to it.
 
 Recomputing every observer's interest set after every change is O(sessions²).
 That is fine at this size — the room caps at 48 sessions and moves are capped
@@ -413,10 +460,11 @@ nothing in this package uses it.
 | `policy.test.ts` | Normalisers, throttle, interest selection |
 | `presence.test.ts` | Admission, server-minted id, movement, suspend/resume, counters |
 | `privacy.test.ts` | Schema field sets (presence incl. `carrying`, sandbox column), **attacker-config model**, suspend, randomised leak hunts, sandbox anonymity on the shared wire |
-| `sandbox-rules.test.ts` | Every pick/place rule and boundary, spawn avoidance/caps with seeded draws, release, snapshot immutability, block accounting |
-| `sandbox.test.ts` | Registry wiring: payload validation, action floor, suspend/leave discards, spawn inputs, schema mirror through a real decoder |
+| `sandbox-rules.test.ts` | Every pick/place rule and boundary (occupancy included), spawn avoidance/caps with seeded draws, `returnCarried` and conservation, release, snapshot immutability, block accounting |
+| `sandbox.test.ts` | Registry wiring: payload validation, action floor, occupancy, carried blocks falling back on suspend/leave (conservation, incl. the pick-suspend-resume loop), spawn inputs, schema mirror through a real decoder |
 | `client-sandbox.test.ts` | The wrapper's sandbox surface against a transport double: fail-closed decoding, change-only delivery, listener isolation, client floor |
-| `sandbox-room.test.ts` | Real server: shared columns across interest, drop broadcast and ordering, pick/place round trip, hostile payloads, server floor, discard on suspend/leave |
+| `sandbox-room.test.ts` | Real server: shared columns across interest, drop broadcast and ordering, pick/place round trip, hostile payloads, server floor, carried blocks falling back on suspend/leave |
+| `sandbox-capacity.test.ts` | Real server: a late joiner receives the worst-case sandbox (900 blocks over all 784 tiles) exactly, with no encoder overflow; the worst case plus 128 peers fits one buffer |
 | `client.test.ts` | The wrapper against a real server or transport double — idempotent connect, attacker-config over the wire, send-rate floor, FIFO status/peer transitions |
 | `client-listener.test.ts` | Listener generation ownership and callback isolation without network I/O |
 | `client-reconcile.test.ts` | The final position lands despite a server-dropped move |
@@ -428,8 +476,8 @@ because check 5 of `scripts/check-invariants.sh` fails the build on those words
 appearing in any lobby `.ts` file — a test that spelled them in TypeScript
 would trip the very gate it exists to reinforce.
 
-The `client-reconcile`, `client-drop` and `sandbox-room` suites each live in
-their own file with a single server: Colyseus's matchmaker is a process-global, so a test that
+The `client-reconcile`, `client-drop`, `sandbox-room` and `sandbox-capacity`
+suites each live in their own file with a single server: Colyseus's matchmaker is a process-global, so a test that
 shuts a server down (or needs a differently tuned one) must not share a process
 with another server. Vitest isolates test files, so one server per file keeps
 them from corrupting each other.

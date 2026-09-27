@@ -9,6 +9,7 @@
  */
 
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
+import { matchMaker } from '@colyseus/core';
 import { Client as ColyseusClient, type Room as ColyseusRoom } from '@colyseus/sdk';
 import {
   DEFAULT_ROOM_NAME,
@@ -1855,9 +1856,14 @@ describe('a client cannot set the room configuration over the wire (BLOCKER 1)',
   it('a hostile first join does not put money on an honest player’s screen', async () => {
     const evil = '0xdeadbeefcafef00d 12.5 STRK to the Bank';
 
+    // An emptied room lingers for its seat-reservation window; dispose it so
+    // the attacker really creates the room, as the exploit requires.
+    await Promise.all(matchMaker.disconnectAll());
+
     // The attacker creates the room with a hostile config as ordinary join
     // options — exactly the proven exploit. They never need to do more.
     const attacker = new ColyseusClient(server.endpoint);
+    const createdAt = Date.now();
     const attackerRoom = await attacker.joinOrCreate(DEFAULT_ROOM_NAME, {
       x: 0,
       y: 0,
@@ -1865,7 +1871,13 @@ describe('a client cannot set the room configuration over the wire (BLOCKER 1)',
       defaultSprite: evil,
       capacity: 99999,
       interestRadius: 1_000_000,
+      // D-060: a sky raining a block every 50 ms, and no pick/place floor.
+      sandboxSpawnIntervalMs: 50,
+      sandboxSlowSpawnIntervalMs: 50,
+      sandboxFastSpawnLimit: 900,
+      sandboxActionIntervalMs: 0,
     });
+    attackerRoom.onMessage('*', () => undefined);
 
     // Two honest players join the same room and stand near each other.
     const a = makeClient(0, 0, 'avatar-2');
@@ -1892,6 +1904,12 @@ describe('a client cannot set the room configuration over the wire (BLOCKER 1)',
     await distant.connect();
     await settle();
     expect(a.peers().some((p) => p.gameId === distant.gameId)).toBe(false);
+
+    // Nor did the hostile sky: drops keep the trusted 1.5 s pace, where the
+    // attacker's 50 ms would have rained a dozen blocks by now.
+    const elapsed = Date.now() - createdAt;
+    const blocks = a.sandbox().columns.reduce((sum, column) => sum + column.colours.length, 0);
+    expect(blocks).toBeLessThanOrEqual(Math.floor(elapsed / 1500) + 1);
 
     await attackerRoom.leave(true).catch(() => undefined);
   });
