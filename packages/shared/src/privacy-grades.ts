@@ -170,9 +170,8 @@ export const PRIVACY_REGISTER: readonly RouteGrade[] = [
     returnToPool: true,
   },
   // D-063, 2026-09-27: Endur private staking, graded like the swap and built
-  // switched off. The disclosure below is a DRAFT awaiting the user's approval;
-  // until approvedBy, approvedOn and rationale are recorded the route is not
-  // playable and its station renders locked.
+  // switched off in production. Approved by the lead, with its in-game
+  // disclosure waived by D-064 (see DISCLOSURE_WAIVERS below).
   {
     building: 'bank',
     route: 'bank.stake',
@@ -215,15 +214,30 @@ export function isRoutePlayable(route: RouteGrade): boolean {
 }
 
 /**
+ * Every disclosure waiver the lead has granted, by route, with its decision.
+ *
+ * The one list a waiver must appear in. An entry's own `disclosureWaivedBy`
+ * only counts when it names exactly the decision recorded here for that
+ * route, so no other route can switch its disclosure off by citing some
+ * decision that merely mentions it. Adding a waiver means a decision entry,
+ * this table and the register entry, all together.
+ */
+export const DISCLOSURE_WAIVERS: Readonly<Record<string, string>> = Object.freeze({
+  'bank.stake': 'D-064',
+});
+
+/**
  * Whether the lead waived this route's player-facing disclosure by decision.
  *
- * Only an own data property naming a decision id counts, so a malformed or
- * inherited value can never switch a disclosure off.
+ * Only an own data property naming the decision `DISCLOSURE_WAIVERS` records
+ * for this exact route counts, so a malformed, inherited or borrowed value can
+ * never switch a disclosure off.
  */
 export function isDisclosureWaived(route: RouteGrade): boolean {
   const descriptor = Object.getOwnPropertyDescriptor(route, 'disclosureWaivedBy');
   if (descriptor === undefined || !('value' in descriptor)) return false;
-  return typeof descriptor.value === 'string' && /^D-\d{3,}$/.test(descriptor.value);
+  const granted = Object.hasOwn(DISCLOSURE_WAIVERS, route.route) ? DISCLOSURE_WAIVERS[route.route] : undefined;
+  return typeof descriptor.value === 'string' && granted !== undefined && descriptor.value === granted;
 }
 
 function hasNonBlankText(value: unknown): value is string {

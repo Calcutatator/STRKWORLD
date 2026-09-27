@@ -520,6 +520,8 @@ describe('the block sandbox is anonymous (D-060)', () => {
     expect(findLeak(surface)).toBeNull();
   });
 
+  // A long seeded run: about 2 s alone and much slower under a full parallel
+  // run, so it gets more than vitest's 5 s default.
   it('stays anonymous and in sync across a long randomised sequence of sandbox input', () => {
     const registry = new LobbyPresence({
       interestRadius: 400,
@@ -609,7 +611,7 @@ describe('the block sandbox is anonymous (D-060)', () => {
     // The sequence really exercised the sandbox, not just the guards.
     expect(registry.sandboxColumns().length).toBeGreaterThan(0);
     expect(everyId.size).toBeGreaterThan(0);
-  });
+  }, 30_000);
 
   it('never drops a returned block where its carrier left the street', () => {
     // A carried block falls back when its carrier suspends (enters a building)

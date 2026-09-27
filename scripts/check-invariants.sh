@@ -191,16 +191,29 @@ reg="packages/shared/src/privacy-grades.ts"
 if [ -f "$reg" ]; then
   report=$(python3 - "$reg" docs/DECISIONS.md <<'PYEOF'
 import re, sys
-src = open(sys.argv[1]).read()
+raw = open(sys.argv[1]).read()
 try:
     decisions = open(sys.argv[2]).read()
 except OSError:
     decisions = ""
 
+# Strip comments first, so a commented-out key can neither satisfy nor hide
+# anything. (Known limit, as below: keep comment markers out of the copy.)
+src = re.sub(r"/\*.*?\*/", "", raw, flags=re.S)
+src = re.sub(r"(?m)^\s*//.*$", "", src)
+
 def waiver_holds(decision, route):
-    # The decision must exist as its own entry and name the waived route.
+    # The decision must exist as its own Accepted, unsuperseded entry, and must
+    # itself record this route's waiver — not merely mention the route.
     m = re.search(r"^## " + re.escape(decision) + r" .*?(?=^## D-|\Z)", decisions, re.M | re.S)
-    return bool(m) and route in m.group(0)
+    if not m:
+        return False
+    body = m.group(0)
+    status = next((line for line in body.splitlines() if line.startswith("**")), "")
+    if "Accepted" not in status or re.search(r"superseded", status, re.I):
+        return False
+    pattern = re.escape(route) + r"[^\n]{0,40}disclosureWaivedBy: '" + re.escape(decision) + "'"
+    return re.search(pattern, body) is not None
 
 # Brace-depth parser: find each object literal whose first key is `building:`,
 # regardless of indentation or formatting. The previous regex only closed a
@@ -229,6 +242,12 @@ for m in re.finditer(r"\{", src):
                 break
 
 if not blocks and "building:" in src:
+    print("PARSEFAIL:yes")
+    sys.exit(0)
+
+# Every route id must belong to a parsed entry. An entry whose first key is not
+# `building:` would otherwise be skipped and pass unchecked.
+if len(re.findall(r"\broute:\s*'", src)) != len(blocks):
     print("PARSEFAIL:yes")
     sys.exit(0)
 

@@ -353,8 +353,16 @@ describe('buildFixedRoom', () => {
     expect(locked.opacity).toBeLessThan(available.opacity);
     expect(available.opacity).toBeLessThan(highlighted.opacity);
     expect(accent(shielding).emissive.getHex()).toBe(new Color(STRK20.orange).getHex());
-    // The label plate renders the Shell's label, as an Endur pill badge.
+    // The label plate renders the Shell's label, as an Endur pill badge, and
+    // the status panel below it names Endur on a plate in Endur's look.
     expect(floatingLabel(staking).userData['text']).toBe('STAKE STRK');
+    const endurPlate = staking.children.find((child) => child.userData['brand'] === 'bank:staking');
+    expect(endurPlate?.userData['text']).toBe('Endur');
+    expect(endurPlate?.userData['options']).toMatchObject({ foreground: '#0d1a17', background: '#ffffff', accent: '#2db882' });
+    expect(endurPlate!.position.y).toBeGreaterThan(0.3);
+    expect(endurPlate!.position.y).toBeLessThan(0.72);
+    expect(endurPlate!.position.z).toBeGreaterThan(meshNamed(staking, ':status').geometry.boundingBox!.max.z);
+    expect(shielding.children.some((child) => child.userData['brand'])).toBe(false);
     expect(floatingLabel(staking).userData['options']).toMatchObject({ foreground: '#0d1a17', font: 'sans', cornerRadius: 0.5 });
     expect(floatingLabel(shielding).userData['options']).toMatchObject({ font: 'mono', uppercase: true });
 
@@ -367,6 +375,7 @@ describe('buildFixedRoom', () => {
     );
     room.dispose();
     for (const spy of spies) expect(spy).toHaveBeenCalledTimes(1);
+    expect(endurPlate!.userData['disposed']).toBe(true);
   });
 
   it('copies its origin so later mutation cannot move the room', () => {

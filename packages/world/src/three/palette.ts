@@ -165,6 +165,19 @@ export const ENDUR = Object.freeze({
   borderAlt: 0xececed,
 });
 
+/**
+ * The Vault's future lender, Vesu — measured from vesu.xyz (Sept 2026): white
+ * pages, near-black text in a wide grotesk at 600, an electric-blue primary
+ * and a pale periwinkle secondary with deep-blue text.
+ */
+export const VESU = Object.freeze({
+  white: 0xffffff,
+  ink: 0x0a0a0a,
+  blue: 0x2c41f6,
+  blueSoft: 0xe0e5ff,
+  blueText: 0x2030b6,
+});
+
 /** A palette number as CSS, so canvas labels read the same source. */
 export function css(hex: number): string {
   return `#${(hex & 0xffffff).toString(16).padStart(6, '0')}`;
@@ -218,6 +231,12 @@ export const SANDBOX_THEME = Object.freeze({
 /** A facade sign: board size, CSS colours and the optional type treatment. */
 export type SignStyle = SignStyleOptions;
 
+/** A protocol's name, set in its own colours, case and weight on a plate: never its logo mark. */
+export interface BrandPlate {
+  readonly text: string;
+  readonly style: SignStyleOptions;
+}
+
 export type BuildingStyle = 'bank' | 'exchange' | 'post-office' | 'bridge' | 'vault' | 'generic';
 
 /** Everything a street facade needs to look like its building. */
@@ -247,6 +266,8 @@ export interface BuildingTheme {
   /** Emissive strength of an open portal's frame (1.8); bright accents want less. */
   readonly portalIntensity?: number;
   readonly sign: SignStyle;
+  /** The protocol behind the building, named on a plate beside its sign. */
+  readonly brand?: BrandPlate;
 }
 
 export const BUILDING_THEMES: Readonly<Record<BuildingId, BuildingTheme>> = Object.freeze({
@@ -286,6 +307,24 @@ export const BUILDING_THEMES: Readonly<Record<BuildingId, BuildingTheme>> = Obje
       subtitleColor: css(STRK20.peach),
       uppercase: true,
     }),
+    brand: Object.freeze({
+      text: 'STRK20',
+      style: Object.freeze({
+        width: 1.8,
+        height: 0.42,
+        background: css(STRK20.black),
+        foreground: css(STRK20.text),
+        accent: css(STRK20.orange),
+        gradient: Object.freeze([css(STRK20.cream), css(STRK20.blush), css(STRK20.peach)]),
+        cornerRadius: 0.06,
+        borderWidth: 0.05,
+        hairline: false,
+        titleFont: 'display',
+        titleWeight: 900,
+        titleTracking: 0.02,
+        uppercase: true,
+      }),
+    }),
   }),
   exchange: Object.freeze({
     style: 'exchange',
@@ -318,6 +357,23 @@ export const BUILDING_THEMES: Readonly<Record<BuildingId, BuildingTheme>> = Obje
       titleFont: 'sans',
       subtitleFont: 'sans',
       subtitleColor: css(AVNU.lightBlue),
+    }),
+    brand: Object.freeze({
+      text: 'avnu',
+      style: Object.freeze({
+        width: 1.5,
+        height: 0.5,
+        background: css(AVNU.navy),
+        foreground: css(AVNU.white),
+        accent: css(AVNU.blue),
+        cornerRadius: 0.3,
+        borderWidth: 0.05,
+        hairline: false,
+        titleFont: 'sans',
+        titleWeight: 800,
+        titleTracking: -0.04,
+        lowercase: true,
+      }),
     }),
   }),
   'post-office': Object.freeze({
@@ -388,6 +444,27 @@ export const BUILDING_THEMES: Readonly<Record<BuildingId, BuildingTheme>> = Obje
       subtitleColor: css(NEAR.green),
       uppercase: true,
     }),
+    brand: Object.freeze({
+      text: 'NEAR\nINTENTS',
+      style: Object.freeze({
+        width: 1.7,
+        height: 0.62,
+        background: css(NEAR.black),
+        foreground: css(NEAR.white),
+        accent: css(NEAR.hairline),
+        cornerRadius: 0.06,
+        borderWidth: 0.03,
+        hairline: false,
+        titleFont: 'sans',
+        titleWeight: 400,
+        titleTracking: 0.06,
+        subtitleFont: 'mono',
+        subtitleWeight: 600,
+        subtitleTracking: 0.42,
+        subtitleColor: css(NEAR.green),
+        uppercase: true,
+      }),
+    }),
   }),
   vault: Object.freeze({
     style: 'vault',
@@ -412,6 +489,24 @@ export const BUILDING_THEMES: Readonly<Record<BuildingId, BuildingTheme>> = Obje
       background: '#1d1e22',
       foreground: '#9b9da5',
       accent: '#5a2020',
+    }),
+    // Locked, so calm: Vesu's pale periwinkle and a thin blue edge on the
+    // Vault's own charcoal, not its bright white pages.
+    brand: Object.freeze({
+      text: 'Vesu',
+      style: Object.freeze({
+        width: 1.15,
+        height: 0.28,
+        background: '#1d1e22',
+        foreground: css(VESU.blueSoft),
+        accent: css(VESU.blue),
+        cornerRadius: 0.2,
+        borderWidth: 0.04,
+        hairline: false,
+        titleFont: 'sans',
+        titleWeight: 600,
+        titleTracking: 0.02,
+      }),
     }),
   }),
 });
@@ -672,6 +767,8 @@ export interface StationTheme {
   readonly kioskTrim?: number;
   readonly label: FloatingStyleOptions;
   readonly looks: StationLooks;
+  /** The protocol's name on the counter's status panel, beside the Shell's label. */
+  readonly plate?: BrandPlate;
 }
 
 /** The Bank's staking counter: Endur's light look, inside the STRK20 room. */
@@ -689,6 +786,23 @@ export const ENDUR_STATION_THEME: StationTheme = Object.freeze({
     cornerRadius: 0.5,
   }),
   looks: ENDUR_STATION_LOOKS,
+  // Endur's name as a white pill with dark green type and a green edge, set
+  // into the status panel, whose colour frames it.
+  plate: Object.freeze({
+    text: 'Endur',
+    style: Object.freeze({
+      width: 1.24,
+      height: 0.3,
+      background: css(ENDUR.card),
+      foreground: css(ENDUR.dark),
+      accent: css(ENDUR.green),
+      cornerRadius: 0.5,
+      borderWidth: 0.06,
+      hairline: false,
+      titleFont: 'sans',
+      titleWeight: 700,
+    }),
+  }),
 });
 
 /** Interior palette for one fixed room. */

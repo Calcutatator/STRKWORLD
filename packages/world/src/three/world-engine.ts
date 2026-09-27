@@ -18,7 +18,7 @@ import type { WorldConfig } from '../runtime.js';
 import { createDomKeyboard, type DomKeyboard } from '../dom-keyboard.js';
 import { createWorldSession, type WorldSession } from '../world-session.js';
 import { createAvatarFigure, disposeAvatarFigureCache } from './avatar-figure.js';
-import { createCameraRig, type CameraRig } from './camera-rig.js';
+import { CAMERA_FOV, createCameraRig, type CameraRig } from './camera-rig.js';
 import { createCanvasLabelFactory } from './labels.js';
 import { createPresenter, type Presenter } from './presenter.js';
 import { disposeSandboxCaches } from './sandbox-view.js';
@@ -100,7 +100,7 @@ export function createWorldEngine(options: WorldEngineOptions): WorldEngine {
   const lastReported = new Map<string, number>();
 
   const scene = new Scene();
-  const camera = new PerspectiveCamera(45, 1, 0.1, 240);
+  const camera = new PerspectiveCamera(CAMERA_FOV, 1, 0.1, 240);
   const sun = new DirectionalLight(0xffe1b3, 2.4);
   const sky = createSky();
 
@@ -190,10 +190,7 @@ export function createWorldEngine(options: WorldEngineOptions): WorldEngine {
     const delta = lastTime === null ? 0 : Math.min(Math.max(time - lastTime, 0), MAX_FRAME_MS);
     lastTime = time;
     guard('session', () => session?.update(delta, { cameraYaw: rig.yaw }));
-    guard('presenter', () => {
-      rig.setInputEnabled(session ? !session.inputSuspended : false);
-      presenter.update(delta);
-    });
+    guard('presenter', () => presenter.update(delta));
     guard('camera', () => {
       if (presenter.consumeSnap()) rig.snap();
       const focus = presenter.player.ground;
@@ -277,7 +274,8 @@ export function createWorldEngine(options: WorldEngineOptions): WorldEngine {
     cleanup.push(() => disposeAvatarFigureCache());
     cleanup.push(() => disposeSandboxCaches());
 
-    rig = createCameraRig({ camera, element: canvas });
+    // A fixed camera: it reads no pointer or wheel input.
+    rig = createCameraRig({ camera });
     cleanup.push(() => rig.destroy());
 
     startSession(options.config);

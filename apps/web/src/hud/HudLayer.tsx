@@ -43,8 +43,10 @@ export function HudLayer({
   useEffect(() => model.listen(shell), [model, shell]);
 
   const arrival = useArrivalNudge();
+  // Hidden unless this viewer chose to show it: a balance on screen by
+  // default is a balance on every stream and screen share.
   const [balanceHidden, setBalanceHidden] = useState(
-    () => storage.read(HUD_BALANCE_HIDDEN_KEY) === '1',
+    () => storage.read(HUD_BALANCE_HIDDEN_KEY) !== '0',
   );
   const [guide, setGuide] = useState(() => ({
     open: storage.read(HUD_GUIDE_DISMISSED_KEY) !== '1',
@@ -63,8 +65,7 @@ export function HudLayer({
   const toggleBalance = (): void => {
     const next = !balanceHidden;
     setBalanceHidden(next);
-    if (next) storage.write(HUD_BALANCE_HIDDEN_KEY, '1');
-    else storage.remove(HUD_BALANCE_HIDDEN_KEY);
+    storage.write(HUD_BALANCE_HIDDEN_KEY, next ? '1' : '0');
   };
 
   const closeGuide = (returnFocus: boolean): void => {

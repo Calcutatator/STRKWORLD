@@ -56,12 +56,17 @@ export interface SignStyleOptions extends SignOptions {
   readonly hairline?: boolean;
   readonly titleFont?: LabelFont;
   readonly subtitleFont?: LabelFont;
+  /** CSS font weight, overriding the face's own (NEAR's regular 400, STRK20's 900). */
+  readonly titleWeight?: number;
+  readonly subtitleWeight?: number;
   /** Letter spacing in em; negative is tight. */
   readonly titleTracking?: number;
   readonly subtitleTracking?: number;
   /** Colour of the lines after the first; defaults to `foreground`. */
   readonly subtitleColor?: string;
   readonly uppercase?: boolean;
+  /** For lowercase wordmarks (avnu); `uppercase` wins if both are set. */
+  readonly lowercase?: boolean;
 }
 
 /** Optional floating-label styling on top of the shared `FloatingLabelOptions`. */
@@ -367,10 +372,27 @@ function setTracking(context: CanvasRenderingContext2D, em: number): void {
   if ('letterSpacing' in target) target.letterSpacing = `${em}em`;
 }
 
-function signFace(options: SignStyleOptions, line: number): { font: LabelFont; tracking: number } {
+function signFace(options: SignStyleOptions, line: number): { font: LabelFont; tracking: number; weight?: number } {
   return line === 0
-    ? { font: options.titleFont ?? 'rounded', tracking: options.titleTracking ?? 0 }
-    : { font: options.subtitleFont ?? options.titleFont ?? 'rounded', tracking: options.subtitleTracking ?? 0 };
+    ? { font: options.titleFont ?? 'rounded', tracking: options.titleTracking ?? 0, weight: fontWeight(options.titleWeight) }
+    : {
+        font: options.subtitleFont ?? options.titleFont ?? 'rounded',
+        tracking: options.subtitleTracking ?? 0,
+        weight: fontWeight(options.subtitleWeight),
+      };
+}
+
+/** A CSS weight from 100 to 900 in steps of 100, or none to keep the face's. */
+function fontWeight(weight: number | undefined): number | undefined {
+  if (typeof weight !== 'number' || !Number.isFinite(weight)) return undefined;
+  return Math.min(900, Math.max(100, Math.round(weight / 100) * 100));
+}
+
+/** The sign's text in the case its style asks for. */
+export function signCase(text: string, options: Pick<SignStyleOptions, 'uppercase' | 'lowercase'>): string {
+  if (options.uppercase) return text.toUpperCase();
+  if (options.lowercase) return text.toLowerCase();
+  return text;
 }
 
 function drawSign(
@@ -404,13 +426,12 @@ function drawSign(
     context.globalAlpha = 1;
   }
 
-  const raw = options.uppercase ? text.toUpperCase() : text;
-  const lines = splitLabelLines(raw);
+  const lines = splitLabelLines(signCase(text, options));
   const layout = layoutSignText(
     lines,
     (line, px, index = 0) => {
       const face = signFace(options, index);
-      context.font = fontString(face.font, px);
+      context.font = fontString(face.font, px, face.weight);
       setTracking(context, face.tracking);
       return context.measureText(line).width;
     },
@@ -420,7 +441,7 @@ function drawSign(
   context.textBaseline = 'middle';
   layout.forEach((line, index) => {
     const face = signFace(options, index);
-    context.font = fontString(face.font, line.fontPx);
+    context.font = fontString(face.font, line.fontPx, face.weight);
     setTracking(context, face.tracking);
     if (index === 0 && options.gradient && options.gradient.length > 0) {
       const gradient = context.createLinearGradient(0, line.y - line.fontPx * 0.5, 0, line.y + line.fontPx * 0.5);

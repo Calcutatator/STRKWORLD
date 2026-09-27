@@ -202,6 +202,18 @@ export function buildStreet(map: DistrictMap, labels: LabelFactory): StreetView 
       signs.add(label.object);
     }
 
+    // Each protocol's name on its building, in its own type (not its mark).
+    for (const footprint of footprints) {
+      const placement = built.get(footprint)?.brand;
+      const brand = buildingTheme(footprint.building).brand;
+      if (!placement || !brand) continue;
+      const label = labels.sign(brand.text, brand.style);
+      textLabels.push(label);
+      label.object.position.set(placement.x, placement.y, placement.z);
+      label.object.userData['brand'] = footprint.building;
+      signs.add(label.object);
+    }
+
     const sandboxSign = sandboxSignPlacement(kinds);
     if (sandboxSign) {
       const style: SignStyleOptions = SANDBOX_THEME.sign;
@@ -998,6 +1010,8 @@ interface BuiltBuilding {
   readonly occluder: BuildingOccluder;
   readonly doorTop: number;
   readonly sign: SignPlacement;
+  /** Where the theme's brand plate goes, when the style makes room for one. */
+  readonly brand?: SignPlacement;
   readonly animate: Animator;
 }
 
@@ -1023,6 +1037,7 @@ interface BuildingCtx {
 interface StyleResult {
   readonly doorTop: number;
   readonly sign: SignPlacement;
+  readonly brand?: SignPlacement;
   readonly fadeMaterials?: readonly Material[];
   readonly animate?: Animator;
 }
@@ -1109,7 +1124,7 @@ function buildBuilding(fp: Footprint, res: ResourceBag): BuiltBuilding {
       if (beacon) beacon.emissiveIntensity = Math.sin(elapsed / 1000 * 3.1 + phase) > 0.55 ? 3 : 0.25;
       style.animate?.(elapsed);
     };
-    return { group, occluder, doorTop: style.doorTop, sign: style.sign, animate };
+    return { group, occluder, doorTop: style.doorTop, sign: style.sign, brand: style.brand, animate };
   } finally {
     bins.dispose();
   }
@@ -1405,7 +1420,8 @@ function bankStyle(ctx: BuildingCtx): StyleResult {
   );
   ctx.bins.add(BODY, cylinderGeometry(gc, H + 1.42, domeZ, 0.16, 0.18, 0.3, 8), t.trim);
   ctx.bins.add(GLOW, coneGeometry(gc, H + 1.72, domeZ, 0.1, 0.26, 8), t.glow);
-  return { doorTop, sign: { x: gc, y: signY, z: signZ } };
+  // STRK20 on the entablature, just proud of its orange frieze line.
+  return { doorTop, sign: { x: gc, y: signY, z: signZ }, brand: { x: gc, y: (3.35 + 3.9) / 2, z: ctx.zf + 0.006 } };
 }
 
 /**
@@ -1535,6 +1551,8 @@ function exchangeStyle(ctx: BuildingCtx): StyleResult {
   return {
     doorTop,
     sign: { x: gc, y: 3.07, z: front + 0.07 },
+    // avnu across the top floor, in front of its mullions, under the ticker.
+    brand: { x: gc, y: 5.08, z: front + 0.055 },
     fadeMaterials: [tickerMaterial],
     animate: (elapsed) => {
       strip.offset.x = ((elapsed / 1000) * pixelsPerSecond / stripImage.width) % 1;
@@ -1812,7 +1830,19 @@ function bridgeStyle(ctx: BuildingCtx): StyleResult {
   parapet(ctx, H, 0.14, 0.1, steel, front);
   band(ctx, H - 0.2, H - 0.17, 0.035, line, front, doorTop, GLOW);
   ctx.bins.add(BODY, boxGeometry(ctx.x0 + 2.3, H, ctx.z0 + 0.8, ctx.x0 + 3.7, H + 0.4, ctx.z0 + 1.8), lift(NEAR.elevatedAlt, 0.08));
-  return { doorTop, sign: { x: gc, y: signY, z: zf - 0.06 } };
+  // The NEAR Intents board on the roof between the pylons: black, on two
+  // steel legs behind the parapet, a green line under it.
+  const board = { x0: gc - 0.95, x1: gc + 0.95, y0: H + 0.28, y1: H + 0.98, z0: front - 0.32, z1: front - 0.24 };
+  for (const dx of [-0.6, 0.6]) {
+    ctx.bins.add(BODY, boxGeometry(gc + dx - 0.05, H, board.z0 + 0.01, gc + dx + 0.05, board.y0, board.z1 - 0.01), steel);
+  }
+  ctx.bins.add(BODY, boxGeometry(board.x0, board.y0, board.z0, board.x1, board.y1, board.z1), lift(NEAR.black, 0.06));
+  ctx.bins.add(GLOW, boxGeometry(board.x0 + 0.04, board.y0 - 0.025, board.z1 - 0.025, board.x1 - 0.04, board.y0, board.z1), line);
+  return {
+    doorTop,
+    sign: { x: gc, y: signY, z: zf - 0.06 },
+    brand: { x: gc, y: (board.y0 + board.y1) / 2, z: board.z1 + 0.006 },
+  };
 }
 
 /** A NEAR Intents crosshair: a small plus mark standing just proud of a face. */
@@ -1907,7 +1937,9 @@ function vaultStyle(ctx: BuildingCtx): StyleResult {
     ctx.bins.add(BODY, boxGeometry(x, H + 0.12, ctx.z0 + SIDE_INSET, x + 0.35, H + 0.45, ctx.z0 + SIDE_INSET + 0.2), t.trim);
   }
   ctx.bins.add(BODY, boxGeometry(ctx.x0 + 1.2, H, ctx.z0 + 1.2, ctx.x0 + 2, H + 0.25, ctx.z0 + 2), 0x2a2d31);
-  return { doorTop, sign: { x: gc, y: 2.95, z: ctx.zf - 0.03 } };
+  // Vesu, locked and calm: a small plaque on the door's lintel.
+  const brand = ctx.gap ? { x: gc, y: doorTop + 0.15, z: ctx.zf - 0.015 } : undefined;
+  return { doorTop, sign: { x: gc, y: 2.95, z: ctx.zf - 0.03 }, ...(brand ? { brand } : {}) };
 }
 
 /** A heavy steel door with a bolt ring, chained in an X and padlocked. */
@@ -2119,7 +2151,7 @@ function buildDecor(
     const fairy = res.material(unlitMaterial());
     const archGlow = res.material(unlitMaterial({ additive: true }));
     flushBin(bin, 'decor', decorMaterial, res, parent, { name: 'street:decor', cast: true, receive: true });
-    gateOccluder = flushGate(bin, res, parent);
+    if (gate) gateOccluder = flushGate(bin, gate, res, parent);
     flushBin(bin, 'far', farMaterial, res, parent, { name: 'street:backdrop' });
     flushBin(bin, 'far-lit', farWindows, res, parent, { name: 'street:backdrop-windows' });
     flushBin(bin, 'fairy', fairy, res, parent, { name: 'street:fairy-lights' });
@@ -2399,27 +2431,32 @@ function sandboxWall(map: DistrictMap, gate: Gate | null, bin: GeometryBin): voi
 /**
  * The gate's superstructure as its own mesh and material, so that when the
  * pillar tops or the lintel come between the camera and the player it fades
- * the way a building does, and the wall beside it does not. Its bounds are
- * the superstructure's box, floor included: a sight line passing under the
- * lintel, through the opening, is clear.
+ * the way a building does, and the wall beside it does not. It is solid only
+ * in three boxes sharing one fader: the two pillar tops, from the wall's
+ * height, and the lintel with its caps, from its underside. A sight line
+ * through the open gap between them, from the street or the apron, is clear.
  */
-function flushGate(bin: GeometryBin, res: ResourceBag, parent: Group): GateOccluder | null {
+function flushGate(bin: GeometryBin, gate: Gate, res: ResourceBag, parent: Group): GateOccluder | null {
   if (!bin.has(GATE_TOP)) return null;
   const material = res.material(standardMaterial({ roughness: 0.9 }));
   const mesh = flushBin(bin, GATE_TOP, material, res, parent, { name: 'street:sandbox-gate', cast: true, receive: true });
   if (!mesh) return null;
   const box = new Box3().setFromObject(mesh);
+  const pillar = (z: number): OccluderBounds =>
+    Object.freeze({ minX: gate.x, maxX: gate.x + 1, minZ: z, maxZ: z + 1, minY: WALL_BLOCKS, height: PILLAR_BLOCKS });
+  const lintel: OccluderBounds = Object.freeze({
+    minX: box.min.x,
+    maxX: box.max.x,
+    minZ: box.min.z,
+    maxZ: box.max.z,
+    minY: PILLAR_BLOCKS,
+    height: box.max.y,
+  });
   const occluder: GateOccluder = Object.freeze({
     kind: 'sandbox-gate',
     object: mesh,
-    bounds: Object.freeze({
-      minX: box.min.x,
-      maxX: box.max.x,
-      minZ: box.min.z,
-      maxZ: box.max.z,
-      minY: box.min.y,
-      height: box.max.y,
-    }),
+    bounds: Object.freeze({ ...lintel, minY: box.min.y }),
+    boxes: Object.freeze([pillar(gate.z0 - 1), pillar(gate.z1), lintel]),
     setOpacity: createOpacityFader([material]),
   });
   return occluder;

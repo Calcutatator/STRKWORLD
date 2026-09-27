@@ -84,7 +84,14 @@ export interface OccluderBounds {
 
 /** Something tall enough to hide the player; the camera fades it when it does. */
 export interface Occluder {
+  /** The whole occluder's box. */
   readonly bounds: OccluderBounds;
+  /**
+   * Where it is actually solid, when one box would overstate it (the sandbox
+   * gate: two pillar tops and a lintel over an open gap). A sight line is
+   * blocked if it hits any of them; when absent, `bounds` is the one box.
+   */
+  readonly boxes?: readonly OccluderBounds[];
   /** 1 is fully opaque. Implementations must not affect other occluders. */
   setOpacity(opacity: number): void;
 }

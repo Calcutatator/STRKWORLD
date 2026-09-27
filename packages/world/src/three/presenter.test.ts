@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import { Group, Mesh, Vector3, type Material } from 'three';
 import { SANDBOX_AREA, type AvatarSpriteKey } from '@strkworld/shared';
-import { CAMERA_FOCUS_HEIGHT, DEFAULT_CAMERA_DISTANCE, DEFAULT_CAMERA_PITCH, cameraOffset } from './camera-rig.js';
+import { cameraPositionFor } from './camera-rig.js';
 import { createNullLabelFactory } from './labels.js';
 import { createPresenter } from './presenter.js';
 import type { AvatarFigure, AvatarFigureFactory } from './types.js';
@@ -161,34 +161,41 @@ describe('presenter', () => {
     const wall = materialOf('street:decor');
     const state = ({ opacity, transparent, depthWrite }: Material) => ({ opacity, transparent, depthWrite });
     const opaque = state(gate);
-    // Where the rig puts the camera; yaw 0 is the default, south of the
-    // player looking north.
-    const settle = (x: number, z: number, yaw = 0) => {
-      const offset = cameraOffset(yaw, DEFAULT_CAMERA_PITCH, DEFAULT_CAMERA_DISTANCE);
-      const camera = new Vector3(x + offset.x, CAMERA_FOCUS_HEIGHT + offset.y, z + offset.z);
-      for (let i = 0; i < 30; i += 1) world.presenter.updateOcclusion(camera, 16);
+    const stand = (x: number, z: number) => {
+      world.view.setPlayerPosition(tile(Math.floor(x), Math.floor(z)), true);
+      world.presenter.update(16);
     };
-    // In the opening, the lintel is between that camera and the player.
+    const settle = (camera: { x: number; y: number; z: number }) => {
+      for (let i = 0; i < 30; i += 1) world.presenter.updateOcclusion(new Vector3(camera.x, camera.y, camera.z), 16);
+    };
+    // The fixed camera, south of a player in the opening: the south pillar's
+    // top and the lintel stand between them.
     const column = SANDBOX_AREA.x - 1;
-    world.view.setPlayerPosition(tile(column, 15), true);
-    world.presenter.update(16);
-    settle(column + 0.5, 15.5);
+    stand(column, 15);
+    settle(cameraPositionFor({ x: column + 0.5, z: 15.5 }));
     expect(gate.opacity).toBeLessThan(0.5);
     expect(gate.transparent).toBe(true);
     expect(gate.depthWrite).toBe(false);
     // The wall is decor and never fades.
     expect(state(wall)).toEqual({ opacity: 1, transparent: false, depthWrite: true });
     // One step back up the road, out of the gate's column: restored exactly.
-    world.view.setPlayerPosition(tile(column - 1, 15), true);
-    world.presenter.update(16);
-    settle(column - 0.5, 15.5);
+    stand(column - 1, 15);
+    settle(cameraPositionFor({ x: column - 0.5, z: 15.5 }));
     expect(state(gate)).toEqual(opaque);
-    // Back in the opening with the camera orbited to either side: the sight
-    // line leaves under the lintel, through the opening, so nothing fades.
-    world.view.setPlayerPosition(tile(column, 15), true);
-    world.presenter.update(16);
-    for (const yaw of [Math.PI / 2, -Math.PI / 2]) {
-      settle(column + 0.5, 15.5, yaw);
+    // On the entrance apron, just inside, nothing is in the way: not from the
+    // fixed camera, nor from one behind the player looking east through the
+    // opening, whose line passes under the lintel between the pillars.
+    for (const x of [54.5, 55.5, 56.5]) {
+      stand(x, 15.5);
+      settle(cameraPositionFor({ x, z: 15.5 }));
+      expect(state(gate), `apron ${x}`).toEqual(opaque);
+      settle({ x: x - 10, y: 7.5, z: 15.5 });
+      expect(state(gate), `apron ${x}, looking east`).toEqual(opaque);
+    }
+    // In the opening, a camera to either side sees the player under the lintel.
+    stand(column, 15);
+    for (const dx of [10, -10]) {
+      settle({ x: column + 0.5 + dx, y: 7.5, z: 15.5 });
       expect(state(gate)).toEqual(opaque);
     }
   });

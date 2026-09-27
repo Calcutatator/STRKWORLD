@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  DISCLOSURE_WAIVERS,
   PRIVACY_REGISTER,
   isDisclosureWaived,
   isRoutePlayable,
@@ -149,5 +150,27 @@ describe('Endur private staking register entry (D-063)', () => {
     for (const text of [stake.observable, stake.disclosure ?? '']) {
       expect(text).not.toMatch(/[{}]/);
     }
+  });
+});
+
+describe('disclosure waivers are granted per route, by one decision each (D-064)', () => {
+  it('lists exactly one waiver, frozen', () => {
+    expect(DISCLOSURE_WAIVERS).toEqual({ 'bank.stake': 'D-064' });
+    expect(Object.isFrozen(DISCLOSURE_WAIVERS)).toBe(true);
+  });
+
+  it('refuses a waiver that borrows a real decision for another route', () => {
+    const unshield = PRIVACY_REGISTER.find((route) => route.route === 'bank.unshield')!;
+    for (const decision of ['D-020', 'D-064']) {
+      const forged = { ...unshield, disclosure: null, disclosureWaivedBy: decision };
+      expect(isDisclosureWaived(forged), decision).toBe(false);
+      expect(isRoutePlayable(forged), decision).toBe(false);
+    }
+  });
+
+  it('refuses the right route citing the wrong decision', () => {
+    const stake = PRIVACY_REGISTER.find((route) => route.route === 'bank.stake')!;
+    expect(isDisclosureWaived({ ...stake, disclosureWaivedBy: 'D-063' })).toBe(false);
+    expect(isRoutePlayable({ ...stake, disclosureWaivedBy: 'D-063' })).toBe(false);
   });
 });

@@ -1582,6 +1582,20 @@ describe('WorldSession orchestration', () => {
     expect(session.inputSuspended).toBe(false);
   });
 
+  it('activates the Bank counter when it becomes available under a player already at it', () => {
+    const world = createWorld();
+    world.start();
+    enterBuilding(world, 'bank');
+    place(world.session, interiorTileCentre(BANK_APPROACH));
+    tick(world);
+    expect(world.bus.payloads('station:activated')).toEqual([]);
+    // Standing still, no tile change: the snapshot alone brings it up.
+    makeBankStationAvailable(world);
+    expect(world.bus.payloads('station:activated')).toEqual([{ building: 'bank', station: BANK_STATION.station }]);
+    tick(world);
+    expect(world.bus.payloads('station:activated')).toHaveLength(1);
+  });
+
   it('hands the active room station presentations to the view', () => {
     const world = createWorld();
     world.start();

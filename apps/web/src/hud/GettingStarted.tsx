@@ -1,5 +1,6 @@
 import type { KeyboardEvent, Ref } from 'react';
 import { COPY } from '../copy.js';
+import { guideRouteSteps } from './guide-route.js';
 
 /**
  * The first-run "Getting started" card. A pure view; `HudLayer` owns whether
@@ -10,8 +11,9 @@ import { COPY } from '../copy.js';
  * while closed (`hidden`) so the HUD's `?` control always has a target.
  *
  * The controls are the World's real bindings (`packages/world` dom-keyboard,
- * camera-rig, world-session and the visit controller's Escape), and the route
- * never calls the Bridge private: its arrival is public.
+ * world-session and the visit controller's Escape; the camera is fixed and
+ * takes no input), and the route never calls the Bridge private: its arrival
+ * is public.
  */
 export function GettingStarted({
   id,
@@ -26,6 +28,7 @@ export function GettingStarted({
   headingRef?: Ref<HTMLHeadingElement>;
   onDismiss: () => void;
 }) {
+  const steps = guideRouteSteps();
   const onKeyDown = (event: KeyboardEvent<HTMLElement>): void => {
     if (event.key !== 'Escape') return;
     // The card owns its own Escape; the visit layer's window listener must
@@ -56,11 +59,15 @@ export function GettingStarted({
       <p>{COPY.guide.buildings}</p>
 
       <h3>{COPY.guide.routeTitle}</h3>
-      <ol className="journey-guide-route">
-        {COPY.guide.route.map((step) => (
-          <li key={step}>{step}</li>
-        ))}
-      </ol>
+      {steps.length > 0 ? (
+        <ol className="journey-guide-route">
+          {steps.map((step) => (
+            <li key={step}>{step}</li>
+          ))}
+        </ol>
+      ) : (
+        <p className="journey-guide-route-none">{COPY.guide.route.none}</p>
+      )}
       <p className="journey-guide-note">{COPY.guide.routeNote}</p>
 
       <h3>{COPY.guide.sandboxTitle}</h3>

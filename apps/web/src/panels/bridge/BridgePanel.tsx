@@ -190,7 +190,7 @@ function QuoteReview({ review }: { review: BridgeQuoteReview }) {
       <dl className="bridge-review">
         <dt>{COPY.bridge.amount}</dt><dd>{formatTokenAmountExact(review.amountIn, review.sourceDecimals)} {review.sourceSymbol}</dd>
         <dt>{COPY.bridge.expected}</dt><dd>{formatStrkExact(review.expectedAmountOut)}</dd>
-        <dt><GlossaryTerm term={COPY.bridge.minimum} definition={COPY.glossary.protectedMinimum} /></dt><dd>{formatStrkExact(review.minimumAmountOut)}</dd>
+        <dt><GlossaryTerm term={COPY.bridge.minimum} definition={COPY.glossary.bridgeMinimum} /></dt><dd>{formatStrkExact(review.minimumAmountOut)}</dd>
       </dl>
       <details className="bridge-details">
         <summary>Quote details</summary>

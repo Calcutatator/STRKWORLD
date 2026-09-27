@@ -2890,8 +2890,12 @@ disclosure for staking.
 - `bank.stake` carries `disclosureWaivedBy: 'D-064'`, approved by the lead.
   The commit gate does not demand a disclosure for it; every other deviation
   keeps its disclosure.
-- Check 8 accepts a waiver only when it names a decision entry that exists and
-  names the route.
+- A waiver counts at runtime only when the frozen `DISCLOSURE_WAIVERS` table
+  lists that exact route with that exact decision, so no route can borrow a
+  decision that merely mentions it. Check 8 strips comments, requires every
+  register entry to parse, and accepts a waiver only when the cited decision
+  is Accepted, unsuperseded, and itself records the route's
+  `disclosureWaivedBy` value.
 - In exchange, the counter's own copy claims no amount privacy. It may say
   staking is from the pool balance and that the xSTRK lands in the pool; it
   must not say amounts are hidden. The note that unstaking takes 1–14 days

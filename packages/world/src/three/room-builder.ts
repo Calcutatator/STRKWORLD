@@ -215,6 +215,9 @@ export function createInteriorShell(options: InteriorShellOptions): InteriorShel
   }
   // A dark apron: the room reads as a lit set instead of floating in sky.
   floor.add('apron', flatQuad(-30, -30, W + 30, H + 30, -0.02), APRON_COLOUR);
+  // And a dark backdrop behind the north wall: the fixed camera looks nearly
+  // level (camera-rig.ts), so without it the view over the wall ends in sky.
+  floor.add('apron', faceQuad({ normal: 'z+', plane: -1.5 }, -30, -0.02, W + 30, 14, 0), APRON_COLOUR);
 
   for (const [a, b] of northRuns) {
     walls.north.bins.add('body', boxGeometry(a, 0, 0, b, WH, T), aoPaint(style.wall));
@@ -562,6 +565,15 @@ function buildStation(
   label.object.position.set(cx, STATION_LABEL_Y, cz);
   label.object.userData['station'] = station.station;
   group.add(label.object);
+  // A branded counter names its protocol on the status panel, whose state
+  // colour frames the plate; the Shell's label above it is untouched.
+  if (dress.plate) {
+    const plate = labels.sign(dress.plate.text, dress.plate.style);
+    textLabels.push(plate);
+    plate.object.position.set(cx, 0.51, z1 + 0.036);
+    plate.object.userData['brand'] = station.station;
+    group.add(plate.object);
+  }
 
   const view: StationView = {
     station: station.station,
@@ -1154,9 +1166,13 @@ function bridgeDecor(theme: RoomTheme, shell: InteriorShell, map: FixedRoomMap, 
     pulse.name = `${north.group.name}:pulse`;
     north.group.add(pulse);
     north.fadeMaterials.push(pulse.material);
+    // Endpoints once, so the per-frame step allocates nothing.
+    const [fromX, fromY, fromZ] = faceToWorld(nf, junction, vc, 0.06);
+    const [toX, toY, toZ] = faceToWorld(nf, destination, vc, 0.06);
     const place = (elapsed: number): void => {
       const s = Math.min(1, ((elapsed / 1000) % 3) / 2.4);
-      pulse.position.set(...faceToWorld(nf, junction + (destination - junction) * s * s * (3 - 2 * s), vc, 0.06));
+      const t = s * s * (3 - 2 * s);
+      pulse.position.set(fromX + (toX - fromX) * t, fromY + (toY - fromY) * t, fromZ + (toZ - fromZ) * t);
     };
     place(0);
     animators.push(place);

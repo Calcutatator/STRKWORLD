@@ -1,15 +1,19 @@
-import type { Occluder } from './types.js';
+import type { Occluder, OccluderBounds } from './types.js';
+
+type Point = { readonly x: number; readonly y: number; readonly z: number };
 
 /**
- * Does the segment from `from` to `to` pass through the occluder's box? The
- * box stands on the ground unless its bounds give a floor (`minY`).
+ * Does the segment from `from` to `to` pass through the occluder? Through
+ * any of its `boxes` when it lists them, else through its `bounds`. A box
+ * stands on the ground unless it gives a floor (`minY`).
  */
-export function segmentHitsBox(
-  from: { readonly x: number; readonly y: number; readonly z: number },
-  to: { readonly x: number; readonly y: number; readonly z: number },
-  occluder: Pick<Occluder, 'bounds'>,
-): boolean {
-  const { bounds } = occluder;
+export function segmentHitsBox(from: Point, to: Point, occluder: Pick<Occluder, 'bounds' | 'boxes'>): boolean {
+  const boxes = occluder.boxes ?? [occluder.bounds];
+  for (const box of boxes) if (segmentHitsBounds(from, to, box)) return true;
+  return false;
+}
+
+function segmentHitsBounds(from: Point, to: Point, bounds: OccluderBounds): boolean {
   const min = [bounds.minX, bounds.minY ?? 0, bounds.minZ] as const;
   const max = [bounds.maxX, bounds.height, bounds.maxZ] as const;
   const start = [from.x, from.y, from.z] as const;

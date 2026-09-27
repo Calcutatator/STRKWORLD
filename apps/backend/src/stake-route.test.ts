@@ -181,11 +181,11 @@ function baseEnvironment(overrides: Record<string, string> = {}): Record<string,
     BACKEND_QUEUE_MAX_QUEUED: '64',
     BACKEND_ROUTE_TRANSFER_ENABLED: 'true',
     BACKEND_ROUTE_TRANSFER_MAX_RELAY_FEE: '10',
-    BACKEND_ROUTE_TRANSFER_MAX_QUEUE_DELAY_MS: '45000',
+    BACKEND_ROUTE_TRANSFER_MAX_QUEUE_DELAY_MS: '15000',
     BACKEND_ROUTE_TRANSFER_ALLOWED_TOKENS: STRK,
     BACKEND_ROUTE_UNSHIELD_ENABLED: 'true',
     BACKEND_ROUTE_UNSHIELD_MAX_RELAY_FEE: '10',
-    BACKEND_ROUTE_UNSHIELD_MAX_QUEUE_DELAY_MS: '45000',
+    BACKEND_ROUTE_UNSHIELD_MAX_QUEUE_DELAY_MS: '15000',
     BACKEND_ROUTE_UNSHIELD_ALLOWED_TOKENS: STRK,
     BACKEND_ROUTE_SWAP_ENABLED: 'true',
     BACKEND_ROUTE_SWAP_MAX_RELAY_FEE: '10',
@@ -199,7 +199,7 @@ function baseEnvironment(overrides: Record<string, string> = {}): Record<string,
 const STAKE_ENVIRONMENT = {
   BACKEND_ROUTE_STAKE_ENABLED: 'true',
   BACKEND_ROUTE_STAKE_MAX_RELAY_FEE: '10',
-  BACKEND_ROUTE_STAKE_MAX_QUEUE_DELAY_MS: '45000',
+  BACKEND_ROUTE_STAKE_MAX_QUEUE_DELAY_MS: '15000',
   BACKEND_ROUTE_STAKE_ALLOWED_TOKENS: STRK,
 };
 
@@ -220,7 +220,7 @@ describe('stake route environment', () => {
     const parsed = parseBackendEnvironment(baseEnvironment(STAKE_ENVIRONMENT));
 
     expect(parsed.backend.routes.stake).toEqual({
-      enabled: true, maxRelayFee: 10n, maxQueueDelayMs: 45_000, quoteBound: false, allowedTokens: [STRK],
+      enabled: true, maxRelayFee: 10n, maxQueueDelayMs: 15_000, quoteBound: false, allowedTokens: [STRK],
     });
   });
 

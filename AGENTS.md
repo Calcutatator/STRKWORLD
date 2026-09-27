@@ -296,6 +296,28 @@ wallet. D-056's funded shield settles the question.
 against the pool address in the STRK20 facts; D-043 and the 2026-08-18 finding
 re-read.
 
+### 2026-09-27 — The wallet picker dropped every getter-shaped wallet
+
+`WalletSession` only listed a discovered wallet whose `name` and `icon` were own
+data properties (the 2026-08-30 hardening). But get-starknet's discovery wraps
+every legacy `window.starknet_*` wallet in `StarknetInjectedWallet`, whose
+`name` and `icon` are class getters, and Wallet Standard wallets commonly use
+getters too. All of them were silently dropped, and the player saw "No
+compatible wallet was discovered." Now an own data property is used as it
+stands (no trap runs), an own accessor is still refused without being invoked,
+and a field with no own property is read once from the prototype, guarded;
+any throw drops the wallet without escaping. The mock tester wallet used own
+data properties, which is why rendered acceptance never saw it. Whether
+installed Ready or Xverse builds register this way is still for the manual
+wallet checklist; Xverse's dapp-facing STRK20 methods may not have shipped, in
+which case it correctly lands in the unsupported-wallet room.
+
+*Verified:* a new discovery-boundary test constructs the pinned
+`StarknetInjectedWallet` around a fake injected object and expects it listed;
+a class-getter wallet is listed; a throwing getter or non-string field drops
+the wallet without throwing; the existing own-accessor and hostile-proxy tests
+still pass (`packages/privacy`, 550 tests).
+
 ### 2026-09-27 — Endur's anonymizer is deposit-only; staking is relayed like swap (D-063)
 
 `EndurDepositAnonymizer` (`0x030dee…30698`, class `0x15ec74f6…58e77a`) exposes
@@ -320,13 +342,19 @@ xSTRK views against the Cartridge public RPC; `packages/privacy` and
 The privacy register's `disclosureWaivedBy` replaces a deviation's in-game
 disclosure and nothing else: approval, date and rationale are still required,
 and `observable` still records what an observer sees. Only an own data
-property naming a decision id counts. Check 8 accepts a waiver only when that
-decision entry exists and names the route, and the commit gate stops demanding
-a disclosure for that route alone. `bank.stake` is the only waived route.
+property naming the decision that the frozen `DISCLOSURE_WAIVERS` table
+records for that exact route counts. Check 8 strips comments, fails if any
+register entry does not parse, and accepts a waiver only when the cited
+decision is Accepted, unsuperseded and itself records the route's
+`disclosureWaivedBy` value; the commit gate stops demanding a disclosure for
+that route alone. `bank.stake` is the only waived route. The first version
+only checked that the decision mentioned the route, so `bank.unshield` could
+have borrowed D-020 (a review finding).
 
-*Verified:* `packages/shared` register tests cover own-property, id-format and
-approval cases; `scripts/check-invariants.sh` passes with D-064 present and
-fails without it.
+*Verified:* `packages/shared` register tests cover own-property, id-format,
+borrowed-decision and approval cases; replaying the review's attacks against
+check 8 (a borrowed D-020 waiver, a commented-out waiver, a reordered entry)
+now fails each one, and the real register passes.
 
 ### 2026-09-27 — The Bridge reserve is 10 STRK today, with a 4 STRK gas allowance (D-061)
 

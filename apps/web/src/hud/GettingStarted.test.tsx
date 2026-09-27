@@ -4,6 +4,7 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it, vi } from 'vitest';
 import { COPY } from '../copy.js';
 import { GettingStarted } from './GettingStarted.js';
+import { guideRouteSteps } from './guide-route.js';
 
 /**
  * The card is copy about another package's code, so its claims are pinned to
@@ -16,7 +17,7 @@ const source = (path: string): string =>
 describe('Getting started card', () => {
   it("matches the World's real bindings", () => {
     const inputs = COPY.guide.controls.map(({ input }) => input);
-    expect(inputs).toEqual(['WASD or arrow keys', 'Shift', 'Drag', 'Scroll', 'F', 'E', 'Esc']);
+    expect(inputs).toEqual(['WASD or arrow keys', 'Shift', 'F', 'E', 'Esc']);
 
     const keyboard = source('../../../../packages/world/src/dom-keyboard.ts');
     for (const binding of [
@@ -31,10 +32,12 @@ describe('Getting started card', () => {
       expect(keyboard).toContain(binding);
     }
 
-    // Either mouse button orbits; the wheel zooms.
+    // The camera is fixed: it takes no pointer or wheel input at all, so the
+    // card lists no Drag or Scroll row.
     const camera = source('../../../../packages/world/src/three/camera-rig.ts');
-    expect(camera).toContain('event.button !== 0 && event.button !== 2');
-    expect(camera).toContain("['wheel', onWheel");
+    expect(camera).toContain('export const CAMERA_YAW = 0');
+    expect(camera).not.toContain('addEventListener');
+    expect(camera).not.toMatch(/'(wheel|pointerdown|pointermove)'/);
 
     // E belongs to the sandbox on the street; F follows the avatar everywhere.
     const session = source('../../../../packages/world/src/world-session.ts');
@@ -60,6 +63,42 @@ describe('Getting started card', () => {
     expect(open).toContain(COPY.guide.title);
     expect(open).toContain(COPY.guide.sandbox);
     expect(open).toContain(COPY.guide.dismiss);
-    for (const step of COPY.guide.route) expect(open).toContain(step);
+    for (const step of guideRouteSteps()) expect(open).toContain(step);
+  });
+});
+
+describe('the first route follows what this build opens', () => {
+  const only = (...open: string[]) => (routeId: string) => open.includes(routeId);
+
+  it('shows the whole route when every door is open', () => {
+    const steps = guideRouteSteps(only('bridge.deposit', 'bank.shield', 'exchange.swap', 'post-office.transfer'));
+    expect(steps).toEqual([
+      COPY.guide.route.bridge,
+      COPY.guide.route.bank,
+      COPY.guide.route.swapOrSend,
+    ]);
+  });
+
+  it('never points at a shut door: the production default shows no route at all', () => {
+    expect(guideRouteSteps(only())).toEqual([]);
+    const markup = renderToStaticMarkup(
+      <GettingStarted id="guide" titleId="guide-title" open onDismiss={vi.fn()} />,
+    );
+    // Tests run outside production, so every approved route is open here.
+    expect(markup).not.toContain(COPY.guide.route.none);
+  });
+
+  it('drops the Bridge when the Bank cannot shield its arrival', () => {
+    expect(guideRouteSteps(only('bridge.deposit', 'post-office.transfer'))).toEqual([COPY.guide.route.send]);
+    expect(guideRouteSteps(only('bridge.deposit', 'bank.shield'))).toEqual([
+      COPY.guide.route.bridge,
+      COPY.guide.route.bank,
+    ]);
+    expect(guideRouteSteps(only('exchange.swap'))).toEqual([COPY.guide.route.swap]);
+  });
+
+  it('never calls the Bridge private', () => {
+    expect(COPY.guide.route.bridge).toMatch(/public/);
+    expect(COPY.guide.route.bridge).not.toMatch(/privat/i);
   });
 });

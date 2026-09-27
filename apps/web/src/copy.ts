@@ -33,7 +33,7 @@ export const COPY = freezeCopy({
 
   connect: {
     title: 'Connect your wallet',
-    body: 'STRKWORLD asks your wallet to do the private part. Your keys, your notes and your proofs never leave it.',
+    body: "STRKWORLD asks your wallet to do the private part. Your keys and notes never leave it; finished proofs pass through STRKWORLD's relay and AVNU to reach the network.",
     action: 'Connect wallet',
     connecting: 'Waiting for your wallet…',
     retry: 'Try again',
@@ -65,7 +65,7 @@ export const COPY = freezeCopy({
 
   notRegistered: {
     title: 'Register with the pool first',
-    body: 'The pool has no viewing key for this account yet, so it will not report a balance or move funds. Registration happens inside your wallet: STRKWORLD cannot do it for you and cannot see when you have.',
+    body: 'The pool has no viewing key for this account yet, so it will not report a balance or move funds. Registration happens inside your wallet, and STRKWORLD cannot do it for you. It is recorded publicly on-chain, and this door checks it when you ask.',
     action: 'I have registered — check again',
     hint: 'Open your wallet, register with the privacy pool, then come back to this door.',
   },
@@ -173,7 +173,7 @@ export const COPY = freezeCopy({
   },
 
   vault: {
-    locked: 'The Vault — private lending with Vesu. Not open yet.',
+    locked: 'The Vault — lending with Vesu. Not open yet.',
   },
 
   postOffice: {
@@ -281,27 +281,29 @@ export const COPY = freezeCopy({
     controls: [
       { input: 'WASD or arrow keys', effect: 'Walk. Up always heads away from the camera.' },
       { input: 'Shift', effect: 'Hold while walking to sprint.' },
-      { input: 'Drag', effect: 'Look around: either mouse button orbits the camera.' },
-      { input: 'Scroll', effect: 'Zoom in and out.' },
       { input: 'F', effect: 'Swap your outfit.' },
       { input: 'E', effect: 'In the sandbox, pick up the block in front of you. Press E again to put it down.' },
       { input: 'Esc', effect: 'Close a counter or Menu Mode.' },
     ],
     buildingsTitle: 'Inside a building',
     buildings:
-      'Walk through a door to go in. Counters open when you walk up to them, and Menu Mode opens the full menu. Walk back out, or press Leave building, to return to the street.',
+      'Walk through a door to go in. A lit counter opens when you walk up to it; a grey one is not open in this build yet, and Menu Mode says why. Walk back out, or press Leave building, to return to the street.',
     routeTitle: 'A first route',
-    route: [
-      'The Bridge brings funds in from another chain. Arrival is public. Skip it if you already hold STRK on Starknet.',
-      'The Bank shields them into the pool.',
-      'Then swap at the Exchange, or send from the Post Office.',
-    ],
+    /** Shown step by step, only while each route is open in this build (`hud/guide-route.ts`). */
+    route: {
+      bridge: 'The Bridge brings funds in from another chain. Arrival is public. Skip it if you already hold STRK on Starknet.',
+      bank: 'The Bank shields them into the pool.',
+      swapOrSend: 'Swap at the Exchange, or send from the Post Office.',
+      swap: 'Swap at the Exchange.',
+      send: 'Send from the Post Office.',
+      none: 'No money route is switched on in this build yet. The street and the sandbox are open to explore.',
+    },
     routeNote: 'You review every action before you confirm it, and nothing moves until you do.',
     sandboxTitle: 'The sandbox',
     sandbox:
       'The road ends in a sandbox square. Blocks drop from the sky: press E to pick one up and E again to put it down, and build with whoever else is there.',
     dismiss: 'Got it',
-    stationHint: 'Counters open when you walk up to them. Menu Mode opens the full menu.',
+    stationHint: 'Lit counters open when you walk up to them; grey ones are not open yet. Menu Mode opens the full menu.',
   },
 
   /** Next-step prompts (`panels/next-step.ts`) and the D-021 Bridge nudge. */
@@ -349,6 +351,8 @@ export const COPY = freezeCopy({
     toggle: "What's this?",
     protectedMinimum:
       'The least amount you are guaranteed to receive, even if the market moves against you before this settles.',
+    bridgeMinimum:
+      'The least STRK this quote delivers if the bridge completes. If it cannot complete, 1Click refunds your deposit instead, so it is not a guarantee of arrival.',
     slippageFixedAt: 'Slippage is fixed at',
     slippageReason:
       'in this build. It is not something you choose — fixing it is what lets the protected minimum above be a guarantee rather than an estimate.',

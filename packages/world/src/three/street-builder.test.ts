@@ -10,6 +10,7 @@ import {
   Mesh,
   MeshStandardMaterial,
   Object3D,
+  PerspectiveCamera,
   SRGBColorSpace,
   Texture,
   Vector3,
@@ -17,6 +18,7 @@ import {
 import { SANDBOX_AREA, SANDBOX_ENTRANCE } from '@strkworld/shared';
 import { createStreetMap, isSolidAt, type DistrictMap, type TileKind } from '../map/street.js';
 import { createNullLabelFactory } from './labels.js';
+import { CAMERA_FOV, createCameraRig } from './camera-rig.js';
 import { AVNU, NEAR, STRK20, boxGeometry } from './palette.js';
 import {
   PAVEMENT_HEIGHT,
@@ -56,8 +58,8 @@ describe('buildStreet', () => {
     const { view } = build();
     expect(view.ground.children.length).toBeGreaterThan(0);
     expect(view.doors.children).toHaveLength(5);
-    // Five facade signs, the sandbox square's sign and its gate's.
-    expect(view.labels.children).toHaveLength(7);
+    // Five facade signs, four brand plates, the sandbox square's sign and its gate's.
+    expect(view.labels.children).toHaveLength(11);
     const names = view.ground.children.map((child) => child.name);
     expect(names).toEqual(
       expect.arrayContaining([
@@ -178,6 +180,16 @@ describe('buildStreet', () => {
     expect(gate.bounds.minY).toBeCloseTo(box.min.y);
     expect(gate.bounds.minY).toBeCloseTo(2, 2);
     for (const building of buildingOccluders(view)) expect(building.bounds.minY ?? 0).toBe(0);
+    // Solid in three boxes sharing the one fader: each pillar's top from the
+    // wall's height, and the lintel with its caps from its underside, so the
+    // gap between them is not.
+    expect(gate.boxes).toHaveLength(3);
+    const [north, south, lintel] = gate.boxes!;
+    expect(north).toMatchObject({ minX: GATE.x, maxX: GATE.x + 1, minZ: GATE.z0 - 1, maxZ: GATE.z0, minY: 2, height: 4 });
+    expect(south).toMatchObject({ minX: GATE.x, maxX: GATE.x + 1, minZ: GATE.z1, maxZ: GATE.z1 + 1, minY: 2, height: 4 });
+    expect(lintel).toMatchObject({ minY: 4, height: gate.bounds.height });
+    expect(lintel!.minZ).toBeCloseTo(gate.bounds.minZ);
+    expect(lintel!.maxZ).toBeCloseTo(gate.bounds.maxZ);
     // The wall stays in the decor, nothing of it above two blocks at the gate.
     const decor = meshNamed(view.ground, 'street:decor');
     const wall = verticesIn(decor, GATE.x - 0.2, GATE.z0 - 3, GATE.x + 1.2, GATE.z1 + 3);
@@ -357,6 +369,62 @@ describe('buildStreet', () => {
     expect(sign!.position.y).toBeGreaterThan(1);
     expect(sign!.rotation.y).toBe(0);
     view.dispose();
+  });
+
+  it('names each protocol on its building in its own type, whole in the fixed camera', () => {
+    const { map, view } = build();
+    const plate = (building: string) => view.labels.children.find((child) => child.userData['brand'] === building);
+    const expected = {
+      bank: {
+        text: 'STRK20',
+        style: { titleFont: 'display', titleWeight: 900, uppercase: true, background: '#0d0d0d', accent: '#c53400', gradient: ['#fffdf1', '#f4ece8', '#ffcdb6'] },
+      },
+      exchange: { text: 'avnu', style: { lowercase: true, background: '#11131d', foreground: '#ffffff', accent: '#3761f6' } },
+      bridge: {
+        text: 'NEAR\nINTENTS',
+        style: { titleWeight: 400, subtitleFont: 'mono', subtitleColor: '#00ec97', background: '#000000', foreground: '#ffffff', uppercase: true },
+      },
+      vault: { text: 'Vesu', style: { background: '#1d1e22', foreground: '#e0e5ff', accent: '#2c41f6' } },
+    } as const;
+    for (const [building, { text, style }] of Object.entries(expected)) {
+      const sign = plate(building);
+      expect(sign, building).toBeDefined();
+      expect(sign!.userData['kind']).toBe('sign');
+      expect(sign!.userData['text']).toBe(text);
+      expect(sign!.userData['options']).toMatchObject(style);
+      // On its own building's front, facing the street, above head height.
+      const { x } = PLAN.find((entry) => entry.building === building)!;
+      expect(sign!.position.x, building).toBeGreaterThan(x);
+      expect(sign!.position.x, building).toBeLessThan(x + 7);
+      expect(sign!.position.z, building).toBeGreaterThan(9.5);
+      expect(sign!.position.z, building).toBeLessThanOrEqual(11.05);
+      expect(sign!.position.y, building).toBeGreaterThan(2.3);
+      expect(sign!.rotation.y).toBe(0);
+      // Whole in the fixed camera's frame from the pavement in front of it.
+      const camera = new PerspectiveCamera(CAMERA_FOV, 16 / 9, 0.1, 240);
+      createCameraRig({ camera }).update(16, { x: sign!.position.x, z: 12 }, null);
+      camera.updateMatrixWorld(true);
+      const { width, height } = sign!.userData['options'] as { width: number; height: number };
+      for (const [dx, dy] of [
+        [-1, -1],
+        [1, -1],
+        [-1, 1],
+        [1, 1],
+      ] as const) {
+        const corner = new Vector3(sign!.position.x + (dx * width) / 2, sign!.position.y + (dy * height) / 2, sign!.position.z);
+        const ndc = corner.project(camera);
+        expect(Math.abs(ndc.x), building).toBeLessThan(1);
+        expect(Math.abs(ndc.y), building).toBeLessThan(1);
+      }
+    }
+    // The Post Office has no protocol plate, and every facade sign keeps its words.
+    expect(plate('post-office')).toBeUndefined();
+    for (const exterior of map.exteriorLabels) {
+      expect(view.labels.children.filter((child) => child.userData['text'] === exterior.text)).toHaveLength(1);
+    }
+    const plates = view.labels.children.filter((child) => child.userData['brand']);
+    view.dispose();
+    for (const sign of plates) expect(sign.userData['disposed']).toBe(true);
   });
 
   it('dresses the Bank in STRK20, the Exchange in avnu and the Bridge in NEAR', () => {

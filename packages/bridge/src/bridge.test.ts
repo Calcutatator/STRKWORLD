@@ -966,7 +966,9 @@ describe('BridgeService', () => {
     ['non-string', 7],
     ['non-decimal', 'abc'],
     ['oversized', '1' + '0'.repeat(80)],
-  ])('rejects a refund with a %s reported amount', async (_label, refundedAmount) => {
+    ['zero', '0'],
+    ['null', null],
+  ])('still settles a refund whose reported amount is %s, showing no figure', async (_label, refundedAmount) => {
     const client = new StubClient();
     const store = new MemoryBridgeStore();
     const service = new BridgeService({ client, store, quoteVerifier: () => true, now: () => NOW });
@@ -978,7 +980,12 @@ describe('BridgeService', () => {
     });
 
     client.statuses.push(status('REFUNDED' as never, { refundedAmount: refundedAmount as never }));
-    await expect(service.refresh()).rejects.toThrow(/invalid execution status data/i);
+    // The figure is display-only: a bad one is dropped, never allowed to keep
+    // a refunded deposit short of its terminal state.
+    const result = await service.refresh();
+    expect(result.leg).toBe('refunded');
+    expect(result.pollingStopped).toBe(true);
+    expect(result.refundedAmount).toBeUndefined();
   });
 
   it.each([

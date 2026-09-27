@@ -206,6 +206,33 @@ describe('createCanvasLabelFactory', () => {
     expect(canvas.arcRadii[0]).toBeCloseTo(canvas.height * 0.04, 0);
   });
 
+  it('sets a sign in any weight and case: a regular title, a heavy caption, a lowercase wordmark', () => {
+    const { doc, canvases } = fakeDocument({ ratio: 1 });
+    const factory = createCanvasLabelFactory(doc);
+    const near: SignStyleOptions = {
+      width: 2,
+      height: 0.6,
+      titleFont: 'sans',
+      titleWeight: 400,
+      subtitleFont: 'mono',
+      subtitleWeight: 850,
+      subtitleTracking: 0.3,
+      uppercase: true,
+    };
+    const wordmark: SignStyleOptions = { width: 1.4, height: 0.5, titleFont: 'sans', titleWeight: 800, lowercase: true };
+    factory.sign('Near\nintents', near);
+    factory.sign('AVNU', wordmark);
+    const [nearCanvas, avnuCanvas] = canvases;
+    expect(nearCanvas!.drawn).toEqual(['NEAR', 'INTENTS']);
+    const [title, caption] = nearCanvas!.drawnWith;
+    expect(title!.font).toMatch(/^400 /);
+    // Weights snap to CSS's hundreds, within 100 to 900.
+    expect(caption!.font).toMatch(/^900 .*monospace/);
+    expect(caption!.letterSpacing).toBe('0.3em');
+    expect(avnuCanvas!.drawn).toEqual(['avnu']);
+    expect(avnuCanvas!.drawnWith[0]!.font).toMatch(/^800 /);
+  });
+
   it('gives every floating label its own sprite geometry, disposed with the label', () => {
     const { doc } = fakeDocument({ ratio: 1 });
     const labels = createCanvasLabelFactory(doc);

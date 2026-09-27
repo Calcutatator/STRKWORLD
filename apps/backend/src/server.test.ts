@@ -1,6 +1,6 @@
 import { createServer } from 'node:http';
 import { describe, expect, it, vi } from 'vitest';
-import { parseBackendEnvironment } from './environment.js';
+import { parseBackendEnvironment, RELAY_SUBMISSION_HEADROOM_MS } from './environment.js';
 import {
   createBackendRuntime,
   listenBackendServer,
@@ -68,11 +68,11 @@ function validEnvironment(overrides: Record<string, string> = {}): Record<string
     BACKEND_QUEUE_MAX_QUEUED: '64',
     BACKEND_ROUTE_TRANSFER_ENABLED: 'true',
     BACKEND_ROUTE_TRANSFER_MAX_RELAY_FEE: '10',
-    BACKEND_ROUTE_TRANSFER_MAX_QUEUE_DELAY_MS: '45000',
+    BACKEND_ROUTE_TRANSFER_MAX_QUEUE_DELAY_MS: '15000',
     BACKEND_ROUTE_TRANSFER_ALLOWED_TOKENS: `${STRK},0xabc`,
     BACKEND_ROUTE_UNSHIELD_ENABLED: 'true',
     BACKEND_ROUTE_UNSHIELD_MAX_RELAY_FEE: '10',
-    BACKEND_ROUTE_UNSHIELD_MAX_QUEUE_DELAY_MS: '45000',
+    BACKEND_ROUTE_UNSHIELD_MAX_QUEUE_DELAY_MS: '15000',
     BACKEND_ROUTE_UNSHIELD_ALLOWED_TOKENS: `${STRK},0xabc`,
     BACKEND_ROUTE_SWAP_ENABLED: 'true',
     BACKEND_ROUTE_SWAP_MAX_RELAY_FEE: '10',
@@ -88,8 +88,8 @@ describe('strict production backend environment', () => {
     const parsed = parseBackendEnvironment(validEnvironment());
     expect(parsed.port).toBe(8080);
     expect(parsed.swapPlanner.chainId).toBe(MAINNET_CHAIN_ID);
-    expect(parsed.backend.routes.transfer).toMatchObject({ quoteBound: false, maxQueueDelayMs: 45_000 });
-    expect(parsed.backend.routes.unshield).toMatchObject({ quoteBound: false, maxQueueDelayMs: 45_000 });
+    expect(parsed.backend.routes.transfer).toMatchObject({ quoteBound: false, maxQueueDelayMs: 15_000 });
+    expect(parsed.backend.routes.unshield).toMatchObject({ quoteBound: false, maxQueueDelayMs: 15_000 });
     expect(parsed.backend.routes.swap).toMatchObject({ quoteBound: true, maxQueueDelayMs: 0 });
   });
 
@@ -100,13 +100,35 @@ describe('strict production backend environment', () => {
     expect(parsed.backend.requestTimeoutMs).toBe(2_147_483_647);
   });
 
-  it('accepts the maximum pool-route delay supported by the Node timer', () => {
+  it('accepts the largest pool-route delay the Node timer and the submission headroom allow', () => {
+    const largest = String(2_147_483_647 - RELAY_SUBMISSION_HEADROOM_MS);
     const parsed = parseBackendEnvironment(validEnvironment({
-      BACKEND_ROUTE_TRANSFER_MAX_QUEUE_DELAY_MS: '2147483647',
-      BACKEND_ROUTE_UNSHIELD_MAX_QUEUE_DELAY_MS: '2147483647',
+      BACKEND_REQUEST_TIMEOUT_MS: '2147483647',
+      BACKEND_ROUTE_TRANSFER_MAX_QUEUE_DELAY_MS: largest,
+      BACKEND_ROUTE_UNSHIELD_MAX_QUEUE_DELAY_MS: largest,
     }));
-    expect(parsed.backend.routes.transfer.maxQueueDelayMs).toBe(2_147_483_647);
-    expect(parsed.backend.routes.unshield.maxQueueDelayMs).toBe(2_147_483_647);
+    expect(parsed.backend.routes.transfer.maxQueueDelayMs).toBe(Number(largest));
+    expect(parsed.backend.routes.unshield.maxQueueDelayMs).toBe(Number(largest));
+  });
+
+  it('rejects a queue delay the request deadline cannot outlast, which would 504 after approval', () => {
+    // The audit's case: a 45 s delay inside a 20 s deadline submits nothing.
+    for (const route of ['TRANSFER', 'UNSHIELD']) {
+      expect(() => parseBackendEnvironment(validEnvironment({
+        [`BACKEND_ROUTE_${route}_MAX_QUEUE_DELAY_MS`]: '45000',
+      }))).toThrow(new RegExp(`BACKEND_ROUTE_${route}_MAX_QUEUE_DELAY_MS must leave`));
+      expect(() => parseBackendEnvironment(validEnvironment({
+        [`BACKEND_ROUTE_${route}_MAX_QUEUE_DELAY_MS`]: String(20_000 - RELAY_SUBMISSION_HEADROOM_MS + 1),
+      }))).toThrow(/must leave/);
+    }
+    // Exactly the headroom is fine, and a disabled route is not held to it.
+    expect(() => parseBackendEnvironment(validEnvironment({
+      BACKEND_ROUTE_TRANSFER_MAX_QUEUE_DELAY_MS: String(20_000 - RELAY_SUBMISSION_HEADROOM_MS),
+    }))).not.toThrow();
+    expect(() => parseBackendEnvironment(validEnvironment({
+      BACKEND_ROUTE_TRANSFER_ENABLED: 'false',
+      BACKEND_ROUTE_TRANSFER_MAX_QUEUE_DELAY_MS: '45000',
+    }))).not.toThrow();
   });
 
   it.each([

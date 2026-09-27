@@ -958,6 +958,36 @@ describe('fixed room controller', () => {
     expect(h.inputCalls).toEqual(['resume', 'resume']);
   });
 
+  it('activates a counter that becomes available while the player already stands at it', () => {
+    const h = harness(POST_OFFICE_ROOM_DEFINITION);
+    const activations = () => h.events.filter((event) => event.event === 'station:activated').map((event) => event.payload);
+    const snapshot = (status: 'available' | 'locked', label = 'TRANSFER') => ({
+      building: 'post-office' as const,
+      stations: [{ station: 'post-office:transfer' as const, label, status }],
+    });
+    h.controller.enter();
+    // They step up while it is still locked: highlighted, nothing activated.
+    h.controller.update({ x: 3, y: 4 });
+    expect(h.controller.state.highlightedStation).toBe('post-office:transfer');
+    expect(activations()).toEqual([]);
+    // The Shell switches it on while they stand there: it activates at once.
+    h.shell.emit('world:stations', snapshot('available'));
+    expect(activations()).toEqual([{ building: 'post-office', station: 'post-office:transfer' }]);
+    expect(h.inputCalls).toEqual(['resume', 'suspend', 'resume']);
+    // Once: a repeated snapshot or a new label does not activate it again.
+    h.shell.emit('world:stations', snapshot('available'));
+    h.shell.emit('world:stations', snapshot('available', 'SEND'));
+    expect(activations()).toHaveLength(1);
+    // Nor does a counter switching on while they stand somewhere else.
+    h.controller.update({ x: 9, y: 8 });
+    h.shell.emit('world:stations', snapshot('locked'));
+    h.shell.emit('world:stations', snapshot('available'));
+    expect(activations()).toHaveLength(1);
+    // Stepping back up to it is a fresh approach, as before.
+    h.controller.update({ x: 3, y: 4 });
+    expect(activations()).toHaveLength(2);
+  });
+
   it('does not activate a station after onChange transfers control to Shell', () => {
     let shell: ReturnType<typeof bus<ShellEvents>> | undefined;
     let claimed = false;

@@ -33,6 +33,8 @@ export function parseBackendEnvironment(environment: Environment): ParsedBackend
   const rpcUrl = parseUrl(environment, 'STARKNET_RPC_URL');
   const paymasterBaseUrl = parseOptionalUrl(environment, 'AVNU_PAYMASTER_BASE_URL');
   const avnuBaseUrl = parseOptionalUrl(environment, 'AVNU_BASE_URL');
+  const requestTimeoutMs = parseInteger(environment, 'BACKEND_REQUEST_TIMEOUT_MS', 1, MAX_NODE_TIMEOUT_MS);
+  requireDelayWithinDeadline(requestTimeoutMs, { transfer, unshield, ...(stake ? { stake } : {}) });
 
   return {
     port: parseInteger(environment, 'PORT', 1, 65_535),
@@ -42,12 +44,7 @@ export function parseBackendEnvironment(environment: Environment): ParsedBackend
       feeToken,
       maxCalldataItems: parseInteger(environment, 'BACKEND_MAX_CALLDATA_ITEMS', 1),
       maxProofBytes: parseInteger(environment, 'BACKEND_MAX_PROOF_BYTES', 1),
-      requestTimeoutMs: parseInteger(
-        environment,
-        'BACKEND_REQUEST_TIMEOUT_MS',
-        1,
-        MAX_NODE_TIMEOUT_MS,
-      ),
+      requestTimeoutMs,
       globalEnabled: parseBoolean(environment, 'BACKEND_GLOBAL_ENABLED'),
       rateLimit: {
         maxRequests: parseInteger(environment, 'BACKEND_RATE_LIMIT_MAX_REQUESTS', 1),
@@ -78,6 +75,30 @@ export function parseBackendEnvironment(environment: Environment): ParsedBackend
     },
     authorizationSecret: parseSecret(environment, 'FEE_AUTHORIZATION_SECRET', 32),
   };
+}
+
+/** Time the relay needs after the delay to submit through the paymaster. */
+export const RELAY_SUBMISSION_HEADROOM_MS = 5_000;
+
+/**
+ * A delayed route's queue delay runs inside the request deadline, so a delay
+ * the deadline cannot outlast turns into a 504 with nothing submitted — after
+ * the player has already approved the proof (a 2026-09-27 privacy-audit
+ * finding: the example paired a 45 s delay with a 20 s deadline). That is a
+ * startup error here, never a runtime surprise.
+ */
+function requireDelayWithinDeadline(
+  requestTimeoutMs: number,
+  routes: Readonly<Record<string, RoutePolicy>>,
+): void {
+  for (const [route, policy] of Object.entries(routes)) {
+    if (!policy.enabled || policy.maxQueueDelayMs === 0) continue;
+    if (policy.maxQueueDelayMs + RELAY_SUBMISSION_HEADROOM_MS > requestTimeoutMs) {
+      throw new Error(
+        `BACKEND_ROUTE_${route.toUpperCase()}_MAX_QUEUE_DELAY_MS must leave ${RELAY_SUBMISSION_HEADROOM_MS} ms of BACKEND_REQUEST_TIMEOUT_MS for submission.`,
+      );
+    }
+  }
 }
 
 function parsePoolRoute(environment: Environment, name: 'TRANSFER' | 'UNSHIELD'): RoutePolicy {

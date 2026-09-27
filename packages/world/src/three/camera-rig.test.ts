@@ -1,88 +1,75 @@
-import { describe, expect, it, vi } from 'vitest';
-import { PerspectiveCamera, Vector3 } from 'three';
+import { readFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
+import { describe, expect, it } from 'vitest';
+import { Mesh, PerspectiveCamera, Vector3 } from 'three';
+import { createStreetMap } from '../map/street.js';
+import { createNullLabelFactory } from './labels.js';
+import { buildStreet } from './street-builder.js';
 import {
-  CAMERA_FOCUS_HEIGHT,
-  DEFAULT_CAMERA_DISTANCE,
-  MAX_CAMERA_DISTANCE,
-  MAX_CAMERA_PITCH,
-  MIN_CAMERA_DISTANCE,
+  CAMERA_AIM_HEIGHT,
+  CAMERA_DISTANCE,
+  CAMERA_FOV,
+  CAMERA_PITCH,
+  CAMERA_YAW,
   cameraOffset,
+  cameraPositionFor,
   createCameraRig,
-  type CameraPointerHost,
 } from './camera-rig.js';
 
-type Listener = EventListener;
-
-function fakeElement(): CameraPointerHost & {
-  fire(type: string, event: Record<string, unknown>): void;
-  count(): number;
-  captured: Set<number>;
-} {
-  const listeners = new Map<string, Set<Listener>>();
-  const captured = new Set<number>();
-  return {
-    captured,
-    addEventListener(type, listener) {
-      if (!listeners.has(type)) listeners.set(type, new Set());
-      listeners.get(type)!.add(listener);
-    },
-    removeEventListener(type, listener) {
-      listeners.get(type)?.delete(listener);
-    },
-    setPointerCapture(id) {
-      captured.add(id);
-    },
-    releasePointerCapture(id) {
-      captured.delete(id);
-    },
-    hasPointerCapture(id) {
-      return captured.has(id);
-    },
-    fire(type, event) {
-      for (const listener of [...(listeners.get(type) ?? [])]) listener(event as unknown as Event);
-    },
-    count() {
-      return [...listeners.values()].reduce((total, set) => total + set.size, 0);
-    },
-  };
-}
-
-function pointer(type: string, x: number, y: number, extra: Record<string, unknown> = {}) {
-  return { type, pointerId: 1, button: 0, clientX: x, clientY: y, ...extra };
-}
-
 describe('camera offset', () => {
-  it('sits south of the focus at yaw 0, so north is up the screen', () => {
+  it('sits south of the aim point at yaw 0, so north is up the screen', () => {
     const offset = cameraOffset(0, 0.9, 10);
     expect(offset.x).toBeCloseTo(0);
     expect(offset.z).toBeGreaterThan(0);
     expect(offset.y).toBeGreaterThan(0);
     expect(Math.hypot(offset.x, offset.y, offset.z)).toBeCloseTo(10);
   });
-
-  it('orbits to the east at yaw π/2', () => {
-    const offset = cameraOffset(Math.PI / 2, 0.9, 10);
-    expect(offset.x).toBeGreaterThan(0);
-    expect(offset.z).toBeCloseTo(0);
-  });
 });
 
 describe('camera rig', () => {
-  it('looks at the player chest from the default orbit', () => {
-    const camera = new PerspectiveCamera();
+  it('looks north at a point above the player from one fixed angle', () => {
+    const camera = new PerspectiveCamera(CAMERA_FOV);
     const rig = createCameraRig({ camera });
     rig.update(16, { x: 24, z: 15 }, null);
+    const aim = new Vector3(24, CAMERA_AIM_HEIGHT, 15);
     expect(camera.position.x).toBeCloseTo(24);
     expect(camera.position.z).toBeGreaterThan(15);
+    expect(camera.position.distanceTo(aim)).toBeCloseTo(CAMERA_DISTANCE);
     const forward = new Vector3();
     camera.getWorldDirection(forward);
-    const toFocus = new Vector3(24, CAMERA_FOCUS_HEIGHT, 15).sub(camera.position).normalize();
-    expect(forward.dot(toFocus)).toBeCloseTo(1, 5);
-    expect(camera.position.distanceTo(new Vector3(24, CAMERA_FOCUS_HEIGHT, 15))).toBeCloseTo(DEFAULT_CAMERA_DISTANCE);
+    expect(forward.dot(aim.clone().sub(camera.position).normalize())).toBeCloseTo(1, 5);
+    // Pitched down by the fixed angle, facing due north.
+    expect(Math.asin(-forward.y)).toBeCloseTo(CAMERA_PITCH, 5);
+    expect(forward.x).toBeCloseTo(0, 5);
+    expect(camera.position.toArray()).toEqual(Object.values(cameraPositionFor({ x: 24, z: 15 })));
+  });
+
+  it('never turns, tilts or zooms, so W stays north', () => {
+    const rig = createCameraRig({ camera: new PerspectiveCamera(CAMERA_FOV) });
+    const angle = () => [rig.yaw, rig.pitch, rig.distance];
+    const fixed = [CAMERA_YAW, CAMERA_PITCH, CAMERA_DISTANCE];
+    expect(angle()).toEqual(fixed);
+    for (const [x, z, elevation] of [
+      [0, 0, 0],
+      [40, 5, 3],
+      [70, 20, 12],
+    ] as const) {
+      rig.update(16, { x, z }, null, elevation);
+      rig.snap();
+    }
+    expect(angle()).toEqual(fixed);
+    expect(CAMERA_YAW).toBe(0);
+  });
+
+  it('reads no pointer or wheel input: nothing to drag, scroll or bind', () => {
+    const source = readFileSync(fileURLToPath(new URL('./camera-rig.ts', import.meta.url)), 'utf8');
+    for (const binding of ['addEventListener', "'pointerdown'", "'wheel'", "'contextmenu'", 'setPointerCapture']) {
+      expect(source).not.toContain(binding);
+    }
   });
 
   it('eases towards a moving target and jumps after snap', () => {
-    const camera = new PerspectiveCamera();
+    const camera = new PerspectiveCamera(CAMERA_FOV);
     const rig = createCameraRig({ camera });
     rig.update(16, { x: 0, z: 0 }, null);
     rig.update(16, { x: 10, z: 0 }, null);
@@ -93,72 +80,87 @@ describe('camera rig', () => {
     expect(camera.position.x).toBeCloseTo(40);
   });
 
-  it('keeps its focus inside the active bounds', () => {
-    const camera = new PerspectiveCamera();
+  it('rises with the player on sandbox blocks, so a tall tower stays framed', () => {
+    const camera = new PerspectiveCamera(CAMERA_FOV);
+    const rig = createCameraRig({ camera });
+    rig.update(16, { x: 60, z: 12 }, null, 0);
+    const ground = camera.position.y;
+    rig.snap();
+    rig.update(16, { x: 60, z: 12 }, null, 8);
+    expect(camera.position.y).toBeCloseTo(ground + 8);
+  });
+
+  it('keeps its aim inside the active bounds', () => {
+    const camera = new PerspectiveCamera(CAMERA_FOV);
     const rig = createCameraRig({ camera });
     rig.update(16, { x: 100, z: -5 }, { minX: 2, maxX: 20, minZ: 2, maxZ: 14 });
     expect(camera.position.x).toBeCloseTo(20);
   });
 
   it('ignores non-finite targets instead of poisoning the camera', () => {
-    const camera = new PerspectiveCamera();
+    const camera = new PerspectiveCamera(CAMERA_FOV);
     const rig = createCameraRig({ camera });
     rig.update(16, { x: 3, z: 4 }, null);
     const before = camera.position.clone();
     rig.update(16, { x: Number.NaN, z: 4 }, null);
     expect(camera.position.equals(before)).toBe(true);
-  });
-
-  it('orbits on drag, clamps pitch, and never changes yaw on its own', () => {
-    const element = fakeElement();
-    const rig = createCameraRig({ camera: new PerspectiveCamera(), element });
-    element.fire('pointerdown', pointer('pointerdown', 100, 100));
-    expect(element.captured.has(1)).toBe(true);
-    element.fire('pointermove', pointer('pointermove', 150, 100));
-    expect(rig.yaw).toBeLessThan(0);
-    element.fire('pointermove', pointer('pointermove', 150, 5000));
-    expect(rig.pitch).toBe(MAX_CAMERA_PITCH);
-    element.fire('pointerup', pointer('pointerup', 150, 5000));
-    expect(element.captured.has(1)).toBe(false);
-    const yaw = rig.yaw;
-    rig.snap();
-    rig.update(16, { x: 1, z: 1 }, null);
-    expect(rig.yaw).toBe(yaw);
-  });
-
-  it('zooms with the wheel within limits and blocks page scroll', () => {
-    const element = fakeElement();
-    const rig = createCameraRig({ camera: new PerspectiveCamera(), element });
-    const preventDefault = vi.fn();
-    element.fire('wheel', { deltaY: 100_000, preventDefault });
-    expect(rig.distance).toBe(MAX_CAMERA_DISTANCE);
-    element.fire('wheel', { deltaY: -100_000, preventDefault });
-    expect(rig.distance).toBe(MIN_CAMERA_DISTANCE);
-    expect(preventDefault).toHaveBeenCalledTimes(2);
-  });
-
-  it('drops an active drag and ignores input while the World does not own it', () => {
-    const element = fakeElement();
-    const rig = createCameraRig({ camera: new PerspectiveCamera(), element });
-    element.fire('pointerdown', pointer('pointerdown', 0, 0));
-    rig.setInputEnabled(false);
-    expect(element.captured.size).toBe(0);
-    element.fire('pointermove', pointer('pointermove', 400, 0));
-    expect(rig.yaw).toBe(0);
-    element.fire('pointerdown', pointer('pointerdown', 0, 0));
-    element.fire('pointermove', pointer('pointermove', 400, 0));
-    expect(rig.yaw).toBe(0);
-    const preventDefault = vi.fn();
-    element.fire('wheel', { deltaY: 500, preventDefault });
-    expect(rig.distance).toBe(DEFAULT_CAMERA_DISTANCE);
-  });
-
-  it('removes every listener on destroy', () => {
-    const element = fakeElement();
-    const rig = createCameraRig({ camera: new PerspectiveCamera(), element });
-    expect(element.count()).toBeGreaterThan(0);
     rig.destroy();
-    rig.destroy();
-    expect(element.count()).toBe(0);
+    rig.update(16, { x: 30, z: 4 }, null);
+    expect(camera.position.equals(before)).toBe(true);
+  });
+});
+
+describe('fixed camera framing', () => {
+  // Every street building, rooftop to kerb, stays in frame while the player
+  // walks the pavement and road in front of it, and the player stays in view.
+  const view = buildStreet(createStreetMap(), createNullLabelFactory());
+  view.ground.updateMatrixWorld(true);
+  const tops: { y: number; z: number; building: string }[] = [];
+  for (const group of view.ground.children.filter((child) => child.name.startsWith('building:'))) {
+    let highest = -Infinity;
+    const points: Vector3[] = [];
+    group.traverse((object) => {
+      if (!(object instanceof Mesh)) return;
+      const position = object.geometry.getAttribute('position');
+      for (let i = 0; i < position.count; i++) {
+        const vertex = new Vector3().fromBufferAttribute(position, i).applyMatrix4(object.matrixWorld);
+        points.push(vertex);
+        highest = Math.max(highest, vertex.y);
+      }
+    });
+    // At yaw 0 a vertex's height on screen depends only on its y and z.
+    for (const point of points) tops.push({ y: point.y, z: point.z, building: group.name });
+    expect(highest, group.name).toBeGreaterThan(3.5);
+  }
+  view.dispose();
+
+  it.each([
+    ['the north pavement', 11.6],
+    ['the north pavement kerb', 12.9],
+    ['the road', 15],
+    ['the far lane', 16.8],
+    ['the south pavement', 18.4],
+  ])('shows every rooftop whole from %s (z %d)', (_where, z) => {
+    for (const x of [6.5, 15.5, 24.5, 33.5, 42.5]) {
+      const camera = new PerspectiveCamera(CAMERA_FOV, 16 / 9, 0.1, 240);
+      const rig = createCameraRig({ camera });
+      rig.update(16, { x, z }, null);
+      camera.updateMatrixWorld(true);
+      let top = -Infinity;
+      let worst = '';
+      for (const point of tops) {
+        const ndc = new Vector3(x, point.y, point.z).project(camera);
+        if (ndc.y > top) {
+          top = ndc.y;
+          worst = point.building;
+        }
+      }
+      expect(top, `${worst} from (${x}, ${z})`).toBeLessThan(0.97);
+      // The player stands in the lower half, feet to head in frame.
+      const feet = new Vector3(x, 0, z).project(camera).y;
+      const head = new Vector3(x, 2, z).project(camera).y;
+      expect(feet).toBeGreaterThan(-0.9);
+      expect(head).toBeLessThan(0);
+    }
   });
 });

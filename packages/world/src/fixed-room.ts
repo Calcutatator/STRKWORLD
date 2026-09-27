@@ -475,6 +475,9 @@ export function createFixedRoomController(
   let stations = normalizeFixedRoomStations(options.definition, undefined);
   let destroyed = false;
   let approachArmed = new Set(options.definition.stations.map((station) => station.station));
+  // The tile the World last reported in this room: a counter that becomes
+  // available while the player already stands at it activates from here.
+  let standing: { readonly x: number; readonly y: number } | null = null;
 
   const state = (): FixedRoomState => ({
     inRoom,
@@ -496,11 +499,18 @@ export function createFixedRoomController(
   try {
     stopStations = options.in?.on('world:stations', (payload) => {
     if (destroyed || !inRoom || ownDataField(payload, 'building') !== options.definition.building) return;
+    const waiting = highlightedStation;
+    const wasAvailable = stations.some((station) => station.station === waiting && station.status === 'available');
     stations = normalizeFixedRoomStations(
       options.definition,
       ownDataField(payload, 'stations') as ShellEvents['world:stations']['stations'] | undefined,
     );
       publish();
+      // Activation otherwise runs only on a tile change. If this snapshot made
+      // the counter the player already stands at available, step up to it now
+      // through the same path, with its arming and ownership guards.
+      const nowAvailable = stations.some((station) => station.station === waiting && station.status === 'available');
+      if (waiting && standing && !wasAvailable && nowAvailable && highlightedStation === waiting) api.update(standing);
     });
     stopOwner = options.in?.on('world:control-owner', (payload) => {
     if (destroyed || !inRoom || ownDataField(payload, 'building') !== options.definition.building) return;
@@ -550,11 +560,14 @@ export function createFixedRoomController(
     controlOwner = 'world';
     highlightedStation = null;
     approachArmed = new Set(options.definition.stations.map((station) => station.station));
+    const previousStanding = standing;
+    standing = null;
     try {
       options.input.resume();
     } catch (error) {
       // Input restoration is an external lifecycle boundary. Keep the room
       // owned when it fails so the same exit can retry the transition.
+      standing = previousStanding;
       inRoom = true;
       controlOwner = previousControlOwner;
       highlightedStation = previousHighlightedStation;
@@ -630,7 +643,7 @@ export function createFixedRoomController(
     }
   }
 
-  return {
+  const api: FixedRoomController = {
     get state() {
       return state();
     },
@@ -639,6 +652,7 @@ export function createFixedRoomController(
       inRoom = true;
       controlOwner = 'world';
       highlightedStation = null;
+      standing = null;
       approachArmed = new Set(options.definition.stations.map((station) => station.station));
       stations = normalizeFixedRoomStations(options.definition, undefined);
       try {
@@ -699,7 +713,9 @@ export function createFixedRoomController(
       }
     },
     update(tile): void {
-      if (destroyed || !inRoom || controlOwner === 'shell') return;
+      if (destroyed || !inRoom) return;
+      standing = { x: tile.x, y: tile.y };
+      if (controlOwner === 'shell') return;
       const ownRevision = ++updateRevision;
       if (isFixedRoomExit(room, tile.x, tile.y)) {
         leave();
@@ -819,6 +835,7 @@ export function createFixedRoomController(
       if (errors.length > 1) throw new AggregateError(errors, 'Fixed-room cleanup failed');
     },
   };
+  return api;
 }
 
 function isInside(rect: FixedRoomRect, x: number, y: number): boolean {

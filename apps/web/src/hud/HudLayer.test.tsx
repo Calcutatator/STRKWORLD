@@ -68,7 +68,9 @@ const text = (view: HTMLElement, selector: string): string | null | undefined =>
 describe('HudLayer', () => {
   it('shows the wallet status, the balance the Bank published and what is in flight', () => {
     const bus = createEventBus<ShellEvents>();
-    const view = mount(<HudLayer shell={bus} storage={memory().storage} />);
+    const shown = memory();
+    shown.values.set(HUD_BALANCE_HIDDEN_KEY, '0');
+    const view = mount(<HudLayer shell={bus} storage={shown.storage} />);
     const live = view.querySelector('.journey-hud > [role="status"]');
 
     expect(view.querySelector('.journey-hud')?.getAttribute('aria-label')).toBe(COPY.hud.label);
@@ -126,13 +128,15 @@ describe('HudLayer', () => {
       bus.emit('hud:balance', { display: '4 STRK' });
     });
 
+    // Hidden by default: a balance on screen is a balance on every stream.
     const toggle = view.querySelector('.journey-hud-toggle');
-    expect(toggle?.getAttribute('aria-label')).toBe(COPY.hud.hideBalance);
-    click(toggle);
     expect(text(view, '.journey-hud-balance strong')).toBe(COPY.hud.balanceHidden);
     expect(view.textContent).not.toContain('4 STRK');
-    expect(view.querySelector('.journey-hud-toggle')?.getAttribute('aria-label')).toBe(COPY.hud.showBalance);
-    expect(browser.values.get(HUD_BALANCE_HIDDEN_KEY)).toBe('1');
+    expect(toggle?.getAttribute('aria-label')).toBe(COPY.hud.showBalance);
+    click(toggle);
+    expect(text(view, '.journey-hud-balance strong')).toBe('4 STRK');
+    expect(view.querySelector('.journey-hud-toggle')?.getAttribute('aria-label')).toBe(COPY.hud.hideBalance);
+    expect(browser.values.get(HUD_BALANCE_HIDDEN_KEY)).toBe('0');
 
     unmount();
     view = mount(<HudLayer shell={bus} storage={browser.storage} />);
@@ -140,11 +144,11 @@ describe('HudLayer', () => {
       bus.emit('wallet:status', { status: 'connected' });
       bus.emit('hud:balance', { display: '4 STRK' });
     });
-    expect(text(view, '.journey-hud-balance strong')).toBe(COPY.hud.balanceHidden);
+    expect(text(view, '.journey-hud-balance strong')).toBe('4 STRK');
 
     click(view.querySelector('.journey-hud-toggle'));
-    expect(text(view, '.journey-hud-balance strong')).toBe('4 STRK');
-    expect(browser.values.has(HUD_BALANCE_HIDDEN_KEY)).toBe(false);
+    expect(text(view, '.journey-hud-balance strong')).toBe(COPY.hud.balanceHidden);
+    expect(browser.values.get(HUD_BALANCE_HIDDEN_KEY)).toBe('1');
   });
 
   it('renders and toggles correctly when storage refuses every access', () => {
@@ -157,8 +161,9 @@ describe('HudLayer', () => {
 
     // Nothing is remembered, so this is always a first run.
     expect((view.querySelector('.journey-guide') as HTMLElement).hidden).toBe(false);
-    click(view.querySelector('.journey-hud-toggle'));
     expect(text(view, '.journey-hud-balance strong')).toBe(COPY.hud.balanceHidden);
+    click(view.querySelector('.journey-hud-toggle'));
+    expect(text(view, '.journey-hud-balance strong')).toBe('7 STRK');
     click(view.querySelector('.journey-guide-dismiss'));
     expect((view.querySelector('.journey-guide') as HTMLElement).hidden).toBe(true);
   });
@@ -212,7 +217,7 @@ describe('HudLayer', () => {
     const view = mount(<HudLayer shell={createEventBus<ShellEvents>()} storage={memory().storage} />);
     const guide = view.querySelector('.journey-guide') as HTMLElement;
     const inputs = [...guide.querySelectorAll('dt')].map((node) => node.textContent);
-    expect(inputs).toEqual(['WASD or arrow keys', 'Shift', 'Drag', 'Scroll', 'F', 'E', 'Esc']);
+    expect(inputs).toEqual(['WASD or arrow keys', 'Shift', 'F', 'E', 'Esc']);
     expect(guide.textContent).toContain('Menu Mode');
     expect(guide.textContent).toContain('sandbox');
 
