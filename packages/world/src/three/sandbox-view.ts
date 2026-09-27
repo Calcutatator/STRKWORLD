@@ -55,9 +55,6 @@ const GRAVITY = 42;
 /** Rebound speed after a sky drop lands: a hop of a few centimetres. */
 const BOUNCE_SPEED = 2.2;
 const LEAVE_MS = 180;
-/** An expected drop that never arrives stops waiting after this long. */
-const DROP_EXPIRY_MS = 8000;
-const MAX_PENDING_DROPS = 64;
 
 export interface SandboxTarget {
   readonly x: number;
@@ -72,7 +69,12 @@ export interface SandboxView {
   readonly group: Group;
   /** Full replacement of state; diffed internally. */
   setColumns(columns: readonly SandboxColumn[]): void;
-  /** The next block that appears on this tile falls from the sky. */
+  /**
+   * A sky-drop hint for a block that has just appeared on this tile: if its
+   * top block is still settling in, it falls from the sky instead. Hints come
+   * after the state that adds the block (the lobby's order, and solo's); a
+   * hint for anything else is ignored, so it can never re-drop a placed block.
+   */
   expectDrop(tile: SandboxTile): void;
   /** Where E will act: a pulsing ghost and outline; null hides it. */
   setTarget(target: SandboxTarget | null): void;
@@ -287,7 +289,6 @@ export function buildSandbox(): SandboxView {
   const leaving: Block[] = [];
   const slots: (Block | null)[] = new Array(SANDBOX_INSTANCE_CAPACITY).fill(null);
   const animating = new Set<Block>();
-  const drops = new Map<number, number>();
   let active = 0;
   let dirtyMin = Infinity;
   let dirtyMax = -Infinity;
@@ -452,10 +453,7 @@ export function buildSandbox(): SandboxView {
           columns.set(key, blocks);
         }
         for (let k = blocks.length; k < column.colours.length; k++) {
-          const expiry = drops.get(key);
-          const falling = expiry !== undefined && expiry >= elapsed;
-          if (falling) drops.delete(key);
-          const block: Block = { x: column.x, y: column.y, k, colour: column.colours[k]!, state: falling ? 'drop' : 'settle', t: 0, index: -1 };
+          const block: Block = { x: column.x, y: column.y, k, colour: column.colours[k]!, state: 'settle', t: 0, index: -1 };
           if (!allocate(block)) break;
           animating.add(block);
           blocks.push(block);
@@ -468,24 +466,18 @@ export function buildSandbox(): SandboxView {
       if (disposed || tile === null || typeof tile !== 'object') return;
       if (!isSandboxTile(tile.x, tile.y)) return;
       const key = tileKey(tile.x, tile.y);
-      // The lobby sends its sky-drop hint after the state patch that adds the
-      // block, so the block can already be here, settling from a short drop.
-      // Upgrade it to a sky drop while it is still arriving. A settled block is
-      // left alone, and a sky drop never lands where a player just placed one
-      // (drops keep a tile away from every player).
+      // The hint follows the state that adds the block, so the block is here,
+      // settling from a short drop. Upgrade it to a sky drop while it is still
+      // arriving. A settled block is left alone, and a sky drop never lands
+      // where a player just placed one (drops keep a tile away from players).
       const stack = columns.get(key);
       const top = stack?.[stack.length - 1];
-      if (top && top.state === 'settle' && top.t < SETTLE_MS) {
-        top.state = 'drop';
-        top.t = 0;
-        animating.add(top);
-        writeMatrix(top);
-        flush();
-        return;
-      }
-      drops.delete(key);
-      drops.set(key, elapsed + DROP_EXPIRY_MS);
-      while (drops.size > MAX_PENDING_DROPS) drops.delete(drops.keys().next().value!);
+      if (!top || top.state !== 'settle' || top.t >= SETTLE_MS) return;
+      top.state = 'drop';
+      top.t = 0;
+      animating.add(top);
+      writeMatrix(top);
+      flush();
     },
     setTarget(value) {
       if (disposed) return;
@@ -536,7 +528,6 @@ export function buildSandbox(): SandboxView {
           writeMatrix(block);
         }
       }
-      for (const [key, expiry] of drops) if (expiry < elapsed) drops.delete(key);
       styleTarget(0.5 + 0.5 * Math.sin((elapsed / 1000) * 6));
       flush();
     },
@@ -546,7 +537,6 @@ export function buildSandbox(): SandboxView {
       columns.clear();
       leaving.length = 0;
       animating.clear();
-      drops.clear();
       group.removeFromParent();
       group.clear();
       mesh.dispose();

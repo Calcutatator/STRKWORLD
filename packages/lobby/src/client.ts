@@ -246,6 +246,8 @@ export class LobbyClient {
   /** The latest requested position not yet confirmed on the server. */
   #desired: Required<Placement> | null = null;
   #lastSentAt: number | null = null;
+  /** The last position actually put on the wire, to tell sent from waiting. */
+  #lastSentPlacement: Required<Placement> | null = null;
   #reconcileHandle: ReturnType<typeof setTimeout> | null = null;
 
   /** Pure. Opens no connection. */
@@ -412,6 +414,7 @@ export class LobbyClient {
     // confirmed position; nothing to reconcile until the consumer moves again.
     this.#desired = null;
     this.#lastSentAt = performance.now();
+    this.#lastSentPlacement = null;
     this.#setStatus('connected');
     this.#emitSandbox();
   }
@@ -658,6 +661,7 @@ export class LobbyClient {
       this.#room = room;
       this.#desired = null;
       this.#lastSentAt = null;
+      this.#lastSentPlacement = null;
       this.#lastSandboxActionAt = null;
       this.#cancelSandboxAction();
       this.#setStatus('connected');
@@ -776,6 +780,7 @@ export class LobbyClient {
     if (elapsed === null || elapsed >= this.#minSendIntervalMs) {
       const room = this.#room;
       room.send(MESSAGE.move, desired);
+      this.#lastSentPlacement = desired;
       // A transport can report closure synchronously from send. Do not stamp
       // the retired room's send time or schedule work against its replacement.
       if (this.#room !== room || this.#status !== 'connected') return;
@@ -1022,6 +1027,26 @@ export class LobbyClient {
         Math.min(SANDBOX_CLIENT_ACTION_INTERVAL_MS - (now - last), MAX_TIMER_DELAY_MS),
       );
       return;
+    }
+    // A newer position still waiting on the move floor goes first, so the
+    // server judges this action from where the player stands now rather than
+    // from the tile they just left. Hold the action until that move can go.
+    // A position already sent and awaiting confirmation does not hold it.
+    const desired = this.#desired;
+    const unsent = desired !== null &&
+      (this.#lastSentPlacement === null || !samePlacement(desired, this.#lastSentPlacement));
+    if (unsent) {
+      const sinceMove = this.#lastSentAt === null ? null : now - this.#lastSentAt;
+      if (sinceMove !== null && sinceMove < this.#minSendIntervalMs) {
+        this.#scheduleSandboxAction(Math.min(this.#minSendIntervalMs - sinceMove, MAX_TIMER_DELAY_MS));
+        return;
+      }
+      const before = this.#room;
+      this.#pump(now);
+      if (this.#room !== before || this.#status !== 'connected' || this.#room === null) {
+        this.#pendingSandboxAction = null;
+        return;
+      }
     }
     this.#pendingSandboxAction = null;
     const room = this.#room;

@@ -300,11 +300,16 @@ export function createPresenter(options: PresenterOptions): Presenter {
         setPlayerElevation(level) {
           if (!live() || !Number.isFinite(level)) return;
           const next = Math.max(0, level);
-          if (next > elevationTarget && !pendingSnap) {
+          // Hop only onto something above the feet as drawn right now. A stack
+          // that rises under a falling player below its current height just
+          // becomes the new landing: the fall carries on down to it.
+          if (next > elevationShown && !pendingSnap) {
             // Re-plan from wherever the feet are now, so they never jump.
             hop = next - elevationShown <= MAX_HOP_RISE ? { from: elevationShown, to: next, elapsed: 0 } : null;
             if (!hop) elevationShown = next;
             fallSpeed = 0;
+          } else if (hop) {
+            hop = null;
           }
           elevationTarget = next;
         },
@@ -398,9 +403,11 @@ export function createPresenter(options: PresenterOptions): Presenter {
         if (value !== 1) occluder.setOpacity(1);
         opacity.delete(occluder);
       }
+      // Sight lines start from where the avatar is drawn, sandbox height included.
+      const base = streetVisible ? elevationShown : 0;
       for (const occluder of active) {
         const blocked = SIGHT_HEIGHTS.some((height) =>
-          segmentHitsBox(camera, { x: ground.x, y: height, z: ground.z }, occluder),
+          segmentHitsBox(camera, { x: ground.x, y: base + height, z: ground.z }, occluder),
         );
         const current = opacity.get(occluder) ?? 1;
         const goal = blocked ? OCCLUDED_OPACITY : 1;

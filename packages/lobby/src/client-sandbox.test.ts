@@ -490,6 +490,32 @@ describe('pickBlock and placeBlock', () => {
     }
   });
 
+  it('sends a waiting position before the action, so reach is judged from where the player stands', async () => {
+    let now = 1000;
+    vi.spyOn(performance, 'now').mockImplementation(() => now);
+    const joined = fakeRoom();
+    const client = await connectedTo(joined);
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+    try {
+      joined.send.mockClear();
+      client.updatePosition(1808, 464, 'right');
+      now = 1010;
+      // A step across a tile edge, still inside the move floor: held.
+      client.updatePosition(1840, 464, 'right');
+      client.pickBlock({ x: 59, y: 14 });
+      expect(joined.send.mock.calls.map(([type]) => type)).toEqual([MESSAGE.move]);
+      now = 1100;
+      vi.advanceTimersByTime(100);
+      const sent = joined.send.mock.calls.map(([type, payload]) => [type, payload]);
+      const moveIndex = sent.findIndex(([type, payload]) => type === MESSAGE.move && (payload as { x: number }).x === 1840);
+      const pickIndex = sent.findIndex(([type]) => type === MESSAGE.sandboxPick);
+      expect(moveIndex).toBeGreaterThanOrEqual(0);
+      expect(pickIndex).toBeGreaterThan(moveIndex);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it('keeps the floor through a clock rollback and an unusable clock', async () => {
     let now = 1000;
     vi.spyOn(performance, 'now').mockImplementation(() => now);

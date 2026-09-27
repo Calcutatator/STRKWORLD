@@ -609,7 +609,9 @@ function stepElevation(avatar: RemoteAvatar, deltaMs: number, goal: number): voi
  */
 export function hopHeight(from: number, to: number, t: number): number {
   const rise = to - from;
-  const curve = rise + 2 * REMOTE_HOP_PEAK + 2 * Math.sqrt(REMOTE_HOP_PEAK * (rise + REMOTE_HOP_PEAK));
+  // Callers only hop upwards; clamp anyway so a negative rise can never reach
+  // the square root and poison the avatar, camera, sun and fog with NaN.
+  const curve = rise + 2 * REMOTE_HOP_PEAK + 2 * Math.sqrt(Math.max(0, REMOTE_HOP_PEAK * (rise + REMOTE_HOP_PEAK)));
   return from + (rise + curve) * t - curve * t * t;
 }
 

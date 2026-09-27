@@ -197,7 +197,8 @@ export function createWorldEngine(options: WorldEngineOptions): WorldEngine {
     guard('camera', () => {
       if (presenter.consumeSnap()) rig.snap();
       const focus = presenter.player.ground;
-      const elevation = presenter.player.elevation;
+      // A bad presentation value must never reach the light, fog or camera.
+      const elevation = Number.isFinite(presenter.player.elevation) ? presenter.player.elevation : 0;
       rig.update(delta, focus, presenter.cameraBounds, elevation);
       presenter.updateOcclusion(camera.position, delta);
       // Snap the light to whole shadow texels so edges do not shimmer as the
@@ -303,18 +304,15 @@ export function createWorldEngine(options: WorldEngineOptions): WorldEngine {
   return {
     rebind(config) {
       if (destroyed) return;
-      // Attempt every step, then report: a failed teardown of the old
-      // session must not leave the World with no session at all.
-      let stopError: unknown;
-      let stopFailed = false;
+      // A failed teardown of the old session is reported, not rethrown: the
+      // host treats a throwing retarget as a failed remount and would tear
+      // down the engine and the fresh session with it.
       try {
         stopSession();
       } catch (error) {
-        stopFailed = true;
-        stopError = error;
+        reportFrameError('rebind', error);
       }
       startSession(config);
-      if (stopFailed) throw stopError;
     },
     resize,
     destroy() {

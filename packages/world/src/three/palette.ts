@@ -1490,17 +1490,15 @@ export interface TickerStrip {
   readonly height: number;
 }
 
-/** avnu's blue LED pairs; the rooftop ticker also carries the route's name, once. */
+/**
+ * avnu's blue LED pairs; the rooftop ticker also carries the route's name,
+ * once. No token symbols and no price arrows: the World must not know what
+ * money is (AGENTS.md §2), and invented price direction beside a real swap
+ * route would read as data.
+ */
 export const EXCHANGE_ROOM_TICKER: readonly TickerSegment[] = Object.freeze([
   { text: 'SWAP', color: AVNU.lightBlue },
-  { text: '  STRK', color: AVNU.white },
-  { text: '\u25b2', color: AVNU.blue },
-  { text: '  ETH', color: AVNU.white },
-  { text: '\u25bc', color: AVNU.slate },
-  { text: '  USDC', color: AVNU.white },
-  { text: '\u25b2', color: AVNU.blue },
-  { text: '  WBTC', color: AVNU.white },
-  { text: '\u25b2', color: AVNU.blue },
+  { text: '   STRKWORLD EXCHANGE', color: AVNU.white },
   { text: '    ', color: 0 },
 ]);
 

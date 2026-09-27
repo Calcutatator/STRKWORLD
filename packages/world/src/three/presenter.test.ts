@@ -96,6 +96,25 @@ describe('presenter', () => {
     expect(world.avatar.object.position.y).toBeCloseTo(0);
   });
 
+  it('keeps falling, never NaN, when a stack rises under a falling player', () => {
+    const world = setup();
+    world.view.setPlayerPosition(tile(SANDBOX_AREA.x + 3, 14), true);
+    world.presenter.update(16);
+    world.presenter.consumeSnap();
+    world.view.setPlayerElevation(3);
+    world.presenter.update(16);
+    world.view.setPlayerElevation(0);
+    world.presenter.update(100);
+    // Mid-fall, above the new landing: the rise must not start a hop.
+    world.view.setPlayerElevation(1);
+    for (let i = 0; i < 40; i += 1) {
+      world.presenter.update(16);
+      expect(Number.isFinite(world.presenter.player.elevation)).toBe(true);
+      expect(Number.isFinite(world.avatar.object.position.y)).toBe(true);
+    }
+    expect(world.presenter.player.elevation).toBeCloseTo(1);
+  });
+
   it('lands at once when a stack rises more than a block under the player', () => {
     const world = setup();
     world.view.setPlayerPosition(tile(SANDBOX_AREA.x + 3, 14), true);

@@ -119,8 +119,14 @@ describe('the shared block sandbox across two real players (D-060)', () => {
     const before = heightAt(first.latest(), target);
     const standAt = { x: target.x - 1 >= SANDBOX_AREA.x ? target.x - 1 : target.x + 1, y: target.y };
     first.stand(standAt, target.x > standAt.x ? 'right' : 'left');
-    // Let the move reach the server before acting on it.
-    await new Promise((resolve) => setTimeout(resolve, 250));
+    // Act only once the server has applied the move — the other client seeing
+    // the first player there is the server's confirmation.
+    const standPx = centre(standAt);
+    await waitFor(
+      () => second.peers.at(-1)?.[0],
+      (peer) => peer?.x === standPx.x && peer?.y === standPx.y,
+      'the server to apply the first player\'s move',
+    );
     first.sandbox.channel.pick(target);
     const carried = await waitFor(() => first.latest()?.carrying, (colour) => colour !== null && colour !== undefined, 'the pick');
     await waitFor(() => heightAt(second.latest(), target), (height) => height === before - 1, 'the other client to see the stack shrink');

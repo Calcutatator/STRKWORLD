@@ -48,12 +48,13 @@ const createPresence = (): PresenceController => {
   activePresence = next;
   return next;
 };
-hot?.dispose(() => {
-  stopSandboxWorld();
-  sandbox.destroy();
-});
+// One teardown for everything multiplayer: Vite keeps a single `hot.dispose`
+// callback per module, so the sandbox rides on the presence lifecycle rather
+// than registering a second one that would silently replace it.
 const presenceLifecycle = {
   destroy: async () => {
+    stopSandboxWorld();
+    sandbox.destroy();
     await activePresence?.destroy();
   },
 };

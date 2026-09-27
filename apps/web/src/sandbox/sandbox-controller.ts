@@ -72,14 +72,27 @@ export function createSandboxController(options: SandboxControllerOptions = {}):
 
   /** The lobby client currently acting as authority, if any. */
   let lobby: { readonly client: SandboxLobbyClient; readonly stop: () => void } | null = null;
-  const adopted = new Map<SandboxLobbyClient, () => void>();
+  const adopted = new Map<SandboxLobbyClient, { stop: () => void; status: string }>();
 
+  /** Every listener hears every change; the first failure surfaces afterwards. */
+  const notify = <T>(targets: ReadonlySet<(value: T) => void>, value: T): void => {
+    const errors: unknown[] = [];
+    for (const listener of [...targets]) {
+      try {
+        listener(value);
+      } catch (error) {
+        errors.push(error);
+      }
+    }
+    if (errors.length === 1) throw errors[0];
+    if (errors.length > 1) throw new AggregateError(errors, 'Sandbox listener failed');
+  };
   const publish = (next: SandboxSnapshot): void => {
     snapshot = next;
-    for (const listener of [...listeners]) listener(next);
+    notify(listeners, next);
   };
   const emitDrop = (tile: SandboxTile): void => {
-    for (const listener of [...dropListeners]) listener(tile);
+    notify(dropListeners, tile);
   };
 
   // -- solo authority ---------------------------------------------------------
@@ -92,17 +105,21 @@ export function createSandboxController(options: SandboxControllerOptions = {}):
     spawnTimer = setTimer(() => {
       spawnTimer = null;
       if (destroyed || lobby) return;
-      // Like the lobby room, only rain blocks while a player is out on the street.
-      if (player && !away) {
-        const tile = authority.spawn([player]);
-        if (tile) {
-          // The hint must precede the state that contains the block, or the
-          // renderer settles it from a short drop instead of the sky.
-          emitDrop(tile);
-          publish(authority.snapshotFor(LOCAL_PLAYER));
+      try {
+        // Like the lobby room, only rain blocks while a player is out on the street.
+        if (player && !away) {
+          const tile = authority.spawn([player]);
+          if (tile) {
+            // Same order as the lobby: the state first, then the sky-drop
+            // hint, which the renderer applies to the block now arriving.
+            publish(authority.snapshotFor(LOCAL_PLAYER));
+            emitDrop(tile);
+          }
         }
+      } finally {
+        // A throwing listener must not end the rain for the rest of the session.
+        scheduleSpawn();
       }
-      scheduleSpawn();
     }, interval);
   };
 
@@ -118,6 +135,9 @@ export function createSandboxController(options: SandboxControllerOptions = {}):
     if (lobby?.client === client) return;
     lobby?.stop();
     stopSpawning();
+    // A block carried in solo play does not travel into the shared room, and
+    // must not reappear if the connection later drops back to solo.
+    if (authority.carrying(LOCAL_PLAYER) !== null) authority.release(LOCAL_PLAYER);
     const stopState = client.onSandbox((next) => {
       if (lobby?.client === client) publish(next);
     });
@@ -215,12 +235,22 @@ export function createSandboxController(options: SandboxControllerOptions = {}):
     },
     adopt<T>(client: T): T {
       if (destroyed || !isSandboxClient(client) || adopted.has(client)) return client;
+      // Presence replaces its client on reconnects; forget replaced clients
+      // that have already closed, so the adopted set cannot grow forever.
+      for (const [previous, entry] of adopted) {
+        if (entry.status !== 'closed' || lobby?.client === previous) continue;
+        adopted.delete(previous);
+        entry.stop();
+      }
+      const entry: { stop: () => void; status: string } = { stop: () => {}, status: 'idle' };
+      adopted.set(client, entry);
       const stopStatus = client.onStatus((event) => {
         if (destroyed) return;
+        entry.status = event.status;
         if (event.status === 'connected' || event.status === 'suspended') useLobby(client);
         else if (event.status === 'closed') useLocal(client);
       });
-      adopted.set(client, stopStatus);
+      entry.stop = stopStatus;
       return client;
     },
     destroy() {
@@ -229,7 +259,7 @@ export function createSandboxController(options: SandboxControllerOptions = {}):
       stopSpawning();
       lobby?.stop();
       lobby = null;
-      for (const stop of adopted.values()) stop();
+      for (const entry of adopted.values()) entry.stop();
       adopted.clear();
       listeners.clear();
       dropListeners.clear();

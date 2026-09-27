@@ -211,11 +211,12 @@ describe('buildSandbox', () => {
     const view = buildSandbox();
     view.setColumns([{ x: X + 4, y: Y + 4, colours: [0, 1] }]);
     settle(view);
-    view.expectDrop({ x: X + 4, y: Y + 4 });
     view.setColumns([
       { x: X + 4, y: Y + 4, colours: [0, 1, 5] },
       { x: X + 9, y: Y + 9, colours: [2] },
     ]);
+    // The hint follows the state that adds the block, as the lobby sends it.
+    view.expectDrop({ x: X + 4, y: Y + 4 });
     const dropIndex = instancePositions(view).findIndex((p) => p.x === X + 4.5 && p.y > 30);
     expect(dropIndex).toBeGreaterThanOrEqual(0);
     expect(heightOf(view, dropIndex)).toBeGreaterThanOrEqual(2.5 + 39);
@@ -237,18 +238,19 @@ describe('buildSandbox', () => {
     view.dispose();
   });
 
-  it('drops only the next block on the tile, and forgets a drop that never comes', () => {
+  it('drops only the arriving top block, and ignores hints with nothing arriving', () => {
     const view = buildSandbox();
-    view.expectDrop({ x: X, y: Y });
     view.setColumns([{ x: X, y: Y, colours: [0, 1] }]);
-    // The first new block (level 0) falls; the one above it just settles.
+    view.expectDrop({ x: X, y: Y });
+    // The top block (level 1) falls; the one beneath it just settles.
     const heights = instancePositions(view).map((p) => p.y).sort((a, b) => a - b);
-    expect(heights[0]).toBeLessThanOrEqual(2.51);
+    expect(heights[0]).toBeLessThanOrEqual(1.51);
     expect(heights[1]).toBeGreaterThan(30);
 
+    // A hint that arrives before anything is there waits for nothing: the
+    // block that later appears settles normally.
     const later = buildSandbox();
     later.expectDrop({ x: X, y: Y });
-    for (let i = 0; i < 48; i++) later.update(250);
     later.setColumns([{ x: X, y: Y, colours: [0] }]);
     expect(heightOf(later, 0)).toBeLessThanOrEqual(1.51);
 
@@ -372,11 +374,11 @@ describe('buildSandbox', () => {
     const run = (): number[] => {
       const view = buildSandbox();
       view.setColumns([{ x: X, y: Y, colours: [0, 1, 2] }]);
-      view.expectDrop({ x: X + 1, y: Y });
       view.setColumns([
         { x: X, y: Y, colours: [0, 1, 2] },
         { x: X + 1, y: Y, colours: [4] },
       ]);
+      view.expectDrop({ x: X + 1, y: Y });
       view.setTarget({ x: X, y: Y, level: 3, mode: 'place', valid: true });
       for (const delta of [16, Number.NaN, -5, 33, Number.POSITIVE_INFINITY, 1e9, 7, 250, 16]) view.update(delta);
       view.setColumns([{ x: X + 1, y: Y, colours: [4] }]);

@@ -173,6 +173,58 @@ describe('sandbox controller (D-060)', () => {
     expect(world.timers.size).toBe(1);
   });
 
+  it('keeps raining when a listener throws', () => {
+    const world = setup();
+    // Subscribing replays the current state; fail only on later changes.
+    let replayed = false;
+    world.controller.channel.subscribe(() => {
+      if (!replayed) {
+        replayed = true;
+        return;
+      }
+      throw new Error('view failed');
+    });
+    world.move({ x: X, y: Y });
+    expect(() => world.timers.runNext()).toThrow('view failed');
+    // The next drop is still scheduled, and healthy listeners still receive
+    // the new stacks even though a neighbour threw.
+    expect(world.timers.size).toBe(1);
+    const blocksBefore = world.last().columns.length;
+    expect(() => world.timers.runNext()).toThrow('view failed');
+    expect(world.last().columns.length).toBe(blocksBefore + 1);
+    expect(world.timers.size).toBe(1);
+  });
+
+  it('does not carry a solo block into the lobby, or back out of it', () => {
+    const world = setup();
+    world.move({ x: X, y: Y });
+    for (let i = 0; i < 5; i += 1) world.timers.runNext();
+    const target = world.drops[0]!;
+    world.move({ x: target.x - 1, y: target.y });
+    world.controller.channel.pick(target);
+    expect(world.last().carrying).not.toBeNull();
+    const lobby = fakeLobby();
+    world.controller.adopt(lobby.client);
+    lobby.status('connected');
+    lobby.status('closed');
+    expect(world.last().carrying).toBeNull();
+  });
+
+  it('forgets replaced clients once they have closed', () => {
+    const world = setup();
+    const first = fakeLobby();
+    world.controller.adopt(first.client);
+    first.status('connected');
+    first.status('closed');
+    const second = fakeLobby();
+    world.controller.adopt(second.client);
+    // The replaced client's status no longer reaches the controller.
+    first.status('connected');
+    expect(first.listening).toBe(false);
+    second.status('connected');
+    expect(second.listening).toBe(true);
+  });
+
   it('leaves clients without the sandbox surface alone', () => {
     const world = setup();
     const plain = { onStatus: vi.fn() };
