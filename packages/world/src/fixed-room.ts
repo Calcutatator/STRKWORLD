@@ -1,7 +1,7 @@
 /**
- * The Phaser-free fixed-room module. A definition is the only variation
+ * The renderer-free fixed-room module. A definition is the only variation
  * between Game Mode interiors; the controller owns the ordering-sensitive
- * handoff and the Phaser scene only adapts its map/state to pixels.
+ * handoff and the renderer only draws its map and state (D-059).
  */
 
 import type { BuildingId, EventBus, ShellEvents, StationId, WorldEvents } from '@strkworld/shared';

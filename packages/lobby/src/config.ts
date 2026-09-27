@@ -5,7 +5,12 @@
  * wire. None of them is a secret and none of them is per-player.
  */
 
-import type { Facing } from '@strkworld/shared';
+import { SANDBOX_MAX_BLOCKS, type Facing } from '@strkworld/shared';
+import {
+  SANDBOX_FAST_SPAWN_LIMIT,
+  SANDBOX_SLOW_SPAWN_INTERVAL_MS,
+  SANDBOX_SPAWN_INTERVAL_MS,
+} from './sandbox-rules.js';
 
 /**
  * Default port for the standalone presence server.
@@ -61,6 +66,29 @@ export const MIN_CLIENT_SEND_INTERVAL_MS = Math.max(
   MIN_UPDATE_INTERVAL_MS,
   HARD_MIN_INTERVAL_MS,
 );
+
+/**
+ * Server-side floor between two accepted sandbox actions (a pick or a place)
+ * from the same session, in ms. D-060.
+ *
+ * Its own floor, separate from the move floor: a block action is a deliberate
+ * key press, so a handful per second is plenty, and anything earlier is
+ * dropped silently rather than queued or answered. A rejected-by-the-rules
+ * action still consumes the floor, so a client cannot probe at full rate.
+ */
+export const SANDBOX_MIN_ACTION_INTERVAL_MS = 150;
+
+/**
+ * The floor the client wrapper holds its own sandbox actions to, in ms.
+ *
+ * Above the server floor so that ordinary network jitter does not turn a
+ * legitimate second action into a silently dropped one, and low enough that
+ * it never approaches the hard ceiling: at most 20 moves plus 5 sandbox
+ * actions per second, against `MAX_MESSAGES_PER_SECOND` of 40. An action
+ * requested inside it is held and sent when it opens, never dropped — a pick
+ * followed at once by a place must still place.
+ */
+export const SANDBOX_CLIENT_ACTION_INTERVAL_MS = 200;
 
 /** How often the room encodes state changes, in ms. 20fps. */
 export const PATCH_RATE_MS = 50;
@@ -162,7 +190,7 @@ export const DEFAULT_FACING: Facing = 'down';
 /**
  * The room's entire client-to-server vocabulary.
  *
- * Three verbs, none of them financial. There is no message type through which
+ * Five verbs, none of them financial. There is no message type through which
  * a client could tell the room anything else, which is the enforcement: the
  * room's surface has no field for it.
  */
@@ -173,18 +201,29 @@ export const MESSAGE = Object.freeze({
   suspend: 'suspend',
   /** `{ x, y, facing, sprite }` — reappear after a suspend. */
   resume: 'resume',
+  /** `{ x, y }` integer sandbox tile — take the top block there. D-060. */
+  sandboxPick: 'sandbox:pick',
+  /** `{ x, y }` integer sandbox tile — put the carried block there. D-060. */
+  sandboxPlace: 'sandbox:place',
 } as const);
 
 export type MessageType = (typeof MESSAGE)[keyof typeof MESSAGE];
 
 /**
- * Server-to-client messages. Exactly one, and it carries only the recipient's
- * own server-assigned session identifier so the client can recognise its own
- * avatar in the shared state. Nothing about any other player rides here.
+ * Server-to-client messages. Two, and neither says anything about another
+ * player: `welcome` carries only the recipient's own server-assigned session
+ * identifier, so the client can recognise its own avatar in the shared state,
+ * and `sandbox:drop` carries only a tile.
  */
 export const SERVER_MESSAGE = Object.freeze({
   /** `{ gameId }` — sent once, right after a join is admitted. */
   welcome: 'welcome',
+  /**
+   * `{ x, y }` — a block fell from the sky onto this sandbox tile. Broadcast
+   * to every client after the patch that adds the block, so the receiver's
+   * state already holds it. An animation hint only: state is the truth.
+   */
+  sandboxDrop: 'sandbox:drop',
 } as const);
 
 export type ServerMessageType =
@@ -215,6 +254,14 @@ export interface PresenceRoomConfig {
   readonly worldLimit: number;
   readonly maxMessagesPerSecond: number;
   readonly patchRateMs: number;
+  /** D-060: sky-drop delay while the sandbox is below `sandboxFastSpawnLimit` blocks. */
+  readonly sandboxSpawnIntervalMs: number;
+  /** D-060: sky-drop delay once the sandbox holds `sandboxFastSpawnLimit` blocks or more. */
+  readonly sandboxSlowSpawnIntervalMs: number;
+  /** D-060: block total (placed + carried) at which drops switch to the slow delay. */
+  readonly sandboxFastSpawnLimit: number;
+  /** D-060: per-session floor between two accepted sandbox actions. */
+  readonly sandboxActionIntervalMs: number;
 }
 
 /** Operator-supplied overrides. Every field optional; all are clamped. */
@@ -231,7 +278,15 @@ export const DEFAULT_ROOM_CONFIG: PresenceRoomConfig = Object.freeze({
   worldLimit: WORLD_LIMIT,
   maxMessagesPerSecond: MAX_MESSAGES_PER_SECOND,
   patchRateMs: PATCH_RATE_MS,
+  sandboxSpawnIntervalMs: SANDBOX_SPAWN_INTERVAL_MS,
+  sandboxSlowSpawnIntervalMs: SANDBOX_SLOW_SPAWN_INTERVAL_MS,
+  sandboxFastSpawnLimit: SANDBOX_FAST_SPAWN_LIMIT,
+  sandboxActionIntervalMs: SANDBOX_MIN_ACTION_INTERVAL_MS,
 });
+
+/** Bounds on the sandbox spawner delays: never a busy loop, never longer than an hour. */
+const MIN_SANDBOX_SPAWN_INTERVAL_MS = 50;
+const MAX_SANDBOX_SPAWN_INTERVAL_MS = 3_600_000;
 
 function clamp(value: unknown, lo: number, hi: number, fallback: number): number {
   if (typeof value !== 'number' || !Number.isFinite(value)) return fallback;
@@ -285,5 +340,29 @@ export function resolveRoomConfig(
     worldLimit: clamp(overrides.worldLimit, 1, 1_000_000, WORLD_LIMIT),
     maxMessagesPerSecond: clamp(overrides.maxMessagesPerSecond, 1, 1000, MAX_MESSAGES_PER_SECOND),
     patchRateMs: clamp(overrides.patchRateMs, 10, 1000, PATCH_RATE_MS),
+    sandboxSpawnIntervalMs: clamp(
+      overrides.sandboxSpawnIntervalMs,
+      MIN_SANDBOX_SPAWN_INTERVAL_MS,
+      MAX_SANDBOX_SPAWN_INTERVAL_MS,
+      SANDBOX_SPAWN_INTERVAL_MS,
+    ),
+    sandboxSlowSpawnIntervalMs: clamp(
+      overrides.sandboxSlowSpawnIntervalMs,
+      MIN_SANDBOX_SPAWN_INTERVAL_MS,
+      MAX_SANDBOX_SPAWN_INTERVAL_MS,
+      SANDBOX_SLOW_SPAWN_INTERVAL_MS,
+    ),
+    sandboxFastSpawnLimit: clamp(
+      overrides.sandboxFastSpawnLimit,
+      0,
+      SANDBOX_MAX_BLOCKS,
+      SANDBOX_FAST_SPAWN_LIMIT,
+    ),
+    sandboxActionIntervalMs: clamp(
+      overrides.sandboxActionIntervalMs,
+      0,
+      10_000,
+      SANDBOX_MIN_ACTION_INTERVAL_MS,
+    ),
   });
 }

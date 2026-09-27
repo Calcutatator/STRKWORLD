@@ -4,8 +4,9 @@
  *
  * This owns a real Colyseus state instance but knows nothing about sockets,
  * clients or the matchmaker, so every rule that matters — admission,
- * throttling, suspend, interest — is exercisable in a plain unit test against
- * the same objects that get encoded in production.
+ * throttling, suspend, interest, and the block sandbox's actions and discards
+ * (D-060) — is exercisable in a plain unit test against the same objects that
+ * get encoded in production.
  *
  * Nothing here persists. When the last session leaves, the registry is empty
  * and the room disposes; there is no store behind it and no log of who was
@@ -13,7 +14,7 @@
  */
 
 import { MapSchema } from '@colyseus/schema';
-import type { Facing, GameId } from '@strkworld/shared';
+import type { Facing, GameId, SandboxColumn, SandboxTile } from '@strkworld/shared';
 import {
   resolveRoomConfig,
 } from './config.js';
@@ -22,10 +23,17 @@ import {
   createGameId,
   normalizeCoordinate,
   normalizeFacing,
+  normalizeSandboxColour,
   normalizeSprite,
   selectVisible,
 } from './policy.js';
-import { LobbyState, PresenceEntry } from './state.js';
+import {
+  LobbySandbox,
+  type SandboxAction,
+  type SandboxActionOutcome,
+} from './sandbox.js';
+import type { SandboxPlayer } from './sandbox-rules.js';
+import { LobbyState, PresenceEntry, type SandboxColumnEntry } from './state.js';
 
 /**
  * What a client may offer when it joins or reappears. All of it untrusted.
@@ -95,11 +103,21 @@ export interface LobbyPresenceOptions {
   minUpdateIntervalMs?: number;
   capacity?: number;
   worldLimit?: number;
+  sandboxSpawnIntervalMs?: number;
+  sandboxSlowSpawnIntervalMs?: number;
+  sandboxFastSpawnLimit?: number;
+  sandboxActionIntervalMs?: number;
   /**
    * Randomness source for server-minted identifiers. Injectable so a test can
    * be deterministic; production uses `crypto.getRandomValues`.
    */
   random?: (bytes: Uint8Array) => Uint8Array;
+  /**
+   * Uniform `[0, 1)` source for sandbox sky drops (D-060). Injectable so a
+   * test can be deterministic; production uses `Math.random` — where a block
+   * lands is public and cosmetic, so it needs no cryptographic source.
+   */
+  sandboxRandom?: () => number;
 }
 
 interface Session {
@@ -120,6 +138,8 @@ export class LobbyPresence {
   readonly #worldLimit: number;
   readonly #throttle: UpdateThrottle;
   readonly #random: ((bytes: Uint8Array) => Uint8Array) | undefined;
+  /** D-060: the room's block sandbox, mirrored into `state.sandbox`. */
+  readonly #sandbox: LobbySandbox;
 
   /**
    * Connection key to session. Lives only as long as the connection: it is
@@ -149,6 +169,16 @@ export class LobbyPresence {
       config.minUpdateIntervalMs,
     );
     this.#random = options.random;
+    this.#sandbox = new LobbySandbox(
+      this.state.sandbox as MapSchema<SandboxColumnEntry>,
+      {
+        ...(options.sandboxRandom === undefined ? {} : { random: options.sandboxRandom }),
+        actionIntervalMs: config.sandboxActionIntervalMs,
+        spawnIntervalMs: config.sandboxSpawnIntervalMs,
+        slowSpawnIntervalMs: config.sandboxSlowSpawnIntervalMs,
+        fastSpawnLimit: config.sandboxFastSpawnLimit,
+      },
+    );
   }
 
   get peers(): MapSchema<PresenceEntry> {
@@ -223,13 +253,18 @@ export class LobbyPresence {
    * The session's rate-floor timestamp is deliberately *not* cleared. Clearing
    * it would let the first move after a resume bypass the floor, and a
    * suspend/resume cycle would become a way to write a position on demand
-   * outside the rate limit.
+   * outside the rate limit. The sandbox action floor is kept for the same
+   * reason.
+   *
+   * A sandbox block the player was carrying is discarded (D-060): it leaves
+   * the world with them, and `resume` starts empty-handed.
    */
   suspend(sessionKey: string): boolean {
     const session = this.#sessions.get(sessionKey);
     if (session === undefined || session.suspended) return false;
     session.suspended = true;
     this.peers.delete(session.gameId);
+    this.#sandbox.release(sessionKey);
     this.#suspensions += 1;
     return true;
   }
@@ -266,14 +301,117 @@ export class LobbyPresence {
     return true;
   }
 
-  /** Forget a connection completely. Called on leave and on dispose. */
+  /**
+   * Forget a connection completely. Called on leave and on dispose. A carried
+   * sandbox block is discarded with it (D-060).
+   */
   release(sessionKey: string): void {
     const session = this.#sessions.get(sessionKey);
     if (session === undefined) return;
     this.peers.delete(session.gameId);
     this.#sessions.delete(sessionKey);
     this.#throttle.forget(sessionKey);
+    this.#sandbox.forget(sessionKey);
     this.#departed += 1;
+  }
+
+  // -------------------------------------------------------------------------
+  // The block sandbox — D-060
+  // -------------------------------------------------------------------------
+
+  /**
+   * Take the top block of a neighbouring stack, for a session on the street.
+   *
+   * `request` is the untrusted client payload. The actor's position is the
+   * one this registry already holds — never anything the request says — and
+   * every other live entry counts as a player the rules must respect.
+   */
+  pickBlock(sessionKey: string, request: unknown, now: number): SandboxActionOutcome {
+    return this.#actOnSandbox('pick', sessionKey, request, now);
+  }
+
+  /** Put the carried block on a neighbouring stack. See `pickBlock`. */
+  placeBlock(sessionKey: string, request: unknown, now: number): SandboxActionOutcome {
+    return this.#actOnSandbox('place', sessionKey, request, now);
+  }
+
+  /**
+   * Drop one block from the sky, never within a tile of a live player. Null
+   * when no block may fall (cap reached, nowhere allowed).
+   */
+  spawnBlock(): SandboxTile | null {
+    return this.#sandbox.spawn(this.#livePlayers());
+  }
+
+  /** Whether any session is on the street — the spawner runs only then. */
+  get hasLivePlayers(): boolean {
+    for (const session of this.#sessions.values()) {
+      if (!session.suspended && this.peers.has(session.gameId)) return true;
+    }
+    return false;
+  }
+
+  /** How long the room's spawner should wait before the next drop. */
+  nextSpawnDelayMs(): number {
+    return this.#sandbox.nextSpawnDelayMs();
+  }
+
+  /** Every non-empty stack, as the authority holds it. Frozen. */
+  sandboxColumns(): readonly SandboxColumn[] {
+    return this.#sandbox.columns();
+  }
+
+  /** The colour a connection carries, or null. Server-side only. */
+  sandboxCarrying(sessionKey: string): number | null {
+    return this.#sandbox.carrying(sessionKey);
+  }
+
+  /** Placed plus carried blocks. */
+  get sandboxBlocks(): number {
+    return this.#sandbox.totalBlocks;
+  }
+
+  #actOnSandbox(
+    action: SandboxAction,
+    sessionKey: string,
+    request: unknown,
+    now: number,
+  ): SandboxActionOutcome {
+    const session = this.#sessions.get(sessionKey);
+    if (session === undefined || session.suspended) return 'absent';
+    const entry = this.peers.get(session.gameId);
+    if (entry === undefined) return 'absent';
+
+    const actor: SandboxPlayer = {
+      key: sessionKey,
+      x: entry.position.x,
+      y: entry.position.y,
+    };
+    const outcome = this.#sandbox.act(
+      action,
+      actor,
+      request,
+      this.#livePlayers(sessionKey),
+      now,
+    );
+    if (outcome === 'applied') {
+      // The only per-player sandbox field on the wire, written from the
+      // authority's own record rather than from anything the client said.
+      entry.carrying = normalizeSandboxColour(this.#sandbox.carrying(sessionKey)) ?? -1;
+    }
+    return outcome;
+  }
+
+  /** Every live entry as a sandbox player, optionally leaving one session out. */
+  #livePlayers(exceptSessionKey?: string): SandboxPlayer[] {
+    const players: SandboxPlayer[] = [];
+    for (const [key, session] of this.#sessions) {
+      if (key === exceptSessionKey || session.suspended) continue;
+      const entry = this.peers.get(session.gameId);
+      if (entry === undefined) continue;
+      players.push({ key, x: entry.position.x, y: entry.position.y });
+    }
+    return players;
   }
 
   /** The identifier a connection currently holds, if any. */

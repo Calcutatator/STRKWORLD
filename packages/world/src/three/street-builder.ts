@@ -27,6 +27,9 @@ import {
   GeometryBin,
   PALETTE,
   ResourceBag,
+  SANDBOX_THEME,
+  AVNU,
+  STRK20,
   aoPaint,
   beamGeometry,
   boxGeometry,
@@ -45,12 +48,15 @@ import {
   flushBin,
   hash01,
   jitterColor,
+  lift,
   mixColor,
   pick,
   prismX,
+  prismY,
   prismZ,
   shade,
   sphereGeometry,
+  stadiumPoints,
   standardMaterial,
   unlitMaterial,
   valueNoise,
@@ -59,7 +65,11 @@ import {
   type Paint,
   type Vec3,
 } from './palette.js';
+import type { SignStyleOptions } from './labels.js';
 import type { LabelFactory, Occluder, OccluderBounds, StreetView, TextLabel } from './types.js';
+
+/** The sandbox square's sign: behind the north hedge, facing the street (D-060). */
+export const SANDBOX_SIGN_TEXT = 'SANDBOX\nPICK UP \u00b7 STACK \u00b7 BUILD';
 
 /**
  * The district as a low-poly golden-hour street (D-059).
@@ -69,6 +79,8 @@ import type { LabelFactory, Occluder, OccluderBounds, StreetView, TextLabel } fr
  * building tiles or outside the map; inside walkable bounds there are only
  * flat things — paint, paving, flowers, light pools. Buildings are derived
  * from connected solid tiles, so the street follows the map, not a copy of it.
+ * The road ends in the block sandbox's build plate (D-060); its blocks are a
+ * separate view (sandbox-view.ts) layered on top.
  */
 
 /** Height of raised pavement; `streetSurfaceHeightAt` reports it per tile. */
@@ -142,14 +154,10 @@ export function buildStreet(map: DistrictMap, labels: LabelFactory): StreetView 
     for (const exterior of map.exteriorLabels) {
       const footprint = footprints.find((candidate) => labelInside(candidate, exterior));
       const placement = footprint ? built.get(footprint)?.sign : undefined;
-      const theme = buildingTheme(exterior.building);
-      const label = labels.sign(exterior.text, {
-        width: theme.sign.width,
-        height: theme.sign.height,
-        background: theme.sign.background,
-        foreground: theme.sign.foreground,
-        accent: theme.sign.accent,
-      });
+      // The theme's full style, as a typed value: factories that understand
+      // gradients and type treatments use them; others read the base options.
+      const style: SignStyleOptions = buildingTheme(exterior.building).sign;
+      const label = labels.sign(exterior.text, style);
       textLabels.push(label);
       const position = placement ?? { x: exterior.x, y: 3, z: exterior.y + 0.5 };
       label.object.position.set(position.x, position.y, position.z);
@@ -157,7 +165,17 @@ export function buildStreet(map: DistrictMap, labels: LabelFactory): StreetView 
       signs.add(label.object);
     }
 
-    buildDecor(map, kinds, res, ground, animators);
+    const sandboxSign = sandboxSignPlacement(kinds);
+    if (sandboxSign) {
+      const style: SignStyleOptions = SANDBOX_THEME.sign;
+      const label = labels.sign(SANDBOX_SIGN_TEXT, style);
+      textLabels.push(label);
+      label.object.position.set(sandboxSign.x, sandboxSign.y, sandboxSign.z);
+      label.object.userData['area'] = 'sandbox';
+      signs.add(label.object);
+    }
+
+    buildDecor(map, kinds, res, ground, animators, sandboxSign);
   } catch (error) {
     for (const label of textLabels) {
       try {
@@ -216,7 +234,7 @@ export function buildStreet(map: DistrictMap, labels: LabelFactory): StreetView 
  * pavement run through grass is a garden path, the rest is raised kerbed
  * pavement.
  */
-type GroundKind = 'grass' | 'road' | 'sidewalk' | 'crossing' | 'path' | 'solid';
+type GroundKind = 'grass' | 'road' | 'sidewalk' | 'crossing' | 'path' | 'plate' | 'solid';
 
 function kindAt(map: DistrictMap, x: number, y: number): TileKind | undefined {
   return map.tiles[y]?.[x];
@@ -236,6 +254,7 @@ function classifyTile(map: DistrictMap, x: number, y: number): GroundKind {
   const kind = kindAt(map, x, y);
   if (kind === undefined || isSolidAt(map, x, y)) return 'solid';
   if (kind === 'road') return 'road';
+  if (kind === 'sandbox') return 'plate';
   if (kind !== 'pavement') return 'grass';
   const [west, east] = runEnds(map, x, y, 1, 0);
   const [north, south] = runEnds(map, x, y, 0, 1);
@@ -279,7 +298,7 @@ function roadBands(map: DistrictMap, kinds: GroundKind[][]): { r0: number; r1: n
   for (let y = 0; y <= map.height; y++) {
     const row = kinds[y];
     const roadCount = row ? row.filter((kind) => kind === 'road' || kind === 'crossing').length : 0;
-    const isRoad = row !== undefined && roadCount * 2 >= map.width;
+    const isRoad = row !== undefined && roadCount >= Math.min(8, map.width / 2);
     if (isRoad && start < 0) start = y;
     if (!isRoad && start >= 0) {
       bands.push({ r0: start, r1: y - 1 });
@@ -306,21 +325,63 @@ function crossingRuns(kinds: GroundKind[][], band: { r0: number; r1: number }, w
   return runs;
 }
 
-/** Rows whose map-edge tile is road or pavement: the band the outskirts continue. */
-function edgeBand(map: DistrictMap, kinds: GroundKind[][]): { top: number; bottom: number } | null {
+/** The x-range [x0, x1) a road band's road and crossing tiles cover. */
+function roadExtent(kinds: GroundKind[][], band: { r0: number; r1: number }, width: number): Span {
+  let x0 = width;
+  let x1 = 0;
+  for (let y = band.r0; y <= band.r1; y++) {
+    const row = kinds[y];
+    if (!row) continue;
+    row.forEach((kind, x) => {
+      if (kind !== 'road' && kind !== 'crossing') return;
+      x0 = Math.min(x0, x);
+      x1 = Math.max(x1, x + 1);
+    });
+  }
+  return x1 > x0 ? { x0, x1 } : { x0: 0, x1: 0 };
+}
+
+/**
+ * Rows whose tile on one map edge is road or pavement: where the street runs
+ * off the map on that side. The east end now runs into the sandbox instead.
+ */
+function edgeBand(map: DistrictMap, kinds: GroundKind[][], side: 'west' | 'east'): { top: number; bottom: number } | null {
+  const edgeX = side === 'west' ? 0 : map.width - 1;
   let top = -1;
   let bottom = -1;
   for (let y = 0; y < map.height; y++) {
-    const west = kinds[y]?.[0];
-    const east = kinds[y]?.[map.width - 1];
-    const paved = (kind: GroundKind | undefined) =>
-      kind === 'road' || kind === 'sidewalk' || kind === 'crossing';
-    if (paved(west) || paved(east)) {
+    const kind = kinds[y]?.[edgeX];
+    if (kind === 'road' || kind === 'sidewalk' || kind === 'crossing') {
       if (top < 0) top = y;
       bottom = y + 1;
     }
   }
   return top < 0 ? null : { top, bottom };
+}
+
+/** Tile bounds of the sandbox build plate, if the map has one. */
+function plateBounds(kinds: GroundKind[][]): { minX: number; maxX: number; minY: number; maxY: number } | null {
+  let minX = Infinity;
+  let maxX = -Infinity;
+  let minY = Infinity;
+  let maxY = -Infinity;
+  kinds.forEach((row, y) =>
+    row.forEach((kind, x) => {
+      if (kind !== 'plate') return;
+      minX = Math.min(minX, x);
+      maxX = Math.max(maxX, x + 1);
+      minY = Math.min(minY, y);
+      maxY = Math.max(maxY, y + 1);
+    }),
+  );
+  return Number.isFinite(minX) ? { minX, maxX, minY, maxY } : null;
+}
+
+/** Just beyond the north map edge over the plate's centre, above the hedge. */
+function sandboxSignPlacement(kinds: GroundKind[][]): { x: number; y: number; z: number } | null {
+  const plate = plateBounds(kinds);
+  if (!plate || plate.minY > 0) return null;
+  return { x: (plate.minX + plate.maxX) / 2, y: 1.72, z: -1.28 };
 }
 
 // ---------------------------------------------------------------------------
@@ -353,6 +414,9 @@ function buildGround(map: DistrictMap, kinds: GroundKind[][], res: ResourceBag, 
             grassTile(bin, x, y);
             pathStone(bin, x, y);
             break;
+          case 'plate':
+            plateTile(bin, kinds, x, y);
+            break;
           case 'solid':
             bin.add('sidewalk', flatQuad(x, y, x + 1, y + 1, 0), PALETTE.apron);
             break;
@@ -371,6 +435,7 @@ function buildGround(map: DistrictMap, kinds: GroundKind[][], res: ResourceBag, 
     // Paint is a decal: it never casts, but it darkens with the road it lies on.
     flushBin(bin, 'paint', paintMaterial, res, parent, { name: 'street:markings', receive: true });
     flushBin(bin, 'decal', groundMaterial, res, parent, { name: 'street:decals', receive: true });
+    flushBin(bin, 'plate', groundMaterial, res, parent, { name: 'street:sandbox-floor', receive: true });
   } finally {
     bin.dispose();
   }
@@ -441,6 +506,26 @@ function sidewalkTile(bin: GeometryBin, kinds: GroundKind[][], x: number, y: num
   }
 }
 
+/**
+ * The sandbox build plate: warm concrete, a faint one-tile grid, and a darker
+ * border that opens where the road and pavements run in. All flat.
+ */
+function plateTile(bin: GeometryBin, kinds: GroundKind[][], x: number, y: number): void {
+  bin.add('plate', flatQuad(x, y, x + 1, y + 1, 0), jitterColor(SANDBOX_THEME.plate, hash01(x, y, 501), 0.012));
+  const g = 0.014;
+  if (kinds[y]?.[x - 1] === 'plate') bin.add('plate', flatQuad(x - g, y, x + g, y + 1, 0.003), SANDBOX_THEME.grid);
+  if (kinds[y - 1]?.[x] === 'plate') bin.add('plate', flatQuad(x, y - g, x + 1, y + g, 0.003), SANDBOX_THEME.grid);
+  const b = 0.14;
+  const closed = (nx: number, ny: number): boolean => {
+    const kind = kinds[ny]?.[nx];
+    return kind === undefined || kind === 'grass' || kind === 'path' || kind === 'solid';
+  };
+  if (closed(x - 1, y)) bin.add('plate', flatQuad(x, y, x + b, y + 1, 0.005), SANDBOX_THEME.border);
+  if (closed(x + 1, y)) bin.add('plate', flatQuad(x + 1 - b, y, x + 1, y + 1, 0.005), SANDBOX_THEME.border);
+  if (closed(x, y - 1)) bin.add('plate', flatQuad(x, y, x + 1, y + b, 0.005), SANDBOX_THEME.border);
+  if (closed(x, y + 1)) bin.add('plate', flatQuad(x, y + 1 - b, x + 1, y + 1, 0.005), SANDBOX_THEME.border);
+}
+
 function pathStone(bin: GeometryBin, x: number, y: number): void {
   const inset = 0.07 + hash01(x, y, 6) * 0.05;
   const shift = (hash01(x, y, 7) - 0.5) * 0.08;
@@ -458,9 +543,16 @@ function paintRoadMarkings(map: DistrictMap, kinds: GroundKind[][], bin: Geometr
     const centre = (band.r0 + band.r1 + 1) / 2;
     const top = band.r0 + 0.14;
     const bottom = band.r1 + 1 - 0.14;
-    for (let x = -OUTSKIRT; x < map.width + OUTSKIRT; x += 1.2) {
+    // Paint runs off the map only where the road does; where the road ends
+    // (into the sandbox), the lines end with it.
+    const extent = roadExtent(kinds, band, map.width);
+    const start = extent.x0 <= 0 ? -OUTSKIRT : extent.x0;
+    const end = extent.x1 >= map.width ? map.width + OUTSKIRT : extent.x1;
+    const dashEnd = extent.x1 >= map.width ? end : end - 1.2;
+    for (let x = start; x < dashEnd; x += 1.2) {
       const a = x + 0.25;
-      const b = x + 0.95;
+      const b = Math.min(x + 0.95, dashEnd);
+      if (b - a < 0.2) continue;
       if (crossings.some((run) => b > run.x0 - 1.4 && a < run.x1 + 1.4)) continue;
       bin.add('paint', flatQuad(a, centre - 0.05, b, centre + 0.05, y), PALETTE.paintCentre);
     }
@@ -468,12 +560,12 @@ function paintRoadMarkings(map: DistrictMap, kinds: GroundKind[][], bin: Geometr
       [top, top + 0.07],
       [bottom - 0.07, bottom],
     ] as const) {
-      let start = -OUTSKIRT;
+      let from = start;
       for (const run of crossings) {
-        if (run.x0 - 0.1 > start) bin.add('paint', flatQuad(start, za, run.x0 - 0.1, zb, y), PALETTE.paint);
-        start = run.x1 + 0.1;
+        if (run.x0 - 0.1 > from) bin.add('paint', flatQuad(from, za, run.x0 - 0.1, zb, y), PALETTE.paint);
+        from = run.x1 + 0.1;
       }
-      bin.add('paint', flatQuad(start, za, map.width + OUTSKIRT, zb, y), PALETTE.paint);
+      if (end > from) bin.add('paint', flatQuad(from, za, end, zb, y), PALETTE.paint);
     }
     for (const run of crossings) {
       for (let row = band.r0; row <= band.r1; row++) {
@@ -800,7 +892,7 @@ function buildBuilding(fp: Footprint, res: ResourceBag): BuiltBuilding {
     addMesh(BODY, () => standardMaterial({ roughness: 0.84 }), true, true);
     addMesh(GLASS, () => standardMaterial({ roughness: 0.28, metalness: 0.15 }), false, true);
     addMesh(LIT, () => standardMaterial({ roughness: 0.5, emissive: theme.windowGlow, emissiveIntensity: 1.25 }), false, false);
-    addMesh(GLOW, () => standardMaterial({ roughness: 0.5, emissive: theme.glow, emissiveIntensity: 1.6 }), false, false);
+    addMesh(GLOW, () => standardMaterial({ roughness: 0.5, emissive: theme.glow, emissiveIntensity: theme.glowIntensity ?? 1.6 }), false, false);
     const beacon = addMesh(
       BEACON,
       () => standardMaterial({ roughness: 0.5, emissive: theme.beacon, emissiveIntensity: 2 }),
@@ -911,6 +1003,7 @@ function band(
   color: Paint,
   front: number,
   doorTop: number,
+  key = BODY,
 ): void {
   const xa = ctx.x0 + SIDE_INSET;
   const xb = ctx.x1 - SIDE_INSET;
@@ -919,14 +1012,14 @@ function band(
     for (const run of solidRuns(ctx)) {
       const a = Math.max(run.x0, xa - out);
       const b = Math.min(run.x1, xb + out);
-      if (b - a > 0.01) ctx.bins.add(BODY, boxGeometry(a, y0, front - 0.01, b, y1, front + out), color);
+      if (b - a > 0.01) ctx.bins.add(key, boxGeometry(a, y0, front - 0.01, b, y1, front + out), color);
     }
   } else {
-    ctx.bins.add(BODY, boxGeometry(xa - out, y0, front - 0.01, xb + out, y1, front + out), color);
+    ctx.bins.add(key, boxGeometry(xa - out, y0, front - 0.01, xb + out, y1, front + out), color);
   }
-  ctx.bins.add(BODY, boxGeometry(xa - out, y0, za - out, xa + 0.01, y1, front), color);
-  ctx.bins.add(BODY, boxGeometry(xb - 0.01, y0, za - out, xb + out, y1, front), color);
-  ctx.bins.add(BODY, boxGeometry(xa, y0, za - out, xb, y1, za + 0.01), color);
+  ctx.bins.add(key, boxGeometry(xa - out, y0, za - out, xa + 0.01, y1, front), color);
+  ctx.bins.add(key, boxGeometry(xb - 0.01, y0, za - out, xb + out, y1, front), color);
+  ctx.bins.add(key, boxGeometry(xa, y0, za - out, xb, y1, za + 0.01), color);
 }
 
 function roofSlab(ctx: BuildingCtx, height: number, front: number, color: number): void {
@@ -1029,14 +1122,20 @@ function doubleDoor(ctx: BuildingCtx, gap: Span, doorTop: number): void {
 
 // -- styles -------------------------------------------------------------------
 
-/** Cream stone, a gold-trimmed colonnade and pediment centred on the door, a dome. */
+/**
+ * STRK20: the classical bank in near-black stone, its podium, frieze,
+ * pediment rakes and cornice drawn in the one burnt-orange accent, under a
+ * dark dome ringed in the same light. The measured near-blacks are lifted
+ * (see `lift`) only as far as the stone needs to read.
+ */
 function bankStyle(ctx: BuildingCtx): StyleResult {
   const t = ctx.theme;
   const H = t.height;
   const doorTop = 2.3;
-  const front = massing(ctx, H, 0.55, doorTop, aoPaint(t.wall));
+  const front = massing(ctx, H, 0.55, doorTop, aoPaint(t.wall, 0.04));
   const gc = ctx.doorCentre;
   if (ctx.gap) doubleDoor(ctx, ctx.gap, doorTop);
+  const metal = lift(STRK20.hairline, 0.05);
 
   const half = Math.max(1, Math.min(3, gc - ctx.x0, ctx.x1 - gc));
   const px0 = gc - half;
@@ -1048,6 +1147,7 @@ function bankStyle(ctx: BuildingCtx): StyleResult {
     if (b - a < 0.05) continue;
     ctx.bins.add(BODY, boxGeometry(a, 0, front, b, 0.22, ctx.zf - 0.01), t.wallAlt);
     ctx.bins.add(BODY, boxGeometry(a, 0.22, front, b, 0.32, ctx.zf - 0.06), t.trim);
+    ctx.bins.add(GLOW, boxGeometry(a + 0.02, 0.29, ctx.zf - 0.075, b - 0.02, 0.325, ctx.zf - 0.055), t.glow);
   }
   const columns = [gc - 2.6, gc - 1.35, gc + 1.35, gc + 2.6].filter(
     (x) => x - 0.25 >= px0 - 1e-6 && x + 0.25 <= px1 + 1e-6 && !overlapsGap(ctx, x - 0.25, x + 0.25),
@@ -1057,68 +1157,73 @@ function bankStyle(ctx: BuildingCtx): StyleResult {
     ctx.bins.add(BODY, cylinderGeometry(x, 0.42, colZ, 0.15, 0.17, 3.2 - 0.42, 10), t.trim);
     ctx.bins.add(BODY, boxGeometry(x - 0.24, 3.2, colZ - 0.24, x + 0.24, 3.35, colZ + 0.24), t.trim);
   }
-  // Entablature with a gold frieze band, then the pediment and its gold rakes.
+  // Entablature with a frieze of light, then the pediment outlined in it.
   ctx.bins.add(BODY, boxGeometry(px0, 3.35, front - 0.12, px1, 3.9, ctx.zf - 0.03), t.trim);
-  ctx.bins.add(BODY, boxGeometry(px0, 3.46, ctx.zf - 0.03, px1, 3.54, ctx.zf), t.accent);
+  ctx.bins.add(GLOW, boxGeometry(px0, 3.47, ctx.zf - 0.03, px1, 3.52, ctx.zf), t.glow);
   const peak = 3.9 + half * 0.36;
   ctx.bins.add(BODY, prismZ([[px0, 3.9], [px1, 3.9], [gc, peak]], front - 0.1, ctx.zf - 0.04), t.trim);
   const rakeZ = ctx.zf - 0.05;
-  ctx.bins.add(BODY, beamGeometry([px0 + 0.03, 3.93, rakeZ], [gc, peak - 0.01, rakeZ], 0.03, 0.07), t.accent);
-  ctx.bins.add(BODY, beamGeometry([px1 - 0.03, 3.93, rakeZ], [gc, peak - 0.01, rakeZ], 0.03, 0.07), t.accent);
+  ctx.bins.add(GLOW, beamGeometry([px0 + 0.03, 3.93, rakeZ], [gc, peak - 0.01, rakeZ], 0.03, 0.05), t.glow);
+  ctx.bins.add(GLOW, beamGeometry([px1 - 0.03, 3.93, rakeZ], [gc, peak - 0.01, rakeZ], 0.03, 0.05), t.glow);
   const tympanum: Face = { normal: 'z+', plane: ctx.zf - 0.04 };
   const emblemY = 3.9 + (peak - 3.9) * 0.42;
-  ctx.bins.add(GLOW, faceDisc(tympanum, gc, emblemY, 0, 0.22, 0.025, 14), t.accent);
-  ctx.bins.add(BODY, faceTorus(tympanum, gc, emblemY, 0.012, 0.28, 0.022, { tubularSegments: 16 }), t.accent);
+  ctx.bins.add(BODY, faceDisc(tympanum, gc, emblemY, 0, 0.24, 0.02, 16), lift(STRK20.black, 0.04));
+  ctx.bins.add(GLOW, faceTorus(tympanum, gc, emblemY, 0.012, 0.27, 0.018, { tubularSegments: 20 }), t.glow);
 
-  // The sign hangs between the inner columns from two gold rods.
+  // The sign hangs between the inner columns from two dark rods.
   const signY = 2.85;
   const signZ = ctx.zf - 0.07;
   for (const dx of [-0.75, 0.75]) {
     ctx.bins.add(
       BODY,
       boxGeometry(gc + dx - 0.012, signY + t.sign.height / 2 - 0.02, signZ - 0.012, gc + dx + 0.012, 3.36, signZ + 0.012),
-      t.accent,
+      metal,
     );
   }
 
   const face: Face = { normal: 'z+', plane: front };
+  const frame = lift(STRK20.black, 0.1);
   const sorted = [...columns].sort((a, b) => a - b);
   let k = 0;
   for (let i = 0; i + 1 < sorted.length; i++) {
     const a = sorted[i]!;
     const b = sorted[i + 1]!;
     if (overlapsGap(ctx, a, b)) continue;
-    windowOnFace(ctx, face, (a + b) / 2, 0.75, 0.52, 1.8, isLit(ctx, k++), { mullion: true, keystone: true });
+    windowOnFace(ctx, face, (a + b) / 2, 0.75, 0.52, 1.8, isLit(ctx, k++), { frame, mullion: true, keystone: true });
   }
   for (const [a, b] of [
     [ctx.x0 + SIDE_INSET, px0],
     [px1, ctx.x1 - SIDE_INSET],
   ] as const) {
-    if (b - a >= 0.75) windowOnFace(ctx, face, (a + b) / 2, 0.75, 0.5, 1.8, isLit(ctx, k++), { mullion: true, keystone: true });
+    if (b - a >= 0.75) windowOnFace(ctx, face, (a + b) / 2, 0.75, 0.5, 1.8, isLit(ctx, k++), { frame, mullion: true, keystone: true });
   }
   for (const side of sideFaces(ctx)) {
     for (const z of distribute(ctx.z0 + 0.8, front - 0.6, 0.52, 1.1)) {
-      windowOnFace(ctx, side, z, 0.75, 0.52, 1.8, isLit(ctx, k++), { mullion: true, keystone: true });
+      windowOnFace(ctx, side, z, 0.75, 0.52, 1.8, isLit(ctx, k++), { frame, mullion: true, keystone: true });
     }
   }
 
   band(ctx, H - 0.24, H + 0.06, 0.1, t.trim, front, doorTop);
-  band(ctx, H - 0.3, H - 0.24, 0.06, t.accent, front, doorTop);
+  band(ctx, H - 0.3, H - 0.26, 0.06, t.glow, front, doorTop, GLOW);
   roofSlab(ctx, H, front, t.roof);
   const domeZ = (ctx.z0 + front) / 2;
   ctx.bins.add(BODY, cylinderGeometry(gc, H, domeZ, 1.05, 1.05, 0.42, 14), t.trim);
-  ctx.bins.add(BODY, cylinderGeometry(gc, H + 0.42, domeZ, 1.09, 1.09, 0.08, 14), t.accent);
+  ctx.bins.add(GLOW, cylinderGeometry(gc, H + 0.42, domeZ, 1.08, 1.08, 0.05, 14), t.glow);
   ctx.bins.add(
     BODY,
-    sphereGeometry(gc, H + 0.5, domeZ, 1, { widthSegments: 14, heightSegments: 5, hemisphere: true }),
-    0xf1e9d6,
+    sphereGeometry(gc, H + 0.47, domeZ, 1, { widthSegments: 14, heightSegments: 5, hemisphere: true }),
+    lift(STRK20.raised, 0.07),
   );
-  ctx.bins.add(BODY, cylinderGeometry(gc, H + 1.45, domeZ, 0.16, 0.18, 0.3, 8), t.trim);
-  ctx.bins.add(GLOW, coneGeometry(gc, H + 1.75, domeZ, 0.12, 0.3, 8), t.accent);
+  ctx.bins.add(BODY, cylinderGeometry(gc, H + 1.42, domeZ, 0.16, 0.18, 0.3, 8), t.trim);
+  ctx.bins.add(GLOW, coneGeometry(gc, H + 1.72, domeZ, 0.1, 0.26, 8), t.glow);
   return { doorTop, sign: { x: gc, y: signY, z: signZ } };
 }
 
-/** Teal glass curtain wall on slab bands, a lit lobby, and a scrolling rooftop ticker. */
+/**
+ * avnu: an indigo glass tower on slate floor bands with blue light panels,
+ * a pill-shaped canopy (avnu's buttons are pills) and a blue LED rooftop
+ * ticker that names the route once.
+ */
 function exchangeStyle(ctx: BuildingCtx): StyleResult {
   const t = ctx.theme;
   const H = t.height;
@@ -1128,6 +1233,8 @@ function exchangeStyle(ctx: BuildingCtx): StyleResult {
   const xa = ctx.x0 + SIDE_INSET;
   const xb = ctx.x1 - SIDE_INSET;
   const za = ctx.z0 + SIDE_INSET;
+  const frame = lift(AVNU.indigoBorder, 0.06);
+  const panel = (seed: number) => mixColor(AVNU.lightBlue, AVNU.blue, hash01(ctx.fp.index, seed, 9));
 
   band(ctx, 0, 0.35, 0.03, t.wallAlt, front, doorTop);
   const levels = [2.55, 3.6, 4.6];
@@ -1139,7 +1246,7 @@ function exchangeStyle(ctx: BuildingCtx): StyleResult {
   for (let i = 0; i <= bays; i++) {
     const x = xa + i * step;
     const y0 = overlapsGap(ctx, x - 0.05, x + 0.05) ? levels[0]! + 0.07 : 0.35;
-    ctx.bins.add(BODY, boxGeometry(x - 0.03, y0, front, x + 0.03, H - 0.1, front + 0.04), t.trim);
+    ctx.bins.add(BODY, boxGeometry(x - 0.03, y0, front, x + 0.03, H - 0.1, front + 0.04), frame);
   }
   const rows: ReadonlyArray<readonly [number, number]> = [
     [0.4, 2.46],
@@ -1155,7 +1262,7 @@ function exchangeStyle(ctx: BuildingCtx): StyleResult {
       k++;
       if (row === 0 && overlapsGap(ctx, a, c)) continue;
       if (!isLit(ctx, k)) continue;
-      ctx.bins.add(LIT, boxGeometry(a, y0 + 0.04, front, c, y1 - 0.04, front + 0.015), jitterColor(t.windowLit, hash01(ctx.fp.index, k, 9), 0.06));
+      ctx.bins.add(LIT, boxGeometry(a, y0 + 0.04, front, c, y1 - 0.04, front + 0.015), panel(k));
     }
   });
   for (const side of sideFaces(ctx)) {
@@ -1163,17 +1270,13 @@ function exchangeStyle(ctx: BuildingCtx): StyleResult {
     const sideStep = (front - za) / count;
     for (let i = 0; i <= count; i++) {
       const u = za + i * sideStep;
-      ctx.bins.add(BODY, faceBox(side, u - 0.03, 0.35, 0, u + 0.03, H - 0.1, 0.04), t.trim);
+      ctx.bins.add(BODY, faceBox(side, u - 0.03, 0.35, 0, u + 0.03, H - 0.1, 0.04), frame);
     }
     for (const [y0, y1] of rows) {
       for (let i = 0; i < count; i++) {
         k++;
         if (!isLit(ctx, k)) continue;
-        ctx.bins.add(
-          LIT,
-          faceBox(side, za + i * sideStep + 0.05, y0 + 0.04, 0, za + (i + 1) * sideStep - 0.05, y1 - 0.04, 0.015),
-          jitterColor(t.windowLit, hash01(ctx.fp.index, k, 9), 0.06),
-        );
+        ctx.bins.add(LIT, faceBox(side, za + i * sideStep + 0.05, y0 + 0.04, 0, za + (i + 1) * sideStep - 0.05, y1 - 0.04, 0.015), panel(k));
       }
     }
   }
@@ -1181,15 +1284,19 @@ function exchangeStyle(ctx: BuildingCtx): StyleResult {
   if (ctx.gap) {
     const g = ctx.gap;
     doubleDoor(ctx, g, doorTop);
-    ctx.bins.add(BODY, boxGeometry(g.x0 - 0.45, 2.47, front - 0.02, g.x1 + 0.45, 2.6, ctx.zf - 0.02), t.trim);
-    ctx.bins.add(GLOW, boxGeometry(g.x0 - 0.4, 2.44, ctx.zf - 0.1, g.x1 + 0.4, 2.47, ctx.zf - 0.04), t.glow);
+    const back = front - 0.02;
+    const edge = ctx.zf - 0.02;
+    const radius = (edge - back) / 2;
+    const halfLength = (g.x1 - g.x0) / 2 + 0.45;
+    ctx.bins.add(BODY, prismY(stadiumPoints(gc, back + radius, halfLength, radius, 6), 2.47, 2.6), AVNU.card);
+    ctx.bins.add(GLOW, prismY(stadiumPoints(gc, back + radius, halfLength - 0.06, radius - 0.05, 6), 2.44, 2.47), t.glow);
     // Planters either side of the entrance, on the solid facade row.
     for (const [a, b] of [
       [g.x0 - 0.95, g.x0 - 0.2],
       [g.x1 + 0.2, g.x1 + 0.95],
     ] as const) {
       if (overlapsGap(ctx, a, b) || a < ctx.x0 || b > ctx.x1) continue;
-      ctx.bins.add(BODY, boxGeometry(a, 0, front + 0.02, b, 0.42, ctx.zf - 0.03), 0x9aa4a8);
+      ctx.bins.add(BODY, boxGeometry(a, 0, front + 0.02, b, 0.42, ctx.zf - 0.03), lift(AVNU.card, 0.1));
       const cx = (a + b) / 2;
       const cz = (front + ctx.zf) / 2;
       for (const dx of [-0.18, 0.16]) {
@@ -1204,23 +1311,23 @@ function exchangeStyle(ctx: BuildingCtx): StyleResult {
 
   roofSlab(ctx, H, front, t.roof);
   // Plant on the roof, visible from the follow camera's high angle.
-  ctx.bins.add(BODY, boxGeometry(ctx.x0 + 0.8, H, ctx.z0 + 0.8, ctx.x0 + 2.2, H + 0.5, ctx.z0 + 1.9), 0x9aa6ab);
-  ctx.bins.add(BODY, cylinderGeometry(ctx.x0 + 1.5, H + 0.5, ctx.z0 + 1.35, 0.4, 0.4, 0.04, 10), 0x3a4449);
-  ctx.bins.add(BODY, boxGeometry(ctx.x0 + 4.2, H, ctx.z0 + 0.7, ctx.x0 + 5.1, H + 0.35, ctx.z0 + 1.4), 0x8d999e);
+  ctx.bins.add(BODY, boxGeometry(ctx.x0 + 0.8, H, ctx.z0 + 0.8, ctx.x0 + 2.2, H + 0.5, ctx.z0 + 1.9), AVNU.slate);
+  ctx.bins.add(BODY, cylinderGeometry(ctx.x0 + 1.5, H + 0.5, ctx.z0 + 1.35, 0.4, 0.4, 0.04, 10), AVNU.navy);
+  ctx.bins.add(BODY, boxGeometry(ctx.x0 + 4.2, H, ctx.z0 + 0.7, ctx.x0 + 5.1, H + 0.35, ctx.z0 + 1.4), lift(AVNU.slate, -0.08));
   const mastX = ctx.x1 - 1;
   const mastZ = ctx.z0 + 1.2;
-  ctx.bins.add(BODY, cylinderGeometry(mastX, H, mastZ, 0.035, 0.05, 1.25, 6), t.trim);
+  ctx.bins.add(BODY, cylinderGeometry(mastX, H, mastZ, 0.035, 0.05, 1.25, 6), AVNU.slate);
   ctx.bins.add(BEACON, sphereGeometry(mastX, H + 1.3, mastZ, 0.08, { widthSegments: 6, heightSegments: 4 }), t.beacon);
 
-  // Ticker: a dark board on legs along the roof's front edge, LED face scrolling.
+  // Ticker: a navy board on legs along the roof's front edge, blue LEDs scrolling.
   const boardA = ctx.x0 + 0.55;
   const boardB = ctx.x1 - 0.55;
   const boardBack = front - 0.45;
   const boardFront = front - 0.2;
   for (const x of [boardA + 0.45, boardB - 0.6]) {
-    ctx.bins.add(BODY, boxGeometry(x, H, boardBack + 0.05, x + 0.15, H + 0.42, boardFront - 0.05), 0x2a3035);
+    ctx.bins.add(BODY, boxGeometry(x, H, boardBack + 0.05, x + 0.15, H + 0.42, boardFront - 0.05), lift(AVNU.navy, 0.06));
   }
-  ctx.bins.add(BODY, boxGeometry(boardA, H + 0.4, boardBack, boardB, H + 1.1, boardFront), 0x151b1f);
+  ctx.bins.add(BODY, boxGeometry(boardA, H + 0.4, boardBack, boardB, H + 1.1, boardFront), AVNU.navy);
   ctx.bins.add(GLOW, boxGeometry(boardA + 0.05, H + 0.36, boardFront - 0.06, boardB - 0.05, H + 0.4, boardFront), t.glow);
   const faceWidth = boardB - boardA - 0.16;
   const faceHeight = 0.54;
@@ -1756,12 +1863,17 @@ function buildDecor(
   res: ResourceBag,
   parent: Group,
   animators: Animator[],
+  sandboxSign: { x: number; y: number; z: number } | null,
 ): void {
-  const band = edgeBand(map, kinds);
+  const west = edgeBand(map, kinds, 'west');
+  const east = edgeBand(map, kinds, 'east');
+  const plate = plateBounds(kinds);
   const bin = new GeometryBin();
   try {
-    hedges(map, band, bin);
-    if (band) barriers(map, band, bin);
+    hedges(map, west, east, bin);
+    if (west) barriers(-0.6, west, bin);
+    if (east) barriers(map.width + 0.6, east, bin);
+    if (sandboxSign) signPosts(sandboxSign, bin);
     southBushes(map, bin);
     backdropCity(map, bin);
     hills(map, bin);
@@ -1786,8 +1898,17 @@ function buildDecor(
   } finally {
     bin.dispose();
   }
-  trees(map, band, res, parent);
-  if (band) lamps(map, band, res, parent);
+  trees(map, west, east, sandboxSign, res, parent);
+  lamps(map, west, east, plate, sandboxSign, res, parent);
+}
+
+/** Two posts carrying the sandbox sign, off the map behind the hedge. */
+function signPosts(sign: { x: number; y: number; z: number }, bin: GeometryBin): void {
+  const half = SANDBOX_THEME.sign.width / 2 - 0.25;
+  for (const dx of [-half, half]) {
+    bin.add('decor', boxGeometry(sign.x + dx - 0.06, 0, sign.z - 0.12, sign.x + dx + 0.06, sign.y + 0.5, sign.z - 0.02), SANDBOX_THEME.post);
+  }
+  bin.add('decor', boxGeometry(sign.x - half - 0.1, sign.y + 0.5, sign.z - 0.13, sign.x + half + 0.1, sign.y + 0.6, sign.z - 0.01), SANDBOX_THEME.post);
 }
 
 type Band = { top: number; bottom: number } | null;
@@ -1814,16 +1935,16 @@ function hedgeRun(bin: GeometryBin, x0: number, z0: number, x1: number, z1: numb
   }
 }
 
-function hedges(map: DistrictMap, band: Band, bin: GeometryBin): void {
+function hedges(map: DistrictMap, west: Band, east: Band, bin: GeometryBin): void {
   const W = map.width;
   const H = map.height;
   const entrance = map.avatarStudioEntrance;
   hedgeRun(bin, -1, -1, W + 1, -0.15, 0.95, 1);
   hedgeRun(bin, -1, H + 0.15, entrance.x - 0.65, H + 0.8, 0.55, 2);
   hedgeRun(bin, entrance.x + entrance.width + 0.65, H + 0.15, W + 1, H + 0.8, 0.55, 3);
-  for (const [x0, x1, seed] of [
-    [-1, -0.15, 4],
-    [W + 0.15, W + 1, 6],
+  for (const [x0, x1, seed, band] of [
+    [-1, -0.15, 4, west],
+    [W + 0.15, W + 1, 6, east],
   ] as const) {
     if (band) {
       hedgeRun(bin, x0, -0.15, x1, band.top - 0.1, 0.95, seed);
@@ -1834,22 +1955,20 @@ function hedges(map: DistrictMap, band: Band, bin: GeometryBin): void {
   }
 }
 
-/** Road-closed barriers where the street leaves the map. */
-function barriers(map: DistrictMap, band: { top: number; bottom: number }, bin: GeometryBin): void {
-  for (const x of [-0.6, map.width + 0.6]) {
-    const za = band.top + 0.15;
-    const zb = band.bottom - 0.15;
-    const count = Math.max(2, Math.round((zb - za) / 0.45));
-    for (let i = 0; i < count; i++) {
-      const a = za + ((zb - za) * i) / count;
-      const b = za + ((zb - za) * (i + 1)) / count;
-      bin.add('decor', boxGeometry(x - 0.05, 0.52, a, x + 0.05, 0.78, b), i % 2 === 0 ? PALETTE.barrierRed : PALETTE.barrierWhite);
-    }
-    for (let z = za + 0.3; z < zb; z += 1.6) {
-      bin.add('decor', beamGeometry([x - 0.25, 0, z], [x, 0.8, z], 0.05, 0.05), 0x55595e);
-      bin.add('decor', beamGeometry([x + 0.25, 0, z], [x, 0.8, z], 0.05, 0.05), 0x55595e);
-      bin.add('fairy', sphereGeometry(x, 0.86, z, 0.06, { widthSegments: 6, heightSegments: 4 }), 0xffb347);
-    }
+/** Road-closed barriers where the street runs off the map (the west end only, now). */
+function barriers(x: number, band: { top: number; bottom: number }, bin: GeometryBin): void {
+  const za = band.top + 0.15;
+  const zb = band.bottom - 0.15;
+  const count = Math.max(2, Math.round((zb - za) / 0.45));
+  for (let i = 0; i < count; i++) {
+    const a = za + ((zb - za) * i) / count;
+    const b = za + ((zb - za) * (i + 1)) / count;
+    bin.add('decor', boxGeometry(x - 0.05, 0.52, a, x + 0.05, 0.78, b), i % 2 === 0 ? PALETTE.barrierRed : PALETTE.barrierWhite);
+  }
+  for (let z = za + 0.3; z < zb; z += 1.6) {
+    bin.add('decor', beamGeometry([x - 0.25, 0, z], [x, 0.8, z], 0.05, 0.05), 0x55595e);
+    bin.add('decor', beamGeometry([x + 0.25, 0, z], [x, 0.8, z], 0.05, 0.05), 0x55595e);
+    bin.add('fairy', sphereGeometry(x, 0.86, z, 0.06, { widthSegments: 6, heightSegments: 4 }), 0xffb347);
   }
 }
 
@@ -2011,7 +2130,14 @@ interface TreeSpot {
 }
 
 /** Groves off the map's east, west and far south edges, instanced per part. */
-function trees(map: DistrictMap, band: Band, res: ResourceBag, parent: Group): void {
+function trees(
+  map: DistrictMap,
+  west: Band,
+  east: Band,
+  sign: { x: number; y: number; z: number } | null,
+  res: ResourceBag,
+  parent: Group,
+): void {
   const W = map.width;
   const H = map.height;
   const spots: TreeSpot[] = [];
@@ -2034,6 +2160,7 @@ function trees(map: DistrictMap, band: Band, res: ResourceBag, parent: Group): v
         const offset = 3.4 + gx * 2.6 + hash01(seed, 4, 102) * 1.2;
         const x = side < 0 ? -offset : W + offset;
         const z = gz + (hash01(seed, 5, 102) - 0.5) * 1.6;
+        const band = side < 0 ? west : east;
         if (band && gx < 3 && z > band.top - 1.5 && z < band.bottom + 1.5) continue;
         push(x, z, seed);
       }
@@ -2042,6 +2169,7 @@ function trees(map: DistrictMap, band: Band, res: ResourceBag, parent: Group): v
   for (let x = 1; x < W; x += 3.3) {
     seed++;
     if (hash01(seed, 0, 103) < 0.25) continue;
+    if (sign && Math.abs(x - sign.x) < SANDBOX_THEME.sign.width / 2 + 1.6) continue;
     push(x + (hash01(seed, 1, 103) - 0.5) * 1.2, -2.2 + (hash01(seed, 2, 103) - 0.5) * 0.3, seed);
   }
   for (let gz = H + 10; gz < H + 18; gz += 2.8) {
@@ -2111,9 +2239,41 @@ function trees(map: DistrictMap, band: Band, res: ResourceBag, parent: Group): v
   }
 }
 
-/** Street lamps on the pavement where the road runs off the map. */
-function lamps(map: DistrictMap, band: { top: number; bottom: number }, res: ResourceBag, parent: Group): void {
+/** Street lamps where the road runs off the map, and around the sandbox square. */
+function lamps(
+  map: DistrictMap,
+  west: Band,
+  east: Band,
+  plate: { minX: number; maxX: number; minY: number; maxY: number } | null,
+  sign: { x: number; y: number; z: number } | null,
+  res: ResourceBag,
+  parent: Group,
+): void {
   const W = map.width;
+  const spots: { x: number; z: number; yaw: number }[] = [];
+  for (let k = 0; k < 4; k++) {
+    if (west) {
+      spots.push({ x: -3 - k * 6.5, z: west.top + 0.3, yaw: 0 });
+      spots.push({ x: -3 - k * 6.5, z: west.bottom - 0.3, yaw: Math.PI });
+    }
+    if (east) {
+      spots.push({ x: W + 3 + k * 6.5, z: east.top + 0.3, yaw: 0 });
+      spots.push({ x: W + 3 + k * 6.5, z: east.bottom - 0.3, yaw: Math.PI });
+    }
+  }
+  if (plate) {
+    // Behind the north hedge facing south, and beyond the east hedge facing west.
+    if (plate.minY === 0) {
+      for (let x = plate.minX + 2.5; x < plate.maxX - 1; x += 6.5) {
+        if (sign && Math.abs(x - sign.x) < SANDBOX_THEME.sign.width / 2 + 0.8) continue;
+        spots.push({ x, z: -1.45, yaw: 0 });
+      }
+    }
+    if (plate.maxX === W) {
+      for (let z = plate.minY + 3.5; z < plate.maxY - 1; z += 7) spots.push({ x: W + 1.45, z, yaw: -Math.PI / 2 });
+    }
+  }
+  if (spots.length === 0) return;
   const bin = new GeometryBin();
   let postGeometry: ReturnType<GeometryBin['take']> = null;
   try {
@@ -2129,13 +2289,6 @@ function lamps(map: DistrictMap, band: { top: number; bottom: number }, res: Res
   if (!postGeometry) return;
   res.geometry(postGeometry);
   const headGeometry = res.geometry(boxGeometry(-0.1, 2.56, 0.36, 0.1, 2.7, 0.56));
-  const spots: { x: number; z: number; yaw: number }[] = [];
-  for (let k = 0; k < 4; k++) {
-    for (const x of [-3 - k * 6.5, W + 3 + k * 6.5]) {
-      spots.push({ x, z: band.top + 0.3, yaw: 0 });
-      spots.push({ x, z: band.bottom - 0.3, yaw: Math.PI });
-    }
-  }
   const postMaterial = res.material(standardMaterial({ roughness: 0.6 }));
   const headMaterial = res.material(unlitMaterial({ color: PALETTE.lampGlow, vertexColors: false }));
   const posts = res.disposable(new InstancedMesh(postGeometry, postMaterial, spots.length));

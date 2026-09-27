@@ -9,13 +9,20 @@
  * arrives from a client and none of it is trustworthy.
  */
 
-import type { Facing, GameId, Position } from '@strkworld/shared';
+import {
+  SANDBOX_COLOURS,
+  type Facing,
+  type GameId,
+  type Position,
+  type SandboxTile,
+} from '@strkworld/shared';
 import {
   DEFAULT_FACING,
   DEFAULT_SPRITE,
   GAME_ID_PATTERN,
   WORLD_LIMIT,
 } from './config.js';
+import { isSandboxTile } from './sandbox-rules.js';
 
 const FACINGS: readonly Facing[] = ['up', 'down', 'left', 'right'];
 
@@ -85,6 +92,46 @@ export function normalizeCoordinate(
 ): number | null {
   if (typeof raw !== 'number' || !Number.isFinite(raw)) return null;
   return Math.max(-limit, Math.min(limit, Math.round(raw)));
+}
+
+/**
+ * Accept a sandbox tile (D-060), or reject it outright.
+ *
+ * Integer coordinates inside `SANDBOX_AREA`, read from own data properties
+ * only — an accessor or a proxy trap is never invoked, and a string, an
+ * array, NaN, Infinity or a fraction is simply not a tile. There is no repair:
+ * a tile that is almost right is still somewhere the player did not aim.
+ */
+export function normalizeSandboxTile(raw: unknown): SandboxTile | null {
+  if (raw === null || typeof raw !== 'object') return null;
+  const x = ownDataField(raw, 'x');
+  const y = ownDataField(raw, 'y');
+  if (typeof x !== 'number' || typeof y !== 'number') return null;
+  if (!isSandboxTile(x, y)) return null;
+  return Object.freeze({ x, y });
+}
+
+/**
+ * Accept a sandbox block colour: an integer palette index in
+ * `0 .. SANDBOX_COLOURS - 1`. Anything else, including the schema's `-1`
+ * "carrying nothing", is null.
+ */
+export function normalizeSandboxColour(raw: unknown): number | null {
+  return typeof raw === 'number' &&
+    Number.isInteger(raw) &&
+    raw >= 0 &&
+    raw < SANDBOX_COLOURS
+    ? raw
+    : null;
+}
+
+function ownDataField(value: object, key: string): unknown {
+  try {
+    const descriptor = Object.getOwnPropertyDescriptor(value, key);
+    return descriptor && 'value' in descriptor ? descriptor.value : undefined;
+  } catch {
+    return undefined;
+  }
 }
 
 /** Anything carrying a position. Both schema instances and plain data fit. */

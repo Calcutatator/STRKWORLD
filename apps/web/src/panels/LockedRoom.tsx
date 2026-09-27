@@ -24,7 +24,7 @@ export function LockedRoom({
   onClose: () => void;
 }) {
   return (
-    <PanelFrame title={COPY.buildings[building]} disclosure={null} onClose={onClose}>
+    <PanelFrame title={COPY.buildings[building]} building={building} disclosure={null} onClose={onClose}>
       <LockedNotice reason={reason} message={message} />
     </PanelFrame>
   );
@@ -58,7 +58,7 @@ export function UnbuiltRoom({
   onClose: () => void;
 }) {
   return (
-    <PanelFrame title={COPY.buildings[building]} disclosure={null} onClose={onClose}>
+    <PanelFrame title={COPY.buildings[building]} building={building} disclosure={null} onClose={onClose}>
       <p className="room-unbuilt">{message}</p>
     </PanelFrame>
   );

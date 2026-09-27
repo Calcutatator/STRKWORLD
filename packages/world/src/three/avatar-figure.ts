@@ -35,9 +35,10 @@ import type { AvatarFigure, AvatarMotion } from './types.js';
  * every figure wearing it; `setLook` swaps geometry references on the same
  * meshes, so the caller's `object` keeps its identity.
  *
- * Rig: root (caller-owned position and yaw) > hips (bob) > legs, and
- * hips > upper body (lean, twist, breath) > torso, head, arms. Limbs pivot at
- * the hips and shoulders. Feet sit on y = 0 and the front faces +Z.
+ * Rig: root (caller-owned position and yaw) > body (uniform build scale) >
+ * hips (bob) > legs, and hips > upper body (lean, twist, breath) > torso,
+ * head, arms. Limbs pivot at the hips and shoulders. The body scales about the
+ * feet, which sit on y = 0; the front faces +Z.
  */
 
 type Vec3 = readonly [number, number, number];
@@ -48,10 +49,11 @@ const SIDES: readonly Side[] = [-1, 1];
 const ZERO: Vec3 = [0, 0, 0];
 
 /**
- * No look rises above this in any pose (the large horned helm, mid-stride),
- * so a label anchored here clears every head. Per-look: `avatarFigureHeight`.
+ * No look rises above this in any pose, build scale included (the large horned
+ * helm, mid-stride), so a label anchored here clears every head.
+ * Per-look standing top: `avatarFigureHeight`.
  */
-export const AVATAR_FIGURE_HEIGHT = 1.58;
+export const AVATAR_FIGURE_HEIGHT = 1.8;
 
 // Face: chibi eyes sit low and wide, and read at a distance as dark blocks.
 const EYE_HEIGHT = 0.4;
@@ -110,6 +112,12 @@ interface BuildDims {
   readonly headDepth: number;
   /** Weapons and shields scale with the body. */
   readonly propScale: number;
+  /**
+   * Uniform scale on the whole figure, on top of the proportions above, so the
+   * size classes read at a glance. The sprites' small and large classes stand
+   * about 0.8x and 1.25x the standard height; these land the 3D figures there.
+   */
+  readonly scale: number;
 }
 
 const BUILDS: Readonly<Record<AvatarBuild, BuildDims>> = {
@@ -129,6 +137,7 @@ const BUILDS: Readonly<Record<AvatarBuild, BuildDims>> = {
     headHeight: 0.47,
     headDepth: 0.48,
     propScale: 0.88,
+    scale: 0.86,
   },
   standard: {
     legLength: 0.34,
@@ -146,6 +155,7 @@ const BUILDS: Readonly<Record<AvatarBuild, BuildDims>> = {
     headHeight: 0.5,
     headDepth: 0.5,
     propScale: 1,
+    scale: 1,
   },
   large: {
     legLength: 0.38,
@@ -163,6 +173,7 @@ const BUILDS: Readonly<Record<AvatarBuild, BuildDims>> = {
     headHeight: 0.52,
     headDepth: 0.52,
     propScale: 1.15,
+    scale: 1.14,
   },
 };
 
@@ -1299,17 +1310,22 @@ export function disposeAvatarFigureCache(): void {
   materialCache = null;
 }
 
+/** Standing still at the top of a breath: the highest a still figure ever reaches. */
+const PEAK_BREATH: FigurePhases = { breath: Math.PI / 2, blink: BLINK_SECONDS };
+
 /**
- * Rest-pose top of one look in world units, for hugging a label to a head.
- * Walking and sprinting lift the body up to ~0.06 higher; AVATAR_FIGURE_HEIGHT
- * already includes that for the tallest look.
+ * The true top of one look standing still, build scale included, in world
+ * units: the exact highest vertex at the top of its idle breath, so anything
+ * held at or above it (a label, a carried block) never touches the figure
+ * while it stands. Walking and sprinting lift the body up to ~0.06 x scale
+ * higher; AVATAR_FIGURE_HEIGHT already includes that for the tallest look.
  */
 export function avatarFigureHeight(key: AvatarSpriteKey): number {
   const valid = validateAvatarSprite(key);
   let height = heightCache.get(valid);
   if (height === undefined) {
-    const figure = createAvatarFigure(valid);
-    height = new Box3().setFromObject(figure.object).max.y;
+    const figure = buildFigure(valid, PEAK_BREATH);
+    height = new Box3().setFromObject(figure.object, true).max.y;
     figure.dispose();
     heightCache.set(valid, height);
   }
@@ -1335,14 +1351,37 @@ function lerp(from: number, to: number, t: number): number {
   return from + (to - from) * t;
 }
 
+interface FigurePhases {
+  readonly breath: number;
+  readonly blink: number;
+}
+
+/** Per-key offsets keep a row of idle figures from breathing and blinking in unison. */
+function keyPhases(key: AvatarSpriteKey): FigurePhases {
+  const index = Math.max(0, AVATAR_SPRITE_KEYS.indexOf(key));
+  return {
+    breath: ((index * GOLDEN_RATIO_FRACTION) % 1) * TAU,
+    blink:
+      BLINK_SECONDS +
+      ((index * GOLDEN_RATIO_FRACTION * GOLDEN_RATIO_FRACTION) % 1) *
+        (BLINK_PERIOD_SECONDS - 2 * BLINK_SECONDS),
+  };
+}
+
 export function createAvatarFigure(key: AvatarSpriteKey): AvatarFigure {
   // Keys can arrive from untyped runtime paths (remote peers); never trust them.
-  let current = validateAvatarSprite(key);
+  const valid = validateAvatarSprite(key);
+  return buildFigure(valid, keyPhases(valid));
+}
+
+function buildFigure(key: AvatarSpriteKey, phases: FigurePhases): AvatarFigure {
+  let current = key;
   let dims = BUILDS[avatarLook(current).character.build];
   const parts = lookParts(current);
   const material = figureMaterial();
 
   const root = pivot('avatar-figure');
+  const body = pivot('avatar-body');
   const hips = pivot('avatar-hips');
   const upperBody = pivot('avatar-upper-body');
   const headPivot = pivot('avatar-head-pivot');
@@ -1358,7 +1397,8 @@ export function createAvatarFigure(key: AvatarSpriteKey): AvatarFigure {
   const legLeft = partMesh('avatar-leg-left', parts.leg, material);
   const legRight = partMesh('avatar-leg-right', parts.leg, material);
 
-  root.add(hips);
+  root.add(body);
+  body.add(hips);
   hips.add(legLeftPivot, legRightPivot, upperBody);
   upperBody.add(torso, headPivot, armLeftPivot, armRightPivot);
   headPivot.add(head, eyes);
@@ -1367,16 +1407,11 @@ export function createAvatarFigure(key: AvatarSpriteKey): AvatarFigure {
   legLeftPivot.add(legLeft);
   legRightPivot.add(legRight);
 
-  // Per-key phase offsets keep a row of idle figures from breathing and blinking in unison.
-  const index = Math.max(0, AVATAR_SPRITE_KEYS.indexOf(current));
   let walkWeight = 0;
   let sprintWeight = 0;
   let stridePhase = 0;
-  let breathPhase = ((index * GOLDEN_RATIO_FRACTION) % 1) * TAU;
-  let blinkClock =
-    BLINK_SECONDS +
-    ((index * GOLDEN_RATIO_FRACTION * GOLDEN_RATIO_FRACTION) % 1) *
-      (BLINK_PERIOD_SECONDS - 2 * BLINK_SECONDS);
+  let breathPhase = phases.breath;
+  let blinkClock = phases.blink;
   let swingLeft = 1;
   let swingRight = 1;
   let disposed = false;
@@ -1385,6 +1420,8 @@ export function createAvatarFigure(key: AvatarSpriteKey): AvatarFigure {
     const look = avatarLook(current);
     const next = lookParts(current);
     dims = BUILDS[look.character.build];
+    // Scaling about the feet keeps them on y = 0; pairs share a build, so F-toggling keeps size.
+    body.scale.setScalar(dims.scale);
     torso.geometry = next.torso;
     head.geometry = next.head;
     armLeft.geometry = next.armLeft;

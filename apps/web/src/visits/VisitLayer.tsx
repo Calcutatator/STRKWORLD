@@ -233,7 +233,7 @@ function ConnectionSurface({
   onClose: () => void;
 }) {
   return (
-    <PanelFrame title={COPY.buildings[building]} disclosure={null} onClose={onClose}>
+    <PanelFrame title={COPY.buildings[building]} building={building} disclosure={null} onClose={onClose}>
       <ConnectRoom />
     </PanelFrame>
   );

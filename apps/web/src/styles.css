@@ -1,18 +1,123 @@
 /*
- * Shell layout, deliberately minimal.
+ * Shell styling.
  *
  * Game Mode is the v1 target (D-030–D-031). The World fills the page with the
  * active street or instanced room; React station and Menu Mode windows stack
- * above that render. A visual pass is a later, separate job.
+ * above that render.
+ *
+ * Stacking, bottom to top (unchanged by the themes below):
+ *   World canvas (.world-host) -> building windows (.panel, z 10)
+ *   -> Game Mode controls (z 11) -> session notice, presence status (z 20)
+ *   -> wallet attention cue (fixed, z 60).
+ *
+ * Theming is presentation only. Every surface reads semantic `--ui-*` tokens.
+ * `:root` holds the game's own warm golden-hour theme, which the HUD (Game
+ * Mode controls, notices, presence, wallet cue) always uses. A building window
+ * carries `data-building` on its `.panel` root (PanelFrame) and re-points the
+ * tokens for that window only:
+ *
+ *   bank        -> STRK20 (shielding)      exchange -> avnu (trading)
+ *   post-office -> game + brick and navy   bridge   -> game + steel and amber
+ *   anything else (the Vault, connect surfaces) keeps the base game theme.
+ *
+ * Fonts are system stacks only. This build loads no web fonts and makes no
+ * font requests; the brand faces are approximated, never shipped.
+ *
+ * Disclosures, warnings and the ConfirmGate are never smaller, fainter or less
+ * prominent than body copy (D-024). Every text pair here was checked against
+ * WCAG AA.
  */
 
 :root {
   color-scheme: dark;
-  --ink: #e8e8f0;
-  --ground: #0e0e14;
-  --panel: #1a1a24;
-  --panel-edge: #2c2c3a;
-  --accent: #6c7bff;
+
+  /* Type */
+  --ui-font: ui-rounded, "SF Pro Rounded", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --ui-font-mono: ui-monospace, SFMono-Regular, Menlo, monospace;
+  --ui-heading-font: var(--ui-font);
+  --ui-number-font: var(--ui-font);
+  --ui-btn-font: var(--ui-font);
+  --ui-heading-size: 1.4rem;
+  --ui-heading-weight: 800;
+  --ui-heading-case: none;
+  --ui-heading-tracking: -0.01em;
+
+  /* Surfaces */
+  --ui-page: #1a1411;
+  --ui-scrim: radial-gradient(120% 90% at 50% 40%, rgb(48 31 16 / 0.3), rgb(24 15 8 / 0.68));
+  --ui-surface: #241c17;
+  --ui-surface-raised: #2e251f;
+  --ui-surface-sunken: #1a1411;
+  --ui-header-bg: linear-gradient(180deg, #30261f, #261e19);
+  --ui-line: #463a30;
+  --ui-line-subtle: rgb(246 236 217 / 0.09);
+  --ui-panel-border: 1px solid #4a3c31;
+  --ui-panel-shadow: 0 24px 56px rgb(12 7 3 / 0.55), 0 3px 0 rgb(0 0 0 / 0.25);
+  --ui-hud-shadow: 0 4px 0 rgb(0 0 0 / 0.28), 0 12px 28px rgb(0 0 0 / 0.35);
+
+  /* Ink */
+  --ui-text: #f6ecd9;
+  --ui-text-dim: #d6c4a6;
+  --ui-heading: #fff4df;
+
+  /* Accents and states */
+  --ui-accent: #f2b54a;
+  --ui-focus: #ffd98a;
+  --ui-focus-width: 3px;
+  --ui-callout-edge: var(--ui-accent);
+  --ui-warn: #f2b54a;
+  --ui-danger: #ff7a5c;
+  --ui-success: #8fd18a;
+  --ui-lock: #a8957c;
+
+  /* Shape */
+  --ui-radius-panel: 18px;
+  --ui-radius-inner: 12px;
+  --ui-radius-control: 12px;
+  --ui-radius-button: 999px;
+  --ui-radius-tabs: 999px;
+
+  /* Inputs */
+  --ui-input-border: #8a7560;
+  --ui-input-border-hover: #a08a72;
+  --ui-input-focus-glow: 0 0 0 4px rgb(242 181 74 / 0.18);
+
+  /* Buttons, secondary (the default for every button) */
+  --ui-btn-size: 0.95rem;
+  --ui-btn-weight: 700;
+  --ui-btn-case: none;
+  --ui-btn-tracking: 0.005em;
+  --ui-btn-pad: 0.55rem 1.1rem;
+  --ui-btn-bg: linear-gradient(#45382d, #392d25);
+  --ui-btn-bg-hover: linear-gradient(#4f4135, #42352b);
+  --ui-btn-text: #f6ecd9;
+  --ui-btn-border: #56463a;
+  --ui-btn-border-hover: #6a5746;
+  --ui-btn-edge: #181210;
+  --ui-btn-inset: inset 0 1px 0 rgb(255 240 215 / 0.1);
+  --ui-btn-glow: 0 0 #0000;
+  --ui-btn-drop: 0 6px 14px rgb(0 0 0 / 0.25);
+  --ui-btn-drop-active: 0 2px 6px rgb(0 0 0 / 0.25);
+  /* The chunky "3D" edge: its height, the hover lift and the press travel. */
+  --ui-btn-depth: 4px;
+  --ui-btn-lift: -1px;
+  --ui-btn-press: 3px;
+
+  /* Buttons, primary */
+  --ui-primary-bg: linear-gradient(#f8c865, #eba73a);
+  --ui-primary-bg-hover: linear-gradient(#fbd27a, #f0b049);
+  --ui-primary-text: #2b1a06;
+  --ui-primary-border: #f7c25d;
+  --ui-primary-border-hover: #fcd384;
+  --ui-primary-edge: #a36d1c;
+  --ui-primary-inset: inset 0 1px 0 rgb(255 250 225 / 0.55);
+  --ui-primary-glow: 0 0 #0000;
+
+  /* Mode tabs */
+  --ui-tab-hover: rgb(246 236 217 / 0.07);
+  --ui-tab-selected-bg: linear-gradient(#f8c865, #eba73a);
+  --ui-tab-selected-text: #2b1a06;
+  --ui-tab-selected-shadow: inset 0 1px 0 rgb(255 250 225 / 0.55), 0 2px 0 #a36d1c;
 }
 
 * {
@@ -27,9 +132,10 @@ body,
 }
 
 body {
-  background: var(--ground);
-  color: var(--ink);
-  font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+  background: radial-gradient(120% 90% at 50% 30%, #30231a 0%, var(--ui-page) 62%) var(--ui-page);
+  color: var(--ui-text);
+  font-family: var(--ui-font);
+  -webkit-font-smoothing: antialiased;
 }
 
 .strkworld {
@@ -50,13 +156,25 @@ body {
   height: 100%;
 }
 
+/* ------------------------------------------------------------------------
+ * HUD: always the base game theme, whichever building window is open.
+ * --------------------------------------------------------------------- */
+
 .game-mode-controls {
   position: absolute;
-  top: 1rem;
-  right: 1rem;
+  top: max(1rem, env(safe-area-inset-top));
+  right: max(1rem, env(safe-area-inset-right));
   z-index: 11;
   display: flex;
-  gap: 0.5rem;
+  gap: 0.6rem;
+}
+
+.game-mode-controls button {
+  --btn-depth: 5px;
+  --btn-press: 4px;
+  padding: 0.62rem 1.25rem;
+  font-size: 1rem;
+  font-weight: 800;
 }
 
 .session-notice {
@@ -64,28 +182,72 @@ body {
   top: 1rem;
   left: 50%;
   z-index: 20;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.75rem 1rem;
   width: min(42rem, calc(100% - 2rem));
   transform: translateX(-50%);
-  padding: 0.9rem 1rem;
-  border: 1px solid var(--panel-edge);
-  border-left: 4px solid var(--accent);
-  border-radius: 8px;
-  background: var(--panel);
+  padding: 0.95rem 1.1rem;
+  border: 1px solid color-mix(in srgb, var(--ui-warn) 50%, var(--ui-line));
+  border-left: 6px solid var(--ui-warn);
+  border-radius: 16px;
+  background: color-mix(in srgb, var(--ui-warn) 16%, var(--ui-surface));
+  box-shadow: var(--ui-hud-shadow);
+  color: var(--ui-text);
+  line-height: 1.45;
+  animation: ui-drop-in 200ms ease-out;
+}
+
+.session-notice p {
+  flex: 1 1 18rem;
+  margin: 0;
 }
 
 .presence-status {
   position: absolute;
-  right: 1rem;
-  bottom: 1rem;
+  right: max(1rem, env(safe-area-inset-right));
+  bottom: max(1rem, env(safe-area-inset-bottom));
   z-index: 20;
   display: flex;
   align-items: center;
-  gap: 0.75rem;
-  padding: 0.6rem 0.8rem;
-  border: 1px solid var(--panel-edge);
-  border-radius: 8px;
-  background: var(--panel);
+  gap: 0.6rem;
+  padding: 0.5rem 0.95rem 0.5rem 0.8rem;
+  border: 1px solid var(--ui-line);
+  border-radius: 999px;
+  background: rgb(36 28 23 / 0.94);
+  box-shadow: var(--ui-hud-shadow);
+  color: var(--ui-text);
   font-size: 0.9rem;
+  font-weight: 700;
+  animation: ui-rise-in 200ms ease-out;
+}
+
+.presence-status:has(button) {
+  padding-right: 0.45rem;
+}
+
+/* Status lamp; decorative, the text carries the meaning. */
+.presence-status::before {
+  content: "";
+  flex: none;
+  width: 0.55rem;
+  height: 0.55rem;
+  border-radius: 50%;
+  background: var(--ui-accent);
+  box-shadow: 0 0 0 3px rgb(242 181 74 / 0.22);
+}
+
+.presence-unavailable::before {
+  background: var(--ui-lock);
+  box-shadow: none;
+}
+
+.presence-status button {
+  --btn-depth: 3px;
+  --btn-press: 2px;
+  padding: 0.32rem 0.8rem;
+  font-size: 0.82rem;
 }
 
 .wallet-attention-cue {
@@ -101,11 +263,12 @@ body {
   padding: 0.65rem 0.9rem 0.65rem 0.65rem;
   overflow: hidden;
   transform: translateX(-50%);
-  border: 2px solid #ffe279;
-  border-radius: 14px;
-  background: #211b38;
-  box-shadow: 0 0 0 4px rgb(10 8 18 / 72%), 0 12px 32px rgb(0 0 0 / 55%);
-  color: #fff8d8;
+  border: 2px solid #f2b54a;
+  border-radius: 16px;
+  background: linear-gradient(180deg, #33271e, #271d17);
+  box-shadow: 0 0 0 4px rgb(20 13 8 / 72%), 0 5px 0 #120c09, 0 14px 32px rgb(0 0 0 / 55%);
+  color: #fff3dc;
+  font-family: var(--ui-font);
   pointer-events: none;
   animation: wallet-attention-arrive 180ms ease-out, wallet-attention-glow 1.1s ease-in-out infinite alternate;
 }
@@ -137,11 +300,12 @@ body {
 
 .wallet-attention-copy strong {
   font-size: 1.05rem;
+  font-weight: 800;
   line-height: 1.15;
 }
 
 .wallet-attention-copy span {
-  color: #e9e1ff;
+  color: #f0dfc2;
   font-size: 0.9rem;
   line-height: 1.3;
 }
@@ -152,45 +316,50 @@ body {
 }
 
 @keyframes wallet-attention-glow {
-  from { border-color: #ffe279; }
-  to { border-color: #ff8ad8; }
+  from { border-color: #f2b54a; }
+  to { border-color: #ff9a5c; }
 }
 
-@media (prefers-reduced-motion: reduce) {
-  .wallet-attention-cue {
-    animation: none;
-  }
-}
+/* ------------------------------------------------------------------------
+ * Building windows
+ * --------------------------------------------------------------------- */
 
-/* Financial and locked surfaces are windows above the active World scene. */
-.panel,
-.room {
+/* Financial and locked surfaces are windows above the active World scene. The
+ * top and bottom padding keep a window clear of the Game Mode controls and the
+ * presence status, so neither can sit over the window's own controls. */
+.panel {
   position: absolute;
   inset: 0;
-  display: grid;
-  place-items: center;
-  padding: 1.5rem;
-  background: color-mix(in srgb, var(--ground) 72%, transparent);
   z-index: 10;
-}
-
-.room > * {
-  width: min(30rem, 100%);
-  background: var(--panel);
-  border: 1px solid var(--panel-edge);
-  border-radius: 12px;
-  padding: 1.5rem;
+  display: grid;
+  grid-template-rows: minmax(0, 1fr);
+  place-items: center;
+  padding: 4.5rem 1rem 4rem;
+  /* Re-resolved here: a token derived at :root would keep the base accent. */
+  --ui-callout-edge: var(--ui-accent);
+  background: var(--ui-scrim);
+  color: var(--ui-text);
+  font-family: var(--ui-font);
+  line-height: 1.45;
+  animation: ui-fade-in 160ms ease-out;
 }
 
 /* PanelFrame is one bounded window. Its contents scroll inside the window so
- * long recovery records never push the close control off-screen. */
+ * long recovery records never push the close control off-screen. It is never
+ * positioned: a nested window (the Bridge's shield step) is laid out against
+ * the outer `.panel`, not clipped inside this card. */
 .panel-card {
   width: min(34rem, calc(100vw - 2rem));
-  max-height: calc(100vh - 2rem);
+  max-height: 100%;
   overflow: auto;
-  background: var(--panel);
-  border: 1px solid var(--panel-edge);
-  border-radius: 12px;
+  overscroll-behavior: contain;
+  scrollbar-width: thin;
+  scrollbar-color: var(--ui-line) transparent;
+  background: var(--ui-surface);
+  border: var(--ui-panel-border);
+  border-radius: var(--ui-radius-panel);
+  box-shadow: var(--ui-panel-shadow);
+  animation: ui-panel-in 190ms cubic-bezier(0.2, 0.8, 0.2, 1);
 }
 
 .panel-header,
@@ -199,8 +368,57 @@ body {
   padding: 1.1rem 1.25rem;
 }
 
+/* The header stays pinned while a long window scrolls, so Close is always in
+ * reach. It is opaque for the same reason. */
 .panel-header {
-  border-bottom: 1px solid var(--panel-edge);
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem 1rem;
+  padding-block: 1rem;
+  background-color: var(--ui-surface);
+  background-image: var(--ui-header-bg);
+  border-bottom: 1px solid var(--ui-line-subtle);
+}
+
+.panel-header h2 {
+  flex: 1 1 auto;
+  min-width: 0;
+  margin: 0;
+  color: var(--ui-heading);
+  font-family: var(--ui-heading-font);
+  font-size: var(--ui-heading-size);
+  font-weight: var(--ui-heading-weight);
+  letter-spacing: var(--ui-heading-tracking);
+  line-height: 1.1;
+  text-transform: var(--ui-heading-case);
+  overflow-wrap: anywhere;
+}
+
+.panel-close {
+  --btn-depth: min(var(--ui-btn-depth), 3px);
+  --btn-press: min(var(--ui-btn-press), 2px);
+  flex: none;
+  padding: 0.4rem 0.9rem;
+}
+
+/* The wallet-is-signing note gets its own full-width line under the title. */
+.panel-closing-note {
+  flex-basis: 100%;
+  margin: 0.2rem 0 0;
+  padding: 0.6rem 0.8rem;
+  border-left: 4px solid var(--ui-warn);
+  border-radius: 0 var(--ui-radius-inner) var(--ui-radius-inner) 0;
+  background: color-mix(in srgb, var(--ui-warn) 16%, transparent);
+  color: var(--ui-text);
+}
+
+.panel-body {
+  padding-bottom: 1.3rem;
 }
 
 .panel-body > :first-child {
@@ -211,62 +429,399 @@ body {
   margin-bottom: 0;
 }
 
-.panel-header {
-  display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  gap: 1rem;
+.panel-footer {
+  border-top: 1px solid var(--ui-line-subtle);
+}
+
+/* ------------------------------------------------------------------------
+ * Callouts: disclosures, notices, locked doors, warnings, outcomes.
+ * Disclosure text stays full size and full contrast; the tinted panel and
+ * edge make it more prominent than body copy, never less.
+ * --------------------------------------------------------------------- */
+
+:where(
+  .panel-disclosure,
+  .commit-disclosures,
+  .room-locked,
+  .panel-notice,
+  .review-warnings,
+  .flow-failed,
+  .flow-done,
+  .confirm-blocked,
+  .exchange-experience .panel-body > [role="alert"]
+) {
+  margin: 0.85rem 0;
+  padding: 0.75rem 0.9rem 0.75rem 0.95rem;
+  border-left: 4px solid var(--ui-callout-edge);
+  border-radius: 0 var(--ui-radius-inner) var(--ui-radius-inner) 0;
+  background: color-mix(in srgb, var(--ui-callout-edge) 13%, var(--ui-surface));
+  color: var(--ui-text);
 }
 
 .panel-disclosure,
-.commit-disclosures,
-.room-locked,
-.panel-notice {
-  border-left: 3px solid var(--accent);
-  padding-left: 0.75rem;
-  margin: 0.75rem 0;
-  opacity: 0.92;
+.commit-disclosures {
+  font-weight: 500;
 }
 
 .panel-card > .panel-disclosure {
   margin: 0;
-  padding: 0.75rem 1.25rem 0.75rem 1rem;
-  border-bottom: 1px solid var(--panel-edge);
+  padding: 0.8rem 1.25rem 0.8rem 1.05rem;
+  border-radius: 0;
+  border-bottom: 1px solid var(--ui-line-subtle);
+}
+
+.commit-disclosures,
+.review-warnings {
+  list-style: none;
+}
+
+.commit-disclosures > li + li,
+.review-warnings > li + li {
+  margin-top: 0.55rem;
+  padding-top: 0.55rem;
+  border-top: 1px solid var(--ui-line-subtle);
+}
+
+.room-locked {
+  --ui-callout-edge: var(--ui-lock);
+}
+
+.review-warnings {
+  --ui-callout-edge: var(--ui-warn);
+}
+
+.flow-done {
+  --ui-callout-edge: var(--ui-success);
+}
+
+.flow-failed,
+.confirm-blocked,
+.panel-notice.notice-error,
+.panel-notice[role="alert"],
+.exchange-experience .panel-body > [role="alert"] {
+  --ui-callout-edge: var(--ui-danger);
+}
+
+:where(.flow-failed, .flow-done, .exchange-experience .panel-body > [role="alert"]) > p {
+  margin: 0;
+}
+
+:where(.flow-failed, .flow-done, .exchange-experience .panel-body > [role="alert"]) > button {
+  margin-top: 0.7rem;
+}
+
+.flow-done > p {
+  font-weight: 600;
+}
+
+/* Wallet work in flight: the in-window pending line gets a small spinner. */
+.flow-pending,
+.exchange-review > p[aria-live] {
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
+  margin: 0.85rem 0;
+  padding: 0.65rem 0.85rem;
+  border: 1px solid var(--ui-line-subtle);
+  border-radius: var(--ui-radius-inner);
+  background: var(--ui-surface-raised);
+  font-weight: 600;
+}
+
+.flow-pending::before,
+.exchange-review > p[aria-live]::before,
+.panel-balance > [aria-busy="true"]::before {
+  content: "";
+  flex: none;
+  width: 0.95rem;
+  height: 0.95rem;
+  border: 2px solid color-mix(in srgb, var(--ui-accent) 30%, transparent);
+  border-top-color: var(--ui-accent);
+  border-radius: 50%;
+  animation: ui-spin 0.9s linear infinite;
+}
+
+/* ------------------------------------------------------------------------
+ * Window contents
+ * --------------------------------------------------------------------- */
+
+.panel-modes {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.3rem;
+  width: fit-content;
+  max-width: 100%;
+  margin: 0 0 1rem;
+  padding: 0.3rem;
+  border: 1px solid var(--ui-line-subtle);
+  border-radius: var(--ui-radius-tabs);
+  background: var(--ui-surface-sunken);
+}
+
+.panel-modes > button {
+  --btn-bg: transparent;
+  --btn-bg-hover: var(--ui-tab-hover);
+  --btn-text: var(--ui-text-dim);
+  --btn-border: transparent;
+  --btn-border-hover: transparent;
+  --tab-shadow: none;
+  padding: 0.45rem 0.95rem;
+  box-shadow: var(--tab-shadow);
+}
+
+.panel-modes > button:hover:not(:disabled),
+.panel-modes > button:active:not(:disabled) {
+  transform: none;
+  box-shadow: var(--tab-shadow);
+  color: var(--ui-text);
+}
+
+.panel-modes > button[aria-selected="true"] {
+  --btn-bg: var(--ui-tab-selected-bg);
+  --btn-bg-hover: var(--ui-tab-selected-bg);
+  --btn-text: var(--ui-tab-selected-text);
+  --tab-shadow: var(--ui-tab-selected-shadow);
+}
+
+.panel-modes > button[aria-selected="true"]:hover:not(:disabled) {
+  color: var(--ui-tab-selected-text);
+}
+
+.panel-balance {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.55rem 1rem;
+  margin: 0 0 1rem;
+  padding: 0.9rem 1rem;
+  border: 1px solid var(--ui-line-subtle);
+  border-radius: var(--ui-radius-inner);
+  background: var(--ui-surface-raised);
+}
+
+.panel-balance > p {
+  flex: 1 1 14rem;
+  margin: 0;
+}
+
+.panel-balance > [aria-busy="true"] {
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
+}
+
+.panel-balance > [role="alert"] {
+  padding-left: 0.75rem;
+  border-left: 4px solid var(--ui-danger);
+  font-weight: 600;
+}
+
+.panel-balance > .balance-total {
+  flex-basis: 100%;
+  color: var(--ui-heading);
+  font-family: var(--ui-number-font);
+  font-size: 1.8rem;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.01em;
+  line-height: 1.1;
+}
+
+.balance-maturing,
+.balance-aggregate {
+  color: var(--ui-text-dim);
+  font-size: 0.95rem;
+}
+
+.panel-compose,
+.bridge-quote-form {
+  display: grid;
+  gap: 0.8rem;
+}
+
+.panel-compose > button,
+.bridge-recovery > button {
+  justify-self: start;
+}
+
+.panel-compose > .review,
+.bridge-quote-form > button,
+.panel[data-building="exchange"] .panel-compose > [type="submit"] {
+  justify-self: stretch;
+  padding-block: 0.7rem;
+}
+
+.panel-hint,
+.batch-empty {
+  margin: 0.85rem 0;
+  color: var(--ui-text-dim);
+  font-size: 0.95rem;
+}
+
+.panel-compose > .panel-hint,
+.panel-compose > .batch-empty {
+  margin: 0;
+}
+
+.station-action {
+  margin: 0;
+  padding: 0.6rem 0.8rem;
+  border: 1px dashed color-mix(in srgb, var(--ui-accent) 60%, var(--ui-line));
+  border-radius: var(--ui-radius-inner);
+  background: var(--ui-surface-raised);
+  font-weight: 600;
+}
+
+.batch-list {
+  display: grid;
+  gap: 0.4rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.batch-list > li {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  padding: 0.55rem 0.75rem;
+  border: 1px solid var(--ui-line-subtle);
+  border-radius: var(--ui-radius-inner);
+  background: var(--ui-surface-raised);
+}
+
+.batch-list button {
+  --btn-depth: min(var(--ui-btn-depth), 2px);
+  --btn-press: min(var(--ui-btn-press), 1px);
+  flex: none;
+  padding: 0.28rem 0.7rem;
+  font-size: 0.82rem;
+}
+
+.panel-review h3 {
+  margin: 0 0 0.75rem;
+  color: var(--ui-heading);
+  font-family: var(--ui-heading-font);
+  font-size: 1.05rem;
+  font-weight: var(--ui-heading-weight);
+  letter-spacing: var(--ui-heading-tracking);
+  text-transform: var(--ui-heading-case);
+}
+
+/* Figure tables: the review costs, the swap quote and the Bridge records. */
+:where(
+  .review-costs,
+  .exchange-review dl,
+  .bridge-review,
+  .bridge-plan,
+  .bridge-instructions dl,
+  .bridge-deposit-instructions dl
+) {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 0.45rem 1rem;
+  margin: 0.9rem 0;
+  padding: 0.8rem 0.95rem;
+  border: 1px solid var(--ui-line-subtle);
+  border-radius: var(--ui-radius-inner);
+  background: var(--ui-surface-raised);
+}
+
+:where(.review-costs, .exchange-review dl, .bridge-review, .bridge-plan, .bridge-instructions dl, .bridge-deposit-instructions dl) dt {
+  color: var(--ui-text-dim);
+}
+
+:where(.review-costs, .exchange-review dl, .bridge-review, .bridge-plan, .bridge-instructions dl, .bridge-deposit-instructions dl) dd {
+  margin: 0;
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+  text-align: right;
+  overflow-wrap: anywhere;
+}
+
+/* The agreed total reads as the answer to the table. */
+.review-costs dt:last-of-type,
+.review-costs dd:last-of-type,
+.exchange-review dl dt:last-of-type,
+.exchange-review dl dd:last-of-type {
+  color: var(--ui-text);
+  font-weight: 800;
+}
+
+.bridge-instructions dl:empty {
+  display: none;
+}
+
+/* A deposit address is copied by hand, so it gets a full line of its own. */
+.bridge-deposit-instructions dl {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.bridge-deposit-instructions dd {
+  text-align: left;
+}
+
+.confirm-gate {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.65rem;
+  margin-top: 0.85rem;
+}
+
+.confirm-gate > :not(button) {
+  flex-basis: 100%;
+  margin: 0;
+}
+
+.confirm-gate > .confirm {
+  flex: 1 1 12rem;
+  padding-block: 0.72rem;
+}
+
+.confirm-gate > .cancel {
+  flex: 0 1 auto;
+  padding-block: 0.72rem;
 }
 
 .bridge-compact-note {
   margin: 0 0 1rem;
-  color: color-mix(in srgb, var(--ink) 78%, transparent);
-  font-size: 0.9rem;
-}
-
-.bridge-review,
-.bridge-plan {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  gap: 0.35rem 1rem;
-  margin: 1rem 0;
-}
-
-.bridge-review dt,
-.bridge-plan dt {
-  color: color-mix(in srgb, var(--ink) 70%, transparent);
-}
-
-.bridge-review dd,
-.bridge-plan dd {
-  margin: 0;
-  text-align: right;
+  color: var(--ui-text-dim);
+  font-size: 0.95rem;
 }
 
 .bridge-details {
   margin: 0.85rem 0;
-  color: color-mix(in srgb, var(--ink) 78%, transparent);
-  font-size: 0.9rem;
+  font-size: 0.95rem;
 }
 
-.bridge-details summary {
+.bridge-details > summary {
+  width: fit-content;
+  border-radius: 6px;
+  color: var(--ui-text);
+  font-weight: 700;
   cursor: pointer;
+}
+
+.bridge-details > summary::marker {
+  color: var(--ui-accent);
+}
+
+.bridge-details[open] > summary {
+  margin-bottom: 0.55rem;
+}
+
+.bridge-details > p {
+  margin: 0.4rem 0 0;
+}
+
+.bridge-details > label {
+  margin-top: 0.8rem;
+}
+
+.bridge-details > button {
+  margin-top: 0.6rem;
 }
 
 .bridge-actions {
@@ -277,21 +832,207 @@ body {
 }
 
 .bridge-next-step {
+  display: grid;
+  gap: 0.6rem;
   margin: 1rem 0 0;
-  padding: 0.8rem;
-  border: 1px solid var(--panel-edge);
-  border-radius: 8px;
-  background: color-mix(in srgb, var(--panel-edge) 28%, transparent);
+  padding: 0.9rem 1rem;
+  border: 1px solid color-mix(in srgb, var(--ui-accent) 45%, var(--ui-line));
+  border-radius: var(--ui-radius-inner);
+  background: color-mix(in srgb, var(--ui-accent) 10%, var(--ui-surface));
 }
 
-button {
+.bridge-next-step > strong {
+  font-size: 1.05rem;
+}
+
+.bridge-next-step > .bridge-plan {
+  margin: 0;
+}
+
+.bridge-next-step > button {
+  justify-self: start;
+}
+
+.bridge-recovery {
+  display: grid;
+  gap: 0.6rem;
+  margin-top: 0.5rem;
+}
+
+.room-unbuilt {
+  color: var(--ui-text-dim);
+}
+
+.panel code,
+.room code {
+  padding: 0.1em 0.4em;
+  border: 1px solid var(--ui-line-subtle);
+  border-radius: min(var(--ui-radius-control), 6px);
+  background: var(--ui-surface-sunken);
+  font-family: var(--ui-font-mono);
+  font-size: 0.9em;
+  overflow-wrap: anywhere;
+}
+
+/* ------------------------------------------------------------------------
+ * Form controls
+ * --------------------------------------------------------------------- */
+
+.panel label {
+  display: grid;
+  gap: 0.35rem;
+  color: var(--ui-text-dim);
+  font-size: 0.92rem;
+  font-weight: 600;
+}
+
+.panel input,
+.panel select,
+.panel textarea {
+  width: 100%;
+  padding: 0.62rem 0.8rem;
+  border: 1px solid var(--ui-input-border);
+  border-radius: var(--ui-radius-control);
+  background-color: var(--ui-surface-sunken);
+  color: var(--ui-text);
   font: inherit;
-  color: var(--ink);
-  background: #262636;
-  border: 1px solid var(--panel-edge);
-  border-radius: 8px;
-  padding: 0.5rem 0.9rem;
+  font-size: 1rem;
+  font-weight: 500;
+  transition: border-color 120ms ease, box-shadow 120ms ease;
+}
+
+.panel input:hover,
+.panel select:hover,
+.panel textarea:hover {
+  border-color: var(--ui-input-border-hover);
+}
+
+.panel select {
+  appearance: none;
+  padding-right: 2.3rem;
+  background-image:
+    linear-gradient(45deg, transparent 50%, var(--ui-text-dim) 50%),
+    linear-gradient(135deg, var(--ui-text-dim) 50%, transparent 50%);
+  background-position: calc(100% - 1.2rem) 52%, calc(100% - 0.85rem) 52%;
+  background-size: 0.35rem 0.35rem;
+  background-repeat: no-repeat;
   cursor: pointer;
+}
+
+.panel option {
+  background-color: var(--ui-surface);
+  color: var(--ui-text);
+}
+
+.panel textarea {
+  min-height: 5.5rem;
+  resize: vertical;
+  font-family: var(--ui-font-mono);
+  font-size: 0.9rem;
+}
+
+.panel input:focus-visible,
+.panel select:focus-visible,
+.panel textarea:focus-visible {
+  outline: var(--ui-focus-width) solid var(--ui-focus);
+  outline-offset: 1px;
+  border-color: var(--ui-focus);
+  box-shadow: var(--ui-input-focus-glow);
+}
+
+.panel summary:focus-visible {
+  outline: var(--ui-focus-width) solid var(--ui-focus);
+  outline-offset: 3px;
+}
+
+/* ------------------------------------------------------------------------
+ * Buttons
+ *
+ * Every button reads per-button `--btn-*` variables that point at the theme's
+ * secondary style. The primary list below and the mode tabs re-point them;
+ * the state rules only read them, so a theme never needs its own state rules.
+ * --------------------------------------------------------------------- */
+
+button {
+  --btn-bg: var(--ui-btn-bg);
+  --btn-bg-hover: var(--ui-btn-bg-hover);
+  --btn-text: var(--ui-btn-text);
+  --btn-border: var(--ui-btn-border);
+  --btn-border-hover: var(--ui-btn-border-hover);
+  --btn-edge: var(--ui-btn-edge);
+  --btn-inset: var(--ui-btn-inset);
+  --btn-glow: var(--ui-btn-glow);
+  --btn-drop: var(--ui-btn-drop);
+  --btn-drop-active: var(--ui-btn-drop-active);
+  --btn-depth: var(--ui-btn-depth);
+  --btn-lift: var(--ui-btn-lift);
+  --btn-press: var(--ui-btn-press);
+
+  appearance: none;
+  padding: var(--ui-btn-pad);
+  border: 1px solid var(--btn-border);
+  border-radius: var(--ui-radius-button);
+  background: var(--btn-bg);
+  box-shadow: var(--btn-inset), 0 var(--btn-depth) 0 var(--btn-edge), var(--btn-drop);
+  color: var(--btn-text);
+  font: inherit;
+  font-family: var(--ui-btn-font);
+  font-size: var(--ui-btn-size);
+  font-weight: var(--ui-btn-weight);
+  letter-spacing: var(--ui-btn-tracking);
+  line-height: 1.2;
+  text-transform: var(--ui-btn-case);
+  cursor: pointer;
+  touch-action: manipulation;
+  transition: transform 120ms ease, box-shadow 120ms ease, border-color 120ms ease, color 120ms ease;
+}
+
+/* The one call to action on each surface. */
+button:where(
+  .confirm,
+  .review,
+  .menu-mode-button,
+  .session-notice button,
+  .shell-crashed button,
+  .room > button:only-of-type,
+  .bridge-quote-form > button,
+  .bridge-next-step > button,
+  .panel[data-building="exchange"] .panel-compose > [type="submit"]
+) {
+  --btn-bg: var(--ui-primary-bg);
+  --btn-bg-hover: var(--ui-primary-bg-hover);
+  --btn-text: var(--ui-primary-text);
+  --btn-border: var(--ui-primary-border);
+  --btn-border-hover: var(--ui-primary-border-hover);
+  --btn-edge: var(--ui-primary-edge);
+  --btn-inset: var(--ui-primary-inset);
+  --btn-glow: var(--ui-primary-glow);
+}
+
+@media (hover: hover) {
+  button:hover:not(:disabled) {
+    border-color: var(--btn-border-hover);
+    background: var(--btn-bg-hover);
+    box-shadow:
+      var(--btn-inset),
+      0 calc(var(--btn-depth) - var(--btn-lift)) 0 var(--btn-edge),
+      var(--btn-drop),
+      var(--btn-glow);
+    transform: translateY(var(--btn-lift));
+  }
+}
+
+button:active:not(:disabled) {
+  box-shadow:
+    var(--btn-inset),
+    0 max(0px, calc(var(--btn-depth) - var(--btn-press))) 0 var(--btn-edge),
+    var(--btn-drop-active);
+  transform: translateY(var(--btn-press));
+}
+
+button:focus-visible {
+  outline: var(--ui-focus-width) solid var(--ui-focus);
+  outline-offset: 2px;
 }
 
 button:disabled {
@@ -300,14 +1041,477 @@ button:disabled {
 }
 
 button[data-locked="true"] {
-  opacity: 0.5;
+  opacity: 0.55;
+}
+
+/* ------------------------------------------------------------------------
+ * Wallet rooms (connect, unsupported, not registered, unreachable)
+ * --------------------------------------------------------------------- */
+
+.room {
+  position: absolute;
+  inset: 0;
+  z-index: 10;
+  display: flex;
+  flex-direction: column;
+  gap: 0.8rem;
+  width: min(30rem, calc(100% - 2rem));
+  height: fit-content;
+  max-height: calc(100% - 2rem);
+  margin: auto;
+  overflow: auto;
+  padding: 1.6rem 1.5rem 1.5rem;
+  border: var(--ui-panel-border);
+  border-radius: var(--ui-radius-panel);
+  background: var(--ui-surface);
+  box-shadow: var(--ui-panel-shadow);
+  color: var(--ui-text);
+  line-height: 1.45;
+  animation: ui-panel-in 190ms cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+.room > * {
+  margin: 0;
+}
+
+.room > h2 {
+  color: var(--ui-heading);
+  font-family: var(--ui-heading-font);
+  font-size: 1.45rem;
+  font-weight: var(--ui-heading-weight);
+  letter-spacing: var(--ui-heading-tracking);
+  line-height: 1.15;
+  text-transform: var(--ui-heading-case);
+}
+
+.room-detail {
+  color: var(--ui-text-dim);
+  font-size: 0.95rem;
+}
+
+/* Inside a building window the room is already framed: it flows as content
+ * instead of covering the window (and its Close control). */
+.panel-body .room {
+  position: static;
+  z-index: auto;
+  width: auto;
+  height: auto;
+  max-height: none;
+  overflow: visible;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: none;
+  box-shadow: none;
+  animation: none;
+}
+
+.panel-body .room > h2 {
+  font-size: 1.15rem;
 }
 
 .shell-boot,
 .shell-crashed {
   display: grid;
   place-items: center;
+  align-content: center;
+  gap: 1rem;
   height: 100vh;
   padding: 2rem;
+  color: var(--ui-text);
+  font-size: 1.1rem;
+  font-weight: 700;
   text-align: center;
+}
+
+.shell-crashed > p {
+  max-width: 34rem;
+  margin: 0;
+}
+
+/* ------------------------------------------------------------------------
+ * The Bank: shielding, in the STRK20 idiom.
+ * --------------------------------------------------------------------- */
+
+.panel[data-building="bank"] {
+  --ui-font: "Helvetica Neue", Helvetica, Arial, sans-serif;
+  --ui-heading-font: "Arial Black", "Helvetica Neue", Arial, sans-serif;
+  --ui-number-font: var(--ui-heading-font);
+  --ui-btn-font: var(--ui-font-mono);
+  --ui-heading-size: 1.55rem;
+  --ui-heading-weight: 900;
+  --ui-heading-case: uppercase;
+  --ui-heading-tracking: -0.025em;
+
+  --ui-scrim: rgb(9 9 9 / 0.66);
+  --ui-surface: #141414;
+  --ui-surface-raised: #1a1a1a;
+  --ui-surface-sunken: #0d0d0d;
+  --ui-header-bg: none;
+  --ui-line: #262626;
+  --ui-line-subtle: rgb(250 250 250 / 0.05);
+  --ui-panel-border: 1px solid #262626;
+  --ui-panel-shadow: 0 32px 80px rgb(0 0 0 / 0.7), 0 0 0 1px rgb(0 0 0 / 0.4);
+
+  --ui-text: #fafafa;
+  --ui-text-dim: rgb(250 250 250 / 0.65);
+  --ui-heading: #fafafa;
+
+  --ui-accent: #c53400;
+  --ui-focus: #ff6a2b;
+  --ui-focus-width: 2px;
+  --ui-warn: #e8a33d;
+  --ui-danger: #ff5a36;
+  --ui-success: #5fbf7f;
+  --ui-lock: #7a7a7a;
+
+  --ui-radius-panel: 4px;
+  --ui-radius-inner: 2px;
+  --ui-radius-control: 2px;
+  --ui-radius-button: 2px;
+  --ui-radius-tabs: 2px;
+
+  --ui-input-border: #666666;
+  --ui-input-border-hover: #808080;
+  --ui-input-focus-glow: 0 0 0 4px rgb(197 52 0 / 0.25);
+
+  --ui-btn-size: 13px;
+  --ui-btn-weight: 600;
+  --ui-btn-case: uppercase;
+  --ui-btn-tracking: 0.04em;
+  --ui-btn-pad: 0.72rem 1.05rem;
+  --ui-btn-bg: #1a1a1a;
+  --ui-btn-bg-hover: #222222;
+  --ui-btn-text: #fafafa;
+  --ui-btn-border: #262626;
+  --ui-btn-border-hover: #4a4a4a;
+  --ui-btn-edge: transparent;
+  --ui-btn-inset: 0 0 #0000;
+  --ui-btn-glow: 0 0 #0000;
+  --ui-btn-drop: 0 0 #0000;
+  --ui-btn-drop-active: 0 0 #0000;
+  --ui-btn-depth: 0px;
+  --ui-btn-lift: 0px;
+  --ui-btn-press: 1px;
+
+  --ui-primary-bg: linear-gradient(rgb(255 255 255 / 0.13), transparent 46%), linear-gradient(#c53400, #a02a00);
+  --ui-primary-bg-hover: linear-gradient(rgb(255 255 255 / 0.16), transparent 46%), linear-gradient(#d23a00, #a82c00);
+  --ui-primary-text: #fafafa;
+  --ui-primary-border: #c53400;
+  --ui-primary-border-hover: #e04000;
+  --ui-primary-edge: transparent;
+  --ui-primary-inset: inset 0 1px 0 rgb(255 255 255 / 0.18);
+  --ui-primary-glow: 0 0 28px -6px rgb(197 52 0 / 0.55);
+
+  --ui-tab-hover: #1a1a1a;
+  --ui-tab-selected-bg: #1f1f1f;
+  --ui-tab-selected-text: #fafafa;
+  --ui-tab-selected-shadow: inset 0 -2px 0 #c53400;
+}
+
+.panel[data-building="bank"] > .panel-card > .panel-header {
+  border-bottom-color: #262626;
+}
+
+/* Easter egg: the STRK20 cream-to-peach title, clipped to the text. */
+@supports ((background-clip: text) or (-webkit-background-clip: text)) {
+  .panel[data-building="bank"] > .panel-card > .panel-header > h2 {
+    background-image: linear-gradient(178deg, #fffdf1 0%, #f4ece8 50%, #ffcdb6 100%);
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+    -webkit-text-fill-color: transparent;
+  }
+}
+
+.panel[data-building="bank"] .balance-total {
+  font-weight: 900;
+  letter-spacing: -0.025em;
+}
+
+/* ------------------------------------------------------------------------
+ * The Exchange: trading, in the avnu idiom.
+ * --------------------------------------------------------------------- */
+
+.panel[data-building="exchange"] {
+  --ui-font: system-ui, -apple-system, "Segoe UI", sans-serif;
+  --ui-heading-font: var(--ui-font);
+  --ui-number-font: var(--ui-font);
+  --ui-btn-font: var(--ui-font);
+  --ui-heading-size: 1.4rem;
+  --ui-heading-weight: 600;
+  --ui-heading-case: none;
+  --ui-heading-tracking: -0.01em;
+
+  --ui-scrim: rgb(12 14 24 / 0.62);
+  --ui-surface: #1b1e2d;
+  --ui-surface-raised: #222639;
+  --ui-surface-sunken: #11131d;
+  --ui-header-bg: none;
+  --ui-line: #2c3047;
+  --ui-line-subtle: rgb(255 255 255 / 0.06);
+  --ui-panel-border: 1px solid rgb(255 255 255 / 0.05);
+  --ui-panel-shadow: 0 32px 80px rgb(4 5 14 / 0.6);
+
+  --ui-text: #ffffff;
+  /* avnu's muted #7c8298, lifted just enough to pass AA on the card. */
+  --ui-text-dim: #8e94aa;
+  --ui-heading: #ffffff;
+
+  --ui-accent: #3761f6;
+  --ui-focus: #718ef9;
+  --ui-focus-width: 2px;
+  --ui-callout-edge: #718ef9;
+  --ui-warn: #f5b95a;
+  --ui-danger: #ff6b81;
+  --ui-success: #4fd1a1;
+  --ui-lock: #7c8298;
+
+  --ui-radius-panel: 32px;
+  --ui-radius-inner: 20px;
+  --ui-radius-control: 16px;
+  --ui-radius-button: 999px;
+  --ui-radius-tabs: 999px;
+
+  --ui-input-border: #626999;
+  --ui-input-border-hover: #7a82b8;
+  --ui-input-focus-glow: 0 0 0 5px rgb(113 142 249 / 0.25);
+
+  --ui-btn-size: 0.95rem;
+  --ui-btn-weight: 600;
+  --ui-btn-case: none;
+  --ui-btn-tracking: 0;
+  --ui-btn-pad: 0.62rem 1.2rem;
+  --ui-btn-bg: #1c204a;
+  --ui-btn-bg-hover: #20255a;
+  --ui-btn-text: #718ef9;
+  --ui-btn-border: #313881;
+  --ui-btn-border-hover: #4049a0;
+  --ui-btn-edge: transparent;
+  --ui-btn-inset: 0 0 #0000;
+  --ui-btn-glow: 0 0 #0000;
+  --ui-btn-drop: 0 0 #0000;
+  --ui-btn-drop-active: 0 0 #0000;
+  --ui-btn-depth: 0px;
+  --ui-btn-lift: -1px;
+  --ui-btn-press: 1px;
+
+  --ui-primary-bg: #3761f6;
+  --ui-primary-bg-hover: #2f58ee;
+  --ui-primary-text: #ffffff;
+  --ui-primary-border: #3761f6;
+  --ui-primary-border-hover: #2f58ee;
+  --ui-primary-edge: transparent;
+  --ui-primary-inset: 0 0 #0000;
+  --ui-primary-glow: 0 10px 28px -10px rgb(55 97 246 / 0.75);
+
+  --ui-tab-hover: rgb(255 255 255 / 0.05);
+  --ui-tab-selected-bg: #1c204a;
+  --ui-tab-selected-text: #718ef9;
+  --ui-tab-selected-shadow: inset 0 0 0 1px #313881;
+}
+
+.panel[data-building="exchange"] > .panel-card > .panel-header,
+.panel[data-building="exchange"] > .panel-card > .panel-body {
+  padding-inline: 1.5rem;
+}
+
+/* Easter egg: a quiet "via avnu" chip at the foot of the card. The empty
+ * alternative text keeps it out of the accessibility tree; a browser without
+ * that syntax drops the declaration and shows nothing. */
+.panel[data-building="exchange"] > .panel-card::after {
+  content: "via avnu" / "";
+  display: block;
+  width: fit-content;
+  margin: 0 1.5rem 1.2rem auto;
+  padding: 0.2rem 0.65rem;
+  border: 1px solid #313881;
+  border-radius: 999px;
+  background: #1c204a;
+  color: #718ef9;
+  font-size: 0.72rem;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+}
+
+/* ------------------------------------------------------------------------
+ * The Post Office: the game theme with brick and navy, after its street sign.
+ * --------------------------------------------------------------------- */
+
+.panel[data-building="post-office"] {
+  --ui-accent: #e2583f;
+  --ui-heading: #fff7e6;
+  --ui-header-bg: linear-gradient(180deg, #33609f, #2d4b7c);
+
+  --ui-primary-bg: linear-gradient(#b3402b, #9f3421);
+  --ui-primary-bg-hover: linear-gradient(#bb442e, #a93924);
+  --ui-primary-text: #fff6e8;
+  --ui-primary-border: #c24a33;
+  --ui-primary-border-hover: #cc5139;
+  --ui-primary-edge: #6c2215;
+  --ui-primary-inset: inset 0 1px 0 rgb(255 225 205 / 0.28);
+
+  --ui-btn-bg: linear-gradient(#34568c, #2d4b7c);
+  --ui-btn-bg-hover: linear-gradient(#3b5f99, #325384);
+  --ui-btn-border: #40639b;
+  --ui-btn-border-hover: #4a70ab;
+  --ui-btn-edge: #17294a;
+
+  --ui-tab-selected-bg: linear-gradient(#b3402b, #9f3421);
+  --ui-tab-selected-text: #fff6e8;
+  --ui-tab-selected-shadow: inset 0 1px 0 rgb(255 225 205 / 0.28), 0 2px 0 #6c2215;
+}
+
+/* On the navy band the close control steps down a shade. */
+.panel[data-building="post-office"] > .panel-card > .panel-header {
+  --ui-btn-bg: linear-gradient(#24406b, #1f385e);
+  --ui-btn-bg-hover: linear-gradient(#2a4a7a, #24406b);
+  --ui-btn-border: #5a7fb8;
+  --ui-btn-border-hover: #6f93cc;
+  --ui-btn-edge: #0f1d33;
+  border-bottom-color: #1f3a63;
+}
+
+/* Airmail edge along the top of the window; decorative. */
+.panel[data-building="post-office"] > .panel-card::before {
+  content: "";
+  display: block;
+  height: 7px;
+  background: repeating-linear-gradient(-45deg, #c8452f 0 9px, #f6ecd9 9px 18px, #2d4b7c 18px 27px, #f6ecd9 27px 36px);
+}
+
+/* ------------------------------------------------------------------------
+ * The Bridge: the game theme with steel and amber, after its street sign.
+ * --------------------------------------------------------------------- */
+
+.panel[data-building="bridge"] {
+  --ui-accent: #f0a53a;
+  --ui-heading: #ffd27a;
+  --ui-header-bg: linear-gradient(180deg, #2c3845, #26313c);
+
+  --ui-primary-bg: linear-gradient(#f5b24c, #eb9d2e);
+  --ui-primary-bg-hover: linear-gradient(#f8bd5f, #efa53a);
+  --ui-primary-text: #2a1a06;
+  --ui-primary-border: #f7ba5a;
+  --ui-primary-border-hover: #fac46c;
+  --ui-primary-edge: #9a6118;
+  --ui-primary-inset: inset 0 1px 0 rgb(255 245 220 / 0.5);
+
+  --ui-btn-bg: linear-gradient(#52616f, #46545f);
+  --ui-btn-bg-hover: linear-gradient(#5a6a7a, #4d5c69);
+  --ui-btn-text: #f6ecd9;
+  --ui-btn-border: #65778a;
+  --ui-btn-border-hover: #71849a;
+  --ui-btn-edge: #232b33;
+}
+
+.panel[data-building="bridge"] > .panel-card > .panel-header {
+  border-bottom-color: #1b232b;
+}
+
+/* A riveted girder along the top of the window; decorative. */
+.panel[data-building="bridge"] > .panel-card::before {
+  content: "";
+  display: block;
+  height: 8px;
+  background:
+    radial-gradient(circle, #f0a53a 0 1.6px, transparent 2.2px) 0 0 / 22px 8px repeat-x,
+    linear-gradient(#7d8e9e, #56667a);
+}
+
+/* ------------------------------------------------------------------------
+ * Motion, small screens, and user preferences
+ * --------------------------------------------------------------------- */
+
+@keyframes ui-fade-in {
+  from { opacity: 0; }
+}
+
+@keyframes ui-panel-in {
+  from { opacity: 0; translate: 0 10px; scale: 0.98; }
+}
+
+@keyframes ui-drop-in {
+  from { opacity: 0; translate: 0 -10px; }
+}
+
+@keyframes ui-rise-in {
+  from { opacity: 0; translate: 0 10px; }
+}
+
+@keyframes ui-spin {
+  to { rotate: 1turn; }
+}
+
+@media (max-width: 480px) {
+  .panel {
+    padding-inline: 0.5rem;
+  }
+
+  .panel-card {
+    width: calc(100vw - 1rem);
+  }
+
+  .panel-header,
+  .panel-body,
+  .panel-footer,
+  .panel[data-building="exchange"] > .panel-card > .panel-header,
+  .panel[data-building="exchange"] > .panel-card > .panel-body {
+    padding-inline: 1rem;
+  }
+
+  .game-mode-controls {
+    gap: 0.45rem;
+  }
+
+  .game-mode-controls button {
+    padding: 0.52rem 0.95rem;
+    font-size: 0.92rem;
+  }
+}
+
+@media (max-height: 560px) {
+  .panel {
+    padding-top: 3.9rem;
+    padding-bottom: 0.75rem;
+  }
+}
+
+@media (forced-colors: active) {
+  .panel[data-building="bank"] > .panel-card > .panel-header > h2 {
+    background: none;
+    color: CanvasText;
+    -webkit-text-fill-color: CanvasText;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .panel,
+  .panel-card,
+  .room,
+  .session-notice,
+  .presence-status,
+  .wallet-attention-cue {
+    animation: none;
+  }
+
+  .flow-pending::before,
+  .exchange-review > p[aria-live]::before,
+  .panel-balance > [aria-busy="true"]::before {
+    animation: none;
+    border-color: var(--ui-accent);
+  }
+
+  button,
+  .panel input,
+  .panel select,
+  .panel textarea {
+    transition: none;
+  }
+
+  button:hover:not(:disabled),
+  button:active:not(:disabled) {
+    transform: none;
+  }
 }

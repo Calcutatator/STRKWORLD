@@ -10,6 +10,7 @@ import {
   signCanvasSize,
   splitLabelLines,
   type MeasureText,
+  type SignStyleOptions,
 } from './labels.js';
 
 /** Roughly a bold sans: 0.6 em per glyph. */
@@ -167,6 +168,65 @@ describe('createCanvasLabelFactory', () => {
     expect(materialDispose).toHaveBeenCalledTimes(1);
   });
 
+  it('draws a styled sign: gradient heading, heavy tight title, tracked mono caption, square corners', () => {
+    const { doc, canvases } = fakeDocument({ ratio: 1 });
+    const style: SignStyleOptions = {
+      width: 2.1,
+      height: 0.8,
+      background: '#141414',
+      foreground: '#fafafa',
+      accent: '#262626',
+      gradient: ['#fffdf1', '#f4ece8', '#ffcdb6'],
+      cornerRadius: 0.04,
+      borderWidth: 0.03,
+      hairline: false,
+      titleFont: 'display',
+      titleTracking: -0.03,
+      subtitleFont: 'mono',
+      subtitleTracking: 0.12,
+      subtitleColor: '#ffcdb6',
+      uppercase: true,
+    };
+    createCanvasLabelFactory(doc).sign('Bank\nshield / unshield', style);
+    const canvas = canvases[0]!;
+    expect(canvas.drawn).toEqual(['BANK', 'SHIELD / UNSHIELD']);
+    expect(canvas.gradients).toHaveLength(1);
+    expect(canvas.gradients[0]!.stops).toEqual([
+      [0, '#fffdf1'],
+      [0.5, '#f4ece8'],
+      [1, '#ffcdb6'],
+    ]);
+    const [title, caption] = canvas.drawnWith;
+    expect(title!.font).toMatch(/^900 /);
+    expect(title!.letterSpacing).toBe('-0.03em');
+    expect(caption!.font).toMatch(/monospace/);
+    expect(caption!.letterSpacing).toBe('0.12em');
+    expect(caption!.fillStyle).toBe('#ffcdb6');
+    // Near-square corners: the first arc radius is 4 % of the board height.
+    expect(canvas.arcRadii[0]).toBeCloseTo(canvas.height * 0.04, 0);
+  });
+
+  it('gives every floating label its own sprite geometry, disposed with the label', () => {
+    const { doc } = fakeDocument({ ratio: 1 });
+    const labels = createCanvasLabelFactory(doc);
+    const first = labels.floating('SWAP');
+    const second = labels.floating('DEPOSIT');
+    const a = first.object as Sprite;
+    const b = second.object as Sprite;
+    // three's own Sprite geometry is shared by every sprite and pins each
+    // renderer that draws it; labels must never draw with it.
+    const shared = new Sprite().geometry;
+    expect(a.geometry).not.toBe(b.geometry);
+    expect(a.geometry).not.toBe(shared);
+    expect(a.geometry.getAttribute('position').count).toBe(4);
+    expect(a.geometry.getAttribute('uv').count).toBe(4);
+    const dispose = vi.spyOn(a.geometry, 'dispose');
+    first.dispose();
+    first.dispose();
+    expect(dispose).toHaveBeenCalledTimes(1);
+    second.dispose();
+  });
+
   it('falls back to a plain labelled object when there is no 2D context', () => {
     const { doc } = fakeDocument({ noContext: true });
     const labels = createCanvasLabelFactory(doc);
@@ -179,6 +239,9 @@ interface FakeCanvas {
   width: number;
   height: number;
   readonly drawn: string[];
+  readonly drawnWith: { font: string; letterSpacing: string; fillStyle: unknown }[];
+  readonly gradients: { stops: [number, string][] }[];
+  readonly arcRadii: number[];
   getContext(kind: string): unknown;
 }
 
@@ -189,9 +252,13 @@ function fakeDocument(options: { ratio?: number; noContext?: boolean } = {}) {
     createElement(tag: string) {
       if (tag !== 'canvas') throw new Error(`unexpected element ${tag}`);
       const drawn: string[] = [];
+      const drawnWith: { font: string; letterSpacing: string; fillStyle: unknown }[] = [];
+      const gradients: { stops: [number, string][] }[] = [];
+      const arcRadii: number[] = [];
       const context = {
         font: '10px sans-serif',
-        fillStyle: '',
+        letterSpacing: '0px',
+        fillStyle: '' as unknown,
         strokeStyle: '',
         lineWidth: 1,
         globalAlpha: 1,
@@ -203,12 +270,20 @@ function fakeDocument(options: { ratio?: number; noContext?: boolean } = {}) {
         },
         fillText(text: string) {
           drawn.push(text);
+          drawnWith.push({ font: context.font, letterSpacing: context.letterSpacing, fillStyle: context.fillStyle });
+        },
+        createLinearGradient() {
+          const gradient = { stops: [] as [number, string][], addColorStop: (at: number, colour: string) => gradient.stops.push([at, colour]) };
+          gradients.push(gradient);
+          return gradient;
+        },
+        arcTo(_x1: number, _y1: number, _x2: number, _y2: number, radius: number) {
+          arcRadii.push(radius);
         },
         clearRect: vi.fn(),
         beginPath: vi.fn(),
         moveTo: vi.fn(),
         lineTo: vi.fn(),
-        arcTo: vi.fn(),
         closePath: vi.fn(),
         fill: vi.fn(),
         stroke: vi.fn(),
@@ -217,6 +292,9 @@ function fakeDocument(options: { ratio?: number; noContext?: boolean } = {}) {
         width: 300,
         height: 150,
         drawn,
+        drawnWith,
+        gradients,
+        arcRadii,
         getContext: () => (options.noContext ? null : context),
       };
       canvases.push(canvas);

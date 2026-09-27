@@ -134,10 +134,11 @@ On room exit, World publishes the restored street placement before emitting
 coordinates. A selection made during an in-flight join invalidates that
 client's captured sprite: Shell replaces it once, defers replacement while
 inside and deduplicates reconnect requests. The presentation lifecycle is one
-adapter used by both `StreetScene` and its deterministic teardown tests. Per
-D-053 the F binding is no longer owned by Avatar Studio: `StreetScene` creates
-one outfit selection and one `keydown-F` listener in `create()`, before the
-rooms and the Studio, and injects that selection into the Studio controller as
+adapter used by both the World session (`world-session.ts`, D-059) and its
+deterministic teardown tests. Per D-053 the F binding is no longer owned by
+Avatar Studio: the session creates one outfit selection and one `keydown-F`
+listener at construction, before the rooms and the Studio, and injects that
+selection into the Studio controller as
 a required option so there is a single source of truth. The same one-press,
 no-repeat cosy/fighting toggle therefore follows the local avatar outdoors and
 through existing interiors, and is silent while `InputGate` has suspended World
@@ -347,6 +348,15 @@ The explicit demo and injected test compositions can run with no wallet
 connected, which keeps the World independently testable. The production root
 is different: a supported connected wallet is its entry gate, so no World or
 lobby surface exists before wallet admission (D-055).
+
+The block sandbox (D-060) is the second retained-state side seam. The lobby
+room is the authority for anonymous block state — stacks of colour indices per
+street tile — and for each player's carried colour, the only sandbox field on
+a presence entry. The Shell's sandbox controller adopts each lobby client and
+exposes one stable World-owned `SandboxChannel`; with no lobby connection it
+runs the same pure rules (`@strkworld/lobby/sandbox`, which imports only
+`@strkworld/shared`) locally. The World reads heights and sends pick/place
+intents; it never imports the lobby, and block state never carries identity.
 
 Remote peers are retained state rather than one-shot commands. D-038 gives
 them a separate World-owned replaying source so a snapshot cannot be lost

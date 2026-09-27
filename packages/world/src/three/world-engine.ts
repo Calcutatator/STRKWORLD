@@ -6,7 +6,7 @@ import {
   Fog,
   HemisphereLight,
   Mesh,
-  PCFSoftShadowMap,
+  PCFShadowMap,
   PerspectiveCamera,
   Scene,
   ShaderMaterial,
@@ -21,6 +21,7 @@ import { createAvatarFigure, disposeAvatarFigureCache } from './avatar-figure.js
 import { createCameraRig, type CameraRig } from './camera-rig.js';
 import { createCanvasLabelFactory } from './labels.js';
 import { createPresenter, type Presenter } from './presenter.js';
+import { disposeSandboxCaches } from './sandbox-view.js';
 
 /**
  * The Three.js renderer for the World (D-059).
@@ -44,6 +45,11 @@ export interface WorldEngine {
 export interface WorldEngineOptions {
   readonly mount: HTMLElement;
   readonly config: WorldConfig;
+  /**
+   * Test seam: node has no WebGL, so engine lifecycle tests inject a stand-in
+   * with the renderer surface the engine uses. Production omits it.
+   */
+  readonly createRenderer?: () => WebGLRenderer;
 }
 
 /** A stalled tab must not deliver one enormous frame. */
@@ -56,6 +62,10 @@ const FOG_NEAR = 26;
 const FOG_FAR = 64;
 /** Sun offset from the camera focus: high in the south-west, so facades are lit. */
 const SUN_OFFSET = { x: -14, y: 24, z: 12 } as const;
+const SHADOW_EXTENT = 22;
+const SHADOW_MAP_SIZE = 2048;
+/** World units per shadow texel; the light moves in whole texels so edges hold still. */
+const SHADOW_TEXEL = (SHADOW_EXTENT * 2) / SHADOW_MAP_SIZE;
 const ERROR_REPORT_INTERVAL_MS = 1000;
 
 export function createWorldEngine(options: WorldEngineOptions): WorldEngine {
@@ -85,21 +95,23 @@ export function createWorldEngine(options: WorldEngineOptions): WorldEngine {
   let keyboard: DomKeyboard | null = null;
   let destroyed = false;
   let lastTime: number | null = null;
-  let lastReported = -Infinity;
+  // One report slot per frame stage, so a handoff failing every frame cannot
+  // hide a presenter or renderer failure behind the rate limit.
+  const lastReported = new Map<string, number>();
 
   const scene = new Scene();
   const camera = new PerspectiveCamera(45, 1, 0.1, 240);
   const sun = new DirectionalLight(0xffe1b3, 2.4);
   const sky = createSky();
 
-  const reportFrameError = (error: unknown): void => {
+  const reportFrameError = (stage: string, error: unknown): void => {
     // Surface the failure like an uncaught error, rate-limited so a handoff
     // that fails every frame cannot flood the console. three requests the next
     // animation frame before running this callback (WebGLAnimation.js), so the
     // loop survives either way; the session's rollback rules retry next frame.
     const now = win.performance?.now?.() ?? Date.now();
-    if (now - lastReported < ERROR_REPORT_INTERVAL_MS) return;
-    lastReported = now;
+    if (now - (lastReported.get(stage) ?? -Infinity) < ERROR_REPORT_INTERVAL_MS) return;
+    lastReported.set(stage, now);
     win.setTimeout(() => {
       throw error;
     }, 0);
@@ -134,6 +146,7 @@ export function createWorldEngine(options: WorldEngineOptions): WorldEngine {
         config: { out: config.out, in: config.in },
         view,
         keyboard: nextKeyboard,
+        sandbox: config.sandbox,
       });
       keyboard = nextKeyboard;
     } catch (error) {
@@ -165,33 +178,44 @@ export function createWorldEngine(options: WorldEngineOptions): WorldEngine {
 
   // Each stage is isolated: a failing animation must not freeze the camera,
   // and nothing short of a broken renderer may skip drawing the frame.
-  const guard = (stage: () => void): void => {
+  const guard = (name: string, stage: () => void): void => {
     try {
       stage();
     } catch (error) {
-      reportFrameError(error);
+      reportFrameError(name, error);
     }
   };
 
   const frame = (time: number): void => {
     const delta = lastTime === null ? 0 : Math.min(Math.max(time - lastTime, 0), MAX_FRAME_MS);
     lastTime = time;
-    guard(() => session?.update(delta, { cameraYaw: rig.yaw }));
-    guard(() => {
+    guard('session', () => session?.update(delta, { cameraYaw: rig.yaw }));
+    guard('presenter', () => {
       rig.setInputEnabled(session ? !session.inputSuspended : false);
       presenter.update(delta);
     });
-    guard(() => {
+    guard('camera', () => {
       if (presenter.consumeSnap()) rig.snap();
       const focus = presenter.player.ground;
-      rig.update(delta, focus, presenter.cameraBounds);
+      const elevation = presenter.player.elevation;
+      rig.update(delta, focus, presenter.cameraBounds, elevation);
       presenter.updateOcclusion(camera.position, delta);
-      sun.position.set(focus.x + SUN_OFFSET.x, SUN_OFFSET.y, focus.z + SUN_OFFSET.z);
-      sun.target.position.set(focus.x, 0, focus.z);
+      // Snap the light to whole shadow texels so edges do not shimmer as the
+      // player walks, and lift it with the player on tall sandbox towers.
+      const sx = Math.round(focus.x / SHADOW_TEXEL) * SHADOW_TEXEL;
+      const sz = Math.round(focus.z / SHADOW_TEXEL) * SHADOW_TEXEL;
+      const sy = Math.round(elevation);
+      sun.position.set(sx + SUN_OFFSET.x, sy + SUN_OFFSET.y, sz + SUN_OFFSET.z);
+      sun.target.position.set(sx, sy, sz);
       sun.target.updateMatrixWorld();
+      // Push the fog back as the player climbs, so a tower top still shows
+      // what they built below.
+      const fog = scene.fog as Fog;
+      fog.near = FOG_NEAR + elevation;
+      fog.far = FOG_FAR + elevation * 1.6;
       sky.position.copy(camera.position);
     });
-    guard(() => renderer.render(scene, camera));
+    guard('render', () => renderer.render(scene, camera));
   };
 
   // The first frame after a hidden tab returns measures from the return, not
@@ -201,7 +225,9 @@ export function createWorldEngine(options: WorldEngineOptions): WorldEngine {
   };
 
   try {
-    renderer = new WebGLRenderer({ antialias: true, powerPreference: 'high-performance' });
+    renderer = options.createRenderer
+      ? options.createRenderer()
+      : new WebGLRenderer({ antialias: true, powerPreference: 'high-performance' });
     cleanup.push(() => {
       renderer.dispose();
       renderer.forceContextLoss();
@@ -211,7 +237,8 @@ export function createWorldEngine(options: WorldEngineOptions): WorldEngine {
     renderer.toneMapping = ACESFilmicToneMapping;
     renderer.toneMappingExposure = 1.0;
     renderer.shadowMap.enabled = true;
-    renderer.shadowMap.type = PCFSoftShadowMap;
+    // PCFSoftShadowMap was removed in r186; PCF with a radius softens edges.
+    renderer.shadowMap.type = PCFShadowMap;
     renderer.setClearColor(SKY_HORIZON);
     const canvas = renderer.domElement;
     canvas.style.display = 'block';
@@ -228,11 +255,12 @@ export function createWorldEngine(options: WorldEngineOptions): WorldEngine {
     });
     scene.add(new HemisphereLight(0xcfe3ff, 0x5b4a3c, 1.0));
     sun.castShadow = true;
-    sun.shadow.mapSize.set(2048, 2048);
-    sun.shadow.camera.left = -22;
-    sun.shadow.camera.right = 22;
-    sun.shadow.camera.top = 22;
-    sun.shadow.camera.bottom = -22;
+    sun.shadow.mapSize.set(SHADOW_MAP_SIZE, SHADOW_MAP_SIZE);
+    sun.shadow.radius = 2;
+    sun.shadow.camera.left = -SHADOW_EXTENT;
+    sun.shadow.camera.right = SHADOW_EXTENT;
+    sun.shadow.camera.top = SHADOW_EXTENT;
+    sun.shadow.camera.bottom = -SHADOW_EXTENT;
     sun.shadow.camera.near = 1;
     sun.shadow.camera.far = 80;
     sun.shadow.normalBias = 0.03;
@@ -246,6 +274,7 @@ export function createWorldEngine(options: WorldEngineOptions): WorldEngine {
     });
     cleanup.push(() => presenter.dispose());
     cleanup.push(() => disposeAvatarFigureCache());
+    cleanup.push(() => disposeSandboxCaches());
 
     rig = createCameraRig({ camera, element: canvas });
     cleanup.push(() => rig.destroy());
@@ -274,8 +303,18 @@ export function createWorldEngine(options: WorldEngineOptions): WorldEngine {
   return {
     rebind(config) {
       if (destroyed) return;
-      stopSession();
+      // Attempt every step, then report: a failed teardown of the old
+      // session must not leave the World with no session at all.
+      let stopError: unknown;
+      let stopFailed = false;
+      try {
+        stopSession();
+      } catch (error) {
+        stopFailed = true;
+        stopError = error;
+      }
       startSession(config);
+      if (stopFailed) throw stopError;
     },
     resize,
     destroy() {

@@ -5,7 +5,8 @@
 Walk around a shared pseudonymous world, step into a building, and use a real
 privacy-preserving protocol with real funds on Starknet mainnet. One balance,
 one world, several protocols — with the rule that a financial building cannot
-open unless it has an approved private execution path.
+open unless it has an approved private execution path. Where the road ends, a
+shared block sandbox lets everyone build together (D-060).
 
 Built on [STRK20](https://strk20-by-example.org), Starknet's confidential
 token standard.

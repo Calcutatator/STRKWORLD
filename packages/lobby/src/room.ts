@@ -1,11 +1,13 @@
 /**
- * The Colyseus room. Wiring only — every rule lives in `presence.ts` and
- * `policy.ts`.
+ * The Colyseus room. Wiring only — every rule lives in `presence.ts`,
+ * `policy.ts`, `sandbox.ts` and `sandbox-rules.ts`.
  *
- * The room's whole client-facing surface is three message types and a join
+ * The room's whole client-facing surface is five message types and a join
  * payload, and none of them has a field for anything the lobby is forbidden
  * to hold. That is the enforcement: not a filter that strips money out of
- * traffic, but a surface with nowhere to put it.
+ * traffic, but a surface with nowhere to put it. The two sandbox verbs
+ * (D-060) take a tile and nothing else, and the one sandbox broadcast names a
+ * tile and nothing else.
  *
  * ## Configuration is trusted; onCreate options are not
  *
@@ -37,7 +39,7 @@
  * session is that nothing does.
  */
 
-import { Room, ServerError, type Client } from '@colyseus/core';
+import { Room, ServerError, type Client, type Delayed } from '@colyseus/core';
 import { StateView } from '@colyseus/schema';
 import type { GameId } from '@strkworld/shared';
 import {
@@ -74,6 +76,9 @@ export class PresenceRoom extends Room<{ state: LobbyState }> {
   protected roomConfig: PresenceRoomConfig = DEFAULT_ROOM_CONFIG;
 
   #registry = new LobbyPresence();
+
+  /** The pending sky drop, while anyone is on the street. D-060. */
+  #spawnTimer: Delayed | undefined;
 
   /** Aggregate counters for this room. Never per-connection. */
   get counters(): PresenceCounters {
@@ -114,13 +119,32 @@ export class PresenceRoom extends Room<{ state: LobbyState }> {
     });
 
     this.onMessage(MESSAGE.suspend, (client: Client) => {
-      if (this.#registry.suspend(client.sessionId)) this.#syncViews();
+      if (this.#registry.suspend(client.sessionId)) {
+        this.#syncViews();
+        this.#scheduleSpawn();
+      }
     });
 
     this.onMessage(MESSAGE.resume, (client: Client, payload: PlacementRequest) => {
       if (this.#registry.resume(client.sessionId, payload ?? {}, performance.now())) {
         this.#syncViews();
+        this.#scheduleSpawn();
       }
+    });
+
+    /*
+     * D-060. The payload is untrusted and read only for an integer tile; the
+     * actor's position is the one the registry already holds. Every refusal
+     * — malformed, throttled, out of reach — is silent: the client learns
+     * the outcome from the shared state, and a refusal leaks nothing. No view
+     * sync is needed, because neither verb moves anyone.
+     */
+    this.onMessage(MESSAGE.sandboxPick, (client: Client, payload: unknown) => {
+      this.#registry.pickBlock(client.sessionId, payload, performance.now());
+    });
+
+    this.onMessage(MESSAGE.sandboxPlace, (client: Client, payload: unknown) => {
+      this.#registry.placeBlock(client.sessionId, payload, performance.now());
     });
   }
 
@@ -137,6 +161,7 @@ export class PresenceRoom extends Room<{ state: LobbyState }> {
     // its own avatar in the shared state. Nothing about any other player.
     client.send(SERVER_MESSAGE.welcome, { gameId: outcome.gameId satisfies GameId });
     this.#syncViews();
+    this.#scheduleSpawn();
   }
 
   override onLeave(client: Client): void {
@@ -145,6 +170,63 @@ export class PresenceRoom extends Room<{ state: LobbyState }> {
     // an unknown session, so it is.
     this.#registry.release(client.sessionId);
     this.#syncViews();
+    this.#scheduleSpawn();
+  }
+
+  override onDispose(): void {
+    this.#spawnTimer?.clear();
+    this.#spawnTimer = undefined;
+  }
+
+  /**
+   * Keep exactly one sky drop pending while anyone is on the street, and none
+   * otherwise (D-060).
+   *
+   * A room clock timeout rather than an interval, re-armed after every drop,
+   * so the delay can switch from fast to slow as the sandbox fills. Called
+   * after every change to who is on the street — which is also every moment
+   * a carried block can be discarded — and idempotent.
+   *
+   * A pending drop is only ever brought forward, never pushed back: when a
+   * discard takes the sandbox back under the fast limit, a drop armed with
+   * the slow delay is re-armed with the fast one if that lands sooner.
+   */
+  #scheduleSpawn(): void {
+    if (!this.#registry.hasLivePlayers) {
+      this.#spawnTimer?.clear();
+      this.#spawnTimer = undefined;
+      return;
+    }
+    const delay = this.#registry.nextSpawnDelayMs();
+    const pending = this.#spawnTimer;
+    if (pending !== undefined) {
+      if (!(pending.time - pending.elapsedTime > delay)) return;
+      pending.clear();
+    }
+    this.#spawnTimer = this.clock.setTimeout(() => this.#spawnTick(), delay);
+  }
+
+  #spawnTick(): void {
+    this.#spawnTimer = undefined;
+    try {
+      if (this.#registry.hasLivePlayers) {
+        const tile = this.#registry.spawnBlock();
+        if (tile !== null) {
+          // After the next patch, so a client already holds the block in its
+          // state by the time the hint arrives. The payload is the tile alone.
+          this.broadcast(
+            SERVER_MESSAGE.sandboxDrop,
+            { x: tile.x, y: tile.y },
+            { afterNextPatch: true },
+          );
+        }
+      }
+    } catch {
+      // The room clock runs this outside any handler; an escape would take
+      // the process down with every room in it. A fixed, content-free line.
+      console.error('lobby: sandbox drop failed');
+    }
+    this.#scheduleSpawn();
   }
 
   /**

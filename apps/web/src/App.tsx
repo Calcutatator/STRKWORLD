@@ -68,7 +68,12 @@ export function App({
       >
         <BridgeProvider {...bridge} demo={!bridge}>
           <main className="strkworld">
-            <WorldHost out={worldOut} in={shellIn} remotePeers={presence.remotePeers} />
+            <WorldHost
+              out={worldOut}
+              in={shellIn}
+              remotePeers={presence.remotePeers}
+              sandbox={presence.sandbox}
+            />
             <VisitLayer world={worldOut} shell={shellIn} />
             <PresenceStatusLayer presence={presence} world={worldOut} />
             <SessionNoticeLayer />

@@ -39,19 +39,50 @@
  * keeps re-sending the latest requested position until the server's copy of
  * this avatar matches it, so the final position of a movement always lands even
  * if an intermediate send was dropped by the server's own rate floor.
+ *
+ * ## The block sandbox (D-060)
+ *
+ * `sandbox()` is a frozen snapshot of the room's shared stacks plus the colour
+ * this client carries. Columns come from the room-wide sandbox state, which is
+ * not interest-filtered; the carried colour comes from this client's **own
+ * presence entry** (`carrying`), so it is only known while connected with an
+ * identity and is null while suspended. `pickBlock`/`placeBlock` send one
+ * tile each, floored client-side at `SANDBOX_CLIENT_ACTION_INTERVAL_MS`: a
+ * call inside the floor is held and sent when it opens (only the latest held
+ * call survives), and the server may still refuse any of them silently — the
+ * next snapshot is the only answer.
+ * `onSandboxDrop` relays sky-drop hints, which arrive after the state that
+ * already holds the dropped block. Everything read from the server is
+ * validated here and fails closed.
  */
 
 import { Client as ColyseusClient, type Room as ColyseusRoom } from '@colyseus/sdk';
-import type { Facing, GameId } from '@strkworld/shared';
+import {
+  SANDBOX_MAX_BLOCKS,
+  SANDBOX_MAX_HEIGHT,
+  type Facing,
+  type GameId,
+  type SandboxColumn,
+  type SandboxSnapshot,
+  type SandboxTile,
+} from '@strkworld/shared';
 import {
   DEFAULT_ROOM_NAME,
   DEFAULT_SPRITE,
   MESSAGE,
   MIN_CLIENT_SEND_INTERVAL_MS,
+  SANDBOX_CLIENT_ACTION_INTERVAL_MS,
   SERVER_MESSAGE,
   type LobbySprite,
 } from './config';
-import { normalizeCoordinate, normalizeFacing, normalizeGameId } from './policy';
+import {
+  normalizeCoordinate,
+  normalizeFacing,
+  normalizeGameId,
+  normalizeSandboxColour,
+  normalizeSandboxTile,
+} from './policy';
+import { isSandboxTile, sandboxTileKey } from './sandbox-rules';
 import type { LobbyState, PresenceEntry } from './state';
 
 export type { LobbySprite } from './config';
@@ -97,6 +128,11 @@ export interface PeerSnapshot {
   readonly y: number;
   readonly facing: Facing;
   readonly sprite: string;
+  /**
+   * D-060: the sandbox block colour this player carries, or null. Validated
+   * to an integer palette index; anything else from the server is null.
+   */
+  readonly carrying: number | null;
 }
 
 export interface Placement {
@@ -132,6 +168,8 @@ export interface LobbyClientOptions {
 
 type PeersListener = (peers: readonly PeerSnapshot[]) => void;
 type StatusListener = (event: LobbyStatusEvent) => void;
+type SandboxListener = (snapshot: SandboxSnapshot) => void;
+type SandboxDropListener = (tile: SandboxTile) => void;
 type ListenerOwner<T> = readonly [listener: T, owner: symbol];
 
 interface PeerDelivery {
@@ -143,6 +181,21 @@ interface StatusDelivery {
   readonly listeners: readonly ListenerOwner<StatusListener>[];
   readonly event: LobbyStatusEvent;
 }
+
+interface SandboxDelivery {
+  readonly listeners: readonly ListenerOwner<SandboxListener>[];
+  readonly snapshot: SandboxSnapshot;
+}
+
+interface SandboxDropDelivery {
+  readonly listeners: readonly ListenerOwner<SandboxDropListener>[];
+  readonly tile: SandboxTile;
+}
+
+const EMPTY_SANDBOX: SandboxSnapshot = Object.freeze({
+  columns: Object.freeze([]) as readonly SandboxColumn[],
+  carrying: null,
+});
 
 interface WelcomePayload {
   gameId: string;
@@ -162,9 +215,25 @@ export class LobbyClient {
   readonly #statusListeners = new Map<StatusListener, symbol>();
   readonly #peerDeliveries: PeerDelivery[] = [];
   readonly #statusDeliveries: StatusDelivery[] = [];
+  readonly #sandboxListeners = new Map<SandboxListener, symbol>();
+  readonly #dropListeners = new Map<SandboxDropListener, symbol>();
+  readonly #sandboxDeliveries: SandboxDelivery[] = [];
+  readonly #dropDeliveries: SandboxDropDelivery[] = [];
 
   #deliveringPeers = false;
   #deliveringStatus = false;
+  #deliveringSandbox = false;
+  #deliveringDrops = false;
+
+  /** The last value `sandbox()` returned, reused while nothing changes. */
+  #sandboxView: SandboxSnapshot = EMPTY_SANDBOX;
+  /** The last value delivered to sandbox listeners, for change detection. */
+  #sandboxPublished: SandboxSnapshot = EMPTY_SANDBOX;
+  /** When the last pick/place left this client, for the client-side floor. */
+  #lastSandboxActionAt: number | null = null;
+  /** The latest pick/place requested inside the floor, sent when it opens. */
+  #pendingSandboxAction: PendingSandboxAction | null = null;
+  #sandboxActionHandle: ReturnType<typeof setTimeout> | null = null;
 
   #room: ColyseusRoom<unknown, LobbyState> | null = null;
   #joinAttempt: JoinAttempt | null = null;
@@ -283,6 +352,7 @@ export class LobbyClient {
   suspend(): void {
     if (this.#status !== 'connected' || this.#room === null) return;
     this.#cancelReconcile();
+    this.#cancelSandboxAction();
     this.#desired = null;
     const room = this.#room;
     room.send(MESSAGE.suspend);
@@ -290,6 +360,9 @@ export class LobbyClient {
     // suspended command overwrite that authoritative lifecycle state.
     if (this.#room !== room || this.#status !== 'connected') return;
     this.#setStatus('suspended');
+    // The server discards a carried block on suspend; stop reporting it now
+    // rather than when the patch that erases our entry arrives.
+    this.#emitSandbox();
   }
 
   /**
@@ -340,6 +413,7 @@ export class LobbyClient {
     this.#desired = null;
     this.#lastSentAt = performance.now();
     this.#setStatus('connected');
+    this.#emitSandbox();
   }
 
   /**
@@ -401,9 +475,80 @@ export class LobbyClient {
     return Object.freeze(out.map((entry) => Object.freeze(entry)));
   }
 
+  /**
+   * The shared block sandbox as this client sees it (D-060). Frozen at every
+   * level, and the same object for as long as nothing in it changes.
+   *
+   * Columns are every validated stack in the room — not interest-filtered —
+   * sorted by `(y, x)`. `carrying` is read from this client's own presence
+   * entry and is null unless connected with a server identity. Before the
+   * first join and after a disconnect, the snapshot is empty.
+   */
+  sandbox(): SandboxSnapshot {
+    const next = this.#readSandbox();
+    if (sameSandbox(this.#sandboxView, next)) return this.#sandboxView;
+    this.#sandboxView = next;
+    return next;
+  }
+
+  /**
+   * Subscribe to the block sandbox. Returns an unsubscribe function.
+   *
+   * Opens nothing. Fires once immediately with the current snapshot, then
+   * whenever a column or this client's carried colour changes — not on every
+   * room patch. Delivery follows `onPeers`: FIFO, generation-owned, and a
+   * throwing subscriber is isolated behind a fixed diagnostic.
+   */
+  onSandbox(listener: SandboxListener): () => void {
+    const owner = Symbol('sandbox listener');
+    this.#sandboxListeners.set(listener, owner);
+    this.#notifySandbox(listener, this.sandbox());
+    return () => {
+      if (this.#sandboxListeners.get(listener) === owner) {
+        this.#sandboxListeners.delete(listener);
+      }
+    };
+  }
+
+  /**
+   * Subscribe to sky-drop hints. Returns an unsubscribe function.
+   *
+   * No replay: a drop is an event, not state. Each hint is a frozen, validated
+   * sandbox tile, delivered after the snapshot that already holds the block
+   * (unless someone took it in between). It is an animation cue only.
+   */
+  onSandboxDrop(listener: SandboxDropListener): () => void {
+    const owner = Symbol('sandbox drop listener');
+    this.#dropListeners.set(listener, owner);
+    return () => {
+      if (this.#dropListeners.get(listener) === owner) {
+        this.#dropListeners.delete(listener);
+      }
+    };
+  }
+
+  /**
+   * Ask to pick up the top block of `tile`.
+   *
+   * A no-op unless connected (not suspended) and for anything but an integer
+   * sandbox tile. Inside the client floor since the last pick or place, the
+   * request is held and sent when the floor opens; a newer request replaces
+   * a held one, and suspend, disconnect or a lost room discards it. The
+   * server applies its own rules and floor and answers only through state.
+   */
+  pickBlock(tile: SandboxTile): void {
+    this.#sendSandboxAction(MESSAGE.sandboxPick, tile);
+  }
+
+  /** Ask to put the carried block on `tile`. Same contract as `pickBlock`. */
+  placeBlock(tile: SandboxTile): void {
+    this.#sendSandboxAction(MESSAGE.sandboxPlace, tile);
+  }
+
   /** Leave the room. The client can be connected again afterwards. */
   async disconnect(): Promise<void> {
     this.#cancelReconcile();
+    this.#cancelSandboxAction();
     this.#desired = null;
     const disconnectGeneration = ++this.#joinGeneration;
     const attempt = this.#joinAttempt;
@@ -429,7 +574,7 @@ export class LobbyClient {
     // `client-left` while the old room's leave is pending. That replacement
     // now owns peer delivery; do not let this stale disconnect continuation
     // publish through its live stream when the old transport finally settles.
-    if (this.#joinGeneration === disconnectGeneration) this.#emitPeers();
+    if (this.#joinGeneration === disconnectGeneration) this.#emitRoomState();
     if (leaveFailed) throw leaveError;
   }
 
@@ -461,6 +606,16 @@ export class LobbyClient {
         return;
       }
 
+      // D-060 sky-drop hints. Registered before the room is published, like
+      // welcome, so no hint can arrive without a handler; a hint that is not
+      // a sandbox tile is dropped here and never reaches a subscriber.
+      room.onMessage(SERVER_MESSAGE.sandboxDrop, (payload: unknown) => {
+        if (!this.#isCurrentRoom(generation, room)) return;
+        const tile = normalizeSandboxTile(payload);
+        if (tile === null) return;
+        this.#emitDrop(tile);
+      });
+
       let rejectWelcome!: (error: Error) => void;
       let welcomeAccepted = false;
       const welcomed = new Promise<void>((resolve, reject) => {
@@ -483,15 +638,16 @@ export class LobbyClient {
             this.#room = null;
             this.#gameId = null;
             this.#cancelReconcile();
+            this.#cancelSandboxAction();
             this.#setStatus('closed', 'error');
-            this.#emitPeers();
+            this.#emitRoomState();
             rejectWelcome(new Error(INVALID_WELCOME_ERROR));
             void room.leave(true).catch(() => undefined);
             return;
           }
           welcomeAccepted = true;
           this.#gameId = gameId;
-          this.#emitPeers();
+          this.#emitRoomState();
           resolve();
         });
       });
@@ -502,16 +658,18 @@ export class LobbyClient {
       this.#room = room;
       this.#desired = null;
       this.#lastSentAt = null;
+      this.#lastSandboxActionAt = null;
+      this.#cancelSandboxAction();
       this.#setStatus('connected');
       // Status delivery is synchronous. A listener may retire this exact
       // room before lifecycle callbacks are installed; do not attach stale
       // handlers to a room that no longer belongs to this client.
       if (!this.#isCurrentRoom(generation, room)) return;
-      this.#emitPeers();
+      this.#emitRoomState();
 
       room.onStateChange(() => {
         if (!this.#isCurrentRoom(generation, room)) return;
-        this.#emitPeers();
+        this.#emitRoomState();
         if (this.#status === 'connected') this.#pump(performance.now());
       });
       room.onError((code, _message) => {
@@ -525,8 +683,9 @@ export class LobbyClient {
         this.#room = null;
         this.#gameId = null;
         this.#cancelReconcile();
+        this.#cancelSandboxAction();
         this.#setStatus('closed', 'error', code);
-        this.#emitPeers();
+        this.#emitRoomState();
         rejectWelcome(new Error('Lobby room error before welcome'));
         // onError does not prove the transport has closed. Leave this exact
         // room once; clearing #room first makes a resulting onLeave callback
@@ -538,8 +697,9 @@ export class LobbyClient {
         this.#room = null;
         this.#gameId = null;
         this.#cancelReconcile();
+        this.#cancelSandboxAction();
         this.#setStatus('closed', 'server-dropped', code);
-        this.#emitPeers();
+        this.#emitRoomState();
         rejectWelcome(new Error('Lobby room left before welcome'));
       });
 
@@ -554,16 +714,18 @@ export class LobbyClient {
           this.#room = null;
           this.#gameId = null;
           this.#cancelReconcile();
+          this.#cancelSandboxAction();
           this.#desired = null;
           this.#setStatus('closed', 'error');
-          this.#emitPeers();
+          this.#emitRoomState();
           await failedRoom.leave(true).catch(() => undefined);
         } else if (joinedRoom !== null && this.#status === 'connecting') {
           this.#gameId = null;
           this.#cancelReconcile();
+          this.#cancelSandboxAction();
           this.#desired = null;
           this.#setStatus('closed', 'error');
-          this.#emitPeers();
+          this.#emitRoomState();
           await joinedRoom.leave(true).catch(() => undefined);
         } else if (this.#status === 'connecting') {
           this.#setStatus('idle');
@@ -723,7 +885,181 @@ export class LobbyClient {
       console.error('lobby client: status subscriber threw');
     }
   }
+
+  /** Publish everything read from room state: peers, then the sandbox. */
+  #emitRoomState(): void {
+    this.#emitPeers();
+    this.#emitSandbox();
+  }
+
+  /**
+   * Deliver the current sandbox snapshot if it differs from the last one
+   * delivered. Room patches arrive at the patch rate whatever changed, so
+   * without this a moving peer would re-deliver an identical sandbox 20 times
+   * a second.
+   */
+  #emitSandbox(): void {
+    const snapshot = this.sandbox();
+    if (sameSandbox(snapshot, this.#sandboxPublished)) return;
+    this.#sandboxPublished = snapshot;
+    if (this.#sandboxListeners.size === 0) return;
+    this.#sandboxDeliveries.push({ listeners: [...this.#sandboxListeners], snapshot });
+    if (this.#deliveringSandbox) return;
+
+    this.#deliveringSandbox = true;
+    try {
+      for (;;) {
+        const delivery = this.#sandboxDeliveries.shift();
+        if (delivery === undefined) return;
+        for (const [listener, owner] of delivery.listeners) {
+          if (this.#sandboxListeners.get(listener) !== owner) continue;
+          this.#notifySandbox(listener, delivery.snapshot);
+        }
+      }
+    } finally {
+      this.#deliveringSandbox = false;
+    }
+  }
+
+  #emitDrop(tile: SandboxTile): void {
+    if (this.#dropListeners.size === 0) return;
+    this.#dropDeliveries.push({ listeners: [...this.#dropListeners], tile });
+    if (this.#deliveringDrops) return;
+
+    this.#deliveringDrops = true;
+    try {
+      for (;;) {
+        const delivery = this.#dropDeliveries.shift();
+        if (delivery === undefined) return;
+        for (const [listener, owner] of delivery.listeners) {
+          if (this.#dropListeners.get(listener) !== owner) continue;
+          this.#notifyDrop(listener, delivery.tile);
+        }
+      }
+    } finally {
+      this.#deliveringDrops = false;
+    }
+  }
+
+  #notifySandbox(listener: SandboxListener, snapshot: SandboxSnapshot): void {
+    try {
+      listener(snapshot);
+    } catch {
+      console.error('lobby client: sandbox subscriber threw');
+    }
+  }
+
+  #notifyDrop(listener: SandboxDropListener, tile: SandboxTile): void {
+    try {
+      listener(tile);
+    } catch {
+      console.error('lobby client: sandbox drop subscriber threw');
+    }
+  }
+
+  #readSandbox(): SandboxSnapshot {
+    const room = this.#room;
+    if (room === null) return EMPTY_SANDBOX;
+    const columns = readSandboxColumns(room);
+    const carrying = this.#status === 'connected' ? this.#ownCarrying(room) : null;
+    if (columns.length === 0 && carrying === null) return EMPTY_SANDBOX;
+    return Object.freeze({ columns, carrying });
+  }
+
+  /** The colour on this client's own presence entry, validated, or null. */
+  #ownCarrying(room: ColyseusRoom<unknown, LobbyState>): number | null {
+    const id = this.#gameId;
+    if (id === null) return null;
+    let entry: PresenceEntry | undefined;
+    try {
+      entry = room.state?.peers?.get(id);
+    } catch {
+      return null;
+    }
+    if (entry === undefined || entry === null) return null;
+    const snapshot = readPeerSnapshot(entry);
+    if (snapshot === null || snapshot.gameId !== id) return null;
+    return snapshot.carrying;
+  }
+
+  #sendSandboxAction(type: SandboxActionMessage, tile: SandboxTile): void {
+    if (this.#status !== 'connected' || this.#room === null) return;
+    // Own data properties only, like resume: a caller-supplied accessor or
+    // proxy is never invoked, and anything but an in-sandbox integer tile is
+    // not sent at all.
+    const target = normalizeSandboxTile(tile);
+    if (target === null) return;
+    this.#pendingSandboxAction = { type, tile: target };
+    this.#flushSandboxAction();
+  }
+
+  /**
+   * Send the pending sandbox action if the client floor allows it, otherwise
+   * hold it until the floor opens.
+   *
+   * Held, not dropped: the server floor would drop an early action silently,
+   * so a pick followed at once by a place would lose the place. Only the
+   * latest request is held — a newer one replaces it — and it is re-checked
+   * against the connection and the floor when it finally goes. A clock that
+   * runs backwards keeps the floor closed until it passes it again.
+   */
+  #flushSandboxAction(): void {
+    this.#cancelSandboxTimer();
+    const pending = this.#pendingSandboxAction;
+    if (pending === null) return;
+    if (this.#status !== 'connected' || this.#room === null) {
+      this.#pendingSandboxAction = null;
+      return;
+    }
+    const now = performance.now();
+    if (!isValidMonotonicTime(now)) {
+      this.#scheduleSandboxAction(SANDBOX_CLIENT_ACTION_INTERVAL_MS);
+      return;
+    }
+    const last = this.#lastSandboxActionAt;
+    if (last !== null && now - last < SANDBOX_CLIENT_ACTION_INTERVAL_MS) {
+      this.#scheduleSandboxAction(
+        Math.min(SANDBOX_CLIENT_ACTION_INTERVAL_MS - (now - last), MAX_TIMER_DELAY_MS),
+      );
+      return;
+    }
+    this.#pendingSandboxAction = null;
+    const room = this.#room;
+    room.send(pending.type, { x: pending.tile.x, y: pending.tile.y });
+    // A transport can report closure synchronously from send; a retired room
+    // must not stamp the floor of whatever replaces it.
+    if (this.#room !== room || this.#status !== 'connected') return;
+    this.#lastSandboxActionAt = now;
+  }
+
+  #scheduleSandboxAction(delay: number): void {
+    this.#cancelSandboxTimer();
+    this.#sandboxActionHandle = setTimeout(() => {
+      this.#sandboxActionHandle = null;
+      this.#flushSandboxAction();
+    }, delay);
+  }
+
+  #cancelSandboxTimer(): void {
+    if (this.#sandboxActionHandle !== null) {
+      clearTimeout(this.#sandboxActionHandle);
+      this.#sandboxActionHandle = null;
+    }
+  }
+
+  /** Forget a held sandbox action. Called wherever this client stops sending. */
+  #cancelSandboxAction(): void {
+    this.#pendingSandboxAction = null;
+    this.#cancelSandboxTimer();
+  }
 }
+
+interface PendingSandboxAction {
+  readonly type: SandboxActionMessage;
+  readonly tile: SandboxTile;
+}
+
+type SandboxActionMessage = typeof MESSAGE.sandboxPick | typeof MESSAGE.sandboxPlace;
 
 function ownDataField(value: object, key: string): unknown {
   try {
@@ -742,10 +1078,102 @@ function readPeerSnapshot(entry: PresenceEntry): PeerSnapshot | null {
       y: entry.position.y,
       facing: entry.facing as Facing,
       sprite: entry.sprite,
+      carrying: normalizeSandboxColour(entry.carrying),
     };
   } catch {
     return null;
   }
+}
+
+/**
+ * Every well-formed stack in the decoded room state, sorted by `(y, x)` and
+ * frozen.
+ *
+ * Fails closed at every level: an unreadable container is an empty sandbox,
+ * a malformed column is skipped whole (never partially trusted), and columns
+ * beyond the room-wide block cap are not drawn.
+ */
+function readSandboxColumns(
+  room: ColyseusRoom<unknown, LobbyState>,
+): readonly SandboxColumn[] {
+  const columns: SandboxColumn[] = [];
+  try {
+    const container: unknown = (room.state as { sandbox?: unknown } | undefined)?.sandbox;
+    if (container === null || typeof container !== 'object') return EMPTY_SANDBOX.columns;
+    const forEach = (container as { forEach?: unknown }).forEach;
+    if (typeof forEach !== 'function') return EMPTY_SANDBOX.columns;
+    Reflect.apply(forEach, container, [
+      (value: unknown, key: unknown) => {
+        const column = readSandboxColumn(value, key);
+        if (column !== null) columns.push(column);
+      },
+    ]);
+  } catch {
+    return EMPTY_SANDBOX.columns;
+  }
+  if (columns.length === 0) return EMPTY_SANDBOX.columns;
+
+  columns.sort((a, b) => a.y - b.y || a.x - b.x);
+  const kept: SandboxColumn[] = [];
+  const seen = new Set<string>();
+  let blocks = 0;
+  for (const column of columns) {
+    const key = sandboxTileKey(column.x, column.y);
+    if (seen.has(key)) continue;
+    if (blocks + column.colours.length > SANDBOX_MAX_BLOCKS) break;
+    seen.add(key);
+    blocks += column.colours.length;
+    kept.push(column);
+  }
+  return Object.freeze(kept);
+}
+
+/** One decoded stack, or null if any part of it is not exactly right. */
+function readSandboxColumn(value: unknown, key: unknown): SandboxColumn | null {
+  if (value === null || typeof value !== 'object') return null;
+  try {
+    const record = value as { x?: unknown; y?: unknown; colours?: unknown };
+    const x = record.x;
+    const y = record.y;
+    if (typeof x !== 'number' || typeof y !== 'number' || !isSandboxTile(x, y)) return null;
+    // The room keys every column by its own tile; a mismatch is not ours.
+    if (key !== sandboxTileKey(x, y)) return null;
+    const stack = record.colours;
+    if (stack === null || typeof stack !== 'object') return null;
+    const length = (stack as { length?: unknown }).length;
+    if (
+      typeof length !== 'number' ||
+      !Number.isInteger(length) ||
+      length < 1 ||
+      length > SANDBOX_MAX_HEIGHT
+    ) {
+      return null;
+    }
+    const colours: number[] = [];
+    for (let index = 0; index < length; index += 1) {
+      const colour = normalizeSandboxColour((stack as Record<number, unknown>)[index]);
+      if (colour === null) return null;
+      colours.push(colour);
+    }
+    return Object.freeze({ x, y, colours: Object.freeze(colours) });
+  } catch {
+    return null;
+  }
+}
+
+function sameSandbox(a: SandboxSnapshot, b: SandboxSnapshot): boolean {
+  if (a === b) return true;
+  if (a.carrying !== b.carrying || a.columns.length !== b.columns.length) return false;
+  for (let index = 0; index < a.columns.length; index += 1) {
+    const left = a.columns[index] as SandboxColumn;
+    const right = b.columns[index] as SandboxColumn;
+    if (left.x !== right.x || left.y !== right.y) return false;
+    if (left.colours.length !== right.colours.length) return false;
+    for (let level = 0; level < left.colours.length; level += 1) {
+      if (left.colours[level] !== right.colours[level]) return false;
+    }
+  }
+  return true;
 }
 
 function isValidMonotonicTime(value: number): boolean {

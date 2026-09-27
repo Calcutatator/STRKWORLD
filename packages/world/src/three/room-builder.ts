@@ -18,11 +18,12 @@ import type {
 import { ROOM_ORIGIN } from '../world-layout.js';
 import { PIXELS_PER_UNIT } from './coords.js';
 import {
-  EXCHANGE_TICKER,
+  EXCHANGE_ROOM_TICKER,
   GeometryBin,
   PALETTE,
   ResourceBag,
-  STATION_LOOKS,
+  STRK20,
+  AVNU,
   aoPaint,
   beamGeometry,
   boxGeometry,
@@ -32,6 +33,8 @@ import {
   cylinderGeometry,
   faceBox,
   faceDisc,
+  facePanel,
+  faceQuad,
   facePipe,
   faceToWorld,
   faceTorus,
@@ -40,6 +43,7 @@ import {
   flushBin,
   hash01,
   jitterColor,
+  lift,
   mixColor,
   pick,
   roomTheme,
@@ -52,7 +56,10 @@ import {
   type Paint,
   type RoomTheme,
   type StationLook,
+  type StationLooks,
+  type TickerSegment,
 } from './palette.js';
+import type { FloatingStyleOptions } from './labels.js';
 import type { LabelFactory, Occluder, OccluderBounds, RoomView, TextLabel } from './types.js';
 
 /**
@@ -318,6 +325,7 @@ interface StationView {
   readonly beacon: Mesh;
   readonly label: TextLabel;
   readonly phase: number;
+  readonly looks: StationLooks;
   labelText: string;
   look: StationLook;
   highlighted: boolean;
@@ -443,13 +451,14 @@ export function buildFixedRoom(
 function applyStation(view: StationView, presentation: FixedRoomStationPresentation): void {
   const available = presentation.status === 'available';
   const highlighted = presentation.highlighted === true;
+  const looks = view.looks;
   const look = available
     ? highlighted
-      ? STATION_LOOKS.highlighted
-      : STATION_LOOKS.available
+      ? looks.highlighted
+      : looks.available
     : highlighted
-      ? STATION_LOOKS.lockedHighlighted
-      : STATION_LOOKS.locked;
+      ? looks.lockedHighlighted
+      : looks.locked;
   view.look = look;
   view.highlighted = highlighted;
   view.accent.color.setHex(look.color);
@@ -536,11 +545,10 @@ function buildStation(
   beacon.position.set(cx, STATION_BEACON_Y, cz);
   group.add(beacon);
 
-  const label = labels.floating(station.label, {
-    lineHeight: 0.3,
-    foreground: theme.labelForeground,
-    background: theme.labelBackground,
-  });
+  // A typed value, not an inline literal: the style fields ride along to
+  // factories that understand them and are ignored by any that do not.
+  const labelStyle: FloatingStyleOptions = { lineHeight: 0.3, ...theme.label };
+  const label = labels.floating(station.label, labelStyle);
   textLabels.push(label);
   label.object.position.set(cx, STATION_LABEL_Y, cz);
   label.object.userData['station'] = station.station;
@@ -555,8 +563,9 @@ function buildStation(
     beacon,
     label,
     phase: hash01(Math.round(cx * 10), Math.round(cz * 10), 301) * Math.PI * 2,
+    looks: theme.stationLooks,
     labelText: station.label,
-    look: STATION_LOOKS.locked,
+    look: theme.stationLooks.locked,
     highlighted: false,
   };
   // Until the Shell reports otherwise a station is locked (fixed-room.ts).
@@ -569,27 +578,30 @@ function stationProps(theme: RoomTheme, bin: GeometryBin, x0: number, x1: number
   const cz = (z0 + z1) / 2;
   const top = 1;
   switch (theme.decor) {
-    case 'bank': {
-      const lx = x0 + 0.3;
-      bin.add('body', cylinderGeometry(lx, top, cz, 0.08, 0.1, 0.04, 8), theme.trim);
-      bin.add('body', cylinderGeometry(lx, top + 0.04, cz, 0.015, 0.015, 0.26, 6), theme.trim);
-      bin.add('body', boxGeometry(lx - 0.16, top + 0.26, cz - 0.07, lx + 0.16, top + 0.34, cz + 0.07), 0x2f6b45);
-      for (let i = 0; i < 3; i++) {
-        bin.add('body', cylinderGeometry(x1 - 0.3 + i * 0.07, top, cz + (i % 2) * 0.06, 0.06, 0.06, 0.05 + i * 0.03, 10), theme.trim);
-      }
+    case 'strk20': {
+      // A slim black terminal with one burnt-orange line: nothing else lit.
+      const cx = (x0 + x1) / 2;
+      const face: Face = { normal: 'z+', plane: z0 + 0.14 };
+      bin.add('body', boxGeometry(cx - 0.34, top, z0 + 0.06, cx + 0.34, top + 0.03, z1 - 0.06), lift(STRK20.surface, 0.08));
+      bin.add('body', faceBox(face, cx - 0.36, top + 0.03, 0, cx + 0.36, top + 0.4, 0.04), lift(STRK20.raised, 0.06));
+      bin.add('unlit', faceBox(face, cx - 0.3, top + 0.09, 0.04, cx + 0.3, top + 0.34, 0.043), lift(STRK20.black, 0.02));
+      bin.add('unlit', faceBox(face, cx - 0.3, top + 0.1, 0.043, cx - 0.02, top + 0.13, 0.046), STRK20.orange);
+      bin.add('unlit', faceBox(face, cx - 0.3, top + 0.2, 0.043, cx + 0.14, top + 0.215, 0.046), STRK20.blush);
+      bin.add('unlit', faceBox(face, cx - 0.3, top + 0.25, 0.043, cx + 0.22, top + 0.265, 0.046), STRK20.peach);
       break;
     }
-    case 'exchange': {
+    case 'avnu': {
+      // A small swap card: two token fields and the primary pill button.
       const cx = (x0 + x1) / 2;
       const face: Face = { normal: 'z+', plane: z0 + 0.12 };
-      bin.add('body', boxGeometry(cx - 0.05, top, z0 + 0.06, cx + 0.05, top + 0.1, z0 + 0.14), 0x1b262c);
-      bin.add('body', faceBox(face, cx - 0.42, top + 0.08, 0, cx + 0.42, top + 0.52, 0.05), 0x10181c);
-      bin.add('unlit', faceBox(face, cx - 0.38, top + 0.12, 0.05, cx + 0.38, top + 0.48, 0.055), 0x0f3a3c);
-      for (let i = 0; i < 7; i++) {
-        const h = 0.06 + hash01(i, 3, 311) * 0.24;
-        const u = cx - 0.32 + i * 0.1;
-        bin.add('unlit', faceBox(face, u, top + 0.15, 0.055, u + 0.06, top + 0.15 + h, 0.06), i % 3 === 1 ? 0xff6b5b : 0x54e0a0);
-      }
+      bin.add('body', boxGeometry(cx - 0.05, top, z0 + 0.06, cx + 0.05, top + 0.1, z0 + 0.14), AVNU.navy);
+      bin.add('body', faceBox(face, cx - 0.44, top + 0.08, 0, cx + 0.44, top + 0.56, 0.05), AVNU.navy);
+      bin.add('unlit', facePanel(face, cx - 0.4, top + 0.12, cx + 0.4, top + 0.52, 0.052, 0.06), AVNU.card);
+      bin.add('unlit', facePanel(face, cx - 0.34, top + 0.38, cx + 0.34, top + 0.47, 0.055, 0.045), AVNU.navy);
+      bin.add('unlit', facePanel(face, cx - 0.34, top + 0.27, cx + 0.34, top + 0.36, 0.055, 0.045), AVNU.navy);
+      bin.add('unlit', facePanel(face, cx - 0.31, top + 0.4, cx - 0.25, top + 0.45, 0.058, 0.03), AVNU.lightBlue);
+      bin.add('unlit', facePanel(face, cx - 0.31, top + 0.29, cx - 0.25, top + 0.34, 0.058, 0.03), AVNU.slate);
+      bin.add('unlit', facePanel(face, cx - 0.34, top + 0.15, cx + 0.34, top + 0.24, 0.055, 0.045), AVNU.blue);
       break;
     }
     case 'post-office': {
@@ -617,7 +629,7 @@ function roomFloorColor(theme: RoomTheme, map: FixedRoomMap): (x: number, y: num
     const seed = hash01(x, y, 201);
     if (tile === 'wall') return shade(theme.floorB, -0.1);
     if (theme.decor === 'bridge') return jitterColor(hash01(x, y, 202) < 0.5 ? theme.floorA : theme.floorB, seed, 0.02);
-    return jitterColor((x + y) % 2 === 0 ? theme.floorA : theme.floorB, seed, theme.decor === 'exchange' ? 0.012 : 0.022);
+    return jitterColor((x + y) % 2 === 0 ? theme.floorA : theme.floorB, seed, theme.decor === 'avnu' || theme.decor === 'strk20' ? 0.01 : 0.022);
   };
 }
 
@@ -676,11 +688,11 @@ function chevron(bin: GeometryBin, cx: number, zc: number, colour: number): void
 
 function decorateRoom(theme: RoomTheme, shell: InteriorShell, map: FixedRoomMap, res: ResourceBag, animators: Animator[]): void {
   switch (theme.decor) {
-    case 'bank':
-      bankDecor(theme, shell, map);
+    case 'strk20':
+      strk20Decor(theme, shell, map);
       return;
-    case 'exchange':
-      exchangeDecor(theme, shell, map, res, animators);
+    case 'avnu':
+      avnuDecor(theme, shell, map, res, animators);
       return;
     case 'post-office':
       postOfficeDecor(theme, shell, map);
@@ -716,63 +728,84 @@ function inSpans(wall: InteriorWall, u0: number, u1: number): boolean {
   return wall.spans.some(([a, b]) => u0 >= a - 1e-6 && u1 <= b + 1e-6);
 }
 
-/** Marble, pilasters, a gold vault-door emblem, paintings and a red carpet. */
-function bankDecor(theme: RoomTheme, shell: InteriorShell, map: FixedRoomMap): void {
+/**
+ * STRK20: near-black stone, burnt-orange light strips, the vault door as a
+ * dark lens ringed in orange (the one nod), and two panels carrying the
+ * cream-to-peach heading gradient in place of paintings.
+ */
+function strk20Decor(theme: RoomTheme, shell: InteriorShell, map: FixedRoomMap): void {
   const north = shell.walls.north;
   const nf = north.face;
-  const cream = 0xf6efdd;
   const anchor = stationAnchor(map);
+  const stone = lift(STRK20.raised, 0.13);
+  const hair = lift(STRK20.hairline, 0.12);
+  for (const wall of Object.values(shell.walls)) {
+    for (const [a, b] of wall.spans) {
+      wall.bins.add('unlit', faceBox(wall.face, a, 2.05, 0, b, 2.09, 0.03), STRK20.orange);
+      wall.bins.add('unlit', faceBox(wall.face, a, 0.16, 0.035, b, 0.185, 0.05), STRK20.orangePressed);
+    }
+  }
   for (const offset of [-7.7, -5.1, -1.7, 1.7, 5.1, 7.7]) {
     const u = anchor + offset;
     if (!inSpans(north, u - 0.26, u + 0.26)) continue;
-    north.bins.add('body', faceBox(nf, u - 0.24, 0, 0, u + 0.24, 0.22, 0.17), theme.wallLower);
-    north.bins.add('body', faceBox(nf, u - 0.2, 0.22, 0, u + 0.2, 1.96, 0.14), cream);
-    north.bins.add('body', faceBox(nf, u - 0.26, 1.96, 0, u + 0.26, 2.12, 0.18), theme.trim);
+    north.bins.add('body', faceBox(nf, u - 0.22, 0, 0, u + 0.22, 1.9, 0.13), stone);
+    north.bins.add('body', faceBox(nf, u - 0.26, 1.9, 0, u + 0.26, 2.02, 0.16), hair);
   }
-  // The vault door behind the teller, gold on steel.
   const vy = 1.2;
-  north.bins.add('body', faceDisc(nf, anchor, vy, 0, 0.72, 0.06, 18), 0x9aa3ad);
-  north.bins.add('body', faceTorus(nf, anchor, vy, 0.07, 0.72, 0.06, { tubularSegments: 20 }), theme.trim);
-  north.bins.add('body', faceTorus(nf, anchor, vy, 0.11, 0.26, 0.035, { tubularSegments: 14 }), theme.trim);
-  for (let i = 0; i < 3; i++) {
-    const angle = (i / 3) * Math.PI;
-    const du = Math.cos(angle) * 0.26;
-    const dv = Math.sin(angle) * 0.26;
-    north.bins.add(
-      'body',
-      beamGeometry(faceToWorld(nf, anchor - du, vy - dv, 0.11), faceToWorld(nf, anchor + du, vy + dv, 0.11), 0.03, 0.03),
-      theme.trim,
-    );
+  north.bins.add('body', faceDisc(nf, anchor, vy, 0, 0.74, 0.06, 20), lift(STRK20.raised, 0.08));
+  north.bins.add('unlit', faceTorus(nf, anchor, vy, 0.075, 0.74, 0.035, { tubularSegments: 28 }), STRK20.orange);
+  north.bins.add('body', faceTorus(nf, anchor, vy, 0.09, 0.48, 0.03, { tubularSegments: 20 }), hair);
+  north.bins.add('body', faceDisc(nf, anchor, vy, 0.06, 0.15, 0.06, 12), hair);
+  for (let i = 0; i < 8; i++) {
+    const angle = (i / 8) * Math.PI * 2 + Math.PI / 8;
+    const u = anchor + Math.cos(angle) * 0.62;
+    const v = vy + Math.sin(angle) * 0.62;
+    north.bins.add('body', faceBox(nf, u - 0.035, v - 0.035, 0.06, u + 0.035, v + 0.035, 0.09), hair);
   }
-  north.bins.add('body', faceDisc(nf, anchor, vy, 0.06, 0.07, 0.08, 10), theme.trim);
   for (const u of [anchor - 3.4, anchor + 3.4]) {
-    if (!inSpans(north, u - 0.62, u + 0.62)) continue;
-    north.bins.add('body', faceBox(nf, u - 0.62, 1.05, 0, u + 0.62, 1.85, 0.05), theme.trim);
-    north.bins.add('body', faceBox(nf, u - 0.52, 1.47, 0.05, u + 0.52, 1.75, 0.06), 0x9cc3e0);
-    north.bins.add('body', faceBox(nf, u - 0.52, 1.15, 0.05, u + 0.52, 1.47, 0.06), 0x7fa35e);
-    north.bins.add('body', faceDisc(nf, u + 0.25, 1.6, 0.06, 0.07, 0.01, 10), 0xffd27a);
+    if (!inSpans(north, u - 0.6, u + 0.6)) continue;
+    north.bins.add('body', faceBox(nf, u - 0.56, 0.96, 0, u + 0.56, 1.94, 0.04), lift(STRK20.black, 0.03));
+    const [top, mid, bottom] = [1.88, 1.45, 1.02];
+    gradientPanel(north, u - 0.5, mid, u + 0.5, top, 0.045, STRK20.blush, STRK20.cream);
+    gradientPanel(north, u - 0.5, bottom, u + 0.5, mid, 0.045, STRK20.peach, STRK20.blush);
+    north.bins.add('unlit', faceBox(nf, u - 0.5, 0.9, 0.04, u - 0.1, 0.925, 0.05), STRK20.orange);
   }
   for (const wall of [shell.walls.west, shell.walls.east]) {
     for (const [a, b] of wall.spans) {
-      const windows = [a + (b - a) * 0.3, a + (b - a) * 0.62];
-      for (const u of windows) {
-        wall.bins.add('body', faceBox(wall.face, u - 0.5, 0.95, 0, u + 0.5, 2.0, 0.06), theme.trim);
-        wall.bins.add('unlit', faceBox(wall.face, u - 0.42, 1.03, 0.06, u + 0.42, 1.92, 0.065), 0xcfe3f5);
-        wall.bins.add('body', faceBox(wall.face, u - 0.02, 1.03, 0.065, u + 0.02, 1.92, 0.08), theme.trim);
-        wall.bins.add('body', faceBox(wall.face, u - 0.42, 1.5, 0.065, u + 0.42, 1.54, 0.08), theme.trim);
+      const slots = [a + (b - a) * 0.25, a + (b - a) * 0.5, a + (b - a) * 0.75];
+      for (const u of slots) {
+        wall.bins.add('body', faceBox(wall.face, u - 0.1, 0.4, 0, u + 0.1, 1.86, 0.04), lift(STRK20.black, 0.03));
+        wall.bins.add('unlit', faceBox(wall.face, u - 0.025, 0.46, 0.04, u + 0.025, 1.8, 0.05), STRK20.orange);
       }
-      const lamp = (windows[0]! + windows[1]!) / 2;
-      wall.bins.add('body', faceBox(wall.face, lamp - 0.05, 1.42, 0, lamp + 0.05, 1.7, 0.06), theme.trim);
-      wall.bins.add('unlit', faceBox(wall.face, lamp - 0.08, 1.7, 0.04, lamp + 0.08, 1.9, 0.2), 0xffd9a0);
-      pottedPlant(wall, b - 0.5);
+      for (const u of [(slots[0]! + slots[1]!) / 2, (slots[1]! + slots[2]!) / 2]) {
+        wall.bins.add('body', faceBox(wall.face, u - 0.05, 1.45, 0, u + 0.05, 1.68, 0.06), hair);
+        wall.bins.add('unlit', faceBox(wall.face, u - 0.08, 1.68, 0.04, u + 0.08, 1.86, 0.18), STRK20.blush);
+      }
     }
   }
-  perimeterInlay(shell, map, 0.12, 0.05, theme.floorAccent);
-  carpet(shell, map, 0x9e2f35, theme.floorAccent);
+  // Hairline joints across the walkable floor, and a black runner edged in light.
+  const joint = lift(STRK20.hairline, 0.06);
+  for (let x = 2; x < map.width - 1; x++) shell.floor.add('floor', flatQuad(x - 0.012, 1, x + 0.012, map.height - 1, 0.003), joint);
+  for (let y = 2; y < map.height - 1; y++) shell.floor.add('floor', flatQuad(1, y - 0.012, map.width - 1, y + 0.012, 0.003), joint);
+  carpet(shell, map, lift(STRK20.black, 0.03), theme.floorAccent, 'glow');
+}
+
+/** A self-lit panel shading from `bottom` at v0 to `top` at v1 (the STRK20 heading gradient). */
+function gradientPanel(
+  wall: InteriorWall,
+  u0: number,
+  v0: number,
+  u1: number,
+  v1: number,
+  w: number,
+  bottom: number,
+  top: number,
+): void {
+  wall.bins.add('unlit', faceQuad(wall.face, u0, v0, u1, v1, w), (_x, y) => mixColor(bottom, top, (y - v0) / (v1 - v0)));
 }
 
 /** A runner from the exit to the first station in line with it. */
-function carpet(shell: InteriorShell, map: FixedRoomMap, colour: number, edge: number): void {
+function carpet(shell: InteriorShell, map: FixedRoomMap, colour: number, edge: number, edgeKey = 'floor'): void {
   const exit = map.exit;
   const station = map.stations.find((candidate) => candidate.x < exit.x + exit.width && candidate.x + candidate.width > exit.x);
   const zTop = station ? station.y + station.height + 1 : map.height / 2;
@@ -781,8 +814,8 @@ function carpet(shell: InteriorShell, map: FixedRoomMap, colour: number, edge: n
   const zBottom = exit.y;
   if (zBottom - zTop < 0.5) return;
   shell.floor.add('floor', flatQuad(x0, zTop, x1, zBottom, 0.004), colour);
-  shell.floor.add('floor', flatQuad(x0, zTop, x0 + 0.06, zBottom, 0.007), edge);
-  shell.floor.add('floor', flatQuad(x1 - 0.06, zTop, x1, zBottom, 0.007), edge);
+  shell.floor.add(edgeKey, flatQuad(x0, zTop, x0 + 0.05, zBottom, 0.007), edge);
+  shell.floor.add(edgeKey, flatQuad(x1 - 0.05, zTop, x1, zBottom, 0.007), edge);
 }
 
 function pottedPlant(wall: InteriorWall, u: number): void {
@@ -793,66 +826,104 @@ function pottedPlant(wall: InteriorWall, u: number): void {
   wall.bins.add('body', sphereGeometry(x + 0.06, 0.78, z - 0.04, 0.13, { widthSegments: 6, heightSegments: 4 }), PALETTE.hedge);
 }
 
-/** Teal trading floor: glowing grid, candlestick screens and a scrolling ticker. */
-function exchangeDecor(theme: RoomTheme, shell: InteriorShell, map: FixedRoomMap, res: ResourceBag, animators: Animator[]): void {
+/**
+ * avnu: navy and indigo, a swap card with pill fields and the primary blue
+ * pill button behind the desk, rounded chart cards and a blue LED ticker.
+ */
+function avnuDecor(theme: RoomTheme, shell: InteriorShell, map: FixedRoomMap, res: ResourceBag, animators: Animator[]): void {
   const north = shell.walls.north;
   const nf = north.face;
   const anchor = stationAnchor(map);
-  const screens: Array<[number, number, number, number]> = [
-    [anchor - 2.2, anchor + 2.2, 0.95, 2.0],
-    [anchor - 10.6, anchor - 7.4, 1.1, 1.95],
-    [anchor - 6.8, anchor - 3.4, 1.1, 1.95],
+  const cardA = anchor - 1.7;
+  const cardB = anchor + 1.7;
+  if (inSpans(north, cardA - 0.05, cardB + 0.05)) {
+    north.bins.add('unlit', facePanel(nf, cardA - 0.035, 0.86, cardB + 0.035, 2.03, 0.02, 0.2), AVNU.indigoBorder);
+    north.bins.add('unlit', facePanel(nf, cardA, 0.89, cardB, 2.0, 0.03, 0.18), AVNU.card);
+    const fields: ReadonlyArray<readonly [number, number, number]> = [
+      [1.62, 1.86, AVNU.lightBlue],
+      [1.32, 1.56, AVNU.slate],
+    ];
+    for (const [v0, v1, token] of fields) {
+      const mid = (v0 + v1) / 2;
+      north.bins.add('unlit', facePanel(nf, cardA + 0.16, v0, cardB - 0.16, v1, 0.04, 0.12), AVNU.navy);
+      north.bins.add('unlit', facePanel(nf, cardA + 0.26, mid - 0.075, cardA + 0.41, mid + 0.075, 0.05, 0.075), token);
+      north.bins.add('unlit', facePanel(nf, cardB - 1.0, mid - 0.028, cardB - 0.3, mid + 0.028, 0.05, 0.028), AVNU.slate);
+    }
+    north.bins.add('unlit', facePanel(nf, anchor - 0.1, 1.49, anchor + 0.1, 1.69, 0.055, 0.1), AVNU.indigoBorder);
+    north.bins.add('unlit', facePanel(nf, cardA + 0.16, 0.98, cardB - 0.16, 1.2, 0.04, 0.11), AVNU.blue);
+  }
+  const charts: ReadonlyArray<readonly [number, number]> = [
+    [anchor - 10.6, anchor - 7.2],
+    [anchor - 6.6, anchor - 3.2],
   ];
-  screens.forEach(([u0, u1, v0, v1], index) => {
-    if (!inSpans(north, u0 - 0.06, u1 + 0.06)) return;
-    north.bins.add('body', faceBox(nf, u0 - 0.06, v0 - 0.06, 0, u1 + 0.06, v1 + 0.06, 0.07), 0x0c1216);
-    north.bins.add('unlit', faceBox(nf, u0, v0, 0.07, u1, v1, 0.075), 0x06141b);
-    candlesticks(north, u0 + 0.1, u1 - 0.1, v0 + 0.1, v1 - 0.12, index);
+  charts.forEach(([u0, u1], index) => {
+    if (!inSpans(north, u0 - 0.05, u1 + 0.05)) return;
+    north.bins.add('unlit', facePanel(nf, u0 - 0.035, 1.02, u1 + 0.035, 2.01, 0.02, 0.17), AVNU.indigoBorder);
+    north.bins.add('unlit', facePanel(nf, u0, 1.05, u1, 1.98, 0.03, 0.15), AVNU.card);
+    candlesticks(north, u0 + 0.15, u1 - 0.15, 1.1, 1.9, index, { up: AVNU.lightBlue, down: AVNU.slate, line: AVNU.blue });
   });
-  // LED ticker along the top of the north wall.
-  const [a, b] = north.spans[0] ?? [INTERIOR_WALL_THICKNESS, map.width - INTERIOR_WALL_THICKNESS];
-  const tickerWidth = b - a;
-  const tickerHeight = 0.14;
-  const strip = createTickerStrip(EXCHANGE_TICKER);
-  const texture = res.texture(strip.texture);
-  texture.repeat.set(tickerWidth / (tickerHeight / strip.height) / strip.width, 1);
-  const material = res.material(new MeshBasicMaterial({ map: texture, toneMapped: false }));
-  const ticker = new Mesh(res.geometry(new PlaneGeometry(tickerWidth, tickerHeight)), material);
-  ticker.name = `${north.group.name}:ticker`;
-  const [tx, ty, tz] = faceToWorld(nf, (a + b) / 2, 2.07, 0.012);
-  ticker.position.set(tx, ty, tz);
-  north.group.add(ticker);
-  north.fadeMaterials.push(material);
-  north.bins.add('body', faceBox(nf, a, 1.98, 0, b, 2.16, 0.01), 0x0b1215);
-  animators.push((elapsed) => {
-    texture.offset.x = (((elapsed / 1000) * 12) / strip.width) % 1;
-  });
+  addTicker(north, map, res, animators, EXCHANGE_ROOM_TICKER);
 
   for (const wall of [shell.walls.west, shell.walls.east]) {
     for (const [s0, s1] of wall.spans) {
       for (let u = s0 + 0.8; u < s1 - 0.4; u += 2.4) {
-        wall.bins.add('unlit', faceBox(wall.face, u - 0.02, 0.2, 0.02, u + 0.02, 2.0, 0.04), theme.floorAccent);
+        wall.bins.add('unlit', faceBox(wall.face, u - 0.018, 0.2, 0.02, u + 0.018, 2.0, 0.04), lift(AVNU.indigoBorder, 0.08));
       }
       const mid = (s0 + s1) / 2;
       for (const u of [mid - 1.4, mid + 1.4]) {
-        wall.bins.add('body', faceBox(wall.face, u - 0.62, 1.05, 0, u + 0.62, 1.8, 0.06), 0x0c1216);
-        wall.bins.add('unlit', faceBox(wall.face, u - 0.56, 1.1, 0.06, u + 0.56, 1.75, 0.065), 0x06141b);
+        wall.bins.add('unlit', facePanel(wall.face, u - 0.64, 1.02, u + 0.64, 1.83, 0.02, 0.13), AVNU.indigoBorder);
+        wall.bins.add('unlit', facePanel(wall.face, u - 0.6, 1.05, u + 0.6, 1.8, 0.03, 0.12), AVNU.card);
         for (let i = 0; i < 6; i++) {
           const h = 0.1 + hash01(Math.round(u * 10), i, 321) * 0.45;
-          const bu = u - 0.48 + i * 0.17;
-          wall.bins.add('unlit', faceBox(wall.face, bu, 1.15, 0.065, bu + 0.11, 1.15 + h, 0.07), i % 2 === 0 ? 0x3fd1c1 : 0xffc861);
+          const bu = u - 0.46 + i * 0.16;
+          wall.bins.add('unlit', facePanel(wall.face, bu, 1.12, bu + 0.1, 1.12 + h, 0.035, 0.03), i % 2 === 0 ? AVNU.blue : AVNU.lightBlue);
         }
       }
       pottedPlant(wall, s1 - 0.6);
     }
   }
-  // A faint glowing grid across the walkable floor.
-  const glowLine = mixColor(theme.floorA, theme.floorAccent, 0.22);
-  for (let x = 2; x < map.width - 1; x++) shell.floor.add('glow', flatQuad(x - 0.015, 1, x + 0.015, map.height - 1, 0.004), glowLine);
-  for (let y = 2; y < map.height - 1; y++) shell.floor.add('glow', flatQuad(1, y - 0.015, map.width - 1, y + 0.015, 0.004), glowLine);
+  // A faint indigo grid across the walkable floor.
+  const glowLine = mixColor(theme.floorA, theme.floorAccent, 0.45);
+  for (let x = 2; x < map.width - 1; x++) shell.floor.add('glow', flatQuad(x - 0.012, 1, x + 0.012, map.height - 1, 0.004), glowLine);
+  for (let y = 2; y < map.height - 1; y++) shell.floor.add('glow', flatQuad(1, y - 0.012, map.width - 1, y + 0.012, 0.004), glowLine);
 }
 
-function candlesticks(wall: InteriorWall, u0: number, u1: number, v0: number, v1: number, seed: number): void {
+/** A scrolling LED ticker along the top of a wall, fading with that wall. */
+function addTicker(
+  wall: InteriorWall,
+  map: FixedRoomMap,
+  res: ResourceBag,
+  animators: Animator[],
+  segments: readonly TickerSegment[],
+): void {
+  const [a, b] = wall.spans[0] ?? [INTERIOR_WALL_THICKNESS, map.width - INTERIOR_WALL_THICKNESS];
+  const tickerWidth = b - a;
+  const tickerHeight = 0.14;
+  const strip = createTickerStrip(segments);
+  const texture = res.texture(strip.texture);
+  texture.repeat.set(tickerWidth / (tickerHeight / strip.height) / strip.width, 1);
+  const material = res.material(new MeshBasicMaterial({ map: texture, toneMapped: false }));
+  const ticker = new Mesh(res.geometry(new PlaneGeometry(tickerWidth, tickerHeight)), material);
+  ticker.name = `${wall.group.name}:ticker`;
+  const [tx, ty, tz] = faceToWorld(wall.face, (a + b) / 2, 2.07, 0.012);
+  ticker.position.set(tx, ty, tz);
+  wall.group.add(ticker);
+  wall.fadeMaterials.push(material);
+  wall.bins.add('body', faceBox(wall.face, a, 1.98, 0, b, 2.16, 0.01), AVNU.navy);
+  animators.push((elapsed) => {
+    texture.offset.x = (((elapsed / 1000) * 12) / strip.width) % 1;
+  });
+}
+
+function candlesticks(
+  wall: InteriorWall,
+  u0: number,
+  u1: number,
+  v0: number,
+  v1: number,
+  seed: number,
+  colours: { readonly up: number; readonly down: number; readonly line: number },
+): void {
   const count = Math.max(6, Math.round((u1 - u0) / 0.28));
   const step = (u1 - u0) / count;
   let level = 0.5;
@@ -866,7 +937,7 @@ function candlesticks(wall: InteriorWall, u0: number, u1: number, v0: number, v1
     const hi = Math.max(open, close);
     const u = u0 + step * (i + 0.5);
     const y = (value: number) => v0 + (v1 - v0) * (0.12 + value * 0.76);
-    const colour = close >= open ? 0x3fe08a : 0xff5d5d;
+    const colour = close >= open ? colours.up : colours.down;
     wall.bins.add('unlit', faceBox(wall.face, u - step * 0.3, y(lo), 0.075, u + step * 0.3, Math.max(y(hi), y(lo) + 0.02), 0.08), colour);
     wall.bins.add('unlit', faceBox(wall.face, u - 0.008, y(Math.max(0, lo - 0.06)), 0.075, u + 0.008, y(Math.min(1, hi + 0.06)), 0.078), colour);
     points.push([u, y(close) + 0.06]);
@@ -874,7 +945,7 @@ function candlesticks(wall: InteriorWall, u0: number, u1: number, v0: number, v1
   for (let i = 0; i + 1 < points.length; i++) {
     const [ua, va] = points[i]!;
     const [ub, vb] = points[i + 1]!;
-    wall.bins.add('unlit', beamGeometry(faceToWorld(wall.face, ua, va, 0.085), faceToWorld(wall.face, ub, vb, 0.085), 0.008, 0.018), 0x7cf2e0);
+    wall.bins.add('unlit', beamGeometry(faceToWorld(wall.face, ua, va, 0.085), faceToWorld(wall.face, ub, vb, 0.085), 0.008, 0.018), colours.line);
   }
 }
 

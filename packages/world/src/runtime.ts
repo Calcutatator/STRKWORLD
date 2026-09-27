@@ -1,6 +1,7 @@
 import type { WorldEvents, ShellEvents, EventBus } from '@strkworld/shared';
 import { createHost, type Host } from './host.js';
 import type { RemotePeerSource } from './remote-peer.js';
+import type { SandboxChannel } from './sandbox-channel.js';
 
 /**
  * World wiring. The Shell loads this module dynamically, and it in turn loads
@@ -23,6 +24,8 @@ export interface WorldConfig {
   in: EventBus<ShellEvents>;
   /** Optional retained full snapshots for presentation-only remote avatars. */
   remotePeers?: RemotePeerSource;
+  /** Optional shared block sandbox (D-060), supplied by the Shell. */
+  sandbox?: SandboxChannel;
 }
 
 interface WorldBinding {
@@ -158,5 +161,6 @@ function sameBinding(
   return current.parent === parent &&
     current.config.out === config.out &&
     current.config.in === config.in &&
-    current.config.remotePeers === config.remotePeers;
+    current.config.remotePeers === config.remotePeers &&
+    current.config.sandbox === config.sandbox;
 }

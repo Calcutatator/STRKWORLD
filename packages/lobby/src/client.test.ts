@@ -430,6 +430,8 @@ describe('identity is server-assigned', () => {
         y: 72,
         facing: 'left',
         sprite: 'avatar-2',
+        // D-060: a decoded entry without a valid palette index carries nothing.
+        carrying: null,
       }]);
       expect(Object.isFrozen(delivered)).toBe(true);
       expect(Object.isFrozen(delivered?.[0])).toBe(true);
@@ -1467,6 +1469,7 @@ describe('presence', () => {
       y: 40,
       facing: 'right',
       sprite: 'avatar-2',
+      carrying: null,
     });
   });
 

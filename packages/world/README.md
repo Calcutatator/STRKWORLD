@@ -29,7 +29,9 @@ no seam changed shape.
 Arrow keys and WASD move the avatar identically outdoors, in every fixed room
 interior and in the Studio. Hold either Shift key to sprint at exactly 1.5×
 walk speed. Diagonal movement stays normalized, including while sprinting.
-`F` swaps the paired outfit anywhere the avatar is (D-053).
+`F` swaps the paired outfit anywhere the avatar is (D-053). In the block
+sandbox at the end of the road, `E` picks up the block in front of you and `E`
+again puts it down (D-060).
 
 The camera follows the player, north-up by default. Drag (left or right
 button) to orbit, scroll to zoom. Movement keys are camera-relative — "up"
@@ -107,6 +109,25 @@ Each remote snapshot contains only `{ id, x, y, facing, sprite }`. The World
 drops invalid identity, position or facing data, replaces omitted IDs, and maps
 the approved cosmetic sprite key onto its local avatar look.
 
+## The block sandbox (D-060)
+
+The road ends in a 28×28 square (`SANDBOX_AREA`) where blocks drop from the
+sky and players stack them. The stacks are shared state with one authority:
+the lobby room when a lobby connection is open, or the same pure rules run by
+the Shell for solo play. The World never imports the lobby; it receives a
+World-owned `SandboxChannel` through `WorldConfig`, like the D-038 peer source.
+
+- **Movement** (`sandbox.ts`): you stand on the tallest stack your body
+  overlaps. A stack more than one block above that level is a wall; one block
+  is a step up with a small hop; stepping down is free. With no blocks the
+  mover is identical to the interiors' tile collision.
+- **`E`** aims at the neighbouring tile you face. Empty hands pick its top
+  block; carrying places onto it. A ghost highlight shows the target and
+  whether the shared reach rules allow it; the authority decides.
+- **Presentation** (`three/sandbox-view.ts`): one instanced mesh for every
+  block, sky drops fall from high above, carried blocks ride above heads for
+  every player, and the camera, sun and fog follow you up tall towers.
+
 ## Fixed Game Mode rooms
 
 D-039 makes fixed interiors data, not separate scenes. The room core owns
@@ -153,4 +174,6 @@ for commercial-use licensing before it lands and recorded in
 `assets/CREDITS.md`.
 
 Four buildings in v1: the Bank, the Exchange, the Post Office, and a visible
-but locked Vault so the world reads as complete, plus the Bridge.
+but locked Vault so the world reads as complete, plus the Bridge. The Bank
+follows the STRK20 visual theme and the Exchange follows avnu's; the Post
+Office and Bridge keep the game's own palette.

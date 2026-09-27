@@ -39,8 +39,11 @@ export interface CameraRig {
   readonly yaw: number;
   readonly pitch: number;
   readonly distance: number;
-  /** Ease towards the target; a pending snap jumps instead. */
-  update(deltaMs: number, target: GroundPoint, bounds: CameraBounds | null): void;
+  /**
+   * Ease towards the target; a pending snap jumps instead. `elevation` lifts
+   * the focus with a player standing on sandbox blocks (D-060).
+   */
+  update(deltaMs: number, target: GroundPoint, bounds: CameraBounds | null, elevation?: number): void;
   /** Jump to the target on the next update (spawn, room and Studio handoffs). */
   snap(): void;
   /** While false the rig ignores drags and wheel, and drops any active drag. */
@@ -81,7 +84,7 @@ export function createCameraRig(options: CameraRigOptions): CameraRig {
   let yaw = 0;
   let pitch = DEFAULT_CAMERA_PITCH;
   let distance = DEFAULT_CAMERA_DISTANCE;
-  let focus: { x: number; z: number } | null = null;
+  let focus: { x: number; y: number; z: number } | null = null;
   let pendingSnap = true;
   let inputEnabled = true;
   let destroyed = false;
@@ -101,6 +104,8 @@ export function createCameraRig(options: CameraRigOptions): CameraRig {
   const onPointerDown = (event: PointerEvent): void => {
     if (destroyed || !inputEnabled || drag) return;
     if (event.button !== 0 && event.button !== 2) return;
+    // A drag on the canvas must not select HUD text or move focus.
+    event.preventDefault?.();
     drag = { pointerId: event.pointerId, x: event.clientX, y: event.clientY };
     try {
       element?.setPointerCapture?.(event.pointerId);
@@ -166,26 +171,25 @@ export function createCameraRig(options: CameraRigOptions): CameraRig {
     get distance() {
       return distance;
     },
-    update(deltaMs, target, bounds) {
+    update(deltaMs, target, bounds, elevation = 0) {
       if (destroyed) return;
       if (!Number.isFinite(target.x) || !Number.isFinite(target.z)) return;
       const goal = clampToBounds(target, bounds);
+      const goalY = Number.isFinite(elevation) ? Math.max(0, elevation) : 0;
       if (!focus || pendingSnap) {
-        focus = { x: goal.x, z: goal.z };
+        focus = { x: goal.x, y: goalY, z: goal.z };
         pendingSnap = false;
       } else {
         const dt = Number.isFinite(deltaMs) && deltaMs > 0 ? Math.min(deltaMs, 250) : 0;
         const blend = 1 - Math.exp(-dt / FOLLOW_TIME_CONSTANT_MS);
         focus.x += (goal.x - focus.x) * blend;
+        focus.y += (goalY - focus.y) * blend;
         focus.z += (goal.z - focus.z) * blend;
       }
       const offset = cameraOffset(yaw, pitch, distance);
-      camera.position.set(
-        focus.x + offset.x,
-        CAMERA_FOCUS_HEIGHT + offset.y,
-        focus.z + offset.z,
-      );
-      camera.lookAt(focus.x, CAMERA_FOCUS_HEIGHT, focus.z);
+      const lookY = focus.y + CAMERA_FOCUS_HEIGHT;
+      camera.position.set(focus.x + offset.x, lookY + offset.y, focus.z + offset.z);
+      camera.lookAt(focus.x, lookY, focus.z);
     },
     snap() {
       pendingSnap = true;

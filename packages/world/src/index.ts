@@ -1,10 +1,9 @@
 /**
  * @strkworld/world — the game.
  *
- * Phaser scenes, movement, tilemaps, sprites. Knows nothing about wallets or
- * money. See README.md before changing anything here.
- *
- * Implementation lands in Phase 1. See docs/SPEC.md §8.
+ * A tile-authored gameplay session drawn by a Three.js renderer (D-059).
+ * Knows nothing about wallets or money. See README.md before changing
+ * anything here.
  */
 
 // Map data and geometry. Phaser-free, so the shell and tests can use it.
@@ -181,3 +180,13 @@ export type {
   RemotePeerSource,
   RemotePeerSourceController,
 } from './remote-peer.js';
+
+// The shared block sandbox (D-060). The Shell supplies the channel; the World
+// never imports the lobby.
+export {
+  EMPTY_SANDBOX_SNAPSHOT,
+  isSandboxTile,
+  normalizeSandboxSnapshot,
+  normalizeSandboxTile,
+} from './sandbox-channel.js';
+export type { SandboxChannel } from './sandbox-channel.js';

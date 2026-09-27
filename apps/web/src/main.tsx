@@ -6,6 +6,8 @@ import { App } from './App.js';
 import './styles.css';
 import { createPresenceController, type PresenceController } from './presence/presence-controller.js';
 import { lobbyEndpoint } from './presence/config.js';
+import { LobbyClient } from '@strkworld/lobby/client';
+import { createSandboxController } from './sandbox/sandbox-controller.js';
 import { installPresenceTeardown } from './presence/lifecycle.js';
 import { parseProductionWalletConfig, usesProductionWallet } from './production/config.js';
 import { startProductionWalletBootstrap } from './production/bootstrap.js';
@@ -32,11 +34,24 @@ const environment = (import.meta as ImportMeta & {
   env: Record<string, string | boolean | undefined>;
 }).env;
 let activePresence: PresenceController | null = null;
+// The shared block sandbox (D-060): the lobby is its authority whenever a lobby
+// client is connected, and the same rules run locally for solo play. Created
+// once, like the buses, so the World always holds one stable channel.
+const sandbox = createSandboxController();
+const stopSandboxWorld = sandbox.listen(worldOut);
 const createPresence = (): PresenceController => {
-  const next = createPresenceController({ endpoint: lobbyEndpoint() });
+  const next = createPresenceController({
+    endpoint: lobbyEndpoint(),
+    factory: (options) => sandbox.adopt(new LobbyClient(options)),
+    sandbox: sandbox.channel,
+  });
   activePresence = next;
   return next;
 };
+hot?.dispose(() => {
+  stopSandboxWorld();
+  sandbox.destroy();
+});
 const presenceLifecycle = {
   destroy: async () => {
     await activePresence?.destroy();

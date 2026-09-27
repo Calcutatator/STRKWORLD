@@ -82,7 +82,7 @@ export function BridgePanel({
 
   if (!owned || !runtime.service) {
     return (
-      <PanelFrame title={COPY.bridge.title} disclosure={routeDisclosure('bridge.deposit', register)} onClose={onClose}>
+      <PanelFrame title={COPY.bridge.title} building="bridge" disclosure={routeDisclosure('bridge.deposit', register)} onClose={onClose}>
         <p className="room-locked" role="note">{COPY.bridge.recoveryUnavailable}</p>
       </PanelFrame>
     );
@@ -93,7 +93,7 @@ export function BridgePanel({
   const plan = state.plan;
   return (
     <section className="bridge-experience" data-experience={experience}>
-      <PanelFrame title={COPY.bridge.title} disclosure={routeDisclosure('bridge.deposit', register)} onClose={onClose}>
+      <PanelFrame title={COPY.bridge.title} building="bridge" disclosure={routeDisclosure('bridge.deposit', register)} onClose={onClose}>
         <p className="bridge-compact-note" role="note">{COPY.bridge.providerFee}</p>
         <details className="bridge-details">
           <summary>Keep the signed record safe</summary>

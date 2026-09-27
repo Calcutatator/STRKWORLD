@@ -224,7 +224,7 @@ describe('presence controller', () => {
     expect(made.client.onPeers).toHaveBeenCalledTimes(1);
     made.publishPeers([{ gameId: 'peer-7', x: 40, y: 72, facing: 'left', sprite: 'avatar-2' }]);
 
-    expect(snapshots.at(-1)).toEqual([{ id: 'peer-7', x: 40, y: 72, facing: 'left', sprite: 'avatar-2' }]);
+    expect(snapshots.at(-1)).toEqual([{ id: 'peer-7', x: 40, y: 72, facing: 'left', carrying: null, sprite: 'avatar-2' }]);
     expect(Object.isFrozen(rawSnapshots.at(-1))).toBe(true);
     expect(Object.isFrozen(rawSnapshots.at(-1)?.[0])).toBe(true);
     stopSource();
@@ -255,6 +255,7 @@ describe('presence controller', () => {
       y: 72,
       facing: 'down',
       sprite: 'avatar-1',
+      carrying: null,
     }]);
     stopSource();
     stopWorld();
@@ -278,10 +279,10 @@ describe('presence controller', () => {
     made.drop();
 
     expect(snapshots.at(-3)).toEqual([
-      { id: 'peer-1', x: 40, y: 72, facing: 'down', sprite: 'avatar-1' },
-      { id: 'peer-2', x: 80, y: 72, facing: 'left', sprite: 'avatar-2' },
+      { id: 'peer-1', x: 40, y: 72, facing: 'down', carrying: null, sprite: 'avatar-1' },
+      { id: 'peer-2', x: 80, y: 72, facing: 'left', carrying: null, sprite: 'avatar-2' },
     ]);
-    expect(snapshots.at(-2)).toEqual([{ id: 'peer-2', x: 88, y: 72, facing: 'left', sprite: 'avatar-2' }]);
+    expect(snapshots.at(-2)).toEqual([{ id: 'peer-2', x: 88, y: 72, facing: 'left', carrying: null, sprite: 'avatar-2' }]);
     expect(snapshots.at(-1)).toEqual([]);
     stopSource();
     stopWorld();
@@ -307,7 +308,7 @@ describe('presence controller', () => {
     const stop = presence.listen(world);
 
     world.emit('player:moved', moved);
-    peerListener?.([{ gameId: 'stale', x: 1, y: 2, facing: 'up', sprite: 'avatar-1' }]);
+    peerListener?.([{ gameId: 'stale', x: 1, y: 2, facing: 'up', sprite: 'avatar-1', carrying: null }]);
 
     expect(presence.getState()).toEqual({ status: 'unavailable', canReconnect: true });
     expect(made.client.onPeers).not.toHaveBeenCalled();
@@ -361,7 +362,7 @@ describe('presence controller', () => {
     expect(consoleError).toHaveBeenCalledOnce();
     expect(latePeers).toBeDefined();
 
-    latePeers?.([{ gameId: 'stale', x: 1, y: 2, facing: 'up', sprite: 'avatar-1' }]);
+    latePeers?.([{ gameId: 'stale', x: 1, y: 2, facing: 'up', sprite: 'avatar-1', carrying: null }]);
 
     expect(presence.getState()).toEqual({ status: 'unavailable', canReconnect: true });
     expect(snapshots.at(-1)).toEqual([]);
@@ -672,7 +673,7 @@ describe('presence controller', () => {
     expect(second.peerListenerCount()).toBe(1);
     first.publishPeers([{ gameId: 'stale-again', x: 3, y: 4, facing: 'up', sprite: 'avatar-1' }]);
     second.publishPeers([{ gameId: 'fresh', x: 5, y: 6, facing: 'down', sprite: 'avatar-2' }]);
-    expect(snapshots.at(-1)).toEqual([{ id: 'fresh', x: 5, y: 6, facing: 'down', sprite: 'avatar-2' }]);
+    expect(snapshots.at(-1)).toEqual([{ id: 'fresh', x: 5, y: 6, facing: 'down', carrying: null, sprite: 'avatar-2' }]);
     stopWorld();
   });
 

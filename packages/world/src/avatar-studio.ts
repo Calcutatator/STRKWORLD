@@ -92,7 +92,7 @@ export interface AvatarStudioBounds {
   readonly height: number;
 }
 
-/** Phaser-free operations owned by the StreetScene presentation adapter. */
+/** Renderer-free operations the World session's presentation adapter supplies. */
 export interface AvatarStudioPresentationPort {
   setPlayerVelocity(x: number, y: number): void;
   setBodyEnabled(enabled: boolean): void;
@@ -118,7 +118,7 @@ export interface AvatarStudioPresentation {
 
 /**
  * Shared lifecycle sequencing for the hidden room. The port is the only
- * Phaser-facing part and is supplied by StreetScene; keeping this ordering
+ * renderer-facing part and is supplied by the World session; keeping this ordering
  * here makes it testable without a canvas and prevents a missed restoration
  * when the room is re-entered or the scene shuts down.
  */

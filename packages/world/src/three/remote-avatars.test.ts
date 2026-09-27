@@ -1,6 +1,6 @@
 import { Group, type Object3D } from 'three';
 import { type Mock, describe, expect, it, vi } from 'vitest';
-import type { AvatarSpriteKey } from '@strkworld/shared';
+import { SANDBOX_MAX_HEIGHT, type AvatarSpriteKey } from '@strkworld/shared';
 import {
   DEFAULT_REMOTE_SPRITE,
   REMOTE_WORLD_LIMIT,
@@ -9,8 +9,13 @@ import {
   type RemotePeerSnapshot,
   type RemotePeerSource,
 } from '../remote-peer.js';
+import { avatarFigureHeight } from './avatar-figure.js';
 import { angleDelta, facingToYaw, pixelToGround } from './coords.js';
 import {
+  REMOTE_CARRY_CLEARANCE,
+  REMOTE_FALL_GRAVITY,
+  REMOTE_HOP_MS,
+  REMOTE_HOP_PEAK,
   REMOTE_INTERPOLATION_TIME_CONSTANT_MS,
   REMOTE_MAX_FRAME_MS,
   REMOTE_MAX_TURN_RATE,
@@ -19,6 +24,7 @@ import {
   createRemoteAvatarLayer3D,
   type RemoteAvatarLayer3D,
 } from './remote-avatars.js';
+import type { CarriedBlock } from './sandbox-view.js';
 import type { AvatarFigure, AvatarMotion } from './types.js';
 
 const WALKING: AvatarMotion = { moving: true, sprinting: false };
@@ -58,6 +64,43 @@ function fakeFigures() {
   };
   const factory = vi.fn((key: AvatarSpriteKey): AvatarFigure => build(key));
   return { factory, created, build };
+}
+
+interface FakeBlock {
+  readonly object: Group;
+  colour: number | null;
+  readonly setColour: Mock<(colour: number | null) => void>;
+  readonly dispose: Mock<() => void>;
+}
+
+function fakeBlocks() {
+  const created: FakeBlock[] = [];
+  const build = (colour: number | null): FakeBlock => {
+    const block: FakeBlock = {
+      object: new Group(),
+      colour,
+      setColour: vi.fn((next: number | null) => {
+        block.colour = next;
+      }),
+      // The interface does not promise that dispose() detaches, so the layer must.
+      dispose: vi.fn<() => void>(),
+    };
+    created.push(block);
+    return block;
+  };
+  const factory = vi.fn((colour: number | null): CarriedBlock => build(colour));
+  return { factory, created, build };
+}
+
+/** A surface hook reporting one mutable level everywhere. */
+function levelSurface(initial: number) {
+  const state = { level: initial };
+  const surfaceHeight = vi.fn((_x: number, _z: number): number => state.level);
+  return { state, surfaceHeight };
+}
+
+function headroom(look: AvatarSpriteKey): number {
+  return avatarFigureHeight(look) + REMOTE_CARRY_CLEARANCE;
 }
 
 /**
@@ -497,6 +540,19 @@ describe('remote avatar layer 3D: re-entrancy and teardown', () => {
     expect(factory).toHaveBeenCalledTimes(2);
   });
 
+  it('animates peers that join after the frame loop has started', () => {
+    const { factory, created } = fakeFigures();
+    const peers = createRemotePeerSource([peer()]);
+    const layer = createRemoteAvatarLayer3D({ source: peers.source, figures: factory });
+    layer.update(16);
+
+    peers.publish([peer(), peer({ id: 'peer-2' })]);
+    layer.update(16);
+
+    expect(at(created, 0).update).toHaveBeenCalledTimes(2);
+    expect(at(created, 1).update).toHaveBeenCalledOnce();
+  });
+
   it('skips figures retired by a publish from inside the frame loop', () => {
     const { factory, created } = fakeFigures();
     const peers = createRemotePeerSource([peer(), peer({ id: 'peer-2' })]);
@@ -817,5 +873,390 @@ describe('remote avatar layer 3D: yaw and frame deltas', () => {
     // Only the limbs froze: it is still placed and eased.
     settle(layer);
     expectAt(broken, 104, 72);
+  });
+});
+
+describe('remote avatar layer 3D: carried blocks (D-060)', () => {
+  it('builds a carried block overhead on the first carry, then recolours and hides it in place', () => {
+    const { factory, created } = fakeFigures();
+    const blocks = fakeBlocks();
+    const peers = createRemotePeerSource([peer()]);
+    createRemoteAvatarLayer3D({ source: peers.source, figures: factory, carriedBlocks: blocks.factory });
+    const figure = at(created, 0);
+    // Peers who never carry cost nothing.
+    expect(blocks.factory).not.toHaveBeenCalled();
+
+    peers.publish([peer({ carrying: 3 })]);
+    expect(blocks.factory).toHaveBeenCalledOnce();
+    expect(blocks.factory).toHaveBeenCalledWith(3);
+    const block = at(blocks.created, 0);
+    expect(block.object.parent).toBe(figure.object);
+    expect(block.object.position.toArray()).toEqual([0, headroom('avatar-1'), 0]);
+
+    peers.publish([peer({ carrying: null })]);
+    peers.publish([peer({ carrying: 5 })]);
+    expect(block.setColour.mock.calls).toEqual([[null], [5]]);
+    expect(blocks.factory).toHaveBeenCalledOnce();
+    expect(block.object.parent).toBe(figure.object);
+  });
+
+  it('builds the carried block with the figure when a peer first appears carrying colour 0', () => {
+    const { factory, created } = fakeFigures();
+    const blocks = fakeBlocks();
+    const peers = createRemotePeerSource([peer({ carrying: 0 })]);
+
+    createRemoteAvatarLayer3D({ source: peers.source, figures: factory, carriedBlocks: blocks.factory });
+
+    expect(blocks.factory).toHaveBeenCalledWith(0);
+    expect(at(blocks.created, 0).object.parent).toBe(at(created, 0).object);
+  });
+
+  it('re-places the carried block at the new head height when the look changes', () => {
+    const { factory, created } = fakeFigures();
+    const blocks = fakeBlocks();
+    const peers = createRemotePeerSource([peer({ carrying: 2 })]);
+    createRemoteAvatarLayer3D({ source: peers.source, figures: factory, carriedBlocks: blocks.factory });
+    const block = at(blocks.created, 0);
+    // A shorter build, so the block visibly has to come down.
+    expect(headroom('avatar-6')).toBeLessThan(headroom('avatar-1'));
+
+    peers.publish([peer({ carrying: 2, sprite: 'avatar-6' })]);
+
+    expect(at(created, 0).setLook).toHaveBeenCalledWith('avatar-6');
+    expect(block.object.position.y).toBe(headroom('avatar-6'));
+  });
+
+  it('releases the carried block before its figure, on leaving and on teardown', () => {
+    const { factory, created } = fakeFigures();
+    const blocks = fakeBlocks();
+    const peers = createRemotePeerSource([peer({ carrying: 4 }), peer({ id: 'peer-2', carrying: 1 })]);
+    const layer = createRemoteAvatarLayer3D({
+      source: peers.source,
+      figures: factory,
+      carriedBlocks: blocks.factory,
+    });
+
+    peers.publish([peer({ id: 'peer-2', carrying: 1 })]);
+    layer.destroy();
+
+    for (const index of [0, 1]) {
+      const block = at(blocks.created, index);
+      const figure = at(created, index);
+      expect(block.dispose).toHaveBeenCalledOnce();
+      expect(figure.dispose).toHaveBeenCalledOnce();
+      expect(block.dispose.mock.invocationCallOrder[0]).toBeLessThan(
+        figure.dispose.mock.invocationCallOrder[0] ?? 0,
+      );
+      expect(block.object.parent).toBeNull();
+    }
+  });
+
+  it('retries a failed block build or recolour, independently of the look', () => {
+    const { factory, created } = fakeFigures();
+    const blocks = fakeBlocks();
+    const peers = createRemotePeerSource([peer()]);
+    createRemoteAvatarLayer3D({ source: peers.source, figures: factory, carriedBlocks: blocks.factory });
+    const figure = at(created, 0);
+    const buildError = new Error('block build failed');
+    blocks.factory.mockImplementationOnce(() => {
+      throw buildError;
+    });
+
+    expect(() => peers.publish([peer({ carrying: 1, sprite: 'avatar-4' })])).toThrow(buildError);
+    expect(figure.setLook).toHaveBeenCalledWith('avatar-4');
+    expect(() => peers.publish([peer({ carrying: 1, sprite: 'avatar-4' })])).not.toThrow();
+    const block = at(blocks.created, 0);
+    expect(block.object.parent).toBe(figure.object);
+
+    // Both cosmetics fail in one snapshot: both are attempted and reported.
+    block.setColour.mockImplementationOnce(() => {
+      throw new Error('recolour failed');
+    });
+    figure.setLook.mockImplementationOnce(() => {
+      throw new Error('look change failed');
+    });
+    expect(() => peers.publish([peer({ carrying: 6, sprite: 'avatar-5' })])).toThrow(AggregateError);
+
+    // Neither was recorded, so an identical snapshot retries both.
+    expect(() => peers.publish([peer({ carrying: 6, sprite: 'avatar-5' })])).not.toThrow();
+    expect(block.setColour.mock.calls).toEqual([[6], [6]]);
+    expect(figure.setLook).toHaveBeenLastCalledWith('avatar-5');
+    expect(block.object.position.y).toBe(headroom('avatar-5'));
+  });
+
+  it('keeps a figure whose carried block will not dispose owned, retrying only the block', () => {
+    const { factory, created } = fakeFigures();
+    const blocks = fakeBlocks();
+    const peers = createRemotePeerSource([peer({ carrying: 2 })]);
+    createRemoteAvatarLayer3D({ source: peers.source, figures: factory, carriedBlocks: blocks.factory });
+    const figure = at(created, 0);
+    const block = at(blocks.created, 0);
+    const disposeError = new Error('block dispose failed');
+    block.dispose.mockImplementationOnce(() => {
+      throw disposeError;
+    });
+
+    expect(() => peers.publish([])).toThrow(disposeError);
+    expect(figure.dispose).toHaveBeenCalledOnce();
+
+    // The reappearing peer waits for the old block to be released first.
+    expect(() => peers.publish([peer()])).not.toThrow();
+    expect(block.dispose).toHaveBeenCalledTimes(2);
+    expect(figure.dispose).toHaveBeenCalledOnce();
+    expect(factory).toHaveBeenCalledTimes(2);
+  });
+
+  it('uses the sandbox view carried block by default, hidden again on put-down', () => {
+    const { factory, created } = fakeFigures();
+    const peers = createRemotePeerSource([peer({ carrying: 2 })]);
+    const layer = createRemoteAvatarLayer3D({ source: peers.source, figures: factory });
+    const figure = at(created, 0);
+
+    expect(figure.object.children).toHaveLength(1);
+    const block = at(figure.object.children, 0);
+    expect(block.visible).toBe(true);
+    expect(block.position.y).toBe(headroom('avatar-1'));
+
+    peers.publish([peer({ carrying: null })]);
+    expect(block.visible).toBe(false);
+    layer.destroy();
+    expect(block.parent).toBeNull();
+  });
+
+  it('disposes a carried block whose factory destroyed the layer', () => {
+    const { factory, created } = fakeFigures();
+    const blocks = fakeBlocks();
+    const peers = manualSource([peer()]);
+    const layer = createRemoteAvatarLayer3D({
+      source: peers.source,
+      figures: factory,
+      carriedBlocks: blocks.factory,
+    });
+    blocks.factory.mockImplementationOnce((colour) => {
+      layer.destroy();
+      return blocks.build(colour);
+    });
+
+    expect(() => peers.deliver([peer({ carrying: 1 })])).not.toThrow();
+
+    const orphan = at(blocks.created, 0);
+    expect(orphan.dispose).toHaveBeenCalledOnce();
+    expect(orphan.object.parent).toBeNull();
+    expect(at(created, 0).dispose).toHaveBeenCalledOnce();
+  });
+
+  it('treats a malformed carried colour from a custom source as none', () => {
+    const { factory } = fakeFigures();
+    const blocks = fakeBlocks();
+    const peers = manualSource();
+    createRemoteAvatarLayer3D({ source: peers.source, figures: factory, carriedBlocks: blocks.factory });
+
+    peers.deliver([
+      { ...peer(), carrying: 99 },
+      { ...peer({ id: 'peer-2' }), carrying: '2' },
+      { ...peer({ id: 'peer-3' }), carrying: -1 },
+    ]);
+
+    expect(factory).toHaveBeenCalledTimes(3);
+    expect(blocks.factory).not.toHaveBeenCalled();
+  });
+});
+
+describe('remote avatar layer 3D: standing on stacks (D-060)', () => {
+  it('stands a first-appearing peer on the surface at once, before any frame', () => {
+    const { factory, created } = fakeFigures();
+    const surface = levelSurface(3);
+    const peers = createRemotePeerSource([peer()]);
+
+    createRemoteAvatarLayer3D({ source: peers.source, figures: factory, surfaceHeight: surface.surfaceHeight });
+
+    expect(at(created, 0).object.position.y).toBe(3);
+    // Asked in World units, where the peer stands.
+    const ground = pixelToGround(40, 72);
+    expect(surface.surfaceHeight).toHaveBeenCalledWith(ground.x, ground.z);
+  });
+
+  it('hops up a one-block step, peaking HOP_PEAK above it and landing after HOP_MS', () => {
+    const { factory, created } = fakeFigures();
+    const surface = levelSurface(0);
+    const peers = createRemotePeerSource([peer()]);
+    const layer = createRemoteAvatarLayer3D({
+      source: peers.source,
+      figures: factory,
+      surfaceHeight: surface.surfaceHeight,
+    });
+    const figure = at(created, 0);
+
+    surface.state.level = 1;
+    const heights: number[] = [];
+    for (let elapsed = 0; elapsed < REMOTE_HOP_MS; elapsed += 5) {
+      layer.update(5);
+      heights.push(figure.object.position.y);
+    }
+
+    expect(Math.max(...heights)).toBeCloseTo(1 + REMOTE_HOP_PEAK, 2);
+    expect(Math.max(...heights)).toBeLessThanOrEqual(1 + REMOTE_HOP_PEAK + 1e-9);
+    expect(heights.slice(0, -1).every((height) => height > 0 && height !== 1)).toBe(true);
+    expect(heights.at(-1)).toBe(1);
+  });
+
+  it('falls off a stack under gravity, frame-rate independent, and lands exactly', () => {
+    const fall = (frames: readonly number[]): number => {
+      const { factory, created } = fakeFigures();
+      const surface = levelSurface(2);
+      const peers = createRemotePeerSource([peer()]);
+      const layer = createRemoteAvatarLayer3D({
+        source: peers.source,
+        figures: factory,
+        surfaceHeight: surface.surfaceHeight,
+      });
+      surface.state.level = 0;
+      for (const frame of frames) layer.update(frame);
+      return at(created, 0).object.position.y;
+    };
+    const after100ms = 2 - 0.5 * REMOTE_FALL_GRAVITY * 0.1 * 0.1;
+
+    expect(fall([100])).toBeCloseTo(after100ms, 10);
+    expect(fall([25, 25, 25, 25])).toBeCloseTo(after100ms, 10);
+    // Two blocks take sqrt(2h/g), about 343 ms, and land exactly on the ground.
+    expect(fall(Array<number>(40).fill(10))).toBe(0);
+  });
+
+  it('holds a figure up while its drawn body still overlaps the stack it steps off', () => {
+    const { factory, created } = fakeFigures();
+    // One block covers x >= 10 units (320 px).
+    const surfaceHeight = (x: number): number => (x >= 10 ? 1 : 0);
+    const peers = createRemotePeerSource([peer({ x: 330 })]);
+    const layer = createRemoteAvatarLayer3D({ source: peers.source, figures: factory, surfaceHeight });
+    const figure = at(created, 0);
+    expect(figure.object.position.y).toBe(1);
+
+    // The peer's own position is already off the block...
+    peers.publish([peer({ x: 300 })]);
+    advance(layer, 30, 10);
+    // ...but the eased figure is still over it, so it stays up.
+    expect(figure.object.position.x).toBeGreaterThanOrEqual(10);
+    expect(figure.object.position.y).toBe(1);
+
+    layer.update(10);
+    expect(figure.object.position.x).toBeLessThan(10);
+    expect(figure.object.position.y).toBeLessThan(1);
+  });
+
+  it('never hops onto a stack that only the eased drawn position clips', () => {
+    const { factory, created } = fakeFigures();
+    // A thin five-block wall between 32 and 64 px that the peer's own positions never touch.
+    const surfaceHeight = (x: number): number => (x > 1 && x < 2 ? 5 : 0);
+    const peers = createRemotePeerSource([peer({ x: 16 })]);
+    const layer = createRemoteAvatarLayer3D({ source: peers.source, figures: factory, surfaceHeight });
+    const figure = at(created, 0);
+
+    peers.publish([peer({ x: 80 })]);
+    let clipped = false;
+    for (let frame = 0; frame < 30; frame += 1) {
+      layer.update(10);
+      clipped ||= figure.object.position.x > 1 && figure.object.position.x < 2;
+      expect(figure.object.position.y).toBe(0);
+    }
+    expect(clipped).toBe(true);
+  });
+
+  it('lands at once on a teleport, and on a rise too tall to be a step', () => {
+    const { factory, created } = fakeFigures();
+    const flat = { level: 0 };
+    // Three blocks high east of 20 units; elsewhere whatever `flat` says.
+    const surfaceHeight = (x: number): number => (x >= 20 ? 3 : flat.level);
+    const peers = createRemotePeerSource([peer(), peer({ id: 'peer-2' })]);
+    const layer = createRemoteAvatarLayer3D({ source: peers.source, figures: factory, surfaceHeight });
+    const traveller = at(created, 0);
+    const stander = at(created, 1);
+
+    peers.publish([peer({ x: 40 + REMOTE_SNAP_DISTANCE_PX + 640 }), peer({ id: 'peer-2' })]);
+    expect(traveller.object.position.y).toBe(3);
+    layer.update(16);
+    expect(traveller.object.position.y).toBe(3);
+
+    // Stacks arriving under a standing peer (a late sandbox snapshot) are no step.
+    flat.level = 2;
+    layer.update(16);
+    expect(stander.object.position.y).toBe(2);
+  });
+
+  it('eases up a kerb instead of hopping or popping', () => {
+    const { factory, created } = fakeFigures();
+    const surface = levelSurface(0);
+    const peers = createRemotePeerSource([peer()]);
+    const layer = createRemoteAvatarLayer3D({
+      source: peers.source,
+      figures: factory,
+      surfaceHeight: surface.surfaceHeight,
+    });
+    const figure = at(created, 0);
+
+    surface.state.level = 0.08;
+    let previous = 0;
+    for (let frame = 0; frame < 30; frame += 1) {
+      layer.update(16);
+      const height = figure.object.position.y;
+      expect(height).toBeGreaterThan(previous);
+      expect(height).toBeLessThanOrEqual(0.08);
+      if (frame === 0) expect(height).toBeLessThan(0.04);
+      previous = height;
+      if (height === 0.08) break;
+    }
+    expect(figure.object.position.y).toBe(0.08);
+  });
+
+  it('reads a throwing or junk surface as ground, and never goes non-finite', () => {
+    const answers: Array<[() => number, number]> = [
+      [
+        () => {
+          throw new Error('no height here');
+        },
+        0,
+      ],
+      [() => Number.NaN, 0],
+      [() => Number.POSITIVE_INFINITY, 0],
+      [() => 'high' as never, 0],
+      [() => 1e308, SANDBOX_MAX_HEIGHT],
+      [() => -1e308, -SANDBOX_MAX_HEIGHT],
+    ];
+
+    for (const [surfaceHeight, expected] of answers) {
+      const { factory, created } = fakeFigures();
+      const peers = createRemotePeerSource([peer()]);
+      const layer = createRemoteAvatarLayer3D({ source: peers.source, figures: factory, surfaceHeight });
+      peers.publish([peer({ x: 60 })]);
+      settle(layer);
+      expect(at(created, 0).object.position.y).toBe(expected);
+    }
+  });
+
+  it('re-plans a hop whose landing changes mid-flight without the feet jumping', () => {
+    const { factory, created } = fakeFigures();
+    const surface = levelSurface(0);
+    const peers = createRemotePeerSource([peer()]);
+    const layer = createRemoteAvatarLayer3D({
+      source: peers.source,
+      figures: factory,
+      surfaceHeight: surface.surfaceHeight,
+    });
+    const figure = at(created, 0);
+    const track = (frames: number): void => {
+      for (let frame = 0; frame < frames; frame += 1) {
+        const before = figure.object.position.y;
+        layer.update(10);
+        expect(Math.abs(figure.object.position.y - before)).toBeLessThan(0.25);
+      }
+    };
+
+    surface.state.level = 1;
+    track(10);
+    // Straight on up while still in the air, then off the side mid-hop.
+    surface.state.level = 2;
+    track(10);
+    surface.state.level = 0;
+    track(60);
+    expect(figure.object.position.y).toBe(0);
   });
 });

@@ -1,8 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
   calculateMovementVelocity,
-  createWasdKeyMapping,
-  mergeMovementInput,
   movementSpeed,
   type DirectionInput,
 } from './movement-input.js';
@@ -10,22 +8,6 @@ import {
 const idle: DirectionInput = { left: false, right: false, up: false, down: false };
 
 describe('movement input', () => {
-  it('treats WASD and arrow directions as equivalent', () => {
-    const arrows = mergeMovementInput({ ...idle, up: true, right: true }, idle);
-    const wasd = mergeMovementInput(idle, { ...idle, up: true, right: true });
-    expect(wasd).toEqual(arrows);
-    expect(wasd).toEqual({ left: false, right: true, up: true, down: false });
-  });
-
-  it('binds WASD to the directional property names consumed by movement', () => {
-    expect(createWasdKeyMapping({ W: 87, A: 65, S: 83, D: 68 })).toEqual({
-      up: 87,
-      down: 83,
-      left: 65,
-      right: 68,
-    });
-  });
-
   it('uses walk speed for a cardinal direction and exactly 1.5x while sprinting', () => {
     expect(movementSpeed(false)).toBe(160);
     expect(movementSpeed(true)).toBe(240);

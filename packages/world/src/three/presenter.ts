@@ -1,5 +1,5 @@
 import { Group, type Object3D, type Vector3 } from 'three';
-import type { AvatarSpriteKey, BuildingId } from '@strkworld/shared';
+import type { AvatarSpriteKey, BuildingId, SandboxColumn } from '@strkworld/shared';
 import { createStreetMap } from '../map/street.js';
 import {
   FIXED_ROOM_DEFINITIONS,
@@ -10,10 +10,20 @@ import { AVATAR_STUDIO_DEFINITION } from '../avatar-studio.js';
 import { DEFAULT_AVATAR_SPRITE } from '../avatar-state.js';
 import type { RemotePeerSource } from '../remote-peer.js';
 import type { PlayerMotion, WorldRect, WorldSessionView } from '../world-session.js';
+import { isSandboxTile } from '../sandbox-channel.js';
+import { FLAT_SANDBOX, createSandboxHeights, levelUnderBody, type SandboxHeights } from '../sandbox.js';
+import { buildSandbox, createCarriedBlock, type SandboxView } from './sandbox-view.js';
+import { avatarFigureHeight } from './avatar-figure.js';
 import { buildStreet, streetSurfaceHeightAt } from './street-builder.js';
 import { buildFixedRoom } from './room-builder.js';
 import { buildAvatarStudio } from './studio-builder.js';
-import { createRemoteAvatarLayer3D, type RemoteAvatarLayer3D } from './remote-avatars.js';
+import {
+  REMOTE_FALL_GRAVITY,
+  REMOTE_HOP_MS,
+  createRemoteAvatarLayer3D,
+  hopHeight,
+  type RemoteAvatarLayer3D,
+} from './remote-avatars.js';
 import { angleDelta, directionToYaw, pixelToGround, PIXELS_PER_UNIT, type GroundPoint } from './coords.js';
 import type { CameraBounds } from './camera-rig.js';
 import { segmentHitsBox } from './occlusion.js';
@@ -43,13 +53,17 @@ export interface PresenterOptions {
   readonly figures: AvatarFigureFactory;
 }
 
-export interface SessionView extends WorldSessionView {
+/** The presenter implements every view method, the optional sandbox ones included. */
+export interface SessionView extends Required<WorldSessionView> {
   destroy(): void;
 }
 
 export interface Presenter {
-  /** Local avatar feet in world units and its presented yaw. */
-  readonly player: { readonly ground: GroundPoint; readonly yaw: number };
+  /**
+   * Local avatar feet in world units, its presented yaw and the presented
+   * height of the blocks it stands on (D-060), which the camera follows.
+   */
+  readonly player: { readonly ground: GroundPoint; readonly yaw: number; readonly elevation: number };
   readonly cameraBounds: CameraBounds | null;
   /** True once after a teleport, so the camera can jump instead of easing. */
   consumeSnap(): boolean;
@@ -67,6 +81,16 @@ const OCCLUDED_OPACITY = 0.22;
 const FADE_TIME_CONSTANT_MS = 90;
 /** Sample the line of sight at the avatar's chest and head. */
 const SIGHT_HEIGHTS = [0.7, 1.25] as const;
+/**
+ * The local avatar hops and falls exactly like remote ones (remote-avatars.ts):
+ * one block up is a parabola peaking just above the landing; a taller rise —
+ * stacks growing underneath — lands at once; drops fall under gravity.
+ */
+const MAX_HOP_RISE = 1.5;
+/** A carried block rides this far above the carrier's head. */
+const CARRY_CLEARANCE = 0.36;
+/** The gameplay body half-width in world units (24 px / 32 px per unit). */
+const BODY_HALF_UNITS = 12 / PIXELS_PER_UNIT;
 
 export function createPresenter(options: PresenterOptions): Presenter {
   const root = new Group();
@@ -75,8 +99,19 @@ export function createPresenter(options: PresenterOptions): Presenter {
 
   const streetMap = createStreetMap();
   const street: StreetView = buildStreet(streetMap, options.labels);
-  // Pavement is raised; stand feet on it. Interiors and the Studio floor are flat.
-  const streetHeight = (x: number, z: number): number => streetSurfaceHeightAt(streetMap, x, z);
+  // Pavement is raised; stand feet on it. Interiors and the Studio floor are
+  // flat. On the sandbox, anyone stands on the tallest stack their body
+  // overlaps — the same rule the session applies to the local player.
+  // Reused probe: the remote layer asks this every frame for every peer.
+  const probe = { x: 0, y: 0 };
+  const streetHeight = (x: number, z: number): number => {
+    probe.x = x * PIXELS_PER_UNIT;
+    probe.y = z * PIXELS_PER_UNIT;
+    const level = levelUnderBody(sandboxHeights, probe, BODY_HALF_UNITS * PIXELS_PER_UNIT, PIXELS_PER_UNIT);
+    if (level > 0) return level;
+    if (isSandboxTile(Math.floor(x), Math.floor(z))) return 0;
+    return streetSurfaceHeightAt(streetMap, x, z);
+  };
   disposers.push(() => street.dispose());
   root.add(street.ground, street.doors, street.labels);
 
@@ -98,11 +133,31 @@ export function createPresenter(options: PresenterOptions): Presenter {
   root.add(avatar.object);
   disposers.push(() => avatar.dispose());
 
+  // The block sandbox (D-060): shared stacks, and the block the player holds.
+  const sandbox: SandboxView = buildSandbox();
+  root.add(sandbox.group);
+  disposers.push(() => sandbox.dispose());
+  const carried = createCarriedBlock(null);
+  avatar.object.add(carried.object);
+  const placeCarried = (): void => {
+    carried.object.position.set(0, avatarFigureHeight(avatar.look) + CARRY_CLEARANCE, 0);
+  };
+  placeCarried();
+  disposers.push(() => {
+    carried.object.parent?.remove(carried.object);
+    carried.dispose();
+  });
+
   options.parent.add(root);
 
   let ground: GroundPoint = { x: 0, z: 0 };
   let feet = 0;
   let yaw = 0;
+  let sandboxHeights: SandboxHeights = FLAT_SANDBOX;
+  let elevationTarget = 0;
+  let elevationShown = 0;
+  let fallSpeed = 0;
+  let hop: { from: number; to: number; elapsed: number } | null = null;
   let targetYaw = 0;
   let motion: PlayerMotion = { vx: 0, vy: 0, sprinting: false };
   let pendingSnap = true;
@@ -128,6 +183,16 @@ export function createPresenter(options: PresenterOptions): Presenter {
     studio.sync({ visible: false, highlightedFigure: null });
     motion = { vx: 0, vy: 0, sprinting: false };
     pendingSnap = true;
+    // A new session replays its own sandbox snapshot; start from flat ground.
+    sandbox.group.visible = true;
+    sandbox.setColumns([]);
+    sandbox.setTarget(null);
+    sandboxHeights = FLAT_SANDBOX;
+    carried.setColour(null);
+    elevationTarget = 0;
+    elevationShown = 0;
+    fallSpeed = 0;
+    hop = null;
   };
 
   const retireRemote = (): void => {
@@ -148,7 +213,7 @@ export function createPresenter(options: PresenterOptions): Presenter {
 
   return {
     get player() {
-      return { ground, yaw };
+      return { ground, yaw, elevation: elevationShown };
     },
     get cameraBounds() {
       return cameraBounds;
@@ -192,11 +257,13 @@ export function createPresenter(options: PresenterOptions): Presenter {
         setPlayerAvatar(sprite: AvatarSpriteKey) {
           if (!live()) return;
           avatar.setLook(sprite);
+          placeCarried();
         },
         setStreetVisible(visible) {
           if (!live()) return;
           streetVisible = visible;
           street.ground.visible = visible;
+          sandbox.group.visible = visible;
         },
         setDoorsVisible(visible) {
           if (!live()) return;
@@ -230,6 +297,36 @@ export function createPresenter(options: PresenterOptions): Presenter {
           studioVisible = false;
           studio.sync({ visible: false, highlightedFigure: null });
         },
+        setPlayerElevation(level) {
+          if (!live() || !Number.isFinite(level)) return;
+          const next = Math.max(0, level);
+          if (next > elevationTarget && !pendingSnap) {
+            // Re-plan from wherever the feet are now, so they never jump.
+            hop = next - elevationShown <= MAX_HOP_RISE ? { from: elevationShown, to: next, elapsed: 0 } : null;
+            if (!hop) elevationShown = next;
+            fallSpeed = 0;
+          }
+          elevationTarget = next;
+        },
+        setSandboxColumns(columns: readonly SandboxColumn[]) {
+          if (!live()) return;
+          sandbox.setColumns(columns);
+          sandboxHeights = columns.length > 0 ? createSandboxHeights(columns) : FLAT_SANDBOX;
+        },
+        sandboxDrop(tile) {
+          if (!live()) return;
+          sandbox.expectDrop(tile);
+        },
+        setCarried(colour) {
+          if (!live()) return;
+          carried.setColour(colour);
+        },
+        setSandboxAim(aim) {
+          if (!live()) return;
+          sandbox.setTarget(aim
+            ? { x: aim.tile.x, y: aim.tile.y, level: aim.level, mode: aim.mode, valid: aim.valid }
+            : null);
+        },
         setCameraBounds(bounds: WorldRect) {
           if (!live()) return;
           cameraBounds = {
@@ -254,12 +351,37 @@ export function createPresenter(options: PresenterOptions): Presenter {
       const maxStep = (MAX_TURN_RATE * dt) / 1000;
       yaw += Math.abs(turn) <= maxStep ? turn : Math.sign(turn) * maxStep;
       avatar.object.rotation.y = yaw;
+      // Sandbox stacks: hop up, fall down (D-060).
+      if (pendingSnap) {
+        elevationShown = elevationTarget;
+        hop = null;
+        fallSpeed = 0;
+      } else if (hop && hop.to !== elevationTarget) {
+        // The landing moved mid-hop (a stack changed): fall or re-hop from here.
+        hop = null;
+      } else if (hop) {
+        hop.elapsed += dt;
+        const t = Math.min(1, hop.elapsed / REMOTE_HOP_MS);
+        elevationShown = t >= 1 ? hop.to : hopHeight(hop.from, hop.to, t);
+        if (t >= 1) hop = null;
+      } else if (elevationShown > elevationTarget) {
+        fallSpeed += (REMOTE_FALL_GRAVITY * dt) / 1000;
+        elevationShown = Math.max(elevationTarget, elevationShown - (fallSpeed * dt) / 1000);
+        if (elevationShown === elevationTarget) fallSpeed = 0;
+      } else {
+        elevationShown = elevationTarget;
+        fallSpeed = 0;
+      }
       // Step up and down kerbs quickly rather than popping 8 cm in one frame.
-      const surface = streetVisible ? streetHeight(ground.x, ground.z) : 0;
-      feet = pendingSnap ? surface : feet + (surface - feet) * (1 - Math.exp(-dt / 45));
-      avatar.object.position.y = feet;
+      const onSandbox = streetVisible && isSandboxTile(Math.floor(ground.x), Math.floor(ground.z));
+      const kerb = streetVisible && !onSandbox && elevationShown === 0 ? streetSurfaceHeightAt(streetMap, ground.x, ground.z) : 0;
+      feet = pendingSnap ? kerb : feet + (kerb - feet) * (1 - Math.exp(-dt / 45));
+      avatar.object.position.y = feet + (streetVisible ? elevationShown : 0);
       avatar.update(dt, { moving, sprinting: moving && motion.sprinting });
-      if (streetVisible) street.update(dt);
+      if (streetVisible) {
+        street.update(dt);
+        sandbox.update(dt);
+      }
       if (visibleRoom) rooms.get(visibleRoom)?.update(dt);
       if (studioVisible) studio.update(dt);
       remote?.update(dt);

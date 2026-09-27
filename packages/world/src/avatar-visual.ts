@@ -24,8 +24,6 @@ export const AVATAR_WALK_COLUMNS = Object.freeze([0, 1, 2, 3, 4] as const);
 export const AVATAR_ONE_SHEET_WIDTH = 384;
 export const AVATAR_ONE_CELL_COLUMNS = 6;
 export const AVATAR_ONE_WALK_COLUMNS = Object.freeze([0, 1, 2, 3, 4, 5] as const);
-export const AVATAR_NORMAL_WALK_FPS = 8;
-export const AVATAR_SPRINT_WALK_FPS = 12;
 
 interface AvatarSheetGeometry {
   readonly width: number;

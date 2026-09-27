@@ -60,7 +60,14 @@ const STUDIO_SPAWN = avatarStudioSpawnToWorld(
   ROOM_ORIGIN,
   AVATAR_STUDIO_TILE_SIZE,
 );
-const STREET_BOUNDS = { x: 0, y: 0, width: 1536, height: 896 };
+// Derived from the map: the street widened to reach the block sandbox (D-060).
+const STREET_MAP = createStreetMap();
+const STREET_BOUNDS = {
+  x: 0,
+  y: 0,
+  width: STREET_MAP.width * TILE_SIZE,
+  height: STREET_MAP.height * TILE_SIZE,
+};
 const INTERIOR_BOUNDS = { x: ROOM_ORIGIN.x, y: ROOM_ORIGIN.y, width: 576, height: 384 };
 /** Distance covered by one 16 ms walking frame. */
 const WALK_STEP = (PLAYER_WALK_SPEED * 16) / 1000;
@@ -197,13 +204,17 @@ class FakeKeyboard implements WorldKeyboard {
     this.pressed = NO_KEYS;
   }
 
-  on(event: 'keydown-F', handler: OutfitHandler): this {
+  // The sandbox key (D-060) is covered by world-session-sandbox.test.ts; this
+  // suite never supplies a sandbox, so only the outfit key is tracked here.
+  on(event: 'keydown-F' | 'keydown-E', handler: OutfitHandler): this {
+    if (event !== 'keydown-F') return this;
     this.journal.push(`keyboard.on:${event}`);
     this.handlers.add(handler);
     return this;
   }
 
-  off(event: 'keydown-F', handler: OutfitHandler): this {
+  off(event: 'keydown-F' | 'keydown-E', handler: OutfitHandler): this {
+    if (event !== 'keydown-F') return this;
     this.journal.push(`keyboard.off:${event}`);
     this.handlers.delete(handler);
     return this;
@@ -274,6 +285,11 @@ function createRecordingView(journal: Journal) {
         { x: bounds.x, y: bounds.y, width: bounds.width, height: bounds.height },
       ]),
     destroy: () => record('destroy', []),
+    setPlayerElevation: (level) => record('setPlayerElevation', [level]),
+    setSandboxColumns: (columns) => record('setSandboxColumns', [columns]),
+    sandboxDrop: (tile) => record('sandboxDrop', [{ x: tile.x, y: tile.y }]),
+    setCarried: (colour) => record('setCarried', [colour]),
+    setSandboxAim: (aim) => record('setSandboxAim', [aim]),
   };
 
   const argsOf = <M extends ViewMethod>(method: M): ViewArgs<M>[] =>

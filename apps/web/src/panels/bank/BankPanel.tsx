@@ -50,7 +50,7 @@ export function BankPanel({
   initialMode?: BankMode;
   /** The existing machine can render a different building title. */
   title?: string;
-  /** Receipt ownership, independent of the reused Bank machine visuals. */
+  /** Receipt ownership; also picks the window's theme (presentation only). */
   building?: BuildingId;
   preConfirmGuard?: () => Promise<boolean>;
   /** Route authority used for every mode tab and the owned machine. */
@@ -134,6 +134,7 @@ export function BankPanel({
       />
       <PanelFrame
         title={title}
+        building={building}
         disclosure={committing ? null : state.disclosure}
         closingNote={state.flow.name === 'submitting' ? COPY.flow.closingWillNotCancel : null}
         onClose={onClose}

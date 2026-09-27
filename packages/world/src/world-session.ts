@@ -3,6 +3,9 @@ import type {
   BuildingId,
   EventBus,
   Facing,
+  SandboxColumn,
+  SandboxSnapshot,
+  SandboxTile,
   ShellEvents,
   WorldEvents,
 } from '@strkworld/shared';
@@ -60,6 +63,22 @@ import {
   type StreetMovementAdapter,
 } from './street-movement.js';
 import { ROOM_ORIGIN, worldToRoomTile } from './world-layout.js';
+import {
+  EMPTY_SANDBOX_SNAPSHOT,
+  normalizeSandboxSnapshot,
+  normalizeSandboxTile,
+  type SandboxChannel,
+} from './sandbox-channel.js';
+import {
+  FLAT_SANDBOX,
+  bodyNearSandbox,
+  createSandboxHeights,
+  levelUnderBody,
+  moveOnHeightmap,
+  sandboxAim,
+  type SandboxAim,
+  type SandboxHeights,
+} from './sandbox.js';
 
 /**
  * The World's gameplay session, independent of any renderer (D-059).
@@ -118,6 +137,15 @@ export interface WorldSessionView {
   setCameraBounds(bounds: WorldRect): void;
   /** Session teardown: release session-owned presentation. */
   destroy?(): void;
+  // Block sandbox (D-060). Optional: a view without a sandbox ignores them.
+  /** Blocks under the local player's feet; changes step up or drop down. */
+  setPlayerElevation?(level: number): void;
+  setSandboxColumns?(columns: readonly SandboxColumn[]): void;
+  /** The next block on this tile falls from the sky. */
+  sandboxDrop?(tile: SandboxTile): void;
+  setCarried?(colour: number | null): void;
+  /** Where `E` would act, or null outside the sandbox. */
+  setSandboxAim?(aim: SandboxAim | null): void;
 }
 
 interface OutfitKeyEvent {
@@ -133,8 +161,9 @@ export interface WorldKeyboard extends KeyboardLike {
   /** Arrows merged with WASD. Must read all-false while `enabled` is false. */
   readonly held: MovementInput;
   readonly sprinting: boolean;
-  on(event: 'keydown-F', handler: (event: OutfitKeyEvent) => void): unknown;
-  off(event: 'keydown-F', handler: (event: OutfitKeyEvent) => void): unknown;
+  /** `keydown-F` toggles the outfit (D-053); `keydown-E` picks or places a block (D-060). */
+  on(event: 'keydown-F' | 'keydown-E', handler: (event: OutfitKeyEvent) => void): unknown;
+  off(event: 'keydown-F' | 'keydown-E', handler: (event: OutfitKeyEvent) => void): unknown;
 }
 
 export interface WorldSessionOptions {
@@ -144,6 +173,8 @@ export interface WorldSessionOptions {
   readonly keyboard?: WorldKeyboard;
   /** Called when the player's street tile changes. It reports; it decides nothing. */
   readonly onTileChanged?: (tile: { x: number; y: number }) => void;
+  /** The shared block sandbox (D-060); absent means no sandbox interaction. */
+  readonly sandbox?: SandboxChannel;
 }
 
 export interface WorldFrame {
@@ -166,6 +197,8 @@ export interface WorldSession {
   readonly facing: Facing;
   /** True while a panel or Shell control claim owns the keyboard. */
   readonly inputSuspended: boolean;
+  /** Blocks under the local player's feet (D-060); 0 off the sandbox. */
+  readonly elevation: number;
   update(deltaMs: number, frame?: WorldFrame): void;
   destroy(): void;
 }
@@ -261,12 +294,21 @@ class Session implements WorldSession {
   private returnTile = { x: 0, y: 0 };
   private viewOwned = false;
   private cleanedUp = false;
+  private readonly sandbox?: SandboxChannel;
+  private sandboxSnapshot: SandboxSnapshot = EMPTY_SANDBOX_SNAPSHOT;
+  private sandboxHeights: SandboxHeights = FLAT_SANDBOX;
+  private stopSandbox?: () => void;
+  private stopSandboxDrops?: () => void;
+  private sandboxKey?: (event: { readonly repeat: boolean; readonly target: unknown }) => void;
+  private elevationLevel = 0;
+  private aim: SandboxAim | null = null;
 
   constructor(options: WorldSessionOptions) {
     this.view = options.view;
     this.keyboard = options.keyboard;
     this.config = options.config;
     this.onTileChanged = options.onTileChanged;
+    this.sandbox = options.sandbox;
     try {
       this.map = createStreetMap();
       this.bounds = this.streetBounds();
@@ -282,6 +324,7 @@ class Session implements WorldSession {
       this.createCamera();
       this.createDoorTriggers();
       this.createInteriorVisuals();
+      this.createSandbox();
     } catch (error) {
       // A constructor has no later shutdown hook. Retire the partial cycle here
       // and surface the construction failure, not a secondary cleanup error.
@@ -311,6 +354,11 @@ class Session implements WorldSession {
 
   get facing(): Facing {
     return this.movement?.facing ?? 'down';
+  }
+
+  /** Blocks under the local player's feet (D-060); 0 off the sandbox. */
+  get elevation(): number {
+    return this.elevationLevel;
   }
 
   get inputSuspended(): boolean {
@@ -374,6 +422,18 @@ class Session implements WorldSession {
     this.avatarStudio = undefined;
     if (avatarStudio) attempt(() => avatarStudio.destroy());
     this.avatarStudioPresentation = undefined;
+    const stopSandbox = this.stopSandbox;
+    this.stopSandbox = undefined;
+    if (stopSandbox) attempt(stopSandbox);
+    const stopSandboxDrops = this.stopSandboxDrops;
+    this.stopSandboxDrops = undefined;
+    if (stopSandboxDrops) attempt(stopSandboxDrops);
+    const sandboxKey = this.sandboxKey;
+    this.sandboxKey = undefined;
+    if (sandboxKey && this.keyboard) {
+      const keyboard = this.keyboard;
+      attempt(() => keyboard.off('keydown-E', sandboxKey));
+    }
     const inputGate = this.inputGate;
     this.inputGate = NOOP_INPUT_GATE;
     attempt(() => inputGate.resume());
@@ -698,12 +758,18 @@ class Session implements WorldSession {
       return NO_MOVEMENT;
     }
     const velocity = this.intendedVelocity(keyboard, cameraYaw);
+    const heights = this.sandbox && bodyNearSandbox(this.position, AVATAR_BODY_SIZE / 2, TILE_SIZE)
+      ? this.sandboxHeights
+      : undefined;
     this.stepPlayer(velocity, delta, {
       tileSize: TILE_SIZE,
       toTile: worldToTile,
       isSolidAt: (x, y) => isSolidAt(this.map, x, y),
+      heights,
     });
-    return cardinalMovementInput(velocity);
+    const input = cardinalMovementInput(velocity);
+    this.presentSandboxStance(input);
+    return input;
   }
 
   private moveRoomPlayer(delta: number, cameraYaw: number): void {
@@ -754,10 +820,12 @@ class Session implements WorldSession {
       readonly tileSize: number;
       readonly toTile: (x: number, y: number) => { x: number; y: number };
       readonly isSolidAt: (x: number, y: number) => boolean;
+      /** Sandbox stacks; present only near the sandbox (D-060). */
+      readonly heights?: SandboxHeights;
     },
   ): boolean {
     if (velocity.x === 0 && velocity.y === 0) return false;
-    const next = moveWithCollisionSubsteps({
+    const movement = {
       position: { x: this.position.x, y: this.position.y },
       velocity,
       delta,
@@ -765,7 +833,10 @@ class Session implements WorldSession {
       collisionHalfSize: AVATAR_BODY_SIZE / 2,
       toTile: grid.toTile,
       isSolidAt: grid.isSolidAt,
-    });
+    };
+    const next = grid.heights
+      ? moveOnHeightmap({ ...movement, heights: grid.heights })
+      : moveWithCollisionSubsteps(movement);
     this.position = clampToRect(next, this.bounds);
     this.view.setPlayerPosition(this.position, false);
     return true;
@@ -774,6 +845,92 @@ class Session implements WorldSession {
   private teleport(position: { readonly x: number; readonly y: number }): void {
     this.position = { x: position.x, y: position.y };
     this.view.setPlayerPosition(this.position, true);
+    // Room spawns and street return tiles are never in the sandbox.
+    this.setElevation(0);
+    this.setAim(null);
+  }
+
+  // -- block sandbox (D-060) -------------------------------------------------
+
+  private createSandbox(): void {
+    const channel = this.sandbox;
+    if (!channel) return;
+    this.stopSandbox = channel.subscribe((snapshot) => this.applySandbox(snapshot));
+    if (typeof channel.subscribeDrops === 'function') {
+      this.stopSandboxDrops = channel.subscribeDrops((tile) => {
+        if (this.cleanedUp) return;
+        const drop = normalizeSandboxTile(tile);
+        if (drop) this.view.sandboxDrop?.(drop);
+      });
+    }
+    const keyboard = this.keyboard;
+    if (!keyboard) return;
+    const onKey = (event: { readonly repeat: boolean; readonly target: unknown }): void => {
+      if (this.cleanedUp || event.repeat) return;
+      if (this.inputGate.suspended || this.area !== 'street') return;
+      const aim = this.aim;
+      if (!aim || !aim.valid) return;
+      if (aim.mode === 'pick') channel.pick(aim.tile);
+      else channel.place(aim.tile);
+    };
+    keyboard.on('keydown-E', onKey);
+    this.sandboxKey = onKey;
+  }
+
+  private applySandbox(value: SandboxSnapshot): void {
+    if (this.cleanedUp) return;
+    const previousCarrying = this.sandboxSnapshot.carrying;
+    const snapshot = normalizeSandboxSnapshot(value);
+    this.sandboxSnapshot = snapshot;
+    this.sandboxHeights = createSandboxHeights(snapshot.columns);
+    this.view.setSandboxColumns?.(snapshot.columns);
+    if (snapshot.carrying !== previousCarrying) this.view.setCarried?.(snapshot.carrying);
+    // Stacks can change under a player who is standing still.
+    if (this.area === 'street') this.presentSandboxStance(null);
+  }
+
+  /** Elevation and aim after the player moved or the stacks changed. */
+  private presentSandboxStance(input: MovementInput | null): void {
+    if (!this.sandbox) return;
+    const halfSize = AVATAR_BODY_SIZE / 2;
+    if (!bodyNearSandbox(this.position, halfSize, TILE_SIZE)) {
+      this.setElevation(0);
+      this.setAim(null);
+      return;
+    }
+    this.setElevation(levelUnderBody(this.sandboxHeights, this.position, halfSize, TILE_SIZE));
+    // Aim along the facing the player just chose; an idle frame keeps it.
+    const facing = input && (input.up || input.down || input.left || input.right)
+      ? (input.up ? 'up' : input.down ? 'down' : input.left ? 'left' : 'right')
+      : this.movement.facing;
+    this.setAim(sandboxAim({
+      heights: this.sandboxHeights,
+      position: this.position,
+      facing,
+      carrying: this.sandboxSnapshot.carrying,
+      halfSize,
+      tileSize: TILE_SIZE,
+    }));
+  }
+
+  private setElevation(level: number): void {
+    if (level === this.elevationLevel) return;
+    this.elevationLevel = level;
+    this.view.setPlayerElevation?.(level);
+  }
+
+  private setAim(aim: SandboxAim | null): void {
+    const current = this.aim;
+    if (
+      current === aim ||
+      (current && aim &&
+        current.tile.x === aim.tile.x && current.tile.y === aim.tile.y &&
+        current.mode === aim.mode && current.level === aim.level && current.valid === aim.valid)
+    ) {
+      return;
+    }
+    this.aim = aim;
+    this.view.setSandboxAim?.(aim);
   }
 
   private reportTile(): void {

@@ -121,6 +121,64 @@ export interface PresenceState {
   facing: Facing;
   /** Sprite key from the asset registry. Cosmetic, player-chosen. */
   sprite: string;
+  /**
+   * D-060: the sandbox block colour this player is carrying, or -1. An opaque
+   * palette index — cosmetic, never financial.
+   */
+  carrying: number;
+}
+
+// ---------------------------------------------------------------------------
+// The block sandbox — D-060
+// ---------------------------------------------------------------------------
+//
+// A shared play area at the east end of the road. Its only state is which
+// street tiles hold stacks of coloured blocks: anonymous, cosmetic and
+// unrelated to money. The lobby stores it so every player sees the same
+// blocks; nothing here identifies a player or a financial action.
+
+/** Street tile rectangle of the sandbox, in tiles. */
+export const SANDBOX_AREA: Readonly<{ x: number; y: number; width: number; height: number }> =
+  Object.freeze({ x: 54, y: 0, width: 28, height: 28 });
+
+/** Tallest stack a column may reach. The sky is effectively open. */
+export const SANDBOX_MAX_HEIGHT = 256;
+
+/** Every block in the sandbox, carried blocks included. */
+export const SANDBOX_MAX_BLOCKS = 900;
+
+/** Block colours are opaque palette indices `0 .. SANDBOX_COLOURS - 1`. */
+export const SANDBOX_COLOURS = 8;
+
+/** A player climbs at most this many blocks when stepping onto a neighbour. */
+export const SANDBOX_STEP_HEIGHT = 1;
+
+/**
+ * Block tops a player can pick up or place onto, relative to the level they
+ * stand on: from one below their feet to two above.
+ */
+export const SANDBOX_REACH_BELOW = 1;
+export const SANDBOX_REACH_ABOVE = 2;
+
+/** A sandbox tile, in street tile coordinates. */
+export interface SandboxTile {
+  x: number;
+  y: number;
+}
+
+/** One stack of blocks: colour indices from the ground up. */
+export interface SandboxColumn {
+  x: number;
+  y: number;
+  colours: readonly number[];
+}
+
+/** Everything a client needs to draw the sandbox. */
+export interface SandboxSnapshot {
+  /** Only columns holding at least one block. */
+  columns: readonly SandboxColumn[];
+  /** The colour this client carries, or null. */
+  carrying: number | null;
 }
 
 // ---------------------------------------------------------------------------

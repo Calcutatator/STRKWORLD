@@ -37,7 +37,7 @@ export function ExchangePanel({ onClose, panel: injected, experience = 'menu', r
   );
   return <div className="exchange-experience" data-experience={experience}>
     <WalletAttentionCue active={walletAttention !== null} kind={walletAttention ?? 'confirm'} />
-    <PanelFrame title={COPY.buildings.exchange} disclosure={null} closingNote={state.flow.name === 'submitting' ? COPY.flow.closingWillNotCancel : null} onClose={onClose}>
+    <PanelFrame title={COPY.buildings.exchange} building="exchange" disclosure={null} closingNote={state.flow.name === 'submitting' ? COPY.flow.closingWillNotCancel : null} onClose={onClose}>
       <p className="panel-hint">{COPY.exchange.oneSwap}</p>
       {!state.door.open ? <LockedNotice reason={state.door.reason ?? 'unknown-route'} message={state.door.message} /> :
         state.flow.name === 'submitted' ? <div className="flow-done"><p>{COPY.flow.submitted} <code>{state.flow.transactionHash}</code></p><button type="button" onClick={() => panel.acknowledge()}>{COPY.flow.back}</button></div> :

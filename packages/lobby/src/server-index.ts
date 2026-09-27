@@ -24,6 +24,13 @@ export {
 } from './presence';
 
 export {
+  LobbySandbox,
+  type LobbySandboxOptions,
+  type SandboxAction,
+  type SandboxActionOutcome,
+} from './sandbox';
+
+export {
   PRESENCE_REFUSED,
   PresenceRoom,
   definePresenceRoom,
@@ -45,4 +52,4 @@ export {
   type PresenceRoomConfig,
   type PresenceRoomConfigOverrides,
 } from './config';
-export { LobbyState, PresenceEntry, PositionSchema } from './state';
+export { LobbyState, PresenceEntry, PositionSchema, SandboxColumnEntry } from './state';

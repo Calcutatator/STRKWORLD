@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 import {
   Box3,
   BufferGeometry,
+  Color,
   InstancedMesh,
   Material,
   Matrix4,
@@ -11,11 +12,13 @@ import {
   Texture,
   Vector3,
 } from 'three';
+import { SANDBOX_AREA } from '@strkworld/shared';
 import { createStreetMap, isSolidAt, type DistrictMap } from '../map/street.js';
 import { createNullLabelFactory } from './labels.js';
-import { boxGeometry } from './palette.js';
+import { AVNU, STRK20, boxGeometry } from './palette.js';
 import {
   PAVEMENT_HEIGHT,
+  SANDBOX_SIGN_TEXT,
   buildStreet,
   streetSurfaceHeightAt,
   type BuildingOccluder,
@@ -39,10 +42,17 @@ describe('buildStreet', () => {
     const { view } = build();
     expect(view.ground.children.length).toBeGreaterThan(0);
     expect(view.doors.children).toHaveLength(5);
-    expect(view.labels.children).toHaveLength(5);
+    // Five facade signs and the sandbox square's sign.
+    expect(view.labels.children).toHaveLength(6);
     const names = view.ground.children.map((child) => child.name);
     expect(names).toEqual(
-      expect.arrayContaining(['street:grass', 'street:road', 'street:pavement', 'street:markings']),
+      expect.arrayContaining([
+        'street:grass',
+        'street:road',
+        'street:pavement',
+        'street:markings',
+        'street:sandbox-floor',
+      ]),
     );
     view.dispose();
   });
@@ -139,6 +149,66 @@ describe('buildStreet', () => {
     view.dispose();
   });
 
+  it('lays the sandbox square as a flat build plate that the road runs into', () => {
+    const { map, view } = build();
+    view.ground.updateMatrixWorld(true);
+    const plate = new Box3().setFromObject(meshNamed(view.ground, 'street:sandbox-floor'));
+    expect(plate.min.x).toBeCloseTo(SANDBOX_AREA.x);
+    expect(plate.max.x).toBeCloseTo(SANDBOX_AREA.x + SANDBOX_AREA.width);
+    expect(plate.min.z).toBeCloseTo(SANDBOX_AREA.y);
+    expect(plate.max.z).toBeCloseTo(SANDBOX_AREA.y + SANDBOX_AREA.height);
+    expect(plate.max.y).toBeLessThan(0.02);
+    // Road paint runs off the west edge but stops where the road meets the square.
+    const paint = new Box3().setFromObject(meshNamed(view.ground, 'street:markings'));
+    expect(paint.min.x).toBeLessThan(0);
+    expect(paint.max.x).toBeLessThanOrEqual(SANDBOX_AREA.x + 1e-6);
+    // The west end is closed by a barrier; the east end is open into the square.
+    const boards = (x: number) => verticesNear(meshNamed(view.ground, 'street:decor'), (v) =>
+      Math.abs(v.x - x) < 0.2 && v.z > 11 && v.z < 19 && v.y > 0.5 && v.y < 0.8,
+    );
+    expect(boards(-0.6)).toBeGreaterThan(0);
+    expect(boards(map.width + 0.6)).toBe(0);
+    view.dispose();
+  });
+
+  it('hangs the sandbox sign off the map above the north hedge, facing the street', () => {
+    const { view } = build();
+    const sign = view.labels.children.find((child) => child.userData['area'] === 'sandbox');
+    expect(sign).toBeDefined();
+    expect(sign!.userData['text']).toBe(SANDBOX_SIGN_TEXT);
+    expect(sign!.position.z).toBeLessThan(0);
+    expect(sign!.position.x).toBeGreaterThan(SANDBOX_AREA.x);
+    expect(sign!.position.x).toBeLessThan(SANDBOX_AREA.x + SANDBOX_AREA.width);
+    expect(sign!.position.y).toBeGreaterThan(1);
+    expect(sign!.rotation.y).toBe(0);
+    view.dispose();
+  });
+
+  it('dresses the Bank in STRK20 and the Exchange in avnu', () => {
+    const { view } = build();
+    const bank = view.ground.getObjectByName('building:bank')!;
+    const exchange = view.ground.getObjectByName('building:exchange')!;
+    const emissive = (root: Object3D, suffix: string) =>
+      (meshNamed(root, suffix).material as MeshStandardMaterial).emissive.getHex();
+    expect(emissive(bank, ':glow')).toBe(new Color(STRK20.orange).getHex());
+    expect(emissive(exchange, ':lit')).toBe(new Color(AVNU.blue).getHex());
+    const portal = (building: string) =>
+      view.doors.children.find((child) => child.userData['building'] === building)!;
+    expect(emissive(portal('bank'), ':frame')).toBe(new Color(STRK20.orange).getHex());
+    expect(emissive(portal('exchange'), ':frame')).toBe(new Color(AVNU.blue).getHex());
+    const signOptions = (building: string) =>
+      view.labels.children.find((child) => child.userData['building'] === building)!.userData['options'];
+    expect(signOptions('bank')).toMatchObject({
+      gradient: ['#fffdf1', '#f4ece8', '#ffcdb6'],
+      titleFont: 'display',
+      subtitleFont: 'mono',
+      uppercase: true,
+      background: '#141414',
+    });
+    expect(signOptions('exchange')).toMatchObject({ background: '#1b1e2d', foreground: '#ffffff' });
+    view.dispose();
+  });
+
   it('keeps every volume off walkable tiles below head height', () => {
     const { map, view } = build();
     const walkable = (x: number, z: number) => !isSolidAt(map, Math.floor(x), Math.floor(z));
@@ -160,6 +230,12 @@ describe('buildStreet', () => {
     expect(findWalkableIntrusions(planted, walkable, map)).toEqual([
       expect.stringContaining('planted'),
     ]);
+    // The sandbox square is walkable ground too.
+    const square = new Object3D();
+    const block = new Mesh(boxGeometry(68.2, 0, 14.2, 68.8, 0.6, 14.8));
+    block.name = 'block';
+    square.add(block);
+    expect(findWalkableIntrusions(square, walkable, map)).toEqual([expect.stringContaining('block')]);
     // An alcove side wall standing exactly on the solid/walkable boundary.
     const flush = new Object3D();
     flush.add(new Mesh(boxGeometry(4, 0, 9.8, 5, 2, 11)));
@@ -175,7 +251,8 @@ describe('buildStreet', () => {
       });
     }
     // The null labels are not meshes; a canvas sign costs one call each.
-    calls += map.exteriorLabels.length;
+    calls += view.labels.children.length;
+    void map;
     expect(calls).toBeLessThan(150);
     view.dispose();
   });
@@ -257,6 +334,27 @@ describe('buildStreet', () => {
     expect(streetSurfaceHeightAt(map, 23, 22)).toBe(0);
   });
 });
+
+function meshNamed(root: Object3D, suffix: string): Mesh {
+  let found: Mesh | undefined;
+  root.traverse((object) => {
+    if (!found && object instanceof Mesh && object.name.endsWith(suffix)) found = object;
+  });
+  if (!found) throw new Error(`no mesh ${suffix}`);
+  return found;
+}
+
+function verticesNear(mesh: Mesh, test: (vertex: Vector3) => boolean): number {
+  mesh.updateMatrixWorld(true);
+  const position = mesh.geometry.getAttribute('position');
+  const vertex = new Vector3();
+  let count = 0;
+  for (let i = 0; i < position.count; i++) {
+    vertex.fromBufferAttribute(position, i).applyMatrix4(mesh.matrixWorld);
+    if (test(vertex)) count++;
+  }
+  return count;
+}
 
 function materialsOf(root: Object3D): Material[] {
   const found = new Set<Material>();

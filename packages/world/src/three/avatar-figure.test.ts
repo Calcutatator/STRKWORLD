@@ -8,12 +8,14 @@ import {
   createAvatarFigure,
   disposeAvatarFigureCache,
 } from './avatar-figure.js';
+import { avatarLook, type AvatarBuild } from './avatar-looks.js';
 import type { AvatarFigure, AvatarMotion } from './types.js';
 
 const IDLE: AvatarMotion = { moving: false, sprinting: false };
 const WALK: AvatarMotion = { moving: true, sprinting: false };
 const SPRINT: AvatarMotion = { moving: true, sprinting: true };
 const FRAME_MS = 1000 / 60;
+const BUILD_SCALE: Readonly<Record<AvatarBuild, number>> = { small: 0.86, standard: 1, large: 1.14 };
 
 function meshesOf(object: Object3D): Mesh[] {
   const found: Mesh[] = [];
@@ -58,25 +60,40 @@ afterEach(() => {
 });
 
 describe('avatar figure shape', () => {
-  it('stands 1.1-1.6 units tall with its feet on the ground, for every look', () => {
+  it('stands on the ground at its build’s height, every small below every standard below every large', () => {
+    const bands: Readonly<Record<AvatarBuild, readonly [number, number]>> = {
+      small: [0.95, 1.1],
+      standard: [1.2, 1.45],
+      large: [1.5, 1.8],
+    };
+    const tops: Record<AvatarBuild, number[]> = { small: [], standard: [], large: [] };
     for (const key of AVATAR_SPRITE_KEYS) {
-      const figure = createAvatarFigure(key);
-      const bounds = new Box3().setFromObject(figure.object);
-      const height = bounds.max.y - bounds.min.y;
-      expect(height, key).toBeGreaterThanOrEqual(1.1);
-      expect(height, key).toBeLessThanOrEqual(1.6);
+      const build = avatarLook(key).character.build;
+      const bounds = new Box3().setFromObject(createAvatarFigure(key).object);
       expect(bounds.min.y, key).toBeGreaterThan(-0.001);
       expect(bounds.min.y, key).toBeLessThan(0.02);
+      expect(bounds.max.y, key).toBeGreaterThanOrEqual(bands[build][0]);
+      expect(bounds.max.y, key).toBeLessThanOrEqual(bands[build][1]);
+      tops[build].push(bounds.max.y);
     }
+    expect(Math.max(...tops.small)).toBeLessThan(Math.min(...tops.standard));
+    expect(Math.max(...tops.standard)).toBeLessThan(Math.min(...tops.large));
   });
 
-  it('keeps the size classes readable: small below standard below large', () => {
+  it('scales the whole body uniformly per build, about the feet, leaving the root alone', () => {
+    for (const key of AVATAR_SPRITE_KEYS) {
+      const figure = createAvatarFigure(key);
+      const body = part(figure, 'avatar-body');
+      const scale = BUILD_SCALE[avatarLook(key).character.build];
+      expect(body.parent, key).toBe(figure.object);
+      expect(body.scale.toArray(), key).toEqual([scale, scale, scale]);
+      expect(body.position.toArray(), key).toEqual([0, 0, 0]);
+      expect(figure.object.scale.toArray(), key).toEqual([1, 1, 1]);
+    }
     const torsoWidth = (key: AvatarSpriteKey): number => {
       const bounds = new Box3().setFromObject(mesh(createAvatarFigure(key), 'avatar-torso'));
       return bounds.max.x - bounds.min.x;
     };
-    expect(avatarFigureHeight('avatar-6')).toBeLessThan(avatarFigureHeight('avatar-8'));
-    expect(avatarFigureHeight('avatar-8')).toBeLessThan(avatarFigureHeight('avatar-7'));
     expect(torsoWidth('avatar-14')).toBeLessThan(torsoWidth('avatar-2'));
     expect(torsoWidth('avatar-2')).toBeLessThan(torsoWidth('avatar-12'));
   });
@@ -98,10 +115,19 @@ describe('avatar figure shape', () => {
     expect(tallest).toBeGreaterThan(AVATAR_FIGURE_HEIGHT - 0.06);
   });
 
-  it('reports each look’s rest height, falling back for unknown keys', () => {
+  it('reports each look’s true standing top, build scale included, falling back for unknown keys', () => {
     for (const key of AVATAR_SPRITE_KEYS) {
-      const top = new Box3().setFromObject(createAvatarFigure(key).object).max.y;
-      expect(avatarFigureHeight(key)).toBeCloseTo(top, 6);
+      const height = avatarFigureHeight(key);
+      const figure = createAvatarFigure(key);
+      let highest = 0;
+      // A full idle breath (~3.3 s): a standing figure never pokes above the top, and reaches it.
+      for (let frame = 0; frame < 210; frame += 1) {
+        figure.update(FRAME_MS, IDLE);
+        const top = new Box3().setFromObject(figure.object, true).max.y;
+        expect(top, key).toBeLessThanOrEqual(height + 1e-9);
+        highest = Math.max(highest, top);
+      }
+      expect(height - highest, key).toBeLessThan(0.001);
     }
     expect(avatarFigureHeight('avatar-0' as AvatarSpriteKey)).toBe(avatarFigureHeight('avatar-1'));
   });
@@ -183,15 +209,43 @@ describe('avatar figure looks', () => {
     expect(torso.geometry).toBe(before);
   });
 
-  it('never moves or turns the caller-owned root', () => {
+  it('applies the new build’s scale on setLook and keeps it across a cosy/fighting toggle', () => {
+    const figure = createAvatarFigure('avatar-1');
+    const object = figure.object;
+    const body = part(figure, 'avatar-body');
+    const meshes = meshesOf(object);
+    const steps: ReadonlyArray<readonly [AvatarSpriteKey, number]> = [
+      ['avatar-4', 1.14],
+      ['avatar-12', 1.14],
+      ['avatar-14', 0.86],
+      ['avatar-6', 0.86],
+      ['avatar-9', 1],
+      ['avatar-15', 1.14],
+    ];
+    for (const [key, scale] of steps) {
+      figure.setLook(key);
+      expect(body.scale.toArray(), key).toEqual([scale, scale, scale]);
+      expect(figure.object, key).toBe(object);
+      expect(part(figure, 'avatar-body'), key).toBe(body);
+      expect(meshesOf(object), key).toEqual(meshes);
+      // The swapped figure stands on the ground within its look's breathing range.
+      const bounds = new Box3().setFromObject(object, true);
+      expect(bounds.min.y, key).toBeGreaterThan(-0.001);
+      expect(bounds.max.y, key).toBeLessThanOrEqual(avatarFigureHeight(key) + 1e-9);
+      expect(bounds.max.y, key).toBeGreaterThan(avatarFigureHeight(key) - 0.02);
+    }
+  });
+
+  it('never moves, turns or scales the caller-owned root', () => {
     const figure = createAvatarFigure('avatar-7');
     figure.object.position.set(3, 0, 5);
     figure.object.rotation.set(0, 1.2, 0);
     run(figure, 30, SPRINT);
-    figure.setLook('avatar-4');
+    figure.setLook('avatar-6');
     run(figure, 30, IDLE);
     expect(figure.object.position.toArray()).toEqual([3, 0, 5]);
     expect(figure.object.rotation.toArray().slice(0, 3)).toEqual([0, 1.2, 0]);
+    expect(figure.object.scale.toArray()).toEqual([1, 1, 1]);
   });
 });
 

@@ -15,6 +15,8 @@ import {
   normalizeCoordinate,
   normalizeFacing,
   normalizeGameId,
+  normalizeSandboxColour,
+  normalizeSandboxTile,
   normalizeSprite,
   selectVisible,
 } from './policy';
@@ -35,6 +37,74 @@ describe('default lobby vocabulary ownership', () => {
     expect(MESSAGE.move).toBe('move');
     expect(MESSAGE.resume).toBe('resume');
     expect(SERVER_MESSAGE.welcome).toBe('welcome');
+  });
+
+  it('does not expose mutable sandbox protocol names (D-060)', () => {
+    expect(Reflect.set(MESSAGE, 'sandboxPick', 'untrusted')).toBe(false);
+    expect(Reflect.set(SERVER_MESSAGE, 'sandboxDrop', 'untrusted')).toBe(false);
+    expect(MESSAGE.sandboxPick).toBe('sandbox:pick');
+    expect(MESSAGE.sandboxPlace).toBe('sandbox:place');
+    expect(SERVER_MESSAGE.sandboxDrop).toBe('sandbox:drop');
+  });
+});
+
+describe('normalizeSandboxTile', () => {
+  it('accepts an integer tile inside the sandbox and returns a frozen copy', () => {
+    const raw = { x: 54, y: 0, extra: 'dropped' };
+    const tile = normalizeSandboxTile(raw);
+    expect(tile).toEqual({ x: 54, y: 0 });
+    expect(Object.isFrozen(tile)).toBe(true);
+    expect(tile).not.toBe(raw);
+    expect(normalizeSandboxTile({ x: 81, y: 27 })).toEqual({ x: 81, y: 27 });
+  });
+
+  it('rejects everything else without invoking accessors or traps', () => {
+    let touched = false;
+    const accessor = Object.defineProperty({ y: 1 }, 'x', {
+      enumerable: true,
+      get: () => {
+        touched = true;
+        return 60;
+      },
+    });
+    const trap = new Proxy({}, {
+      getOwnPropertyDescriptor: () => {
+        touched = true;
+        throw new Error('hostile trap');
+      },
+    });
+    for (const raw of [
+      null,
+      undefined,
+      60,
+      '60,1',
+      [60, 1],
+      {},
+      { x: 60 },
+      { x: 53, y: 1 },
+      { x: 82, y: 1 },
+      { x: 60, y: -1 },
+      { x: 60, y: 28 },
+      { x: 60.5, y: 1 },
+      { x: Number.NaN, y: 1 },
+      { x: 60, y: Number.POSITIVE_INFINITY },
+      { x: '60', y: '1' },
+      Object.create({ x: 60, y: 1 }),
+      accessor,
+    ]) {
+      expect(normalizeSandboxTile(raw)).toBeNull();
+    }
+    expect(touched).toBe(false);
+    expect(normalizeSandboxTile(trap)).toBeNull();
+  });
+});
+
+describe('normalizeSandboxColour', () => {
+  it('accepts exactly the integer palette indices', () => {
+    for (let colour = 0; colour < 8; colour += 1) expect(normalizeSandboxColour(colour)).toBe(colour);
+    for (const raw of [-1, 8, 2.5, Number.NaN, '3', null, undefined, {}]) {
+      expect(normalizeSandboxColour(raw)).toBeNull();
+    }
   });
 });
 

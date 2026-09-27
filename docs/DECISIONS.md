@@ -2656,3 +2656,58 @@ first art pass.
   suite, ported), the keyboard, the camera math and scene construction.
 - A later Art decision may swap procedural geometry for a CC0 model pack; it
   must record provenance the way D-044 did.
+
+---
+
+## D-060 — A shared block sandbox where the road ends
+
+**2026-09-27 · Accepted by the user · extends D-011 (shared seam: sandbox
+constants and types, `PresenceState.carrying`) and D-038 (remote peers carry a
+block colour) · adds anonymous lobby state under invariant 2**
+
+**Context.** The user asked for a simple sandbox area at the end of the road:
+blocks drop from the sky at random; `E` picks one up and `E` puts it down;
+blocks stack, with no practical ceiling but a solid floor; walking into a block
+steps you up onto it — one block at a time, never a climb of several; and the
+area is a large square you can reshape and draw in by placing blocks. They
+then asked for it to be multiplayer too.
+
+**Decision.**
+
+- The street map widens east: the road runs on into a 28×28 sandbox square
+  (`SANDBOX_AREA`, street tiles x 54–81, y 0–27). Its floor is a new walkable
+  tile kind; block stacks are shared state layered on top of it.
+- The lobby is the authority. The room stores the stacks (colour indices from
+  the ground up, per tile) and each player's carried colour. It spawns sky
+  drops on a server timer while players are present, never within a tile of a
+  player, and validates every pick and place: the target must be inside the
+  area, next to the requester, not under another player, within reach (block
+  tops from one below to two above the level the player stands on) and within
+  the height and block caps. A rejected request changes nothing. A carried
+  block is discarded when its carrier disconnects or suspends presence.
+- Solo play runs the same pure rules locally in the Shell, so the sandbox works
+  without a lobby.
+- The lobby schema gains exactly one presence field, `carrying` (an opaque
+  colour index, or −1), plus anonymous block state. Neither is financial:
+  invariant 2 holds — no address, balance, transaction, token or building name
+  enters lobby traffic, and block state carries no player identity.
+- The World stays lobby-free. It receives a World-owned `SandboxChannel`
+  through `WorldConfig`, like D-038's peer source, reads stack heights for
+  movement and emits pick/place intents. Walking keeps the tile collision and
+  adds one rule: a stack more than one block above the level you stand on is a
+  wall; one block is a step up with a small hop; stepping down is free. `E`
+  targets the tile you face. Other players stand on the same shared stacks and
+  show the block they carry.
+- The shared seam grows additively — constants `SANDBOX_*`, types
+  `SandboxTile`, `SandboxColumn`, `SandboxSnapshot`, and
+  `PresenceState.carrying` — recorded here as D-011 requires.
+
+**Consequences.**
+
+- Blocks are visible to everyone in the room regardless of the 640 px presence
+  interest radius; the state is small (at most 900 blocks).
+- Every client draws a player standing on blocks at stack height from shared
+  state, so heights never go on the wire.
+- No persistence: block state lives as long as the lobby room.
+- Sandbox messages have their own rate limit; the existing hard message
+  ceiling still disconnects floods.

@@ -1,4 +1,5 @@
 import type { ReactNode } from 'react';
+import type { BuildingId } from '@strkworld/shared';
 import { COPY } from '../copy.js';
 
 /**
@@ -11,6 +12,7 @@ import { COPY } from '../copy.js';
  */
 export function PanelFrame({
   title,
+  building,
   disclosure,
   onClose,
   closingNote = null,
@@ -18,6 +20,11 @@ export function PanelFrame({
   footer,
 }: {
   title: string;
+  /**
+   * Presentation only: picks this window's visual theme in `styles.css`
+   * (`.panel[data-building]`). It never gates a route or changes a control.
+   */
+  building?: BuildingId;
   /** Canonical approved copy, or null for a route graded `private`. */
   disclosure: string | null;
   onClose: () => void;
@@ -35,7 +42,7 @@ export function PanelFrame({
   footer?: ReactNode;
 }) {
   return (
-    <section className="panel" aria-label={title}>
+    <section className="panel" aria-label={title} data-building={building}>
       <div className="panel-card">
         <header className="panel-header">
           <h2>{title}</h2>

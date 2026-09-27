@@ -165,14 +165,14 @@ decision entry explaining why before writing the code.
 | Package | Owns | Must never |
 |---|---|---|
 | `packages/privacy` | All Starknet interaction. The `PrivacyOperations` interface and its implementations | Import from `world` or `lobby`. Contain UI |
-| `packages/world` | Phaser scenes, movement, collision, tilemaps, sprites | Import `starknet` or any wallet package. Know what money is |
+| `packages/world` | The gameplay session (movement, tile collision, rooms, the Studio, the sandbox rules) and its Three.js renderer (D-059) | Import `starknet`, any wallet package or the lobby. Know what money is |
 | `packages/lobby` | Colyseus presence, positions, ephemeral IDs | Touch an address, balance, tx hash, or building name |
 | `packages/shared` | Types and constants crossing boundaries | Contain logic or dependencies |
 | `apps/web` | Composition, routing, layout, the event bus | Contain business logic that belongs in a package |
 | `apps/backend` | Paymaster proxy, privacy-safe RPC reads, bounded submission queue | Log or persist per-request IPs, calls, proofs, timings, recipients or transaction hashes |
 
 The bridge is one-directional: React owns wallet and financial state and
-pushes into Phaser via an event emitter. Phaser never reaches back into
+pushes into the World via an event emitter. The World never reaches back into
 React state or calls Starknet.
 
 ---
@@ -217,11 +217,10 @@ their content hashes.
 | `strk20-privacy-sdk` | The low-level route. **Not ours** — read only to understand what we are not doing |
 | `strk20-privacy-integration` | The official ask/plan/execute planner |
 
-**Phaser ships its own docs.** `node_modules/phaser/skills/` holds 28
-engine-versioned `SKILL.md` files — `tilemaps`, `scenes`,
-`input-keyboard-mouse-touch`, `events-system`, `scale-and-responsive` and more.
-They cannot drift from the installed version, so prefer them over anything
-found online for Phaser questions.
+**Read the installed three.js sources.** The World renders with `three@0.186.1`
+(D-059). For renderer questions prefer `node_modules/three/src/` and
+`node_modules/three/examples/jsm/` over anything found online — APIs move
+between releases (r186 removed `PCFSoftShadowMap`, for example).
 
 Route work deliberately: use `strk20-privacy` for the trust boundary and
 hidden/visible claims, `strk20-wallet-api` for `packages/privacy` and browser
@@ -258,6 +257,59 @@ empty shell to fetchers, so a 200 there means nothing.
 ---
 
 ## 6. Findings log
+
+### 2026-09-27 — The shared block sandbox is a lobby-authority seam (D-060)
+
+The lobby room owns anonymous block state (colour stacks per street tile) and
+each player's carried colour, the only sandbox field on a presence entry. The
+World never imports the lobby: it receives a World-owned `SandboxChannel`
+through `WorldConfig`, and the Shell's sandbox controller backs that channel
+with whichever lobby client is connected, or with the same pure rules
+(`@strkworld/lobby/sandbox`, which imports only `@strkworld/shared`) for solo
+play. Three traps surfaced while wiring it:
+
+- Reach must be judged the authority's way. The World stands you on the
+  tallest stack your body overlaps, but the server measures reach from the
+  stack under your centre tile; the highlight now uses the server's rule, so it
+  never promises a pick or place the server refuses.
+- The lobby sends its sky-drop hint *after* the patch that adds the block. The
+  renderer upgrades a block that is still settling into a sky drop when the
+  hint arrives late, so both orders animate correctly.
+- A client-side action floor that drops early requests loses real input: a
+  place sent 44 ms after a pick vanished. The client now holds the latest early
+  action and sends it when the floor opens.
+
+*Verified:* an end-to-end test drives two real Shell stacks (presence
+controller, sandbox controller, `LobbyClient`) against `startPresenceServer`:
+shared sky drops, identical stacks, a pick seen by the other client (shorter
+stack, `carrying` on the peer snapshot) and a place seen likewise. Lobby suite
+370 tests; World sandbox rules, session and view suites pass. Full workspace:
+typecheck, 131 files / 2,786 tests, production build (`three` only in the
+`world-engine` chunk, no Colyseus server code in any browser chunk), all
+invariants including the lobby money-word scan, and the live D-005 header
+gate. Live: two browser tabs connected to the dev lobby.
+
+### 2026-09-27 — Colyseus room lifetime and patch-order traps
+
+- An emptied room lingers for the seat-reservation window, so a test that
+  expects a fresh room must call `matchMaker.disconnectAll()` first.
+- `broadcast(…, { afterNextPatch: true })` is delivered after the state patch;
+  a client reading state in the message handler already sees the change.
+- In `@colyseus/schema` 4.0.30, a pop plus push, or a delete plus re-create,
+  of the same entry within one patch decodes correctly on the client.
+
+*Verified:* the lobby's real-server sandbox room tests.
+
+### 2026-09-27 — Theme tokens: a derived custom property resolves where it is declared
+
+A custom property defined as `var(--ui-accent)` is computed on the element
+that declares it, so a per-building theme root that only overrides
+`--ui-accent` still inherits the base theme's derived values. Theme roots must
+re-declare every derived token. The same pass fixed an existing bug: the
+in-building connect screen covered the window's Close button.
+
+*Verified:* rendered checks of every themed building window (Bank, Exchange,
+Post Office, Bridge, Vault) during the restyle; `apps/web` tests pass.
 
 ### 2026-09-27 — The World is a tile-authored session drawn by Three.js (D-059)
 

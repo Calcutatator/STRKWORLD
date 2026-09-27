@@ -166,6 +166,60 @@ describe('DOM World keyboard', () => {
     expect(keyboard.held).toEqual({ up: false, down: false, left: false, right: false });
   });
 
+  it('leaves browser chords alone: nothing held, captured or emitted with Ctrl, Cmd or Alt', () => {
+    const { window, keyboard } = setup();
+    const outfit = vi.fn();
+    keyboard.on('keydown-F', outfit);
+    for (const modifier of ['ctrlKey', 'metaKey', 'altKey']) {
+      const chord = key('ArrowLeft', { [modifier]: true });
+      window.dispatch('keydown', chord);
+      expect(chord.preventDefault).not.toHaveBeenCalled();
+      window.dispatch('keydown', key('KeyF', { [modifier]: true }));
+    }
+    expect(keyboard.held.left).toBe(false);
+    expect(outfit).not.toHaveBeenCalled();
+    // Shift is sprint, not a browser chord.
+    window.dispatch('keydown', key('ArrowLeft', { shiftKey: true }));
+    expect(keyboard.held.left).toBe(true);
+  });
+
+  it('ignores a key the Shell already handled', () => {
+    const { window, keyboard } = setup();
+    const handled = key('KeyW', { defaultPrevented: true });
+    window.dispatch('keydown', handled);
+    expect(keyboard.held.up).toBe(false);
+    expect(handled.preventDefault).not.toHaveBeenCalled();
+  });
+
+  it('treats an input inside a shadow root as editable', () => {
+    const { window, keyboard } = setup();
+    const shadowInput = { tagName: 'INPUT' };
+    window.dispatch('keydown', key('KeyS', {
+      target: { tagName: 'MY-WIDGET' },
+      composedPath: () => [shadowInput, { tagName: 'MY-WIDGET' }],
+    }));
+    expect(keyboard.held.down).toBe(false);
+  });
+
+  it('emits keydown-E for the sandbox block key with the same guards as F', () => {
+    const { window, keyboard } = setup();
+    const block = vi.fn();
+    const outfit = vi.fn();
+    keyboard.on('keydown-E', block);
+    keyboard.on('keydown-F', outfit);
+    window.dispatch('keydown', key('KeyE'));
+    expect(block).toHaveBeenCalledWith({ repeat: false, target: null });
+    expect(outfit).not.toHaveBeenCalled();
+    window.dispatch('keydown', key('KeyE', { target: { tagName: 'INPUT' } }));
+    keyboard.enabled = false;
+    window.dispatch('keydown', key('KeyE'));
+    expect(block).toHaveBeenCalledOnce();
+    keyboard.enabled = true;
+    keyboard.off('keydown-E', block);
+    window.dispatch('keydown', key('KeyE'));
+    expect(block).toHaveBeenCalledOnce();
+  });
+
   it('detaches every listener on destroy and stays inert', () => {
     const { window, document, keyboard } = setup();
     const handler = vi.fn();

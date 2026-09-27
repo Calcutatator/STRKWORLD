@@ -21,6 +21,8 @@ import {
   RGBAFormat,
   RepeatWrapping,
   SRGBColorSpace,
+  Shape,
+  ShapeGeometry,
   SphereGeometry,
   TorusGeometry,
   Vector3,
@@ -28,16 +30,19 @@ import {
 import type { ColorRepresentation, Material, Object3D, Texture } from 'three';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import type { BuildingId } from '@strkworld/shared';
+import type { FloatingStyleOptions, SignStyleOptions } from './labels.js';
 import type { Occluder, OccluderBounds } from './types.js';
 
 /**
  * Colours, material specs and the small low-poly kit shared by the 3D
- * environment builders — street, fixed rooms and the Avatar Studio (D-059).
+ * environment builders — street, fixed rooms, the Avatar Studio and the block
+ * sandbox (D-059, D-060).
  *
  * Everything here is presentation. One palette keeps a building's facade, its
- * sign and its interior reading as one place; one kit means every builder
- * merges geometry per material, fades occluders and disposes GPU resources the
- * same way, which is what keeps the street under its draw-call budget.
+ * sign and its interior reading as one place — including the two brand refits,
+ * whose measured hexes live only here; one kit means every builder merges
+ * geometry per material, fades occluders and disposes GPU resources the same
+ * way, which is what keeps the street under its draw-call budget.
  */
 
 // ---------------------------------------------------------------------------
@@ -77,14 +82,89 @@ export const PALETTE = Object.freeze({
   backdropWindowDark: 0x5b6470,
 });
 
-/** A facade sign's board size and CSS colours. */
-export interface SignStyle {
-  readonly width: number;
-  readonly height: number;
-  readonly background: string;
-  readonly foreground: string;
-  readonly accent: string;
+// ---------------------------------------------------------------------------
+// Brand palettes: measured from the live apps, and the only place these live
+// ---------------------------------------------------------------------------
+
+/** The Exchange's swap route, avnu — measured from app.avnu.fi. */
+export const AVNU = Object.freeze({
+  navy: 0x11131d,
+  card: 0x1b1e2d,
+  indigo: 0x1c204a,
+  indigoBorder: 0x313881,
+  blue: 0x3761f6,
+  lightBlue: 0x718ef9,
+  slate: 0x7c8298,
+  white: 0xffffff,
+});
+
+/** The Bank's shielding pool, STRK20 — measured from strk20.starknet.io. */
+export const STRK20 = Object.freeze({
+  black: 0x0d0d0d,
+  surface: 0x141414,
+  raised: 0x1a1a1a,
+  hairline: 0x262626,
+  text: 0xfafafa,
+  orange: 0xc53400,
+  orangePressed: 0xa02a00,
+  /** Alpha of the accent's glow, `rgba(197,52,0,0.55)`. */
+  glowAlpha: 0.55,
+  /** The heading gradient, top to bottom. */
+  cream: 0xfffdf1,
+  blush: 0xf4ece8,
+  peach: 0xffcdb6,
+});
+
+/** A palette number as CSS, so canvas labels read the same source. */
+export function css(hex: number): string {
+  return `#${(hex & 0xffffff).toString(16).padStart(6, '0')}`;
 }
+
+export function cssAlpha(hex: number, alpha: number): string {
+  return `rgba(${(hex >> 16) & 255},${(hex >> 8) & 255},${hex & 255},${alpha})`;
+}
+
+/**
+ * A brand colour lifted in sRGB lightness for a lit 3D surface. Near-black UI
+ * colours render as a hole under a warm key light and ACES; lifting keeps the
+ * hue and the dark character while letting form read. Self-lit surfaces
+ * (screens, light strips, signs) use the measured colours unlifted.
+ */
+export function lift(hex: number, lightness: number): number {
+  const colour = new Color(hex);
+  const hsl = { h: 0, s: 0, l: 0 };
+  colour.getHSL(hsl, SRGBColorSpace);
+  colour.setHSL(hsl.h, hsl.s, clamp01(hsl.l + lightness), SRGBColorSpace);
+  return colour.getHex(SRGBColorSpace);
+}
+
+export function mixHex(a: number, b: number, t: number): number {
+  return mixColor(a, b, t).getHex(SRGBColorSpace);
+}
+
+/** The block sandbox (D-060): a warm concrete build plate and toy blocks. */
+export const SANDBOX_THEME = Object.freeze({
+  plate: 0xdccfb9,
+  grid: 0xc6b8a0,
+  border: 0x9f907a,
+  /** Index = `SandboxColumn` colour. Saturated enough to survive warm light. */
+  blocks: Object.freeze([0xe4524b, 0xf28f3b, 0xf5cf4f, 0x5dbb63, 0x35b3b0, 0x4a78d8, 0x9467d0, 0xf2efe6]),
+  targetValid: 0xfff1c4,
+  targetInvalid: 0xff4a3d,
+  post: 0x4a4038,
+  sign: Object.freeze({
+    width: 4.2,
+    height: 1.1,
+    background: '#fff6e3',
+    foreground: '#3b2a14',
+    accent: '#4a78d8',
+    cornerRadius: 0.22,
+    borderWidth: 0.05,
+  } satisfies SignStyleOptions),
+});
+
+/** A facade sign: board size, CSS colours and the optional type treatment. */
+export type SignStyle = SignStyleOptions;
 
 export type BuildingStyle = 'bank' | 'exchange' | 'post-office' | 'bridge' | 'vault' | 'generic';
 
@@ -102,8 +182,10 @@ export interface BuildingTheme {
   readonly windowLit: number;
   readonly windowGlow: number;
   readonly windowDark: number;
-  /** Sconces, emblems and other small emissive details. */
+  /** Sconces, emblems, light strips and other small emissive details. */
   readonly glow: number;
+  /** Emissive strength of `glow`; light strips want more than lanterns. */
+  readonly glowIntensity?: number;
   /** Blinking roof lights. */
   readonly beacon: number;
   /** Share of windows that are lit, 0..1. */
@@ -117,49 +199,71 @@ export const BUILDING_THEMES: Readonly<Record<BuildingId, BuildingTheme>> = Obje
   bank: Object.freeze({
     style: 'bank',
     height: 4.4,
-    wall: 0xeadfc4,
-    wallAlt: 0xd6c8a8,
-    trim: 0xf6efdd,
-    accent: 0xd4a53c,
-    roof: 0xcdbf9f,
-    door: 0x6e4a2c,
-    windowLit: 0xffe2a8,
-    windowGlow: 0xffc46b,
-    windowDark: 0x3d4a5a,
-    glow: 0xffcf6e,
-    beacon: 0xffcf6e,
-    litRatio: 0.75,
-    portal: 0xffc766,
+    // STRK20: near-black stone, lifted just enough that its colonnade reads,
+    // lit only by the one burnt-orange accent.
+    wall: lift(STRK20.raised, 0.1),
+    wallAlt: lift(STRK20.surface, 0.06),
+    trim: lift(STRK20.hairline, 0.13),
+    accent: STRK20.orange,
+    roof: lift(STRK20.surface, 0.04),
+    door: lift(STRK20.surface, 0.05),
+    windowLit: STRK20.blush,
+    windowGlow: mixHex(STRK20.peach, STRK20.orange, 0.35),
+    windowDark: lift(STRK20.black, 0.05),
+    glow: STRK20.orange,
+    glowIntensity: 2.2,
+    beacon: STRK20.orange,
+    litRatio: 0.7,
+    portal: STRK20.orange,
     sign: Object.freeze({
       width: 2.1,
       height: 0.8,
-      background: '#f8f0dc',
-      foreground: '#5b3a14',
-      accent: '#c9982f',
+      background: css(STRK20.surface),
+      foreground: css(STRK20.text),
+      accent: css(STRK20.hairline),
+      gradient: Object.freeze([css(STRK20.cream), css(STRK20.blush), css(STRK20.peach)]),
+      cornerRadius: 0.04,
+      borderWidth: 0.03,
+      hairline: false,
+      titleFont: 'display',
+      titleTracking: -0.03,
+      subtitleFont: 'mono',
+      subtitleTracking: 0.12,
+      subtitleColor: css(STRK20.peach),
+      uppercase: true,
     }),
   }),
   exchange: Object.freeze({
     style: 'exchange',
     height: 5.6,
-    wall: 0x2e8288,
-    wallAlt: 0x324049,
-    trim: 0xdbe6e8,
-    accent: 0x3fd1c1,
-    roof: 0x5d6b72,
-    door: 0x1c3d42,
-    windowLit: 0xa3e9df,
-    windowGlow: 0x3cb8aa,
-    windowDark: 0x236f76,
-    glow: 0x6ff5e2,
-    beacon: 0xff4d3d,
-    litRatio: 0.45,
-    portal: 0x7cf2e0,
+    // avnu: indigo glass (lifted from #1c204a so it reads as glass rather than
+    // a hole), slate floor bands, blue light panels.
+    wall: lift(AVNU.indigo, 0.08),
+    wallAlt: lift(AVNU.navy, 0.06),
+    trim: AVNU.slate,
+    accent: AVNU.blue,
+    roof: lift(AVNU.card, 0.06),
+    door: AVNU.card,
+    windowLit: AVNU.lightBlue,
+    windowGlow: AVNU.blue,
+    windowDark: AVNU.indigo,
+    glow: AVNU.lightBlue,
+    beacon: AVNU.blue,
+    litRatio: 0.5,
+    portal: AVNU.blue,
     sign: Object.freeze({
       width: 2.9,
       height: 0.78,
-      background: '#0f2c31',
-      foreground: '#86f7e8',
-      accent: '#3fd1c1',
+      background: css(AVNU.card),
+      foreground: css(AVNU.white),
+      accent: css(AVNU.indigoBorder),
+      // avnu's 32 px card radius, at the board's scale.
+      cornerRadius: 0.3,
+      borderWidth: 0.035,
+      hairline: false,
+      titleFont: 'sans',
+      subtitleFont: 'sans',
+      subtitleColor: css(AVNU.lightBlue),
     }),
   }),
   'post-office': Object.freeze({
@@ -269,122 +373,7 @@ export function buildingTheme(building: BuildingId | null): BuildingTheme {
   return building ? BUILDING_THEMES[building] ?? GENERIC_BUILDING_THEME : GENERIC_BUILDING_THEME;
 }
 
-export type RoomDecorStyle = 'bank' | 'exchange' | 'post-office' | 'bridge' | 'plain';
-
-/** Interior palette for one fixed room. */
-export interface RoomTheme {
-  readonly decor: RoomDecorStyle;
-  readonly floorA: number;
-  readonly floorB: number;
-  readonly floorAccent: number;
-  readonly wall: number;
-  readonly wallLower: number;
-  readonly wallTop: number;
-  readonly trim: number;
-  readonly skirting: number;
-  readonly cut: number;
-  readonly kioskBase: number;
-  readonly kioskTop: number;
-  readonly exitGlow: number;
-  /** Station label colours (CSS). */
-  readonly labelForeground: string;
-  readonly labelBackground: string;
-}
-
-export const ROOM_THEMES: Readonly<Partial<Record<BuildingId, RoomTheme>>> = Object.freeze({
-  bank: Object.freeze({
-    decor: 'bank',
-    floorA: 0xf1e9d8,
-    floorB: 0xd8cdb8,
-    floorAccent: 0xcfa043,
-    wall: 0xeee3cb,
-    wallLower: 0xd6c6a3,
-    wallTop: 0x8f7a55,
-    trim: 0xd4a53c,
-    skirting: 0x8f7a55,
-    cut: 0x5e4f38,
-    kioskBase: 0xe6dcc6,
-    kioskTop: 0x9e7a3c,
-    exitGlow: 0xffc46b,
-    labelForeground: '#fff6e0',
-    labelBackground: 'rgba(60,42,18,0.84)',
-  }),
-  exchange: Object.freeze({
-    decor: 'exchange',
-    floorA: 0x1d4f55,
-    floorB: 0x225a60,
-    floorAccent: 0x3fd1c1,
-    wall: 0x2c3f47,
-    wallLower: 0x22323a,
-    wallTop: 0x16222a,
-    trim: 0x3fd1c1,
-    skirting: 0x16222a,
-    cut: 0x101a20,
-    kioskBase: 0x2d3f48,
-    kioskTop: 0x9fb4bb,
-    exitGlow: 0x7cf2e0,
-    labelForeground: '#dffcf7',
-    labelBackground: 'rgba(10,32,36,0.86)',
-  }),
-  'post-office': Object.freeze({
-    decor: 'post-office',
-    floorA: 0xb65a45,
-    floorB: 0xe9dcc3,
-    floorAccent: 0x2f5fa3,
-    wall: 0xf1e6cf,
-    wallLower: 0x2f5fa3,
-    wallTop: 0x7b3528,
-    trim: 0xc8513c,
-    skirting: 0x243f6e,
-    cut: 0x5a2a20,
-    kioskBase: 0x8a5a3a,
-    kioskTop: 0xc49a6c,
-    exitGlow: 0xffc070,
-    labelForeground: '#fff7e6',
-    labelBackground: 'rgba(28,48,92,0.86)',
-  }),
-  bridge: Object.freeze({
-    decor: 'bridge',
-    floorA: 0x66737f,
-    floorB: 0x5b6773,
-    floorAccent: 0xe3a33a,
-    wall: 0x55687a,
-    wallLower: 0x46586a,
-    wallTop: 0x2d3945,
-    trim: 0xe3a33a,
-    skirting: 0x2d3945,
-    cut: 0x1f2831,
-    kioskBase: 0x3e4c5a,
-    kioskTop: 0x8795a3,
-    exitGlow: 0xffc877,
-    labelForeground: '#ffe9bd',
-    labelBackground: 'rgba(24,31,39,0.86)',
-  }),
-});
-
-export const DEFAULT_ROOM_THEME: RoomTheme = Object.freeze({
-  decor: 'plain',
-  floorA: 0x6a6272,
-  floorB: 0x5f5867,
-  floorAccent: 0xd6b36a,
-  wall: 0x6f6878,
-  wallLower: 0x5c5664,
-  wallTop: 0x39343b,
-  trim: 0xd6b36a,
-  skirting: 0x39343b,
-  cut: 0x241f27,
-  kioskBase: 0x5c5664,
-  kioskTop: 0x9d93a8,
-  exitGlow: 0xffd08a,
-  labelForeground: '#fff6e0',
-  labelBackground: 'rgba(28,22,32,0.84)',
-});
-
-export function roomTheme(building: BuildingId): RoomTheme {
-  return ROOM_THEMES[building] ?? DEFAULT_ROOM_THEME;
-}
-
-/** Station render states. Colours echo the 2D room layer's station fills. */
+/** Station render states: its accent material and its approach halo. */
 export interface StationLook {
   readonly color: number;
   readonly emissive: number;
@@ -394,7 +383,15 @@ export interface StationLook {
   readonly edgeOpacity: number;
 }
 
-export const STATION_LOOKS = Object.freeze({
+export interface StationLooks {
+  readonly available: StationLook;
+  readonly highlighted: StationLook;
+  readonly locked: StationLook;
+  readonly lockedHighlighted: StationLook;
+}
+
+/** Default looks; the colours echo the 2D room layer's station fills. */
+export const STATION_LOOKS: StationLooks = Object.freeze({
   available: Object.freeze({
     color: 0xb07b41,
     emissive: 0xffa640,
@@ -427,7 +424,208 @@ export const STATION_LOOKS = Object.freeze({
     haloOpacity: 0.16,
     edgeOpacity: 0.45,
   }),
-} satisfies Record<string, StationLook>);
+});
+
+/** avnu: primary blue when ready, light blue when you step up to it. */
+export const AVNU_STATION_LOOKS: StationLooks = Object.freeze({
+  available: Object.freeze({
+    color: AVNU.indigoBorder,
+    emissive: AVNU.blue,
+    emissiveIntensity: 1,
+    halo: AVNU.blue,
+    haloOpacity: 0.2,
+    edgeOpacity: 0.6,
+  }),
+  highlighted: Object.freeze({
+    color: AVNU.lightBlue,
+    emissive: AVNU.lightBlue,
+    emissiveIntensity: 2.2,
+    halo: AVNU.lightBlue,
+    haloOpacity: 0.45,
+    edgeOpacity: 0.95,
+  }),
+  locked: Object.freeze({
+    color: lift(AVNU.slate, -0.18),
+    emissive: 0x000000,
+    emissiveIntensity: 0,
+    halo: AVNU.slate,
+    haloOpacity: 0.06,
+    edgeOpacity: 0.2,
+  }),
+  lockedHighlighted: Object.freeze({
+    color: AVNU.slate,
+    emissive: AVNU.indigo,
+    emissiveIntensity: 0.5,
+    halo: AVNU.slate,
+    haloOpacity: 0.16,
+    edgeOpacity: 0.45,
+  }),
+});
+
+/** STRK20: the burnt-orange accent, glowing at its measured 55 % alpha when active. */
+export const STRK20_STATION_LOOKS: StationLooks = Object.freeze({
+  available: Object.freeze({
+    color: STRK20.orangePressed,
+    emissive: STRK20.orange,
+    emissiveIntensity: 1.2,
+    halo: STRK20.orange,
+    haloOpacity: 0.2,
+    edgeOpacity: 0.6,
+  }),
+  highlighted: Object.freeze({
+    color: STRK20.orange,
+    emissive: STRK20.orange,
+    emissiveIntensity: 2.6,
+    halo: STRK20.orange,
+    haloOpacity: STRK20.glowAlpha,
+    edgeOpacity: 1,
+  }),
+  locked: Object.freeze({
+    color: lift(STRK20.hairline, 0.08),
+    emissive: 0x000000,
+    emissiveIntensity: 0,
+    halo: 0x6b6b6b,
+    haloOpacity: 0.06,
+    edgeOpacity: 0.2,
+  }),
+  lockedHighlighted: Object.freeze({
+    color: lift(STRK20.hairline, 0.12),
+    emissive: STRK20.orangePressed,
+    emissiveIntensity: 0.25,
+    halo: 0x8a8a8a,
+    haloOpacity: 0.16,
+    edgeOpacity: 0.45,
+  }),
+});
+
+export type RoomDecorStyle = 'strk20' | 'avnu' | 'post-office' | 'bridge' | 'plain';
+
+/** Interior palette for one fixed room. */
+export interface RoomTheme {
+  readonly decor: RoomDecorStyle;
+  readonly floorA: number;
+  readonly floorB: number;
+  readonly floorAccent: number;
+  readonly wall: number;
+  readonly wallLower: number;
+  readonly wallTop: number;
+  readonly trim: number;
+  readonly skirting: number;
+  readonly cut: number;
+  readonly kioskBase: number;
+  readonly kioskTop: number;
+  readonly exitGlow: number;
+  /** Station label style (CSS colours, type treatment). */
+  readonly label: FloatingStyleOptions;
+  readonly stationLooks: StationLooks;
+}
+
+export const ROOM_THEMES: Readonly<Partial<Record<BuildingId, RoomTheme>>> = Object.freeze({
+  bank: Object.freeze({
+    decor: 'strk20',
+    floorA: lift(STRK20.surface, 0.07),
+    floorB: lift(STRK20.raised, 0.1),
+    floorAccent: STRK20.orange,
+    wall: lift(STRK20.raised, 0.09),
+    wallLower: lift(STRK20.surface, 0.05),
+    wallTop: STRK20.black,
+    trim: lift(STRK20.hairline, 0.1),
+    skirting: STRK20.black,
+    cut: STRK20.black,
+    kioskBase: lift(STRK20.raised, 0.09),
+    kioskTop: lift(STRK20.hairline, 0.15),
+    exitGlow: STRK20.orange,
+    label: Object.freeze({
+      foreground: css(STRK20.text),
+      background: cssAlpha(STRK20.surface, 0.92),
+      border: css(STRK20.hairline),
+      font: 'mono',
+      cornerRadius: 0.08,
+      tracking: 0.1,
+      uppercase: true,
+    }),
+    stationLooks: STRK20_STATION_LOOKS,
+  }),
+  exchange: Object.freeze({
+    decor: 'avnu',
+    floorA: lift(AVNU.navy, 0.07),
+    floorB: lift(AVNU.card, 0.06),
+    floorAccent: AVNU.indigoBorder,
+    wall: lift(AVNU.indigo, 0.1),
+    wallLower: lift(AVNU.card, 0.03),
+    wallTop: AVNU.navy,
+    trim: AVNU.blue,
+    skirting: AVNU.navy,
+    cut: AVNU.navy,
+    kioskBase: lift(AVNU.card, 0.04),
+    kioskTop: lift(AVNU.indigoBorder, 0.06),
+    exitGlow: AVNU.blue,
+    label: Object.freeze({
+      foreground: css(AVNU.white),
+      background: cssAlpha(AVNU.card, 0.92),
+      border: css(AVNU.indigoBorder),
+      font: 'sans',
+      cornerRadius: 0.5,
+    }),
+    stationLooks: AVNU_STATION_LOOKS,
+  }),
+  'post-office': Object.freeze({
+    decor: 'post-office',
+    floorA: 0xb65a45,
+    floorB: 0xe9dcc3,
+    floorAccent: 0x2f5fa3,
+    wall: 0xf1e6cf,
+    wallLower: 0x2f5fa3,
+    wallTop: 0x7b3528,
+    trim: 0xc8513c,
+    skirting: 0x243f6e,
+    cut: 0x5a2a20,
+    kioskBase: 0x8a5a3a,
+    kioskTop: 0xc49a6c,
+    exitGlow: 0xffc070,
+    label: Object.freeze({ foreground: '#fff7e6', background: 'rgba(28,48,92,0.86)' }),
+    stationLooks: STATION_LOOKS,
+  }),
+  bridge: Object.freeze({
+    decor: 'bridge',
+    floorA: 0x66737f,
+    floorB: 0x5b6773,
+    floorAccent: 0xe3a33a,
+    wall: 0x55687a,
+    wallLower: 0x46586a,
+    wallTop: 0x2d3945,
+    trim: 0xe3a33a,
+    skirting: 0x2d3945,
+    cut: 0x1f2831,
+    kioskBase: 0x3e4c5a,
+    kioskTop: 0x8795a3,
+    exitGlow: 0xffc877,
+    label: Object.freeze({ foreground: '#ffe9bd', background: 'rgba(24,31,39,0.86)' }),
+    stationLooks: STATION_LOOKS,
+  }),
+});
+
+export const DEFAULT_ROOM_THEME: RoomTheme = Object.freeze({
+  decor: 'plain',
+  floorA: 0x6a6272,
+  floorB: 0x5f5867,
+  floorAccent: 0xd6b36a,
+  wall: 0x6f6878,
+  wallLower: 0x5c5664,
+  wallTop: 0x39343b,
+  trim: 0xd6b36a,
+  skirting: 0x39343b,
+  cut: 0x241f27,
+  kioskBase: 0x5c5664,
+  kioskTop: 0x9d93a8,
+  exitGlow: 0xffd08a,
+  label: Object.freeze({ foreground: '#fff6e0', background: 'rgba(28,22,32,0.84)' }),
+  stationLooks: STATION_LOOKS,
+});
+
+export function roomTheme(building: BuildingId): RoomTheme {
+  return ROOM_THEMES[building] ?? DEFAULT_ROOM_THEME;
+}
 
 /** Avatar Studio accents; floor and wall tones come from `avatarStudioTileColour`. */
 export const STUDIO_THEME = Object.freeze({
@@ -898,6 +1096,81 @@ export function prismX(points: readonly Point2[], x0: number, x1: number): Buffe
   return prismZ(points, -Math.max(x0, x1), -Math.min(x0, x1)).rotateY(-Math.PI / 2);
 }
 
+/** Extrude a convex polygon given in (x, z) between heights y0 and y1 (slabs, canopies). */
+export function prismY(points: readonly Point2[], y0: number, y1: number): BufferGeometry {
+  // Local y becomes world z and local z becomes world -y after the rotation.
+  return prismZ(points, -Math.max(y0, y1), -Math.min(y0, y1)).rotateX(Math.PI / 2);
+}
+
+/** Outline of a pill (stadium) running along x, for convex prisms. */
+export function stadiumPoints(cx: number, cz: number, halfLength: number, radius: number, segments = 6): Point2[] {
+  const r = Math.max(1e-3, Math.min(radius, halfLength));
+  const a = cx - halfLength + r;
+  const b = cx + halfLength - r;
+  const points: Point2[] = [];
+  for (let i = 0; i <= segments; i++) {
+    const t = -Math.PI / 2 + (Math.PI * i) / segments;
+    points.push([b + Math.cos(t) * r, cz + Math.sin(t) * r]);
+  }
+  for (let i = 0; i <= segments; i++) {
+    const t = Math.PI / 2 + (Math.PI * i) / segments;
+    points.push([a + Math.cos(t) * r, cz + Math.sin(t) * r]);
+  }
+  return points;
+}
+
+/** A rounded rectangle centred on the origin; radius clamps to a pill. */
+export function roundedRectShape(width: number, height: number, radius: number): Shape {
+  const w = Math.max(1e-4, width);
+  const h = Math.max(1e-4, height);
+  const r = Math.max(0, Math.min(radius, w / 2, h / 2));
+  const x = -w / 2;
+  const y = -h / 2;
+  const shape = new Shape();
+  shape.moveTo(x + r, y);
+  shape.lineTo(x + w - r, y);
+  if (r > 0) shape.absarc(x + w - r, y + r, r, -Math.PI / 2, 0, false);
+  shape.lineTo(x + w, y + h - r);
+  if (r > 0) shape.absarc(x + w - r, y + h - r, r, 0, Math.PI / 2, false);
+  shape.lineTo(x + r, y + h);
+  if (r > 0) shape.absarc(x + r, y + h - r, r, Math.PI / 2, Math.PI, false);
+  shape.lineTo(x, y + r);
+  if (r > 0) shape.absarc(x + r, y + r, r, Math.PI, Math.PI * 1.5, false);
+  return shape;
+}
+
+/** A flat rounded rectangle on a face, `w` out from the plane: cards, pills, screens. */
+export function facePanel(
+  face: Face,
+  u0: number,
+  v0: number,
+  u1: number,
+  v1: number,
+  w: number,
+  radius: number,
+  curveSegments = 4,
+): BufferGeometry {
+  const geometry = new ShapeGeometry(roundedRectShape(Math.abs(u1 - u0), Math.abs(v1 - v0), radius), curveSegments);
+  orientToFace(geometry, face.normal, 'z');
+  const [x, y, z] = faceToWorld(face, (u0 + u1) / 2, (v0 + v1) / 2, w);
+  return geometry.translate(x, y, z);
+}
+
+/** A flat rounded rectangle facing up. */
+export function flatPanel(
+  x0: number,
+  z0: number,
+  x1: number,
+  z1: number,
+  y: number,
+  radius: number,
+  curveSegments = 4,
+): BufferGeometry {
+  return new ShapeGeometry(roundedRectShape(Math.abs(x1 - x0), Math.abs(z1 - z0), radius), curveSegments)
+    .rotateX(-Math.PI / 2)
+    .translate((x0 + x1) / 2, y, (z0 + z1) / 2);
+}
+
 const scratchA = new Vector3();
 const scratchB = new Vector3();
 const scratchUp = new Vector3();
@@ -1198,6 +1471,11 @@ const GLYPHS: Readonly<Record<string, string>> = Object.freeze({
   '▲': '0000000100011101111100000',
   '▼': '0000011111011100010000000',
   '?': '110001010000010',
+  // Lowercase, x-height only: enough for the one wordmark on the ticker.
+  a: '000000011101011',
+  n: '000000110101101',
+  u: '000000101101011',
+  v: '000000101101010',
 });
 
 export interface TickerSegment {
@@ -1212,25 +1490,32 @@ export interface TickerStrip {
   readonly height: number;
 }
 
+/** avnu's blue LED pairs; the rooftop ticker also carries the route's name, once. */
+export const EXCHANGE_ROOM_TICKER: readonly TickerSegment[] = Object.freeze([
+  { text: 'SWAP', color: AVNU.lightBlue },
+  { text: '  STRK', color: AVNU.white },
+  { text: '\u25b2', color: AVNU.blue },
+  { text: '  ETH', color: AVNU.white },
+  { text: '\u25bc', color: AVNU.slate },
+  { text: '  USDC', color: AVNU.white },
+  { text: '\u25b2', color: AVNU.blue },
+  { text: '  WBTC', color: AVNU.white },
+  { text: '\u25b2', color: AVNU.blue },
+  { text: '    ', color: 0 },
+]);
+
 export const EXCHANGE_TICKER: readonly TickerSegment[] = Object.freeze([
-  { text: 'SWAP', color: 0x7cf2e0 },
-  { text: ' STRK', color: 0xffc861 },
-  { text: '▲', color: 0x5ee07a },
-  { text: '  ETH', color: 0xffc861 },
-  { text: '▼', color: 0xff6b5b },
-  { text: '  USDC', color: 0xffc861 },
-  { text: '▲', color: 0x5ee07a },
-  { text: '  WBTC', color: 0xffc861 },
-  { text: '▲', color: 0x5ee07a },
-  { text: '   ', color: 0 },
+  ...EXCHANGE_ROOM_TICKER.slice(0, -1),
+  { text: '    avnu', color: AVNU.lightBlue },
+  { text: '    ', color: 0 },
 ]);
 
 /** An LED text strip; scroll it with `texture.offset.x`. */
 export function createTickerStrip(
   segments: readonly TickerSegment[],
-  background = 0x0b1215,
+  background: number = AVNU.navy,
 ): TickerStrip {
-  const glyph = (char: string): string => GLYPHS[char.toUpperCase()] ?? GLYPHS['?']!;
+  const glyph = (char: string): string => GLYPHS[char] ?? GLYPHS[char.toUpperCase()] ?? GLYPHS['?']!;
   let width = 2;
   for (const segment of segments) {
     for (const char of segment.text) width += char === ' ' ? 2 : glyph(char).length / 5 + 1;

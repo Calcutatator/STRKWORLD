@@ -13,9 +13,12 @@ import type { WorldKeyboard } from './world-session.js';
  * - `resetKeys()` clears held state, so a key held across a suspend does not
  *   walk the player away the moment input resumes.
  *
- * Two traps Phaser also guarded are handled here: a window blur or a hidden
- * tab clears held keys (their keyup is delivered somewhere else), and a
- * keystroke aimed at an editable element is never read as movement.
+ * Traps Phaser also guarded are handled here: a window blur or a hidden tab
+ * clears held keys (their keyup is delivered somewhere else); a keystroke
+ * aimed at an editable element — including one inside a shadow root — is never
+ * read as movement; a key the Shell already handled is left alone; and any
+ * chord with Ctrl, Cmd or Alt belongs to the browser (Phaser skipped modified
+ * keys too, and macOS never delivers the keyup of a Cmd chord).
  */
 
 const MOVEMENT_CODES: Readonly<Record<keyof MovementInput, readonly string[]>> = Object.freeze({
@@ -31,7 +34,11 @@ const CAPTURED_CODES: ReadonlySet<string> = new Set([
   ...SPRINT_CODES,
   'Space',
 ]);
-const OUTFIT_CODE = 'KeyF';
+/** One-shot action keys: the outfit toggle (D-053) and the sandbox block key (D-060). */
+const ACTION_EVENTS: Readonly<Record<string, 'keydown-F' | 'keydown-E'>> = Object.freeze({
+  KeyF: 'keydown-F',
+  KeyE: 'keydown-E',
+});
 
 const NO_MOVEMENT: MovementInput = Object.freeze({
   left: false,
@@ -47,6 +54,11 @@ interface KeyboardEventLike {
   readonly code?: unknown;
   readonly repeat?: unknown;
   readonly target?: unknown;
+  readonly defaultPrevented?: unknown;
+  readonly ctrlKey?: unknown;
+  readonly metaKey?: unknown;
+  readonly altKey?: unknown;
+  composedPath?(): unknown[];
   preventDefault?(): void;
 }
 
@@ -68,22 +80,29 @@ export interface DomKeyboard extends WorldKeyboard {
   destroy(): void;
 }
 
-type OutfitHandler = Parameters<WorldKeyboard['on']>[1];
+type ActionHandler = Parameters<WorldKeyboard['on']>[1];
+type ActionEvent = Parameters<WorldKeyboard['on']>[0];
 
 export function createDomKeyboard(options: DomKeyboardOptions): DomKeyboard {
   const held = new Set<string>();
-  const outfitHandlers = new Set<OutfitHandler>();
+  const actionHandlers: Record<ActionEvent, Set<ActionHandler>> = {
+    'keydown-F': new Set(),
+    'keydown-E': new Set(),
+  };
   let enabled = true;
   let capture = true;
   let destroyed = false;
 
   const onKeyDown: Listener = (event) => {
-    if (destroyed || !enabled) return;
+    if (destroyed || !enabled || event.defaultPrevented === true) return;
+    if (event.ctrlKey === true || event.metaKey === true || event.altKey === true) return;
     const code = typeof event.code === 'string' ? event.code : '';
-    if (!code || isEditableTarget(event.target)) return;
+    const target = composedTarget(event);
+    if (!code || isEditableTarget(target)) return;
     held.add(code);
     if (capture && CAPTURED_CODES.has(code)) event.preventDefault?.();
-    if (code === OUTFIT_CODE) emitOutfit(event);
+    const action = ACTION_EVENTS[code];
+    if (action) emitAction(action, { repeat: event.repeat === true, target });
   };
 
   // Release is honoured whatever the target or gate state: a key pressed in
@@ -102,10 +121,12 @@ export function createDomKeyboard(options: DomKeyboardOptions): DomKeyboard {
     if (options.document?.visibilityState === 'hidden') held.clear();
   };
 
-  const emitOutfit = (event: KeyboardEventLike): void => {
-    const payload = { repeat: event.repeat === true, target: event.target };
+  const emitAction = (
+    action: ActionEvent,
+    payload: { readonly repeat: boolean; readonly target: unknown },
+  ): void => {
     const errors: unknown[] = [];
-    for (const handler of [...outfitHandlers]) {
+    for (const handler of [...actionHandlers[action]]) {
       try {
         handler(payload);
       } catch (error) {
@@ -152,26 +173,37 @@ export function createDomKeyboard(options: DomKeyboardOptions): DomKeyboard {
       held.clear();
     },
     on(event, handler) {
-      if (event === 'keydown-F' && typeof handler === 'function' && !destroyed) {
-        outfitHandlers.add(handler);
+      if (actionHandlers[event] && typeof handler === 'function' && !destroyed) {
+        actionHandlers[event].add(handler);
       }
       return undefined;
     },
     off(event, handler) {
-      if (event === 'keydown-F') outfitHandlers.delete(handler);
+      actionHandlers[event]?.delete(handler);
       return undefined;
     },
     destroy(): void {
       if (destroyed) return;
       destroyed = true;
       held.clear();
-      outfitHandlers.clear();
+      for (const handlers of Object.values(actionHandlers)) handlers.clear();
       options.window.removeEventListener('keydown', onKeyDown);
       options.window.removeEventListener('keyup', onKeyUp);
       options.window.removeEventListener('blur', onBlur);
       options.document?.removeEventListener('visibilitychange', onVisibilityChange);
     },
   };
+}
+
+/** The element a keystroke was really aimed at, even inside a shadow root. */
+function composedTarget(event: KeyboardEventLike): unknown {
+  try {
+    const path = typeof event.composedPath === 'function' ? event.composedPath() : undefined;
+    if (Array.isArray(path) && path.length > 0) return path[0];
+  } catch {
+    // Fall back to the retargeted target.
+  }
+  return event.target;
 }
 
 function isEditableTarget(target: unknown): boolean {

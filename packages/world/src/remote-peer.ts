@@ -1,4 +1,4 @@
-import type { AvatarSpriteKey, Facing } from '@strkworld/shared';
+import { SANDBOX_COLOURS, type AvatarSpriteKey, type Facing } from '@strkworld/shared';
 import {
   AVATAR_SPRITE_KEYS,
   DEFAULT_AVATAR_SPRITE,
@@ -18,6 +18,13 @@ export interface RemotePeerSnapshot {
   readonly y: number;
   readonly facing: Facing;
   readonly sprite: string;
+  /**
+   * D-060: the sandbox block colour this peer carries, as an opaque palette
+   * index `0 .. SANDBOX_COLOURS - 1`, or null. Cosmetic like `sprite`, so a
+   * bad value means "not carrying" rather than rejecting the peer. Optional
+   * for producers; every validated snapshot states it explicitly.
+   */
+  readonly carrying?: number | null;
 }
 
 export type RemotePeerListener = (snapshot: readonly RemotePeerSnapshot[]) => void;
@@ -53,7 +60,8 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 
 /**
  * Validate one untrusted snapshot entry. Invalid identity/position/pose data
- * is rejected; cosmetic data fails closed to the local procedural texture.
+ * is rejected; cosmetic data fails closed, the sprite to the local procedural
+ * texture and the carried colour to null.
  */
 export function validateRemotePeer(value: unknown): RemotePeerSnapshot | null {
   if (!isRecord(value)) return null;
@@ -73,13 +81,25 @@ export function validateRemotePeer(value: unknown): RemotePeerSnapshot | null {
   if (!FACINGS.includes(facing as Facing)) return null;
 
   const sprite = ownDataField(value, 'sprite');
+  const carrying = ownDataField(value, 'carrying');
   return Object.freeze({
     id,
     x,
     y,
     facing: facing as Facing,
     sprite: validateAvatarSprite(sprite),
+    carrying: validateCarriedColour(carrying),
   });
+}
+
+/** Only a palette index is a colour; anything else, the lobby's -1 included, is none. */
+function validateCarriedColour(value: unknown): number | null {
+  return typeof value === 'number' &&
+    Number.isInteger(value) &&
+    value >= 0 &&
+    value < SANDBOX_COLOURS
+    ? value
+    : null;
 }
 
 function ownDataField(value: Record<string, unknown>, key: string): unknown {

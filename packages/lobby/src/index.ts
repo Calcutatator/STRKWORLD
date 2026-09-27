@@ -1,10 +1,14 @@
 /**
  * @strkworld/lobby — multiplayer presence.
  *
- * Broadcasts where avatars are. Nothing else, and structurally nothing else:
- * the room schema in `state.ts` mirrors the frozen `PresenceState` field for
- * field, so there is no field for an account, a balance, a hash or a
+ * Broadcasts where avatars are, plus D-060's anonymous block sandbox. Nothing
+ * else, and structurally nothing else: the room schema in `state.ts` mirrors
+ * the frozen `PresenceState` field for field and adds only colour stacks keyed
+ * by tile, so there is no field for an account, a balance, a hash or a
  * destination to travel in. See README.md.
+ *
+ * The pure sandbox rules the Shell runs for solo play live at
+ * `@strkworld/lobby/sandbox`, with no Colyseus import at all.
  *
  * ## This entry is browser-safe
  *
@@ -35,6 +39,8 @@ export {
   MIN_CLIENT_SEND_INTERVAL_MS,
   MIN_UPDATE_INTERVAL_MS,
   PATCH_RATE_MS,
+  SANDBOX_CLIENT_ACTION_INTERVAL_MS,
+  SANDBOX_MIN_ACTION_INTERVAL_MS,
   SERVER_MESSAGE,
   WORLD_LIMIT,
   resolveRoomConfig,
@@ -53,6 +59,8 @@ export {
   normalizeCoordinate,
   normalizeFacing,
   normalizeGameId,
+  normalizeSandboxColour,
+  normalizeSandboxTile,
   normalizeSprite,
   selectVisible,
   type Located,
@@ -62,6 +70,7 @@ export {
   LobbyState,
   PositionSchema,
   PresenceEntry,
+  SandboxColumnEntry,
 } from './state';
 
 export {
