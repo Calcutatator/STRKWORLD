@@ -74,6 +74,12 @@ export interface OccluderBounds {
   readonly minZ: number;
   readonly maxZ: number;
   readonly height: number;
+  /**
+   * Where the box starts above the ground; 0 (the ground) when absent. An
+   * overhead occluder such as the sandbox gate's superstructure starts
+   * higher, so a sight line passing under it is clear.
+   */
+  readonly minY?: number;
 }
 
 /** Something tall enough to hide the player; the camera fades it when it does. */

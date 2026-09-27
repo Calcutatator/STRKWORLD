@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import {
+  AdditiveBlending,
   Box3,
   BufferGeometry,
   Color,
@@ -9,13 +10,14 @@ import {
   Mesh,
   MeshStandardMaterial,
   Object3D,
+  SRGBColorSpace,
   Texture,
   Vector3,
 } from 'three';
 import { SANDBOX_AREA, SANDBOX_ENTRANCE } from '@strkworld/shared';
 import { createStreetMap, isSolidAt, type DistrictMap, type TileKind } from '../map/street.js';
 import { createNullLabelFactory } from './labels.js';
-import { AVNU, STRK20, boxGeometry } from './palette.js';
+import { AVNU, NEAR, STRK20, boxGeometry } from './palette.js';
 import {
   PAVEMENT_HEIGHT,
   SANDBOX_GATE_TEXT,
@@ -171,6 +173,11 @@ describe('buildStreet', () => {
     expect(gate.bounds.maxZ).toBeGreaterThanOrEqual(Math.max(box.max.z, GATE.z1 + 1));
     expect(gate.bounds.height).toBeGreaterThanOrEqual(box.max.y);
     expect(gate.bounds.maxX - gate.bounds.minX).toBeLessThan(1.2);
+    // Its floor is the superstructure's base, so a sight line under the lintel
+    // is clear; buildings still stand on the ground.
+    expect(gate.bounds.minY).toBeCloseTo(box.min.y);
+    expect(gate.bounds.minY).toBeCloseTo(2, 2);
+    for (const building of buildingOccluders(view)) expect(building.bounds.minY ?? 0).toBe(0);
     // The wall stays in the decor, nothing of it above two blocks at the gate.
     const decor = meshNamed(view.ground, 'street:decor');
     const wall = verticesIn(decor, GATE.x - 0.2, GATE.z0 - 3, GATE.x + 1.2, GATE.z1 + 3);
@@ -352,28 +359,53 @@ describe('buildStreet', () => {
     view.dispose();
   });
 
-  it('dresses the Bank in STRK20 and the Exchange in avnu', () => {
-    const { view } = build();
+  it('dresses the Bank in STRK20, the Exchange in avnu and the Bridge in NEAR', () => {
+    const { map, view } = build();
     const bank = view.ground.getObjectByName('building:bank')!;
     const exchange = view.ground.getObjectByName('building:exchange')!;
+    const bridge = view.ground.getObjectByName('building:bridge')!;
     const emissive = (root: Object3D, suffix: string) =>
       (meshNamed(root, suffix).material as MeshStandardMaterial).emissive.getHex();
     expect(emissive(bank, ':glow')).toBe(new Color(STRK20.orange).getHex());
     expect(emissive(exchange, ':lit')).toBe(new Color(AVNU.blue).getHex());
+    expect(emissive(bridge, ':glow')).toBe(new Color(NEAR.green).getHex());
     const portal = (building: string) =>
       view.doors.children.find((child) => child.userData['building'] === building)!;
     expect(emissive(portal('bank'), ':frame')).toBe(new Color(STRK20.orange).getHex());
     expect(emissive(portal('exchange'), ':frame')).toBe(new Color(AVNU.blue).getHex());
-    const signOptions = (building: string) =>
-      view.labels.children.find((child) => child.userData['building'] === building)!.userData['options'];
-    expect(signOptions('bank')).toMatchObject({
+    expect(emissive(portal('bridge'), ':frame')).toBe(new Color(NEAR.green).getHex());
+    const sign = (building: string) => view.labels.children.find((child) => child.userData['building'] === building)!;
+    expect(sign('bank').userData['options']).toMatchObject({
       gradient: ['#fffdf1', '#f4ece8', '#ffcdb6'],
       titleFont: 'display',
       subtitleFont: 'mono',
       uppercase: true,
       background: '#141414',
     });
-    expect(signOptions('exchange')).toMatchObject({ background: '#1b1e2d', foreground: '#ffffff' });
+    expect(sign('exchange').userData['options']).toMatchObject({ background: '#1b1e2d', foreground: '#ffffff' });
+    // NEAR: white on black, the Intents call to action in green uppercase mono, tight corners.
+    expect(sign('bridge').userData['options']).toMatchObject({
+      background: '#000000',
+      foreground: '#ffffff',
+      subtitleFont: 'mono',
+      subtitleColor: '#00ec97',
+      uppercase: true,
+    });
+    expect(sign('bridge').userData['options'].cornerRadius).toBeLessThanOrEqual(0.1);
+    // Only the style changed: the words are still the map's.
+    const exterior = map.exteriorLabels.find((label) => label.building === 'bridge')!;
+    expect(sign('bridge').userData['text']).toBe(exterior.text);
+    // The span's aurora is an additive wash that fades with the building.
+    const aura = meshNamed(bridge, ':aura').material as Material;
+    expect(aura.blending).toBe(AdditiveBlending);
+    const bridgeOccluder = buildingOccluders(view).find((occluder) => occluder.building === 'bridge')!;
+    bridgeOccluder.setOpacity(0.4);
+    expect(aura.opacity).toBeCloseTo(0.4);
+    bridgeOccluder.setOpacity(1);
+    // Green leads and the Bank keeps orange: no orange on the Bridge, no green on the Bank.
+    expect(huesOf(bridge).filter(isOrange)).toEqual([]);
+    expect(huesOf(bridge).filter(isGreen).length).toBeGreaterThan(0);
+    expect(huesOf(bank).filter(isGreen)).toEqual([]);
     view.dispose();
   });
 
@@ -571,6 +603,36 @@ function coloursIn(mesh: Mesh, x0: number, z0: number, x1: number, z1: number): 
   }
   return found;
 }
+
+interface Hue {
+  readonly h: number;
+  readonly s: number;
+  readonly l: number;
+}
+
+/** Perceptual (sRGB) hue, saturation and lightness of every vertex colour and live emissive under `root`. */
+function huesOf(root: Object3D): Hue[] {
+  const found: Hue[] = [];
+  const colour = new Color();
+  const hsl = { h: 0, s: 0, l: 0 };
+  const push = (value: Color): void => {
+    value.getHSL(hsl, SRGBColorSpace);
+    found.push({ h: hsl.h * 360, s: hsl.s, l: hsl.l });
+  };
+  root.traverse((object) => {
+    if (!(object instanceof Mesh)) return;
+    const attribute = object.geometry.getAttribute('color');
+    for (let i = 0; attribute && i < attribute.count; i++) {
+      push(colour.setRGB(attribute.getX(i), attribute.getY(i), attribute.getZ(i)));
+    }
+    const material = object.material as Partial<MeshStandardMaterial>;
+    if (material.emissive && (material.emissiveIntensity ?? 0) > 0) push(colour.copy(material.emissive));
+  });
+  return found;
+}
+
+const isOrange = ({ h, s, l }: Hue): boolean => s > 0.5 && l > 0.15 && h >= 10 && h <= 40;
+const isGreen = ({ h, s, l }: Hue): boolean => s > 0.5 && l > 0.15 && h >= 135 && h <= 175;
 
 function materialsOf(root: Object3D): Material[] {
   const found = new Set<Material>();

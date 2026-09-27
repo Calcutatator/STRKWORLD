@@ -1,5 +1,6 @@
 import {
   BufferAttribute,
+  CircleGeometry,
   Color,
   Group,
   Mesh,
@@ -24,6 +25,7 @@ import {
   ResourceBag,
   STRK20,
   AVNU,
+  NEAR,
   aoPaint,
   beamGeometry,
   boxGeometry,
@@ -35,7 +37,6 @@ import {
   faceDisc,
   facePanel,
   faceQuad,
-  facePipe,
   faceToWorld,
   faceTorus,
   flatPolygon,
@@ -612,10 +613,17 @@ function stationProps(theme: RoomTheme, bin: GeometryBin, x0: number, x1: number
       break;
     }
     case 'bridge': {
+      // A slim black terminal showing one route (a chain, a green line,
+      // Starknet) over the green call-to-action bar.
       const cx = (x0 + x1) / 2;
-      bin.add('unlit', faceTorus({ normal: 'z+', plane: 0 }, 0, 0, 0, 0.22, 0.025, { tubularSegments: 16 }).rotateX(-Math.PI / 2).translate(cx, top + 0.02, cz), theme.exitGlow);
-      bin.add('body', boxGeometry(x0 + 0.1, top, z0 + 0.05, x0 + 0.34, top + 0.08, z0 + 0.25), 0x2d3945);
-      bin.add('body', boxGeometry(x1 - 0.34, top, z0 + 0.05, x1 - 0.1, top + 0.08, z0 + 0.25), 0x2d3945);
+      const face: Face = { normal: 'z+', plane: z0 + 0.14 };
+      bin.add('body', boxGeometry(cx - 0.36, top, z0 + 0.06, cx + 0.36, top + 0.03, z1 - 0.06), lift(NEAR.raised, 0.08));
+      bin.add('body', faceBox(face, cx - 0.38, top + 0.03, 0, cx + 0.38, top + 0.44, 0.04), lift(NEAR.raised, 0.06));
+      bin.add('unlit', faceBox(face, cx - 0.32, top + 0.09, 0.04, cx + 0.32, top + 0.38, 0.043), lift(NEAR.black, 0.02));
+      bin.add('unlit', faceBox(face, cx - 0.25, top + 0.265, 0.043, cx - 0.2, top + 0.315, 0.046), NEAR.muted);
+      bin.add('unlit', faceBox(face, cx - 0.2, top + 0.284, 0.043, cx + 0.2, top + 0.296, 0.046), theme.floorAccent);
+      bin.add('unlit', faceBox(face, cx + 0.2, top + 0.26, 0.043, cx + 0.26, top + 0.32, 0.046), NEAR.white);
+      bin.add('unlit', faceBox(face, cx - 0.25, top + 0.13, 0.043, cx + 0.26, top + 0.19, 0.046), theme.floorAccent);
       break;
     }
     case 'plain':
@@ -628,8 +636,9 @@ function roomFloorColor(theme: RoomTheme, map: FixedRoomMap): (x: number, y: num
     const tile = map.tiles[y]?.[x];
     const seed = hash01(x, y, 201);
     if (tile === 'wall') return shade(theme.floorB, -0.1);
-    if (theme.decor === 'bridge') return jitterColor(hash01(x, y, 202) < 0.5 ? theme.floorA : theme.floorB, seed, 0.02);
-    return jitterColor((x + y) % 2 === 0 ? theme.floorA : theme.floorB, seed, theme.decor === 'avnu' || theme.decor === 'strk20' ? 0.01 : 0.022);
+    // The brand rooms' dark floors take almost no jitter: it reads as grime.
+    const quiet = theme.decor === 'avnu' || theme.decor === 'strk20' || theme.decor === 'bridge';
+    return jitterColor((x + y) % 2 === 0 ? theme.floorA : theme.floorB, seed, quiet ? 0.01 : 0.022);
   };
 }
 
@@ -1019,96 +1028,151 @@ function postOfficeDecor(theme: RoomTheme, shell: InteriorShell, map: FixedRoomM
   perimeterInlay(shell, map, 0.3, 0.14, theme.floorAccent);
 }
 
-/** Riveted steel, pipes, hazard stripes and the chain portal behind the deposit desk. */
+/**
+ * NEAR (deposits route through NEAR Intents): black walls and floor, a grey
+ * grid of crosshair marks underfoot, and a dashed green route to the desk.
+ * Behind the desk, a quiet route map in green light: five chains feed one
+ * junction, three solver lanes race and the middle one wins, and a single
+ * route runs on to Starknet, a pulse travelling along it. The side walls
+ * carry cards with crosshair corners (one still pending, in amber) above a
+ * run of slashes on the wainscot.
+ */
 function bridgeDecor(theme: RoomTheme, shell: InteriorShell, map: FixedRoomMap, res: ResourceBag, animators: Animator[]): void {
   const north = shell.walls.north;
   const nf = north.face;
   const anchor = stationAnchor(map);
-  const py = 1.15;
-  const steel = 0x8795a3;
-  if (inSpans(north, anchor - 1.3, anchor + 1.3)) {
-    north.bins.add('body', faceTorus(nf, anchor, py, 0.2, 0.85, 0.12, { radialSegments: 6, tubularSegments: 22 }), steel);
-    for (const side of [-1, 1]) {
-      const u = anchor + side * 1.1;
-      north.bins.add('body', faceBox(nf, u - 0.15, 0, 0, u + 0.15, 2.15, 0.36), 0x3e4c5a);
-      for (const v of [0.6, 1.2, 1.8]) {
-        north.bins.add('unlit', faceBox(nf, u - 0.06, v, 0.36, u + 0.06, v + 0.08, 0.37), theme.trim);
-      }
-    }
-    // The portal's swirling face: its own mesh so it can turn.
-    const geometry = res.geometry(new RingGeometry(0, 0.76, 32, 4));
-    const position = geometry.getAttribute('position');
-    const colours = new Float32Array(position.count * 3);
-    const deep = new Color(0x1b3a6b);
-    const bright = new Color(0x7ad8ff);
-    const warm = new Color(0xffc877);
-    const scratch = new Color();
-    for (let i = 0; i < position.count; i++) {
-      const x = position.getX(i);
-      const y = position.getY(i);
-      const r = Math.hypot(x, y) / 0.76;
-      const angle = Math.atan2(y, x);
-      const swirl = 0.5 + 0.5 * Math.sin(angle * 3 + r * 7);
-      scratch.copy(deep).lerp(bright, swirl * (1 - r * 0.4)).lerp(warm, Math.max(0, 0.6 - r) * 0.5);
-      colours[i * 3] = scratch.r;
-      colours[i * 3 + 1] = scratch.g;
-      colours[i * 3 + 2] = scratch.b;
-    }
-    geometry.setAttribute('color', new BufferAttribute(colours, 3));
-    const material = res.material(unlitMaterial());
-    const disc = new Mesh(geometry, material);
-    disc.name = `${north.group.name}:portal`;
-    const [x, y, z] = faceToWorld(nf, anchor, py, 0.18);
-    disc.position.set(x, y, z);
-    north.group.add(disc);
-    north.fadeMaterials.push(material);
-    animators.push((elapsed) => {
-      disc.rotation.z = -(elapsed / 1000) * 0.9;
+  const panel = lift(NEAR.black, 0.04);
+  const frame = lift(NEAR.hairline, 0.16);
+  const mark = lift(NEAR.muted, 0.08);
+  const idle = lift(NEAR.muted, -0.22);
+
+  const [u0, u1, v0, v1] = [anchor - 3.6, anchor + 3.6, 1.04, 2.0];
+  if (inSpans(north, u0, u1)) {
+    nearCard(north, u0, v0, u1, v1, panel, frame, mark);
+    const vc = (v0 + v1) / 2;
+    const w = 0.04;
+    const [sources, junction, split, merge, destination] = [anchor - 3.1, anchor - 1.7, anchor - 1.2, anchor + 1.2, anchor + 2.7];
+    const line = (ua: number, va: number, ub: number, vb: number, colour: number, width: number): void => {
+      north.bins.add('unlit', beamGeometry(faceToWorld(nf, ua, va, w), faceToWorld(nf, ub, vb, w), 0.008, width), colour);
+    };
+    // Five chains feed one junction, bending in at 45 degrees like a transit map.
+    [NEAR.muted, NEAR.teal, NEAR.muted, NEAR.periwinkle, NEAR.muted].forEach((colour, i) => {
+      const v = vc + (i - 2) * 0.16;
+      const bend = junction - Math.abs(v - vc);
+      north.bins.add('unlit', faceDisc(nf, sources, v, 0.03, 0.045, 0.016, 10), colour);
+      line(sources + 0.05, v, bend, v, theme.floorAccent, 0.014);
+      if (bend < junction) line(bend, v, junction, vc, theme.floorAccent, 0.014);
     });
-  }
-  for (const [a, b] of north.spans) {
-    for (const [s0, s1] of [
-      [a, Math.min(b, anchor - 1.4)],
-      [Math.max(a, anchor + 1.4), b],
-    ] as const) {
-      if (s1 - s0 < 0.3) continue;
-      north.bins.add('body', facePipe(nf, s0, s1, 1.96, 0.12, 0.06), 0x6d7b89);
-      north.bins.add('body', facePipe(nf, s0, s1, 0.32, 0.1, 0.045), 0x9a6b3c);
+    north.bins.add('unlit', faceTorus(nf, junction, vc, w + 0.004, 0.055, 0.012, { tubularSegments: 16 }), theme.floorAccent);
+    // Three solver lanes race from the split to the merge; the middle one wins.
+    line(junction + 0.055, vc, destination - 0.11, vc, theme.floorAccent, 0.022);
+    for (const dv of [-0.14, 0.14]) {
+      line(split, vc, split + 0.14, vc + dv, idle, 0.012);
+      line(split + 0.14, vc + dv, merge - 0.14, vc + dv, idle, 0.012);
+      line(merge - 0.14, vc + dv, merge, vc, idle, 0.012);
     }
+    // Starknet, the one destination: a white core in a green ring, over a
+    // faint aurora that shades from green to a hint of violet.
+    north.bins.add('unlit', faceTorus(nf, destination, vc, w + 0.004, 0.11, 0.016, { tubularSegments: 20 }), theme.floorAccent);
+    north.bins.add('unlit', faceDisc(nf, destination, vc, 0.03, 0.06, 0.018, 12), NEAR.white);
+    const glow = new RingGeometry(0, 1, 32, 5);
+    const position = glow.getAttribute('position');
+    const colours = new Float32Array(position.count * 4);
+    const inner = new Color(theme.floorAccent);
+    const outer = new Color(NEAR.violet);
+    const tint = new Color();
+    for (let i = 0; i < position.count; i++) {
+      const r = Math.min(1, Math.hypot(position.getX(i), position.getY(i)));
+      tint.copy(inner).lerp(outer, clamp01(r * 1.3));
+      colours.set([tint.r, tint.g, tint.b, 0.34 * (1 - r) ** 1.7], i * 4);
+    }
+    glow.setAttribute('color', new BufferAttribute(colours, 4));
+    const aurora = new Mesh(res.geometry(glow.scale(0.7, 0.42, 1)), res.material(unlitMaterial({ additive: true })));
+    aurora.name = `${north.group.name}:aurora`;
+    aurora.renderOrder = 2;
+    aurora.position.set(...faceToWorld(nf, destination, vc, 0.032));
+    north.group.add(aurora);
+    north.fadeMaterials.push(aurora.material);
+    // A pulse runs the route from the junction, rests at Starknet, repeats.
+    const pulse = new Mesh(
+      res.geometry(new CircleGeometry(0.032, 10)),
+      res.material(unlitMaterial({ color: NEAR.greenTint, vertexColors: false })),
+    );
+    pulse.name = `${north.group.name}:pulse`;
+    north.group.add(pulse);
+    north.fadeMaterials.push(pulse.material);
+    const place = (elapsed: number): void => {
+      const s = Math.min(1, ((elapsed / 1000) % 3) / 2.4);
+      pulse.position.set(...faceToWorld(nf, junction + (destination - junction) * s * s * (3 - 2 * s), vc, 0.06));
+    };
+    place(0);
+    animators.push(place);
   }
-  for (const wall of [shell.walls.west, shell.walls.east]) {
+
+  // The wainscot's run of slashes, on every wall.
+  for (const wall of Object.values(shell.walls)) {
     for (const [s0, s1] of wall.spans) {
-      wall.bins.add('body', facePipe(wall.face, s0, s1, 1.9, 0.12, 0.06), 0x6d7b89);
-      wall.bins.add('body', facePipe(wall.face, s0, s1, 0.38, 0.1, 0.045), 0x9a6b3c);
-      for (let u = s0 + 1; u + 0.8 < s1; u += 2.2) {
-        wall.bins.add('body', faceBox(wall.face, u - 0.7, 0.55, 0, u + 0.7, 1.7, 0.03), theme.wallLower);
-        for (const [du, v] of [
-          [-0.62, 0.63],
-          [0.62, 0.63],
-          [-0.62, 1.62],
-          [0.62, 1.62],
-        ] as const) {
-          wall.bins.add('body', faceBox(wall.face, u + du - 0.03, v - 0.03, 0.03, u + du + 0.03, v + 0.03, 0.05), 0x9aa6b2);
-        }
-        wall.bins.add('unlit', faceBox(wall.face, u - 0.08, 1.2, 0.03, u + 0.08, 1.28, 0.04), theme.trim);
+      for (let u = s0 + 0.3; u + 0.32 < s1; u += 0.24) {
+        wall.bins.add('body', beamGeometry(faceToWorld(wall.face, u, 0.6, 0.028), faceToWorld(wall.face, u + 0.12, 0.82, 0.028), 0.01, 0.022), frame);
       }
     }
   }
-  // Hazard band inside the walls: amber and charcoal squares.
-  const y = 0.006;
-  const band = (x0: number, z0: number, x1: number, z1: number) => {
-    const alongX = x1 - x0 > z1 - z0;
-    const length = alongX ? x1 - x0 : z1 - z0;
-    const count = Math.floor(length / 0.25);
-    for (let i = 0; i < count; i++) {
-      const colour = i % 2 === 0 ? theme.floorAccent : 0x2a2f36;
-      if (alongX) shell.floor.add('floor', flatQuad(x0 + i * 0.25, z0, x0 + (i + 1) * 0.25, z1, y), colour);
-      else shell.floor.add('floor', flatQuad(x0, z0 + i * 0.25, x1, z0 + (i + 1) * 0.25, y), colour);
+  // Side-wall cards, one chain each: a ring, and its route's progress bar.
+  const cards: ReadonlyArray<readonly [number, number, boolean]> = [
+    [NEAR.teal, 1, false],
+    [NEAR.muted, 0.55, true],
+    [NEAR.periwinkle, 1, false],
+    [NEAR.muted, 1, false],
+  ];
+  let next = 0;
+  for (const wall of [shell.walls.west, shell.walls.east]) {
+    const [s0, s1] = wall.spans[0] ?? [0, 0];
+    const mid = (s0 + s1) / 2;
+    for (const u of [mid - 2.1, mid + 2.1]) {
+      const [ring, done, pending] = cards[next++ % cards.length]!;
+      if (!inSpans(wall, u - 0.72, u + 0.72)) continue;
+      nearCard(wall, u - 0.7, 1.12, u + 0.7, 1.78, panel, frame, mark);
+      wall.bins.add('unlit', faceTorus(wall.face, u - 0.38, 1.45, 0.044, 0.1, 0.016, { tubularSegments: 16 }), ring);
+      wall.bins.add('unlit', faceBox(wall.face, u - 0.16, 1.43, 0.03, u + 0.5, 1.47, 0.036), lift(NEAR.hairline, 0.06));
+      wall.bins.add('unlit', faceBox(wall.face, u - 0.16, 1.43, 0.036, u - 0.16 + 0.66 * done, 1.47, 0.042), pending ? NEAR.amber : theme.floorAccent);
     }
-  };
-  const inset = 0.12;
-  const w = 0.16;
-  band(1 + inset, 1 + inset, map.width - 1 - inset, 1 + inset + w);
-  band(1 + inset, 1 + inset + w, 1 + inset + w, map.height - 1 - inset);
-  band(map.width - 1 - inset - w, 1 + inset + w, map.width - 1 - inset, map.height - 1 - inset);
+  }
+
+  // Underfoot: a grey grid of crosshairs (clear of the desk's halo), and the
+  // route from the exit to the desk, dashed in green.
+  const station = map.stations[0];
+  const exit = map.exit;
+  const routeX = exit.x + exit.width / 2;
+  const cross = lift(NEAR.hairline, 0.2);
+  for (let x = 2; x < map.width - 1; x += 2) {
+    for (let z = 2; z < map.height - 1; z += 2) {
+      if (Math.abs(x - routeX) < 0.5) continue;
+      if (station && x >= station.x - 1 && x <= station.x + station.width + 1 && z >= station.y - 1 && z <= station.y + station.height + 1) continue;
+      shell.floor.add('floor', flatQuad(x - 0.08, z - 0.008, x + 0.08, z + 0.008, 0.004), cross);
+      shell.floor.add('floor', flatQuad(x - 0.008, z - 0.08, x + 0.008, z + 0.08, 0.004), cross);
+    }
+  }
+  const zTop = station ? station.y + station.height + 1.12 : map.height / 2;
+  for (let z = exit.y - 0.95; z - 0.34 > zTop; z -= 0.56) {
+    shell.floor.add('glow', flatQuad(routeX - 0.025, z - 0.34, routeX + 0.025, z, 0.008), theme.floorAccent);
+  }
+}
+
+/** A NEAR card on a wall: a black panel in a hairline frame, crosshairs in its corners. */
+function nearCard(wall: InteriorWall, u0: number, v0: number, u1: number, v1: number, fill: number, frame: number, mark: number): void {
+  const f = wall.face;
+  const t = 0.012;
+  wall.bins.add('body', faceBox(f, u0, v0, 0, u1, v1, 0.03), fill);
+  wall.bins.add('body', faceBox(f, u0, v0, 0.03, u1, v0 + t, 0.034), frame);
+  wall.bins.add('body', faceBox(f, u0, v1 - t, 0.03, u1, v1, 0.034), frame);
+  wall.bins.add('body', faceBox(f, u0, v0 + t, 0.03, u0 + t, v1 - t, 0.034), frame);
+  wall.bins.add('body', faceBox(f, u1 - t, v0 + t, 0.03, u1, v1 - t, 0.034), frame);
+  const arm = 0.05;
+  const bar = 0.012;
+  for (const u of [u0 + 0.1, u1 - 0.1]) {
+    for (const v of [v0 + 0.1, v1 - 0.1]) {
+      wall.bins.add('body', faceBox(f, u - arm, v - bar / 2, 0.03, u + arm, v + bar / 2, 0.036), mark);
+      wall.bins.add('body', faceBox(f, u - bar / 2, v - arm, 0.03, u + bar / 2, v + arm, 0.036), mark);
+    }
+  }
 }

@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 import {
   Box3,
   BufferGeometry,
+  Color,
   InstancedMesh,
   Material,
   Matrix4,
@@ -9,6 +10,7 @@ import {
   MeshBasicMaterial,
   MeshStandardMaterial,
   Object3D,
+  SRGBColorSpace,
   Texture,
   Vector3,
 } from 'three';
@@ -22,6 +24,7 @@ import {
 } from '../fixed-room.js';
 import { ROOM_ORIGIN } from '../world-layout.js';
 import { createNullLabelFactory } from './labels.js';
+import { NEAR } from './palette.js';
 import {
   INTERIOR_SOUTH_WALL_HEIGHT,
   INTERIOR_WALL_HEIGHT,
@@ -253,6 +256,46 @@ describe('buildFixedRoom', () => {
     room.dispose();
   });
 
+  it('dresses the Bridge room in NEAR: green light on black, a route map behind the desk', () => {
+    const { map, room } = build('bridge');
+    const group = stationGroup(room, 'bridge:deposit');
+    // The station label in NEAR's uppercase mono, white on black.
+    expect(floatingLabel(group).userData['options']).toMatchObject({
+      font: 'mono',
+      uppercase: true,
+      foreground: '#ffffff',
+      background: 'rgba(0,0,0,0.9)',
+    });
+    // Locked until the Shell says otherwise, then green; the highlight's halo in the tint.
+    const accent = meshNamed(group, ':status').material as MeshStandardMaterial;
+    const halo = meshNamed(group, ':halo').material as MeshBasicMaterial;
+    expect(accent.emissiveIntensity).toBe(0);
+    room.setStations(fixedRoomStationPresentations(map, roomState(map, 'available', null)));
+    expect(accent.emissive.getHex()).toBe(new Color(NEAR.green).getHex());
+    expect(halo.color.getHex()).toBe(new Color(NEAR.green).getHex());
+    room.setStations(fixedRoomStationPresentations(map, roomState(map, 'available', 'bridge:deposit')));
+    expect(halo.color.getHex()).toBe(new Color(NEAR.greenTint).getHex());
+    // The route map on the north wall, self-lit in the measured green, with its
+    // aurora and travelling pulse fading with that wall.
+    const north = (room.occluders as readonly InteriorOccluder[]).find((occluder) => occluder.side === 'north')!;
+    expect(coloursOf(meshNamed(north.object, ':lights'))).toContain(new Color(NEAR.green).getHex());
+    const aurora = meshNamed(north.object, ':aurora').material as MeshBasicMaterial;
+    const pulse = meshNamed(north.object, ':pulse');
+    north.setOpacity(0.3);
+    expect(aurora.opacity).toBeCloseTo(0.3);
+    expect((pulse.material as MeshBasicMaterial).opacity).toBeCloseTo(0.3);
+    north.setOpacity(1);
+    const start = pulse.position.x;
+    room.update(1200);
+    expect(pulse.position.x).toBeGreaterThan(start);
+    // Green leads, amber marks the one pending route, and there is no orange anywhere.
+    const hues = huesOf(room.group);
+    expect(hues.filter(isOrange)).toEqual([]);
+    expect(hues.filter(isGreen).length).toBeGreaterThan(0);
+    expect(coloursOf(meshNamed(room.group, ':wall-west:lights'))).toContain(new Color(NEAR.amber).getHex());
+    room.dispose();
+  });
+
   it('copies its origin so later mutation cannot move the room', () => {
     const origin = { x: 64, y: 96 };
     const room = buildFixedRoom(createFixedRoom(FIXED_ROOM_DEFINITIONS.bridge), createNullLabelFactory(), origin);
@@ -313,6 +356,47 @@ describe('buildFixedRoom', () => {
     room.setStations(fixedRoomStationPresentations(map, roomState(map, 'available', null)));
   });
 });
+
+/** sRGB hexes of a mesh's vertex colours. */
+function coloursOf(mesh: Mesh): number[] {
+  const attribute = mesh.geometry.getAttribute('color');
+  const colour = new Color();
+  const found = new Set<number>();
+  for (let i = 0; attribute && i < attribute.count; i++) {
+    found.add(colour.setRGB(attribute.getX(i), attribute.getY(i), attribute.getZ(i)).getHex());
+  }
+  return [...found];
+}
+
+interface Hue {
+  readonly h: number;
+  readonly s: number;
+  readonly l: number;
+}
+
+/** See street-builder.test.ts: perceptual hues of vertex colours and live emissives. */
+function huesOf(root: Object3D): Hue[] {
+  const found: Hue[] = [];
+  const colour = new Color();
+  const hsl = { h: 0, s: 0, l: 0 };
+  const push = (value: Color): void => {
+    value.getHSL(hsl, SRGBColorSpace);
+    found.push({ h: hsl.h * 360, s: hsl.s, l: hsl.l });
+  };
+  root.traverse((object) => {
+    if (!(object instanceof Mesh)) return;
+    const attribute = object.geometry.getAttribute('color');
+    for (let i = 0; attribute && i < attribute.count; i++) {
+      push(colour.setRGB(attribute.getX(i), attribute.getY(i), attribute.getZ(i)));
+    }
+    const material = object.material as Partial<MeshStandardMaterial>;
+    if (material.emissive && (material.emissiveIntensity ?? 0) > 0) push(colour.copy(material.emissive));
+  });
+  return found;
+}
+
+const isOrange = ({ h, s, l }: Hue): boolean => s > 0.5 && l > 0.15 && h >= 10 && h <= 40;
+const isGreen = ({ h, s, l }: Hue): boolean => s > 0.5 && l > 0.15 && h >= 135 && h <= 175;
 
 function materialsOf(root: Object3D): Material[] {
   const found = new Set<Material>();

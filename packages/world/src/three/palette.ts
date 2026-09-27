@@ -115,6 +115,32 @@ export const STRK20 = Object.freeze({
   peach: 0xffcdb6,
 });
 
+/**
+ * The Bridge's deposit route, NEAR Intents — measured from near.org /
+ * intents.near.org. A black and white base with one green accent. The
+ * Intents orange is left out on purpose: the Bank owns orange.
+ */
+export const NEAR = Object.freeze({
+  black: 0x000000,
+  surface: 0x0a0a0a,
+  raised: 0x171717,
+  elevated: 0x1e1e1e,
+  elevatedAlt: 0x242424,
+  hairline: 0x2a2a2a,
+  white: 0xffffff,
+  muted: 0x9ca3af,
+  /** The primary accent; anything printed on it is black. */
+  green: 0x00ec97,
+  greenTint: 0xc7f5d8,
+  /** Sparingly. */
+  teal: 0x17d9d4,
+  periwinkle: 0x9797ff,
+  /** A hint, and only ever as glow. */
+  violet: 0xa855f7,
+  /** Pending and processing. */
+  amber: 0xfbbf24,
+});
+
 /** A palette number as CSS, so canvas labels read the same source. */
 export function css(hex: number): string {
   return `#${(hex & 0xffffff).toString(16).padStart(6, '0')}`;
@@ -194,6 +220,8 @@ export interface BuildingTheme {
   readonly litRatio: number;
   /** Door portal glow; the Vault's is a dim locked red. */
   readonly portal: number;
+  /** Emissive strength of an open portal's frame (1.8); bright accents want less. */
+  readonly portalIntensity?: number;
   readonly sign: SignStyle;
 }
 
@@ -294,28 +322,47 @@ export const BUILDING_THEMES: Readonly<Record<BuildingId, BuildingTheme>> = Obje
   }),
   bridge: Object.freeze({
     style: 'bridge',
-    height: 4.2,
-    // Lighter than it "should" be: under a high warm sun, vertical faces get
-    // well under half the key light and ACES crushes low albedo to navy.
-    wall: 0x86a0b6,
-    wallAlt: 0x7089a0,
-    trim: 0x3f4d5b,
-    accent: 0xe3a33a,
-    roof: 0x6b7b8a,
-    door: 0x52667a,
-    windowLit: 0xffe6b0,
-    windowGlow: 0xffc36b,
-    windowDark: 0x2d3945,
-    glow: 0xffc15a,
-    beacon: 0xffa726,
-    litRatio: 0.55,
-    portal: 0xffc877,
+    height: 4.4,
+    // NEAR: black glass (lifted from #171717 so it reads as glass rather than
+    // a hole) in a thin grey frame, dark steel for the span, and green as the
+    // one colour, only ever self-lit.
+    wall: lift(NEAR.raised, 0.07),
+    wallAlt: lift(NEAR.elevated, 0.1),
+    trim: lift(NEAR.muted, 0.04),
+    accent: NEAR.green,
+    roof: lift(NEAR.surface, 0.07),
+    door: lift(NEAR.raised, 0.06),
+    // Cool, soft interior light, darker than it looks (the mix is linear, and
+    // the facade takes the key light): the green stays the only colour.
+    windowLit: mixHex(NEAR.greenTint, NEAR.black, 0.85),
+    windowGlow: mixHex(NEAR.greenTint, NEAR.black, 0.86),
+    windowDark: lift(NEAR.black, 0.05),
+    glow: NEAR.green,
+    // Light lines are painted near-black and glow green. ACES bleaches a
+    // bright green to mint (at 1.0 the measured green comes out #82deb0), so
+    // the glow stays low enough to keep the hue.
+    glowIntensity: 0.6,
+    beacon: NEAR.green,
+    litRatio: 0.35,
+    portal: NEAR.green,
+    portalIntensity: 0.6,
     sign: Object.freeze({
-      width: 2.7,
+      width: 2.6,
       height: 0.72,
-      background: '#26313c',
-      foreground: '#ffd27a',
-      accent: '#e3a33a',
+      background: css(NEAR.black),
+      foreground: css(NEAR.white),
+      accent: css(NEAR.hairline),
+      // NEAR's tight 2-8 px radii, at the board's scale.
+      cornerRadius: 0.06,
+      borderWidth: 0.03,
+      hairline: false,
+      titleFont: 'sans',
+      titleTracking: 0.02,
+      // The Intents call to action: uppercase mono, widely tracked, in green.
+      subtitleFont: 'mono',
+      subtitleTracking: 0.24,
+      subtitleColor: css(NEAR.green),
+      uppercase: true,
     }),
   }),
   vault: Object.freeze({
@@ -500,6 +547,48 @@ export const STRK20_STATION_LOOKS: StationLooks = Object.freeze({
   }),
 });
 
+/**
+ * NEAR: green when ready, brighter green with its tint as the halo when you
+ * step up to it. Locked only means not enabled yet, so it stays neutral grey;
+ * amber (pending) is kept for the room's decor.
+ */
+export const NEAR_STATION_LOOKS: StationLooks = Object.freeze({
+  // A near-black green body under a low green glow: ACES bleaches a bright
+  // green to mint, so the halo (unlit, exact colour) carries the highlight.
+  available: Object.freeze({
+    color: lift(NEAR.green, -0.38),
+    emissive: NEAR.green,
+    emissiveIntensity: 0.5,
+    halo: NEAR.green,
+    haloOpacity: 0.2,
+    edgeOpacity: 0.6,
+  }),
+  highlighted: Object.freeze({
+    color: lift(NEAR.green, -0.34),
+    emissive: NEAR.green,
+    emissiveIntensity: 0.8,
+    halo: NEAR.greenTint,
+    haloOpacity: 0.42,
+    edgeOpacity: 1,
+  }),
+  locked: Object.freeze({
+    color: lift(NEAR.hairline, 0.08),
+    emissive: 0x000000,
+    emissiveIntensity: 0,
+    halo: NEAR.muted,
+    haloOpacity: 0.06,
+    edgeOpacity: 0.2,
+  }),
+  lockedHighlighted: Object.freeze({
+    color: lift(NEAR.hairline, 0.13),
+    emissive: lift(NEAR.muted, -0.3),
+    emissiveIntensity: 0.3,
+    halo: NEAR.muted,
+    haloOpacity: 0.16,
+    edgeOpacity: 0.45,
+  }),
+});
+
 export type RoomDecorStyle = 'strk20' | 'avnu' | 'post-office' | 'bridge' | 'plain';
 
 /** Interior palette for one fixed room. */
@@ -590,20 +679,28 @@ export const ROOM_THEMES: Readonly<Partial<Record<BuildingId, RoomTheme>>> = Obj
   }),
   bridge: Object.freeze({
     decor: 'bridge',
-    floorA: 0x66737f,
-    floorB: 0x5b6773,
-    floorAccent: 0xe3a33a,
-    wall: 0x55687a,
-    wallLower: 0x46586a,
-    wallTop: 0x2d3945,
-    trim: 0xe3a33a,
-    skirting: 0x2d3945,
-    cut: 0x1f2831,
-    kioskBase: 0x3e4c5a,
-    kioskTop: 0x8795a3,
-    exitGlow: 0xffc877,
-    label: Object.freeze({ foreground: '#ffe9bd', background: 'rgba(24,31,39,0.86)' }),
-    stationLooks: STATION_LOOKS,
+    floorA: lift(NEAR.surface, 0.08),
+    floorB: lift(NEAR.raised, 0.08),
+    floorAccent: NEAR.green,
+    wall: lift(NEAR.raised, 0.1),
+    wallLower: lift(NEAR.surface, 0.06),
+    wallTop: NEAR.black,
+    trim: lift(NEAR.hairline, 0.12),
+    skirting: NEAR.black,
+    cut: NEAR.black,
+    kioskBase: lift(NEAR.raised, 0.09),
+    kioskTop: lift(NEAR.hairline, 0.16),
+    exitGlow: NEAR.green,
+    label: Object.freeze({
+      foreground: css(NEAR.white),
+      background: cssAlpha(NEAR.black, 0.9),
+      border: css(NEAR.hairline),
+      font: 'mono',
+      cornerRadius: 0.12,
+      tracking: 0.16,
+      uppercase: true,
+    }),
+    stationLooks: NEAR_STATION_LOOKS,
   }),
 });
 

@@ -10,6 +10,7 @@ import {
   MeshBasicMaterial,
   PlaneGeometry,
   Quaternion,
+  RingGeometry,
   Vector3,
   Color,
 } from 'three';
@@ -29,6 +30,7 @@ import {
   ResourceBag,
   SANDBOX_THEME,
   AVNU,
+  NEAR,
   STRK20,
   aoPaint,
   beamGeometry,
@@ -118,6 +120,8 @@ const GLASS = 'glass';
 const LIT = 'lit';
 const GLOW = 'glow';
 const BEACON = 'beacon';
+/** Additive washes of light on a facade (the Bridge's aurora); RGBA paint. */
+const AURA = 'aura';
 
 type Animator = (elapsedMs: number) => void;
 
@@ -1082,6 +1086,7 @@ function buildBuilding(fp: Footprint, res: ResourceBag): BuiltBuilding {
       false,
       false,
     );
+    addMesh(AURA, () => unlitMaterial({ additive: true }), false, false);
 
     group.updateMatrixWorld(true);
     const box = new Box3().setFromObject(group);
@@ -1658,125 +1663,164 @@ function pillarBox(ctx: BuildingCtx, x: number, z: number): void {
   ctx.bins.add(BODY, boxGeometry(x - 0.07, 0.52, z + 0.16, x + 0.07, 0.64, z + 0.2), 0xf3ead6);
 }
 
-/** Corrugated blue-grey steel, a hazard-striped girder door and a Warren roof truss. */
+/**
+ * NEAR (deposits route through NEAR Intents): black glass in a thin grey
+ * frame, and a cable-stayed span across the front. Two steel pylons carry a
+ * slim deck over the entrance on cables drawn in NEAR green light, clear of
+ * the middle, where the sign sits on a black card with crosshair marks at
+ * its corners. A faint aurora washes the glass around the card, and a run of
+ * slashes marks the plinth.
+ */
 function bridgeStyle(ctx: BuildingCtx): StyleResult {
   const t = ctx.theme;
   const H = t.height;
-  const doorTop = 2.5;
-  const front = massing(ctx, H, 0.12, doorTop, aoPaint(t.wall, 0.06));
+  const doorTop = 2.4;
+  const deck = 2.62;
+  const front = massing(ctx, H, 0.42, doorTop, (_x, y) => shade(t.wall, 0.035 * (y / H) - 0.01), GLASS);
   const gc = ctx.doorCentre;
   const xa = ctx.x0 + SIDE_INSET;
   const xb = ctx.x1 - SIDE_INSET;
   const za = ctx.z0 + SIDE_INSET;
-  band(ctx, 0, 0.45, 0.04, t.trim, front, doorTop);
+  const steel = t.wallAlt;
+  const mark = lift(NEAR.muted, 0.1);
+  // Light lines: a near-black body, lit only by the GLOW material's green.
+  const line = lift(NEAR.green, -0.38);
+  if (ctx.gap) doubleDoor(ctx, ctx.gap, doorTop);
 
-  for (let x = xa + 0.2; x < xb - 0.1; x += 0.32) {
-    const nearDoor = ctx.gap !== null && x > ctx.gap.x0 - 0.3 && x < ctx.gap.x1 + 0.3;
-    const y0 = nearDoor ? doorTop + 0.36 : 0.45;
-    ctx.bins.add(BODY, boxGeometry(x - 0.035, y0, front, x + 0.035, H - 0.25, front + 0.035), t.wallAlt);
-  }
-  for (const side of sideFaces(ctx)) {
-    for (let z = za + 0.2; z < front - 0.1; z += 0.35) {
-      ctx.bins.add(BODY, faceBox(side, z - 0.035, 0.45, 0, z + 0.035, H - 0.25, 0.035), t.wallAlt);
+  // Plinth: a green line along its top and a run of slashes on its face.
+  band(ctx, 0, 0.34, 0.04, steel, front, doorTop);
+  band(ctx, 0.34, 0.37, 0.05, line, front, doorTop, GLOW);
+  for (const run of solidRuns(ctx)) {
+    const a = Math.max(run.x0, xa) + 0.1;
+    const b = Math.min(run.x1, xb) - 0.1;
+    for (let x = a; x + 0.12 <= b; x += 0.2) {
+      ctx.bins.add(BODY, beamGeometry([x, 0.09, front + 0.046], [x + 0.12, 0.27, front + 0.046], 0.012, 0.024), mark);
     }
   }
-  for (const [a, b] of [
-    [ctx.x0, ctx.x0 + 0.24],
-    [ctx.x1 - 0.24, ctx.x1],
-  ] as const) {
-    ctx.bins.add(BODY, boxGeometry(a, 0, front - 0.14, b, H + 0.12, ctx.zf - 0.02), t.trim);
-    ctx.bins.add(BODY, boxGeometry(a, 0, ctx.z0, b, H + 0.12, ctx.z0 + 0.24), t.trim);
-  }
 
-  if (ctx.gap) {
-    const g = ctx.gap;
-    for (const [a, b] of [
-      [g.x0 - 0.22, g.x0],
-      [g.x1, g.x1 + 0.22],
-    ] as const) {
-      ctx.bins.add(BODY, boxGeometry(a, 0, front - 0.05, b, doorTop + 0.35, ctx.zf - 0.03), t.trim);
-      for (let i = 0; i < 6; i++) {
-        const y = 0.12 + i * 0.2;
-        ctx.bins.add(BODY, boxGeometry(a + 0.01, y, ctx.zf - 0.03, b - 0.01, y + 0.1, ctx.zf - 0.012), i % 2 === 0 ? t.accent : 0x23282e);
+  // The curtain wall: a grey grid over black glass, two rows of panes per
+  // floor, a few of them lit; the shopfront's lower row stays dark.
+  const ground = 1.36;
+  const upper = (deck + 0.16 + H - 0.24) / 2;
+  const floors: ReadonlyArray<readonly [number, number]> = [
+    [0.4, ground - 0.03],
+    [ground + 0.03, deck - 0.05],
+    [deck + 0.16, upper - 0.03],
+    [upper + 0.03, H - 0.24],
+  ];
+  const bays = 9;
+  const step = (xb - xa) / bays;
+  for (let i = 0; i <= bays; i++) {
+    const x = xa + i * step;
+    const y0 = overlapsGap(ctx, x - 0.03, x + 0.03) ? doorTop : 0.37;
+    ctx.bins.add(BODY, boxGeometry(x - 0.022, y0, front, x + 0.022, H - 0.2, front + 0.028), t.trim);
+  }
+  for (const y of [ground, upper]) {
+    for (const run of y < doorTop ? solidRuns(ctx) : [{ x0: xa, x1: xb }]) {
+      const a = Math.max(run.x0, xa);
+      const b = Math.min(run.x1, xb);
+      if (b - a > 0.05) ctx.bins.add(BODY, boxGeometry(a, y - 0.018, front, b, y + 0.018, front + 0.026), t.trim);
+    }
+  }
+  const pane = (k: number) => jitterColor(t.windowLit, hash01(ctx.fp.index, k, 19), 0.04);
+  let k = 0;
+  floors.forEach(([y0, y1], row) => {
+    for (let i = 0; i < bays; i++) {
+      const a = xa + i * step + 0.03;
+      const c = xa + (i + 1) * step - 0.03;
+      k++;
+      if (row === 0 || (row === 1 && overlapsGap(ctx, a, c)) || !isLit(ctx, k)) continue;
+      ctx.bins.add(LIT, boxGeometry(a, y0, front, c, y1, front + 0.012), pane(k));
+    }
+  });
+  band(ctx, deck - 0.05, deck + 0.16, 0.03, steel, front, doorTop);
+  for (const side of sideFaces(ctx)) {
+    const count = Math.max(2, Math.round((front - za) / 0.8));
+    const sideStep = (front - za) / count;
+    for (let i = 0; i <= count; i++) {
+      const u = za + i * sideStep;
+      ctx.bins.add(BODY, faceBox(side, u - 0.022, 0.37, 0, u + 0.022, H - 0.2, 0.028), t.trim);
+    }
+    for (const [y0, y1] of floors) {
+      for (let i = 0; i < count; i++) {
+        k++;
+        if (!isLit(ctx, k)) continue;
+        ctx.bins.add(LIT, faceBox(side, za + i * sideStep + 0.03, y0, 0, za + (i + 1) * sideStep - 0.03, y1, 0.012), pane(k));
       }
     }
-    ctx.bins.add(BODY, boxGeometry(g.x0 - 0.22, doorTop, front - 0.05, g.x1 + 0.22, doorTop + 0.35, ctx.zf - 0.03), t.trim);
-    for (let x = g.x0 - 0.1; x <= g.x1 + 0.1; x += 0.25) {
-      ctx.bins.add(BODY, boxGeometry(x - 0.025, doorTop + 0.15, ctx.zf - 0.03, x + 0.025, doorTop + 0.2, ctx.zf - 0.015), 0x5d6d7c);
-    }
-    const back = ctx.rowZ - DOOR_RECESS + 0.02;
-    const doorFace = ctx.rowZ - 0.02;
-    const a = g.x0 + JAMB;
-    const b = g.x1 - JAMB;
-    ctx.bins.add(BODY, boxGeometry(a, 0, back, b, doorTop - 0.02, doorFace), t.door);
-    for (let i = 0; i < 5; i++) {
-      const y = 0.3 + i * 0.42;
-      ctx.bins.add(BODY, boxGeometry(a + 0.05, y, doorFace, b - 0.05, y + 0.05, doorFace + 0.02), shade(t.door, 0.06));
-    }
-    ctx.bins.add(LIT, boxGeometry((a + b) / 2 - 0.32, 1.42, doorFace, (a + b) / 2 + 0.32, 1.78, doorFace + 0.012), t.windowLit);
-    ctx.bins.add(BODY, boxGeometry(b - 0.2, 0.9, doorFace, b - 0.14, 1.3, doorFace + 0.04), t.accent);
-    sconce(ctx, g.x0 - 0.42, 2.05, front);
-    sconce(ctx, g.x1 + 0.42, 2.05, front);
   }
 
-  const face: Face = { normal: 'z+', plane: front };
-  const signHalf = t.sign.width / 2 + 0.15;
-  let k = 0;
-  for (const [a, b] of [
-    [xa + 0.25, gc - signHalf],
-    [gc + signHalf, xb - 0.25],
+  // The span: a slim deck across the front with a green line under its edge,
+  // two pylons, and cables fanning from each pylon head towards the middle.
+  const zf = ctx.zf;
+  ctx.bins.add(BODY, boxGeometry(xa + 0.02, deck, front - 0.02, xb - 0.02, deck + 0.1, zf - 0.03), steel);
+  ctx.bins.add(GLOW, boxGeometry(xa + 0.08, deck - 0.024, zf - 0.09, xb - 0.08, deck, zf - 0.05), line);
+  const pz = (front + zf) / 2;
+  const top = H + 1.3;
+  const card = { halfWidth: t.sign.width / 2 + 0.2, halfHeight: t.sign.height / 2 + 0.14 };
+  const signY = deck + 0.12 + card.halfHeight;
+  for (const [px, dir] of [
+    [ctx.x0 + 0.36, 1],
+    [ctx.x1 - 0.36, -1],
   ] as const) {
-    for (const x of distribute(a, b, 0.55, 0.2)) {
-      windowOnFace(ctx, face, x, 3.0, 0.55, 0.7, isLit(ctx, k++), { frame: t.trim, sill: false });
+    ctx.bins.add(BODY, boxGeometry(px - 0.12, 0, pz - 0.12, px + 0.12, 0.34, pz + 0.12), shade(steel, -0.04));
+    ctx.bins.add(BODY, boxGeometry(px - 0.085, 0, pz - 0.085, px + 0.085, top, pz + 0.085), steel);
+    ctx.bins.add(GLOW, boxGeometry(px - 0.095, top - 0.06, pz - 0.095, px + 0.095, top, pz + 0.095), line);
+    ctx.bins.add(BEACON, sphereGeometry(px, top + 0.08, pz, 0.07, { widthSegments: 6, heightSegments: 4 }), t.beacon);
+    // Anchors stop short of the card, so no cable crosses the sign.
+    const reach = Math.abs(gc - px) - card.halfWidth - 0.08;
+    for (let i = 1; i <= 3; i++) {
+      const anchor: Vec3 = [px + dir * reach * (i / 3), deck + 0.1, pz];
+      ctx.bins.add(GLOW, beamGeometry([px, top - 0.12 - (3 - i) * 0.16, pz], anchor, 0.022, 0.022), line);
+    }
+    // A back-stay over the roof to an anchor block.
+    ctx.bins.add(GLOW, beamGeometry([px, top - 0.1, pz], [px, H + 0.12, za + 0.9], 0.022, 0.022), line);
+    ctx.bins.add(BODY, boxGeometry(px - 0.1, H, za + 0.8, px + 0.1, H + 0.14, za + 1), steel);
+  }
+
+  // The sign's card, crosshairs in its corners, and the aurora around it.
+  const cardFront = zf - 0.08;
+  ctx.bins.add(
+    BODY,
+    boxGeometry(gc - card.halfWidth, signY - card.halfHeight, front, gc + card.halfWidth, signY + card.halfHeight, cardFront),
+    lift(NEAR.black, 0.06),
+  );
+  const cardFace: Face = { normal: 'z+', plane: cardFront };
+  for (const su of [-1, 1]) {
+    for (const sv of [-1, 1]) {
+      crosshair(ctx, cardFace, gc + su * (card.halfWidth - 0.1), signY + sv * (card.halfHeight - 0.08), mark);
     }
   }
-  for (const run of solidRuns(ctx)) {
-    const a = Math.max(run.x0, xa + 0.2) + (ctx.gap && run.x0 === ctx.gap.x1 ? 0.35 : 0);
-    const b = Math.min(run.x1, xb - 0.2) - (ctx.gap && run.x1 === ctx.gap.x0 ? 0.35 : 0) - 0.14;
-    for (const x of distribute(a, b, 0.7, 0.35)) {
-      windowOnFace(ctx, face, x, 0.9, 0.7, 0.85, isLit(ctx, k++), { frame: t.trim, mullion: true });
-    }
-  }
-  for (const side of sideFaces(ctx)) {
-    for (const z of distribute(za + 0.4, front - 0.4, 0.55, 0.25)) {
-      windowOnFace(ctx, side, z, 3.0, 0.55, 0.7, isLit(ctx, k++), { frame: t.trim, sill: false });
-    }
-  }
+  // The card hides the aurora's core, so it is brightest where it shows: in a
+  // band around the card's edge, fading out by the rim.
+  const aurora = { x: gc, y: signY, rx: card.halfWidth + 0.9, ry: card.halfHeight + 0.42 };
+  const inner = new Color(NEAR.green);
+  const outer = mixColor(NEAR.teal, NEAR.violet, 0.5);
+  const tint = new Color();
+  ctx.bins.addRGBA(
+    AURA,
+    // Just in front of the mullions, so it washes over the frame as well.
+    new RingGeometry(0, 1, 40, 6).scale(aurora.rx, aurora.ry, 1).translate(aurora.x, aurora.y, front + 0.034),
+    (x, y) => {
+      const r = clamp01(Math.hypot((x - aurora.x) / aurora.rx, (y - aurora.y) / aurora.ry));
+      tint.copy(inner).lerp(outer, clamp01((r - 0.45) / 0.55));
+      return [tint.r, tint.g, tint.b, 0.32 * clamp01((1 - r) / 0.42) ** 1.4];
+    },
+  );
 
   roofSlab(ctx, H, front, t.roof);
-  parapet(ctx, H, 0.18, 0.12, t.trim, front);
-  const steel = 0x7d93a6;
-  const txa = ctx.x0 + 0.4;
-  const txb = ctx.x1 - 0.4;
-  const trussZ = [ctx.z0 + 1, front - 1] as const;
-  const yb = H + 0.28;
-  const yt = H + 1.25;
-  const panels = 7;
-  const pw = (txb - txa) / panels;
-  for (const z of trussZ) {
-    ctx.bins.add(BODY, beamGeometry([txa, yb, z], [txb, yb, z], 0.1, 0.1), steel);
-    ctx.bins.add(BODY, beamGeometry([txa, yt, z], [txb, yt, z], 0.12, 0.12), steel);
-    for (let i = 0; i < panels; i++) {
-      const a = txa + i * pw;
-      const up = i % 2 === 0;
-      ctx.bins.add(BODY, beamGeometry([a, up ? yb : yt, z], [a + pw, up ? yt : yb, z], 0.07, 0.07), steel);
-    }
-    ctx.bins.add(BODY, beamGeometry([txa, yb, z], [txa, yt, z], 0.08, 0.08), steel);
-    ctx.bins.add(BODY, beamGeometry([txb, yb, z], [txb, yt, z], 0.08, 0.08), steel);
-    for (const x of [txa, (txa + txb) / 2, txb]) {
-      ctx.bins.add(BODY, boxGeometry(x - 0.07, H, z - 0.07, x + 0.07, yb, z + 0.07), shade(steel, -0.1));
-    }
-  }
-  for (let i = 0; i <= panels; i++) {
-    const x = txa + i * pw;
-    ctx.bins.add(BODY, beamGeometry([x, yt, trussZ[0]], [x, yt, trussZ[1]], 0.06, 0.06), steel);
-  }
-  ctx.bins.add(
-    BEACON,
-    sphereGeometry((txa + txb) / 2, yt + 0.14, trussZ[1], 0.09, { widthSegments: 6, heightSegments: 4 }),
-    t.beacon,
-  );
-  return { doorTop, sign: { x: gc, y: 3.3, z: ctx.zf - 0.06 } };
+  parapet(ctx, H, 0.14, 0.1, steel, front);
+  band(ctx, H - 0.2, H - 0.17, 0.035, line, front, doorTop, GLOW);
+  ctx.bins.add(BODY, boxGeometry(ctx.x0 + 2.3, H, ctx.z0 + 0.8, ctx.x0 + 3.7, H + 0.4, ctx.z0 + 1.8), lift(NEAR.elevatedAlt, 0.08));
+  return { doorTop, sign: { x: gc, y: signY, z: zf - 0.06 } };
+}
+
+/** A NEAR Intents crosshair: a small plus mark standing just proud of a face. */
+function crosshair(ctx: BuildingCtx, face: Face, u: number, v: number, colour: number): void {
+  const arm = 0.065;
+  const bar = 0.018;
+  ctx.bins.add(BODY, faceBox(face, u - arm, v - bar / 2, 0, u + arm, v + bar / 2, 0.008), colour);
+  ctx.bins.add(BODY, faceBox(face, u - bar / 2, v - arm, 0, u + bar / 2, v + arm, 0.008), colour);
 }
 
 /** Charcoal stone, iron straps, crenellations, and a chained, padlocked vault door. */
@@ -1986,8 +2030,9 @@ function buildDoorPortal(
   const half = door.width / 2;
   // The door stands at the back of the zone: the facade row's north edge.
   const dz = -door.height / 2;
+  const base = door.locked ? 0.6 : theme.portalIntensity ?? 1.8;
   const frameMaterial = res.material(
-    standardMaterial({ color: 0x1d1a17, vertexColors: false, emissive: theme.portal, emissiveIntensity: door.locked ? 0.6 : 1.8 }),
+    standardMaterial({ color: 0x1d1a17, vertexColors: false, emissive: theme.portal, emissiveIntensity: base }),
   );
   const lightMaterial = res.material(unlitMaterial({ additive: true }));
   const bin = new GeometryBin();
@@ -2023,8 +2068,8 @@ function buildDoorPortal(
   } finally {
     bin.dispose();
   }
-  const base = door.locked ? 0.6 : 1.8;
-  const amplitude = door.locked ? 0.15 : 0.45;
+  // The frame breathes by a quarter of its strength, locked or open.
+  const amplitude = 0.25 * base;
   const speed = door.locked ? 0.8 : 2.2;
   const phase = hash01(door.x, door.y, 5) * Math.PI * 2;
   return {
@@ -2355,7 +2400,8 @@ function sandboxWall(map: DistrictMap, gate: Gate | null, bin: GeometryBin): voi
  * The gate's superstructure as its own mesh and material, so that when the
  * pillar tops or the lintel come between the camera and the player it fades
  * the way a building does, and the wall beside it does not. Its bounds are
- * the superstructure's box.
+ * the superstructure's box, floor included: a sight line passing under the
+ * lintel, through the opening, is clear.
  */
 function flushGate(bin: GeometryBin, res: ResourceBag, parent: Group): GateOccluder | null {
   if (!bin.has(GATE_TOP)) return null;
@@ -2366,7 +2412,14 @@ function flushGate(bin: GeometryBin, res: ResourceBag, parent: Group): GateOcclu
   const occluder: GateOccluder = Object.freeze({
     kind: 'sandbox-gate',
     object: mesh,
-    bounds: Object.freeze({ minX: box.min.x, maxX: box.max.x, minZ: box.min.z, maxZ: box.max.z, height: box.max.y }),
+    bounds: Object.freeze({
+      minX: box.min.x,
+      maxX: box.max.x,
+      minZ: box.min.z,
+      maxZ: box.max.z,
+      minY: box.min.y,
+      height: box.max.y,
+    }),
     setOpacity: createOpacityFader([material]),
   });
   return occluder;

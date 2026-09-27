@@ -161,9 +161,10 @@ describe('presenter', () => {
     const wall = materialOf('street:decor');
     const state = ({ opacity, transparent, depthWrite }: Material) => ({ opacity, transparent, depthWrite });
     const opaque = state(gate);
-    // Where the rig puts the default camera: south of the player, looking north.
-    const settle = (x: number, z: number) => {
-      const offset = cameraOffset(0, DEFAULT_CAMERA_PITCH, DEFAULT_CAMERA_DISTANCE);
+    // Where the rig puts the camera; yaw 0 is the default, south of the
+    // player looking north.
+    const settle = (x: number, z: number, yaw = 0) => {
+      const offset = cameraOffset(yaw, DEFAULT_CAMERA_PITCH, DEFAULT_CAMERA_DISTANCE);
       const camera = new Vector3(x + offset.x, CAMERA_FOCUS_HEIGHT + offset.y, z + offset.z);
       for (let i = 0; i < 30; i += 1) world.presenter.updateOcclusion(camera, 16);
     };
@@ -182,6 +183,14 @@ describe('presenter', () => {
     world.presenter.update(16);
     settle(column - 0.5, 15.5);
     expect(state(gate)).toEqual(opaque);
+    // Back in the opening with the camera orbited to either side: the sight
+    // line leaves under the lintel, through the opening, so nothing fades.
+    world.view.setPlayerPosition(tile(column, 15), true);
+    world.presenter.update(16);
+    for (const yaw of [Math.PI / 2, -Math.PI / 2]) {
+      settle(column + 0.5, 15.5, yaw);
+      expect(state(gate)).toEqual(opaque);
+    }
   });
 
   it('disposes everything once and detaches from its parent', () => {
