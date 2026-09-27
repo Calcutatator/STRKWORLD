@@ -8,10 +8,12 @@
  * room.ts). These tests build the true worst case — the block cap spread over
  * every tile — and check it byte for byte.
  *
- * Seeding goes through two test-only, server-side seams, never client input:
- * the rules module is wrapped so every authority draws a fixed sequence
- * (spawn n lands on open tile n mod 784, colour n mod 8), and the registry's
- * spawn is wrapped so one spawner tick fills the sandbox to the cap.
+ * Seeding goes through three test-only, server-side seams, never client input:
+ * the entrance is emptied so drops can reach every tile (in play only players
+ * fill it, but the worst case still counts it), the rules module is wrapped
+ * so every authority draws a fixed sequence (spawn n lands on open tile
+ * n mod 784, colour n mod 8), and the registry's spawn is wrapped so one
+ * spawner tick fills the sandbox to the cap.
  *
  * One server for the file, as the matchmaker is a process-global.
  */
@@ -34,6 +36,11 @@ import { startPresenceServer, type PresenceServer } from './server';
 import type { PresenceEntry } from './state';
 
 const TILES = SANDBOX_AREA.width * SANDBOX_AREA.height;
+
+vi.mock('@strkworld/shared', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@strkworld/shared')>()),
+  SANDBOX_ENTRANCE: Object.freeze({ x: 54, y: 11, width: 0, height: 0 }),
+}));
 
 vi.mock('./sandbox-rules', async (importOriginal) => {
   const actual = await importOriginal<typeof import('./sandbox-rules')>();

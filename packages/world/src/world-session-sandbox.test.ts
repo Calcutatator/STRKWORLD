@@ -231,6 +231,20 @@ describe('WorldSession block sandbox (D-060)', () => {
     expect(world.session.player.x).toBeLessThanOrEqual((X + 1) * TILE_SIZE - 12);
   });
 
+  it('walks in through the gate, but not through the wall beside it', () => {
+    const gate = setup();
+    place(gate.session, centre(SANDBOX_AREA.x - 3, Y));
+    gate.keyboard.hold({ right: true });
+    for (let frame = 0; frame < 90; frame += 1) gate.session.update(16);
+    expect(gate.session.player.x).toBeGreaterThan((SANDBOX_AREA.x + 1) * TILE_SIZE);
+
+    const wall = setup();
+    place(wall.session, centre(SANDBOX_AREA.x - 3, 5));
+    wall.keyboard.hold({ right: true });
+    for (let frame = 0; frame < 90; frame += 1) wall.session.update(16);
+    expect(wall.session.player.x).toBeLessThanOrEqual((SANDBOX_AREA.x - 1) * TILE_SIZE - 12);
+  });
+
   it('rises with a stack that grows under a standing player', () => {
     const world = setup();
     place(world.session, centre(X, Y));

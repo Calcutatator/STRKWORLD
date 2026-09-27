@@ -147,6 +147,8 @@ export const SANDBOX_THEME = Object.freeze({
   plate: 0xdccfb9,
   grid: 0xc6b8a0,
   border: 0x9f907a,
+  /** The entrance apron inside the gate, kept clear of sky drops: the plate, a shade lighter. */
+  entrance: 0xe6dcc9,
   /** Index = `SandboxColumn` colour. Saturated enough to survive warm light. */
   blocks: Object.freeze([0xe4524b, 0xf28f3b, 0xf5cf4f, 0x5dbb63, 0x35b3b0, 0x4a78d8, 0x9467d0, 0xf2efe6]),
   targetValid: 0xfff1c4,

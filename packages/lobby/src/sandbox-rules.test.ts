@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   SANDBOX_AREA,
   SANDBOX_COLOURS,
+  SANDBOX_ENTRANCE,
   SANDBOX_MAX_BLOCKS,
   SANDBOX_MAX_HEIGHT,
   type SandboxTile,
@@ -13,6 +14,7 @@ import {
   SANDBOX_SPAWN_INTERVAL_MS,
   SANDBOX_TILE_SIZE,
   createSandboxAuthority,
+  isEntranceTile,
   isSandboxTile,
   sandboxLevelAt,
   sandboxSpawnDelay,
@@ -61,7 +63,7 @@ interface Rig {
 /**
  * An authority whose draws are scripted. `drop` computes the draw that selects
  * a given tile from the documented order: open tiles enumerated by `(y, x)`,
- * skipping tiles within one of a player and full stacks.
+ * skipping the entrance, tiles within one of a player and full stacks.
  */
 function rig(fallback: () => number = () => 0.5): Rig {
   const draws: number[] = [];
@@ -84,6 +86,7 @@ function rig(fallback: () => number = () => 0.5): Rig {
     const open: SandboxTile[] = [];
     for (let y = TOP; y <= BOTTOM; y += 1) {
       for (let x = LEFT; x <= RIGHT; x += 1) {
+        if (isEntranceTile(x, y)) continue;
         if (blocked.has(sandboxTileKey(x, y))) continue;
         if (sandboxLevelAt(sandbox.columns(), x, y) >= SANDBOX_MAX_HEIGHT) continue;
         open.push({ x, y });
@@ -140,6 +143,20 @@ describe('geometry helpers', () => {
     expect(isSandboxTile(Number.NaN, TOP)).toBe(false);
   });
 
+  it('keeps the entrance inside the area, flush with its west edge (D-060)', () => {
+    const { x, y, width, height } = SANDBOX_ENTRANCE;
+    expect(x).toBe(LEFT);
+    expect(isSandboxTile(x, y) && isSandboxTile(x + width - 1, y + height - 1)).toBe(true);
+    expect(isEntranceTile(x, y)).toBe(true);
+    expect(isEntranceTile(x + width - 1, y + height - 1)).toBe(true);
+    expect(isEntranceTile(x + width, y)).toBe(false);
+    expect(isEntranceTile(x, y - 1)).toBe(false);
+    expect(isEntranceTile(x, y + height)).toBe(false);
+    expect(isEntranceTile(x - 1, y)).toBe(false);
+    expect(isEntranceTile(x + 0.5, y)).toBe(false);
+    expect(isEntranceTile(Number.NaN, y)).toBe(false);
+  });
+
   it('floors pixel positions to tiles, including negative ones', () => {
     expect(sandboxTileAt(0, 0)).toEqual({ x: 0, y: 0 });
     expect(sandboxTileAt(31.9, 32)).toEqual({ x: 0, y: 1 });
@@ -193,6 +210,13 @@ describe('a new authority', () => {
 });
 
 describe('spawn', () => {
+  it('never drops into the entrance, so the rain cannot wall the way in', () => {
+    const sandbox = createSandboxAuthority({ random: mulberry32(2_025) });
+    while (sandbox.spawn([]) !== null) { /* rain to the cap */ }
+    expect(sandbox.totalBlocks).toBe(SANDBOX_MAX_BLOCKS);
+    expect(sandbox.columns().filter((column) => isEntranceTile(column.x, column.y))).toEqual([]);
+  });
+
   it('draws the tile first, then the colour, from open tiles in (y, x) order', () => {
     const { sandbox, draws, calls } = rig();
     draws.push(0, 0);
@@ -544,6 +568,28 @@ describe('place', () => {
     expect(sandbox.totalBlocks).toBe(2);
   });
 
+  it('still lets a player build in the entrance, where nothing falls', () => {
+    const { sandbox } = carrying(3);
+    const inside = { x: SANDBOX_ENTRANCE.x + SANDBOX_ENTRANCE.width - 1, y: SANDBOX_ENTRANCE.y + 2 };
+    expect(isEntranceTile(inside.x, inside.y)).toBe(true);
+    expect(sandbox.place(at(inside.x + 1, inside.y), inside, [])).toBe(true);
+    expect(sandbox.columns()).toEqual([{ ...inside, colours: [3] }]);
+  });
+
+  it('keeps entrance stacks to one step, so the way in cannot be walled off', () => {
+    const r = carrying(3);
+    const inside = { x: SANDBOX_ENTRANCE.x + SANDBOX_ENTRANCE.width - 1, y: SANDBOX_ENTRANCE.y + 2 };
+    const me = at(inside.x + 1, inside.y);
+    expect(r.sandbox.place(me, inside, [])).toBe(true);
+    r.drop({ x: inside.x + 2, y: inside.y }, 5);
+    expect(r.sandbox.pick(me, { x: inside.x + 2, y: inside.y }, [])).toBe(true);
+    expect(r.sandbox.place(me, inside, [])).toBe(false);
+    expect(r.sandbox.carrying('me')).toBe(5);
+    expect(r.sandbox.columns()).toEqual([{ ...inside, colours: [3] }]);
+    // One tile further in, the usual rules apply.
+    expect(r.sandbox.place(me, { x: inside.x + 2, y: inside.y }, [])).toBe(true);
+  });
+
   it('refuses when not carrying', () => {
     const { sandbox } = rig();
     expect(sandbox.place(at(61, 11), { x: 62, y: 11 }, [])).toBe(false);
@@ -659,10 +705,13 @@ describe('returnCarried', () => {
     const random = mulberry32(606);
     for (let trial = 0; trial < 300; trial += 1) {
       const r = rig(random);
-      const spot = {
+      const pickSpot = () => ({
         x: LEFT + 1 + Math.floor(random() * (SANDBOX_AREA.width - 2)),
         y: TOP + 1 + Math.floor(random() * (SANDBOX_AREA.height - 2)),
-      };
+      });
+      // The block reaches the neighbour by falling, and nothing falls in the entrance.
+      let spot = pickSpot();
+      while (isEntranceTile(spot.x + 1, spot.y)) spot = pickSpot();
       const neighbour = { x: spot.x + 1, y: spot.y };
       const colour = trial % SANDBOX_COLOURS;
       r.drop(neighbour, colour);
@@ -678,6 +727,7 @@ describe('returnCarried', () => {
 
       expect(tile).not.toBeNull();
       const landed = tile as SandboxTile;
+      expect(isEntranceTile(landed.x, landed.y), `trial ${trial} landed in the entrance`).toBe(false);
       for (const who of [player, bystander]) {
         const there = sandboxTileAt(who.x, who.y) as SandboxTile;
         const distance = Math.max(Math.abs(landed.x - there.x), Math.abs(landed.y - there.y));

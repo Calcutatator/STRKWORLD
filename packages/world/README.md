@@ -111,8 +111,12 @@ the approved cosmetic sprite key onto its local avatar look.
 
 ## The block sandbox (D-060)
 
-The road ends in a 28×28 square (`SANDBOX_AREA`) where blocks drop from the
-sky and players stack them. The stacks are shared state with one authority:
+The road runs through a gate into a 28×28 square (`SANDBOX_AREA`) where blocks
+drop from the sky and players stack them. A two-block toy-block wall (solid
+`fence` tiles) closes the square's street side. Sky drops keep clear of the
+three tiles inside the gate (`SANDBOX_ENTRANCE`) and stacks there stay one
+block high, so the way in always stays walkable; the aim highlight shows the
+same limit. The stacks are shared state with one authority:
 the lobby room when a lobby connection is open, or the same pure rules run by
 the Shell for solo play. The World never imports the lobby; it receives a
 World-owned `SandboxChannel` through `WorldConfig`, like the D-038 peer source.

@@ -1,6 +1,7 @@
 import {
   SANDBOX_AREA,
   SANDBOX_COLOURS,
+  SANDBOX_ENTRANCE,
   SANDBOX_MAX_BLOCKS,
   SANDBOX_MAX_HEIGHT,
   type SandboxColumn,
@@ -39,6 +40,21 @@ export function isSandboxTile(tileX: number, tileY: number): boolean {
     tileX < SANDBOX_AREA.x + SANDBOX_AREA.width &&
     tileY >= SANDBOX_AREA.y &&
     tileY < SANDBOX_AREA.y + SANDBOX_AREA.height
+  );
+}
+
+/**
+ * Is this street tile in the entrance just inside the gate? Nothing falls
+ * there and stacks stay within one step, so the way in stays walkable.
+ */
+export function isEntranceTile(tileX: number, tileY: number): boolean {
+  return (
+    Number.isInteger(tileX) &&
+    Number.isInteger(tileY) &&
+    tileX >= SANDBOX_ENTRANCE.x &&
+    tileX < SANDBOX_ENTRANCE.x + SANDBOX_ENTRANCE.width &&
+    tileY >= SANDBOX_ENTRANCE.y &&
+    tileY < SANDBOX_ENTRANCE.y + SANDBOX_ENTRANCE.height
   );
 }
 

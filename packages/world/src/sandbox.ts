@@ -7,7 +7,7 @@ import {
   type SandboxColumn,
   type SandboxTile,
 } from '@strkworld/shared';
-import { isSandboxTile } from './sandbox-channel.js';
+import { isEntranceTile, isSandboxTile } from './sandbox-channel.js';
 import {
   moveWithCollisionSubsteps,
   type CollisionSubstepOptions,
@@ -205,10 +205,12 @@ export function sandboxAim(options: {
       valid: height >= 1 && withinReach(level, height),
     });
   }
+  // The entrance stays one step deep at most, as the authority enforces.
+  const cap = isEntranceTile(tile.x, tile.y) ? SANDBOX_STEP_HEIGHT : SANDBOX_MAX_HEIGHT;
   return Object.freeze({
     tile: Object.freeze(tile),
     mode: 'place',
     level: height,
-    valid: height + 1 <= SANDBOX_MAX_HEIGHT && withinReach(level, height + 1),
+    valid: height + 1 <= cap && withinReach(level, height + 1),
   });
 }

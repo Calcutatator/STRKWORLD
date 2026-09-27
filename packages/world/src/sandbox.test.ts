@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   SANDBOX_AREA,
+  SANDBOX_ENTRANCE,
   SANDBOX_MAX_HEIGHT,
   type SandboxColumn,
 } from '@strkworld/shared';
@@ -163,6 +164,18 @@ describe('aiming the block key', () => {
     expect(aim({ heights: two, carrying: 2 })).toMatchObject({ mode: 'place', valid: false });
     const one = createSandboxHeights([stack(X + 1, Y, 1)]);
     expect(aim({ heights: one, carrying: 2 })).toMatchObject({ mode: 'place', valid: true, level: 1 });
+  });
+
+  it('keeps the entrance to one block, as the authority does', () => {
+    // Standing just east of the entrance, facing into it.
+    const inside = { x: SANDBOX_ENTRANCE.x + SANDBOX_ENTRANCE.width - 1, y: SANDBOX_ENTRANCE.y + 2 };
+    const from = centre(inside.x + 1, inside.y);
+    expect(aim({ at: from, facing: 'left', carrying: 2 })).toMatchObject({ tile: inside, valid: true });
+    const laid = createSandboxHeights([stack(inside.x, inside.y, 1)]);
+    expect(aim({ heights: laid, at: from, facing: 'left', carrying: 2 })).toMatchObject({ tile: inside, valid: false });
+    // Just outside the entrance a second block is fine.
+    const beside = createSandboxHeights([stack(inside.x + 2, inside.y, 1)]);
+    expect(aim({ heights: beside, at: from, facing: 'right', carrying: 2 })).toMatchObject({ valid: true });
   });
 
   it('cannot reach far below the feet or past the ceiling', () => {

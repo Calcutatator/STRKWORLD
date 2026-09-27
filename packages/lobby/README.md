@@ -383,7 +383,11 @@ under the hard ceiling of 40, which still disconnects a flood of any kind.
 **Sky drops.** The room keeps one drop pending while at least one session is on
 the street (none while everyone is suspended or gone): every 1.5 s until the
 sandbox holds 120 blocks, then every 5 s, up to the 900-block cap. A drop never
-lands within one tile of a live player. When a carrier suspends or leaves, the
+lands within one tile of a live player, nor in the entrance just inside the
+square's gate (`SANDBOX_ENTRANCE`), so the rain never walls off the way in.
+Players may still lay blocks there, one high at most — a place that would make
+an entrance stack taller than one step is refused, so nobody can wall it off
+either. When a carrier suspends or leaves, the
 block they held is put back: it falls from the sky onto a random allowed tile —
 never within a tile of where they stood — keeping its colour, with the usual
 `sandbox:drop` hint. Only if no tile is allowed is it discarded; if that takes

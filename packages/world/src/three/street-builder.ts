@@ -14,7 +14,7 @@ import {
   Color,
 } from 'three';
 import type { Material, Object3D } from 'three';
-import type { BuildingId } from '@strkworld/shared';
+import { SANDBOX_ENTRANCE, type BuildingId } from '@strkworld/shared';
 import {
   isSolidAt,
   type BuildingExteriorLabel,
@@ -66,21 +66,26 @@ import {
   type Vec3,
 } from './palette.js';
 import type { SignStyleOptions } from './labels.js';
+import { bevelledBlockGeometry } from './sandbox-view.js';
 import type { LabelFactory, Occluder, OccluderBounds, StreetView, TextLabel } from './types.js';
 
 /** The sandbox square's sign: behind the north hedge, facing the street (D-060). */
 export const SANDBOX_SIGN_TEXT = 'SANDBOX\nPICK UP \u00b7 STACK \u00b7 BUILD';
+
+/** The board on the gate's lintel, facing the street as you walk in (D-060). */
+export const SANDBOX_GATE_TEXT = 'SANDBOX';
 
 /**
  * The district as a low-poly golden-hour street (D-059).
  *
  * Presentation only: collision stays tile-based in the session, so nothing
  * here may put a volume where the player can walk. Volumes live on solid
- * building tiles or outside the map; inside walkable bounds there are only
- * flat things — paint, paving, flowers, light pools. Buildings are derived
- * from connected solid tiles, so the street follows the map, not a copy of it.
- * The road ends in the block sandbox's build plate (D-060); its blocks are a
- * separate view (sandbox-view.ts) layered on top.
+ * tiles or outside the map; inside walkable bounds there are only flat
+ * things — paint, paving, flowers, light pools — and what hangs above head
+ * height. Buildings are derived from connected wall and facade tiles, so the
+ * street follows the map, not a copy of it. The road runs through a toy-block
+ * gate in the sandbox square's wall onto its build plate (D-060); the blocks
+ * players stack are a separate view (sandbox-view.ts) layered on top.
  */
 
 /** Height of raised pavement; `streetSurfaceHeightAt` reports it per tile. */
@@ -94,6 +99,19 @@ const DOOR_RECESS = 0.2;
 /** Walls sit inside the footprint so cornices and sills stay on solid tiles. */
 const SIDE_INSET = 0.1;
 const JAMB = 0.12;
+/**
+ * The sandbox wall, in the toy blocks players stack (D-060). Two high reads
+ * as the wall it is: the step rule makes any stack two or more above you
+ * unclimbable.
+ */
+const WALL_BLOCKS = 2;
+/**
+ * The gate's pillars, in blocks. The lintel rests on them, so its underside
+ * is this high: clear of a tall avatar (2.05) holding a block overhead.
+ */
+const PILLAR_BLOCKS = 4;
+/** Same chamfer as the sandbox's own blocks (sandbox-view.ts). */
+const TOY_BEVEL = 0.07;
 
 const BODY = 'body';
 const GLASS = 'glass';
@@ -103,9 +121,24 @@ const BEACON = 'beacon';
 
 type Animator = (elapsedMs: number) => void;
 
+/** A street occluder, naming what it fades: a building, or the sandbox gate. */
+export type StreetOccluder = BuildingOccluder | GateOccluder;
+
 /** A street occluder that also names the building it fades. */
 export interface BuildingOccluder extends Occluder {
+  readonly kind: 'building';
   readonly building: BuildingId | null;
+  readonly object: Object3D;
+}
+
+/**
+ * The sandbox gate's superstructure (D-060): the pillar blocks above the
+ * wall, the lintel and its caps, which fade like a building when they hide
+ * the player. Not a building; the two-high wall below is decor and never
+ * fades.
+ */
+export interface GateOccluder extends Occluder {
+  readonly kind: 'sandbox-gate';
   readonly object: Object3D;
 }
 
@@ -128,7 +161,7 @@ export function buildStreet(map: DistrictMap, labels: LabelFactory): StreetView 
   signs.name = 'street:labels';
   const textLabels: TextLabel[] = [];
   const animators: Animator[] = [];
-  const occluders: BuildingOccluder[] = [];
+  const occluders: StreetOccluder[] = [];
 
   try {
     const kinds = classifyGround(map);
@@ -175,7 +208,20 @@ export function buildStreet(map: DistrictMap, labels: LabelFactory): StreetView 
       signs.add(label.object);
     }
 
-    buildDecor(map, kinds, res, ground, animators, sandboxSign);
+    const gate = findGate(map);
+    if (gate) {
+      const label = labels.sign(SANDBOX_GATE_TEXT, GATE_SIGN_STYLE);
+      textLabels.push(label);
+      const placement = gateSignPlacement(gate);
+      label.object.position.set(placement.x, placement.y, placement.z);
+      // A sign faces +Z at rotation 0; this turns it to face -X, the street.
+      label.object.rotation.y = -Math.PI / 2;
+      label.object.userData['area'] = 'sandbox-gate';
+      signs.add(label.object);
+    }
+
+    const gateOccluder = buildDecor(map, kinds, res, ground, animators, sandboxSign, gate);
+    if (gateOccluder) occluders.push(gateOccluder);
   } catch (error) {
     for (const label of textLabels) {
       try {
@@ -231,10 +277,11 @@ export function buildStreet(map: DistrictMap, labels: LabelFactory): StreetView 
 /**
  * What the ground looks like, which the tile kind alone does not say: a
  * pavement strip crossing the road is a zebra crossing at road level, a
- * pavement run through grass is a garden path, the rest is raised kerbed
- * pavement.
+ * pavement run through grass is a garden path, road or pavement meeting the
+ * sandbox plate is the gate's stone threshold at road level, the rest is
+ * raised kerbed pavement.
  */
-type GroundKind = 'grass' | 'road' | 'sidewalk' | 'crossing' | 'path' | 'plate' | 'solid';
+type GroundKind = 'grass' | 'road' | 'sidewalk' | 'crossing' | 'path' | 'plate' | 'threshold' | 'solid';
 
 function kindAt(map: DistrictMap, x: number, y: number): TileKind | undefined {
   return map.tiles[y]?.[x];
@@ -253,14 +300,25 @@ function classifyGround(map: DistrictMap): GroundKind[][] {
 function classifyTile(map: DistrictMap, x: number, y: number): GroundKind {
   const kind = kindAt(map, x, y);
   if (kind === undefined || isSolidAt(map, x, y)) return 'solid';
-  if (kind === 'road') return 'road';
   if (kind === 'sandbox') return 'plate';
+  if ((kind === 'road' || kind === 'pavement') && touchesPlate(map, x, y)) return 'threshold';
+  if (kind === 'road') return 'road';
   if (kind !== 'pavement') return 'grass';
   const [west, east] = runEnds(map, x, y, 1, 0);
   const [north, south] = runEnds(map, x, y, 0, 1);
   if ((west === 'road' && east === 'road') || (north === 'road' && south === 'road')) return 'crossing';
   if ((west === 'grass' && east === 'grass') || (north === 'grass' && south === 'grass')) return 'path';
   return 'sidewalk';
+}
+
+/** Whether a tile borders the sandbox floor: where the street reaches the square. */
+function touchesPlate(map: DistrictMap, x: number, y: number): boolean {
+  return (
+    kindAt(map, x + 1, y) === 'sandbox' ||
+    kindAt(map, x - 1, y) === 'sandbox' ||
+    kindAt(map, x, y + 1) === 'sandbox' ||
+    kindAt(map, x, y - 1) === 'sandbox'
+  );
 }
 
 /** The tile kinds just past both ends of the pavement run through (x, y). */
@@ -384,6 +442,44 @@ function sandboxSignPlacement(kinds: GroundKind[][]): { x: number; y: number; z:
   return { x: (plate.minX + plate.maxX) / 2, y: 1.72, z: -1.28 };
 }
 
+/** The gap in the sandbox wall where the street runs in (D-060). */
+interface Gate {
+  /** The wall's column: the opening spans world x to x + 1. */
+  readonly x: number;
+  /** Open rows [z0, z1); the pillars stand on rows z0 - 1 and z1. */
+  readonly z0: number;
+  readonly z1: number;
+}
+
+/**
+ * The first walkable run in a column of fence tiles with fence at both ends.
+ * Read from the tiles, like the buildings: move the gate in the map and the
+ * pillars, lintel and sign follow it.
+ */
+function findGate(map: DistrictMap): Gate | null {
+  for (let x = 0; x < map.width; x++) {
+    let fence = -1;
+    for (let y = 0; y < map.height; y++) {
+      if (kindAt(map, x, y) !== 'fence') continue;
+      if (fence >= 0 && y - fence > 1) {
+        let open = true;
+        for (let row = fence + 1; row < y && open; row++) open = !isSolidAt(map, x, row);
+        if (open) return { x, z0: fence + 1, z1: y };
+      }
+      fence = y;
+    }
+  }
+  return null;
+}
+
+/** The square's sign style, sized for the lintel's one-block face. */
+const GATE_SIGN_STYLE: SignStyleOptions = Object.freeze({ ...SANDBOX_THEME.sign, width: 3, height: 0.72 });
+
+/** Centred over the opening on the lintel's street face, just proud of it. */
+function gateSignPlacement(gate: Gate): SignPlacement {
+  return { x: gate.x - 0.02, y: PILLAR_BLOCKS + 0.5, z: (gate.z0 + gate.z1) / 2 };
+}
+
 // ---------------------------------------------------------------------------
 // Ground
 // ---------------------------------------------------------------------------
@@ -417,12 +513,22 @@ function buildGround(map: DistrictMap, kinds: GroundKind[][], res: ResourceBag, 
           case 'plate':
             plateTile(bin, kinds, x, y);
             break;
+          case 'threshold':
+            thresholdTile(bin, x, y);
+            break;
           case 'solid':
-            bin.add('sidewalk', flatQuad(x, y, x + 1, y + 1, 0), PALETTE.apron);
+            // Under the sandbox wall a stone footing, which shows in the blocks'
+            // bevels like a contact shadow; under buildings the apron.
+            bin.add(
+              'sidewalk',
+              flatQuad(x, y, x + 1, y + 1, 0),
+              kindAt(map, x, y) === 'fence' ? SANDBOX_THEME.border : PALETTE.apron,
+            );
             break;
         }
       }
     }
+    entranceApron(bin, kinds);
     paintRoadMarkings(map, kinds, bin);
     buildOutskirts(map, kinds, bin);
     scatterGroundDecals(map, kinds, bin);
@@ -479,7 +585,9 @@ function sidewalkTile(bin: GeometryBin, kinds: GroundKind[][], x: number, y: num
     // Off-map pavement continues into the outskirts; walls cover their own edge.
     if (neighbour === undefined || neighbour === 'sidewalk' || neighbour === 'solid') continue;
     const dropped = neighbour === 'crossing';
-    const height = dropped ? PAVEMENT_HEIGHT + 0.004 : KERB_HEIGHT;
+    // Pavement meets the gate's threshold at a flush kerb: you walk straight in.
+    const flush = dropped || neighbour === 'threshold';
+    const height = flush ? PAVEMENT_HEIGHT + 0.004 : KERB_HEIGHT;
     const k = KERB_WIDTH;
     const edge =
       side === 'n'
@@ -508,13 +616,17 @@ function sidewalkTile(bin: GeometryBin, kinds: GroundKind[][], x: number, y: num
 
 /**
  * The sandbox build plate: warm concrete, a faint one-tile grid, and a darker
- * border that opens where the road and pavements run in. All flat.
+ * border that opens where the road and pavements run in. The entrance apron
+ * is a lighter tone without the grid (see `entranceApron`). All flat.
  */
 function plateTile(bin: GeometryBin, kinds: GroundKind[][], x: number, y: number): void {
-  bin.add('plate', flatQuad(x, y, x + 1, y + 1, 0), jitterColor(SANDBOX_THEME.plate, hash01(x, y, 501), 0.012));
+  const apron = inEntrance(x, y);
+  const tone = apron ? SANDBOX_THEME.entrance : SANDBOX_THEME.plate;
+  bin.add('plate', flatQuad(x, y, x + 1, y + 1, 0), jitterColor(tone, hash01(x, y, 501), 0.012));
   const g = 0.014;
-  if (kinds[y]?.[x - 1] === 'plate') bin.add('plate', flatQuad(x - g, y, x + g, y + 1, 0.003), SANDBOX_THEME.grid);
-  if (kinds[y - 1]?.[x] === 'plate') bin.add('plate', flatQuad(x, y - g, x + 1, y + g, 0.003), SANDBOX_THEME.grid);
+  const grid = (nx: number, ny: number): boolean => kinds[ny]?.[nx] === 'plate' && !(apron && inEntrance(nx, ny));
+  if (grid(x - 1, y)) bin.add('plate', flatQuad(x - g, y, x + g, y + 1, 0.003), SANDBOX_THEME.grid);
+  if (grid(x, y - 1)) bin.add('plate', flatQuad(x, y - g, x + 1, y + g, 0.003), SANDBOX_THEME.grid);
   const b = 0.14;
   const closed = (nx: number, ny: number): boolean => {
     const kind = kinds[ny]?.[nx];
@@ -524,6 +636,68 @@ function plateTile(bin: GeometryBin, kinds: GroundKind[][], x: number, y: number
   if (closed(x + 1, y)) bin.add('plate', flatQuad(x + 1 - b, y, x + 1, y + 1, 0.005), SANDBOX_THEME.border);
   if (closed(x, y - 1)) bin.add('plate', flatQuad(x, y, x + 1, y + b, 0.005), SANDBOX_THEME.border);
   if (closed(x, y + 1)) bin.add('plate', flatQuad(x, y + 1 - b, x + 1, y + 1, 0.005), SANDBOX_THEME.border);
+}
+
+function inEntrance(x: number, y: number): boolean {
+  const e = SANDBOX_ENTRANCE;
+  return x >= e.x && x < e.x + e.width && y >= e.y && y < e.y + e.height;
+}
+
+/**
+ * The way in (D-060): the apron just inside the gate, where sky drops never
+ * land. A thin outline closes it off from the build grid and faint chevrons
+ * point into the square. Paint on the plate, never volumes.
+ */
+function entranceApron(bin: GeometryBin, kinds: GroundKind[][]): void {
+  const { x, y, width, height } = SANDBOX_ENTRANCE;
+  for (let ty = y; ty < y + height; ty++) {
+    for (let tx = x; tx < x + width; tx++) if (kinds[ty]?.[tx] !== 'plate') return;
+  }
+  const x1 = x + width;
+  const y1 = y + height;
+  const o = 0.06;
+  // Open to the gate on the west; the plate's own border meets it at both ends.
+  bin.add('plate', flatQuad(x, y, x1, y + o, 0.006), SANDBOX_THEME.border);
+  bin.add('plate', flatQuad(x, y1 - o, x1, y1, 0.006), SANDBOX_THEME.border);
+  bin.add('plate', flatQuad(x1 - o, y + o, x1, y1 - o, 0.006), SANDBOX_THEME.border);
+  const zc = y + height / 2;
+  const half = Math.min(0.9, height / 2 - 0.5);
+  const depth = 0.42;
+  const t = 0.15;
+  if (half < 0.2) return;
+  const step = width > 1 ? (width - 0.6 - depth - t) / (width - 1) : 0;
+  const colour = shade(SANDBOX_THEME.entrance, -0.07);
+  for (let i = 0; i < width; i++) {
+    const xa = x + 0.3 + i * step;
+    bin.add('plate', flatPolygon([[xa, zc - half], [xa + t, zc - half], [xa + t + depth, zc], [xa + depth, zc]], 0.004), colour);
+    bin.add('plate', flatPolygon([[xa + depth, zc], [xa + t + depth, zc], [xa + t, zc + half], [xa, zc + half]], 0.004), colour);
+  }
+}
+
+/**
+ * The gate's threshold (D-060): where the road and pavements pass the sandbox
+ * wall, setts between two sill stones replace asphalt and paving, so the
+ * street finishes at the gate instead of butting into the plate. Flat and at
+ * road level; the pavements step down to it at a flush kerb.
+ */
+function thresholdTile(bin: GeometryBin, x: number, y: number): void {
+  bin.add('sidewalk', flatQuad(x, y, x + 1, y + 1, 0), shade(PALETTE.kerb, -0.12));
+  const sill = 0.16;
+  const j = 0.012;
+  bin.add('sidewalk', flatQuad(x + j, y + j, x + sill - j, y + 1 - j, 0.006), jitterColor(PALETTE.pathStone, hash01(x, y, 611), 0.02));
+  bin.add('sidewalk', flatQuad(x + 1 - sill + j, y + j, x + 1 - j, y + 1 - j, 0.006), jitterColor(PALETTE.pathStone, hash01(x, y, 612), 0.02));
+  const a = x + sill;
+  const w = (1 - sill * 2) / 2;
+  for (let row = 0; row < 3; row++) {
+    for (let col = 0; col < 2; col++) {
+      const seed = hash01(x * 2 + col, y * 3 + row, 613);
+      bin.add(
+        'sidewalk',
+        flatQuad(a + col * w + j, y + row / 3 + j, a + (col + 1) * w - j, y + (row + 1) / 3 - j, 0.006),
+        jitterColor(seed < 0.5 ? PALETTE.kerb : PALETTE.sidewalkAlt, hash01(x * 2 + col, y * 3 + row, 614), 0.035),
+      );
+    }
+  }
 }
 
 function pathStone(bin: GeometryBin, x: number, y: number): void {
@@ -700,14 +874,23 @@ interface Footprint {
   hasTile(x: number, y: number): boolean;
 }
 
-/** Connected components of solid tiles, north to south, west to east. */
+/**
+ * Tiles that make buildings. The sandbox wall's fence tiles are solid too,
+ * but they are decor: no footprint, no occluder (see `sandboxWall`).
+ */
+function isBuildingAt(map: DistrictMap, x: number, y: number): boolean {
+  const kind = kindAt(map, x, y);
+  return kind === 'wall' || kind === 'facade';
+}
+
+/** Connected components of building tiles, north to south, west to east. */
 function findFootprints(map: DistrictMap): Footprint[] {
   const key = (x: number, y: number) => y * map.width + x;
   const seen = new Set<number>();
   const components: { tiles: Set<number>; minX: number; maxX: number; minY: number; maxY: number }[] = [];
   for (let y = 0; y < map.height; y++) {
     for (let x = 0; x < map.width; x++) {
-      if (seen.has(key(x, y)) || !isSolidAt(map, x, y)) continue;
+      if (seen.has(key(x, y)) || !isBuildingAt(map, x, y)) continue;
       const tiles = new Set<number>();
       let minX = x;
       let maxX = x + 1;
@@ -729,7 +912,7 @@ function findFootprints(map: DistrictMap): Footprint[] {
           [cx, cy - 1],
         ] as const) {
           if (nx < 0 || ny < 0 || nx >= map.width || ny >= map.height) continue;
-          if (seen.has(key(nx, ny)) || !isSolidAt(map, nx, ny)) continue;
+          if (seen.has(key(nx, ny)) || !isBuildingAt(map, nx, ny)) continue;
           seen.add(key(nx, ny));
           queue.push([nx, ny]);
         }
@@ -910,6 +1093,7 @@ function buildBuilding(fp: Footprint, res: ResourceBag): BuiltBuilding {
       height: Number.isFinite(box.max.y) ? box.max.y : theme.height,
     });
     const occluder: BuildingOccluder = Object.freeze({
+      kind: 'building',
       building: fp.building,
       object: group,
       bounds,
@@ -1854,7 +2038,7 @@ function buildDoorPortal(
 }
 
 // ---------------------------------------------------------------------------
-// Decor: volumes only outside the map
+// Decor: volumes only outside the map, or on the sandbox wall's solid tiles
 // ---------------------------------------------------------------------------
 
 function buildDecor(
@@ -1864,11 +2048,13 @@ function buildDecor(
   parent: Group,
   animators: Animator[],
   sandboxSign: { x: number; y: number; z: number } | null,
-): void {
+  gate: Gate | null,
+): GateOccluder | null {
   const west = edgeBand(map, kinds, 'west');
   const east = edgeBand(map, kinds, 'east');
   const plate = plateBounds(kinds);
   const bin = new GeometryBin();
+  let gateOccluder: GateOccluder | null = null;
   try {
     hedges(map, west, east, bin);
     if (west) barriers(-0.6, west, bin);
@@ -1878,6 +2064,7 @@ function buildDecor(
     backdropCity(map, bin);
     hills(map, bin);
     studioArch(map, bin);
+    sandboxWall(map, gate, bin);
 
     const decorMaterial = res.material(standardMaterial({ roughness: 0.9 }));
     const farMaterial = res.material(standardMaterial({ roughness: 0.95 }));
@@ -1887,6 +2074,7 @@ function buildDecor(
     const fairy = res.material(unlitMaterial());
     const archGlow = res.material(unlitMaterial({ additive: true }));
     flushBin(bin, 'decor', decorMaterial, res, parent, { name: 'street:decor', cast: true, receive: true });
+    gateOccluder = flushGate(bin, res, parent);
     flushBin(bin, 'far', farMaterial, res, parent, { name: 'street:backdrop' });
     flushBin(bin, 'far-lit', farWindows, res, parent, { name: 'street:backdrop-windows' });
     flushBin(bin, 'fairy', fairy, res, parent, { name: 'street:fairy-lights' });
@@ -1900,6 +2088,7 @@ function buildDecor(
   }
   trees(map, west, east, sandboxSign, res, parent);
   lamps(map, west, east, plate, sandboxSign, res, parent);
+  return gateOccluder;
 }
 
 /** Two posts carrying the sandbox sign, off the map behind the hedge. */
@@ -2112,6 +2301,117 @@ function studioArch(map: DistrictMap, bin: GeometryBin): void {
     glow.b,
     0.28 * (1 - clamp01((z - H) / 0.9)),
   ]);
+}
+
+/** `SANDBOX_THEME.blocks` indices: the cream the wall is laid in, and its accents. */
+const TOY_CREAM = 7;
+const TOY_BLUE = 5;
+/** The top course's accents, every third block out from the gate: yellow, red, blue. */
+const WALL_ACCENTS: readonly number[] = [2, 0, TOY_BLUE];
+/** Bin key for the gate's superstructure: everything above the wall, in its own fading mesh. */
+const GATE_TOP = 'gate';
+
+function toyColour(index: number, seed: number): Color {
+  return jitterColor(SANDBOX_THEME.blocks[index] ?? SANDBOX_THEME.plate, seed, 0.012);
+}
+
+/** One toy block centred on (x, y, z); a non-unit scale squashes it into a slab. */
+function toyBlock(
+  bin: GeometryBin,
+  key: string,
+  x: number,
+  y: number,
+  z: number,
+  colour: Paint,
+  scale: Vec3 = [1, 1, 1],
+): void {
+  bin.add(key, bevelledBlockGeometry(1, TOY_BEVEL).scale(scale[0], scale[1], scale[2]).translate(x, y, z), colour);
+}
+
+/**
+ * The sandbox square's wall (D-060), in the toy blocks players stack: two
+ * high on every fence tile, four at the gate's pillars. Every volume stands
+ * on a solid fence tile; only the lintel, its caps and its lights reach over
+ * the opening, all above head height. The wall is decor; what rises above it
+ * at the gate is the superstructure, which fades (see `flushGate`).
+ */
+function sandboxWall(map: DistrictMap, gate: Gate | null, bin: GeometryBin): void {
+  for (let y = 0; y < map.height; y++) {
+    for (let x = 0; x < map.width; x++) {
+      if (kindAt(map, x, y) !== 'fence') continue;
+      // Blocks out from the gate along the wall; 0 is a pillar.
+      const out = gate && x === gate.x ? (y < gate.z0 ? gate.z0 - 1 - y : y - gate.z1) : y + 1;
+      const courses = out === 0 ? PILLAR_BLOCKS : WALL_BLOCKS;
+      for (let k = 0; k < courses; k++) {
+        const key = k < WALL_BLOCKS ? 'decor' : GATE_TOP;
+        toyBlock(bin, key, x + 0.5, k + 0.5, y + 0.5, toyColour(wallBlockColour(out, k), hash01(x, y * 8 + k, 601)));
+      }
+    }
+  }
+  if (gate) gateLintel(gate, bin);
+}
+
+/**
+ * The gate's superstructure as its own mesh and material, so that when the
+ * pillar tops or the lintel come between the camera and the player it fades
+ * the way a building does, and the wall beside it does not. Its bounds are
+ * the superstructure's box.
+ */
+function flushGate(bin: GeometryBin, res: ResourceBag, parent: Group): GateOccluder | null {
+  if (!bin.has(GATE_TOP)) return null;
+  const material = res.material(standardMaterial({ roughness: 0.9 }));
+  const mesh = flushBin(bin, GATE_TOP, material, res, parent, { name: 'street:sandbox-gate', cast: true, receive: true });
+  if (!mesh) return null;
+  const box = new Box3().setFromObject(mesh);
+  const occluder: GateOccluder = Object.freeze({
+    kind: 'sandbox-gate',
+    object: mesh,
+    bounds: Object.freeze({ minX: box.min.x, maxX: box.max.x, minZ: box.min.z, maxZ: box.max.z, height: box.max.y }),
+    setOpacity: createOpacityFader([material]),
+  });
+  return occluder;
+}
+
+/**
+ * Mostly cream. A pillar's top block, its capital, is the sign's blue; on the
+ * wall's top course every third block out from the gate is an accent, in the
+ * same order both ways, so the colour reads as laid rather than spilled.
+ */
+function wallBlockColour(out: number, course: number): number {
+  if (out === 0) return course === PILLAR_BLOCKS - 1 ? TOY_BLUE : TOY_CREAM;
+  if (course !== WALL_BLOCKS - 1 || out % 3 !== 0) return TOY_CREAM;
+  return WALL_ACCENTS[(out / 3 - 1) % WALL_ACCENTS.length]!;
+}
+
+/**
+ * A course of blocks across the pillar tops, capped over each pillar, with a
+ * festoon of fairy lights along both edges. Its underside is `PILLAR_BLOCKS`
+ * high over the whole opening; the festoons dip a little below it.
+ */
+function gateLintel(gate: Gate, bin: GeometryBin): void {
+  const cx = gate.x + 0.5;
+  for (let z = gate.z0 - 1; z <= gate.z1; z++) {
+    toyBlock(bin, GATE_TOP, cx, PILLAR_BLOCKS + 0.5, z + 0.5, toyColour(TOY_CREAM, hash01(gate.x, z, 602)));
+  }
+  for (const z of [gate.z0 - 1, gate.z1]) {
+    const cap = toyColour(TOY_CREAM, hash01(gate.x, z, 603));
+    toyBlock(bin, GATE_TOP, cx, PILLAR_BLOCKS + 1.12, z + 0.5, cap, [1.12, 0.24, 1.12]);
+  }
+  // On each side two swags, pillar to pillar, meeting under the sign.
+  const top = PILLAR_BLOCKS - 0.06;
+  const span = (gate.z1 - gate.z0) / 2;
+  const count = Math.max(2, Math.round(span / 0.4));
+  for (const x of [gate.x - 0.07, gate.x + 1.07]) {
+    for (let i = 0; i <= count * 2; i++) {
+      const s = (i % count) / count;
+      const y = top - 0.26 * 4 * s * (1 - s);
+      bin.add(
+        'fairy',
+        sphereGeometry(x, y, gate.z0 + (i / count) * span, 0.045, { widthSegments: 5, heightSegments: 3 }),
+        i % 3 === 0 ? 0xffd9a0 : PALETTE.fairyLight,
+      );
+    }
+  }
 }
 
 const scratchMatrix = new Matrix4();

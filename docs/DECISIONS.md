@@ -2677,10 +2677,20 @@ then asked for it to be multiplayer too.
 - The street map widens east: the road runs on into a 28×28 sandbox square
   (`SANDBOX_AREA`, street tiles x 54–81, y 0–27). Its floor is a new walkable
   tile kind; block stacks are shared state layered on top of it.
+- *Amended 2026-09-27, at the user's request for a better road-to-square
+  transition:* the square is walled on its street side — a two-block toy-block
+  wall one tile west of it, a new solid tile kind (`fence`) — and entered
+  through one gate where the road and both pavements run in. The gate's lintel
+  clears the tallest avatar holding a block. Sky drops and returned blocks
+  never land on the three tiles just inside the gate (`SANDBOX_ENTRANCE`,
+  x 54–56, y 11–18), so the rain cannot wall off the way in. Players may still
+  lay blocks there, but a stack in the entrance never grows past one step
+  (`SANDBOX_STEP_HEIGHT`), so nobody can wall it off either: a three-high wall
+  would otherwise be out of reach from the gate and lock everyone outside.
 - The lobby is the authority. The room stores the stacks (colour indices from
   the ground up, per tile) and each player's carried colour. It spawns sky
   drops on a server timer while players are present, never within a tile of a
-  player, and validates every pick and place: the target must be inside the
+  player or in the entrance, and validates every pick and place: the target must be inside the
   area, next to the requester, not under another player, within reach (block
   tops from one below to two above the level the player stands on) and within
   the height and block caps. A rejected request changes nothing. Blocks are

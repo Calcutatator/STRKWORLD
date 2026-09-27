@@ -141,6 +141,18 @@ export interface PresenceState {
 export const SANDBOX_AREA: Readonly<{ x: number; y: number; width: number; height: number }> =
   Object.freeze({ x: 54, y: 0, width: 28, height: 28 });
 
+/**
+ * The way in: the tiles just inside the square's gate, where the road and
+ * pavements enter from the west. Sky drops and returned blocks never land
+ * here, and a stack here never grows past one step (`SANDBOX_STEP_HEIGHT`),
+ * so neither the rain nor a player can wall the entrance off — players may
+ * still lay blocks in it. A street tile rectangle inside `SANDBOX_AREA`,
+ * flush with its west edge; the gate is the gap in the wall just west of it,
+ * `height` tiles wide.
+ */
+export const SANDBOX_ENTRANCE: Readonly<{ x: number; y: number; width: number; height: number }> =
+  Object.freeze({ x: 54, y: 11, width: 3, height: 8 });
+
 /** Tallest stack a column may reach. The sky is effectively open. */
 export const SANDBOX_MAX_HEIGHT = 256;
 

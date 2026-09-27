@@ -12,16 +12,19 @@ import {
   Texture,
   Vector3,
 } from 'three';
-import { SANDBOX_AREA } from '@strkworld/shared';
-import { createStreetMap, isSolidAt, type DistrictMap } from '../map/street.js';
+import { SANDBOX_AREA, SANDBOX_ENTRANCE } from '@strkworld/shared';
+import { createStreetMap, isSolidAt, type DistrictMap, type TileKind } from '../map/street.js';
 import { createNullLabelFactory } from './labels.js';
 import { AVNU, STRK20, boxGeometry } from './palette.js';
 import {
   PAVEMENT_HEIGHT,
+  SANDBOX_GATE_TEXT,
   SANDBOX_SIGN_TEXT,
   buildStreet,
   streetSurfaceHeightAt,
   type BuildingOccluder,
+  type GateOccluder,
+  type StreetOccluder,
 } from './street-builder.js';
 import type { StreetView } from './types.js';
 
@@ -33,6 +36,15 @@ const PLAN = [
   { building: 'vault', x: 39 },
 ] as const;
 
+/** The gap in the sandbox wall: its column, and the open rows [z0, z1). */
+const GATE = {
+  x: SANDBOX_AREA.x - 1,
+  z0: SANDBOX_ENTRANCE.y,
+  z1: SANDBOX_ENTRANCE.y + SANDBOX_ENTRANCE.height,
+} as const;
+/** A tall avatar (2.05) holding a block overhead must pass under the lintel. */
+const GATE_CLEARANCE = 3.4;
+
 function build(map: DistrictMap = createStreetMap()): { map: DistrictMap; view: StreetView } {
   return { map, view: buildStreet(map, createNullLabelFactory()) };
 }
@@ -42,8 +54,8 @@ describe('buildStreet', () => {
     const { view } = build();
     expect(view.ground.children.length).toBeGreaterThan(0);
     expect(view.doors.children).toHaveLength(5);
-    // Five facade signs and the sandbox square's sign.
-    expect(view.labels.children).toHaveLength(6);
+    // Five facade signs, the sandbox square's sign and its gate's.
+    expect(view.labels.children).toHaveLength(7);
     const names = view.ground.children.map((child) => child.name);
     expect(names).toEqual(
       expect.arrayContaining([
@@ -59,7 +71,7 @@ describe('buildStreet', () => {
 
   it('gives each building one occluder whose bounds match its solid footprint', () => {
     const { map, view } = build();
-    const occluders = view.occluders as readonly BuildingOccluder[];
+    const occluders = buildingOccluders(view);
     expect(occluders).toHaveLength(PLAN.length);
     for (const { building, x } of PLAN) {
       const occluder = occluders.find((candidate) => candidate.building === building);
@@ -68,22 +80,178 @@ describe('buildStreet', () => {
       expect(occluder!.bounds.height).toBeGreaterThanOrEqual(3.5);
       expect(occluder!.bounds.height).toBeLessThanOrEqual(8);
     }
-    // Every solid tile belongs to exactly one occluder footprint.
-    for (let y = 0; y < map.height; y++) {
-      for (let x = 0; x < map.width; x++) {
-        if (!isSolidAt(map, x, y)) continue;
-        const owners = occluders.filter(
-          ({ bounds }) => x >= bounds.minX && x < bounds.maxX && y >= bounds.minZ && y < bounds.maxZ,
-        );
-        expect(owners, `tile ${x},${y}`).toHaveLength(1);
-      }
+    // Every building tile belongs to exactly one occluder footprint.
+    const buildingTiles = [...tilesOf(map, 'wall'), ...tilesOf(map, 'facade')];
+    expect(buildingTiles.length).toBeGreaterThan(0);
+    for (const [x, y] of buildingTiles) {
+      expect(ownersOf(occluders, x, y), `tile ${x},${y}`).toHaveLength(1);
     }
+    view.dispose();
+  });
+
+  it('builds the sandbox wall as decor: fence tiles are not building footprints', () => {
+    const { map, view } = build();
+    const occluders = view.occluders as readonly StreetOccluder[];
+    const pillars = new Set([GATE.z0 - 1, GATE.z1]);
+    const fence = tilesOf(map, 'fence');
+    expect(fence.length).toBeGreaterThan(0);
+    for (const [x, y] of fence) {
+      expect(isSolidAt(map, x, y)).toBe(true);
+      expect(ownersOf(buildingOccluders(view), x, y), `fence ${x},${y}`).toHaveLength(0);
+      // Only the gate's pillars carry anything that fades: its superstructure.
+      const owners = ownersOf(occluders, x, y).map((occluder) => occluder.kind);
+      expect(owners, `fence ${x},${y}`).toEqual(x === GATE.x && pillars.has(y) ? ['sandbox-gate'] : []);
+    }
+    const buildings = view.ground.children.filter((child) => child.name.startsWith('building:'));
+    expect(buildings).toHaveLength(PLAN.length);
+    for (const group of buildings) expect(group.userData['building']).not.toBeNull();
+    view.dispose();
+  });
+
+  it('walls the square in toy blocks two high, open at the gate', () => {
+    const { map, view } = build();
+    const decor = meshNamed(view.ground, 'street:decor');
+    const pillars = new Set([GATE.z0 - 1, GATE.z1]);
+    for (const [x, y] of tilesOf(map, 'fence')) {
+      const column = verticesIn(decor, x + 0.02, y + 0.02, x + 0.98, y + 0.98);
+      // A stack standing on the tile: from the ground to its top block.
+      expect(Math.min(...column.map((v) => v.y)), `fence ${x},${y}`).toBeLessThan(0.01);
+      const top = Math.max(...column.map((v) => v.y));
+      if (x === GATE.x && pillars.has(y)) continue;
+      expect(top, `fence ${x},${y}`).toBeGreaterThan(1.95);
+      expect(top, `fence ${x},${y}`).toBeLessThan(2.05);
+    }
+    // The map's gap is where these tests expect it.
+    for (let z = GATE.z0; z < GATE.z1; z++) expect(isSolidAt(map, GATE.x, z), `gate row ${z}`).toBe(false);
+    // Nothing stands or hangs in the opening, or just either side of it, below
+    // the lintel's clearance.
+    const opening = (x: number, z: number) => x >= GATE.x - 0.2 && x < GATE.x + 1.2 && z >= GATE.z0 && z < GATE.z1;
+    expect(findWalkableIntrusions(view.ground, opening, map, { maxY: GATE_CLEARANCE })).toEqual([]);
+    view.dispose();
+  });
+
+  it('frames the gate with pillars carrying a lintel that clears a tall avatar holding a block', () => {
+    const { view } = build();
+    const parts = [meshNamed(view.ground, 'street:decor'), meshNamed(view.ground, 'street:sandbox-gate')];
+    const heights = (x0: number, z0: number, x1: number, z1: number) =>
+      parts.flatMap((mesh) => verticesIn(mesh, x0, z0, x1, z1)).map((vertex) => vertex.y);
+    // The pillars flank the opening, about four blocks tall, over two-high wall.
+    for (const [pillar, wall] of [
+      [GATE.z0 - 1, GATE.z0 - 2],
+      [GATE.z1, GATE.z1 + 1],
+    ] as const) {
+      expect(Math.max(...heights(GATE.x + 0.02, pillar + 0.02, GATE.x + 0.98, pillar + 0.98))).toBeGreaterThan(3.95);
+      expect(Math.max(...heights(GATE.x + 0.02, wall + 0.02, GATE.x + 0.98, wall + 0.98))).toBeLessThan(2.05);
+    }
+    // The lintel spans the opening; its underside is the lowest thing over it.
+    const over = heights(GATE.x + 0.02, GATE.z0 + 0.02, GATE.x + 0.98, GATE.z1 - 0.02);
+    expect(over.length).toBeGreaterThan(0);
+    expect(Math.min(...over)).toBeGreaterThanOrEqual(GATE_CLEARANCE);
+    expect(Math.min(...over)).toBeLessThan(4.5);
+    expect(Math.max(...over)).toBeGreaterThan(4.9);
+    view.dispose();
+  });
+
+  it('fades the gate superstructure as one occluder of its own, never the wall', () => {
+    const { view } = build();
+    const occluders = view.occluders as readonly StreetOccluder[];
+    const gates = occluders.filter((occluder): occluder is GateOccluder => occluder.kind === 'sandbox-gate');
+    expect(gates).toHaveLength(1);
+    expect(occluders).toHaveLength(PLAN.length + 1);
+    const gate = gates[0]!;
+    const mesh = meshNamed(view.ground, 'street:sandbox-gate');
+    expect(gate.object).toBe(mesh);
+    // In the fading mesh: only what rises above the two-high wall...
+    const box = new Box3().setFromObject(mesh);
+    expect(box.min.y).toBeGreaterThan(2 - 1e-3);
+    // ...and the occluder's box covers all of it: pillar tops, lintel, caps.
+    expect(gate.bounds.minX).toBeLessThanOrEqual(Math.min(box.min.x, GATE.x));
+    expect(gate.bounds.maxX).toBeGreaterThanOrEqual(Math.max(box.max.x, GATE.x + 1));
+    expect(gate.bounds.minZ).toBeLessThanOrEqual(Math.min(box.min.z, GATE.z0 - 1));
+    expect(gate.bounds.maxZ).toBeGreaterThanOrEqual(Math.max(box.max.z, GATE.z1 + 1));
+    expect(gate.bounds.height).toBeGreaterThanOrEqual(box.max.y);
+    expect(gate.bounds.maxX - gate.bounds.minX).toBeLessThan(1.2);
+    // The wall stays in the decor, nothing of it above two blocks at the gate.
+    const decor = meshNamed(view.ground, 'street:decor');
+    const wall = verticesIn(decor, GATE.x - 0.2, GATE.z0 - 3, GATE.x + 1.2, GATE.z1 + 3);
+    expect(wall.length).toBeGreaterThan(0);
+    expect(Math.max(...wall.map((vertex) => vertex.y))).toBeLessThan(2 + 1e-3);
+    // Fading touches the gate's material alone, and restores it exactly.
+    const own = materialsOf(mesh);
+    const others = [decor, ...buildingOccluders(view).map((building) => building.object)].flatMap(materialsOf);
+    for (const material of own) expect(others).not.toContain(material);
+    const before = own.map(({ opacity, transparent, depthWrite }) => ({ opacity, transparent, depthWrite }));
+    gate.setOpacity(0.25);
+    for (const material of own) {
+      expect(material.opacity).toBeCloseTo(0.25);
+      expect(material.transparent).toBe(true);
+      expect(material.depthWrite).toBe(false);
+    }
+    for (const material of others) expect(material.opacity).toBe(1);
+    gate.setOpacity(1);
+    expect(own.map(({ opacity, transparent, depthWrite }) => ({ opacity, transparent, depthWrite }))).toEqual(before);
+    view.dispose();
+  });
+
+  it('hangs the gate sign over the opening on the lintel, facing the street', () => {
+    const { view } = build();
+    const sign = view.labels.children.find((child) => child.userData['area'] === 'sandbox-gate');
+    expect(sign).toBeDefined();
+    expect(sign!.userData['text']).toBe(SANDBOX_GATE_TEXT);
+    expect(sign!.userData['kind']).toBe('sign');
+    // A sign faces +Z at rotation 0; this one must face -X, west to the street.
+    const facing = new Vector3(0, 0, 1).applyEuler(sign!.rotation);
+    expect(facing.x).toBeCloseTo(-1);
+    expect(facing.z).toBeCloseTo(0);
+    expect(sign!.position.z).toBeCloseTo((GATE.z0 + GATE.z1) / 2);
+    // On the lintel's street face, just proud of it.
+    expect(sign!.position.x).toBeLessThan(GATE.x);
+    expect(sign!.position.x).toBeGreaterThan(GATE.x - 0.1);
+    const { width, height } = sign!.userData['options'] as { width: number; height: number };
+    expect(sign!.position.y - height / 2).toBeGreaterThan(GATE_CLEARANCE);
+    expect(width).toBeLessThan(GATE.z1 - GATE.z0);
+    // The north-hedge board stays as it was.
+    expect(view.labels.children.filter((child) => child.userData['area'] === 'sandbox')).toHaveLength(1);
+    view.dispose();
+  });
+
+  it('finishes the street at the gate on a flat stone threshold at road level', () => {
+    const { map, view } = build();
+    for (let z = GATE.z0; z < GATE.z1; z++) expect(streetSurfaceHeightAt(map, GATE.x, z), `gate row ${z}`).toBe(0);
+    // The pavements stay raised up to the gate, where they meet it at a flush kerb.
+    expect(streetSurfaceHeightAt(map, GATE.x - 1, GATE.z0)).toBe(PAVEMENT_HEIGHT);
+    expect(streetSurfaceHeightAt(map, GATE.x - 1, GATE.z1 - 1)).toBe(PAVEMENT_HEIGHT);
+    const pavement = meshNamed(view.ground, 'street:pavement');
+    const threshold = verticesIn(pavement, GATE.x + 0.01, GATE.z0 + 0.01, GATE.x + 0.99, GATE.z1 - 0.01);
+    expect(threshold.length).toBeGreaterThan(0);
+    expect(Math.max(...threshold.map((vertex) => vertex.y))).toBeLessThan(0.02);
+    const kerb = verticesIn(pavement, GATE.x - 0.2, GATE.z0 + 0.01, GATE.x - 0.01, GATE.z1 - 0.01);
+    expect(Math.max(...kerb.map((vertex) => vertex.y))).toBeLessThanOrEqual(PAVEMENT_HEIGHT + 0.005);
+    // The road stops on the threshold: no asphalt or paint on the gate tiles.
+    expect(verticesIn(meshNamed(view.ground, 'street:road'), GATE.x + 0.01, GATE.z0, GATE.x + 0.99, GATE.z1)).toEqual([]);
+    const paint = new Box3().setFromObject(meshNamed(view.ground, 'street:markings'));
+    expect(paint.max.x).toBeLessThanOrEqual(GATE.x + 1e-6);
+    view.dispose();
+  });
+
+  it('marks the entrance apron inside the gate, flat on the build plate', () => {
+    const { view } = build();
+    const floor = meshNamed(view.ground, 'street:sandbox-floor');
+    const { x, y, width, height } = SANDBOX_ENTRANCE;
+    const apron = verticesIn(floor, x + 0.01, y + 0.01, x + width - 0.01, y + height - 0.01);
+    expect(apron.length).toBeGreaterThan(0);
+    expect(Math.max(...apron.map((vertex) => vertex.y))).toBeLessThan(0.02);
+    // Its tones are its own: a plain stretch of plate the same size shares none of them.
+    const plain = coloursIn(floor, x + 12, y + 0.01, x + 12 + width, y + height - 0.01);
+    const marked = coloursIn(floor, x + 0.01, y + 0.01, x + width - 0.01, y + height - 0.01);
+    expect(plain.size).toBeGreaterThan(0);
+    expect([...marked].filter((colour) => !plain.has(colour)).length).toBeGreaterThan(0);
     view.dispose();
   });
 
   it('fades only the occluded building and restores its materials exactly', () => {
     const { view } = build();
-    const occluders = view.occluders as readonly BuildingOccluder[];
+    const occluders = buildingOccluders(view);
     const bank = occluders.find((occluder) => occluder.building === 'bank')!;
     const exchange = occluders.find((occluder) => occluder.building === 'exchange')!;
     const bankMaterials = materialsOf(bank.object);
@@ -356,6 +524,54 @@ function verticesNear(mesh: Mesh, test: (vertex: Vector3) => boolean): number {
   return count;
 }
 
+function tilesOf(map: DistrictMap, kind: TileKind): [number, number][] {
+  const tiles: [number, number][] = [];
+  map.tiles.forEach((row, y) => row.forEach((tile, x) => tile === kind && tiles.push([x, y])));
+  return tiles;
+}
+
+/** The street's occluders that fade a building; the gate's is not one. */
+function buildingOccluders(view: StreetView): BuildingOccluder[] {
+  return (view.occluders as readonly StreetOccluder[]).filter(
+    (occluder): occluder is BuildingOccluder => occluder.kind === 'building',
+  );
+}
+
+/** Occluders whose footprint holds the tile's centre. */
+function ownersOf<T extends StreetOccluder>(occluders: readonly T[], x: number, y: number): T[] {
+  const cx = x + 0.5;
+  const cz = y + 0.5;
+  return occluders.filter(({ bounds }) => cx > bounds.minX && cx < bounds.maxX && cz > bounds.minZ && cz < bounds.maxZ);
+}
+
+/** World-space vertices strictly inside an (x, z) rectangle, at any height. */
+function verticesIn(mesh: Mesh, x0: number, z0: number, x1: number, z1: number): Vector3[] {
+  mesh.updateMatrixWorld(true);
+  const position = mesh.geometry.getAttribute('position');
+  const found: Vector3[] = [];
+  for (let i = 0; i < position.count; i++) {
+    const vertex = new Vector3().fromBufferAttribute(position, i).applyMatrix4(mesh.matrixWorld);
+    if (vertex.x > x0 && vertex.x < x1 && vertex.z > z0 && vertex.z < z1) found.push(vertex);
+  }
+  return found;
+}
+
+/** Distinct vertex colours inside an (x, z) rectangle. */
+function coloursIn(mesh: Mesh, x0: number, z0: number, x1: number, z1: number): Set<string> {
+  mesh.updateMatrixWorld(true);
+  const position = mesh.geometry.getAttribute('position');
+  const colour = mesh.geometry.getAttribute('color');
+  const vertex = new Vector3();
+  const found = new Set<string>();
+  for (let i = 0; i < position.count; i++) {
+    vertex.fromBufferAttribute(position, i).applyMatrix4(mesh.matrixWorld);
+    if (vertex.x > x0 && vertex.x < x1 && vertex.z > z0 && vertex.z < z1) {
+      found.add([colour.getX(i), colour.getY(i), colour.getZ(i)].map((c) => c.toFixed(3)).join(','));
+    }
+  }
+  return found;
+}
+
 function materialsOf(root: Object3D): Material[] {
   const found = new Set<Material>();
   root.traverse((object) => {
@@ -368,17 +584,18 @@ function materialsOf(root: Object3D): Material[] {
 }
 
 /**
- * Sample every triangle between ankle and head height; a sample is an
- * intrusion when it sits more than a hair inside a walkable tile. Tile
- * boundaries (alcove walls, door faces) are allowed.
+ * Sample every triangle between ankle and head height (or another band); a
+ * sample is an intrusion when it sits more than a hair inside a walkable
+ * tile. Tile boundaries (alcove walls, door faces) are allowed.
  */
 function findWalkableIntrusions(
   root: Object3D,
   walkable: (x: number, z: number) => boolean,
   map: DistrictMap,
+  band: { readonly minY?: number; readonly maxY?: number } = {},
 ): string[] {
-  const MIN_Y = 0.15;
-  const MAX_Y = 1.9;
+  const MIN_Y = band.minY ?? 0.15;
+  const MAX_Y = band.maxY ?? 1.9;
   const EPS = 0.04;
   const STEP = 0.12;
   root.updateMatrixWorld(true);

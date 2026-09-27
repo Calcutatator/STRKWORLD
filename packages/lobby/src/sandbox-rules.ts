@@ -47,10 +47,12 @@
 import {
   SANDBOX_AREA,
   SANDBOX_COLOURS,
+  SANDBOX_ENTRANCE,
   SANDBOX_MAX_BLOCKS,
   SANDBOX_MAX_HEIGHT,
   SANDBOX_REACH_ABOVE,
   SANDBOX_REACH_BELOW,
+  SANDBOX_STEP_HEIGHT,
   type SandboxColumn,
   type SandboxSnapshot,
   type SandboxTile,
@@ -98,14 +100,16 @@ export interface SandboxAuthority {
   pick(player: SandboxPlayer, tile: SandboxTile, others: readonly SandboxPlayer[]): boolean;
   /**
    * Put the carried block on a neighbouring stack that no player in `others`
-   * stands on. False, and nothing changes, when a rule fails.
+   * stands on; in the entrance, only where the stack stays within one step.
+   * False, and nothing changes, when a rule fails.
    */
   place(player: SandboxPlayer, tile: SandboxTile, others: readonly SandboxPlayer[]): boolean;
   /**
    * Drop one block of a random colour onto a random allowed tile: inside the
-   * area, more than one tile (Chebyshev) from every player's tile, and below
-   * the height cap. Null, and nothing changes, when the block cap is reached,
-   * no tile is allowed or `players` is not an array.
+   * area but outside `SANDBOX_ENTRANCE`, more than one tile (Chebyshev) from
+   * every player's tile, and below the height cap. Null, and nothing changes,
+   * when the block cap is reached, no tile is allowed or `players` is not an
+   * array.
    *
    * Uniform over the allowed tiles enumerated in `(y, x)` order — the first
    * draw picks the index into that list, the second the colour — so a
@@ -114,8 +118,9 @@ export interface SandboxAuthority {
   spawn(players: readonly SandboxPlayer[]): SandboxTile | null;
   /**
    * Put back the block `key` carries: it falls from the sky, keeping its
-   * colour, onto a random tile chosen by the spawn rules — inside the area,
-   * more than one tile from every player in `players`, below the height cap.
+   * colour, onto a random tile chosen by the spawn rules — inside the area
+   * but outside the entrance, more than one tile from every player in
+   * `players`, below the height cap.
    * Returns that tile, and `key` then carries nothing.
    *
    * Include the carrier's last position in `players`: the block must never
@@ -148,6 +153,21 @@ export function isSandboxTile(tileX: number, tileY: number): boolean {
     tileX < SANDBOX_AREA.x + SANDBOX_AREA.width &&
     tileY >= SANDBOX_AREA.y &&
     tileY < SANDBOX_AREA.y + SANDBOX_AREA.height
+  );
+}
+
+/**
+ * Whether a street tile lies in `SANDBOX_ENTRANCE`, where nothing falls and
+ * stacks stay within one step.
+ */
+export function isEntranceTile(tileX: number, tileY: number): boolean {
+  return (
+    Number.isInteger(tileX) &&
+    Number.isInteger(tileY) &&
+    tileX >= SANDBOX_ENTRANCE.x &&
+    tileX < SANDBOX_ENTRANCE.x + SANDBOX_ENTRANCE.width &&
+    tileY >= SANDBOX_ENTRANCE.y &&
+    tileY < SANDBOX_ENTRANCE.y + SANDBOX_ENTRANCE.height
   );
 }
 
@@ -286,6 +306,8 @@ class Authority implements SandboxAuthority {
     const key = sandboxTileKey(target.x, target.y);
     const height = this.#stacks.get(key)?.colours.length ?? 0;
     if (height + 1 > SANDBOX_MAX_HEIGHT) return false;
+    // The entrance must stay walkable: one step, never a wall.
+    if (isEntranceTile(target.x, target.y) && height + 1 > SANDBOX_STEP_HEIGHT) return false;
     if (!withinReach(this.#levelOf(actor), height + 1)) return false;
 
     this.#push(target, colour);
@@ -331,9 +353,11 @@ class Authority implements SandboxAuthority {
   }
 
   /**
-   * Tiles a block may fall onto, in `(y, x)` order: inside the area, more than
-   * one tile (Chebyshev) from every locatable player, below the height cap.
-   * Null when `players` is not an array — avoidance cannot be verified.
+   * Tiles a block may fall onto, in `(y, x)` order: inside the area, outside
+   * the entrance (so the rain never walls the way in; players may still lay
+   * blocks there), more than one tile (Chebyshev) from every locatable player,
+   * below the height cap. Null when `players` is not an array — avoidance
+   * cannot be verified.
    */
   #openTiles(players: readonly SandboxPlayer[]): SandboxTile[] | null {
     if (!Array.isArray(players)) return null;
@@ -352,6 +376,7 @@ class Authority implements SandboxAuthority {
     const open: SandboxTile[] = [];
     for (let y = SANDBOX_AREA.y; y < SANDBOX_AREA.y + SANDBOX_AREA.height; y += 1) {
       for (let x = SANDBOX_AREA.x; x < SANDBOX_AREA.x + SANDBOX_AREA.width; x += 1) {
+        if (isEntranceTile(x, y)) continue;
         const key = sandboxTileKey(x, y);
         if (blocked.has(key)) continue;
         if ((this.#stacks.get(key)?.colours.length ?? 0) >= SANDBOX_MAX_HEIGHT) continue;

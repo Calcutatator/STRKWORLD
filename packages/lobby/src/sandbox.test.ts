@@ -27,6 +27,7 @@ import {
   SANDBOX_SLOW_SPAWN_INTERVAL_MS,
   SANDBOX_SPAWN_INTERVAL_MS,
   SANDBOX_TILE_SIZE,
+  isEntranceTile,
   sandboxTileKey,
 } from './sandbox-rules';
 import { SandboxColumnEntry } from './state';
@@ -62,7 +63,8 @@ function registryWith(options: LobbyPresenceOptions = {}): {
   });
   const drop = (tile: SandboxTile, colour: number): void => {
     // With no live player within a tile of the target and no full stacks,
-    // the open list is the whole area minus the neighbourhoods of players.
+    // the open list is the whole area minus the entrance and the
+    // neighbourhoods of players.
     const open: SandboxTile[] = [];
     const blocked = new Set<string>();
     registry.peers.forEach((entry) => {
@@ -74,7 +76,7 @@ function registryWith(options: LobbyPresenceOptions = {}): {
     });
     for (let y = TOP; y < TOP + SANDBOX_AREA.height; y += 1) {
       for (let x = LEFT; x < LEFT + SANDBOX_AREA.width; x += 1) {
-        if (!blocked.has(sandboxTileKey(x, y))) open.push({ x, y });
+        if (!blocked.has(sandboxTileKey(x, y)) && !isEntranceTile(x, y)) open.push({ x, y });
       }
     }
     const index = open.findIndex((candidate) => candidate.x === tile.x && candidate.y === tile.y);

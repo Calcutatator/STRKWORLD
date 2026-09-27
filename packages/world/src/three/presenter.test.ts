@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
-import { Group, Vector3 } from 'three';
+import { Group, Mesh, Vector3, type Material } from 'three';
 import { SANDBOX_AREA, type AvatarSpriteKey } from '@strkworld/shared';
+import { CAMERA_FOCUS_HEIGHT, DEFAULT_CAMERA_DISTANCE, DEFAULT_CAMERA_PITCH, cameraOffset } from './camera-rig.js';
 import { createNullLabelFactory } from './labels.js';
 import { createPresenter } from './presenter.js';
 import type { AvatarFigure, AvatarFigureFactory } from './types.js';
@@ -147,6 +148,40 @@ describe('presenter', () => {
     for (let i = 0; i < 30; i += 1) world.presenter.updateOcclusion(camera, 16);
     // No throw, and the loop settles; opacity values are internal to occluders.
     expect(true).toBe(true);
+  });
+
+  it('fades the sandbox gate over a player in its opening, and restores it exactly', () => {
+    const world = setup();
+    const materialOf = (name: string): Material => {
+      const mesh = world.parent.getObjectByName(name);
+      expect(mesh, name).toBeInstanceOf(Mesh);
+      return (mesh as Mesh).material as Material;
+    };
+    const gate = materialOf('street:sandbox-gate');
+    const wall = materialOf('street:decor');
+    const state = ({ opacity, transparent, depthWrite }: Material) => ({ opacity, transparent, depthWrite });
+    const opaque = state(gate);
+    // Where the rig puts the default camera: south of the player, looking north.
+    const settle = (x: number, z: number) => {
+      const offset = cameraOffset(0, DEFAULT_CAMERA_PITCH, DEFAULT_CAMERA_DISTANCE);
+      const camera = new Vector3(x + offset.x, CAMERA_FOCUS_HEIGHT + offset.y, z + offset.z);
+      for (let i = 0; i < 30; i += 1) world.presenter.updateOcclusion(camera, 16);
+    };
+    // In the opening, the lintel is between that camera and the player.
+    const column = SANDBOX_AREA.x - 1;
+    world.view.setPlayerPosition(tile(column, 15), true);
+    world.presenter.update(16);
+    settle(column + 0.5, 15.5);
+    expect(gate.opacity).toBeLessThan(0.5);
+    expect(gate.transparent).toBe(true);
+    expect(gate.depthWrite).toBe(false);
+    // The wall is decor and never fades.
+    expect(state(wall)).toEqual({ opacity: 1, transparent: false, depthWrite: true });
+    // One step back up the road, out of the gate's column: restored exactly.
+    world.view.setPlayerPosition(tile(column - 1, 15), true);
+    world.presenter.update(16);
+    settle(column - 0.5, 15.5);
+    expect(state(gate)).toEqual(opaque);
   });
 
   it('disposes everything once and detaches from its parent', () => {
