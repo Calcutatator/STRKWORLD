@@ -184,12 +184,23 @@ fi
 
 # 8. Privacy default is ABSOLUTE. Any route below `private` is a deviation and
 #    needs the project lead's recorded approval plus plain-language disclosure.
-#    Unapproved means a locked door, never a quiet downgrade.
+#    Unapproved means a locked door, never a quiet downgrade. The only
+#    substitute for the disclosure is an explicit waiver naming a decision
+#    entry that exists and names the route (`disclosureWaivedBy`, D-064).
 reg="packages/shared/src/privacy-grades.ts"
 if [ -f "$reg" ]; then
-  report=$(python3 - "$reg" <<'PYEOF'
+  report=$(python3 - "$reg" docs/DECISIONS.md <<'PYEOF'
 import re, sys
 src = open(sys.argv[1]).read()
+try:
+    decisions = open(sys.argv[2]).read()
+except OSError:
+    decisions = ""
+
+def waiver_holds(decision, route):
+    # The decision must exist as its own entry and name the waived route.
+    m = re.search(r"^## " + re.escape(decision) + r" .*?(?=^## D-|\Z)", decisions, re.M | re.S)
+    return bool(m) and route in m.group(0)
 
 # Brace-depth parser: find each object literal whose first key is `building:`,
 # regardless of indentation or formatting. The previous regex only closed a
@@ -229,9 +240,10 @@ for b in blocks:
         continue
     approved = re.search(r"approvedBy:\s*'[^']+'", b)
     disclosed = re.search(r"disclosure:\s*\n?\s*['\"]", b)
+    waiver = re.search(r"disclosureWaivedBy:\s*'(D-\d{3,})'", b)
     if not approved:
         unapproved.append(f"{route} ({grade})")
-    elif not disclosed:
+    elif not disclosed and not (waiver and waiver_holds(waiver.group(1), route)):
         nocopy.append(route)
 print("PARSEFAIL:")
 print("UNAPPROVED:" + " ".join(unapproved))
@@ -259,7 +271,7 @@ PYEOF
     bad "approved deviation(s) still missing player-facing copy: $nocopy"
     note "Approved but undisclosed is still a silent downgrade. Door stays locked."
   else
-    ok "every deviation discloses itself to the player"
+    ok "every deviation discloses itself to the player, or carries a decision-backed waiver"
   fi
 else
   bad "privacy register missing: $reg"

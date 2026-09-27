@@ -29,6 +29,7 @@ export function parseBackendEnvironment(environment: Environment): ParsedBackend
   const transfer = parsePoolRoute(environment, 'TRANSFER');
   const unshield = parsePoolRoute(environment, 'UNSHIELD');
   const swap = parseSwapRoute(environment);
+  const stake = parseStakeRoute(environment);
   const rpcUrl = parseUrl(environment, 'STARKNET_RPC_URL');
   const paymasterBaseUrl = parseOptionalUrl(environment, 'AVNU_PAYMASTER_BASE_URL');
   const avnuBaseUrl = parseOptionalUrl(environment, 'AVNU_BASE_URL');
@@ -64,7 +65,7 @@ export function parseBackendEnvironment(environment: Environment): ParsedBackend
         maxInFlight: parseInteger(environment, 'BACKEND_QUEUE_MAX_IN_FLIGHT', 1),
         maxQueued: parseInteger(environment, 'BACKEND_QUEUE_MAX_QUEUED', 0),
       },
-      routes: { transfer, unshield, swap },
+      routes: { transfer, unshield, swap, ...(stake ? { stake } : {}) },
     },
     paymaster: {
       apiKey: parseSecret(environment, 'AVNU_PAYMASTER_API_KEY', 1),
@@ -103,6 +104,46 @@ function parseSwapRoute(environment: Environment): RoutePolicy {
     allowedTokens: parseAllowedTokens(environment, 'BACKEND_ROUTE_SWAP_ALLOWED_TOKENS'),
     maxSlippageBps: parseInteger(environment, 'BACKEND_ROUTE_SWAP_MAX_SLIPPAGE_BPS', 1, 1_000),
   };
+}
+
+const STAKE_ROUTE_VARIABLES = [
+  'BACKEND_ROUTE_STAKE_MAX_RELAY_FEE',
+  'BACKEND_ROUTE_STAKE_MAX_QUEUE_DELAY_MS',
+  'BACKEND_ROUTE_STAKE_ALLOWED_TOKENS',
+] as const;
+
+/**
+ * Endur staking (D-063), disabled by default. Without
+ * `BACKEND_ROUTE_STAKE_ENABLED` the route is absent, and any other stake
+ * variable is a startup error rather than a silently ignored half
+ * configuration. Once it is set, every stake variable is required and strictly
+ * validated as for the other routes. Not quote-bound, so its queue delay must
+ * be positive (D-004); the pinned STRK-only allowlist is enforced when the
+ * `BackendApi` validates its configuration.
+ */
+function parseStakeRoute(environment: Environment): RoutePolicy | undefined {
+  if (isUnset(environment.BACKEND_ROUTE_STAKE_ENABLED)) {
+    if (STAKE_ROUTE_VARIABLES.some((name) => !isUnset(environment[name]))) {
+      throw new Error('Missing required BACKEND_ROUTE_STAKE_ENABLED.');
+    }
+    return undefined;
+  }
+  return {
+    enabled: parseBoolean(environment, 'BACKEND_ROUTE_STAKE_ENABLED'),
+    maxRelayFee: parseUnsignedBigint(environment, 'BACKEND_ROUTE_STAKE_MAX_RELAY_FEE', MAX_U128),
+    maxQueueDelayMs: parseInteger(
+      environment,
+      'BACKEND_ROUTE_STAKE_MAX_QUEUE_DELAY_MS',
+      1,
+      MAX_NODE_TIMEOUT_MS,
+    ),
+    quoteBound: false,
+    allowedTokens: parseAllowedTokens(environment, 'BACKEND_ROUTE_STAKE_ALLOWED_TOKENS'),
+  };
+}
+
+function isUnset(value: string | undefined): boolean {
+  return value === undefined || value === '';
 }
 
 function readRequired(environment: Environment, name: string): string {

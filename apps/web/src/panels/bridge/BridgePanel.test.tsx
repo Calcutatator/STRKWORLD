@@ -1,12 +1,13 @@
 import { describe, expect, it } from 'vitest';
 import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
-import { FakePrivacyOperations } from '@strkworld/privacy';
+import { FakePrivacyOperations, ReservePublicShieldPlanner } from '@strkworld/privacy';
 import { PrivacyProvider } from '../../privacy/PrivacyProvider.js';
 import { BridgeProvider } from '../../bridge/BridgeProvider.js';
 import { BridgePanel } from './BridgePanel.js';
 import { createBridgePanel } from '../../bridge/bridge-machine.js';
 import { PRIVACY_REGISTER } from '../../privacy/register.js';
+import { COPY } from '../../copy.js';
 import type { BridgeRecord } from '@strkworld/bridge';
 
 const service = {
@@ -139,5 +140,101 @@ describe('BridgePanel', () => {
     );
     expect(markup).toContain('Resume saved deposit');
     expect(markup).not.toContain('Prepare deposit instructions');
+  });
+
+  it('gives a refund its own presentation — destination and amount — never as a bare failure, and never claiming privacy', async () => {
+    const refunded: BridgeRecord = {
+      v: 1,
+      createdAt: 1,
+      updatedAt: 1,
+      source: { assetId: 'nep141:arb-usdc.omft.near', symbol: 'USDC', chainName: 'arbitrum', decimals: 6, depositMode: 'manual' },
+      amountIn: 1_000_000n,
+      starknetRecipient: '0x123',
+      refundAddress: '0x2222222222222222222222222222222222222222',
+      signedQuote: {
+        correlationId: 'refund-me',
+        timestamp: '2030-01-01T00:00:00.000Z',
+        signature: 'signed',
+        quoteRequest: { recipient: '0x123' },
+        quote: { depositAddress: '0xdeposit', amountOut: '20', minAmountOut: '19', deadline: '2030-01-01T00:30:00.000Z' },
+      } as never,
+      status: {
+        leg: 'refunded',
+        depositTxHash: '0xorigin',
+        refundedAmount: 987_654n,
+        message: '1Click refunded this deposit instead of completing it.',
+        pollingStopped: true,
+      },
+    };
+    const machine = createBridgePanel({ service: { ...service, resume: () => refunded }, loadSources: async () => [], readAccount: () => '0x123', planner: null, now: () => Date.parse('2030-01-01T00:01:00.000Z') });
+    await machine.open();
+    const markup = renderToStaticMarkup(
+      <PrivacyProvider operations={new FakePrivacyOperations()}>
+        <BridgeProvider service={service} account="0x123" planner={null}>
+          <BridgePanel panel={machine} onClose={() => {}} />
+        </BridgeProvider>
+      </PrivacyProvider>,
+    );
+    expect(markup).toContain(COPY.bridge.refundAddress);
+    // Shortened, like every other address the Bridge displays — never the raw address.
+    expect(markup).not.toContain(refunded.refundAddress);
+    expect(markup).toContain(COPY.bridge.refundedAmount);
+    expect(markup).toContain('0.987654');
+    expect(markup).toContain('USDC');
+    // Distinct from a bare failure: never described as settled.
+    expect(markup).not.toContain(COPY.bridge.settled);
+    // The refund's own presentation must never claim this was private — only
+    // the always-present D-024 disclosure may say the word "privacy", and only
+    // to say it begins later (this asserts against the status block alone).
+    const instructions = markup.slice(markup.indexOf('class="bridge-instructions"'));
+    expect(instructions.toLowerCase()).not.toContain('private');
+  });
+
+  it('says the planned reserve stays as public STRK in the wallet beside the shield plan and its Bank handoff (D-061)', async () => {
+    const STRK = '0x04718f5a0fc34cc1af16a1cdee98ffb20c31f5cd61d6ab07201858f4287c938d';
+    const ONE_STRK = 10n ** 18n;
+    const settled: BridgeRecord = {
+      v: 1,
+      createdAt: 1,
+      updatedAt: 1,
+      source: { assetId: 'nep141:arb-usdc.omft.near', symbol: 'USDC', chainName: 'arbitrum', decimals: 6, depositMode: 'manual' },
+      amountIn: 100_000_000n,
+      starknetRecipient: '0x123',
+      refundAddress: '0x1111111111111111111111111111111111111111',
+      signedQuote: {
+        correlationId: 'settled-reserve',
+        timestamp: '2030-01-01T00:00:00.000Z',
+        signature: 'signed',
+        quoteRequest: { recipient: '0x123' },
+        quote: { depositAddress: '0xdeposit', amountOut: (101n * ONE_STRK).toString(), minAmountOut: (100n * ONE_STRK).toString(), deadline: '2030-01-01T00:30:00.000Z' },
+      } as never,
+      status: { leg: 'settled', message: 'settled', pollingStopped: true, strkReceived: 100n * ONE_STRK },
+    };
+    const planner = new ReservePublicShieldPlanner({
+      pool: { config: async () => ({ feeAmount: 6n * ONE_STRK, feeToken: STRK, proofValidityBlocks: 450, noteMaturityBlocks: 10 }) },
+      readAccount: () => '0x123',
+    });
+    const machine = createBridgePanel({ service: { ...service, resume: () => settled }, loadSources: async () => [], readAccount: () => '0x123', planner, now: () => Date.parse('2030-01-01T00:01:00.000Z') });
+    await machine.open();
+    await machine.planShield();
+    expect(machine.store.getState().flow.name).toBe('ready-to-shield');
+
+    const markup = renderToStaticMarkup(
+      <PrivacyProvider operations={new FakePrivacyOperations()}>
+        <BridgeProvider service={service} account="0x123" planner={planner}>
+          <BridgePanel panel={machine} onClose={() => {}} />
+        </BridgeProvider>
+      </PrivacyProvider>,
+    );
+    const start = markup.indexOf('class="bridge-next-step"');
+    const handoff = markup.slice(start, markup.indexOf('Recovery options', start));
+
+    expect(start).toBeGreaterThan(-1);
+    expect(handoff).toMatch(/90(<!-- -->)? STRK/);
+    expect(handoff).toMatch(/10(<!-- -->)? STRK/);
+    expect(handoff).toContain(COPY.bridge.reserveStaysPublic);
+    expect(handoff).toContain(COPY.bridge.shield);
+    // The Bridge is never described as private.
+    expect(handoff.toLowerCase()).not.toContain('private');
   });
 });

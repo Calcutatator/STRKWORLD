@@ -25,11 +25,13 @@ import {
   ResourceBag,
   STRK20,
   AVNU,
+  ENDUR,
   NEAR,
   aoPaint,
   beamGeometry,
   boxGeometry,
   clamp01,
+  coneGeometry,
   createOpacityFader,
   createTickerStrip,
   cylinderGeometry,
@@ -52,12 +54,14 @@ import {
   shade,
   sphereGeometry,
   standardMaterial,
+  stationTheme,
   unlitMaterial,
   type Face,
   type Paint,
   type RoomTheme,
   type StationLook,
   type StationLooks,
+  type StationPropStyle,
   type TickerSegment,
 } from './palette.js';
 import type { FloatingStyleOptions } from './labels.js';
@@ -481,7 +485,10 @@ function applyStation(view: StationView, presentation: FixedRoomStationPresentat
   }
 }
 
-/** A counter on the station rect, a status beacon, a floating label and the approach halo. */
+/**
+ * A counter on the station rect, a status beacon, a floating label and the
+ * approach halo, dressed in the station's own theme or else its room's.
+ */
 function buildStation(
   station: FixedRoomStationDefinition,
   theme: RoomTheme,
@@ -500,17 +507,18 @@ function buildStation(
   const z1 = station.y + station.height - 0.1;
   const cx = station.x + station.width / 2;
   const cz = station.y + station.height / 2;
+  const dress = stationTheme(theme, station.station);
 
   const accent = res.material(standardMaterial({ vertexColors: false, roughness: 0.5 }));
   const haloFill = res.material(unlitMaterial({ vertexColors: false, transparent: true }));
   const haloEdge = res.material(unlitMaterial({ vertexColors: false, transparent: true }));
   const bin = new GeometryBin();
   try {
-    bin.add('body', boxGeometry(x0, 0, z0, x1, 0.92, z1), aoPaint(theme.kioskBase, 0.1));
-    bin.add('body', boxGeometry(x0 - 0.05, 0.92, z0 - 0.05, x1 + 0.05, 1, z1 + 0.05), theme.kioskTop);
-    bin.add('body', boxGeometry(x0 + 0.03, 0, z1, x1 - 0.03, 0.1, z1 + 0.02), shade(theme.kioskBase, -0.12));
+    bin.add('body', boxGeometry(x0, 0, z0, x1, 0.92, z1), aoPaint(dress.kioskBase, 0.1));
+    bin.add('body', boxGeometry(x0 - 0.05, 0.92, z0 - 0.05, x1 + 0.05, 1, z1 + 0.05), dress.kioskTop);
+    bin.add('body', boxGeometry(x0 + 0.03, 0, z1, x1 - 0.03, 0.1, z1 + 0.02), dress.kioskTrim ?? shade(dress.kioskBase, -0.12));
     bin.add('accent', boxGeometry(x0 + 0.12, 0.3, z1, x1 - 0.12, 0.72, z1 + 0.03), 0xffffff);
-    stationProps(theme, bin, x0, x1, z0, z1);
+    stationProps(dress.props, theme, bin, x0, x1, z0, z1);
 
     const hx0 = station.x - 1 + 0.04;
     const hx1 = station.x + station.width + 1 - 0.04;
@@ -548,7 +556,7 @@ function buildStation(
 
   // A typed value, not an inline literal: the style fields ride along to
   // factories that understand them and are ignored by any that do not.
-  const labelStyle: FloatingStyleOptions = { lineHeight: 0.3, ...theme.label };
+  const labelStyle: FloatingStyleOptions = { lineHeight: 0.3, ...dress.label };
   const label = labels.floating(station.label, labelStyle);
   textLabels.push(label);
   label.object.position.set(cx, STATION_LABEL_Y, cz);
@@ -564,9 +572,9 @@ function buildStation(
     beacon,
     label,
     phase: hash01(Math.round(cx * 10), Math.round(cz * 10), 301) * Math.PI * 2,
-    looks: theme.stationLooks,
+    looks: dress.looks,
     labelText: station.label,
-    look: theme.stationLooks.locked,
+    look: dress.looks.locked,
     highlighted: false,
   };
   // Until the Shell reports otherwise a station is locked (fixed-room.ts).
@@ -574,11 +582,19 @@ function buildStation(
   return view;
 }
 
-/** Themed props on the counter top (y = 1). */
-function stationProps(theme: RoomTheme, bin: GeometryBin, x0: number, x1: number, z0: number, z1: number): void {
+/** Themed props on the counter top (y = 1), in the station's style. */
+function stationProps(
+  style: StationPropStyle,
+  theme: RoomTheme,
+  bin: GeometryBin,
+  x0: number,
+  x1: number,
+  z0: number,
+  z1: number,
+): void {
   const cz = (z0 + z1) / 2;
   const top = 1;
-  switch (theme.decor) {
+  switch (style) {
     case 'strk20': {
       // A slim black terminal with one burnt-orange line: nothing else lit.
       const cx = (x0 + x1) / 2;
@@ -626,8 +642,45 @@ function stationProps(theme: RoomTheme, bin: GeometryBin, x0: number, x1: number
       bin.add('unlit', faceBox(face, cx - 0.25, top + 0.13, 0.043, cx + 0.26, top + 0.19, 0.046), theme.floorAccent);
       break;
     }
+    case 'endur':
+      endurCounter(bin, x0, x1, z0, z1, top);
+      break;
     case 'plain':
       break;
+  }
+}
+
+/**
+ * Endur's staking counter, light on the Bank's dark floor: a white card with
+ * a mint amount field and the green pill (dark mark on it: text on Endur's
+ * green is never white), a green droplet standing on the counter, and a
+ * dark-green wave running along the front above the status panel.
+ */
+function endurCounter(bin: GeometryBin, x0: number, x1: number, z0: number, z1: number, top: number): void {
+  const cx = (x0 + x1) / 2;
+  const face: Face = { normal: 'z+', plane: z0 + 0.12 };
+  bin.add('body', boxGeometry(cx - 0.05, top, z0 + 0.06, cx + 0.05, top + 0.1, z0 + 0.12), ENDUR.dark);
+  bin.add('body', facePanel(face, cx - 0.45, top + 0.08, cx + 0.45, top + 0.6, 0.004, 0.08), ENDUR.border);
+  bin.add('body', facePanel(face, cx - 0.43, top + 0.1, cx + 0.43, top + 0.58, 0.012, 0.07), ENDUR.card);
+  bin.add('body', facePanel(face, cx - 0.35, top + 0.37, cx + 0.35, top + 0.5, 0.02, 0.065), ENDUR.band);
+  bin.add('body', faceDisc(face, cx - 0.27, top + 0.435, 0.02, 0.034, 0.008, 10), ENDUR.green);
+  bin.add('body', facePanel(face, cx + 0.02, top + 0.422, cx + 0.27, top + 0.448, 0.026, 0.013), ENDUR.dark);
+  bin.add('body', facePanel(face, cx - 0.35, top + 0.18, cx + 0.35, top + 0.3, 0.02, 0.06), ENDUR.green);
+  bin.add('body', facePanel(face, cx - 0.1, top + 0.228, cx + 0.1, top + 0.252, 0.026, 0.012), ENDUR.dark);
+  // The droplet: a sphere drawn up into a cone, the logo's idea, not its mark.
+  const dx = x1 - 0.2;
+  const dz = (z0 + z1) / 2 + 0.08;
+  const r = 0.085;
+  bin.add('body', sphereGeometry(dx, top + r, dz, r, { widthSegments: 10, heightSegments: 6 }), ENDUR.green);
+  bin.add('body', coneGeometry(dx, top + r * 1.25, dz, r * 0.93, 0.19, 10), ENDUR.green);
+  // The wave, as short strokes along a sine.
+  const front: Face = { normal: 'z+', plane: z1 };
+  const steps = 18;
+  const wave = (i: number): number => 0.815 + 0.035 * Math.sin((i / steps) * Math.PI * 4);
+  for (let i = 0; i < steps; i++) {
+    const ua = x0 + 0.12 + ((x1 - x0 - 0.24) * i) / steps;
+    const ub = x0 + 0.12 + ((x1 - x0 - 0.24) * (i + 1)) / steps;
+    bin.add('body', beamGeometry(faceToWorld(front, ua, wave(i), 0.012), faceToWorld(front, ub, wave(i + 1), 0.012), 0.012, 0.024), ENDUR.greenDeep);
   }
 }
 

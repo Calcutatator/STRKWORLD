@@ -131,6 +131,7 @@ export const COPY = freezeCopy({
     shield: 'Shield',
     unshield: 'Unshield',
     transfer: 'Private transfer',
+    stake: 'Stake',
     amount: 'Amount',
     recipient: 'To',
     max: 'Max',
@@ -149,6 +150,34 @@ export const COPY = freezeCopy({
     slippage: 'Slippage',
     expiresAt: 'Quote expires',
     oneSwap: 'This Exchange prepares and confirms one swap at a time.',
+  },
+
+  /**
+   * The Bank's Endur staking counter (D-063). D-064 waived its in-game
+   * disclosure, and in exchange this copy claims no amount privacy: it says
+   * where the STRK comes from and where the xSTRK lands, and never that
+   * anything about the stake is hidden (`copy.test.ts` checks). The unstaking
+   * line is how the product works, not a privacy disclosure.
+   */
+  stake: {
+    eyebrow: 'Liquid staking with Endur',
+    intro: 'Stake STRK from your pool balance with Endur. The xSTRK you receive lands in your pool balance.',
+    unstaking: "Unstaking isn't available in the game yet. Endur's own withdrawal queue takes 1 to 14 days.",
+    oneAtATime: 'This counter prepares and confirms one stake at a time.',
+    youStake: 'You stake',
+    youReceive: 'You receive',
+    outputToken: 'xSTRK',
+    /** No figure is shown because neither the seam nor the prepared batch carries one (D-063). */
+    amountAtExecution:
+      "The xSTRK lands in your pool balance. Endur's vault sets the exact amount when the stake runs, so there is no figure to show before you confirm.",
+  },
+
+  vault: {
+    locked: 'The Vault — private lending with Vesu. Not open yet.',
+  },
+
+  postOffice: {
+    intro: 'Send privately to a STRK20 pool account belonging to another player. They must already be registered with the pool to receive it.',
   },
 
   bridge: {
@@ -196,6 +225,10 @@ export const COPY = freezeCopy({
     poolFee: 'Pool fee estimate',
     gasEstimate: 'Public gas estimate',
     plannedReserve: 'Planned reserve',
+    /** D-061: shown wherever the Bridge shows its planned shield or hands it to the Bank. */
+    reserveStaysPublic:
+      'The planned reserve is not shielded. It stays in your wallet as public STRK to cover the pool fee and network gas. Whatever is not spent stays there, still public.',
+    refundedAmount: 'Refunded amount',
   },
 
   gameMode: {
@@ -213,6 +246,81 @@ export const COPY = freezeCopy({
     reconnect: 'Reconnect multiplayer',
   },
 
+  /** The street HUD (`hud/HudLayer.tsx`). Status words only; no privacy claim. */
+  hud: {
+    label: 'Your wallet and balance',
+    wallet: {
+      unknown: 'Checking wallet…',
+      connecting: 'Connecting wallet…',
+      connected: 'Wallet connected',
+      disconnected: 'Wallet not connected',
+      unsupported: 'Wallet cannot open the pool',
+      unregistered: 'Register in your wallet',
+    },
+    balance: 'Shielded balance',
+    balanceUnknown: 'Check at the Bank',
+    balanceHidden: 'Hidden',
+    hide: 'Hide',
+    show: 'Show',
+    hideBalance: 'Hide balance',
+    showBalance: 'Show balance',
+    pendingOne: 'action in progress',
+    pendingMany: 'actions in progress',
+    pendingNone: 'No actions in progress',
+    help: 'Getting started',
+  },
+
+  /**
+   * The first-run card (`hud/GettingStarted.tsx`). The controls are the
+   * World's real bindings; the route never calls the Bridge private.
+   */
+  guide: {
+    title: 'Getting started',
+    intro: 'Every building on this street is a Starknet protocol. Walk in to use one.',
+    controlsTitle: 'Controls',
+    controls: [
+      { input: 'WASD or arrow keys', effect: 'Walk. Up always heads away from the camera.' },
+      { input: 'Shift', effect: 'Hold while walking to sprint.' },
+      { input: 'Drag', effect: 'Look around: either mouse button orbits the camera.' },
+      { input: 'Scroll', effect: 'Zoom in and out.' },
+      { input: 'F', effect: 'Swap your outfit.' },
+      { input: 'E', effect: 'In the sandbox, pick up the block in front of you. Press E again to put it down.' },
+      { input: 'Esc', effect: 'Close a counter or Menu Mode.' },
+    ],
+    buildingsTitle: 'Inside a building',
+    buildings:
+      'Walk through a door to go in. Counters open when you walk up to them, and Menu Mode opens the full menu. Walk back out, or press Leave building, to return to the street.',
+    routeTitle: 'A first route',
+    route: [
+      'The Bridge brings funds in from another chain. Arrival is public. Skip it if you already hold STRK on Starknet.',
+      'The Bank shields them into the pool.',
+      'Then swap at the Exchange, or send from the Post Office.',
+    ],
+    routeNote: 'You review every action before you confirm it, and nothing moves until you do.',
+    sandboxTitle: 'The sandbox',
+    sandbox:
+      'The road ends in a sandbox square. Blocks drop from the sky: press E to pick one up and E again to put it down, and build with whoever else is there.',
+    dismiss: 'Got it',
+    stationHint: 'Counters open when you walk up to them. Menu Mode opens the full menu.',
+  },
+
+  /** Next-step prompts (`panels/next-step.ts`) and the D-021 Bridge nudge. */
+  next: {
+    shieldAtBank: 'Next: shield at the Bank',
+    afterShield: 'Next: swap at the Exchange or send from the Post Office.',
+    afterShieldSend: 'Next: send from the Post Office.',
+    afterShieldSwap: 'Next: swap at the Exchange.',
+    afterSwap: 'Next: send it privately from the Post Office.',
+    afterTransfer:
+      'All done here. Take a walk down the street, or build something in the sandbox where the road ends.',
+    afterStake: 'All done here. Your xSTRK lands in your pool balance.',
+    bridgeArrival: 'Your bridged STRK arrived publicly — shield it at the Bank.',
+    bridgeArrivalHere:
+      'Your bridged STRK arrived publicly. Shield it here, and keep enough back to cover the fees.',
+    dismiss: 'Dismiss',
+    dismissLabel: 'Dismiss this reminder',
+  },
+
   locked: {
     comingSoon:
       'This building is shut. It opens once its private route is built, reviewed and approved.',
@@ -220,6 +328,40 @@ export const COPY = freezeCopy({
       'This door stays locked. The route behind it gives up more privacy than the default, and no approved disclosure exists for it yet.',
     unknownRoute:
       'This door stays locked. STRKWORLD has no approved private route for it, and there is no public shortcut on offer.',
+    /** Approved by the privacy register, but this build's wallet policy has not switched it on (D-054/D-056). */
+    notEnabled: {
+      generic: "This route isn't switched on in this build yet.",
+      shield: "Shield isn't switched on in this build yet.",
+      unshield: "Unshield isn't switched on in this build yet.",
+      transfer: "Private transfer isn't switched on in this build yet.",
+      swap: "Swap isn't switched on in this build yet.",
+      stake: "Staking isn't switched on in this build yet.",
+    },
+  },
+
+  /**
+   * Plain-English "what's this?" disclosures next to review-screen jargon
+   * (`panels/Glossary.tsx`). Kept separate from the field labels above them —
+   * `bank.poolFee` etc. stay the visible label; these are the expandable
+   * explanation underneath it.
+   */
+  glossary: {
+    toggle: "What's this?",
+    protectedMinimum:
+      'The least amount you are guaranteed to receive, even if the market moves against you before this settles.',
+    slippageFixedAt: 'Slippage is fixed at',
+    slippageReason:
+      'in this build. It is not something you choose — fixing it is what lets the protected minimum above be a guarantee rather than an estimate.',
+    quoteExpiry:
+      'After this time the quote is no longer valid. Confirming past it fails safely rather than trading at a stale price.',
+    refundAddress: 'Where funds are sent back if this deposit cannot be completed.',
+    memo: 'A short tag the destination needs to identify your deposit. Leaving it out can cause the deposit to be delayed or lost.',
+    poolFee: 'The protocol fee the STRK20 pool charges for this action. It is set by governance and read live, never hardcoded.',
+    networkCost: 'The Starknet network gas for this action, separate from the pool fee.',
+    maturingFunds:
+      'Funds you shielded need a fixed number of blocks before they can be spent. Until then they count toward your balance but are not available yet.',
+    xstrk:
+      "xSTRK is Endur's liquid staking token: a share of the STRK staked with Endur, so the STRK it stands for changes over time. What you receive lands in your pool balance.",
   },
 
   unbuilt: 'This room is still being built.',
@@ -240,6 +382,7 @@ export const COPY = freezeCopy({
       'Shielding and spending cannot travel together: a deposit names you publicly, and bundling the two would publish the link the pool exists to break. Confirm the shield on its own first.',
     mixedRouteKinds: 'One visit settles as one kind of action. Confirm what is queued, or clear it, then start the other one.',
     swapAlone: 'A swap settles on its own.',
+    stakeAlone: 'A stake settles on its own.',
     batchFull: 'That is as much as one visit can settle at once.',
     emptyBatch: 'There is nothing queued to confirm.',
     notAnIntent: 'STRKWORLD only sends the actions its own controls produce.',

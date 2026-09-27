@@ -11,7 +11,7 @@ import { createSandboxController } from './sandbox/sandbox-controller.js';
 import { installPresenceTeardown } from './presence/lifecycle.js';
 import { parseProductionWalletConfig, usesProductionWallet } from './production/config.js';
 import { startProductionWalletBootstrap } from './production/bootstrap.js';
-import { ProductionRoot } from './production/ProductionRoot.js';
+import { ProductionRoot, type ShieldPlannerFactory } from './production/ProductionRoot.js';
 
 /**
  * STRKWORLD shell entry point.
@@ -95,12 +95,16 @@ if (usesProductionWallet(environment)) {
   );
   try {
     const config = parseProductionWalletConfig(environment);
+    // D-061's reserve planner arrives with the same lazy privacy import.
+    // ProductionRoot uses it only while config.policy enables shield.
+    let createShieldPlanner: ShieldPlannerFactory | undefined;
     // Keep the Starknet/Wallet API implementation out of the initial shell
     // graph. Production still always takes this path; the dynamic boundary only
     // lets the city render its honest loading surface before chain code arrives.
     startProductionWalletBootstrap({
       load: async () => {
-        const { createProductionWalletSession } = await import('@strkworld/privacy');
+        const { createProductionWalletSession, ReservePublicShieldPlanner } = await import('@strkworld/privacy');
+        createShieldPlanner = (options) => new ReservePublicShieldPlanner(options);
         return createProductionWalletSession(config);
       },
       render: (session) => {
@@ -112,6 +116,8 @@ if (usesProductionWallet(environment)) {
               shellIn={shellIn}
               createPresence={createPresence}
               bridge={{ loadRuntime: loadProductionBridgeRuntime }}
+              policy={config.policy}
+              createShieldPlanner={createShieldPlanner}
             />
           </StrictMode>,
         );

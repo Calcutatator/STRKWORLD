@@ -10,6 +10,7 @@ import {
   createFixedRoom,
   createFixedRoomController,
   createFixedRoomPresentation,
+  fixedRoomStationAtApproach,
   fixedRoomStationPresentations,
   isFixedRoomApproach,
   isFixedRoomExit,
@@ -625,9 +626,37 @@ describe('fixed room definitions', () => {
     expect(isFixedRoomSolidAt(room, room.spawn.x, room.spawn.y)).toBe(false);
     expect(isFixedRoomExit(room, room.exit.x, room.exit.y)).toBe(true);
     expect(isFixedRoomSolidAt(room, room.exit.x, room.exit.y)).toBe(false);
-    expect(room.stations).toHaveLength(1);
-    expect(isFixedRoomSolidAt(room, room.stations[0]!.x, room.stations[0]!.y)).toBe(true);
-    expect(isFixedRoomApproach(room, room.stations[0]!.x, room.stations[0]!.y + 1)).toBe(true);
+    // One station per room, except the Bank's two counters (D-063).
+    expect(room.stations).toHaveLength(definition === BANK_ROOM_DEFINITION ? 2 : 1);
+    for (const station of room.stations) {
+      expect(isFixedRoomSolidAt(room, station.x, station.y)).toBe(true);
+      expect(isFixedRoomApproach(room, station.x, station.y + 1)).toBe(true);
+      expect(isFixedRoomSolidAt(room, station.x, station.y + 1)).toBe(false);
+    }
+  });
+
+  it('registers the Bank shielding and Endur staking counters as separate stations', () => {
+    expect(BANK_ROOM_DEFINITION.stations).toEqual([
+      { station: 'bank:shielding', label: 'SHIELD / UNSHIELD', x: 8, y: 3, width: 2, height: 1 },
+      { station: 'bank:staking', label: 'STAKE', x: 13, y: 3, width: 2, height: 1 },
+    ]);
+    const room = createFixedRoom(BANK_ROOM_DEFINITION);
+    const [shielding, staking] = room.stations;
+    // Each approach names its own counter; the column between them is neither's.
+    expect(fixedRoomStationAtApproach(room, 9, 4)?.station).toBe('bank:shielding');
+    expect(fixedRoomStationAtApproach(room, 14, 4)?.station).toBe('bank:staking');
+    expect(fixedRoomStationAtApproach(room, 11, 3)).toBeNull();
+    expect(isFixedRoomSolidAt(room, 11, 3)).toBe(false);
+    // Neither blocks the exit's straight walk up to the shielding counter.
+    for (let y = shielding!.y + 1; y < room.exit.y; y++) {
+      for (let x = room.exit.x; x < room.exit.x + room.exit.width; x++) expect(isFixedRoomSolidAt(room, x, y)).toBe(false);
+    }
+    expect(staking!.x).toBeGreaterThanOrEqual(room.exit.x + room.exit.width + 2);
+    // Until the Shell says otherwise both are locked; staking ships switched off.
+    expect(normalizeFixedRoomStations(BANK_ROOM_DEFINITION, undefined)).toEqual([
+      { station: 'bank:shielding', label: 'SHIELD / UNSHIELD', status: 'locked' },
+      { station: 'bank:staking', label: 'STAKE', status: 'locked' },
+    ]);
   });
 
   it('registers the Exchange swap station at the authored coordinates', () => {

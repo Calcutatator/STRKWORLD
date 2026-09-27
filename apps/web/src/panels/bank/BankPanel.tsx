@@ -1,4 +1,5 @@
 import { useEffect, useMemo } from 'react';
+import type { Intent } from '@strkworld/privacy';
 import type { BuildingId } from '@strkworld/shared';
 import { COPY } from '../../copy.js';
 import { formatStrk, formatStrkExact, shortenAddress } from '../../format.js';
@@ -9,13 +10,39 @@ import { LockedNotice } from '../LockedRoom.js';
 import { PanelFrame } from '../PanelFrame.js';
 import { PRIVACY_REGISTER, type RouteGrade } from '../../privacy/register.js';
 import { routeDoor } from '../routes.js';
-import { createBankPanel, ROUTE_BY_MODE, type BankMode, type BankPanel as BankPanelMachine, type BankState } from './bank-machine.js';
+import {
+  createBankPanel,
+  modeNeedsRecipient,
+  reviewedStake,
+  ROUTE_BY_MODE,
+  type BankMode,
+  type BankPanel as BankPanelMachine,
+  type BankState,
+} from './bank-machine.js';
 import { describeIntent, describeWarning } from './summary-copy.js';
 import { WalletAttentionCue, walletOperationAttention } from '../../wallet/WalletAttentionCue.js';
 import { createPendingHudOwner } from '../pending-hud.js';
+import { BankJourneyNotice } from '../JourneyNotice.js';
+import { GlossaryTerm } from '../Glossary.js';
 
-const BANK_MENU_MODES: readonly BankMode[] = ['shield', 'unshield', 'transfer'];
+const BANK_MENU_MODES: readonly BankMode[] = ['shield', 'unshield', 'transfer', 'stake'];
 const BANK_STATION_MODES: readonly BankMode[] = ['shield', 'unshield'];
+
+/**
+ * Whether the window wears Endur's look (D-063). Presentation only.
+ *
+ * The staking counter is themed while it is the control being composed, and
+ * at the commit point the look follows the batch rather than the tab — the
+ * same rule the disclosures follow — so a stake is always reviewed in Endur's
+ * palette and nothing else ever is.
+ */
+function wearsEndur(state: BankState): boolean {
+  const { flow } = state;
+  if (flow.name === 'review' || flow.name === 'submitting') {
+    return reviewedStake(flow.summary.intents) !== null;
+  }
+  return state.mode === 'stake';
+}
 
 /**
  * The Bank.
@@ -38,6 +65,7 @@ export function BankPanel({
   building = 'bank',
   preConfirmGuard,
   register = PRIVACY_REGISTER,
+  intro,
 }: {
   onClose: () => void;
   /** Supply a driven machine to render a specific state. Tests use this. */
@@ -55,6 +83,8 @@ export function BankPanel({
   preConfirmGuard?: () => Promise<boolean>;
   /** Route authority used for every mode tab and the owned machine. */
   register?: readonly RouteGrade[];
+  /** One short line explaining what this window does — the Post Office's own identity narrowed onto this machine. */
+  intro?: string;
 }) {
   const { operations, receipts, noteOperationError, shellBus, submissionUncertainty } = usePrivacy();
   const modes = allowedModes ?? (experience === 'station' ? BANK_STATION_MODES : BANK_MENU_MODES);
@@ -135,10 +165,19 @@ export function BankPanel({
       <PanelFrame
         title={title}
         building={building}
+        brand={wearsEndur(state) ? 'endur' : undefined}
         disclosure={committing ? null : state.disclosure}
         closingNote={state.flow.name === 'submitting' ? COPY.flow.closingWillNotCancel : null}
         onClose={onClose}
       >
+        {intro ? <p className="panel-intro">{intro}</p> : null}
+        <BankJourneyNotice
+          building={building}
+          flow={state.flow}
+          register={register}
+          // The Bridge nudge says "shield it here", so only a window that can shield carries it.
+          bridgeNudge={modes.includes('shield')}
+        />
         <ModeTabs
           mode={state.mode}
           activeDoor={state.door}
@@ -151,6 +190,7 @@ export function BankPanel({
           <LockedNotice reason={state.door.reason ?? 'unknown-route'} message={state.door.message} />
         ) : (
           <>
+            {state.mode === 'stake' && !committing && state.flow.name !== 'submitted' ? <StakeIntro /> : null}
             <BalanceBlock state={state} onRefresh={() => void panel.refreshBalance()} />
 
             {gateBlocked && state.flow.name === 'review' ? null : committing ? (
@@ -162,7 +202,8 @@ export function BankPanel({
             ) : state.flow.name === 'submitted' ? (
               <div className="flow-done" aria-live="polite">
                 <p>
-                  {COPY.flow.submitted} <code>{shortenAddress(state.flow.transactionHash)}</code>
+                  {state.flow.restored ? COPY.flow.receiptWaiting : COPY.flow.submitted}{' '}
+                  <code>{shortenAddress(state.flow.transactionHash)}</code>
                 </p>
                 <button type="button" onClick={() => panel.acknowledge()}>
                   {COPY.flow.back}
@@ -212,6 +253,7 @@ function ModeTabs({
     shield: COPY.bank.shield,
     unshield: COPY.bank.unshield,
     transfer: COPY.bank.transfer,
+    stake: COPY.bank.stake,
   };
   return (
     <nav className="panel-modes" role="tablist">
@@ -287,8 +329,12 @@ function ComposeBlock({
   experience: 'menu' | 'station';
 }) {
   const busy = state.flow.name === 'preparing' || state.adding;
-  const needsRecipient = state.mode !== 'shield';
+  const needsRecipient = modeNeedsRecipient(state.mode);
   const max = panel.maxSpendable();
+  // A stake settles on its own (D-063), so even Menu Mode composes it as one
+  // action: batch vocabulary would promise a shared fee that cannot happen.
+  const stake = state.mode === 'stake';
+  const singleAction = experience === 'station' || stake;
 
   return (
     <form
@@ -331,17 +377,25 @@ function ComposeBlock({
         type="submit"
         disabled={busy || (experience === 'station' && state.batch.length > 0)}
       >
-        {experience === 'station' ? COPY.gameMode.reviewAction : COPY.batch.add}
+        {singleAction ? COPY.gameMode.reviewAction : COPY.batch.add}
       </button>
 
       {experience === 'station' ? (
         state.batch.length > 0 ? <StationAction state={state} /> : null
+      ) : stake ? (
+        // Menu Mode keeps Remove and Clear for whatever is queued, but the stake
+        // tab never invites the player to fill a visit.
+        state.batch.length > 0 ? <BatchList state={state} panel={panel} /> : null
       ) : (
         <BatchList state={state} panel={panel} />
       )}
 
       <p className="panel-hint">
-        {experience === 'station' ? COPY.gameMode.singleAction : COPY.batch.why}
+        {stake
+          ? COPY.stake.oneAtATime
+          : experience === 'station'
+            ? COPY.gameMode.singleAction
+            : COPY.batch.why}
       </p>
       <button
         type="button"
@@ -413,30 +467,43 @@ function CommitBlock({
   if (flow.name !== 'review' && flow.name !== 'submitting') return null;
   const { summary } = flow;
   const busy = flow.name === 'submitting';
+  const stake = reviewedStake(summary.intents);
 
   return (
     <div className="panel-review">
       <h3>{COPY.flow.review}</h3>
-      <ul className="batch-list">
-        {summary.intents.map((intent, index) => (
-          <li key={`${intent.kind}-${index}`}>{describeIntent(intent)}</li>
-        ))}
-      </ul>
+      {stake ? (
+        <StakeFigures intent={stake} />
+      ) : (
+        <ul className="batch-list">
+          {summary.intents.map((intent, index) => (
+            <li key={`${intent.kind}-${index}`}>{describeIntent(intent)}</li>
+          ))}
+        </ul>
+      )}
 
       {/* Exact figures: this is the number being agreed to, not an ambient one. */}
       <dl className="review-costs">
-        <dt>{COPY.bank.poolFee}</dt>
+        <dt><GlossaryTerm term={COPY.bank.poolFee} definition={COPY.glossary.poolFee} /></dt>
         <dd title={COPY.bank.poolFeeNote}>{formatStrkExact(summary.poolFee)}</dd>
-        <dt>{COPY.bank.networkCost}</dt>
+        <dt><GlossaryTerm term={COPY.bank.networkCost} definition={COPY.glossary.networkCost} /></dt>
         <dd>{formatStrkExact(summary.gasEstimate)}</dd>
         <dt>{COPY.bank.total}</dt>
         <dd>{formatStrkExact(summary.totalCost)}</dd>
       </dl>
 
+      {/* How the product works, said at the moment it matters. Not a privacy disclosure (D-064). */}
+      {stake ? <p className="stake-note">{COPY.stake.unstaking}</p> : null}
+
       {summary.warnings.length > 0 ? (
         <ul className="review-warnings">
           {summary.warnings.map((warning, index) => (
-            <li key={`${warning.kind}-${index}`}>{describeWarning(warning)}</li>
+            <li key={`${warning.kind}-${index}`}>
+              {describeWarning(warning)}
+              {warning.kind === 'funds-maturing' ? (
+                <GlossaryTerm term={COPY.glossary.toggle} definition={COPY.glossary.maturingFunds} />
+              ) : null}
+            </li>
           ))}
         </ul>
       ) : null}
@@ -455,5 +522,46 @@ function CommitBlock({
         onCancel={onCancel}
       />
     </div>
+  );
+}
+
+/**
+ * The staking counter's own header (D-063): where the STRK comes from, where
+ * the xSTRK lands, and that there is no way back out in the game yet.
+ *
+ * D-064 waived the stake route's in-game disclosure, so nothing here is a
+ * disclosure, and nothing here may claim the amounts are hidden. The unstaking
+ * line is product information: how the exit works, not what an observer sees.
+ */
+function StakeIntro() {
+  return (
+    <div className="stake-intro">
+      <p className="stake-eyebrow">{COPY.stake.eyebrow}</p>
+      <p className="panel-intro">{COPY.stake.intro}</p>
+      <p className="stake-note">{COPY.stake.unstaking}</p>
+    </div>
+  );
+}
+
+/**
+ * STRK in and xSTRK out, at the commit point.
+ *
+ * STRK in is the exact amount being signed. xSTRK out is named and never
+ * numbered: `PreparedBatch` carries no stake output figure, because the
+ * ERC-4626 share amount is fixed only when the deposit executes (D-063), and
+ * D-041/D-042 forbid reviewing a figure nothing enforces. Showing a rate here
+ * would mean inventing one — the demo fake's fixed rate included.
+ */
+function StakeFigures({ intent }: { intent: Extract<Intent, { kind: 'stake' }> }) {
+  return (
+    <>
+      <dl className="stake-review">
+        <dt>{COPY.stake.youStake}</dt>
+        <dd>{formatStrkExact(intent.amountIn)}</dd>
+        <dt><GlossaryTerm term={COPY.stake.youReceive} definition={COPY.glossary.xstrk} /></dt>
+        <dd><span className="stake-token">{COPY.stake.outputToken}</span></dd>
+      </dl>
+      <p className="stake-review-note">{COPY.stake.amountAtExecution}</p>
+    </>
   );
 }

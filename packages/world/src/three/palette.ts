@@ -29,7 +29,7 @@ import {
 } from 'three';
 import type { ColorRepresentation, Material, Object3D, Texture } from 'three';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
-import type { BuildingId } from '@strkworld/shared';
+import type { BuildingId, StationId } from '@strkworld/shared';
 import type { FloatingStyleOptions, SignStyleOptions } from './labels.js';
 import type { Occluder, OccluderBounds } from './types.js';
 
@@ -139,6 +139,30 @@ export const NEAR = Object.freeze({
   violet: 0xa855f7,
   /** Pending and processing. */
   amber: 0xfbbf24,
+});
+
+/**
+ * The Bank's staking counter, Endur (D-063) — measured from app.endur.fi /
+ * endur.fi. A light brand, unlike the others: mint-white and white surfaces,
+ * dark green bands and trim, one muted green accent. Its green shares NEAR's
+ * hue, so it stays light and muted, never neon on black.
+ */
+export const ENDUR = Object.freeze({
+  base: 0xe8f7f4,
+  card: 0xffffff,
+  band: 0xedf5f2,
+  bandAlt: 0xf0f7f5,
+  /** Dark bands, trim and text on light. */
+  dark: 0x0d1a17,
+  ink: 0x09090b,
+  /** The primary accent; text on it is dark, never white. */
+  green: 0x2db882,
+  greenDeep: 0x17876d,
+  greenDeeper: 0x03624c,
+  /** BTC orange: sparingly, or not at all. */
+  btc: 0xd97706,
+  border: 0xe4e4e7,
+  borderAlt: 0xececed,
 });
 
 /** A palette number as CSS, so canvas labels read the same source. */
@@ -589,7 +613,83 @@ export const NEAR_STATION_LOOKS: StationLooks = Object.freeze({
   }),
 });
 
+/**
+ * Endur, a light brand: its muted green when ready and brighter with a mint
+ * halo when you step up to it. Locked, the production default while staking
+ * is switched off (D-063), is a calm grey, nothing alarming.
+ */
+export const ENDUR_STATION_LOOKS: StationLooks = Object.freeze({
+  // A small glow only: the muted green should read as Endur's, not neon.
+  available: Object.freeze({
+    color: ENDUR.green,
+    emissive: ENDUR.greenDeep,
+    emissiveIntensity: 0.25,
+    halo: ENDUR.green,
+    haloOpacity: 0.22,
+    edgeOpacity: 0.6,
+  }),
+  highlighted: Object.freeze({
+    color: mixHex(ENDUR.green, ENDUR.card, 0.2),
+    emissive: ENDUR.green,
+    emissiveIntensity: 0.8,
+    halo: mixHex(ENDUR.green, ENDUR.base, 0.55),
+    haloOpacity: 0.42,
+    edgeOpacity: 1,
+  }),
+  locked: Object.freeze({
+    color: lift(ENDUR.border, -0.2),
+    emissive: 0x000000,
+    emissiveIntensity: 0,
+    halo: lift(ENDUR.border, -0.3),
+    haloOpacity: 0.06,
+    edgeOpacity: 0.2,
+  }),
+  lockedHighlighted: Object.freeze({
+    color: lift(ENDUR.border, -0.12),
+    emissive: lift(ENDUR.border, -0.6),
+    emissiveIntensity: 0.3,
+    halo: lift(ENDUR.border, -0.2),
+    haloOpacity: 0.16,
+    edgeOpacity: 0.45,
+  }),
+});
+
 export type RoomDecorStyle = 'strk20' | 'avnu' | 'post-office' | 'bridge' | 'plain';
+
+/** Counter-top props: a room's decor style, or a station's own brand. */
+export type StationPropStyle = RoomDecorStyle | 'endur';
+
+/**
+ * How one station dresses: counter, props, label and state looks. A room's
+ * stations wear the room's theme unless it names one of its own, as the
+ * Bank's Endur staking counter does (D-063).
+ */
+export interface StationTheme {
+  readonly props: StationPropStyle;
+  readonly kioskBase: number;
+  readonly kioskTop: number;
+  /** Kick plate and trim; a shade of the base when absent. */
+  readonly kioskTrim?: number;
+  readonly label: FloatingStyleOptions;
+  readonly looks: StationLooks;
+}
+
+/** The Bank's staking counter: Endur's light look, inside the STRK20 room. */
+export const ENDUR_STATION_THEME: StationTheme = Object.freeze({
+  props: 'endur',
+  kioskBase: ENDUR.base,
+  kioskTop: ENDUR.card,
+  kioskTrim: ENDUR.dark,
+  // A white pill badge with dark green text, as Endur's are.
+  label: Object.freeze({
+    foreground: css(ENDUR.dark),
+    background: cssAlpha(ENDUR.card, 0.96),
+    border: css(ENDUR.border),
+    font: 'sans',
+    cornerRadius: 0.5,
+  }),
+  looks: ENDUR_STATION_LOOKS,
+});
 
 /** Interior palette for one fixed room. */
 export interface RoomTheme {
@@ -609,6 +709,8 @@ export interface RoomTheme {
   /** Station label style (CSS colours, type treatment). */
   readonly label: FloatingStyleOptions;
   readonly stationLooks: StationLooks;
+  /** Stations dressed in their own brand instead of the room's (see `stationTheme`). */
+  readonly stations?: Readonly<Partial<Record<StationId, StationTheme>>>;
 }
 
 export const ROOM_THEMES: Readonly<Partial<Record<BuildingId, RoomTheme>>> = Object.freeze({
@@ -636,6 +738,8 @@ export const ROOM_THEMES: Readonly<Partial<Record<BuildingId, RoomTheme>>> = Obj
       uppercase: true,
     }),
     stationLooks: STRK20_STATION_LOOKS,
+    // Endur staking is its own counter in its own brand (D-063).
+    stations: Object.freeze({ 'bank:staking': ENDUR_STATION_THEME }),
   }),
   exchange: Object.freeze({
     decor: 'avnu',
@@ -724,6 +828,19 @@ export const DEFAULT_ROOM_THEME: RoomTheme = Object.freeze({
 
 export function roomTheme(building: BuildingId): RoomTheme {
   return ROOM_THEMES[building] ?? DEFAULT_ROOM_THEME;
+}
+
+/** What a station wears: its own theme if its room names one, else the room's. */
+export function stationTheme(room: RoomTheme, station: StationId): StationTheme {
+  return (
+    room.stations?.[station] ?? {
+      props: room.decor,
+      kioskBase: room.kioskBase,
+      kioskTop: room.kioskTop,
+      label: room.label,
+      looks: room.stationLooks,
+    }
+  );
 }
 
 /** Avatar Studio accents; floor and wall tones come from `avatarStudioTileColour`. */

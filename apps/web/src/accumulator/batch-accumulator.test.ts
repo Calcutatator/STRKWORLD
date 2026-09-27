@@ -63,6 +63,29 @@ describe('batch accumulator', () => {
     expect(!result.ok && result.rejection.reason).toBe('mixed-route-kinds');
   });
 
+  it('accepts a stake in its exact shape and settles it on its own (D-063)', () => {
+    const XSTRK = '0x028d709c875c0ceac3dce7065bec5328186dc89fe254527084d1689910954b0a';
+    const stake = (amountIn = 5n): Intent => ({ kind: 'stake', tokenIn: TOKEN, tokenOut: XSTRK, amountIn });
+
+    const batch = createBatchAccumulator();
+    expect(batch.accept(stake())).toEqual({ ok: true, value: [stake()] });
+    const second = batch.accept(stake(6n));
+    expect(!second.ok && second.rejection.reason).toBe('stake-must-be-alone');
+    const beside = batch.accept(transfer());
+    expect(!beside.ok && beside.rejection.reason).toBe('stake-must-be-alone');
+
+    const other = createBatchAccumulator();
+    other.accept(transfer());
+    const late = other.accept(stake());
+    expect(!late.ok && late.rejection.reason).toBe('stake-must-be-alone');
+
+    // A stake carries no minimum out: nothing on-chain would enforce one.
+    const withFloor = createBatchAccumulator().accept({ ...stake(), minAmountOut: 1n });
+    expect(!withFloor.ok && withFloor.rejection.reason).toBe('not-an-intent');
+    const zero = createBatchAccumulator().accept(stake(0n));
+    expect(!zero.ok && zero.rejection.reason).toBe('non-positive-amount');
+  });
+
   it('settles a swap on its own', () => {
     const batch = createBatchAccumulator();
     batch.accept(swap());

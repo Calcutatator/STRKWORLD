@@ -582,6 +582,12 @@ function ownPolicy(policy: WalletRoutePolicy): WalletRoutePolicy {
   const swapTokens = copyPolicyCollection(
     readPolicyValue<WalletRoutePolicy['allowedTokens']['swap']>(allowedTokens, 'swap'),
   );
+  // Optional (D-063): an existing policy without it admits no stake token.
+  const stakeValue = readOptionalPolicyValue<NonNullable<WalletRoutePolicy['allowedTokens']['stake']>>(
+    allowedTokens,
+    'stake',
+  );
+  const stakeTokens = stakeValue === undefined ? undefined : copyPolicyCollection(stakeValue);
   const swap = readOptionalPolicyValue<NonNullable<WalletRoutePolicy['swap']>>(policy, 'swap');
   if (swap !== undefined && !hasOwnDataProperties(swap, ['expectedChainId', 'slippageBps'])) {
     throw new PrivacyError('unknown', 'The wallet route policy is invalid.');
@@ -589,14 +595,14 @@ function ownPolicy(policy: WalletRoutePolicy): WalletRoutePolicy {
   if (!Number.isSafeInteger(maxIntents) || maxIntents < 0 || typeof maxRelayFee !== 'bigint' || maxRelayFee < 0n) {
     throw invalidPolicy();
   }
-  const knownRoutes = new Set(['shield', 'unshield', 'transfer', 'swap']);
+  const knownRoutes = new Set(['shield', 'unshield', 'transfer', 'swap', 'stake']);
   if (
     enabledRoutes.some((route) => typeof route !== 'string' || !knownRoutes.has(route))
     || new Set(enabledRoutes).size !== enabledRoutes.length
   ) {
     throw invalidPolicy();
   }
-  for (const tokens of [shield, unshield, transfer, swapTokens]) validatePolicyTokens(tokens);
+  for (const tokens of [shield, unshield, transfer, swapTokens, stakeTokens ?? []]) validatePolicyTokens(tokens);
   if (enabledRoutes.includes('swap') && swap === undefined) throw invalidPolicy();
   let ownedSwap: NonNullable<WalletRoutePolicy['swap']> | undefined;
   if (swap !== undefined) {
@@ -616,6 +622,7 @@ function ownPolicy(policy: WalletRoutePolicy): WalletRoutePolicy {
       unshield: Object.freeze(unshield),
       transfer: Object.freeze(transfer),
       swap: Object.freeze(swapTokens),
+      ...(stakeTokens ? { stake: Object.freeze(stakeTokens) } : {}),
     }),
     ...(ownedSwap
       ? { swap: ownedSwap }
@@ -835,6 +842,16 @@ function validIntent(value: unknown): boolean {
       && tokenOut && 'value' in tokenOut && typeof tokenOut.value === 'string' && isNonzeroFelt(tokenOut.value)
       && amountIn && 'value' in amountIn && typeof amountIn.value === 'bigint' && amountIn.value > 0n
       && minimum && 'value' in minimum && typeof minimum.value === 'bigint' && minimum.value > 0n
+    );
+  }
+  if (kind.value === 'stake') {
+    const tokenIn = Object.getOwnPropertyDescriptor(value, 'tokenIn');
+    const tokenOut = Object.getOwnPropertyDescriptor(value, 'tokenOut');
+    const amountIn = Object.getOwnPropertyDescriptor(value, 'amountIn');
+    return Boolean(
+      tokenIn && 'value' in tokenIn && typeof tokenIn.value === 'string' && isNonzeroFelt(tokenIn.value)
+      && tokenOut && 'value' in tokenOut && typeof tokenOut.value === 'string' && isNonzeroFelt(tokenOut.value)
+      && amountIn && 'value' in amountIn && typeof amountIn.value === 'bigint' && amountIn.value > 0n
     );
   }
   return true;

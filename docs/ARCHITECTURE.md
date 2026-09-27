@@ -46,10 +46,12 @@ React (useStrk20Balances)
   → walletV6.strk20Balances([])
   → wallet resolves from its own note discovery
   → React state
-  → event emitter → Phaser HUD
+  → `hud:balance` on the Shell bus → the Shell's HUD overlay (apps/web/src/hud)
 ```
 
-Phaser never calls Starknet. It receives values it can render.
+The World never calls Starknet. The HUD is a Shell overlay that only listens
+to the pre-formatted `hud:*` and `wallet:status` events; the World receives
+them too and ignores them.
 
 ### Performing a shielded action
 
@@ -62,7 +64,7 @@ Player enters building
   → packages/privacy admits one approved route
       ├─ pool-native Wallet API action         (Bank, Post Office)
       ├─ first-party private executor         (AVNU Exchange)
-      └─ audited app-specific anonymizer      (Vault)
+      └─ app-specific anonymizer              (Vault; Bank staking, D-063, off)
   → wallet prompts and proves
   → route submits; backend queues only eligible prepared calls
   → receipt → React state → HUD

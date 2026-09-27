@@ -66,6 +66,18 @@ sell withdrawal, fee withdrawal and executor invocation; only the final
 wallet-resolved open-note id is variable. Generic fee requests cannot authorize
 the swap route.
 
+Endur private staking (D-063) is the optional `stake` route, disabled by
+default: with no `BACKEND_ROUTE_STAKE_ENABLED` it is absent, and any other
+`BACKEND_ROUTE_STAKE_*` variable fails startup. Once enabled, `_MAX_RELAY_FEE`,
+`_MAX_QUEUE_DELAY_MS` (positive) and `_ALLOWED_TOKENS` are required, and the
+allowlist must be exactly STRK. It uses the generic fee build and the ordinary
+delayed queue, since no quote binds it. At submission the decoded proof must
+contain exactly one `Invoke` of the pinned `EndurDepositAnonymizer` with
+`privacy_invoke(in_token, out_token, assets: u256, note_id)` calldata — the
+authorized STRK in, pinned xSTRK out, a nonzero u256 — and exactly two
+withdrawals: the authorized relay fee and `assets` of STRK to the anonymizer.
+Only the wallet-resolved note id is variable.
+
 Fee build returns an HMAC authorization binding route, fee token, operation
 token, recipient, amount and block-validity window. The server keeps no quote
 row to correlate with the later proof. Pool-native submissions receive bounded

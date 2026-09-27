@@ -32,6 +32,15 @@ describe('Post Office Menu Mode', () => {
     expect(markup).not.toContain(COPY.gameMode.singleAction);
   });
 
+  it('explains its own identity — a private send to another registered pool account — before any control', () => {
+    const markup = render(<PostOfficePanel onClose={() => {}} />);
+    expect(markup).toContain(COPY.postOffice.intro);
+    // Says what it does without implying anything the flow does not: it
+    // requires the recipient to already be registered, and never overclaims
+    // "anonymous forever"/"untraceable" (copy.test.ts enforces that globally).
+    expect(markup.indexOf(COPY.postOffice.intro)).toBeLessThan(markup.indexOf(COPY.bank.transfer));
+  });
+
   it('runs the privacy gate before resolving the Post Office panel', () => {
     const transfer = PRIVACY_REGISTER.find((entry) => entry.route === 'post-office.transfer')!;
     const lockedTransfer: RouteGrade = {

@@ -18,8 +18,22 @@ import type {
   WalletCapability,
 } from '../operations.js';
 import { protectedMinimumOut } from '../protected-minimum.js';
+import { ENDUR_XSTRK, ENDUR_XSTRK_ASSET } from '../endur.js';
 
 const STARK_FIELD_PRIME = (1n << 251n) + 17n * (1n << 192n) + 1n;
+
+/**
+ * DEMO RATE, not Endur's. The fake mints xSTRK at a fixed 1 xSTRK = 1.25 STRK
+ * (4 shares per 5 STRK, floored) so demo mode stays deterministic. It is a
+ * fixture: it never reads the vault and must never be presented as a live
+ * exchange rate. The real share amount is fixed only when the ERC-4626 deposit
+ * executes on-chain (D-063).
+ */
+const DEMO_XSTRK_SHARES_PER_STRK = { numerator: 4n, denominator: 5n } as const;
+
+function demoStakeShares(assets: bigint): bigint {
+  return (assets * DEMO_XSTRK_SHARES_PER_STRK.numerator) / DEMO_XSTRK_SHARES_PER_STRK.denominator;
+}
 
 /**
  * A deterministic, in-memory `PrivacyOperations`.
@@ -74,7 +88,8 @@ const RELAY_FEE_PER_ACTION = 1_000000000000000n; // 1e15 — the single-spend ba
  * performs. We reproduce that shape-dependence deterministically: the estimate
  * grows with the number of spend actions and their kind — a private swap drives
  * an executor and mints an output note, strictly more work than a pool-native
- * transfer or unshield, so it counts double.
+ * transfer or unshield, so it counts double. A stake drives the Endur
+ * anonymizer and mints an output note the same way, so it counts double too.
  *
  * It intentionally ignores the numeric amount — a larger felt is not more
  * calldata — so the estimate stays a predictable function of the batch *shape*
@@ -90,7 +105,7 @@ function estimateRelayFee(intents: readonly Intent[]): bigint {
   let units = 0n;
   for (const intent of intents) {
     if (intent.kind === 'shield') continue;
-    units += intent.kind === 'swap' ? 2n : 1n;
+    units += intent.kind === 'swap' || intent.kind === 'stake' ? 2n : 1n;
   }
   return units * RELAY_FEE_PER_ACTION;
 }
@@ -290,13 +305,21 @@ export class FakePrivacyOperations implements PrivacyOperations {
       throw new PrivacyError('unknown', 'prepare called with no intents');
     }
     for (const intent of reviewed) {
-      const amount = intent.kind === 'swap' ? intent.amountIn : intent.amount;
+      const twoSided = intent.kind === 'swap' || intent.kind === 'stake';
+      const amount = twoSided ? intent.amountIn : intent.amount;
       if (amount <= 0n) throw new PrivacyError('unknown', 'Amounts must be positive.');
-      assertAddress(intent.kind === 'swap' ? intent.tokenIn : intent.token, 'fake intent token');
+      assertAddress(twoSided ? intent.tokenIn : intent.token, 'fake intent token');
       if (intent.kind === 'swap' && intent.minAmountOut <= 0n) {
         throw new PrivacyError('unknown', 'Minimum output must be positive.');
       }
-      if (intent.kind === 'swap') assertAddress(intent.tokenOut, 'fake swap output token');
+      if (twoSided) assertAddress(intent.tokenOut, `fake ${intent.kind} output token`);
+      // Production pins the pair (the anonymizer pins none); so does the fake.
+      if (
+        intent.kind === 'stake'
+        && (!sameAddress(intent.tokenIn, ENDUR_XSTRK_ASSET) || !sameAddress(intent.tokenOut, ENDUR_XSTRK))
+      ) {
+        throw new PrivacyError('unknown', 'The stake route accepts only STRK in and xSTRK out.');
+      }
       if (intent.kind === 'unshield' || intent.kind === 'transfer') {
         assertAddress(intent.recipient, 'fake intent recipient');
       }
@@ -322,6 +345,9 @@ export class FakePrivacyOperations implements PrivacyOperations {
     if (kinds.has('swap') && reviewed.length > 1) {
       throw new PrivacyError('unknown', 'A private swap must be prepared one at a time.');
     }
+    if (kinds.has('stake') && reviewed.length > 1) {
+      throw new PrivacyError('unknown', 'A private stake must be prepared one at a time.');
+    }
     const promptCount = 1;
 
     for (const intent of reviewed) {
@@ -337,6 +363,8 @@ export class FakePrivacyOperations implements PrivacyOperations {
           detail: `Withdrawing reveals the amount and ${intent.recipient} on-chain.`,
         });
       }
+      // A stake carries no public-leg warning, matching the Wallet API adapter:
+      // D-064 waived its in-game disclosure, and a swap carries none either.
       if (intent.kind === 'transfer' && !this.registeredAddrs.has(normalise(intent.recipient))) {
         throw new PrivacyError(
           'not-registered',
@@ -352,8 +380,9 @@ export class FakePrivacyOperations implements PrivacyOperations {
     const spendByToken = new Map<string, bigint>();
     for (const intent of reviewed) {
       if (intent.kind === 'shield') continue;
-      const token = intent.kind === 'swap' ? intent.tokenIn : intent.token;
-      const amount = intent.kind === 'swap' ? intent.amountIn : intent.amount;
+      const twoSided = intent.kind === 'swap' || intent.kind === 'stake';
+      const token = twoSided ? intent.tokenIn : intent.token;
+      const amount = twoSided ? intent.amountIn : intent.amount;
       spendByToken.set(normalise(token), (spendByToken.get(normalise(token)) ?? 0n) + amount);
     }
     if (hasSpend) {
@@ -490,6 +519,19 @@ export class FakePrivacyOperations implements PrivacyOperations {
             matureAtBlock: this.block + this.pool.noteMaturityBlocks,
           });
           break;
+        case 'stake': {
+          // The minted xSTRK lands in an open note, which matures like any other.
+          this.debit(intent.tokenIn, intent.amountIn);
+          const shares = demoStakeShares(intent.amountIn);
+          if (shares > 0n) {
+            this.maturing.push({
+              token: intent.tokenOut,
+              amount: shares,
+              matureAtBlock: this.block + this.pool.noteMaturityBlocks,
+            });
+          }
+          break;
+        }
       }
       if (!feeCharged && intent.kind !== 'shield') {
         this.debit(this.pool.feeToken, fee);

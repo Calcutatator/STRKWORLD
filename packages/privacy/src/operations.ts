@@ -20,6 +20,8 @@ import type {
  * interface or its transitive public shapes needs a decision entry and a
  * heads-up to dependent lanes before implementation. Funded prompt behavior,
  * latency and live-paymaster artifact acceptance remain pre-launch checks.
+ * Narrowly extended by D-041/D-042 (`SwapReview`) and D-063 (the `stake`
+ * intent); every method and every other shape is unchanged.
  *
  * Implementations must not branch on wallet identity. Capability is determined
  * at runtime, which is what keeps web wallets possible later without a rewrite.
@@ -47,6 +49,22 @@ export type Intent =
       tokenOut: Address;
       amountIn: bigint;
       minAmountOut: bigint;
+    }
+  /**
+   * Endur private staking (D-063): shielded STRK in, shielded xSTRK out,
+   * through Endur's STRK20 anonymizer. `tokenIn` must be STRK and `tokenOut`
+   * xSTRK (`ENDUR_XSTRK_ASSET` / `ENDUR_XSTRK`); anything else fails closed.
+   *
+   * No minimum output, deliberately. The anonymizer's `privacy_invoke` takes no
+   * floor, and the ERC-4626 share amount is fixed only at execution, so a
+   * minimum here could never be enforced on-chain. D-041/D-042 forbid
+   * reviewing a floor that nothing protects.
+   */
+  | {
+      kind: 'stake';
+      tokenIn: Address;
+      tokenOut: Address;
+      amountIn: bigint;
     };
 
 /**

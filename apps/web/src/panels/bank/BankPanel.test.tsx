@@ -353,6 +353,48 @@ describe('BankPanel rendering', () => {
     expect(markup).toMatch(/<button[^>]*data-locked="true"[^>]*>Unshield<\/button>/);
   });
 
+  it('tells the player a restored receipt settled while the room was shut, not that it was just sent', async () => {
+    const receipts = createReceiptLedger();
+    receipts.record({ building: 'bank', transactionHash: '0xrestored', intents: [] });
+    const seam = operations();
+    const panel = createAllowedBankPanel({ operations: seam, receipts });
+    await panel.open();
+
+    const markup = render(panel, seam);
+    expect(markup).toContain(COPY.flow.receiptWaiting);
+    expect(markup).not.toContain(COPY.flow.submitted);
+  });
+
+  it('says "Sent." for a receipt confirmed this session, not the restored line', async () => {
+    const seam = operations();
+    const panel = createAllowedBankPanel({ operations: seam, receipts: createReceiptLedger() });
+    await panel.open();
+    panel.setAmount('1');
+    await panel.addToBatch();
+    await panel.prepare();
+    await panel.confirm();
+
+    const markup = render(panel, seam);
+    expect(markup).toContain(COPY.flow.submitted);
+    expect(markup).not.toContain(COPY.flow.receiptWaiting);
+  });
+
+  it('gives pool fee and network cost an accessible, keyboard-reachable "what\'s this?" disclosure at the review point', async () => {
+    const seam = operations();
+    const panel = createAllowedBankPanel({ operations: seam, receipts: createReceiptLedger() });
+    await panel.open();
+    panel.setAmount('1');
+    await panel.addToBatch();
+    await panel.prepare();
+
+    const markup = render(panel, seam);
+    // <details>/<summary> is native keyboard- and screen-reader-reachable, not hover-only.
+    expect(markup).toMatch(/<details class="glossary-term"><summary>Pool fee<\/summary>/);
+    expect(markup).toContain(COPY.glossary.poolFee);
+    expect(markup).toMatch(/<details class="glossary-term"><summary>Network cost<\/summary>/);
+    expect(markup).toContain(COPY.glossary.networkCost);
+  });
+
   it('shows uncertainty without a retry path or another financial form', async () => {
     const seam = operations();
     const panel = createAllowedBankPanel({ operations: seam, receipts: createReceiptLedger() });
@@ -530,7 +572,10 @@ describe('BankPanel — closing during a signature', () => {
     await reopened.open();
 
     const markup = render(reopened, seam);
-    expect(markup).toContain(COPY.flow.submitted);
+    // Restored on reopen, not confirmed in this session — the room was shut
+    // when it settled, so this is the receiptWaiting line, not "Sent.".
+    expect(markup).toContain(COPY.flow.receiptWaiting);
+    expect(markup).not.toContain(COPY.flow.submitted);
     expect(markup).toContain(COPY.flow.back);
   });
 });

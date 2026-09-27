@@ -81,6 +81,25 @@ export function VisitLayer({
 
   useEffect(() => controller.listen(world), [controller, world]);
 
+  // Walking into the Bridge is the moment its optional runtime is worth
+  // loading. The Game Mode deposit station needs the account snapshot and
+  // shield planner that runtime carries, and must not wait for Menu Mode to
+  // mount BridgePanel first. The loader stays the lazy one `main.tsx` hands
+  // down — nothing here imports it — and no other building touches it.
+  const inBridge = state.name === 'visiting' && state.building === 'bridge';
+  const loadBridge = bridge.load;
+  useEffect(() => {
+    if (inBridge) loadBridge();
+  }, [inBridge, loadBridge]);
+
+  // The runtime arrives after the entry snapshot went out, so say again what
+  // the room's stations are whenever a Bridge capability changes mid-visit.
+  const bridgeAccountAvailable = bridge.account !== null;
+  const bridgePlannerAvailable = Boolean(bridge.planner);
+  useEffect(() => {
+    controller.refreshStations();
+  }, [controller, bridgeAccountAvailable, bridgePlannerAvailable]);
+
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent): void => handleVisitKeyDown(event, controller);
     window.addEventListener('keydown', onKeyDown);
@@ -91,10 +110,7 @@ export function VisitLayer({
     <VisitLayerView
       state={state}
       connected={connectState.name === 'connected'}
-      bridgeCapabilities={{
-        bridgeAccountAvailable: bridge.account !== null,
-        bridgePlannerAvailable: Boolean(bridge.planner),
-      }}
+      bridgeCapabilities={{ bridgeAccountAvailable, bridgePlannerAvailable }}
       register={register}
       {...visitLayerActions(controller)}
     />
@@ -130,7 +146,7 @@ export function VisitLayerView({
       <LockedRoom
         building={state.building}
         reason={state.reason}
-        message={COPY.locked.comingSoon}
+        message={state.building === 'vault' ? COPY.vault.locked : COPY.locked.comingSoon}
         onClose={onDismissLocked}
       />
     );
@@ -148,6 +164,14 @@ export function VisitLayerView({
           {COPY.gameMode.exit}
         </button>
       </div>
+      {/* Stations open by proximity with no prompt of their own, so the room
+          always says how. Shown with every room and no window, the same in
+          each building; a window replaces it. */}
+      {showMenu ? (
+        <p className="station-hint" role="note">
+          {COPY.guide.stationHint}
+        </p>
+      ) : null}
       {surface}
     </>
   );

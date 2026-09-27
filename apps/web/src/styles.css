@@ -17,8 +17,12 @@
  * tokens for that window only:
  *
  *   bank        -> STRK20 (shielding)      exchange -> avnu (trading)
- *   post-office -> game + brick and navy   bridge   -> game + steel and amber
+ *   post-office -> game + brick and navy   bridge   -> NEAR Intents (routing)
  *   anything else (the Vault, connect surfaces) keeps the base game theme.
+ *
+ * One counter wears a partner's look over its building's theme: the Bank's
+ * staking counter carries `data-brand="endur"` (PanelFrame) while it is the
+ * stake view, and re-points every token again, in Endur's light idiom (D-063).
  *
  * Fonts are system stacks only. This build loads no web fonts and makes no
  * font requests; the brand faces are approximated, never shipped.
@@ -709,10 +713,11 @@ body {
   text-transform: var(--ui-heading-case);
 }
 
-/* Figure tables: the review costs, the swap quote and the Bridge records. */
+/* Figure tables: the review costs, the swap quote, the stake and the Bridge records. */
 :where(
   .review-costs,
   .exchange-review dl,
+  .stake-review,
   .bridge-review,
   .bridge-plan,
   .bridge-instructions dl,
@@ -728,11 +733,11 @@ body {
   background: var(--ui-surface-raised);
 }
 
-:where(.review-costs, .exchange-review dl, .bridge-review, .bridge-plan, .bridge-instructions dl, .bridge-deposit-instructions dl) dt {
+:where(.review-costs, .exchange-review dl, .stake-review, .bridge-review, .bridge-plan, .bridge-instructions dl, .bridge-deposit-instructions dl) dt {
   color: var(--ui-text-dim);
 }
 
-:where(.review-costs, .exchange-review dl, .bridge-review, .bridge-plan, .bridge-instructions dl, .bridge-deposit-instructions dl) dd {
+:where(.review-costs, .exchange-review dl, .stake-review, .bridge-review, .bridge-plan, .bridge-instructions dl, .bridge-deposit-instructions dl) dd {
   margin: 0;
   font-variant-numeric: tabular-nums;
   font-weight: 600;
@@ -1382,42 +1387,344 @@ button[data-locked="true"] {
 }
 
 /* ------------------------------------------------------------------------
- * The Bridge: the game theme with steel and amber, after its street sign.
+ * The Bridge: routing deposits, in the NEAR Intents idiom.
  * --------------------------------------------------------------------- */
 
 .panel[data-building="bridge"] {
-  --ui-accent: #f0a53a;
-  --ui-heading: #ffd27a;
-  --ui-header-bg: linear-gradient(180deg, #2c3845, #26313c);
+  /* FK Grotesk is NEAR's paid face and is never loaded (see the file header
+   * and index.html) — this is a system-stack approximation. */
+  --ui-font: system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  --ui-heading-font: var(--ui-font);
+  --ui-number-font: var(--ui-font);
+  --ui-btn-font: var(--ui-font-mono);
+  --ui-heading-size: 1.4rem;
+  --ui-heading-weight: 400;
+  --ui-heading-case: none;
+  --ui-heading-tracking: -0.01em;
 
-  --ui-primary-bg: linear-gradient(#f5b24c, #eb9d2e);
-  --ui-primary-bg-hover: linear-gradient(#f8bd5f, #efa53a);
-  --ui-primary-text: #2a1a06;
-  --ui-primary-border: #f7ba5a;
-  --ui-primary-border-hover: #fac46c;
-  --ui-primary-edge: #9a6118;
-  --ui-primary-inset: inset 0 1px 0 rgb(255 245 220 / 0.5);
+  --ui-scrim: rgb(0 0 0 / 0.7);
+  --ui-surface: #0a0a0a;
+  --ui-surface-raised: #171717;
+  --ui-surface-sunken: #000000;
+  --ui-header-bg: none;
+  --ui-line: #2a2a2a;
+  --ui-line-subtle: rgb(255 255 255 / 0.06);
+  --ui-panel-border: 1px solid #2a2a2a;
+  --ui-panel-shadow: 0 32px 80px rgb(0 0 0 / 0.7), 0 0 0 1px rgb(0 0 0 / 0.5);
 
-  --ui-btn-bg: linear-gradient(#52616f, #46545f);
-  --ui-btn-bg-hover: linear-gradient(#5a6a7a, #4d5c69);
-  --ui-btn-text: #f6ecd9;
-  --ui-btn-border: #65778a;
-  --ui-btn-border-hover: #71849a;
-  --ui-btn-edge: #232b33;
+  --ui-text: #ffffff;
+  /* NEAR's muted #9ca3af: ~7.8:1 on --ui-surface and ~6.1:1 on the lightest
+   * card surface below, so it clears AA (4.5:1) at every size used here. */
+  --ui-text-dim: #9ca3af;
+  --ui-heading: #ffffff;
+
+  --ui-accent: #00ec97;
+  --ui-focus: #00ec97;
+  --ui-focus-width: 2px;
+  --ui-warn: #fbbf24;
+  --ui-danger: #ef4444;
+  --ui-success: #17d9d4;
+  --ui-lock: #6b7280;
+
+  /* NEAR's shape language: tight radii everywhere, no pills outside chips. */
+  --ui-radius-panel: 8px;
+  --ui-radius-inner: 6px;
+  --ui-radius-control: 6px;
+  --ui-radius-button: 6px;
+  --ui-radius-tabs: 8px;
+
+  --ui-input-border: #4b5563;
+  --ui-input-border-hover: #6b7280;
+  --ui-input-focus-glow: 0 0 0 4px rgb(0 236 151 / 0.2);
+
+  /* NEAR Intents' signature: control labels set in uppercase mono with wide
+   * tracking, on both the primary and secondary buttons below. */
+  --ui-btn-size: 0.8rem;
+  --ui-btn-weight: 600;
+  --ui-btn-case: uppercase;
+  --ui-btn-tracking: 0.12em;
+  --ui-btn-pad: 0.65rem 1.05rem;
+  --ui-btn-bg: #1e1e1e;
+  --ui-btn-bg-hover: #242424;
+  --ui-btn-text: #ffffff;
+  --ui-btn-border: #2a2a2a;
+  --ui-btn-border-hover: #3f3f46;
+  --ui-btn-edge: transparent;
+  --ui-btn-inset: 0 0 #0000;
+  --ui-btn-glow: 0 0 #0000;
+  --ui-btn-drop: 0 0 #0000;
+  --ui-btn-drop-active: 0 0 #0000;
+  --ui-btn-depth: 0px;
+  --ui-btn-lift: -1px;
+  --ui-btn-press: 1px;
+
+  /* Text on green must stay black: #00ec97 only ever carries #000 (13.45:1),
+   * never white (1.56:1). */
+  --ui-primary-bg: #00ec97;
+  --ui-primary-bg-hover: #2bf0a8;
+  --ui-primary-text: #000000;
+  --ui-primary-border: #00ec97;
+  --ui-primary-border-hover: #2bf0a8;
+  --ui-primary-edge: transparent;
+  --ui-primary-inset: 0 0 #0000;
+  --ui-primary-glow: 0 0 24px -6px rgb(0 236 151 / 0.5);
+
+  --ui-tab-hover: rgb(255 255 255 / 0.05);
+  --ui-tab-selected-bg: #10281f;
+  --ui-tab-selected-text: #00ec97;
+  --ui-tab-selected-shadow: inset 0 0 0 1px #00ec97;
+}
+
+.panel[data-building="bridge"] > .panel-card {
+  position: relative;
 }
 
 .panel[data-building="bridge"] > .panel-card > .panel-header {
-  border-bottom-color: #1b232b;
+  border-bottom-color: #2a2a2a;
 }
 
-/* A riveted girder along the top of the window; decorative. */
+/* A very faint aurora — green with a hint of violet — behind the header's
+ * own title and close control. Negative z-index keeps it under that content
+ * but above the header's flat background. */
+.panel[data-building="bridge"] > .panel-card > .panel-header::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  background:
+    radial-gradient(120% 140% at 30% 0%, rgb(0 236 151 / 0.16), transparent 60%),
+    radial-gradient(80% 120% at 90% -20%, rgb(168 85 247 / 0.1), transparent 65%);
+}
+
+/* NEAR Intents' technical motif, replacing the old riveted-girder strip: a
+ * thin accent hairline plus a small crosshair tucked into each top corner of
+ * the card, clear of the title and close control. Decorative only; it scrolls
+ * away with the card's content exactly as the girder strip did. */
 .panel[data-building="bridge"] > .panel-card::before {
   content: "";
-  display: block;
-  height: 8px;
-  background:
-    radial-gradient(circle, #f0a53a 0 1.6px, transparent 2.2px) 0 0 / 22px 8px repeat-x,
-    linear-gradient(#7d8e9e, #56667a);
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 2;
+  height: 20px;
+  pointer-events: none;
+  opacity: 0.7;
+  background-repeat: no-repeat;
+  background-image:
+    linear-gradient(90deg, transparent, var(--ui-accent) 20%, var(--ui-accent) 80%, transparent),
+    linear-gradient(var(--ui-accent), var(--ui-accent)),
+    linear-gradient(var(--ui-accent), var(--ui-accent)),
+    linear-gradient(var(--ui-accent), var(--ui-accent)),
+    linear-gradient(var(--ui-accent), var(--ui-accent));
+  background-position:
+    0 0,
+    left 9px top 11px,
+    left 11px top 9px,
+    right 9px top 11px,
+    right 11px top 9px;
+  background-size:
+    100% 1px,
+    7px 2px,
+    2px 7px,
+    7px 2px,
+    2px 7px;
+}
+
+/* ------------------------------------------------------------------------
+ * The Bank's staking counter: Endur liquid staking, in the Endur idiom.
+ *
+ * Worn only while the counter is the stake view (`data-brand="endur"`, set by
+ * BankPanel), on top of the Bank's STRK20 block above. It therefore re-points
+ * every token that block sets, derived ones included: a token left out would
+ * keep the Bank's value (see the theme-token finding in AGENTS.md). It is the
+ * one light window, so it also flips `color-scheme` for native controls.
+ *
+ * Tokens measured from app.endur.fi: mint base #E8F7F4, white cards, #F5F7FA
+ * inputs, ink #09090B / #0D1A17, accent #2DB882 with the deeper greens
+ * #17876D and #03624C, #E4E4E7 borders. Contrast, checked against WCAG AA:
+ *  - Endur's muted #71717B is 4.38:1 on the mint, so it is lifted to #63636B,
+ *    which clears 4.5:1 on the card, the mint blocks and the inputs (5.95,
+ *    5.40, 5.55).
+ *  - Text on the green is always the dark #0D1A17 (7.04:1; 5.91:1 on the
+ *    hover shade). White on #2DB882 is 2.53:1 and never used.
+ *  - Green text and the focus ring use #03624C (7.35:1 on the card, 6.67:1 on
+ *    the mint).
+ *  - Field borders are #8A8A93, which keeps the 3:1 a field boundary needs
+ *    against the card (3.42:1); Endur's #E4E4E7 stays on the decorative lines.
+ * --------------------------------------------------------------------- */
+
+.panel[data-building="bank"][data-brand="endur"] {
+  color-scheme: light;
+
+  /* System stacks only, like every other window: no web font is loaded. */
+  --ui-font: system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  --ui-heading-font: var(--ui-font);
+  --ui-number-font: var(--ui-font);
+  --ui-btn-font: var(--ui-font);
+  --ui-heading-size: 1.4rem;
+  --ui-heading-weight: 700;
+  --ui-heading-case: none;
+  --ui-heading-tracking: -0.01em;
+
+  /* The mint base is the page behind Endur's white cards: here, the scrim. */
+  --ui-scrim: rgb(232 247 244 / 0.82);
+  --ui-surface: #ffffff;
+  --ui-surface-raised: #e8f7f4;
+  --ui-surface-sunken: #f5f7fa;
+  --ui-header-bg: none;
+  --ui-line: #e4e4e7;
+  --ui-line-subtle: #e4e4e7;
+  --ui-panel-border: 1px solid #e4e4e7;
+  --ui-panel-shadow: 0 24px 64px rgb(13 26 23 / 0.16), 0 2px 8px rgb(13 26 23 / 0.06);
+
+  --ui-text: #09090b;
+  --ui-text-dim: #63636b;
+  --ui-heading: #0d1a17;
+
+  --ui-accent: #2db882;
+  --ui-focus: #03624c;
+  --ui-focus-width: 2px;
+  --ui-callout-edge: var(--ui-accent);
+  --ui-warn: #b45309;
+  --ui-danger: #dc2626;
+  --ui-success: #17876d;
+  --ui-lock: #71717b;
+
+  /* Endur's shape language: 8-10 px controls, pills only for badges. */
+  --ui-radius-panel: 16px;
+  --ui-radius-inner: 10px;
+  --ui-radius-control: 8px;
+  --ui-radius-button: 10px;
+  --ui-radius-tabs: 10px;
+
+  --ui-input-border: #8a8a93;
+  --ui-input-border-hover: #71717b;
+  --ui-input-focus-glow: 0 0 0 4px rgb(45 184 130 / 0.22);
+
+  /* Sentence case, soft mint secondary buttons with deep-green ink (6.67:1). */
+  --ui-btn-size: 0.95rem;
+  --ui-btn-weight: 600;
+  --ui-btn-case: none;
+  --ui-btn-tracking: 0;
+  --ui-btn-pad: 0.6rem 1.1rem;
+  --ui-btn-bg: #e8f7f4;
+  --ui-btn-bg-hover: #d9f2ec;
+  --ui-btn-text: #03624c;
+  --ui-btn-border: #cdebe3;
+  --ui-btn-border-hover: #a9dccf;
+  --ui-btn-edge: transparent;
+  --ui-btn-inset: 0 0 #0000;
+  --ui-btn-glow: 0 0 #0000;
+  --ui-btn-drop: 0 0 #0000;
+  --ui-btn-drop-active: 0 0 #0000;
+  --ui-btn-depth: 0px;
+  --ui-btn-lift: -1px;
+  --ui-btn-press: 1px;
+
+  --ui-primary-bg: #2db882;
+  --ui-primary-bg-hover: #29a877;
+  --ui-primary-text: #0d1a17;
+  --ui-primary-border: #2db882;
+  --ui-primary-border-hover: #17876d;
+  --ui-primary-edge: transparent;
+  --ui-primary-inset: 0 0 #0000;
+  --ui-primary-glow: 0 10px 24px -12px rgb(23 135 109 / 0.6);
+
+  --ui-tab-hover: rgb(45 184 130 / 0.1);
+  --ui-tab-selected-bg: #ffffff;
+  --ui-tab-selected-text: #03624c;
+  --ui-tab-selected-shadow: inset 0 0 0 1px #e4e4e7, 0 1px 2px rgb(13 26 23 / 0.08);
+}
+
+/* The Bank block's own element rules, undone for the light card. */
+.panel[data-building="bank"][data-brand="endur"] > .panel-card > .panel-header {
+  border-bottom-color: #e4e4e7;
+}
+
+/* The STRK20 cream-to-peach title would vanish on a white header. */
+.panel[data-building="bank"][data-brand="endur"] > .panel-card > .panel-header > h2 {
+  background: none;
+  color: var(--ui-heading);
+  -webkit-text-fill-color: currentColor;
+}
+
+.panel[data-building="bank"][data-brand="endur"] .balance-total {
+  font-weight: 700;
+  letter-spacing: -0.01em;
+}
+
+/* The counter's own contents. They only render in the stake view. */
+.panel[data-brand="endur"] .stake-intro {
+  display: grid;
+  gap: 0.6rem;
+  justify-items: start;
+  margin: 0 0 1rem;
+}
+
+.panel[data-brand="endur"] .stake-intro > p {
+  margin: 0;
+}
+
+.panel[data-brand="endur"] .stake-intro > .panel-intro {
+  color: var(--ui-text);
+}
+
+/* The eyebrow is a pill badge; the copy stays sentence case, CSS sets caps. */
+.panel[data-brand="endur"] .stake-eyebrow {
+  padding: 0.22rem 0.7rem;
+  border-radius: 999px;
+  background: #e8f7f4;
+  color: #03624c;
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  line-height: 1.3;
+  text-transform: uppercase;
+}
+
+/* How the exit works: product information, set as a quiet card rather than
+ * as a callout, so it never reads as a privacy disclosure (D-064). */
+.panel[data-brand="endur"] .stake-note {
+  justify-self: stretch;
+  margin: 0;
+  padding: 0.65rem 0.85rem;
+  border: 1px solid #e4e4e7;
+  border-radius: var(--ui-radius-inner);
+  background: var(--ui-surface-sunken);
+  color: var(--ui-text);
+  font-size: 0.92rem;
+}
+
+.panel[data-brand="endur"] .panel-review > .stake-note {
+  margin: 0.9rem 0;
+}
+
+.panel[data-brand="endur"] .stake-review {
+  margin-bottom: 0.5rem;
+}
+
+.panel[data-brand="endur"] .stake-review-note {
+  margin: 0 0 0.9rem;
+  color: var(--ui-text-dim);
+  font-size: 0.92rem;
+}
+
+.panel[data-brand="endur"] .stake-token {
+  display: inline-block;
+  padding: 0.08rem 0.6rem;
+  border-radius: 999px;
+  background: #ffffff;
+  box-shadow: inset 0 0 0 1px #e4e4e7;
+  color: #03624c;
+  font-weight: 700;
+}
+
+@media (forced-colors: active) {
+  .panel[data-brand="endur"] :is(.stake-eyebrow, .stake-token) {
+    border: 1px solid CanvasText;
+  }
 }
 
 /* ------------------------------------------------------------------------
@@ -1513,5 +1820,490 @@ button[data-locked="true"] {
   button:hover:not(:disabled),
   button:active:not(:disabled) {
     transform: none;
+  }
+}
+
+/* ------------------------------------------------------------------------
+ * Journey HUD, Getting started, station hint and next-step notices.
+ *
+ * The HUD (`hud/HudLayer.tsx`) holds the top-left corner in the base game
+ * theme, like the rest of the HUD. It stacks at z 11, level with the Game
+ * Mode controls: above building windows (z 10) and below the session notice,
+ * presence status (z 20) and wallet attention cue (z 60), which are alerts
+ * and may sit over it, exactly as they sit over windows.
+ *
+ * It never overlaps the Game Mode controls, the presence status or a window:
+ *  - its height stops short of the bottom band the presence status uses;
+ *  - inside a building it stops short of the top-right column the Game Mode
+ *    controls and the station hint use;
+ *  - while a window is open it shrinks to one row inside the band the
+ *    window's own top padding keeps clear (`.panel`: 4.5rem, 3.9rem short);
+ *  - inside a building at tablet and phone widths it keeps only the wallet
+ *    lamp, or the pending spinner while something is in flight, and on the
+ *    narrowest phones it steps aside entirely.
+ * The live region that announces pending work is never hidden by any of this.
+ * --------------------------------------------------------------------- */
+
+.journey-hud {
+  position: absolute;
+  top: max(1rem, env(safe-area-inset-top));
+  left: max(1rem, env(safe-area-inset-left));
+  z-index: 11;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.5rem;
+  max-width: min(26rem, calc(100% - 2rem));
+  max-height: calc(100% - 5.5rem);
+  color: var(--ui-text);
+  font-family: var(--ui-font);
+  font-size: 0.9rem;
+  line-height: 1.35;
+  /* Only the HUD's own boxes take the pointer; the gaps stay the World's. */
+  pointer-events: none;
+}
+
+.journey-hud > * {
+  pointer-events: auto;
+}
+
+.journey-hud-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.35rem 0.85rem;
+  max-width: 100%;
+  padding: 0.4rem 0.45rem 0.4rem 0.8rem;
+  border: 1px solid var(--ui-line);
+  border-radius: 16px;
+  background: rgb(36 28 23 / 0.94);
+  box-shadow: var(--ui-hud-shadow);
+  animation: ui-drop-in 200ms ease-out;
+}
+
+.journey-hud-bar > p {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  min-width: 0;
+  margin: 0;
+}
+
+.journey-hud-wallet {
+  font-weight: 700;
+}
+
+/* Status lamp; decorative, the label carries the meaning. */
+.journey-hud-lamp {
+  flex: none;
+  width: 0.55rem;
+  height: 0.55rem;
+  border-radius: 50%;
+  background: var(--ui-accent);
+  box-shadow: 0 0 0 3px rgb(242 181 74 / 0.22);
+}
+
+.journey-hud-wallet[data-status="connected"] .journey-hud-lamp {
+  background: var(--ui-success);
+  box-shadow: 0 0 0 3px rgb(143 209 138 / 0.22);
+}
+
+.journey-hud-wallet:is([data-status="unsupported"], [data-status="unregistered"]) .journey-hud-lamp {
+  background: var(--ui-danger);
+  box-shadow: 0 0 0 3px rgb(255 122 92 / 0.22);
+}
+
+.journey-hud-wallet[data-status="disconnected"] .journey-hud-lamp {
+  background: var(--ui-lock);
+  box-shadow: none;
+}
+
+.journey-hud-balance {
+  font-variant-numeric: tabular-nums;
+}
+
+.journey-hud-balance > .journey-hud-label {
+  color: var(--ui-text-dim);
+  font-size: 0.8rem;
+  font-weight: 700;
+}
+
+.journey-hud-balance > strong {
+  font-family: var(--ui-number-font);
+  font-weight: 800;
+  overflow-wrap: anywhere;
+}
+
+.journey-hud-bar button,
+.journey-hud-nudge > button {
+  --btn-depth: 3px;
+  --btn-press: 2px;
+  padding: 0.28rem 0.7rem;
+  font-size: 0.8rem;
+}
+
+.journey-hud-bar > .journey-hud-help {
+  display: inline-grid;
+  place-items: center;
+  width: 2rem;
+  height: 2rem;
+  padding: 0;
+  font-size: 0.95rem;
+  font-weight: 800;
+}
+
+.journey-hud-pending {
+  padding: 0.12rem 0.6rem 0.12rem 0.45rem;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--ui-accent) 14%, transparent);
+  font-weight: 700;
+}
+
+/* Quiet on purpose: small, thin and slow. */
+.journey-hud-spinner {
+  flex: none;
+  width: 0.8rem;
+  height: 0.8rem;
+  border: 2px solid color-mix(in srgb, var(--ui-accent) 30%, transparent);
+  border-top-color: var(--ui-accent);
+  border-radius: 50%;
+  animation: ui-spin 1.2s linear infinite;
+}
+
+.journey-hud-nudge {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem 0.8rem;
+  max-width: 100%;
+  padding: 0.6rem 0.6rem 0.6rem 0.85rem;
+  border: 1px solid color-mix(in srgb, var(--ui-accent) 45%, var(--ui-line));
+  border-left: 5px solid var(--ui-accent);
+  border-radius: 14px;
+  background: color-mix(in srgb, var(--ui-accent) 14%, var(--ui-surface));
+  box-shadow: var(--ui-hud-shadow);
+  font-weight: 600;
+  animation: ui-drop-in 200ms ease-out;
+}
+
+.journey-hud-nudge > p {
+  flex: 1 1 14rem;
+  margin: 0;
+}
+
+.journey-visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip-path: inset(50%);
+  border: 0;
+  white-space: nowrap;
+}
+
+/* Getting started: a card under the HUD bar that scrolls inside the space
+ * the HUD may use, so it never reaches the presence band. */
+.journey-guide {
+  display: grid;
+  gap: 0.55rem;
+  width: 26rem;
+  max-width: 100%;
+  min-height: 0;
+  overflow: auto;
+  overscroll-behavior: contain;
+  padding: 1rem 1.1rem 1.1rem;
+  border: var(--ui-panel-border);
+  border-radius: var(--ui-radius-panel);
+  background: var(--ui-surface);
+  box-shadow: var(--ui-panel-shadow);
+  line-height: 1.45;
+  scrollbar-width: thin;
+  scrollbar-color: var(--ui-line) transparent;
+  animation: ui-panel-in 190ms cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+.journey-guide[hidden] {
+  display: none;
+}
+
+.journey-guide :is(h2, h3, p, ol, dl) {
+  margin: 0;
+}
+
+.journey-guide h2 {
+  color: var(--ui-heading);
+  font-family: var(--ui-heading-font);
+  font-size: 1.2rem;
+  font-weight: var(--ui-heading-weight);
+  letter-spacing: var(--ui-heading-tracking);
+  line-height: 1.15;
+}
+
+.journey-guide h2:focus {
+  outline: none;
+}
+
+.journey-guide h2:focus-visible {
+  outline: var(--ui-focus-width) solid var(--ui-focus);
+  outline-offset: 3px;
+  border-radius: 4px;
+}
+
+.journey-guide h3 {
+  margin-top: 0.35rem;
+  color: var(--ui-text-dim);
+  font-size: 0.78rem;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.journey-guide-controls {
+  display: grid;
+  grid-template-columns: max-content minmax(0, 1fr);
+  align-items: baseline;
+  gap: 0.35rem 0.7rem;
+}
+
+.journey-guide-controls > div {
+  display: contents;
+}
+
+.journey-guide-controls dt {
+  justify-self: start;
+  padding: 0.05rem 0.45rem;
+  border: 1px solid var(--ui-line);
+  border-bottom-width: 2px;
+  border-radius: 6px;
+  background: var(--ui-surface-raised);
+  font-family: var(--ui-font-mono);
+  font-size: 0.78rem;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.journey-guide-controls dd {
+  margin: 0;
+}
+
+.journey-guide-route {
+  display: grid;
+  gap: 0.3rem;
+  padding-left: 1.3rem;
+}
+
+.journey-guide-note {
+  color: var(--ui-text-dim);
+  font-size: 0.85rem;
+}
+
+.journey-guide-dismiss {
+  --btn-bg: var(--ui-primary-bg);
+  --btn-bg-hover: var(--ui-primary-bg-hover);
+  --btn-text: var(--ui-primary-text);
+  --btn-border: var(--ui-primary-border);
+  --btn-border-hover: var(--ui-primary-border-hover);
+  --btn-edge: var(--ui-primary-edge);
+  --btn-inset: var(--ui-primary-inset);
+  --btn-glow: var(--ui-primary-glow);
+  justify-self: start;
+  margin-top: 0.35rem;
+}
+
+/* The room's one-line reminder of how stations open. It sits under the Game
+ * Mode controls and only ever shares the screen with the room, never with a
+ * window. Subtle by design: dim text, no controls, no pointer. */
+.station-hint {
+  position: absolute;
+  top: calc(max(1rem, env(safe-area-inset-top)) + 3.4rem);
+  right: max(1rem, env(safe-area-inset-right));
+  z-index: 11;
+  max-width: min(20rem, calc(100% - 2rem));
+  margin: 0;
+  padding: 0.4rem 0.75rem;
+  border: 1px solid var(--ui-line);
+  border-radius: 12px;
+  background: rgb(36 28 23 / 0.9);
+  color: var(--ui-text-dim);
+  font-size: 0.85rem;
+  line-height: 1.35;
+  text-align: right;
+  pointer-events: none;
+  animation: ui-fade-in 200ms ease-out;
+}
+
+/* Next-step and Bridge-arrival notices inside a building window. The same
+ * callout recipe as the window's own notices, so each building's theme
+ * tokens apply and the checked contrast pairs carry over. */
+.journey-next {
+  --ui-callout-edge: var(--ui-success);
+  margin: 0 0 1rem;
+  padding: 0.75rem 0.9rem 0.75rem 0.95rem;
+  border-left: 4px solid var(--ui-callout-edge);
+  border-radius: 0 var(--ui-radius-inner) var(--ui-radius-inner) 0;
+  background: color-mix(in srgb, var(--ui-callout-edge) 13%, var(--ui-surface));
+  color: var(--ui-text);
+  font-weight: 600;
+}
+
+.journey-arrival {
+  --ui-callout-edge: var(--ui-accent);
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.6rem 1rem;
+}
+
+.journey-arrival > p {
+  flex: 1 1 14rem;
+  margin: 0;
+}
+
+.journey-arrival > button {
+  --btn-depth: min(var(--ui-btn-depth), 3px);
+  --btn-press: min(var(--ui-btn-press), 2px);
+  padding: 0.35rem 0.85rem;
+}
+
+/* Inside a building the top-right column belongs to the Game Mode controls
+ * (about 19rem) and the station hint (20rem). */
+.strkworld:has(.game-mode-controls) .journey-hud {
+  max-width: min(26rem, calc(100% - 23rem));
+}
+
+/* A window is open: one row in the band above it. The toggle, the nudge (the
+ * Bank window carries its own) and the guide wait for the window to close. */
+.strkworld:has(.panel) .journey-hud-bar {
+  flex-wrap: nowrap;
+}
+
+.strkworld:has(.panel) .journey-hud-bar .journey-hud-label {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip-path: inset(50%);
+  border: 0;
+  white-space: nowrap;
+}
+
+.strkworld:has(.panel) :is(.journey-hud-toggle, .journey-hud-help, .journey-hud-nudge, .journey-guide) {
+  display: none;
+}
+
+@media (max-width: 48rem) {
+  .strkworld:has(.game-mode-controls) .journey-hud {
+    max-width: calc(100% - 2rem);
+  }
+
+  .strkworld:has(.game-mode-controls) :is(.journey-hud-balance, .journey-hud-help, .journey-hud-nudge, .journey-guide) {
+    display: none;
+  }
+
+  .strkworld:has(.game-mode-controls) .journey-hud-bar {
+    flex-wrap: nowrap;
+    gap: 0.35rem;
+    padding: 0.45rem 0.55rem;
+  }
+
+  /* One chip: the wallet lamp, or the pending spinner in its place. */
+  .strkworld:has(.game-mode-controls) .journey-hud-bar .journey-hud-label,
+  .strkworld:has(.game-mode-controls) .journey-hud-bar:has(.journey-hud-pending) .journey-hud-wallet {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    margin: -1px;
+    padding: 0;
+    overflow: hidden;
+    clip-path: inset(50%);
+    border: 0;
+    white-space: nowrap;
+  }
+
+  .strkworld:has(.game-mode-controls) .journey-hud-pending {
+    padding: 0;
+    background: none;
+  }
+}
+
+/* The narrowest phones: the Game Mode controls need the whole top row. */
+@media (max-width: 22rem) {
+  .strkworld:has(.game-mode-controls) .journey-hud-bar {
+    display: none;
+  }
+}
+
+@media (max-width: 480px) {
+  .station-hint {
+    font-size: 0.8rem;
+  }
+}
+
+@media (forced-colors: active) {
+  .journey-hud-lamp {
+    background: CanvasText;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .journey-hud-bar,
+  .journey-hud-nudge,
+  .journey-guide,
+  .station-hint {
+    animation: none;
+  }
+
+  .journey-hud-spinner {
+    animation: none;
+    border-color: var(--ui-accent);
+  }
+}
+
+/* ===========================================================================
+ * Clarity and honesty pass: plain-English "what's this?" disclosures next to
+ * review-screen jargon (Exchange, Bridge and Bank review figures, the Bank's
+ * maturing-funds warning), and the Post Office's own intro line.
+ *
+ * `.glossary-term` is a native <details>/<summary> — keyboard-reachable and
+ * exposed to a screen reader as an expandable disclosure with no ARIA of our
+ * own, never hover-only. Visible focus is already covered by the existing
+ * `.panel summary:focus-visible` rule above; this section only adds the
+ * affordance and spacing.
+ * ======================================================================== */
+
+.glossary-term {
+  display: inline-block;
+  color: inherit;
+}
+
+.glossary-term > summary {
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+  text-decoration: underline dotted;
+  text-underline-offset: 3px;
+}
+
+.glossary-definition {
+  margin: 0.35rem 0 0;
+  color: var(--ui-text-dim);
+  font-size: 0.88rem;
+  font-weight: 400;
+  text-align: left;
+}
+
+.panel-intro {
+  margin: 0 0 0.85rem;
+  color: var(--ui-text-dim);
+  font-size: 0.95rem;
+}
+
+@media (forced-colors: active) {
+  .glossary-term > summary {
+    text-decoration-color: LinkText;
   }
 }

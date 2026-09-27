@@ -1586,22 +1586,25 @@ describe('WorldSession orchestration', () => {
     const world = createWorld();
     world.start();
     enterBuilding(world, 'bank');
+    // The Bank's Endur staking counter rides along, locked: the Shell has not
+    // switched it on (D-063).
+    const staking = { ...FIXED_ROOM_DEFINITIONS.bank.stations[1], status: 'locked', highlighted: false };
     expect(world.view.last('renderRoom')).toEqual([
       'bank',
-      [{ ...BANK_STATION, status: 'locked', highlighted: false }],
+      [{ ...BANK_STATION, status: 'locked', highlighted: false }, staking],
     ]);
 
     makeBankStationAvailable(world);
     expect(world.view.last('renderRoom')).toEqual([
       'bank',
-      [{ ...BANK_STATION, label: 'SHIELD', status: 'available', highlighted: false }],
+      [{ ...BANK_STATION, label: 'SHIELD', status: 'available', highlighted: false }, staking],
     ]);
 
     place(world.session, interiorTileCentre(BANK_APPROACH));
     tick(world);
     expect(world.view.last('renderRoom')).toEqual([
       'bank',
-      [{ ...BANK_STATION, label: 'SHIELD', status: 'available', highlighted: true }],
+      [{ ...BANK_STATION, label: 'SHIELD', status: 'available', highlighted: true }, staking],
     ]);
     expect(world.bus.payloads('station:activated')).toEqual([
       { building: 'bank', station: BANK_STATION.station },

@@ -3,8 +3,15 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import { act, StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 import { describe, expect, it, vi } from 'vitest';
-import { FakePrivacyOperations, type WalletSession } from '@strkworld/privacy';
+import {
+  FakePrivacyOperations,
+  ReservePublicShieldPlanner,
+  type PublicShieldPlanner,
+  type WalletRoutePolicy,
+  type WalletSession,
+} from '@strkworld/privacy';
 import { createEventBus } from '../bus/event-bus.js';
+import { parseRoutePolicy } from './config.js';
 import type { ShellEvents, WorldEvents } from '@strkworld/shared';
 import { createPresenceController, type PresenceController } from '../presence/presence-controller.js';
 import { COPY } from '../copy.js';
@@ -17,7 +24,12 @@ vi.mock('../App.js', () => ({
   },
 }));
 
-import { capabilityAdmits, ProductionRoot } from './ProductionRoot.js';
+import {
+  capabilityAdmits,
+  ProductionRoot,
+  shieldPlanningEnabled,
+  type ShieldPlannerFactory,
+} from './ProductionRoot.js';
 
 Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true });
 
@@ -543,3 +555,159 @@ async function unmountReactRoot(root: ReturnType<typeof createRoot>): Promise<vo
     await flushReact();
   });
 }
+
+describe('ProductionRoot Bridge shield planner (D-061)', () => {
+  const STRK = '0x04718f5a0fc34cc1af16a1cdee98ffb20c31f5cd61d6ab07201858f4287c938d';
+  const ONE_STRK = 10n ** 18n;
+  const SHIELD_ENV = {
+    VITE_STRK20_SHIELD_ENABLED: 'true',
+    VITE_STRK20_SHIELD_MAX_INTENTS: '1',
+    VITE_STRK20_SHIELD_ALLOWED_TOKENS: STRK,
+  };
+  const TRANSFER_ENV = {
+    VITE_STRK20_TRANSFER_ENABLED: 'true',
+    VITE_STRK20_TRANSFER_MAX_INTENTS: '1',
+    VITE_STRK20_TRANSFER_MAX_RELAY_FEE: '5',
+    VITE_STRK20_TRANSFER_ALLOWED_TOKENS: STRK,
+  };
+  const UNSHIELD_ENV = {
+    VITE_STRK20_UNSHIELD_ENABLED: 'true',
+    VITE_STRK20_UNSHIELD_MAX_INTENTS: '1',
+    VITE_STRK20_UNSHIELD_MAX_RELAY_FEE: '5',
+    VITE_STRK20_UNSHIELD_ALLOWED_TOKENS: STRK,
+  };
+  const shieldPolicy = parseRoutePolicy(SHIELD_ENV);
+  const reservePlanner: ShieldPlannerFactory = (options) => new ReservePublicShieldPlanner(options);
+
+  function admittedOperations(): FakePrivacyOperations {
+    return new FakePrivacyOperations({
+      capability: { supportsStrk20: true, walletApiVersion: '0.10.3', registration: 'unknown' },
+    });
+  }
+
+  async function mountConnected({
+    policy,
+    createShieldPlanner,
+    operations = admittedOperations(),
+  }: {
+    policy: WalletRoutePolicy | null;
+    createShieldPlanner?: ShieldPlannerFactory;
+    operations?: FakePrivacyOperations;
+  }) {
+    captured.current = null;
+    const session = sessionAt('connected', '0xabc', operations);
+    const worldOut = createEventBus<WorldEvents>();
+    const shellIn = createEventBus<ShellEvents>();
+    const createPresence = () => createPresenceController({});
+    const bridge = recoveryBridge();
+    const container = document.createElement('div');
+    document.body.appendChild(container);
+    const root = createRoot(container);
+    const render = async () => {
+      await act(async () => {
+        root.render(
+          <ProductionRoot
+            session={session}
+            worldOut={worldOut}
+            shellIn={shellIn}
+            createPresence={createPresence}
+            bridge={bridge}
+            policy={policy}
+            createShieldPlanner={createShieldPlanner}
+          />,
+        );
+        await flushReact();
+      });
+    };
+    await render();
+    return {
+      render,
+      planner: () => (captured.current?.bridge as { planner: PublicShieldPlanner | null } | undefined)?.planner,
+      async unmount() {
+        await unmountReactRoot(root);
+        container.remove();
+      },
+    };
+  }
+
+  it('injects the reserve planner when shield is enabled, reading the live fee through the session', async () => {
+    const operations = admittedOperations();
+    const poolConfig = vi.spyOn(operations, 'poolConfig');
+    const factory = vi.fn(reservePlanner);
+    const mounted = await mountConnected({ policy: shieldPolicy, createShieldPlanner: factory, operations });
+
+    const planner = mounted.planner();
+    expect(planner).toBeInstanceOf(ReservePublicShieldPlanner);
+    expect(factory).toHaveBeenCalledWith({ pool: { config: expect.any(Function) }, readAccount: expect.any(Function) });
+    poolConfig.mockClear();
+
+    await expect(planner!.planMax({ token: STRK, available: 100n * ONE_STRK, expectedRecipient: '0xabc' }))
+      .resolves.toMatchObject({
+        recipient: '0xabc',
+        poolFee: 6n * ONE_STRK,
+        plannedReserve: 10n * ONE_STRK,
+        amountToShield: 90n * ONE_STRK,
+      });
+    expect(poolConfig).toHaveBeenCalledOnce();
+    await mounted.unmount();
+  });
+
+  it.each([
+    ['no production policy', null],
+    ['a deny-all policy', parseRoutePolicy({})],
+    ['a transfer-only policy', parseRoutePolicy(TRANSFER_ENV)],
+    ['an unshield-only policy', parseRoutePolicy(UNSHIELD_ENV)],
+    ['transfer and unshield without shield', parseRoutePolicy({ ...TRANSFER_ENV, ...UNSHIELD_ENV })],
+  ])('keeps the Bridge recovery-only under %s, without building a planner', async (_name, policy) => {
+    const factory = vi.fn(reservePlanner);
+    const mounted = await mountConnected({ policy, createShieldPlanner: factory });
+
+    expect(captured.current).not.toBeNull();
+    expect(mounted.planner()).toBeNull();
+    expect(factory).not.toHaveBeenCalled();
+    await mounted.unmount();
+  });
+
+  it('stays recovery-only when shield is enabled but no planner was composed, or composing it throws', async () => {
+    const absent = await mountConnected({ policy: shieldPolicy });
+    expect(absent.planner()).toBeNull();
+    await absent.unmount();
+
+    const throwing = await mountConnected({
+      policy: shieldPolicy,
+      createShieldPlanner: () => { throw new Error('planner unavailable'); },
+    });
+    expect(captured.current).not.toBeNull();
+    expect(throwing.planner()).toBeNull();
+    await throwing.unmount();
+  });
+
+  it('keeps one planner across re-renders so an open Bridge panel is not reset', async () => {
+    const factory = vi.fn(reservePlanner);
+    const mounted = await mountConnected({ policy: shieldPolicy, createShieldPlanner: factory });
+    const first = mounted.planner();
+
+    await mounted.render();
+
+    expect(first).toBeInstanceOf(ReservePublicShieldPlanner);
+    expect(mounted.planner()).toBe(first);
+    expect(factory).toHaveBeenCalledOnce();
+    await mounted.unmount();
+  });
+
+  it('enables planning only for a policy that admits the STRK shield route', () => {
+    const hostile = { ...shieldPolicy };
+    Object.defineProperty(hostile, 'enabledRoutes', { get() { throw new Error('hostile policy'); } });
+
+    expect(shieldPlanningEnabled(shieldPolicy)).toBe(true);
+    expect(shieldPlanningEnabled(parseRoutePolicy({ ...SHIELD_ENV, ...TRANSFER_ENV, ...UNSHIELD_ENV }))).toBe(true);
+    expect(shieldPlanningEnabled({ ...shieldPolicy, allowedTokens: { ...shieldPolicy.allowedTokens, shield: [`0x${STRK.slice(3)}`] } })).toBe(true);
+    expect(shieldPlanningEnabled(null)).toBe(false);
+    expect(shieldPlanningEnabled(undefined)).toBe(false);
+    expect(shieldPlanningEnabled(parseRoutePolicy({}))).toBe(false);
+    expect(shieldPlanningEnabled(parseRoutePolicy(TRANSFER_ENV))).toBe(false);
+    expect(shieldPlanningEnabled(parseRoutePolicy(UNSHIELD_ENV))).toBe(false);
+    expect(shieldPlanningEnabled({ ...shieldPolicy, allowedTokens: { ...shieldPolicy.allowedTokens, shield: ['0x123'] } })).toBe(false);
+    expect(shieldPlanningEnabled(hostile as WalletRoutePolicy)).toBe(false);
+  });
+});

@@ -180,6 +180,16 @@ uncertainty handling and the session receipt ledger; only their allowed
 controls and batch policy differ. The World never receives either station's
 route or financial meaning.
 
+D-063 adds `bank:staking`, the Bank's Endur staking counter, as its own station
+beside shielding so no station mixes privacy grades (D-030). The same machine
+runs it in a Stake mode, which Bank Menu Mode also offers as a tab; a stake
+settles on its own, so neither surface uses batch vocabulary. The review shows
+the exact STRK in and names xSTRK out without a figure, because the prepared
+batch carries none. D-064 waives the route's disclosure, so `ConfirmGate`
+enables with none while every other deviation still needs its own. While it is
+the stake view the window carries `data-brand="endur"` and wears Endur's light
+palette. Like every route, it stays locked until the build's policy enables it.
+
 The Bridge is a separate manual state machine, not a financial batch mode. It
 binds a signed 1Click quote to the active account, requires a public-shield
 planner preflight before revealing an actionable deposit address, and keeps
@@ -189,7 +199,10 @@ hands a prefilled shield into the ordinary Bank review; the player still
 prepares and confirms it explicitly, the receipt belongs to the Bank, and no
 Bridge-to-shield correlation is persisted. A service-scoped single-flight
 coordinator prevents an unabortable late quote response from resurrecting or
-overwriting recovery evidence after the room closes.
+overwriting recovery evidence after the room closes. The optional production
+runtime loads when the player walks into the Bridge (or its Menu panel
+mounts), and `VisitLayer` re-publishes the room's station snapshot when it
+arrives, so the Game Mode deposit station opens in the same visit.
 
 `SessionNoticeLayer` is a sibling above the World and visit surfaces. If a
 private submission response is lost after dispatch, D-034 classifies the result

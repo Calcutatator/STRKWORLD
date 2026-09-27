@@ -37,6 +37,8 @@ export type BatchRejectionReason =
   /** One visit settles as one approved route (D-018). */
   | { reason: 'mixed-route-kinds'; queued: Intent['kind']; incoming: Intent['kind'] }
   | { reason: 'swap-must-be-alone' }
+  /** D-063: the pool admits one external invoke per transaction, so a stake settles alone. */
+  | { reason: 'stake-must-be-alone' }
   | { reason: 'non-positive-amount' }
   | { reason: 'batch-full'; limit: number }
   | { reason: 'empty-batch' };
@@ -102,6 +104,11 @@ export function createBatchAccumulator(options: AccumulatorOptions = {}): BatchA
         if (queued.kind === 'swap' || intent.kind === 'swap') {
           return { ok: false, rejection: { reason: 'swap-must-be-alone' } };
         }
+        // The seam prepares a stake one at a time (D-063); refusing here says so
+        // at the moment of the mistake rather than as a failed prepare.
+        if (queued.kind === 'stake' || intent.kind === 'stake') {
+          return { ok: false, rejection: { reason: 'stake-must-be-alone' } };
+        }
         if (queued.kind !== intent.kind) {
           return {
             ok: false,
@@ -148,6 +155,8 @@ const INTENT_SHAPES = {
   unshield: ['kind', 'token', 'amount', 'recipient'],
   transfer: ['kind', 'token', 'amount', 'recipient'],
   swap: ['kind', 'tokenIn', 'tokenOut', 'amountIn', 'minAmountOut'],
+  // No minimum output: nothing on-chain enforces one for a stake (D-063).
+  stake: ['kind', 'tokenIn', 'tokenOut', 'amountIn'],
 } as const satisfies Record<Intent['kind'], readonly string[]>;
 
 const ADDRESS_FIELDS = ['token', 'recipient', 'tokenIn', 'tokenOut'] as const;
@@ -217,5 +226,5 @@ function reject(detail: string): BatchResult<never> {
 }
 
 function amountOf(intent: Intent): bigint {
-  return intent.kind === 'swap' ? intent.amountIn : intent.amount;
+  return intent.kind === 'swap' || intent.kind === 'stake' ? intent.amountIn : intent.amount;
 }

@@ -111,7 +111,9 @@ describe('ActiveRoomView', () => {
         onClose={() => {}}
       />,
     );
-    expect(markup).toContain(COPY.locked.comingSoon);
+    // The Vault has its own specific locked line rather than the shared
+    // "coming soon" text every other never-built building uses.
+    expect(markup).toContain(COPY.vault.locked);
   });
 
   it('renders the built Exchange surface for an approved building', () => {

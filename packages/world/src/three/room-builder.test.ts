@@ -24,7 +24,7 @@ import {
 } from '../fixed-room.js';
 import { ROOM_ORIGIN } from '../world-layout.js';
 import { createNullLabelFactory } from './labels.js';
-import { NEAR } from './palette.js';
+import { ENDUR, ENDUR_STATION_LOOKS, NEAR, STRK20, STRK20_STATION_LOOKS } from './palette.js';
 import {
   INTERIOR_SOUTH_WALL_HEIGHT,
   INTERIOR_WALL_HEIGHT,
@@ -294,6 +294,79 @@ describe('buildFixedRoom', () => {
     expect(hues.filter(isGreen).length).toBeGreaterThan(0);
     expect(coloursOf(meshNamed(room.group, ':wall-west:lights'))).toContain(new Color(NEAR.amber).getHex());
     room.dispose();
+  });
+
+  it('dresses the Bank staking counter in Endur while the room and its shielding counter keep STRK20', () => {
+    const { map, room } = build('bank');
+    const staking = stationGroup(room, 'bank:staking');
+    const shielding = stationGroup(room, 'bank:shielding');
+    // Its own counter, on its own tiles east of shielding.
+    room.group.updateMatrixWorld(true);
+    const counter = new Box3().setFromObject(meshNamed(staking, ':counter'));
+    expect(counter.min.x).toBeGreaterThanOrEqual(OX + 13);
+    expect(counter.max.x).toBeLessThanOrEqual(OX + 15);
+    expect(counter.min.z).toBeGreaterThanOrEqual(OZ + 3);
+    expect(counter.max.z).toBeLessThanOrEqual(OZ + 4);
+    // A light Endur kiosk (white top and card, mint field, green pill and
+    // droplet, dark-green trim and wave), none of which reaches shielding.
+    const endur = [ENDUR.card, ENDUR.band, ENDUR.green, ENDUR.greenDeep, ENDUR.dark].map((hex) => new Color(hex).getHex());
+    const stakingColours = coloursOf(meshNamed(staking, ':counter'));
+    for (const hex of endur) expect(stakingColours).toContain(hex);
+    const shieldingColours = coloursOf(meshNamed(shielding, ':counter'));
+    for (const hex of endur) expect(shieldingColours).not.toContain(hex);
+    expect(counter.max.y).toBeGreaterThan(1.25);
+
+    // Three distinct states in Endur's looks: locked is a calm grey.
+    const accent = (group: Object3D) => meshNamed(group, ':status').material as MeshStandardMaterial;
+    const halo = (group: Object3D) => meshNamed(group, ':halo').material as MeshBasicMaterial;
+    const state = (group: Object3D) => ({
+      colour: accent(group).color.getHex(),
+      glow: accent(group).emissiveIntensity,
+      halo: halo(group).color.getHex(),
+      opacity: halo(group).opacity,
+    });
+    const show = (status: 'available' | 'locked', highlighted: 'bank:staking' | null, label = 'STAKE') =>
+      room.setStations(
+        fixedRoomStationPresentations(map, {
+          ...roomState(map, status, highlighted),
+          stations: [
+            { station: 'bank:shielding', label: 'SHIELD / UNSHIELD', status },
+            { station: 'bank:staking', label, status },
+          ],
+        }),
+      );
+    const locked = state(staking);
+    expect(locked.colour).toBe(new Color(ENDUR_STATION_LOOKS.locked.color).getHex());
+    expect(locked.glow).toBe(0);
+    const hsl = { h: 0, s: 0, l: 0 };
+    accent(staking).color.getHSL(hsl, SRGBColorSpace);
+    expect(hsl.s).toBeLessThan(0.1);
+    show('available', null);
+    const available = state(staking);
+    expect(available.colour).toBe(new Color(ENDUR.green).getHex());
+    expect(state(shielding).colour).toBe(new Color(STRK20_STATION_LOOKS.available.color).getHex());
+    show('available', 'bank:staking', 'STAKE STRK');
+    const highlighted = state(staking);
+    expect(new Set([locked.colour, available.colour, highlighted.colour]).size).toBe(3);
+    expect(highlighted.glow).toBeGreaterThan(available.glow);
+    expect(highlighted.halo).not.toBe(available.halo);
+    expect(locked.opacity).toBeLessThan(available.opacity);
+    expect(available.opacity).toBeLessThan(highlighted.opacity);
+    expect(accent(shielding).emissive.getHex()).toBe(new Color(STRK20.orange).getHex());
+    // The label plate renders the Shell's label, as an Endur pill badge.
+    expect(floatingLabel(staking).userData['text']).toBe('STAKE STRK');
+    expect(floatingLabel(staking).userData['options']).toMatchObject({ foreground: '#0d1a17', font: 'sans', cornerRadius: 0.5 });
+    expect(floatingLabel(shielding).userData['options']).toMatchObject({ font: 'mono', uppercase: true });
+
+    // The counter costs five draw calls, and disposes with the room.
+    const meshes: Mesh[] = [];
+    staking.traverse((object) => object instanceof Mesh && meshes.push(object));
+    expect(meshes).toHaveLength(5);
+    const spies = [...new Set(meshes.flatMap((mesh) => [mesh.geometry, mesh.material as Material]))].map((value) =>
+      vi.spyOn(value, 'dispose'),
+    );
+    room.dispose();
+    for (const spy of spies) expect(spy).toHaveBeenCalledTimes(1);
   });
 
   it('copies its origin so later mutation cannot move the room', () => {

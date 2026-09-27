@@ -10,6 +10,7 @@ import { BankPanel } from '../bank/BankPanel.js';
 import { createBankPanel, type BankPanel as BankMachine } from '../bank/bank-machine.js';
 import { usePrivacy } from '../../privacy/PrivacyProvider.js';
 import { PRIVACY_REGISTER, type RouteGrade } from '../../privacy/register.js';
+import { GlossaryTerm } from '../Glossary.js';
 
 export function BridgePanel({
   onClose,
@@ -114,6 +115,7 @@ export function BridgePanel({
             </label>
             <details className="bridge-details">
               <summary>{COPY.bridge.refundAddress}</summary>
+              <p className="glossary-definition">{COPY.glossary.refundAddress}</p>
               <label>
                 <input value={refundAddress} onChange={(event) => setRefundAddress(event.target.value)} />
               </label>
@@ -188,13 +190,13 @@ function QuoteReview({ review }: { review: BridgeQuoteReview }) {
       <dl className="bridge-review">
         <dt>{COPY.bridge.amount}</dt><dd>{formatTokenAmountExact(review.amountIn, review.sourceDecimals)} {review.sourceSymbol}</dd>
         <dt>{COPY.bridge.expected}</dt><dd>{formatStrkExact(review.expectedAmountOut)}</dd>
-        <dt>{COPY.bridge.minimum}</dt><dd>{formatStrkExact(review.minimumAmountOut)}</dd>
+        <dt><GlossaryTerm term={COPY.bridge.minimum} definition={COPY.glossary.protectedMinimum} /></dt><dd>{formatStrkExact(review.minimumAmountOut)}</dd>
       </dl>
       <details className="bridge-details">
         <summary>Quote details</summary>
         <dl className="bridge-review">
           <dt>{COPY.bridge.recipient}</dt><dd><code>{shortenAddress(review.recipient)}</code></dd>
-          <dt>{COPY.bridge.deadline}</dt><dd>{compactDeadline(review.deadline)}</dd>
+          <dt><GlossaryTerm term={COPY.bridge.deadline} definition={COPY.glossary.quoteExpiry} /></dt><dd>{compactDeadline(review.deadline)}</dd>
         </dl>
       </details>
     </>
@@ -234,6 +236,13 @@ function BridgeStatusPanel({
       <p>{status.message}</p>
       <dl>
         {status.strkReceived !== undefined ? <><dt>{COPY.bridge.settled}</dt><dd>{formatStrkExact(status.strkReceived)}</dd></> : null}
+        {status.leg === 'refunded' ? <>
+          <dt>{COPY.bridge.refundAddress}</dt><dd><code>{shortenAddress(record.refundAddress)}</code></dd>
+          {status.refundedAmount !== undefined ? <>
+            <dt>{COPY.bridge.refundedAmount}</dt>
+            <dd>{formatTokenAmountExact(status.refundedAmount, record.source.decimals)} {record.source.symbol}</dd>
+          </> : null}
+        </> : null}
       </dl>
       <div className="bridge-actions">
         <button type="button" onClick={onRefresh} disabled={flow === 'loading'}>{COPY.bridge.refresh}</button>
@@ -242,7 +251,7 @@ function BridgeStatusPanel({
       </div>
       {plan && flow === 'ready-to-shield' ? (
         <div className="bridge-next-step">
-          <strong>Next: shield at the Bank</strong>
+          <strong>{COPY.next.shieldAtBank}</strong>
           <ShieldPlan plan={plan} />
           <button type="button" onClick={onShield}>{COPY.bridge.shield}</button>
         </div>
@@ -268,7 +277,7 @@ function BridgeDepositInstructions({ record }: { record: import('@strkworld/brid
       <p>{COPY.bridge.instructions}</p>
       <dl>
         <dt>{COPY.bridge.depositAddress}</dt><dd><code>{record.signedQuote.quote.depositAddress}</code></dd>
-        {record.signedQuote.quote.depositMemo ? <><dt>{COPY.bridge.memo}</dt><dd><code>{record.signedQuote.quote.depositMemo}</code></dd></> : null}
+        {record.signedQuote.quote.depositMemo ? <><dt><GlossaryTerm term={COPY.bridge.memo} definition={COPY.glossary.memo} /></dt><dd><code>{record.signedQuote.quote.depositMemo}</code></dd></> : null}
       </dl>
     </div>
   );
@@ -276,10 +285,14 @@ function BridgeDepositInstructions({ record }: { record: import('@strkworld/brid
 
 function ShieldPlan({ plan }: { plan: import('@strkworld/privacy').PublicShieldPlan }) {
   const values = planDisplay(plan);
-  return <dl className="bridge-plan">
-    <dt>{COPY.bridge.amountToShield}</dt><dd>{values.amountToShield} STRK</dd>
-    <dt>{COPY.bridge.plannedReserve}</dt><dd>{values.plannedReserve} STRK</dd>
-  </dl>;
+  // D-061: the planned shield and its Bank handoff always say where the reserve goes.
+  return <>
+    <dl className="bridge-plan">
+      <dt>{COPY.bridge.amountToShield}</dt><dd>{values.amountToShield} STRK</dd>
+      <dt>{COPY.bridge.plannedReserve}</dt><dd>{values.plannedReserve} STRK</dd>
+    </dl>
+    <p className="bridge-compact-note" role="note">{COPY.bridge.reserveStaysPublic}</p>
+  </>;
 }
 
 function compactDeadline(deadline: string): string {

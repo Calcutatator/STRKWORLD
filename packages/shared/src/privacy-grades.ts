@@ -14,6 +14,12 @@
  * grade below `private` and no recorded approval fails the build. Unapproved
  * means a locked door, never a quiet downgrade.
  *
+ * The one exception to "the game tells the player" is explicit and narrow: the
+ * project lead may waive a route's player-facing disclosure by decision entry
+ * (`disclosureWaivedBy`, e.g. D-064). The grade and `observable` still record
+ * exactly what an observer sees; only the in-game copy is waived, and the
+ * route's own copy must not claim more privacy than its grade.
+ *
  * Review the current state with `./scripts/privacy-report.sh`.
  */
 
@@ -68,6 +74,13 @@ export interface RouteGrade {
   approvedOn: string | null;
   /** Why the deviation is acceptable. Required whenever `approvedBy` is set. */
   rationale: string | null;
+  /**
+   * The decision entry (e.g. `D-064`) under which the project lead waived this
+   * deviation's player-facing disclosure. Absent or null for every route that
+   * shows its disclosure, which is the rule. A waiver replaces only the
+   * `disclosure` string; approval and rationale are still required.
+   */
+  disclosureWaivedBy?: string | null;
   /**
    * Whether finishing this route should funnel the player back to the pool.
    *
@@ -156,6 +169,27 @@ export const PRIVACY_REGISTER: readonly RouteGrade[] = [
       'Public rails are the only way in from another chain. Accepted because arrival was never the privacy promise — and the player is funnelled straight into the pool afterwards.',
     returnToPool: true,
   },
+  // D-063, 2026-09-27: Endur private staking, graded like the swap and built
+  // switched off. The disclosure below is a DRAFT awaiting the user's approval;
+  // until approvedBy, approvedOn and rationale are recorded the route is not
+  // playable and its station renders locked.
+  {
+    building: 'bank',
+    route: 'bank.stake',
+    grade: 'anonymous',
+    observable:
+      'Unlinkable but not amount-confidential. The pool withdraws the staked STRK to the Endur deposit anonymizer as a public transfer with a visible amount, the anonymizer deposits it into the public xSTRK vault, and the minted xSTRK is credited to an open note whose amount is plaintext. Who staked is hidden; that a stake happened, when, and how much went in and came out is not. There is no private unstake: the Endur withdrawal queue takes 1 to 14 days and no withdraw anonymizer exists.',
+    // The lead waived the in-game disclosure (D-064). `observable` above is
+    // still the exact record of what an observer sees.
+    disclosure: null,
+    approvedBy: 'calc',
+    approvedOn: '2026-09-27',
+    rationale:
+      'Endur liquid staking through its live STRK20 deposit anonymizer (D-063): the staker is unlinkable, which the lead accepts for a stake-only counter. The player-facing disclosure is waived by D-064; the counter claims no amount privacy.',
+    disclosureWaivedBy: 'D-064',
+    // The anonymizer credits the minted xSTRK to an OPEN pool note.
+    returnToPool: false,
+  },
 ];
 
 /** Grades that ship without approval. Everything else is a deviation. */
@@ -177,7 +211,19 @@ export function isRoutePlayable(route: RouteGrade): boolean {
   return hasNonBlankText(route.approvedBy) &&
     hasNonBlankText(route.approvedOn) &&
     hasNonBlankText(route.rationale) &&
-    hasNonBlankText(route.disclosure);
+    (hasNonBlankText(route.disclosure) || isDisclosureWaived(route));
+}
+
+/**
+ * Whether the lead waived this route's player-facing disclosure by decision.
+ *
+ * Only an own data property naming a decision id counts, so a malformed or
+ * inherited value can never switch a disclosure off.
+ */
+export function isDisclosureWaived(route: RouteGrade): boolean {
+  const descriptor = Object.getOwnPropertyDescriptor(route, 'disclosureWaivedBy');
+  if (descriptor === undefined || !('value' in descriptor)) return false;
+  return typeof descriptor.value === 'string' && /^D-\d{3,}$/.test(descriptor.value);
 }
 
 function hasNonBlankText(value: unknown): value is string {
@@ -200,6 +246,6 @@ export function routesAwaitingApproval(): RouteGrade[] {
  */
 export function routesAwaitingCopy(): RouteGrade[] {
   return PRIVACY_REGISTER.filter(
-    (r) => isDeviation(r.grade) && r.approvedBy !== null && r.disclosure === null,
+    (r) => isDeviation(r.grade) && r.approvedBy !== null && r.disclosure === null && !isDisclosureWaived(r),
   );
 }

@@ -28,9 +28,25 @@ export type {
   WalletCapability,
 } from './operations.js';
 
+// Endur private staking (D-063): the pinned mainnet contracts the stake route admits.
+export {
+  ENDUR_DEPOSIT_ANONYMIZER,
+  ENDUR_XSTRK,
+  ENDUR_XSTRK_ASSET,
+  ENDUR_XSTRK_DECIMALS,
+} from './endur.js';
+
 // Test double. Safe to import from any lane — no network, no wallet, no chain.
 export { FakePrivacyOperations, type FakeConfig, type Fault } from './testing/fake.js';
 export { FakePublicShieldPlanner, type FakePublicShieldPlannerConfig } from './testing/public-shield.js';
+
+// Production Bridge reserve planner (D-061). Composed only while shield is enabled.
+export {
+  ReservePublicShieldPlanner,
+  RESERVE_SHIELD_FLOOR,
+  RESERVE_SHIELD_GAS_ALLOWANCE,
+  type ReservePublicShieldPlannerOptions,
+} from './wallet-api/reserve-shield-planner.js';
 
 export {
   WalletApiPrivacyOperations,

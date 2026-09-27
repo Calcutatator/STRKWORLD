@@ -17,7 +17,7 @@ function fromWire(value: unknown): FeeAuthorizationClaims | null {
     if (
       !hasOwnDataFields(record, ['v', 'route', 'feeToken', 'operationToken', 'token', 'recipient', 'amount', 'issuedAtBlock', 'expiresAtBlock']) ||
       record.v !== 1 ||
-      (record.route !== 'transfer' && record.route !== 'unshield' && record.route !== 'swap') ||
+      (record.route !== 'transfer' && record.route !== 'unshield' && record.route !== 'swap' && record.route !== 'stake') ||
       !isStringRecord(record, ['feeToken', 'operationToken', 'token', 'recipient']) ||
       !isCanonicalDecimal(record.amount) ||
       !Number.isSafeInteger(record.issuedAtBlock) ||

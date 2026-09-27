@@ -22,6 +22,7 @@ const BRIDGE_LEGS: readonly BridgeLeg[] = [
   'deposit-detected',
   'solver-settling',
   'settled',
+  'refunded',
   'failed',
   'expired',
 ];
@@ -30,6 +31,7 @@ const BRIDGE_STATUS_FIELDS = [
   'depositTxHash',
   'settlementTxHash',
   'strkReceived',
+  'refundedAmount',
   'message',
   'pollingStopped',
 ] as const;
@@ -139,6 +141,16 @@ function isBridgeStatus(value: unknown): value is BridgeStatus {
     (typeof value.strkReceived !== 'bigint' ||
       value.strkReceived < 0n ||
       value.strkReceived > MAX_PERSISTED_AMOUNT)
+  ) return false;
+  if (
+    value.leg !== 'refunded' &&
+    Object.prototype.hasOwnProperty.call(value, 'refundedAmount')
+  ) return false;
+  if (
+    Object.prototype.hasOwnProperty.call(value, 'refundedAmount') &&
+    (typeof value.refundedAmount !== 'bigint' ||
+      value.refundedAmount < 0n ||
+      value.refundedAmount > MAX_PERSISTED_AMOUNT)
   ) return false;
   return true;
 }

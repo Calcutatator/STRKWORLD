@@ -13,6 +13,7 @@ import { COPY } from '../copy.js';
 export function PanelFrame({
   title,
   building,
+  brand,
   disclosure,
   onClose,
   closingNote = null,
@@ -25,6 +26,12 @@ export function PanelFrame({
    * (`.panel[data-building]`). It never gates a route or changes a control.
    */
   building?: BuildingId;
+  /**
+   * Presentation only: a partner's look worn by one counter inside a building,
+   * over the building's own theme (`.panel[data-brand]`) — the Bank's Endur
+   * staking counter (D-063). It never gates a route or changes a control.
+   */
+  brand?: 'endur';
   /** Canonical approved copy, or null for a route graded `private`. */
   disclosure: string | null;
   onClose: () => void;
@@ -42,7 +49,7 @@ export function PanelFrame({
   footer?: ReactNode;
 }) {
   return (
-    <section className="panel" aria-label={title} data-building={building}>
+    <section className="panel" aria-label={title} data-building={building} data-brand={brand}>
       <div className="panel-card">
         <header className="panel-header">
           <h2>{title}</h2>

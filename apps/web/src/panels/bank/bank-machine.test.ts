@@ -1024,6 +1024,9 @@ describe('bank panel — prepare and confirm', () => {
     expect(state.notice?.text).toBe(COPY.balance.changed);
     expect(balances).not.toHaveBeenCalled();
     expect(state.batch).toHaveLength(0);
+    // Confirmed this session, not found on reopen — must not read as a
+    // restored receipt (fix for the dead `receiptWaiting` copy).
+    expect(state.flow.name === 'submitted' && state.flow.restored).toBeFalsy();
   });
 
   it('cancelling a prepared batch returns to composing without submitting', async () => {
@@ -1695,7 +1698,7 @@ describe('bank panel — a receipt outlives the room', () => {
       building: 'post-office',
     });
     expect(postOffice.store.getState()).toMatchObject({
-      flow: { name: 'submitted', transactionHash: '0xpending-post-office' },
+      flow: { name: 'submitted', transactionHash: '0xpending-post-office', restored: true },
       mode: 'transfer',
       routeId: 'post-office.transfer',
     });
@@ -1753,6 +1756,8 @@ describe('bank panel — a receipt outlives the room', () => {
     expect(flow.name === 'submitted' && flow.transactionHash).toBe(
       receipts.pending('bank')[0]?.transactionHash,
     );
+    // Restored, not just confirmed this session — the room was shut when it settled.
+    expect(flow.name === 'submitted' && flow.restored).toBe(true);
 
     reopened.acknowledge();
     expect(receipts.pending('bank')).toHaveLength(0);

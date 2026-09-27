@@ -25,7 +25,8 @@ export type ExchangeFlow =
   | { name: 'idle' | 'loading-pool' | 'composing' | 'preparing' }
   | { name: 'review'; summary: ExchangeReview }
   | { name: 'submitting'; stage: OperationStage; message: string; summary: ExchangeReview }
-  | { name: 'submitted'; transactionHash: string }
+  /** `restored` is set when this receipt was found outstanding on `open()`, not confirmed this session. */
+  | { name: 'submitted'; transactionHash: string; restored?: boolean }
   | { name: 'failed'; kind: PrivacyErrorKind; message: string; recovery: 'prepare-again' | 'close' };
 
 export interface ExchangeState {
@@ -130,7 +131,7 @@ export function createExchangePanel(options: {
         await operations.poolConfig(signal);
         if (!live(id)) return;
         const receipt = receipts.pending('exchange')[0];
-        patch({ flow: receipt ? { name: 'submitted', transactionHash: receipt.transactionHash } : { name: 'composing' } });
+        patch({ flow: receipt ? { name: 'submitted', transactionHash: receipt.transactionHash, restored: true } : { name: 'composing' } });
       } catch (error) { fail(error, id, 'close'); }
     },
     close() { start(); ++session; ++balanceRead; discard(); stateStore.setState(freezeExchangeState(initialState(register))); },

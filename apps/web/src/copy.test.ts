@@ -47,6 +47,51 @@ describe('shell copy', () => {
     expect(copy).not.toContain('Nothing was sent');
   });
 
+  describe('the staking counter (D-063, D-064)', () => {
+    // Every line the counter can show: its own section plus its entries elsewhere.
+    const stakeCopy = [
+      ...allCopyStrings(COPY.stake),
+      COPY.bank.stake,
+      COPY.locked.notEnabled.stake,
+      COPY.notices.stakeAlone,
+      COPY.next.afterStake,
+      COPY.glossary.xstrk,
+    ];
+
+    it('claims no amount privacy — the waiver is exchanged for honest copy', () => {
+      // The register test's pattern, widened: this route is `anonymous`, so
+      // the amounts in and out are public and the copy must not say otherwise.
+      const claim =
+        /hidden amount|amounts? (?:are|is|stays?) (?:hidden|private)|untraceable|completely private|private|anonymous|confidential|invisible|nobody can see/i;
+      expect(stakeCopy.length).toBeGreaterThan(10);
+      for (const line of stakeCopy) {
+        expect(line, line).not.toMatch(claim);
+      }
+    });
+
+    it('adds no disclosure text, since the lead waived it', () => {
+      const stake = PRIVACY_REGISTER.find((entry) => entry.route === 'bank.stake');
+      expect(stake?.disclosure).toBeNull();
+      expect(stake?.disclosureWaivedBy).toBe('D-064');
+      for (const line of stakeCopy) {
+        expect(line, line).not.toMatch(/on-chain|observer|reveals?|visible|public|linkable/i);
+      }
+    });
+
+    it('says plainly where the STRK comes from, where the xSTRK lands, and how unstaking works', () => {
+      expect(COPY.stake.intro).toContain('STRK from your pool balance');
+      expect(COPY.stake.intro).toMatch(/xSTRK you receive lands in your pool balance/);
+      expect(COPY.stake.unstaking).toBe(
+        "Unstaking isn't available in the game yet. Endur's own withdrawal queue takes 1 to 14 days.",
+      );
+    });
+
+    it('never quotes an xSTRK amount or a rate at review', () => {
+      expect(COPY.stake.amountAtExecution).not.toMatch(/\d/);
+      expect(COPY.glossary.xstrk).not.toMatch(/\d|rate|apy|apr|yield|earn/i);
+    });
+  });
+
   it('never promises that timing or a batch hides more than it does', () => {
     for (const line of allCopyStrings()) {
       expect(line.toLowerCase(), line).not.toContain('untraceable');

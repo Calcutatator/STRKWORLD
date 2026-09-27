@@ -7,6 +7,7 @@ import { PrivacyProvider } from '../../privacy/PrivacyProvider.js';
 import { SessionNoticeLayer } from '../../privacy/SessionNoticeLayer.js';
 import { createSubmissionUncertainty } from '../../privacy/submission-uncertainty.js';
 import { createReceiptLedger } from '../../receipts/receipt-ledger.js';
+import { COPY } from '../../copy.js';
 import { EXCHANGE_CATALOG } from './catalog.js';
 import { ExchangePanel } from './ExchangePanel.js';
 import { createExchangePanel } from './exchange-machine.js';
@@ -105,5 +106,37 @@ describe('ExchangePanel review render', () => {
     expect(markup).toContain(flow.transactionHash);
     expect(markup).toContain('Back to the counter');
     expect(markup).toContain('We could not confirm whether this private action was submitted.');
+  });
+
+  it('gives protected minimum, slippage, pool fee, network cost and quote expiry an accessible disclosure', async () => {
+    const { operations, panel } = await reviewed();
+    const markup = renderToStaticMarkup(<PrivacyProvider operations={operations}><ExchangePanel panel={panel} onClose={() => {}} /></PrivacyProvider>);
+    const gate = markup.slice(markup.indexOf('class="confirm-gate"'));
+    for (const definition of [
+      COPY.glossary.protectedMinimum,
+      COPY.glossary.poolFee,
+      COPY.glossary.networkCost,
+      COPY.glossary.quoteExpiry,
+    ]) {
+      expect(gate).toContain(definition);
+    }
+    // Slippage says plainly that it is fixed, and at what value (D-042).
+    expect(gate).toContain(COPY.glossary.slippageFixedAt);
+    expect(gate).toContain('0.50%');
+    expect(gate).toContain(COPY.glossary.slippageReason);
+    // Native <details>/<summary>: keyboard-reachable and screen-reader exposed, not hover-only.
+    expect((gate.match(/<details class="glossary-term">/g) ?? [])).toHaveLength(5);
+  });
+
+  it('tells the player a restored receipt settled while the room was shut, not that it was just sent', async () => {
+    const ledger = createReceiptLedger();
+    ledger.record({ building: 'exchange', transactionHash: '0xrestored-swap', intents: [] });
+    const operations = new FakePrivacyOperations({ balances: { [strk!.token]: 100n * 10n ** 18n } });
+    const panel = createExchangePanel({ operations, receipts: ledger, canStartFinancialAction: () => true });
+    await panel.open();
+
+    const markup = renderToStaticMarkup(<PrivacyProvider operations={operations}><ExchangePanel panel={panel} onClose={() => {}} /></PrivacyProvider>);
+    expect(markup).toContain(COPY.flow.receiptWaiting);
+    expect(markup).not.toContain('Sent.');
   });
 });

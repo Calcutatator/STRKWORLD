@@ -220,6 +220,17 @@ export const BANK_ROOM_DEFINITION = freezeAuthoredRoom({
       width: 2,
       height: 1,
     },
+    // Endur staking (D-063): its own counter, never merged with shielding,
+    // so each station keeps one privacy grade (D-030). East of shielding with
+    // a free column between their approaches; the Shell supplies the label.
+    {
+      station: 'bank:staking',
+      label: 'STAKE',
+      x: 13,
+      y: 3,
+      width: 2,
+      height: 1,
+    },
   ],
 } as const satisfies FixedRoomDefinition);
 

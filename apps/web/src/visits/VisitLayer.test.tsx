@@ -442,3 +442,27 @@ describe('VisitLayerView', () => {
     }
   });
 });
+
+describe('locked doors name what is behind them', () => {
+  const locked = (building: 'vault' | 'bank') =>
+    render(
+      <VisitLayerView
+        state={{ name: 'locked', building, reason: 'coming-soon' }}
+        connected
+        onOpenMenu={() => {}}
+        onRequestExit={() => {}}
+        onCloseSurface={() => {}}
+        onDismissLocked={() => {}}
+      />,
+    );
+
+  it('tells the player the Vault is private lending with Vesu, not open yet', () => {
+    const markup = locked('vault');
+    expect(markup).toContain(COPY.vault.locked);
+    expect(markup).not.toContain(COPY.locked.comingSoon);
+  });
+
+  it('keeps the shared coming-soon line for every other locked door', () => {
+    expect(locked('bank')).toContain(COPY.locked.comingSoon);
+  });
+});

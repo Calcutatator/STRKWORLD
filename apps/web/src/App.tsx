@@ -10,13 +10,17 @@ import { WorldHost } from './world/WorldHost.js';
 import type { PresenceController } from './presence/presence-controller.js';
 import { PresenceStatusLayer } from './presence/PresenceStatusLayer.js';
 import { BridgeProvider, type BridgeProviderProps } from './bridge/BridgeProvider.js';
+import { ArrivalNudgeProvider } from './bridge/ArrivalNudgeProvider.js';
+import { HudLayer } from './hud/HudLayer.js';
 
 /**
  * The composition root, as a component.
  *
  * Everything the shell is made of, wired together and nothing more: the
- * financial seam over the top, the world underneath, and the visit controls
- * above it. It takes the two buses as props rather than constructing them, so the
+ * financial seam over the top, the world underneath, and the HUD and visit
+ * controls above it. Both the demo and the production entry render this tree,
+ * so the HUD and the Bridge arrival nudge exist in exactly one place.
+ * It takes the two buses as props rather than constructing them, so the
  * same tree can be mounted by `main.tsx` against the real page and by a test
  * against buses it controls — the buses are the seam between world and shell,
  * and a composition root that manufactures its own seam cannot be driven from
@@ -67,17 +71,20 @@ export function App({
         fallback={<Boot />}
       >
         <BridgeProvider {...bridge} demo={!bridge}>
-          <main className="strkworld">
-            <WorldHost
-              out={worldOut}
-              in={shellIn}
-              remotePeers={presence.remotePeers}
-              sandbox={presence.sandbox}
-            />
-            <VisitLayer world={worldOut} shell={shellIn} />
-            <PresenceStatusLayer presence={presence} world={worldOut} />
-            <SessionNoticeLayer />
-          </main>
+          <ArrivalNudgeProvider world={worldOut}>
+            <main className="strkworld">
+              <WorldHost
+                out={worldOut}
+                in={shellIn}
+                remotePeers={presence.remotePeers}
+                sandbox={presence.sandbox}
+              />
+              <HudLayer shell={shellIn} />
+              <VisitLayer world={worldOut} shell={shellIn} />
+              <PresenceStatusLayer presence={presence} world={worldOut} />
+              <SessionNoticeLayer />
+            </main>
+          </ArrivalNudgeProvider>
         </BridgeProvider>
       </PrivacyProvider>
     </ErrorBoundary>

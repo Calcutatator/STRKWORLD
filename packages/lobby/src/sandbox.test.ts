@@ -209,6 +209,8 @@ describe('the schema mirror', () => {
     expect(client.sync()).toEqual([{ x: 60, y: 10, colours: [2, 1] }]);
   });
 
+  // Thousands of seeded operations: about 2.5 s alone and slower under a full
+  // parallel run, so it gets more than vitest's 5 s default.
   it('stays equal to the authority through a long seeded sequence', () => {
     const registry = new LobbyPresence({
       capacity: 8,
@@ -256,7 +258,7 @@ describe('the schema mirror', () => {
       }
     }
     expect(registry.sandboxColumns().length).toBeGreaterThan(0);
-  });
+  }, 20_000);
 
   it('clears a mirror handed over non-empty, since the authority starts empty', () => {
     const mirror = new MapSchema<SandboxColumnEntry>();

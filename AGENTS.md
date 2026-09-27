@@ -258,6 +258,117 @@ empty shell to fetchers, so a 200 there means nothing.
 
 ## 6. Findings log
 
+### 2026-09-27 — A station snapshot is published once, at the door; the fake mirrors seam warnings
+
+- `world:stations` goes out when the visit controller handles
+  `building:entered`, and the World activates only a station whose last
+  snapshot said `available`. A capability that arrives after entry stays
+  locked for the whole visit unless the Shell publishes again. The production
+  Bridge runtime now loads when the player walks into the Bridge (not when
+  BridgePanel mounts), so `VisitLayer` calls the controller's
+  `refreshStations()` whenever a Bridge capability changes. Activation still
+  re-resolves, so a republished snapshot is presentation, never authority.
+- `FakePrivacyOperations.prepare` repeats the Wallet API adapter's review
+  warnings. Removing the stake `public-leg` warning for D-064 had to land in
+  both `wallet-api/operations.ts` and `testing/fake.ts`; with only the first,
+  demo mode shows disclosure copy that production does not.
+
+*Verified:* `apps/web/src/visits/bridge-entry.test.tsx` composes the
+BridgeProvider as ProductionRoot does (dormant loader, account, planner): one
+load on Bridge entry, none on Bank entry, and a locked-then-available
+`bridge:deposit` snapshot; it fails with the entry load removed.
+`fake-stake.test.ts` and `stake-actions.test.ts` both pin an empty stake
+warning list.
+
+### 2026-09-27 — The pool fee is still 6 STRK; the Bridge's blocker is the fee allowance, not its size
+
+`get_fee_amount()` on the mainnet pool returned 6e18 (6 STRK) at block
+15,523,237, read through the public `https://api.cartridge.gg/x/starknet/mainnet`
+RPC (lava's public endpoint is discontinued). Launch material's 4 STRK is still
+wrong. The production Bridge lock was never about sizing: Ready's shield route
+approves only the deposit amount while `apply_actions` separately pulls the fee
+(the 2026-08-18 finding). D-061 opens the Bridge with a reserve of
+max(10 STRK, live fee + gas); if Ready does not supply the fee allowance, the
+separate shield reverts and the bridged STRK stays public in the player's
+wallet. D-056's funded shield settles the question.
+
+*Verified:* a read-only starknet.js 10.4 `callContract` of `get_fee_amount`
+against the pool address in the STRK20 facts; D-043 and the 2026-08-18 finding
+re-read.
+
+### 2026-09-27 — Endur's anonymizer is deposit-only; staking is relayed like swap (D-063)
+
+`EndurDepositAnonymizer` (`0x030dee…30698`, class `0x15ec74f6…58e77a`) exposes
+one entry point, `privacy_invoke(in_token, out_token, assets: u256, note_id)
+-> Span<OpenNoteDeposit>`. It is token-pair generic and has no withdraw path,
+and no Endur withdraw anonymizer exists, so a private unstake cannot be built
+today (Endur's own queue takes 1–14 days). xSTRK
+(`0x028d709c…954b0a`) is an ERC-4626 vault; `convert_to_assets(1e18)` read
+1.182556 STRK on 2026-09-27. A stake follows AVNU's proven action order:
+withdraw the staked STRK to the anonymizer, withdraw the relay fee, open the
+xSTRK note, then invoke. Without the explicit withdrawal the anonymizer holds
+nothing. The relay goes through AVNU's sponsored-private paymaster behind the
+backend, so that paymaster, not Ready's client, is what must accept the
+anonymizer before staking can be switched on.
+
+*Verified:* read-only starknet.js 10.4 `getClassHashAt`, the deployed ABI and
+xSTRK views against the Cartridge public RPC; `packages/privacy` and
+`apps/backend` tests pin the action order and the relay's exact admission.
+
+### 2026-09-27 — A disclosure can be waived only by a decision that names the route (D-064)
+
+The privacy register's `disclosureWaivedBy` replaces a deviation's in-game
+disclosure and nothing else: approval, date and rationale are still required,
+and `observable` still records what an observer sees. Only an own data
+property naming a decision id counts. Check 8 accepts a waiver only when that
+decision entry exists and names the route, and the commit gate stops demanding
+a disclosure for that route alone. `bank.stake` is the only waived route.
+
+*Verified:* `packages/shared` register tests cover own-property, id-format and
+approval cases; `scripts/check-invariants.sh` passes with D-064 present and
+fails without it.
+
+### 2026-09-27 — The Bridge reserve is 10 STRK today, with a 4 STRK gas allowance (D-061)
+
+`ReservePublicShieldPlanner` reads the live pool fee through the Bank's own
+`/api/v1/rpc/pool-config` path on every plan and never caches it. With a
+6 STRK fee the reserve is the 10 STRK floor. The Bridge machine's `planValid`
+requires `plannedReserve === poolFee + gasEstimate`, so when the floor wins
+the plan reports `gasEstimate = 10 STRK − fee`. It is injected only when the
+production shield route is enabled.
+
+A related test trap: Vite inlines `import.meta.env` at transform time, so
+`vi.stubEnv` cannot change what `detectRoutePolicy()` returns. Tests mock the
+policy with the real parser's output instead.
+
+*Verified:* `reserve-shield-planner.test.ts` (54 cases) and the production
+composition tests.
+
+### 2026-09-27 — Shell test and storage traps
+
+- jsdom rewrites `import.meta.url`, so a test that reads source files (for
+  example to pin the World's key bindings) must run in the node environment.
+- `LocalBridgeStore.load()` deletes a record it cannot validate, so a
+  read-only reader (the Bridge arrival nudge) needs a storage adapter that
+  swallows writes.
+- Node 25 exposes a global `localStorage` object with no methods; per-viewer
+  storage goes through `apps/web/src/store/viewer-storage.ts`, which never
+  throws.
+
+*Verified:* `apps/web` tests (723) pass with the HUD, guide and nudge suites.
+
+### 2026-09-27 — Occluder boxes start at the ground unless they say otherwise
+
+The presenter fades a street occluder when the camera-to-player segment hits
+its bounds, and those bounds used to start at y = 0. An overhead structure
+(the sandbox gate's lintel and pillar tops) therefore faded whenever an
+orbited camera looked through the opening beneath it. Occluder bounds now take
+an optional floor height (`minY`) that `segmentHitsBox` respects; buildings
+leave it unset and behave as before.
+
+*Verified:* `occlusion.test.ts` covers both cases; the presenter's gate test
+checks that the default camera fades the gate and orbited cameras do not.
+
 ### 2026-09-27 — The shared block sandbox is a lobby-authority seam (D-060)
 
 The lobby room owns block state with no identity field (colour stacks per

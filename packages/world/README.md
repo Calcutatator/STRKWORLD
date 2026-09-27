@@ -63,8 +63,11 @@ plain data and emits semantic events.
 emitter.emit('building:entered', { building: 'bank' })
 
 // in — the shell tells the world what to render
-emitter.on('hud:balance', (b: { display: string | null }) => { ... })
+emitter.on('world:stations', ({ building, stations }) => { ... })
 ```
+
+The `hud:*` and `wallet:status` events reach this package too, but the HUD is
+drawn by the Shell's overlay (`apps/web/src/hud`), so the World ignores them.
 
 The world must run correctly with no wallet connected at all. That is what
 Phase 1 builds, and it is what makes the world independently testable.

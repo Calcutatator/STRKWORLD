@@ -93,6 +93,10 @@ export interface BridgeQuote {
  *
  * `settled` means STRK has landed publicly at the player's address. The
  * shielding step that follows belongs to the shell, not to this package.
+ *
+ * `refunded` is not `failed`: 1Click returning the deposit to the player's
+ * refund address is a distinct, resolved outcome with its own evidence
+ * (`refundedAmount`), not a bare "this did not work".
  */
 export type BridgeLeg =
   | 'quoted'
@@ -100,6 +104,7 @@ export type BridgeLeg =
   | 'deposit-detected'
   | 'solver-settling'
   | 'settled'
+  | 'refunded'
   | 'failed'
   | 'expired';
 
@@ -111,6 +116,13 @@ export interface BridgeStatus {
   settlementTxHash?: string;
   /** STRK actually delivered. Known only at `settled`. */
   strkReceived?: bigint;
+  /**
+   * Amount of the *origin* asset returned to the deposit's refund address —
+   * present only at `leg: 'refunded'`, and only when 1Click's status payload
+   * reports it. Never invented: a refund with no reported amount surfaces
+   * with this left undefined rather than a guessed figure.
+   */
+  refundedAmount?: bigint;
   /** Already mapped from solver states. Never surface a raw solver string. */
   message: string;
   /**

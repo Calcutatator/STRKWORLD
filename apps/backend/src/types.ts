@@ -1,4 +1,4 @@
-export type PrivateRoute = 'transfer' | 'unshield' | 'swap';
+export type PrivateRoute = 'transfer' | 'unshield' | 'swap' | 'stake';
 
 export interface PreparedArtifact {
   call: {
@@ -32,7 +32,11 @@ export interface BackendConfig {
   rateLimit: { maxRequests: number; windowMs: number };
   sponsorshipBudget: { maxFeeAmount: bigint; windowMs: number };
   submissionQueue: { maxInFlight: number; maxQueued: number };
-  routes: Record<PrivateRoute, RoutePolicy>;
+  /**
+   * Endur staking (D-063) is optional and disabled while absent; every other
+   * route is always configured.
+   */
+  routes: Record<Exclude<PrivateRoute, 'stake'>, RoutePolicy> & { stake?: RoutePolicy };
 }
 
 export interface RelayFee {

@@ -1,3 +1,4 @@
+import { ENDUR_XSTRK_ASSET } from './endur.js';
 import {
   AggregateBudget,
   AggregateMetrics,
@@ -406,9 +407,10 @@ export class BackendApi {
     return { status: 200, body: await this.rpc.getReceipt(hash, signal) };
   }
 
-  private routePolicy(route: PrivateRoute) {
+  private routePolicy(route: PrivateRoute): RoutePolicy {
+    // An unconfigured optional route (stake, D-063) is disabled, not an error.
     const policy = this.config.routes[route];
-    if (!policy.enabled) throw new ApiFailure(503, 'This private route is disabled.');
+    if (!policy?.enabled) throw new ApiFailure(503, 'This private route is disabled.');
     return policy;
   }
 
@@ -606,6 +608,7 @@ function validateBackendConfig(config: BackendConfig): void {
     throw new Error('Backend size and rate limits must be positive integers.');
   }
   for (const [route, policy] of Object.entries(config.routes)) {
+    if (policy === undefined) continue;
     if (
       policy.maxRelayFee < 0n ||
       !Number.isSafeInteger(policy.maxQueueDelayMs) ||
@@ -621,6 +624,20 @@ function validateBackendConfig(config: BackendConfig): void {
     const policy = config.routes[route];
     if (policy.quoteBound || policy.maxQueueDelayMs === 0) {
       throw new Error(`Backend ${route} route policy must be non-quote-bound and delayed.`);
+    }
+  }
+  const stake = config.routes.stake;
+  if (stake) {
+    // No quote binds a stake, so it takes the ordinary delayed queue (D-004).
+    if (stake.quoteBound || stake.maxQueueDelayMs === 0) {
+      throw new Error('Backend stake route policy must be non-quote-bound and delayed.');
+    }
+    // D-063 admits STRK in only; the anonymizer itself pins no pair.
+    if (
+      stake.enabled &&
+      (stake.allowedTokens.length !== 1 || !sameAddress(stake.allowedTokens[0]!, ENDUR_XSTRK_ASSET))
+    ) {
+      throw new Error('Backend stake route must admit exactly STRK, the xSTRK asset.');
     }
   }
   const swap = config.routes.swap;

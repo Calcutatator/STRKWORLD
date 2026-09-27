@@ -22,6 +22,7 @@ export function PostOfficePanel({ onClose, register }: PostOfficePanelProps) {
       register={register}
       title={COPY.buildings['post-office']}
       building="post-office"
+      intro={COPY.postOffice.intro}
     />
   );
 }

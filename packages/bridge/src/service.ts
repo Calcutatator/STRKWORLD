@@ -528,9 +528,12 @@ function mapStatus(raw: {
     case 'REFUNDED':
       requireOwnDataFields(raw.swapDetails, ['originChainTxHashes']);
       return {
-        leg: 'failed',
+        leg: 'refunded',
         depositTxHash: firstTransactionHash(raw.swapDetails.originChainTxHashes),
-        message: 'The bridge did not settle and 1Click reports a refund.',
+        refundedAmount: hasOwnDataProperties(raw.swapDetails, ['refundedAmount'])
+          ? parseSettlementAmount(raw.swapDetails.refundedAmount)
+          : undefined,
+        message: '1Click refunded this deposit instead of completing it.',
         pollingStopped: true,
       };
     case 'FAILED':

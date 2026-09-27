@@ -1219,7 +1219,7 @@ D-028 freeze.
 
 ## D-036 — `PrivacyOperations` is frozen on source-derived evidence
 
-**2026-08-18 · Accepted · implements D-028 and supersedes D-015's provisional seam status · narrowly extended by D-041/D-042 for truthful swap review**
+**2026-08-18 · Accepted · implements D-028 and supersedes D-015's provisional seam status · narrowly extended by D-041/D-042 for truthful swap review, and by D-063 for private staking**
 
 **Context.** D-015 correctly unfroze the original one-shot interface. The
 replacement intent-based, prepare-then-confirm seam is implemented by both the
@@ -1604,7 +1604,7 @@ unchanged Bank/Post Office behavior. Rendered acceptance remains user-owned.
 
 ## D-043 — Bridge v1 is manual, direct and wallet-bound; exact shielding fails closed
 
-**2026-08-18 · Accepted and implemented through production recovery; new
+**2026-08-18 · production planner lock SUPERSEDED by D-061 · Accepted and implemented through production recovery; new
 financial continuation remains locked · SUPERSEDED in part by D-055 for
 production no-wallet entry; production fee-aware planning remains a D-028
 funded gate · rendered Bridge navigation/exit status updated, with physical
@@ -2450,7 +2450,7 @@ signature, funds or transaction was used by this implementation.
 
 ## D-056 — The funded tester may enable the pool-native STRK shield route
 
-**2026-08-24 · Accepted · autonomous tester handoff superseded by D-057**
+**2026-08-24 · Accepted · autonomous tester handoff superseded by D-057 · unshield exclusion superseded by D-062**
 
 **Context.** The disposable Ready mainnet account is now deployed, registered
 with the STRK20 pool and able to share its private balance with STRKWORLD. Its
@@ -2737,3 +2737,167 @@ then asked for it to be multiplayer too.
 - Late joiners receive the whole board in one state encode, so the lobby
   raises Colyseus's encode buffer above the worst-case board (see the lobby
   findings).
+
+---
+
+## D-061 — The production Bridge plans its shield with a conservative STRK reserve
+
+**2026-09-27 · Accepted by the user · supersedes D-043 in part (its production planner lock) · open only while D-056's shield route is enabled**
+
+**Context.** D-043 locked new production Bridge quotes, deposit instructions
+and the Bridge-to-Bank handoff until a fee-aware shield route was proven:
+Ready's visible shield route approves only the deposit amount, while the
+pool's `apply_actions` separately pulls `get_fee_amount()` from the caller
+(the 2026-08-18 finding). In the 2026-09-27 feature review the user decided
+the Bridge should open with a conservative reserve rather than wait: size it
+from the live fee and overcompensate, to 10 STRK. The live fee read that day
+was 6 STRK (`get_fee_amount()` = 6e18 at mainnet block 15,523,237).
+
+**Decision.**
+
+- Production composition injects a reserve-based `PublicShieldPlanner`
+  whenever, and only when, the production shield route is enabled (D-056).
+  With shield disabled the Bridge stays recovery-only, exactly as before.
+- `plannedReserve = max(10 STRK, liveFee + gasAllowance)`. `liveFee` is the
+  pool's `get_fee_amount()`, read live through the existing pool-configuration
+  path at planning time; `gasAllowance` is a fixed, positive, conservative
+  public-gas allowance of 4 STRK — above the one measured STRK20 private
+  transaction's 3.6133 STRK of gas, and exactly 10 STRK minus today's fee, so
+  today's reserve is the approved 10 STRK and a fee rise never squeezes gas. The planner fails closed — no plan, handoff
+  locked — when the read fails, the denomination is not the Bridge's STRK or
+  `amountToShield` would not be positive.
+- `amountToShield = available − plannedReserve`. D-043's arithmetic,
+  denomination and positivity rules are unchanged, as are its two phases:
+  preflight against the signed minimum output before deposit instructions,
+  then a fresh maximum-shield plan from the actual `strkReceived` after
+  `SUCCESS`, revalidated at the Bank commit point, where the Bank's own fee
+  ceiling and confirmation remain authoritative.
+- The unspent reserve stays as public STRK in the player's wallet, and the
+  copy says so.
+
+**Consequences.**
+
+- "Bring funds in, then shield" becomes playable in production wherever the
+  shield route is.
+- The fee-allowance question is not resolved by this: if Ready does not
+  supply the allowance for the pool fee, the separate shield reverts and the
+  bridged STRK stays public in the player's wallet — the state a manual Bridge
+  deposit already ends in, never a loss. D-056's funded shield is the evidence
+  either way.
+- A governance fee rise is absorbed automatically: the live fee always wins
+  over the 10 STRK floor.
+
+---
+
+## D-062 — The funded tester may enable the pool-native STRK unshield route
+
+**2026-09-27 · Accepted by the user · supersedes D-056 in part (its unshield exclusion)**
+
+**Context.** Unshield is built, register-approved (`public-edge`, with its
+D-024 disclosure) and the pool's only in-game exit, but D-056 admitted shield
+alone and production policy hard-coded unshield to deny, so the Bank offered a
+route that could only fail at prepare. The user asked for it to be switched
+on. Like transfer, unshield is submitted through the private-submission
+backend, whose own route allowlist and relay-fee ceiling
+(`BACKEND_ROUTE_UNSHIELD_*`) already exist.
+
+**Decision.** Production wallet policy may expose an explicit, fail-closed
+unshield configuration mirroring the transfer route's shape: disabled by
+default; admits only the configured STRK token, a positive bounded intent
+count and a positive relay-fee ceiling, alongside the live pool-fee ceiling
+check; malformed, partial or empty configuration resolves to deny-all. Where
+several relayed routes are enabled, the policy keeps the strictest relay-fee
+ceiling and intent bound. Enabling unshield enables nothing else. Ready remains
+the only owner of execution, and the final confirmation remains a human
+handoff.
+
+**Consequences.** Tests pin disabled and malformed deny-all, STRK-only
+enablement, strictest-bound merging and the absence of every other route. The
+acceptance evidence is one small funded mainnet unshield by the tester, with
+its receipt and a deliberate balance refresh; until then the route is enabled
+only in the tester's checkout.
+
+---
+
+## D-063 — Endur private staking is a Bank counter, built switched off
+
+**2026-09-27 · Accepted by the user · extends D-036's frozen seam with a `stake` intent · a D-018 anonymizer path · respects D-030's one-grade-per-station rule**
+
+**Context.** The feature review of strk20.starknet.io found Endur liquid
+staking live on mainnet through an STRK20 anonymizer, the strongest new
+integration. `EndurDepositAnonymizer` at
+`0x030dee638065962eb3642ca54aa48e9e2cd98536bc90b64b99bb306c1db30698` has one
+entry point, `privacy_invoke(in_token, out_token, assets: u256, note_id) ->
+Span<OpenNoteDeposit>` (read from the deployed class ABI); Endur's xSTRK at
+`0x028d709c875c0ceac3dce7065bec5328186dc89fe254527084d1689910954b0a` is an
+ERC-4626 vault. There is no private unstake: Endur's withdrawal queue takes
+1–14 days and no withdraw anonymizer exists. Ready 5.33.8's client accepts any
+invoke target, but its paymaster may reject one that is not pre-approved. The
+user chose a counter in the Bank, in Endur's look, built now and switched off.
+
+**Decision.**
+
+- `PrivacyOperations` gains a `stake` intent — STRK in, xSTRK out, one
+  amount — prepared like `swap`, in AVNU's mainnet-proven order: withdraw the
+  staked STRK to the anonymizer, withdraw the relay fee, open the xSTRK note,
+  then invoke the anonymizer (calldata `[in, out, amount low, amount high,
+  note_id]`). There is no minimum-out field: `privacy_invoke` enforces none,
+  and D-041/D-042 forbid showing a floor nothing enforces. No other seam
+  method changes.
+- Like swap, it is relayed by the private-submission backend through AVNU's
+  sponsored-private paymaster. A fail-closed `BACKEND_ROUTE_STAKE_*` group,
+  disabled when absent, admits exactly one call to the pinned anonymizer plus
+  exactly two withdrawals: the authorized fee and the staked STRK.
+- The privacy register grades it `anonymous`, like swap: who staked is hidden;
+  the amount staked and the xSTRK received are public. (Its player-facing
+  disclosure is waived by D-064.)
+- The Bank gets a separate staking station and menu section, so no station
+  mixes grades (D-030). It wears Endur's palette, as the Bank's other counters
+  wear STRK20's.
+- It is switched off: production policy and the backend both deny `stake`
+  unless their own fail-closed configuration enables it.
+
+**Consequences.**
+
+- Before switching it on: AVNU's sponsored-private paymaster, which relays it
+  behind the backend, must accept the anonymizer as an invoke target (ask the
+  STRK20 team or AVNU; Ready's client already accepts any target), and one
+  small funded stake must succeed.
+- The counter is stake-only. A later decision covers exit: an Endur withdraw
+  anonymizer, or adding xSTRK to the Exchange (whose six-asset catalog is fixed
+  by D-042).
+- The position view reads the shielded xSTRK balance only on the player's
+  explicit request, like every balance, plus a public xSTRK-to-STRK rate.
+
+---
+
+## D-064 — The lead waives the in-game disclosure for Endur staking
+
+**2026-09-27 · Accepted by the user · a narrow exception to D-020/D-024's disclosure rule, for `bank.stake` only**
+
+**Context.** D-063's staking counter is graded `anonymous`: who staked is
+hidden, while the STRK staked and the xSTRK received are public, as with the
+private swap. The register requires every deviation to show the player a
+disclosure before commit. Offered a one-line disclosure, the user declined any
+disclosure for staking.
+
+**Decision.**
+
+- The register gains an explicit waiver, `disclosureWaivedBy`, naming the
+  decision that waives a route's player-facing disclosure. It replaces only the
+  `disclosure` string: approval, date and rationale are still required, and
+  the grade and `observable` still record exactly what an observer sees.
+- `bank.stake` carries `disclosureWaivedBy: 'D-064'`, approved by the lead.
+  The commit gate does not demand a disclosure for it; every other deviation
+  keeps its disclosure.
+- Check 8 accepts a waiver only when it names a decision entry that exists and
+  names the route.
+- In exchange, the counter's own copy claims no amount privacy. It may say
+  staking is from the pool balance and that the xSTRK lands in the pool; it
+  must not say amounts are hidden. The note that unstaking takes 1–14 days
+  through Endur and is not available in the game stays: it is how the product
+  works, not a privacy disclosure.
+
+**Consequences.** The Exchange keeps its swap disclosure, so the two
+`anonymous` routes now differ in what they show. Any further waiver needs its
+own decision; there is no blanket switch.
