@@ -29,7 +29,7 @@ side channel. So the constraint is structural rather than a matter of care:
   **server**, never derived from an address, discarded on disconnect. A
   client-supplied identifier is ignored.
 - Sandbox state carries **no identity field**: stacks of palette indices keyed
-  by tile. No column, drop or sandbox message names a player; the only
+  by tile. No column, drop, burst or other sandbox message names a player; the only
   per-player sandbox field is `carrying` on that player's own presence entry.
   That is weaker than "unattributable" — see "What the sandbox reveals" below.
 - No persistence. When the room empties, nothing remains — blocks included.
@@ -239,6 +239,11 @@ isolated behind a fixed content-free diagnostic).
   no replay. A hint is broadcast after the patch that adds the block, so by the
   time it fires the snapshot already holds that block (unless someone took it
   in between).
+- **`onSandboxBurst`** (D-071) relays bursts the same way: the frozen,
+  validated tile of the column that tipped the sandbox, with no replay. A
+  burst is broadcast at once, before the patch that removes the blocks, so
+  when it fires the snapshot still holds everything it throws; the next
+  snapshot is the emptied board.
 - **`PeerSnapshot.carrying`** is the peer's carried colour, validated to an
   integer palette index, else null. It is presence data, so it is subject to
   interest management like the rest of the entry.
@@ -253,9 +258,9 @@ import {
 
 const sandbox = createSandboxAuthority();          // { random } injectable
 sandbox.pick({ key: 'me', x, y }, tile, []);       // false: nothing changed
-sandbox.place({ key: 'me', x, y }, tile, others);
-sandbox.spawn([{ key: 'me', x, y }]);              // tile or null
-sandbox.returnCarried('me', [{ key: 'me', x, y }]); // leaving the street
+sandbox.place({ key: 'me', x, y }, tile, others);  // tile, { burst: tile } or null
+sandbox.spawn([{ key: 'me', x, y }]);              // tile, { burst: tile } or null
+sandbox.returnCarried('me', [{ key: 'me', x, y }]); // leaving the street, likewise
 sandbox.snapshotFor('me');                         // frozen SandboxSnapshot
 setTimeout(tick, sandboxSpawnDelay(sandbox.totalBlocks));
 ```
@@ -270,7 +275,9 @@ object on every call. The Shell runs its own drop timer with
 solo drops also avoid them. When the player leaves the street carrying a
 block, the Shell calls `returnCarried(key, players)` — with the player's last
 position among `players` — and shows the returned tile as a drop, exactly as
-the room does.
+the room does. `isSandboxBurst(result)` tells a burst from a landing, and the
+Shell announces a burst before publishing the emptied board, as the room
+does.
 
 **The rules.** A player's tile is `floor(x / 32), floor(y / 32)`; their level
 is the stack height on that tile (0 outside the area). A target must be inside
@@ -286,8 +293,12 @@ below 900 blocks (carried blocks count); uniform over tiles more than one tile
 (Chebyshev) from every player's tile and below the height cap, enumerated in
 `(y, x)` order; colour uniform over the 8-colour palette. **Return**
 (`returnCarried`): the carried block falls onto a tile chosen by the spawn
-rules, keeping its colour; it is discarded only if no tile is allowed. A
-rejected action changes nothing.
+rules, keeping its colour; it is discarded only if no tile is allowed.
+**Burst** (D-071): a place, spawn or return onto a column already holding
+`SANDBOX_BURST_HEIGHT` (15) blocks passes every check above first, then
+removes every placed block instead of landing, the arriving block with them;
+blocks other players carry stay carried. So no column ever holds more than 15
+and the 256 cap is never reached. A rejected action changes nothing.
 
 ### What the sandbox reveals, and what it trusts
 
@@ -297,10 +308,12 @@ rejected action changes nothing.
   building interior or the Avatar Studio puts you somewhere new) — so a
   hostile client can teleport beside any stack or stand "on" a tower it never
   climbed, and act from there. What bounds the damage is **conservation**:
-  play never destroys a block. Picking only moves one into a hand, and a
-  carried block goes back to the sky when its carrier suspends or leaves, so
-  the most a griefer can do is rearrange the board, a block at a time, at the
-  150 ms action floor, never below the fixed total.
+  play never destroys a block but in a burst. Picking only moves one into a
+  hand, and a carried block goes back to the sky when its carrier suspends or
+  leaves, so the most a griefer can do block by block is rearrange the board,
+  at the 150 ms action floor, never below the fixed total. Anyone, hostile or
+  not, can empty it by building a pillar past 15 (D-071): that is the reset,
+  and it needs a real stand 14 blocks high beside the pillar.
 - **The board is player-written content, visible to the whole room.** Blocks
   can spell words, draw symbols or write any pattern a player chooses —
   including text that means something off the board. The lobby does not and
@@ -346,9 +359,12 @@ is small. It names tiles and colours and nothing else.
 The client-to-server vocabulary is five verbs — `move`, `suspend`, `resume`,
 `sandbox:pick` and `sandbox:place` (each `{ x, y }`, an integer sandbox tile) —
 and a join payload. There is no message through which a client could tell the
-room anything else, because there is no field for it. The server sends two
-messages: `welcome` (`{ gameId }`, the recipient's own id) and `sandbox:drop`
-(`{ x, y }`, a sky-drop animation hint broadcast to every client).
+room anything else, because there is no field for it. The server sends three
+messages: `welcome` (`{ gameId }`, the recipient's own id), `sandbox:drop`
+(`{ x, y }`, a sky-drop animation hint broadcast to every client after the
+patch that adds the block) and `sandbox:burst` (`{ x, y }`, D-071: the column
+that burst the sandbox, broadcast to every client at once, before the patch
+that removes the blocks).
 
 ---
 

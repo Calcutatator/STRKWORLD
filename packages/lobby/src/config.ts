@@ -210,10 +210,10 @@ export const MESSAGE = Object.freeze({
 export type MessageType = (typeof MESSAGE)[keyof typeof MESSAGE];
 
 /**
- * Server-to-client messages. Two, and neither says anything about another
+ * Server-to-client messages. Three, and none says anything about another
  * player: `welcome` carries only the recipient's own server-assigned session
  * identifier, so the client can recognise its own avatar in the shared state,
- * and `sandbox:drop` carries only a tile.
+ * and `sandbox:drop` and `sandbox:burst` carry only a tile.
  */
 export const SERVER_MESSAGE = Object.freeze({
   /** `{ gameId }` — sent once, right after a join is admitted. */
@@ -224,6 +224,13 @@ export const SERVER_MESSAGE = Object.freeze({
    * state already holds it. An animation hint only: state is the truth.
    */
   sandboxDrop: 'sandbox:drop',
+  /**
+   * `{ x, y }` — D-071: a block would have made this tile's column taller
+   * than `SANDBOX_BURST_HEIGHT`, so the whole sandbox burst. Broadcast to
+   * every client at once, before the patch that removes the blocks, so the
+   * receiver still holds them. An animation hint only: state is the truth.
+   */
+  sandboxBurst: 'sandbox:burst',
 } as const);
 
 export type ServerMessageType =

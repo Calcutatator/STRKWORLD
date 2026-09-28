@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
-import { Group, Mesh, Vector3, type Material } from 'three';
-import { SANDBOX_AREA, type AvatarSpriteKey } from '@strkworld/shared';
+import { Group, InstancedMesh, Mesh, Vector3, type Material } from 'three';
+import { SANDBOX_AREA, SANDBOX_BURST_HEIGHT, type AvatarSpriteKey } from '@strkworld/shared';
 import {
   EXCHANGE_DEGEN_LEVEL,
   EXCHANGE_DEGEN_STATION,
@@ -40,10 +40,15 @@ function fakeFigures() {
   return { factory, created };
 }
 
-function setup() {
+function setup(reducedMotion?: () => boolean) {
   const parent = new Group();
   const figures = fakeFigures();
-  const presenter = createPresenter({ parent, labels: createNullLabelFactory(), figures: figures.factory });
+  const presenter = createPresenter({
+    parent,
+    labels: createNullLabelFactory(),
+    figures: figures.factory,
+    ...(reducedMotion ? { reducedMotion } : {}),
+  });
   const view = presenter.bindSession();
   // The Studio builds its figures first; the local avatar hangs off the root.
   const avatar = figures.created.find((figure) => figure.object.parent?.name === 'strkworld')!;
@@ -122,6 +127,51 @@ describe('presenter', () => {
       expect(Number.isFinite(world.avatar.object.position.y)).toBe(true);
     }
     expect(world.presenter.player.elevation).toBeCloseTo(1);
+  });
+
+  it('throws the blocks of a burst and lets a player on the pillar fall under gravity, not snap (D-071)', () => {
+    const world = setup();
+    const at = { x: SANDBOX_AREA.x + 3, y: 14 };
+    const blocks = world.parent.getObjectByName('sandbox:blocks') as InstancedMesh;
+    world.view.setPlayerPosition(tile(at.x, at.y), true);
+    world.view.setSandboxColumns([{ ...at, colours: Array.from({ length: SANDBOX_BURST_HEIGHT }, () => 1) }]);
+    world.presenter.update(16);
+    world.presenter.consumeSnap();
+    world.view.setPlayerElevation(SANDBOX_BURST_HEIGHT);
+    world.presenter.update(16);
+    expect(world.presenter.player.elevation).toBe(SANDBOX_BURST_HEIGHT);
+    expect(blocks.count).toBe(SANDBOX_BURST_HEIGHT);
+
+    // The lobby's order: the burst, then the state that empties the board.
+    world.view.sandboxBurst(at);
+    world.view.setSandboxColumns([]);
+    world.view.setPlayerElevation(0);
+    world.presenter.update(16);
+    const falling = world.presenter.player.elevation;
+    expect(falling).toBeLessThan(SANDBOX_BURST_HEIGHT);
+    expect(falling).toBeGreaterThan(SANDBOX_BURST_HEIGHT - 1);
+    let previous = falling;
+    for (let frame = 0; frame < 120; frame += 1) {
+      world.presenter.update(16);
+      const elevation = world.presenter.player.elevation;
+      expect(elevation).toBeLessThanOrEqual(previous);
+      previous = elevation;
+    }
+    expect(world.presenter.player.elevation).toBe(0);
+    expect(world.avatar.object.position.y).toBeCloseTo(0);
+    // Flown away and gone.
+    expect(blocks.count).toBe(0);
+  });
+
+  it('passes the reduced-motion preference to the sandbox, so a burst pops out in place', () => {
+    const world = setup(() => true);
+    const at = { x: SANDBOX_AREA.x + 3, y: 14 };
+    const blocks = world.parent.getObjectByName('sandbox:blocks') as InstancedMesh;
+    world.view.setSandboxColumns([{ ...at, colours: [1, 2] }]);
+    for (let frame = 0; frame < 30; frame += 1) world.presenter.update(16);
+    world.view.sandboxBurst(at);
+    for (let frame = 0; frame < 16; frame += 1) world.presenter.update(16);
+    expect(blocks.count).toBe(0);
   });
 
   it('lands at once when a stack rises more than a block under the player', () => {

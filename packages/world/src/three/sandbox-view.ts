@@ -16,9 +16,10 @@ import {
   Quaternion,
   Vector3,
 } from 'three';
-import type { Object3D } from 'three';
+import type { BufferAttribute, Object3D } from 'three';
 import {
   SANDBOX_AREA,
+  SANDBOX_BURST_HEIGHT,
   SANDBOX_COLOURS,
   SANDBOX_MAX_BLOCKS,
   SANDBOX_MAX_HEIGHT,
@@ -36,14 +37,18 @@ import { SANDBOX_THEME } from './palette.js';
  * single InstancedMesh, so a full 900-block sandbox is one draw call, and a
  * frame only re-uploads the instances that moved. Input is untrusted: tiles
  * outside the area, bad colours and anything past the height and block caps
- * are dropped rather than drawn.
+ * are dropped rather than drawn. A burst (D-071) throws every block it draws
+ * away at once and leaves the board empty.
  */
 
 /** 8 toy-block colours; index = `SandboxColumn` colour. Lives in the palette. */
 export const SANDBOX_BLOCK_PALETTE: readonly number[] = SANDBOX_THEME.blocks;
 
-/** Live blocks plus room for blocks still popping out. */
+/** Live blocks plus room for blocks still popping out or flying from a burst. */
 export const SANDBOX_INSTANCE_CAPACITY = SANDBOX_MAX_BLOCKS + 128;
+
+/** How long a burst block flies before it is gone (D-071). */
+export const SANDBOX_BURST_MS = 1400;
 
 /** Edge of a carried block, in world units. */
 export const CARRIED_BLOCK_SIZE = 0.55;
@@ -55,6 +60,22 @@ const GRAVITY = 42;
 /** Rebound speed after a sky drop lands: a hop of a few centimetres. */
 const BOUNCE_SPEED = 2.2;
 const LEAVE_MS = 180;
+/** A burst block's gravity, in units/s²: floatier than a sky drop's, so the throw reads. */
+const BURST_GRAVITY = 16;
+/** A burst block shrinks away over the end of its flight. */
+const BURST_SHRINK_MS = 450;
+/** Outward speed, units/s: a base, a random part, and a boost that fades with distance from the burst. */
+const BURST_SPEED = 4;
+const BURST_SPEED_RANGE = 6;
+const BURST_NEAR_BOOST = 6;
+/** How far, in radians, a throw may stray from straight out of the burst tile. */
+const BURST_SPREAD = 0.8;
+/** The upward kick, units/s. */
+const BURST_KICK = 10;
+const BURST_KICK_RANGE = 6;
+/** Tumble rate, radians/s. */
+const BURST_SPIN = 3;
+const BURST_SPIN_RANGE = 9;
 
 export interface SandboxTarget {
   readonly x: number;
@@ -76,10 +97,25 @@ export interface SandboxView {
    * hint for anything else is ignored, so it can never re-drop a placed block.
    */
   expectDrop(tile: SandboxTile): void;
+  /**
+   * D-071: the sandbox burst at this tile. Every block drawn now — standing,
+   * arriving or already popping out — flies away from it, tumbling, and is
+   * gone after `SANDBOX_BURST_MS`; for a player who asked for less motion it
+   * pops out instead. The board is then empty, so the empty snapshot that
+   * follows changes nothing, and one that came first leaves the same blocks
+   * to throw. Each block's throw depends only on its tile, its level and the
+   * burst tile, so every client draws the same explosion.
+   */
+  burst(tile: SandboxTile): void;
   /** Where E will act: a pulsing ghost and outline; null hides it. */
   setTarget(target: SandboxTarget | null): void;
   update(deltaMs: number): void;
   dispose(): void;
+}
+
+export interface SandboxViewOptions {
+  /** Whether the player asked for less motion (`prefers-reduced-motion`); read at each burst. */
+  readonly reducedMotion?: () => boolean;
 }
 
 export interface CarriedBlock {
@@ -89,7 +125,23 @@ export interface CarriedBlock {
   dispose(): void;
 }
 
-type BlockState = 'idle' | 'settle' | 'drop' | 'leave';
+type BlockState = 'idle' | 'settle' | 'drop' | 'leave' | 'burst';
+
+/** A burst block's throw (D-071), fixed when the burst reaches it. */
+interface Flight {
+  /** Its centre and scale as drawn when the burst hit it. */
+  readonly x: number;
+  readonly y: number;
+  readonly z: number;
+  readonly scale: number;
+  /** Units per second. */
+  readonly vx: number;
+  readonly vy: number;
+  readonly vz: number;
+  /** A unit axis and a rate in radians per second. */
+  readonly axis: Vector3;
+  readonly spin: number;
+}
 
 interface Block {
   readonly x: number;
@@ -101,6 +153,8 @@ interface Block {
   t: number;
   /** Instance slot, or -1 once released. */
   index: number;
+  /** While bursting, how it flies; null otherwise. */
+  flight: Flight | null;
 }
 
 export function isSandboxTile(x: unknown, y: unknown): x is number {
@@ -233,13 +287,83 @@ export function bevelledBlockGeometry(size = 1, bevel = 0.07): BufferGeometry {
   return geometry;
 }
 
+/**
+ * The instances of one attribute written since three last uploaded it.
+ *
+ * three uploads an attribute's update ranges only when it next draws the
+ * mesh, and clears them itself once they are uploaded
+ * (`WebGLAttributes.updateBuffer`). Several flushes can land before that
+ * draw — two lobby patches in one frame, or a patch and then the frame's own
+ * `update()` — so a flush must not replace a range three has not drawn yet:
+ * the replaced instances would never reach the GPU and would keep whatever it
+ * last held, for a colour never uploaded the attribute's initial white. The
+ * range handed to three therefore covers everything written since its last
+ * upload, and the attribute's upload callback resets it: one range per
+ * attribute, however many flushes go undrawn (a hidden tab draws nothing).
+ */
+interface UploadTracker {
+  /** Instance `index` was written. */
+  mark(index: number): void;
+  /** Hand three one range covering every instance it has not uploaded. */
+  flush(): void;
+}
+
+function trackUploads(attribute: BufferAttribute, itemSize: number): UploadTracker {
+  // Handed to three and not yet uploaded; written since the last flush.
+  let pendingMin = Infinity;
+  let pendingMax = -Infinity;
+  let freshMin = Infinity;
+  let freshMax = -Infinity;
+  attribute.onUpload(() => {
+    pendingMin = Infinity;
+    pendingMax = -Infinity;
+  });
+  return {
+    mark(index) {
+      if (index < freshMin) freshMin = index;
+      if (index > freshMax) freshMax = index;
+    },
+    flush() {
+      if (freshMax < freshMin) return;
+      pendingMin = Math.min(pendingMin, freshMin);
+      pendingMax = Math.max(pendingMax, freshMax);
+      freshMin = Infinity;
+      freshMax = -Infinity;
+      attribute.clearUpdateRanges();
+      attribute.addUpdateRange(pendingMin * itemSize, (pendingMax - pendingMin + 1) * itemSize);
+      attribute.needsUpdate = true;
+    },
+  };
+}
+
+/**
+ * Uniform draws in `[0, 1)` seeded only by integers, so every client that
+ * seeds one the same way draws the same sequence (D-071's shared explosion).
+ */
+function seededDraws(seeds: readonly number[]): () => number {
+  let a = 0x9e3779b9;
+  for (const seed of seeds) {
+    a = Math.imul(a ^ (seed | 0), 0x85ebca6b);
+    a ^= a >>> 13;
+    a = Math.imul(a, 0xc2b2ae35);
+    a ^= a >>> 16;
+  }
+  return () => {
+    a = (a + 0x6d2b79f5) | 0;
+    let t = Math.imul(a ^ (a >>> 15), 1 | a);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
 const PALETTE_COLOURS = SANDBOX_BLOCK_PALETTE.map((hex) => new Color(hex));
 const scratchMatrix = new Matrix4();
 const scratchPosition = new Vector3();
 const scratchScale = new Vector3();
+const scratchRotation = new Quaternion();
 const IDENTITY = new Quaternion();
 
-export function buildSandbox(): SandboxView {
+export function buildSandbox(options: SandboxViewOptions = {}): SandboxView {
   const group = new Group();
   group.name = 'sandbox';
 
@@ -257,6 +381,8 @@ export function buildSandbox(): SandboxView {
   mesh.instanceColor!.setUsage(DynamicDrawUsage);
   mesh.count = 0;
   group.add(mesh);
+  const matrixUploads = trackUploads(mesh.instanceMatrix, 16);
+  const colourUploads = trackUploads(mesh.instanceColor!, 3);
 
   // The target: a flat ring on the column's tile, and a ghost block with an outline.
   const target = new Group();
@@ -286,19 +412,26 @@ export function buildSandbox(): SandboxView {
   group.add(target);
 
   const columns = new Map<number, Block[]>();
-  const leaving: Block[] = [];
+  /** Blocks on their way out, popping or flying, oldest first: they still hold slots. */
+  const leaving = new Set<Block>();
   const slots: (Block | null)[] = new Array(SANDBOX_INSTANCE_CAPACITY).fill(null);
   const animating = new Set<Block>();
   let active = 0;
-  let dirtyMin = Infinity;
-  let dirtyMax = -Infinity;
-  let colourMin = Infinity;
-  let colourMax = -Infinity;
   let elapsed = 0;
-  let targetState: { pick: boolean; valid: boolean } | null = null;
+  let targetState: { pick: boolean; valid: boolean; burst: boolean } | null = null;
   let disposed = false;
 
-  const writeMatrix = (block: Block): void => {
+  const reducedMotion = (): boolean => {
+    try {
+      return options.reducedMotion?.() === true;
+    } catch {
+      return false;
+    }
+  };
+
+  /** A block's drawn centre height and scale, in every state but a burst's flight. */
+  const posed = { y: 0, s: 1, sy: 1 };
+  const pose = (block: Block): void => {
     const rest = block.k + 0.5;
     let y = rest;
     let s = 1;
@@ -336,20 +469,41 @@ export function buildSandbox(): SandboxView {
         break;
       }
       case 'idle':
+      case 'burst':
         break;
     }
-    scratchPosition.set(block.x + 0.5, y, block.y + 0.5);
-    scratchScale.set(s, sy, s);
-    scratchMatrix.compose(scratchPosition, IDENTITY, scratchScale);
+    posed.y = y;
+    posed.s = s;
+    posed.sy = sy;
+  };
+
+  const writeMatrix = (block: Block): void => {
+    const flight = block.state === 'burst' ? block.flight : null;
+    if (flight) {
+      // Thrown out and up under gravity, tumbling, shrinking away at the end.
+      // Its bottom never sinks through the floor: a low throw lands and lies
+      // there while it shrinks.
+      const seconds = block.t / 1000;
+      const shrink = Math.min(1, Math.max(0, (block.t - (SANDBOX_BURST_MS - BURST_SHRINK_MS)) / BURST_SHRINK_MS));
+      const scale = Math.max(0.001, flight.scale * (1 - shrink * shrink));
+      const y = flight.y + flight.vy * seconds - 0.5 * BURST_GRAVITY * seconds * seconds;
+      scratchPosition.set(flight.x + flight.vx * seconds, Math.max(0.5 * scale, y), flight.z + flight.vz * seconds);
+      scratchRotation.setFromAxisAngle(flight.axis, flight.spin * seconds);
+      scratchScale.setScalar(scale);
+      scratchMatrix.compose(scratchPosition, scratchRotation, scratchScale);
+    } else {
+      pose(block);
+      scratchPosition.set(block.x + 0.5, posed.y, block.y + 0.5);
+      scratchScale.set(posed.s, posed.sy, posed.s);
+      scratchMatrix.compose(scratchPosition, IDENTITY, scratchScale);
+    }
     mesh.setMatrixAt(block.index, scratchMatrix);
-    dirtyMin = Math.min(dirtyMin, block.index);
-    dirtyMax = Math.max(dirtyMax, block.index);
+    matrixUploads.mark(block.index);
   };
 
   const writeColour = (block: Block): void => {
     mesh.setColorAt(block.index, PALETTE_COLOURS[block.colour]!);
-    colourMin = Math.min(colourMin, block.index);
-    colourMax = Math.max(colourMax, block.index);
+    colourUploads.mark(block.index);
   };
 
   const finished = (block: Block): boolean => {
@@ -381,9 +535,11 @@ export function buildSandbox(): SandboxView {
 
   const allocate = (block: Block): boolean => {
     while (active >= SANDBOX_INSTANCE_CAPACITY) {
-      // Out of room: finish the oldest pop-out now rather than drop a live block.
-      const victim = leaving.shift();
-      if (!victim) return false;
+      // Out of room: finish the oldest pop-out or burst block now rather than
+      // drop a live block.
+      const victim = leaving.values().next().value;
+      if (victim === undefined) return false;
+      leaving.delete(victim);
       animating.delete(victim);
       release(victim);
     }
@@ -399,33 +555,60 @@ export function buildSandbox(): SandboxView {
   const startLeaving = (block: Block): void => {
     block.state = 'leave';
     block.t = 0;
-    leaving.push(block);
+    leaving.add(block);
+    animating.add(block);
+    writeMatrix(block);
+  };
+
+  /**
+   * Throw a block away from the burst at `tile` (D-071), from wherever it is
+   * drawn now. Seeded by its tile, its level and the burst tile alone, so
+   * every client throws it the same way.
+   */
+  const launch = (block: Block, tile: SandboxTile): void => {
+    pose(block);
+    const draw = seededDraws([block.x, block.y, block.k, tile.x, tile.y]);
+    const [stray, pace, kick, turn, tilt, rate, sense] = [draw(), draw(), draw(), draw(), draw(), draw(), draw()];
+    const dx = block.x - tile.x;
+    const dz = block.y - tile.y;
+    const distance = Math.hypot(dx, dz);
+    // Straight out of the burst tile, give or take; its own column's blocks fly anywhere.
+    const heading = distance > 0 ? Math.atan2(dz, dx) + (stray - 0.5) * BURST_SPREAD : stray * Math.PI * 2;
+    const speed = BURST_SPEED + pace * BURST_SPEED_RANGE + BURST_NEAR_BOOST / (1 + 0.5 * distance);
+    const cosTilt = tilt * 2 - 1;
+    const sinTilt = Math.sqrt(1 - cosTilt * cosTilt);
+    block.flight = {
+      x: block.x + 0.5,
+      y: posed.y,
+      z: block.y + 0.5,
+      scale: posed.s,
+      vx: Math.cos(heading) * speed,
+      vy: BURST_KICK + kick * BURST_KICK_RANGE,
+      vz: Math.sin(heading) * speed,
+      axis: new Vector3(sinTilt * Math.cos(turn * Math.PI * 2), sinTilt * Math.sin(turn * Math.PI * 2), cosTilt),
+      spin: (BURST_SPIN + rate * BURST_SPIN_RANGE) * (sense < 0.5 ? -1 : 1),
+    };
+    block.state = 'burst';
+    block.t = 0;
+    // Its flight starts now, so it is the newest to go.
+    leaving.delete(block);
+    leaving.add(block);
     animating.add(block);
     writeMatrix(block);
   };
 
   const flush = (): void => {
-    if (dirtyMax >= dirtyMin) {
-      const attribute = mesh.instanceMatrix;
-      attribute.clearUpdateRanges();
-      attribute.addUpdateRange(dirtyMin * 16, (dirtyMax - dirtyMin + 1) * 16);
-      attribute.needsUpdate = true;
-    }
-    if (colourMax >= colourMin && mesh.instanceColor) {
-      const attribute = mesh.instanceColor;
-      attribute.clearUpdateRanges();
-      attribute.addUpdateRange(colourMin * 3, (colourMax - colourMin + 1) * 3);
-      attribute.needsUpdate = true;
-    }
-    dirtyMin = Infinity;
-    dirtyMax = -Infinity;
-    colourMin = Infinity;
-    colourMax = -Infinity;
+    matrixUploads.flush();
+    colourUploads.flush();
   };
 
   const styleTarget = (pulse: number): void => {
     if (!targetState) return;
-    const colour = targetState.valid ? SANDBOX_THEME.targetValid : SANDBOX_THEME.targetInvalid;
+    const colour = targetState.burst
+      ? SANDBOX_THEME.targetBurst
+      : targetState.valid
+        ? SANDBOX_THEME.targetValid
+        : SANDBOX_THEME.targetInvalid;
     for (const targetMaterial of [ringMaterial, ghostMaterial, outlineMaterial]) targetMaterial.color.setHex(colour);
     ghostMaterial.opacity = (targetState.pick ? 0.2 : 0.38) * (0.75 + 0.25 * pulse);
     outlineMaterial.opacity = 0.7 + 0.3 * pulse;
@@ -453,7 +636,16 @@ export function buildSandbox(): SandboxView {
           columns.set(key, blocks);
         }
         for (let k = blocks.length; k < column.colours.length; k++) {
-          const block: Block = { x: column.x, y: column.y, k, colour: column.colours[k]!, state: 'settle', t: 0, index: -1 };
+          const block: Block = {
+            x: column.x,
+            y: column.y,
+            k,
+            colour: column.colours[k]!,
+            state: 'settle',
+            t: 0,
+            index: -1,
+            flight: null,
+          };
           if (!allocate(block)) break;
           animating.add(block);
           blocks.push(block);
@@ -479,6 +671,22 @@ export function buildSandbox(): SandboxView {
       writeMatrix(top);
       flush();
     },
+    burst(tile) {
+      if (disposed || tile === null || typeof tile !== 'object') return;
+      if (!isSandboxTile(tile.x, tile.y)) return;
+      // Everything drawn now: the board, and blocks already popping out (an
+      // empty snapshot that arrived first). Blocks already flying keep flying.
+      const thrown: Block[] = [];
+      for (const blocks of columns.values()) thrown.push(...blocks);
+      for (const block of leaving) if (block.state === 'leave') thrown.push(block);
+      columns.clear();
+      const still = reducedMotion();
+      for (const block of thrown) {
+        if (!still) launch(block, tile);
+        else if (block.state !== 'leave') startLeaving(block);
+      }
+      flush();
+    },
     setTarget(value) {
       if (disposed) return;
       const valid =
@@ -502,8 +710,10 @@ export function buildSandbox(): SandboxView {
       marker.visible = !(pick && level < 1);
       marker.position.y = pick ? level - 0.5 : level + 0.5;
       target.visible = true;
-      targetState = { pick, valid: value.valid === true };
-      target.userData = { mode: value.mode, valid: value.valid === true, level };
+      // D-071: a place onto a full column would burst the sandbox; say so.
+      const burst = !pick && value.valid === true && level >= SANDBOX_BURST_HEIGHT;
+      targetState = { pick, valid: value.valid === true, burst };
+      target.userData = { mode: value.mode, valid: value.valid === true, level, burst };
       styleTarget(0.5 + 0.5 * Math.sin((elapsed / 1000) * 6));
     },
     update(deltaMs) {
@@ -513,11 +723,10 @@ export function buildSandbox(): SandboxView {
       if (dt > 0) {
         for (const block of animating) {
           block.t += dt;
-          if (block.state === 'leave') {
-            if (block.t >= LEAVE_MS) {
+          if (block.state === 'leave' || block.state === 'burst') {
+            if (block.t >= (block.state === 'leave' ? LEAVE_MS : SANDBOX_BURST_MS)) {
               animating.delete(block);
-              const at = leaving.indexOf(block);
-              if (at >= 0) leaving.splice(at, 1);
+              leaving.delete(block);
               release(block);
               continue;
             }
@@ -535,7 +744,7 @@ export function buildSandbox(): SandboxView {
       if (disposed) return;
       disposed = true;
       columns.clear();
-      leaving.length = 0;
+      leaving.clear();
       animating.clear();
       group.removeFromParent();
       group.clear();

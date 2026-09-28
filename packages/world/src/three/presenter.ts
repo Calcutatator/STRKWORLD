@@ -58,6 +58,11 @@ export interface PresenterOptions {
   readonly figures: AvatarFigureFactory;
   /** Decodes bundled art such as the Degen floor's posters; without it they stay procedural. */
   readonly images?: ImageTextureLoader;
+  /**
+   * Whether the player asked for less motion (`prefers-reduced-motion`),
+   * read at each sandbox burst: its blocks then pop out instead of flying.
+   */
+  readonly reducedMotion?: () => boolean;
 }
 
 /** The presenter implements every view method, the optional sandbox ones included. */
@@ -160,7 +165,7 @@ export function createPresenter(options: PresenterOptions): Presenter {
   disposers.push(() => avatar.dispose());
 
   // The block sandbox (D-060): shared stacks, and the block the player holds.
-  const sandbox: SandboxView = buildSandbox();
+  const sandbox: SandboxView = buildSandbox({ reducedMotion: options.reducedMotion });
   root.add(sandbox.group);
   disposers.push(() => sandbox.dispose());
   const carried = createCarriedBlock(null);
@@ -358,6 +363,10 @@ export function createPresenter(options: PresenterOptions): Presenter {
         sandboxDrop(tile) {
           if (!live()) return;
           sandbox.expectDrop(tile);
+        },
+        sandboxBurst(tile) {
+          if (!live()) return;
+          sandbox.burst(tile);
         },
         setCarried(colour) {
           if (!live()) return;

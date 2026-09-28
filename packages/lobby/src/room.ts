@@ -6,8 +6,8 @@
  * payload, and none of them has a field for anything the lobby is forbidden
  * to hold. That is the enforcement: not a filter that strips money out of
  * traffic, but a surface with nowhere to put it. The two sandbox verbs
- * (D-060) take a tile and nothing else, and the one sandbox broadcast names a
- * tile and nothing else.
+ * (D-060) take a tile and nothing else, and the two sandbox broadcasts, a sky
+ * drop and a burst (D-071), each name a tile and nothing else.
  *
  * ## Configuration is trusted; onCreate options are not
  *
@@ -134,6 +134,7 @@ export class PresenceRoom extends Room<{ state: LobbyState }> {
     this.#registry = new LobbyPresence({
       ...config,
       onSandboxDrop: (tile) => this.#broadcastDrop(tile),
+      onSandboxBurst: (tile) => this.#broadcastBurst(tile),
     });
     this.state = this.#registry.state;
 
@@ -177,14 +178,17 @@ export class PresenceRoom extends Room<{ state: LobbyState }> {
      * actor's position is the one the registry already holds. Every refusal
      * — malformed, throttled, out of reach — is silent: the client learns
      * the outcome from the shared state, and a refusal leaks nothing. No view
-     * sync is needed, because neither verb moves anyone.
+     * sync is needed, because neither verb moves anyone. A place that bursts
+     * the sandbox (D-071) empties it, so the rain is re-paced after one.
      */
     this.onMessage(MESSAGE.sandboxPick, (client: Client, payload: unknown) => {
       this.#registry.pickBlock(client.sessionId, payload, performance.now());
     });
 
     this.onMessage(MESSAGE.sandboxPlace, (client: Client, payload: unknown) => {
-      this.#registry.placeBlock(client.sessionId, payload, performance.now());
+      if (this.#registry.placeBlock(client.sessionId, payload, performance.now()) === 'applied') {
+        this.#scheduleSpawn();
+      }
     });
   }
 
@@ -229,8 +233,9 @@ export class PresenceRoom extends Room<{ state: LobbyState }> {
    * and idempotent.
    *
    * A pending drop is only ever brought forward, never pushed back: when a
-   * lost block takes the sandbox back under the fast limit, a drop armed with
-   * the slow delay is re-armed with the fast one if that lands sooner.
+   * lost block or a burst (D-071) takes the sandbox back under the fast
+   * limit, a drop armed with the slow delay is re-armed with the fast one if
+   * that lands sooner.
    */
   #scheduleSpawn(): void {
     if (!this.#registry.hasLivePlayers) {
@@ -272,6 +277,18 @@ export class PresenceRoom extends Room<{ state: LobbyState }> {
       { x: tile.x, y: tile.y },
       { afterNextPatch: true },
     );
+  }
+
+  /**
+   * Tell every client the sandbox burst at `tile` (D-071): a block would have
+   * made that column taller than `SANDBOX_BURST_HEIGHT`, so every placed
+   * block is gone. Sent at once, not after the next patch, so it arrives
+   * while a client still holds the blocks and can throw them from where they
+   * stand; the patch that removes them follows. The payload is the tile
+   * alone, whoever caused it.
+   */
+  #broadcastBurst(tile: SandboxTile): void {
+    this.broadcast(SERVER_MESSAGE.sandboxBurst, { x: tile.x, y: tile.y });
   }
 
   /**

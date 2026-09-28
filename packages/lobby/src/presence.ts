@@ -125,6 +125,13 @@ export interface LobbyPresenceOptions {
    * about who caused it.
    */
   onSandboxDrop?: (tile: SandboxTile) => void;
+  /**
+   * D-071: told when a block bursts the sandbox — a place, a sky drop or a
+   * returned block onto a column already holding `SANDBOX_BURST_HEIGHT` —
+   * with that column's tile, once every placed block is gone from state. The
+   * room broadcasts it as `sandbox:burst`. Tile only, like a drop.
+   */
+  onSandboxBurst?: (tile: SandboxTile) => void;
 }
 
 interface Session {
@@ -148,6 +155,7 @@ export class LobbyPresence {
   /** D-060: the room's block sandbox, mirrored into `state.sandbox`. */
   readonly #sandbox: LobbySandbox;
   readonly #onSandboxDrop: ((tile: SandboxTile) => void) | undefined;
+  readonly #onSandboxBurst: ((tile: SandboxTile) => void) | undefined;
 
   /**
    * Connection key to session. Lives only as long as the connection: it is
@@ -185,9 +193,11 @@ export class LobbyPresence {
         spawnIntervalMs: config.sandboxSpawnIntervalMs,
         slowSpawnIntervalMs: config.sandboxSlowSpawnIntervalMs,
         fastSpawnLimit: config.sandboxFastSpawnLimit,
+        onBurst: (tile) => this.#onSandboxBurst?.(tile),
       },
     );
     this.#onSandboxDrop = options.onSandboxDrop;
+    this.#onSandboxBurst = options.onSandboxBurst;
   }
 
   get peers(): MapSchema<PresenceEntry> {
@@ -351,8 +361,9 @@ export class LobbyPresence {
 
   /**
    * Drop one block from the sky, never within a tile of a live player. Null
-   * when no block may fall (cap reached, nowhere allowed). Announced through
-   * `onSandboxDrop` like every sky drop.
+   * when no block may fall (cap reached, nowhere allowed) or when it burst
+   * the sandbox instead, which `onSandboxBurst` announces (D-071). A landed
+   * block is announced through `onSandboxDrop` like every sky drop.
    */
   spawnBlock(): SandboxTile | null {
     const tile = this.#sandbox.spawn(this.#livePlayers());

@@ -52,8 +52,9 @@
  * call survives), and the server may still refuse any of them silently — the
  * next snapshot is the only answer.
  * `onSandboxDrop` relays sky-drop hints, which arrive after the state that
- * already holds the dropped block. Everything read from the server is
- * validated here and fails closed.
+ * already holds the dropped block, and `onSandboxBurst` relays bursts
+ * (D-071), which arrive before the state that empties the board. Everything
+ * read from the server is validated here and fails closed.
  */
 
 import { Client as ColyseusClient, type Room as ColyseusRoom } from '@colyseus/sdk';
@@ -170,6 +171,7 @@ type PeersListener = (peers: readonly PeerSnapshot[]) => void;
 type StatusListener = (event: LobbyStatusEvent) => void;
 type SandboxListener = (snapshot: SandboxSnapshot) => void;
 type SandboxDropListener = (tile: SandboxTile) => void;
+type SandboxBurstListener = (tile: SandboxTile) => void;
 type ListenerOwner<T> = readonly [listener: T, owner: symbol];
 
 interface PeerDelivery {
@@ -189,6 +191,11 @@ interface SandboxDelivery {
 
 interface SandboxDropDelivery {
   readonly listeners: readonly ListenerOwner<SandboxDropListener>[];
+  readonly tile: SandboxTile;
+}
+
+interface SandboxBurstDelivery {
+  readonly listeners: readonly ListenerOwner<SandboxBurstListener>[];
   readonly tile: SandboxTile;
 }
 
@@ -217,13 +224,16 @@ export class LobbyClient {
   readonly #statusDeliveries: StatusDelivery[] = [];
   readonly #sandboxListeners = new Map<SandboxListener, symbol>();
   readonly #dropListeners = new Map<SandboxDropListener, symbol>();
+  readonly #burstListeners = new Map<SandboxBurstListener, symbol>();
   readonly #sandboxDeliveries: SandboxDelivery[] = [];
   readonly #dropDeliveries: SandboxDropDelivery[] = [];
+  readonly #burstDeliveries: SandboxBurstDelivery[] = [];
 
   #deliveringPeers = false;
   #deliveringStatus = false;
   #deliveringSandbox = false;
   #deliveringDrops = false;
+  #deliveringBursts = false;
 
   /** The last value `sandbox()` returned, reused while nothing changes. */
   #sandboxView: SandboxSnapshot = EMPTY_SANDBOX;
@@ -531,6 +541,24 @@ export class LobbyClient {
   }
 
   /**
+   * Subscribe to bursts (D-071). Returns an unsubscribe function.
+   *
+   * No replay, like drops. Each burst is the frozen, validated tile of the
+   * column that tipped it, delivered before the snapshot that empties the
+   * board, so the blocks it throws are still in `sandbox()`. It is an
+   * animation cue only: that snapshot is the truth.
+   */
+  onSandboxBurst(listener: SandboxBurstListener): () => void {
+    const owner = Symbol('sandbox burst listener');
+    this.#burstListeners.set(listener, owner);
+    return () => {
+      if (this.#burstListeners.get(listener) === owner) {
+        this.#burstListeners.delete(listener);
+      }
+    };
+  }
+
+  /**
    * Ask to pick up the top block of `tile`.
    *
    * A no-op unless connected (not suspended) and for anything but an integer
@@ -617,6 +645,15 @@ export class LobbyClient {
         const tile = normalizeSandboxTile(payload);
         if (tile === null) return;
         this.#emitDrop(tile);
+      });
+
+      // D-071 bursts, under the same discipline: registered before the room
+      // is published, and anything but a sandbox tile never reaches anyone.
+      room.onMessage(SERVER_MESSAGE.sandboxBurst, (payload: unknown) => {
+        if (!this.#isCurrentRoom(generation, room)) return;
+        const tile = normalizeSandboxTile(payload);
+        if (tile === null) return;
+        this.#emitBurst(tile);
       });
 
       let rejectWelcome!: (error: Error) => void;
@@ -946,6 +983,26 @@ export class LobbyClient {
     }
   }
 
+  #emitBurst(tile: SandboxTile): void {
+    if (this.#burstListeners.size === 0) return;
+    this.#burstDeliveries.push({ listeners: [...this.#burstListeners], tile });
+    if (this.#deliveringBursts) return;
+
+    this.#deliveringBursts = true;
+    try {
+      for (;;) {
+        const delivery = this.#burstDeliveries.shift();
+        if (delivery === undefined) return;
+        for (const [listener, owner] of delivery.listeners) {
+          if (this.#burstListeners.get(listener) !== owner) continue;
+          this.#notifyBurst(listener, delivery.tile);
+        }
+      }
+    } finally {
+      this.#deliveringBursts = false;
+    }
+  }
+
   #notifySandbox(listener: SandboxListener, snapshot: SandboxSnapshot): void {
     try {
       listener(snapshot);
@@ -959,6 +1016,14 @@ export class LobbyClient {
       listener(tile);
     } catch {
       console.error('lobby client: sandbox drop subscriber threw');
+    }
+  }
+
+  #notifyBurst(listener: SandboxBurstListener, tile: SandboxTile): void {
+    try {
+      listener(tile);
+    } catch {
+      console.error('lobby client: sandbox burst subscriber threw');
     }
   }
 

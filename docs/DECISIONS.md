@@ -2663,7 +2663,9 @@ first art pass.
 
 **2026-09-27 · Accepted by the user · extends D-011 (shared seam: sandbox
 constants and types, `PresenceState.carrying`) and D-038 (remote peers carry a
-block colour) · adds anonymous lobby state under invariant 2**
+block colour) · adds anonymous lobby state under invariant 2 · amended by D-071
+(a pillar taller than 15 bursts the sandbox, announced by a second sandbox
+broadcast)**
 
 **Context.** The user asked for a simple sandbox area at the end of the road:
 blocks drop from the sky at random; `E` picks one up and `E` puts it down;
@@ -3130,3 +3132,62 @@ deployment without one keeps shield working and says plainly that the relayed
 actions are not set up, instead of reporting a network failure. The first
 keyed relay, D-062's funded unshield, is also the evidence for the docs'
 account that the in-transaction fee, not Portal credits, pays for this mode.
+
+---
+
+## D-071 — A pillar taller than 15 bursts the sandbox
+
+**2026-09-28 · Accepted by the user · amends D-060 (the sandbox now resets itself by bursting, and the lobby sends a second sandbox broadcast) · extends D-011's shared seam with `SANDBOX_BURST_HEIGHT`**
+
+**Context.** In multiplayer the sandbox is always busy and never resets. D-060
+keeps nothing beyond the room's life, a busy room never empties, and sky drops
+keep adding blocks up to the 900-block cap. The lead asked that "if one pillar
+of blocks gets above 15 blocks they all explode and fly away, resetting the
+area."
+
+**Decision.**
+
+- `SANDBOX_BURST_HEIGHT` (15) joins the shared seam: the most blocks a column
+  may hold. The block that would make any column taller (a player's place, a
+  sky drop or a carried block put back) bursts the sandbox instead: every
+  placed block is removed at once, that block with them. The placer's carried
+  block is consumed; blocks other players carry stay in their hands.
+  `SANDBOX_MAX_HEIGHT` (256) is unchanged, and can no longer be reached.
+- The authority runs every existing check first (range, occupancy, reach, the
+  entrance's one-step cap, the height and block caps), so whatever it refused
+  before it still refuses, and reports the tile of the column that tipped it.
+  The rules stay pure and deterministic: a sky drop that bursts draws the same
+  two numbers as one that lands.
+- The lobby announces a burst with a second sandbox broadcast,
+  `sandbox:burst` `{ x, y }`: the tile alone, whoever caused it, validated and
+  relayed by the client like `sandbox:drop`. It is sent at once, not after the
+  next patch, so it reaches every client before the patch that removes the
+  blocks. Solo play announces it in the same order.
+- Every client throws the blocks it still draws away from the burst tile:
+  outward and upward, tumbling, under gravity, shrinking out after about
+  1.4 s. Each block's throw is seeded only by its tile, its level and the
+  burst tile, so every client sees the same explosion. For a player who asked
+  for less motion (`prefers-reduced-motion`) the blocks pop out where they
+  stand instead. Players on the stacks fall to the ground through the
+  existing fall. When the aimed place would burst the sandbox, the target
+  shows its own warning colour.
+- A debug build (D-069) logs `sandbox.burst` with the tile and nothing else.
+
+**Consequences.**
+
+- The square resets whenever a 16th block lands on a pillar, placed or from
+  the sky. Placing it needs a stand at least 14 blocks high beside the pillar,
+  so it takes building; the rain and returned blocks trip it only by chance.
+- Blocks are conserved between bursts, not through one. D-060's argument that
+  a griefer can only rearrange the board still holds block by block, but
+  anyone can now empty it by building a pillar, which is the point.
+- The server vocabulary grows to three messages, none with an identity field.
+  A burst reveals no more than the column change it causes.
+- A late joiner never receives the broadcast; it just sees the emptied board.
+- The ordering rests on Colyseus: a `broadcast` without `afterNextPatch` goes
+  out at once, and the room's clock, which runs the spawner, ticks inside
+  `broadcastPatch` (the room sets no simulation interval) before that tick's
+  patch is encoded. If a client ever
+  received the emptied state first (the lobby's order rules it out), the
+  burst would still throw the blocks then popping out, and any block that
+  state had just added would fly too and reappear at the next change.

@@ -69,6 +69,19 @@ const SHADOW_MAP_SIZE = 2048;
 const SHADOW_TEXEL = (SHADOW_EXTENT * 2) / SHADOW_MAP_SIZE;
 const ERROR_REPORT_INTERVAL_MS = 1000;
 
+/**
+ * The player's `prefers-reduced-motion`, read live from the window the World
+ * is mounted in, as the engine reads its pixel ratio and visibility; false
+ * wherever it cannot be read.
+ */
+export function prefersReducedMotion(win: Window): boolean {
+  try {
+    return win.matchMedia?.('(prefers-reduced-motion: reduce)').matches === true;
+  } catch {
+    return false;
+  }
+}
+
 export function createWorldEngine(options: WorldEngineOptions): WorldEngine {
   const { mount } = options;
   const doc = mount.ownerDocument;
@@ -271,6 +284,7 @@ export function createWorldEngine(options: WorldEngineOptions): WorldEngine {
       labels: createCanvasLabelFactory(doc),
       figures: createAvatarFigure,
       images: createImageTextureLoader(doc),
+      reducedMotion: () => prefersReducedMotion(win),
     });
     cleanup.push(() => presenter.dispose());
     cleanup.push(() => disposeAvatarFigureCache());

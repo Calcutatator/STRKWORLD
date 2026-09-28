@@ -31,6 +31,8 @@ export interface DebugTap {
   visit(previous: unknown, next: unknown): void;
   /** A Bank step, by code only. */
   bank(step: unknown): void;
+  /** D-071: the sandbox burst, by the tile it came from and nothing else. */
+  sandboxBurst(tile: unknown): void;
 }
 
 let tap: DebugTap | null = null;
@@ -80,6 +82,21 @@ export function debugBank(step: BankDebugStep): void {
   if (!tap) return;
   try {
     tap.bank(step);
+  } catch {
+    // As above.
+  }
+}
+
+/** A sandbox tile, spelled out: this module imports nothing, so it stays inert. */
+export interface DebugSandboxTile {
+  readonly x: number;
+  readonly y: number;
+}
+
+export function debugSandboxBurst(tile: DebugSandboxTile): void {
+  if (!tap) return;
+  try {
+    tap.sandboxBurst(tile);
   } catch {
     // As above.
   }

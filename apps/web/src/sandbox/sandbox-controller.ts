@@ -5,9 +5,12 @@ import {
   SANDBOX_SLOW_SPAWN_INTERVAL_MS,
   SANDBOX_SPAWN_INTERVAL_MS,
   createSandboxAuthority,
+  isSandboxBurst,
   type SandboxAuthority,
+  type SandboxLanding,
   type SandboxPlayer,
 } from '@strkworld/lobby/sandbox';
+import { debugSandboxBurst } from '../debug/debug-tap.js';
 
 /**
  * The Shell side of the block sandbox (D-060).
@@ -16,6 +19,10 @@ import {
  * authority whenever a lobby connection is open, so every player sees the same
  * blocks; otherwise the same pure rules run here for solo play. Switching
  * backends never changes the channel object the World holds.
+ *
+ * A pillar taller than `SANDBOX_BURST_HEIGHT` bursts the sandbox (D-071).
+ * Either backend announces the burst before the state that empties the board,
+ * so the World can throw the blocks it still draws.
  */
 
 /** The subset of `LobbyClient` the sandbox needs. */
@@ -23,6 +30,8 @@ export interface SandboxLobbyClient {
   sandbox(): SandboxSnapshot;
   onSandbox(listener: (snapshot: SandboxSnapshot) => void): () => void;
   onSandboxDrop(listener: (tile: SandboxTile) => void): () => void;
+  /** D-071 bursts. Optional: without it a burst's blocks just pop out with the state. */
+  onSandboxBurst?(listener: (tile: SandboxTile) => void): () => void;
   pickBlock(tile: SandboxTile): void;
   placeBlock(tile: SandboxTile): void;
   onStatus(listener: (event: { readonly status: string }) => void): () => void;
@@ -64,6 +73,7 @@ export function createSandboxController(options: SandboxControllerOptions = {}):
   const authority: SandboxAuthority = createSandboxAuthority({ random: options.random });
   const listeners = new Set<(snapshot: SandboxSnapshot) => void>();
   const dropListeners = new Set<(tile: SandboxTile) => void>();
+  const burstListeners = new Set<(tile: SandboxTile) => void>();
   let snapshot: SandboxSnapshot = authority.snapshotFor(LOCAL_PLAYER);
   let player: SandboxPlayer | null = null;
   let away = false;
@@ -94,6 +104,29 @@ export function createSandboxController(options: SandboxControllerOptions = {}):
   const emitDrop = (tile: SandboxTile): void => {
     notify(dropListeners, tile);
   };
+  const emitBurst = (tile: SandboxTile): void => {
+    debugSandboxBurst(tile);
+    notify(burstListeners, tile);
+  };
+
+  /**
+   * Publish a block that joined a column in solo play, in the lobby's order: a
+   * sky drop's hint follows the state that holds it, and a burst is announced
+   * before the state that empties the board — which still goes out if a burst
+   * listener throws.
+   */
+  const settle = (landing: SandboxLanding, fell: boolean): void => {
+    if (isSandboxBurst(landing)) {
+      try {
+        emitBurst(landing.burst);
+      } finally {
+        publish(authority.snapshotFor(LOCAL_PLAYER));
+      }
+      return;
+    }
+    publish(authority.snapshotFor(LOCAL_PLAYER));
+    if (fell) emitDrop(landing);
+  };
 
   // -- solo authority ---------------------------------------------------------
 
@@ -108,13 +141,10 @@ export function createSandboxController(options: SandboxControllerOptions = {}):
       try {
         // Like the lobby room, only rain blocks while a player is out on the street.
         if (player && !away) {
-          const tile = authority.spawn([player]);
-          if (tile) {
-            // Same order as the lobby: the state first, then the sky-drop
-            // hint, which the renderer applies to the block now arriving.
-            publish(authority.snapshotFor(LOCAL_PLAYER));
-            emitDrop(tile);
-          }
+          const landing = authority.spawn([player]);
+          // Same order as the lobby: the state first, then the sky-drop hint,
+          // which the renderer applies to the block now arriving.
+          if (landing) settle(landing, true);
         }
       } finally {
         // A throwing listener must not end the rain for the rest of the session.
@@ -144,11 +174,17 @@ export function createSandboxController(options: SandboxControllerOptions = {}):
     const stopDrops = client.onSandboxDrop((tile) => {
       if (lobby?.client === client) emitDrop(tile);
     });
+    const stopBursts = typeof client.onSandboxBurst === 'function'
+      ? client.onSandboxBurst((tile) => {
+        if (lobby?.client === client) emitBurst(tile);
+      })
+      : () => undefined;
     lobby = {
       client,
       stop: () => {
         stopState();
         stopDrops();
+        stopBursts();
       },
     };
     publish(client.sandbox());
@@ -178,6 +214,12 @@ export function createSandboxController(options: SandboxControllerOptions = {}):
         dropListeners.delete(listener);
       };
     },
+    subscribeBursts(listener: (tile: SandboxTile) => void): () => void {
+      burstListeners.add(listener);
+      return () => {
+        burstListeners.delete(listener);
+      };
+    },
     pick(tile: SandboxTile): void {
       if (destroyed) return;
       if (lobby) {
@@ -194,9 +236,9 @@ export function createSandboxController(options: SandboxControllerOptions = {}):
         lobby.client.placeBlock(tile);
         return;
       }
-      if (player && !away && authority.place(player, tile, [])) {
-        publish(authority.snapshotFor(LOCAL_PLAYER));
-      }
+      if (!player || away) return;
+      const landing = authority.place(player, tile, []);
+      if (landing) settle(landing, false);
     },
   });
 
@@ -205,10 +247,10 @@ export function createSandboxController(options: SandboxControllerOptions = {}):
     // Blocks are conserved (D-060): like the lobby on suspend, a carried block
     // falls back onto the board, away from where the player stood.
     if (!lobby && authority.carrying(LOCAL_PLAYER) !== null) {
-      const tile = player ? authority.returnCarried(LOCAL_PLAYER, [player]) : null;
+      const landing = player ? authority.returnCarried(LOCAL_PLAYER, [player]) : null;
       if (!player) authority.release(LOCAL_PLAYER);
-      publish(authority.snapshotFor(LOCAL_PLAYER));
-      if (tile) emitDrop(tile);
+      if (landing) settle(landing, true);
+      else publish(authority.snapshotFor(LOCAL_PLAYER));
     }
   };
 
@@ -266,6 +308,7 @@ export function createSandboxController(options: SandboxControllerOptions = {}):
       adopted.clear();
       listeners.clear();
       dropListeners.clear();
+      burstListeners.clear();
     },
   };
 }

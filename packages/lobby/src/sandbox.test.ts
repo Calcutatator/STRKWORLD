@@ -8,6 +8,7 @@ import { Encoder, MapSchema, Reflection } from '@colyseus/schema';
 import { describe, expect, it } from 'vitest';
 import {
   SANDBOX_AREA,
+  SANDBOX_BURST_HEIGHT,
   SANDBOX_COLOURS,
   SANDBOX_MAX_BLOCKS,
   type GameId,
@@ -48,11 +49,14 @@ function centre(tileX: number, tileY: number): { x: number; y: number } {
 
 /**
  * A registry whose sandbox draws are scripted: `drop(tile, colour)` lands a
- * block exactly, given the tiles currently open (no live players nearby).
+ * block exactly, given the tiles currently open (no live players nearby), and
+ * `aim(tile)` scripts the next fall onto `tile` — a spawn's two draws when
+ * given a colour, a returned block's one draw when not.
  */
 function registryWith(options: LobbyPresenceOptions = {}): {
   registry: LobbyPresence;
   drop: (tile: SandboxTile, colour: number) => void;
+  aim: (tile: SandboxTile, colour?: number) => void;
   join: (session: string, tileX: number, tileY: number) => GameId;
 } {
   const draws: number[] = [];
@@ -61,7 +65,7 @@ function registryWith(options: LobbyPresenceOptions = {}): {
     ...options,
     sandboxRandom: () => (draws.length > 0 ? (draws.shift() as number) : 0.5),
   });
-  const drop = (tile: SandboxTile, colour: number): void => {
+  const aim = (tile: SandboxTile, colour?: number): void => {
     // With no live player within a tile of the target and no full stacks,
     // the open list is the whole area minus the entrance and the
     // neighbourhoods of players.
@@ -81,7 +85,11 @@ function registryWith(options: LobbyPresenceOptions = {}): {
     }
     const index = open.findIndex((candidate) => candidate.x === tile.x && candidate.y === tile.y);
     if (index < 0) throw new Error(`tile ${tile.x},${tile.y} is not open`);
-    draws.push((index + 0.5) / open.length, (colour + 0.5) / SANDBOX_COLOURS);
+    draws.push((index + 0.5) / open.length);
+    if (colour !== undefined) draws.push((colour + 0.5) / SANDBOX_COLOURS);
+  };
+  const drop = (tile: SandboxTile, colour: number): void => {
+    aim(tile, colour);
     expect(registry.spawnBlock()).toEqual(tile);
   };
   const join = (session: string, tileX: number, tileY: number): GameId => {
@@ -89,7 +97,7 @@ function registryWith(options: LobbyPresenceOptions = {}): {
     if (!outcome.ok) throw new Error(`admit failed: ${outcome.reason}`);
     return outcome.gameId;
   };
-  return { registry, drop, join };
+  return { registry, drop, aim, join };
 }
 
 function plain(columns: readonly SandboxColumn[]): SandboxColumn[] {
@@ -543,6 +551,138 @@ describe('a carried block goes back to the sky (conservation)', () => {
   });
 });
 
+describe('a pillar taller than SANDBOX_BURST_HEIGHT bursts the sandbox (D-071)', () => {
+  interface Heard {
+    readonly tile: SandboxTile;
+    /** Mirrored columns and blocks left when the burst was announced. */
+    readonly mirrored: number;
+    readonly blocks: number;
+  }
+
+  /** A registry that records bursts and drops, with what state held at each burst. */
+  function listening() {
+    const drops: SandboxTile[] = [];
+    const bursts: Heard[] = [];
+    const rig: ReturnType<typeof registryWith> = registryWith({
+      onSandboxDrop: (tile) => drops.push(tile),
+      onSandboxBurst: (tile) =>
+        bursts.push({ tile, mirrored: rig.registry.state.sandbox.size, blocks: rig.registry.sandboxBlocks }),
+    });
+    const pillar = (tile: SandboxTile, height = SANDBOX_BURST_HEIGHT): void => {
+      for (let n = 0; n < height; n += 1) rig.drop(tile, n % SANDBOX_COLOURS);
+    };
+    return { ...rig, drops, bursts, pillar };
+  }
+
+  it('announces a sky drop onto a full column as a burst, a tile alone, once the mirror is empty', () => {
+    const { registry, drop, aim, drops, bursts, pillar } = listening();
+    pillar({ x: 60, y: 10 });
+    drop({ x: 70, y: 20 }, 4);
+    drops.length = 0;
+
+    aim({ x: 60, y: 10 }, 0);
+    expect(registry.spawnBlock()).toBeNull();
+
+    expect(bursts).toEqual([{ tile: { x: 60, y: 10 }, mirrored: 0, blocks: 0 }]);
+    expect(Object.keys(bursts[0]!.tile).sort()).toEqual(['x', 'y']);
+    expect(drops).toEqual([]);
+    expect(registry.sandboxColumns()).toEqual([]);
+    expect(mirrorOf(registry)).toEqual([]);
+  });
+
+  it('bursts on a place: the placer ends empty-handed, and a peer keeps the block they carry', () => {
+    const { registry, drop, join, bursts, pillar } = listening();
+    pillar({ x: 61, y: 11 }, 14); // where 'a' stands: level 14
+    pillar({ x: 62, y: 11 }); // the full column beside it
+    pillar({ x: 61, y: 10 }, 14); // a supply stack in reach
+    drop({ x: 72, y: 20 }, 3);
+    const a = join('a', 61, 11);
+    const b = join('b', 73, 20);
+    expect(registry.pickBlock('b', { x: 72, y: 20 }, 0)).toBe('applied');
+    expect(registry.pickBlock('a', { x: 61, y: 10 }, 0)).toBe('applied');
+
+    expect(registry.placeBlock('a', { x: 62, y: 11 }, STEP)).toBe('applied');
+
+    expect(bursts).toEqual([{ tile: { x: 62, y: 11 }, mirrored: 0, blocks: 1 }]);
+    expect(registry.sandboxColumns()).toEqual([]);
+    expect(mirrorOf(registry)).toEqual([]);
+    expect(registry.peers.get(a)?.carrying).toBe(-1);
+    expect(registry.sandboxCarrying('a')).toBeNull();
+    expect(registry.peers.get(b)?.carrying).toBe(3);
+    expect(registry.sandboxBlocks).toBe(1);
+  });
+
+  it('bursts when a carrier suspends and their block falls onto a full column, and announces no drop', () => {
+    const { registry, drop, aim, join, drops, bursts, pillar } = listening();
+    drop({ x: 60, y: 10 }, 6);
+    pillar({ x: 70, y: 5 });
+    drops.length = 0;
+    join('a', 61, 10);
+    expect(registry.pickBlock('a', { x: 60, y: 10 }, 0)).toBe('applied');
+
+    aim({ x: 70, y: 5 });
+    expect(registry.suspend('a')).toBe(true);
+
+    expect(bursts).toEqual([{ tile: { x: 70, y: 5 }, mirrored: 0, blocks: 0 }]);
+    expect(drops).toEqual([]);
+    expect(registry.sandboxCarrying('a')).toBeNull();
+    expect(registry.sandboxColumns()).toEqual([]);
+  });
+
+  it('reaches a real decoder as an empty board, with a block landing in the same patch, and a late joiner agrees', () => {
+    const { registry, drop, aim, pillar } = listening();
+    const encoder = new Encoder(registry.state);
+    const client = decoderFor(encoder);
+    pillar({ x: 60, y: 10 });
+    drop({ x: 64, y: 10 }, 3);
+    expect(client.sync()).toEqual(plain(registry.sandboxColumns()));
+
+    // One patch: the burst, then blocks landing where the pillar stood and beside it.
+    aim({ x: 60, y: 10 }, 0);
+    expect(registry.spawnBlock()).toBeNull();
+    drop({ x: 60, y: 10 }, 5);
+    drop({ x: 64, y: 10 }, 6);
+    const after = [
+      { x: 60, y: 10, colours: [5] },
+      { x: 64, y: 10, colours: [6] },
+    ];
+    expect(plain(registry.sandboxColumns())).toEqual(after);
+    expect(client.sync()).toEqual(after);
+    expect(decoderFor(encoder).sync()).toEqual(after);
+  });
+
+  // Hundreds of seeded drops into one corner, so the corner bursts again and again.
+  it('keeps the mirror equal to the authority through repeated bursts', () => {
+    const bursts: SandboxTile[] = [];
+    const registry = new LobbyPresence({
+      capacity: 128,
+      sandboxRandom: mulberry32(71),
+      onSandboxBurst: (tile) => bursts.push(tile),
+    });
+    const encoder = new Encoder(registry.state);
+    const client = decoderFor(encoder);
+    // Players everywhere but the 3x3 corner around (55, 1): the rain piles up there.
+    const xs = [55, 58, 61, 64, 67, 70, 73, 76, 79, 81];
+    const ys = [1, 4, 7, 10, 13, 16, 19, 22, 25, 27];
+    for (const y of ys) {
+      for (const x of xs) {
+        if (x === 55 && y === 1) continue;
+        expect(registry.admit(`p${x},${y}`, centre(x, y)).ok).toBe(true);
+      }
+    }
+    for (let step = 0; step < 400; step += 1) {
+      registry.spawnBlock();
+      expect(mirrorOf(registry)).toEqual(plain(registry.sandboxColumns()));
+      for (const column of registry.sandboxColumns()) {
+        expect(column.colours.length).toBeLessThanOrEqual(SANDBOX_BURST_HEIGHT);
+      }
+      if (step % 7 === 0) expect(client.sync(), `decoded at step ${step}`).toEqual(plain(registry.sandboxColumns()));
+    }
+    expect(bursts.length).toBeGreaterThan(2);
+    expect(client.sync()).toEqual(plain(registry.sandboxColumns()));
+  });
+});
+
 describe('the spawner inputs', () => {
   it('never drops within a tile of a live player, but ignores suspended ones', () => {
     const { registry } = registryWith();
@@ -556,7 +696,9 @@ describe('the spawner inputs', () => {
     }
     expect(registry.spawnBlock()).toBeNull();
     registry.suspend('p55,1');
-    for (let n = 0; n < 20; n += 1) {
+    // The constant draw lands every drop on one tile, which holds
+    // SANDBOX_BURST_HEIGHT blocks before the next one would burst it (D-071).
+    for (let n = 0; n < SANDBOX_BURST_HEIGHT; n += 1) {
       const tile = registry.spawnBlock() as SandboxTile;
       expect(tile).not.toBeNull();
       expect(tile.x).toBeGreaterThanOrEqual(LEFT);

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { SANDBOX_AREA, type SandboxSnapshot, type SandboxTile } from '@strkworld/shared';
+import { SANDBOX_AREA, SANDBOX_BURST_HEIGHT, type SandboxSnapshot, type SandboxTile } from '@strkworld/shared';
 import { TILE_SIZE } from './map/street.js';
 import type { SandboxChannel } from './sandbox-channel.js';
 import type { MovementInput } from './street-movement.js';
@@ -32,6 +32,7 @@ function fakeChannel(initial: SandboxSnapshot = { columns: [], carrying: null })
   let snapshot = initial;
   const listeners = new Set<(snapshot: SandboxSnapshot) => void>();
   const drops = new Set<(tile: SandboxTile) => void>();
+  const bursts = new Set<(tile: SandboxTile) => void>();
   const picks: SandboxTile[] = [];
   const places: SandboxTile[] = [];
   const channel: SandboxChannel = {
@@ -43,6 +44,10 @@ function fakeChannel(initial: SandboxSnapshot = { columns: [], carrying: null })
     subscribeDrops(listener) {
       drops.add(listener);
       return () => drops.delete(listener);
+    },
+    subscribeBursts(listener) {
+      bursts.add(listener);
+      return () => bursts.delete(listener);
     },
     pick: (tile) => picks.push({ x: tile.x, y: tile.y }),
     place: (tile) => places.push({ x: tile.x, y: tile.y }),
@@ -58,8 +63,11 @@ function fakeChannel(initial: SandboxSnapshot = { columns: [], carrying: null })
     drop(tile: SandboxTile) {
       for (const listener of [...drops]) listener(tile);
     },
+    burst(tile: SandboxTile) {
+      for (const listener of [...bursts]) listener(tile);
+    },
     get listeners() {
-      return listeners.size + drops.size;
+      return listeners.size + drops.size + bursts.size;
     },
   };
 }
@@ -261,9 +269,51 @@ describe('WorldSession block sandbox (D-060)', () => {
     expect(world.recording.last('sandboxDrop')).toEqual([{ x: X, y: 2 }]);
   });
 
+  it('forwards valid bursts and ignores malformed ones (D-071)', () => {
+    const world = setup();
+    world.sandbox.burst({ x: X, y: 2 });
+    world.sandbox.burst({ x: 1, y: 2 });
+    world.sandbox.burst({ x: X + 0.5, y: 2 });
+    expect(world.recording.count('sandboxBurst')).toBe(1);
+    expect(world.recording.last('sandboxBurst')).toEqual([{ x: X, y: 2 }]);
+    expect(world.recording.count('sandboxDrop')).toBe(0);
+  });
+
+  it.each(['burst first', 'board first'] as const)(
+    'drops a player on a burst pillar to the ground through the usual fall, %s (D-071)',
+    (order) => {
+      const pillar = stack(X, Y, SANDBOX_BURST_HEIGHT);
+      const world = setup({ columns: [pillar, stack(X + 1, Y, 3)], carrying: null });
+      place(world.session, centre(X, Y));
+      world.session.update(16);
+      expect(world.session.elevation).toBe(SANDBOX_BURST_HEIGHT);
+      world.recording.calls.length = 0;
+
+      if (order === 'burst first') {
+        world.sandbox.burst({ x: X, y: Y });
+        // The hint only animates: the player stands where the state says.
+        expect(world.session.elevation).toBe(SANDBOX_BURST_HEIGHT);
+      }
+      world.sandbox.publish({ columns: [], carrying: null });
+      if (order === 'board first') world.sandbox.burst({ x: X, y: Y });
+
+      expect(world.session.elevation).toBe(0);
+      const methods = world.recording.calls.map((call) => call.method);
+      expect(methods.filter((method) => ['sandboxBurst', 'setSandboxColumns', 'setPlayerElevation'].includes(method))).toEqual(
+        order === 'burst first'
+          ? ['sandboxBurst', 'setSandboxColumns', 'setPlayerElevation']
+          : ['setSandboxColumns', 'setPlayerElevation', 'sandboxBurst'],
+      );
+      expect(world.recording.last('setPlayerElevation')).toEqual([0]);
+      expect(world.recording.last('sandboxBurst')).toEqual([{ x: X, y: Y }]);
+      // Not a teleport: the view eases the fall (presenter.test.ts).
+      expect(world.recording.calls.filter((call) => call.method === 'setPlayerPosition' && call.args[1] === true)).toEqual([]);
+    },
+  );
+
   it('unsubscribes and releases the block key on destroy', () => {
     const world = setup();
-    expect(world.sandbox.listeners).toBe(2);
+    expect(world.sandbox.listeners).toBe(3);
     expect(world.keyboard.count('keydown-E')).toBe(1);
     world.session.destroy();
     expect(world.sandbox.listeners).toBe(0);

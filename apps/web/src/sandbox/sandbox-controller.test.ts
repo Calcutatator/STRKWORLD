@@ -1,11 +1,14 @@
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   SANDBOX_AREA,
+  SANDBOX_BURST_HEIGHT,
+  SANDBOX_ENTRANCE,
   type SandboxSnapshot,
   type SandboxTile,
   type WorldEvents,
 } from '@strkworld/shared';
 import { createEventBus } from '../bus/event-bus.js';
+import { attachDebugTap, type DebugTap } from '../debug/debug-tap.js';
 import { createSandboxController, type SandboxLobbyClient } from './sandbox-controller.js';
 
 const X = SANDBOX_AREA.x + 5;
@@ -38,10 +41,11 @@ function manualTimers() {
   };
 }
 
-function fakeLobby(initial: SandboxSnapshot = { columns: [], carrying: null }) {
+function fakeLobby(initial: SandboxSnapshot = { columns: [], carrying: null }, options: { bursts?: boolean } = {}) {
   let status: ((event: { status: string }) => void) | undefined;
   let state: ((snapshot: SandboxSnapshot) => void) | undefined;
   let drops: ((tile: SandboxTile) => void) | undefined;
+  let bursts: ((tile: SandboxTile) => void) | undefined;
   const client: SandboxLobbyClient & { picks: SandboxTile[]; places: SandboxTile[] } = {
     picks: [],
     places: [],
@@ -58,6 +62,16 @@ function fakeLobby(initial: SandboxSnapshot = { columns: [], carrying: null }) {
         drops = undefined;
       };
     },
+    ...(options.bursts === false
+      ? {}
+      : {
+        onSandboxBurst: (listener: (tile: SandboxTile) => void) => {
+          bursts = listener;
+          return () => {
+            bursts = undefined;
+          };
+        },
+      }),
     pickBlock(tile) {
       this.picks.push(tile);
     },
@@ -76,17 +90,18 @@ function fakeLobby(initial: SandboxSnapshot = { columns: [], carrying: null }) {
     status: (next: string) => status?.({ status: next }),
     publish: (snapshot: SandboxSnapshot) => state?.(snapshot),
     drop: (tile: SandboxTile) => drops?.(tile),
+    burst: (tile: SandboxTile) => bursts?.(tile),
     get listening() {
-      return Boolean(state || drops);
+      return Boolean(state || drops || bursts);
     },
   };
 }
 
-function setup() {
+function setup(random?: () => number) {
   const timers = manualTimers();
   let seed = 0;
   const controller = createSandboxController({
-    random: () => ((seed = (seed * 9301 + 49297) % 233280) / 233280),
+    random: random ?? (() => ((seed = (seed * 9301 + 49297) % 233280) / 233280)),
     setTimer: timers.setTimer,
     clearTimer: timers.clearTimer,
   });
@@ -94,11 +109,61 @@ function setup() {
   controller.listen(world);
   const snapshots: SandboxSnapshot[] = [];
   const drops: SandboxTile[] = [];
-  controller.channel.subscribe((snapshot) => snapshots.push(snapshot));
-  controller.channel.subscribeDrops?.((tile) => drops.push(tile));
+  const bursts: SandboxTile[] = [];
+  /** Snapshots and hints in the order they reached the World. */
+  const order: string[] = [];
+  controller.channel.subscribe((snapshot) => {
+    snapshots.push(snapshot);
+    order.push(`state ${snapshot.columns.length}`);
+  });
+  controller.channel.subscribeDrops?.((tile) => {
+    drops.push(tile);
+    order.push(`drop ${tile.x},${tile.y}`);
+  });
+  controller.channel.subscribeBursts?.((tile) => {
+    bursts.push(tile);
+    order.push(`burst ${tile.x},${tile.y}`);
+  });
   const move = (tile: { x: number; y: number }) =>
     world.emit('player:moved', { position: centre(tile.x, tile.y), facing: 'right' });
-  return { controller, world, timers, snapshots, drops, move, last: () => snapshots.at(-1)! };
+  return { controller, world, timers, snapshots, drops, bursts, order, move, last: () => snapshots.at(-1)! };
+}
+
+/**
+ * A random source that drops solo spawns on `targets`, in order, while the
+ * player stands on `standing`: each spawn's tile draw indexes the open tiles
+ * in `(y, x)` order (the area minus the entrance and the player's 3x3), and
+ * its colour draw is 0.5.
+ */
+function rainOnto(targets: readonly SandboxTile[], standing: SandboxTile): () => number {
+  const open: SandboxTile[] = [];
+  for (let y = SANDBOX_AREA.y; y < SANDBOX_AREA.y + SANDBOX_AREA.height; y += 1) {
+    for (let x = SANDBOX_AREA.x; x < SANDBOX_AREA.x + SANDBOX_AREA.width; x += 1) {
+      const entrance = x >= SANDBOX_ENTRANCE.x && x < SANDBOX_ENTRANCE.x + SANDBOX_ENTRANCE.width &&
+        y >= SANDBOX_ENTRANCE.y && y < SANDBOX_ENTRANCE.y + SANDBOX_ENTRANCE.height;
+      const beside = Math.max(Math.abs(x - standing.x), Math.abs(y - standing.y)) <= 1;
+      if (!entrance && !beside) open.push({ x, y });
+    }
+  }
+  const draws = targets.flatMap((tile) => {
+    const index = open.findIndex((candidate) => candidate.x === tile.x && candidate.y === tile.y);
+    if (index < 0) throw new Error(`tile ${tile.x},${tile.y} is not open`);
+    return [(index + 0.5) / open.length, 0.5];
+  });
+  return () => draws.shift() ?? 0.5;
+}
+
+afterEach(() => {
+  attachDebugTap(null);
+});
+
+/** A debug tap that records only sandbox bursts. */
+function tapBursts(): ReturnType<typeof vi.fn> {
+  const sandboxBurst = vi.fn();
+  const ignore = () => undefined;
+  const tap: DebugTap = { failure: ignore, connectState: ignore, walletSession: ignore, visit: ignore, bank: ignore, sandboxBurst };
+  attachDebugTap(tap);
+  return sandboxBurst;
 }
 
 describe('sandbox controller (D-060)', () => {
@@ -238,6 +303,94 @@ describe('sandbox controller (D-060)', () => {
     const plain = { onStatus: vi.fn() };
     expect(world.controller.adopt(plain)).toBe(plain);
     expect(plain.onStatus).not.toHaveBeenCalled();
+  });
+
+  it('relays a lobby burst to the World and the debug log, before the lobby state that empties the board (D-071)', () => {
+    const tap = tapBursts();
+    const world = setup();
+    const lobby = fakeLobby({ columns: [{ x: X, y: 1, colours: [2] }], carrying: null });
+    world.controller.adopt(lobby.client);
+    lobby.status('connected');
+    world.order.length = 0;
+    lobby.burst({ x: X, y: 1 });
+    lobby.publish({ columns: [], carrying: null });
+    expect(world.order).toEqual([`burst ${X},1`, 'state 0']);
+    expect(world.bursts).toEqual([{ x: X, y: 1 }]);
+    expect(tap).toHaveBeenCalledTimes(1);
+    expect(tap).toHaveBeenCalledWith({ x: X, y: 1 });
+
+    // A closed client's late burst reaches nobody.
+    lobby.status('closed');
+    lobby.burst({ x: X, y: 2 });
+    expect(world.bursts).toHaveLength(1);
+    expect(tap).toHaveBeenCalledTimes(1);
+  });
+
+  it('still adopts a lobby client without bursts: its blocks go with the state', () => {
+    const world = setup();
+    const lobby = fakeLobby({ columns: [{ x: X, y: 1, colours: [2] }], carrying: null }, { bursts: false });
+    world.controller.adopt(lobby.client);
+    lobby.status('connected');
+    expect(world.last().columns).toEqual([{ x: X, y: 1, colours: [2] }]);
+    lobby.publish({ columns: [], carrying: null });
+    expect(world.last().columns).toEqual([]);
+    expect(world.bursts).toEqual([]);
+  });
+
+  it('bursts solo when the rain lands on a full column: the burst, then the empty board (D-071)', () => {
+    const tap = tapBursts();
+    const pillar = { x: SANDBOX_AREA.x, y: SANDBOX_AREA.y };
+    // A draw of 0 drops every block on the first open tile.
+    const world = setup(() => 0);
+    world.move({ x: X, y: Y });
+    for (let n = 0; n < SANDBOX_BURST_HEIGHT; n += 1) world.timers.runNext();
+    expect(world.last().columns).toEqual([{ ...pillar, colours: Array.from({ length: SANDBOX_BURST_HEIGHT }, () => 0) }]);
+    world.order.length = 0;
+
+    world.timers.runNext();
+
+    expect(world.order).toEqual([`burst ${pillar.x},${pillar.y}`, 'state 0']);
+    expect(world.drops).toHaveLength(SANDBOX_BURST_HEIGHT);
+    expect(world.last()).toEqual({ columns: [], carrying: null });
+    expect(tap).toHaveBeenCalledWith(pillar);
+    // The rain goes on over the empty square.
+    expect(world.timers.size).toBe(1);
+  });
+
+  it('bursts solo when the player places a 16th block, and ends empty-handed', () => {
+    const stand = { x: 61, y: 11 };
+    const column = { x: 62, y: 11 };
+    const supply = { x: 61, y: 10 };
+    const far = { x: 80, y: 26 };
+    const targets = [
+      ...Array.from({ length: 14 }, () => stand),
+      ...Array.from({ length: SANDBOX_BURST_HEIGHT }, () => column),
+      ...Array.from({ length: 14 }, () => supply),
+    ];
+    const world = setup(rainOnto(targets, far));
+    world.move(far);
+    for (let n = 0; n < targets.length; n += 1) world.timers.runNext();
+    world.move(stand);
+    world.controller.channel.pick(supply);
+    expect(world.last().carrying).not.toBeNull();
+    world.order.length = 0;
+
+    world.controller.channel.place(column);
+
+    expect(world.order).toEqual([`burst ${column.x},${column.y}`, 'state 0']);
+    expect(world.last()).toEqual({ columns: [], carrying: null });
+  });
+
+  it('publishes the empty board even when a burst listener throws', () => {
+    const world = setup(() => 0);
+    world.controller.channel.subscribeBursts?.(() => {
+      throw new Error('view failed');
+    });
+    world.move({ x: X, y: Y });
+    for (let n = 0; n < SANDBOX_BURST_HEIGHT; n += 1) world.timers.runNext();
+    expect(() => world.timers.runNext()).toThrow('view failed');
+    expect(world.last()).toEqual({ columns: [], carrying: null });
+    expect(world.timers.size).toBe(1);
   });
 
   it('stops everything on destroy', () => {
