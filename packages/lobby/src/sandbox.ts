@@ -5,7 +5,8 @@
  * The authority in `sandbox-rules.ts` is the truth; the `MapSchema` handed to
  * this class is a copy that exists only so Colyseus can encode it. Every
  * change goes authority first, then the touched tile is copied across, so the
- * two can never disagree about more than the tile being written.
+ * two can never disagree about more than the tile being written. A burst
+ * (D-071) empties the authority, so it empties the whole mirror.
  *
  * Everything here is keyed by the caller's connection key, which never leaves
  * the server. The mirror holds tiles and colours only: no identity field is
@@ -18,8 +19,10 @@ import { resolveRoomConfig } from './config.js';
 import { UpdateThrottle, normalizeSandboxTile } from './policy.js';
 import {
   createSandboxAuthority,
+  isSandboxBurst,
   sandboxTileKey,
   type SandboxAuthority,
+  type SandboxLanding,
   type SandboxPlayer,
 } from './sandbox-rules.js';
 import { SandboxColumnEntry } from './state.js';
@@ -27,7 +30,7 @@ import { SandboxColumnEntry } from './state.js';
 export type SandboxAction = 'pick' | 'place';
 
 export type SandboxActionOutcome =
-  /** The authority accepted it; state changed. */
+  /** The authority accepted it; state changed. A place may have burst the sandbox. */
   | 'applied'
   /** Well-formed and on time, but a sandbox rule refused it. Nothing changed. */
   | 'rejected'
@@ -45,6 +48,12 @@ export interface LobbySandboxOptions {
   readonly spawnIntervalMs?: number;
   readonly slowSpawnIntervalMs?: number;
   readonly fastSpawnLimit?: number;
+  /**
+   * D-071: told when a block bursts the sandbox — a place, a spawn or a
+   * returned block — with the tile of the column that tipped it, after the
+   * mirror is empty. Tile only, whoever caused it.
+   */
+  readonly onBurst?: (tile: SandboxTile) => void;
 }
 
 export class LobbySandbox {
@@ -54,6 +63,7 @@ export class LobbySandbox {
   readonly #spawnIntervalMs: number;
   readonly #slowSpawnIntervalMs: number;
   readonly #fastSpawnLimit: number;
+  readonly #onBurst: ((tile: SandboxTile) => void) | undefined;
 
   constructor(mirror: MapSchema<SandboxColumnEntry>, options: LobbySandboxOptions = {}) {
     this.#mirror = mirror;
@@ -72,6 +82,7 @@ export class LobbySandbox {
     this.#spawnIntervalMs = config.sandboxSpawnIntervalMs;
     this.#slowSpawnIntervalMs = config.sandboxSlowSpawnIntervalMs;
     this.#fastSpawnLimit = config.sandboxFastSpawnLimit;
+    this.#onBurst = options.onBurst;
     // The authority starts empty, so the mirror must too.
     if (this.#mirror.size > 0) this.#mirror.clear();
   }
@@ -109,32 +120,35 @@ export class LobbySandbox {
     const tile = normalizeSandboxTile(request);
     if (tile === null) return 'malformed';
     if (!this.#throttle.accept(actor.key, now)) return 'throttled';
-    const applied =
-      action === 'pick'
-        ? this.#authority.pick(actor, tile, others)
-        : this.#authority.place(actor, tile, others);
-    if (!applied) return 'rejected';
-    this.#copy(tile);
+    if (action === 'pick') {
+      if (!this.#authority.pick(actor, tile, others)) return 'rejected';
+      this.#copy(tile);
+      return 'applied';
+    }
+    const landing = this.#authority.place(actor, tile, others);
+    if (landing === null) return 'rejected';
+    this.#settle(landing);
     return 'applied';
   }
 
-  /** Drop one block from the sky, away from `players`. Null when none may fall. */
+  /**
+   * Drop one block from the sky, away from `players`. The tile it landed on,
+   * or null when none may fall or it burst the sandbox instead (reported
+   * through `onBurst`).
+   */
   spawn(players: readonly SandboxPlayer[]): SandboxTile | null {
-    const tile = this.#authority.spawn(players);
-    if (tile !== null) this.#copy(tile);
-    return tile;
+    return this.#settle(this.#authority.spawn(players));
   }
 
   /**
    * Put back what `key` carries: a sky drop onto a random allowed tile away
    * from `players` (which must include the carrier's last position). Returns
-   * the tile, or null when nothing fell. Used on suspend: the action floor is
-   * kept, so a suspend/resume cycle cannot reset it.
+   * the tile, or null when nothing fell or it burst the sandbox (reported
+   * through `onBurst`). Used on suspend: the action floor is kept, so a
+   * suspend/resume cycle cannot reset it.
    */
   returnCarried(key: string, players: readonly SandboxPlayer[]): SandboxTile | null {
-    const tile = this.#authority.returnCarried(key, players);
-    if (tile !== null) this.#copy(tile);
-    return tile;
+    return this.#settle(this.#authority.returnCarried(key, players));
   }
 
   /** Put back what `key` carries, as `returnCarried`, and forget its floor. Used on leave. */
@@ -149,6 +163,23 @@ export class LobbySandbox {
     return this.#authority.totalBlocks < this.#fastSpawnLimit
       ? this.#spawnIntervalMs
       : this.#slowSpawnIntervalMs;
+  }
+
+  /**
+   * Mirror a block that joined a column, and return the tile it landed on. A
+   * burst empties the authority, so every mirrored column goes, one delete
+   * per entry (a path the decoder handles alongside a re-create in the same
+   * patch), before the burst is reported; it then returns null.
+   */
+  #settle(landing: SandboxLanding | null): SandboxTile | null {
+    if (landing === null) return null;
+    if (!isSandboxBurst(landing)) {
+      this.#copy(landing);
+      return landing;
+    }
+    for (const key of [...this.#mirror.keys()]) this.#mirror.delete(key);
+    this.#onBurst?.(landing.burst);
+    return null;
   }
 
   /**

@@ -3,7 +3,7 @@ import { Vector3, type PerspectiveCamera, type WebGLRenderer } from 'three';
 import type { EventBus, ShellEvents, WorldEvents } from '@strkworld/shared';
 import { EXCHANGE_ROOF_HEIGHT } from '../fixed-room.js';
 import { CAMERA_PITCH, ROOFTOP_CAMERA_PITCH } from './camera-rig.js';
-import { createWorldEngine } from './world-engine.js';
+import { createWorldEngine, prefersReducedMotion } from './world-engine.js';
 
 /**
  * Engine lifecycle in node (D-059). WebGL does not exist here, so the renderer
@@ -132,6 +132,21 @@ function start() {
   });
   return { dom, gl, engine, emitted };
 }
+
+describe('prefersReducedMotion (D-071)', () => {
+  it("reads the window's media query live, and is false wherever it cannot be read", () => {
+    let reduce = true;
+    const query = vi.fn(() => ({ matches: reduce }));
+    const win = { matchMedia: query } as unknown as Window;
+    expect(prefersReducedMotion(win)).toBe(true);
+    expect(query).toHaveBeenCalledWith('(prefers-reduced-motion: reduce)');
+    reduce = false;
+    expect(prefersReducedMotion(win)).toBe(false);
+    expect(prefersReducedMotion({} as Window)).toBe(false);
+    expect(prefersReducedMotion({ matchMedia: () => { throw new Error('no media'); } } as unknown as Window)).toBe(false);
+    expect(prefersReducedMotion({ matchMedia: () => ({ matches: 'yes' }) } as unknown as Window)).toBe(false);
+  });
+});
 
 describe('world engine lifecycle', () => {
   it('mounts one canvas, sizes it, starts a session and a render loop', () => {

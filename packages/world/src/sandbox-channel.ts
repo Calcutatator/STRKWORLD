@@ -22,6 +22,12 @@ export interface SandboxChannel {
   subscribe(listener: (snapshot: SandboxSnapshot) => void): () => void;
   /** Sky drops, as animation hints only. */
   subscribeDrops?(listener: (tile: SandboxTile) => void): () => void;
+  /**
+   * D-071: the sandbox burst at this tile, and every block flies away from
+   * it. An animation hint only, usually ahead of the snapshot that empties
+   * the board; either order draws the same burst.
+   */
+  subscribeBursts?(listener: (tile: SandboxTile) => void): () => void;
   pick(tile: SandboxTile): void;
   place(tile: SandboxTile): void;
 }

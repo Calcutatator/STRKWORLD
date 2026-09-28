@@ -297,6 +297,7 @@ function createRecordingView(journal: Journal) {
     setPlayerElevation: (level) => record('setPlayerElevation', [level]),
     setSandboxColumns: (columns) => record('setSandboxColumns', [columns]),
     sandboxDrop: (tile) => record('sandboxDrop', [{ x: tile.x, y: tile.y }]),
+    sandboxBurst: (tile) => record('sandboxBurst', [{ x: tile.x, y: tile.y }]),
     setCarried: (colour) => record('setCarried', [colour]),
     setSandboxAim: (aim) => record('setSandboxAim', [aim]),
   };

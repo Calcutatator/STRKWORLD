@@ -12,10 +12,12 @@ import {
   MeshBasicMaterial,
   MeshStandardMaterial,
   Object3D,
+  Quaternion,
   Vector3,
 } from 'three';
 import {
   SANDBOX_AREA,
+  SANDBOX_BURST_HEIGHT,
   SANDBOX_COLOURS,
   SANDBOX_MAX_BLOCKS,
   SANDBOX_MAX_HEIGHT,
@@ -25,6 +27,7 @@ import { SANDBOX_THEME } from './palette.js';
 import {
   CARRIED_BLOCK_SIZE,
   SANDBOX_BLOCK_PALETTE,
+  SANDBOX_BURST_MS,
   SANDBOX_INSTANCE_CAPACITY,
   buildSandbox,
   createCarriedBlock,
@@ -258,8 +261,15 @@ describe('instance uploads (three uploads update ranges only when it draws)', ()
           else if (kind < 0.85) stack.pop();
           else stack.splice(0, stack.length, ...Array.from({ length: Math.floor(random() * 4) }, () => Math.floor(random() * SANDBOX_COLOURS)));
           view.setColumns(columns());
-        } else if (roll < 0.45) {
+        } else if (roll < 0.42) {
           view.expectDrop(tileOf(Math.floor(random() * tiles)));
+        } else if (roll < 0.45) {
+          // D-071: a burst, then (usually) the empty board it leaves.
+          view.burst(tileOf(Math.floor(random() * tiles)));
+          if (random() < 0.8) {
+            for (const stack of stacks) stack.length = 0;
+            view.setColumns(columns());
+          }
         } else if (roll < 0.75) {
           view.update(Math.floor(random() * 120));
         } else {
@@ -628,6 +638,258 @@ describe('buildSandbox', () => {
     view.expectDrop({ x: X, y: Y });
     view.setTarget({ x: X, y: Y, level: 0, mode: 'place', valid: true });
     view.update(16);
+  });
+});
+
+describe('bursting (D-071)', () => {
+  const BURST = { x: X + 10, y: Y + 10 };
+  /** Horizontal distance of an instance from the burst tile's centre. */
+  const fromBurst = (p: Vector3): number => Math.hypot(p.x - (BURST.x + 0.5), p.z - (BURST.y + 0.5));
+
+  /**
+   * One block in every state: three standing in the burst column, one
+   * standing and one popping out at (X+5, Y+5), one settling in and one
+   * falling from the sky.
+   */
+  function everyState(options?: Parameters<typeof buildSandbox>[0]): SandboxView {
+    const view = buildSandbox(options);
+    view.setColumns([
+      { ...BURST, colours: [0, 1, 2] },
+      { x: X + 5, y: Y + 5, colours: [3, 4] },
+    ]);
+    settle(view);
+    view.setColumns([
+      { ...BURST, colours: [0, 1, 2] },
+      { x: X + 5, y: Y + 5, colours: [3] },
+      { x: X + 2, y: Y + 2, colours: [5] },
+      { x: X + 14, y: Y + 10, colours: [6] },
+    ]);
+    view.expectDrop({ x: X + 14, y: Y + 10 });
+    view.update(16);
+    return view;
+  }
+
+  it('throws every block, whatever its state, away from the burst tile, then frees every slot', () => {
+    const view = everyState();
+    const mesh = blocks(view);
+    expect(mesh.count).toBe(7);
+    const before = instancePositions(view);
+    view.burst(BURST);
+    view.update(250);
+    // A pop-out would be gone by now; a burst keeps every slot while it flies.
+    expect(mesh.count).toBe(7);
+    const after = instancePositions(view);
+    after.forEach((position, index) => {
+      const start = before[index]!;
+      expect(fromBurst(position), `instance ${index}`).toBeGreaterThan(fromBurst(start) + 1);
+      expect(position.y, `instance ${index}`).toBeGreaterThan(0.4);
+    });
+    // Up in the air mid-flight, spinning.
+    const rotation = new Quaternion();
+    const matrix = new Matrix4();
+    mesh.getMatrixAt(0, matrix);
+    matrix.decompose(new Vector3(), rotation, new Vector3());
+    expect(Math.abs(rotation.w)).toBeLessThan(0.9999);
+
+    for (let t = 250; t < SANDBOX_BURST_MS - 50; t += 50) view.update(50);
+    expect(mesh.count).toBe(7);
+    view.update(100);
+    expect(mesh.count).toBe(0);
+    view.dispose();
+  });
+
+  it('shrinks each block away over the end of its flight, never below the floor', () => {
+    const view = everyState();
+    const mesh = blocks(view);
+    view.burst(BURST);
+    const scale = new Vector3();
+    const position = new Vector3();
+    const matrix = new Matrix4();
+    for (let t = 0; t < SANDBOX_BURST_MS - 20; t += 20) {
+      view.update(20);
+      for (let index = 0; index < mesh.count; index += 1) {
+        mesh.getMatrixAt(index, matrix);
+        matrix.decompose(position, new Quaternion(), scale);
+        expect(position.y).toBeGreaterThanOrEqual(0.5 * scale.x - 1e-9);
+        expect([position.x, position.y, position.z, scale.x].every(Number.isFinite)).toBe(true);
+      }
+    }
+    mesh.getMatrixAt(0, matrix);
+    matrix.decompose(position, new Quaternion(), scale);
+    expect(scale.x).toBeLessThan(0.2);
+    view.dispose();
+  });
+
+  it('leaves nothing for the empty snapshot that follows to do', () => {
+    const view = everyState();
+    const mesh = blocks(view);
+    view.burst(BURST);
+    view.update(100);
+    const matrices = Array.from(mesh.instanceMatrix.array.slice(0, mesh.count * 16));
+    const version = mesh.instanceMatrix.version;
+    view.setColumns([]);
+    expect(mesh.count).toBe(7);
+    expect(mesh.instanceMatrix.version).toBe(version);
+    expect(Array.from(mesh.instanceMatrix.array.slice(0, mesh.count * 16))).toEqual(matrices);
+    view.expectDrop(BURST);
+    settle(view, SANDBOX_BURST_MS + 100);
+    expect(mesh.count).toBe(0);
+    view.dispose();
+  });
+
+  it('throws the blocks an empty snapshot already set popping, when the burst comes second', () => {
+    const view = everyState();
+    const mesh = blocks(view);
+    view.setColumns([]);
+    view.update(60);
+    view.burst(BURST);
+    view.update(250);
+    expect(mesh.count).toBe(7);
+    for (const position of instancePositions(view)) expect(fromBurst(position)).toBeGreaterThan(1);
+    settle(view, SANDBOX_BURST_MS + 100);
+    expect(mesh.count).toBe(0);
+    view.dispose();
+  });
+
+  it('keeps blocks already flying on their course when a second burst arrives', () => {
+    const first = everyState();
+    const second = everyState();
+    first.burst(BURST);
+    second.burst(BURST);
+    first.update(150);
+    first.update(150);
+    second.update(150);
+    second.burst({ x: X, y: Y });
+    second.update(150);
+    expect(Array.from(blocks(second).instanceMatrix.array.slice(0, 7 * 16))).toEqual(
+      Array.from(blocks(first).instanceMatrix.array.slice(0, 7 * 16)),
+    );
+    first.dispose();
+    second.dispose();
+  });
+
+  it('throws each block the same way on every client, and different blocks differently', () => {
+    const run = (): number[] => {
+      const view = buildSandbox();
+      view.setColumns([
+        { ...BURST, colours: Array.from({ length: SANDBOX_BURST_HEIGHT }, (_, k) => k % SANDBOX_COLOURS) },
+        { x: X + 3, y: Y + 4, colours: [1, 2] },
+      ]);
+      settle(view);
+      view.burst(BURST);
+      for (const delta of [16, 33, 250, 7, 120]) view.update(delta);
+      const values = Array.from(blocks(view).instanceMatrix.array.slice(0, blocks(view).count * 16));
+      view.dispose();
+      return values;
+    };
+    const first = run();
+    expect(first.every(Number.isFinite)).toBe(true);
+    expect(run()).toEqual(first);
+    const positions = new Set<string>();
+    for (let index = 0; index < first.length / 16; index += 1) {
+      positions.add(`${first[index * 16 + 12]!.toFixed(3)},${first[index * 16 + 14]!.toFixed(3)}`);
+    }
+    expect(positions.size).toBe(first.length / 16);
+  });
+
+  it('draws what comes after on the empty board', () => {
+    const view = everyState();
+    const mesh = blocks(view);
+    view.burst(BURST);
+    view.setColumns([{ ...BURST, colours: [4] }]);
+    expect(mesh.count).toBe(8);
+    settle(view, SANDBOX_BURST_MS + 400);
+    expect(mesh.count).toBe(1);
+    expect(blockAt(view, BURST.x, BURST.y, 0)).toBe(0);
+    expect(colourAt(view, 0)).toBe(new Color(SANDBOX_BLOCK_PALETTE[4]!).getHex());
+    view.dispose();
+  });
+
+  it('finishes the oldest flying blocks when out of room, rather than refuse a live one', () => {
+    const view = buildSandbox();
+    const mesh = blocks(view);
+    const tall = Array.from({ length: SANDBOX_BURST_HEIGHT }, (_, k) => k % SANDBOX_COLOURS);
+    const board = (row: number): SandboxColumn[] =>
+      Array.from({ length: SANDBOX_MAX_BLOCKS / SANDBOX_BURST_HEIGHT }, (_, n) => ({
+        x: X + (n % SANDBOX_AREA.width),
+        y: Y + row + Math.floor(n / SANDBOX_AREA.width) * 3,
+        colours: tall,
+      }));
+    view.setColumns(board(0));
+    settle(view);
+    expect(mesh.count).toBe(SANDBOX_MAX_BLOCKS);
+    view.burst({ x: X, y: Y });
+    view.setColumns(board(1));
+    expect(mesh.count).toBe(SANDBOX_INSTANCE_CAPACITY);
+    settle(view);
+    expect(mesh.count).toBe(SANDBOX_MAX_BLOCKS);
+    expect(blockAt(view, X, Y + 1, SANDBOX_BURST_HEIGHT - 1)).toBeGreaterThanOrEqual(0);
+    view.dispose();
+  });
+
+  it('pops the blocks out where they stand for a player who asked for less motion', () => {
+    const view = everyState({ reducedMotion: () => true });
+    const mesh = blocks(view);
+    const before = instancePositions(view);
+    view.burst(BURST);
+    view.update(60);
+    instancePositions(view).forEach((position, index) => {
+      expect(position.x).toBeCloseTo(before[index]!.x);
+      expect(position.z).toBeCloseTo(before[index]!.z);
+    });
+    view.update(250);
+    expect(mesh.count).toBe(0);
+    view.dispose();
+
+    // A preference that cannot be read means the full burst.
+    const unreadable = everyState({
+      reducedMotion: () => {
+        throw new Error('no media queries here');
+      },
+    });
+    unreadable.burst(BURST);
+    unreadable.update(250);
+    expect(blocks(unreadable).count).toBe(7);
+    unreadable.dispose();
+  });
+
+  it('ignores a burst hint that is not a sandbox tile, and anything after dispose', () => {
+    const view = everyState();
+    const mesh = blocks(view);
+    for (const bad of [null, undefined, 'burst', { x: X - 1, y: Y }, { x: X + 0.5, y: Y }, { x: X, y: Number.NaN }]) {
+      view.burst(bad as never);
+    }
+    settle(view);
+    expect(mesh.count).toBe(6);
+    view.dispose();
+    view.burst(BURST);
+    view.update(16);
+  });
+
+  it('warns in its own colour when a place would burst the sandbox', () => {
+    const view = buildSandbox();
+    const ghost = view.group.getObjectByName('sandbox:target-ghost') as Mesh;
+    const ring = view.group.getObjectByName('sandbox:target-ring') as Mesh;
+    const target = view.group.getObjectByName('sandbox:target')!;
+    const colour = () => (ghost.material as MeshBasicMaterial).color.getHex();
+    const hex = (value: number) => new Color(value).getHex();
+    expect(new Set([SANDBOX_THEME.targetBurst, SANDBOX_THEME.targetValid, SANDBOX_THEME.targetInvalid]).size).toBe(3);
+
+    view.setTarget({ x: X, y: Y, level: SANDBOX_BURST_HEIGHT, mode: 'place', valid: true });
+    expect(colour()).toBe(hex(SANDBOX_THEME.targetBurst));
+    expect((ring.material as MeshBasicMaterial).color.getHex()).toBe(hex(SANDBOX_THEME.targetBurst));
+    expect(target.userData).toMatchObject({ mode: 'place', valid: true, burst: true });
+    view.update(120);
+    expect(colour()).toBe(hex(SANDBOX_THEME.targetBurst));
+    // One lower only stacks; out of reach is refused first; picking never bursts.
+    view.setTarget({ x: X, y: Y, level: SANDBOX_BURST_HEIGHT - 1, mode: 'place', valid: true });
+    expect(colour()).toBe(hex(SANDBOX_THEME.targetValid));
+    view.setTarget({ x: X, y: Y, level: SANDBOX_BURST_HEIGHT, mode: 'place', valid: false });
+    expect(colour()).toBe(hex(SANDBOX_THEME.targetInvalid));
+    view.setTarget({ x: X, y: Y, level: SANDBOX_BURST_HEIGHT, mode: 'pick', valid: true });
+    expect(colour()).toBe(hex(SANDBOX_THEME.targetValid));
+    expect(target.userData).toMatchObject({ burst: false });
+    view.dispose();
   });
 });
 

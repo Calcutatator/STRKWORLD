@@ -29,23 +29,33 @@
  *
  * ## Conservation
  *
- * Blocks are never destroyed by play. A carried block whose carrier leaves
- * the street is put back with `returnCarried` — it falls from the sky onto a
- * random allowed tile, as a spawn would — and is discarded only when no tile
- * is allowed at all. So the reach and step rules can be ignored by a hostile
- * client without it being able to empty the sandbox: blocks move, the total
- * stays.
+ * Blocks are destroyed by play only in a burst (below). A carried block whose
+ * carrier leaves the street is put back with `returnCarried` — it falls from
+ * the sky onto a random allowed tile, as a spawn would — and is discarded
+ * only when no tile is allowed at all. So the reach and step rules can be
+ * ignored by a hostile client without it being able to empty the sandbox
+ * block by block: blocks move, the total stays, until a pillar bursts.
+ *
+ * ## Bursting (D-071)
+ *
+ * No column holds more than `SANDBOX_BURST_HEIGHT` blocks. The block that
+ * would make one taller — placed, dropped from the sky or put back — bursts
+ * the sandbox instead: every placed block is gone at once, that block with
+ * them, while blocks other players carry stay in their hands. Nothing else
+ * ever clears the shared board, so this is how it resets. Every other rule is
+ * checked first: whatever is refused without bursting is refused still.
  *
  * ## Anonymity
  *
  * Stacks carry colours only. The `key` of a `SandboxPlayer` exists solely so
  * the authority can remember who holds which carried block; it never appears
- * in `columns()`, a spawn or a return result, and a snapshot only ever
- * reports the requesting key's own carried colour.
+ * in `columns()`, a place, spawn or return result or a burst, and a snapshot
+ * only ever reports the requesting key's own carried colour.
  */
 
 import {
   SANDBOX_AREA,
+  SANDBOX_BURST_HEIGHT,
   SANDBOX_COLOURS,
   SANDBOX_ENTRANCE,
   SANDBOX_MAX_BLOCKS,
@@ -84,6 +94,27 @@ export interface SandboxPlayer {
   readonly y: number;
 }
 
+/**
+ * D-071: a block that would have made a column taller than
+ * `SANDBOX_BURST_HEIGHT` burst the sandbox instead, and every placed block is
+ * gone. `burst` is that column's tile: all a burst reports. Frozen.
+ */
+export interface SandboxBurst {
+  readonly burst: SandboxTile;
+}
+
+/**
+ * Where a block that joined a column went: the tile it landed on, or the
+ * burst it caused. What `place`, `spawn` and `returnCarried` return when they
+ * change anything.
+ */
+export type SandboxLanding = SandboxTile | SandboxBurst;
+
+/** Whether a landing is a burst rather than a block on a tile. */
+export function isSandboxBurst(landing: SandboxLanding): landing is SandboxBurst {
+  return 'burst' in landing;
+}
+
 export interface SandboxAuthority {
   /** Every non-empty stack, sorted by `(y, x)`. Frozen; the same array until the next change. */
   columns(): readonly SandboxColumn[];
@@ -101,27 +132,32 @@ export interface SandboxAuthority {
   /**
    * Put the carried block on a neighbouring stack that no player in `others`
    * stands on; in the entrance, only where the stack stays within one step.
-   * False, and nothing changes, when a rule fails.
+   * Returns the tile it landed on — or, when that stack already holds
+   * `SANDBOX_BURST_HEIGHT` blocks, a `SandboxBurst`: the sandbox is empty and
+   * the carried block went with it. Null, and nothing changes, when a rule
+   * fails.
    */
-  place(player: SandboxPlayer, tile: SandboxTile, others: readonly SandboxPlayer[]): boolean;
+  place(player: SandboxPlayer, tile: SandboxTile, others: readonly SandboxPlayer[]): SandboxLanding | null;
   /**
    * Drop one block of a random colour onto a random allowed tile: inside the
    * area but outside `SANDBOX_ENTRANCE`, more than one tile (Chebyshev) from
-   * every player's tile, and below the height cap. Null, and nothing changes,
-   * when the block cap is reached, no tile is allowed or `players` is not an
-   * array.
+   * every player's tile, and below the height cap. Returns that tile, or a
+   * `SandboxBurst` when its stack already held `SANDBOX_BURST_HEIGHT` blocks
+   * (the new block goes with the rest). Null, and nothing changes, when the
+   * block cap is reached, no tile is allowed or `players` is not an array.
    *
    * Uniform over the allowed tiles enumerated in `(y, x)` order — the first
-   * draw picks the index into that list, the second the colour — so a
-   * scripted `random` places blocks exactly.
+   * draw picks the index into that list, the second the colour, a burst
+   * included — so a scripted `random` places blocks exactly.
    */
-  spawn(players: readonly SandboxPlayer[]): SandboxTile | null;
+  spawn(players: readonly SandboxPlayer[]): SandboxLanding | null;
   /**
    * Put back the block `key` carries: it falls from the sky, keeping its
    * colour, onto a random tile chosen by the spawn rules — inside the area
    * but outside the entrance, more than one tile from every player in
    * `players`, below the height cap.
-   * Returns that tile, and `key` then carries nothing.
+   * Returns that tile, or a `SandboxBurst` when its stack already held
+   * `SANDBOX_BURST_HEIGHT` blocks; either way `key` then carries nothing.
    *
    * Include the carrier's last position in `players`: the block must never
    * land where its carrier stood, or the drop would mark where they left the
@@ -129,7 +165,7 @@ export interface SandboxAuthority {
    * (or `players` is not an array) the block is discarded instead and null is
    * returned. Draws once — the tile — and never when nothing falls.
    */
-  returnCarried(key: string, players: readonly SandboxPlayer[]): SandboxTile | null;
+  returnCarried(key: string, players: readonly SandboxPlayer[]): SandboxLanding | null;
   /** Discard the block `key` is carrying, if any. Prefer `returnCarried`. */
   release(key: string): void;
 }
@@ -292,30 +328,30 @@ class Authority implements SandboxAuthority {
     return true;
   }
 
-  place(player: SandboxPlayer, tile: SandboxTile, others: readonly SandboxPlayer[]): boolean {
+  place(player: SandboxPlayer, tile: SandboxTile, others: readonly SandboxPlayer[]): SandboxLanding | null {
     const actor = readPlayer(player);
     const target = readTile(tile);
-    if (actor === null || target === null) return false;
+    if (actor === null || target === null) return null;
     const colour = this.#carried.get(actor.key);
-    if (colour === undefined) return false;
-    if (!inRange(actor, target)) return false;
+    if (colour === undefined) return null;
+    if (!inRange(actor, target)) return null;
     // Occupancy cannot be verified without the list, so a malformed one fails
     // closed rather than letting a block land on someone.
-    if (!Array.isArray(others) || isOccupied(target, others)) return false;
+    if (!Array.isArray(others) || isOccupied(target, others)) return null;
 
     const key = sandboxTileKey(target.x, target.y);
     const height = this.#stacks.get(key)?.colours.length ?? 0;
-    if (height + 1 > SANDBOX_MAX_HEIGHT) return false;
+    if (height + 1 > SANDBOX_MAX_HEIGHT) return null;
     // The entrance must stay walkable: one step, never a wall.
-    if (isEntranceTile(target.x, target.y) && height + 1 > SANDBOX_STEP_HEIGHT) return false;
-    if (!withinReach(this.#levelOf(actor), height + 1)) return false;
+    if (isEntranceTile(target.x, target.y) && height + 1 > SANDBOX_STEP_HEIGHT) return null;
+    if (!withinReach(this.#levelOf(actor), height + 1)) return null;
 
-    this.#push(target, colour);
+    const landing = this.#land(target, colour);
     this.#carried.delete(actor.key);
-    return true;
+    return landing;
   }
 
-  spawn(players: readonly SandboxPlayer[]): SandboxTile | null {
+  spawn(players: readonly SandboxPlayer[]): SandboxLanding | null {
     if (this.totalBlocks >= SANDBOX_MAX_BLOCKS) return null;
     const open = this.#openTiles(players);
     if (open === null || open.length === 0) return null;
@@ -324,11 +360,10 @@ class Authority implements SandboxAuthority {
     // sandbox exactly as it was.
     const tile = open[drawIndex(this.#random, open.length)] as SandboxTile;
     const colour = drawIndex(this.#random, SANDBOX_COLOURS);
-    this.#push(tile, colour);
-    return Object.freeze({ x: tile.x, y: tile.y });
+    return this.#land(tile, colour);
   }
 
-  returnCarried(key: string, players: readonly SandboxPlayer[]): SandboxTile | null {
+  returnCarried(key: string, players: readonly SandboxPlayer[]): SandboxLanding | null {
     if (typeof key !== 'string') return null;
     const colour = this.#carried.get(key);
     if (colour === undefined) return null;
@@ -342,9 +377,9 @@ class Authority implements SandboxAuthority {
     // The draw happens before any mutation, so a throwing source leaves the
     // block where it was: still carried.
     const tile = open[drawIndex(this.#random, open.length)] as SandboxTile;
-    this.#push(tile, colour);
+    const landing = this.#land(tile, colour);
     this.#carried.delete(key);
-    return Object.freeze({ x: tile.x, y: tile.y });
+    return landing;
   }
 
   release(key: string): void {
@@ -386,9 +421,22 @@ class Authority implements SandboxAuthority {
     return open;
   }
 
-  #push(tile: SandboxTile, colour: number): void {
+  /**
+   * A block joins the column at `tile`, whose rules have all passed: it lands
+   * on top, or — the column already holding `SANDBOX_BURST_HEIGHT` — bursts
+   * the sandbox, and every placed block is gone (D-071). Carried blocks are
+   * the caller's business.
+   */
+  #land(tile: SandboxTile, colour: number): SandboxLanding {
     const key = sandboxTileKey(tile.x, tile.y);
+    const at = Object.freeze({ x: tile.x, y: tile.y });
     let stack = this.#stacks.get(key);
+    if (stack !== undefined && stack.colours.length >= SANDBOX_BURST_HEIGHT) {
+      this.#stacks.clear();
+      this.#placed = 0;
+      this.#view = null;
+      return Object.freeze({ burst: at });
+    }
     if (stack === undefined) {
       stack = { x: tile.x, y: tile.y, colours: [] };
       this.#stacks.set(key, stack);
@@ -396,6 +444,7 @@ class Authority implements SandboxAuthority {
     stack.colours.push(colour);
     this.#placed += 1;
     this.#view = null;
+    return at;
   }
 
   #levelOf(player: SandboxPlayer): number {

@@ -21,7 +21,14 @@ import {
   startDebugLogs,
   stopDebugLogs,
 } from './debug-logs.js';
-import { debugBank, debugConnectState, debugFailure, debugVisit, debugWalletSession } from './debug-tap.js';
+import {
+  debugBank,
+  debugConnectState,
+  debugFailure,
+  debugSandboxBurst,
+  debugVisit,
+  debugWalletSession,
+} from './debug-tap.js';
 
 /**
  * D-069 in the browser: two gates, then batches every 3 s, a beacon on the
@@ -136,6 +143,7 @@ describe('the runtime opt-in', () => {
     debugWalletSession({ phase: 'connecting' });
     debugVisit({ name: 'outside' }, { name: 'locked', building: 'vault', reason: 'coming-soon' });
     debugBank({ step: 'mode', mode: 'unshield', from: 'shield' });
+    debugSandboxBurst({ x: 60, y: 10 });
     window.dispatchEvent(new Event('pagehide'));
     await tick(10_000);
     expect(network).not.toHaveBeenCalled();
@@ -550,6 +558,22 @@ describe('what it captures', () => {
     expect(JSON.stringify(entries())).not.toContain(address);
   });
 
+  it('records a sandbox burst by its tile, and nothing but a tile inside the square (D-071)', async () => {
+    const { entries, tick } = harness();
+    debugSandboxBurst({ x: 60, y: 10 });
+    debugSandboxBurst({ x: 60, y: 10, gameId: '0123456789abcdef' } as never);
+    debugSandboxBurst({ x: 10, y: 10 });
+    debugSandboxBurst({ x: 60.5, y: 10 });
+    debugSandboxBurst({ x: '60', y: '10' } as never);
+    debugSandboxBurst(Object.defineProperty({ y: 10 }, 'x', { get: () => 60 }) as never);
+    await tick();
+    expect(entries().filter((entry) => entry.event.startsWith('sandbox.')).map(({ level, event, detail }) => [level, event, detail])).toEqual([
+      ['info', 'sandbox.burst', 'x=60 y=10'],
+      ['info', 'sandbox.burst', 'x=60 y=10'],
+    ]);
+    expect(JSON.stringify(entries())).not.toContain('0123456789abcdef');
+  });
+
   it('names the relay failure kind, so a missing avnu key is legible in the log (D-070)', async () => {
     const { entries, tick } = harness();
     debugFailure('privacy.operation', new PrivacyError('relay-not-configured', 'The private relay is not configured on this deployment.'));
@@ -642,6 +666,7 @@ describe('the taps', () => {
       debugWalletSession(hostile);
       debugVisit(hostile, { name: 'outside' });
       debugBank(hostile as never);
+      debugSandboxBurst(hostile as never);
     };
     expect(call).not.toThrow();
     const { tick, entries } = harness();

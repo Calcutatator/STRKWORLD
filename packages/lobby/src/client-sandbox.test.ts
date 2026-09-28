@@ -429,6 +429,107 @@ describe('onSandboxDrop', () => {
   });
 });
 
+describe('onSandboxBurst (D-071)', () => {
+  it('relays validated, frozen tiles and nothing else', async () => {
+    const joined = fakeRoom();
+    const client = await connectedTo(joined);
+    expect(joined.handles(SERVER_MESSAGE.sandboxBurst)).toBe(true);
+    const bursts: SandboxTile[] = [];
+    client.onSandboxBurst((tile) => bursts.push(tile));
+
+    let accessorRead = false;
+    const accessor = Object.defineProperty({ y: 1 }, 'x', {
+      enumerable: true,
+      get: () => {
+        accessorRead = true;
+        return 60;
+      },
+    });
+    for (const payload of [
+      undefined,
+      null,
+      'burst',
+      [60, 1],
+      { x: LEFT - 1, y: 1 },
+      { x: 60.5, y: 1 },
+      { x: 60, y: Number.NaN },
+      { x: '60', y: '1' },
+      Object.create({ x: 60, y: 1 }),
+      accessor,
+    ]) {
+      joined.message(SERVER_MESSAGE.sandboxBurst, payload);
+    }
+    expect(bursts).toEqual([]);
+    expect(accessorRead).toBe(false);
+
+    joined.message(SERVER_MESSAGE.sandboxBurst, { x: 60, y: 1, gameId: PEER, colours: [1] });
+    expect(bursts).toEqual([{ x: 60, y: 1 }]);
+    expect(Object.isFrozen(bursts[0])).toBe(true);
+    expect(Object.keys(bursts[0] as object).sort()).toEqual(['x', 'y']);
+  });
+
+  it('is not a drop: each hint reaches only its own subscribers', async () => {
+    const joined = fakeRoom();
+    const client = await connectedTo(joined);
+    const drops = vi.fn();
+    const bursts = vi.fn();
+    client.onSandboxDrop(drops);
+    client.onSandboxBurst(bursts);
+    joined.message(SERVER_MESSAGE.sandboxBurst, { x: 60, y: 1 });
+    expect(drops).not.toHaveBeenCalled();
+    expect(bursts).toHaveBeenCalledWith({ x: 60, y: 1 });
+    joined.message(SERVER_MESSAGE.sandboxDrop, { x: 61, y: 1 });
+    expect(bursts).toHaveBeenCalledTimes(1);
+    expect(drops).toHaveBeenCalledWith({ x: 61, y: 1 });
+  });
+
+  it('arrives while the snapshot still holds the blocks it throws', async () => {
+    const joined = fakeRoom();
+    const client = await connectedTo(joined);
+    const sandbox = joined.state.sandbox as Map<string, unknown>;
+    sandbox.set('60,1', column(60, 1, [1, 2, 3]));
+    joined.stateChange();
+    const seen: number[] = [];
+    client.onSandboxBurst(() => seen.push(client.sandbox().columns.length));
+    joined.message(SERVER_MESSAGE.sandboxBurst, { x: 60, y: 1 });
+    expect(seen).toEqual([1]);
+  });
+
+  it('does not replay, stops after unsubscribe, and ignores a retired room', async () => {
+    const joined = fakeRoom();
+    const client = await connectedTo(joined);
+    joined.message(SERVER_MESSAGE.sandboxBurst, { x: 60, y: 1 });
+    const listener = vi.fn();
+    const stop = client.onSandboxBurst(listener);
+    expect(listener).not.toHaveBeenCalled();
+    joined.message(SERVER_MESSAGE.sandboxBurst, { x: 61, y: 1 });
+    expect(listener).toHaveBeenCalledTimes(1);
+    stop();
+    joined.message(SERVER_MESSAGE.sandboxBurst, { x: 62, y: 1 });
+    expect(listener).toHaveBeenCalledTimes(1);
+
+    const after = vi.fn();
+    client.onSandboxBurst(after);
+    await client.disconnect();
+    joined.message(SERVER_MESSAGE.sandboxBurst, { x: 63, y: 1 });
+    expect(after).not.toHaveBeenCalled();
+  });
+
+  it('isolates a throwing burst subscriber behind a fixed diagnostic', async () => {
+    const joined = fakeRoom();
+    const client = await connectedTo(joined);
+    const consoleError = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    const later = vi.fn();
+    client.onSandboxBurst(() => {
+      throw new Error('burst subscriber failed');
+    });
+    client.onSandboxBurst(later);
+    expect(() => joined.message(SERVER_MESSAGE.sandboxBurst, { x: 60, y: 1 })).not.toThrow();
+    expect(later).toHaveBeenCalledWith({ x: 60, y: 1 });
+    expect(consoleError).toHaveBeenCalledWith('lobby client: sandbox burst subscriber threw');
+  });
+});
+
 describe('pickBlock and placeBlock', () => {
   it('send exactly one tile under the sandbox verbs', async () => {
     let now = 1000;

@@ -350,6 +350,8 @@ export const SANDBOX_THEME = Object.freeze({
   blocks: Object.freeze([0xe4524b, 0xf28f3b, 0xf5cf4f, 0x5dbb63, 0x35b3b0, 0x4a78d8, 0x9467d0, 0xf2efe6]),
   targetValid: 0xfff1c4,
   targetInvalid: 0xff4a3d,
+  /** D-071: the aimed place would burst the sandbox. A hot pink no block uses. */
+  targetBurst: 0xff3db8,
   post: 0x4a4038,
   sign: Object.freeze({
     width: 4.2,

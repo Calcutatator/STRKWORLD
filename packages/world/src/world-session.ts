@@ -155,6 +155,8 @@ export interface WorldSessionView {
   setSandboxColumns?(columns: readonly SandboxColumn[]): void;
   /** The next block on this tile falls from the sky. */
   sandboxDrop?(tile: SandboxTile): void;
+  /** D-071: every block bursts away from this tile. */
+  sandboxBurst?(tile: SandboxTile): void;
   setCarried?(colour: number | null): void;
   /** Where `E` would act, or null outside the sandbox. */
   setSandboxAim?(aim: SandboxAim | null): void;
@@ -323,6 +325,7 @@ class Session implements WorldSession {
   private sandboxHeights: SandboxHeights = FLAT_SANDBOX;
   private stopSandbox?: () => void;
   private stopSandboxDrops?: () => void;
+  private stopSandboxBursts?: () => void;
   private sandboxKey?: (event: { readonly repeat: boolean; readonly target: unknown }) => void;
   private elevationLevel = 0;
   private aim: SandboxAim | null = null;
@@ -459,6 +462,9 @@ class Session implements WorldSession {
     const stopSandboxDrops = this.stopSandboxDrops;
     this.stopSandboxDrops = undefined;
     if (stopSandboxDrops) attempt(stopSandboxDrops);
+    const stopSandboxBursts = this.stopSandboxBursts;
+    this.stopSandboxBursts = undefined;
+    if (stopSandboxBursts) attempt(stopSandboxBursts);
     const sandboxKey = this.sandboxKey;
     this.sandboxKey = undefined;
     if (sandboxKey && this.keyboard) {
@@ -942,6 +948,15 @@ class Session implements WorldSession {
         if (this.cleanedUp) return;
         const drop = normalizeSandboxTile(tile);
         if (drop) this.view.sandboxDrop?.(drop);
+      });
+    }
+    // A burst (D-071) only animates; the snapshot that empties the board is
+    // what drops anyone standing on it, through the usual fall.
+    if (typeof channel.subscribeBursts === 'function') {
+      this.stopSandboxBursts = channel.subscribeBursts((tile) => {
+        if (this.cleanedUp) return;
+        const burst = normalizeSandboxTile(tile);
+        if (burst) this.view.sandboxBurst?.(burst);
       });
     }
     const keyboard = this.keyboard;

@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   SANDBOX_AREA,
+  SANDBOX_BURST_HEIGHT,
   SANDBOX_COLOURS,
   SANDBOX_ENTRANCE,
   SANDBOX_MAX_BLOCKS,
@@ -15,12 +16,14 @@ import {
   SANDBOX_TILE_SIZE,
   createSandboxAuthority,
   isEntranceTile,
+  isSandboxBurst,
   isSandboxTile,
   sandboxLevelAt,
   sandboxSpawnDelay,
   sandboxTileAt,
   sandboxTileKey,
   type SandboxAuthority,
+  type SandboxBurst,
   type SandboxPlayer,
 } from './sandbox-rules';
 
@@ -100,7 +103,7 @@ function rig(fallback: () => number = () => 0.5): Rig {
     if (index < 0) throw new Error(`tile ${tile.x},${tile.y} is not open`);
     draws.push((index + 0.5) / open.length, (colour + 0.5) / SANDBOX_COLOURS);
     const landed = sandbox.spawn(players);
-    if (landed === null || landed.x !== tile.x || landed.y !== tile.y) {
+    if (landed === null || isSandboxBurst(landed) || landed.x !== tile.x || landed.y !== tile.y) {
       throw new Error(`drop missed ${tile.x},${tile.y}`);
     }
   };
@@ -282,19 +285,21 @@ describe('spawn', () => {
     expect(sandbox.totalBlocks).toBe(0);
   });
 
-  it('skips a full stack', () => {
-    const { sandbox, stack, draws } = rig(mulberry32(3));
-    stack({ x: LEFT, y: TOP }, Array.from({ length: SANDBOX_MAX_HEIGHT }, () => 2));
-    expect(heightAt(sandbox, LEFT, TOP)).toBe(SANDBOX_MAX_HEIGHT);
-    // Leave only the 3x3 corner around (55, 1) open, which holds the full stack.
+  it('never builds a column past SANDBOX_BURST_HEIGHT, so the height cap is never reached (D-071)', () => {
+    const { sandbox } = rig(mulberry32(3));
+    expect(SANDBOX_BURST_HEIGHT).toBeLessThan(SANDBOX_MAX_HEIGHT);
+    // Leave only the 3x3 corner around (55, 1) open: the rain piles up there.
     const players = coveringGrid().filter((player) => player.key !== 'p55,1');
-    draws.push(0, 0);
-    expect(sandbox.spawn(players)).toEqual({ x: LEFT + 1, y: TOP });
-    for (let n = 0; n < 50; n += 1) {
-      const tile = sandbox.spawn(players);
-      expect(tile).not.toEqual({ x: LEFT, y: TOP });
+    let bursts = 0;
+    for (let n = 0; n < 300; n += 1) {
+      const landing = sandbox.spawn(players);
+      expect(landing).not.toBeNull();
+      if (isSandboxBurst(landing as NonNullable<typeof landing>)) bursts += 1;
+      for (const column of sandbox.columns()) {
+        expect(column.colours.length).toBeLessThanOrEqual(SANDBOX_BURST_HEIGHT);
+      }
     }
-    expect(heightAt(sandbox, LEFT, TOP)).toBe(SANDBOX_MAX_HEIGHT);
+    expect(bursts).toBeGreaterThan(0);
   });
 
   it('stops at the block cap, counting a carried block, and resumes after a release', () => {
@@ -562,7 +567,9 @@ describe('place', () => {
   it('puts the carried colour on top of a neighbouring tile', () => {
     const { sandbox, drop } = carrying(6);
     drop({ x: 62, y: 11 }, 1);
-    expect(sandbox.place(at(61, 11), { x: 62, y: 11 }, [])).toBe(true);
+    const landed = sandbox.place(at(61, 11), { x: 62, y: 11 }, []);
+    expect(landed).toEqual({ x: 62, y: 11 });
+    expect(Object.isFrozen(landed)).toBe(true);
     expect(sandbox.carrying('me')).toBeNull();
     expect(sandbox.columns()).toEqual([{ x: 62, y: 11, colours: [1, 6] }]);
     expect(sandbox.totalBlocks).toBe(2);
@@ -572,7 +579,7 @@ describe('place', () => {
     const { sandbox } = carrying(3);
     const inside = { x: SANDBOX_ENTRANCE.x + SANDBOX_ENTRANCE.width - 1, y: SANDBOX_ENTRANCE.y + 2 };
     expect(isEntranceTile(inside.x, inside.y)).toBe(true);
-    expect(sandbox.place(at(inside.x + 1, inside.y), inside, [])).toBe(true);
+    expect(sandbox.place(at(inside.x + 1, inside.y), inside, [])).not.toBeNull();
     expect(sandbox.columns()).toEqual([{ ...inside, colours: [3] }]);
   });
 
@@ -580,28 +587,28 @@ describe('place', () => {
     const r = carrying(3);
     const inside = { x: SANDBOX_ENTRANCE.x + SANDBOX_ENTRANCE.width - 1, y: SANDBOX_ENTRANCE.y + 2 };
     const me = at(inside.x + 1, inside.y);
-    expect(r.sandbox.place(me, inside, [])).toBe(true);
+    expect(r.sandbox.place(me, inside, [])).not.toBeNull();
     r.drop({ x: inside.x + 2, y: inside.y }, 5);
     expect(r.sandbox.pick(me, { x: inside.x + 2, y: inside.y }, [])).toBe(true);
-    expect(r.sandbox.place(me, inside, [])).toBe(false);
+    expect(r.sandbox.place(me, inside, [])).toBeNull();
     expect(r.sandbox.carrying('me')).toBe(5);
     expect(r.sandbox.columns()).toEqual([{ ...inside, colours: [3] }]);
     // One tile further in, the usual rules apply.
-    expect(r.sandbox.place(me, { x: inside.x + 2, y: inside.y }, [])).toBe(true);
+    expect(r.sandbox.place(me, { x: inside.x + 2, y: inside.y }, [])).not.toBeNull();
   });
 
   it('refuses when not carrying', () => {
     const { sandbox } = rig();
-    expect(sandbox.place(at(61, 11), { x: 62, y: 11 }, [])).toBe(false);
+    expect(sandbox.place(at(61, 11), { x: 62, y: 11 }, [])).toBeNull();
     expect(sandbox.columns()).toEqual([]);
   });
 
   it('refuses the own tile, out-of-range and out-of-area tiles', () => {
     const { sandbox } = carrying(2);
-    expect(sandbox.place(at(61, 11), { x: 61, y: 11 }, [])).toBe(false);
-    expect(sandbox.place(at(61, 11), { x: 63, y: 11 }, [])).toBe(false);
-    expect(sandbox.place(at(LEFT, 11), { x: LEFT - 1, y: 11 }, [])).toBe(false);
-    expect(sandbox.place(at(61, TOP), { x: 61, y: TOP - 1 }, [])).toBe(false);
+    expect(sandbox.place(at(61, 11), { x: 61, y: 11 }, [])).toBeNull();
+    expect(sandbox.place(at(61, 11), { x: 63, y: 11 }, [])).toBeNull();
+    expect(sandbox.place(at(LEFT, 11), { x: LEFT - 1, y: 11 }, [])).toBeNull();
+    expect(sandbox.place(at(61, TOP), { x: 61, y: TOP - 1 }, [])).toBeNull();
     expect(sandbox.carrying('me')).toBe(2);
     expect(sandbox.columns()).toEqual([]);
   });
@@ -609,7 +616,7 @@ describe('place', () => {
   it('refuses the tile under another player', () => {
     const { sandbox } = carrying(2);
     const other = at(62, 11, 'other', 10, -10);
-    expect(sandbox.place(at(61, 11), { x: 62, y: 11 }, [other])).toBe(false);
+    expect(sandbox.place(at(61, 11), { x: 62, y: 11 }, [other])).toBeNull();
     expect(sandbox.carrying('me')).toBe(2);
     // Elsewhere is fine, and unlocatable entries do not block anything.
     expect(
@@ -618,23 +625,23 @@ describe('place', () => {
         { key: 'ghost', x: Number.NaN, y: 0 },
         null as never,
       ]),
-    ).toBe(true);
+    ).toEqual({ x: 62, y: 11 });
   });
 
   it('fails closed when the other players are not an array', () => {
     const { sandbox } = carrying(2);
-    expect(sandbox.place(at(61, 11), { x: 62, y: 11 }, null as never)).toBe(false);
+    expect(sandbox.place(at(61, 11), { x: 62, y: 11 }, null as never)).toBeNull();
     expect(sandbox.carrying('me')).toBe(2);
   });
 
   it('reaches from one below to two above the level, for the new top', () => {
     const ground = carrying(1);
     ground.stack({ x: 62, y: 11 }, [0]); // new top 2: in reach
-    expect(ground.sandbox.place(at(61, 11), { x: 62, y: 11 }, [])).toBe(true);
+    expect(ground.sandbox.place(at(61, 11), { x: 62, y: 11 }, [])).not.toBeNull();
 
     const tooHigh = carrying(1);
     tooHigh.stack({ x: 62, y: 11 }, [0, 0]); // new top 3 on level 0: out of reach
-    expect(tooHigh.sandbox.place(at(61, 11), { x: 62, y: 11 }, [])).toBe(false);
+    expect(tooHigh.sandbox.place(at(61, 11), { x: 62, y: 11 }, [])).toBeNull();
     expect(tooHigh.sandbox.carrying('me')).toBe(1);
 
     // Standing on 3: placing on the ground (new top 1) is below reach, on a
@@ -644,33 +651,13 @@ describe('place', () => {
     high.stack({ x: 61, y: 10 }, [0]);
     high.stack({ x: 60, y: 10 }, [0, 0, 0, 0]);
     high.stack({ x: 62, y: 10 }, [0, 0, 0, 0, 0]);
-    expect(high.sandbox.place(at(61, 11), { x: 62, y: 11 }, [])).toBe(false);
-    expect(high.sandbox.place(at(61, 11), { x: 62, y: 10 }, [])).toBe(false);
-    expect(high.sandbox.place(at(61, 11), { x: 60, y: 10 }, [])).toBe(true);
+    expect(high.sandbox.place(at(61, 11), { x: 62, y: 11 }, [])).toBeNull();
+    expect(high.sandbox.place(at(61, 11), { x: 62, y: 10 }, [])).toBeNull();
+    expect(high.sandbox.place(at(61, 11), { x: 60, y: 10 }, [])).not.toBeNull();
     expect(high.sandbox.pick(at(61, 11), { x: 60, y: 10 }, [])).toBe(true);
-    expect(high.sandbox.place(at(61, 11), { x: 61, y: 10 }, [])).toBe(true);
+    expect(high.sandbox.place(at(61, 11), { x: 61, y: 10 }, [])).not.toBeNull();
   });
 
-  it('never grows a stack past the height cap', () => {
-    const { sandbox, stack } = rig();
-    // (60, 5) is where the player stands; (61, 5) and (60, 6) are neighbours.
-    // Built in (y, x) order so no full stack precedes one still growing.
-    stack({ x: 60, y: 5 }, Array.from({ length: SANDBOX_MAX_HEIGHT - 1 }, () => 0));
-    stack({ x: 61, y: 5 }, Array.from({ length: SANDBOX_MAX_HEIGHT - 1 }, () => 1));
-    stack({ x: 60, y: 6 }, Array.from({ length: SANDBOX_MAX_HEIGHT }, () => 2));
-    const player = at(60, 5);
-    expect(sandbox.pick(player, { x: 61, y: 5 }, [])).toBe(true);
-    // 257 would be within reach of level 255, but the cap is 256.
-    expect(sandbox.place(player, { x: 60, y: 6 }, [])).toBe(false);
-    expect(heightAt(sandbox, 60, 6)).toBe(SANDBOX_MAX_HEIGHT);
-    expect(sandbox.place(player, { x: 61, y: 5 }, [])).toBe(true);
-    expect(heightAt(sandbox, 61, 5)).toBe(SANDBOX_MAX_HEIGHT - 1);
-    // Picking the top off the full stack and putting it back is fine.
-    expect(sandbox.pick(player, { x: 60, y: 6 }, [])).toBe(true);
-    expect(sandbox.place(player, { x: 60, y: 6 }, [])).toBe(true);
-    expect(heightAt(sandbox, 60, 6)).toBe(SANDBOX_MAX_HEIGHT);
-    expect(sandbox.totalBlocks).toBe(3 * SANDBOX_MAX_HEIGHT - 2);
-  });
 });
 
 describe('returnCarried', () => {
@@ -735,16 +722,6 @@ describe('returnCarried', () => {
       }
       expect(r.sandbox.columns()).toEqual([{ x: landed.x, y: landed.y, colours: [colour] }]);
     }
-  });
-
-  it('never lands on a full stack', () => {
-    const r = carrier(3);
-    r.stack({ x: LEFT, y: TOP }, Array.from({ length: SANDBOX_MAX_HEIGHT }, () => 1));
-    // Only the 3x3 corner around (55, 1) is open, and (54, 0) in it is full.
-    const players = [...coveringGrid().filter((player) => player.key !== 'p55,1'), at(60, 11)];
-    r.draws.push(0);
-    expect(r.sandbox.returnCarried('me', players)).toEqual({ x: LEFT + 1, y: TOP });
-    expect(heightAt(r.sandbox, LEFT, TOP)).toBe(SANDBOX_MAX_HEIGHT);
   });
 
   it('discards the block, without drawing, when no tile is allowed', () => {
@@ -822,6 +799,131 @@ describe('returnCarried', () => {
     expect(cycles).toBe(200);
     const blocks = r.sandbox.columns().reduce((sum, column) => sum + column.colours.length, 0);
     expect(blocks).toBe(100);
+  });
+});
+
+describe('bursting (D-071)', () => {
+  const full = (colour = 1): number[] => Array.from({ length: SANDBOX_BURST_HEIGHT }, () => colour);
+  const tall = (height: number, colour = 0): number[] => Array.from({ length: height }, () => colour);
+
+  /** Script the next spawn's two draws so it falls on `tile`. */
+  function aim(r: Rig, tile: SandboxTile, players: readonly SandboxPlayer[] = []): void {
+    const open = r.open(players);
+    const index = open.findIndex((candidate) => candidate.x === tile.x && candidate.y === tile.y);
+    if (index < 0) throw new Error(`tile ${tile.x},${tile.y} is not open`);
+    r.draws.push((index + 0.5) / open.length, 0.5);
+  }
+
+  /**
+   * 'me' stands on a 14-high stack at (61, 11), within reach of a 16th block
+   * on the column beside it at (62, 11), carrying a block from the supply
+   * stack at (61, 10); 'other' carries a block of colour 3 far away.
+   */
+  function besidePillar(column: number): Rig & { readonly me: SandboxPlayer; readonly other: SandboxPlayer } {
+    const r = rig();
+    r.stack({ x: 61, y: 11 }, tall(14));
+    r.stack({ x: 62, y: 11 }, tall(column, 1));
+    r.stack({ x: 61, y: 10 }, tall(14, 2));
+    r.drop({ x: 72, y: 20 }, 3);
+    const me = at(61, 11);
+    const other = at(73, 20, 'other');
+    if (!r.sandbox.pick(me, { x: 61, y: 10 }, [other])) throw new Error('setup pick failed');
+    if (!r.sandbox.pick(other, { x: 72, y: 20 }, [me])) throw new Error('setup pick failed');
+    return { ...r, me, other };
+  }
+
+  it('stacks a column to SANDBOX_BURST_HEIGHT, and the next sky drop there bursts the sandbox', () => {
+    const r = rig();
+    r.stack({ x: 60, y: 10 }, full());
+    r.drop({ x: 70, y: 20 }, 4);
+    expect(heightAt(r.sandbox, 60, 10)).toBe(SANDBOX_BURST_HEIGHT);
+    const calls = r.calls();
+    aim(r, { x: 60, y: 10 });
+    const burst = r.sandbox.spawn([]);
+    expect(burst).toEqual({ burst: { x: 60, y: 10 } });
+    // Tile and colour, as for any drop, so scripted sources stay aligned.
+    expect(r.calls() - calls).toBe(2);
+    expect(Object.isFrozen(burst)).toBe(true);
+    expect(Object.isFrozen((burst as SandboxBurst).burst)).toBe(true);
+    expect(Object.keys(burst as object)).toEqual(['burst']);
+    expect(Object.keys((burst as SandboxBurst).burst).sort()).toEqual(['x', 'y']);
+    // Every placed block is gone, the far column's too, and the new one with them.
+    expect(r.sandbox.columns()).toEqual([]);
+    expect(Object.isFrozen(r.sandbox.columns())).toBe(true);
+    expect(r.sandbox.totalBlocks).toBe(0);
+    // And the board starts again.
+    r.drop({ x: 60, y: 10 }, 2);
+    expect(r.sandbox.columns()).toEqual([{ x: 60, y: 10, colours: [2] }]);
+  });
+
+  it('places the 15th block, and a 16th placed bursts it: the carried block goes, other hands keep theirs', () => {
+    const r = besidePillar(SANDBOX_BURST_HEIGHT - 1);
+    expect(r.sandbox.place(r.me, { x: 62, y: 11 }, [r.other])).toEqual({ x: 62, y: 11 });
+    expect(heightAt(r.sandbox, 62, 11)).toBe(SANDBOX_BURST_HEIGHT);
+    expect(r.sandbox.pick(r.me, { x: 61, y: 10 }, [r.other])).toBe(true);
+    const total = r.sandbox.totalBlocks;
+    expect(total).toBe(14 + SANDBOX_BURST_HEIGHT + 12 + 2);
+
+    const burst = r.sandbox.place(r.me, { x: 62, y: 11 }, [r.other]);
+    expect(burst).toEqual({ burst: { x: 62, y: 11 } });
+    expect(Object.isFrozen(burst)).toBe(true);
+    expect(r.sandbox.columns()).toEqual([]);
+    expect(r.sandbox.carrying('me')).toBeNull();
+    expect(r.sandbox.carrying('other')).toBe(3);
+    expect(r.sandbox.totalBlocks).toBe(1);
+    expect(r.sandbox.snapshotFor('other')).toEqual({ columns: [], carrying: 3 });
+  });
+
+  it('bursts when a carried block is put back onto a full column', () => {
+    const r = rig();
+    r.drop({ x: 60, y: 12 }, 6);
+    const leaver = at(60, 11);
+    expect(r.sandbox.pick(leaver, { x: 60, y: 12 }, [])).toBe(true);
+    r.drop({ x: 72, y: 20 }, 3);
+    expect(r.sandbox.pick(at(73, 20, 'other'), { x: 72, y: 20 }, [])).toBe(true);
+    r.stack({ x: 70, y: 5 }, full());
+    const open = r.open([leaver]);
+    r.draws.push((open.findIndex((tile) => tile.x === 70 && tile.y === 5) + 0.5) / open.length);
+    const calls = r.calls();
+
+    expect(r.sandbox.returnCarried('me', [leaver])).toEqual({ burst: { x: 70, y: 5 } });
+    expect(r.calls() - calls).toBe(1);
+    expect(r.sandbox.carrying('me')).toBeNull();
+    expect(r.sandbox.carrying('other')).toBe(3);
+    expect(r.sandbox.columns()).toEqual([]);
+    expect(r.sandbox.totalBlocks).toBe(1);
+  });
+
+  it('refuses first: a place that is refused today changes nothing, full column or not', () => {
+    const r = besidePillar(SANDBOX_BURST_HEIGHT);
+    const before = r.sandbox.columns();
+    // Two tiles away, the own tile, under another player, an unreadable
+    // players list, from the ground (a 16th top is out of reach there), and
+    // with empty hands.
+    expect(r.sandbox.place(at(60, 11), { x: 62, y: 11 }, [])).toBeNull();
+    expect(r.sandbox.place(r.me, { x: 61, y: 11 }, [])).toBeNull();
+    expect(r.sandbox.place(r.me, { x: 62, y: 11 }, [at(62, 11, 'standing')])).toBeNull();
+    expect(r.sandbox.place(r.me, { x: 62, y: 11 }, null as never)).toBeNull();
+    expect(r.sandbox.place(at(63, 11), { x: 62, y: 11 }, [])).toBeNull();
+    expect(r.sandbox.place(at(61, 11, 'empty-handed'), { x: 62, y: 11 }, [])).toBeNull();
+    expect(r.sandbox.columns()).toBe(before);
+    expect(heightAt(r.sandbox, 62, 11)).toBe(SANDBOX_BURST_HEIGHT);
+    expect(r.sandbox.carrying('me')).toBe(2);
+  });
+
+  it('stops the rain at the block cap before it can burst anything', () => {
+    const r = rig(mulberry32(8));
+    r.stack({ x: 60, y: 10 }, full());
+    // A guard beside the column keeps the rain off it while the board fills.
+    const guard = at(61, 10, 'guard');
+    while (r.sandbox.spawn([guard]) !== null) { /* rain to the cap */ }
+    expect(r.sandbox.totalBlocks).toBe(SANDBOX_MAX_BLOCKS);
+    expect(heightAt(r.sandbox, 60, 10)).toBe(SANDBOX_BURST_HEIGHT);
+    const calls = r.calls();
+    const before = r.sandbox.columns();
+    expect(r.sandbox.spawn([])).toBeNull();
+    expect(r.calls()).toBe(calls);
+    expect(r.sandbox.columns()).toBe(before);
   });
 });
 
@@ -919,7 +1021,7 @@ describe('total block accounting', () => {
     history.push(sandbox.totalBlocks);
     expect(sandbox.pick(at(61, 10), { x: 60, y: 10 }, [])).toBe(true);
     history.push(sandbox.totalBlocks);
-    expect(sandbox.place(at(61, 10), { x: 62, y: 10 }, [])).toBe(true);
+    expect(sandbox.place(at(61, 10), { x: 62, y: 10 }, [])).not.toBeNull();
     history.push(sandbox.totalBlocks);
     expect(sandbox.pick(at(61, 10), { x: 62, y: 10 }, [])).toBe(true);
     sandbox.release('me');

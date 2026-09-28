@@ -42,9 +42,13 @@ describe('default lobby vocabulary ownership', () => {
   it('does not expose mutable sandbox protocol names (D-060)', () => {
     expect(Reflect.set(MESSAGE, 'sandboxPick', 'untrusted')).toBe(false);
     expect(Reflect.set(SERVER_MESSAGE, 'sandboxDrop', 'untrusted')).toBe(false);
+    expect(Reflect.set(SERVER_MESSAGE, 'sandboxBurst', 'untrusted')).toBe(false);
     expect(MESSAGE.sandboxPick).toBe('sandbox:pick');
     expect(MESSAGE.sandboxPlace).toBe('sandbox:place');
     expect(SERVER_MESSAGE.sandboxDrop).toBe('sandbox:drop');
+    // D-071.
+    expect(SERVER_MESSAGE.sandboxBurst).toBe('sandbox:burst');
+    expect(Object.keys(SERVER_MESSAGE).sort()).toEqual(['sandboxBurst', 'sandboxDrop', 'welcome']);
   });
 });
 

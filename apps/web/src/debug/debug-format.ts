@@ -1,4 +1,5 @@
 import type { Intent, OperationStage, PrivacyErrorKind } from '@strkworld/privacy';
+import { SANDBOX_AREA } from '@strkworld/shared';
 import type { BankAddRefusal, BankConfirmStage, BankMode } from '../panels/bank/bank-machine.js';
 
 /**
@@ -405,6 +406,19 @@ export function describeBankStep(step: unknown): { level: DebugLevel; event: str
     default:
       return null;
   }
+}
+
+/**
+ * The tile a sandbox burst came from (D-071), as `x=60 y=10`: two integers
+ * inside the square, or null for anything else.
+ */
+export function describeSandboxTile(tile: unknown): string | null {
+  const x = readData(tile, 'x');
+  const y = readData(tile, 'y');
+  if (typeof x !== 'number' || typeof y !== 'number' || !Number.isInteger(x) || !Number.isInteger(y)) return null;
+  const inside = x >= SANDBOX_AREA.x && x < SANDBOX_AREA.x + SANDBOX_AREA.width &&
+    y >= SANDBOX_AREA.y && y < SANDBOX_AREA.y + SANDBOX_AREA.height;
+  return inside ? `x=${x} y=${y}` : null;
 }
 
 /** A failed `/api` response: path, status and the body's code, and nothing else. */

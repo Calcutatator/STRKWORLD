@@ -2035,6 +2035,7 @@ describe('bank panel — debug steps (D-070)', () => {
       walletSession: () => undefined,
       visit: () => undefined,
       bank: (step) => steps.push(step),
+      sandboxBurst: () => undefined,
     });
     return { steps, detach: () => attachDebugTap(null) };
   }

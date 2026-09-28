@@ -156,6 +156,13 @@ export const SANDBOX_ENTRANCE: Readonly<{ x: number; y: number; width: number; h
 /** Tallest stack a column may reach. The sky is effectively open. */
 export const SANDBOX_MAX_HEIGHT = 256;
 
+/**
+ * D-071: the most blocks a column may hold. The block that would make any
+ * column taller bursts the sandbox instead: every placed block flies away and
+ * the square is empty again.
+ */
+export const SANDBOX_BURST_HEIGHT = 15;
+
 /** Every block in the sandbox, carried blocks included. */
 export const SANDBOX_MAX_BLOCKS = 900;
 
