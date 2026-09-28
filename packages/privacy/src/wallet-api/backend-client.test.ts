@@ -1101,6 +1101,70 @@ describe('BackendPrivacyClient', () => {
     })).rejects.toMatchObject({ kind: 'unreachable', message: 'submissions paused' });
   });
 
+  describe('a relay with no avnu key (D-070)', () => {
+    const refused = { code: 'RELAY_NOT_CONFIGURED', message: 'The private relay is not configured on this deployment.' };
+    const submission: Parameters<BackendPrivacyClient['submit']>[0] = {
+      route: 'unshield',
+      artifact: {
+        call: { contract_address: '0x123', entry_point: 'apply_actions', calldata: ['0x1'] },
+        proof: { data: 'proof', output: ['0x1'], proof_facts: ['0x2'] },
+      },
+      feeAuthorization: 'auth',
+      proofValidityBlocks: 450,
+    };
+
+    it('is its own failure kind on every relayed call, never unreachable or uncertain', async () => {
+      const client = new BackendPrivacyClient('https://backend.example', async () => response(refused, 503));
+      const expected = { kind: 'relay-not-configured', message: refused.message };
+      await expect(client.estimate({ route: 'unshield', feeToken: '0x4718', operationToken: '0x4718' }))
+        .rejects.toMatchObject(expected);
+      await expect(client.prepareSwap({
+        sellToken: '0xabc', buyToken: '0x4718', sellAmount: 20n, minAmountOut: 1n, slippageBps: 50,
+      })).rejects.toMatchObject(expected);
+      await expect(client.submit(submission)).rejects.toMatchObject(expected);
+      await expect(client.submit(submission)).rejects.toBeInstanceOf(PrivacyError);
+    });
+
+    it('needs both the 503 and the code, so nothing else is reclassified', async () => {
+      const disabled = new BackendPrivacyClient(
+        'https://backend.example',
+        async () => response({ code: 'SERVICE_DISABLED', message: 'Private operations are temporarily disabled.' }, 503),
+      );
+      await expect(disabled.submit(submission)).rejects.toMatchObject({ kind: 'unreachable' });
+      const otherStatus = new BackendPrivacyClient('https://backend.example', async () => response(refused, 500));
+      await expect(otherStatus.estimate({ route: 'unshield', feeToken: '0x4718', operationToken: '0x4718' }))
+        .rejects.toMatchObject({ kind: 'unknown' });
+      const noMessage = new BackendPrivacyClient(
+        'https://backend.example',
+        async () => response({ code: 'RELAY_NOT_CONFIGURED' }, 503),
+      );
+      await expect(noMessage.estimate({ route: 'transfer', feeToken: '0x4718', operationToken: '0x4718' }))
+        .rejects.toMatchObject({ kind: 'relay-not-configured', message: refused.message });
+    });
+
+    it('reads the code without running an accessor or a proxy trap', async () => {
+      let getterCalled = false;
+      const accessor = { message: 'paused' } as { message: string; code?: string };
+      Object.defineProperty(accessor, 'code', {
+        enumerable: true,
+        get() {
+          getterCalled = true;
+          return 'RELAY_NOT_CONFIGURED';
+        },
+      });
+      const trapped = new Proxy({}, { getOwnPropertyDescriptor() { throw new Error('trap'); } });
+      for (const body of [accessor, trapped]) {
+        const client = new BackendPrivacyClient('https://backend.example', async () => ({
+          ok: false,
+          status: 503,
+          json: async () => body,
+        }) as Response);
+        await expect(client.config()).rejects.toMatchObject({ kind: 'unreachable' });
+      }
+      expect(getterCalled).toBe(false);
+    });
+  });
+
   it('parses a quote-bound private swap plan without losing bigint amounts', async () => {
     const fetcher = vi.fn(async () => response({
       quoteId: 'quote-1',

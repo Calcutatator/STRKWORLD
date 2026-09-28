@@ -368,7 +368,7 @@ Shell lane owns it.
 
 ## D-014 — The backend is a first-class component with its own privacy rules
 
-**2026-08-16 · Accepted · paymaster key made optional (gasless relay) by D-068 · per-request logging exception for opted-in test deployments by D-069**
+**2026-08-16 · Accepted · paymaster key made optional (gasless relay) by D-068 · per-request logging exception for opted-in test deployments by D-069 · key required again for relayed routes by D-070**
 
 **Context.** An independent review found that D-013 quietly put a server on the
 critical path of *every* private action — fee build and submission must be
@@ -1219,7 +1219,7 @@ D-028 freeze.
 
 ## D-036 — `PrivacyOperations` is frozen on source-derived evidence
 
-**2026-08-18 · Accepted · implements D-028 and supersedes D-015's provisional seam status · narrowly extended by D-041/D-042 for truthful swap review, and by D-063 for private staking**
+**2026-08-18 · Accepted · implements D-028 and supersedes D-015's provisional seam status · narrowly extended by D-041/D-042 for truthful swap review, and by D-063 for private staking · failure taxonomy extended by D-070 (`relay-not-configured`)**
 
 **Context.** D-015 correctly unfroze the original one-shot interface. The
 replacement intent-based, prepare-then-confirm seam is implemented by both the
@@ -3006,7 +3006,7 @@ operator configuration.
 
 ## D-068 — The private relay runs gasless, with no paymaster key by default
 
-**2026-09-28 · Accepted by the user · narrows D-014's "holds the paymaster key" to "holds it if one is used"**
+**2026-09-28 · Accepted by the user · narrows D-014's "holds the paymaster key" to "holds it if one is used" · keyless default SUPERSEDED by D-070**
 
 **Context.** The backend refused to start without `AVNU_PAYMASTER_API_KEY`.
 AVNU's docs distinguish gasfree (the dapp sponsors gas, with an API key) from
@@ -3068,3 +3068,65 @@ acceptable only because the deployment is private and the tester is the
 owner. While the route is open, anyone who can reach it can write lines within
 the rate limit. D-005 and D-020/D-024 are unchanged. A launch leaves both
 flags unset.
+
+---
+
+## D-070 — The private relay needs an avnu Portal key
+
+**2026-09-28 · Accepted by the user (D-068's contingency) · supersedes D-068 in part (its keyless default) · extends D-036's frozen seam with a `relay-not-configured` failure kind**
+
+**Context.** On the live test site an unshield failed at its first step:
+`POST /api/v1/private/fees` answered 502 `UPSTREAM_FAILURE`. avnu's paymaster
+refuses `paymaster_buildTransaction` (type `apply_action`, fee mode
+`sponsored_private`) without an API key. Replaying the SDK's exact request with
+no `x-paymaster-api-key` header returns JSON-RPC error
+`{"code":163,"message":"An error occurred (UNKNOWN_ERROR)","data":"x-paymaster-api-key is invalid"}`.
+avnu's docs (`https://docs.avnu.fi/llms-full.txt`, "Build Private
+Transaction") say the Portal key is "Required for the sponsored fee modes
+(`sponsored`, `sponsored_private`)", and for execution: "The relayer submits
+the proven call on-chain and pays the gas; the pool fee (from the build step)
+reimburses it." (avnu's "pool fee" there is what STRKWORLD calls the relay
+fee.) The key is an access credential, not a budget: the player still pays,
+through the relay fee withdrawn inside their own private transaction, and the
+relay stays gasless for STRKWORLD. D-068 named this contingency: if the
+relay needs a key for this fee mode, the fix is to set one. Shield is not
+affected, because the wallet submits it (`wallet_strk20InvokeTransaction`) and
+it never reaches the relay. In the same session a shield could not then be
+added, most likely because the failed unshield stayed queued in the Bank visit
+and a shield cannot join a spend; the D-069 debug log could not show which,
+because the Bank's own steps were not logged.
+
+**Decision.**
+
+- `AVNU_PAYMASTER_API_KEY` is required for every relayed route: unshield,
+  transfer, stake and swap. It is created at `https://portal.avnu.fi` by
+  connecting a deployed wallet. In `sponsored_private` each transaction repays
+  avnu itself, so Portal credits, which fund gasfree (`sponsored`)
+  sponsorship, are not what these relays spend. The backend still starts
+  without a key, and D-014's custody rules apply to it unchanged.
+- Without a key the backend never calls avnu for a relayed route. A fee build,
+  a swap preparation (its quote included) or a submission on an enabled route
+  answers HTTP 503
+  `{ "code": "RELAY_NOT_CONFIGURED", "message": "The private relay is not configured on this deployment." }`.
+  A disabled route still answers as disabled, and the kill switch still
+  answers `SERVICE_DISABLED`. With a key set, avnu's own rejection of it (code
+  163 whose data or message names the API key) answers the same 503. Every
+  other upstream failure, other 163s included, keeps its old answer.
+- The relay writes one startup line when enabled routes will be refused,
+  naming them, and nothing per request (D-014). The composition discards the
+  relay's output (D-045, D-069), so the relay hands the line to the edge with
+  its readiness message and the edge prints only that exact line.
+- `PrivacyErrorKind` gains `relay-not-configured`, which the browser client
+  maps from that 503. The Bank, the Post Office, the staking counter and the
+  Exchange show "Unshield, send, stake and swap need the private relay, which
+  isn't set up on this site yet. Nothing was sent."
+- A shield refused behind a queued spend tells the player to remove the queued
+  item first. Under D-069, a debug build also logs the Bank's mode switches,
+  refused adds (reason code only), prepares (intent kinds and count only) and
+  confirm stages, never an amount, a balance, a recipient or a token address.
+
+**Consequences.** Setting the key is the whole fix; no code changes with it. A
+deployment without one keeps shield working and says plainly that the relayed
+actions are not set up, instead of reporting a network failure. The first
+keyed relay, D-062's funded unshield, is also the evidence for the docs'
+account that the in-transaction fee, not Portal credits, pays for this mode.

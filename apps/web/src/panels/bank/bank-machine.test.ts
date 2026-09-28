@@ -14,6 +14,7 @@ import { createConnectFlow } from '../../connect/connect-machine.js';
 import { createBatchAccumulator } from '../../accumulator/batch-accumulator.js';
 import { createReceiptLedger } from '../../receipts/receipt-ledger.js';
 import { createSubmissionUncertainty } from '../../privacy/submission-uncertainty.js';
+import { attachDebugTap } from '../../debug/debug-tap.js';
 import {
   createBankPanel,
   ROUTE_BY_MODE,
@@ -1970,5 +1971,157 @@ describe('bank panel — a quote is evidence about one batch shape', () => {
     panel.setMode('unshield');
     expect(panel.store.getState().quotedGasForNextIntent).toBeNull();
     expect(panel.maxSpendable()).toBeNull();
+  });
+});
+
+describe('bank panel — a relay with no avnu key (D-070)', () => {
+  it.each([
+    ['an unshield', 'unshield', ALICE],
+    ['a Post Office send', 'transfer', BOB],
+    ['a stake', 'stake', null],
+  ] as const)('says plainly that %s needs the relay, and keeps the queued item for Back', async (_label, mode, recipient) => {
+    const operations = fake();
+    const failures: ShellFailure[] = [];
+    const panel = await openPanel(operations, { onError: (failure) => failures.push(failure) });
+    operations.injectFault({ kind: 'relay-not-configured', on: 'prepare' });
+    panel.setMode(mode);
+    if (recipient) panel.setRecipient(recipient);
+    panel.setAmount('1');
+    await panel.addToBatch();
+    await panel.prepare();
+
+    expect(panel.store.getState().flow).toEqual({
+      name: 'failed',
+      kind: 'relay-not-configured',
+      message: COPY.errors['relay-not-configured'],
+      recovery: 'prepare-again',
+    });
+    expect(failures.map((failure) => failure.kind)).toEqual(['relay-not-configured']);
+    expect(panel.store.getState().batch.map((intent) => intent.kind)).toEqual([mode]);
+    expect(operations.submitted).toHaveLength(0);
+  });
+
+  it('tells a player adding a shield behind the failed spend to remove it first', async () => {
+    const operations = fake();
+    const panel = await openPanel(operations);
+    panel.setMode('unshield');
+    panel.setRecipient(ALICE);
+    panel.setAmount('1');
+    await panel.addToBatch();
+    operations.injectFault({ kind: 'relay-not-configured', on: 'prepare' });
+    await panel.prepare();
+    panel.cancelPrepared();
+
+    panel.setMode('shield');
+    panel.setAmount('1');
+    await panel.addToBatch();
+    expect(panel.store.getState().notice).toEqual({ tone: 'error', text: COPY.notices.shieldAfterSpend });
+    expect(panel.store.getState().batch.map((intent) => intent.kind)).toEqual(['unshield']);
+
+    // Doing what it says works: the shield queues once the spend is gone.
+    panel.removeFromBatch(0);
+    await panel.addToBatch();
+    expect(panel.store.getState().batch.map((intent) => intent.kind)).toEqual(['shield']);
+    expect(panel.store.getState().notice).toBeNull();
+  });
+});
+
+describe('bank panel — debug steps (D-070)', () => {
+  function captureBankSteps(): { steps: unknown[]; detach: () => void } {
+    const steps: unknown[] = [];
+    attachDebugTap({
+      failure: () => undefined,
+      connectState: () => undefined,
+      walletSession: () => undefined,
+      visit: () => undefined,
+      bank: (step) => steps.push(step),
+    });
+    return { steps, detach: () => attachDebugTap(null) };
+  }
+
+  it('reports mode switches, refused adds, the prepare and each confirm stage, by code alone', async () => {
+    const { steps, detach } = captureBankSteps();
+    try {
+      const operations = fake();
+      const panel = await openPanel(operations);
+      panel.setMode('unshield');
+      panel.setMode('unshield');
+      panel.setRecipient(ALICE);
+      panel.setAmount('lots');
+      await panel.addToBatch();
+      panel.setAmount('1.5');
+      await panel.addToBatch();
+      panel.setMode('shield');
+      panel.setAmount('2');
+      await panel.addToBatch();
+      panel.setMode('unshield');
+      await panel.prepare();
+      await panel.confirm();
+      expect(panel.store.getState().flow.name).toBe('submitted');
+    } finally {
+      detach();
+    }
+
+    expect(steps).toEqual([
+      // Re-selecting the same tab is not a switch.
+      { step: 'mode', mode: 'unshield', from: 'shield' },
+      { step: 'add-refused', reason: 'bad-amount' },
+      { step: 'mode', mode: 'shield', from: 'unshield' },
+      { step: 'add-refused', reason: 'mixed-shield-and-spend' },
+      { step: 'mode', mode: 'unshield', from: 'shield' },
+      { step: 'prepare', kinds: ['unshield'] },
+      { step: 'confirm', stage: 'composing' },
+      { step: 'confirm', stage: 'awaiting-approval' },
+      { step: 'confirm', stage: 'proving' },
+      { step: 'confirm', stage: 'submitting' },
+      { step: 'confirm', stage: 'done' },
+      { step: 'confirm', stage: 'submitted' },
+    ]);
+    // Never the money: no amount, balance, recipient or token address.
+    const sent = JSON.stringify(steps);
+    expect(sent).not.toMatch(/0x|1\.5|lots|\d/);
+  });
+
+  it('names how a confirm ended when it ended here, and each refusal before the accumulator', async () => {
+    const { steps, detach } = captureBankSteps();
+    try {
+      const operations = fake();
+      const panel = await openPanel(operations);
+      panel.setMode('transfer');
+      panel.setRecipient('not an address');
+      panel.setAmount('1');
+      await panel.addToBatch();
+      panel.setRecipient(STRANGER);
+      await panel.addToBatch();
+      panel.setRecipient(BOB);
+      await panel.addToBatch();
+      await panel.prepare();
+      operations.setPoolFee(strk('20'));
+      await panel.confirm();
+      expect(panel.store.getState().flow).toMatchObject({ name: 'failed', message: COPY.notices.feeMoved });
+    } finally {
+      detach();
+    }
+    expect(steps).toEqual([
+      { step: 'mode', mode: 'transfer', from: 'shield' },
+      { step: 'add-refused', reason: 'bad-recipient' },
+      { step: 'add-refused', reason: 'recipient-unregistered' },
+      { step: 'prepare', kinds: ['transfer'] },
+      { step: 'confirm', stage: 'composing' },
+      { step: 'confirm', stage: 'fee-moved' },
+    ]);
+  });
+
+  it('sends nothing, and changes nothing, with no logger attached', async () => {
+    attachDebugTap(null);
+    const operations = fake();
+    const panel = await openPanel(operations);
+    panel.setMode('unshield');
+    panel.setRecipient(ALICE);
+    panel.setAmount('1');
+    await panel.addToBatch();
+    await panel.prepare();
+    await panel.confirm();
+    expect(panel.store.getState().flow.name).toBe('submitted');
   });
 });

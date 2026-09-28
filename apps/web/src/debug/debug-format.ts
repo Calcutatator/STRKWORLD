@@ -1,3 +1,6 @@
+import type { Intent, OperationStage, PrivacyErrorKind } from '@strkworld/privacy';
+import type { BankAddRefusal, BankConfirmStage, BankMode } from '../panels/bank/bank-machine.js';
+
 /**
  * What the opt-in debug logger (D-069) writes, and what it removes first.
  *
@@ -43,16 +46,18 @@ export const WALLET_ERROR_NAMES: Readonly<Record<number, string>> = Object.freez
   163: 'UNKNOWN_ERROR',
 });
 
-const KINDS: ReadonlySet<unknown> = new Set([
-  'not-registered',
-  'insufficient-balance',
-  'privacy-leak',
-  'unsupported-wallet',
-  'user-rejected',
-  'unreachable',
-  'submission-uncertain',
-  'unknown',
-]);
+/** Every PrivacyError kind; a record, so a kind the seam adds cannot be missed here. */
+const KINDS = setOf({
+  'not-registered': true,
+  'insufficient-balance': true,
+  'privacy-leak': true,
+  'unsupported-wallet': true,
+  'user-rejected': true,
+  unreachable: true,
+  'submission-uncertain': true,
+  'relay-not-configured': true,
+  unknown: true,
+} satisfies Record<PrivacyErrorKind, true>);
 
 const LINE_BREAKS = /[\t\n\v\f\r\u0085\u2028\u2029]+/g;
 const UNPRINTABLE = /[\p{Cc}\p{Cf}\p{Cs}]/gu;
@@ -320,10 +325,96 @@ export function visitPanel(state: unknown): string | null {
   return typeof station === 'string' ? `station ${station}` : null;
 }
 
+/*
+ * The Bank's steps (D-070). Each field is admitted only from its own fixed
+ * list, typed against the union it comes from, so whatever a caller passes, no
+ * amount, balance, recipient or token address can be written.
+ */
+const BANK_MODES = setOf({ shield: true, unshield: true, transfer: true, stake: true } satisfies Record<BankMode, true>);
+const INTENT_KINDS = setOf({
+  shield: true, unshield: true, transfer: true, swap: true, stake: true,
+} satisfies Record<Intent['kind'], true>);
+const ADD_REFUSALS = setOf({
+  'not-an-intent': true,
+  'mixed-shield-and-spend': true,
+  'mixed-route-kinds': true,
+  'swap-must-be-alone': true,
+  'stake-must-be-alone': true,
+  'one-recipient-per-send': true,
+  'one-unshield-per-send': true,
+  'non-positive-amount': true,
+  'batch-full': true,
+  'empty-batch': true,
+  'gate-closed': true,
+  'door-locked': true,
+  'pool-not-loaded': true,
+  'bad-amount': true,
+  'bad-recipient': true,
+  'recipient-unregistered': true,
+  'recipient-check-failed': true,
+} satisfies Record<BankAddRefusal, true>);
+const CONFIRM_STAGES = setOf({
+  composing: true,
+  'awaiting-approval': true,
+  proving: true,
+  submitting: true,
+  confirming: true,
+  done: true,
+  failed: true,
+  submitted: true,
+  'fee-moved': true,
+  'plan-moved': true,
+  'gate-closed': true,
+} satisfies Record<OperationStage | BankConfirmStage, true>);
+
+/**
+ * A Bank step as one entry, or null for anything unexpected:
+ * `bank.mode mode=unshield from=shield`, `bank.add-refused reason=…`,
+ * `bank.prepare intents=1 kinds=unshield`, `bank.confirm stage=proving`.
+ */
+export function describeBankStep(step: unknown): { level: DebugLevel; event: string; detail: string } | null {
+  switch (readData(step, 'step')) {
+    case 'mode': {
+      const mode = readData(step, 'mode');
+      const from = readData(step, 'from');
+      if (!BANK_MODES.has(mode) || !BANK_MODES.has(from)) return null;
+      return { level: 'info', event: 'bank.mode', detail: `mode=${String(mode)} from=${String(from)}` };
+    }
+    case 'add-refused': {
+      const reason = readData(step, 'reason');
+      if (!ADD_REFUSALS.has(reason)) return null;
+      return { level: 'warn', event: 'bank.add-refused', detail: `reason=${String(reason)}` };
+    }
+    case 'prepare': {
+      const kinds = readData(step, 'kinds');
+      const count = Array.isArray(kinds) ? readData(kinds, 'length') : undefined;
+      if (typeof count !== 'number' || !Number.isSafeInteger(count) || count < 1 || count > MAX_ITEMS) return null;
+      const listed: string[] = [];
+      for (let index = 0; index < count; index += 1) {
+        const kind = readData(kinds, String(index));
+        if (!INTENT_KINDS.has(kind)) return null;
+        listed.push(String(kind));
+      }
+      return { level: 'info', event: 'bank.prepare', detail: `intents=${count} kinds=${listed.join(',')}` };
+    }
+    case 'confirm': {
+      const stage = readData(step, 'stage');
+      if (!CONFIRM_STAGES.has(stage)) return null;
+      return { level: 'info', event: 'bank.confirm', detail: `stage=${String(stage)}` };
+    }
+    default:
+      return null;
+  }
+}
+
 /** A failed `/api` response: path, status and the body's code, and nothing else. */
 export function describeApiFailure(path: string, status: number, body: unknown): string {
   const code = readData(body, 'code');
   return typeof code === 'string' && ERROR_CODE.test(code) ? `${path} ${status} ${code}` : `${path} ${status}`;
+}
+
+function setOf(record: Record<string, true>): ReadonlySet<unknown> {
+  return new Set(Object.keys(record));
 }
 
 function plain(value: unknown): string {

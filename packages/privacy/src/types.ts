@@ -90,6 +90,12 @@ export type PrivacyErrorKind =
   | 'unreachable'
   /** Private submit was dispatched, but no validated receipt returned. Never retry blindly. */
   | 'submission-uncertain'
+  /**
+   * This deployment's private relay has no avnu key, or avnu rejected it
+   * (D-070). Nothing was sent, and retrying cannot help until the operator
+   * sets one. Shield is unaffected: the wallet submits it.
+   */
+  | 'relay-not-configured'
   /** Anything unmapped. Log it, then add a case. */
   | 'unknown';
 

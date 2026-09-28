@@ -2,6 +2,7 @@ import { spawn, type ChildProcess } from 'node:child_process';
 import { realpath } from 'node:fs/promises';
 import type { Server } from 'node:http';
 import { resolve } from 'node:path';
+import { isRelayStartupNotice } from '../../../apps/backend/src/relay.js';
 import { forwardDebugLines, forwardsDebugLines, writeEdgeStdout } from './debug-lines.js';
 import { closeEdgeServer, createEdgeServer } from './edge.js';
 import { resolveContainedRegularFile } from './static-file.js';
@@ -25,6 +26,12 @@ export interface FlyCompositionOptions {
    * is true (D-069). The edge's own stdout by default; a test seam.
    */
   readonly debugLogWriter?: (line: string) => void;
+  /**
+   * Where the relay's D-070 startup line goes: the edge's own stdout by
+   * default; a test seam. It is the only thing a child's readiness message
+   * can print, and only the backend's.
+   */
+  readonly noticeWriter?: (line: string) => void;
 }
 
 export interface FlyComposition {
@@ -107,7 +114,7 @@ export async function startFlyComposition(
   });
 
   try {
-    await Promise.all([
+    const [backendReady] = await Promise.all([
       waitForChildReady(children[0], options.readinessTimeoutMs, options.startupSignal),
       waitForChildReady(children[1], options.readinessTimeoutMs, options.startupSignal),
     ]);
@@ -142,6 +149,7 @@ export async function startFlyComposition(
     assertStartupActive(options.startupSignal);
     if (startupChildDied) throw new Error('A private service exited before the public edge was ready.');
     startup = false;
+    writeRelayNotice(backendReady, options.noticeWriter ?? writeEdgeStdout);
     return { address, shutdown };
   } catch (error) {
     stopping = true;
@@ -167,6 +175,21 @@ async function assertStaticShell(staticRoot: string): Promise<void> {
   }
 }
 
+/**
+ * The relay's one startup line (D-070), when its readiness message carries
+ * one: printed once, and only if it is exactly the relay's own line. The
+ * lobby's readiness message is never read for this.
+ */
+function writeRelayNotice(ready: unknown, write: (line: string) => void): void {
+  const notice = ready && typeof ready === 'object' ? (ready as { notice?: unknown }).notice : undefined;
+  if (!isRelayStartupNotice(notice)) return;
+  try {
+    write(notice);
+  } catch {
+    // A broken log stream must never take the edge down.
+  }
+}
+
 function assertStartupActive(signal: AbortSignal | undefined): void {
   if (signal?.aborted) throw new FlyStartupAbortError();
 }
@@ -184,22 +207,23 @@ function launchChild(entry: string, environment: NodeJS.ProcessEnv, stdout: Chil
   return child;
 }
 
+/** Resolves with the child's readiness message, which the caller may read (D-070). */
 async function waitForChildReady(
   child: ChildProcess | undefined,
   timeoutMs: number | undefined,
   signal?: AbortSignal,
-): Promise<void> {
+): Promise<unknown> {
   if (!child) throw new Error('Private service was not started.');
   let timer: ReturnType<typeof setTimeout> | undefined;
   let rejectReady: ((error: Error) => void) | undefined;
-  let resolveReady: (() => void) | undefined;
+  let resolveReady: ((message: unknown) => void) | undefined;
   const onAbort = () => rejectReady?.(new FlyStartupAbortError());
   const onMessage = (message: unknown) => {
     if (message && typeof message === 'object' && (message as { type?: unknown }).type === 'ready') {
-      resolveReady?.();
+      resolveReady?.(message);
     }
   };
-  const ready = new Promise<void>((resolve, reject) => {
+  const ready = new Promise<unknown>((resolve, reject) => {
     resolveReady = resolve;
     rejectReady = reject;
     timer = setTimeout(() => reject(new Error('Private service did not become ready.')), timeoutMs ?? 15_000);
@@ -211,8 +235,9 @@ async function waitForChildReady(
   child.once('exit', onExit);
   child.once('error', onExit);
   try {
-    await ready;
+    const message = await ready;
     if (child.exitCode !== null || child.signalCode !== null) throw new Error('Private service exited before readiness.');
+    return message;
   } finally {
     if (timer) clearTimeout(timer);
     child.off('exit', onExit);

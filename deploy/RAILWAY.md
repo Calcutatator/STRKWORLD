@@ -41,7 +41,7 @@ generated domain.
 | Variable | Value |
 |---|---|
 | `FEE_AUTHORIZATION_SECRET` | Required: 32+ random characters, for example the output of `openssl rand -hex 32`. |
-| `AVNU_PAYMASTER_API_KEY` | Optional (D-068). The relay is gasless without it: the player's shielded STRK repays each relay's gas. Set one only if AVNU asks for it. |
+| `AVNU_PAYMASTER_API_KEY` | Required for unshield, send, stake and swap (D-070). avnu's relay refuses private transactions without a key, so until one is set those routes answer `503 RELAY_NOT_CONFIGURED`; shield works without it. Get one at https://portal.avnu.fi: connect a deployed wallet and create a key. It is an access credential, not a budget: in private mode each transaction repays avnu itself, so Portal credits (which fund gasfree sponsorship) are not what these relays spend. |
 
 ### Runtime (public configuration)
 
@@ -91,7 +91,9 @@ reserve planner is on too.
 3. Two browsers see each other's avatars on the street.
 4. With a funded wallet, do one small shield first, then read the balance at
    the Bank, then one small unshield. Those two receipts are D-056's and
-   D-062's live evidence.
+   D-062's live evidence. If `railway logs` shows a line starting
+   `[relay] AVNU_PAYMASTER_API_KEY is not set`, set the key before the
+   unshield: that line names the routes that will be refused.
 
 ## Debug logs
 
@@ -135,15 +137,17 @@ The browser sends window errors and unhandled rejections; `console.error` and
 `console.warn`; every privacy and wallet failure, with its PrivacyError kind,
 wallet error code and message; connect-flow states; wallet-session phases,
 with the connected account; buildings entered and exited, stations activated
-and panels opened and closed; and failed `/api` calls, as path, status and
-error code only. It never sends wallet signatures, calldata or proof data, and
+and panels opened and closed; the Bank's mode switches, refused adds (reason
+code), prepares (intent kinds and count) and confirm stages, never an amount,
+balance, recipient or token (D-070); and failed `/api` calls, as path, status
+and error code only. It never sends wallet signatures, calldata or proof data, and
 long hex and base64 runs are redacted. It batches every 3 seconds and sends
 what is left by `sendBeacon` when the page closes.
 
 The relay writes no IP, header or request timing for these requests, but
 Railway's own HTTP log records them as it records every request here. The
-composition forwards only the relay's `[debug]` lines to stdout; the rest of
-its output is still discarded.
+composition forwards only the relay's `[debug]` lines, and its one `[relay]`
+startup line (D-070), to stdout; the rest of its output is still discarded.
 
 To switch it off, unset both variables and redeploy. Both stay unset on any
 service real players use: they are not in `.env.production.example`.

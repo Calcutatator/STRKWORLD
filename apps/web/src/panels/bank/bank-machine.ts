@@ -29,6 +29,7 @@ import {
 } from '../routes.js';
 import type { ReceiptLedger } from '../../receipts/receipt-ledger.js';
 import { XSTRK_TOKEN } from '../../production/config.js';
+import { debugBank } from '../../debug/debug-tap.js';
 
 /**
  * The Bank panel, as a state machine.
@@ -72,6 +73,27 @@ import { XSTRK_TOKEN } from '../../production/config.js';
  */
 
 export type BankMode = 'shield' | 'unshield' | 'transfer' | 'stake';
+
+/**
+ * Why the Bank refused an Add, as the debug log names it (D-070): the
+ * accumulator's own reason, or one of the Bank's checks before it.
+ */
+export type BankAddRefusal =
+  | BatchRejectionReason['reason']
+  | 'gate-closed'
+  | 'door-locked'
+  | 'pool-not-loaded'
+  | 'bad-amount'
+  | 'bad-recipient'
+  | 'recipient-unregistered'
+  | 'recipient-check-failed';
+
+/**
+ * A confirm stage as the debug log names it (D-070): the seam's own stage, or
+ * how the attempt ended here — settled, the fee or the Bridge plan moved, or
+ * the D-035 gate closed and sent it back to review.
+ */
+export type BankConfirmStage = OperationStage | 'submitted' | 'fee-moved' | 'plan-moved' | 'gate-closed';
 
 const ALL_BANK_MODES: readonly BankMode[] = ['shield', 'unshield', 'transfer', 'stake'];
 
@@ -379,6 +401,12 @@ export function createBankPanel(options: BankPanelOptions): BankPanel {
     patch({ notice: { tone, text } });
   }
 
+  /** An Add the Bank will not queue: the player reads why, the debug log gets the code alone (D-070). */
+  function refuseAdd(reason: BankAddRefusal, text?: string): void {
+    if (text !== undefined) notice('error', text);
+    debugBank({ step: 'add-refused', reason });
+  }
+
   function gateOpen(): boolean {
     if (canStartFinancialAction()) return true;
     notice('error', COPY.errors['submission-uncertain']);
@@ -512,6 +540,7 @@ export function createBankPanel(options: BankPanelOptions): BankPanel {
 
     setMode(mode: BankMode): void {
       if (!allowedModes.includes(mode)) return;
+      const from = store.getState().mode;
       const routeId = ROUTE_BY_MODE[mode];
       // Selecting a mode has always reset both form fields and the notice,
       // even when the selected tab is already active. That is a composition
@@ -529,6 +558,7 @@ export function createBankPanel(options: BankPanelOptions): BankPanel {
         recipientText: '',
         notice: null,
       });
+      if (from !== mode) debugBank({ step: 'mode', mode, from });
     },
 
     setAmount(text: string): void {
@@ -597,23 +627,26 @@ export function createBankPanel(options: BankPanelOptions): BankPanel {
     },
 
     async addToBatch(signal?: AbortSignal): Promise<void> {
-      if (!gateOpen()) return;
+      if (!gateOpen()) {
+        refuseAdd('gate-closed');
+        return;
+      }
       const state = store.getState();
       // A second click while the first is still resolving would queue the same
       // intent twice, and the player would see one row appear and then another.
       if (state.adding) return;
       if (!state.door.open) {
-        notice('error', state.door.message);
+        refuseAdd('door-locked', state.door.message);
         return;
       }
       if (!state.token) {
-        notice('error', COPY.notices.poolNotLoaded);
+        refuseAdd('pool-not-loaded', COPY.notices.poolNotLoaded);
         return;
       }
 
       const amount = parseTokenAmount(state.amountText);
       if (amount === null || amount <= 0n) {
-        notice('error', COPY.notices.badAmount);
+        refuseAdd('bad-amount', COPY.notices.badAmount);
         return;
       }
 
@@ -621,7 +654,7 @@ export function createBankPanel(options: BankPanelOptions): BankPanel {
       if (modeNeedsRecipient(state.mode)) {
         recipient = state.recipientText.trim();
         if (!looksLikeAddress(recipient)) {
-          notice('error', COPY.notices.badRecipient);
+          refuseAdd('bad-recipient', COPY.notices.badRecipient);
           return;
         }
       }
@@ -640,9 +673,12 @@ export function createBankPanel(options: BankPanelOptions): BankPanel {
             // The room may have closed while the pool was answering. Queuing an
             // intent into a reset panel is a financial write nobody asked for.
             if (!live(mySession) || composition !== myComposition) return;
-            if (!gateOpen()) return;
+            if (!gateOpen()) {
+              refuseAdd('gate-closed');
+              return;
+            }
             if (status === 'unregistered') {
-              notice('error', COPY.notices.recipientUnregistered);
+              refuseAdd('recipient-unregistered', COPY.notices.recipientUnregistered);
               return;
             }
             if (status === 'unknown') {
@@ -652,7 +688,7 @@ export function createBankPanel(options: BankPanelOptions): BankPanel {
             if (!live(mySession) || composition !== myComposition) return;
             const failure = toFailure(error);
             onError?.(failure);
-            notice('error', COPY.errors[failure.kind]);
+            refuseAdd('recipient-check-failed', COPY.errors[failure.kind]);
             return;
           }
         }
@@ -671,7 +707,7 @@ export function createBankPanel(options: BankPanelOptions): BankPanel {
 
         const result = accumulator.accept(intent);
         if (!result.ok) {
-          notice('error', rejectionCopy(result.rejection));
+          refuseAdd(result.rejection.reason, rejectionCopy(result.rejection, intent.kind));
           return;
         }
 
@@ -716,6 +752,7 @@ export function createBankPanel(options: BankPanelOptions): BankPanel {
 
       const id = begin();
       discardPrepared();
+      debugBank({ step: 'prepare', kinds: confirmed.value.map((intent) => intent.kind) });
       patch({ flow: { name: 'preparing' }, notice: null });
       try {
         const batch = await operations.prepare([...confirmed.value], signal);
@@ -762,7 +799,15 @@ export function createBankPanel(options: BankPanelOptions): BankPanel {
       // disabled button is the courtesy, this is the guard.
       const mySession = session;
       const id = begin();
+      // D-070: each stage once, in order, for the debug log. Stages only.
+      let lastStage: BankConfirmStage | null = null;
+      const trace = (stage: BankConfirmStage): void => {
+        if (stage === lastStage) return;
+        lastStage = stage;
+        debugBank({ step: 'confirm', stage });
+      };
       patch({ flow: { name: 'submitting', stage: 'composing', message: COPY.flow.handingOver, summary } });
+      trace('composing');
 
       // Re-read the live fee before asking the wallet for anything. The seam's
       // ceiling is the real guard and is still passed below, but it can only
@@ -774,6 +819,7 @@ export function createBankPanel(options: BankPanelOptions): BankPanel {
         if (!canStartFinancialAction()) {
           patch({ flow: { name: 'review', summary } });
           notice('error', COPY.errors['submission-uncertain']);
+          trace('gate-closed');
           return;
         }
         patch({ pool });
@@ -782,10 +828,12 @@ export function createBankPanel(options: BankPanelOptions): BankPanel {
           patch({
             flow: { name: 'failed', kind: 'unknown', message: COPY.notices.feeMoved, recovery: 'prepare-again' },
           });
+          trace('fee-moved');
           return;
         }
       } catch (error) {
         fail(error, 'prepare-again', id);
+        if (current(id)) trace('failed');
         return;
       }
 
@@ -793,6 +841,7 @@ export function createBankPanel(options: BankPanelOptions): BankPanel {
         if (!canStartFinancialAction()) {
           patch({ flow: { name: 'review', summary } });
           notice('error', COPY.errors['submission-uncertain']);
+          trace('gate-closed');
           return;
         }
         const handoffReady = options.preConfirmGuard ? await options.preConfirmGuard() : true;
@@ -800,6 +849,7 @@ export function createBankPanel(options: BankPanelOptions): BankPanel {
         if (!canStartFinancialAction()) {
           patch({ flow: { name: 'review', summary } });
           notice('error', COPY.errors['submission-uncertain']);
+          trace('gate-closed');
           return;
         }
         if (!handoffReady) {
@@ -812,6 +862,7 @@ export function createBankPanel(options: BankPanelOptions): BankPanel {
               recovery: 'prepare-again',
             },
           });
+          trace('plan-moved');
           return;
         }
         signingOwner = id;
@@ -821,6 +872,7 @@ export function createBankPanel(options: BankPanelOptions): BankPanel {
           signal,
           onProgress: ({ stage }) => {
             if (!current(id)) return;
+            trace(stage);
             patch({ flow: { name: 'submitting', stage, message: stageCopy(stage), summary } });
           },
         });
@@ -848,6 +900,7 @@ export function createBankPanel(options: BankPanelOptions): BankPanel {
           balance: { status: 'unrequested' },
           notice: { tone: 'info', text: COPY.balance.changed },
         });
+        trace('submitted');
       } catch (error) {
         if (signingOwner === id) {
           signingOwner = null;
@@ -867,9 +920,11 @@ export function createBankPanel(options: BankPanelOptions): BankPanel {
           patch({
             flow: { name: 'failed', kind: 'unknown', message: COPY.notices.feeMoved, recovery: 'prepare-again' },
           });
+          trace('fee-moved');
           return;
         }
         fail(error, 'prepare-again', id);
+        if (current(id)) trace('failed');
       }
     },
 
@@ -990,10 +1045,16 @@ export function stageCopy(stage: OperationStage): string {
   }
 }
 
-export function rejectionCopy(rejection: BatchRejectionReason): string {
+/**
+ * What the player reads for a refused intent. `incoming` is the kind being
+ * added, when there is one: a shield refused behind a queued spend (often one
+ * whose prepare failed) is told to remove that item, since there is no queued
+ * shield to confirm on its own.
+ */
+export function rejectionCopy(rejection: BatchRejectionReason, incoming?: Intent['kind']): string {
   switch (rejection.reason) {
     case 'mixed-shield-and-spend':
-      return COPY.notices.mixedShieldAndSpend;
+      return incoming === 'shield' ? COPY.notices.shieldAfterSpend : COPY.notices.mixedShieldAndSpend;
     case 'mixed-route-kinds':
       return COPY.notices.mixedRouteKinds;
     case 'swap-must-be-alone':

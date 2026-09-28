@@ -258,6 +258,42 @@ empty shell to fetchers, so a 200 there means nothing.
 
 ## 6. Findings log
 
+### 2026-09-28 — avnu's private relay refuses `sponsored_private` without a Portal key (D-070)
+
+D-068's keyless default could never relay. With no `x-paymaster-api-key`
+header, avnu answers the SDK's exact `paymaster_buildTransaction` request
+(type `apply_action`, fee mode `sponsored_private`) with JSON-RPC
+`{"code":163,"message":"An error occurred (UNKNOWN_ERROR)","data":"x-paymaster-api-key is invalid"}`,
+which the relay turned into 502 `UPSTREAM_FAILURE` at `/api/v1/private/fees`.
+163 is also avnu's code for an outage or a blacklisted call, so only a 163
+whose `data` or message names the key means a key problem. The SDK's
+`PaymasterRpcError` keeps avnu's `data` apart and folds the JSON-RPC message
+into its own `message` as `Paymaster <method>: <message> (code: <code>)`. The
+key is an access credential, not a budget: the relayer pays the gas and the
+relay fee withdrawn inside the private transaction reimburses it, so the
+player still pays. Shield never reaches the relay; the wallet submits it. A
+failed prepare keeps its intent queued (by design, so nothing is retyped), so
+a spend that cannot relay blocks a shield in the same visit until it is
+removed. A Game Mode station window has no Remove and disables Add while
+anything is queued, so there only closing the window clears it. The
+composition discards the relay's stdout (see the D-069 finding below), so the
+relay's one startup line reaches the log on its child's readiness message.
+
+*Verified:* the keyless request replayed with curl against
+`https://starknet.paymaster.avnu.fi` (pool
+`0x040337b1…ffe812a`, STRK fee token): the 163 above. avnu's
+`https://docs.avnu.fi/llms-full.txt` sections "Build Private Transaction"
+(key "Required for the sponsored fee modes"; 163 is "Invalid API key, service
+unavailable, or blacklisted call"), "Execute Private Transaction" and
+"Gasfree integration" (Portal sign-in with a deployed wallet; credits fund
+`sponsored`). `@avnu/avnu-sdk` 4.2.0 `dist/index.mjs` (`paymasterRpcCall`,
+`PaymasterRpcError`). `apps/backend/src/relay.test.ts` (no avnu call without a
+key on any relayed route, the 163 and its variants mapped to
+`RELAY_NOT_CONFIGURED`, other failures still 502, one startup line, no write
+per request), `deploy/fly/src/compose.test.ts` (only the backend's exact line
+is printed, once), the backend-client and Bank machine tests; nine mutations
+of the new guards, backend and edge, each fail a test.
+
 ### 2026-09-28 — The composition discards every child's stdout; debug logs forward only `[debug]` lines (D-069)
 
 `deploy/fly/src/compose.ts` spawns the backend and lobby children with

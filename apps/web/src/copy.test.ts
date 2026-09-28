@@ -47,6 +47,22 @@ describe('shell copy', () => {
     expect(copy).not.toContain('Nothing was sent');
   });
 
+  it('says in plain words which actions need the unconfigured relay, and that nothing was sent (D-070)', () => {
+    expect(COPY.errors['relay-not-configured']).toBe(
+      "Unshield, send, stake and swap need the private relay, which isn't set up on this site yet. Nothing was sent.",
+    );
+    // Not a retry invitation, and not the network's fault.
+    expect(COPY.errors['relay-not-configured']).not.toMatch(/try again|could not reach|wallet/i);
+  });
+
+  it('tells a player whose shield meets a queued spend to remove that item first', () => {
+    expect(COPY.notices.shieldAfterSpend).toBe(
+      'A spend is already queued, and a shield cannot travel with it. Remove the queued item first, then add the shield.',
+    );
+    expect(COPY.notices.shieldAfterSpend).toContain(COPY.batch.remove);
+    expect(COPY.notices.shieldAfterSpend).not.toBe(COPY.notices.mixedShieldAndSpend);
+  });
+
   describe('the staking counter (D-063, D-064)', () => {
     // Every line the counter can show: its own section plus its entries elsewhere.
     const stakeCopy = [

@@ -8,6 +8,18 @@
  * that hold, buffer and send nothing. A tap can never break its caller.
  */
 
+/**
+ * One step in the Bank (D-070): a mode switch, an add the Bank refused, a
+ * prepare starting, or a confirm stage. Codes, intent kinds and a count only,
+ * never an amount, a balance, a recipient or a token address; the logger
+ * admits each field only from a fixed list, so a wrong value is dropped.
+ */
+export type BankDebugStep =
+  | { readonly step: 'mode'; readonly mode: string; readonly from: string }
+  | { readonly step: 'add-refused'; readonly reason: string }
+  | { readonly step: 'prepare'; readonly kinds: readonly string[] }
+  | { readonly step: 'confirm'; readonly stage: string };
+
 export interface DebugTap {
   /** A privacy or wallet failure: its PrivacyError kind, wallet code and message. */
   failure(event: string, error: unknown): void;
@@ -17,6 +29,8 @@ export interface DebugTap {
   walletSession(snapshot: unknown): void;
   /** A building-visit transition, from which panel opens and closes are read. */
   visit(previous: unknown, next: unknown): void;
+  /** A Bank step, by code only. */
+  bank(step: unknown): void;
 }
 
 let tap: DebugTap | null = null;
@@ -57,6 +71,15 @@ export function debugVisit(previous: unknown, next: unknown): void {
   if (!tap || previous === next) return;
   try {
     tap.visit(previous, next);
+  } catch {
+    // As above.
+  }
+}
+
+export function debugBank(step: BankDebugStep): void {
+  if (!tap) return;
+  try {
+    tap.bank(step);
   } catch {
     // As above.
   }

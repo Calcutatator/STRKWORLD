@@ -17,6 +17,7 @@ import {
   type ParsedBackendEnvironment,
 } from './environment.js';
 import { createBackendFetchHandler } from './http.js';
+import { relayStartupNotice } from './relay.js';
 import { StarknetRpcPoolPort } from './starknet-rpc.js';
 import type { DegenCatalogPort, PaymasterPort, PoolRpcPort, SwapPlannerPort } from './types.js';
 
@@ -33,6 +34,12 @@ export interface BackendRuntime {
   api: BackendApi;
   server: Server;
   port: number;
+  /**
+   * The relay's one startup line when enabled routes will be refused for want
+   * of an avnu key (D-070), or null. The entry point prints it once; nothing
+   * here prints per request (D-014).
+   */
+  startupNotice: string | null;
 }
 
 export interface ListenBackendServerOptions {
@@ -76,7 +83,7 @@ export function createBackendRuntime(
   });
   server.requestTimeout = parsed.backend.requestTimeoutMs;
 
-  return { api, server, port: parsed.port };
+  return { api, server, port: parsed.port, startupNotice: relayStartupNotice(api.relayRefusedRoutes()) };
 }
 
 /** Bind the private edge on every container interface; port 0 is test-only. */

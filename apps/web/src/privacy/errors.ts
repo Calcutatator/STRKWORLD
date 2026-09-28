@@ -14,16 +14,19 @@ import type { PrivacyErrorKind } from '@strkworld/privacy';
  * the usual reason `instanceof` quietly stops matching in a bundled app.
  */
 
-const KINDS: readonly PrivacyErrorKind[] = [
-  'not-registered',
-  'insufficient-balance',
-  'privacy-leak',
-  'unsupported-wallet',
-  'user-rejected',
-  'unreachable',
-  'submission-uncertain',
-  'unknown',
-];
+/** Every kind, as a record so the compiler refuses a kind the seam adds and this misses. */
+const KIND_SET: Readonly<Record<PrivacyErrorKind, true>> = Object.freeze({
+  'not-registered': true,
+  'insufficient-balance': true,
+  'privacy-leak': true,
+  'unsupported-wallet': true,
+  'user-rejected': true,
+  unreachable: true,
+  'submission-uncertain': true,
+  'relay-not-configured': true,
+  unknown: true,
+});
+const KINDS = Object.freeze(Object.keys(KIND_SET)) as readonly PrivacyErrorKind[];
 
 /** What the shell passes around instead of the seam's error class. */
 export interface ShellFailure {

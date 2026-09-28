@@ -247,6 +247,12 @@ single-attempt, non-retryable `submission-uncertain` outcome, and D-035 requires
 the Shell's balance-check acknowledgement gate before another action. Never
 describe it as “nothing was sent” and never retry automatically.
 
+A relay with no avnu Portal key, or one avnu rejects, answers every relayed
+route `503 RELAY_NOT_CONFIGURED` before anything is relayed. The backend client
+maps that answer, and only that one, to the definite `relay-not-configured`
+kind (D-070): not `unreachable`, since retrying cannot help until the operator
+sets a key, and not `submission-uncertain`, since nothing was sent.
+
 `strk20PrepareInvoke(actions, true)` is simulation only. It skips proof
 generation and returns an empty, non-submittable proof; use it for previews,
 never for the submission queue.

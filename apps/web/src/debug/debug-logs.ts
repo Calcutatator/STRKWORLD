@@ -8,6 +8,7 @@ import { createViewerStorage, type ViewerStorage } from '../store/viewer-storage
 import {
   cleanText,
   describeApiFailure,
+  describeBankStep,
   describeConnectState,
   describeFailure,
   describeValue,
@@ -31,8 +32,10 @@ import { attachDebugTap } from './debug-tap.js';
  * It captures window errors and unhandled rejections, `console.error` and
  * `console.warn` (which still print), every privacy and wallet failure the
  * Shell funnels (`debug-tap.ts`), connect-flow states, wallet-session
- * snapshots, building and station events, panel opens and closes, and failed
- * `/api` responses (path, status and body code only). Entries go to the
+ * snapshots, building and station events, panel opens and closes, the Bank's
+ * mode switches, refused adds, prepares and confirm stages (codes and intent
+ * kinds only, D-070), and failed `/api` responses (path, status and body code
+ * only). Entries go to the
  * backend's `/api/v1/debug/logs` every 3 s, and by `sendBeacon` when the page
  * is hidden for good. The session id is random for this browser session:
  * never the lobby id, never derived from the wallet.
@@ -417,6 +420,10 @@ function createDebugLogs(page: Window, storage: ViewerStorage, options: DebugLog
       if (closed === opened) return;
       if (closed) record('info', 'panel.close', closed);
       if (opened) record('info', 'panel.open', opened);
+    },
+    bank: (step) => {
+      const entry = describeBankStep(step);
+      if (entry) record(entry.level, entry.event, entry.detail);
     },
   });
   undo.push(() => attachDebugTap(null));

@@ -9,7 +9,9 @@ await new Promise<void>((resolve, reject) => {
     resolve();
   });
 });
-process.send?.(READY_MESSAGE);
+// D-070: the composition discards this process's output, so the relay's one
+// startup line rides on the readiness message and the edge prints it.
+process.send?.(runtime.startupNotice ? { ...READY_MESSAGE, notice: runtime.startupNotice } : READY_MESSAGE);
 
 let stopping = false;
 const shutdown = () => {

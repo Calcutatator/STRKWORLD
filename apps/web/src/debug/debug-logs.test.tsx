@@ -21,7 +21,7 @@ import {
   startDebugLogs,
   stopDebugLogs,
 } from './debug-logs.js';
-import { debugConnectState, debugFailure, debugVisit, debugWalletSession } from './debug-tap.js';
+import { debugBank, debugConnectState, debugFailure, debugVisit, debugWalletSession } from './debug-tap.js';
 
 /**
  * D-069 in the browser: two gates, then batches every 3 s, a beacon on the
@@ -135,6 +135,7 @@ describe('the runtime opt-in', () => {
     debugConnectState({ name: 'detecting' });
     debugWalletSession({ phase: 'connecting' });
     debugVisit({ name: 'outside' }, { name: 'locked', building: 'vault', reason: 'coming-soon' });
+    debugBank({ step: 'mode', mode: 'unshield', from: 'shield' });
     window.dispatchEvent(new Event('pagehide'));
     await tick(10_000);
     expect(network).not.toHaveBeenCalled();
@@ -521,6 +522,46 @@ describe('what it captures', () => {
     expect(network).toHaveBeenCalled();
   });
 
+  it('records Bank steps by code, intent kind and count, and drops anything else (D-070)', async () => {
+    const { entries, tick } = harness();
+    const address = '0x04718f5a0fc34cc1af16a1cdee98ffb20c31f5cd61d6ab07201858f4287c938d';
+    debugBank({ step: 'mode', mode: 'unshield', from: 'shield' });
+    debugBank({ step: 'add-refused', reason: 'mixed-shield-and-spend' });
+    debugBank({ step: 'prepare', kinds: ['unshield'] });
+    debugBank({ step: 'confirm', stage: 'proving' });
+    debugBank({ step: 'confirm', stage: 'fee-moved' });
+    // Whatever a caller passes, only listed codes are written: never an
+    // amount, a recipient or a token address.
+    debugBank({ step: 'mode', mode: address, from: 'shield' });
+    debugBank({ step: 'add-refused', reason: `amount 1.5 to ${address}` });
+    debugBank({ step: 'prepare', kinds: ['unshield', address] });
+    debugBank({ step: 'prepare', kinds: [] });
+    debugBank({ step: 'confirm', stage: '1500000000000000000' });
+    debugBank({ step: 'balance', total: '100' } as never);
+    debugBank({ step: 'prepare', kinds: [{ kind: 'unshield', amount: 1n, recipient: address }] } as never);
+    await tick();
+    expect(entries().filter((entry) => entry.event.startsWith('bank.')).map(({ level, event, detail }) => [level, event, detail])).toEqual([
+      ['info', 'bank.mode', 'mode=unshield from=shield'],
+      ['warn', 'bank.add-refused', 'reason=mixed-shield-and-spend'],
+      ['info', 'bank.prepare', 'intents=1 kinds=unshield'],
+      ['info', 'bank.confirm', 'stage=proving'],
+      ['info', 'bank.confirm', 'stage=fee-moved'],
+    ]);
+    expect(JSON.stringify(entries())).not.toContain(address);
+  });
+
+  it('names the relay failure kind, so a missing avnu key is legible in the log (D-070)', async () => {
+    const { entries, tick } = harness();
+    debugFailure('privacy.operation', new PrivacyError('relay-not-configured', 'The private relay is not configured on this deployment.'));
+    await tick();
+    expect(entries().at(-1)).toEqual({
+      t: T0,
+      level: 'error',
+      event: 'privacy.operation',
+      detail: 'kind=relay-not-configured message="The private relay is not configured on this deployment."',
+    });
+  });
+
   it('never sends signatures, calldata or proof data, but may name an account', async () => {
     vi.spyOn(console, 'error').mockImplementation(() => undefined);
     const { entries, tick } = harness();
@@ -600,6 +641,7 @@ describe('the taps', () => {
       debugConnectState(hostile);
       debugWalletSession(hostile);
       debugVisit(hostile, { name: 'outside' });
+      debugBank(hostile as never);
     };
     expect(call).not.toThrow();
     const { tick, entries } = harness();

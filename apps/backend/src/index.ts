@@ -37,6 +37,15 @@ export {
   DEFAULT_MAX_REQUEST_BYTES,
   type BackendFetchHandlerOptions,
 } from './http.js';
+export {
+  isRelayStartupNotice,
+  RELAY_NOT_CONFIGURED_CODE,
+  RELAY_NOT_CONFIGURED_MESSAGE,
+  RELAYED_ROUTES,
+  RelayNotConfiguredError,
+  refusedRelayRoutes,
+  relayStartupNotice,
+} from './relay.js';
 export { decodeServerActions, validateServerActionRoute } from './server-actions.js';
 export { StarknetRpcPoolPort, type StarknetRpcOptions } from './starknet-rpc.js';
 export { ApiFailure, validateArtifact } from './validation.js';

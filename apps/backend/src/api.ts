@@ -8,6 +8,12 @@ import {
   type RequestRateLimiterPort,
   type SponsorshipBudgetPort,
 } from './metrics.js';
+import {
+  RELAY_NOT_CONFIGURED_CODE,
+  RELAY_NOT_CONFIGURED_MESSAGE,
+  RelayNotConfiguredError,
+  refusedRelayRoutes,
+} from './relay.js';
 import { validateServerActionRoute } from './server-actions.js';
 import {
   BoundedSubmissionQueue,
@@ -171,6 +177,7 @@ export class BackendApi {
     if (route === 'swap') {
       throw new ApiFailure(400, 'Use the quote-bound swap preparation endpoint.');
     }
+    this.requireRelay();
     const feeToken = requireFelt(value.feeToken, 'fee token');
     const operationToken = requireFelt(value.operationToken, 'operation token');
     if (!sameAddress(feeToken, this.config.feeToken)) {
@@ -229,6 +236,7 @@ export class BackendApi {
     requireVersion(value);
     const route = requireRoute(value.route);
     const policy = this.routePolicy(route);
+    this.requireRelay();
     const artifact = validateArtifact(value.artifact, this.config);
     if (typeof value.feeAuthorization !== 'string' || !value.feeAuthorization) {
       throw new ApiFailure(400, 'Fee authorization is required.');
@@ -325,6 +333,8 @@ export class BackendApi {
     );
     requireVersion(value);
     const policy = this.routePolicy('swap');
+    // Before the quote as well as the fee: the planner is avnu too (D-070).
+    this.requireRelay();
     const sellToken = requireFelt(value.sellToken, 'sell token');
     const buyToken = requireFelt(value.buyToken, 'buy token');
     const sellAmount = requireBigintString(value.sellAmount, 'sell amount');
@@ -506,6 +516,23 @@ export class BackendApi {
     return policy;
   }
 
+  /**
+   * D-070: avnu refuses `sponsored_private` without a Portal key, so a relay
+   * holding none refuses an enabled route here, before avnu or the chain is
+   * asked anything. A disabled route has already answered as disabled.
+   */
+  private requireRelay(): void {
+    if (this.paymaster.configured === false) throw new RelayNotConfiguredError();
+  }
+
+  /**
+   * The enabled routes this relay refuses for want of a key (D-070), for its
+   * one startup line. Read from the same switch the routes themselves check.
+   */
+  relayRefusedRoutes(): readonly PrivateRoute[] {
+    return refusedRelayRoutes(this.config, this.paymaster.configured !== false);
+  }
+
   private validateClaims(
     claims: FeeAuthorizationClaims,
     route: PrivateRoute,
@@ -566,6 +593,10 @@ export class BackendApi {
 
   private failure(error: unknown): ApiResponse {
     this.metrics.failure();
+    // D-070: no key, or a key avnu rejects. One fixed answer, never avnu's text.
+    if (error instanceof RelayNotConfiguredError) {
+      return { status: 503, body: { code: RELAY_NOT_CONFIGURED_CODE, message: RELAY_NOT_CONFIGURED_MESSAGE } };
+    }
     if (error instanceof ApiFailure) {
       return { status: error.status, body: { code: `HTTP_${error.status}`, message: error.message } };
     }

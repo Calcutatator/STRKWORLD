@@ -11,6 +11,10 @@ describe('failure classification', () => {
     expect(toFailure(new PrivacyError('submission-uncertain', 'response lost')).kind).toBe(
       'submission-uncertain',
     );
+    // D-070: a relay with no avnu key is its own class, never `unknown`.
+    expect(toFailure(new PrivacyError('relay-not-configured', 'relay not configured')).kind).toBe(
+      'relay-not-configured',
+    );
   });
 
   it('classifies anything else as unknown and keeps the cause for logs', () => {
