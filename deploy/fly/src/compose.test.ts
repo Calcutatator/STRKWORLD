@@ -28,6 +28,9 @@ async function fakeChild(): Promise<string> {
         : 0,
     );
     const server = createServer((_request, response) => response.end('child'));
+    if (process.env.PRINT_DEBUG_LINES) {
+      process.stdout.write('noise from ' + port + '\\n[debug] fixture-' + port + ' 2026-09-28T16:00:00.000Z info test.event from ' + port + '\\nunterminated noise');
+    }
     if (process.env.EXIT_BEFORE_READY) setTimeout(() => process.exit(2), Number(process.env.EXIT_BEFORE_READY));
     if (!process.env.EXIT_BEFORE_READY) {
       setTimeout(() => server.listen(port, '127.0.0.1', () => {
@@ -204,6 +207,40 @@ describe('Fly composition process boundary', () => {
     const response = await fetch(`http://127.0.0.1:${composition.address.port}/`);
     expect(response.status).toBe(200);
     await expect(response.text()).resolves.toBe('<html>test shell</html>');
+  });
+
+  it('forwards only the backend child\'s [debug] lines, and only while debug logs are on (D-069)', async () => {
+    const child = await fakeChild();
+    const staticRoot = await fakeStaticRoot();
+    for (const flag of ['true', undefined]) {
+      const { publicPort, backendPort, lobbyPort } = await ports();
+      const lines: string[] = [];
+      const environment: NodeJS.ProcessEnv = { ...process.env, PRINT_DEBUG_LINES: '1' };
+      delete environment['BACKEND_DEBUG_LOGS_ENABLED'];
+      if (flag) environment['BACKEND_DEBUG_LOGS_ENABLED'] = flag;
+      const composition = await startFlyComposition({
+        staticRoot,
+        backendEntry: child,
+        lobbyEntry: child,
+        publicPort,
+        backendPort,
+        lobbyPort,
+        publicOrigin: 'https://game.example',
+        environment,
+        readinessTimeoutMs: 2_000,
+        debugLogWriter: (line) => lines.push(line),
+      });
+      compositions.push(composition);
+      const deadline = Date.now() + 2_000;
+      while (flag && lines.length === 0 && Date.now() < deadline) {
+        await new Promise((resolve) => setTimeout(resolve, 10));
+      }
+      await new Promise((resolve) => setTimeout(resolve, 100));
+      // The backend's one debug line; never its noise, never the lobby's output.
+      expect(lines).toEqual(flag
+        ? [`[debug] fixture-${backendPort} 2026-09-28T16:00:00.000Z info test.event from ${backendPort}`]
+        : []);
+    }
   });
 
   it('refuses to expose the public edge without a usable shell artifact', async () => {

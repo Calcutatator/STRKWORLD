@@ -1,5 +1,6 @@
 import type { PrivacyOperations, WalletCapability } from '@strkworld/privacy';
 import type { WalletStatus } from '@strkworld/shared';
+import { debugConnectState, debugFailure } from '../debug/debug-tap.js';
 import { createStore, type ReadableStore } from '../store/store.js';
 import { toFailure } from '../privacy/errors.js';
 
@@ -71,6 +72,8 @@ export function createConnectFlow(
   const stateStore = createStore<ConnectState>(freezeConnectState(initialState));
   const publish = (state: ConnectState): ConnectState => {
     const frozen = freezeConnectState(state);
+    // D-069: recorded before delivery, so a re-entrant publish logs after this one.
+    debugConnectState(frozen);
     stateStore.setState(frozen);
     return frozen;
   };
@@ -93,6 +96,7 @@ export function createConnectFlow(
         const next = classify(capability);
         return generation === attemptGeneration ? publish(next) : store.getState();
       } catch (error) {
+        debugFailure('connect.capability', error);
         const next = fromError(error);
         return generation === attemptGeneration ? publish(next) : store.getState();
       }

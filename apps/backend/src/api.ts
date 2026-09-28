@@ -1,3 +1,4 @@
+import { DEBUG_LOGS_PATH, DebugLogSink } from './debug-logs.js';
 import { publicDegenToken, validateDegenConfig } from './degen-catalog.js';
 import { ENDUR_XSTRK_ASSET } from './endur.js';
 import {
@@ -59,6 +60,11 @@ export interface BackendApiOptions {
   rateLimiter?: RequestRateLimiterPort;
   sponsorshipBudget?: SponsorshipBudgetPort;
   submissionQueue?: SubmissionQueuePort;
+  /**
+   * The opt-in debug sink (D-069). Reachable only while
+   * `config.debugLogsEnabled` is true; by default it writes to stdout.
+   */
+  debugLogs?: DebugLogSink;
 }
 
 export class BackendApi {
@@ -76,6 +82,7 @@ export class BackendApi {
   private readonly clockNow: () => number;
   private readonly budget: SponsorshipBudgetPort;
   private readonly submissionQueue: SubmissionQueuePort;
+  private readonly debugLogs: DebugLogSink;
 
   constructor(options: BackendApiOptions) {
     validateBackendConfig(options.config);
@@ -100,9 +107,18 @@ export class BackendApi {
       this.config.submissionQueue.maxInFlight,
       this.config.submissionQueue.maxQueued,
     );
+    this.debugLogs = options.debugLogs ?? new DebugLogSink({ now });
   }
 
   async handle(request: ApiRequest): Promise<ApiResponse> {
+    // D-069: the opt-in debug sink stands apart from the private routes. It
+    // takes no slot in the players' shared rate window, has its own entry
+    // limit, and keeps working while the private kill switch is off. Switched
+    // off, this path is not a route: it falls through and answers exactly as
+    // any unknown path does.
+    if (this.config.debugLogsEnabled === true && request.path === DEBUG_LOGS_PATH) {
+      return this.debugLogs.handle(request);
+    }
     this.metrics.request();
     const deadline = createRequestDeadline(request.signal, this.requestTimeoutMs);
     try {
@@ -734,6 +750,9 @@ function validateBackendConfig(config: BackendConfig): void {
     throw new Error('Backend swap policy must be quote-bound, immediate and allowlisted.');
   }
   if (config.degen !== undefined) validateDegenConfig(config.degen);
+  if (config.debugLogsEnabled !== undefined && typeof config.debugLogsEnabled !== 'boolean') {
+    throw new Error('Backend debug-log switch must be a boolean.');
+  }
 }
 
 function createRequestDeadline(

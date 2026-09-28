@@ -34,6 +34,20 @@ const hot = (import.meta as ImportMeta & { hot?: { dispose(callback: () => void)
 const environment = (import.meta as ImportMeta & {
   env: Record<string, string | boolean | undefined>;
 }).env;
+/**
+ * D-069: opt-in remote debug logs, for a test deployment only. The logger is
+ * compiled in only when VITE_DEBUG_LOGS=true, and even then does nothing
+ * unless this page was opened with ?debug=1. A launch build leaves the flag
+ * unset: Vite replaces the read below with `undefined`, so the dynamic import
+ * is dead code and the logger's chunk is never emitted.
+ */
+const debugLogsBuildFlag = (import.meta as unknown as { env: { VITE_DEBUG_LOGS?: string } }).env.VITE_DEBUG_LOGS;
+const debugLogsReady: Promise<unknown> | null = debugLogsBuildFlag === 'true'
+  ? import('./debug/debug-logs.js')
+    .then(({ startDebugLogs }) => startDebugLogs({ buildFlag: debugLogsBuildFlag, world: worldOut }))
+    // A debug logger that fails to load or start must never hold up the city.
+    .catch(() => null)
+  : null;
 let activePresence: PresenceController | null = null;
 // The shared block sandbox (D-060): the lobby is its authority whenever a lobby
 // client is connected, and the same rules run locally for solo play. Created
@@ -107,6 +121,9 @@ if (usesProductionWallet(environment)) {
     // lets the city render its honest loading surface before chain code arrives.
     startProductionWalletBootstrap({
       load: async () => {
+        // The relay client binds fetch when the session is built, so an
+        // opted-in debug logger must wrap it first (D-069).
+        if (debugLogsReady) await debugLogsReady;
         const { createProductionWalletSession, ReservePublicShieldPlanner } = await import('@strkworld/privacy');
         createShieldPlanner = (options) => new ReservePublicShieldPlanner(options);
         return createProductionWalletSession(config);

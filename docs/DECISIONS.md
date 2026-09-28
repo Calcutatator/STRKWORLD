@@ -368,7 +368,7 @@ Shell lane owns it.
 
 ## D-014 — The backend is a first-class component with its own privacy rules
 
-**2026-08-16 · Accepted · paymaster key made optional (gasless relay) by D-068**
+**2026-08-16 · Accepted · paymaster key made optional (gasless relay) by D-068 · per-request logging exception for opted-in test deployments by D-069**
 
 **Context.** An independent review found that D-013 quietly put a server on the
 critical path of *every* private action — fee build and submission must be
@@ -3024,3 +3024,47 @@ fee ceilings, sponsorship budget, queue and no-logging rules are unchanged.
 **Consequences.** A test deployment needs only `FEE_AUTHORIZATION_SECRET` as a
 secret. If AVNU's relay turns out to require a key for this fee mode, relayed
 routes fail at the fee build and the fix is to set one: nothing else changes.
+
+---
+
+## D-069 — Opt-in debug logs for test deployments
+
+**2026-09-28 · Accepted by the user · narrows D-014's "logs nothing per-request" for opted-in test deployments only**
+
+**Context.** The lead tests the live Railway deployment on a separate laptop
+with a funded wallet, and what fails there has to reach the developer without
+copying and pasting. D-014 makes the backend log nothing per request, and the
+one-container composition (D-045) discarded every child's stdout, so a failure
+in that browser left no trace the developer could read.
+
+**Decision.**
+
+- Two flags, both off by default and never set for a launch:
+  `BACKEND_DEBUG_LOGS_ENABLED=true` opens `POST /api/v1/debug/logs`, and
+  `VITE_DEBUG_LOGS=true` compiles the browser logger into the bundle. Unset,
+  the route answers exactly like an unknown path and the bundle carries no
+  logger; any value other than `true` or `false` stops the relay starting.
+- A debug build sends nothing until the page is opened with `?debug=1`, which
+  lasts for that tab's session; `?debug=0` or the badge's button ends it, and a
+  badge shows while it is on.
+- The browser sends window errors and unhandled rejections, `console.error`
+  and `console.warn`, privacy and wallet failures (kind, wallet error code,
+  message), connect-flow states, wallet-session phases including the connected
+  account, building, station and panel events, and failed `/api` calls (path,
+  status and body code only). It never sends signatures, calldata or proof
+  data, and long hex and base64 runs are redacted. The session id is random
+  per browser session, never the lobby id and never derived from the wallet.
+- The relay validates each batch strictly (at most 50 entries and 32 KB, a
+  fixed schema), writes one `[debug]` line per entry with control characters
+  stripped, rate-limits to 600 entries a minute, and never reads the request's
+  IP, headers or timing. With the flag on, the composition pipes the backend's
+  stdout and forwards only lines that start with `[debug] `; the lobby's
+  output is never read.
+
+**Consequences.** With both flags on, one tester's own session reaches the
+platform log stream, including their account address and any amounts or
+addresses that wallet errors mention, beside Railway's own HTTP log. That is
+acceptable only because the deployment is private and the tester is the
+owner. While the route is open, anyone who can reach it can write lines within
+the rate limit. D-005 and D-020/D-024 are unchanged. A launch leaves both
+flags unset.

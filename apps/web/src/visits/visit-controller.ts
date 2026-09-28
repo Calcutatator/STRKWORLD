@@ -5,6 +5,7 @@ import type {
   StationId,
   WorldEvents,
 } from '@strkworld/shared';
+import { debugVisit } from '../debug/debug-tap.js';
 import { PRIVACY_REGISTER, type RouteGrade } from '../privacy/register.js';
 import { createStore, type ReadableStore } from '../store/store.js';
 import { ownBuildingPayload, ownLockedBuildingPayload, ownStationPayload } from '../bus/world-event-payload.js';
@@ -61,11 +62,15 @@ export function createVisitController(
 
   const stateStore = createStore<VisitState>(freezeVisitState({ name: 'outside' }));
   const setState = (update: VisitState | ((previous: VisitState) => VisitState)): void => {
-    stateStore.setState(
-      typeof update === 'function'
-        ? (previous) => freezeVisitState((update as (previous: VisitState) => VisitState)(previous))
-        : freezeVisitState(update),
+    const before = stateStore.getState();
+    const next = freezeVisitState(
+      typeof update === 'function' ? (update as (previous: VisitState) => VisitState)(before) : update,
     );
+    // D-069: panel opens and closes, read from this one transition point and
+    // recorded before delivery, so a re-entrant update logs after this one.
+    // Inert unless debug logs are on.
+    debugVisit(before, next);
+    stateStore.setState(next);
   };
   const store: ReadableStore<VisitState> = {
     getState: stateStore.getState,

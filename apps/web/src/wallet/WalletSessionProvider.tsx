@@ -1,5 +1,6 @@
-import { createContext, useContext, useMemo, useSyncExternalStore, type ReactNode } from 'react';
+import { createContext, useContext, useEffect, useMemo, useSyncExternalStore, type ReactNode } from 'react';
 import type { WalletSession, WalletSessionSnapshot } from '@strkworld/privacy';
+import { debugFailure, debugWalletSession } from '../debug/debug-tap.js';
 
 export interface WalletSessionRuntime {
   readonly session: WalletSession;
@@ -39,11 +40,18 @@ export function WalletSessionProvider({
   );
   const getSnapshot = useMemo(() => () => snapshotReader(), [snapshotReader]);
   const snapshot = useSyncExternalStore(subscribe, getSnapshot, getSnapshot);
+  // D-069: the session's phases as the Shell sees them; inert unless debug logs are on.
+  useEffect(() => debugWalletSession(snapshot), [snapshot]);
   const value = useMemo<WalletSessionRuntime>(() => Object.freeze({
     session,
     snapshot,
     async connect(key: string) {
-      await session.connect(key);
+      try {
+        await session.connect(key);
+      } catch (error) {
+        debugFailure('wallet.connect', error);
+        throw error;
+      }
     },
     refreshDiscovery: () => session.refreshDiscovery(),
     disconnect: () => session.disconnect(),

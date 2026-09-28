@@ -92,3 +92,58 @@ reserve planner is on too.
 4. With a funded wallet, do one small shield first, then read the balance at
    the Bank, then one small unshield. Those two receipts are D-056's and
    D-062's live evidence.
+
+## Debug logs
+
+For a test session whose failures should reach the developer without copy and
+paste (D-069). **Never enable it for a launch.**
+
+1. On the test service, set both flags and redeploy. The browser flag is
+   compiled into the bundle, so it takes a rebuild, not just a restart.
+
+   | Variable | Value |
+   |---|---|
+   | `BACKEND_DEBUG_LOGS_ENABLED` | `true`. Opens `POST /api/v1/debug/logs`. Unset or empty, that path answers 404 like any unknown route; any value other than `true` or `false` stops the relay from starting. |
+   | `VITE_DEBUG_LOGS` | `true`. Compiles the browser logger in. Unset, the bundle does not contain it. |
+
+2. Open the site with `?debug=1`, for example
+   `https://strkworld-production.up.railway.app/?debug=1`. A badge in the
+   bottom-left corner reads "Debug logs on · sending to the server". It stays
+   on for that tab's browser session, reloads included, until you press its
+   **Turn off** button or open `?debug=0`. Without `?debug=1` nothing is
+   captured or sent, even from a debug build. If the badge says the server is
+   not accepting them, `BACKEND_DEBUG_LOGS_ENABLED` is not set.
+
+3. Read the logs:
+
+   ```sh
+   railway logs --service strkworld | grep '\[debug\]'
+   ```
+
+   Each line is `[debug] <session> <ISO time> <level> <event> <detail>`:
+
+   ```
+   [debug] 3f0c5a6e-8d1b-4c2a-9e7f-1b2c3d4e5f60 2026-09-28T16:04:12.345Z error privacy.operation kind=not-registered code=118 NOT_REGISTERED message="This wallet is not registered with the privacy pool." cause="An error occurred (NOT_REGISTERED)"
+   ```
+
+   The session id is random for each tab's browser session; hover over the
+   badge to see it, and add it to the `grep` to follow one tester. Lines whose
+   session is `server` are the relay's own: `debug.dropped` counts entries
+   dropped above the limit of 600 a minute, across all sessions.
+
+The browser sends window errors and unhandled rejections; `console.error` and
+`console.warn`; every privacy and wallet failure, with its PrivacyError kind,
+wallet error code and message; connect-flow states; wallet-session phases,
+with the connected account; buildings entered and exited, stations activated
+and panels opened and closed; and failed `/api` calls, as path, status and
+error code only. It never sends wallet signatures, calldata or proof data, and
+long hex and base64 runs are redacted. It batches every 3 seconds and sends
+what is left by `sendBeacon` when the page closes.
+
+The relay writes no IP, header or request timing for these requests, but
+Railway's own HTTP log records them as it records every request here. The
+composition forwards only the relay's `[debug]` lines to stdout; the rest of
+its output is still discarded.
+
+To switch it off, unset both variables and redeploy. Both stay unset on any
+service real players use: they are not in `.env.production.example`.

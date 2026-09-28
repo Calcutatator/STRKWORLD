@@ -258,6 +258,32 @@ empty shell to fetchers, so a 200 there means nothing.
 
 ## 6. Findings log
 
+### 2026-09-28 — The composition discards every child's stdout; debug logs forward only `[debug]` lines (D-069)
+
+`deploy/fly/src/compose.ts` spawns the backend and lobby children with
+`stdio: ['ignore', 'ignore', 'ignore', 'ipc']`, so anything the relay writes
+to its own stdout never reaches `railway logs` or Fly's log stream: only the
+edge process's stdout does. The D-069 debug sink therefore needed a change in
+the composition, not just the backend. With `BACKEND_DEBUG_LOGS_ENABLED=true`
+(exactly), the backend child alone gets a stdout pipe and
+`deploy/fly/src/debug-lines.ts` forwards whole lines that start with
+`[debug] ` to the edge's stdout; everything else the relay or a dependency
+prints is still discarded, and the lobby is never read. In the browser, the
+relay client binds `globalThis.fetch` when `createProductionWalletSession`
+builds it, so a fetch wrapper installed later never sees its requests:
+`main.tsx` awaits the debug logger before importing the privacy seam. A
+launch-shaped `vite build` (flag unset) contains none of the logger, because
+Vite 8 defines every unknown `import.meta.env.*` as `undefined` and the guarded
+dynamic import becomes dead code.
+
+*Verified:* `compose.test.ts` spawns real children that print noise and a
+`[debug]` line: exactly the backend's line arrives with the flag, nothing
+without it, and the test fails when the pipe is forced back to `ignore`;
+`debug-lines.test.ts` (split chunks, split UTF-8, overlong lines, other
+prefixes); two scratch `vite build`s of apps/web, one with `VITE_DEBUG_LOGS`
+unset (no badge copy, storage key or `/api/v1/debug/logs` anywhere in the
+output) and one with it `true` (a 12.9 KB `debug-logs` chunk).
+
 ### 2026-09-28 — Degen posters are bundled project art behind an injected image loader
 
 The Degen floor's eight posters are composites of each project's own logo and
