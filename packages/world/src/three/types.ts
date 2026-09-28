@@ -1,4 +1,4 @@
-import type { Group, Object3D } from 'three';
+import type { Group, Object3D, Texture } from 'three';
 import type { AvatarSpriteKey, BuildingId } from '@strkworld/shared';
 import type { FixedRoomStationPresentation } from '../fixed-room.js';
 
@@ -65,6 +65,20 @@ export interface LabelFactory {
   sign(text: string, options: SignOptions): TextLabel;
   /** A camera-facing label anchored at its bottom centre. */
   floating(text: string, options?: FloatingLabelOptions): TextLabel;
+}
+
+/**
+ * Images need a decoder, which the node test environment does not have, so
+ * builders receive a loader instead of touching `document` themselves — the
+ * texture twin of `LabelFactory`. The World only ever asks it for its own
+ * bundled assets (`packages/world/assets/`), never a third-party URL.
+ */
+export interface ImageTextureLoader {
+  /**
+   * Decode `url` into a texture the caller then owns and disposes. Rejects
+   * when the image cannot load; a builder keeps its procedural stand-in then.
+   */
+  load(url: string): Promise<Texture>;
 }
 
 /** Axis-aligned footprint in world units, for camera occlusion tests. */

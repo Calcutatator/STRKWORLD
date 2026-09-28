@@ -27,6 +27,10 @@ Node builder, which finds no start command. Set
 `RAILWAY_DOCKERFILE_PATH=deploy/fly/Dockerfile` on the service so every build
 uses the Dockerfile.
 
+Also set `NODE_OPTIONS=--dns-result-order=ipv4first`. Without it the relay's
+outbound RPC calls failed from Railway's containers (Node tried an address the
+container could not reach), so every pool read returned `UPSTREAM_FAILURE`.
+
 ## Variables
 
 Railway variable references keep the three origin values in step with the

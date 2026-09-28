@@ -4,12 +4,15 @@ import {
   BufferGeometry,
   Color,
   InstancedMesh,
+  LinearFilter,
+  LinearMipmapLinearFilter,
   Material,
   Matrix4,
   Mesh,
   MeshBasicMaterial,
   MeshStandardMaterial,
   Object3D,
+  PlaneGeometry,
   SRGBColorSpace,
   Texture,
   Vector3,
@@ -29,6 +32,9 @@ import { ROOM_ORIGIN } from '../world-layout.js';
 import { createNullLabelFactory } from './labels.js';
 import { DEGEN_STATION_LOOKS, DEGEN_TOKENS, ENDUR, ENDUR_STATION_LOOKS, NEAR, STRK20, STRK20_STATION_LOOKS } from './palette.js';
 import {
+  DEGEN_POSTER_BOTTOM,
+  DEGEN_POSTER_DEPTH,
+  DEGEN_POSTER_SIZE,
   DEGEN_POSTER_SLOTS,
   DEGEN_SIGN_TEXT,
   INTERIOR_SOUTH_WALL_HEIGHT,
@@ -37,7 +43,7 @@ import {
   degenPosterStyle,
   type InteriorOccluder,
 } from './room-builder.js';
-import type { LabelFactory, RoomView } from './types.js';
+import type { ImageTextureLoader, LabelFactory, RoomView } from './types.js';
 
 const DEFINITIONS = Object.values(FIXED_ROOM_DEFINITIONS);
 /** Every interior floor: the ground floors and the Exchange tower's Degen floor. */
@@ -91,6 +97,15 @@ function floatingLabel(root: Object3D): Object3D {
   });
   if (!found) throw new Error('no floating label');
   return found;
+}
+
+/** An image loader whose every request waits until the test settles it: node decodes no images. */
+function deferredImages() {
+  const requests: { url: string; resolve(texture: Texture): void; reject(error: unknown): void }[] = [];
+  const loader: ImageTextureLoader = {
+    load: (url) => new Promise<Texture>((resolve, reject) => requests.push({ url, resolve, reject })),
+  };
+  return { loader, requests };
 }
 
 describe('buildFixedRoom', () => {
@@ -456,6 +471,28 @@ describe('the Exchange tower floors', () => {
     });
     return found;
   };
+  /** The Degen floor's textured poster planes, whether or not their art has arrived. */
+  const postersIn = (root: Object3D): Mesh<BufferGeometry, MeshBasicMaterial>[] => {
+    const found: Mesh<BufferGeometry, MeshBasicMaterial>[] = [];
+    root.traverse((object) => {
+      if (object instanceof Mesh && object.userData['poster'] !== undefined) found.push(object as Mesh<BufferGeometry, MeshBasicMaterial>);
+    });
+    return found;
+  };
+  /** Each tall wall's inner face in world units. */
+  const faces = { north: { axis: 'z', at: OZ + 0.55 }, west: { axis: 'x', at: OX + 0.55 }, east: { axis: 'x', at: OX + degenMap.width - 0.55 } } as const;
+  /** The yaw that turns a +Z-facing board or plane to face out of each wall. */
+  const FACING = { north: 0, west: Math.PI / 2, east: -Math.PI / 2 } as const;
+  const drawCalls = (root: Object3D): number => {
+    let calls = 0;
+    root.traverse((object) => {
+      // A mesh is a call; so is each canvas label, which the null factory draws as an Object3D.
+      if (object instanceof Mesh || object.userData['kind']) calls += 1;
+    });
+    return calls;
+  };
+  /** Let every settled load's handlers run. */
+  const settle = (): Promise<void> => new Promise((resolve) => setTimeout(resolve, 0));
 
   it('builds the Degen floor over its own grid, its counter locked until the Shell opens it', () => {
     const room = buildFixedRoom(degenMap, createNullLabelFactory());
@@ -485,7 +522,7 @@ describe('the Exchange tower floors', () => {
     room.dispose();
   });
 
-  it('hangs a poster per DEGEN_TOKENS entry, in the list\'s order, colours and words', () => {
+  it('without a loader, hangs each DEGEN_TOKENS entry\'s stand-in poster, in the list\'s order, colours and words', () => {
     expect(DEGEN_TOKENS.length).toBeGreaterThanOrEqual(3);
     expect(DEGEN_TOKENS.length).toBeLessThanOrEqual(DEGEN_POSTER_SLOTS.length);
     expect(DEGEN_TOKENS.slice(0, 3).map((token) => token.ticker)).toEqual(['LORDS', 'DREAMS', 'SLAY']);
@@ -493,12 +530,13 @@ describe('the Exchange tower floors', () => {
     for (const token of DEGEN_TOKENS) expect(token.placeholder, token.ticker).not.toBe(true);
     const room = buildFixedRoom(degenMap, createNullLabelFactory());
     room.group.updateMatrixWorld(true);
+    // No loader, so no art: every poster is its procedural stand-in and board.
+    expect(postersIn(room.group)).toEqual([]);
     const posters = labelsIn(room.group, 'token');
     // The scene groups posters by wall, so match each token to its poster by
     // text rather than by traversal order.
     const textOf = (token: (typeof DEGEN_TOKENS)[number]) => `${token.ticker}\n${token.name}`;
     expect(posters.map((poster) => poster.userData['text']).sort()).toEqual(DEGEN_TOKENS.map(textOf).sort());
-    const faces = { north: { axis: 'z', at: OZ + 0.55 }, west: { axis: 'x', at: OX + 0.55 }, east: { axis: 'x', at: OX + degenMap.width - 0.55 } } as const;
     DEGEN_TOKENS.forEach((token, index) => {
       const poster = posters.find((candidate) => candidate.userData['text'] === textOf(token))!;
       expect(poster.userData['kind']).toBe('sign');
@@ -509,14 +547,143 @@ describe('the Exchange tower floors', () => {
       const position = poster.getWorldPosition(new Vector3());
       const face = faces[slot.wall];
       expect(Math.abs(position[face.axis] - face.at), token.ticker).toBeLessThan(0.08);
-      expect(position.y).toBeGreaterThan(0.8);
-      expect(poster.rotation.y).toBeCloseTo({ north: 0, west: Math.PI / 2, east: -Math.PI / 2 }[slot.wall]);
+      expect(position.y).toBeGreaterThan(DEGEN_POSTER_BOTTOM);
+      expect(position.y).toBeLessThan(DEGEN_POSTER_BOTTOM + DEGEN_POSTER_SIZE.height);
+      expect(poster.rotation.y).toBeCloseTo(FACING[slot.wall]);
     });
     // The floor's own sign, and never a price: no currency, percentage or decimal on any board.
     const sign = labelsIn(room.group, 'area').find((label) => label.userData['area'] === 'degen-sign')!;
     expect(sign.userData['text']).toBe(DEGEN_SIGN_TEXT);
     for (const label of [...posters, sign]) expect(label.userData['text']).not.toMatch(/[$%\u20ac\u00a3]|\d[.,]\d/);
     room.dispose();
+  });
+
+  it('loads each poster\'s own art through the injected loader, as an sRGB mipmapped texture on its wall', async () => {
+    const images = deferredImages();
+    const room = buildFixedRoom(degenMap, createNullLabelFactory(), ROOM_ORIGIN, images.loader);
+    room.group.updateMatrixWorld(true);
+    // One request per poster, for that token's bundled art, in the list's order.
+    expect(images.requests.map((request) => request.url)).toEqual(DEGEN_TOKENS.map((token) => token.poster));
+    // While the art loads the stand-ins show: the planes wait hidden, and no board spends a call.
+    const posters = postersIn(room.group);
+    expect(posters.map((poster) => poster.userData['poster']).sort()).toEqual(DEGEN_TOKENS.map((token) => token.ticker).sort());
+    expect(posters.every((poster) => !poster.visible)).toBe(true);
+    expect(labelsIn(room.group, 'token')).toEqual([]);
+
+    const textures = images.requests.map(() => new Texture());
+    images.requests.forEach((request, index) => request.resolve(textures[index]!));
+    await settle();
+    DEGEN_TOKENS.forEach((token, index) => {
+      const poster = posters.find((candidate) => candidate.userData['poster'] === token.ticker)!;
+      const texture = textures[index]!;
+      expect(poster.visible, token.ticker).toBe(true);
+      expect(poster.material.map).toBe(texture);
+      expect(poster.material.toneMapped).toBe(false);
+      expect(texture.colorSpace).toBe(SRGBColorSpace);
+      expect(texture.generateMipmaps).toBe(true);
+      expect(texture.minFilter).toBe(LinearMipmapLinearFilter);
+      expect(texture.magFilter).toBe(LinearFilter);
+      expect(texture.anisotropy).toBe(4);
+      // The art's own 2:3 portrait, on its slot's wall, facing into the room.
+      const plane = poster.geometry as PlaneGeometry;
+      expect(plane.parameters.width / plane.parameters.height).toBeCloseTo(512 / 768);
+      expect(plane.parameters.height).toBe(DEGEN_POSTER_SIZE.height);
+      const slot = DEGEN_POSTER_SLOTS[index]!;
+      const position = poster.getWorldPosition(new Vector3());
+      const face = faces[slot.wall];
+      expect(Math.abs(Math.abs(position[face.axis] - face.at) - DEGEN_POSTER_DEPTH), token.ticker).toBeLessThan(1e-6);
+      expect(position[face.axis === 'z' ? 'x' : 'z']).toBeCloseTo((face.axis === 'z' ? OX : OZ) + slot.u);
+      expect(position.y).toBeCloseTo(DEGEN_POSTER_BOTTOM + DEGEN_POSTER_SIZE.height / 2);
+      expect(poster.rotation.y).toBeCloseTo(FACING[slot.wall]);
+    });
+    // Art replaces boards one for one, so the floor keeps its budget.
+    expect(labelsIn(room.group, 'token')).toEqual([]);
+    const standIn = buildFixedRoom(degenMap, createNullLabelFactory());
+    expect(drawCalls(room.group)).toBe(drawCalls(standIn.group));
+    standIn.dispose();
+    room.dispose();
+  });
+
+  it('fades each poster with the wall it hangs on', async () => {
+    const images = deferredImages();
+    const room = buildFixedRoom(degenMap, createNullLabelFactory(), ROOM_ORIGIN, images.loader);
+    for (const request of images.requests) request.resolve(new Texture());
+    await settle();
+    const occluders = room.occluders as readonly InteriorOccluder[];
+    for (const side of ['north', 'west', 'east'] as const) {
+      const wall = occluders.find((occluder) => occluder.side === side)!;
+      const own = postersIn(wall.object);
+      const others = postersIn(room.group).filter((poster) => !own.includes(poster));
+      expect(own.length, side).toBe(DEGEN_POSTER_SLOTS.filter((slot) => slot.wall === side).length);
+      wall.setOpacity(0.3);
+      for (const poster of own) expect(poster.material.opacity).toBeCloseTo(0.3);
+      for (const poster of others) expect(poster.material.opacity).toBe(1);
+      wall.setOpacity(1);
+      for (const poster of own) expect(poster.material.transparent).toBe(false);
+    }
+    room.dispose();
+  });
+
+  it('keeps a poster\'s procedural stand-in, and gives it its board, when its art fails', async () => {
+    const images = deferredImages();
+    const failing = DEGEN_TOKENS[2]!;
+    const room = buildFixedRoom(degenMap, createNullLabelFactory(), ROOM_ORIGIN, images.loader);
+    images.requests.forEach((request) => {
+      if (request.url === failing.poster) request.reject(new Error('decode failed'));
+      else request.resolve(new Texture());
+    });
+    await settle();
+    // The failed art's plane leaves; its board takes the call it would have spent.
+    const posters = postersIn(room.group);
+    expect(posters.map((poster) => poster.userData['poster'])).not.toContain(failing.ticker);
+    expect(posters).toHaveLength(DEGEN_TOKENS.length - 1);
+    expect(posters.every((poster) => poster.visible)).toBe(true);
+    const boards = labelsIn(room.group, 'token');
+    expect(boards.map((board) => board.userData['text'])).toEqual([`${failing.ticker}\n${failing.name}`]);
+    expect(boards[0]!.userData['options']).toEqual(degenPosterStyle(failing));
+    const standIn = buildFixedRoom(degenMap, createNullLabelFactory());
+    expect(drawCalls(room.group)).toBe(drawCalls(standIn.group));
+    standIn.dispose();
+    room.dispose();
+    // A loader that throws outright is a failed load too, never a broken room.
+    const throwing: ImageTextureLoader = {
+      load() {
+        throw new Error('no decoder');
+      },
+    };
+    const fallback = buildFixedRoom(degenMap, createNullLabelFactory(), ROOM_ORIGIN, throwing);
+    await settle();
+    expect(postersIn(fallback.group)).toEqual([]);
+    expect(labelsIn(fallback.group, 'token')).toHaveLength(DEGEN_TOKENS.length);
+    fallback.dispose();
+  });
+
+  it('disposes poster art with the room, and art that arrives after it at once', async () => {
+    const images = deferredImages();
+    const labels = createNullLabelFactory();
+    const signs = vi.spyOn(labels, 'sign');
+    const room = buildFixedRoom(degenMap, labels, ROOM_ORIGIN, images.loader);
+    const [early, late] = [images.requests.slice(0, 4), images.requests.slice(4)];
+    const earlyTextures = early.map(() => new Texture());
+    const spies = earlyTextures.map((texture) => vi.spyOn(texture, 'dispose'));
+    early.forEach((request, index) => request.resolve(earlyTextures[index]!));
+    await settle();
+    const materials = postersIn(room.group).map((poster) => vi.spyOn(poster.material, 'dispose'));
+    const geometries = postersIn(room.group).map((poster) => vi.spyOn(poster.geometry, 'dispose'));
+    const boardsBefore = signs.mock.calls.length;
+    room.dispose();
+    room.dispose();
+    for (const spy of [...spies, ...materials, ...geometries]) expect(spy).toHaveBeenCalledTimes(1);
+    // Art still in flight when the room goes is released the moment it lands,
+    // and a failure then makes no board for a room that no longer exists.
+    const lateTexture = new Texture();
+    const lateSpy = vi.spyOn(lateTexture, 'dispose');
+    late[0]!.resolve(lateTexture);
+    late[1]!.reject(new Error('gone'));
+    await settle();
+    expect(lateSpy).toHaveBeenCalledTimes(1);
+    expect(signs).toHaveBeenCalledTimes(boardsBefore);
+    expect(room.group.children).toHaveLength(0);
   });
 
   it('marks every lift with a pad, a label naming where it goes and, on the north wall, doors', () => {
@@ -551,15 +718,18 @@ describe('the Exchange tower floors', () => {
     }
   });
 
-  it.each(FLOORS)('keeps the $building $level room within its draw-call budget', (map) => {
+  it.each(FLOORS)('keeps the $building $level room within its draw-call budget', async (map) => {
     const room = buildFixedRoom(map, createNullLabelFactory());
-    let calls = 0;
-    room.group.traverse((object) => {
-      // A mesh is a call; so is each canvas label, which the null factory draws as an Object3D.
-      if (object instanceof Mesh || object.userData['kind']) calls += 1;
-    });
-    expect(calls).toBeLessThan(40);
+    expect(drawCalls(room.group)).toBeLessThan(40);
     room.dispose();
+    // With poster art loading, then loaded, it spends the same.
+    const images = deferredImages();
+    const loading = buildFixedRoom(map, createNullLabelFactory(), ROOM_ORIGIN, images.loader);
+    expect(drawCalls(loading.group)).toBeLessThan(40);
+    for (const request of images.requests) request.resolve(new Texture());
+    await settle();
+    expect(drawCalls(loading.group)).toBeLessThan(40);
+    loading.dispose();
   });
 
   it('disposes the Degen floor completely: every poster, sign and lift label once', () => {

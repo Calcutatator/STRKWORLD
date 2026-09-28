@@ -11,6 +11,7 @@ import {
 } from '../fixed-room.js';
 import { AVATAR_STUDIO_DEFINITION } from '../avatar-studio.js';
 import { DEFAULT_AVATAR_SPRITE } from '../avatar-state.js';
+import { ROOM_ORIGIN } from '../world-layout.js';
 import type { RemotePeerSource } from '../remote-peer.js';
 import type { PlayerMotion, WorldRect, WorldSessionView } from '../world-session.js';
 import { isSandboxTile } from '../sandbox-channel.js';
@@ -33,6 +34,7 @@ import { segmentHitsBox } from './occlusion.js';
 import type {
   AvatarFigure,
   AvatarFigureFactory,
+  ImageTextureLoader,
   LabelFactory,
   Occluder,
   RoomView,
@@ -54,6 +56,8 @@ export interface PresenterOptions {
   readonly parent: Object3D;
   readonly labels: LabelFactory;
   readonly figures: AvatarFigureFactory;
+  /** Decodes bundled art such as the Degen floor's posters; without it they stay procedural. */
+  readonly images?: ImageTextureLoader;
 }
 
 /** The presenter implements every view method, the optional sandbox ones included. */
@@ -134,11 +138,15 @@ export function createPresenter(options: PresenterOptions): Presenter {
     root.add(room.group);
     disposers.push(() => room.dispose());
   };
+  const images = options.images ?? null;
   for (const definition of Object.values(FIXED_ROOM_DEFINITIONS)) {
-    addRoom(roomKey(definition.building), buildFixedRoom(createFixedRoom(definition), options.labels));
+    addRoom(roomKey(definition.building), buildFixedRoom(createFixedRoom(definition), options.labels, ROOM_ORIGIN, images));
     for (const level of FIXED_ROOM_LEVELS[definition.building] ?? []) {
       if (level.rooftop) continue;
-      addRoom(roomKey(definition.building, level.level), buildFixedRoom(createFixedRoomLevel(level), options.labels));
+      addRoom(
+        roomKey(definition.building, level.level),
+        buildFixedRoom(createFixedRoomLevel(level), options.labels, ROOM_ORIGIN, images),
+      );
     }
   }
 

@@ -180,6 +180,14 @@ the Shell's wallet-attention cue (D-058). Any future model pack must be checked
 for commercial-use licensing before it lands and recorded in
 `assets/CREDITS.md`.
 
+The one exception is the Exchange tower's Degen floor: its posters are the
+token projects' own logos and art, composed into 512×768 WebPs in
+`assets/degen-posters/` and credited in `assets/CREDITS.md`. They are bundled,
+so the browser loads them from the game's own origin and never from a
+project's CDN. Builders get them through an injected `ImageTextureLoader`
+(the texture twin of `LabelFactory`); without one, or while one loads or if it
+fails, each poster shows its procedural stand-in.
+
 Four buildings in v1: the Bank, the Exchange, the Post Office, and a visible
 but locked Vault so the world reads as complete, plus the Bridge. The Bank
 follows the STRK20 visual theme and the Exchange follows avnu's; the Post
