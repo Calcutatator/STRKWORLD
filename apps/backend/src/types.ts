@@ -95,6 +95,12 @@ export interface RelayFee {
 }
 
 export interface PaymasterPort {
+  /**
+   * False when the relay holds no avnu Portal key (D-070). The API then
+   * answers every relayed route RELAY_NOT_CONFIGURED without calling avnu.
+   * Absent means configured, so a test double need not say.
+   */
+  readonly configured?: boolean;
   buildFee(input: {
     route: PrivateRoute;
     poolAddress: string;

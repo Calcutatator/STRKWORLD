@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { FakePrivacyOperations, PrivacyError, type PreparedBatch, type PrivacyOperations } from '@strkworld/privacy';
+import { COPY } from '../../copy.js';
 import { createReceiptLedger } from '../../receipts/receipt-ledger.js';
 import { PRIVACY_REGISTER } from '../../privacy/register.js';
 import { EXCHANGE_CATALOG } from './catalog.js';
@@ -144,6 +145,22 @@ describe('Exchange machine', () => {
 
     expect(discarded).toBe(1);
     expect(machine.store.getState()).toMatchObject({ ...expected, flow: { name: 'composing' } });
+  });
+
+  it('says plainly that a swap needs the relay when the deployment has no avnu key (D-070)', async () => {
+    const operations = new FakePrivacyOperations({
+      balances: { [strk!.token]: 100n * 10n ** 18n },
+      swapReview: { expectedAmountOut: 2n * 10n ** 18n, slippageBps: 50, expiresAt: farFuture },
+    });
+    operations.injectFault({ kind: 'relay-not-configured', on: 'prepare' });
+    const machine = await ready(createExchangePanel({
+      operations, receipts: createReceiptLedger(), canStartFinancialAction: () => true,
+    }));
+    await machine.prepare();
+    expect(machine.store.getState().flow).toEqual({
+      name: 'failed', kind: 'relay-not-configured', message: COPY.errors['relay-not-configured'], recovery: 'prepare-again',
+    });
+    expect(operations.submitted).toHaveLength(0);
   });
 
   it('fails closed and discards when a prepared swap has no review', async () => {

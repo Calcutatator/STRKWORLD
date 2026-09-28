@@ -74,9 +74,11 @@ export function parseBackendEnvironment(environment: Environment): ParsedBackend
       debugLogsEnabled: parseDebugLogsEnabled(environment),
     },
     paymaster: {
-      // D-068: optional. The private relay is gasless without a key, because
-      // the paymaster is repaid from the player's shielded balance; a key, if
-      // set, stays server-side (D-014).
+      // D-068/D-070: optional at startup, but avnu refuses sponsored_private
+      // without a Portal key, so relayed routes answer RELAY_NOT_CONFIGURED
+      // until one is set. It is an access credential, not a budget: the relay
+      // fee withdrawn in each private transaction still repays avnu. A key
+      // stays server-side (D-014).
       ...optionalSecret(environment, 'AVNU_PAYMASTER_API_KEY', 'apiKey'),
       ...(paymasterBaseUrl ? { paymasterBaseUrl } : {}),
     },

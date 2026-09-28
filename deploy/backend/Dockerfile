@@ -21,9 +21,9 @@
 # ---------------------------------------------------------------------------
 # Aggregate counters only. Nothing in this image logs per-request IPs, calls,
 # proofs, timings, recipients or transaction hashes, and the application code
-# emits no log line at all (verified: the only match for `console.`/`process.
-# stdout` under apps/backend/src is the comment at apps/backend/src/http.ts:12
-# saying the edge deliberately has no access logger).
+# emits no per-request log line outside D-069's opt-in debug sink. Its one
+# other write is D-070's startup line; docs/OPS.md "Logging and monitoring"
+# lists both.
 #
 # Two things are therefore on the DEPLOYMENT, not the code:
 #   1. The platform's own access log. A default access log that records IP,
@@ -31,11 +31,13 @@
 #      It must be disabled for these routes before the service takes traffic.
 #   2. `NODE_OPTIONS`, `NODE_DEBUG` and any APM/tracing agent are left unset
 #      on purpose. An injected agent is a per-request observer.
-# Successful startup and steady-state traffic are silent. The launcher writes
-# only a configuration error to stderr if the compiled entry is missing, is
-# not a regular file, or its exact target becomes missing, a directory or
-# unreadable during entry admission. Backend and nested-dependency failures
-# remain startup crashes; anything appearing on stdout during traffic is a defect.
+# Steady-state traffic is silent, and a successful startup prints at most
+# D-070's one `[relay]` line, naming the routes refused for want of an avnu
+# key. The launcher writes only a configuration error to stderr if the
+# compiled entry is missing, is not a regular file, or its exact target becomes
+# missing, a directory or unreadable during entry admission. Backend and
+# nested-dependency failures remain startup crashes; anything appearing on
+# stdout during traffic is a defect.
 
 # Node 22.12 is the repository floor (D-025): AVNU SDK 4.2.0 requires Node 22,
 # and Vite supports Node 22 from 22.12. Overridable so the tag can be pinned to

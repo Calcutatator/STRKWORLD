@@ -413,6 +413,9 @@ export const COPY = freezeCopy({
       'We could not check whether that address is registered. The transfer may still be refused when your wallet tries it.',
     mixedShieldAndSpend:
       'Shielding and spending cannot travel together: a deposit names you publicly, and bundling the two would publish the link the pool exists to break. Confirm the shield on its own first.',
+    /** The same rule met from the other side: a spend is already queued, often one whose prepare failed. */
+    shieldAfterSpend:
+      'A spend is already queued, and a shield cannot travel with it. Remove the queued item first, then add the shield.',
     mixedRouteKinds: 'One visit settles as one kind of action. Confirm what is queued, or clear it, then start the other one.',
     swapAlone: 'A swap settles on its own.',
     stakeAlone: 'A stake settles on its own.',
@@ -443,6 +446,9 @@ export const COPY = freezeCopy({
     unreachable: 'Could not reach the network or your wallet. Nothing was sent.',
     'submission-uncertain':
       'We could not confirm whether this private action was submitted. Do not retry it yet. Reconnect, wait a few minutes, and refresh your private balance before taking another action.',
+    /** D-070: the deployment has no avnu key for its relay. Shield never needs it. */
+    'relay-not-configured':
+      "Unshield, send, stake and swap need the private relay, which isn't set up on this site yet. Nothing was sent.",
     unknown: 'That did not go through, and nothing was signed.',
   } satisfies Record<PrivacyErrorKind, string>,
 

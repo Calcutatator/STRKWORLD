@@ -161,7 +161,7 @@ describe('strict production backend environment', () => {
     expect(() => parseBackendEnvironment(validEnvironment(override))).toThrow(/invalid|required/i);
   });
 
-  it('runs gasless without a paymaster key, and passes a key through when one is set (D-068)', () => {
+  it('starts without a paymaster key, which relayed routes then refuse (D-070), and passes a key through when one is set', () => {
     const withoutKey = validEnvironment();
     delete withoutKey['AVNU_PAYMASTER_API_KEY'];
     const keyless = parseBackendEnvironment(withoutKey);

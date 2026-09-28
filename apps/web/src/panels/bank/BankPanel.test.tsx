@@ -523,6 +523,32 @@ describe('BankPanel rendering', () => {
     expect(markup).not.toContain(COPY.submissionUncertainty.acknowledge);
   });
 
+  it('shows the relay message with a way back to the queued item, in the Bank and the Post Office (D-070)', async () => {
+    const message = COPY.errors['relay-not-configured'].replaceAll("'", '&#x27;');
+    for (const [mode, options] of [
+      ['unshield', {}],
+      ['transfer', { allowedModes: ['transfer'] as const, initialMode: 'transfer' as const, title: COPY.buildings['post-office'] }],
+    ] as const) {
+      const seam = operations();
+      const panel = createAllowedBankPanel({
+        operations: seam,
+        receipts: createReceiptLedger(),
+        ...('allowedModes' in options ? { allowedModes: options.allowedModes, initialMode: options.initialMode } : {}),
+      });
+      await panel.open();
+      panel.setMode(mode);
+      panel.setRecipient(BOB);
+      panel.setAmount('1');
+      await panel.addToBatch();
+      seam.injectFault({ kind: 'relay-not-configured', on: 'prepare' });
+      await panel.prepare();
+
+      const markup = render(panel, seam, 'menu', createSubmissionUncertainty(), options);
+      expect(markup, mode).toContain(`<div class="flow-failed" role="alert"><p>${message}</p><button type="button">${COPY.flow.back}</button>`);
+      expect(markup, mode).not.toContain(COPY.errors.unreachable);
+    }
+  });
+
   it('offers a way back to the counter after a submission', async () => {
     const seam = operations();
     const panel = createAllowedBankPanel({ operations: seam, receipts: createReceiptLedger() });

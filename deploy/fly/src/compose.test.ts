@@ -3,6 +3,7 @@ import { mkdir, mkdtemp, rm, symlink, writeFile } from 'node:fs/promises';
 import { createServer } from 'node:net';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { relayStartupNotice } from '../../../apps/backend/src/relay';
 import { parseFlyEnvironment } from './main';
 import { startFlyComposition, type FlyComposition } from './compose';
 
@@ -34,7 +35,8 @@ async function fakeChild(): Promise<string> {
     if (process.env.EXIT_BEFORE_READY) setTimeout(() => process.exit(2), Number(process.env.EXIT_BEFORE_READY));
     if (!process.env.EXIT_BEFORE_READY) {
       setTimeout(() => server.listen(port, '127.0.0.1', () => {
-        process.send?.({ type: 'ready' }, () => {
+        const ready = process.env.READY_NOTICE ? { type: 'ready', notice: process.env.READY_NOTICE } : { type: 'ready' };
+        process.send?.(ready, () => {
           if (process.env.EXIT_AFTER_READY_MARKER) {
             const timer = setInterval(() => {
               if (existsSync(process.env.EXIT_AFTER_READY_MARKER)) {
@@ -240,6 +242,40 @@ describe('Fly composition process boundary', () => {
       expect(lines).toEqual(flag
         ? [`[debug] fixture-${backendPort} 2026-09-28T16:00:00.000Z info test.event from ${backendPort}`]
         : []);
+    }
+  });
+
+  it('prints the relay\'s one startup line from its readiness message, and nothing else a child sends (D-070)', async () => {
+    const child = await fakeChild();
+    const staticRoot = await fakeStaticRoot();
+    const notice = relayStartupNotice(['transfer', 'unshield', 'swap'])!;
+    // The same fixture runs as both children, so the lobby sends the same
+    // message: only the backend's may reach the log, and only once.
+    for (const [sent, expected] of [
+      [notice, [notice]],
+      [`${notice}\n[relay] forged second line`, []],
+      ['[relay] anything else', []],
+      [undefined, []],
+    ] as const) {
+      const { publicPort, backendPort, lobbyPort } = await ports();
+      const lines: string[] = [];
+      const environment: NodeJS.ProcessEnv = { ...process.env };
+      delete environment['READY_NOTICE'];
+      if (sent !== undefined) environment['READY_NOTICE'] = sent;
+      const composition = await startFlyComposition({
+        staticRoot,
+        backendEntry: child,
+        lobbyEntry: child,
+        publicPort,
+        backendPort,
+        lobbyPort,
+        publicOrigin: 'https://game.example',
+        environment,
+        readinessTimeoutMs: 2_000,
+        noticeWriter: (line) => lines.push(line),
+      });
+      compositions.push(composition);
+      expect(lines, String(sent)).toEqual(expected);
     }
   });
 

@@ -10,6 +10,8 @@ import type {
 type FetchLike = (input: string, init?: RequestInit) => Promise<Response>;
 const STARK_FIELD_PRIME = (1n << 251n) + 17n * (1n << 192n) + 1n;
 const MAX_UINT256 = (1n << 256n) - 1n;
+/** The relay's answer when it has no avnu key, or avnu rejected it (D-070). */
+const RELAY_NOT_CONFIGURED = 'RELAY_NOT_CONFIGURED';
 
 /** Browser client for the narrow, no-logging backend API. */
 export class BackendPrivacyClient implements PoolReadClient, PrivateSubmissionGateway {
@@ -239,7 +241,15 @@ export class BackendPrivacyClient implements PoolReadClient, PrivateSubmissionGa
         }
         failure = null;
       }
-      const message = readErrorMessage(failure);
+      const message = readErrorField(failure, 'message');
+      // D-070: a definite refusal before anything was relayed, and not one a
+      // retry can fix, so it is neither `unreachable` nor uncertain.
+      if (status === 503 && readErrorField(failure, 'code') === RELAY_NOT_CONFIGURED) {
+        throw new PrivacyError(
+          'relay-not-configured',
+          message ?? 'The private relay is not configured on this deployment.',
+        );
+      }
       throw new PrivacyError(
         status === 503 ? 'unreachable' : 'unknown',
         message ?? 'The private service rejected the request.',
@@ -438,12 +448,17 @@ function ownResponseMeta(response: Response): { ok: boolean; status: number; jso
   throw new PrivacyError('unknown', 'The private service returned an invalid response.');
 }
 
-function readErrorMessage(value: unknown): string | null {
+function readErrorField(value: unknown, key: 'message' | 'code'): string | null {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
-  const descriptor = Object.getOwnPropertyDescriptor(value, 'message');
-  return descriptor && 'value' in descriptor && typeof descriptor.value === 'string'
-    ? descriptor.value
-    : null;
+  try {
+    const descriptor = Object.getOwnPropertyDescriptor(value, key);
+    return descriptor && 'value' in descriptor && typeof descriptor.value === 'string'
+      ? descriptor.value
+      : null;
+  } catch {
+    // A descriptor trap reads as no field, never as a raw error.
+    return null;
+  }
 }
 
 function throwIfAborted(signal?: AbortSignal): void {

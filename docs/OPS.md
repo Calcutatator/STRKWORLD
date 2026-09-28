@@ -228,15 +228,17 @@ timing, recipient or transaction hash** (D-014).
 
 The code complies today, and this is verifiable rather than asserted:
 
-- Zero request logging under `apps/backend/src`. The one write is D-069's
-  opt-in debug sink (`apps/backend/src/debug-logs.ts`), which is not a route
-  unless `BACKEND_DEBUG_LOGS_ENABLED=true` on a test deployment, never a
+- Zero request logging under `apps/backend/src`. The one per-request write is
+  D-069's opt-in debug sink (`apps/backend/src/debug-logs.ts`), which is not a
+  route unless `BACKEND_DEBUG_LOGS_ENABLED=true` on a test deployment, never a
   launch, and writes only the entries a tester's browser posts to it, never an
-  IP, header or request timing. Otherwise the only match for `console.` /
-  `process.stdout` / `process.stderr` / `logger` in the directory is the
-  comment at `apps/backend/src/http.ts:12` stating that the edge deliberately
-  has no access logger, client identifier, CORS reflection or request
-  persistence.
+  IP, header or request timing. The other write is D-070's single startup line
+  (`apps/backend/src/server.ts`; in the composition the edge prints it), which
+  names the enabled routes refused for want of an avnu key. Otherwise the only
+  match for `console.` / `process.stdout` / `process.stderr` / `logger` in the
+  directory is the comment at `apps/backend/src/http.ts:12` stating that the
+  edge deliberately has no access logger, client identifier, CORS reflection or
+  request persistence.
 - No request-logging middleware is enabled, because there is no middleware
   chain at all. `createBackendFetchHandler()` (`apps/backend/src/http.ts:15`)
   is a single closure that passes only `{method, path, body, signal}` into the
@@ -292,17 +294,21 @@ third party see nothing of ours, but it is our bill and our rate limit.
 
 ### AVNU paymaster key (`AVNU_PAYMASTER_API_KEY`)
 
-**Highest-value secret in the deployment — it spends our money.** It is the
-reason the backend exists: it cannot ship to a browser (D-013, D-014).
+**Required for every relayed route, and it cannot ship to a browser** (D-013,
+D-014, D-070). Without it the relay answers unshield, transfer, stake and swap
+`503 RELAY_NOT_CONFIGURED` and says so once at startup; shield is unaffected.
+The relay's `sponsored_private` transactions repay avnu from inside each
+transaction, so they do not spend Portal credits. The key can spend the Portal
+account's credits only on gasfree (`sponsored`) transactions, which STRKWORLD
+never sends.
 
-1. Set `sponsorshipBudget.maxFeeAmount` to `0` first — stops the bleed without
-   taking the game down.
-2. Request a replacement key from AVNU. Lead time is unknown; find out before
-   you need it.
-3. Update the secret, redeploy, restore the budget, confirm a sponsored action.
-4. Revoke the old key with AVNU.
+1. Create a replacement key in the avnu Portal (`https://portal.avnu.fi`,
+   signed in with the deployed wallet that owns the account). No lead time.
+2. Update the secret, redeploy, confirm a relayed action.
+3. Revoke the old key with AVNU.
 
-Compromise: budget to zero first, then rotate. Do not wait for the new key.
+Compromise: rotate at once. Setting `sponsorshipBudget.maxFeeAmount` to `0`
+stops only this relay, not a third party holding the old key.
 
 ### Fee authorization secret (`FEE_AUTHORIZATION_SECRET`)
 
