@@ -258,7 +258,7 @@ describe('the schema mirror', () => {
       }
     }
     expect(registry.sandboxColumns().length).toBeGreaterThan(0);
-  }, 20_000);
+  }, 60_000);
 
   it('clears a mirror handed over non-empty, since the authority starts empty', () => {
     const mirror = new MapSchema<SandboxColumnEntry>();

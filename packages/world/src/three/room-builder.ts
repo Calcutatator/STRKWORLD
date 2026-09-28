@@ -3,13 +3,16 @@ import {
   CircleGeometry,
   Color,
   Group,
+  LinearFilter,
+  LinearMipmapLinearFilter,
   Mesh,
   MeshBasicMaterial,
   OctahedronGeometry,
   PlaneGeometry,
   RingGeometry,
+  SRGBColorSpace,
 } from 'three';
-import type { BufferGeometry, Material, MeshStandardMaterial, Object3D } from 'three';
+import type { BufferGeometry, Material, MeshStandardMaterial, Object3D, Texture } from 'three';
 import type { StationId } from '@strkworld/shared';
 import type {
   FixedRoomLevelMap,
@@ -74,7 +77,7 @@ import {
   type TickerSegment,
 } from './palette.js';
 import type { FloatingStyleOptions, SignStyleOptions } from './labels.js';
-import type { LabelFactory, Occluder, OccluderBounds, RoomView, TextLabel } from './types.js';
+import type { ImageTextureLoader, LabelFactory, Occluder, OccluderBounds, RoomView, TextLabel } from './types.js';
 
 /**
  * Fixed-room interiors as lit dioramas (D-059).
@@ -100,8 +103,9 @@ export const DEGEN_SIGN_TEXT = 'DEGEN\nMODE';
 
 /**
  * Where the Degen floor hangs its posters, in the order `DEGEN_TOKENS` fills
- * them: the north wall first (the camera faces it), then the side walls. The
- * north wall keeps the sign behind the counter and the lift doors clear.
+ * them: the north wall first (the camera faces it), then the side walls. Each
+ * `u` is a poster's centre along its wall. The north wall keeps the sign
+ * behind the counter and the lift doors clear.
  */
 export const DEGEN_POSTER_SLOTS: readonly { readonly wall: InteriorWallSide; readonly u: number }[] = Object.freeze([
   { wall: 'north', u: 2.2 },
@@ -113,6 +117,17 @@ export const DEGEN_POSTER_SLOTS: readonly { readonly wall: InteriorWallSide; rea
   { wall: 'west', u: 7.7 },
   { wall: 'east', u: 7.7 },
 ]);
+
+/**
+ * A Degen-floor poster in world units: the 2:3 portrait of its 512 by 768
+ * art, pasted over the chair rail, from above the floor's neon strip to just
+ * under the LED run.
+ */
+export const DEGEN_POSTER_SIZE = Object.freeze({ width: 1.04, height: 1.56 });
+export const DEGEN_POSTER_BOTTOM = 0.33;
+/** How far the art stands out of the wall: in front of every stand-in part, inside the frame's lip. */
+export const DEGEN_POSTER_DEPTH = 0.075;
+const DEGEN_POSTER_FRAME = 0.045;
 
 const DEGEN_SIGN_STYLE: SignStyleOptions = Object.freeze({
   width: 3.2,
@@ -386,10 +401,16 @@ interface StationView {
   highlighted: boolean;
 }
 
+/**
+ * `images` decodes the room's bundled art (the Degen floor's posters). Without
+ * one — node tests, or a host that cannot decode — every poster stays its
+ * procedural stand-in, which is also what shows while art loads or if it fails.
+ */
 export function buildFixedRoom(
   map: FixedRoomLevelMap,
   labels: LabelFactory,
   origin: { readonly x: number; readonly y: number } = ROOM_ORIGIN,
+  images: ImageTextureLoader | null = null,
 ): RoomView {
   const res = new ResourceBag();
   const theme = roomTheme(map.building, map.level);
@@ -428,7 +449,7 @@ export function buildFixedRoom(
       res,
       group,
     });
-    decorateRoom(theme, shell, map, res, animators, labels, textLabels);
+    decorateRoom(theme, shell, map, res, animators, labels, textLabels, images);
     exitDecor(map, theme, shell);
     liftDecor(map, theme, shell, labels, textLabels, group);
     for (const station of map.stations) {
@@ -929,6 +950,7 @@ function decorateRoom(
   animators: Animator[],
   labels: LabelFactory,
   textLabels: TextLabel[],
+  images: ImageTextureLoader | null,
 ): void {
   switch (theme.decor) {
     case 'strk20':
@@ -938,7 +960,7 @@ function decorateRoom(
       avnuDecor(theme, shell, map, res, animators);
       return;
     case 'degen':
-      degenDecor(theme, shell, map, res, animators, labels, textLabels);
+      degenDecor(theme, shell, map, res, animators, labels, textLabels, images);
       return;
     case 'post-office':
       postOfficeDecor(theme, shell, map);
@@ -1138,8 +1160,8 @@ function avnuDecor(theme: RoomTheme, shell: InteriorShell, map: FixedRoomLevelMa
 /**
  * The Degen floor: avnu's navy and indigo, turned up. Neon runs along every
  * wall, DEGEN MODE glows behind the counter over an LED run, and the walls
- * carry a poster per `DEGEN_TOKENS` entry: its colour block, a simple motif,
- * its ticker and name. Nothing here is a price, a chart or an arrow: the
+ * carry a poster per `DEGEN_TOKENS` entry: the project's own art in a neon
+ * frame of its colour. Nothing here is a price, a chart or an arrow: the
  * World must not know what money is (AGENTS.md §4).
  */
 function degenDecor(
@@ -1150,6 +1172,7 @@ function degenDecor(
   animators: Animator[],
   labels: LabelFactory,
   textLabels: TextLabel[],
+  images: ImageTextureLoader | null,
 ): void {
   const north = shell.walls.north;
   const nf = north.face;
@@ -1175,7 +1198,7 @@ function degenDecor(
   addTicker(north, map, res, animators, DEGEN_ROOM_TICKER);
   DEGEN_TOKENS.slice(0, DEGEN_POSTER_SLOTS.length).forEach((token, index) => {
     const slot = DEGEN_POSTER_SLOTS[index]!;
-    degenPoster(shell.walls[slot.wall], slot.u, token, labels, textLabels);
+    degenPoster(shell.walls[slot.wall], slot.u, token, res, labels, textLabels, images);
   });
   // Neon tubes up the side walls, between and beside the posters.
   for (const wall of [shell.walls.west, shell.walls.east]) {
@@ -1202,34 +1225,106 @@ function degenDecor(
 }
 
 /**
- * One token's poster: a neon frame round its colour block, two bands, its
- * motif above, and its ticker over its name on a board below. The board is a
- * sign, so it takes the label factory's type.
+ * One token's poster. A neon frame in the token's accent stands out of the
+ * wall round the art: the project's own poster, decoded by `images` and shown
+ * once it is ready. Recessed behind it sits the procedural stand-in (colour
+ * block, bands, motif), which rides the wall's lights bin at no draw call of
+ * its own. The stand-in is what shows while the art loads; it gains its
+ * ticker-and-name board only when no art is coming (no loader, or a failed
+ * load), so the art and the board never both spend a draw call.
  */
-function degenPoster(wall: InteriorWall, u: number, token: DegenToken, labels: LabelFactory, textLabels: TextLabel[]): void {
+function degenPoster(
+  wall: InteriorWall,
+  u: number,
+  token: DegenToken,
+  res: ResourceBag,
+  labels: LabelFactory,
+  textLabels: TextLabel[],
+  images: ImageTextureLoader | null,
+): void {
   const f = wall.face;
-  const [u0, u1, v0, v1] = [u - 0.75, u + 0.75, 0.72, 1.92];
-  if (!inSpans(wall, u0 - 0.05, u1 + 0.05)) return;
+  const { width, height } = DEGEN_POSTER_SIZE;
+  const frame = DEGEN_POSTER_FRAME;
+  const [u0, u1, v0, v1] = [u - width / 2, u + width / 2, DEGEN_POSTER_BOTTOM, DEGEN_POSTER_BOTTOM + height];
+  if (!inSpans(wall, u0 - frame - 0.05, u1 + frame + 0.05)) return;
   const { background, accent, ink } = token.colors;
-  wall.bins.add('unlit', facePanel(f, u0 - 0.035, v0 - 0.035, u1 + 0.035, v1 + 0.035, 0.02, 0.09), accent);
-  wall.bins.add('unlit', facePanel(f, u0, v0, u1, v1, 0.028, 0.07), background);
-  wall.bins.add('unlit', facePanel(f, u0 + 0.1, v1 - 0.14, u1 - 0.1, v1 - 0.1, 0.032, 0.02), accent);
-  wall.bins.add('unlit', facePanel(f, u0 + 0.1, v1 - 0.2, u0 + 0.62, v1 - 0.17, 0.032, 0.015), ink);
-  degenMotif(wall, token.motif, u, 1.44, accent, ink);
-  const sign = labels.sign(`${token.ticker}\n${token.name}`, degenPosterStyle(token));
-  textLabels.push(sign);
-  sign.object.position.set(...faceToWorld(f, u, v0 + 0.25, 0.036));
-  sign.object.rotation.y = faceYaw(f);
-  sign.object.userData['token'] = token.ticker;
-  wall.group.add(sign.object);
+  // The frame: four bars out of the wall, their front a lip just proud of the art.
+  const [back, front] = [0.02, DEGEN_POSTER_DEPTH + 0.006];
+  wall.bins.add('unlit', faceBox(f, u0 - frame, v0 - frame, back, u0, v1 + frame, front), accent);
+  wall.bins.add('unlit', faceBox(f, u1, v0 - frame, back, u1 + frame, v1 + frame, front), accent);
+  wall.bins.add('unlit', faceBox(f, u0, v1, back, u1, v1 + frame, front), accent);
+  wall.bins.add('unlit', faceBox(f, u0, v0 - frame, back, u1, v0, front), accent);
+  // The stand-in, behind the art's plane.
+  wall.bins.add('unlit', facePanel(f, u0, v0, u1, v1, 0.046, 0.02), background);
+  wall.bins.add('unlit', facePanel(f, u0 + 0.1, v1 - 0.14, u1 - 0.1, v1 - 0.1, 0.048, 0.02), accent);
+  wall.bins.add('unlit', facePanel(f, u0 + 0.1, v1 - 0.2, u0 + 0.46, v1 - 0.17, 0.048, 0.015), ink);
+  degenMotif(wall, token.motif, u, v0 + height * 0.64, accent, ink);
+
+  const board = (): void => {
+    const sign = labels.sign(`${token.ticker}\n${token.name}`, degenPosterStyle(token));
+    textLabels.push(sign);
+    sign.object.position.set(...faceToWorld(f, u, v0 + 0.42, DEGEN_POSTER_DEPTH - 0.004));
+    sign.object.rotation.y = faceYaw(f);
+    sign.object.userData['token'] = token.ticker;
+    wall.group.add(sign.object);
+  };
+  if (!images) {
+    board();
+    return;
+  }
+
+  const material = res.material(new MeshBasicMaterial({ toneMapped: false }));
+  const art = new Mesh(res.geometry(new PlaneGeometry(width, height)), material);
+  art.name = `${wall.group.name}:poster:${token.ticker}`;
+  art.userData['poster'] = token.ticker;
+  art.position.set(...faceToWorld(f, u, v0 + height / 2, DEGEN_POSTER_DEPTH));
+  art.rotation.y = faceYaw(f);
+  // Hidden until decoded: a map with no image yet samples black.
+  art.visible = false;
+  wall.group.add(art);
+  wall.fadeMaterials.push(material);
+
+  const show = (texture: Texture): void => {
+    // The room may be gone by the time the image arrives; nothing may leak.
+    if (res.disposed) {
+      texture.dispose();
+      return;
+    }
+    res.texture(texture);
+    texture.colorSpace = SRGBColorSpace;
+    texture.generateMipmaps = true;
+    texture.minFilter = LinearMipmapLinearFilter;
+    texture.magFilter = LinearFilter;
+    // Read at the camera's pitch, and along the side walls at a slant.
+    texture.anisotropy = 4;
+    texture.needsUpdate = true;
+    material.map = texture;
+    material.needsUpdate = true;
+    art.visible = true;
+  };
+  const standIn = (): void => {
+    if (res.disposed) return;
+    art.removeFromParent();
+    board();
+  };
+  let pending: Promise<Texture>;
+  try {
+    pending = images.load(token.poster);
+  } catch (error) {
+    pending = Promise.reject(error);
+  }
+  pending.then(show, standIn).catch(() => {
+    // A late failure (a label factory throwing) must not surface as an
+    // unhandled rejection: the procedural poster is already on the wall.
+  });
 }
 
-/** A poster's board: the ticker big in the token's ink, its name under it in the accent. */
+/** A stand-in poster's board: the ticker big in the token's ink, its name under it in the accent. */
 export function degenPosterStyle(token: DegenToken): SignStyleOptions {
   const hex = (value: number) => `#${value.toString(16).padStart(6, '0')}`;
   return {
-    width: 1.34,
-    height: 0.42,
+    width: 0.94,
+    height: 0.36,
     background: hex(token.colors.background),
     foreground: hex(token.colors.ink),
     accent: hex(token.colors.accent),
@@ -1246,10 +1341,13 @@ export function degenPosterStyle(token: DegenToken): SignStyleOptions {
   };
 }
 
-/** A poster's motif, centred on (u, v): simple convex shapes, never a token's mark. */
+/**
+ * A stand-in poster's motif, centred on (u, v): simple convex shapes, never a
+ * token's mark. Every part stays behind the art's plane (`DEGEN_POSTER_DEPTH`).
+ */
 function degenMotif(wall: InteriorWall, motif: DegenMotif, u: number, v: number, accent: number, ink: number): void {
   const f = wall.face;
-  const [w0, w1] = [0.034, 0.05];
+  const [w0, w1] = [0.05, 0.056];
   const shape = (points: readonly (readonly [number, number])[], colour: number): void => {
     wall.bins.add('unlit', facePrism(f, points.map(([du, dv]) => [u + du, v + dv] as const), w0, w1), colour);
   };

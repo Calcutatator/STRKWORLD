@@ -179,7 +179,9 @@ function expectSafeLifecycle(calls, name, stopGraceSeconds) {
   expect(calls).toContainEqual(['container', 'rm', '--force', '--', containerId]);
 }
 
-describe('production image boot-smoke seam', () => {
+// Each case shells out to the real Bash entrypoints, which slows sharply under a
+// full parallel run; the suite gets more than vitest's 5 s default.
+describe('production image boot-smoke seam', { timeout: 20_000 }, () => {
   it('provides executable, syntax-valid Bash entrypoints that reject extra arguments before Docker', async () => {
     for (const script of [flyScript, backendScript]) {
       const metadata = await stat(script);

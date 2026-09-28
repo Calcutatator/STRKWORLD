@@ -194,92 +194,121 @@ export const DEGEN = Object.freeze({
   ink: 0x0b0c14,
 });
 
-/** A simple procedural mark for a poster: never a token's logo. */
+/** The stand-in mark a poster shows until its art is decoded, or if it never is. */
 export type DegenMotif = 'crown' | 'stars' | 'blade' | 'coin' | 'gem' | 'bolt';
 
 /**
  * One Degen-floor poster. Presentation vocabulary only: a ticker, a name,
- * colours and a motif. The World must not know what money is (AGENTS.md §4),
- * so a poster never carries a price, an amount, an arrow, a chart or an
- * address, and the degen swap's real token list is the Shell's.
+ * colours, a stand-in motif and the poster's art. The World must not know
+ * what money is (AGENTS.md §4), so a poster never carries a price, an amount,
+ * an arrow, a chart or an address, and the degen swap's real token list is
+ * the Shell's.
  */
 export interface DegenToken {
   readonly ticker: string;
   readonly name: string;
   readonly colors: {
-    /** The poster's colour block. */
+    /** The stand-in poster's colour block. */
     readonly background: number;
-    /** Its frame, motif and name. */
+    /** The neon frame round the poster, and the stand-in's motif and name. */
     readonly accent: number;
-    /** The ticker's type. */
+    /** The stand-in's ticker type. */
     readonly ink: number;
   };
   readonly motif: DegenMotif;
+  /**
+   * The poster's art: a bundled 512 by 768 WebP composed from the project's
+   * own logo and imagery (sources in `assets/CREDITS.md`). A URL the bundler
+   * resolves to the game's own origin; never a third-party address.
+   */
+  readonly poster: string;
   /** A slot still waiting for the lead's research. */
   readonly placeholder?: boolean;
 }
 
 /**
+ * A bundled poster. `new URL` with `import.meta.url` is what Vite rewrites to
+ * the emitted asset (as `avatar-visual.ts` does for the avatar sheets), so the
+ * browser fetches it from the game's own origin, and node tests read the file.
+ */
+function degenPosterAsset(file: string): string {
+  return new URL(`../../assets/degen-posters/${file}.webp`, import.meta.url).href;
+}
+
+/**
  * The Degen floor's posters, one per entry and drawn in this order (north
  * wall first, see room-builder.ts). Tickers and projects come from avnu's
- * public token list (Community / Unruggable / Verified tags, read 2026-09-27);
- * colours are taken from each project's own logo where it rendered, and are
- * marked as guesses where it did not. Decoration only: no price, chart or
- * address ever appears on a poster, and a poster is not a swap listing.
- * Up to eight fit the walls.
+ * public token list (Community / Unruggable / Verified tags, read 2026-09-27).
+ * Each poster is composed from its project's own logo, art, colours and type
+ * (read from avnu's token API and the project's site, 2026-09-28); the
+ * colours here are measured from those assets and dress the neon frame and
+ * the stand-in. Decoration only: no price, chart or address ever appears on
+ * a poster, and a poster is not a swap listing. Up to eight fit the walls.
  */
 export const DEGEN_TOKENS: readonly DegenToken[] = Object.freeze([
   Object.freeze({
     ticker: 'LORDS',
     name: 'Realms',
-    // Logo black and white; gold is a guess from the wider Realms brand.
-    colors: Object.freeze({ background: 0x101010, accent: 0xd4af37, ink: 0xe0e0e0 }),
+    // Realms World: night-blue key art, gold type, the badge's cream.
+    colors: Object.freeze({ background: 0x07080c, accent: 0xd8b46a, ink: 0xfbe1bb }),
     motif: 'crown',
+    poster: degenPosterAsset('lords'),
   }),
   Object.freeze({
     ticker: 'DREAMS',
     name: 'Daydreams',
-    colors: Object.freeze({ background: 0x202000, accent: 0xe0e040, ink: 0xfdfde0 }),
+    // The brain mark's yellow on daydreams.systems' dark olive and cream.
+    colors: Object.freeze({ background: 0x0b0d04, accent: 0xe8e84d, ink: 0xf4f5de }),
     motif: 'stars',
+    poster: degenPosterAsset('dreams'),
   }),
   Object.freeze({
     ticker: 'SLAY',
     name: 'Brother Eli',
-    // A guess: the project's logo did not load.
-    colors: Object.freeze({ background: 0x1d070d, accent: 0xff4768, ink: 0xffe8ec }),
+    // brothereli.com's cut-out yellow and torn paper on black.
+    colors: Object.freeze({ background: 0x050505, accent: 0xfcd809, ink: 0xefe6d4 }),
     motif: 'blade',
+    poster: degenPosterAsset('slay'),
   }),
   Object.freeze({
     ticker: 'BROTHER',
     name: 'Starknet Brother',
-    colors: Object.freeze({ background: 0x000040, accent: 0x909090, ink: 0xe8e8ff }),
+    // supbro.fun's navy and the mascot's coral helmet.
+    colors: Object.freeze({ background: 0x0c0c61, accent: 0xf07c6c, ink: 0xffffff }),
     motif: 'bolt',
+    poster: degenPosterAsset('brother'),
   }),
   Object.freeze({
     ticker: 'tBTC',
     name: 'Threshold',
-    // Logo dark teal and white; the purple is a guess from Threshold's brand.
-    colors: Object.freeze({ background: 0x102020, accent: 0x7a00ff, ink: 0xe0e0e0 }),
+    // threshold.network: a light page, Threshold violet, black tBTC coins.
+    colors: Object.freeze({ background: 0xf2f3f7, accent: 0x7d00ff, ink: 0x0b0b0f }),
     motif: 'coin',
+    poster: degenPosterAsset('tbtc'),
   }),
   Object.freeze({
     ticker: 'CASH',
     name: 'Opus',
-    colors: Object.freeze({ background: 0x0c2416, accent: 0x60c080, ink: 0xe6fff0 }),
+    // opus.money's black and white, and the CASH coin's green.
+    colors: Object.freeze({ background: 0x050505, accent: 0x66cc88, ink: 0xffffff }),
     motif: 'gem',
+    poster: degenPosterAsset('cash'),
   }),
   Object.freeze({
     ticker: 'DOG',
     name: 'Dog Go To The Moon',
-    // The logo is a photo, so a greyscale treatment.
-    colors: Object.freeze({ background: 0x141414, accent: 0xbdbdbd, ink: 0xf5f5f5 }),
+    // The DOG art's space purple and the hoodie's bitcoin orange.
+    colors: Object.freeze({ background: 0x3f3268, accent: 0xf7931a, ink: 0xffffff }),
     motif: 'coin',
+    poster: degenPosterAsset('dog'),
   }),
   Object.freeze({
     ticker: 'SSTR',
     name: 'Sister',
-    colors: Object.freeze({ background: 0x16163a, accent: 0xf0c0c0, ink: 0xe6e6ff }),
+    // The Sister avatar: pale pink, coral ring, violet hair.
+    colors: Object.freeze({ background: 0xffe9e9, accent: 0xf19891, ink: 0x6661d9 }),
     motif: 'stars',
+    poster: degenPosterAsset('sstr'),
   }),
 ] satisfies readonly DegenToken[]);
 

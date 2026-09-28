@@ -258,6 +258,36 @@ empty shell to fetchers, so a 200 there means nothing.
 
 ## 6. Findings log
 
+### 2026-09-28 — Degen posters are bundled project art behind an injected image loader
+
+The Degen floor's eight posters are composites of each project's own logo and
+art (`packages/world/assets/degen-posters/`, sources in `assets/CREDITS.md`).
+The room builder loads them through `ImageTextureLoader` (`three/types.ts`),
+the texture twin of `LabelFactory`: node has no image decoder, so tests inject
+a deferred fake, and the engine passes `createImageTextureLoader(doc)`, which
+refuses anything that is neither same-origin nor `data:`. Vite rewrites
+``new URL(`../../assets/degen-posters/${file}.webp`, import.meta.url)`` into a
+glob of that folder's `*.webp` and emits hashed same-origin files
+(`/assets/lords-<hash>.webp`). An esbuild IIFE bundle leaves `import.meta`
+empty, so a render harness for World code that resolves assets must be a Vite
+build, and headless Chrome needs `--allow-file-access-from-files` for its
+file:// module script and textures. The art plane and the stand-in's ticker
+board never both exist (the board is made only when no art is coming), which
+keeps the floor at 31 counted draw calls while loading, loaded or failed.
+Source traps: avnu's SLAY `logoUri` (`brothereli.com/logo.svg`) is a 404;
+`sstr.fun` now 301s to an unrelated casino domain, which the corporate DNS
+filter blocks, so SSTR has no official site; `dreams.fun` is a parking page
+and Daydreams lives at `daydreams.systems`; brothereli.com's hero art includes
+photos of a real person, and supbro.fun's gallery shows third-party characters.
+
+*Verified:* `room-builder.test.ts` (loads, fades, falls back, disposes, keeps
+the budget; ten mutations of the poster code each fail a test),
+`degen-posters.test.ts` (files, 512x768 WebP headers, 150 KB budget, credits,
+loader origin rule) and `architecture-boundary.test.ts` (no remote URL in
+World code); a scratch `vite build` of apps/web emitted the eight posters under
+`/assets/` with no third-party host in the World chunk; headless Chrome renders
+of the floor with all eight textures decoded, and with one load forced to fail.
+
 ### 2026-09-28 — avnu's token list: 200 a page, volume order only, flaky, and not all printable (D-067)
 
 avnu's public `GET https://starknet.api.avnu.fi/v1/starknet/tokens` (the SDK's

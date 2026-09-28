@@ -19,6 +19,7 @@ import { createDomKeyboard, type DomKeyboard } from '../dom-keyboard.js';
 import { createWorldSession, type WorldSession } from '../world-session.js';
 import { createAvatarFigure, disposeAvatarFigureCache } from './avatar-figure.js';
 import { CAMERA_FOV, createCameraRig, type CameraRig } from './camera-rig.js';
+import { createImageTextureLoader } from './image-textures.js';
 import { createCanvasLabelFactory } from './labels.js';
 import { createPresenter, type Presenter } from './presenter.js';
 import { disposeSandboxCaches } from './sandbox-view.js';
@@ -269,6 +270,7 @@ export function createWorldEngine(options: WorldEngineOptions): WorldEngine {
       parent: scene,
       labels: createCanvasLabelFactory(doc),
       figures: createAvatarFigure,
+      images: createImageTextureLoader(doc),
     });
     cleanup.push(() => presenter.dispose());
     cleanup.push(() => disposeAvatarFigureCache());

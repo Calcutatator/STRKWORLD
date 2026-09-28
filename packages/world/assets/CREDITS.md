@@ -26,3 +26,35 @@ SHA-256s, licence) remains in git history before the removal commit.
   `sourceSize`/pivot preservation and `(32,56)` feet-anchor validation before
   Phaser integration. The runtime-owned gameplay/contact body remains the
   common 24x24 footprint.
+
+## Degen floor posters (`degen-posters/`)
+
+- What: eight 512x768 WebP posters for the Exchange tower's Degen floor, one
+  per `DEGEN_TOKENS` entry (`src/three/palette.ts`). Composed offline for
+  STRKWORLD on 2026-09-28 from each project's own imagery, so each reads as a
+  poster the project made: its token logo (from avnu's public token API,
+  `https://starknet.api.avnu.fi/v1/starknet/tokens`, field `logoUri`), art from
+  its official site or public social pages, its colours, and type set to echo
+  its own (macOS system fonts rendered to pixels; no font file ships).
+- Ownership: every logo, mascot, illustration and wordmark below belongs to
+  its project and is used only to represent that project's token on the
+  Degen floor. STRKWORLD claims no rights in them and implies no endorsement.
+- Runtime: bundled with the World and served from the game's own origin. The
+  browser never fetches a project's CDN, so no player's address reaches one.
+- Content rule: decoration only. No price, amount, chart, percentage, address
+  or call to action appears on a poster; cashtags (`$`) were left out.
+- Sources: the files that made it into a poster, all retrieved 2026-09-28
+  (sizes are the downloaded files'). Other official images were consulted
+  and left out, among them Opus's UI cards (they show prices) and the Starknet
+  Brother gallery art (third-party characters).
+
+| Poster | Token / project | Sources used | Changes |
+|---|---|---|---|
+| `degen-posters/lords.webp` (60 KB) | LORDS / Realms (Realms World) | `https://realms.world/brand/blitz-card.png` (castle key art, 2.4 MB); `https://assets.coingecko.com/coins/images/22171/large/Frame_1.png` (the LORDS logo avnu lists, large size, 7 KB); `https://realms.world/rw-logo.svg` (REALMS.WORLD badge, 15 KB) | Art cropped to portrait and darkened at the foot; logo in a gold medallion; badge rasterised; "LORDS" and "the REALMS" set in Big Caslon after the site's classical capitals |
+| `degen-posters/dreams.webp` (72 KB) | DREAMS / Daydreams | `https://www.daydreams.systems/images/daydreams-agent-network.webp` (hero illustration, 202 KB); `https://www.daydreams.systems/brand/daydreams-wordmark.svg` (brain mark and wordmark, 20 KB) | Illustration cropped to portrait; brain mark tinted to the logo's yellow (as in the avnu logo); "DREAMS" in Krungthep, captions in Menlo |
+| `degen-posters/slay.webp` (112 KB) | SLAY / Brother Eli | `https://www.brothereli.com/assets/believe/delivery/loader-portrait-v9-640.webp` (bELIeve collage, 145 KB); `https://www.brothereli.com/assets/believe/delivery/hero-scene-desktop-print-v6-hawaiian-961.webp` (Eli cartoon, 89 KB) | Collage scaled; cartoon cropped to the character only (the site's photos of a real person were left out) and taped on as a sticker; "SLAY" typed in American Typewriter, "BROTHER ELI" in cut-out letters. avnu's `logoUri` (`https://www.brothereli.com/logo.svg`) returned 404 |
+| `degen-posters/brother.webp` (46 KB) | BROTHER / Starknet Brother | `https://www.supbro.fun/image/logo.jpeg` (mascot, the same art as the avnu logo, 65 KB) | White background keyed out; set on the site's navy (rgb 12, 12, 97) with coral rings; "STARKNET BROTHER" in Krungthep |
+| `degen-posters/tbtc.webp` (32 KB) | tBTC / Threshold | `https://cdn.prod.website-files.com/68f7acb28e2423ac92e4dd06/68f7acb28e2423ac92e4de18_prupose_coin.svg` (tBTC coin illustration, 12 KB); `https://cdn.prod.website-files.com/68f7acb28e2423ac92e4dd06/6911e0e32f2fb5d9a124978e_Threshold%20Network%20Home.png` (og:image: THRESHOLD wordmark and an orange coin, 175 KB) | Coin rasterised and used three times; wordmark and coin cropped; "tBTC" in Futura on the site's dotted light ground |
+| `degen-posters/cash.webp` (17 KB) | CASH / Opus | `https://cdn.prod.website-files.com/62a717dce62f321947cb33d7/64e7c57c4f672466b07300ab_opengraph.png` (og:image: dash field and opus wordmark, 262 KB); `https://raw.githubusercontent.com/lindy-labs/opus_contracts/main/assets/CASH_no_margin_2x.png` (CASH logo, 2x of the avnu `logoUri` asset, 13 KB) | Dash field and wordmark cropped (headline and button left out); "CASH" in Helvetica Neue after the site's grotesk |
+| `degen-posters/dog.webp` (99 KB) | DOG / DOG•GO•TO•THE•MOON | `https://dogofbitcoin.com/images/dog-of-bitcoin.webp` (og:image art, 297 KB) | Cropped to portrait; the faint ticker on the moon softened; "DOG" and "DOG•GO•TO•THE•MOON" in Arial Rounded MT Bold with the site logo's black outline and bitcoin orange |
+| `degen-posters/sstr.webp` (73 KB) | SSTR / Sister | `https://res.cloudinary.com/dikavhrql/image/upload/v1732475722/pp-twitter-sstr_t2hd5h.png` (the avatar avnu lists, 157 KB); `https://media.tenor.com/BEs0KOwtMdsAAAA1/gm-sister.webp` and `https://media.tenor.com/4-ngEFkYHwgAAAA1/sstr-tobby.webp` (stickers from the project's public Tenor profile, 448 KB and 366 KB) | Avatar framed in its violet ring; stickers' first frames; "SSTR" and "SISTER" in Arial Rounded MT Bold. The project's site, `sstr.fun`, now redirects to an unrelated casino domain and was not used |
