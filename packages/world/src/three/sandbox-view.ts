@@ -16,7 +16,7 @@ import {
   Quaternion,
   Vector3,
 } from 'three';
-import type { Object3D } from 'three';
+import type { BufferAttribute, Object3D } from 'three';
 import {
   SANDBOX_AREA,
   SANDBOX_COLOURS,
@@ -233,6 +233,55 @@ export function bevelledBlockGeometry(size = 1, bevel = 0.07): BufferGeometry {
   return geometry;
 }
 
+/**
+ * The instances of one attribute written since three last uploaded it.
+ *
+ * three uploads an attribute's update ranges only when it next draws the
+ * mesh, and clears them itself once they are uploaded
+ * (`WebGLAttributes.updateBuffer`). Several flushes can land before that
+ * draw — two lobby patches in one frame, or a patch and then the frame's own
+ * `update()` — so a flush must not replace a range three has not drawn yet:
+ * the replaced instances would never reach the GPU and would keep whatever it
+ * last held, for a colour never uploaded the attribute's initial white. The
+ * range handed to three therefore covers everything written since its last
+ * upload, and the attribute's upload callback resets it: one range per
+ * attribute, however many flushes go undrawn (a hidden tab draws nothing).
+ */
+interface UploadTracker {
+  /** Instance `index` was written. */
+  mark(index: number): void;
+  /** Hand three one range covering every instance it has not uploaded. */
+  flush(): void;
+}
+
+function trackUploads(attribute: BufferAttribute, itemSize: number): UploadTracker {
+  // Handed to three and not yet uploaded; written since the last flush.
+  let pendingMin = Infinity;
+  let pendingMax = -Infinity;
+  let freshMin = Infinity;
+  let freshMax = -Infinity;
+  attribute.onUpload(() => {
+    pendingMin = Infinity;
+    pendingMax = -Infinity;
+  });
+  return {
+    mark(index) {
+      if (index < freshMin) freshMin = index;
+      if (index > freshMax) freshMax = index;
+    },
+    flush() {
+      if (freshMax < freshMin) return;
+      pendingMin = Math.min(pendingMin, freshMin);
+      pendingMax = Math.max(pendingMax, freshMax);
+      freshMin = Infinity;
+      freshMax = -Infinity;
+      attribute.clearUpdateRanges();
+      attribute.addUpdateRange(pendingMin * itemSize, (pendingMax - pendingMin + 1) * itemSize);
+      attribute.needsUpdate = true;
+    },
+  };
+}
+
 const PALETTE_COLOURS = SANDBOX_BLOCK_PALETTE.map((hex) => new Color(hex));
 const scratchMatrix = new Matrix4();
 const scratchPosition = new Vector3();
@@ -257,6 +306,8 @@ export function buildSandbox(): SandboxView {
   mesh.instanceColor!.setUsage(DynamicDrawUsage);
   mesh.count = 0;
   group.add(mesh);
+  const matrixUploads = trackUploads(mesh.instanceMatrix, 16);
+  const colourUploads = trackUploads(mesh.instanceColor!, 3);
 
   // The target: a flat ring on the column's tile, and a ghost block with an outline.
   const target = new Group();
@@ -290,10 +341,6 @@ export function buildSandbox(): SandboxView {
   const slots: (Block | null)[] = new Array(SANDBOX_INSTANCE_CAPACITY).fill(null);
   const animating = new Set<Block>();
   let active = 0;
-  let dirtyMin = Infinity;
-  let dirtyMax = -Infinity;
-  let colourMin = Infinity;
-  let colourMax = -Infinity;
   let elapsed = 0;
   let targetState: { pick: boolean; valid: boolean } | null = null;
   let disposed = false;
@@ -342,14 +389,12 @@ export function buildSandbox(): SandboxView {
     scratchScale.set(s, sy, s);
     scratchMatrix.compose(scratchPosition, IDENTITY, scratchScale);
     mesh.setMatrixAt(block.index, scratchMatrix);
-    dirtyMin = Math.min(dirtyMin, block.index);
-    dirtyMax = Math.max(dirtyMax, block.index);
+    matrixUploads.mark(block.index);
   };
 
   const writeColour = (block: Block): void => {
     mesh.setColorAt(block.index, PALETTE_COLOURS[block.colour]!);
-    colourMin = Math.min(colourMin, block.index);
-    colourMax = Math.max(colourMax, block.index);
+    colourUploads.mark(block.index);
   };
 
   const finished = (block: Block): boolean => {
@@ -405,22 +450,8 @@ export function buildSandbox(): SandboxView {
   };
 
   const flush = (): void => {
-    if (dirtyMax >= dirtyMin) {
-      const attribute = mesh.instanceMatrix;
-      attribute.clearUpdateRanges();
-      attribute.addUpdateRange(dirtyMin * 16, (dirtyMax - dirtyMin + 1) * 16);
-      attribute.needsUpdate = true;
-    }
-    if (colourMax >= colourMin && mesh.instanceColor) {
-      const attribute = mesh.instanceColor;
-      attribute.clearUpdateRanges();
-      attribute.addUpdateRange(colourMin * 3, (colourMax - colourMin + 1) * 3);
-      attribute.needsUpdate = true;
-    }
-    dirtyMin = Infinity;
-    dirtyMax = -Infinity;
-    colourMin = Infinity;
-    colourMax = -Infinity;
+    matrixUploads.flush();
+    colourUploads.flush();
   };
 
   const styleTarget = (pulse: number): void => {

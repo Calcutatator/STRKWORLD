@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import {
   Box3,
+  BufferAttribute,
   BufferGeometry,
   Color,
   InstancedMesh,
@@ -64,6 +65,212 @@ function settle(view: SandboxView, ms = 3000): void {
 function heightOf(view: SandboxView, index: number): number {
   return instancePositions(view)[index]!.y;
 }
+
+/** Deterministic PRNG, so a failure is reproducible. */
+function mulberry32(seed: number): () => number {
+  let a = seed >>> 0;
+  return () => {
+    a = (a + 0x6d2b79f5) >>> 0;
+    let t = Math.imul(a ^ (a >>> 15), 1 | a);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
+interface GpuMirror {
+  /** One drawn frame: upload each instanced attribute exactly as three would. */
+  draw(): void;
+  /** The floats the GPU holds for instance `index`. */
+  matrix(index: number): number[];
+  colour(index: number): number[];
+}
+
+/**
+ * What the GPU holds for the block mesh, updated the way three's
+ * `WebGLAttributes` does it and only when a frame is drawn: the first draw
+ * uploads the whole array (`createBuffer`, which leaves the update ranges
+ * alone); a later draw, only if the version moved, uploads the update ranges —
+ * the whole array when there are none — then clears them (`updateBuffer`).
+ * Both then call the attribute's upload callback.
+ */
+function gpuMirror(mesh: InstancedMesh): GpuMirror {
+  const mirror = (attribute: BufferAttribute, size: number) => {
+    let data: Float32Array | null = null;
+    let version = 0;
+    return {
+      draw(): void {
+        const source = attribute.array as Float32Array;
+        if (data === null) {
+          data = Float32Array.from(source);
+        } else if (version < attribute.version) {
+          if (attribute.updateRanges.length === 0) {
+            data.set(source);
+          } else {
+            for (const { start, count } of attribute.updateRanges) {
+              data.set(source.subarray(start, start + count), start);
+            }
+            attribute.clearUpdateRanges();
+          }
+        } else {
+          return;
+        }
+        version = attribute.version;
+        attribute.onUploadCallback();
+      },
+      read(index: number): number[] {
+        if (data === null) throw new Error('nothing drawn yet');
+        return Array.from(data.subarray(index * size, (index + 1) * size));
+      },
+    };
+  };
+  const matrices = mirror(mesh.instanceMatrix, 16);
+  const colours = mirror(mesh.instanceColor!, 3);
+  return {
+    draw() {
+      matrices.draw();
+      colours.draw();
+    },
+    matrix: (index) => matrices.read(index),
+    colour: (index) => colours.read(index),
+  };
+}
+
+/** A palette colour as the instance colour attribute stores it: linear, in float32. */
+function paletteFloats(colour: number): number[] {
+  return Array.from(new Float32Array(new Color(SANDBOX_BLOCK_PALETTE[colour]!).toArray()));
+}
+
+/** Every drawn instance whose GPU matrix or colour differs from the CPU arrays. */
+function unmirrored(mesh: InstancedMesh, gpu: GpuMirror): string[] {
+  const wrong: string[] = [];
+  const matrices = mesh.instanceMatrix.array as Float32Array;
+  const colours = mesh.instanceColor!.array as Float32Array;
+  for (let index = 0; index < mesh.count; index += 1) {
+    const matrix = Array.from(matrices.subarray(index * 16, index * 16 + 16));
+    const colour = Array.from(colours.subarray(index * 3, index * 3 + 3));
+    if (gpu.matrix(index).some((value, i) => value !== matrix[i])) wrong.push(`matrix ${index}`);
+    if (gpu.colour(index).some((value, i) => value !== colour[i])) wrong.push(`colour ${index}`);
+  }
+  return wrong;
+}
+
+describe('instance uploads (three uploads update ranges only when it draws)', () => {
+  it('keeps both of two patches that land between frames in the colour upload', () => {
+    const view = buildSandbox();
+    const mesh = blocks(view);
+    const gpu = gpuMirror(mesh);
+    gpu.draw();
+    view.setColumns([{ x: X, y: Y, colours: [2] }]);
+    view.setColumns([
+      { x: X, y: Y, colours: [2] },
+      { x: X + 1, y: Y, colours: [5] },
+    ]);
+    // No frame between the patches: both new instances are still pending.
+    expect(mesh.instanceColor!.updateRanges).toEqual([{ start: 0, count: 6 }]);
+    expect(mesh.instanceMatrix.updateRanges).toEqual([{ start: 0, count: 32 }]);
+    gpu.draw();
+    expect(unmirrored(mesh, gpu)).toEqual([]);
+    expect(gpu.colour(0)).toEqual(paletteFloats(2));
+    view.dispose();
+  });
+
+  it("keeps a patch's colours when the frame's update moves a block into a freed slot", () => {
+    const view = buildSandbox();
+    const mesh = blocks(view);
+    const gpu = gpuMirror(mesh);
+    view.setColumns([
+      { x: X, y: Y, colours: [0] },
+      { x: X + 1, y: Y, colours: [1] },
+      { x: X + 2, y: Y, colours: [2] },
+    ]);
+    settle(view);
+    gpu.draw();
+    // One patch pops the middle block (slot 1) and adds two (slots 3 and 4)...
+    view.setColumns([
+      { x: X, y: Y, colours: [0] },
+      { x: X + 2, y: Y, colours: [2] },
+      { x: X + 3, y: Y, colours: [3] },
+      { x: X + 4, y: Y, colours: [4] },
+    ]);
+    // ...and before the next frame, update() finishes the pop-out: the last
+    // instance moves into slot 1, a colour write there.
+    view.update(250);
+    expect(mesh.count).toBe(4);
+    expect(mesh.instanceColor!.updateRanges).toEqual([{ start: 3, count: 12 }]);
+    gpu.draw();
+    expect(unmirrored(mesh, gpu)).toEqual([]);
+    // Slot 3 is the patch's first new block, which never moved: not white.
+    expect(gpu.colour(3)).toEqual(paletteFloats(3));
+    view.dispose();
+  });
+
+  it('forgets what three has uploaded: only later writes stay pending', () => {
+    const view = buildSandbox();
+    const mesh = blocks(view);
+    const gpu = gpuMirror(mesh);
+    view.setColumns([{ x: X, y: Y, colours: [0, 1] }]);
+    gpu.draw();
+    view.setColumns([{ x: X, y: Y, colours: [0, 1, 2] }]);
+    expect(mesh.instanceColor!.updateRanges).toEqual([{ start: 6, count: 3 }]);
+    expect(mesh.instanceMatrix.updateRanges).toEqual([{ start: 32, count: 16 }]);
+    gpu.draw();
+    expect(mesh.instanceColor!.updateRanges).toEqual([]);
+    expect(mesh.instanceMatrix.updateRanges).toEqual([]);
+    view.setColumns([{ x: X, y: Y, colours: [0, 1, 2, 3] }]);
+    expect(mesh.instanceColor!.updateRanges).toEqual([{ start: 9, count: 3 }]);
+    expect(mesh.instanceMatrix.updateRanges).toEqual([{ start: 48, count: 16 }]);
+    gpu.draw();
+    expect(unmirrored(mesh, gpu)).toEqual([]);
+    view.dispose();
+  });
+
+  it('keeps one range per attribute however many flushes go undrawn', () => {
+    const view = buildSandbox();
+    const mesh = blocks(view);
+    gpuMirror(mesh).draw();
+    for (let n = 0; n < 50; n += 1) {
+      view.setColumns([{ x: X + (n % 7), y: Y + Math.floor(n / 7), colours: [n % SANDBOX_COLOURS] }]);
+      view.update(16);
+    }
+    expect(mesh.instanceMatrix.updateRanges).toHaveLength(1);
+    expect(mesh.instanceColor!.updateRanges).toHaveLength(1);
+    view.dispose();
+  });
+
+  it('draws what the CPU holds on every frame, whatever lands between frames (seeded)', () => {
+    const tiles = 12;
+    for (let seed = 1; seed <= 40; seed += 1) {
+      const random = mulberry32(seed);
+      const view = buildSandbox();
+      const mesh = blocks(view);
+      const gpu = gpuMirror(mesh);
+      const stacks: number[][] = Array.from({ length: tiles }, () => []);
+      const tileOf = (index: number) => ({ x: X + (index % 4), y: Y + Math.floor(index / 4) });
+      const columns = (): SandboxColumn[] =>
+        stacks.flatMap((colours, index) => (colours.length > 0 ? [{ ...tileOf(index), colours: [...colours] }] : []));
+      for (let step = 0; step < 300; step += 1) {
+        const roll = random();
+        if (roll < 0.35) {
+          // One patch: a block lands, is taken, or a column is rebuilt.
+          const stack = stacks[Math.floor(random() * tiles)]!;
+          const kind = random();
+          if (kind < 0.5) stack.push(Math.floor(random() * SANDBOX_COLOURS));
+          else if (kind < 0.85) stack.pop();
+          else stack.splice(0, stack.length, ...Array.from({ length: Math.floor(random() * 4) }, () => Math.floor(random() * SANDBOX_COLOURS)));
+          view.setColumns(columns());
+        } else if (roll < 0.45) {
+          view.expectDrop(tileOf(Math.floor(random() * tiles)));
+        } else if (roll < 0.75) {
+          view.update(Math.floor(random() * 120));
+        } else {
+          gpu.draw();
+          expect(unmirrored(mesh, gpu), `seed ${seed}, step ${step}`).toEqual([]);
+        }
+      }
+      view.dispose();
+    }
+  });
+});
 
 describe('late sky-drop hints (lobby order)', () => {
   it('upgrades a block that is still arriving into a sky drop', () => {
@@ -150,11 +357,12 @@ describe('buildSandbox', () => {
     const mesh = blocks(view);
     view.setColumns([{ x: X, y: Y, colours: [0, 1] }]);
     settle(view);
+    gpuMirror(mesh).draw();
     const before = Array.from(mesh.instanceMatrix.array.slice(0, 32));
     view.setColumns([{ x: X, y: Y, colours: [0, 1, 2] }]);
     expect(mesh.count).toBe(3);
     expect(Array.from(mesh.instanceMatrix.array.slice(0, 32))).toEqual(before);
-    // Only the new instance is queued for upload.
+    // Once the settled stack has been drawn, only the new instance is queued.
     expect(mesh.instanceMatrix.updateRanges).toEqual([{ start: 32, count: 16 }]);
     settle(view);
     expect(blockAt(view, X, Y, 2)).toBeGreaterThanOrEqual(0);

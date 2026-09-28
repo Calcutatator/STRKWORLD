@@ -258,6 +258,41 @@ empty shell to fetchers, so a 200 there means nothing.
 
 ## 6. Findings log
 
+### 2026-09-28 — Sandbox blocks turned white: a flush replaced update ranges three had not drawn yet
+
+Every placed block is one instance of a single `InstancedMesh`, its colour in
+`instanceColor`, which `setColorAt` creates filled with 1s: white
+(`InstancedMesh.js:322`; matrices start as the identity). three uploads an
+attribute's `updateRanges` only when it next draws the mesh, then clears them
+itself and calls the attribute's `onUploadCallback`
+(`WebGLAttributes.updateBuffer`). The view's `flush()` cleared and re-added
+its ranges on every call, and it runs after every lobby patch (patches land
+between frames), every sky-drop hint and every frame's `update()`. So when two
+flushes landed before a draw — two patches in one frame, or a patch and then
+the frame's `update()`, whose swap-remove moves the last block into a freed
+slot — the first range was dropped and those instances never reached the GPU:
+a slot never uploaded stays white, a reused one keeps the last block drawn
+there. A busy room hits it more often the longer it runs. The material's
+missing `vertexColors` flag is not the cause: `WebGLProgram.js:740` defines
+`USE_COLOR` for `instancingColor`. The view now keeps, per attribute, the
+union of instances written since three last uploaded it, reset in the
+attribute's `onUpload` callback (nothing else in the repo or in three sets
+it), and hands three that single range on every flush, so a hidden tab that
+draws nothing still holds one range per attribute. `createBuffer`'s first
+upload sends the whole array and calls the callback without clearing the
+ranges; the next flush replaces them.
+
+*Verified:* `three@0.186.1` `src/renderers/webgl/WebGLAttributes.js`
+(`createBuffer`, `updateBuffer`), `WebGLObjects.js` (instance attributes
+updated once per frame) and `src/objects/InstancedMesh.js`.
+`sandbox-view.test.ts` mirrors the GPU the way three uploads and only at
+simulated draws: two patches between frames, a patch then a swap-moving
+`update()`, an upload that leaves only later writes pending, and a seeded
+property test (40 seeds × 300 random patches, drop hints, updates and draws)
+comparing every drawn instance's mirrored matrix and colour with the CPU
+arrays. The property test and both scenarios fail on the old `flush()` (seed
+1, step 14) and pass with the fix.
+
 ### 2026-09-28 — avnu's private relay refuses `sponsored_private` without a Portal key (D-070)
 
 D-068's keyless default could never relay. With no `x-paymaster-api-key`
