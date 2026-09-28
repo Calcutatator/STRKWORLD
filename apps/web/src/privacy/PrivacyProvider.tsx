@@ -26,6 +26,7 @@ import {
 } from './submission-uncertainty.js';
 import { toFailure } from './errors.js';
 import { loadDemoOperations } from './demo-loader.js';
+import { debugFailure } from '../debug/debug-tap.js';
 
 /**
  * Wallet and financial state for the whole shell.
@@ -222,6 +223,8 @@ function PrivacyRuntime({
 
   const noteOperationError = useCallback(
     (error: unknown): void => {
+      // D-069: every operation failure passes here; inert unless debug logs are on.
+      debugFailure('privacy.operation', error);
       const failure = toFailure(error);
       if (failure.kind === 'submission-uncertain') submissionUncertainty.retain();
       connect.noteOperationError(failure);

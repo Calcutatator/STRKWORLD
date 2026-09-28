@@ -163,6 +163,23 @@ describe('shell boundaries', () => {
     expect(runtime).toContain("import('@strkworld/privacy')");
   });
 
+  it('reaches the debug logger only through main.tsx\'s VITE_DEBUG_LOGS-guarded dynamic import (D-069)', () => {
+    // A launch build leaves VITE_DEBUG_LOGS unset, so the guarded import is dead
+    // code and the logger is never bundled. One static import anywhere would
+    // ship it; the Shell's taps go through the inert `debug-tap.ts` instead.
+    const main = readFileSync(join(SRC, 'main.tsx'), 'utf8');
+    expect(main).toMatch(/debugLogsBuildFlag === 'true'\s*\?\s*import\('\.\/debug\/debug-logs\.js'\)/);
+    expect(main).toMatch(/\.env\.VITE_DEBUG_LOGS;/);
+    const offenders = sources()
+      .filter(({ path }) => !isTest(path) && !path.startsWith('debug/'))
+      .flatMap(({ path, text }) => imports(text)
+        .filter(({ specifier }) => /\/debug\/debug-(?:logs|format)\.js$/.test(specifier))
+        .map(() => path));
+    expect(offenders).toEqual([]);
+    const tap = readFileSync(join(SRC, 'debug/debug-tap.ts'), 'utf8');
+    expect(imports(tap)).toEqual([]);
+  });
+
   it('hands the production Bridge a dormant loader rather than importing it during wallet bootstrap', () => {
     const main = readFileSync(join(SRC, 'main.tsx'), 'utf8');
     expect(main).toContain("import('./bridge/production-runtime.js')");

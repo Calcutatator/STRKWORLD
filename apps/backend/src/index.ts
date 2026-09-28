@@ -2,6 +2,22 @@ export { BackendApi, DEGEN_TOKENS_PATH, type BackendApiOptions } from './api.js'
 export { AvnuDegenCatalog, type AvnuDegenCatalogOptions } from './avnu-degen-catalog.js';
 export { AvnuPaymasterPort, type AvnuPaymasterOptions } from './avnu-paymaster.js';
 export { AvnuSwapPlanner, type AvnuSwapPlannerOptions } from './avnu-swap-planner.js';
+export {
+  DEBUG_LOGS_MAX_BODY_BYTES,
+  DEBUG_LOGS_MAX_DETAIL_CHARS,
+  DEBUG_LOGS_MAX_ENTRIES,
+  DEBUG_LOGS_PATH,
+  DEBUG_LOGS_RATE_LIMIT,
+  DEBUG_LOGS_RATE_WINDOW_MS,
+  DebugLogSink,
+  formatDebugLine,
+  parseDebugLogBatch,
+  type DebugLogBatch,
+  type DebugLogEntry,
+  type DebugLogLevel,
+  type DebugLogSinkOptions,
+  type DebugLogWriter,
+} from './debug-logs.js';
 export { DEGEN_CURATED_CORE, DEGEN_TAGS, filterLiveTokens } from './degen-catalog.js';
 export { HmacAuthorizationCodec, MemoryAuthorizationCodec } from './authorization.js';
 export {

@@ -42,6 +42,11 @@ export interface BackendConfig {
    * never enables swap; it only widens what an enabled swap route admits.
    */
   degen?: DegenConfig;
+  /**
+   * Opt-in debug logs for a test deployment (D-069). Only exactly `true`
+   * opens `POST /v1/debug/logs`; absent or false, the path is unknown.
+   */
+  debugLogsEnabled?: boolean;
 }
 
 /** avnu's token tags, as its public token API names them. */

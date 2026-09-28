@@ -2,6 +2,7 @@ import { spawn, type ChildProcess } from 'node:child_process';
 import { realpath } from 'node:fs/promises';
 import type { Server } from 'node:http';
 import { resolve } from 'node:path';
+import { forwardDebugLines, forwardsDebugLines, writeEdgeStdout } from './debug-lines.js';
 import { closeEdgeServer, createEdgeServer } from './edge.js';
 import { resolveContainedRegularFile } from './static-file.js';
 
@@ -19,6 +20,11 @@ export interface FlyCompositionOptions {
   readonly onFatal?: (error: Error) => void;
   /** Abort startup before the public edge has been handed to the caller. */
   readonly startupSignal?: AbortSignal;
+  /**
+   * Where the backend's `[debug]` lines go while `BACKEND_DEBUG_LOGS_ENABLED`
+   * is true (D-069). The edge's own stdout by default; a test seam.
+   */
+  readonly debugLogWriter?: (line: string) => void;
 }
 
 export interface FlyComposition {
@@ -47,13 +53,28 @@ export async function startFlyComposition(
   await assertStaticShell(options.staticRoot);
   assertStartupActive(options.startupSignal);
   const environment = options.environment ?? process.env;
-  const startChild = (entry: string, childEnvironment: NodeJS.ProcessEnv): ChildProcess => {
-    const child = launchChild(entry, childEnvironment);
+  const startChild = (
+    entry: string,
+    childEnvironment: NodeJS.ProcessEnv,
+    stdout: ChildStdout = 'ignore',
+  ): ChildProcess => {
+    const child = launchChild(entry, childEnvironment, stdout);
     try { observer.onChildStart?.(); } catch { /* Observation cannot interrupt startup. */ }
     return child;
   };
+  // D-069: only an opted-in test deployment reads the backend's stdout, and
+  // then only its `[debug]` lines pass. The lobby's output is always discarded.
+  const debugLogs = forwardsDebugLines(environment);
+  const backend = startChild(
+    options.backendEntry,
+    { ...environment, PORT: String(options.backendPort) },
+    debugLogs ? 'pipe' : 'ignore',
+  );
+  if (debugLogs && backend.stdout) {
+    forwardDebugLines(backend.stdout, options.debugLogWriter ?? writeEdgeStdout);
+  }
   const children = [
-    startChild(options.backendEntry, { ...environment, PORT: String(options.backendPort) }),
+    backend,
     startChild(options.lobbyEntry, {
       ...environment,
       LOBBY_PORT: String(options.lobbyPort),
@@ -150,10 +171,12 @@ function assertStartupActive(signal: AbortSignal | undefined): void {
   if (signal?.aborted) throw new FlyStartupAbortError();
 }
 
-function launchChild(entry: string, environment: NodeJS.ProcessEnv): ChildProcess {
+type ChildStdout = 'ignore' | 'pipe';
+
+function launchChild(entry: string, environment: NodeJS.ProcessEnv, stdout: ChildStdout): ChildProcess {
   const child = spawn(process.execPath, [entry], {
     env: environment,
-    stdio: ['ignore', 'ignore', 'ignore', 'ipc'],
+    stdio: ['ignore', stdout, 'ignore', 'ipc'],
   });
   // An error is followed by exit for normal spawn failures. The listener is
   // still attached by the caller so a custom supervisor sees one fatal event.

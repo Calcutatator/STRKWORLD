@@ -49,7 +49,8 @@ for the building privacy-admission rule.
 `BackendApi` is a framework-neutral, versioned handler for the exact six
 operations the browser needs: pool-native fee build, quote-bound swap prepare,
 prepared submission, pool config, recipient public key and receipt lookup,
-plus the optional read-only degen token list (D-067, below).
+plus the optional read-only degen token list (D-067, below) and the opt-in
+debug-log sink (D-069, below).
 Schemas reject unknown fields. The
 submission validator accepts only the configured pool's `apply_actions`,
 bounded calldata and a non-empty bounded proof. It verifies that the proof
@@ -84,6 +85,22 @@ the edge refuses query strings), and the endpoint is shut whenever swap or
 degen mode is. A swap's tokens must be in `BACKEND_ROUTE_SWAP_ALLOWED_TOKENS`,
 the curated core or the current list, checked at prepare and again at
 submission; a swap the static allowlist covers never consults the list.
+
+Opt-in debug logs (D-069) are a test-deployment exception to D-014, off by
+default. Only `BACKEND_DEBUG_LOGS_ENABLED=true` opens `POST /v1/debug/logs`;
+unset, empty or `false`, the path answers exactly as an unknown one, and any
+other value fails startup. The body is `{ v: 1, session, entries }`: a session
+of 8–64 `[A-Za-z0-9-]`, 1–50 entries of `{ t, level, event, detail }` (epoch
+ms; `info`, `warn` or `error`; up to 64 `[a-z0-9.:-]`; up to 2,000 characters),
+at most 32 KB as compact JSON, and anything else refuses the whole batch. Each
+entry becomes one stdout line, `[debug] <session> <ISO time> <level> <event>
+<detail>`, with every control, format and lone-surrogate character stripped.
+A global limit of 600 entries a minute drops and counts the rest and ends the
+window with one `[debug] server … debug.dropped` line. The sink reads only the
+body: no IP, header or timing. It takes no slot in the players' rate window
+and ignores the private kill switch. The composition forwards only these
+lines from the backend's stdout (`deploy/fly/src/debug-lines.ts`). A launch
+never sets the flag.
 
 For AVNU swaps the server selects an exact-input quote and requests
 `quoteToCalls({ private: true })`. Its HMAC authorization additionally binds

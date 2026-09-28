@@ -42,6 +42,9 @@ ARG VITE_STRK20_UNSHIELD_ALLOWED_TOKENS
 ARG VITE_STRK20_STAKE_ENABLED
 ARG VITE_STRK20_STAKE_MAX_RELAY_FEE
 ARG VITE_STRK20_STAKE_ALLOWED_TOKENS
+# D-069: test deployments only. Unset, as on every launch, the debug logger is
+# not compiled into the bundle at all.
+ARG VITE_DEBUG_LOGS
 
 COPY apps apps
 COPY packages packages

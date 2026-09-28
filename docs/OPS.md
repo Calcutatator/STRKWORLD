@@ -155,7 +155,9 @@ This is deliberate on privacy grounds, not laziness:
 
 - **There is no health route.** The API exposes six POST operations and, when
   D-067's optional degen catalog is configured, one read-only
-  `GET /v1/degen/tokens` (`apps/backend/src/api.ts`); anything else is rejected.
+  `GET /v1/degen/tokens` (`apps/backend/src/api.ts`), plus D-069's
+  `POST /v1/debug/logs` on an opted-in test deployment only; anything else is
+  rejected.
   Adding one is the Backend lane's call, not the deployment lane's.
 - **Probing a real route would be actively harmful.** Every request takes a
   slot in the *global* aggregate rate window shared with real players
@@ -226,11 +228,15 @@ timing, recipient or transaction hash** (D-014).
 
 The code complies today, and this is verifiable rather than asserted:
 
-- Zero logging calls under `apps/backend/src`. The only match for
-  `console.` / `process.stdout` / `process.stderr` / `logger` in the whole
-  directory is the comment at `apps/backend/src/http.ts:12` stating that the
-  edge deliberately has no access logger, client identifier, CORS reflection or
-  request persistence.
+- Zero request logging under `apps/backend/src`. The one write is D-069's
+  opt-in debug sink (`apps/backend/src/debug-logs.ts`), which is not a route
+  unless `BACKEND_DEBUG_LOGS_ENABLED=true` on a test deployment, never a
+  launch, and writes only the entries a tester's browser posts to it, never an
+  IP, header or request timing. Otherwise the only match for `console.` /
+  `process.stdout` / `process.stderr` / `logger` in the directory is the
+  comment at `apps/backend/src/http.ts:12` stating that the edge deliberately
+  has no access logger, client identifier, CORS reflection or request
+  persistence.
 - No request-logging middleware is enabled, because there is no middleware
   chain at all. `createBackendFetchHandler()` (`apps/backend/src/http.ts:15`)
   is a single closure that passes only `{method, path, body, signal}` into the
@@ -242,7 +248,9 @@ The code complies today, and this is verifiable rather than asserted:
   no request field.
 - The container writes to stdout at startup and on fatal error only
   (`deploy/backend/launch.mjs`). **Anything on stdout during steady-state
-  traffic is a defect** — treat it as an incident, not noise.
+  traffic is a defect** — treat it as an incident, not noise. The one
+  exception is an opted-in D-069 test deployment, whose extra lines all begin
+  `[debug] ` (`deploy/RAILWAY.md`, "Debug logs").
 
 **The remaining risk is the platform, not the code.** A default access log that
 records IP, path or latency violates D-014 even though this container is

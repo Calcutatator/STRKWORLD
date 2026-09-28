@@ -10,6 +10,7 @@ import { HmacAuthorizationCodec } from './authorization.js';
 import { AvnuDegenCatalog } from './avnu-degen-catalog.js';
 import { AvnuPaymasterPort } from './avnu-paymaster.js';
 import { AvnuSwapPlanner } from './avnu-swap-planner.js';
+import type { DebugLogSink } from './debug-logs.js';
 import {
   parseBackendEnvironment,
   type Environment,
@@ -24,6 +25,8 @@ export interface BackendRuntimeOverrides {
   rpc?: PoolRpcPort;
   swapPlanner?: SwapPlannerPort;
   degenCatalog?: DegenCatalogPort;
+  /** The D-069 debug sink, with a test writer in place of stdout. */
+  debugLogs?: DebugLogSink;
 }
 
 export interface BackendRuntime {
@@ -183,6 +186,8 @@ function createBackendApi(
       }),
     } : {}),
     authorizations: new HmacAuthorizationCodec(parsed.authorizationSecret),
+    // D-069: constructed either way; only BACKEND_DEBUG_LOGS_ENABLED=true routes to it.
+    ...(overrides.debugLogs ? { debugLogs: overrides.debugLogs } : {}),
   });
 }
 

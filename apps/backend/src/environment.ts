@@ -71,6 +71,7 @@ export function parseBackendEnvironment(environment: Environment): ParsedBackend
       },
       routes: { transfer, unshield, swap, ...(stake ? { stake } : {}) },
       ...(degen ? { degen } : {}),
+      debugLogsEnabled: parseDebugLogsEnabled(environment),
     },
     paymaster: {
       // D-068: optional. The private relay is gasless without a key, because
@@ -218,6 +219,17 @@ function parseDegenCatalog(environment: Environment): DegenConfig | undefined {
       DEGEN_MAX_CACHE_TTL_MS,
     ),
   };
+}
+
+/**
+ * Opt-in debug logs for a test deployment (D-069), fail-closed: unset or
+ * empty is off, and only exactly `true` turns them on. Any other value fails
+ * startup like every other switch, so a typo can never half-enable them.
+ * Never set for a launch.
+ */
+function parseDebugLogsEnabled(environment: Environment): boolean {
+  if (isUnset(environment.BACKEND_DEBUG_LOGS_ENABLED)) return false;
+  return parseBoolean(environment, 'BACKEND_DEBUG_LOGS_ENABLED');
 }
 
 function parseDegenTags(environment: Environment, name: string): readonly DegenTag[] {
