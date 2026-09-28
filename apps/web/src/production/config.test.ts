@@ -95,6 +95,19 @@ describe('production wallet configuration', () => {
     ['zero intent bound', { VITE_STRK20_SHIELD_ENABLED: 'true', VITE_STRK20_SHIELD_MAX_INTENTS: '0', VITE_STRK20_SHIELD_ALLOWED_TOKENS: STRK_TOKEN }],
     ['malformed token', { VITE_STRK20_SHIELD_ENABLED: 'true', VITE_STRK20_SHIELD_MAX_INTENTS: '1', VITE_STRK20_SHIELD_ALLOWED_TOKENS: '0x1234' }],
     ['multiple tokens', { VITE_STRK20_SHIELD_ENABLED: 'true', VITE_STRK20_SHIELD_MAX_INTENTS: '1', VITE_STRK20_SHIELD_ALLOWED_TOKENS: `${STRK_TOKEN},${STRK_TOKEN}` }],
+    // D-072's "any token" still meets D-056's STRK-only parser: listing the
+    // Exchange catalog's ETH, USDC, USDT and WBTC beside STRK switches shield off.
+    ['STRK with the Exchange catalog\'s other tokens', {
+      VITE_STRK20_SHIELD_ENABLED: 'true',
+      VITE_STRK20_SHIELD_MAX_INTENTS: '1',
+      VITE_STRK20_SHIELD_ALLOWED_TOKENS: [
+        STRK_TOKEN,
+        '0x049d36570d4e46f48e99674bd3fcc84644ddd6b96f7c741b1562b82f9e004dc7',
+        '0x033068f6539f8e6e6b131e6b2b814e6c34a5224bc66947c47dab9dfee93b35fb',
+        '0x068f5c6a61780768455de69077e07e89787839bf8166decfbf92b645209c0fb8',
+        '0x03fe2b97c1fd336e750087d68b9b867997fd64a2661ff3ca5a7c771641e8e7ac',
+      ].join(','),
+    }],
   ])('denies the shield route for %s without widening a valid transfer policy', (_name, shield) => {
     const config = parseProductionWalletConfig({
       VITE_STARKNET_CHAIN_ID: 'SN_MAIN',

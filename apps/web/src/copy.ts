@@ -63,6 +63,32 @@ export const COPY = freezeCopy({
     action: 'Connect a different wallet',
   },
 
+  /**
+   * The entry gate (D-072): one check before the city opens, and the deposit
+   * card for a player with nothing in the pool. The deposit's privacy
+   * disclosure is the register's approved copy (D-024), shown at the commit
+   * point by `ConfirmGate`, and never restated here. The fee note names no
+   * figure: the wallet takes the pool's fee out of the deposit, in the
+   * deposited token.
+   */
+  entry: {
+    title: 'One check before you enter',
+    body: 'STRKWORLD is for people with funds in the STRK20 privacy pool. Your wallet will ask to share your private balance.',
+    action: 'Enter STRKWORLD',
+    checking: 'Waiting for your wallet to share your private balance…',
+    depositTitle: 'Deposit to enter',
+    depositBody: 'This account has nothing in the STRK20 privacy pool yet. Deposit any amount to enter.',
+    token: 'Token',
+    feeNote: "Part of a first deposit pays the pool's fee, so less than you deposit reaches the pool.",
+    review: 'Review deposit',
+    deposit: 'Deposit',
+    landing: 'Deposit sent. Waiting for the network to confirm it…',
+    unconfirmed: 'The network has not confirmed this deposit yet. It may still arrive, so check again in a moment.',
+    checkAgain: 'Check again',
+    reverted: 'This deposit did not go through on the network, so nothing entered the pool.',
+    noToken: 'No token can be deposited in this build yet.',
+  },
+
   notRegistered: {
     title: 'Register with the pool first',
     body: 'The pool has no viewing key for this account yet, so it will not report a balance or move funds. Registration happens inside your wallet, and STRKWORLD cannot do it for you. It is recorded publicly on-chain, and this door checks it when you ask.',

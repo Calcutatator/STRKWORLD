@@ -258,6 +258,50 @@ empty shell to fetchers, so a 200 there means nothing.
 
 ## 6. Findings log
 
+### 2026-09-29 — A deposit is confirmed from its receipt; the shield parser admits only STRK (D-072)
+
+The pool's `Deposit` event is a `nested` variant of
+`privacy::privacy::Privacy::Event`, so it is emitted with keys
+`[sn_keccak('Deposit'), user_addr, token]` and data `[amount]` (a `u128`, one
+felt). The selector is
+`0x9149d2123147c5f43d258257fef0b7b969db78269369ebcf5ebb9eef8592f2`. A receipt
+prints the pool's `from_address` unpadded (`0x40337b1a…`), so addresses must
+compare by value. Deposits of USDC (`0x033068f6…35fb`, the Exchange catalog's
+address), STRK and strkBTC all appeared in the last 20,000 blocks, so the pool
+already takes non-STRK tokens. For an unknown hash the node answers JSON-RPC
+error 29 "Transaction hash not found", and the backend's `/v1/rpc/receipt`
+passes every RPC error on as 502 `UPSTREAM_FAILURE`, so the browser cannot
+tell "not mined yet" from a failed read: `depositStatus` calls both
+`pending`. Traps met on the way:
+
+- `parseShieldRoute` (`apps/web/src/production/config.ts`) admits exactly one
+  shield token, canonical STRK (D-056). A comma list of several tokens in
+  `VITE_STRK20_SHIELD_ALLOWED_TOKENS` switches shield off entirely, fail
+  closed, and with it the entry gate's deposit and the Bridge planner.
+- A recipient's 118 reads as the player's own. `warningsFor` in the Wallet API
+  adapter (and the fake) throws `PrivacyError('not-registered')` for an
+  unregistered transfer recipient, and `noteOperationError` escalates any
+  `not-registered` to the connect flow, so a building then shows the
+  not-registered card for the player. The Bank's recipient preflight makes it
+  rare; it predates D-072.
+- The pass hash is an async `crypto.subtle` digest (present under vitest's
+  jsdom, and in Node), so a test must let the gate leave `recalling` before it
+  presses the button. `sessionStorage` also persists across the tests of one
+  jsdom file: clear it in `beforeEach`, or a later test for the same account
+  walks straight in.
+- Bootstrap admits a session only if its operations carry every seam method
+  as an own data property, so the two new methods had to join that list.
+
+*Verified:* read-only `starknet_getClassAt`, `starknet_getEvents` (pool
+address, Deposit key, blocks 15,578,224 to 15,598,224) and
+`starknet_getTransactionReceipt` against the Cartridge public RPC (spec
+0.10.2) on 2026-09-29; starknet.js 10.4 `hash.getSelectorFromName('Deposit')`
+(pinned in `packages/privacy/src/pool.test.ts`); `config.ts` read, and its
+refusal of STRK with ETH, USDC, USDT and WBTC pinned in `config.test.ts`; the adapter's
+`warningsFor` and `connect-machine.ts` read side by side; `entry-gate.test.ts`,
+`EntryGate.test.tsx`, `App.entry.test.tsx`, `ProductionRoot.test.tsx` and
+`bootstrap.test.ts`.
+
 ### 2026-09-28 — Sandbox blocks turned white: a flush replaced update ranges three had not drawn yet
 
 Every placed block is one instance of a single `InstancedMesh`, its colour in

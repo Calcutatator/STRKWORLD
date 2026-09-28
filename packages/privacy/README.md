@@ -60,10 +60,15 @@ interface PrivacyOperations {
   prepare(intents: Intent[], signal?: AbortSignal): Promise<PreparedBatch>
   // PreparedBatch.confirm({ feeCeiling, onProgress?, signal? }) executes;
   // it refuses to sign if the fee moved past the ceiling.
+  // D-072, the entry gate: one balance read of every token, as a boolean,
+  // and a public receipt read of a shield (never a wallet prompt).
+  hasPrivateFunds(signal?: AbortSignal): Promise<boolean>
+  depositStatus(transactionHash: string, signal?: AbortSignal): Promise<DepositStatus>
 }
 ```
 
-The interface is **source-derived and frozen under D-036**. Any change to its
+The interface is **source-derived and frozen under D-036**, narrowly extended
+since by D-041/D-042, D-063, D-070 and D-072. Any change to its
 methods or transitive public shapes needs a decision entry and a heads-up to
 dependent lanes before implementation — never a quiet edit.
 

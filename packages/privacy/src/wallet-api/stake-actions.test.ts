@@ -82,6 +82,9 @@ function fixture(policy: WalletRoutePolicy = stakePolicy()) {
     async publicKey() {
       return '0x99';
     },
+    async receipt() {
+      throw new Error('no receipt read in this fixture');
+    },
   };
   let quotes = 0;
   const gateway: PrivateSubmissionGateway = {
@@ -562,6 +565,8 @@ describe('session admission of the stake policy', () => {
       balances: async () => [],
       recipientStatus: async () => 'registered',
       prepare: async () => prepared,
+      hasPrivateFunds: async () => false,
+      depositStatus: async () => 'pending',
     };
   }
 

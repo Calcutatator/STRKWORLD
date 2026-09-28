@@ -196,6 +196,23 @@ export const PRIVACY_REGISTER: readonly RouteGrade[] = [
     // The anonymizer credits the minted xSTRK to an OPEN pool note.
     returnToPool: false,
   },
+  // D-072, 2026-09-29: the entry gate's deposit. The Bank's own shield,
+  // offered on a second surface at the city's entrance, so it is graded under
+  // the Bank with the Bank shield's approved disclosure word for word.
+  {
+    building: 'bank',
+    route: 'entry.shield',
+    grade: 'public-edge',
+    observable:
+      'The same pool deposit as bank.shield: the ERC-20 approve and the deposit are both public, and the pool emits a Deposit event naming the depositor and the token, with the amount. Your address, the token and the amount are visible on-chain. Deposits are always to self, so the depositor is always named.',
+    disclosure:
+      'Shielding is public. Your wallet address, token and amount will be visible on-chain. Privacy begins after the funds enter the pool.',
+    approvedBy: 'calc',
+    approvedOn: '2026-09-29',
+    rationale:
+      'D-072: entry needs funds in the pool, so a player with none must be able to deposit at the gate. It is the Bank shield on a second surface with the same grade and disclosure; without it such a player would have no way in.',
+    returnToPool: false,
+  },
 ];
 
 /** Grades that ship without approval. Everything else is a deviation. */

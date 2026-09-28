@@ -1170,7 +1170,7 @@ acceptance remain pre-launch validation, not development gates.
 
 ## D-035 — Balance-check acknowledgement releases the uncertainty gate
 
-**2026-08-18 · Accepted · extends D-034 after the Shieldup production-reference audit**
+**2026-08-18 · Accepted · extends D-034 after the Shieldup production-reference audit · D-072 adds one player-initiated balance read at entry, answered as a boolean**
 
 **Context.** D-034 says a hashless post-dispatch response loss is non-retryable
 and keeps a notice for the browser session. A review found that closing and
@@ -1219,7 +1219,7 @@ D-028 freeze.
 
 ## D-036 — `PrivacyOperations` is frozen on source-derived evidence
 
-**2026-08-18 · Accepted · implements D-028 and supersedes D-015's provisional seam status · narrowly extended by D-041/D-042 for truthful swap review, and by D-063 for private staking · failure taxonomy extended by D-070 (`relay-not-configured`)**
+**2026-08-18 · Accepted · implements D-028 and supersedes D-015's provisional seam status · narrowly extended by D-041/D-042 for truthful swap review, and by D-063 for private staking · failure taxonomy extended by D-070 (`relay-not-configured`) · methods extended by D-072 (`hasPrivateFunds`, `depositStatus`)**
 
 **Context.** D-015 correctly unfroze the original one-shot interface. The
 replacement intent-based, prepare-then-confirm seam is implemented by both the
@@ -2401,7 +2401,7 @@ live wallet or funded claim is accepted by this status.
 
 ## D-055 — A supported connected wallet is the app entry gate
 
-**2026-08-23 · Accepted by the user · supersedes D-037's wallet-independent
+**2026-08-23 · Accepted by the user · SUPERSEDED in part by D-072 (a supported wallet now reaches the funds gate, not the city) · supersedes D-037's wallet-independent
 lobby availability and qualifies D-043's production no-wallet recovery claim
 for the production app entry path**
 
@@ -3191,3 +3191,96 @@ area."
   received the emptied state first (the lobby's order rules it out), the
   burst would still throw the blocks then popping out, and any block that
   state had just added would fly too and reappear at the next change.
+
+---
+
+## D-072 — Entry requires funds in the privacy pool
+
+**2026-09-29 · Accepted by the user · supersedes D-055 in part (a supported wallet now reaches the funds gate, not the city) · extends D-036's frozen seam with `hasPrivateFunds` and `depositStatus` · adds one player-initiated read under D-035's balance-read rule · registers `entry.shield` (approved by the lead, 2026-09-29)**
+
+**Context.** The lead asked for one check before the app opens: a player must
+have funds in the STRK20 pool; one who does is checked and loads straight in,
+one who does not is prompted to deposit anything into the pool. It had to use
+the current shielding function, stay clean, and change neither the theme nor
+the login method (wallet connect). Asked, the lead chose any token and any
+amount ("it doesn't even need to be STRK"), checked once per session. Until
+now a supported wallet (D-055) admitted the city directly, an account the
+capability flow marked `not-registered` included, whose room then waited in
+every building. Ready raises an explicit "Share private balances" approval for
+every `wallet_strk20Balances` read (the 2026-08-16 finding), so the check can
+only be a read the player starts. Given an empty token list the Wallet API
+returns every shielded token's balance, and an account that never registered
+answers 118. Shield never reaches the relay: the wallet proves and submits it,
+and Ready takes the pool fee out of the deposit, in the deposited token (a 20
+STRK shield left 14 STRK private). The pool emits `Deposit` with keys
+`[sn_keccak('Deposit'), user_addr, token]` and data `[amount]` for every
+deposit, read from its deployed class ABI.
+
+**Decision.**
+
+- **The gate sits after the wallet's capability check and before everything
+  else.** In production, `ProductionRoot` renders it once `capabilityAdmits`
+  passes, keyed by account generation; the presence owner, `App`, the World,
+  the HUD and the lobby connection mount only after it passes. The demo
+  composition, whose seam `App` loads itself, runs the same gate around the
+  city. It reuses the connect rooms' card and the Bank's review pieces.
+- **One check, started by the player, answered yes or no.** The card "One
+  check before you enter" has one button, "Enter STRKWORLD", which makes one
+  `hasPrivateFunds()` read: a single `wallet_strk20Balances` call with an
+  empty list, true when any token's total, maturing included, is above zero.
+  The amounts stay in `packages/privacy`; the shell learns a boolean. Nothing
+  reads on mount or on a timer.
+- **Pass, deposit or retry.** Funds pass straight into the city. No funds,
+  every balance zero or a 118, shows the deposit card. A declined or failed
+  read returns to the check card with the matching `COPY.errors` message and
+  a retry.
+- **Once per session.** A pass is remembered in this tab's `sessionStorage`
+  under a SHA-256 of the normalised account, with a constant value: no
+  address, balance or amount is stored. A reload of the same account skips
+  the check; another account, tab or session checks again, and a storage or
+  hashing failure only means checking again.
+- **The deposit is the Bank's shield.** The same `prepare([shield])` and
+  `confirm({ feeCeiling })`, with the Bank shield's approved disclosure at a
+  `ConfirmGate` commit point (D-020, D-024). It is registered as its own
+  route, `entry.shield`, under the Bank: graded `public-edge` with that
+  disclosure word for word, approved by the lead on 2026-09-29, and gated by
+  the build's shield policy exactly as `bank.shield` is.
+- **Any token this build admits, any amount above zero.** The card offers the
+  shield route policy's allowlist, with the Exchange catalog's symbol and
+  decimals and a picker when there is more than one; a token the catalog
+  cannot describe is left out. There is no minimum and no public balance (the
+  Bank reads none). A plain note says part of a first deposit pays the pool's
+  fee, with no figure.
+- **Landing is a public read.** After the wallet returns the hash,
+  `depositStatus()` reads the receipt through the backend's receipt route
+  (D-014): the gate passes when the transaction succeeded, was accepted, and
+  holds the pool's `Deposit` naming this account. There is no second wallet
+  prompt. A revert says so; a receipt not seen within about three minutes
+  offers "Check again". A 118 from the shield shows the existing
+  not-registered guidance, with a retry back to the deposit.
+- **The not-registered room is folded into the gate.** A capability
+  `not-registered` state is admitted to the gate like `connected`, and the
+  gate meets a 118 itself. After entry, a later operation's 118 still moves
+  the connect flow to `not-registered`, and a building shows the gate's same
+  card with the connect flow's recheck. The connect machine's states and
+  escalation rules are unchanged.
+- `PrivacyOperations` gains `hasPrivateFunds(signal?)` and
+  `depositStatus(transactionHash, signal?)`; the backend-proxied
+  `PoolReadClient` gains `receipt()`. The pool address and the `Deposit`
+  selector are pinned in `packages/privacy/src/pool.ts`.
+- Under D-069, a debug build logs the gate's transitions, by state name only.
+- The demo seam starts a fresh player with nothing in the pool, and its notes
+  mature at once so a practice deposit can be spent;
+  `createDemoOperations({ funded: true })` and the fake's `balances` start
+  funded.
+
+**Consequences.** Every player approves one balance share per session before
+the city opens, and a player with nothing in the pool makes a public deposit
+first, which names their address, token and amount on-chain. A build with
+shield switched off shows new players a locked deposit card: they cannot enter
+until it is on. Today's shield policy admits exactly canonical STRK (D-056),
+so "any token" means STRK until a decision widens that allowlist and its
+parser. The fee comes out of the deposit in the deposited token; the gate
+names no figure, and its fee ceiling is still the prepared pool fee. Each
+depositing player adds one public receipt read every few seconds to the
+backend's shared rate window while the gate waits.

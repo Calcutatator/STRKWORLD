@@ -2,7 +2,7 @@
 import { renderToStaticMarkup } from 'react-dom/server';
 import { act, StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
-import { describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   FakePrivacyOperations,
   ReservePublicShieldPlanner,
@@ -32,6 +32,52 @@ import {
 } from './ProductionRoot.js';
 
 Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true });
+
+const STRK_TOKEN = '0x04718f5a0fc34cc1af16a1cdee98ffb20c31f5cd61d6ab07201858f4287c938d';
+
+// D-072's once-per-session pass lives in this tab's session storage; every
+// test starts with a tab that has let nobody in.
+beforeEach(() => {
+  sessionStorage.clear();
+});
+
+/** An admitted wallet whose account already holds something in the pool. */
+function fundedOperations(registration: 'unknown' | 'registered' = 'unknown'): FakePrivacyOperations {
+  return new FakePrivacyOperations({
+    balances: { [STRK_TOKEN]: 1n },
+    capability: { supportsStrk20: true, walletApiVersion: '0.10.3', registration },
+  });
+}
+
+/** Let the gate finish recalling this tab's pass: its key is an async SHA-256. */
+async function settleGate(container: HTMLElement): Promise<void> {
+  for (let turn = 0; turn < 50 && container.querySelector('[data-gate="recalling"]'); turn += 1) {
+    await act(async () => {
+      await flushReact();
+    });
+  }
+  expect(container.querySelector('[data-gate="recalling"]')).toBeNull();
+}
+
+/**
+ * Press the entry gate's one button, as the player does. With `remembered`,
+ * this tab already let the account in, so there must be no gate at all.
+ */
+async function enterCity(container: HTMLElement, { remembered = false } = {}): Promise<void> {
+  await settleGate(container);
+  const gate = container.querySelector('[data-testid="entry-gate"]');
+  if (remembered) {
+    expect(gate, 'a remembered pass skips the gate').toBeNull();
+    return;
+  }
+  expect(gate, 'the entry gate should be showing').not.toBeNull();
+  const button = gate!.querySelector('button');
+  expect(button?.textContent).toBe(COPY.entry.action);
+  await act(async () => {
+    button!.click();
+    await flushReact();
+  });
+}
 
 describe('ProductionRoot', () => {
   it('keeps the connected tree behind capability admission', () => {
@@ -227,13 +273,7 @@ describe('ProductionRoot', () => {
   it('passes the already-admitted capability into the financial composition', async () => {
     captured.current = null;
     const createPresence = vi.fn(() => createPresenceController({}));
-    const session = sessionAt('connected', '0xabc', new FakePrivacyOperations({
-      capability: {
-        supportsStrk20: true,
-        walletApiVersion: '0.10.3',
-        registration: 'unknown',
-      },
-    }));
+    const session = sessionAt('connected', '0xabc', fundedOperations());
     const container = document.createElement('div');
     document.body.appendChild(container);
     const root = createRoot(container);
@@ -252,6 +292,7 @@ describe('ProductionRoot', () => {
       );
       await flushReact();
     });
+    await enterCity(container);
 
     expect(captured.current).toMatchObject({
       initialConnectState: {
@@ -273,13 +314,7 @@ describe('ProductionRoot', () => {
     const loadSources = vi.fn(async () => []);
     const loadRuntime = vi.fn(async () => ({ service, loadSources }));
     const bridge = { loadRuntime };
-    const session = sessionAt('connected', '0xabc', new FakePrivacyOperations({
-      capability: {
-        supportsStrk20: true,
-        walletApiVersion: '0.10.3',
-        registration: 'unknown',
-      },
-    }));
+    const session = sessionAt('connected', '0xabc', fundedOperations());
     const container = document.createElement('div');
     document.body.appendChild(container);
     const root = createRoot(container);
@@ -296,6 +331,7 @@ describe('ProductionRoot', () => {
       );
       await flushReact();
     });
+    await enterCity(container);
 
     expect((captured.current as Record<string, unknown> | null)?.bridge).toEqual({
       loadRuntime,
@@ -345,7 +381,7 @@ describe('ProductionRoot', () => {
     const createPresence = vi.fn()
       .mockReturnValueOnce(first)
       .mockReturnValueOnce(second);
-    const session = reactiveSession('selection-required', null);
+    const session = reactiveSession('selection-required', null, fundedOperations());
     const container = document.createElement('div');
     document.body.appendChild(container);
     const root = createRoot(container);
@@ -370,6 +406,9 @@ describe('ProductionRoot', () => {
       session.publish('connected', '0xabc');
       await flushReact();
     });
+    // D-072: the presence owner waits for the entry gate.
+    expect(createPresence).not.toHaveBeenCalled();
+    await enterCity(container);
     expect(createPresence).toHaveBeenCalledOnce();
     expect(captured.current).toMatchObject({ walletSession: session });
     expect(first.destroy).not.toHaveBeenCalled();
@@ -385,6 +424,9 @@ describe('ProductionRoot', () => {
       session.publish('connected', '0xdef');
       await flushReact();
     });
+    // Another account checks again before its city exists.
+    expect(createPresence).toHaveBeenCalledOnce();
+    await enterCity(container);
     expect(createPresence).toHaveBeenCalledTimes(2);
     expect(second.destroy).not.toHaveBeenCalled();
 
@@ -398,13 +440,7 @@ describe('ProductionRoot', () => {
     const container = document.createElement('div');
     document.body.appendChild(container);
     const root = createRoot(container);
-    const first = sessionAt('connected', '0xabc', new FakePrivacyOperations({
-      capability: {
-        supportsStrk20: true,
-        walletApiVersion: '0.10.3',
-        registration: 'unknown',
-      },
-    }));
+    const first = sessionAt('connected', '0xabc', fundedOperations());
 
     await act(async () => {
       root.render(
@@ -418,6 +454,7 @@ describe('ProductionRoot', () => {
       );
       await flushReact();
     });
+    await enterCity(container);
     expect(captured.current).not.toBeNull();
 
     captured.current = null;
@@ -580,19 +617,20 @@ describe('ProductionRoot Bridge shield planner (D-061)', () => {
   const reservePlanner: ShieldPlannerFactory = (options) => new ReservePublicShieldPlanner(options);
 
   function admittedOperations(): FakePrivacyOperations {
-    return new FakePrivacyOperations({
-      capability: { supportsStrk20: true, walletApiVersion: '0.10.3', registration: 'unknown' },
-    });
+    return fundedOperations();
   }
 
   async function mountConnected({
     policy,
     createShieldPlanner,
     operations = admittedOperations(),
+    remembered = false,
   }: {
     policy: WalletRoutePolicy | null;
     createShieldPlanner?: ShieldPlannerFactory;
     operations?: FakePrivacyOperations;
+    /** This tab already let the account in (D-072), so the city mounts straight away. */
+    remembered?: boolean;
   }) {
     captured.current = null;
     const session = sessionAt('connected', '0xabc', operations);
@@ -620,6 +658,7 @@ describe('ProductionRoot Bridge shield planner (D-061)', () => {
       });
     };
     await render();
+    await enterCity(container, { remembered });
     return {
       render,
       planner: () => (captured.current?.bridge as { planner: PublicShieldPlanner | null } | undefined)?.planner,
@@ -676,6 +715,8 @@ describe('ProductionRoot Bridge shield planner (D-061)', () => {
     const throwing = await mountConnected({
       policy: shieldPolicy,
       createShieldPlanner: () => { throw new Error('planner unavailable'); },
+      // The same account, in the same tab: its pass from the first mount holds.
+      remembered: true,
     });
     expect(captured.current).not.toBeNull();
     expect(throwing.planner()).toBeNull();
@@ -709,5 +750,145 @@ describe('ProductionRoot Bridge shield planner (D-061)', () => {
     expect(shieldPlanningEnabled(parseRoutePolicy(UNSHIELD_ENV))).toBe(false);
     expect(shieldPlanningEnabled({ ...shieldPolicy, allowedTokens: { ...shieldPolicy.allowedTokens, shield: ['0x123'] } })).toBe(false);
     expect(shieldPlanningEnabled(hostile as WalletRoutePolicy)).toBe(false);
+  });
+});
+
+describe('ProductionRoot entry gate (D-072)', () => {
+  const STRK = '0x04718f5a0fc34cc1af16a1cdee98ffb20c31f5cd61d6ab07201858f4287c938d';
+  const shieldPolicy = parseRoutePolicy({
+    VITE_STRK20_SHIELD_ENABLED: 'true',
+    VITE_STRK20_SHIELD_MAX_INTENTS: '1',
+    VITE_STRK20_SHIELD_ALLOWED_TOKENS: STRK,
+  });
+
+  async function mount(session: WalletSession, {
+    createPresence = vi.fn(() => createPresenceController({})),
+    policy = shieldPolicy,
+  }: {
+    createPresence?: () => PresenceController;
+    policy?: WalletRoutePolicy | null;
+  } = {}) {
+    captured.current = null;
+    const container = document.createElement('div');
+    document.body.appendChild(container);
+    const root = createRoot(container);
+    await act(async () => {
+      root.render(
+        <StrictMode>
+          <ProductionRoot
+            session={session}
+            worldOut={createEventBus<WorldEvents>()}
+            shellIn={createEventBus<ShellEvents>()}
+            createPresence={createPresence}
+            bridge={recoveryBridge()}
+            policy={policy}
+          />
+        </StrictMode>,
+      );
+      await flushReact();
+    });
+    await settleGate(container);
+    return {
+      container,
+      createPresence,
+      async unmount() {
+        await unmountReactRoot(root);
+        container.remove();
+      },
+    };
+  }
+
+  function clickLabelled(container: HTMLElement, label: string): Promise<void> {
+    const found = [...container.querySelectorAll('button')].find((candidate) => candidate.textContent === label);
+    if (!found) throw new Error(`No button labelled ${label}`);
+    return act(async () => {
+      found.click();
+      await flushReact();
+    });
+  }
+
+  it('holds the presence owner, the World and the HUD until the check passes', async () => {
+    const operations = fundedOperations();
+    const check = vi.spyOn(operations, 'hasPrivateFunds');
+    const mounted = await mount(sessionAt('connected', '0xabc', operations));
+
+    expect(mounted.container.querySelector('[data-testid="entry-gate"]')?.getAttribute('data-gate')).toBe('ready');
+    expect(mounted.container.textContent).toContain(COPY.entry.title);
+    expect(mounted.createPresence).not.toHaveBeenCalled();
+    expect(captured.current).toBeNull();
+    // Nothing reads a balance until the player asks.
+    expect(check).not.toHaveBeenCalled();
+
+    await enterCity(mounted.container);
+    expect(check).toHaveBeenCalledOnce();
+    expect(mounted.createPresence).toHaveBeenCalledOnce();
+    expect(captured.current).toMatchObject({ operations });
+    await mounted.unmount();
+  });
+
+  it('deposits its way in through the session, then opens the city once the receipt lands', async () => {
+    const operations = new FakePrivacyOperations({
+      capability: { supportsStrk20: true, walletApiVersion: '0.10.3', registration: 'unknown' },
+    });
+    const status = vi.spyOn(operations, 'depositStatus');
+    const mounted = await mount(sessionAt('connected', '0xabc', operations));
+
+    await enterCity(mounted.container);
+    expect(mounted.container.querySelector('[data-gate="deposit"]')).not.toBeNull();
+    expect(mounted.createPresence).not.toHaveBeenCalled();
+
+    const input = mounted.container.querySelector<HTMLInputElement>('input[name="amount"]')!;
+    const setValue = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!;
+    await act(async () => {
+      setValue.call(input, '7');
+      input.dispatchEvent(new Event('input', { bubbles: true }));
+    });
+    await clickLabelled(mounted.container, COPY.entry.review);
+    await clickLabelled(mounted.container, COPY.flow.confirm);
+
+    expect(operations.submitted).toEqual([[{ kind: 'shield', token: STRK, amount: 7n * 10n ** 18n }]]);
+    expect(status).toHaveBeenCalledWith('0xfake0001', expect.anything());
+    expect(mounted.createPresence).toHaveBeenCalledOnce();
+    expect(captured.current).not.toBeNull();
+    await mounted.unmount();
+  });
+
+  it('admits a not-registered capability to the gate, never straight to the city', async () => {
+    const operations = new FakePrivacyOperations({
+      capability: { supportsStrk20: true, walletApiVersion: '0.10.3', registration: 'unregistered' },
+    });
+    const mounted = await mount(sessionAt('connected', '0xabc', operations));
+    expect(mounted.container.querySelector('[data-testid="entry-gate"]')).not.toBeNull();
+    expect(mounted.createPresence).not.toHaveBeenCalled();
+    expect(captured.current).toBeNull();
+    await mounted.unmount();
+  });
+
+  it('offers the deposit only through the build\'s shield policy', async () => {
+    const mounted = await mount(sessionAt('connected', '0xabc', new FakePrivacyOperations()), { policy: parseRoutePolicy({}) });
+    await enterCity(mounted.container);
+    expect(mounted.container.querySelector('.room-locked')?.textContent).toBe(COPY.locked.notEnabled.shield);
+    expect(mounted.container.querySelector('input[name="amount"]')).toBeNull();
+    await mounted.unmount();
+  });
+
+  it('lets the same account back in on a reload without a second balance prompt', async () => {
+    const operations = fundedOperations();
+    const check = vi.spyOn(operations, 'hasPrivateFunds');
+    const first = await mount(sessionAt('connected', '0xabc', operations));
+    await enterCity(first.container);
+    for (let turn = 0; turn < 20 && sessionStorage.length === 0; turn += 1) await act(async () => { await flushReact(); });
+    await first.unmount();
+
+    const reload = await mount(sessionAt('connected', '0xabc', operations));
+    await enterCity(reload.container, { remembered: true });
+    expect(check).toHaveBeenCalledOnce();
+    expect(reload.createPresence).toHaveBeenCalledOnce();
+    await reload.unmount();
+
+    const other = await mount(sessionAt('connected', '0xdef', operations));
+    expect(other.container.querySelector('[data-gate="ready"]')).not.toBeNull();
+    expect(other.createPresence).not.toHaveBeenCalled();
+    await other.unmount();
   });
 });

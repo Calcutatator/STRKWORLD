@@ -179,10 +179,20 @@ export const ROUTE_BY_INTENT_KIND: Readonly<Record<Intent['kind'], string>> = Ob
 });
 
 /**
+ * The entry gate's deposit (D-072): the Bank's shield on a second surface,
+ * graded in the register on its own so its approval is recorded for that
+ * surface. `ROUTE_BY_INTENT_KIND` still maps a shield intent to the Bank's
+ * route; the gate names this one directly.
+ */
+export const ENTRY_SHIELD_ROUTE = 'entry.shield';
+
+/**
  * The inverse of `ROUTE_BY_INTENT_KIND` — which policy route kind, if any,
  * gates a given route id. Written out rather than derived with
  * `Object.fromEntries`, which would widen the value back to `string` and lose
- * the literal union `routeDoor` relies on.
+ * the literal union `routeDoor` relies on. The entry gate's deposit is a
+ * shield, so the shield policy gates it too: a route missing here would pass
+ * the policy check open.
  */
 const POLICY_KIND_BY_ROUTE: Readonly<Partial<Record<string, Intent['kind']>>> = Object.freeze({
   [ROUTE_BY_INTENT_KIND.shield]: 'shield',
@@ -190,6 +200,7 @@ const POLICY_KIND_BY_ROUTE: Readonly<Partial<Record<string, Intent['kind']>>> = 
   [ROUTE_BY_INTENT_KIND.transfer]: 'transfer',
   [ROUTE_BY_INTENT_KIND.swap]: 'swap',
   [ROUTE_BY_INTENT_KIND.stake]: 'stake',
+  [ENTRY_SHIELD_ROUTE]: 'shield',
 });
 
 /**
@@ -253,6 +264,20 @@ export function batchRequiresDisclosure(
     // An unknown route is not a "no disclosure needed" answer.
     return entry === undefined || (entry.grade !== 'private' && !isDisclosureWaived(entry));
   });
+}
+
+/**
+ * Whether committing on one route needs its disclosure on screen: the
+ * route-level twin of `batchRequiresDisclosure`, for a surface that commits
+ * one registered route by name (the entry gate, D-072). An unknown route
+ * fails closed.
+ */
+export function routeRequiresDisclosure(
+  routeId: string,
+  register: readonly RouteGrade[] = PRIVACY_REGISTER,
+): boolean {
+  const entry = findRoute(routeId, register);
+  return entry === undefined || (entry.grade !== 'private' && !isDisclosureWaived(entry));
 }
 
 /** Routes that leave value sitting in public and must offer the way back (D-021). */

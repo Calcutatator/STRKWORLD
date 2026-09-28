@@ -10,6 +10,8 @@ function session(): WalletSession {
       balances: async () => undefined,
       recipientStatus: async () => undefined,
       prepare: async () => undefined,
+      hasPrivateFunds: async () => undefined,
+      depositStatus: async () => undefined,
     } as never,
     getSnapshot: () => ({
       phase: 'selection-required',
@@ -222,6 +224,23 @@ describe('production wallet bootstrap', () => {
     expect(render).not.toHaveBeenCalled();
     expect(failure).toHaveBeenCalledOnce();
     expect(loaded.destroy).toHaveBeenCalledOnce();
+  });
+
+  it('fails closed when the seam lacks the entry gate reads (D-072)', async () => {
+    for (const missing of ['hasPrivateFunds', 'depositStatus']) {
+      const operations: Record<string, unknown> = { ...(session().operations as unknown as Record<string, unknown>) };
+      delete operations[missing];
+      const loaded = sessionWithOperations(operations);
+      const render = vi.fn();
+      const failure = vi.fn();
+      startProductionWalletBootstrap({ load: async () => loaded, render, failure });
+      await Promise.resolve();
+      await Promise.resolve();
+
+      expect(render, missing).not.toHaveBeenCalled();
+      expect(failure, missing).toHaveBeenCalledOnce();
+      expect(loaded.destroy, missing).toHaveBeenCalledOnce();
+    }
   });
 
   it('contains an operations proxy whose descriptor inspection throws', async () => {

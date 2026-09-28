@@ -2,12 +2,14 @@ import { buildStrk20Actions, type PrivateSwapPlan } from '@avnu/avnu-sdk';
 import { num, transaction, type STRK20_ACTION } from 'starknet';
 import type {
   BatchWarning,
+  DepositStatus,
   Intent,
   PoolConfig,
   PreparedBatch,
   PrivacyOperations,
   WalletCapability,
 } from '../operations.js';
+import { depositStatusFromReceipt } from '../pool.js';
 import {
   PrivacyError,
   type Address,
@@ -170,6 +172,39 @@ export class WalletApiPrivacyOperations implements PrivacyOperations {
     } catch (error) {
       throw mapWalletError(error);
     }
+  }
+
+  /**
+   * D-072's entry check: one `wallet_strk20Balances` call with an empty token
+   * list, which the Wallet API answers with every shielded token, reduced to
+   * a boolean here so no amount reaches the shell. The aggregate `total`
+   * already counts maturing notes. A 118 rejects as `not-registered`.
+   */
+  async hasPrivateFunds(signal?: AbortSignal): Promise<boolean> {
+    const balances = await this.balances([], signal);
+    return balances.some((entry) => entry.total > 0n);
+  }
+
+  /**
+   * D-072: whether this account's shield landed, from the backend's public
+   * receipt read. The network answers a transaction it has not seen yet with
+   * an error, which the backend passes on as an upstream failure, so any
+   * failed read is `pending`, never `failed`. Only a cancellation rejects.
+   */
+  async depositStatus(transactionHash: string, signal?: AbortSignal): Promise<DepositStatus> {
+    throwIfAborted(signal);
+    if (typeof transactionHash !== 'string' || !isFelt(transactionHash) || BigInt(transactionHash) === 0n) {
+      throw new PrivacyError('unknown', 'The deposit transaction hash is invalid.');
+    }
+    let receipt: unknown;
+    try {
+      receipt = await this.pool.receipt(transactionHash, signal);
+    } catch {
+      throwIfAborted(signal);
+      return 'pending';
+    }
+    throwIfAborted(signal);
+    return depositStatusFromReceipt(receipt, { transactionHash, account: this.walletAddress });
   }
 
   async recipientStatus(address: string, signal?: AbortSignal): Promise<RecipientStatus> {

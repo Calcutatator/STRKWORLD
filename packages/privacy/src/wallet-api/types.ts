@@ -63,6 +63,12 @@ export interface PublicShieldPlanner {
 export interface PoolReadClient {
   config(signal?: AbortSignal): Promise<PoolConfig>;
   publicKey(address: Address, signal?: AbortSignal): Promise<string>;
+  /**
+   * A transaction's receipt, exactly as the chain returned it (D-072). Public
+   * data, read through the backend so the player's IP never reaches a
+   * third-party RPC with the hash (D-014). Callers own its validation.
+   */
+  receipt(transactionHash: string, signal?: AbortSignal): Promise<unknown>;
 }
 
 export type PoolNativeRoute = 'unshield' | 'transfer';

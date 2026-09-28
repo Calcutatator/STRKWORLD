@@ -193,6 +193,9 @@ export function createWalletSession(
     poolConfig: (signal) => ownedResult((owned) => owned.poolConfig(signal)),
     balances: (tokens, signal) => ownedResult((owned) => owned.balances(tokens, signal)),
     recipientStatus: (address, signal) => ownedResult((owned) => owned.recipientStatus(address, signal)),
+    // D-072. A read answered for a retired account is refused like any other.
+    hasPrivateFunds: (signal) => ownedResult((owned) => owned.hasPrivateFunds(signal)),
+    depositStatus: (transactionHash, signal) => ownedResult((owned) => owned.depositStatus(transactionHash, signal)),
     async prepare(intents, signal) {
       const owner = currentOwner();
       let prepared: PreparedBatch;

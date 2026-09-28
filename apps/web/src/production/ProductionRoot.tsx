@@ -12,6 +12,7 @@ import type { BridgeRuntimeLoader } from '../bridge/BridgeProvider.js';
 import type { DegenCatalogSource } from '../panels/exchange/degen-catalog.js';
 import { STRK_TOKEN } from '../bridge/bridge-machine.js';
 import { createConnectFlow, type ConnectFlow, type ConnectState } from '../connect/connect-machine.js';
+import { EntryGate } from '../connect/EntryGate.js';
 import { COPY } from '../copy.js';
 import { sameAddress } from '../format.js';
 import type { PresenceController } from '../presence/presence-controller.js';
@@ -75,6 +76,7 @@ export function ProductionRoot({
         bridge={bridge}
         shieldPlanner={shieldPlanner}
         degenCatalog={degenCatalog}
+        policy={policy}
       />
     </WalletSessionProvider>
   );
@@ -124,6 +126,7 @@ function ProductionApp({
   bridge,
   shieldPlanner,
   degenCatalog,
+  policy,
 }: {
   session: WalletSession;
   worldOut: EventBus<WorldEvents>;
@@ -133,6 +136,7 @@ function ProductionApp({
   bridge: { loadRuntime: BridgeRuntimeLoader };
   shieldPlanner: PublicShieldPlanner | null;
   degenCatalog?: DegenCatalogSource;
+  policy: WalletRoutePolicy | null;
 }) {
   const wallet = useWalletSessionOptional();
   if (!wallet) throw new Error('ProductionApp needs a WalletSessionProvider.');
@@ -152,6 +156,7 @@ function ProductionApp({
       bridge={bridge}
       shieldPlanner={shieldPlanner}
       degenCatalog={degenCatalog}
+      policy={policy}
     />
   );
 }
@@ -166,6 +171,7 @@ function WalletCapabilityGate({
   bridge,
   shieldPlanner,
   degenCatalog,
+  policy,
 }: {
   session: WalletSession;
   snapshot: WalletSessionSnapshot;
@@ -176,6 +182,7 @@ function WalletCapabilityGate({
   bridge: { loadRuntime: BridgeRuntimeLoader };
   shieldPlanner: PublicShieldPlanner | null;
   degenCatalog?: DegenCatalogSource;
+  policy: WalletRoutePolicy | null;
 }) {
   const connect = useMemo(
     () => createConnectFlow(session.operations),
@@ -209,18 +216,29 @@ function WalletCapabilityGate({
   }, [connect]);
 
   if (capabilityAdmits(state)) {
+    // D-072: a supported wallet reaches the entry gate, not the city. The
+    // presence owner, the World, the HUD and the lobby connection all live
+    // below it, so none of them exists until this account passes. Keyed by
+    // account generation, so another account starts the gate over.
     return (
-      <ConnectedProductionApp
-        session={session}
-        initialConnectState={state}
-        worldOut={worldOut}
-        shellIn={shellIn}
-        presence={presence}
-        createPresence={createPresence}
-        bridge={bridge}
-        shieldPlanner={shieldPlanner}
-        degenCatalog={degenCatalog}
-      />
+      <EntryGate
+        key={`${snapshot.generation}:${snapshot.account ?? ''}`}
+        operations={session.operations}
+        account={snapshot.account}
+        policy={policy}
+      >
+        <ConnectedProductionApp
+          session={session}
+          initialConnectState={state}
+          worldOut={worldOut}
+          shellIn={shellIn}
+          presence={presence}
+          createPresence={createPresence}
+          bridge={bridge}
+          shieldPlanner={shieldPlanner}
+          degenCatalog={degenCatalog}
+        />
+      </EntryGate>
     );
   }
 
@@ -300,6 +318,13 @@ function isConnectedWallet(snapshot: WalletSessionSnapshot): boolean {
   return snapshot.phase === 'connected' && snapshot.account !== null;
 }
 
+/**
+ * Whether the capability verdict admits this wallet past the connect rooms:
+ * a supported `connected` state, or `not-registered`. Since D-072 that
+ * admits the player to the entry gate, not to the city: the gate's own reads
+ * meet a 118 and answer it with the deposit card, or with the not-registered
+ * card when the deposit itself answers 118.
+ */
 export function capabilityAdmits(state: ConnectState): boolean {
   if (typeof state !== 'object' || state === null) return false;
   try {

@@ -1262,6 +1262,8 @@ class AggregateOnlyOperations implements PrivacyOperations {
   recipientStatus: PrivacyOperations['recipientStatus'] = (address, signal) =>
     this.inner.recipientStatus(address, signal);
   prepare: PrivacyOperations['prepare'] = (intents, signal) => this.inner.prepare(intents, signal);
+  hasPrivateFunds: PrivacyOperations['hasPrivateFunds'] = (signal) => this.inner.hasPrivateFunds(signal);
+  depositStatus: PrivacyOperations['depositStatus'] = (hash, signal) => this.inner.depositStatus(hash, signal);
 
   async balances(tokens?: Address[], signal?: AbortSignal): Promise<PrivateBalance[]> {
     const balances = await this.inner.balances(tokens, signal);
@@ -2036,6 +2038,7 @@ describe('bank panel — debug steps (D-070)', () => {
       visit: () => undefined,
       bank: (step) => steps.push(step),
       sandboxBurst: () => undefined,
+      gate: () => undefined,
     });
     return { steps, detach: () => attachDebugTap(null) };
   }

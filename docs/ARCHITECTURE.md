@@ -224,9 +224,14 @@ discovery, explicit wallet selection and connection/recovery UI;
 creates a fresh presence owner, composes `App` and supplies the same reactive
 account authority to Bridge. Losing the account, disconnecting or entering a
 wrong-network state unmounts that connected tree and tears down its World and
-lobby owner. Production configuration is public, mainnet-only, same-origin
-for Backend calls, and starts with every transaction route denied. Bridge
-planning stays null. The default browser route therefore supports
+lobby owner. Since D-072 admission leads to a second gate: the entry gate
+asks, on the player's press, whether the account holds anything in the pool
+(`hasPrivateFunds`, a boolean) and takes a deposit through the shield route
+when it does not, confirming it from a public receipt read. The presence
+owner and `App` are created only after it passes; a pass is remembered for the
+tab's session under a hash of the account. Production configuration is public,
+mainnet-only, same-origin for Backend calls, and starts with every transaction
+route denied. Bridge planning stays null. The default browser route therefore supports
 connection/capability acceptance before it authorizes any proof, signature,
 submission, or funds movement (D-054/D-055). D-056 is the narrow, explicit
 funded-tester exception: a build may supply the complete three-variable
@@ -350,7 +355,9 @@ One-directional by design.
 The explicit demo and injected test compositions can run with no wallet
 connected, which keeps the World independently testable. The production root
 is different: a supported connected wallet is its entry gate, so no World or
-lobby surface exists before wallet admission (D-055).
+lobby surface exists before wallet admission (D-055). Both the production
+root and the demo composition then hold the World, the HUD and the lobby
+behind D-072's funds check, which the demo runs against its own seam.
 
 The block sandbox (D-060) is the second retained-state side seam. The lobby
 room is the authority for anonymous block state — stacks of colour indices per

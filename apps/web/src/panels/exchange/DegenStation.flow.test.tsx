@@ -78,7 +78,7 @@ async function type(input: HTMLInputElement, value: string): Promise<void> {
 
 describe('the degen station, driven through the screen in demo', () => {
   it('lists the degen tokens with their tags, reviews a DOG buy and confirms it', async () => {
-    const operations = createDemoOperations();
+    const operations = createDemoOperations({ funded: true });
     container = document.createElement('div');
     document.body.append(container);
     root = createRoot(container);

@@ -5,10 +5,11 @@ import type { PrivacyOperations } from './operations.js';
 /**
  * The D-036 freeze, made mechanical.
  *
- * `PrivacyOperations` is frozen at five methods. Adding a sixth, or removing or
- * renaming one of these, needs a decision entry and a heads-up to dependent
- * lanes before implementation, so it must not be possible to do it quietly.
- * These assertions turn seam drift into an error in the package typecheck.
+ * `PrivacyOperations` is frozen at seven methods: D-036's five, plus the two
+ * entry-gate reads D-072 added. Adding another, or removing or renaming one of
+ * these, needs a decision entry and a heads-up to dependent lanes before
+ * implementation, so it must not be possible to do it quietly. These
+ * assertions turn seam drift into an error in the package typecheck.
  */
 const PINNED_METHODS = [
   'capability',
@@ -16,6 +17,9 @@ const PINNED_METHODS = [
   'balances',
   'recipientStatus',
   'prepare',
+  // D-072: the entry gate's boolean funds check and its public deposit receipt read.
+  'hasPrivateFunds',
+  'depositStatus',
 ] as const;
 
 type PinnedMethod = (typeof PINNED_METHODS)[number];
@@ -39,8 +43,8 @@ type NoMissingMember = MustBeNever<Exclude<PinnedMethod, keyof PrivacyOperations
 type EveryPinnedMemberIsAMethod = MustBeNever<Exclude<PinnedMethod, SeamMethod>>;
 
 describe('D-036 PrivacyOperations freeze', () => {
-  it('pins five distinct method names', () => {
-    expect(new Set(PINNED_METHODS).size).toBe(5);
+  it('pins seven distinct method names', () => {
+    expect(new Set(PINNED_METHODS).size).toBe(7);
   });
 
   it('names methods the shipped test double implements', () => {

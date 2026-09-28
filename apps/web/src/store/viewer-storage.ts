@@ -11,7 +11,10 @@
  * This is for presentation preferences only — the guide's dismissal, the HUD
  * balance toggle and an opaque Bridge-arrival fingerprint
  * (`bridge/arrival-nudge.ts`). No address, amount, hash or timestamp goes
- * through it, and nothing here is ever sent anywhere.
+ * through it, and nothing here is ever sent anywhere. The entry gate's
+ * once-per-session pass (`connect/entry-pass.ts`, D-072) uses the same guard
+ * over `sessionStorage`: its key is an opaque SHA-256 of the account, its value
+ * a constant.
  */
 
 export interface StorageLike {

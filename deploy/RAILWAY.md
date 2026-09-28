@@ -85,7 +85,11 @@ reserve planner is on too.
 ## After it deploys
 
 1. Open the domain: the connect screen should appear (production gates the
-   street behind a supported wallet, D-055).
+   street behind a supported wallet, D-055). After connecting, the entry gate
+   (D-072) asks to share the private balance once per tab session; an account
+   with nothing in the pool deposits there through the shield route, so a
+   deployment with shield switched off shows new players a locked deposit
+   card.
 2. `curl -i https://<domain>/health` returns 404 (there is no public health
    route); `/` returns the shell with no COOP/COEP headers.
 3. Two browsers see each other's avatars on the street.

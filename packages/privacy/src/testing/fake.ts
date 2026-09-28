@@ -10,6 +10,7 @@ import {
 } from '../types.js';
 import type {
   BatchWarning,
+  DepositStatus,
   Intent,
   PoolConfig,
   PreparedBatch,
@@ -57,8 +58,17 @@ function demoStakeShares(assets: bigint): bigint {
  */
 
 export interface FakeConfig {
-  /** Starting shielded balances, token → amount. */
+  /**
+   * Starting shielded balances, token → amount. Omitted, the fake starts with
+   * nothing in the pool, like a fresh player at D-072's entry gate; any
+   * positive balance starts it funded.
+   */
   balances?: Record<Address, bigint>;
+  /**
+   * What `depositStatus` reports for each shield this fake confirms, until
+   * `setDepositStatus` changes it (D-072). `landed` by default.
+   */
+  deposits?: DepositStatus;
   /** Addresses registered in the pool and able to receive. */
   registered?: Address[];
   poolConfig?: Partial<PoolConfig>;
@@ -138,8 +148,11 @@ function estimateRelayFee(intents: readonly Intent[]): bigint {
 /** A fault the next matching call will raise. Consumed on use unless `sticky`. */
 export interface Fault {
   kind: PrivacyErrorKind;
-  /** Limit to one method. Omit to affect the next call of any kind. */
-  on?: 'capability' | 'poolConfig' | 'balances' | 'recipientStatus' | 'prepare' | 'confirm';
+  /**
+   * Limit to one method. Omit to affect the next call of any kind.
+   * `hasPrivateFunds` is one balance read, so a `balances` fault reaches it.
+   */
+  on?: 'capability' | 'poolConfig' | 'balances' | 'recipientStatus' | 'prepare' | 'confirm' | 'depositStatus';
   message?: string;
   sticky?: boolean;
 }
@@ -160,6 +173,9 @@ export class FakePrivacyOperations implements PrivacyOperations {
   private latency: number;
   private block = 0;
   private txCounter = 0;
+  /** Every confirmed batch's hash and what its receipt says of a deposit (D-072). */
+  private readonly receipts = new Map<string, DepositStatus>();
+  private readonly newDepositStatus: DepositStatus;
   private readonly configuredSwapReview?: Omit<SwapReview, 'minimumAmountOut'>;
   private readonly demoRates?: {
     readonly perStrk: ReadonlyMap<bigint, bigint>;
@@ -233,6 +249,7 @@ export class FakePrivacyOperations implements PrivacyOperations {
       throw new PrivacyError('unknown', 'The fake latency must be a non-negative safe integer.');
     }
     this.latency = latency;
+    this.newDepositStatus = ownDepositStatus(config.deposits ?? 'landed');
     if (config.swapReview !== undefined) {
       if (!Number.isSafeInteger(config.swapReview.expiresAt) || config.swapReview.expiresAt <= 0) {
         throw new PrivacyError('unknown', 'The deterministic swap review is invalid.');
@@ -289,6 +306,17 @@ export class FakePrivacyOperations implements PrivacyOperations {
     return this.block;
   }
 
+  /**
+   * Change what a confirmed transaction's receipt says (D-072): hold a shield
+   * at `pending`, land it later, or make it `failed` as a revert would.
+   */
+  setDepositStatus(transactionHash: string, status: DepositStatus): void {
+    if (!this.receipts.has(transactionHash)) {
+      throw new PrivacyError('unknown', 'The fake has not confirmed that transaction.');
+    }
+    this.receipts.set(transactionHash, ownDepositStatus(status));
+  }
+
   // -- PrivacyOperations ----------------------------------------------------
 
   async capability(signal?: AbortSignal): Promise<WalletCapability> {
@@ -320,6 +348,19 @@ export class FakePrivacyOperations implements PrivacyOperations {
     assertAddress(address, 'fake recipient');
     await this.tick('recipientStatus', signal);
     return this.registeredAddrs.has(normalise(address)) ? 'registered' : 'unregistered';
+  }
+
+  /** D-072: one balance read of every token, as the adapter makes it, reduced to a boolean. */
+  async hasPrivateFunds(signal?: AbortSignal): Promise<boolean> {
+    const balances = await this.balances(undefined, signal);
+    return balances.some((entry) => entry.total > 0n);
+  }
+
+  /** D-072: the fake is its own chain, so it knows every receipt it produced. */
+  async depositStatus(transactionHash: string, signal?: AbortSignal): Promise<DepositStatus> {
+    await this.tick('depositStatus', signal);
+    // A hash this fake never confirmed has no receipt yet, as on the network.
+    return this.receipts.get(transactionHash) ?? 'pending';
   }
 
   async prepare(intents: Intent[], signal?: AbortSignal): Promise<PreparedBatch> {
@@ -489,8 +530,11 @@ export class FakePrivacyOperations implements PrivacyOperations {
 
         self.applyIntents(canonicalIntents, currentFee);
         self.submitted.push([...canonicalIntents]);
+        const transactionHash = `0xfake${(++self.txCounter).toString(16).padStart(4, '0')}`;
+        // A spend's receipt carries no deposit, as on the network.
+        self.receipts.set(transactionHash, hasShield ? self.newDepositStatus : 'failed');
         emitProgress(onProgress, { stage: 'done', message: 'Done' });
-        return { transactionHash: `0xfake${(++self.txCounter).toString(16).padStart(4, '0')}` };
+        return { transactionHash };
       },
       discard() {
         discarded = true;
@@ -544,17 +588,26 @@ export class FakePrivacyOperations implements PrivacyOperations {
     return { expectedAmountOut, slippageBps: rates.slippageBps, expiresAt: rates.expiresAt };
   }
 
+  /**
+   * A new note: spendable once it matures. With a zero-block maturity window it
+   * is due at the current block, so it is spendable at once, exactly as
+   * `advanceBlocks(0)` would leave it.
+   */
+  private mintNote(token: Address, amount: bigint): void {
+    if (this.pool.noteMaturityBlocks === 0) {
+      this.credit(token, amount);
+      return;
+    }
+    this.maturing.push({ token, amount, matureAtBlock: this.block + this.pool.noteMaturityBlocks });
+  }
+
   private applyIntents(intents: readonly Intent[], fee: bigint): void {
     let feeCharged = false;
     for (const intent of intents) {
       switch (intent.kind) {
         case 'shield':
           // Always to self, and not spendable until it matures.
-          this.maturing.push({
-            token: intent.token,
-            amount: intent.amount,
-            matureAtBlock: this.block + this.pool.noteMaturityBlocks,
-          });
+          this.mintNote(intent.token, intent.amount);
           break;
         case 'unshield':
         case 'transfer':
@@ -562,23 +615,13 @@ export class FakePrivacyOperations implements PrivacyOperations {
           break;
         case 'swap':
           this.debit(intent.tokenIn, intent.amountIn);
-          this.maturing.push({
-            token: intent.tokenOut,
-            amount: intent.minAmountOut,
-            matureAtBlock: this.block + this.pool.noteMaturityBlocks,
-          });
+          this.mintNote(intent.tokenOut, intent.minAmountOut);
           break;
         case 'stake': {
           // The minted xSTRK lands in an open note, which matures like any other.
           this.debit(intent.tokenIn, intent.amountIn);
           const shares = demoStakeShares(intent.amountIn);
-          if (shares > 0n) {
-            this.maturing.push({
-              token: intent.tokenOut,
-              amount: shares,
-              matureAtBlock: this.block + this.pool.noteMaturityBlocks,
-            });
-          }
+          if (shares > 0n) this.mintNote(intent.tokenOut, shares);
           break;
         }
       }
@@ -680,6 +723,13 @@ function ownData(record: object, key: string): unknown {
   const descriptor = Object.getOwnPropertyDescriptor(record, key);
   if (!descriptor || !('value' in descriptor)) throw new PrivacyError('unknown', 'The demo swap rates are invalid.');
   return descriptor.value;
+}
+
+function ownDepositStatus(status: unknown): DepositStatus {
+  if (status !== 'landed' && status !== 'pending' && status !== 'failed') {
+    throw new PrivacyError('unknown', 'The fake deposit status is invalid.');
+  }
+  return status;
 }
 
 /**

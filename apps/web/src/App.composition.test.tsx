@@ -11,6 +11,11 @@ vi.mock('./privacy/PrivacyProvider.js', () => ({
   PrivacyProvider: ({ children }: { children: ReactNode }) => children,
 }));
 vi.mock('./privacy/SessionNoticeLayer.js', () => ({ SessionNoticeLayer: () => null }));
+// The entry gate (D-072) has its own composition tests (`App.entry.test.tsx`);
+// here it stands open so the presence wiring behind it can be inspected.
+vi.mock('./connect/EntryGate.js', () => ({
+  SeamEntryGate: ({ children }: { children: ReactNode }) => children,
+}));
 vi.mock('./world/WorldHost.js', () => ({
   WorldHost: (props: { remotePeers?: unknown }) => {
     worldHostProps.current = props;

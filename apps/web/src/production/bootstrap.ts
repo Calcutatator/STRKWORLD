@@ -88,6 +88,9 @@ function isWalletSession(value: unknown): value is WalletSession {
       'balances',
       'recipientStatus',
       'prepare',
+      // D-072: the entry gate's reads.
+      'hasPrivateFunds',
+      'depositStatus',
     ].every((key) => hasOwnDataMethod(operations.value, key))) {
       return false;
     }

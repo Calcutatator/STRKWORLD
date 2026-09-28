@@ -63,6 +63,31 @@ describe('shell copy', () => {
     expect(COPY.notices.shieldAfterSpend).not.toBe(COPY.notices.mixedShieldAndSpend);
   });
 
+  describe('the entry gate (D-072)', () => {
+    const entryCopy = allCopyStrings(COPY.entry);
+
+    it('asks plainly before the city opens', () => {
+      expect(COPY.entry.title).toBe('One check before you enter');
+      expect(COPY.entry.body).toBe(
+        'STRKWORLD is for people with funds in the STRK20 privacy pool. Your wallet will ask to share your private balance.',
+      );
+      expect(COPY.entry.action).toBe('Enter STRKWORLD');
+    });
+
+    it('says part of a first deposit pays the pool fee, without promising a figure', () => {
+      expect(COPY.entry.feeNote).toMatch(/first deposit pays the pool's fee/);
+      expect(COPY.entry.feeNote).not.toMatch(/\d/);
+    });
+
+    it('never calls the deposit private: the register discloses it as public at the commit point', () => {
+      const claim = /\b(?:hidden|hides?|anonymous\w*|untraceable|unlinkable|confidential|invisible)\b|\bnobody\b|deposit\w* (?:is|are|stays?) private/i;
+      expect(entryCopy.length).toBeGreaterThan(10);
+      for (const line of entryCopy) {
+        expect(line, line).not.toMatch(claim);
+      }
+    });
+  });
+
   describe('the staking counter (D-063, D-064)', () => {
     // Every line the counter can show: its own section plus its entries elsewhere.
     const stakeCopy = [

@@ -121,3 +121,15 @@ describe('window layout rules', () => {
     }
   });
 });
+
+describe('the entry gate cards (D-072)', () => {
+  it('borrow the window\'s own form controls rather than styling their own', () => {
+    for (const selector of ['.panel label', '.panel input', '.panel select']) {
+      const rule = [...css.matchAll(/([^{}]+)\{([^{}]*)\}/g)].find((match) =>
+        match[1]!.split(',').map((part) => part.trim()).includes(selector));
+      expect(rule, selector).toBeDefined();
+      const selectors = rule![1]!.split(',').map((part) => part.trim());
+      expect(selectors, selector).toContain(selector.replace('.panel', '.room-entry'));
+    }
+  });
+});

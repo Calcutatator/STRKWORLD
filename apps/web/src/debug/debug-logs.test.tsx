@@ -25,6 +25,7 @@ import {
   debugBank,
   debugConnectState,
   debugFailure,
+  debugGate,
   debugSandboxBurst,
   debugVisit,
   debugWalletSession,
@@ -144,6 +145,7 @@ describe('the runtime opt-in', () => {
     debugVisit({ name: 'outside' }, { name: 'locked', building: 'vault', reason: 'coming-soon' });
     debugBank({ step: 'mode', mode: 'unshield', from: 'shield' });
     debugSandboxBurst({ x: 60, y: 10 });
+    debugGate('checking');
     window.dispatchEvent(new Event('pagehide'));
     await tick(10_000);
     expect(network).not.toHaveBeenCalled();
@@ -572,6 +574,28 @@ describe('what it captures', () => {
       ['info', 'sandbox.burst', 'x=60 y=10'],
     ]);
     expect(JSON.stringify(entries())).not.toContain('0123456789abcdef');
+  });
+
+  it('records entry-gate transitions by state name alone, and drops anything else (D-072)', async () => {
+    const { entries, tick } = harness();
+    const address = '0x04718f5a0fc34cc1af16a1cdee98ffb20c31f5cd61d6ab07201858f4287c938d';
+    for (const name of ['ready', 'checking', 'deposit', 'review', 'depositing', 'landing', 'passed']) debugGate(name);
+    // Only the gate's own state names are ever written.
+    debugGate(address);
+    debugGate('deposit 12.5 STRK');
+    debugGate({ name: 'passed' } as never);
+    await tick();
+    expect(entries().filter((entry) => entry.event.startsWith('gate.')).map(({ level, event, detail }) => [level, event, detail])).toEqual([
+      ['info', 'gate.state', 'state=ready'],
+      ['info', 'gate.state', 'state=checking'],
+      ['info', 'gate.state', 'state=deposit'],
+      ['info', 'gate.state', 'state=review'],
+      ['info', 'gate.state', 'state=depositing'],
+      ['info', 'gate.state', 'state=landing'],
+      ['info', 'gate.state', 'state=passed'],
+    ]);
+    expect(JSON.stringify(entries())).not.toContain(address);
+    expect(JSON.stringify(entries())).not.toContain('12.5');
   });
 
   it('names the relay failure kind, so a missing avnu key is legible in the log (D-070)', async () => {

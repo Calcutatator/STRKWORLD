@@ -26,9 +26,26 @@ const STRK: Address = '0x04718f5a0fc34cc1af16a1cdee98ffb20c31f5cd61d6ab07201858f
 export const DEMO_NEIGHBOUR: Address =
   '0x02b4c7d1a1f8f39e0e6e8b9a2c7d0e3f4a5b6c7d8e9f0a1b2c3d4e5f60718293';
 
-export function createDemoOperations(): FakePrivacyOperations {
+/** The practice balance a funded demo player starts with. */
+export const DEMO_PRACTICE_BALANCE = 250n * 10n ** 18n;
+
+/**
+ * The demo seam.
+ *
+ * A fresh demo player has nothing in the pool, like a new player at D-072's
+ * entry gate, and deposits their way in. `funded` starts them with the old
+ * 250 STRK practice balance instead, so tests (and the gate's pass path) need
+ * no deposit first.
+ *
+ * DEMO ONLY: notes mature at once (a zero-block window), so a practice deposit
+ * is spendable in the Bank, Exchange and Post Office straight away. The real
+ * pool makes new notes wait (`PoolConfig.noteMaturityBlocks`), and the demo has
+ * no clock to advance blocks with.
+ */
+export function createDemoOperations({ funded = false }: { funded?: boolean } = {}): FakePrivacyOperations {
   return new FakePrivacyOperations({
-    balances: { [STRK]: 250n * 10n ** 18n },
+    ...(funded ? { balances: { [STRK]: DEMO_PRACTICE_BALANCE } } : {}),
+    poolConfig: { noteMaturityBlocks: 0 },
     registered: [DEMO_NEIGHBOUR],
     swapReview: {
       expectedAmountOut: 2n * 10n ** 18n,

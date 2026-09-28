@@ -305,7 +305,7 @@ Session keys are absent from the dapp surface and blocked at the contract level:
 
 No `wallet_strk20Register` method exists. Every method returns 118 until the player has registered a viewing key inside their wallet. The game cannot register them and cannot probe registration without making a call.
 
-**Design answer:** The Bank's ground floor is the onboarding room — connect, catch 118, explain, deep-link out, detect return. Instrument the drop-off; it is the largest unknown in the project.
+**Design answer:** The Bank's ground floor is the onboarding room — connect, catch 118, explain, deep-link out, detect return. Instrument the drop-off; it is the largest unknown in the project. Since D-072 the onboarding room is the entry gate before the city: a 118 there means nothing is in the pool yet and leads to a deposit, and a 118 from that deposit shows the registration card.
 
 ### Shielded actions are session events, not turn events
 

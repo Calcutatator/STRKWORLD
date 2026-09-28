@@ -1,6 +1,7 @@
 import type { Intent, OperationStage, PrivacyErrorKind } from '@strkworld/privacy';
 import { SANDBOX_AREA } from '@strkworld/shared';
 import type { BankAddRefusal, BankConfirmStage, BankMode } from '../panels/bank/bank-machine.js';
+import type { EntryGateStateName } from '../connect/entry-gate.js';
 
 /**
  * What the opt-in debug logger (D-069) writes, and what it removes first.
@@ -419,6 +420,33 @@ export function describeSandboxTile(tile: unknown): string | null {
   const inside = x >= SANDBOX_AREA.x && x < SANDBOX_AREA.x + SANDBOX_AREA.width &&
     y >= SANDBOX_AREA.y && y < SANDBOX_AREA.y + SANDBOX_AREA.height;
   return inside ? `x=${x} y=${y}` : null;
+}
+
+/*
+ * The entry gate's states (D-072), admitted from a fixed list typed against
+ * the gate's own union, so a state added there is a compile error here until
+ * it is listed. A name is all that is ever written.
+ */
+const GATE_STATES = setOf({
+  recalling: true,
+  ready: true,
+  checking: true,
+  'check-failed': true,
+  deposit: true,
+  preparing: true,
+  review: true,
+  depositing: true,
+  landing: true,
+  unconfirmed: true,
+  'deposit-failed': true,
+  'not-registered': true,
+  passed: true,
+} satisfies Record<EntryGateStateName, true>);
+
+/** An entry-gate transition as one entry, or null for anything unexpected: `gate.state state=checking`. */
+export function describeGateState(state: unknown): { level: DebugLevel; event: string; detail: string } | null {
+  if (!GATE_STATES.has(state)) return null;
+  return { level: 'info', event: 'gate.state', detail: `state=${String(state)}` };
 }
 
 /** A failed `/api` response: path, status and the body's code, and nothing else. */
