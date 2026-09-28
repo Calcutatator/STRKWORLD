@@ -902,7 +902,7 @@ describe('BridgeService', () => {
 
   it.each([
     ['INCOMPLETE_DEPOSIT', 'deposit-detected', false],
-    ['REFUNDED', 'failed', true],
+    ['REFUNDED', 'refunded', true],
     ['FAILED', 'failed', true],
   ])('maps a valid %s response safely', async (providerStatus, leg, pollingStopped) => {
     const client = new StubClient();
@@ -917,6 +917,75 @@ describe('BridgeService', () => {
 
     client.statuses.push(status(providerStatus as never));
     await expect(service.refresh()).resolves.toMatchObject({ leg, pollingStopped });
+  });
+
+  it('gives a refund its own distinct outcome, with the amount 1Click reports', async () => {
+    const client = new StubClient();
+    const store = new MemoryBridgeStore();
+    const service = new BridgeService({ client, store, quoteVerifier: () => true, now: () => NOW });
+    await service.createManualDeposit({
+      source: SOURCE,
+      amountIn: 1_000_000n,
+      starknetRecipient: '0x123',
+      refundAddress: request.refundTo,
+    });
+
+    client.statuses.push(status('REFUNDED' as never, {
+      originChainTxHashes: [{ hash: '0xorigin', explorerUrl: 'https://example/tx' }],
+      refundedAmount: '1000000',
+    }));
+    const result = await service.refresh();
+    expect(result).toMatchObject({
+      leg: 'refunded',
+      depositTxHash: '0xorigin',
+      refundedAmount: 1_000_000n,
+      pollingStopped: true,
+    });
+    // Never invented: 'failed' would have carried no such promise either.
+    expect(result.message.toLowerCase()).not.toContain('failed');
+  });
+
+  it('never invents a refund amount 1Click did not report', async () => {
+    const client = new StubClient();
+    const store = new MemoryBridgeStore();
+    const service = new BridgeService({ client, store, quoteVerifier: () => true, now: () => NOW });
+    await service.createManualDeposit({
+      source: SOURCE,
+      amountIn: 1_000_000n,
+      starknetRecipient: '0x123',
+      refundAddress: request.refundTo,
+    });
+
+    client.statuses.push(status('REFUNDED' as never));
+    const result = await service.refresh();
+    expect(result.leg).toBe('refunded');
+    expect(result.refundedAmount).toBeUndefined();
+  });
+
+  it.each([
+    ['non-string', 7],
+    ['non-decimal', 'abc'],
+    ['oversized', '1' + '0'.repeat(80)],
+    ['zero', '0'],
+    ['null', null],
+  ])('still settles a refund whose reported amount is %s, showing no figure', async (_label, refundedAmount) => {
+    const client = new StubClient();
+    const store = new MemoryBridgeStore();
+    const service = new BridgeService({ client, store, quoteVerifier: () => true, now: () => NOW });
+    await service.createManualDeposit({
+      source: SOURCE,
+      amountIn: 1_000_000n,
+      starknetRecipient: '0x123',
+      refundAddress: request.refundTo,
+    });
+
+    client.statuses.push(status('REFUNDED' as never, { refundedAmount: refundedAmount as never }));
+    // The figure is display-only: a bad one is dropped, never allowed to keep
+    // a refunded deposit short of its terminal state.
+    const result = await service.refresh();
+    expect(result.leg).toBe('refunded');
+    expect(result.pollingStopped).toBe(true);
+    expect(result.refundedAmount).toBeUndefined();
   });
 
   it.each([
@@ -2252,6 +2321,9 @@ describe('bridge persistence', () => {
     ['non-string settlement hash', { leg: 'settled', message: 'settled', pollingStopped: true, settlementTxHash: {} }],
     ['non-bigint received amount', { leg: 'settled', message: 'settled', pollingStopped: true, strkReceived: '1' }],
     ['negative received amount', { leg: 'settled', message: 'settled', pollingStopped: true, strkReceived: -1n }],
+    ['non-bigint refunded amount', { leg: 'refunded', message: 'refunded', pollingStopped: true, refundedAmount: '1' }],
+    ['negative refunded amount', { leg: 'refunded', message: 'refunded', pollingStopped: true, refundedAmount: -1n }],
+    ['refunded amount on a non-refunded leg', { leg: 'failed', message: 'failed', pollingStopped: true, refundedAmount: 1n }],
     ['deposit hash on quoted leg', { leg: 'quoted', message: 'quoted', pollingStopped: false, depositTxHash: '0xorigin' }],
     ['deposit hash on awaiting leg', { leg: 'awaiting-deposit', message: 'waiting', pollingStopped: false, depositTxHash: '0xorigin' }],
     ['received amount on a pending leg', { leg: 'awaiting-deposit', message: 'waiting', pollingStopped: false, strkReceived: 1n }],
@@ -2297,6 +2369,8 @@ describe('bridge persistence', () => {
       { leg: 'deposit-detected', depositTxHash: '0xorigin', message: 'detected', pollingStopped: false },
       { leg: 'solver-settling', depositTxHash: '0xorigin', message: 'settling', pollingStopped: false },
       { leg: 'settled', depositTxHash: '0xorigin', settlementTxHash: '0xdestination', strkReceived: 1n, message: 'settled', pollingStopped: true },
+      { leg: 'refunded', depositTxHash: '0xorigin', refundedAmount: 1n, message: 'refunded', pollingStopped: true },
+      { leg: 'refunded', message: 'refunded, amount unknown', pollingStopped: true },
       { leg: 'failed', message: 'failed', pollingStopped: true },
       { leg: 'expired', message: 'expired', pollingStopped: true },
     ];

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { ACTIVE_BUILDINGS, BUILDINGS } from '@strkworld/shared';
+import { ACTIVE_BUILDINGS, BUILDINGS, SANDBOX_AREA, SANDBOX_ENTRANCE } from '@strkworld/shared';
 import {
   createStreetMap,
   doorAt,
@@ -79,6 +79,61 @@ describe('the street is walkable', () => {
     expect(isAvatarStudioEntrance(map, 23, 27)).toBe(true);
     expect(isAvatarStudioEntrance(map, 24, 27)).toBe(true);
     expect(isAvatarStudioEntrance(map, 22, 27)).toBe(false);
+  });
+});
+
+describe('the sandbox square has one way in (D-060)', () => {
+  const wallX = SANDBOX_AREA.x - 1;
+  const inGate = (y: number) => y >= SANDBOX_ENTRANCE.y && y < SANDBOX_ENTRANCE.y + SANDBOX_ENTRANCE.height;
+
+  /** Every walkable tile reachable from spawn, optionally with the gate shut. */
+  function reachable(gateShut = false): Set<string> {
+    const solid = (x: number, y: number) => isSolidAt(map, x, y) || (gateShut && x === wallX && inGate(y));
+    const seen = new Set<string>([`${map.spawn.x},${map.spawn.y}`]);
+    const queue = [map.spawn];
+    while (queue.length > 0) {
+      const { x, y } = queue.shift()!;
+      for (const [nx, ny] of [[x + 1, y], [x - 1, y], [x, y + 1], [x, y - 1]] as const) {
+        if (solid(nx, ny) || seen.has(`${nx},${ny}`)) continue;
+        seen.add(`${nx},${ny}`);
+        queue.push({ x: nx, y: ny });
+      }
+    }
+    return seen;
+  }
+
+  it('walls its street side except for the gate', () => {
+    for (let y = 0; y < map.height; y += 1) {
+      expect(isSolidAt(map, wallX, y), `row ${y}`).toBe(!inGate(y));
+      if (!inGate(y)) expect(map.tiles[y]![wallX]).toBe('fence');
+    }
+  });
+
+  it('lines the gate up with the road and both pavements', () => {
+    const street: number[] = [];
+    for (let y = 0; y < map.height; y += 1) {
+      const kind = map.tiles[y]![wallX - 1];
+      if (kind === 'road' || kind === 'pavement') street.push(y);
+    }
+    expect(street[0]).toBe(SANDBOX_ENTRANCE.y);
+    expect(street).toHaveLength(SANDBOX_ENTRANCE.height);
+    expect(SANDBOX_ENTRANCE.x).toBe(SANDBOX_AREA.x);
+    for (let y = SANDBOX_ENTRANCE.y; y < SANDBOX_ENTRANCE.y + SANDBOX_ENTRANCE.height; y += 1) {
+      for (let x = SANDBOX_ENTRANCE.x; x < SANDBOX_ENTRANCE.x + SANDBOX_ENTRANCE.width; x += 1) {
+        expect(map.tiles[y]![x]).toBe('sandbox');
+      }
+    }
+  });
+
+  it('reaches every sandbox tile from spawn, and only through the gate', () => {
+    const open = reachable();
+    const shut = reachable(true);
+    for (let y = SANDBOX_AREA.y; y < SANDBOX_AREA.y + SANDBOX_AREA.height; y += 1) {
+      for (let x = SANDBOX_AREA.x; x < SANDBOX_AREA.x + SANDBOX_AREA.width; x += 1) {
+        expect(open.has(`${x},${y}`), `${x},${y}`).toBe(true);
+        expect(shut.has(`${x},${y}`), `${x},${y}`).toBe(false);
+      }
+    }
   });
 });
 

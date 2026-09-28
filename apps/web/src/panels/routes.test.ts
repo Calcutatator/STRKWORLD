@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { PRIVACY_REGISTER, type RouteGrade } from '../privacy/register.js';
 import { COPY } from '../copy.js';
-import type { Intent } from '@strkworld/privacy';
+import type { Intent, WalletRoutePolicy } from '@strkworld/privacy';
 import {
   buildingDoor,
   disclosuresForIntents,
@@ -137,6 +137,24 @@ describe('route gate', () => {
     expect(routeDisclosure('bank.shield')).toBe(shield?.disclosure);
   });
 
+  it('opens the transfer only while its D-065 approval and waiver both stand', () => {
+    const transfer = findRoute('post-office.transfer')!;
+    expect(transfer).toMatchObject({ grade: 'anonymous', approvedBy: 'calc', disclosure: null, disclosureWaivedBy: 'D-065' });
+    expect(routeDoor('post-office.transfer', PRIVACY_REGISTER, null).open).toBe(true);
+    for (const change of [
+      { approvedBy: null },
+      { rationale: null },
+      { disclosureWaivedBy: null },
+      { disclosureWaivedBy: 'D-064' },
+    ] satisfies Partial<RouteGrade>[]) {
+      const register = PRIVACY_REGISTER.map((entry) => (entry.route === 'post-office.transfer' ? { ...entry, ...change } : entry));
+      expect(routeDoor('post-office.transfer', register, null), JSON.stringify(change)).toMatchObject({
+        open: false,
+        reason: 'unapproved-route',
+      });
+    }
+  });
+
   it('reports the D-021 return-to-pool routes', () => {
     expect(routeReturnsToPool('bridge.deposit')).toBe(true);
     expect(routeReturnsToPool('exchange.swap')).toBe(false);
@@ -155,6 +173,16 @@ describe('building doors', () => {
     const door = buildingDoor('vault');
     expect(door.open).toBe(false);
     expect(door.reason).toBe('coming-soon');
+    // The Vault gets its own line rather than the shared "coming soon" text —
+    // every other never-built building still uses the generic one.
+    expect(door.message).toBe(COPY.vault.locked);
+    expect(door.message).not.toBe(COPY.locked.comingSoon);
+  });
+
+  it('keeps the shared "coming soon" line for every other building with no graded route', () => {
+    // Only the Vault has a specific line; a hypothetical unbuilt building
+    // must not silently inherit it.
+    const door = buildingDoor('post-office', []);
     expect(door.message).toBe(COPY.locked.comingSoon);
   });
 
@@ -235,7 +263,8 @@ describe('disclosures for a batch', () => {
   });
 
   it('says nothing for a batch that needs no disclosure', () => {
-    expect(disclosuresForIntents([transfer, transfer])).toEqual([]);
+    // The transfer's disclosure is waived by D-065; a batch holds one transfer.
+    expect(disclosuresForIntents([transfer])).toEqual([]);
   });
 
   it('de-duplicates, because one route said twice is not two disclosures', () => {
@@ -243,7 +272,7 @@ describe('disclosures for a batch', () => {
   });
 
   it('covers every intent kind the seam can carry', () => {
-    const kinds: Intent['kind'][] = ['shield', 'unshield', 'transfer', 'swap'];
+    const kinds: Intent['kind'][] = ['shield', 'unshield', 'transfer', 'swap', 'stake'];
     for (const kind of kinds) {
       expect(ROUTE_BY_INTENT_KIND[kind], kind).toBeTruthy();
       // Every mapped id must exist in the register, or the door fails closed
@@ -256,5 +285,104 @@ describe('disclosures for a batch', () => {
     expect(Object.isFrozen(ROUTE_BY_INTENT_KIND)).toBe(true);
     expect(Reflect.set(ROUTE_BY_INTENT_KIND, 'shield', 'exchange.swap')).toBe(false);
     expect(ROUTE_BY_INTENT_KIND.shield).toBe('bank.shield');
+  });
+});
+
+describe('the active wallet policy gates a route the register already approved (D-054/D-056)', () => {
+  const denyAll: WalletRoutePolicy = {
+    maxIntents: 0,
+    maxRelayFee: 0n,
+    enabledRoutes: [],
+    allowedTokens: { shield: [], unshield: [], transfer: [], swap: [] },
+  };
+  const shieldAndTransferOnly: WalletRoutePolicy = {
+    ...denyAll,
+    maxIntents: 1,
+    enabledRoutes: ['shield', 'transfer'],
+    allowedTokens: {
+      shield: ['0x04718f5a0fc34cc1af16a1cdee98ffb20c31f5cd61d6ab07201858f4287c938d'],
+      unshield: [],
+      transfer: ['0x04718f5a0fc34cc1af16a1cdee98ffb20c31f5cd61d6ab07201858f4287c938d'],
+      swap: [],
+    },
+  };
+
+  it('demo mode (no policy) keeps every register-approved route open', () => {
+    for (const route of ['bank.shield', 'bank.unshield', 'post-office.transfer', 'exchange.swap']) {
+      expect(routeDoor(route, PRIVACY_REGISTER, null).open, route).toBe(true);
+    }
+  });
+
+  it('locks unshield with a clear, specific reason even though the register approves it — off unless the build enables it (D-062)', () => {
+    const door = routeDoor('bank.unshield', PRIVACY_REGISTER, denyAll);
+    expect(door.open).toBe(false);
+    expect(door.reason).toBe('not-enabled');
+    expect(door.message).toBe(COPY.locked.notEnabled.unshield);
+    expect(door.message).not.toBe(COPY.locked.unapprovedRoute);
+  });
+
+  it('opens exactly the routes this build enabled, and locks the rest with the not-enabled reason', () => {
+    expect(routeDoor('bank.shield', PRIVACY_REGISTER, shieldAndTransferOnly).open).toBe(true);
+    expect(routeDoor('post-office.transfer', PRIVACY_REGISTER, shieldAndTransferOnly).open).toBe(true);
+    expect(routeDoor('bank.unshield', PRIVACY_REGISTER, shieldAndTransferOnly)).toMatchObject({
+      open: false,
+      reason: 'not-enabled',
+    });
+    expect(routeDoor('exchange.swap', PRIVACY_REGISTER, shieldAndTransferOnly)).toMatchObject({
+      open: false,
+      reason: 'not-enabled',
+      message: COPY.locked.notEnabled.swap,
+    });
+  });
+
+  it('keeps Endur staking behind its own switch: register-approved, off until the build enables it (D-063)', () => {
+    expect(ROUTE_BY_INTENT_KIND.stake).toBe('bank.stake');
+    expect(routeDoor('bank.stake', PRIVACY_REGISTER, null).open).toBe(true);
+    for (const policy of [denyAll, shieldAndTransferOnly]) {
+      expect(routeDoor('bank.stake', PRIVACY_REGISTER, policy)).toEqual({
+        open: false,
+        reason: 'not-enabled',
+        message: COPY.locked.notEnabled.stake,
+      });
+    }
+    const stakeOnly: WalletRoutePolicy = {
+      ...denyAll,
+      maxRelayFee: 5n,
+      enabledRoutes: ['stake'],
+      allowedTokens: {
+        ...denyAll.allowedTokens,
+        stake: [
+          '0x04718f5a0fc34cc1af16a1cdee98ffb20c31f5cd61d6ab07201858f4287c938d',
+          '0x028d709c875c0ceac3dce7065bec5328186dc89fe254527084d1689910954b0a',
+        ],
+      },
+    };
+    expect(routeDoor('bank.stake', PRIVACY_REGISTER, stakeOnly).open).toBe(true);
+    expect(routeDoor('bank.shield', PRIVACY_REGISTER, stakeOnly).reason).toBe('not-enabled');
+  });
+
+  it('never locks the Bridge for a policy reason — bridge.deposit never goes through PrivacyOperations.prepare', () => {
+    expect(routeDoor('bridge.deposit', PRIVACY_REGISTER, denyAll).open).toBe(true);
+  });
+
+  it('still locks an unapproved deviation even when the policy would have enabled it', () => {
+    const unapprovedShield: RouteGrade = {
+      ...PRIVACY_REGISTER.find((entry) => entry.route === 'bank.shield')!,
+      approvedBy: null,
+      approvedOn: null,
+      disclosure: null,
+      rationale: null,
+    };
+    const register = [
+      ...PRIVACY_REGISTER.filter((entry) => entry.route !== 'bank.shield'),
+      unapprovedShield,
+    ];
+    const door = routeDoor('bank.shield', register, shieldAndTransferOnly);
+    expect(door.reason).toBe('unapproved-route');
+  });
+
+  it('isRouteOpen honors the same explicit policy argument as routeDoor', () => {
+    expect(isRouteOpen('bank.unshield', PRIVACY_REGISTER, denyAll)).toBe(false);
+    expect(isRouteOpen('bank.shield', PRIVACY_REGISTER, shieldAndTransferOnly)).toBe(true);
   });
 });

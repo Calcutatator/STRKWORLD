@@ -14,6 +14,12 @@
  * grade below `private` and no recorded approval fails the build. Unapproved
  * means a locked door, never a quiet downgrade.
  *
+ * The one exception to "the game tells the player" is explicit and narrow: the
+ * project lead may waive a route's player-facing disclosure by decision entry
+ * (`disclosureWaivedBy`, e.g. D-064). The grade and `observable` still record
+ * exactly what an observer sees; only the in-game copy is waived, and the
+ * route's own copy must not claim more privacy than its grade.
+ *
  * Review the current state with `./scripts/privacy-report.sh`.
  */
 
@@ -32,9 +38,12 @@ export type PrivacyGrade =
    */
   | 'private'
   /**
-   * Parties hidden, **amounts visible**. Anonymizer-mediated DeFi: open notes
-   * carry the filled amount in plaintext by design, and the AMM leg is public.
-   * "Nobody can link this to you" is defensible; "your amount is hidden" is not.
+   * Who acted is hidden, but **part of the action is public**. Anonymizer-
+   * mediated DeFi hides the parties but not the amounts: open notes carry the
+   * filled amount in plaintext by design, and the AMM leg is public. "Nobody
+   * can link this to you" is defensible; "your amount is hidden" is not. The
+   * private transfer (D-065) hides sender and amount, but a first send
+   * publishes the recipient, so "the recipient is hidden" is not defensible.
    */
   | 'anonymous'
   /**
@@ -69,6 +78,13 @@ export interface RouteGrade {
   /** Why the deviation is acceptable. Required whenever `approvedBy` is set. */
   rationale: string | null;
   /**
+   * The decision entry (e.g. `D-064`) under which the project lead waived this
+   * deviation's player-facing disclosure. Absent or null for every route that
+   * shows its disclosure, which is the rule. A waiver replaces only the
+   * `disclosure` string; approval and rationale are still required.
+   */
+  disclosureWaivedBy?: string | null;
+  /**
    * Whether finishing this route should funnel the player back to the pool.
    *
    * Pool STRK is the game's money and its gas (D-013), so any route that
@@ -90,13 +106,17 @@ export const PRIVACY_REGISTER: readonly RouteGrade[] = [
   {
     building: 'post-office',
     route: 'post-office.transfer',
-    grade: 'private',
+    // D-065: regraded from `private` after a verified mainnet finding; the
+    // lead waived the in-game disclosure.
+    grade: 'anonymous',
     observable:
-      'Nothing. A private transfer between two registered accounts has no public leg — sender, recipient, token and amount are all hidden.',
+      'Sender and amount hidden, recipient not always. A first transfer to a new recipient opens a channel keyed by their address: the address is in plaintext calldata and the pool counts a new channel for it in that block, so an observer learns that this address received a first private payment, and when. Later transfers to the same recipient add no such record. The relay fee leaves the pool publicly to the paymaster forwarder, and the proof publishes the block it was built against, which dates the confirm. One recipient per send (D-065), so a submission never links several recipients.',
     disclosure: null,
-    approvedBy: null,
-    approvedOn: null,
-    rationale: null,
+    approvedBy: 'calc',
+    approvedOn: '2026-09-27',
+    rationale:
+      'The sender and amount stay hidden, which the lead accepts for private sends; the first-send recipient record cannot be avoided through the Wallet API. The player-facing disclosure is waived by D-065, and the copy claims no recipient privacy.',
+    disclosureWaivedBy: 'D-065',
     returnToPool: false,
   },
   {
@@ -156,6 +176,26 @@ export const PRIVACY_REGISTER: readonly RouteGrade[] = [
       'Public rails are the only way in from another chain. Accepted because arrival was never the privacy promise — and the player is funnelled straight into the pool afterwards.',
     returnToPool: true,
   },
+  // D-063, 2026-09-27: Endur private staking, graded like the swap and built
+  // switched off in production. Approved by the lead, with its in-game
+  // disclosure waived by D-064 (see DISCLOSURE_WAIVERS below).
+  {
+    building: 'bank',
+    route: 'bank.stake',
+    grade: 'anonymous',
+    observable:
+      'Unlinkable but not amount-confidential. The pool withdraws the staked STRK to the Endur deposit anonymizer as a public transfer with a visible amount, the anonymizer deposits it into the public xSTRK vault, and the minted xSTRK is credited to an open note whose amount is plaintext. Who staked is hidden; that a stake happened, when, and how much went in and came out is not. There is no private unstake: the Endur withdrawal queue takes 1 to 14 days and no withdraw anonymizer exists.',
+    // The lead waived the in-game disclosure (D-064). `observable` above is
+    // still the exact record of what an observer sees.
+    disclosure: null,
+    approvedBy: 'calc',
+    approvedOn: '2026-09-27',
+    rationale:
+      'Endur liquid staking through its live STRK20 deposit anonymizer (D-063): the staker is unlinkable, which the lead accepts for a stake-only counter. The player-facing disclosure is waived by D-064; the counter claims no amount privacy.',
+    disclosureWaivedBy: 'D-064',
+    // The anonymizer credits the minted xSTRK to an OPEN pool note.
+    returnToPool: false,
+  },
 ];
 
 /** Grades that ship without approval. Everything else is a deviation. */
@@ -177,7 +217,35 @@ export function isRoutePlayable(route: RouteGrade): boolean {
   return hasNonBlankText(route.approvedBy) &&
     hasNonBlankText(route.approvedOn) &&
     hasNonBlankText(route.rationale) &&
-    hasNonBlankText(route.disclosure);
+    (hasNonBlankText(route.disclosure) || isDisclosureWaived(route));
+}
+
+/**
+ * Every disclosure waiver the lead has granted, by route, with its decision.
+ *
+ * The one list a waiver must appear in. An entry's own `disclosureWaivedBy`
+ * only counts when it names exactly the decision recorded here for that
+ * route, so no other route can switch its disclosure off by citing some
+ * decision that merely mentions it. Adding a waiver means a decision entry,
+ * this table and the register entry, all together.
+ */
+export const DISCLOSURE_WAIVERS: Readonly<Record<string, string>> = Object.freeze({
+  'bank.stake': 'D-064',
+  'post-office.transfer': 'D-065',
+});
+
+/**
+ * Whether the lead waived this route's player-facing disclosure by decision.
+ *
+ * Only an own data property naming the decision `DISCLOSURE_WAIVERS` records
+ * for this exact route counts, so a malformed, inherited or borrowed value can
+ * never switch a disclosure off.
+ */
+export function isDisclosureWaived(route: RouteGrade): boolean {
+  const descriptor = Object.getOwnPropertyDescriptor(route, 'disclosureWaivedBy');
+  if (descriptor === undefined || !('value' in descriptor)) return false;
+  const granted = Object.hasOwn(DISCLOSURE_WAIVERS, route.route) ? DISCLOSURE_WAIVERS[route.route] : undefined;
+  return typeof descriptor.value === 'string' && granted !== undefined && descriptor.value === granted;
 }
 
 function hasNonBlankText(value: unknown): value is string {
@@ -200,6 +268,6 @@ export function routesAwaitingApproval(): RouteGrade[] {
  */
 export function routesAwaitingCopy(): RouteGrade[] {
   return PRIVACY_REGISTER.filter(
-    (r) => isDeviation(r.grade) && r.approvedBy !== null && r.disclosure === null,
+    (r) => isDeviation(r.grade) && r.approvedBy !== null && r.disclosure === null && !isDisclosureWaived(r),
   );
 }

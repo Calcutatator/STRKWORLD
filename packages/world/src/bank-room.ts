@@ -22,6 +22,13 @@ import {
 export const BANK_ROOM_BUILDING: BuildingId = 'bank';
 export const BANK_SHIELDING_STATION: StationId = 'bank:shielding';
 export const BANK_SHIELDING_LABEL = 'SHIELD / UNSHIELD';
+/**
+ * Endur staking (D-063): a separate counter, never merged with shielding
+ * (D-030). This facade keeps describing shielding alone; the staking counter
+ * lives in `BANK_ROOM_DEFINITION` beside it.
+ */
+export const BANK_STAKING_STATION: StationId = 'bank:staking';
+export const BANK_STAKING_LABEL = 'STAKE';
 export const BANK_ROOM_TILE_SIZE = FIXED_ROOM_TILE_SIZE;
 
 export type BankRoomTile = FixedRoomTile;

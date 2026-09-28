@@ -12,6 +12,7 @@
 
 import {
   PRIVACY_REGISTER as SHARED_PRIVACY_REGISTER,
+  isDisclosureWaived,
   isRoutePlayable,
 } from '@strkworld/shared/src/privacy-grades.js';
 import type { RouteGrade } from '@strkworld/shared/src/privacy-grades.js';
@@ -24,5 +25,5 @@ export const PRIVACY_REGISTER: readonly RouteGrade[] = Object.freeze(
   SHARED_PRIVACY_REGISTER.map((entry) => Object.freeze({ ...entry })),
 );
 
-export { isRoutePlayable };
+export { isDisclosureWaived, isRoutePlayable };
 export type { PrivacyGrade, RouteGrade } from '@strkworld/shared/src/privacy-grades.js';

@@ -1,10 +1,10 @@
-import { BUILDINGS, type BuildingId } from '@strkworld/shared';
+import { BUILDINGS, SANDBOX_AREA, SANDBOX_ENTRANCE, type BuildingId } from '@strkworld/shared';
 import { flattenProperties, type TiledObject } from '../tiled-object-props.js';
 
 /**
  * The first district, as data.
  *
- * Deliberately plain data rather than Phaser calls, for two reasons. It is
+ * Deliberately plain data rather than renderer calls, for two reasons. It is
  * unit-testable without a browser, and it is the same shape a parsed Tiled map
  * produces — so replacing this with a real export is a swap, not a rewrite.
  *
@@ -16,7 +16,7 @@ import { flattenProperties, type TiledObject } from '../tiled-object-props.js';
 export const TILE_SIZE = 32;
 
 /** What a tile is. `solid` drives collision; nothing else here does. */
-export type TileKind = 'grass' | 'road' | 'pavement' | 'wall' | 'facade';
+export type TileKind = 'grass' | 'road' | 'pavement' | 'wall' | 'facade' | 'sandbox' | 'fence';
 
 export interface TileSpec {
   kind: TileKind;
@@ -32,6 +32,16 @@ export const TILES: Readonly<Record<TileKind, Readonly<TileSpec>>> = Object.free
   wall: Object.freeze({ kind: 'wall', solid: true, colour: 0x5a4a3f }),
   /** The front face of a building. Solid — you enter through the door. */
   facade: Object.freeze({ kind: 'facade', solid: true, colour: 0x6b5847 }),
+  /**
+   * The block sandbox floor (D-060). Walkable; the shared block stacks on it
+   * add height, which the session reads from the sandbox channel, not here.
+   */
+  sandbox: Object.freeze({ kind: 'sandbox', solid: false, colour: 0xd9cdb8 }),
+  /**
+   * The low wall along the sandbox square's street side (D-060). Solid — you
+   * come in through the gate, where the road runs through it.
+   */
+  fence: Object.freeze({ kind: 'fence', solid: true, colour: 0xb8a98f }),
 });
 
 /**
@@ -109,10 +119,13 @@ function fill(
  *
  * A horizontal road with pavement either side, five buildings along the north
  * edge. Four are enterable; the Vault is a visible facade with a locked door,
- * so the world reads as complete while v1 ships without it (D-007).
+ * so the world reads as complete while v1 ships without it (D-007). The road
+ * ends in the block sandbox square (D-060).
  */
 export function createStreetMap(): DistrictMap {
-  const width = 48;
+  // The original street is 48 tiles wide; the road then runs on into the block
+  // sandbox square at its east end (D-060).
+  const width = SANDBOX_AREA.x + SANDBOX_AREA.width;
   const height = 28;
 
   const tiles: TileKind[][] = Array.from({ length: height }, () =>
@@ -189,6 +202,18 @@ export function createStreetMap(): DistrictMap {
   // by a two-tile path that continues directly south from the spawn column to
   // the bottom edge, where the offscreen trigger lives.
   fill(tiles, 23, 17, 2, height - 17, 'pavement');
+
+  // The block sandbox square where the road ends (D-060). Its floor is plain
+  // walkable ground; block stacks are shared state layered on top of it.
+  fill(tiles, SANDBOX_AREA.x, SANDBOX_AREA.y, SANDBOX_AREA.width, SANDBOX_AREA.height, 'sandbox');
+
+  // A wall closes the square's street side, one tile west of it, except for
+  // the gate: the gap where the road and both pavements run in, in line with
+  // the entrance apron that sky drops keep clear of.
+  const gateTop = SANDBOX_ENTRANCE.y;
+  const gateBottom = SANDBOX_ENTRANCE.y + SANDBOX_ENTRANCE.height;
+  fill(tiles, SANDBOX_AREA.x - 1, SANDBOX_AREA.y, 1, gateTop - SANDBOX_AREA.y, 'fence');
+  fill(tiles, SANDBOX_AREA.x - 1, gateBottom, 1, SANDBOX_AREA.y + SANDBOX_AREA.height - gateBottom, 'fence');
 
   return {
     name: 'street',

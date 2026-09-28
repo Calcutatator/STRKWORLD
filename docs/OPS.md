@@ -153,8 +153,9 @@ resolved, and route the web origin's `/api` prefix to it.
 
 This is deliberate on privacy grounds, not laziness:
 
-- **There is no health route.** The API exposes exactly six paths, all POST
-  operations (`apps/backend/src/api.ts:105-110`); anything else is rejected.
+- **There is no health route.** The API exposes six POST operations and, when
+  D-067's optional degen catalog is configured, one read-only
+  `GET /v1/degen/tokens` (`apps/backend/src/api.ts`); anything else is rejected.
   Adding one is the Backend lane's call, not the deployment lane's.
 - **Probing a real route would be actively harmful.** Every request takes a
   slot in the *global* aggregate rate window shared with real players
@@ -201,6 +202,7 @@ transaction (D-018). That is the design, not a degradation.
 | Global | `BackendConfig.globalEnabled = false` | every private route returns `503 SERVICE_DISABLED` (`apps/backend/src/api.ts:97-100`). The city stays up; financial doors lock. |
 | Per route | `routes.<transfer\|unshield\|swap>.enabled = false` | that building alone locks. `RoutePolicy.enabled`, `apps/backend/src/types.ts:17`. |
 | Sponsorship | `sponsorshipBudget.maxFeeAmount` → `0` | sponsorship stops without taking the game down (D-006). Rejections increment `budgetExhausted` only. |
+| Degen list | `BACKEND_DEGEN_ENABLED=false`, or the group absent | the degen list answers 503 and swaps admit only `BACKEND_ROUTE_SWAP_ALLOWED_TOKENS` (D-067). The degen counter's own lock follows the swap route. |
 
 Also available as ceilings rather than switches: `routes.<r>.maxRelayFee`
 (reject anything above a fee ceiling) and `routes.<r>.allowedTokens`.

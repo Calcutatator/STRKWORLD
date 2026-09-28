@@ -10,11 +10,14 @@
   },
   "dependencies": {
     "@strkworld/shared": "*",
-    "phaser": "4.2.1"
+    "three": "0.186.1"
   },
   "exports": {
     ".": "./src/index.ts",
     "./runtime": "./src/runtime.ts",
     "./host": "./src/host.ts"
+  },
+  "devDependencies": {
+    "@types/three": "0.186.0"
   }
 }

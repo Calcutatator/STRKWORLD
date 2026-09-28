@@ -251,6 +251,8 @@ describe('Exchange machine', () => {
     expect(operations.submitted[0]?.[0]).toMatchObject({ kind: 'swap', minAmountOut: 1_990000000000000000n });
     expect(ledger.pending('exchange')).toHaveLength(1);
     expect(ledger.pending('bank')).toHaveLength(0);
+    const flow = machine.store.getState().flow;
+    expect(flow.name === 'submitted' && flow.restored).toBeFalsy();
   });
 
   it('treats expiry as epoch milliseconds and discards an expired review', async () => {
@@ -281,7 +283,8 @@ describe('Exchange machine', () => {
     const confirming = machine.confirm(); await entered.promise; machine.close(); result.resolve({ transactionHash: '0xlate' }); await confirming;
     expect(ledger.pending('exchange')).toHaveLength(1);
     const remount = createExchangePanel({ operations, receipts: ledger, canStartFinancialAction: () => true }); await remount.open();
-    expect(remount.store.getState().flow).toEqual({ name: 'submitted', transactionHash: '0xlate' });
+    // Restored on reopen, not confirmed this session — the room was shut when it settled.
+    expect(remount.store.getState().flow).toEqual({ name: 'submitted', transactionHash: '0xlate', restored: true });
   });
 
   it('does not let a stale rejected confirmation discard a newer signing batch', async () => {

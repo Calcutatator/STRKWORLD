@@ -6,7 +6,8 @@
 # claim, not that anything is broken.
 set -uo pipefail
 
-RPC="${STARKNET_RPC_URL:-https://rpc.starknet.lava.build}"
+# Lava's public endpoint is discontinued; Cartridge's serves the same reads.
+RPC="${STARKNET_RPC_URL:-https://api.cartridge.gg/x/starknet/mainnet}"
 POOL="0x040337b1af3c663e86e333bab5a4b28da8d4652a15a69beee2b677776ffe812a"
 fail=0
 

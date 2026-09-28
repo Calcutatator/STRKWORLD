@@ -1,16 +1,20 @@
 import { describe, expect, it, vi } from 'vitest';
+import { SANDBOX_COLOURS } from '@strkworld/shared';
 import {
   createRemotePeerSource,
   reconcileRemotePeers,
+  validateRemotePeer,
   type RemotePeerSnapshot,
 } from './remote-peer.js';
 
+// Validated snapshots always state `carrying`, so the fixture does too.
 const peer = (overrides: Partial<RemotePeerSnapshot> = {}): RemotePeerSnapshot => ({
   id: 'peer-1',
   x: 40,
   y: 72,
   facing: 'down',
   sprite: 'avatar-1',
+  carrying: null,
   ...overrides,
 });
 
@@ -80,6 +84,16 @@ describe('RemotePeerSource', () => {
     ]);
 
     expect(seen.at(-1)).toEqual([peer({ id: 'bad-sprite', sprite: 'avatar-1' })]);
+  });
+
+  it('delivers carried colours sanitized, so subscribers never see a bad one', () => {
+    const controller = createRemotePeerSource();
+    const seen: Array<readonly RemotePeerSnapshot[]> = [];
+    controller.source.subscribe((snapshot) => seen.push(snapshot));
+
+    controller.publish([peer({ carrying: 3 }), peer({ id: 'peer-2', carrying: -1 })]);
+
+    expect(seen.at(-1)).toEqual([peer({ carrying: 3 }), peer({ id: 'peer-2', carrying: null })]);
   });
 
   it('makes unsubscribe idempotent and stops later delivery', () => {
@@ -360,6 +374,56 @@ describe('remote peer reconciliation', () => {
     expect(reconciled.get('fighting-9')?.sprite).toBe('avatar-9');
     expect(reconciled.get('fighting-16')?.sprite).toBe('avatar-16');
     expect(reconciled.get('unknown')?.sprite).toBe('avatar-1');
+  });
+
+  it('keeps a palette-index carried colour and fails anything else closed, never rejecting the peer', () => {
+    const colours: unknown[] = [
+      0,
+      SANDBOX_COLOURS - 1,
+      -1,
+      SANDBOX_COLOURS,
+      1.5,
+      Number.NaN,
+      Number.POSITIVE_INFINITY,
+      '3',
+      true,
+      {},
+      null,
+      undefined,
+    ];
+    const reconciled = reconcileRemotePeers(
+      colours.map((carrying, index) => ({ ...peer({ id: `peer-${index}` }), carrying })),
+    );
+
+    expect(reconciled.size).toBe(colours.length);
+    expect([...reconciled.values()].map((entry) => entry.carrying)).toEqual([
+      0,
+      SANDBOX_COLOURS - 1,
+      ...Array<null>(colours.length - 2).fill(null),
+    ]);
+  });
+
+  it('states an absent carried colour as null', () => {
+    const { carrying: _omitted, ...withoutCarrying } = peer();
+
+    expect(validateRemotePeer(withoutCarrying)).toEqual(peer({ carrying: null }));
+  });
+
+  it('ignores a carried colour supplied through a prototype or an accessor', () => {
+    const inherited = Object.assign(Object.create({ carrying: 2 }) as object, {
+      id: 'inherited',
+      x: 40,
+      y: 72,
+      facing: 'down',
+      sprite: 'avatar-1',
+    });
+    const accessor = Object.defineProperty({ ...peer({ id: 'accessor' }) }, 'carrying', {
+      get: () => 2,
+      enumerable: true,
+    });
+
+    expect(validateRemotePeer(inherited)?.carrying).toBeNull();
+    expect(validateRemotePeer(accessor)?.carrying).toBeNull();
   });
 
   it('uses the last occurrence for duplicate ids deterministically', () => {

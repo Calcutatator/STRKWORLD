@@ -2,7 +2,7 @@
   "name": "strkworld",
   "version": "0.1.0",
   "private": true,
-  "description": "A 2D top-down city where the buildings are Starknet privacy protocols",
+  "description": "A 3D walkable city where the buildings are Starknet privacy protocols",
   "license": "UNLICENSED",
   "engines": {
     "node": ">=22.12.0"

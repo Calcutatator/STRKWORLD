@@ -66,7 +66,12 @@ export interface PoolReadClient {
 }
 
 export type PoolNativeRoute = 'unshield' | 'transfer';
-export type PrivateRoute = PoolNativeRoute | 'swap';
+/**
+ * Every route the backend relays. `swap` is quote-bound and prepared through
+ * `prepareSwap`; `stake` (D-063) is relayed like a pool-native route but
+ * invokes Endur's anonymizer.
+ */
+export type PrivateRoute = PoolNativeRoute | 'swap' | 'stake';
 
 export interface RelayFeeQuote {
   token: Address;
@@ -93,8 +98,9 @@ export interface PreparedPrivateSwap {
 }
 
 export interface PrivateSubmissionGateway {
+  /** A relay fee quote for every non-quote-bound route; swaps quote in `prepareSwap`. */
   estimate(input: {
-    route: PoolNativeRoute;
+    route: Exclude<PrivateRoute, 'swap'>;
     feeToken: Address;
     operationToken: Address;
     signal?: AbortSignal;
@@ -126,9 +132,18 @@ export interface PrivateSubmissionGateway {
 export interface WalletRoutePolicy {
   maxIntents: number;
   maxRelayFee: bigint;
-  enabledRoutes: readonly ('shield' | 'unshield' | 'transfer' | 'swap')[];
-  /** Every token crossing an enabled route must be explicitly admitted. */
-  allowedTokens: Readonly<Record<'shield' | 'unshield' | 'transfer' | 'swap', readonly Address[]>>;
+  enabledRoutes: readonly ('shield' | 'unshield' | 'transfer' | 'swap' | 'stake')[];
+  /**
+   * Every token crossing an enabled route must be explicitly admitted.
+   *
+   * `stake` (D-063) is optional so every existing policy stays valid; absent
+   * admits no stake token, so the route fails closed even when enabled. When
+   * present it must list both STRK (in) and xSTRK (out), as a swap lists both
+   * of its sides.
+   */
+  allowedTokens: Readonly<Record<'shield' | 'unshield' | 'transfer' | 'swap', readonly Address[]>> & {
+    readonly stake?: readonly Address[];
+  };
   swap?: {
     expectedChainId: string;
     slippageBps: number;

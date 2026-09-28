@@ -1,12 +1,17 @@
+import { ENDUR_DEPOSIT_ANONYMIZER, ENDUR_XSTRK, ENDUR_XSTRK_ASSET } from './endur.js';
 import type {
   PreparedArtifact,
   PrivateRoute,
   RelayFee,
   SwapAuthorizationBinding,
 } from './types.js';
-import { ApiFailure, sameAddress } from './validation.js';
+import { ApiFailure, isFelt, sameAddress } from './validation.js';
+
+const U128_LIMIT = 1n << 128n;
 
 type ServerAction =
+  /** `Append(recipient, …)`: a channel opened to `recipient`, whose address the pool publishes. */
+  | { kind: 'channel-open'; recipient: string }
   | { kind: 'transfer-from'; from: string; token: string; amount: bigint }
   | { kind: 'transfer-to'; to: string; token: string; amount: bigint }
   | { kind: 'invoke'; contract: string; calldata: string[] }
@@ -29,8 +34,11 @@ export function decodeServerActions(calldata: readonly string[]): ServerAction[]
     switch (variant) {
       case 0: // WriteOnce(storage_address, Span<felt>)
         cursor.felt(); cursor.span(); actions.push({ kind: 'other', variant }); break;
-      case 1: // Append(recipient, EncChannelInfo[3])
-        cursor.take(4); actions.push({ kind: 'other', variant }); break;
+      case 1: { // Append(recipient, EncChannelInfo[3])
+        const [recipient] = cursor.take(4);
+        actions.push({ kind: 'channel-open', recipient: recipient! });
+        break;
+      }
       case 2: { // TransferFrom(from, token, amount)
         const [from, token, amount] = cursor.take(3);
         actions.push({ kind: 'transfer-from', from: from!, token: token!, amount: BigInt(amount!) });
@@ -100,6 +108,7 @@ export function validateServerActionRoute(
   if (screening === 'some') {
     throw new ApiFailure(400, 'Private route cannot carry a public-deposit screening attestation.');
   }
+  requireOneRecipient(actions);
   const invokes = actions.filter((action) => action.kind === 'invoke');
   const transfers = actions.filter(
     (action): action is Extract<ServerAction, { kind: 'transfer-to' }> => action.kind === 'transfer-to',
@@ -123,6 +132,8 @@ export function validateServerActionRoute(
     if (transfers.length !== 2 || feeIndex < 0 || withdrawalIndex < 0) {
       throw new ApiFailure(400, 'Unshield route contains an unauthorized withdrawal.');
     }
+  } else if (route === 'stake') {
+    validateStakeActions(invokes, transfers, isFeeTransfer, operationToken);
   } else {
     if (!swap) throw new ApiFailure(401, 'Swap authorization has no quote binding.');
     if (invokes.length !== 1) {
@@ -152,6 +163,92 @@ export function validateServerActionRoute(
       throw new ApiFailure(400, 'Swap withdrawals do not match the authorized AVNU plan.');
     }
   }
+}
+
+/**
+ * One recipient per send (D-065), on every relayed route.
+ *
+ * A private transfer names its recipient in the calldata only when it opens a
+ * channel, i.e. on the first send to that address: `Append(recipient, …)` in
+ * plaintext. So the relay counts distinct `Append` addresses, compared as
+ * field elements, and refuses more than one: a submission that opened channels
+ * to several addresses would publish them all as paid by one sender. Later
+ * sends to a known recipient carry no address at all, so the Shell's
+ * one-transfer batch rule is what bounds those. Fail-closed: a first send
+ * that also opened the sender's own change channel would be refused too, as
+ * the relay cannot tell that address from a second recipient (and the
+ * submission would publish both).
+ */
+function requireOneRecipient(actions: readonly ServerAction[]): void {
+  const recipients = new Set<bigint>();
+  for (const action of actions) {
+    if (action.kind !== 'channel-open') continue;
+    if (!isFelt(action.recipient)) throw new ApiFailure(400, 'Channel recipient is not a field element.');
+    recipients.add(BigInt(action.recipient));
+  }
+  if (recipients.size > 1) {
+    throw new ApiFailure(400, 'A private submission may pay at most one recipient.');
+  }
+}
+
+/**
+ * Endur staking (D-063). The one external invoke must be the pinned anonymizer
+ * with `privacy_invoke(in_token, out_token, assets: u256, note_id)` calldata:
+ * STRK — the authorized operation token — in, xSTRK out, a nonzero u256, and
+ * the wallet-resolved note id, which is left unchecked as the swap leaves its
+ * own. The only withdrawals allowed are the authorized relay fee and exactly
+ * `assets` of STRK to the anonymizer, so the authorization cannot sponsor any
+ * other call or move any other value.
+ */
+function validateStakeActions(
+  invokes: readonly Extract<ServerAction, { kind: 'invoke' }>[],
+  transfers: readonly Extract<ServerAction, { kind: 'transfer-to' }>[],
+  isFeeTransfer: (action: Extract<ServerAction, { kind: 'transfer-to' }>) => boolean,
+  operationToken: string,
+): void {
+  if (invokes.length !== 1) {
+    throw new ApiFailure(400, 'Stake route must contain exactly one Endur anonymizer call.');
+  }
+  const invoke = invokes[0]!;
+  if (!sameAddress(invoke.contract, ENDUR_DEPOSIT_ANONYMIZER)) {
+    throw new ApiFailure(400, 'Stake invoke target is not the Endur deposit anonymizer.');
+  }
+  if (invoke.calldata.length !== 5) {
+    throw new ApiFailure(400, 'Stake calldata does not match the Endur anonymizer signature.');
+  }
+  const [inToken, outToken, low, high] = invoke.calldata as [string, string, string, string, string];
+  if (
+    !sameAddress(inToken, operationToken) ||
+    !sameAddress(inToken, ENDUR_XSTRK_ASSET) ||
+    !sameAddress(outToken, ENDUR_XSTRK)
+  ) {
+    throw new ApiFailure(400, 'Stake tokens do not match the authorized route.');
+  }
+  const assets = u256FromLimbs(low, high);
+  if (transfers.length !== 2) {
+    throw new ApiFailure(400, 'Stake withdrawals do not match the authorized route.');
+  }
+  const feeIndex = transfers.findIndex(isFeeTransfer);
+  const stakeIndex = transfers.findIndex((action, index) =>
+    index !== feeIndex &&
+    sameAddress(action.to, ENDUR_DEPOSIT_ANONYMIZER) &&
+    sameAddress(action.token, operationToken) &&
+    action.amount === assets,
+  );
+  if (feeIndex < 0 || stakeIndex < 0) {
+    throw new ApiFailure(400, 'Stake withdrawals do not match the authorized route.');
+  }
+}
+
+/** A Cairo u256 is (low, high), each limb a u128. Zero stakes nothing. */
+function u256FromLimbs(low: string, high: string): bigint {
+  const lowValue = BigInt(low);
+  const highValue = BigInt(high);
+  const value = lowValue + (highValue << 128n);
+  if (lowValue >= U128_LIMIT || highValue >= U128_LIMIT || value === 0n) {
+    throw new ApiFailure(400, 'Stake amount is not a valid nonzero u256.');
+  }
+  return value;
 }
 
 function validateScreeningSuffix(suffix: readonly string[]): 'compatibility' | 'none' | 'some' {

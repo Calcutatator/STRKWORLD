@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import type { EventBus, ShellEvents, WorldEvents } from '@strkworld/shared';
+import type { WalletRoutePolicy } from '@strkworld/privacy';
 import { createEventBus } from '../bus/event-bus.js';
 import { PRIVACY_REGISTER, type RouteGrade } from '../privacy/register.js';
 import { createVisitController } from './visit-controller.js';
@@ -127,6 +128,7 @@ describe('visit controller', () => {
       building: 'bank',
       stations: [
         { station: 'bank:shielding', label: 'SHIELD / UNSHIELD', status: 'available' },
+        { station: 'bank:staking', label: 'STAKE', status: 'available' },
       ],
     });
   });
@@ -558,9 +560,10 @@ describe('visit controller', () => {
 });
 
 describe('station registry', () => {
-  it('publishes exactly one opaque single-swap Exchange station', () => {
+  it('publishes two opaque single-swap Exchange stations, the ground floor and the degen floor (D-067)', () => {
     expect(stationSnapshot('exchange')).toEqual([
       { station: 'exchange:swap', label: 'SWAP', status: 'available' },
+      { station: 'exchange:degen', label: 'DEGEN SWAP', status: 'available' },
     ]);
     const resolved = resolveStation('exchange', 'exchange:swap');
     expect(resolved.status).toBe('available');
@@ -571,8 +574,20 @@ describe('station registry', () => {
       label: 'SWAP',
       routes: ['exchange.swap'],
       view: 'exchange',
+      mode: 'ground',
     });
     expect(resolved.definition).not.toHaveProperty('modes');
+    const degen = resolveStation('exchange', 'exchange:degen');
+    expect(degen.status).toBe('available');
+    if (degen.status !== 'available') return;
+    expect(degen.definition).toEqual({
+      station: 'exchange:degen',
+      building: 'exchange',
+      label: 'DEGEN SWAP',
+      routes: ['exchange.swap'],
+      view: 'exchange',
+      mode: 'degen',
+    });
   });
 
   it('publishes only the approved transfer station for the Post Office', () => {
@@ -656,9 +671,86 @@ describe('station registry', () => {
       unapprovedShield,
     ];
 
+    // The staking counter keeps its own grade (D-030): shielding's lock is not its lock.
     expect(stationSnapshot('bank', register)).toEqual([
       { station: 'bank:shielding', label: 'SHIELD / UNSHIELD', status: 'locked' },
+      { station: 'bank:staking', label: 'STAKE', status: 'available' },
     ]);
     expect(resolveStation('bank', 'bank:shielding', register)).toMatchObject({ status: 'locked' });
+  });
+
+  it('keeps the Post Office transfer station open only while its D-065 approval and waiver stand', () => {
+    const transfer = PRIVACY_REGISTER.find((entry) => entry.route === 'post-office.transfer')!;
+    expect(transfer).toMatchObject({ grade: 'anonymous', disclosureWaivedBy: 'D-065' });
+    expect(resolveStation('post-office', 'post-office:transfer')).toMatchObject({ status: 'available' });
+
+    for (const change of [
+      { approvedBy: null, approvedOn: null, rationale: null },
+      { disclosureWaivedBy: null },
+      { disclosureWaivedBy: 'D-064' },
+    ] satisfies Partial<RouteGrade>[]) {
+      const register = [
+        ...PRIVACY_REGISTER.filter((entry) => entry.route !== 'post-office.transfer'),
+        { ...transfer, ...change },
+      ];
+      expect(stationSnapshot('post-office', register), JSON.stringify(change)).toEqual([
+        { station: 'post-office:transfer', label: 'TRANSFER', status: 'locked' },
+      ]);
+      expect(resolveStation('post-office', 'post-office:transfer', register), JSON.stringify(change))
+        .toMatchObject({ status: 'locked', door: { reason: 'unapproved-route' } });
+    }
+  });
+
+  describe('a policy-disabled route only locks its own control, not a sibling station route (D-054/D-056)', () => {
+    const denyAll: WalletRoutePolicy = {
+      maxIntents: 0,
+      maxRelayFee: 0n,
+      enabledRoutes: [],
+      allowedTokens: { shield: [], unshield: [], transfer: [], swap: [] },
+    };
+    const shieldOnly: WalletRoutePolicy = {
+      ...denyAll,
+      maxIntents: 1,
+      enabledRoutes: ['shield'],
+      allowedTokens: {
+        shield: ['0x04718f5a0fc34cc1af16a1cdee98ffb20c31f5cd61d6ab07201858f4287c938d'],
+        unshield: [],
+        transfer: [],
+        swap: [],
+      },
+    };
+
+    it('keeps the shared bank:shielding station open when shield is enabled and unshield is not', () => {
+      const resolved = resolveStation('bank', 'bank:shielding', PRIVACY_REGISTER, {}, shieldOnly);
+      expect(resolved.status).toBe('available');
+    });
+
+    it('locks the station outright once every one of its routes is policy-disabled', () => {
+      const resolved = resolveStation('bank', 'bank:shielding', PRIVACY_REGISTER, {}, denyAll);
+      expect(resolved).toMatchObject({ status: 'locked', door: { reason: 'not-enabled' } });
+    });
+
+    it('still locks the whole station immediately for a register (privacy) reason, regardless of policy', () => {
+      // An unapproved deviation is a hard stop — a policy that would have
+      // enabled the sibling route must not paper over it.
+      const unapprovedShield: RouteGrade = {
+        ...PRIVACY_REGISTER.find((entry) => entry.route === 'bank.shield')!,
+        approvedBy: null,
+        approvedOn: null,
+        disclosure: null,
+        rationale: null,
+      };
+      const register = [
+        ...PRIVACY_REGISTER.filter((entry) => entry.route !== 'bank.shield'),
+        unapprovedShield,
+      ];
+      const resolved = resolveStation('bank', 'bank:shielding', register, {}, shieldOnly);
+      expect(resolved).toMatchObject({ status: 'locked', door: { reason: 'unapproved-route' } });
+    });
+
+    it('locks the single-route Exchange swap station whenever this build has not enabled swap', () => {
+      const resolved = resolveStation('exchange', 'exchange:swap', PRIVACY_REGISTER, {}, shieldOnly);
+      expect(resolved).toMatchObject({ status: 'locked', door: { reason: 'not-enabled' } });
+    });
   });
 });

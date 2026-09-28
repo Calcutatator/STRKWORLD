@@ -15,7 +15,7 @@ describe('web environment lookup', () => {
     expect(resolved).toMatchObject({ envDir: '../..' });
   });
 
-  it('prebundles Phaser before the WorldHost lazy import can run', async () => {
+  it('prebundles the Three.js engine before the WorldHost lazy import can run', async () => {
     const resolved = await config({
       command: 'serve',
       mode: 'development',
@@ -23,7 +23,8 @@ describe('web environment lookup', () => {
       isPreview: false,
     });
 
-    expect(resolved.optimizeDeps?.include).toContain('phaser');
+    expect(resolved.optimizeDeps?.include).toContain('three');
+    expect(resolved.optimizeDeps?.include).not.toContain('phaser');
   });
   it('does not configure a development backend proxy for production builds', async () => {
     const resolved = await config({

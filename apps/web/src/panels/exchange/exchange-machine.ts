@@ -7,7 +7,14 @@ import { toFailure, type ShellFailure } from '../../privacy/errors.js';
 import { disclosuresForIntents, routeDoor, type DoorState } from '../routes.js';
 import { PRIVACY_REGISTER } from '../../privacy/register.js';
 import type { RouteGrade } from '../../privacy/register.js';
-import { catalogAsset, EXCHANGE_CATALOG, type ExchangeAsset } from './catalog.js';
+import {
+  EXCHANGE_CATALOG,
+  isSwappable,
+  type AvnuTag,
+  type ExchangeAsset,
+  type ExchangeCatalogOrigin,
+  type ExchangeCatalogPort,
+} from './catalog.js';
 
 export interface ExchangeReview {
   readonly sell: string;
@@ -25,11 +32,25 @@ export type ExchangeFlow =
   | { name: 'idle' | 'loading-pool' | 'composing' | 'preparing' }
   | { name: 'review'; summary: ExchangeReview }
   | { name: 'submitting'; stage: OperationStage; message: string; summary: ExchangeReview }
-  | { name: 'submitted'; transactionHash: string }
+  /** `restored` is set when this receipt was found outstanding on `open()`, not confirmed this session. */
+  | { name: 'submitted'; transactionHash: string; restored?: boolean }
   | { name: 'failed'; kind: PrivacyErrorKind; message: string; recovery: 'prepare-again' | 'close' };
+
+/**
+ * The floor's listed assets. The ground floor's fixed six are always ready
+ * (D-042); the degen floor's list loads when the counter opens (D-067).
+ */
+export type ExchangeCatalogState =
+  | {
+      readonly status: 'ready';
+      readonly origin: ExchangeCatalogOrigin;
+      readonly assets: readonly ExchangeAsset[];
+    }
+  | { readonly status: 'idle' | 'loading' | 'failed' };
 
 export interface ExchangeState {
   readonly door: DoorState;
+  readonly catalog: ExchangeCatalogState;
   readonly balances: 'unrequested' | 'loading' | 'loaded' | 'failed';
   readonly sellChoices: readonly ExchangeAsset[];
   readonly sell: ExchangeAsset | null;
@@ -44,6 +65,8 @@ export interface ExchangePanel {
   readonly store: ReadableStore<ExchangeState>;
   open(signal?: AbortSignal): Promise<void>;
   close(): void;
+  /** Load a loaded floor's list again after it failed. The ground floor's fixed six never need it. */
+  reloadCatalog(signal?: AbortSignal): Promise<void>;
   refreshBalances(signal?: AbortSignal): Promise<void>;
   setSell(token: string): void;
   setBuy(token: string): void;
@@ -62,12 +85,20 @@ export function createExchangePanel(options: {
   feeTolerance?: bigint;
   now?: () => number;
   register?: readonly RouteGrade[];
+  /**
+   * A list that loads on open: the degen floor's (D-067). Absent, the floor
+   * lists the ground floor's fixed six. Either way the flow, the review and
+   * every check below are the same.
+   */
+  catalog?: ExchangeCatalogPort;
 }): ExchangePanel {
   const { operations, receipts, onError } = options;
   const feeTolerance = options.feeTolerance ?? 0n;
   const now = options.now ?? Date.now;
   const register = options.register ?? PRIVACY_REGISTER;
-  const stateStore = createStore<ExchangeState>(freezeExchangeState(initialState(register)));
+  const catalogPort = options.catalog;
+  const fresh = () => initialState(register, catalogPort !== undefined);
+  const stateStore = createStore<ExchangeState>(freezeExchangeState(fresh()));
   const store: ReadableStore<ExchangeState> = Object.freeze({
     getState: stateStore.getState,
     getServerSnapshot: stateStore.getServerSnapshot,
@@ -79,7 +110,21 @@ export function createExchangePanel(options: {
   let attempt = 0;
   let session = 0;
   let balanceRead = 0;
+  let catalogRead = 0;
   const patch = (next: Partial<ExchangeState>) => stateStore.setState((state) => freezeExchangeState({ ...state, ...next }));
+  const loadCatalog = async (signal?: AbortSignal) => {
+    if (!catalogPort) return;
+    const id = ++catalogRead; const currentSession = session;
+    patch({ catalog: { status: 'loading' } });
+    try {
+      const result = await catalogPort.load(signal);
+      if (id !== catalogRead || currentSession !== session) return;
+      patch({ catalog: ownCatalog(result) });
+    } catch {
+      if (id !== catalogRead || currentSession !== session) return;
+      patch({ catalog: { status: 'failed' } });
+    }
+  };
   const start = () => ++attempt;
   const live = (id: number) => attempt === id;
   const editComposition = (next: Partial<ExchangeState>) => {
@@ -126,23 +171,33 @@ export function createExchangePanel(options: {
     store,
     async open(signal) {
       const id = start(); patch({ flow: { name: 'loading-pool' } });
+      // The list loads beside the pool read; the flow does not wait for it.
+      void loadCatalog(signal);
       try {
         await operations.poolConfig(signal);
         if (!live(id)) return;
         const receipt = receipts.pending('exchange')[0];
-        patch({ flow: receipt ? { name: 'submitted', transactionHash: receipt.transactionHash } : { name: 'composing' } });
+        patch({ flow: receipt ? { name: 'submitted', transactionHash: receipt.transactionHash, restored: true } : { name: 'composing' } });
       } catch (error) { fail(error, id, 'close'); }
     },
-    close() { start(); ++session; ++balanceRead; discard(); stateStore.setState(freezeExchangeState(initialState(register))); },
+    close() { start(); ++session; ++balanceRead; ++catalogRead; discard(); stateStore.setState(freezeExchangeState(fresh())); },
+    async reloadCatalog(signal) {
+      if (store.getState().catalog.status !== 'failed') return;
+      await loadCatalog(signal);
+    },
     async refreshBalances(signal) {
+      const listing = store.getState().catalog;
+      if (listing.status !== 'ready') { patch({ notice: COPY.degen.notReady }); return; }
+      // Display-only assets cannot be sold, so their balances are never asked for.
+      const tradable = listing.assets.filter(isSwappable);
       const id = ++balanceRead; const currentSession = session;
       patch({ balances: 'loading', notice: null });
       try {
-        const balances = await operations.balances(EXCHANGE_CATALOG.map((asset) => asset.token), signal);
+        const balances = tradable.length === 0 ? [] : await operations.balances(tradable.map((asset) => asset.token), signal);
         if (id !== balanceRead || currentSession !== session) return;
-        const sellChoices = EXCHANGE_CATALOG.filter((asset) => (balances.find((b) => sameAddress(b.token, asset.token))?.total ?? 0n) > 0n);
+        const sellChoices = tradable.filter((asset) => (balances.find((b) => sameAddress(b.token, asset.token))?.total ?? 0n) > 0n);
         const sell = sellChoices[0] ?? null;
-        const buy = EXCHANGE_CATALOG.find((asset) => sell && !sameAddress(asset.token, sell.token)) ?? null;
+        const buy = tradable.find((asset) => sell && !sameAddress(asset.token, sell.token)) ?? null;
         patch({ balances: 'loaded', sellChoices, sell, buy });
       } catch (error) {
         if (id !== balanceRead || currentSession !== session) return;
@@ -151,12 +206,13 @@ export function createExchangePanel(options: {
     },
     setSell(token) {
       const sell = store.getState().sellChoices.find((asset) => sameAddress(asset.token, token)) ?? null;
-      const buy = EXCHANGE_CATALOG.find((asset) => sell && !sameAddress(asset.token, sell.token)) ?? null;
+      const buy = listedAssets(store.getState()).find((asset) => sell && isSwappable(asset) && !sameAddress(asset.token, sell.token)) ?? null;
       editComposition({ sell, buy, amountText: '', notice: null });
     },
     setBuy(token) {
-      const asset = catalogAsset(token); const sell = store.getState().sell;
-      if (!asset || !sell || sameAddress(asset.token, sell.token)) return;
+      const asset = listedAssets(store.getState()).find((candidate) => sameAddress(candidate.token, token));
+      const sell = store.getState().sell;
+      if (!asset || !isSwappable(asset) || !sell || sameAddress(asset.token, sell.token)) return;
       editComposition({ buy: asset, notice: null });
     },
     setAmount(amountText) { editComposition({ amountText, notice: null }); },
@@ -164,6 +220,8 @@ export function createExchangePanel(options: {
       if (!gate()) return;
       const state = store.getState();
       if (!state.door.open || !state.sell || !state.buy || sameAddress(state.sell.token, state.buy.token)) { patch({ notice: state.door.message || COPY.locked.unknownRoute }); return; }
+      // A display-only token is listed, never swapped (D-067).
+      if (!isListedSwappable(state, state.sell) || !isListedSwappable(state, state.buy)) { patch({ notice: COPY.degen.displayOnlyNotice }); return; }
       const amountIn = parseTokenAmount(state.amountText, state.sell.decimals);
       if (amountIn === null || amountIn <= 0n) { patch({ notice: COPY.notices.badAmount }); return; }
       const id = start(); discard(); patch({ flow: { name: 'preparing' }, notice: null });
@@ -259,13 +317,89 @@ export function createExchangePanel(options: {
   }
 }
 
-function initialState(register: readonly RouteGrade[]): ExchangeState {
-  return { door: routeDoor('exchange.swap', register), balances: 'unrequested', sellChoices: [], sell: null, buy: null, amountText: '', notice: null, flow: { name: 'idle' } };
+/** The ground floor's fixed six (D-042): always ready, never loaded. */
+const FIXED_CATALOG: ExchangeCatalogState = Object.freeze({ status: 'ready', origin: 'fixed', assets: EXCHANGE_CATALOG });
+
+function initialState(register: readonly RouteGrade[], loaded: boolean): ExchangeState {
+  return { door: routeDoor('exchange.swap', register), catalog: loaded ? { status: 'idle' } : FIXED_CATALOG, balances: 'unrequested', sellChoices: [], sell: null, buy: null, amountText: '', notice: null, flow: { name: 'idle' } };
+}
+
+/** The listed assets, or none until a loaded list is ready. */
+export function listedAssets(state: ExchangeState): readonly ExchangeAsset[] {
+  return state.catalog.status === 'ready' ? state.catalog.assets : [];
+}
+
+/** What the buy side may choose: listed, swappable in this build, and not the asset being sold. */
+export function buyChoices(state: ExchangeState): readonly ExchangeAsset[] {
+  return listedAssets(state).filter((asset) => isSwappable(asset) && (!state.sell || !sameAddress(asset.token, state.sell.token)));
+}
+
+function isListedSwappable(state: ExchangeState, asset: ExchangeAsset): boolean {
+  const listed = listedAssets(state).find((candidate) => sameAddress(candidate.token, asset.token));
+  return listed !== undefined && isSwappable(listed) && isSwappable(asset);
+}
+
+const MAX_LISTED_ASSETS = 160;
+const AVNU_TAGS: readonly AvnuTag[] = ['Unknown', 'Verified', 'Community', 'Unruggable', 'AVNU'];
+
+/** Own a loaded list before it is shown: well-formed assets, each token once, or the whole list fails. */
+function ownCatalog(result: unknown): ExchangeCatalogState {
+  const invalid = () => new Error('The Exchange list is malformed.');
+  if (!result || typeof result !== 'object') throw invalid();
+  const origin = Object.getOwnPropertyDescriptor(result, 'origin')?.value as unknown;
+  const assets = Object.getOwnPropertyDescriptor(result, 'assets')?.value as unknown;
+  if ((origin !== 'live' && origin !== 'curated' && origin !== 'demo') || !Array.isArray(assets)) throw invalid();
+  if (assets.length === 0 || assets.length > MAX_LISTED_ASSETS) throw invalid();
+  const owned: ExchangeAsset[] = [];
+  for (const asset of assets as unknown[]) {
+    if (!asset || typeof asset !== 'object') throw invalid();
+    const read = (key: string) => {
+      const descriptor = Object.getOwnPropertyDescriptor(asset, key);
+      if (descriptor && !('value' in descriptor)) throw invalid();
+      return descriptor?.value as unknown;
+    };
+    const symbol = read('symbol'); const decimals = read('decimals'); const token = read('token');
+    const name = read('name'); const tags = read('tags'); const swappable = read('swappable');
+    if (
+      typeof symbol !== 'string' || symbol.length === 0 ||
+      typeof decimals !== 'number' || !Number.isSafeInteger(decimals) || decimals < 0 ||
+      typeof token !== 'string' || !/^0x[0-9a-fA-F]{1,64}$/.test(token) || BigInt(token) === 0n ||
+      (name !== undefined && typeof name !== 'string') ||
+      (swappable !== undefined && typeof swappable !== 'boolean') ||
+      (tags !== undefined && (!Array.isArray(tags) || tags.some((tag: unknown) => !(AVNU_TAGS as readonly unknown[]).includes(tag))))
+    ) {
+      throw invalid();
+    }
+    if (owned.some((known) => sameAddress(known.token, token))) throw invalid();
+    owned.push({
+      symbol,
+      decimals,
+      token,
+      ...(name !== undefined ? { name } : {}),
+      ...(tags !== undefined ? { tags: [...(tags as AvnuTag[])] } : {}),
+      ...(swappable !== undefined ? { swappable } : {}),
+    });
+  }
+  return { status: 'ready', origin, assets: owned };
+}
+
+function freezeAsset(asset: ExchangeAsset): ExchangeAsset {
+  if (Object.isFrozen(asset) && (asset.tags === undefined || Object.isFrozen(asset.tags))) return asset;
+  return Object.freeze({ ...asset, ...(asset.tags ? { tags: Object.freeze([...asset.tags]) } : {}) });
+}
+
+/** Freeze a ready list entry by entry, keeping the same objects when they already are. */
+function freezeCatalog(catalog: Extract<ExchangeCatalogState, { status: 'ready' }>): ExchangeCatalogState {
+  const assets = catalog.assets.map(freezeAsset);
+  const unchanged = Object.isFrozen(catalog)
+    && Object.isFrozen(catalog.assets)
+    && assets.every((asset, index) => asset === catalog.assets[index]);
+  return unchanged ? catalog : Object.freeze({ ...catalog, assets: Object.freeze(assets) });
 }
 
 function freezeExchangeState(state: ExchangeState): ExchangeState {
-  const freezeAsset = (asset: ExchangeAsset | null): ExchangeAsset | null =>
-    asset === null ? null : Object.freeze({ ...asset });
+  const freezeOptional = (asset: ExchangeAsset | null): ExchangeAsset | null =>
+    asset === null ? null : freezeAsset(asset);
   const flow = state.flow.name === 'review' || state.flow.name === 'submitting'
     ? Object.freeze({
         ...state.flow,
@@ -275,12 +409,16 @@ function freezeExchangeState(state: ExchangeState): ExchangeState {
         }),
       })
     : Object.freeze({ ...state.flow });
+  const catalog = state.catalog.status === 'ready'
+    ? freezeCatalog(state.catalog)
+    : Object.freeze({ ...state.catalog });
   return Object.freeze({
     ...state,
     door: Object.freeze({ ...state.door }),
-    sellChoices: Object.freeze(state.sellChoices.map((asset) => freezeAsset(asset)!)),
-    sell: freezeAsset(state.sell),
-    buy: freezeAsset(state.buy),
+    catalog,
+    sellChoices: Object.freeze(state.sellChoices.map(freezeAsset)),
+    sell: freezeOptional(state.sell),
+    buy: freezeOptional(state.buy),
     flow,
   });
 }

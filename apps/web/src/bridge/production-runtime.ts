@@ -44,8 +44,9 @@ const STORAGE_PROBE_VALUE = 'available';
 
 /**
  * Recovery must not pretend to persist signed evidence when Web Storage is
- * absent, sandboxed or read-only. The probe runs only after BridgePanel asks
- * for the optional runtime and never contacts the provider.
+ * absent, sandboxed or read-only. The probe runs only once the optional
+ * runtime is asked for — the player entering the Bridge, or BridgePanel
+ * mounting — and never contacts the provider.
  */
 function usablePersistentStorage(storage: Storage): boolean {
   const probeKey = `${STORAGE_PROBE_PREFIX}.${Date.now()}.${Math.random().toString(36).slice(2)}`;

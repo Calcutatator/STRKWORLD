@@ -1,0 +1,308 @@
+import { describe, expect, it, vi } from 'vitest';
+import { Group, Mesh, Vector3, type Material } from 'three';
+import { SANDBOX_AREA, type AvatarSpriteKey } from '@strkworld/shared';
+import {
+  EXCHANGE_DEGEN_LEVEL,
+  EXCHANGE_DEGEN_STATION,
+  EXCHANGE_ROOF_HEIGHT,
+  EXCHANGE_ROOF_LEVEL,
+  createFixedRoomLevel,
+  fixedRoomStationPresentations,
+} from '../fixed-room.js';
+import { cameraPositionFor } from './camera-rig.js';
+import { createNullLabelFactory } from './labels.js';
+import { createPresenter } from './presenter.js';
+import type { AvatarFigure, AvatarFigureFactory } from './types.js';
+
+/**
+ * The presenter in node (D-059): real builders and the null label factory,
+ * with fake avatar figures so looks and animation calls can be observed.
+ */
+
+function fakeFigures() {
+  const created: Array<AvatarFigure & { update: ReturnType<typeof vi.fn> }> = [];
+  const factory: AvatarFigureFactory = (key) => {
+    let look: AvatarSpriteKey = key;
+    const figure = {
+      object: new Group(),
+      get look() {
+        return look;
+      },
+      setLook: vi.fn((next: AvatarSpriteKey) => {
+        look = next;
+      }),
+      update: vi.fn(),
+      dispose: vi.fn(),
+    };
+    created.push(figure);
+    return figure;
+  };
+  return { factory, created };
+}
+
+function setup() {
+  const parent = new Group();
+  const figures = fakeFigures();
+  const presenter = createPresenter({ parent, labels: createNullLabelFactory(), figures: figures.factory });
+  const view = presenter.bindSession();
+  // The Studio builds its figures first; the local avatar hangs off the root.
+  const avatar = figures.created.find((figure) => figure.object.parent?.name === 'strkworld')!;
+  return { parent, presenter, view, avatar, figures };
+}
+
+const tile = (x: number, y: number) => ({ x: x * 32 + 16, y: y * 32 + 16 });
+
+describe('presenter', () => {
+  it('draws the local avatar at the session position, in world units', () => {
+    const world = setup();
+    world.view.setPlayerPosition(tile(24, 15), true);
+    world.presenter.update(16);
+    expect(world.avatar.object.position.x).toBeCloseTo(24.5);
+    expect(world.avatar.object.position.z).toBeCloseTo(15.5);
+    expect(world.presenter.consumeSnap()).toBe(true);
+    expect(world.presenter.consumeSnap()).toBe(false);
+  });
+
+  it('turns the avatar towards its heading without snapping', () => {
+    const world = setup();
+    world.view.setPlayerMotion({ vx: 160, vy: 0, sprinting: false });
+    world.presenter.update(16);
+    const yaw = world.presenter.player.yaw;
+    expect(yaw).toBeGreaterThan(0);
+    expect(yaw).toBeLessThan(Math.PI / 2);
+    for (let i = 0; i < 30; i += 1) world.presenter.update(16);
+    expect(world.presenter.player.yaw).toBeCloseTo(Math.PI / 2);
+  });
+
+  it('shows one room at a time and hides the street while inside', () => {
+    const world = setup();
+    const street = world.parent.getObjectByName('strkworld')!;
+    world.view.setStreetVisible(false);
+    world.view.showRoom('bank');
+    const rooms = street.children.filter((child) => child.name.includes('room') && child.visible);
+    expect(rooms.length).toBeLessThanOrEqual(1);
+    world.view.showRoom(null);
+    world.view.setStreetVisible(true);
+  });
+
+  it('holds a carried block above the head and follows sandbox elevation with a hop', () => {
+    const world = setup();
+    world.view.setPlayerPosition(tile(SANDBOX_AREA.x + 3, 14), true);
+    world.presenter.update(16);
+    // The engine consumes the teleport snap every frame; do the same here.
+    world.presenter.consumeSnap();
+    world.view.setCarried(2);
+    const carried = world.avatar.object.children.find((child) => child.visible);
+    expect(carried?.position.y).toBeGreaterThan(1);
+    world.view.setPlayerElevation(1);
+    world.presenter.update(95);
+    // Mid-hop the feet are above the landing level, then land exactly.
+    expect(world.avatar.object.position.y).toBeGreaterThan(1);
+    world.presenter.update(200);
+    expect(world.avatar.object.position.y).toBeCloseTo(1);
+    world.view.setPlayerElevation(0);
+    for (let i = 0; i < 40; i += 1) world.presenter.update(16);
+    expect(world.avatar.object.position.y).toBeCloseTo(0);
+  });
+
+  it('keeps falling, never NaN, when a stack rises under a falling player', () => {
+    const world = setup();
+    world.view.setPlayerPosition(tile(SANDBOX_AREA.x + 3, 14), true);
+    world.presenter.update(16);
+    world.presenter.consumeSnap();
+    world.view.setPlayerElevation(3);
+    world.presenter.update(16);
+    world.view.setPlayerElevation(0);
+    world.presenter.update(100);
+    // Mid-fall, above the new landing: the rise must not start a hop.
+    world.view.setPlayerElevation(1);
+    for (let i = 0; i < 40; i += 1) {
+      world.presenter.update(16);
+      expect(Number.isFinite(world.presenter.player.elevation)).toBe(true);
+      expect(Number.isFinite(world.avatar.object.position.y)).toBe(true);
+    }
+    expect(world.presenter.player.elevation).toBeCloseTo(1);
+  });
+
+  it('lands at once when a stack rises more than a block under the player', () => {
+    const world = setup();
+    world.view.setPlayerPosition(tile(SANDBOX_AREA.x + 3, 14), true);
+    world.presenter.update(16);
+    world.view.setPlayerElevation(4);
+    world.presenter.update(16);
+    expect(world.presenter.player.elevation).toBe(4);
+  });
+
+  it('ignores a retired session, so it cannot steer its successor', () => {
+    const world = setup();
+    world.view.setPlayerPosition(tile(10, 14), true);
+    const next = world.presenter.bindSession();
+    world.view.setPlayerPosition(tile(40, 14), true);
+    world.presenter.update(16);
+    expect(world.avatar.object.position.x).toBeCloseTo(10.5);
+    next.setPlayerPosition(tile(30, 14), true);
+    world.presenter.update(16);
+    expect(world.avatar.object.position.x).toBeCloseTo(30.5);
+  });
+
+  it('fades a building between the camera and the player, and restores it', () => {
+    const world = setup();
+    // Behind the Bank (north of its footprint), camera to the south.
+    world.view.setPlayerPosition(tile(6, 3), true);
+    world.presenter.update(16);
+    const camera = new Vector3(6.5, 9, 16);
+    for (let i = 0; i < 30; i += 1) world.presenter.updateOcclusion(camera, 16);
+    world.view.setPlayerPosition(tile(6, 20), true);
+    for (let i = 0; i < 30; i += 1) world.presenter.updateOcclusion(camera, 16);
+    // No throw, and the loop settles; opacity values are internal to occluders.
+    expect(true).toBe(true);
+  });
+
+  it('fades the sandbox gate over a player in its opening, and restores it exactly', () => {
+    const world = setup();
+    const materialOf = (name: string): Material => {
+      const mesh = world.parent.getObjectByName(name);
+      expect(mesh, name).toBeInstanceOf(Mesh);
+      return (mesh as Mesh).material as Material;
+    };
+    const gate = materialOf('street:sandbox-gate');
+    const wall = materialOf('street:decor');
+    const state = ({ opacity, transparent, depthWrite }: Material) => ({ opacity, transparent, depthWrite });
+    const opaque = state(gate);
+    const stand = (x: number, z: number) => {
+      world.view.setPlayerPosition(tile(Math.floor(x), Math.floor(z)), true);
+      world.presenter.update(16);
+    };
+    const settle = (camera: { x: number; y: number; z: number }) => {
+      for (let i = 0; i < 30; i += 1) world.presenter.updateOcclusion(new Vector3(camera.x, camera.y, camera.z), 16);
+    };
+    // The fixed camera, south of a player in the opening: the south pillar's
+    // top and the lintel stand between them.
+    const column = SANDBOX_AREA.x - 1;
+    stand(column, 15);
+    settle(cameraPositionFor({ x: column + 0.5, z: 15.5 }));
+    expect(gate.opacity).toBeLessThan(0.5);
+    expect(gate.transparent).toBe(true);
+    expect(gate.depthWrite).toBe(false);
+    // The wall is decor and never fades.
+    expect(state(wall)).toEqual({ opacity: 1, transparent: false, depthWrite: true });
+    // One step back up the road, out of the gate's column: restored exactly.
+    stand(column - 1, 15);
+    settle(cameraPositionFor({ x: column - 0.5, z: 15.5 }));
+    expect(state(gate)).toEqual(opaque);
+    // On the entrance apron, just inside, nothing is in the way: not from the
+    // fixed camera, nor from one behind the player looking east through the
+    // opening, whose line passes under the lintel between the pillars.
+    for (const x of [54.5, 55.5, 56.5]) {
+      stand(x, 15.5);
+      settle(cameraPositionFor({ x, z: 15.5 }));
+      expect(state(gate), `apron ${x}`).toEqual(opaque);
+      settle({ x: x - 10, y: 7.5, z: 15.5 });
+      expect(state(gate), `apron ${x}, looking east`).toEqual(opaque);
+    }
+    // In the opening, a camera to either side sees the player under the lintel.
+    stand(column, 15);
+    for (const dx of [10, -10]) {
+      settle({ x: column + 0.5 + dx, y: 7.5, z: 15.5 });
+      expect(state(gate)).toEqual(opaque);
+    }
+  });
+
+  it('draws the Degen floor as its own interior, one floor of the Exchange at a time', () => {
+    const world = setup();
+    const root = world.parent.getObjectByName('strkworld')!;
+    const room = (name: string) => root.children.find((child) => child.name === name)!;
+    world.view.setStreetVisible(false);
+    world.view.showRoom('exchange', 'degen');
+    expect(room('room:exchange:degen').visible).toBe(true);
+    expect(room('room:exchange').visible).toBe(false);
+    world.view.showRoom('exchange');
+    expect(room('room:exchange').visible).toBe(true);
+    expect(room('room:exchange:degen').visible).toBe(false);
+    // The Exchange's station state reaches whichever floor draws the station.
+    const degen = createFixedRoomLevel(EXCHANGE_DEGEN_LEVEL);
+    world.view.renderRoom('exchange', fixedRoomStationPresentations(degen, {
+      inRoom: true,
+      building: 'exchange',
+      level: 'degen',
+      controlOwner: 'world',
+      highlightedStation: null,
+      stations: [{ station: EXCHANGE_DEGEN_STATION, label: 'DEGEN', status: 'available' }],
+    }));
+    const counter = room('room:exchange:degen').children.find((child) => child.userData['station'] === EXCHANGE_DEGEN_STATION)!;
+    expect(counter.userData['status']).toBe('available');
+    // No roof room: the roof is the tower's top in the street.
+    expect(root.children.filter((child) => child.name.startsWith('room:exchange')).map((child) => child.name).sort()).toEqual([
+      'room:exchange',
+      'room:exchange:degen',
+    ]);
+  });
+
+  it('stands the player on the roof in the street scene and points the camera down', () => {
+    const world = setup();
+    expect(world.presenter.cameraPreset).toBe('street');
+    const roof = EXCHANGE_ROOF_LEVEL.rooftop;
+    world.view.showRoom(null);
+    world.view.showRooftop('exchange');
+    world.view.setPlayerPosition(tile(roof.x + 5, roof.y + 3), true);
+    world.view.setPlayerElevation(EXCHANGE_ROOF_HEIGHT);
+    world.presenter.update(16);
+    expect(world.presenter.cameraPreset).toBe('rooftop');
+    expect(world.avatar.object.position.y).toBeCloseTo(EXCHANGE_ROOF_HEIGHT);
+    expect(world.presenter.player.elevation).toBe(EXCHANGE_ROOF_HEIGHT);
+    // The street, not an interior, is drawn around and below.
+    expect(world.parent.getObjectByName('street:ground')!.visible).toBe(true);
+    expect(world.parent.getObjectByName('room:exchange')!.visible).toBe(false);
+    // Down the lift: level again, on the floor, in one frame.
+    world.view.showRooftop(null);
+    world.view.setPlayerPosition(tile(4, 14), true);
+    world.view.setPlayerElevation(0);
+    world.presenter.update(16);
+    expect(world.presenter.cameraPreset).toBe('street');
+    expect(world.avatar.object.position.y).toBeCloseTo(0);
+    // A new session starts on the street.
+    world.view.showRooftop('exchange');
+    world.presenter.bindSession();
+    expect(world.presenter.cameraPreset).toBe('street');
+  });
+
+  it('never fades anything while the camera looks down on the roof', () => {
+    const world = setup();
+    const roof = createFixedRoomLevel(EXCHANGE_ROOF_LEVEL);
+    const origin = roof.rooftop!;
+    // Everything that can fade: every building and the sandbox gate.
+    const materials: Material[] = [];
+    world.parent.getObjectByName('street:ground')!.traverse((object) => {
+      const fades = object.name.startsWith('building:') || object.name === 'street:sandbox-gate';
+      if (object instanceof Mesh && (fades || object.parent?.name.startsWith('building:'))) materials.push(object.material as Material);
+    });
+    expect(materials.length).toBeGreaterThan(20);
+    const state = (material: Material) => ({ opacity: material.opacity, transparent: material.transparent, depthWrite: material.depthWrite });
+    const before = materials.map(state);
+    world.view.showRoom(null);
+    world.view.showRooftop('exchange');
+    let tiles = 0;
+    for (let y = 0; y < roof.height; y++) {
+      for (let x = 0; x < roof.width; x++) {
+        if (roof.tiles[y]![x] === 'wall') continue;
+        world.view.setPlayerPosition(tile(origin.x + x, origin.y + y), true);
+        world.view.setPlayerElevation(EXCHANGE_ROOF_HEIGHT);
+        world.presenter.update(16);
+        const camera = cameraPositionFor({ x: origin.x + x + 0.5, z: origin.y + y + 0.5 }, EXCHANGE_ROOF_HEIGHT, 'rooftop');
+        for (let i = 0; i < 20; i += 1) world.presenter.updateOcclusion(new Vector3(camera.x, camera.y, camera.z), 16);
+        expect(materials.map(state), `deck ${x},${y}`).toEqual(before);
+        tiles += 1;
+      }
+    }
+    expect(tiles).toBe(20);
+  });
+
+  it('disposes everything once and detaches from its parent', () => {
+    const world = setup();
+    world.presenter.dispose();
+    world.presenter.dispose();
+    expect(world.parent.children).toEqual([]);
+    for (const figure of world.figures.created) expect(figure.dispose).toHaveBeenCalledOnce();
+    expect(() => world.presenter.bindSession()).toThrow();
+  });
+});

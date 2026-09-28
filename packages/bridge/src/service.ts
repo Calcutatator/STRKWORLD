@@ -528,9 +528,15 @@ function mapStatus(raw: {
     case 'REFUNDED':
       requireOwnDataFields(raw.swapDetails, ['originChainTxHashes']);
       return {
-        leg: 'failed',
+        leg: 'refunded',
         depositTxHash: firstTransactionHash(raw.swapDetails.originChainTxHashes),
-        message: 'The bridge did not settle and 1Click reports a refund.',
+        // Display-only: an absent, zero or unreadable amount must never keep a
+        // refunded deposit from reaching its terminal state, so it is dropped
+        // rather than failing the whole status.
+        refundedAmount: hasOwnDataProperties(raw.swapDetails, ['refundedAmount'])
+          ? optionalRefundAmount(raw.swapDetails.refundedAmount)
+          : undefined,
+        message: '1Click refunded this deposit instead of completing it.',
         pollingStopped: true,
       };
     case 'FAILED':
@@ -579,6 +585,15 @@ function parseSettlementAmount(value: unknown): bigint {
   const amount = BigInt(value);
   if (amount > MAX_BASE_UNIT_AMOUNT) throw invalidExecutionStatus();
   return amount;
+}
+
+/** A refund figure if 1Click gave a valid one, otherwise nothing to show. */
+function optionalRefundAmount(value: unknown): bigint | undefined {
+  try {
+    return parseSettlementAmount(value);
+  } catch {
+    return undefined;
+  }
 }
 
 function invalidExecutionStatus(): Error {

@@ -1,4 +1,5 @@
 import type { ReactNode } from 'react';
+import type { BuildingId } from '@strkworld/shared';
 import { COPY } from '../copy.js';
 
 /**
@@ -11,6 +12,8 @@ import { COPY } from '../copy.js';
  */
 export function PanelFrame({
   title,
+  building,
+  brand,
   disclosure,
   onClose,
   closingNote = null,
@@ -18,7 +21,19 @@ export function PanelFrame({
   footer,
 }: {
   title: string;
-  /** Canonical approved copy, or null for a route graded `private`. */
+  /**
+   * Presentation only: picks this window's visual theme in `styles.css`
+   * (`.panel[data-building]`). It never gates a route or changes a control.
+   */
+  building?: BuildingId;
+  /**
+   * Presentation only: a look worn by one counter inside a building, over the
+   * building's own theme (`.panel[data-brand]`) — the Bank's Endur staking
+   * counter (D-063) and the Exchange's degen floor (D-067). It never gates a
+   * route or changes a control.
+   */
+  brand?: 'endur' | 'degen';
+  /** Canonical approved copy, or null for a route graded `private` or with a waived disclosure (D-064, D-065). */
   disclosure: string | null;
   onClose: () => void;
   /**
@@ -35,7 +50,7 @@ export function PanelFrame({
   footer?: ReactNode;
 }) {
   return (
-    <section className="panel" aria-label={title}>
+    <section className="panel" aria-label={title} data-building={building} data-brand={brand}>
       <div className="panel-card">
         <header className="panel-header">
           <h2>{title}</h2>

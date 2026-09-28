@@ -1,6 +1,10 @@
 # Privacy City — Technical Spec & Feasibility
 
-**A 2D top-down browser world where buildings are Starknet privacy protocols.**
+**A 3D walkable browser world where buildings are Starknet privacy protocols.**
+
+> The World renderer moved from Phaser 4 to Three.js in D-059. Gameplay is still
+> tile-authored in 2D pixel space; historical Phaser/Tiled notes below describe
+> the v1 build and the map-data format, not the current renderer.
 
 | | |
 |---|---|
@@ -41,7 +45,7 @@ The binding constraints are economic and procedural, not architectural: wallet p
 | v1 authentication | Extension connectors only | Extra prompts accepted. Email/social deferred — no web wallet implements the methods yet |
 | Code target | `WalletWithStarknetFeatures` | Not a specific wallet. Web wallets register on the same feature surface, so email/social lights up with no code change when one ships |
 | Network | Mainnet from day one | Real funds. No testnet phase |
-| Game engine | Phaser 4 + Tiled + React overlay | **Embed tilesets on export.** Phaser rejects external `.tsx` — see §2 |
+| Game engine | Three.js 0.186 + tile-authored map data + React overlay | D-059. Gameplay stays in 2D pixel space; the renderer is presentation only. Any future Tiled export still embeds tilesets (D-008) |
 | Multiplayer | Colyseus, presence only | Street lobby. Never sees an account address |
 | Gas | `strk20PrepareInvoke` + sponsor submit | Requires a small backend to hold the paymaster key |
 
@@ -349,16 +353,18 @@ financial action, but a nearby observer may infer the chosen building and visit
 timing from the last position and disappearance. The project lead accepts that
 trade-off for v1 (D-019).
 
-Financial submission remains separate. The backend may add bounded jitter on
-eligible prepared Wallet API calls, within proof validity; it never delays
-quote-bound AVNU actions. This can reduce precise timing linkage but does not
-defeat session-level correlation while the pool is small (D-015).
+Financial submission remains separate, and since D-066 it is not delayed: the
+wallet builds the proof first, and every pool transaction publishes the block
+its proof was built against, which dates the confirm whenever it is
+broadcast. Artificial jitter therefore did not reduce timing linkage and only
+made the game's transactions stand out. Session-level correlation remains
+while the pool is small (D-015, D-019).
 
 ---
 
 ## 7. What the game builds
 
-- **The game itself** — Phaser 4 canvas, Tiled maps with embedded tilesets (D-008 — Phaser rejects external `.tsx`), React overlay, PWA shell. STRK20 provides zero game primitives.
+- **The game itself** — Three.js canvas over a tile-authored world (D-059; Tiled-shaped map data, embedded tilesets per D-008 if exported), React overlay, PWA shell. STRK20 provides zero game primitives.
 - **Colyseus lobby** — presence and position only. Never sees an address.
 - **The Bridge funding edge** — NEAR Intents 1Click orchestration in `packages/bridge`, deposit-only, public by design, followed by a prompted shield (D-009, D-012).
 - **Starknet RPC** for public reads — receipts, adapter contract reads. Not `publicProvider()` in production.

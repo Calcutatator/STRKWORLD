@@ -18,9 +18,9 @@ Four concerns that barely talk to each other, composed by a thin shell.
 │ packages/     │ │ packages/     │ │ packages/     │ │ packages/     │
 │ privacy       │ │ bridge        │ │ world         │ │ lobby         │
 │               │ │               │ │               │ │               │
-│ Starknet.     │ │ 1Click.       │ │ Phaser.       │ │ Colyseus.     │
+│ Starknet.     │ │ 1Click.       │ │ Three.js.     │ │ Colyseus.     │
 │ Money.        │ │ Public        │ │ Movement.     │ │ Positions.    │
-│ Wallet.       │ │ funding.      │ │ Tilemaps.     │ │ Ephemeral IDs.│
+│ Wallet.       │ │ funding.      │ │ Tile world.   │ │ Ephemeral IDs.│
 │               │ │               │ │               │ │               │
 │ Knows nothing │ │ Knows nothing │ │ Knows nothing │ │ Knows nothing │
 │ about the game│ │ about the pool│ │ about money   │ │ about anything│
@@ -46,10 +46,12 @@ React (useStrk20Balances)
   → walletV6.strk20Balances([])
   → wallet resolves from its own note discovery
   → React state
-  → event emitter → Phaser HUD
+  → `hud:balance` on the Shell bus → the Shell's HUD overlay (apps/web/src/hud)
 ```
 
-Phaser never calls Starknet. It receives values it can render.
+The World never calls Starknet. The HUD is a Shell overlay that only listens
+to the pre-formatted `hud:*` and `wallet:status` events; the World receives
+them too and ignores them.
 
 ### Performing a shielded action
 
@@ -62,7 +64,7 @@ Player enters building
   → packages/privacy admits one approved route
       ├─ pool-native Wallet API action         (Bank, Post Office)
       ├─ first-party private executor         (AVNU Exchange)
-      └─ audited app-specific anonymizer      (Vault)
+      └─ app-specific anonymizer              (Vault; Bank staking, D-063, off)
   → wallet prompts and proves
   → route submits; backend queues only eligible prepared calls
   → receipt → React state → HUD
@@ -92,9 +94,10 @@ address out of the protocol action, but the application, action, timing and
 open-note amount may remain public. AVNU already supplies its own private
 executor, so the Exchange does not need project-owned Cairo.
 
-The backend submission queue can add bounded jitter only when STRKWORLD
-controls the prepare/submit path. It never delays quote-bound AVNU actions, and
-it must not be presented as defeating timing correlation (D-015).
+The backend submission queue keeps its concurrency and backpressure limits
+but adds no artificial delay (D-066): each proof publishes the block it was
+built against, so jitter could not hide when the player confirmed. It must
+never be presented as defeating timing correlation (D-015).
 
 ### Multiplayer presence
 
@@ -134,10 +137,11 @@ On room exit, World publishes the restored street placement before emitting
 coordinates. A selection made during an in-flight join invalidates that
 client's captured sprite: Shell replaces it once, defers replacement while
 inside and deduplicates reconnect requests. The presentation lifecycle is one
-adapter used by both `StreetScene` and its deterministic teardown tests. Per
-D-053 the F binding is no longer owned by Avatar Studio: `StreetScene` creates
-one outfit selection and one `keydown-F` listener in `create()`, before the
-rooms and the Studio, and injects that selection into the Studio controller as
+adapter used by both the World session (`world-session.ts`, D-059) and its
+deterministic teardown tests. Per D-053 the F binding is no longer owned by
+Avatar Studio: the session creates one outfit selection and one `keydown-F`
+listener at construction, before the rooms and the Studio, and injects that
+selection into the Studio controller as
 a required option so there is a single source of truth. The same one-press,
 no-repeat cosy/fighting toggle therefore follows the local avatar outdoors and
 through existing interiors, and is silent while `InputGate` has suspended World
@@ -275,10 +279,12 @@ funding feature, and its copy must say the arrival leg is public.
 
 ### `packages/world`
 
-Phaser scenes, tilemaps, collision, sprites, camera, input. Emits semantic
-events (`building:entered`, `player:moved`) and consumes plain data.
+An engine-agnostic gameplay session (tile collision, doors, rooms, stations,
+the Avatar Studio, input gate) drawn by a Three.js renderer: camera, avatars,
+input (D-059). Emits semantic events (`building:entered`, `player:moved`) and
+consumes plain data.
 
-**Must not:** import `starknet` or any wallet package. If Phaser code needs
+**Must not:** import `starknet` or any wallet package. If World code needs
 to know a balance, it is being asked to do the wrong job.
 
 Tilemaps: **embed tilesets on export.** Phaser rejects external `.tsx` — see
@@ -335,9 +341,10 @@ One-directional by design.
 
 - React owns wallet connection, balances, pending operations, and all
   financial state.
-- Phaser owns scenes, movement and rendering.
-- React pushes into Phaser via an event emitter.
-- Phaser emits semantic events back; it never reads React state and never
+- The World owns movement and rendering (a gameplay session drawn by
+  Three.js, D-059).
+- React pushes into the World via an event emitter.
+- The World emits semantic events back; it never reads React state and never
   calls Starknet.
 
 The explicit demo and injected test compositions can run with no wallet
@@ -345,9 +352,20 @@ connected, which keeps the World independently testable. The production root
 is different: a supported connected wallet is its entry gate, so no World or
 lobby surface exists before wallet admission (D-055).
 
+The block sandbox (D-060) is the second retained-state side seam. The lobby
+room is the authority for anonymous block state — stacks of colour indices per
+street tile — and for each player's carried colour, the only sandbox field on
+a presence entry. The Shell's sandbox controller adopts each lobby client and
+exposes one stable World-owned `SandboxChannel`; with no lobby connection it
+runs the same pure rules (`@strkworld/lobby/sandbox`, which imports only
+`@strkworld/shared`) locally. The World reads heights and sends pick/place
+intents; it never imports the lobby. Block state has no identity field, but
+it is not unlinkable: a nearby observer can correlate a peer's carried colour
+with a column change (D-060).
+
 Remote peers are retained state rather than one-shot commands. D-038 gives
 them a separate World-owned replaying source so a snapshot cannot be lost
-while Phaser boots or remounts. The Shell maps `LobbyClient.onPeers()` into
+while the World boots or remounts. The Shell maps `LobbyClient.onPeers()` into
 that source; World receives only opaque peer ID, position, facing and approved
 sprite key. The D-038 `WorldEvents` / `ShellEvents` contract remains unchanged;
 D-047 is a later, explicitly controlled extension of `WorldEvents` only for
@@ -358,8 +376,8 @@ remain unchanged.
 Game Mode interiors use one data-driven fixed-room core (D-039). A definition
 contains only local presentation geometry, an opaque building ID and opaque
 station footprints; it contains no route, action, wallet or financial meaning.
-The street scene remains the sole Phaser scene and renders the active
-definition. Shell separately maps station IDs to admitted routes and sends only
+One World session drives one Three.js scene that renders the active
+definition (D-059). Shell separately maps station IDs to admitted routes and sends only
 labels/lock state across the frozen D-033 bus. This keeps collision, entry/exit,
 control handoff and teardown in one World implementation across Bank, Post
 Office, Exchange and Bridge.

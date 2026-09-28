@@ -26,6 +26,26 @@ describe('summary copy', () => {
     expect(describeWarning(warning)).toBe('Depositing 5 is public.');
   });
 
+  it('renders an approximate wait for maturing funds from blocksRemaining', () => {
+    const warning: BatchWarning = { kind: 'funds-maturing', maturingAmount: 10n ** 18n, blocksRemaining: 42 };
+    const text = describeWarning(warning);
+    expect(text).toContain('about 42 blocks');
+    // No block-time constant exists in this repo; a seconds estimate would be invented.
+    expect(text).not.toMatch(/second/i);
+  });
+
+  it('keeps the maturity wait singular for exactly one block', () => {
+    const warning: BatchWarning = { kind: 'funds-maturing', maturingAmount: 1n, blocksRemaining: 1 };
+    expect(describeWarning(warning)).toContain('about 1 block');
+    expect(describeWarning(warning)).not.toContain('1 blocks');
+  });
+
+  it('describes a stake as exact STRK in and xSTRK out, with no output figure', () => {
+    const XSTRK = '0x028d709c875c0ceac3dce7065bec5328186dc89fe254527084d1689910954b0a';
+    const intent: Intent = { kind: 'stake', tokenIn: TOKEN, tokenOut: XSTRK, amountIn: 5_000000000000000001n };
+    expect(describeIntent(intent)).toBe('Stake 5.000000000000000001 STRK → xSTRK');
+  });
+
   it('describes a transfer with its recipient shortened for display', () => {
     const intent: Intent = { kind: 'transfer', token: TOKEN, amount: 10n ** 18n, recipient: BOB };
     expect(describeIntent(intent)).toContain('→');

@@ -61,7 +61,7 @@ export class BackendPrivacyClient implements PoolReadClient, PrivateSubmissionGa
     const operationToken = ownInputField(input, 'operationToken');
     const signal = ownOptionalInputField(input, 'signal');
     if (
-      (route !== 'transfer' && route !== 'unshield')
+      (route !== 'transfer' && route !== 'unshield' && route !== 'stake')
       || typeof feeToken !== 'string'
       || !isNonzeroFelt(feeToken)
       || typeof operationToken !== 'string'
@@ -95,7 +95,7 @@ export class BackendPrivacyClient implements PoolReadClient, PrivateSubmissionGa
     const signal = ownOptionalInputField(input, 'signal');
     const onAccepted = ownOptionalInputField(input, 'onAccepted');
     if (
-      (route !== 'transfer' && route !== 'unshield' && route !== 'swap')
+      (route !== 'transfer' && route !== 'unshield' && route !== 'swap' && route !== 'stake')
       || !artifact
       || typeof artifact !== 'object'
       || Array.isArray(artifact)

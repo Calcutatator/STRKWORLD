@@ -1,117 +1,45 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { EventBus, ShellEvents, WorldEvents } from '@strkworld/shared';
 
-const sceneBusAtCreate: Array<unknown> = [];
-const sceneBusAtRestart: Array<unknown> = [];
-const gameConfigs: Array<{
-  type?: number;
-  pixelArt?: boolean;
-  scale?: { mode?: number; autoCenter?: number };
-}> = [];
-const gameInstances: Array<{
-  canvas: { parentNode: unknown };
-  domContainer: { parentNode: unknown };
-  scale: {
-    parent: FakeElement;
-    parentSize: { width: number; height: number };
-    lastRefreshSize: { width: number; height: number } | null;
-    getParentBounds: ReturnType<typeof vi.fn>;
-    refresh: ReturnType<typeof vi.fn>;
-  };
-}> = [];
-
 interface FakeElement {
   parentNode: FakeElement | null;
   children: unknown[];
   style: Record<string, string>;
   appendChild(node: unknown): unknown;
   removeChild(node: unknown): unknown;
-  getBoundingClientRect(): { width: number; height: number };
 }
 
-vi.mock('phaser', () => {
-  class Scene {}
+interface FakeEngine {
+  readonly mount: FakeElement;
+  readonly canvas: { parentNode: unknown };
+  readonly configs: unknown[];
+  readonly resize: ReturnType<typeof vi.fn>;
+  readonly rebind: ReturnType<typeof vi.fn>;
+  readonly destroy: ReturnType<typeof vi.fn>;
+}
 
-  class Game {
-    registry = new MapRegistry();
-    canvas = { parentNode: null as unknown };
-    domContainer = { parentNode: null as unknown };
-    scale: (typeof gameInstances)[number]['scale'];
-    scene = {
-      getScene: vi.fn(() => ({
-        scene: {
-          restart: vi.fn(() => sceneBusAtRestart.push(this.registry.get('bus'))),
-        },
-      })),
+const engines: FakeEngine[] = [];
+const engineStart = { fail: false };
+
+vi.mock('./three/world-engine.js', () => ({
+  createWorldEngine: (options: { mount: FakeElement; config: unknown }) => {
+    if (engineStart.fail) throw new Error('WebGL unavailable');
+    const canvas = { parentNode: null as unknown };
+    options.mount.appendChild(canvas);
+    const engine: FakeEngine = {
+      mount: options.mount,
+      canvas,
+      configs: [options.config],
+      resize: vi.fn(),
+      rebind: vi.fn((config: unknown) => {
+        engine.configs.push(config);
+      }),
+      destroy: vi.fn(),
     };
-
-    constructor(config: {
-      parent?: FakeElement;
-      type?: number;
-      pixelArt?: boolean;
-      scale?: { mode?: number; autoCenter?: number };
-      callbacks?: { preBoot?: (game: Game) => void; postBoot?: (game: Game) => void };
-      scene?: unknown[];
-    }) {
-      if (!config.parent) throw new Error('missing Phaser parent');
-      gameConfigs.push({
-        type: config.type,
-        pixelArt: config.pixelArt,
-        scale: config.scale ? { ...config.scale } : undefined,
-      });
-      const initialBounds = config.parent.getBoundingClientRect();
-      this.scale = {
-        parent: config.parent,
-        parentSize: { ...initialBounds },
-        lastRefreshSize: null,
-        getParentBounds: vi.fn(() => {
-          const bounds = this.scale.parent.getBoundingClientRect();
-          this.scale.parentSize = { ...bounds };
-          return true;
-        }),
-        refresh: vi.fn(() => {
-          this.scale.lastRefreshSize = { ...this.scale.parentSize };
-        }),
-      };
-      config.parent?.appendChild(this.canvas);
-      config.parent?.appendChild(this.domContainer);
-      gameInstances.push(this);
-      config.callbacks?.preBoot?.(this);
-      for (const SceneType of config.scene ?? []) {
-        const scene = new (SceneType as new () => unknown)() as unknown as {
-          game: Game;
-          resolveWorldConfig(): unknown;
-          createFixedRooms(): void;
-        };
-        scene.game = this;
-        // Invoke the real StreetScene seam after Phaser has assigned its
-        // Game. This is the same registry lookup used by createFixedRooms().
-        sceneBusAtCreate.push(scene.resolveWorldConfig());
-        scene.createFixedRooms();
-      }
-      config.callbacks?.postBoot?.(this);
-    }
-
-    destroy(): void {}
-  }
-
-  return {
-    Game,
-    Scene,
-    WEBGL: 2,
-    Scale: { RESIZE: 5, CENTER_BOTH: 1 },
-  };
-});
-
-class MapRegistry {
-  private values = new Map<string, unknown>();
-  set(key: string, value: unknown): void {
-    this.values.set(key, value);
-  }
-  get(key: string): unknown {
-    return this.values.get(key);
-  }
-}
+    engines.push(engine);
+    return engine;
+  },
+}));
 
 function fakeBus(): { out: EventBus<WorldEvents>; in: EventBus<ShellEvents> } {
   return {
@@ -120,38 +48,7 @@ function fakeBus(): { out: EventBus<WorldEvents>; in: EventBus<ShellEvents> } {
   };
 }
 
-function fakeParent(
-  name: string,
-  width = 640,
-  height = 480,
-): HTMLElement & FakeElement & { readonly name: string } {
-  const document = {
-    body: {},
-    createElement: () => fakeElement(0, 0),
-  };
-  const parent = {
-    name,
-    parentNode: null,
-    children: [] as unknown[],
-    style: {} as Record<string, string>,
-    ownerDocument: document,
-    appendChild(node: { parentNode?: { removeChild(child: unknown): void } | null }) {
-      node.parentNode?.removeChild(node);
-      this.children.push(node);
-      node.parentNode = this;
-      return node;
-    },
-    removeChild(node: { parentNode?: unknown }) {
-      this.children = this.children.filter((child) => child !== node);
-      node.parentNode = null;
-      return node;
-    },
-    getBoundingClientRect: () => ({ width, height }),
-  };
-  return parent as unknown as HTMLElement & FakeElement & { readonly name: string };
-}
-
-function fakeElement(width: number, height: number): FakeElement {
+function fakeElement(): FakeElement {
   return {
     parentNode: null,
     children: [],
@@ -167,21 +64,23 @@ function fakeElement(width: number, height: number): FakeElement {
       node.parentNode = null;
       return node;
     },
-    getBoundingClientRect() {
-      if (this.parentNode) return this.parentNode.getBoundingClientRect();
-      return { width, height };
-    },
   };
+}
+
+function fakeParent(name: string): HTMLElement & FakeElement & { readonly name: string } {
+  const parent = Object.assign(fakeElement(), {
+    name,
+    ownerDocument: { createElement: () => fakeElement() },
+  });
+  return parent as unknown as HTMLElement & FakeElement & { readonly name: string };
 }
 
 describe('world runtime boot ordering', () => {
   beforeEach(() => {
     vi.resetModules();
     vi.useFakeTimers();
-    sceneBusAtCreate.length = 0;
-    sceneBusAtRestart.length = 0;
-    gameConfigs.length = 0;
-    gameInstances.length = 0;
+    engines.length = 0;
+    engineStart.fail = false;
   });
 
   afterEach(async () => {
@@ -189,44 +88,36 @@ describe('world runtime boot ordering', () => {
     vi.useRealTimers();
   });
 
-  it('installs the shell bus before a scene is created', async () => {
+  it('starts the engine with the shell bus inside a stable World-owned mount', async () => {
     const bus = fakeBus();
+    const parent = fakeParent('first-wallet-tree');
     const { acquireWorld, releaseWorld } = await import('./runtime.js');
 
-    await acquireWorld(fakeParent('first-wallet-tree'), bus);
+    await acquireWorld(parent, bus);
 
-    expect(sceneBusAtCreate).toEqual([bus]);
-    expect(bus.in.on).toHaveBeenCalledWith('world:stations', expect.any(Function));
-    releaseWorld();
-  });
-
-  it('boots the WebGL canvas with crisp pixel-art rendering and one-to-one resize', async () => {
-    const { acquireWorld, releaseWorld } = await import('./runtime.js');
-
-    await acquireWorld(fakeParent('pixel-grid'), fakeBus());
-
-    expect(gameConfigs).toEqual([
-      {
-        type: 2,
-        pixelArt: true,
-        scale: { mode: 5, autoCenter: 1 },
-      },
-    ]);
+    expect(engines).toHaveLength(1);
+    expect(engines[0]?.configs).toEqual([bus]);
+    expect(parent.children).toEqual([engines[0]?.mount]);
+    expect(engines[0]?.mount.style).toMatchObject({ position: 'absolute', inset: '0' });
+    expect(engines[0]?.mount.children).toContain(engines[0]?.canvas);
     releaseWorld();
   });
 
   it('binds a replacement world to the current config after complete teardown', async () => {
     const first = fakeBus();
     const second = fakeBus();
+    const firstParent = fakeParent('first-wallet-tree');
     const { acquireWorld, releaseWorld } = await import('./runtime.js');
 
-    await acquireWorld(fakeParent('first-wallet-tree'), first);
+    await acquireWorld(firstParent, first);
     releaseWorld();
     await vi.runAllTimersAsync();
     await acquireWorld(fakeParent('replacement-wallet-tree'), second);
 
-    expect(sceneBusAtCreate.at(-1)).toBe(second);
-    expect(second.in.on).toHaveBeenCalledWith('world:stations', expect.any(Function));
+    expect(engines).toHaveLength(2);
+    expect(engines[0]?.destroy).toHaveBeenCalledOnce();
+    expect(firstParent.children).toEqual([]);
+    expect(engines[1]?.configs).toEqual([second]);
 
     releaseWorld();
     await vi.runAllTimersAsync();
@@ -235,48 +126,72 @@ describe('world runtime boot ordering', () => {
   it('rebinds a retained world to a new host and config before deferred teardown', async () => {
     const first = fakeBus();
     const second = fakeBus();
-    const firstParent = fakeParent('old-wallet-tree', 640, 480);
-    const secondParent = fakeParent('new-wallet-tree', 960, 540);
+    const firstParent = fakeParent('old-wallet-tree');
+    const secondParent = fakeParent('new-wallet-tree');
     const { acquireWorld, releaseWorld } = await import('./runtime.js');
 
-    const firstGame = await acquireWorld(firstParent, first);
+    await acquireWorld(firstParent, first);
     releaseWorld();
-    const secondGame = await acquireWorld(secondParent, second);
+    await acquireWorld(secondParent, second);
 
-    expect(secondGame).toBe(firstGame);
-    expect(gameInstances).toHaveLength(1);
-    const retainedParent = gameInstances[0]?.scale.parent;
-    expect(firstParent.children).not.toContain(retainedParent);
-    expect(secondParent.children).toContain(retainedParent);
-    expect(retainedParent?.children).toContain(gameInstances[0]?.canvas);
-    expect(gameInstances[0]?.scale.getParentBounds).toHaveBeenCalledOnce();
-    expect(gameInstances[0]?.scale.refresh).toHaveBeenCalledOnce();
-    expect(gameInstances[0]?.scale.getParentBounds.mock.invocationCallOrder[0]).toBeLessThan(
-      gameInstances[0]?.scale.refresh.mock.invocationCallOrder[0] ?? 0,
+    expect(engines).toHaveLength(1);
+    const engine = engines[0]!;
+    expect(firstParent.children).not.toContain(engine.mount);
+    expect(secondParent.children).toContain(engine.mount);
+    expect(engine.mount.children).toContain(engine.canvas);
+    expect(engine.resize).toHaveBeenCalledOnce();
+    expect(engine.rebind).toHaveBeenCalledOnce();
+    expect(engine.resize.mock.invocationCallOrder[0]).toBeLessThan(
+      engine.rebind.mock.invocationCallOrder[0] ?? 0,
     );
-    expect(gameInstances[0]?.scale.lastRefreshSize).toEqual({ width: 960, height: 540 });
-    expect(sceneBusAtRestart).toEqual([second]);
+    expect(engine.configs).toEqual([first, second]);
+    expect(engine.destroy).not.toHaveBeenCalled();
+
+    releaseWorld();
+    await vi.runAllTimersAsync();
+    expect(engine.destroy).toHaveBeenCalledOnce();
+  });
+
+  it('keeps a same-owner StrictMode remount on the current session', async () => {
+    const bus = fakeBus();
+    const parent = fakeParent('same-wallet-tree');
+    const { acquireWorld, releaseWorld } = await import('./runtime.js');
+
+    await acquireWorld(parent, bus);
+    releaseWorld();
+    await acquireWorld(parent, bus);
+
+    expect(engines).toHaveLength(1);
+    expect(engines[0]?.rebind).not.toHaveBeenCalled();
+    expect(engines[0]?.resize).not.toHaveBeenCalled();
+    expect(engines[0]?.destroy).not.toHaveBeenCalled();
 
     releaseWorld();
     await vi.runAllTimersAsync();
   });
 
-  it('keeps a same-owner StrictMode remount on the current scene cycle', async () => {
-    const bus = fakeBus();
-    const parent = fakeParent('same-wallet-tree');
-    const { acquireWorld, releaseWorld } = await import('./runtime.js');
+  it('removes the World mount when the engine cannot start', async () => {
+    engineStart.fail = true;
+    const parent = fakeParent('no-webgl-tree');
+    const { acquireWorld } = await import('./runtime.js');
 
-    const firstGame = await acquireWorld(parent, bus);
+    await expect(acquireWorld(parent, fakeBus())).rejects.toThrow('WebGL unavailable');
+
+    expect(parent.children).toEqual([]);
+    expect(engines).toHaveLength(0);
+  });
+
+  it('destroys the engine synchronously on deferred teardown and removes its mount', async () => {
+    const parent = fakeParent('closing-wallet-tree');
+    const { acquireWorld, releaseWorld, worldDebugState } = await import('./runtime.js');
+
+    await acquireWorld(parent, fakeBus());
     releaseWorld();
-    const secondGame = await acquireWorld(parent, bus);
-
-    expect(secondGame).toBe(firstGame);
-    expect(gameInstances).toHaveLength(1);
-    expect(sceneBusAtRestart).toEqual([]);
-    expect(gameInstances[0]?.scale.getParentBounds).not.toHaveBeenCalled();
-    expect(gameInstances[0]?.scale.refresh).not.toHaveBeenCalled();
-
-    releaseWorld();
+    expect(engines[0]?.destroy).not.toHaveBeenCalled();
     await vi.runAllTimersAsync();
+
+    expect(engines[0]?.destroy).toHaveBeenCalledOnce();
+    expect(parent.children).toEqual([]);
+    expect(worldDebugState()).toEqual({ refCount: 0, alive: false });
   });
 });

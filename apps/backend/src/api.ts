@@ -1,3 +1,5 @@
+import { publicDegenToken, validateDegenConfig } from './degen-catalog.js';
+import { ENDUR_XSTRK_ASSET } from './endur.js';
 import {
   AggregateBudget,
   AggregateMetrics,
@@ -16,6 +18,7 @@ import type {
   ApiResponse,
   AuthorizationCodec,
   BackendConfig,
+  DegenCatalogPort,
   FeeAuthorizationClaims,
   PaymasterPort,
   PoolRpcPort,
@@ -39,6 +42,8 @@ import {
 const MAX_NODE_TIMEOUT_MS = 2_147_483_647;
 const MAX_UINT256 = (1n << 256n) - 1n;
 const MAINNET_CHAIN_ID = '0x534e5f4d41494e';
+/** The degen floor's token list (D-067): the one GET route, and it reads nothing from the request. */
+export const DEGEN_TOKENS_PATH = '/v1/degen/tokens';
 
 export interface BackendApiOptions {
   config: BackendConfig;
@@ -49,6 +54,8 @@ export interface BackendApiOptions {
   sleep?: (ms: number) => Promise<void>;
   now?: () => number;
   swapPlanner?: SwapPlannerPort;
+  /** The backend's own degen list (D-067). Without it, degen mode stays off whatever the config says. */
+  degenCatalog?: DegenCatalogPort;
   rateLimiter?: RequestRateLimiterPort;
   sponsorshipBudget?: SponsorshipBudgetPort;
   submissionQueue?: SubmissionQueuePort;
@@ -65,6 +72,7 @@ export class BackendApi {
   private readonly randomInt: (maxInclusive: number) => number;
   private readonly sleep: (ms: number) => Promise<void>;
   private readonly swapPlanner?: SwapPlannerPort;
+  private readonly degenCatalog?: DegenCatalogPort;
   private readonly clockNow: () => number;
   private readonly budget: SponsorshipBudgetPort;
   private readonly submissionQueue: SubmissionQueuePort;
@@ -79,6 +87,7 @@ export class BackendApi {
     this.randomInt = options.randomInt ?? ((max) => Math.floor(Math.random() * (max + 1)));
     this.sleep = options.sleep ?? ((ms) => new Promise((resolve) => setTimeout(resolve, ms)));
     this.swapPlanner = options.swapPlanner;
+    this.degenCatalog = options.degenCatalog;
     const now = options.now ?? Date.now;
     this.clockNow = now;
     this.limiter = options.rateLimiter ?? new AggregateRateLimiter(
@@ -109,17 +118,24 @@ export class BackendApi {
         this.metrics.failure();
         return { status: 503, body: { code: 'SERVICE_DISABLED', message: 'Private operations are temporarily disabled.' } };
       }
-      if (request.method !== 'POST') return this.failure(new ApiFailure(405, 'Method not allowed.'));
+      // One read-only GET route (D-067); every other route is POST-only.
+      const degenList = request.method === 'GET' && request.path === DEGEN_TOKENS_PATH;
+      if (request.method !== 'POST' && !degenList) return this.failure(new ApiFailure(405, 'Method not allowed.'));
 
       let response: ApiResponse;
-      switch (request.path) {
-        case '/v1/private/fees': response = await abortable(this.fee(request.body, deadline.signal), deadline.signal); break;
-        case '/v1/private/submissions': response = await abortable(this.submit(request.body, deadline.signal), deadline.signal); break;
-        case '/v1/private/swaps/prepare': response = await abortable(this.prepareSwap(request.body, deadline.signal), deadline.signal); break;
-        case '/v1/rpc/pool-config': response = await abortable(this.poolConfig(request.body, deadline.signal), deadline.signal); break;
-        case '/v1/rpc/public-key': response = await abortable(this.publicKey(request.body, deadline.signal), deadline.signal); break;
-        case '/v1/rpc/receipt': response = await abortable(this.receipt(request.body, deadline.signal), deadline.signal); break;
-        default: throw new ApiFailure(404, 'Endpoint not found.');
+      if (degenList) {
+        response = await abortable(this.degenTokens(request.body, deadline.signal), deadline.signal);
+      } else {
+        switch (request.path) {
+          case '/v1/private/fees': response = await abortable(this.fee(request.body, deadline.signal), deadline.signal); break;
+          case '/v1/private/submissions': response = await abortable(this.submit(request.body, deadline.signal), deadline.signal); break;
+          case '/v1/private/swaps/prepare': response = await abortable(this.prepareSwap(request.body, deadline.signal), deadline.signal); break;
+          case '/v1/rpc/pool-config': response = await abortable(this.poolConfig(request.body, deadline.signal), deadline.signal); break;
+          case '/v1/rpc/public-key': response = await abortable(this.publicKey(request.body, deadline.signal), deadline.signal); break;
+          case '/v1/rpc/receipt': response = await abortable(this.receipt(request.body, deadline.signal), deadline.signal); break;
+          case DEGEN_TOKENS_PATH: throw new ApiFailure(405, 'Method not allowed.');
+          default: throw new ApiFailure(404, 'Endpoint not found.');
+        }
       }
       this.metrics.success();
       return response;
@@ -204,7 +220,7 @@ export class BackendApi {
     const validity = requirePositiveInteger(value.proofValidityBlocks, 'proof validity');
     const claims = await this.authorizations.verify(value.feeAuthorization);
     if (!claims) throw new ApiFailure(401, 'Fee authorization is invalid.');
-    this.validateClaims(claims, route, validity, policy);
+    this.validateClaims(claims, route, validity, policy, await this.degenSwapAdmissions(route, claims, policy, signal));
     if (claims.swap && claims.swap.quoteExpiresAt <= this.clockNow()) {
       throw new ApiFailure(409, 'The private swap quote has expired.');
     }
@@ -215,6 +231,8 @@ export class BackendApi {
     }, claims.operationToken, claims.swap);
 
     await this.assertCurrentProofFreshness(claims, signal, 'Prepared proof has expired.');
+    // D-066: a zero delay, the normal setting, goes straight to the queue. A
+    // delay cannot hide timing, since the proof publishes its reference block.
     if (!policy.quoteBound && policy.maxQueueDelayMs > 0) {
       const delay = clamp(this.randomInt(policy.maxQueueDelayMs), 0, policy.maxQueueDelayMs);
       if (delay > 0) await abortable(this.sleep(delay), signal);
@@ -226,7 +244,15 @@ export class BackendApi {
           throw new ApiFailure(503, 'Private operations are temporarily disabled.');
         }
         const currentPolicy = this.routePolicy(route);
-        this.validateClaims(claims, route, validity, currentPolicy);
+        // Admission is checked again against the current degen list: a token
+        // avnu dropped since the quote no longer relays.
+        this.validateClaims(
+          claims,
+          route,
+          validity,
+          currentPolicy,
+          await this.degenSwapAdmissions(route, claims, currentPolicy, signal),
+        );
         await this.assertCurrentProofFreshness(
           claims,
           signal,
@@ -292,11 +318,15 @@ export class BackendApi {
       throw new ApiFailure(400, 'Swap slippage exceeds route policy.');
     }
     const allowlist = policy.allowedTokens;
-    if (
-      !allowlist.some((token) => sameAddress(token, sellToken)) ||
-      !allowlist.some((token) => sameAddress(token, buyToken))
-    ) {
-      throw new ApiFailure(400, 'Swap token is not allowlisted.');
+    const listed = (token: string) => allowlist.some((allowed) => sameAddress(allowed, token));
+    if (!listed(sellToken) || !listed(buyToken)) {
+      // D-067: beyond the static allowlist, only the backend's own degen list
+      // admits a token. The request's addresses are checked, never added.
+      const degen = await this.degenAdmissions(signal);
+      const admitted = (token: string) => listed(token) || degen.some((address) => sameAddress(address, token));
+      if (!admitted(sellToken) || !admitted(buyToken)) {
+        throw new ApiFailure(400, 'Swap token is not allowlisted.');
+      }
     }
 
     const [plan, block, poolConfig] = await Promise.all([
@@ -406,9 +436,57 @@ export class BackendApi {
     return { status: 200, body: await this.rpc.getReceipt(hash, signal) };
   }
 
-  private routePolicy(route: PrivateRoute) {
+  /**
+   * The degen floor's list (D-067): the curated core plus the backend's own
+   * filtered copy of avnu's live list. The request carries nothing — no body,
+   * and the HTTP edge refuses query strings — so no player can add, choose or
+   * probe a token here. It exists only to serve the swap route, so it is shut
+   * whenever swap or degen mode is.
+   */
+  private async degenTokens(body: unknown, signal: AbortSignal): Promise<ApiResponse> {
+    if (body !== null) throw new ApiFailure(400, 'The degen token list takes no request body.');
+    this.routePolicy('swap');
+    if (!this.config.degen?.enabled || !this.degenCatalog) {
+      throw new ApiFailure(503, 'Degen mode is disabled.');
+    }
+    const snapshot = await this.degenCatalog.snapshot(signal);
+    return {
+      status: 200,
+      body: { source: snapshot.source, tokens: snapshot.tokens.map(publicDegenToken) },
+    };
+  }
+
+  /** Addresses the degen list admits right now, or none while degen mode is off (D-067). */
+  private async degenAdmissions(signal: AbortSignal): Promise<readonly string[]> {
+    if (!this.config.degen?.enabled || !this.degenCatalog) return [];
+    const snapshot = await this.degenCatalog.snapshot(signal);
+    return snapshot.tokens
+      .map((token) => token.address)
+      .filter((address) => typeof address === 'string' && isFelt(address) && BigInt(address) !== 0n);
+  }
+
+  /**
+   * The degen list is consulted only for a swap whose tokens the static
+   * allowlist does not already cover, so an ordinary swap never waits on
+   * avnu's token list.
+   */
+  private async degenSwapAdmissions(
+    route: PrivateRoute,
+    claims: FeeAuthorizationClaims,
+    policy: RoutePolicy,
+    signal: AbortSignal,
+  ): Promise<readonly string[]> {
+    const swap = claims.swap;
+    if (route !== 'swap' || claims.route !== 'swap' || !swap) return [];
+    const listed = (token: string) => policy.allowedTokens.some((allowed) => sameAddress(allowed, token));
+    if ([claims.operationToken, swap.sellToken, swap.buyToken].every(listed)) return [];
+    return this.degenAdmissions(signal);
+  }
+
+  private routePolicy(route: PrivateRoute): RoutePolicy {
+    // An unconfigured optional route (stake, D-063) is disabled, not an error.
     const policy = this.config.routes[route];
-    if (!policy.enabled) throw new ApiFailure(503, 'This private route is disabled.');
+    if (!policy?.enabled) throw new ApiFailure(503, 'This private route is disabled.');
     return policy;
   }
 
@@ -417,6 +495,8 @@ export class BackendApi {
     route: PrivateRoute,
     validity: number,
     policy: RoutePolicy,
+    /** The degen list's current addresses (D-067); they widen the swap route only. */
+    degenTokens: readonly string[] = [],
   ): void {
     if (claims.v !== 1 || claims.route !== route) throw new ApiFailure(401, 'Fee authorization route mismatch.');
     if (!sameAddress(claims.feeToken, this.config.feeToken) || !sameAddress(claims.token, this.config.feeToken)) {
@@ -425,7 +505,10 @@ export class BackendApi {
     if (claims.amount <= 0n || claims.amount > policy.maxRelayFee) {
       throw new ApiFailure(401, 'Fee authorization exceeds policy.');
     }
-    if (!policy.allowedTokens.some((token) => sameAddress(token, claims.operationToken))) {
+    const admitted = (token: string) =>
+      policy.allowedTokens.some((allowed) => sameAddress(allowed, token)) ||
+      (route === 'swap' && degenTokens.some((address) => sameAddress(address, token)));
+    if (!admitted(claims.operationToken)) {
       throw new ApiFailure(401, 'Fee authorization operation token is no longer allowlisted.');
     }
     if ((route === 'swap') !== Boolean(claims.swap)) {
@@ -434,8 +517,8 @@ export class BackendApi {
     const swap = claims.swap;
     if (swap && (
       !sameAddress(swap.sellToken, claims.operationToken) ||
-      !policy.allowedTokens.some((token) => sameAddress(token, swap.sellToken)) ||
-      !policy.allowedTokens.some((token) => sameAddress(token, swap.buyToken))
+      !admitted(swap.sellToken) ||
+      !admitted(swap.buyToken)
     )) {
       throw new ApiFailure(401, 'Fee authorization swap token is no longer allowlisted.');
     }
@@ -606,6 +689,7 @@ function validateBackendConfig(config: BackendConfig): void {
     throw new Error('Backend size and rate limits must be positive integers.');
   }
   for (const [route, policy] of Object.entries(config.routes)) {
+    if (policy === undefined) continue;
     if (
       policy.maxRelayFee < 0n ||
       !Number.isSafeInteger(policy.maxQueueDelayMs) ||
@@ -617,10 +701,26 @@ function validateBackendConfig(config: BackendConfig): void {
       throw new Error(`Backend ${route} policy has invalid limits.`);
     }
   }
+  // Relayed pool routes submit as soon as they are validated (D-066): a zero
+  // queue delay is valid, and the per-route limits above bound a nonzero one.
+  // They are never quote-bound, so they may still wait in the bounded queue.
   for (const route of ['transfer', 'unshield'] as const) {
-    const policy = config.routes[route];
-    if (policy.quoteBound || policy.maxQueueDelayMs === 0) {
-      throw new Error(`Backend ${route} route policy must be non-quote-bound and delayed.`);
+    if (config.routes[route].quoteBound) {
+      throw new Error(`Backend ${route} route policy must not be quote-bound.`);
+    }
+  }
+  const stake = config.routes.stake;
+  if (stake) {
+    // No quote binds a stake, so it takes the ordinary submission queue (D-066).
+    if (stake.quoteBound) {
+      throw new Error('Backend stake route policy must not be quote-bound.');
+    }
+    // D-063 admits STRK in only; the anonymizer itself pins no pair.
+    if (
+      stake.enabled &&
+      (stake.allowedTokens.length !== 1 || !sameAddress(stake.allowedTokens[0]!, ENDUR_XSTRK_ASSET))
+    ) {
+      throw new Error('Backend stake route must admit exactly STRK, the xSTRK asset.');
     }
   }
   const swap = config.routes.swap;
@@ -633,6 +733,7 @@ function validateBackendConfig(config: BackendConfig): void {
   ) {
     throw new Error('Backend swap policy must be quote-bound, immediate and allowlisted.');
   }
+  if (config.degen !== undefined) validateDegenConfig(config.degen);
 }
 
 function createRequestDeadline(

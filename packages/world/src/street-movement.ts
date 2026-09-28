@@ -204,8 +204,8 @@ export function createStreetMovementReporter(
 }
 
 /**
- * The small lifecycle seam used by StreetScene. Keeping the ordering here
- * makes the privacy-presence contract testable without constructing Phaser.
+ * The small lifecycle seam used by the World session. Keeping the ordering
+ * here makes the privacy-presence contract testable without a renderer.
  */
 export function createStreetMovementAdapter(
   out: Pick<EventBus<WorldEvents>, 'emit'>,

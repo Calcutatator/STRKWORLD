@@ -1,9 +1,28 @@
 import { describe, expect, it } from 'vitest';
 import {
+  DISCLOSURE_WAIVERS,
   PRIVACY_REGISTER,
+  isDisclosureWaived,
   isRoutePlayable,
+  routesAwaitingApproval,
+  routesAwaitingCopy,
   type RouteGrade,
 } from './privacy-grades.js';
+
+/** Every route approved and disclosed before D-063. */
+const APPROVED_ROUTES = [
+  'post-office.transfer',
+  'bank.shield',
+  'bank.unshield',
+  'exchange.swap',
+  'bridge.deposit',
+] as const;
+
+function registered(route: string): RouteGrade {
+  const matches = PRIVACY_REGISTER.filter((entry) => entry.route === route);
+  expect(matches, route).toHaveLength(1);
+  return matches[0]!;
+}
 
 const APPROVED_DEVIATION: RouteGrade = {
   building: 'vault',
@@ -51,7 +70,10 @@ describe('privacy deviation admission', () => {
   );
 
   it('keeps complete canonical approvals admitted', () => {
-    expect(PRIVACY_REGISTER.every((route) => isRoutePlayable(route))).toBe(true);
+    // D-063 adds a registered-but-unapproved route, so the register is no
+    // longer uniformly playable; every approved route still is.
+    expect(PRIVACY_REGISTER.map((route) => route.route)).toEqual([...APPROVED_ROUTES, 'bank.stake']);
+    expect(APPROVED_ROUTES.every((route) => isRoutePlayable(registered(route)))).toBe(true);
     expect(isRoutePlayable(APPROVED_DEVIATION)).toBe(true);
   });
 
@@ -63,5 +85,92 @@ describe('privacy deviation admission', () => {
       rationale: null,
       disclosure: null,
     })).toBe(false);
+  });
+});
+
+describe('Endur private staking register entry (D-063)', () => {
+  it('grades the Bank stake route anonymous, like the private swap', () => {
+    const stake = registered('bank.stake');
+    expect(stake.building).toBe('bank');
+    expect(stake.grade).toBe('anonymous');
+    expect(stake.grade).toBe(registered('exchange.swap').grade);
+    // The minted xSTRK is already an open pool note.
+    expect(stake.returnToPool).toBe(false);
+  });
+
+  it('is approved by the lead with its in-game disclosure waived by D-064', () => {
+    const stake = registered('bank.stake');
+    expect(stake.approvedBy).toBe('calc');
+    expect(stake.approvedOn).toBe('2026-09-27');
+    expect(stake.rationale).toMatch(/D-064/);
+    expect(stake.disclosure).toBeNull();
+    expect(stake.disclosureWaivedBy).toBe('D-064');
+    expect(isDisclosureWaived(stake)).toBe(true);
+    expect(isRoutePlayable(stake)).toBe(true);
+    // Waived is neither "awaiting approval" nor "approved but awaiting copy".
+    expect(routesAwaitingApproval()).toEqual([]);
+    expect(routesAwaitingCopy()).toEqual([]);
+  });
+
+  it('still records exactly what an observer sees, without claiming hidden amounts', () => {
+    const { observable, rationale } = registered('bank.stake');
+    expect(observable).toMatch(/Who staked is hidden/);
+    expect(observable).toMatch(/how much went in and came out is not/);
+    expect(observable).toMatch(/1 to 14 days/);
+    for (const text of [observable, rationale ?? '']) {
+      expect(text).not.toMatch(/hidden amount|amounts? (?:are|is) hidden|untraceable|completely private/i);
+    }
+  });
+
+  it('accepts a waiver only as an own decision id, and never without approval', () => {
+    const stake = registered('bank.stake');
+    // Without approval metadata a waiver unlocks nothing.
+    expect(isRoutePlayable({ ...stake, approvedBy: null, approvedOn: null, rationale: null })).toBe(false);
+    // A waiver must name a decision entry.
+    for (const bad of ['', 'yes', 'D-', 'D-64', 'd-064', ' D-064', true, 64]) {
+      const entry = { ...stake, disclosureWaivedBy: bad as unknown as string };
+      expect(isDisclosureWaived(entry), String(bad)).toBe(false);
+      expect(isRoutePlayable(entry), String(bad)).toBe(false);
+    }
+    // An inherited waiver cannot switch a disclosure off.
+    const { disclosureWaivedBy: _omit, ...own } = stake;
+    const inherited = Object.assign(Object.create({ disclosureWaivedBy: 'D-064' }), own);
+    expect(isDisclosureWaived(inherited)).toBe(false);
+    expect(isRoutePlayable(inherited)).toBe(false);
+    // Every other deviation still shows its own disclosure.
+    for (const route of PRIVACY_REGISTER) {
+      if (Object.hasOwn(DISCLOSURE_WAIVERS, route.route) || route.grade === 'private') continue;
+      expect(isDisclosureWaived(route), route.route).toBe(false);
+      expect(route.disclosure, route.route).toBeTruthy();
+    }
+  });
+
+  it('keeps braces out of the copy so the CI register parser cannot lose the entry', () => {
+    const stake = registered('bank.stake');
+    for (const text of [stake.observable, stake.disclosure ?? '']) {
+      expect(text).not.toMatch(/[{}]/);
+    }
+  });
+});
+
+describe('disclosure waivers are granted per route, by one decision each (D-064)', () => {
+  it('lists exactly the granted waivers, frozen', () => {
+    expect(DISCLOSURE_WAIVERS).toEqual({ 'bank.stake': 'D-064', 'post-office.transfer': 'D-065' });
+    expect(Object.isFrozen(DISCLOSURE_WAIVERS)).toBe(true);
+  });
+
+  it('refuses a waiver that borrows a real decision for another route', () => {
+    const unshield = PRIVACY_REGISTER.find((route) => route.route === 'bank.unshield')!;
+    for (const decision of ['D-020', 'D-064']) {
+      const forged = { ...unshield, disclosure: null, disclosureWaivedBy: decision };
+      expect(isDisclosureWaived(forged), decision).toBe(false);
+      expect(isRoutePlayable(forged), decision).toBe(false);
+    }
+  });
+
+  it('refuses the right route citing the wrong decision', () => {
+    const stake = PRIVACY_REGISTER.find((route) => route.route === 'bank.stake')!;
+    expect(isDisclosureWaived({ ...stake, disclosureWaivedBy: 'D-063' })).toBe(false);
+    expect(isRoutePlayable({ ...stake, disclosureWaivedBy: 'D-063' })).toBe(false);
   });
 });

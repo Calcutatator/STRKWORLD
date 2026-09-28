@@ -5,11 +5,35 @@ const MAINNET_CHAIN_ID = '0x534e5f4d41494e';
 const MAX_U128 = (1n << 128n) - 1n;
 const STARK_FIELD_PRIME = (1n << 251n) + 17n * (1n << 192n) + 1n;
 const STRK_TOKEN = '0x04718f5a0fc34cc1af16a1cdee98ffb20c31f5cd61d6ab07201858f4287c938d';
+/** Endur xSTRK (D-063). Inlined like STRK so this file keeps type-only privacy imports; a test pins it to `ENDUR_XSTRK`. */
+export const XSTRK_TOKEN = '0x028d709c875c0ceac3dce7065bec5328186dc89fe254527084d1689910954b0a';
 
 type WalletEnvironment = Record<string, string | boolean | undefined>;
 
 export function usesProductionWallet(environment: WalletEnvironment): boolean {
   return environment.PROD === true || environment.VITE_WALLET_MODE === 'real';
+}
+
+/**
+ * The live route policy this build actually admits, or `null` when this build
+ * does not construct a production wallet at all.
+ *
+ * `null` means "no restriction beyond the privacy register" — the answer a
+ * demo build and the test runner both need, since neither one ever builds a
+ * `WalletRoutePolicy` for a route to be disabled by. Mirrors
+ * `usesProductionWallet`'s own definition of production so this can never
+ * disagree with whether the game bothered to build a policy in the first
+ * place. Split from `detectRoutePolicy` so the fail-closed branch — no
+ * `import.meta.env` at all — stays reachable from a test (mirrors
+ * `../privacy/build-context.ts`).
+ */
+export function routePolicyFrom(environment: WalletEnvironment | undefined): WalletSessionOptions['policy'] | null {
+  if (!environment || !usesProductionWallet(environment)) return null;
+  return parseRoutePolicy(environment);
+}
+
+export function detectRoutePolicy(): WalletSessionOptions['policy'] | null {
+  return routePolicyFrom((import.meta as ImportMeta & { env?: WalletEnvironment }).env);
 }
 
 /** Parse only public browser configuration; secrets are never accepted here. */
@@ -45,38 +69,65 @@ export function parseProductionWalletConfig(
  * malformed, zero or disabled value keeps that route denied. The backend has
  * an independent allowlist and fee ceiling; these values are public admission
  * policy, never credentials.
+ *
+ * Exported so the Shell's route resolution (`panels/routes.ts`) can ask what
+ * this exact build actually admits, instead of only what the privacy register
+ * approves — those are different questions (D-054/D-056), and conflating them
+ * is how the Bank ended up offering an Unshield tab production can never open.
  */
-function parseRoutePolicy(environment: WalletEnvironment): WalletSessionOptions['policy'] {
-  const transfer = parseTransferRoute(environment);
+export function parseRoutePolicy(environment: WalletEnvironment): WalletSessionOptions['policy'] {
   const shield = parseShieldRoute(environment);
-  const enabledRoutes: Array<'shield' | 'transfer'> = [];
+  const unshield = parseUnshieldRoute(environment);
+  const transfer = parseTransferRoute(environment);
+  const stake = parseStakeRoute(environment);
+  const enabledRoutes: Array<'shield' | 'unshield' | 'transfer' | 'stake'> = [];
   const shieldTokens: string[] = [];
+  const unshieldTokens: string[] = [];
   const transferTokens: string[] = [];
-  let maxIntents = 0;
-  let maxRelayFee = 0n;
+  // The policy has one intent bound for every route and one relay-fee ceiling
+  // that the Wallet API adapter checks every relay quote against. Where
+  // several routes are enabled, the strictest configured bound wins.
+  const intentBounds: number[] = [];
+  const relayFeeCeilings: bigint[] = [];
 
   if (shield) {
     enabledRoutes.push('shield');
-    maxIntents = shield.maxIntents;
+    intentBounds.push(shield.maxIntents);
     shieldTokens.push(...shield.allowedTokens);
+  }
+  if (unshield) {
+    enabledRoutes.push('unshield');
+    intentBounds.push(unshield.maxIntents);
+    relayFeeCeilings.push(unshield.maxRelayFee);
+    unshieldTokens.push(...unshield.allowedTokens);
   }
   if (transfer) {
     enabledRoutes.push('transfer');
-    maxIntents = maxIntents === 0 ? transfer.maxIntents : Math.min(maxIntents, transfer.maxIntents);
-    maxRelayFee = transfer.maxRelayFee;
+    intentBounds.push(transfer.maxIntents);
+    relayFeeCeilings.push(transfer.maxRelayFee);
     transferTokens.push(...transfer.allowedTokens);
+  }
+  if (stake) {
+    // The adapter prepares a stake one at a time, so staking adds no intent
+    // bound: enabling it never narrows another route's batch size.
+    enabledRoutes.push('stake');
+    relayFeeCeilings.push(stake.maxRelayFee);
   }
   if (enabledRoutes.length === 0) return denyAllPolicy();
 
   return Object.freeze({
-    maxIntents,
-    maxRelayFee,
+    maxIntents: intentBounds.length > 0 ? Math.min(...intentBounds) : 1,
+    // Shield alone is not relayed and keeps no relay-fee authority.
+    maxRelayFee: relayFeeCeilings.reduce((lowest, ceiling) => (ceiling < lowest ? ceiling : lowest), relayFeeCeilings[0] ?? 0n),
     enabledRoutes: Object.freeze(enabledRoutes),
     allowedTokens: Object.freeze({
       shield: Object.freeze(shieldTokens),
-      unshield: Object.freeze([]),
+      unshield: Object.freeze(unshieldTokens),
       transfer: Object.freeze(transferTokens),
       swap: Object.freeze([]),
+      // Present only when staking is enabled: the adapter reads an absent list
+      // as "nothing admitted" and requires a present one to name both tokens.
+      ...(stake ? { stake: Object.freeze(stake.allowedTokens) } : {}),
     }),
   });
 }
@@ -96,17 +147,66 @@ function parseTransferRoute(environment: WalletEnvironment): ParsedTransferRoute
   return { maxIntents, maxRelayFee, allowedTokens };
 }
 
+/**
+ * D-062: the pool-native unshield route. The private-submission backend
+ * relays it like transfer, so it takes transfer's four values. Like shield, it
+ * admits canonical STRK only. Missing, zero, malformed, partial or disabled
+ * values keep unshield denied without touching any other route, and enabling
+ * it enables nothing else.
+ */
+function parseUnshieldRoute(environment: WalletEnvironment): ParsedTransferRoute | null {
+  if (environment.VITE_STRK20_UNSHIELD_ENABLED !== 'true') return null;
+  const maxIntents = parsePositiveSafeInteger(environment.VITE_STRK20_UNSHIELD_MAX_INTENTS);
+  const maxRelayFee = parsePositiveBigint(environment.VITE_STRK20_UNSHIELD_MAX_RELAY_FEE, MAX_U128);
+  const allowedTokens = parseAllowedTokens(environment.VITE_STRK20_UNSHIELD_ALLOWED_TOKENS);
+  if (maxIntents === null || maxRelayFee === null || allowedTokens === null || !isStrkOnly(allowedTokens)) {
+    return null;
+  }
+  return { maxIntents, maxRelayFee, allowedTokens };
+}
+
+/**
+ * D-063: Endur staking, relayed by the private-submission backend like swap.
+ * It admits exactly STRK in and xSTRK out, in either order, and a positive
+ * relay-fee ceiling. Missing, zero, malformed, partial or disabled values keep
+ * staking denied without touching any other route; enabling it enables
+ * nothing else. The backend's BACKEND_ROUTE_STAKE_* block gates it separately.
+ */
+function parseStakeRoute(environment: WalletEnvironment): { maxRelayFee: bigint; allowedTokens: string[] } | null {
+  if (environment.VITE_STRK20_STAKE_ENABLED !== 'true') return null;
+  const maxRelayFee = parsePositiveBigint(environment.VITE_STRK20_STAKE_MAX_RELAY_FEE, MAX_U128);
+  const allowedTokens = parseAllowedTokens(environment.VITE_STRK20_STAKE_ALLOWED_TOKENS);
+  if (maxRelayFee === null || allowedTokens === null || !isStakePair(allowedTokens)) return null;
+  return { maxRelayFee, allowedTokens };
+}
+
+/** Exactly STRK and xSTRK, compared by field-element value. */
+function isStakePair(tokens: readonly string[]): boolean {
+  if (tokens.length !== 2) return false;
+  try {
+    const values = new Set(tokens.map((token) => BigInt(token)));
+    return values.has(BigInt(STRK_TOKEN)) && values.has(BigInt(XSTRK_TOKEN));
+  } catch {
+    return false;
+  }
+}
+
 function parseShieldRoute(environment: WalletEnvironment): Pick<ParsedTransferRoute, 'maxIntents' | 'allowedTokens'> | null {
   if (environment.VITE_STRK20_SHIELD_ENABLED !== 'true') return null;
   const maxIntents = parsePositiveSafeInteger(environment.VITE_STRK20_SHIELD_MAX_INTENTS);
   const allowedTokens = parseAllowedTokens(environment.VITE_STRK20_SHIELD_ALLOWED_TOKENS);
-  if (maxIntents === null || allowedTokens === null || allowedTokens.length !== 1) return null;
-  try {
-    if (BigInt(allowedTokens[0]!) !== BigInt(STRK_TOKEN)) return null;
-  } catch {
-    return null;
-  }
+  if (maxIntents === null || allowedTokens === null || !isStrkOnly(allowedTokens)) return null;
   return { maxIntents, allowedTokens };
+}
+
+/** Exactly one admitted token, and it is canonical STRK by field-element value. */
+function isStrkOnly(tokens: readonly string[]): boolean {
+  if (tokens.length !== 1) return false;
+  try {
+    return BigInt(tokens[0]!) === BigInt(STRK_TOKEN);
+  } catch {
+    return false;
+  }
 }
 
 function denyAllPolicy(): WalletSessionOptions['policy'] {

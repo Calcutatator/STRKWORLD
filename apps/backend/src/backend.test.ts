@@ -1383,6 +1383,171 @@ describe('bounded private submission', () => {
   });
 });
 
+describe('relayed routes submit without an artificial delay (D-066)', () => {
+  function immediate(overrides: Partial<BackendConfig> = {}) {
+    const base = fixture();
+    return fixture({
+      routes: {
+        ...base.config.routes,
+        transfer: { ...base.config.routes.transfer, maxQueueDelayMs: 0 },
+        unshield: { ...base.config.routes.unshield, maxQueueDelayMs: 0 },
+      },
+      ...overrides,
+    });
+  }
+
+  it('relays a zero-delay transfer without ever sleeping', async () => {
+    const { api, delays, submitted } = immediate();
+    const quote = await fee(api);
+    const response = await api.handle({
+      method: 'POST', path: '/v1/private/submissions',
+      body: { v: 1, route: 'transfer', artifact, feeAuthorization: quote.authorization, proofValidityBlocks: 450 },
+    });
+
+    expect(response).toEqual({ status: 200, body: { transactionHash: '0x5ab' } });
+    expect(delays).toEqual([]);
+    expect(submitted).toEqual([artifact]);
+  });
+
+  it('keeps the submission queue bound: a zero-delay submission still waits for a slot, and overflow is refused', async () => {
+    const { api, paymaster, delays } = immediate({ submissionQueue: { maxInFlight: 1, maxQueued: 1 } });
+    const quote = await fee(api);
+    let releaseFirst!: () => void;
+    let submitCalls = 0;
+    vi.spyOn(paymaster, 'submit').mockImplementation(async () => {
+      submitCalls += 1;
+      if (submitCalls === 1) {
+        await new Promise<void>((resolve) => { releaseFirst = resolve; });
+      }
+      return { transactionHash: `0x${submitCalls}` };
+    });
+    const request = {
+      method: 'POST',
+      path: '/v1/private/submissions',
+      body: { v: 1, route: 'transfer', artifact, feeAuthorization: quote.authorization, proofValidityBlocks: 450 },
+    } as const;
+
+    const first = api.handle(request);
+    await vi.waitFor(() => expect(submitCalls).toBe(1));
+    const queued = api.handle(request);
+    const overflow = await api.handle(request);
+    releaseFirst();
+
+    await expect(first).resolves.toMatchObject({ status: 200 });
+    await expect(queued).resolves.toMatchObject({ status: 200 });
+    expect(overflow).toMatchObject({ status: 503 });
+    expect(submitCalls).toBe(2);
+    expect(delays).toEqual([]);
+    expect(api.metrics.snapshot()).toMatchObject({ queueRejected: 1 });
+  });
+  // A configured nonzero delay is still honoured as bounded jitter: see
+  // "validates, jitters a pool-native artifact, rechecks freshness, and relays it".
+});
+
+describe('one recipient per send (D-065)', () => {
+  /** `Append(recipient, EncChannelInfo[3])`: the channel a first send opens, keyed by the recipient. */
+  const channelOpen = (recipient: string) => ['0x1', recipient, '0xe1', '0xe2', '0xe3'];
+  const feeWithdrawal = ['0x3', FEE_RECIPIENT, STRK, '0x7'];
+
+  /**
+   * A first private transfer as the pool serializes it: the action sequence of
+   * mainnet tx 0x33d01b…930495 (block 15,524,071), with placeholder felts. One
+   * channel open per new recipient, channel and note writes, the spent note,
+   * one new note per recipient plus change, and the relay fee withdrawal.
+   */
+  function transferActions(recipients: readonly string[]): string[][] {
+    return [
+      ...recipients.map(channelOpen),
+      ['0x0', '0x5101', '0x1', '0x1'],
+      ['0x9', '0x9a1'],
+      ...recipients.flatMap((_, index) => [
+        ['0x0', `0x52${index}0`, '0x1', '0xbeef'],
+        ['0x8', `0x62${index}0`, '0xbeef'],
+      ]),
+      ['0x0', '0x5300', '0x1', '0xcafe'],
+      ['0x8', '0x6300', '0xcafe'],
+      feeWithdrawal,
+      ['0x5', '0xa1', '0xa2', '0xa3', FEE_RECIPIENT, STRK, '0x7'],
+    ];
+  }
+
+  function artifactOf(actions: readonly string[][]): PreparedArtifact {
+    const serialized = [`0x${actions.length.toString(16)}`, ...actions.flat()];
+    return {
+      // The current pool appends a `None` screening attestation after the actions.
+      call: { contract_address: POOL, entry_point: 'apply_actions', calldata: [...serialized, '0x1'] },
+      proof: { data: 'proof-data', output: ['0xc1', ...serialized], proof_facts: ['0x4'] },
+    };
+  }
+
+  async function submitAs(route: 'transfer' | 'unshield', submission: PreparedArtifact) {
+    const harness = fixture();
+    const quote = await fee(harness.api, route);
+    const response = await harness.api.handle({
+      method: 'POST', path: '/v1/private/submissions',
+      body: { v: 1, route, artifact: submission, feeAuthorization: quote.authorization, proofValidityBlocks: 450 },
+    });
+    return { response, submitted: harness.submitted };
+  }
+
+  it('relays a first send that opens one recipient channel, and a later send that opens none', async () => {
+    for (const recipients of [['0x456'], []]) {
+      const submission = artifactOf(transferActions(recipients));
+      const { response, submitted } = await submitAs('transfer', submission);
+      expect(response, recipients.join()).toEqual({ status: 200, body: { transactionHash: '0x5ab' } });
+      expect(submitted).toEqual([submission]);
+    }
+  });
+
+  it('refuses a transfer that pays two recipients, without sponsoring it', async () => {
+    const { response, submitted } = await submitAs('transfer', artifactOf(transferActions(['0x456', '0x457'])));
+    expect(response).toEqual({
+      status: 400,
+      body: { code: 'HTTP_400', message: 'A private submission may pay at most one recipient.' },
+    });
+    expect(submitted).toHaveLength(0);
+  });
+
+  it('counts recipients as field elements, so one address spelled twice is still one', async () => {
+    const actions = [channelOpen('0x0456'), ...transferActions(['0x456'])];
+    const { response } = await submitAs('transfer', artifactOf(actions));
+    expect(response.status).toBe(200);
+  });
+
+  it('applies the same limit on the unshield route', async () => {
+    const unshield = (channels: string[][]) => artifactOf([
+      ...channels,
+      feeWithdrawal,
+      ['0x3', '0x456', '0xabc', '0x14'],
+    ]);
+    // One channel open, such as the sender's own change channel, is still one address.
+    await expect(submitAs('unshield', unshield([channelOpen('0x999')]))).resolves.toMatchObject({
+      response: { status: 200 },
+    });
+    const refused = await submitAs('unshield', unshield([channelOpen('0x999'), channelOpen('0x998')]));
+    expect(refused.response).toMatchObject({ status: 400 });
+    expect(refused.submitted).toHaveLength(0);
+  });
+
+  it('keeps every existing transfer admission check alongside the new one', async () => {
+    const withExtraWithdrawal = artifactOf([...transferActions(['0x456']), ['0x3', '0x456', STRK, '0x1']]);
+    const { response, submitted } = await submitAs('transfer', withExtraWithdrawal);
+    expect(response).toMatchObject({
+      status: 400,
+      body: { message: 'Transfer route does not contain exactly the authorized relay fee.' },
+    });
+    expect(submitted).toHaveLength(0);
+  });
+
+  it('refuses an out-of-field channel recipient as a 400 rather than counting it', () => {
+    // The HTTP edge already rejects such a felt; the route check fails closed on its own too.
+    const outOfField = artifactOf([channelOpen(`0x${'f'.repeat(64)}`), feeWithdrawal]);
+    expect(() => validateServerActionRoute(
+      'transfer', outOfField, { token: STRK, recipient: FEE_RECIPIENT, amount: 7n }, STRK,
+    )).toThrow('Channel recipient is not a field element.');
+  });
+});
+
 describe('quote-bound swap withdrawal matching', () => {
   const invokePrefix = ['0xabc'];
   const swapBinding = {
@@ -1483,6 +1648,26 @@ describe('quote-bound swap withdrawal matching', () => {
       STRK,
       swapBinding,
     )).not.toThrow();
+  });
+
+  it('refuses a swap whose actions open channels to two recipients (D-065)', () => {
+    const calldata = [
+      '0x5',
+      '0x1', '0xa11ce', '0xe1', '0xe2', '0xe3',
+      '0x1', '0xb0b', '0xe1', '0xe2', '0xe3',
+      '0x3', '0x999', STRK, '0x7',
+      '0x3', '0x999', STRK, '0x7',
+      '0xa', '0x999', '0x2', ...invokePrefix, '0x777',
+    ];
+    expect(() => validateServerActionRoute(
+      'swap', {
+        call: { contract_address: POOL, entry_point: 'apply_actions', calldata },
+        proof: { data: 'proof', output: ['0xc1', ...calldata], proof_facts: ['0x1'] },
+      },
+      { token: STRK, recipient: '0x999', amount: 7n },
+      STRK,
+      swapBinding,
+    )).toThrow('A private submission may pay at most one recipient.');
   });
 
   it('rejects a current-ABI computed invoke and a public deposit on private routes', () => {
@@ -1668,16 +1853,14 @@ describe('privacy-safe RPC and operations', () => {
     expect(call).not.toHaveBeenCalled();
   });
 
-  it('fixes pool-native routes as delayed and swaps as quote-bound and immediate', () => {
+  it('fixes pool-native routes as never quote-bound and swaps as quote-bound and immediate', () => {
     const { config } = fixture();
     const invalidPolicies: Array<{
       route: keyof BackendConfig['routes'];
       changes: Partial<BackendConfig['routes']['transfer']>;
     }> = [
       { route: 'transfer', changes: { quoteBound: true } },
-      { route: 'transfer', changes: { maxQueueDelayMs: 0 } },
       { route: 'unshield', changes: { quoteBound: true } },
-      { route: 'unshield', changes: { maxQueueDelayMs: 0 } },
       { route: 'swap', changes: { quoteBound: false } },
       { route: 'swap', changes: { maxQueueDelayMs: 1 } },
     ];
@@ -1688,8 +1871,19 @@ describe('privacy-safe RPC and operations', () => {
           ...config.routes,
           [route]: { ...config.routes[route], ...changes },
         },
-      }), `${route}: ${Object.keys(changes).join(', ')}`).toThrow(/route policy|quote-bound|immediate|delayed/i);
+      }), `${route}: ${Object.keys(changes).join(', ')}`).toThrow(/route policy|quote-bound|immediate/i);
     }
+  });
+
+  it('accepts a zero queue delay on the pool-native routes, the D-066 setting', () => {
+    const { config } = fixture();
+    expect(() => fixture({
+      routes: {
+        ...config.routes,
+        transfer: { ...config.routes.transfer, maxQueueDelayMs: 0 },
+        unshield: { ...config.routes.unshield, maxQueueDelayMs: 0 },
+      },
+    })).not.toThrow();
   });
 
   it.each(['transfer', 'unshield'] as const)(

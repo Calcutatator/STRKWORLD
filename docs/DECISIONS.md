@@ -86,7 +86,7 @@ email login are an independent seam.
 
 ## D-004 — Submission is decoupled from avatar action
 
-**2026-08-16 · Accepted**
+**2026-08-16 · Accepted · randomised relay delay SUPERSEDED by D-066**
 
 **Context.** Entering a building is a timestamped event visible to every
 player in the lobby and to our own server. The resulting pool interaction is
@@ -1219,7 +1219,7 @@ D-028 freeze.
 
 ## D-036 — `PrivacyOperations` is frozen on source-derived evidence
 
-**2026-08-18 · Accepted · implements D-028 and supersedes D-015's provisional seam status · narrowly extended by D-041/D-042 for truthful swap review**
+**2026-08-18 · Accepted · implements D-028 and supersedes D-015's provisional seam status · narrowly extended by D-041/D-042 for truthful swap review, and by D-063 for private staking**
 
 **Context.** D-015 correctly unfroze the original one-shot interface. The
 replacement intent-based, prepare-then-confirm seam is implemented by both the
@@ -1430,7 +1430,7 @@ unbuilt. Browser acceptance remains user-owned.
 
 ## D-040 — Post Office Menu Mode is the transfer-only batch surface
 
-**2026-08-18 · Accepted · technical direction delegated to the project lead · completes the bounded deferral in D-039 · Exchange deferral completed by D-042**
+**2026-08-18 · Accepted · technical direction delegated to the project lead · completes the bounded deferral in D-039 · Exchange deferral completed by D-042 · transfer batching narrowed to one recipient per send by D-065**
 
 **Context.** D-030 and D-032 already define Menu Mode as a building-wide
 transaction surface that batches compatible typed intents for one later
@@ -1536,7 +1536,7 @@ new decision.
 
 ## D-042 — The Exchange reviews AVNU's protected minimum over a six-asset display catalog
 
-**2026-08-18 · Accepted · technical direction delegated to the project lead · implements D-030–D-032, completes D-040's Exchange deferral and amends D-041's minimum mapping · rendered Exchange room/station status updated by [the 2026-08-28 finding](../AGENTS.md#2026-08-28--room-navigation-and-three-admitted-stations-pass-bridge-deposit-stays-locked)**
+**2026-08-18 · Accepted · technical direction delegated to the project lead · implements D-030–D-032, completes D-040's Exchange deferral and amends D-041's minimum mapping · rendered Exchange room/station status updated by [the 2026-08-28 finding](../AGENTS.md#2026-08-28--room-navigation-and-three-admitted-stations-pass-bridge-deposit-stays-locked) · the ground floor keeps these six assets, but the degen floor's runtime catalog (a backend-fetched avnu list) is added by D-067**
 
 **Context.** D-041 exposed the expected output, the typed intent's minimum,
 the configured slippage and quote expiry. Tracing the installed AVNU 4.2.0
@@ -1604,7 +1604,7 @@ unchanged Bank/Post Office behavior. Rendered acceptance remains user-owned.
 
 ## D-043 — Bridge v1 is manual, direct and wallet-bound; exact shielding fails closed
 
-**2026-08-18 · Accepted and implemented through production recovery; new
+**2026-08-18 · production planner lock SUPERSEDED by D-061 · Accepted and implemented through production recovery; new
 financial continuation remains locked · SUPERSEDED in part by D-055 for
 production no-wallet entry; production fee-aware planning remains a D-028
 funded gate · rendered Bridge navigation/exit status updated, with physical
@@ -1714,7 +1714,9 @@ pre-launch checks. Rendered game acceptance remains user-owned.
 
 ## D-044 — Kenney Urban CC0 is the placeholder art base
 
-**2026-08-19 · Accepted by the user · placeholder scope only**
+**2026-08-19 · SUPERSEDED by [D-059](#d-059--the-world-renders-in-3d-with-threejs) — the 3D World is drawn from
+procedural geometry and no longer slices the Kenney 2D atlas · previously accepted
+by the user, placeholder scope only**
 
 **Context.** The World tracer currently uses procedural and placeholder
 presentation. Art needs a commercially safe base for roads, grass, pavement
@@ -1929,7 +1931,9 @@ orientation; rendered acceptance is required again after implementation.
 
 ## D-049 — Avatar art uses one fixed 64x64 logical canvas
 
-**2026-08-20 · PARTIALLY SUPERSEDED by
+**2026-08-20 · PARTIALLY SUPERSEDED by [D-059](#d-059--the-world-renders-in-3d-with-threejs) for in-World
+rendering (avatars are procedural 3D figures; these sheets remain the colour
+reference and D-058's wallet-cue source) and by
 [D-052](#d-052--avatar-animation-contract-and-avatar-studio-f-toggle) for
 animation geometry and the Avatar Studio fighting-toggle status; 2026-08-19
 accepted by the user; 2026-08-20 art-production amendment authorizes all eight
@@ -2165,8 +2169,9 @@ or funded-route readiness.
 
 ## D-052 — Avatar animation contract and Avatar Studio F toggle
 
-**2026-08-20 · PARTIALLY SUPERSEDED — the animation contract remains accepted;
-the Studio-only F scope is superseded by
+**2026-08-20 · PARTIALLY SUPERSEDED — the sprite-sheet animation contract is
+superseded for in-World rendering by [D-059](#d-059--the-world-renders-in-3d-with-threejs) (procedural 3D
+walk cycle); the Studio-only F scope is superseded by
 [D-053](#d-053--the-f-outfit-toggle-follows-the-local-avatar-throughout-world-play) ·
 supersedes the animation-geometry and Avatar Studio toggle portions of
 [D-049](#d-049--avatar-art-uses-one-fixed-64x64-logical-canvas) · Avatar 1
@@ -2445,7 +2450,7 @@ signature, funds or transaction was used by this implementation.
 
 ## D-056 — The funded tester may enable the pool-native STRK shield route
 
-**2026-08-24 · Accepted · autonomous tester handoff superseded by D-057**
+**2026-08-24 · Accepted · autonomous tester handoff superseded by D-057 · unshield exclusion superseded by D-062**
 
 **Context.** The disposable Ready mainnet account is now deployed, registered
 with the STRK20 pool and able to share its private balance with STRKWORLD. Its
@@ -2581,3 +2586,418 @@ account, balance, amount, route, transaction hash or wallet identity. Mock mode
 continues to complete without the cue lingering because it never waits on a
 human-owned prompt. Browser rendering and audibility remain local acceptance
 checks after the headless state and lifecycle regressions pass.
+
+---
+
+## D-059 — The World renders in 3D with Three.js
+
+**2026-09-27 · Accepted by the user · supersedes D-044's placeholder art base ·
+partially supersedes D-049 and D-052 for in-World avatars · amends the Phaser
+mechanism named in D-008, D-030 and D-039**
+
+**Context.** The user asked for STRKWORLD to become a 3D-rendered, simple game
+world you can walk around in, entirely in the browser, built on the same
+technology as a reference browser game made with Claude in one day. The
+reference site could not be inspected from the development machine, so the
+stack is the conventional one for that kind of build: vanilla Three.js on Vite
+and TypeScript. Offered a flag-gated rollout or a direct replacement, the user
+chose the quickest path to ship ("remove whatever you need or replace whatever
+you want"), low-poly 3D figures for avatars, and procedural geometry for the
+first art pass.
+
+**Decision.**
+
+- `packages/world` renders with Three.js 0.186 instead of Phaser 4. The engine
+  loads behind the same lazy `./runtime` seam — `acquireWorld` /
+  `releaseWorld`, the ref-counted host, retarget on a new Shell binding — and
+  keeps one WebGL context per mount. `acquireWorld` now resolves to `void`;
+  nothing in the Shell used the Phaser `Game` it returned.
+- Gameplay stays tile-authored in 2D pixel space and is now engine-agnostic.
+  `world-session.ts` carries StreetScene's orchestration, create/teardown
+  order and rollback rules over unchanged and drives a narrow
+  `WorldSessionView`. The street uses the same substep tile collision the
+  interiors already used (`moveWithCollisionSubsteps` with `isSolidAt` and the
+  same 24 px body), replacing Arcade physics. One tile is one world unit; +X is
+  east and +Z is south.
+- No seam changes shape. `packages/shared`, the lobby protocol and the Shell
+  are untouched. `Facing` stays four cardinal values on the wire; the avatar's
+  continuous yaw is presentation only.
+- Camera: third-person follow, north-up by default so the district reads as it
+  did in 2D; drag to orbit, wheel to zoom. Movement keys are camera-relative,
+  and the reported facing is the cardinal nearest the intended World-space
+  direction, with exact diagonals resolving vertically as before. The camera
+  never turns on its own, so a key held through a room or Studio handoff cannot
+  walk the player straight back out.
+- Art: procedural low-poly geometry and no new third-party assets. Avatars are
+  procedural blocky figures, one look per existing opaque avatar key, coloured
+  from the approved D-049 sheets, so the lobby's cosmetic allowlist is
+  unchanged. Buildings that stand between the camera and the player fade.
+- Input: a DOM keyboard replaces Phaser's KeyboardPlugin behind the same
+  `KeyboardLike` input-gate contract, and also clears held keys on window blur
+  and when the tab is hidden.
+- Other players are interpolated between lobby snapshots and face their
+  direction of travel. They remain presentation-only (D-038).
+
+**Consequences.**
+
+- The Phaser dependency, StreetScene, the Kenney atlas slicer and the
+  sprite-sheet renderers are removed. The approved 2D sheets stay: they are
+  the colour reference for the 3D looks and the source of D-058's
+  wallet-attention cue.
+- Still WebGL on one canvas under `.world-host`; no COOP/COEP, no
+  SharedArrayBuffer and no WASM, so D-005 is unaffected.
+- Frame stages are isolated. A failing session update, animation or camera
+  step is reported (rate-limited) and the frame still renders; the session's
+  rollback rules retry the handoff on the next frame.
+- A perspective camera sees further than the lobby's 640 px interest radius, so
+  a distant peer can appear at the edge of the fog.
+- Visual acceptance stays with the user at localhost:5173, as for every
+  rendered change. Headless tests cover the session (the StreetScene lifecycle
+  suite, ported), the keyboard, the camera math and scene construction.
+- A later Art decision may swap procedural geometry for a CC0 model pack; it
+  must record provenance the way D-044 did.
+
+---
+
+## D-060 — A shared block sandbox where the road ends
+
+**2026-09-27 · Accepted by the user · extends D-011 (shared seam: sandbox
+constants and types, `PresenceState.carrying`) and D-038 (remote peers carry a
+block colour) · adds anonymous lobby state under invariant 2**
+
+**Context.** The user asked for a simple sandbox area at the end of the road:
+blocks drop from the sky at random; `E` picks one up and `E` puts it down;
+blocks stack, with no practical ceiling but a solid floor; walking into a block
+steps you up onto it — one block at a time, never a climb of several; and the
+area is a large square you can reshape and draw in by placing blocks. They
+then asked for it to be multiplayer too.
+
+**Decision.**
+
+- The street map widens east: the road runs on into a 28×28 sandbox square
+  (`SANDBOX_AREA`, street tiles x 54–81, y 0–27). Its floor is a new walkable
+  tile kind; block stacks are shared state layered on top of it.
+- *Amended 2026-09-27, at the user's request for a better road-to-square
+  transition:* the square is walled on its street side — a two-block toy-block
+  wall one tile west of it, a new solid tile kind (`fence`) — and entered
+  through one gate where the road and both pavements run in. The gate's lintel
+  clears the tallest avatar holding a block. Sky drops and returned blocks
+  never land on the three tiles just inside the gate (`SANDBOX_ENTRANCE`,
+  x 54–56, y 11–18), so the rain cannot wall off the way in. Players may still
+  lay blocks there, but a stack in the entrance never grows past one step
+  (`SANDBOX_STEP_HEIGHT`), so nobody can wall it off either: a three-high wall
+  would otherwise be out of reach from the gate and lock everyone outside.
+- The lobby is the authority. The room stores the stacks (colour indices from
+  the ground up, per tile) and each player's carried colour. It spawns sky
+  drops on a server timer while players are present, never within a tile of a
+  player or in the entrance, and validates every pick and place: the target must be inside the
+  area, next to the requester, not under another player, within reach (block
+  tops from one below to two above the level the player stands on) and within
+  the height and block caps. A rejected request changes nothing. Blocks are
+  conserved: when a carrier disconnects or suspends presence, the block they
+  held returns to the board as a sky drop on a random open tile — never at the
+  carrier's position, which would reveal where they went.
+- Solo play runs the same pure rules locally in the Shell, so the sandbox works
+  without a lobby.
+- The lobby schema gains exactly one presence field, `carrying` (an opaque
+  colour index, or −1), plus anonymous block state. Neither is financial:
+  invariant 2 holds — no address, balance, transaction, token or building name
+  enters lobby traffic, and block state carries no identity field. It is not
+  unlinkable, though: an observer inside the presence interest radius can
+  correlate a peer's `carrying` change with a neighbouring column change in the
+  same patch, and anyone learns that someone was within reach of a changed
+  tile.
+- The World stays lobby-free. It receives a World-owned `SandboxChannel`
+  through `WorldConfig`, like D-038's peer source, reads stack heights for
+  movement and emits pick/place intents. Walking keeps the tile collision and
+  adds one rule: a stack more than one block above the level you stand on is a
+  wall; one block is a step up with a small hop; stepping down is free. `E`
+  targets the tile you face. Other players stand on the same shared stacks and
+  show the block they carry.
+- The shared seam grows additively — constants `SANDBOX_*`, types
+  `SandboxTile`, `SandboxColumn`, `SandboxSnapshot`, and
+  `PresenceState.carrying` — recorded here as D-011 requires.
+
+**Consequences.**
+
+- Blocks are visible to everyone in the room regardless of the 640 px presence
+  interest radius; the state is small (at most 900 blocks).
+- Every client draws a player standing on blocks at stack height from shared
+  state, so heights never go on the wire.
+- No persistence: block state lives as long as the lobby room.
+- Sandbox messages have their own rate limit; the existing hard message
+  ceiling still disconnects floods.
+- Reach and step checks bind honest clients; a hostile client can claim any
+  in-bounds position (presence already trusts positions within its clamps), so
+  on the server they are advisory. Block conservation bounds the damage: a
+  hostile player can rearrange blocks but not destroy them.
+- The board is player-written content visible to the whole room. Colluding
+  clients could encode data in it, as they already could in positions; nothing
+  here makes that financial.
+- Late joiners receive the whole board in one state encode, so the lobby
+  raises Colyseus's encode buffer above the worst-case board (see the lobby
+  findings).
+
+---
+
+## D-061 — The production Bridge plans its shield with a conservative STRK reserve
+
+**2026-09-27 · Accepted by the user · supersedes D-043 in part (its production planner lock) · open only while D-056's shield route is enabled**
+
+**Context.** D-043 locked new production Bridge quotes, deposit instructions
+and the Bridge-to-Bank handoff until a fee-aware shield route was proven:
+Ready's visible shield route approves only the deposit amount, while the
+pool's `apply_actions` separately pulls `get_fee_amount()` from the caller
+(the 2026-08-18 finding). In the 2026-09-27 feature review the user decided
+the Bridge should open with a conservative reserve rather than wait: size it
+from the live fee and overcompensate, to 10 STRK. The live fee read that day
+was 6 STRK (`get_fee_amount()` = 6e18 at mainnet block 15,523,237).
+
+**Decision.**
+
+- Production composition injects a reserve-based `PublicShieldPlanner`
+  whenever, and only when, the production shield route is enabled (D-056).
+  With shield disabled the Bridge stays recovery-only, exactly as before.
+- `plannedReserve = max(10 STRK, liveFee + gasAllowance)`. `liveFee` is the
+  pool's `get_fee_amount()`, read live through the existing pool-configuration
+  path at planning time; `gasAllowance` is a fixed, positive, conservative
+  public-gas allowance of 4 STRK — above the one measured STRK20 private
+  transaction's 3.6133 STRK of gas, and exactly 10 STRK minus today's fee, so
+  today's reserve is the approved 10 STRK and a fee rise never squeezes gas. The planner fails closed — no plan, handoff
+  locked — when the read fails, the denomination is not the Bridge's STRK or
+  `amountToShield` would not be positive.
+- `amountToShield = available − plannedReserve`. D-043's arithmetic,
+  denomination and positivity rules are unchanged, as are its two phases:
+  preflight against the signed minimum output before deposit instructions,
+  then a fresh maximum-shield plan from the actual `strkReceived` after
+  `SUCCESS`, revalidated at the Bank commit point, where the Bank's own fee
+  ceiling and confirmation remain authoritative.
+- The unspent reserve stays as public STRK in the player's wallet, and the
+  copy says so.
+
+**Consequences.**
+
+- "Bring funds in, then shield" becomes playable in production wherever the
+  shield route is.
+- The fee-allowance question is not resolved by this: if Ready does not
+  supply the allowance for the pool fee, the separate shield reverts and the
+  bridged STRK stays public in the player's wallet — the state a manual Bridge
+  deposit already ends in, never a loss. D-056's funded shield is the evidence
+  either way.
+- A governance fee rise is absorbed automatically: the live fee always wins
+  over the 10 STRK floor.
+
+---
+
+## D-062 — The funded tester may enable the pool-native STRK unshield route
+
+**2026-09-27 · Accepted by the user · supersedes D-056 in part (its unshield exclusion)**
+
+**Context.** Unshield is built, register-approved (`public-edge`, with its
+D-024 disclosure) and the pool's only in-game exit, but D-056 admitted shield
+alone and production policy hard-coded unshield to deny, so the Bank offered a
+route that could only fail at prepare. The user asked for it to be switched
+on. Like transfer, unshield is submitted through the private-submission
+backend, whose own route allowlist and relay-fee ceiling
+(`BACKEND_ROUTE_UNSHIELD_*`) already exist.
+
+**Decision.** Production wallet policy may expose an explicit, fail-closed
+unshield configuration mirroring the transfer route's shape: disabled by
+default; admits only the configured STRK token, a positive bounded intent
+count and a positive relay-fee ceiling, alongside the live pool-fee ceiling
+check; malformed, partial or empty configuration resolves to deny-all. Where
+several relayed routes are enabled, the policy keeps the strictest relay-fee
+ceiling and intent bound. Enabling unshield enables nothing else. Ready remains
+the only owner of execution, and the final confirmation remains a human
+handoff.
+
+**Consequences.** Tests pin disabled and malformed deny-all, STRK-only
+enablement, strictest-bound merging and the absence of every other route. The
+acceptance evidence is one small funded mainnet unshield by the tester, with
+its receipt and a deliberate balance refresh; until then the route is enabled
+only in the tester's checkout.
+
+---
+
+## D-063 — Endur private staking is a Bank counter, built switched off
+
+**2026-09-27 · Accepted by the user · extends D-036's frozen seam with a `stake` intent · a D-018 anonymizer path · respects D-030's one-grade-per-station rule**
+
+**Context.** The feature review of strk20.starknet.io found Endur liquid
+staking live on mainnet through an STRK20 anonymizer, the strongest new
+integration. `EndurDepositAnonymizer` at
+`0x030dee638065962eb3642ca54aa48e9e2cd98536bc90b64b99bb306c1db30698` has one
+entry point, `privacy_invoke(in_token, out_token, assets: u256, note_id) ->
+Span<OpenNoteDeposit>` (read from the deployed class ABI); Endur's xSTRK at
+`0x028d709c875c0ceac3dce7065bec5328186dc89fe254527084d1689910954b0a` is an
+ERC-4626 vault. There is no private unstake: Endur's withdrawal queue takes
+1–14 days and no withdraw anonymizer exists. Ready 5.33.8's client accepts any
+invoke target, but its paymaster may reject one that is not pre-approved. The
+user chose a counter in the Bank, in Endur's look, built now and switched off.
+
+**Decision.**
+
+- `PrivacyOperations` gains a `stake` intent — STRK in, xSTRK out, one
+  amount — prepared like `swap`, in AVNU's mainnet-proven order: withdraw the
+  staked STRK to the anonymizer, withdraw the relay fee, open the xSTRK note,
+  then invoke the anonymizer (calldata `[in, out, amount low, amount high,
+  note_id]`). There is no minimum-out field: `privacy_invoke` enforces none,
+  and D-041/D-042 forbid showing a floor nothing enforces. No other seam
+  method changes.
+- Like swap, it is relayed by the private-submission backend through AVNU's
+  sponsored-private paymaster. A fail-closed `BACKEND_ROUTE_STAKE_*` group,
+  disabled when absent, admits exactly one call to the pinned anonymizer plus
+  exactly two withdrawals: the authorized fee and the staked STRK.
+- The privacy register grades it `anonymous`, like swap: who staked is hidden;
+  the amount staked and the xSTRK received are public. (Its player-facing
+  disclosure is waived by D-064.)
+- The Bank gets a separate staking station and menu section, so no station
+  mixes grades (D-030). It wears Endur's palette, as the Bank's other counters
+  wear STRK20's.
+- It is switched off: production policy and the backend both deny `stake`
+  unless their own fail-closed configuration enables it.
+
+**Consequences.**
+
+- Before switching it on: AVNU's sponsored-private paymaster, which relays it
+  behind the backend, must accept the anonymizer as an invoke target (ask the
+  STRK20 team or AVNU; Ready's client already accepts any target), and one
+  small funded stake must succeed.
+- The counter is stake-only. A later decision covers exit: an Endur withdraw
+  anonymizer, or adding xSTRK to the Exchange (whose six-asset catalog is fixed
+  by D-042).
+- The position view reads the shielded xSTRK balance only on the player's
+  explicit request, like every balance, plus a public xSTRK-to-STRK rate.
+
+---
+
+## D-064 — The lead waives the in-game disclosure for Endur staking
+
+**2026-09-27 · Accepted by the user · a narrow exception to D-020/D-024's disclosure rule, for `bank.stake` only**
+
+**Context.** D-063's staking counter is graded `anonymous`: who staked is
+hidden, while the STRK staked and the xSTRK received are public, as with the
+private swap. The register requires every deviation to show the player a
+disclosure before commit. Offered a one-line disclosure, the user declined any
+disclosure for staking.
+
+**Decision.**
+
+- The register gains an explicit waiver, `disclosureWaivedBy`, naming the
+  decision that waives a route's player-facing disclosure. It replaces only the
+  `disclosure` string: approval, date and rationale are still required, and
+  the grade and `observable` still record exactly what an observer sees.
+- `bank.stake` carries `disclosureWaivedBy: 'D-064'`, approved by the lead.
+  The commit gate does not demand a disclosure for it; every other deviation
+  keeps its disclosure.
+- A waiver counts at runtime only when the frozen `DISCLOSURE_WAIVERS` table
+  lists that exact route with that exact decision, so no route can borrow a
+  decision that merely mentions it. Check 8 strips comments, requires every
+  register entry to parse, and accepts a waiver only when the cited decision
+  is Accepted, unsuperseded, and itself records the route's
+  `disclosureWaivedBy` value.
+- In exchange, the counter's own copy claims no amount privacy. It may say
+  staking is from the pool balance and that the xSTRK lands in the pool; it
+  must not say amounts are hidden. The note that unstaking takes 1–14 days
+  through Endur and is not available in the game stays: it is how the product
+  works, not a privacy disclosure.
+
+**Consequences.** The Exchange keeps its swap disclosure, so the two
+`anonymous` routes now differ in what they show. Any further waiver needs its
+own decision; there is no blanket switch.
+
+---
+
+## D-065 — A first transfer reveals its recipient; no note, one recipient per send
+
+**2026-09-27 · Accepted by the user · regrades `post-office.transfer` from `private` to `anonymous` · a D-064-style disclosure waiver**
+
+**Context.** The 2026-09-27 privacy audit verified on mainnet that a first
+transfer to a new recipient opens a channel keyed by the recipient's address:
+`Append(recipient)` sits in plaintext calldata and `get_num_of_channels`
+for that address goes from 0 to 1 in the same block (tx `0x33d01b…495`, block
+15,524,071; re-checked independently). The sender and the amount stay hidden,
+the relay fee leaves the pool publicly to AVNU's forwarder, and the proof's
+reference block dates the confirm. The register graded the route `private`
+with "all hidden", which overclaimed. Batching several transfers publishes
+every new recipient in one transaction, as paid by one sender. Offered a
+one-line note, the user declined it, and chose one recipient per send.
+
+**Decision.**
+
+- `post-office.transfer` is regraded `anonymous`, the conservative grade that
+  does not overclaim, and `observable` records exactly what is visible.
+- Its in-game disclosure is waived: `post-office.transfer` carries `disclosureWaivedBy: 'D-065'`,
+  listed in `DISCLOSURE_WAIVERS` and approved by the lead. Copy may keep "send
+  privately" but must not claim the recipient is hidden.
+- One recipient per send: a batch holds at most one transfer. The Shell's
+  batch accumulator refuses a second, and the relay rejects any submission
+  that pays more than one recipient.
+
+**Consequences.** Menu Mode's transfer tab at the Bank follows the same rule.
+A shield and a transfer may still share a visit. The recipient reveal cannot
+be avoided through the Wallet API, which has no separate way to open a
+channel in advance.
+
+---
+
+## D-066 — The relay submits without an artificial delay
+
+**2026-09-27 · Accepted by the user · supersedes D-004 in part (its randomised relay delay)**
+
+**Context.** D-004 put a randomised delay between game action and broadcast
+to break timing correlation. The 2026-09-27 privacy audit found it cannot:
+the wallet builds the proof before the relay sees anything, and every pool
+transaction publishes its proof's reference block in plaintext
+(`proof_facts[4]`), which dates the confirm whenever it is broadcast. The
+delay instead pushed the game's transactions past the pool's normal 14–33
+block proof-to-inclusion gap (p90 22), so they stood out, and a delay longer
+than the request deadline failed submissions after the player had approved.
+
+**Decision.** Relayed routes (transfer, unshield, stake) submit as soon as
+they are validated. The backend accepts a zero queue delay for them, and the
+example configuration sets zero. A nonzero delay remains possible but must
+leave the request deadline 5 s of headroom. The submission queue's
+concurrency and backpressure limits stay.
+
+**Consequences.** Sends feel faster. Timing privacy is unchanged in
+substance: the proof's block always dated the confirm. D-019's accepted
+presence leak, the avatar vanishing into a building, remains the main
+in-game timing signal.
+
+---
+
+## D-067 — The degen floor swaps a curated core plus avnu's live community list
+
+**2026-09-28 · Accepted by the user · extends D-042 (the ground floor's six-asset catalog is unchanged) · keeps D-018's server-side allowlisting**
+
+**Context.** The Exchange's new degen floor was asked to list "the degen mode
+listed tokens on Starknet that avnu has", and the user chose a combination of
+a curated list and avnu's live list. avnu's degen mode is a client toggle; its
+public token API tags tokens `Unknown`, `Verified`, `Community`, `Unruggable`
+and `AVNU`. Routed liquidity is thin (about $50–60 a day for LORDS and
+DREAMS, under $10 for most others), and ticker-squatting impostors exist
+(three fake LORDS). The pool itself accepts any ERC-20, so our allowlist is
+the only gate.
+
+**Decision.**
+
+- The degen counter (`exchange:degen`) swaps privately through the same
+  `exchange.swap` route, grade and disclosure as the ground floor, over a
+  separate degen catalog.
+- The degen catalog is a curated core (LORDS, DREAMS, SLAY, BROTHER, tBTC,
+  CASH, DOG), each pinned to a reviewed address and always listed, plus
+  avnu's live list. The backend fetches the live list itself, so avnu never
+  sees a player's IP. It keeps only `Verified`, `Community`, `Unruggable` or
+  `AVNU` tags above a minimum routed daily volume, and never a token whose
+  ticker impersonates a curated one. Addresses come only from avnu's API or
+  the curated core, never from player input or a URL.
+- The backend admits a degen swap only for tokens in the curated core or in
+  its own current filtered list. The counter is labelled "Degen mode" and
+  shows each token's avnu tag. D-041/D-042's protected-minimum review applies
+  unchanged: thin liquidity means worse quotes, never an unprotected fill.
+
+**Consequences.** Demo mode shows the counter working against the fake.
+Production keeps swap denied until swap itself is switched on; that decision
+must also switch the degen catalog on or off. The volume floor and tag set are
+operator configuration.

@@ -24,6 +24,12 @@ import type { Intent } from '@strkworld/privacy';
  * the app breaking, so the accumulator refuses at the moment of the mistake and
  * says why.
  *
+ * **It holds at most one transfer** (D-065). A first transfer to a new
+ * recipient publishes that recipient's address, so a batch of transfers would
+ * publish every new recipient in one transaction, paid by one sender. The
+ * relay refuses such a submission; refusing here says so before the wallet
+ * proves anything.
+ *
  * **It never clears itself on emit.** `confirm()` hands out a frozen snapshot;
  * the visit's intent survives a failed prepare so the player is not asked to
  * retype it.
@@ -37,6 +43,12 @@ export type BatchRejectionReason =
   /** One visit settles as one approved route (D-018). */
   | { reason: 'mixed-route-kinds'; queued: Intent['kind']; incoming: Intent['kind'] }
   | { reason: 'swap-must-be-alone' }
+  /** D-063: the pool admits one external invoke per transaction, so a stake settles alone. */
+  | { reason: 'stake-must-be-alone' }
+  /** D-065: a first send publishes its recipient, so one batch pays one recipient. */
+  | { reason: 'one-recipient-per-send' }
+  /** The relay's unshield route admits exactly one withdrawal, so a batch unshields once. */
+  | { reason: 'one-unshield-per-send' }
   | { reason: 'non-positive-amount' }
   | { reason: 'batch-full'; limit: number }
   | { reason: 'empty-batch' };
@@ -102,11 +114,27 @@ export function createBatchAccumulator(options: AccumulatorOptions = {}): BatchA
         if (queued.kind === 'swap' || intent.kind === 'swap') {
           return { ok: false, rejection: { reason: 'swap-must-be-alone' } };
         }
+        // The seam prepares a stake one at a time (D-063); refusing here says so
+        // at the moment of the mistake rather than as a failed prepare.
+        if (queued.kind === 'stake' || intent.kind === 'stake') {
+          return { ok: false, rejection: { reason: 'stake-must-be-alone' } };
+        }
         if (queued.kind !== intent.kind) {
           return {
             ok: false,
             rejection: { reason: 'mixed-route-kinds', queued: queued.kind, incoming: intent.kind },
           };
+        }
+        // D-065: one recipient per send. Checked after the mixing rules, so a
+        // shield or an unshield queued beside a transfer keeps its own reason.
+        if (intent.kind === 'transfer' && intents.some((entry) => entry.kind === 'transfer')) {
+          return { ok: false, rejection: { reason: 'one-recipient-per-send' } };
+        }
+        // The relay's unshield route admits exactly one withdrawal per
+        // submission (apps/backend server-actions.ts), so a second unshield in
+        // the batch would be refused only after the player approved the proof.
+        if (intent.kind === 'unshield' && intents.some((entry) => entry.kind === 'unshield')) {
+          return { ok: false, rejection: { reason: 'one-unshield-per-send' } };
         }
       }
 
@@ -148,6 +176,8 @@ const INTENT_SHAPES = {
   unshield: ['kind', 'token', 'amount', 'recipient'],
   transfer: ['kind', 'token', 'amount', 'recipient'],
   swap: ['kind', 'tokenIn', 'tokenOut', 'amountIn', 'minAmountOut'],
+  // No minimum output: nothing on-chain enforces one for a stake (D-063).
+  stake: ['kind', 'tokenIn', 'tokenOut', 'amountIn'],
 } as const satisfies Record<Intent['kind'], readonly string[]>;
 
 const ADDRESS_FIELDS = ['token', 'recipient', 'tokenIn', 'tokenOut'] as const;
@@ -217,5 +247,5 @@ function reject(detail: string): BatchResult<never> {
 }
 
 function amountOf(intent: Intent): bigint {
-  return intent.kind === 'swap' ? intent.amountIn : intent.amount;
+  return intent.kind === 'swap' || intent.kind === 'stake' ? intent.amountIn : intent.amount;
 }

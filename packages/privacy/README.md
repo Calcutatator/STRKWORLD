@@ -162,7 +162,11 @@ quote IDs, executor calls, calldata, authorizations, paymaster details and
 recovery handles never cross this seam. The fake exposes the same field only
 when its explicit deterministic `swapReview` configuration supplies the
 expected output, expiry and slippage; it never reads a clock or invents a
-market rate.
+market rate. For the demo's degen floor (D-067), an explicit
+`demoSwapRates` table (base units per STRK, plus a fixed slippage and expiry)
+quotes a swap between two rated tokens by floored bigint arithmetic, with
+AVNU's protected-minimum formula; any other swap falls back to `swapReview`.
+Those rates are demo fixtures, never prices.
 
 `buildStrk20Actions` is a validation-free array literal, and the relay's own
 binding check runs only *after* the wallet has minted an irrevocable proof. So
@@ -220,8 +224,10 @@ on the route:
   AVNU's paymaster without the user's account signer. The submission port
   reports acceptance as soon as it knows the transaction hash; `confirm()`
   preserves that receipt if later gateway cleanup throws.
-- A quote-bound AVNU swap uses the same wallet proof artifact but skips timing
-  delay; delaying it risks submitting an expired quote. The backend chooses
+- A quote-bound AVNU swap uses the same wallet proof artifact but never waits:
+  the backend neither delays nor queues it, since waiting risks submitting an
+  expired quote. (Since D-066 the pool-native routes carry no artificial delay
+  by default either; they may still wait for a free submission slot.) The backend chooses
   the private quote and executor calls, then the browser passes that bounded
   plan through AVNU's `buildStrk20Actions()`. The bought asset is created
   directly as an `OPEN` pool note; there is no public output or second shield

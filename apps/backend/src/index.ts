@@ -1,6 +1,8 @@
-export { BackendApi, type BackendApiOptions } from './api.js';
+export { BackendApi, DEGEN_TOKENS_PATH, type BackendApiOptions } from './api.js';
+export { AvnuDegenCatalog, type AvnuDegenCatalogOptions } from './avnu-degen-catalog.js';
 export { AvnuPaymasterPort, type AvnuPaymasterOptions } from './avnu-paymaster.js';
 export { AvnuSwapPlanner, type AvnuSwapPlannerOptions } from './avnu-swap-planner.js';
+export { DEGEN_CURATED_CORE, DEGEN_TAGS, filterLiveTokens } from './degen-catalog.js';
 export { HmacAuthorizationCodec, MemoryAuthorizationCodec } from './authorization.js';
 export {
   AggregateBudget,
@@ -26,7 +28,13 @@ export type {
   ApiRequest,
   ApiResponse,
   AuthorizationCodec,
+  AvnuTokenTag,
   BackendConfig,
+  DegenCatalogPort,
+  DegenCatalogSnapshot,
+  DegenConfig,
+  DegenTag,
+  DegenToken,
   FeeAuthorizationClaims,
   PaymasterPort,
   PoolRpcPort,

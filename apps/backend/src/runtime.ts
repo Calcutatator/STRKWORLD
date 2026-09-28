@@ -7,6 +7,7 @@ import {
 import { Readable } from 'node:stream';
 import { BackendApi } from './api.js';
 import { HmacAuthorizationCodec } from './authorization.js';
+import { AvnuDegenCatalog } from './avnu-degen-catalog.js';
 import { AvnuPaymasterPort } from './avnu-paymaster.js';
 import { AvnuSwapPlanner } from './avnu-swap-planner.js';
 import {
@@ -16,12 +17,13 @@ import {
 } from './environment.js';
 import { createBackendFetchHandler } from './http.js';
 import { StarknetRpcPoolPort } from './starknet-rpc.js';
-import type { PaymasterPort, PoolRpcPort, SwapPlannerPort } from './types.js';
+import type { DegenCatalogPort, PaymasterPort, PoolRpcPort, SwapPlannerPort } from './types.js';
 
 export interface BackendRuntimeOverrides {
   paymaster?: PaymasterPort;
   rpc?: PoolRpcPort;
   swapPlanner?: SwapPlannerPort;
+  degenCatalog?: DegenCatalogPort;
 }
 
 export interface BackendRuntime {
@@ -165,11 +167,21 @@ function createBackendApi(
   parsed: ParsedBackendEnvironment,
   overrides: BackendRuntimeOverrides,
 ): BackendApi {
+  // D-067: composed only while the BACKEND_DEGEN_* group is present. It makes
+  // no request until a player opens the degen counter or quotes a degen swap.
+  const degen = parsed.backend.degen;
+  const avnuBaseUrl = parsed.swapPlanner.baseUrl;
   return new BackendApi({
     config: parsed.backend,
     paymaster: overrides.paymaster ?? new AvnuPaymasterPort(parsed.paymaster),
     rpc: overrides.rpc ?? new StarknetRpcPoolPort(parsed.rpc),
     swapPlanner: overrides.swapPlanner ?? new AvnuSwapPlanner(parsed.swapPlanner),
+    ...(degen ? {
+      degenCatalog: overrides.degenCatalog ?? new AvnuDegenCatalog({
+        config: degen,
+        ...(avnuBaseUrl ? { baseUrl: avnuBaseUrl } : {}),
+      }),
+    } : {}),
     authorizations: new HmacAuthorizationCodec(parsed.authorizationSecret),
   });
 }

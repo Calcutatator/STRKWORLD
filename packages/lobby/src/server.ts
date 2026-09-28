@@ -41,7 +41,7 @@ import {
   resolveRoomConfig,
   type PresenceRoomConfigOverrides,
 } from './config.js';
-import { definePresenceRoom } from './room.js';
+import { definePresenceRoom, reserveStateEncodeBuffer } from './room.js';
 import { silenceColyseusDebug } from './logging.js';
 
 /** Origins allowed to reach the matchmaking HTTP API from a browser. */
@@ -157,6 +157,10 @@ export async function startPresenceServer(
   // DEBUG=colyseus:* (see logging.ts).
   silenceColyseusDebug();
   lockCors(options.allowedOrigins ?? DEFAULT_ALLOWED_ORIGINS);
+  // Before any room exists: a joiner's full state must fit the first encode
+  // buffer, or Colyseus sends everything past 8 KB as zeros. See
+  // STATE_ENCODE_BUFFER_BYTES in room.ts for the mechanism.
+  reserveStateEncodeBuffer();
 
   // Resolve and freeze the trusted config once, in this trusted process, and
   // bake it into the room class. Nothing about it travels as client options.

@@ -78,7 +78,9 @@ function isSeam(specifier: string): boolean {
 }
 
 function isAllowedLobbyImport(specifier: string): boolean {
-  return specifier === '@strkworld/lobby/client';
+  // D-060: the pure sandbox rules run the solo sandbox in the browser. The
+  // test below pins that entry to `@strkworld/shared` imports only.
+  return specifier === '@strkworld/lobby/client' || specifier === '@strkworld/lobby/sandbox';
 }
 
 const isTest = (path: string): boolean => /\.test\.tsx?$/.test(path);
@@ -92,6 +94,7 @@ describe('shell boundaries', () => {
         .map(() => path));
     expect(offenders).toEqual([]);
     expect(isAllowedLobbyImport('@strkworld/lobby/client')).toBe(true);
+    expect(isAllowedLobbyImport('@strkworld/lobby/sandbox')).toBe(true);
     expect(isAllowedLobbyImport('@strkworld/lobby/server')).toBe(false);
     expect(isAllowedLobbyImport('@strkworld/lobby')).toBe(false);
     // Adversarial fixture: the scanner must catch a bare server-capable entry,
@@ -99,6 +102,16 @@ describe('shell boundaries', () => {
     expect(imports("import { LobbyClient } from '@strkworld/lobby';").some(({ specifier }) =>
       specifier === '@strkworld/lobby' && !isAllowedLobbyImport(specifier),
     )).toBe(true);
+  });
+
+  it('keeps the browser-side sandbox rules free of server code (D-060)', () => {
+    const rules = readFileSync(
+      fileURLToPath(new URL('../../../packages/lobby/src/sandbox-rules.ts', import.meta.url)),
+      'utf8',
+    );
+    const specifiers = imports(rules).map(({ specifier }) => specifier);
+    expect(specifiers.length).toBeGreaterThan(0);
+    expect(specifiers.every((specifier) => specifier === '@strkworld/shared')).toBe(true);
   });
 
   it('holds no runtime import of the financial seam outside the lazy demo module', () => {

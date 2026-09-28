@@ -48,7 +48,7 @@ export function isFelt(value: string): boolean {
 }
 
 export function requireRoute(value: unknown): PrivateRoute {
-  if (value !== 'transfer' && value !== 'unshield' && value !== 'swap') {
+  if (value !== 'transfer' && value !== 'unshield' && value !== 'swap' && value !== 'stake') {
     throw new ApiFailure(400, 'Unknown private route.');
   }
   return value;

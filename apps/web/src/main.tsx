@@ -6,10 +6,13 @@ import { App } from './App.js';
 import './styles.css';
 import { createPresenceController, type PresenceController } from './presence/presence-controller.js';
 import { lobbyEndpoint } from './presence/config.js';
+import { LobbyClient } from '@strkworld/lobby/client';
+import { createSandboxController } from './sandbox/sandbox-controller.js';
 import { installPresenceTeardown } from './presence/lifecycle.js';
 import { parseProductionWalletConfig, usesProductionWallet } from './production/config.js';
 import { startProductionWalletBootstrap } from './production/bootstrap.js';
-import { ProductionRoot } from './production/ProductionRoot.js';
+import { ProductionRoot, type ShieldPlannerFactory } from './production/ProductionRoot.js';
+import { createBackendDegenCatalog } from './panels/exchange/degen-catalog.js';
 
 /**
  * STRKWORLD shell entry point.
@@ -21,7 +24,7 @@ import { ProductionRoot } from './production/ProductionRoot.js';
  * double-mount, which would otherwise hand the world a fresh bus on the second
  * pass and strand every subscription made against the first.
  *
- * The world's own lifecycle (Phaser, WebGL) is ref-counted inside
+ * The world's own lifecycle (Three.js, WebGL) is ref-counted inside
  * `@strkworld/world` precisely so that double-mount is safe; nothing here needs
  * to defend against it beyond keeping these two references fixed.
  */
@@ -32,13 +35,27 @@ const environment = (import.meta as ImportMeta & {
   env: Record<string, string | boolean | undefined>;
 }).env;
 let activePresence: PresenceController | null = null;
+// The shared block sandbox (D-060): the lobby is its authority whenever a lobby
+// client is connected, and the same rules run locally for solo play. Created
+// once, like the buses, so the World always holds one stable channel.
+const sandbox = createSandboxController();
+const stopSandboxWorld = sandbox.listen(worldOut);
 const createPresence = (): PresenceController => {
-  const next = createPresenceController({ endpoint: lobbyEndpoint() });
+  const next = createPresenceController({
+    endpoint: lobbyEndpoint(),
+    factory: (options) => sandbox.adopt(new LobbyClient(options)),
+    sandbox: sandbox.channel,
+  });
   activePresence = next;
   return next;
 };
+// One teardown for everything multiplayer: Vite keeps a single `hot.dispose`
+// callback per module, so the sandbox rides on the presence lifecycle rather
+// than registering a second one that would silently replace it.
 const presenceLifecycle = {
   destroy: async () => {
+    stopSandboxWorld();
+    sandbox.destroy();
     await activePresence?.destroy();
   },
 };
@@ -79,12 +96,19 @@ if (usesProductionWallet(environment)) {
   );
   try {
     const config = parseProductionWalletConfig(environment);
+    // The degen floor's list (D-067), read from the same-origin backend only
+    // when the degen counter opens; while swap is off that counter is locked.
+    const degenCatalog = createBackendDegenCatalog({ baseUrl: config.backendBaseUrl });
+    // D-061's reserve planner arrives with the same lazy privacy import.
+    // ProductionRoot uses it only while config.policy enables shield.
+    let createShieldPlanner: ShieldPlannerFactory | undefined;
     // Keep the Starknet/Wallet API implementation out of the initial shell
     // graph. Production still always takes this path; the dynamic boundary only
     // lets the city render its honest loading surface before chain code arrives.
     startProductionWalletBootstrap({
       load: async () => {
-        const { createProductionWalletSession } = await import('@strkworld/privacy');
+        const { createProductionWalletSession, ReservePublicShieldPlanner } = await import('@strkworld/privacy');
+        createShieldPlanner = (options) => new ReservePublicShieldPlanner(options);
         return createProductionWalletSession(config);
       },
       render: (session) => {
@@ -96,6 +120,9 @@ if (usesProductionWallet(environment)) {
               shellIn={shellIn}
               createPresence={createPresence}
               bridge={{ loadRuntime: loadProductionBridgeRuntime }}
+              policy={config.policy}
+              createShieldPlanner={createShieldPlanner}
+              degenCatalog={degenCatalog}
             />
           </StrictMode>,
         );

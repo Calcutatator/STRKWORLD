@@ -1,6 +1,6 @@
 # @strkworld/world
 
-**The game. Phaser scenes, movement, tilemaps, sprites.**
+**The game. A tile-authored world, drawn in 3D with Three.js (D-059).**
 
 This package knows nothing about wallets or money. If code here needs to know
 a balance, it is being asked to do the wrong job — the value should be pushed
@@ -10,18 +10,35 @@ in as plain data by the shell.
 
 ## What this owns
 
-- Phaser scenes, the game loop and camera
-- Tilemaps, collision, world layout
-- Player and NPC sprites, walking animation
-- Building entrances and their trigger zones
+- The gameplay session (`world-session.ts`): movement, tile collision, door
+  triggers, fixed rooms and stations, the Avatar Studio, the outfit toggle and
+  the input gate — engine-agnostic and tested headlessly
+- The 3D presentation (`three/`): renderer, camera, lighting, procedural
+  district and interiors, low-poly avatars, remote avatars
+- World layout and building entrances with their trigger zones
 - Semantic events out: `building:entered`, `building:exited`, `player:moved`
+
+Gameplay stays in 2D pixel space — the same coordinates the lobby, door
+triggers and room controllers always used. The renderer draws that plane in 3D:
+one 32 px tile is one world unit, +X is east, +Z is south and +Y is up
+(`three/coords.ts`). Nothing outside the renderer ever sees a 3D coordinate, so
+no seam changed shape.
 
 ## Controls
 
-Arrow keys and WASD move the avatar identically outdoors and in every fixed
-room interior. Hold either Shift key to sprint at exactly 1.5× walk speed;
-releasing Shift immediately returns to walk speed. Diagonal movement remains
-normalized, including while sprinting.
+Arrow keys and WASD move the avatar identically outdoors, in every fixed room
+interior and in the Studio. Hold either Shift key to sprint at exactly 1.5×
+walk speed. Diagonal movement stays normalized, including while sprinting.
+`F` swaps the paired outfit anywhere the avatar is (D-053). In the block
+sandbox at the end of the road, `E` picks up the block in front of you and `E`
+again puts it down (D-060).
+
+The camera follows the player, north-up by default. Drag (left or right
+button) to orbit, scroll to zoom. Movement keys are camera-relative — "up"
+always walks away from the camera — and the facing published on the wire is
+the cardinal nearest the intended World direction. The camera never turns on
+its own, so a key held through a room or Studio handoff cannot walk the player
+back out of the door. Buildings between the camera and the player fade.
 
 On `building:entered`, the shell removes or suspends the player's lobby
 presence while the local interior UI is open. The world emits the semantic
@@ -46,16 +63,20 @@ plain data and emits semantic events.
 emitter.emit('building:entered', { building: 'bank' })
 
 // in — the shell tells the world what to render
-emitter.on('hud:balance', (b: { display: string | null }) => { ... })
+emitter.on('world:stations', ({ building, stations }) => { ... })
 ```
+
+The `hud:*` and `wallet:status` events reach this package too, but the HUD is
+drawn by the Shell's overlay (`apps/web/src/hud`), so the World ignores them.
 
 The world must run correctly with no wallet connected at all. That is what
 Phase 1 builds, and it is what makes the world independently testable.
 
 Remote-avatar snapshots are the one retained-state side seam (D-038), not an
-event. The Shell injects a World-owned replaying source before scene creation;
-this package subscribes and reconciles complete presentation-only snapshots.
-It never imports the lobby or controls its connection lifecycle.
+event. The Shell injects a World-owned replaying source; this package
+subscribes and reconciles complete presentation-only snapshots, interpolating
+each avatar between them. It never imports the lobby or controls its
+connection lifecycle.
 
 The source is subscribe-only at the World boundary. The Shell keeps the
 publisher/controller beside its lobby lifecycle and passes only the source to
@@ -68,73 +89,98 @@ channel.publish(peers);
 channel.clear();
 ```
 
-The ref-counted Phaser host survives React's synchronous StrictMode remount.
-A same-owner remount keeps the current Scene cycle and WebGL context. If the
-host element or injected buses/remote-peer source change before deferred
-teardown, the retained Game keeps one stable World-owned Phaser parent and
-moves that parent to the new React host. It then samples the new bounds through
-ScaleManager's public API, refreshes, and restarts the Street Scene against the
-new registry config. It must not retain a detached React node, first Shell bus
-or stale remote-peer source merely because the WebGL context survives.
+## Lifecycle
 
-Each snapshot contains only `{ id, x, y, facing, sprite }`. The World drops
-invalid identity, position or facing data, replaces omitted IDs, and maps the
-approved cosmetic sprite key onto its safe local avatar texture.
+`acquireWorld` / `releaseWorld` go through the ref-counted host (`host.ts`),
+which survives React's synchronous StrictMode remount. One engine owns one
+WebGL context per mount. A same-owner remount keeps the current session. If
+the host element or injected buses/remote-peer source change before deferred
+teardown, the engine moves its stable World-owned mount to the new React host,
+re-measures it, and rebuilds only the gameplay session against the new config:
+it must not retain a detached React node, the first Shell bus or a stale
+remote-peer source merely because the WebGL context survives.
+
+Teardown is synchronous — stop the loop, dispose the session, every geometry,
+material and texture, then the renderer and its context. A renderer that waited
+for the next animation frame would never tear down in a hidden tab.
+
+Frame stages are isolated. A failing session update, animation or camera step
+is reported (rate-limited) and the frame still renders; the session's rollback
+rules retry a failed Shell handoff on the next frame.
+
+Each remote snapshot contains only `{ id, x, y, facing, sprite }`. The World
+drops invalid identity, position or facing data, replaces omitted IDs, and maps
+the approved cosmetic sprite key onto its local avatar look.
+
+## The block sandbox (D-060)
+
+The road runs through a gate into a 28×28 square (`SANDBOX_AREA`) where blocks
+drop from the sky and players stack them. A two-block toy-block wall (solid
+`fence` tiles) closes the square's street side. Sky drops keep clear of the
+three tiles inside the gate (`SANDBOX_ENTRANCE`) and stacks there stay one
+block high, so the way in always stays walkable; the aim highlight shows the
+same limit. The stacks are shared state with one authority:
+the lobby room when a lobby connection is open, or the same pure rules run by
+the Shell for solo play. The World never imports the lobby; it receives a
+World-owned `SandboxChannel` through `WorldConfig`, like the D-038 peer source.
+
+- **Movement** (`sandbox.ts`): you stand on the tallest stack your body
+  overlaps. A stack more than one block above that level is a wall; one block
+  is a step up with a small hop; stepping down is free. With no blocks the
+  mover is identical to the interiors' tile collision.
+- **`E`** aims at the neighbouring tile you face. Empty hands pick its top
+  block; carrying places onto it. A ghost highlight shows the target and
+  whether the shared reach rules allow it; the authority decides.
+- **Presentation** (`three/sandbox-view.ts`): one instanced mesh for every
+  block, sky drops fall from high above, carried blocks ride above heads for
+  every player, and the camera, sun and fog follow you up tall towers.
 
 ## Fixed Game Mode rooms
 
-D-039 makes fixed interiors data, not separate Phaser scenes. The Phaser-free
-room core owns tiles, collision, physical exit, station approach/activation and
-Shell control handoff for every definition; the street scene only presents the
-currently active room. A definition may name a building and opaque station but
-never a route or action.
+D-039 makes fixed interiors data, not separate scenes. The room core owns
+tiles, collision, physical exit, station approach/activation and Shell control
+handoff for every definition; the session presents the currently active room.
+A definition may name a building and opaque station but never a route or
+action. Interiors are drawn at `ROOM_ORIGIN` over the hidden street
+(`world-layout.ts`).
 
 The Bank remains the frozen first tracer. The Post Office is the second, with
 one `post-office:transfer` station labelled `TRANSFER`; the Exchange is the
 third, with one `exchange:swap` station labelled `SWAP`. All use the same
-18×12, 32 px procedural envelope for this placeholder phase. Shell remains the
-authorization boundary: every visit begins with stations locked until the
-matching current snapshot arrives.
+18×12, 32 px envelope. Shell remains the authorization boundary: every visit
+begins with stations locked until the matching current snapshot arrives.
 
 ---
 
 ## Map authoring
 
-**Embed tilesets on export.** Phaser's Tiled parser rejects external `.tsx`:
-
-```js
-// phaser/src/tilemaps/parsers/tiled/ParseTilesets.js:38
-if (set.source) {
-    console.warn('External tilesets unsupported. Use Embed Tileset and re-export');
-```
-
-In Tiled: *Map → Embed Tilesets* before exporting JSON, or flatten as a build
-step. Maps authored with external tilesets load as empty with only a console
-warning, which is easy to miss and annoying to diagnose.
+The street is procedural, Tiled-shaped data (`map/street.ts`): doors are an
+object layer converted by `objectLayerToDoors`, so a real Tiled export is a
+data-source swap. If one lands, **embed tilesets on export** (D-008) — Tiled
+JSON with external `.tsx` references is not self-contained.
 
 ### Growing the city
 
 The map is meant to expand version by version. Keep each district a separate
-tilemap with a shared tileset so a new street is an added file rather than an
-edit to a large one, and keep building entrances data-driven — a trigger zone
-with a `building` property, not a hardcoded coordinate.
+map, and keep building entrances data-driven — a trigger zone with a
+`building` property, not a hardcoded coordinate.
+
+Collision is tile-based and 3D props do not collide, so volumetric decor only
+goes outside the walkable bounds or on solid building tiles. Inside the
+walkable area use flat decor.
 
 ---
 
 ## Art
 
-Asset-pack base with bespoke building facades. Any pack must be checked for
-commercial-use licensing before it lands — a per-pack audit, not a per-tag
-assumption. Record the licence for each asset in `assets/CREDITS.md` as you
-add it.
-
-The Kenney RPG Urban CC0 placeholder source is acquired under
-`assets/third-party/kenney-rpg-urban/` and recorded in `assets/CREDITS.md`.
-The street runtime uses the audited `tilemap.png` frames for road,
-pavement, wall and facade at clean 2× (the existing 32px tile/index/collision
-contracts stay unchanged). The door frame is a separate overlay at the
-existing door coordinates. Grass remains procedural; no Kenney frame is
-claimed as a roof treatment.
+Procedural low-poly geometry, no third-party assets (D-059). Avatars are
+procedural blocky figures, one look per opaque avatar key, coloured from the
+approved D-049 sheets in `assets/player-sprites/v1/`; those sheets also feed
+the Shell's wallet-attention cue (D-058). Any future model pack must be checked
+for commercial-use licensing before it lands and recorded in
+`assets/CREDITS.md`.
 
 Four buildings in v1: the Bank, the Exchange, the Post Office, and a visible
-but disabled Vault facade so the world reads as complete.
+but locked Vault so the world reads as complete, plus the Bridge. The Bank
+follows the STRK20 visual theme and the Exchange follows avnu's; the Post
+Office and Bridge keep the game's own palette.

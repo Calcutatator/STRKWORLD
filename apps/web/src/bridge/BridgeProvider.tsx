@@ -13,7 +13,12 @@ export interface BridgeRuntime {
   /** Synchronous capability snapshot; null means no currently bound account. */
   account: Address | null;
   available(): boolean;
-  /** Begin optional runtime acquisition. BridgePanel is the only production caller. */
+  /**
+   * Begin optional runtime acquisition. Production calls it when the player
+   * enters the Bridge building (`VisitLayer`) and when BridgePanel mounts;
+   * nothing else does. A call while a load is pending, or after one landed,
+   * starts nothing new.
+   */
   load(): void;
 }
 
@@ -32,7 +37,7 @@ export interface BridgeProviderProps {
   planner?: PublicShieldPlanner | null;
   now?: () => number;
   account?: Address | null;
-  /** Recovery runtime loader; remains dormant until BridgePanel mounts. */
+  /** Recovery runtime loader; remains dormant until the player enters the Bridge or BridgePanel mounts. */
   loadRuntime?: BridgeRuntimeLoader;
   demo?: boolean;
   build?: BuildContext;
@@ -133,8 +138,9 @@ export function BridgeProvider({
   }>({ loader: loadRuntime, service, generation: 1, pending: false });
 
   // Props are authoritative during render. Do not initialize this owner in an
-  // effect: React mounts child effects before parent effects, and BridgePanel
-  // is the child that legitimately starts the first load.
+  // effect: React mounts child effects before parent effects, and a child —
+  // VisitLayer on Bridge entry, or BridgePanel — legitimately starts the first
+  // load.
   if (loadOwner.current.loader !== loadRuntime || loadOwner.current.service !== service) {
     loadOwner.current = {
       loader: loadRuntime,

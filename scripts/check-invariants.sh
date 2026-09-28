@@ -184,12 +184,36 @@ fi
 
 # 8. Privacy default is ABSOLUTE. Any route below `private` is a deviation and
 #    needs the project lead's recorded approval plus plain-language disclosure.
-#    Unapproved means a locked door, never a quiet downgrade.
+#    Unapproved means a locked door, never a quiet downgrade. The only
+#    substitute for the disclosure is an explicit waiver naming a decision
+#    entry that exists and names the route (`disclosureWaivedBy`, D-064).
 reg="packages/shared/src/privacy-grades.ts"
 if [ -f "$reg" ]; then
-  report=$(python3 - "$reg" <<'PYEOF'
+  report=$(python3 - "$reg" docs/DECISIONS.md <<'PYEOF'
 import re, sys
-src = open(sys.argv[1]).read()
+raw = open(sys.argv[1]).read()
+try:
+    decisions = open(sys.argv[2]).read()
+except OSError:
+    decisions = ""
+
+# Strip comments first, so a commented-out key can neither satisfy nor hide
+# anything. (Known limit, as below: keep comment markers out of the copy.)
+src = re.sub(r"/\*.*?\*/", "", raw, flags=re.S)
+src = re.sub(r"(?m)^\s*//.*$", "", src)
+
+def waiver_holds(decision, route):
+    # The decision must exist as its own Accepted, unsuperseded entry, and must
+    # itself record this route's waiver — not merely mention the route.
+    m = re.search(r"^## " + re.escape(decision) + r" .*?(?=^## D-|\Z)", decisions, re.M | re.S)
+    if not m:
+        return False
+    body = m.group(0)
+    status = next((line for line in body.splitlines() if line.startswith("**")), "")
+    if "Accepted" not in status or re.search(r"superseded", status, re.I):
+        return False
+    pattern = re.escape(route) + r"[^\n]{0,40}disclosureWaivedBy: '" + re.escape(decision) + "'"
+    return re.search(pattern, body) is not None
 
 # Brace-depth parser: find each object literal whose first key is `building:`,
 # regardless of indentation or formatting. The previous regex only closed a
@@ -221,6 +245,12 @@ if not blocks and "building:" in src:
     print("PARSEFAIL:yes")
     sys.exit(0)
 
+# Every route id must belong to a parsed entry. An entry whose first key is not
+# `building:` would otherwise be skipped and pass unchecked.
+if len(re.findall(r"\broute:\s*'", src)) != len(blocks):
+    print("PARSEFAIL:yes")
+    sys.exit(0)
+
 unapproved, nocopy = [], []
 for b in blocks:
     route = (re.search(r"route:\s*'([^']+)'", b) or [None, "?"])[1]
@@ -229,9 +259,10 @@ for b in blocks:
         continue
     approved = re.search(r"approvedBy:\s*'[^']+'", b)
     disclosed = re.search(r"disclosure:\s*\n?\s*['\"]", b)
+    waiver = re.search(r"disclosureWaivedBy:\s*'(D-\d{3,})'", b)
     if not approved:
         unapproved.append(f"{route} ({grade})")
-    elif not disclosed:
+    elif not disclosed and not (waiver and waiver_holds(waiver.group(1), route)):
         nocopy.append(route)
 print("PARSEFAIL:")
 print("UNAPPROVED:" + " ".join(unapproved))
@@ -259,7 +290,7 @@ PYEOF
     bad "approved deviation(s) still missing player-facing copy: $nocopy"
     note "Approved but undisclosed is still a silent downgrade. Door stays locked."
   else
-    ok "every deviation discloses itself to the player"
+    ok "every deviation discloses itself to the player, or carries a decision-backed waiver"
   fi
 else
   bad "privacy register missing: $reg"

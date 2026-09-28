@@ -9,7 +9,8 @@ at the bottom is the part that grows.
 
 ## 1. What this project is
 
-A 2D top-down browser game where buildings are Starknet privacy protocols.
+A 3D walkable browser game where buildings are Starknet privacy protocols
+(Three.js over a tile-authored world, D-059).
 Real funds, Starknet **mainnet**, from day one. Players hold funds in the
 STRK20 privacy pool.
 
@@ -164,14 +165,14 @@ decision entry explaining why before writing the code.
 | Package | Owns | Must never |
 |---|---|---|
 | `packages/privacy` | All Starknet interaction. The `PrivacyOperations` interface and its implementations | Import from `world` or `lobby`. Contain UI |
-| `packages/world` | Phaser scenes, movement, collision, tilemaps, sprites | Import `starknet` or any wallet package. Know what money is |
+| `packages/world` | The gameplay session (movement, tile collision, rooms, the Studio, the sandbox rules) and its Three.js renderer (D-059) | Import `starknet`, any wallet package or the lobby. Know what money is |
 | `packages/lobby` | Colyseus presence, positions, ephemeral IDs | Touch an address, balance, tx hash, or building name |
 | `packages/shared` | Types and constants crossing boundaries | Contain logic or dependencies |
 | `apps/web` | Composition, routing, layout, the event bus | Contain business logic that belongs in a package |
 | `apps/backend` | Paymaster proxy, privacy-safe RPC reads, bounded submission queue | Log or persist per-request IPs, calls, proofs, timings, recipients or transaction hashes |
 
 The bridge is one-directional: React owns wallet and financial state and
-pushes into Phaser via an event emitter. Phaser never reaches back into
+pushes into the World via an event emitter. The World never reaches back into
 React state or calls Starknet.
 
 ---
@@ -216,11 +217,10 @@ their content hashes.
 | `strk20-privacy-sdk` | The low-level route. **Not ours** — read only to understand what we are not doing |
 | `strk20-privacy-integration` | The official ask/plan/execute planner |
 
-**Phaser ships its own docs.** `node_modules/phaser/skills/` holds 28
-engine-versioned `SKILL.md` files — `tilemaps`, `scenes`,
-`input-keyboard-mouse-touch`, `events-system`, `scale-and-responsive` and more.
-They cannot drift from the installed version, so prefer them over anything
-found online for Phaser questions.
+**Read the installed three.js sources.** The World renders with `three@0.186.1`
+(D-059). For renderer questions prefer `node_modules/three/src/` and
+`node_modules/three/examples/jsm/` over anything found online — APIs move
+between releases (r186 removed `PCFSoftShadowMap`, for example).
 
 Route work deliberately: use `strk20-privacy` for the trust boundary and
 hidden/visible claims, `strk20-wallet-api` for `packages/privacy` and browser
@@ -257,6 +257,333 @@ empty shell to fetchers, so a 200 there means nothing.
 ---
 
 ## 6. Findings log
+
+### 2026-09-28 — avnu's token list: 200 a page, volume order only, flaky, and not all printable (D-067)
+
+avnu's public `GET https://starknet.api.avnu.fi/v1/starknet/tokens` (the SDK's
+`fetchTokens`) returns at most 200 tokens a page whatever `size` asks for, is
+always sorted by `lastDailyVolumeUsd` highest first, and ignores any `sort`
+parameter. It answered `503 Service temporarily unavailable` twice in one
+session of about 30 requests, so the backend's degen list must fail safe (it
+falls back to the curated core, retried after a minute). Of 2,515 tokens,
+1,330 carry an admitted tag; 1,254 are tagged both `Unknown` and
+`Unruggable`, so a tag set means "any admitted tag present", never "no
+Unknown". Symbols are not clean text: 12 carry control characters or
+non-ASCII letters (`\x01`, `\x1f`, `Flokİ`), one of them a
+`Verified`/`Community`/`Unruggable` token whose symbol is `\x08` + `8`, which
+is why live symbols and names must be printable ASCII (that also rules out
+look-alike letters from other scripts). No
+same-ticker impostor of the curated core was listed that day; tickers compare
+case-folded, alphanumerics only, because DREAMS is `dreams` on avnu and
+on-chain. DREAMS has 6 decimals and DOG 5. At the default $100/day floor the
+live list was 16 `Verified` tokens, the ground floor's six and xSTRK among
+them; no community token outside the curated core cleared even $10.
+
+*Verified:* curl of the endpoint and its `/v3/api-docs` OpenAPI (read-only,
+all 13 pages); `symbol()`, `name()` and `decimals()` of the seven curated
+tokens over the Cartridge public RPC at block 15,566,935; the backend's own
+`filterLiveTokens` run over the fetched page at floors of $1–$500.
+`apps/backend/src/degen-catalog.test.ts` pins the filter, cache and fallback.
+
+### 2026-09-28 — A relayed send names its recipient only in `Append`, first felt (D-065)
+
+A pool transfer puts its recipient in calldata only when it opens a channel:
+server action 1, `Append(recipient, EncChannelInfo[3])`, four felts with the
+recipient first. A later send to the same recipient carries no address, only
+`WriteOnce` writes and note events. So the relay's one-recipient rule counts
+distinct `Append` addresses per submission, as field elements, on every route,
+and the Shell's one-transfer batch rule is the only bound on sends to known
+recipients. Fail-closed side effect: a first send that also had to open the
+sender's own change channel would carry two `Append`s and be refused. That
+case is untested against a live wallet.
+
+*Verified:* decoded mainnet tx `0x33d01b…930495` (block 15,524,071) with the
+relay's own layout: 13 server actions, exactly one `Append`, then five
+`WriteOnce`, one spent note, two new notes and the fee `TransferTo` plus
+`EmitWithdrawal`. The `Append`'s first felt `0x14aa58…af0aa` reads
+`get_num_of_channels` 0 at block 15,524,070 and 1 at 15,524,071 (Cartridge
+public RPC). `backend.test.ts` replays that sequence: one recipient relays,
+two are refused with a 400.
+
+### 2026-09-27 — A station snapshot is published once, at the door; the fake mirrors seam warnings
+
+- `world:stations` goes out when the visit controller handles
+  `building:entered`, and the World activates only a station whose last
+  snapshot said `available`. A capability that arrives after entry stays
+  locked for the whole visit unless the Shell publishes again. The production
+  Bridge runtime now loads when the player walks into the Bridge (not when
+  BridgePanel mounts), so `VisitLayer` calls the controller's
+  `refreshStations()` whenever a Bridge capability changes. Activation still
+  re-resolves, so a republished snapshot is presentation, never authority.
+- `FakePrivacyOperations.prepare` repeats the Wallet API adapter's review
+  warnings. Removing the stake `public-leg` warning for D-064 had to land in
+  both `wallet-api/operations.ts` and `testing/fake.ts`; with only the first,
+  demo mode shows disclosure copy that production does not.
+
+*Verified:* `apps/web/src/visits/bridge-entry.test.tsx` composes the
+BridgeProvider as ProductionRoot does (dormant loader, account, planner): one
+load on Bridge entry, none on Bank entry, and a locked-then-available
+`bridge:deposit` snapshot; it fails with the entry load removed.
+`fake-stake.test.ts` and `stake-actions.test.ts` both pin an empty stake
+warning list.
+
+### 2026-09-27 — The pool fee is still 6 STRK; the Bridge's blocker is the fee allowance, not its size
+
+`get_fee_amount()` on the mainnet pool returned 6e18 (6 STRK) at block
+15,523,237, read through the public `https://api.cartridge.gg/x/starknet/mainnet`
+RPC (lava's public endpoint is discontinued). Launch material's 4 STRK is still
+wrong. The production Bridge lock was never about sizing: Ready's shield route
+approves only the deposit amount while `apply_actions` separately pulls the fee
+(the 2026-08-18 finding). D-061 opens the Bridge with a reserve of
+max(10 STRK, live fee + gas); if Ready does not supply the fee allowance, the
+separate shield reverts and the bridged STRK stays public in the player's
+wallet. D-056's funded shield settles the question.
+
+*Verified:* a read-only starknet.js 10.4 `callContract` of `get_fee_amount`
+against the pool address in the STRK20 facts; D-043 and the 2026-08-18 finding
+re-read.
+
+### 2026-09-27 — Spends are one per send; the Bank's multi-spend Max path is now unreachable
+
+The relay's unshield route admits exactly one withdrawal per submission, and
+D-065 limits a transfer batch to one recipient, so the Shell's accumulator now
+refuses a second unshield (`one-unshield-per-send`) as well as a second
+transfer. Before this, a production unshield switch with `MAX_INTENTS` above 1
+would have let a batch of unshields fail at the relay after the player had
+approved the proof. Shields, which the wallet submits directly, still batch.
+`bank-machine.ts`'s Max arithmetic for several queued spends is now unreachable
+and could be simplified; the tests that exercised it were rewritten for a
+single spend or dropped.
+
+*Verified:* `batch-accumulator.test.ts` and `bank-machine.test.ts` cover the
+refusal, its notice and single-spend Max costing; `apps/web` panels and
+accumulator suites pass (309 tests).
+
+### 2026-09-27 — The wallet picker dropped every getter-shaped wallet
+
+`WalletSession` only listed a discovered wallet whose `name` and `icon` were own
+data properties (the 2026-08-30 hardening). But get-starknet's discovery wraps
+every legacy `window.starknet_*` wallet in `StarknetInjectedWallet`, whose
+`name` and `icon` are class getters, and Wallet Standard wallets commonly use
+getters too. All of them were silently dropped, and the player saw "No
+compatible wallet was discovered." Now an own data property is used as it
+stands (no trap runs), an own accessor is still refused without being invoked,
+and a field with no own property is read once from the prototype, guarded;
+any throw drops the wallet without escaping. The mock tester wallet used own
+data properties, which is why rendered acceptance never saw it. Whether
+installed Ready or Xverse builds register this way is still for the manual
+wallet checklist; Xverse's dapp-facing STRK20 methods may not have shipped, in
+which case it correctly lands in the unsupported-wallet room.
+
+*Verified:* a new discovery-boundary test constructs the pinned
+`StarknetInjectedWallet` around a fake injected object and expects it listed;
+a class-getter wallet is listed; a throwing getter or non-string field drops
+the wallet without throwing; the existing own-accessor and hostile-proxy tests
+still pass (`packages/privacy`, 550 tests).
+
+### 2026-09-27 — Endur's anonymizer is deposit-only; staking is relayed like swap (D-063)
+
+`EndurDepositAnonymizer` (`0x030dee…30698`, class `0x15ec74f6…58e77a`) exposes
+one entry point, `privacy_invoke(in_token, out_token, assets: u256, note_id)
+-> Span<OpenNoteDeposit>`. It is token-pair generic and has no withdraw path,
+and no Endur withdraw anonymizer exists, so a private unstake cannot be built
+today (Endur's own queue takes 1–14 days). xSTRK
+(`0x028d709c…954b0a`) is an ERC-4626 vault; `convert_to_assets(1e18)` read
+1.182556 STRK on 2026-09-27. A stake follows AVNU's proven action order:
+withdraw the staked STRK to the anonymizer, withdraw the relay fee, open the
+xSTRK note, then invoke. Without the explicit withdrawal the anonymizer holds
+nothing. The relay goes through AVNU's sponsored-private paymaster behind the
+backend, so that paymaster, not Ready's client, is what must accept the
+anonymizer before staking can be switched on.
+
+*Verified:* read-only starknet.js 10.4 `getClassHashAt`, the deployed ABI and
+xSTRK views against the Cartridge public RPC; `packages/privacy` and
+`apps/backend` tests pin the action order and the relay's exact admission.
+
+### 2026-09-27 — A disclosure can be waived only by a decision that names the route (D-064)
+
+The privacy register's `disclosureWaivedBy` replaces a deviation's in-game
+disclosure and nothing else: approval, date and rationale are still required,
+and `observable` still records what an observer sees. Only an own data
+property naming the decision that the frozen `DISCLOSURE_WAIVERS` table
+records for that exact route counts. Check 8 strips comments, fails if any
+register entry does not parse, and accepts a waiver only when the cited
+decision is Accepted, unsuperseded and itself records the route's
+`disclosureWaivedBy` value; the commit gate stops demanding a disclosure for
+that route alone. `bank.stake` is the only waived route. The first version
+only checked that the decision mentioned the route, so `bank.unshield` could
+have borrowed D-020 (a review finding).
+
+*Verified:* `packages/shared` register tests cover own-property, id-format,
+borrowed-decision and approval cases; replaying the review's attacks against
+check 8 (a borrowed D-020 waiver, a commented-out waiver, a reordered entry)
+now fails each one, and the real register passes.
+
+### 2026-09-27 — The Bridge reserve is 10 STRK today, with a 4 STRK gas allowance (D-061)
+
+`ReservePublicShieldPlanner` reads the live pool fee through the Bank's own
+`/api/v1/rpc/pool-config` path on every plan and never caches it. With a
+6 STRK fee the reserve is the 10 STRK floor. The Bridge machine's `planValid`
+requires `plannedReserve === poolFee + gasEstimate`, so when the floor wins
+the plan reports `gasEstimate = 10 STRK − fee`. It is injected only when the
+production shield route is enabled.
+
+A related test trap: Vite inlines `import.meta.env` at transform time, so
+`vi.stubEnv` cannot change what `detectRoutePolicy()` returns. Tests mock the
+policy with the real parser's output instead.
+
+*Verified:* `reserve-shield-planner.test.ts` (54 cases) and the production
+composition tests.
+
+### 2026-09-27 — Shell test and storage traps
+
+- jsdom rewrites `import.meta.url`, so a test that reads source files (for
+  example to pin the World's key bindings) must run in the node environment.
+- `LocalBridgeStore.load()` deletes a record it cannot validate, so a
+  read-only reader (the Bridge arrival nudge) needs a storage adapter that
+  swallows writes.
+- Node 25 exposes a global `localStorage` object with no methods; per-viewer
+  storage goes through `apps/web/src/store/viewer-storage.ts`, which never
+  throws.
+
+*Verified:* `apps/web` tests (723) pass with the HUD, guide and nudge suites.
+
+### 2026-09-27 — Occluder boxes start at the ground unless they say otherwise
+
+The presenter fades a street occluder when the camera-to-player segment hits
+its bounds, and those bounds used to start at y = 0. An overhead structure
+(the sandbox gate's lintel and pillar tops) therefore faded whenever an
+orbited camera looked through the opening beneath it. Occluder bounds now take
+an optional floor height (`minY`) that `segmentHitsBox` respects; buildings
+leave it unset and behave as before.
+
+*Verified:* `occlusion.test.ts` covers both cases; the presenter's gate test
+checks that the default camera fades the gate and orbited cameras do not.
+
+### 2026-09-27 — The shared block sandbox is a lobby-authority seam (D-060)
+
+The lobby room owns block state with no identity field (colour stacks per
+street tile) and each player's carried colour, the only sandbox field on a
+presence entry — not unlinkable, since a nearby observer can correlate a
+peer's carried colour with a column change (D-060). The
+World never imports the lobby: it receives a World-owned `SandboxChannel`
+through `WorldConfig`, and the Shell's sandbox controller backs that channel
+with whichever lobby client is connected, or with the same pure rules
+(`@strkworld/lobby/sandbox`, which imports only `@strkworld/shared`) for solo
+play. Three traps surfaced while wiring it:
+
+- Reach must be judged the authority's way. The World stands you on the
+  tallest stack your body overlaps, but the server measures reach from the
+  stack under your centre tile; the highlight now uses the server's rule, so it
+  never promises a pick or place the server refuses.
+- The lobby sends its sky-drop hint *after* the patch that adds the block. The
+  renderer upgrades a block that is still settling into a sky drop when the
+  hint arrives late, so both orders animate correctly.
+- A client-side action floor that drops early requests loses real input: a
+  place sent 44 ms after a pick vanished. The client now holds the latest early
+  action and sends it when the floor opens.
+
+*Verified:* an end-to-end test drives two real Shell stacks (presence
+controller, sandbox controller, `LobbyClient`) against `startPresenceServer`:
+shared sky drops, identical stacks, a pick seen by the other client (shorter
+stack, `carrying` on the peer snapshot) and a place seen likewise. Lobby suite
+370 tests; World sandbox rules, session and view suites pass. Full workspace:
+typecheck, 131 files / 2,786 tests, production build (`three` only in the
+`world-engine` chunk, no Colyseus server code in any browser chunk), all
+invariants including the lobby money-word scan, and the live D-005 header
+gate. Live: two browser tabs connected to the dev lobby.
+
+### 2026-09-27 — Colyseus corrupts a late joiner's state past 8 KB unless the encode buffer is raised
+
+A joiner's full state is encoded into `Encoder.BUFFER_SIZE` (8 KB by default
+in `@colyseus/schema` 4.0.30). When the state is larger, the shared encode
+grows into a new buffer, but the per-client `StateView` encode is still handed
+the old 8 KB one (`SchemaSerializer.getFullState` → `encodeAllView`), so
+everything past 8 KB reaches the joiner as zeros. The client decodes it
+without failing: the room looks connected while the joiner sees a partial,
+wrong board (and the server logs `buffer overflow` per join). The unfiltered
+sandbox board makes this reachable in ordinary play — a full board is ~24 KB,
+~33.5 KB with 128 visible peers. The lobby raises the buffer to 64 KB before
+any room exists and again before a room assigns its state.
+
+*Verified:* an independent security review reproduced it against a real
+server (900 blocks on 526 tiles → a late joiner saw 256 blocks on 117 tiles);
+`packages/lobby/src/sandbox-capacity.test.ts` fills a real room to 900 blocks
+over all 784 tiles and asserts a new joiner's board is identical with no
+overflow warning — red with the reservation disabled, green with it.
+
+### 2026-09-27 — Colyseus room lifetime and patch-order traps
+
+- An emptied room lingers for the seat-reservation window, so a test that
+  expects a fresh room must call `matchMaker.disconnectAll()` first.
+- `broadcast(…, { afterNextPatch: true })` is delivered after the state patch;
+  a client reading state in the message handler already sees the change.
+- In `@colyseus/schema` 4.0.30, a pop plus push, or a delete plus re-create,
+  of the same entry within one patch decodes correctly on the client.
+
+*Verified:* the lobby's real-server sandbox room tests.
+
+### 2026-09-27 — Theme tokens: a derived custom property resolves where it is declared
+
+A custom property defined as `var(--ui-accent)` is computed on the element
+that declares it, so a per-building theme root that only overrides
+`--ui-accent` still inherits the base theme's derived values. Theme roots must
+re-declare every derived token. The same pass fixed an existing bug: the
+in-building connect screen covered the window's Close button.
+
+*Verified:* rendered checks of every themed building window (Bank, Exchange,
+Post Office, Bridge, Vault) during the restyle; `apps/web` tests pass.
+
+### 2026-09-27 — The World is a tile-authored session drawn by Three.js (D-059)
+
+Phaser is gone. `world-session.ts` now owns what StreetScene orchestrated —
+create/teardown order, movement, retryable tile reports, door/room/Studio
+transitions, outfit selection and the input gate — and drives a narrow
+`WorldSessionView`; `three/` draws it. Gameplay coordinates did not change:
+one 32 px tile is one world unit, +X east, +Z south, so no seam, lobby message
+or Shell file changed shape.
+
+Three behaviours differ from the Phaser build and are deliberate. The street
+uses the substep tile collision the interiors already used, with the same
+24 px body; out-of-bounds tiles are solid, so bounds and door/Studio
+reachability match, but corners no longer get Arcade's nudge. Movement keys are
+camera-relative, and the wire facing is derived from the intended World
+velocity, so opposing keys now cancel for facing too (up+down+left faces
+`left`; up+down alone keeps the last facing, where the Scene turned `up`). And
+the camera never rotates on its own, so a key held through a room or Studio
+teleport keeps pointing away from the exit.
+
+*Verified:* the StreetScene lifecycle suite was ported 1:1 to
+`world-session.test.ts` (67 tests; 69 of 70 deliberate session mutations fail a
+test — the survivor was a redundant idempotence guard). Workspace typecheck,
+119 test files / 2,581 tests, production build, all invariants and the D-005
+live header gate pass. The production build keeps `three` confined to the lazy
+`world-engine` chunk (681 kB, 183 kB gzip, down from Phaser's ~353 kB gzip);
+no other chunk contains `WebGLRenderer`. In the dev preview, holding up from
+spawn walked through the Post Office door into its rendered interior with the
+Shell's Game Mode controls and no console errors.
+
+### 2026-09-27 — three r186: `transparent` changes the program; canvas textures cannot grow
+
+Two renderer traps hit while building the 3D World:
+
+- Toggling `material.transparent` changes the compiled program, because
+  `opaque` is a program parameter (`WebGLPrograms.js:264`). A fader that flips
+  it without `material.needsUpdate = true` keeps drawing with the old program.
+  `createOpacityFader` flips it only when crossing 1, so per-frame fades stay
+  uniform updates.
+- The GPU texture cache key has no image dimensions
+  (`WebGLTextures.js:528-547`), so a `CanvasTexture` whose canvas grows after
+  upload is not reallocated. The label factory creates a new texture when a
+  label's canvas has to grow.
+
+Also: `WebGLAnimation` requests the next frame *before* invoking the loop
+callback (`WebGLAnimation.js:10`), so an exception does not stop
+`setAnimationLoop` — but it does skip the rest of that frame. The engine
+guards each frame stage separately so a failing update still renders.
+
+*Verified:* read in the installed `three@0.186.1` sources at the cited lines;
+the fader and label tests in `packages/world/src/three` cover both behaviours.
 
 ### 2026-08-30 — Input-gate handoffs must honor reentrant desired state
 

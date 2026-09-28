@@ -7,6 +7,7 @@ import {
   isAvatarSpriteKey,
   type RemotePeerSnapshot,
   type RemotePeerSource,
+  type SandboxChannel,
 } from '@strkworld/world';
 import { LobbyClient } from '@strkworld/lobby/client';
 import { ownMovementPayload } from '../bus/world-event-payload.js';
@@ -28,6 +29,8 @@ export interface PresenceController {
   subscribe(listener: () => void): () => void;
   getState(): PresenceState;
   readonly remotePeers: RemotePeerSource;
+  /** The shared block sandbox (D-060), when the composition provides one. */
+  readonly sandbox?: SandboxChannel;
   reconnect(): void;
   destroy(): Promise<void>;
 }
@@ -36,7 +39,7 @@ function freezePresenceState(next: PresenceState): PresenceState {
   return Object.freeze({ ...next });
 }
 
-export function createPresenceController({ endpoint, factory = (options) => new LobbyClient(options) }: { endpoint?: string; factory?: PresenceFactory }): PresenceController {
+export function createPresenceController({ endpoint, factory = (options) => new LobbyClient(options), sandbox }: { endpoint?: string; factory?: PresenceFactory; sandbox?: SandboxChannel }): PresenceController {
   let state: PresenceState = freezePresenceState({ status: 'unavailable', canReconnect: Boolean(endpoint) });
   let client: PresenceClient | null = null;
   let clientSprite: AvatarSpriteKey | null = null;
@@ -227,7 +230,7 @@ export function createPresenceController({ endpoint, factory = (options) => new 
     try {
       stopPeers = ownedClient.onPeers((snapshot) => {
         if (active && !destroyed && client === ownedClient) {
-          peerChannel.publish(snapshot.map(({ gameId, x, y, facing, sprite }) => ({ id: gameId, x, y, facing, sprite })));
+          peerChannel.publish(snapshot.map(({ gameId, x, y, facing, sprite, carrying }) => ({ id: gameId, x, y, facing, sprite, carrying })));
         }
       });
     } catch (error) {
@@ -504,6 +507,7 @@ export function createPresenceController({ endpoint, factory = (options) => new 
       };
     },
     remotePeers: peerSource,
+    ...(sandbox ? { sandbox } : {}),
     getState: () => state,
     reconnect() {
       if (!endpoint || destroyed) return;

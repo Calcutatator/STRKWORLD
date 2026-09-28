@@ -28,14 +28,17 @@ import {
   type DoorState,
 } from '../routes.js';
 import type { ReceiptLedger } from '../../receipts/receipt-ledger.js';
+import { XSTRK_TOKEN } from '../../production/config.js';
 
 /**
  * The Bank panel, as a state machine.
  *
  * The Bank is the whole pool-native action set behind one door: shield,
- * unshield, and a private transfer to another player. All three go out as typed
- * intent through the batch accumulator; the panel never composes a protocol
- * action and has no way to name a contract or a selector (D-018).
+ * unshield, and a private transfer to another player — plus the Endur staking
+ * counter (D-063), which spends the same shielded STRK balance. All four go out
+ * as typed intent through the batch accumulator; the panel never composes a
+ * protocol action and has no way to name a contract or a selector (D-018). A
+ * stake names only its two tokens; `packages/privacy` owns the anonymizer.
  *
  * Five behaviours here are consequences of verified protocol or wallet
  * behaviour rather than taste, and are why this is a state machine and not a
@@ -68,16 +71,38 @@ import type { ReceiptLedger } from '../../receipts/receipt-ledger.js';
  * settled transaction is the worst lie this panel could tell.
  */
 
-export type BankMode = 'shield' | 'unshield' | 'transfer';
+export type BankMode = 'shield' | 'unshield' | 'transfer' | 'stake';
 
-const ALL_BANK_MODES: readonly BankMode[] = ['shield', 'unshield', 'transfer'];
+const ALL_BANK_MODES: readonly BankMode[] = ['shield', 'unshield', 'transfer', 'stake'];
 
 /** The graded route each control drives. See `ROUTE_BY_INTENT_KIND`. */
 export const ROUTE_BY_MODE: Readonly<Record<BankMode, string>> = Object.freeze({
   shield: ROUTE_BY_INTENT_KIND.shield,
   unshield: ROUTE_BY_INTENT_KIND.unshield,
   transfer: ROUTE_BY_INTENT_KIND.transfer,
+  stake: ROUTE_BY_INTENT_KIND.stake,
 });
+
+/** The staking counter's output token: Endur xSTRK, the same value the production policy pins. */
+export const STAKE_TOKEN_OUT: Address = XSTRK_TOKEN;
+
+type StakeIntent = Extract<Intent, { kind: 'stake' }>;
+
+/**
+ * The one stake a prepared batch is reviewing, or null for anything else.
+ *
+ * The seam prepares a stake strictly alone (D-063), so a batch that is not
+ * exactly one stake is reviewed by the ordinary Bank surface instead.
+ */
+export function reviewedStake(intents: readonly Intent[]): StakeIntent | null {
+  const only = intents.length === 1 ? intents[0] : undefined;
+  return only?.kind === 'stake' ? only : null;
+}
+
+/** Only unshield and transfer name a recipient: a shield is always to self, and a stake's xSTRK comes back to the player's own pool balance. */
+export function modeNeedsRecipient(mode: BankMode): boolean {
+  return mode === 'unshield' || mode === 'transfer';
+}
 
 export type BalanceView =
   /** Never read, or invalidated by a submission. The player asks; we do not. */
@@ -142,7 +167,12 @@ export type BankFlow =
        */
       readonly summary: PreparedSummary;
     }
-  | { readonly name: 'submitted'; readonly transactionHash: string }
+  | {
+      readonly name: 'submitted';
+      readonly transactionHash: string;
+      /** Set when this receipt was found outstanding on `open()` rather than just confirmed this session. */
+      readonly restored?: boolean;
+    }
   | {
       readonly name: 'failed';
       readonly kind: PrivacyErrorKind;
@@ -160,7 +190,7 @@ export interface BankState {
   readonly mode: BankMode;
   readonly routeId: string;
   readonly door: DoorState;
-  /** Approved copy for the mode being composed. Null when the route is private. */
+  /** Approved copy for the mode being composed. Null when the route is private or its disclosure is waived (D-064, D-065). */
   readonly disclosure: string | null;
   /** Approved copy for what is queued. The commit point renders these. */
   readonly batchDisclosures: readonly string[];
@@ -461,7 +491,7 @@ export function createBankPanel(options: BankPanelOptions): BankPanel {
           pool,
           token: pool.feeToken,
           flow: outstanding
-            ? { name: 'submitted', transactionHash: outstanding.transactionHash }
+            ? { name: 'submitted', transactionHash: outstanding.transactionHash, restored: true }
             : { name: 'composing' },
         });
       } catch (error) {
@@ -588,7 +618,7 @@ export function createBankPanel(options: BankPanelOptions): BankPanel {
       }
 
       let recipient = '';
-      if (state.mode !== 'shield') {
+      if (modeNeedsRecipient(state.mode)) {
         recipient = state.recipientText.trim();
         if (!looksLikeAddress(recipient)) {
           notice('error', COPY.notices.badRecipient);
@@ -627,12 +657,17 @@ export function createBankPanel(options: BankPanelOptions): BankPanel {
           }
         }
 
+        // A stake spends the same shielded balance every other control reads:
+        // the pool's own STRK, which is also its fee token. The seam pins the
+        // pair itself and refuses anything but STRK in, xSTRK out (D-063).
         const intent: Intent =
           state.mode === 'shield'
             ? { kind: 'shield', token: state.token, amount }
             : state.mode === 'unshield'
               ? { kind: 'unshield', token: state.token, amount, recipient }
-              : { kind: 'transfer', token: state.token, amount, recipient };
+              : state.mode === 'transfer'
+                ? { kind: 'transfer', token: state.token, amount, recipient }
+                : { kind: 'stake', tokenIn: state.token, tokenOut: STAKE_TOKEN_OUT, amountIn: amount };
 
         const result = accumulator.accept(intent);
         if (!result.ok) {
@@ -879,7 +914,8 @@ function shapeKey(kinds: readonly string[]): string {
 /** What the visit has already committed to spend, in the pool's fee token. */
 function queuedSpend(intents: readonly Intent[]): bigint {
   return intents.reduce(
-    (total, intent) => total + (intent.kind === 'swap' ? intent.amountIn : intent.amount),
+    (total, intent) =>
+      total + (intent.kind === 'swap' || intent.kind === 'stake' ? intent.amountIn : intent.amount),
     0n,
   );
 }
@@ -962,6 +998,12 @@ export function rejectionCopy(rejection: BatchRejectionReason): string {
       return COPY.notices.mixedRouteKinds;
     case 'swap-must-be-alone':
       return COPY.notices.swapAlone;
+    case 'stake-must-be-alone':
+      return COPY.notices.stakeAlone;
+    case 'one-recipient-per-send':
+      return COPY.notices.oneRecipientPerSend;
+    case 'one-unshield-per-send':
+      return COPY.notices.oneUnshieldPerSend;
     case 'non-positive-amount':
       return COPY.notices.badAmount;
     case 'batch-full':

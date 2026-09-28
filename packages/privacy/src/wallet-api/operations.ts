@@ -18,10 +18,12 @@ import {
   type TxResult,
 } from '../types.js';
 import { protectedMinimumOut } from '../protected-minimum.js';
+import { ENDUR_DEPOSIT_ANONYMIZER, ENDUR_XSTRK, ENDUR_XSTRK_ASSET } from '../endur.js';
 import { mapWalletError } from './errors.js';
 import type {
   PoolNativeRoute,
   PoolReadClient,
+  PrivateRoute,
   PrivateSubmissionGateway,
   PreparedPrivateSwap,
   RelayFeeQuote,
@@ -33,6 +35,11 @@ import type {
 const REQUIRED_WALLET_API = '0.10.3';
 const STARK_FIELD_PRIME = (1n << 251n) + 17n * (1n << 192n) + 1n;
 const MAX_UINT256 = (1n << 256n) - 1n;
+const U128_MASK = (1n << 128n) - 1n;
+
+/** Routes relayed on a fresh fee quote: everything but the quote-bound swap. */
+type RelayedRoute = Exclude<PrivateRoute, 'swap'>;
+type StakeIntent = Extract<Intent, { kind: 'stake' }>;
 
 export interface WalletApiPrivacyOperationsOptions {
   wallet: WalletStrk20Account;
@@ -213,6 +220,14 @@ export class WalletApiPrivacyOperations implements PrivacyOperations {
       }
       return this.prepareSwap(reviewed[0], config, warnings, signal);
     }
+    if (kinds.has('stake')) {
+      const intent = reviewed[0];
+      // The pool allows one external invoke per transaction, so one stake each.
+      if (reviewed.length !== 1 || intent?.kind !== 'stake') {
+        throw new PrivacyError('unknown', 'A private stake must be prepared one at a time.');
+      }
+      return this.prepareStake(reviewed, intent, config, warnings, signal);
+    }
 
     const route = reviewed[0]!.kind as PoolNativeRoute;
     const operationToken = tokenFor(reviewed[0]!);
@@ -373,6 +388,32 @@ export class WalletApiPrivacyOperations implements PrivacyOperations {
     return value;
   }
 
+  /**
+   * Endur private staking (D-063). The swap's transfer-OPEN + invoke shape,
+   * relayed like a pool-native route: there is no quote to bind, so the fee is
+   * quoted now for costing and re-quoted at confirmation, and the backend
+   * submits it without artificial delay, like every relayed route (D-066).
+   */
+  private async prepareStake(
+    reviewed: readonly Intent[],
+    intent: StakeIntent,
+    config: PoolConfig,
+    warnings: readonly BatchWarning[],
+    signal?: AbortSignal,
+  ): Promise<PreparedBatch> {
+    const fee = await this.estimateRelay('stake', intent.tokenIn, config, signal);
+    const taker = this.walletAddress;
+    return this.preparePrivate(
+      reviewed,
+      'stake',
+      intent.tokenIn,
+      config,
+      fee,
+      warnings,
+      (relayFee) => stakeActions(intent, relayFee, taker),
+    );
+  }
+
   private prepareShield(
     intents: readonly Intent[],
     config: PoolConfig,
@@ -422,11 +463,16 @@ export class WalletApiPrivacyOperations implements PrivacyOperations {
 
   private preparePrivate(
     intents: readonly Intent[],
-    route: PoolNativeRoute,
+    route: RelayedRoute,
     operationToken: string,
     config: PoolConfig,
     feeAtPrepare: RelayFeeQuote,
     warnings: readonly BatchWarning[],
+    /** The actions to prove around the confirm-time fee. Pool-native by default. */
+    buildActions: (relayFee: RelayFeeQuote) => STRK20_ACTION[] = (relayFee) => [
+      ...toActions(intents),
+      relayFeeWithdrawal(relayFee),
+    ],
   ): PreparedBatch {
     const owner = this;
     let discarded = false;
@@ -451,15 +497,7 @@ export class WalletApiPrivacyOperations implements PrivacyOperations {
           throwIfAborted(signal);
           const relayFee = await owner.estimateRelay(route, operationToken, current, signal);
           assertFeeCeiling(checkedFeeTotal(current.feeAmount, relayFee.amount), feeCeiling);
-          const actions = [
-            ...toActions(intents),
-            {
-              type: 'withdraw' as const,
-              token: relayFee.token,
-              amount: toFelt(relayFee.amount),
-              recipient: relayFee.recipient,
-            },
-          ];
+          const actions = buildActions(relayFee);
           emitProgress(onProgress, { stage: 'awaiting-approval', message: 'Confirm in your wallet' });
           emitProgress(onProgress, { stage: 'proving', message: 'Your wallet is generating a proof' });
           assertNotDiscarded(discarded);
@@ -493,7 +531,7 @@ export class WalletApiPrivacyOperations implements PrivacyOperations {
   }
 
   private async estimateRelay(
-    route: PoolNativeRoute,
+    route: RelayedRoute,
     operationToken: string,
     config: PoolConfig,
     signal?: AbortSignal,
@@ -508,6 +546,13 @@ export class WalletApiPrivacyOperations implements PrivacyOperations {
     return ownRelayFee(fee, config, this.policy.maxRelayFee);
   }
 
+  /**
+   * Review warnings. Only the two public-edge routes carry a `public-leg`
+   * detail. The anonymous routes carry none: a swap never has, and D-064
+   * waived the stake route's in-game disclosure, so the seam must not put one
+   * back as a warning. What an observer sees of a stake stays recorded in the
+   * privacy register's `observable` entry (D-063).
+   */
   private async warningsFor(intents: readonly Intent[], signal?: AbortSignal): Promise<BatchWarning[]> {
     const warnings: BatchWarning[] = [];
     for (const intent of intents) {
@@ -596,7 +641,9 @@ function validateIntents(intents: readonly Intent[], policy: WalletRoutePolicy):
       ? ['kind', 'token', 'amount']
       : intent.kind === 'swap'
         ? ['kind', 'tokenIn', 'tokenOut', 'amountIn', 'minAmountOut']
-        : ['kind', 'token', 'amount', 'recipient'];
+        : intent.kind === 'stake'
+          ? ['kind', 'tokenIn', 'tokenOut', 'amountIn']
+          : ['kind', 'token', 'amount', 'recipient'];
     if (
       !hasOwnDataProperties(intent, expectedKeys)
       || Reflect.ownKeys(intent).length !== expectedKeys.length
@@ -606,7 +653,8 @@ function validateIntents(intents: readonly Intent[], policy: WalletRoutePolicy):
     if (!policy.enabledRoutes.includes(intent.kind)) {
       throw new PrivacyError('unknown', `The ${intent.kind} route is disabled.`);
     }
-    const amount = intent.kind === 'swap' ? intent.amountIn : intent.amount;
+    const twoSided = intent.kind === 'swap' || intent.kind === 'stake';
+    const amount = twoSided ? intent.amountIn : intent.amount;
     if (typeof amount !== 'bigint' || amount <= 0n || amount > MAX_UINT256) {
       throw new PrivacyError('unknown', 'Amounts must be positive u256 values.');
     }
@@ -616,17 +664,27 @@ function validateIntents(intents: readonly Intent[], policy: WalletRoutePolicy):
     ) {
       throw new PrivacyError('unknown', 'Minimum output must be a positive u256 value.');
     }
-    assertAddress(intent.kind === 'swap' ? intent.tokenIn : intent.token, 'token');
-    const allowed = policy.allowedTokens[intent.kind];
-    const inputToken = intent.kind === 'swap' ? intent.tokenIn : intent.token;
+    const inputToken = twoSided ? intent.tokenIn : intent.token;
+    assertAddress(inputToken, 'token');
+    // Absent stake tokens admit nothing: an enabled stake route with no
+    // allowlist still fails closed (D-063).
+    const allowed = policy.allowedTokens[intent.kind] ?? [];
     if (!allowed.some((token) => sameAddress(token, inputToken))) {
       throw new PrivacyError('unknown', `The ${intent.kind} input token is not allowlisted.`);
     }
-    if (intent.kind === 'swap') {
+    if (twoSided) {
       assertAddress(intent.tokenOut, 'output token');
       if (!allowed.some((token) => sameAddress(token, intent.tokenOut))) {
-        throw new PrivacyError('unknown', 'The swap output token is not allowlisted.');
+        throw new PrivacyError('unknown', `The ${intent.kind} output token is not allowlisted.`);
       }
+    }
+    if (
+      intent.kind === 'stake'
+      && (!sameAddress(intent.tokenIn, ENDUR_XSTRK_ASSET) || !sameAddress(intent.tokenOut, ENDUR_XSTRK))
+    ) {
+      // The anonymizer pins no pair itself, so an allowlist broader than
+      // STRK/xSTRK must not widen what it is asked to do.
+      throw new PrivacyError('unknown', 'The stake route accepts only STRK in and xSTRK out.');
     }
     if (intent.kind === 'unshield' || intent.kind === 'transfer') {
       assertAddress(intent.recipient, 'recipient');
@@ -634,7 +692,11 @@ function validateIntents(intents: readonly Intent[], policy: WalletRoutePolicy):
   }
 }
 
-/** Only the first open note is addressable, so AVNU emits exactly this literal. */
+/**
+ * Only the first open note is addressable, so AVNU emits exactly this literal;
+ * the stake route reuses it for its one xSTRK note as the anonymizer's
+ * `note_id`.
+ */
 const OPEN_NOTE_PLACEHOLDER = '${openNoteIds[0]}';
 
 /** What the wallet must be asked to prove, taken from validated sources only. */
@@ -799,11 +861,71 @@ function toActions(intents: readonly Intent[]): STRK20_ACTION[] {
         type: 'transfer', token: intent.token, amount: toFelt(intent.amount), recipient: intent.recipient,
       };
       case 'swap': throw new PrivacyError('unknown', 'Swap actions require the AVNU route.');
+      case 'stake': throw new PrivacyError('unknown', 'Stake actions require the Endur anonymizer route.');
     }
   });
 }
 
+/** The authorized relay-fee leg every relayed route carries. */
+function relayFeeWithdrawal(relayFee: RelayFeeQuote): STRK20_ACTION {
+  return {
+    type: 'withdraw',
+    token: relayFee.token,
+    amount: toFelt(relayFee.amount),
+    recipient: relayFee.recipient,
+  };
+}
+
+/**
+ * The stake request the wallet proves (D-063): the swap's transfer-OPEN +
+ * invoke pattern around Endur's anonymizer, in AVNU's proven action order.
+ *
+ * 1. Withdraw the staked STRK to the anonymizer — the public "pool paid the
+ *    helper" leg every anonymizer route has (D-018).
+ * 2. Withdraw the authorized relay fee, as every relayed route does.
+ * 3. Open the xSTRK note the minted shares are credited into, owned by the
+ *    connected account so the output cannot be credited anywhere else.
+ * 4. Invoke the anonymizer, last as Ready requires. The pool calls
+ *    `privacy_invoke(in_token, out_token, assets: u256, note_id)` through its
+ *    fixed invoke selector, so the calldata is exactly that signature: the u256
+ *    as (low, high), then the same wallet-resolved placeholder the swap uses
+ *    for its one open note.
+ *
+ * Tokens come from the validated intent, already pinned to STRK → xSTRK; the
+ * target is the pinned constant, never caller input.
+ */
+function stakeActions(intent: StakeIntent, relayFee: RelayFeeQuote, taker: Address): STRK20_ACTION[] {
+  const assets = splitU256(intent.amountIn);
+  return [
+    {
+      type: 'withdraw',
+      token: intent.tokenIn,
+      amount: toFelt(intent.amountIn),
+      recipient: ENDUR_DEPOSIT_ANONYMIZER,
+    },
+    relayFeeWithdrawal(relayFee),
+    { type: 'transfer', token: intent.tokenOut, amount: 'OPEN', recipient: taker },
+    {
+      type: 'invoke',
+      contract: ENDUR_DEPOSIT_ANONYMIZER,
+      calldata: [
+        intent.tokenIn,
+        intent.tokenOut,
+        toFelt(assets.low),
+        toFelt(assets.high),
+        OPEN_NOTE_PLACEHOLDER,
+      ],
+    },
+  ];
+}
+
+/** Cairo serializes a u256 as two felts, low 128 bits first. */
+function splitU256(value: bigint): { low: bigint; high: bigint } {
+  return { low: value & U128_MASK, high: value >> 128n };
+}
+
 function ownPolicy(policy: WalletRoutePolicy): WalletRoutePolicy {
+  const stakeTokens = policy.allowedTokens.stake;
   return Object.freeze({
     maxIntents: policy.maxIntents,
     maxRelayFee: policy.maxRelayFee,
@@ -813,6 +935,7 @@ function ownPolicy(policy: WalletRoutePolicy): WalletRoutePolicy {
       unshield: Object.freeze([...policy.allowedTokens.unshield]),
       transfer: Object.freeze([...policy.allowedTokens.transfer]),
       swap: Object.freeze([...policy.allowedTokens.swap]),
+      ...(stakeTokens ? { stake: Object.freeze([...stakeTokens]) } : {}),
     }),
     ...(policy.swap ? { swap: Object.freeze({ ...policy.swap }) } : {}),
   });
@@ -1023,7 +1146,7 @@ function ownRelayFee(value: unknown, config: PoolConfig, maxRelayFee: bigint): R
 }
 
 function tokenFor(intent: Intent): string {
-  return intent.kind === 'swap' ? intent.tokenIn : intent.token;
+  return intent.kind === 'swap' || intent.kind === 'stake' ? intent.tokenIn : intent.token;
 }
 
 function toFelt(value: bigint): string {

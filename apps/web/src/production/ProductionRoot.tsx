@@ -1,10 +1,19 @@
 import type { EventBus, ShellEvents, WorldEvents } from '@strkworld/shared';
-import type { WalletSession, WalletSessionSnapshot } from '@strkworld/privacy';
+import type {
+  PublicShieldPlanner,
+  ReservePublicShieldPlannerOptions,
+  WalletRoutePolicy,
+  WalletSession,
+  WalletSessionSnapshot,
+} from '@strkworld/privacy';
 import { useEffect, useMemo, useState, useRef } from 'react';
 import { App } from '../App.js';
 import type { BridgeRuntimeLoader } from '../bridge/BridgeProvider.js';
+import type { DegenCatalogSource } from '../panels/exchange/degen-catalog.js';
+import { STRK_TOKEN } from '../bridge/bridge-machine.js';
 import { createConnectFlow, type ConnectFlow, type ConnectState } from '../connect/connect-machine.js';
 import { COPY } from '../copy.js';
+import { sameAddress } from '../format.js';
 import type { PresenceController } from '../presence/presence-controller.js';
 import { useStore } from '../store/use-store.js';
 import {
@@ -12,6 +21,14 @@ import {
   useWalletSessionOptional,
 } from '../wallet/WalletSessionProvider.js';
 import { WalletAttentionCue } from '../wallet/WalletAttentionCue.js';
+import { detectRoutePolicy } from './config.js';
+
+/**
+ * Builds the Bridge's reserve shield planner (D-061). The privacy seam loads
+ * lazily, so `main.tsx` supplies this from its dynamic import rather than the
+ * shell importing the planner eagerly.
+ */
+export type ShieldPlannerFactory = (options: ReservePublicShieldPlannerOptions) => PublicShieldPlanner;
 
 export function ProductionRoot({
   session,
@@ -20,6 +37,9 @@ export function ProductionRoot({
   presence,
   createPresence,
   bridge,
+  createShieldPlanner,
+  policy = detectRoutePolicy(),
+  degenCatalog,
 }: {
   session: WalletSession;
   worldOut: EventBus<WorldEvents>;
@@ -28,9 +48,22 @@ export function ProductionRoot({
   presence?: PresenceController;
   /** Creates a fresh lobby owner for each connected app lifetime. */
   createPresence?: () => PresenceController;
-  /** Main-owned lazy Bridge recovery loader; no shield planner capability. */
+  /** Main-owned lazy Bridge recovery loader. Shield planning arrives separately. */
   bridge: { loadRuntime: BridgeRuntimeLoader };
+  /** D-061's reserve planner. Used only while `policy` enables the STRK shield route. */
+  createShieldPlanner?: ShieldPlannerFactory;
+  /** The route policy this build's session enforces; defaults to the live one. */
+  policy?: WalletRoutePolicy | null;
+  /** The degen floor's list, read from the same-origin backend (D-067). */
+  degenCatalog?: DegenCatalogSource;
 }) {
+  // A boolean, not the policy object: the default policy is re-parsed on every
+  // render, and a new planner per render would reset the Bridge panel.
+  const shieldPlanning = shieldPlanningEnabled(policy);
+  const shieldPlanner = useMemo(
+    () => (shieldPlanning ? buildShieldPlanner(createShieldPlanner, session) : null),
+    [shieldPlanning, createShieldPlanner, session],
+  );
   return (
     <WalletSessionProvider session={session}>
       <ProductionApp
@@ -40,9 +73,46 @@ export function ProductionRoot({
         presence={presence}
         createPresence={createPresence}
         bridge={bridge}
+        shieldPlanner={shieldPlanner}
+        degenCatalog={degenCatalog}
       />
     </WalletSessionProvider>
   );
+}
+
+/**
+ * D-061: the Bridge may plan a shield only while this build's route policy
+ * admits the STRK shield route (D-056). Without that, whatever else the
+ * policy enables, the Bridge stays recovery-only.
+ */
+export function shieldPlanningEnabled(policy: WalletRoutePolicy | null | undefined): boolean {
+  if (!policy) return false;
+  try {
+    return policy.enabledRoutes.includes('shield')
+      && policy.allowedTokens.shield.some((token) => sameAddress(token, STRK_TOKEN));
+  } catch {
+    return false;
+  }
+}
+
+function buildShieldPlanner(
+  factory: ShieldPlannerFactory | undefined,
+  session: WalletSession,
+): PublicShieldPlanner | null {
+  if (!factory) return null;
+  try {
+    return factory({
+      // The Bank's own pool-configuration path: the session's operations read
+      // the backend-proxied PoolReadClient.config(), so the Bridge reserve and
+      // the Bank's fee ceiling see the same live fee.
+      pool: { config: (signal) => session.operations.poolConfig(signal) },
+      readAccount: () => session.readAccount(),
+    });
+  } catch {
+    // Planning is optional. A failed composition leaves the Bridge
+    // recovery-only; it never blocks wallet admission or the city.
+    return null;
+  }
 }
 
 function ProductionApp({
@@ -52,6 +122,8 @@ function ProductionApp({
   presence,
   createPresence,
   bridge,
+  shieldPlanner,
+  degenCatalog,
 }: {
   session: WalletSession;
   worldOut: EventBus<WorldEvents>;
@@ -59,6 +131,8 @@ function ProductionApp({
   presence?: PresenceController;
   createPresence?: () => PresenceController;
   bridge: { loadRuntime: BridgeRuntimeLoader };
+  shieldPlanner: PublicShieldPlanner | null;
+  degenCatalog?: DegenCatalogSource;
 }) {
   const wallet = useWalletSessionOptional();
   if (!wallet) throw new Error('ProductionApp needs a WalletSessionProvider.');
@@ -76,6 +150,8 @@ function ProductionApp({
       presence={presence}
       createPresence={createPresence}
       bridge={bridge}
+      shieldPlanner={shieldPlanner}
+      degenCatalog={degenCatalog}
     />
   );
 }
@@ -88,6 +164,8 @@ function WalletCapabilityGate({
   presence,
   createPresence,
   bridge,
+  shieldPlanner,
+  degenCatalog,
 }: {
   session: WalletSession;
   snapshot: WalletSessionSnapshot;
@@ -96,6 +174,8 @@ function WalletCapabilityGate({
   presence?: PresenceController;
   createPresence?: () => PresenceController;
   bridge: { loadRuntime: BridgeRuntimeLoader };
+  shieldPlanner: PublicShieldPlanner | null;
+  degenCatalog?: DegenCatalogSource;
 }) {
   const connect = useMemo(
     () => createConnectFlow(session.operations),
@@ -138,6 +218,8 @@ function WalletCapabilityGate({
         presence={presence}
         createPresence={createPresence}
         bridge={bridge}
+        shieldPlanner={shieldPlanner}
+        degenCatalog={degenCatalog}
       />
     );
   }
@@ -153,6 +235,8 @@ function ConnectedProductionApp({
   presence,
   createPresence,
   bridge,
+  shieldPlanner,
+  degenCatalog,
 }: {
   session: WalletSession;
   initialConnectState: ConnectState;
@@ -161,6 +245,8 @@ function ConnectedProductionApp({
   presence?: PresenceController;
   createPresence?: () => PresenceController;
   bridge: { loadRuntime: BridgeRuntimeLoader };
+  shieldPlanner: PublicShieldPlanner | null;
+  degenCatalog?: DegenCatalogSource;
 }) {
   const [activePresence, setActivePresence] = useState<PresenceController | null>(presence ?? null);
   const owner = useRef<PresenceController | null>(presence ?? null);
@@ -201,8 +287,11 @@ function ConnectedProductionApp({
         loadRuntime: bridge.loadRuntime,
         account: session.getSnapshot().account,
         readAccount: session.readAccount,
-        planner: null,
+        // D-061: a reserve planner only while shield is enabled; otherwise
+        // null keeps the Bridge recovery-only.
+        planner: shieldPlanner,
       }}
+      degenCatalog={degenCatalog}
     />
   );
 }

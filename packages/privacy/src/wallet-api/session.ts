@@ -114,16 +114,13 @@ export function createWalletSession(
     const result: WalletChoice[] = [];
     for (const wallet of wallets) {
       try {
-        const name = Object.getOwnPropertyDescriptor(wallet, 'name');
-        const icon = Object.getOwnPropertyDescriptor(wallet, 'icon');
-        if (
-          !name || !('value' in name) || typeof name.value !== 'string'
-          || !icon || !('value' in icon) || typeof icon.value !== 'string'
-        ) continue;
+        const name = walletDisplayField(wallet, 'name');
+        const icon = walletDisplayField(wallet, 'icon');
+        if (name === null || icon === null) continue;
         result.push(Object.freeze({
           key: keyFor(wallet),
-          name: name.value,
-          icon: icon.value,
+          name,
+          icon,
         }));
       } catch {
         // A malformed discovery object must not escape through the snapshot.
@@ -527,17 +524,41 @@ export function createProductionWalletSession(
   });
 }
 
+/**
+ * A discovered wallet's display `name` or `icon`, or null.
+ *
+ * - An own data property is used as it stands, without invoking any trap —
+ *   the 2026-08-30 finding: a descriptor-valid proxy must not be able to throw
+ *   out of session construction.
+ * - An own accessor is refused without being invoked: nothing legitimate
+ *   defines one per instance, and running it is exactly what that finding
+ *   ruled out.
+ * - With no own property at all, the field comes from the prototype, which is
+ *   how Wallet Standard wallets normally expose it. get-starknet's own
+ *   `StarknetInjectedWallet`, which wraps every legacy `window.starknet_*`
+ *   wallet, uses class getters, so it is read once, guarded. Requiring own
+ *   data properties alone silently dropped such wallets from the picker.
+ *
+ * Any throw, from a trap or a getter, drops the field and so the wallet; it
+ * never escapes.
+ */
+function walletDisplayField(wallet: object, key: 'name' | 'icon'): string | null {
+  try {
+    const own = Object.getOwnPropertyDescriptor(wallet, key);
+    if (own) return 'value' in own && typeof own.value === 'string' ? own.value : null;
+    const value: unknown = Reflect.get(wallet, key);
+    return typeof value === 'string' ? value : null;
+  } catch {
+    return null;
+  }
+}
+
 function ownDiscoveredWallets(value: unknown): WalletHandle[] {
   if (!Array.isArray(value)) return [];
   const seen = new Set<object>();
   return value.filter((wallet): wallet is WalletHandle => {
     if ((typeof wallet !== 'object' && typeof wallet !== 'function') || wallet === null) return false;
-    const name = Object.getOwnPropertyDescriptor(wallet, 'name');
-    const icon = Object.getOwnPropertyDescriptor(wallet, 'icon');
-    if (
-      !name || !('value' in name) || typeof name.value !== 'string'
-      || !icon || !('value' in icon) || typeof icon.value !== 'string'
-    ) return false;
+    if (walletDisplayField(wallet, 'name') === null || walletDisplayField(wallet, 'icon') === null) return false;
     if (seen.has(wallet)) return false;
     seen.add(wallet);
     return true;
@@ -582,6 +603,12 @@ function ownPolicy(policy: WalletRoutePolicy): WalletRoutePolicy {
   const swapTokens = copyPolicyCollection(
     readPolicyValue<WalletRoutePolicy['allowedTokens']['swap']>(allowedTokens, 'swap'),
   );
+  // Optional (D-063): an existing policy without it admits no stake token.
+  const stakeValue = readOptionalPolicyValue<NonNullable<WalletRoutePolicy['allowedTokens']['stake']>>(
+    allowedTokens,
+    'stake',
+  );
+  const stakeTokens = stakeValue === undefined ? undefined : copyPolicyCollection(stakeValue);
   const swap = readOptionalPolicyValue<NonNullable<WalletRoutePolicy['swap']>>(policy, 'swap');
   if (swap !== undefined && !hasOwnDataProperties(swap, ['expectedChainId', 'slippageBps'])) {
     throw new PrivacyError('unknown', 'The wallet route policy is invalid.');
@@ -589,14 +616,14 @@ function ownPolicy(policy: WalletRoutePolicy): WalletRoutePolicy {
   if (!Number.isSafeInteger(maxIntents) || maxIntents < 0 || typeof maxRelayFee !== 'bigint' || maxRelayFee < 0n) {
     throw invalidPolicy();
   }
-  const knownRoutes = new Set(['shield', 'unshield', 'transfer', 'swap']);
+  const knownRoutes = new Set(['shield', 'unshield', 'transfer', 'swap', 'stake']);
   if (
     enabledRoutes.some((route) => typeof route !== 'string' || !knownRoutes.has(route))
     || new Set(enabledRoutes).size !== enabledRoutes.length
   ) {
     throw invalidPolicy();
   }
-  for (const tokens of [shield, unshield, transfer, swapTokens]) validatePolicyTokens(tokens);
+  for (const tokens of [shield, unshield, transfer, swapTokens, stakeTokens ?? []]) validatePolicyTokens(tokens);
   if (enabledRoutes.includes('swap') && swap === undefined) throw invalidPolicy();
   let ownedSwap: NonNullable<WalletRoutePolicy['swap']> | undefined;
   if (swap !== undefined) {
@@ -616,6 +643,7 @@ function ownPolicy(policy: WalletRoutePolicy): WalletRoutePolicy {
       unshield: Object.freeze(unshield),
       transfer: Object.freeze(transfer),
       swap: Object.freeze(swapTokens),
+      ...(stakeTokens ? { stake: Object.freeze(stakeTokens) } : {}),
     }),
     ...(ownedSwap
       ? { swap: ownedSwap }
@@ -835,6 +863,16 @@ function validIntent(value: unknown): boolean {
       && tokenOut && 'value' in tokenOut && typeof tokenOut.value === 'string' && isNonzeroFelt(tokenOut.value)
       && amountIn && 'value' in amountIn && typeof amountIn.value === 'bigint' && amountIn.value > 0n
       && minimum && 'value' in minimum && typeof minimum.value === 'bigint' && minimum.value > 0n
+    );
+  }
+  if (kind.value === 'stake') {
+    const tokenIn = Object.getOwnPropertyDescriptor(value, 'tokenIn');
+    const tokenOut = Object.getOwnPropertyDescriptor(value, 'tokenOut');
+    const amountIn = Object.getOwnPropertyDescriptor(value, 'amountIn');
+    return Boolean(
+      tokenIn && 'value' in tokenIn && typeof tokenIn.value === 'string' && isNonzeroFelt(tokenIn.value)
+      && tokenOut && 'value' in tokenOut && typeof tokenOut.value === 'string' && isNonzeroFelt(tokenOut.value)
+      && amountIn && 'value' in amountIn && typeof amountIn.value === 'bigint' && amountIn.value > 0n
     );
   }
   return true;
