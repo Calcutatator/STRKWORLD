@@ -81,11 +81,13 @@ export function parseBackendEnvironment(environment: Environment): ParsedBackend
 export const RELAY_SUBMISSION_HEADROOM_MS = 5_000;
 
 /**
- * A delayed route's queue delay runs inside the request deadline, so a delay
- * the deadline cannot outlast turns into a 504 with nothing submitted — after
- * the player has already approved the proof (a 2026-09-27 privacy-audit
- * finding: the example paired a 45 s delay with a 20 s deadline). That is a
- * startup error here, never a runtime surprise.
+ * Relayed routes submit as soon as they are validated (D-066): a zero queue
+ * delay is the normal setting, not a placeholder, and is exempt here. A
+ * nonzero delay remains possible, but it runs inside the request deadline, so
+ * a delay the deadline cannot outlast turns into a 504 with nothing submitted
+ * — after the player has already approved the proof (a 2026-09-27
+ * privacy-audit finding: the example paired a 45 s delay with a 20 s
+ * deadline). That is a startup error here, never a runtime surprise.
  */
 function requireDelayWithinDeadline(
   requestTimeoutMs: number,
@@ -105,10 +107,11 @@ function parsePoolRoute(environment: Environment, name: 'TRANSFER' | 'UNSHIELD')
   return {
     enabled: parseBoolean(environment, `BACKEND_ROUTE_${name}_ENABLED`),
     maxRelayFee: parseUnsignedBigint(environment, `BACKEND_ROUTE_${name}_MAX_RELAY_FEE`, MAX_U128),
+    // Zero, no artificial delay, is the D-066 setting.
     maxQueueDelayMs: parseInteger(
       environment,
       `BACKEND_ROUTE_${name}_MAX_QUEUE_DELAY_MS`,
-      1,
+      0,
       MAX_NODE_TIMEOUT_MS,
     ),
     quoteBound: false,
@@ -138,9 +141,10 @@ const STAKE_ROUTE_VARIABLES = [
  * `BACKEND_ROUTE_STAKE_ENABLED` the route is absent, and any other stake
  * variable is a startup error rather than a silently ignored half
  * configuration. Once it is set, every stake variable is required and strictly
- * validated as for the other routes. Not quote-bound, so its queue delay must
- * be positive (D-004); the pinned STRK-only allowlist is enforced when the
- * `BackendApi` validates its configuration.
+ * validated as for the other routes. Not quote-bound, so like transfer and
+ * unshield it takes the ordinary submission queue, with zero artificial delay
+ * as the normal setting (D-066); the pinned STRK-only allowlist is enforced
+ * when the `BackendApi` validates its configuration.
  */
 function parseStakeRoute(environment: Environment): RoutePolicy | undefined {
   if (isUnset(environment.BACKEND_ROUTE_STAKE_ENABLED)) {
@@ -155,7 +159,7 @@ function parseStakeRoute(environment: Environment): RoutePolicy | undefined {
     maxQueueDelayMs: parseInteger(
       environment,
       'BACKEND_ROUTE_STAKE_MAX_QUEUE_DELAY_MS',
-      1,
+      0,
       MAX_NODE_TIMEOUT_MS,
     ),
     quoteBound: false,

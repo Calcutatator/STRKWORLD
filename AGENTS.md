@@ -258,6 +258,26 @@ empty shell to fetchers, so a 200 there means nothing.
 
 ## 6. Findings log
 
+### 2026-09-28 — A relayed send names its recipient only in `Append`, first felt (D-065)
+
+A pool transfer puts its recipient in calldata only when it opens a channel:
+server action 1, `Append(recipient, EncChannelInfo[3])`, four felts with the
+recipient first. A later send to the same recipient carries no address, only
+`WriteOnce` writes and note events. So the relay's one-recipient rule counts
+distinct `Append` addresses per submission, as field elements, on every route,
+and the Shell's one-transfer batch rule is the only bound on sends to known
+recipients. Fail-closed side effect: a first send that also had to open the
+sender's own change channel would carry two `Append`s and be refused. That
+case is untested against a live wallet.
+
+*Verified:* decoded mainnet tx `0x33d01b…930495` (block 15,524,071) with the
+relay's own layout: 13 server actions, exactly one `Append`, then five
+`WriteOnce`, one spent note, two new notes and the fee `TransferTo` plus
+`EmitWithdrawal`. The `Append`'s first felt `0x14aa58…af0aa` reads
+`get_num_of_channels` 0 at block 15,524,070 and 1 at 15,524,071 (Cartridge
+public RPC). `backend.test.ts` replays that sequence: one recipient relays,
+two are refused with a 400.
+
 ### 2026-09-27 — A station snapshot is published once, at the door; the fake mirrors seam warnings
 
 - `world:stations` goes out when the visit controller handles
@@ -295,6 +315,22 @@ wallet. D-056's funded shield settles the question.
 *Verified:* a read-only starknet.js 10.4 `callContract` of `get_fee_amount`
 against the pool address in the STRK20 facts; D-043 and the 2026-08-18 finding
 re-read.
+
+### 2026-09-27 — Spends are one per send; the Bank's multi-spend Max path is now unreachable
+
+The relay's unshield route admits exactly one withdrawal per submission, and
+D-065 limits a transfer batch to one recipient, so the Shell's accumulator now
+refuses a second unshield (`one-unshield-per-send`) as well as a second
+transfer. Before this, a production unshield switch with `MAX_INTENTS` above 1
+would have let a batch of unshields fail at the relay after the player had
+approved the proof. Shields, which the wallet submits directly, still batch.
+`bank-machine.ts`'s Max arithmetic for several queued spends is now unreachable
+and could be simplified; the tests that exercised it were rewritten for a
+single spend or dropped.
+
+*Verified:* `batch-accumulator.test.ts` and `bank-machine.test.ts` cover the
+refusal, its notice and single-spend Max costing; `apps/web` panels and
+accumulator suites pass (309 tests).
 
 ### 2026-09-27 — The wallet picker dropped every getter-shaped wallet
 

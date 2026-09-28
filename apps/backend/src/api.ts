@@ -216,6 +216,8 @@ export class BackendApi {
     }, claims.operationToken, claims.swap);
 
     await this.assertCurrentProofFreshness(claims, signal, 'Prepared proof has expired.');
+    // D-066: a zero delay, the normal setting, goes straight to the queue. A
+    // delay cannot hide timing, since the proof publishes its reference block.
     if (!policy.quoteBound && policy.maxQueueDelayMs > 0) {
       const delay = clamp(this.randomInt(policy.maxQueueDelayMs), 0, policy.maxQueueDelayMs);
       if (delay > 0) await abortable(this.sleep(delay), signal);
@@ -620,17 +622,19 @@ function validateBackendConfig(config: BackendConfig): void {
       throw new Error(`Backend ${route} policy has invalid limits.`);
     }
   }
+  // Relayed pool routes submit as soon as they are validated (D-066): a zero
+  // queue delay is valid, and the per-route limits above bound a nonzero one.
+  // They are never quote-bound, so they may still wait in the bounded queue.
   for (const route of ['transfer', 'unshield'] as const) {
-    const policy = config.routes[route];
-    if (policy.quoteBound || policy.maxQueueDelayMs === 0) {
-      throw new Error(`Backend ${route} route policy must be non-quote-bound and delayed.`);
+    if (config.routes[route].quoteBound) {
+      throw new Error(`Backend ${route} route policy must not be quote-bound.`);
     }
   }
   const stake = config.routes.stake;
   if (stake) {
-    // No quote binds a stake, so it takes the ordinary delayed queue (D-004).
-    if (stake.quoteBound || stake.maxQueueDelayMs === 0) {
-      throw new Error('Backend stake route policy must be non-quote-bound and delayed.');
+    // No quote binds a stake, so it takes the ordinary submission queue (D-066).
+    if (stake.quoteBound) {
+      throw new Error('Backend stake route policy must not be quote-bound.');
     }
     // D-063 admits STRK in only; the anonymizer itself pins no pair.
     if (

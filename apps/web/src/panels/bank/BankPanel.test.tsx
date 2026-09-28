@@ -197,7 +197,7 @@ describe('BankPanel rendering', () => {
     await panel.prepare();
 
     const markup = render(panel, seam);
-    // A private transfer discloses nothing, so nothing must be disclosed.
+    // The transfer's disclosure is waived (D-065), so nothing must be disclosed.
     expect(markup).not.toContain(SHIELD_DISCLOSURE);
     expect(markup).not.toContain('data-testid="disclosure"');
     expect(commitGate(markup)).not.toContain('commit-disclosures');
@@ -273,6 +273,35 @@ describe('BankPanel rendering', () => {
     expect(markup).toContain(COPY.batch.title);
     expect(markup).toContain(COPY.batch.clear);
     expect(markup).toContain(COPY.batch.why);
+  });
+
+  it('composes a transfer as one send in Bank Menu Mode, and says why a second is refused (D-065)', async () => {
+    const seam = operations();
+    const panel = createAllowedBankPanel({ operations: seam, receipts: createReceiptLedger() });
+    await panel.open();
+    panel.setMode('transfer');
+
+    const empty = render(panel, seam, 'menu');
+    expect(empty).toContain(COPY.postOffice.oneAtATime);
+    expect(empty).toContain(COPY.gameMode.reviewAction);
+    expect(empty).not.toContain(COPY.batch.add);
+    expect(empty).not.toContain(COPY.batch.empty);
+    expect(empty).not.toContain(COPY.batch.why);
+
+    panel.setRecipient(BOB);
+    panel.setAmount('1');
+    await panel.addToBatch();
+    panel.setRecipient(BOB);
+    panel.setAmount('2');
+    await panel.addToBatch();
+
+    const refused = render(panel, seam, 'menu');
+    expect(refused).toContain(COPY.notices.oneRecipientPerSend);
+    expect(refused).toContain('Private transfer 1 STRK');
+    expect(refused).not.toContain('Private transfer 2 STRK');
+    // What is queued keeps its Remove and Clear controls.
+    expect(refused).toContain(COPY.batch.remove);
+    expect(refused).toContain(COPY.batch.clear);
   });
 
   it('disables confirm while the wallet works, and keeps the disclosure on screen', async () => {

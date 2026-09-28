@@ -11,12 +11,14 @@ import {
   MeshStandardMaterial,
   Object3D,
   PerspectiveCamera,
+  Raycaster,
   SRGBColorSpace,
   Texture,
   Vector3,
 } from 'three';
 import { SANDBOX_AREA, SANDBOX_ENTRANCE } from '@strkworld/shared';
 import { createStreetMap, isSolidAt, type DistrictMap, type TileKind } from '../map/street.js';
+import { EXCHANGE_ROOF_HEIGHT, EXCHANGE_ROOF_LEVEL, createFixedRoomLevel } from '../fixed-room.js';
 import { createNullLabelFactory } from './labels.js';
 import { CAMERA_FOV, createCameraRig } from './camera-rig.js';
 import { AVNU, NEAR, STRK20, boxGeometry } from './palette.js';
@@ -58,8 +60,9 @@ describe('buildStreet', () => {
     const { view } = build();
     expect(view.ground.children.length).toBeGreaterThan(0);
     expect(view.doors.children).toHaveLength(5);
-    // Five facade signs, four brand plates, the sandbox square's sign and its gate's.
-    expect(view.labels.children).toHaveLength(11);
+    // Five facade signs, four brand plates, the sandbox square's sign and its
+    // gate's, and the label on the Exchange tower's roof lift.
+    expect(view.labels.children).toHaveLength(12);
     const names = view.ground.children.map((child) => child.name);
     expect(names).toEqual(
       expect.arrayContaining([
@@ -81,6 +84,11 @@ describe('buildStreet', () => {
       const occluder = occluders.find((candidate) => candidate.building === building);
       expect(occluder, building).toBeDefined();
       expect(occluder!.bounds).toMatchObject({ minX: x, maxX: x + 7, minZ: 5, maxZ: 11 });
+      if (building === 'exchange') {
+        // The tower's box stops at its roof deck: nothing on the roof hides anyone.
+        expect(occluder!.bounds.height).toBe(EXCHANGE_ROOF_HEIGHT);
+        continue;
+      }
       expect(occluder!.bounds.height).toBeGreaterThanOrEqual(3.5);
       expect(occluder!.bounds.height).toBeLessThanOrEqual(8);
     }
@@ -475,6 +483,88 @@ describe('buildStreet', () => {
     expect(huesOf(bridge).filter(isGreen).length).toBeGreaterThan(0);
     expect(huesOf(bank).filter(isGreen)).toEqual([]);
     view.dispose();
+  });
+
+  it('raises the Exchange as a tower whose roof is a walkable floor of the building', () => {
+    const { map, view } = build();
+    const H = EXCHANGE_ROOF_HEIGHT;
+    const roof = createFixedRoomLevel(EXCHANGE_ROOF_LEVEL);
+    const tower = view.ground.getObjectByName('building:exchange')!;
+    tower.updateMatrixWorld(true);
+    // The roof's grid lies exactly over the tower's street footprint.
+    const exchange = buildingOccluders(view).find((occluder) => occluder.building === 'exchange')!;
+    expect(roof.rooftop).toMatchObject({ x: exchange.bounds.minX, y: exchange.bounds.minZ });
+    expect(roof.width).toBe(exchange.bounds.maxX - exchange.bounds.minX);
+    expect(roof.height).toBe(exchange.bounds.maxZ - exchange.bounds.minZ);
+    // Every street tile under it is the tower's: solid, or its door's alcove.
+    const door = map.doors.find((candidate) => candidate.building === 'exchange')!;
+    for (let y = 0; y < roof.height; y++) {
+      for (let x = 0; x < roof.width; x++) {
+        const [sx, sy] = [roof.rooftop!.x + x, roof.rooftop!.y + y];
+        const inDoor = sx >= door.x && sx < door.x + door.width && sy >= door.y && sy < door.y + door.height;
+        expect(isSolidAt(map, sx, sy) || inDoor, `street ${sx},${sy}`).toBe(true);
+      }
+    }
+    // Glass up to the roof, and the old rooftop model on it.
+    expect(new Box3().setFromObject(tower).max.y).toBeGreaterThan(H + 1);
+    const glass = meshNamed(tower, ':glass');
+    expect(glass.castShadow).toBe(true);
+    expect(meshNamed(tower, ':ticker').position.y).toBeGreaterThan(H);
+    expect(meshNamed(tower, ':podium-ticker').position.y).toBeLessThan(7);
+    // A deck at exactly the roof's height over every walkable roof tile...
+    const body = meshNamed(tower, ':body');
+    const glow = meshNamed(tower, ':glow');
+    const walkable = (x: number, z: number): boolean => {
+      const tile = roof.tiles[Math.floor(z) - roof.rooftop!.y]?.[Math.floor(x) - roof.rooftop!.x];
+      return tile === 'floor' || tile === 'lift';
+    };
+    // Looking straight down on a tile: the first solid thing under it.
+    const raycaster = new Raycaster();
+    const firstBelow = (x: number, z: number): number => {
+      raycaster.set(new Vector3(x, H + 10, z), new Vector3(0, -1, 0));
+      return raycaster.intersectObjects([body, glass], false)[0]?.point.y ?? -Infinity;
+    };
+    const front = exchange.bounds.maxZ - 0.45;
+    for (let y = 0; y < roof.height; y++) {
+      for (let x = 0; x < roof.width; x++) {
+        const wx = roof.rooftop!.x + x + 0.5;
+        const wz = Math.min(roof.rooftop!.y + y + 0.5, front - 0.05);
+        if (walkable(wx, wz)) {
+          // The deck, at exactly the roof's height the player stands at.
+          expect(firstBelow(wx, wz), `deck ${x},${y}`).toBeGreaterThanOrEqual(H);
+          expect(firstBelow(wx, wz), `deck ${x},${y}`).toBeLessThan(H + 0.02);
+        } else {
+          // The ring: a ledge knee-high at least, under a balustrade at the edge.
+          expect(firstBelow(wx, wz), `ring ${x},${y}`).toBeGreaterThan(H + 0.4);
+        }
+      }
+    }
+    for (const [x, z] of [[exchange.bounds.minX + 0.12, 8], [exchange.bounds.maxX - 0.12, 8], [15.5, exchange.bounds.minZ + 0.12], [15.5, front - 0.02]] as const) {
+      expect(firstBelow(x, z), `edge ${x},${z}`).toBeGreaterThan(H + 1.1);
+    }
+    // Nothing stands on the deck below head height, the lift pad included.
+    const deck = (x: number, z: number) => walkable(x, z);
+    expect(findWalkableIntrusions(tower, deck, map, { minY: H + 0.15, maxY: H + 1.9 })).toEqual([]);
+    // The lift pad is lit on the deck, and labelled with where it goes.
+    const pad = roof.lifts[0]!;
+    const padX = roof.rooftop!.x + pad.x;
+    const padZ = roof.rooftop!.y + pad.y;
+    expect(verticesIn(glow, padX + 0.05, padZ + 0.05, padX + 0.95, padZ + 0.95).some((vertex) => Math.abs(vertex.y - H - 0.01) < 0.01)).toBe(true);
+    const label = view.labels.children.find((child) => child.userData['lift'] === 'degen')!;
+    expect(label.userData['text']).toBe('\u25bc DEGEN FLOOR');
+    expect(label.position.toArray()).toEqual([padX + 0.5, H + 1.86, padZ + 0.5]);
+    view.dispose();
+  });
+
+  it('has a roof intrusion check that catches a crate on the deck', () => {
+    const map = createStreetMap();
+    const H = EXCHANGE_ROOF_HEIGHT;
+    const crate = new Object3D();
+    const box = new Mesh(boxGeometry(14.3, H, 7.3, 14.7, H + 0.6, 7.7));
+    box.name = 'crate';
+    crate.add(box);
+    const deck = (x: number, z: number) => x >= 13 && x < 18 && z >= 6 && z < 10;
+    expect(findWalkableIntrusions(crate, deck, map, { minY: H + 0.15, maxY: H + 1.9 })).toEqual([expect.stringContaining('crate')]);
   });
 
   it('keeps every volume off walkable tiles below head height', () => {

@@ -286,7 +286,7 @@ describe('bank panel — entering the room', () => {
     expect(panel.store.getState().disclosure).toContain('Unshielding is public.');
 
     panel.setMode('transfer');
-    // A private transfer needs no disclosure — the register says so.
+    // The transfer shows no disclosure: the register records D-065's waiver.
     expect(panel.store.getState().routeId).toBe('post-office.transfer');
     expect(panel.store.getState().disclosure).toBeNull();
     expect(panel.store.getState().door.open).toBe(true);
@@ -383,17 +383,18 @@ describe('bank panel — maturity-aware balance', () => {
   it('offers no maximum for a visit shape it has never seen costed', async () => {
     // The relay fee is charged per action, so a figure measured on a one-intent
     // batch is not the cost of a two-intent batch. Reusing it is what made MAX
-    // a button that always failed.
+    // a button that always failed. Unshields still batch; a transfer never
+    // shares a batch since D-065, so it cannot show this.
     const panel = await openPanel(fake());
-    panel.setMode('transfer');
-    panel.setRecipient(BOB);
+    panel.setMode('unshield');
+    panel.setRecipient(ALICE);
     panel.setAmount('1');
     await panel.addToBatch();
     await panel.prepare();
     panel.cancelPrepared();
     await panel.refreshBalance();
 
-    // One transfer has been costed; a batch of two has not, and that is the
+    // One unshield has been costed; a batch of two has not, and that is the
     // shape another Add would create.
     expect(panel.store.getState().quotedGasForNextIntent).toBeNull();
     expect(panel.maxSpendable()).toBeNull();
@@ -424,33 +425,18 @@ describe('bank panel — maturity-aware balance', () => {
     expect(panel.store.getState().flow.name).toBe('review');
   });
 
-  it('counts the queued intents, and survives review, once that shape is costed', async () => {
+  it('refuses a second unshield in one visit, because the relay admits one withdrawal', async () => {
     const operations = fake();
     const panel = await openPanel(operations);
-    panel.setMode('transfer');
-
-    // Cost a two-transfer visit, so the shape a MAX would create is known.
+    panel.setMode('unshield');
     for (const amount of ['1', '1']) {
-      panel.setRecipient(BOB);
+      panel.setRecipient(ALICE);
       panel.setAmount(amount);
       await panel.addToBatch();
     }
-    await panel.prepare();
-    const gasForTwo = quotedCost(panel);
-    panel.cancelPrepared();
-
-    // Drop back to one queued intent. Cancelling never empties the visit, so
-    // the remaining 1 STRK has to count against the maximum.
-    panel.removeFromBatch(1);
     expect(panel.store.getState().batch).toHaveLength(1);
-    await panel.refreshBalance();
-
-    const max = strk('100') - POOL_FEE - gasForTwo - strk('1');
-    expect(panel.maxSpendable()).toBe(max);
-
-    panel.applyMax();
-    panel.setRecipient(BOB);
-    await panel.addToBatch();
+    expect(panel.store.getState().notice).toEqual({ tone: 'error', text: COPY.notices.oneUnshieldPerSend });
+    // The one that was queued still reviews.
     await panel.prepare();
     expect(panel.store.getState().flow.name).toBe('review');
   });
@@ -458,15 +444,13 @@ describe('bank panel — maturity-aware balance', () => {
   it('offers no maximum once the visit already spends everything', async () => {
     const operations = fake({ balances: { [STRK]: strk('10') } });
     const panel = await openPanel(operations);
-    panel.setMode('transfer');
-    for (const amount of ['4', '1']) {
-      panel.setRecipient(BOB);
-      panel.setAmount(amount);
-      await panel.addToBatch();
-    }
+    panel.setMode('unshield');
+    panel.setRecipient(ALICE);
+    panel.setAmount('4');
+    await panel.addToBatch();
+    expect(panel.store.getState().batch).toHaveLength(1);
     await panel.prepare();
     panel.cancelPrepared();
-    panel.removeFromBatch(1);
     await panel.refreshBalance();
 
     // 10 held, 4 queued, 6 pool fee and the relay estimate on top: the visit
@@ -760,27 +744,45 @@ describe('bank panel — composing a visit', () => {
     });
   });
 
-  it('queues several transfers and settles them as one submission', async () => {
-    const operations = fake();
+  it('refuses a second transfer with the one-recipient notice, then sends the next after confirm (D-065)', async () => {
+    const operations = fake({ registered: [BOB, ALICE] });
     const panel = await openPanel(operations);
     panel.setMode('transfer');
 
     panel.setRecipient(BOB);
     panel.setAmount('1');
     await panel.addToBatch();
-    panel.setRecipient(BOB);
+    panel.setRecipient(ALICE);
     panel.setAmount('2');
     await panel.addToBatch();
 
-    expect(panel.store.getState().batch).toHaveLength(2);
+    expect(panel.store.getState()).toMatchObject({
+      batch: [{ kind: 'transfer', token: STRK, amount: strk('1'), recipient: BOB }],
+      // The refused entry stays in the form, so the player can send it next.
+      amountText: '2',
+      recipientText: ALICE,
+      notice: { tone: 'error', text: COPY.notices.oneRecipientPerSend },
+    });
     await panel.prepare();
     await panel.confirm();
+    expect(operations.submitted).toEqual([
+      [{ kind: 'transfer', token: STRK, amount: strk('1'), recipient: BOB }],
+    ]);
 
-    expect(operations.submitted).toHaveLength(1);
-    expect(operations.submitted[0]).toHaveLength(2);
+    // Confirming empties the visit, so the next send is its own submission.
+    panel.acknowledge();
+    panel.setRecipient(ALICE);
+    panel.setAmount('2');
+    await panel.addToBatch();
+    await panel.prepare();
+    await panel.confirm();
+    expect(operations.submitted).toEqual([
+      [{ kind: 'transfer', token: STRK, amount: strk('1'), recipient: BOB }],
+      [{ kind: 'transfer', token: STRK, amount: strk('2'), recipient: ALICE }],
+    ]);
   });
 
-  it('batches two compatible transfers in the exact Post Office Menu configuration', async () => {
+  it('holds one transfer at a time in the exact Post Office Menu configuration (D-065)', async () => {
     const operations = fake();
     const panel = await openPanel(operations, {
       allowedModes: ['transfer'],
@@ -793,25 +795,50 @@ describe('bank panel — composing a visit', () => {
       await panel.addToBatch();
     }
 
+    // Even to the same recipient: a batch holds at most one transfer.
     expect(panel.store.getState()).toMatchObject({
       mode: 'transfer',
       routeId: 'post-office.transfer',
-      batch: [
-        { kind: 'transfer', token: STRK, amount: strk('1'), recipient: BOB },
-        { kind: 'transfer', token: STRK, amount: strk('2'), recipient: BOB },
-      ],
+      batch: [{ kind: 'transfer', token: STRK, amount: strk('1'), recipient: BOB }],
+      notice: { tone: 'error', text: COPY.notices.oneRecipientPerSend },
     });
 
     await panel.prepare();
     await panel.confirm();
 
     expect(operations.submitted).toEqual([
-      [
-        { kind: 'transfer', token: STRK, amount: strk('1'), recipient: BOB },
-        { kind: 'transfer', token: STRK, amount: strk('2'), recipient: BOB },
-      ],
+      [{ kind: 'transfer', token: STRK, amount: strk('1'), recipient: BOB }],
     ]);
     expect(panel.store.getState().flow.name).toBe('submitted');
+  });
+
+  it('still lets a shield or an unshield share a visit with the one transfer, as separate sends', async () => {
+    for (const other of ['shield', 'unshield'] as const) {
+      const operations = fake();
+      const panel = await openPanel(operations);
+
+      panel.setMode(other);
+      if (other === 'unshield') panel.setRecipient(ALICE);
+      panel.setAmount('1');
+      await panel.addToBatch();
+      await panel.prepare();
+      await panel.confirm();
+      panel.acknowledge();
+
+      panel.setMode('transfer');
+      panel.setRecipient(BOB);
+      panel.setAmount('2');
+      await panel.addToBatch();
+      expect(panel.store.getState().notice, other).toBeNull();
+      await panel.prepare();
+      await panel.confirm();
+
+      expect(operations.submitted.map((batch) => batch.map((intent) => intent.kind)), other).toEqual([
+        [other],
+        ['transfer'],
+      ]);
+      expect(panel.store.getState().flow.name, other).toBe('submitted');
+    }
   });
 
   it('executes a transfer-only station as one typed private transfer', async () => {
@@ -1901,52 +1928,28 @@ describe('bank panel — a quote is evidence about one batch shape', () => {
    * The relay fee is charged per action, so the cost of a batch depends on its
    * shape. A quote is therefore evidence about the shape it was taken on and
    * nothing else — there is no interpolation between two observations here,
-   * because a fitted curve is still a guess about somebody's money.
+   * because a fitted curve is still a guess about somebody's money. Unshields
+   * show it: they still batch, where a transfer never shares a batch (D-065).
    */
-  it('does not reuse a one-intent quote for a two-intent visit', async () => {
+
+  it('offers a maximum only once the one-spend shape has actually been costed', async () => {
     const operations = fake();
     const panel = await openPanel(operations);
-    panel.setMode('transfer');
-    panel.setRecipient(BOB);
-    panel.setAmount('1');
-    await panel.addToBatch();
-    await panel.prepare();
-    const gasForOne = quotedCost(panel);
-    panel.cancelPrepared();
-
-    panel.setRecipient(BOB);
-    panel.setAmount('1');
-    await panel.addToBatch();
-    await panel.prepare();
-    const gasForTwo = quotedCost(panel);
-
-    // If these were equal the whole precaution would be untestable, which is
-    // exactly the state the fake was in before its gas model varied.
-    expect(gasForTwo).toBeGreaterThan(gasForOne);
-  });
-
-  it('re-offers a maximum only for a shape it has actually costed', async () => {
-    const operations = fake();
-    const panel = await openPanel(operations);
-    panel.setMode('transfer');
-    panel.setRecipient(BOB);
-    panel.setAmount('1');
-    await panel.addToBatch();
-    await panel.prepare();
-    panel.cancelPrepared();
+    panel.setMode('unshield');
     await panel.refreshBalance();
 
-    // One queued intent: a MAX would make two, and two has not been costed.
+    // Nothing costed yet: a MAX would make a one-unshield visit nobody priced.
     expect(panel.maxSpendable()).toBeNull();
 
-    panel.setRecipient(BOB);
+    panel.setRecipient(ALICE);
     panel.setAmount('1');
     await panel.addToBatch();
     await panel.prepare();
     panel.cancelPrepared();
-    panel.removeFromBatch(1);
+    panel.removeFromBatch(0);
+    await panel.refreshBalance();
 
-    // Two has now been costed, and one is queued again.
+    // That shape has now been costed, and the visit is empty again.
     expect(panel.maxSpendable()).not.toBeNull();
   });
 

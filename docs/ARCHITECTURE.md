@@ -94,9 +94,10 @@ address out of the protocol action, but the application, action, timing and
 open-note amount may remain public. AVNU already supplies its own private
 executor, so the Exchange does not need project-owned Cairo.
 
-The backend submission queue can add bounded jitter only when STRKWORLD
-controls the prepare/submit path. It never delays quote-bound AVNU actions, and
-it must not be presented as defeating timing correlation (D-015).
+The backend submission queue keeps its concurrency and backpressure limits
+but adds no artificial delay (D-066): each proof publishes the block it was
+built against, so jitter could not hide when the player confirmed. It must
+never be presented as defeating timing correlation (D-015).
 
 ### Multiplayer presence
 

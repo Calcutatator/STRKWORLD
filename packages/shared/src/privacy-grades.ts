@@ -38,9 +38,12 @@ export type PrivacyGrade =
    */
   | 'private'
   /**
-   * Parties hidden, **amounts visible**. Anonymizer-mediated DeFi: open notes
-   * carry the filled amount in plaintext by design, and the AMM leg is public.
-   * "Nobody can link this to you" is defensible; "your amount is hidden" is not.
+   * Who acted is hidden, but **part of the action is public**. Anonymizer-
+   * mediated DeFi hides the parties but not the amounts: open notes carry the
+   * filled amount in plaintext by design, and the AMM leg is public. "Nobody
+   * can link this to you" is defensible; "your amount is hidden" is not. The
+   * private transfer (D-065) hides sender and amount, but a first send
+   * publishes the recipient, so "the recipient is hidden" is not defensible.
    */
   | 'anonymous'
   /**
@@ -103,13 +106,17 @@ export const PRIVACY_REGISTER: readonly RouteGrade[] = [
   {
     building: 'post-office',
     route: 'post-office.transfer',
-    grade: 'private',
+    // D-065: regraded from `private` after a verified mainnet finding; the
+    // lead waived the in-game disclosure.
+    grade: 'anonymous',
     observable:
-      'Nothing. A private transfer between two registered accounts has no public leg — sender, recipient, token and amount are all hidden.',
+      'Sender and amount hidden, recipient not always. A first transfer to a new recipient opens a channel keyed by their address: the address is in plaintext calldata and the pool counts a new channel for it in that block, so an observer learns that this address received a first private payment, and when. Later transfers to the same recipient add no such record. The relay fee leaves the pool publicly to the paymaster forwarder, and the proof publishes the block it was built against, which dates the confirm. One recipient per send (D-065), so a submission never links several recipients.',
     disclosure: null,
-    approvedBy: null,
-    approvedOn: null,
-    rationale: null,
+    approvedBy: 'calc',
+    approvedOn: '2026-09-27',
+    rationale:
+      'The sender and amount stay hidden, which the lead accepts for private sends; the first-send recipient record cannot be avoided through the Wallet API. The player-facing disclosure is waived by D-065, and the copy claims no recipient privacy.',
+    disclosureWaivedBy: 'D-065',
     returnToPool: false,
   },
   {
@@ -224,6 +231,7 @@ export function isRoutePlayable(route: RouteGrade): boolean {
  */
 export const DISCLOSURE_WAIVERS: Readonly<Record<string, string>> = Object.freeze({
   'bank.stake': 'D-064',
+  'post-office.transfer': 'D-065',
 });
 
 /**

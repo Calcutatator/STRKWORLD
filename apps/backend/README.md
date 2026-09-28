@@ -10,12 +10,14 @@ submit eligible prepared Wallet API calls and proxy those reads.
 
 - Paymaster-key custody and fee-action ceiling checks
 - Recipient-registration and receipt RPC proxies
-- Bounded submission jitter and concurrency for eligible prepared calls only
+- Bounded submission concurrency for eligible prepared calls only, with no
+  artificial delay by default (D-066)
 - A hard request deadline propagated to AVNU and Starknet RPC
 - Aggregate rate, budget and health counters
 - Global and per-route kill switches
 
-AVNU's quote-bound first-party flow does not pass through the delay queue.
+AVNU's quote-bound first-party flow is never delayed and never waits in the
+submission queue.
 
 ## Request boundary
 
@@ -57,6 +59,11 @@ an external `Invoke`, the exact authorized paymaster withdrawal must be
 present, and public deposit/transfer-from/viewing-key or computed-invoke actions
 cannot be smuggled through a private route. A `Some` screening attestation is
 also rejected on these non-deposit routes; the current pool expects `None`.
+One recipient per send (D-065): a first transfer opens a channel with
+`Append(recipient, …)`, which publishes the recipient's address, so every
+route refuses a submission whose `Append` actions name more than one distinct
+address (400). Later sends to a known recipient carry no address, so the
+Shell's one-transfer batch rule bounds those.
 
 For AVNU swaps the server selects an exact-input quote and requests
 `quoteToCalls({ private: true })`. Its HMAC authorization additionally binds
@@ -69,9 +76,10 @@ the swap route.
 Endur private staking (D-063) is the optional `stake` route, disabled by
 default: with no `BACKEND_ROUTE_STAKE_ENABLED` it is absent, and any other
 `BACKEND_ROUTE_STAKE_*` variable fails startup. Once enabled, `_MAX_RELAY_FEE`,
-`_MAX_QUEUE_DELAY_MS` (positive) and `_ALLOWED_TOKENS` are required, and the
-allowlist must be exactly STRK. It uses the generic fee build and the ordinary
-delayed queue, since no quote binds it. At submission the decoded proof must
+`_MAX_QUEUE_DELAY_MS` (0, no artificial delay, under D-066) and
+`_ALLOWED_TOKENS` are required, and the allowlist must be exactly STRK. It uses
+the generic fee build and the ordinary submission queue, since no quote binds
+it. At submission the decoded proof must
 contain exactly one `Invoke` of the pinned `EndurDepositAnonymizer` with
 `privacy_invoke(in_token, out_token, assets: u256, note_id)` calldata — the
 authorized STRK in, pinned xSTRK out, a nonzero u256 — and exactly two
@@ -80,12 +88,17 @@ Only the wallet-resolved note id is variable.
 
 Fee build returns an HMAC authorization binding route, fee token, operation
 token, recipient, amount and block-validity window. The server keeps no quote
-row to correlate with the later proof. Pool-native submissions receive bounded
-jitter, then enter a bounded process-local admission queue. They are checked
-again after both waits against the current block, current pool proof-validity
-window, and current route/token allowlists; a stale or newly forbidden request
-is removed from the queue and can never relay later. Quote-bound swaps skip
-both delay and queuing: if the
+row to correlate with the later proof. Relayed pool routes (transfer, unshield,
+stake) enter a bounded process-local admission queue as soon as they are
+validated: D-066 removed the artificial delay, because every pool transaction
+publishes the block its proof was built against, so a delay cannot hide timing
+and only made the game's transactions stand out. The example configuration
+sets `MAX_QUEUE_DELAY_MS=0`; a nonzero value is still honoured as bounded jitter
+before the queue, and startup fails unless it leaves the request deadline 5 s of
+headroom. Submissions are checked again after any wait against the current
+block, current pool proof-validity window, and current route/token allowlists;
+a stale or newly forbidden request is removed from the queue and can never
+relay later. Quote-bound swaps skip both delay and queuing: if the
 in-flight slot is unavailable they fail fast and must be re-quoted. Every
 request also has a configured deadline. The edge abort signal and deadline are
 propagated to AVNU and raw Starknet RPC, and timeout responses contain no

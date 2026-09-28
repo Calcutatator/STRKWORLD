@@ -32,7 +32,7 @@ export function PanelFrame({
    * staking counter (D-063). It never gates a route or changes a control.
    */
   brand?: 'endur';
-  /** Canonical approved copy, or null for a route graded `private`. */
+  /** Canonical approved copy, or null for a route graded `private` or with a waived disclosure (D-064, D-065). */
   disclosure: string | null;
   onClose: () => void;
   /**

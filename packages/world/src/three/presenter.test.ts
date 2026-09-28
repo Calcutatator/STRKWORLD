@@ -1,6 +1,14 @@
 import { describe, expect, it, vi } from 'vitest';
 import { Group, Mesh, Vector3, type Material } from 'three';
 import { SANDBOX_AREA, type AvatarSpriteKey } from '@strkworld/shared';
+import {
+  EXCHANGE_DEGEN_LEVEL,
+  EXCHANGE_DEGEN_STATION,
+  EXCHANGE_ROOF_HEIGHT,
+  EXCHANGE_ROOF_LEVEL,
+  createFixedRoomLevel,
+  fixedRoomStationPresentations,
+} from '../fixed-room.js';
 import { cameraPositionFor } from './camera-rig.js';
 import { createNullLabelFactory } from './labels.js';
 import { createPresenter } from './presenter.js';
@@ -198,6 +206,95 @@ describe('presenter', () => {
       settle({ x: column + 0.5 + dx, y: 7.5, z: 15.5 });
       expect(state(gate)).toEqual(opaque);
     }
+  });
+
+  it('draws the Degen floor as its own interior, one floor of the Exchange at a time', () => {
+    const world = setup();
+    const root = world.parent.getObjectByName('strkworld')!;
+    const room = (name: string) => root.children.find((child) => child.name === name)!;
+    world.view.setStreetVisible(false);
+    world.view.showRoom('exchange', 'degen');
+    expect(room('room:exchange:degen').visible).toBe(true);
+    expect(room('room:exchange').visible).toBe(false);
+    world.view.showRoom('exchange');
+    expect(room('room:exchange').visible).toBe(true);
+    expect(room('room:exchange:degen').visible).toBe(false);
+    // The Exchange's station state reaches whichever floor draws the station.
+    const degen = createFixedRoomLevel(EXCHANGE_DEGEN_LEVEL);
+    world.view.renderRoom('exchange', fixedRoomStationPresentations(degen, {
+      inRoom: true,
+      building: 'exchange',
+      level: 'degen',
+      controlOwner: 'world',
+      highlightedStation: null,
+      stations: [{ station: EXCHANGE_DEGEN_STATION, label: 'DEGEN', status: 'available' }],
+    }));
+    const counter = room('room:exchange:degen').children.find((child) => child.userData['station'] === EXCHANGE_DEGEN_STATION)!;
+    expect(counter.userData['status']).toBe('available');
+    // No roof room: the roof is the tower's top in the street.
+    expect(root.children.filter((child) => child.name.startsWith('room:exchange')).map((child) => child.name).sort()).toEqual([
+      'room:exchange',
+      'room:exchange:degen',
+    ]);
+  });
+
+  it('stands the player on the roof in the street scene and points the camera down', () => {
+    const world = setup();
+    expect(world.presenter.cameraPreset).toBe('street');
+    const roof = EXCHANGE_ROOF_LEVEL.rooftop;
+    world.view.showRoom(null);
+    world.view.showRooftop('exchange');
+    world.view.setPlayerPosition(tile(roof.x + 5, roof.y + 3), true);
+    world.view.setPlayerElevation(EXCHANGE_ROOF_HEIGHT);
+    world.presenter.update(16);
+    expect(world.presenter.cameraPreset).toBe('rooftop');
+    expect(world.avatar.object.position.y).toBeCloseTo(EXCHANGE_ROOF_HEIGHT);
+    expect(world.presenter.player.elevation).toBe(EXCHANGE_ROOF_HEIGHT);
+    // The street, not an interior, is drawn around and below.
+    expect(world.parent.getObjectByName('street:ground')!.visible).toBe(true);
+    expect(world.parent.getObjectByName('room:exchange')!.visible).toBe(false);
+    // Down the lift: level again, on the floor, in one frame.
+    world.view.showRooftop(null);
+    world.view.setPlayerPosition(tile(4, 14), true);
+    world.view.setPlayerElevation(0);
+    world.presenter.update(16);
+    expect(world.presenter.cameraPreset).toBe('street');
+    expect(world.avatar.object.position.y).toBeCloseTo(0);
+    // A new session starts on the street.
+    world.view.showRooftop('exchange');
+    world.presenter.bindSession();
+    expect(world.presenter.cameraPreset).toBe('street');
+  });
+
+  it('never fades anything while the camera looks down on the roof', () => {
+    const world = setup();
+    const roof = createFixedRoomLevel(EXCHANGE_ROOF_LEVEL);
+    const origin = roof.rooftop!;
+    // Everything that can fade: every building and the sandbox gate.
+    const materials: Material[] = [];
+    world.parent.getObjectByName('street:ground')!.traverse((object) => {
+      const fades = object.name.startsWith('building:') || object.name === 'street:sandbox-gate';
+      if (object instanceof Mesh && (fades || object.parent?.name.startsWith('building:'))) materials.push(object.material as Material);
+    });
+    expect(materials.length).toBeGreaterThan(20);
+    const state = (material: Material) => ({ opacity: material.opacity, transparent: material.transparent, depthWrite: material.depthWrite });
+    const before = materials.map(state);
+    world.view.showRoom(null);
+    world.view.showRooftop('exchange');
+    let tiles = 0;
+    for (let y = 0; y < roof.height; y++) {
+      for (let x = 0; x < roof.width; x++) {
+        if (roof.tiles[y]![x] === 'wall') continue;
+        world.view.setPlayerPosition(tile(origin.x + x, origin.y + y), true);
+        world.view.setPlayerElevation(EXCHANGE_ROOF_HEIGHT);
+        world.presenter.update(16);
+        const camera = cameraPositionFor({ x: origin.x + x + 0.5, z: origin.y + y + 0.5 }, EXCHANGE_ROOF_HEIGHT, 'rooftop');
+        for (let i = 0; i < 20; i += 1) world.presenter.updateOcclusion(new Vector3(camera.x, camera.y, camera.z), 16);
+        expect(materials.map(state), `deck ${x},${y}`).toEqual(before);
+        tiles += 1;
+      }
+    }
+    expect(tiles).toBe(20);
   });
 
   it('disposes everything once and detaches from its parent', () => {

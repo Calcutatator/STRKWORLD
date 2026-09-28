@@ -12,7 +12,7 @@ import { PRIVACY_REGISTER, isDisclosureWaived, isRoutePlayable, isDeviation, rou
 
 const LABEL: Record<string, string> = {
   private:       "PRIVATE      parties and amounts hidden, no public leg",
-  anonymous:     "ANONYMOUS    parties hidden, AMOUNTS VISIBLE",
+  anonymous:     "ANONYMOUS    who acted is hidden, but PART OF THE ACTION IS VISIBLE (see below)",
   "public-edge": "PUBLIC EDGE  actor and amount visible on-chain",
   public:        "PUBLIC       no privacy claim",
 };

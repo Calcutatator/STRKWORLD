@@ -15,25 +15,33 @@ import {
   Vector3,
 } from 'three';
 import {
+  EXCHANGE_DEGEN_LEVEL,
+  EXCHANGE_DEGEN_STATION,
   FIXED_ROOM_DEFINITIONS,
   createFixedRoom,
+  createFixedRoomLevel,
   fixedRoomStationPresentations,
   isFixedRoomSolidAt,
-  type FixedRoomMap,
+  type FixedRoomLevelMap,
   type FixedRoomState,
 } from '../fixed-room.js';
 import { ROOM_ORIGIN } from '../world-layout.js';
 import { createNullLabelFactory } from './labels.js';
-import { ENDUR, ENDUR_STATION_LOOKS, NEAR, STRK20, STRK20_STATION_LOOKS } from './palette.js';
+import { DEGEN_STATION_LOOKS, DEGEN_TOKENS, ENDUR, ENDUR_STATION_LOOKS, NEAR, STRK20, STRK20_STATION_LOOKS } from './palette.js';
 import {
+  DEGEN_POSTER_SLOTS,
+  DEGEN_SIGN_TEXT,
   INTERIOR_SOUTH_WALL_HEIGHT,
   INTERIOR_WALL_HEIGHT,
   buildFixedRoom,
+  degenPosterStyle,
   type InteriorOccluder,
 } from './room-builder.js';
 import type { LabelFactory, RoomView } from './types.js';
 
 const DEFINITIONS = Object.values(FIXED_ROOM_DEFINITIONS);
+/** Every interior floor: the ground floors and the Exchange tower's Degen floor. */
+const FLOORS: readonly FixedRoomLevelMap[] = [...DEFINITIONS.map(createFixedRoom), createFixedRoomLevel(EXCHANGE_DEGEN_LEVEL)];
 const OX = ROOM_ORIGIN.x / 32;
 const OZ = ROOM_ORIGIN.y / 32;
 
@@ -43,7 +51,7 @@ function build(building: keyof typeof FIXED_ROOM_DEFINITIONS, labels: LabelFacto
 }
 
 function roomState(
-  map: FixedRoomMap,
+  map: FixedRoomLevelMap,
   status: 'available' | 'locked',
   highlightedStation: FixedRoomState['highlightedStation'],
   label?: string,
@@ -211,6 +219,7 @@ describe('buildFixedRoom', () => {
       }
     });
     expect(tallest).toBeLessThanOrEqual(0.55);
+    room.group.updateMatrixWorld(true);
     const south = new Box3().setFromObject(meshNamed(room.group, ':south-wall'));
     expect(south.max.y).toBeLessThanOrEqual(INTERIOR_SOUTH_WALL_HEIGHT + 0.12);
     const occluders = room.occluders as readonly InteriorOccluder[];
@@ -247,8 +256,7 @@ describe('buildFixedRoom', () => {
     room.dispose();
   });
 
-  it.each(DEFINITIONS)('keeps every $building volume off the walkable floor', (definition) => {
-    const map = createFixedRoom(definition);
+  it.each(FLOORS)('keeps every $building $level volume off the walkable floor', (map) => {
     const room = buildFixedRoom(map, createNullLabelFactory());
     const walkable = (x: number, z: number) =>
       !isFixedRoomSolidAt(map, Math.floor(x - OX), Math.floor(z - OZ));
@@ -438,6 +446,155 @@ describe('buildFixedRoom', () => {
     room.setStations(fixedRoomStationPresentations(map, roomState(map, 'available', null)));
   });
 });
+
+describe('the Exchange tower floors', () => {
+  const degenMap = createFixedRoomLevel(EXCHANGE_DEGEN_LEVEL);
+  const labelsIn = (root: Object3D, key: string): Object3D[] => {
+    const found: Object3D[] = [];
+    root.traverse((object) => {
+      if (object.userData[key] !== undefined && object.userData['kind']) found.push(object);
+    });
+    return found;
+  };
+
+  it('builds the Degen floor over its own grid, its counter locked until the Shell opens it', () => {
+    const room = buildFixedRoom(degenMap, createNullLabelFactory());
+    expect(room.building).toBe('exchange');
+    expect(room.group.name).toBe('room:exchange:degen');
+    expect(room.group.userData['level']).toBe('degen');
+    expect(room.group.position.toArray()).toEqual([OX, 0, OZ]);
+    const stations = room.group.children.filter((child) => child.name.startsWith('station:'));
+    expect(stations.map((child) => child.userData['station'])).toEqual([EXCHANGE_DEGEN_STATION]);
+    const counter = stationGroup(room, EXCHANGE_DEGEN_STATION);
+    expect(counter.userData['status']).toBe('locked');
+    expect(floatingLabel(counter).userData['text']).toBe('DEGEN SWAP');
+    const accent = meshNamed(counter, ':status').material as MeshStandardMaterial;
+    expect(accent.color.getHex()).toBe(new Color(DEGEN_STATION_LOOKS.locked.color).getHex());
+    // Available and stepped up to: hot pink with a lime halo, and the Shell's label.
+    room.setStations(fixedRoomStationPresentations(degenMap, roomState(degenMap, 'available', EXCHANGE_DEGEN_STATION, 'DEGEN')));
+    expect(counter.userData['status']).toBe('available');
+    expect(floatingLabel(counter).userData['text']).toBe('DEGEN');
+    expect(accent.emissive.getHex()).toBe(new Color(DEGEN_STATION_LOOKS.highlighted.emissive).getHex());
+    // No exit: the south wall is one unbroken ledge, the lifts are the way out.
+    expect(degenMap.exit).toBeNull();
+    expect(degenMap.tiles.at(-1)!.every((tile) => tile === 'wall')).toBe(true);
+    room.group.updateMatrixWorld(true);
+    const south = new Box3().setFromObject(meshNamed(room.group, ':south-wall'));
+    expect(south.min.x).toBeCloseTo(OX);
+    expect(south.max.x).toBeCloseTo(OX + degenMap.width);
+    room.dispose();
+  });
+
+  it('hangs a poster per DEGEN_TOKENS entry, in the list\'s order, colours and words', () => {
+    expect(DEGEN_TOKENS.length).toBeGreaterThanOrEqual(3);
+    expect(DEGEN_TOKENS.length).toBeLessThanOrEqual(DEGEN_POSTER_SLOTS.length);
+    expect(DEGEN_TOKENS.slice(0, 3).map((token) => token.ticker)).toEqual(['LORDS', 'DREAMS', 'SLAY']);
+    // Researched entries only now: no slot is still a placeholder.
+    for (const token of DEGEN_TOKENS) expect(token.placeholder, token.ticker).not.toBe(true);
+    const room = buildFixedRoom(degenMap, createNullLabelFactory());
+    room.group.updateMatrixWorld(true);
+    const posters = labelsIn(room.group, 'token');
+    // The scene groups posters by wall, so match each token to its poster by
+    // text rather than by traversal order.
+    const textOf = (token: (typeof DEGEN_TOKENS)[number]) => `${token.ticker}\n${token.name}`;
+    expect(posters.map((poster) => poster.userData['text']).sort()).toEqual(DEGEN_TOKENS.map(textOf).sort());
+    const faces = { north: { axis: 'z', at: OZ + 0.55 }, west: { axis: 'x', at: OX + 0.55 }, east: { axis: 'x', at: OX + degenMap.width - 0.55 } } as const;
+    DEGEN_TOKENS.forEach((token, index) => {
+      const poster = posters.find((candidate) => candidate.userData['text'] === textOf(token))!;
+      expect(poster.userData['kind']).toBe('sign');
+      expect(poster.userData['options']).toEqual(degenPosterStyle(token));
+      expect(poster.userData['options']).toMatchObject({ background: `#${token.colors.background.toString(16).padStart(6, '0')}` });
+      // On its slot's wall, just proud of it, facing into the room.
+      const slot = DEGEN_POSTER_SLOTS[index]!;
+      const position = poster.getWorldPosition(new Vector3());
+      const face = faces[slot.wall];
+      expect(Math.abs(position[face.axis] - face.at), token.ticker).toBeLessThan(0.08);
+      expect(position.y).toBeGreaterThan(0.8);
+      expect(poster.rotation.y).toBeCloseTo({ north: 0, west: Math.PI / 2, east: -Math.PI / 2 }[slot.wall]);
+    });
+    // The floor's own sign, and never a price: no currency, percentage or decimal on any board.
+    const sign = labelsIn(room.group, 'area').find((label) => label.userData['area'] === 'degen-sign')!;
+    expect(sign.userData['text']).toBe(DEGEN_SIGN_TEXT);
+    for (const label of [...posters, sign]) expect(label.userData['text']).not.toMatch(/[$%\u20ac\u00a3]|\d[.,]\d/);
+    room.dispose();
+  });
+
+  it('marks every lift with a pad, a label naming where it goes and, on the north wall, doors', () => {
+    const cases = [
+      { map: createFixedRoom(FIXED_ROOM_DEFINITIONS.exchange), labels: ['\u25b2 DEGEN FLOOR'] },
+      { map: degenMap, labels: ['\u25bc GROUND FLOOR', '\u25b2 ROOF'] },
+    ];
+    for (const { map, labels } of cases) {
+      const room = buildFixedRoom(map, createNullLabelFactory());
+      room.group.updateMatrixWorld(true);
+      const found = labelsIn(room.group, 'lift');
+      expect(found.map((label) => label.userData['text'])).toEqual(labels);
+      map.lifts.forEach((lift, index) => {
+        const position = found[index]!.getWorldPosition(new Vector3());
+        expect(position.x).toBeCloseTo(OX + lift.x + lift.width / 2);
+        expect(position.z).toBeCloseTo(OZ + lift.y + lift.height / 2);
+        expect(position.y).toBeGreaterThan(1.8);
+        expect(found[index]!.userData['lift']).toBe(lift.to);
+        // The pad is lit on the floor, flat.
+        const glow = meshNamed(room.group, ':floor-glow');
+        const flat = verticesIn(glow, OX + lift.x + 0.1, OZ + lift.y + 0.1, OX + lift.x + lift.width - 0.1, OZ + lift.y + lift.height - 0.1);
+        expect(flat.length).toBeGreaterThan(0);
+        expect(Math.max(...flat.map((vertex) => vertex.y))).toBeLessThan(0.02);
+        // A pad against the north wall has doors standing in it, lit down the middle.
+        if (lift.y === 1) {
+          const north = meshNamed(room.group, ':wall-north:body');
+          const doors = verticesIn(north, OX + lift.x + 0.15, OZ + 0.5, OX + lift.x + lift.width - 0.15, OZ + 0.7);
+          expect(Math.max(...doors.map((vertex) => vertex.y))).toBeGreaterThan(1.75);
+        }
+      });
+      room.dispose();
+    }
+  });
+
+  it.each(FLOORS)('keeps the $building $level room within its draw-call budget', (map) => {
+    const room = buildFixedRoom(map, createNullLabelFactory());
+    let calls = 0;
+    room.group.traverse((object) => {
+      // A mesh is a call; so is each canvas label, which the null factory draws as an Object3D.
+      if (object instanceof Mesh || object.userData['kind']) calls += 1;
+    });
+    expect(calls).toBeLessThan(40);
+    room.dispose();
+  });
+
+  it('disposes the Degen floor completely: every poster, sign and lift label once', () => {
+    const room = buildFixedRoom(degenMap, createNullLabelFactory());
+    const labels: Object3D[] = [];
+    room.group.traverse((object) => {
+      if (object.userData['kind']) labels.push(object);
+    });
+    expect(labels.length).toBe(DEGEN_TOKENS.length + 1 + degenMap.lifts.length + degenMap.stations.length);
+    const geometries = new Set<BufferGeometry>();
+    const materials = new Set<Material>();
+    room.group.traverse((object) => {
+      if (!(object instanceof Mesh)) return;
+      geometries.add(object.geometry);
+      materials.add(object.material as Material);
+    });
+    const spies = [...geometries, ...materials].map((value) => vi.spyOn(value, 'dispose'));
+    room.dispose();
+    room.dispose();
+    for (const spy of spies) expect(spy).toHaveBeenCalledTimes(1);
+    for (const label of labels) expect(label.userData['disposed']).toBe(true);
+  });
+});
+
+/** World-space vertices of a mesh inside an x/z rectangle. */
+function verticesIn(mesh: Mesh, x0: number, z0: number, x1: number, z1: number): Vector3[] {
+  mesh.updateMatrixWorld(true);
+  const position = mesh.geometry.getAttribute('position');
+  const found: Vector3[] = [];
+  for (let i = 0; i < position.count; i++) {
+    const vertex = new Vector3().fromBufferAttribute(position, i).applyMatrix4(mesh.matrixWorld);
+    if (vertex.x >= x0 && vertex.x <= x1 && vertex.z >= z0 && vertex.z <= z1) found.push(vertex);
+  }
+  return found;
+}
 
 /** sRGB hexes of a mesh's vertex colours. */
 function coloursOf(mesh: Mesh): number[] {

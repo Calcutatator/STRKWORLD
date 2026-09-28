@@ -30,6 +30,7 @@ import {
 import type { ColorRepresentation, Material, Object3D, Texture } from 'three';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import type { BuildingId, StationId } from '@strkworld/shared';
+import type { FixedRoomLevelId } from '../fixed-room.js';
 import type { FloatingStyleOptions, SignStyleOptions } from './labels.js';
 import type { Occluder, OccluderBounds } from './types.js';
 
@@ -177,6 +178,110 @@ export const VESU = Object.freeze({
   blueSoft: 0xe0e5ff,
   blueText: 0x2030b6,
 });
+
+/**
+ * The Exchange tower's Degen floor (its first floor): neon over avnu's own
+ * navy and indigo. The walls stay avnu's; these are the accents that make it
+ * loud. Not a brand: nobody's palette is claimed here.
+ */
+export const DEGEN = Object.freeze({
+  pink: 0xff3dbb,
+  pinkDeep: 0x9c1f73,
+  lime: 0xb8ff3d,
+  cyan: 0x3de8ff,
+  violet: 0x9b5cff,
+  yellow: 0xffd23d,
+  ink: 0x0b0c14,
+});
+
+/** A simple procedural mark for a poster: never a token's logo. */
+export type DegenMotif = 'crown' | 'stars' | 'blade' | 'coin' | 'gem' | 'bolt';
+
+/**
+ * One Degen-floor poster. Presentation vocabulary only: a ticker, a name,
+ * colours and a motif. The World must not know what money is (AGENTS.md §4),
+ * so a poster never carries a price, an amount, an arrow, a chart or an
+ * address, and the degen swap's real token list is the Shell's.
+ */
+export interface DegenToken {
+  readonly ticker: string;
+  readonly name: string;
+  readonly colors: {
+    /** The poster's colour block. */
+    readonly background: number;
+    /** Its frame, motif and name. */
+    readonly accent: number;
+    /** The ticker's type. */
+    readonly ink: number;
+  };
+  readonly motif: DegenMotif;
+  /** A slot still waiting for the lead's research. */
+  readonly placeholder?: boolean;
+}
+
+/**
+ * The Degen floor's posters, one per entry and drawn in this order (north
+ * wall first, see room-builder.ts). Tickers and projects come from avnu's
+ * public token list (Community / Unruggable / Verified tags, read 2026-09-27);
+ * colours are taken from each project's own logo where it rendered, and are
+ * marked as guesses where it did not. Decoration only: no price, chart or
+ * address ever appears on a poster, and a poster is not a swap listing.
+ * Up to eight fit the walls.
+ */
+export const DEGEN_TOKENS: readonly DegenToken[] = Object.freeze([
+  Object.freeze({
+    ticker: 'LORDS',
+    name: 'Realms',
+    // Logo black and white; gold is a guess from the wider Realms brand.
+    colors: Object.freeze({ background: 0x101010, accent: 0xd4af37, ink: 0xe0e0e0 }),
+    motif: 'crown',
+  }),
+  Object.freeze({
+    ticker: 'DREAMS',
+    name: 'Daydreams',
+    colors: Object.freeze({ background: 0x202000, accent: 0xe0e040, ink: 0xfdfde0 }),
+    motif: 'stars',
+  }),
+  Object.freeze({
+    ticker: 'SLAY',
+    name: 'Brother Eli',
+    // A guess: the project's logo did not load.
+    colors: Object.freeze({ background: 0x1d070d, accent: 0xff4768, ink: 0xffe8ec }),
+    motif: 'blade',
+  }),
+  Object.freeze({
+    ticker: 'BROTHER',
+    name: 'Starknet Brother',
+    colors: Object.freeze({ background: 0x000040, accent: 0x909090, ink: 0xe8e8ff }),
+    motif: 'bolt',
+  }),
+  Object.freeze({
+    ticker: 'tBTC',
+    name: 'Threshold',
+    // Logo dark teal and white; the purple is a guess from Threshold's brand.
+    colors: Object.freeze({ background: 0x102020, accent: 0x7a00ff, ink: 0xe0e0e0 }),
+    motif: 'coin',
+  }),
+  Object.freeze({
+    ticker: 'CASH',
+    name: 'Opus',
+    colors: Object.freeze({ background: 0x0c2416, accent: 0x60c080, ink: 0xe6fff0 }),
+    motif: 'gem',
+  }),
+  Object.freeze({
+    ticker: 'DOG',
+    name: 'Dog Go To The Moon',
+    // The logo is a photo, so a greyscale treatment.
+    colors: Object.freeze({ background: 0x141414, accent: 0xbdbdbd, ink: 0xf5f5f5 }),
+    motif: 'coin',
+  }),
+  Object.freeze({
+    ticker: 'SSTR',
+    name: 'Sister',
+    colors: Object.freeze({ background: 0x16163a, accent: 0xf0c0c0, ink: 0xe6e6ff }),
+    motif: 'stars',
+  }),
+] satisfies readonly DegenToken[]);
 
 /** A palette number as CSS, so canvas labels read the same source. */
 export function css(hex: number): string {
@@ -749,7 +854,47 @@ export const ENDUR_STATION_LOOKS: StationLooks = Object.freeze({
   }),
 });
 
-export type RoomDecorStyle = 'strk20' | 'avnu' | 'post-office' | 'bridge' | 'plain';
+export type RoomDecorStyle = 'strk20' | 'avnu' | 'degen' | 'post-office' | 'bridge' | 'plain';
+
+/**
+ * The Degen floor's counter: hot pink when ready, brighter with a lime halo
+ * when you step up to it, and a calm dark violet while locked (the default
+ * until the Shell opens it).
+ */
+export const DEGEN_STATION_LOOKS: StationLooks = Object.freeze({
+  available: Object.freeze({
+    color: DEGEN.pinkDeep,
+    emissive: DEGEN.pink,
+    emissiveIntensity: 0.9,
+    halo: DEGEN.pink,
+    haloOpacity: 0.24,
+    edgeOpacity: 0.7,
+  }),
+  highlighted: Object.freeze({
+    color: DEGEN.pink,
+    emissive: DEGEN.pink,
+    emissiveIntensity: 1.8,
+    halo: DEGEN.lime,
+    haloOpacity: 0.42,
+    edgeOpacity: 1,
+  }),
+  locked: Object.freeze({
+    color: lift(AVNU.indigo, 0.12),
+    emissive: 0x000000,
+    emissiveIntensity: 0,
+    halo: lift(DEGEN.violet, -0.25),
+    haloOpacity: 0.07,
+    edgeOpacity: 0.22,
+  }),
+  lockedHighlighted: Object.freeze({
+    color: lift(AVNU.indigo, 0.2),
+    emissive: lift(DEGEN.violet, -0.3),
+    emissiveIntensity: 0.35,
+    halo: lift(DEGEN.violet, -0.1),
+    haloOpacity: 0.16,
+    edgeOpacity: 0.45,
+  }),
+});
 
 /** Counter-top props: a room's decor style, or a station's own brand. */
 export type StationPropStyle = RoomDecorStyle | 'endur';
@@ -820,6 +965,8 @@ export interface RoomTheme {
   readonly kioskBase: number;
   readonly kioskTop: number;
   readonly exitGlow: number;
+  /** Lift pads' light (the Exchange tower's floors); the exit's glow when absent. */
+  readonly liftGlow?: number;
   /** Station label style (CSS colours, type treatment). */
   readonly label: FloatingStyleOptions;
   readonly stationLooks: StationLooks;
@@ -940,7 +1087,45 @@ export const DEFAULT_ROOM_THEME: RoomTheme = Object.freeze({
   stationLooks: STATION_LOOKS,
 });
 
-export function roomTheme(building: BuildingId): RoomTheme {
+/**
+ * The Exchange tower's Degen floor: avnu's walls and floor, louder. Neon pink
+ * trim and floor light, lime lift pads, the same navy label type.
+ */
+export const DEGEN_ROOM_THEME: RoomTheme = Object.freeze({
+  decor: 'degen',
+  floorA: lift(AVNU.navy, 0.07),
+  floorB: lift(AVNU.card, 0.06),
+  floorAccent: DEGEN.pink,
+  wall: lift(AVNU.indigo, 0.1),
+  wallLower: lift(AVNU.card, 0.03),
+  wallTop: AVNU.navy,
+  trim: DEGEN.pink,
+  skirting: AVNU.navy,
+  cut: AVNU.navy,
+  kioskBase: lift(AVNU.card, 0.04),
+  kioskTop: lift(AVNU.indigoBorder, 0.06),
+  exitGlow: DEGEN.pink,
+  liftGlow: DEGEN.lime,
+  label: Object.freeze({
+    foreground: css(AVNU.white),
+    background: cssAlpha(AVNU.navy, 0.92),
+    border: css(DEGEN.pink),
+    font: 'sans',
+    cornerRadius: 0.5,
+  }),
+  stationLooks: DEGEN_STATION_LOOKS,
+});
+
+/** Floors reached by lift, by building and floor. */
+export const ROOM_LEVEL_THEMES: Readonly<Partial<Record<BuildingId, Readonly<Partial<Record<FixedRoomLevelId, RoomTheme>>>>>> =
+  Object.freeze({ exchange: Object.freeze({ degen: DEGEN_ROOM_THEME }) });
+
+/** A floor's theme: a lift-only floor's own, else its building's ground-floor room. */
+export function roomTheme(building: BuildingId, level: FixedRoomLevelId = 'ground'): RoomTheme {
+  if (level !== 'ground') {
+    const theme = ROOM_LEVEL_THEMES[building]?.[level];
+    if (theme) return theme;
+  }
   return ROOM_THEMES[building] ?? DEFAULT_ROOM_THEME;
 }
 
@@ -1829,6 +2014,32 @@ export interface TickerStrip {
 export const EXCHANGE_ROOM_TICKER: readonly TickerSegment[] = Object.freeze([
   { text: 'SWAP', color: AVNU.lightBlue },
   { text: '   STRKWORLD EXCHANGE', color: AVNU.white },
+  { text: '    ', color: 0 },
+]);
+
+/** The Exchange tower's floors, bottom to top, and what a lift's label calls them. */
+export const LEVEL_ORDER: readonly FixedRoomLevelId[] = Object.freeze(['ground', 'degen', 'roof']);
+export const LEVEL_NAMES: Readonly<Record<FixedRoomLevelId, string>> = Object.freeze({
+  ground: 'GROUND FLOOR',
+  degen: 'DEGEN FLOOR',
+  roof: 'ROOF',
+});
+
+/** Whether a lift from `from` to `to` goes up the tower. */
+export function liftGoesUp(from: FixedRoomLevelId, to: FixedRoomLevelId): boolean {
+  return LEVEL_ORDER.indexOf(to) > LEVEL_ORDER.indexOf(from);
+}
+
+/** A lift pad's label: which way it goes, and to where. */
+export function liftLabelText(from: FixedRoomLevelId, to: FixedRoomLevelId): string {
+  return `${liftGoesUp(from, to) ? '\u25b2' : '\u25bc'} ${LEVEL_NAMES[to]}`;
+}
+
+/** The Degen floor's LED run: the floor's name, never a token symbol or a price. */
+export const DEGEN_ROOM_TICKER: readonly TickerSegment[] = Object.freeze([
+  { text: 'DEGEN MODE', color: DEGEN.pink },
+  { text: '   STRKWORLD EXCHANGE', color: AVNU.white },
+  { text: '   avnu', color: DEGEN.lime },
   { text: '    ', color: 0 },
 ]);
 

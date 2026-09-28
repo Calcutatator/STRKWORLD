@@ -5,11 +5,13 @@ import type {
   RelayFee,
   SwapAuthorizationBinding,
 } from './types.js';
-import { ApiFailure, sameAddress } from './validation.js';
+import { ApiFailure, isFelt, sameAddress } from './validation.js';
 
 const U128_LIMIT = 1n << 128n;
 
 type ServerAction =
+  /** `Append(recipient, …)`: a channel opened to `recipient`, whose address the pool publishes. */
+  | { kind: 'channel-open'; recipient: string }
   | { kind: 'transfer-from'; from: string; token: string; amount: bigint }
   | { kind: 'transfer-to'; to: string; token: string; amount: bigint }
   | { kind: 'invoke'; contract: string; calldata: string[] }
@@ -32,8 +34,11 @@ export function decodeServerActions(calldata: readonly string[]): ServerAction[]
     switch (variant) {
       case 0: // WriteOnce(storage_address, Span<felt>)
         cursor.felt(); cursor.span(); actions.push({ kind: 'other', variant }); break;
-      case 1: // Append(recipient, EncChannelInfo[3])
-        cursor.take(4); actions.push({ kind: 'other', variant }); break;
+      case 1: { // Append(recipient, EncChannelInfo[3])
+        const [recipient] = cursor.take(4);
+        actions.push({ kind: 'channel-open', recipient: recipient! });
+        break;
+      }
       case 2: { // TransferFrom(from, token, amount)
         const [from, token, amount] = cursor.take(3);
         actions.push({ kind: 'transfer-from', from: from!, token: token!, amount: BigInt(amount!) });
@@ -103,6 +108,7 @@ export function validateServerActionRoute(
   if (screening === 'some') {
     throw new ApiFailure(400, 'Private route cannot carry a public-deposit screening attestation.');
   }
+  requireOneRecipient(actions);
   const invokes = actions.filter((action) => action.kind === 'invoke');
   const transfers = actions.filter(
     (action): action is Extract<ServerAction, { kind: 'transfer-to' }> => action.kind === 'transfer-to',
@@ -156,6 +162,32 @@ export function validateServerActionRoute(
     if (feeIndex < 0 || sellIndex < 0) {
       throw new ApiFailure(400, 'Swap withdrawals do not match the authorized AVNU plan.');
     }
+  }
+}
+
+/**
+ * One recipient per send (D-065), on every relayed route.
+ *
+ * A private transfer names its recipient in the calldata only when it opens a
+ * channel, i.e. on the first send to that address: `Append(recipient, …)` in
+ * plaintext. So the relay counts distinct `Append` addresses, compared as
+ * field elements, and refuses more than one: a submission that opened channels
+ * to several addresses would publish them all as paid by one sender. Later
+ * sends to a known recipient carry no address at all, so the Shell's
+ * one-transfer batch rule is what bounds those. Fail-closed: a first send
+ * that also opened the sender's own change channel would be refused too, as
+ * the relay cannot tell that address from a second recipient (and the
+ * submission would publish both).
+ */
+function requireOneRecipient(actions: readonly ServerAction[]): void {
+  const recipients = new Set<bigint>();
+  for (const action of actions) {
+    if (action.kind !== 'channel-open') continue;
+    if (!isFelt(action.recipient)) throw new ApiFailure(400, 'Channel recipient is not a field element.');
+    recipients.add(BigInt(action.recipient));
+  }
+  if (recipients.size > 1) {
+    throw new ApiFailure(400, 'A private submission may pay at most one recipient.');
   }
 }
 

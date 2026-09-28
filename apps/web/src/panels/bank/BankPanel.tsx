@@ -331,10 +331,12 @@ function ComposeBlock({
   const busy = state.flow.name === 'preparing' || state.adding;
   const needsRecipient = modeNeedsRecipient(state.mode);
   const max = panel.maxSpendable();
-  // A stake settles on its own (D-063), so even Menu Mode composes it as one
-  // action: batch vocabulary would promise a shared fee that cannot happen.
+  // A stake settles on its own (D-063), and a transfer pays one recipient per
+  // send (D-065), so even Menu Mode composes either as one action: batch
+  // vocabulary would promise a shared fee that cannot happen.
   const stake = state.mode === 'stake';
-  const singleAction = experience === 'station' || stake;
+  const transfer = state.mode === 'transfer';
+  const singleAction = experience === 'station' || stake || transfer;
 
   return (
     <form
@@ -382,9 +384,9 @@ function ComposeBlock({
 
       {experience === 'station' ? (
         state.batch.length > 0 ? <StationAction state={state} /> : null
-      ) : stake ? (
-        // Menu Mode keeps Remove and Clear for whatever is queued, but the stake
-        // tab never invites the player to fill a visit.
+      ) : singleAction ? (
+        // Menu Mode keeps Remove and Clear for whatever is queued, but the
+        // stake and transfer tabs never invite the player to fill a visit.
         state.batch.length > 0 ? <BatchList state={state} panel={panel} /> : null
       ) : (
         <BatchList state={state} panel={panel} />
@@ -395,7 +397,9 @@ function ComposeBlock({
           ? COPY.stake.oneAtATime
           : experience === 'station'
             ? COPY.gameMode.singleAction
-            : COPY.batch.why}
+            : transfer
+              ? COPY.postOffice.oneAtATime
+              : COPY.batch.why}
       </p>
       <button
         type="button"

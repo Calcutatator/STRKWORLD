@@ -666,6 +666,28 @@ describe('station registry', () => {
     expect(resolveStation('bank', 'bank:shielding', register)).toMatchObject({ status: 'locked' });
   });
 
+  it('keeps the Post Office transfer station open only while its D-065 approval and waiver stand', () => {
+    const transfer = PRIVACY_REGISTER.find((entry) => entry.route === 'post-office.transfer')!;
+    expect(transfer).toMatchObject({ grade: 'anonymous', disclosureWaivedBy: 'D-065' });
+    expect(resolveStation('post-office', 'post-office:transfer')).toMatchObject({ status: 'available' });
+
+    for (const change of [
+      { approvedBy: null, approvedOn: null, rationale: null },
+      { disclosureWaivedBy: null },
+      { disclosureWaivedBy: 'D-064' },
+    ] satisfies Partial<RouteGrade>[]) {
+      const register = [
+        ...PRIVACY_REGISTER.filter((entry) => entry.route !== 'post-office.transfer'),
+        { ...transfer, ...change },
+      ];
+      expect(stationSnapshot('post-office', register), JSON.stringify(change)).toEqual([
+        { station: 'post-office:transfer', label: 'TRANSFER', status: 'locked' },
+      ]);
+      expect(resolveStation('post-office', 'post-office:transfer', register), JSON.stringify(change))
+        .toMatchObject({ status: 'locked', door: { reason: 'unapproved-route' } });
+    }
+  });
+
   describe('a policy-disabled route only locks its own control, not a sibling station route (D-054/D-056)', () => {
     const denyAll: WalletRoutePolicy = {
       maxIntents: 0,

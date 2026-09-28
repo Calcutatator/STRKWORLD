@@ -139,7 +139,7 @@ describe('Endur private staking register entry (D-063)', () => {
     expect(isRoutePlayable(inherited)).toBe(false);
     // Every other deviation still shows its own disclosure.
     for (const route of PRIVACY_REGISTER) {
-      if (route.route === 'bank.stake' || route.grade === 'private') continue;
+      if (Object.hasOwn(DISCLOSURE_WAIVERS, route.route) || route.grade === 'private') continue;
       expect(isDisclosureWaived(route), route.route).toBe(false);
       expect(route.disclosure, route.route).toBeTruthy();
     }
@@ -154,8 +154,8 @@ describe('Endur private staking register entry (D-063)', () => {
 });
 
 describe('disclosure waivers are granted per route, by one decision each (D-064)', () => {
-  it('lists exactly one waiver, frozen', () => {
-    expect(DISCLOSURE_WAIVERS).toEqual({ 'bank.stake': 'D-064' });
+  it('lists exactly the granted waivers, frozen', () => {
+    expect(DISCLOSURE_WAIVERS).toEqual({ 'bank.stake': 'D-064', 'post-office.transfer': 'D-065' });
     expect(Object.isFrozen(DISCLOSURE_WAIVERS)).toBe(true);
   });
 

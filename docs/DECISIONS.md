@@ -86,7 +86,7 @@ email login are an independent seam.
 
 ## D-004 — Submission is decoupled from avatar action
 
-**2026-08-16 · Accepted**
+**2026-08-16 · Accepted · randomised relay delay SUPERSEDED by D-066**
 
 **Context.** Entering a building is a timestamped event visible to every
 player in the lobby and to our own server. The resulting pool interaction is
@@ -1430,7 +1430,7 @@ unbuilt. Browser acceptance remains user-owned.
 
 ## D-040 — Post Office Menu Mode is the transfer-only batch surface
 
-**2026-08-18 · Accepted · technical direction delegated to the project lead · completes the bounded deferral in D-039 · Exchange deferral completed by D-042**
+**2026-08-18 · Accepted · technical direction delegated to the project lead · completes the bounded deferral in D-039 · Exchange deferral completed by D-042 · transfer batching narrowed to one recipient per send by D-065**
 
 **Context.** D-030 and D-032 already define Menu Mode as a building-wide
 transaction surface that batches compatible typed intents for one later
@@ -2905,3 +2905,62 @@ disclosure for staking.
 **Consequences.** The Exchange keeps its swap disclosure, so the two
 `anonymous` routes now differ in what they show. Any further waiver needs its
 own decision; there is no blanket switch.
+
+---
+
+## D-065 — A first transfer reveals its recipient; no note, one recipient per send
+
+**2026-09-27 · Accepted by the user · regrades `post-office.transfer` from `private` to `anonymous` · a D-064-style disclosure waiver**
+
+**Context.** The 2026-09-27 privacy audit verified on mainnet that a first
+transfer to a new recipient opens a channel keyed by the recipient's address:
+`Append(recipient)` sits in plaintext calldata and `get_num_of_channels`
+for that address goes from 0 to 1 in the same block (tx `0x33d01b…495`, block
+15,524,071; re-checked independently). The sender and the amount stay hidden,
+the relay fee leaves the pool publicly to AVNU's forwarder, and the proof's
+reference block dates the confirm. The register graded the route `private`
+with "all hidden", which overclaimed. Batching several transfers publishes
+every new recipient in one transaction, as paid by one sender. Offered a
+one-line note, the user declined it, and chose one recipient per send.
+
+**Decision.**
+
+- `post-office.transfer` is regraded `anonymous`, the conservative grade that
+  does not overclaim, and `observable` records exactly what is visible.
+- Its in-game disclosure is waived: `post-office.transfer` carries `disclosureWaivedBy: 'D-065'`,
+  listed in `DISCLOSURE_WAIVERS` and approved by the lead. Copy may keep "send
+  privately" but must not claim the recipient is hidden.
+- One recipient per send: a batch holds at most one transfer. The Shell's
+  batch accumulator refuses a second, and the relay rejects any submission
+  that pays more than one recipient.
+
+**Consequences.** Menu Mode's transfer tab at the Bank follows the same rule.
+A shield and a transfer may still share a visit. The recipient reveal cannot
+be avoided through the Wallet API, which has no separate way to open a
+channel in advance.
+
+---
+
+## D-066 — The relay submits without an artificial delay
+
+**2026-09-27 · Accepted by the user · supersedes D-004 in part (its randomised relay delay)**
+
+**Context.** D-004 put a randomised delay between game action and broadcast
+to break timing correlation. The 2026-09-27 privacy audit found it cannot:
+the wallet builds the proof before the relay sees anything, and every pool
+transaction publishes its proof's reference block in plaintext
+(`proof_facts[4]`), which dates the confirm whenever it is broadcast. The
+delay instead pushed the game's transactions past the pool's normal 14–33
+block proof-to-inclusion gap (p90 22), so they stood out, and a delay longer
+than the request deadline failed submissions after the player had approved.
+
+**Decision.** Relayed routes (transfer, unshield, stake) submit as soon as
+they are validated. The backend accepts a zero queue delay for them, and the
+example configuration sets zero. A nonzero delay remains possible but must
+leave the request deadline 5 s of headroom. The submission queue's
+concurrency and backpressure limits stay.
+
+**Consequences.** Sends feel faster. Timing privacy is unchanged in
+substance: the proof's block always dated the confirm. D-019's accepted
+presence leak, the avatar vanishing into a building, remains the main
+in-game timing signal.

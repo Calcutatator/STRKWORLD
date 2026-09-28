@@ -391,8 +391,8 @@ export class WalletApiPrivacyOperations implements PrivacyOperations {
   /**
    * Endur private staking (D-063). The swap's transfer-OPEN + invoke shape,
    * relayed like a pool-native route: there is no quote to bind, so the fee is
-   * quoted now for costing and re-quoted at confirmation, and the backend may
-   * delay the submission like any non-quote-bound route (D-004).
+   * quoted now for costing and re-quoted at confirmation, and the backend
+   * submits it without artificial delay, like every relayed route (D-066).
    */
   private async prepareStake(
     reviewed: readonly Intent[],

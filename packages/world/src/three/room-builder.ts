@@ -9,16 +9,19 @@ import {
   PlaneGeometry,
   RingGeometry,
 } from 'three';
-import type { Material, MeshStandardMaterial, Object3D } from 'three';
+import type { BufferGeometry, Material, MeshStandardMaterial, Object3D } from 'three';
 import type { StationId } from '@strkworld/shared';
 import type {
-  FixedRoomMap,
+  FixedRoomLevelMap,
   FixedRoomStationDefinition,
   FixedRoomStationPresentation,
 } from '../fixed-room.js';
 import { ROOM_ORIGIN } from '../world-layout.js';
 import { PIXELS_PER_UNIT } from './coords.js';
 import {
+  DEGEN,
+  DEGEN_ROOM_TICKER,
+  DEGEN_TOKENS,
   EXCHANGE_ROOM_TICKER,
   GeometryBin,
   PALETTE,
@@ -47,8 +50,12 @@ import {
   hash01,
   jitterColor,
   lift,
+  liftGoesUp,
+  liftLabelText,
   mixColor,
   pick,
+  prismX,
+  prismZ,
   roomTheme,
   runsWhere,
   shade,
@@ -56,6 +63,8 @@ import {
   standardMaterial,
   stationTheme,
   unlitMaterial,
+  type DegenMotif,
+  type DegenToken,
   type Face,
   type Paint,
   type RoomTheme,
@@ -64,7 +73,7 @@ import {
   type StationPropStyle,
   type TickerSegment,
 } from './palette.js';
-import type { FloatingStyleOptions } from './labels.js';
+import type { FloatingStyleOptions, SignStyleOptions } from './labels.js';
 import type { LabelFactory, Occluder, OccluderBounds, RoomView, TextLabel } from './types.js';
 
 /**
@@ -85,6 +94,44 @@ export const INTERIOR_WALL_THICKNESS = 0.55;
 const STATION_BEACON_Y = 1.42;
 const STATION_LABEL_Y = 1.74;
 const APRON_COLOUR = 0x2e2629;
+
+/** The Degen floor's neon sign, behind its counter. */
+export const DEGEN_SIGN_TEXT = 'DEGEN\nMODE';
+
+/**
+ * Where the Degen floor hangs its posters, in the order `DEGEN_TOKENS` fills
+ * them: the north wall first (the camera faces it), then the side walls. The
+ * north wall keeps the sign behind the counter and the lift doors clear.
+ */
+export const DEGEN_POSTER_SLOTS: readonly { readonly wall: InteriorWallSide; readonly u: number }[] = Object.freeze([
+  { wall: 'north', u: 2.2 },
+  { wall: 'north', u: 4.15 },
+  { wall: 'north', u: 6.1 },
+  { wall: 'north', u: 12.2 },
+  { wall: 'west', u: 5.2 },
+  { wall: 'east', u: 5.2 },
+  { wall: 'west', u: 7.7 },
+  { wall: 'east', u: 7.7 },
+]);
+
+const DEGEN_SIGN_STYLE: SignStyleOptions = Object.freeze({
+  width: 3.2,
+  height: 0.62,
+  background: '#11131d',
+  foreground: '#ff3dbb',
+  accent: '#ff3dbb',
+  subtitleColor: '#b8ff3d',
+  cornerRadius: 0.22,
+  borderWidth: 0.05,
+  hairline: false,
+  titleFont: 'display',
+  titleWeight: 900,
+  titleTracking: 0.14,
+  subtitleFont: 'mono',
+  subtitleWeight: 700,
+  subtitleTracking: 0.6,
+  uppercase: true,
+});
 
 type Animator = (elapsedMs: number) => void;
 
@@ -340,18 +387,20 @@ interface StationView {
 }
 
 export function buildFixedRoom(
-  map: FixedRoomMap,
+  map: FixedRoomLevelMap,
   labels: LabelFactory,
   origin: { readonly x: number; readonly y: number } = ROOM_ORIGIN,
 ): RoomView {
   const res = new ResourceBag();
-  const theme = roomTheme(map.building);
+  const theme = roomTheme(map.building, map.level);
   // Copy the origin now: a caller mutating its object later must not move the room.
   const ox = origin.x / PIXELS_PER_UNIT;
   const oz = origin.y / PIXELS_PER_UNIT;
   const group = new Group();
-  group.name = `room:${map.building}`;
+  // A ground floor keeps its building's name; a floor reached by lift adds its own.
+  group.name = map.level === 'ground' ? `room:${map.building}` : `room:${map.building}:${map.level}`;
   group.userData['building'] = map.building;
+  group.userData['level'] = map.level;
   group.position.set(ox, 0, oz);
 
   const textLabels: TextLabel[] = [];
@@ -379,8 +428,9 @@ export function buildFixedRoom(
       res,
       group,
     });
-    decorateRoom(theme, shell, map, res, animators);
+    decorateRoom(theme, shell, map, res, animators, labels, textLabels);
     exitDecor(map, theme, shell);
+    liftDecor(map, theme, shell, labels, textLabels, group);
     for (const station of map.stations) {
       stations.push(buildStation(station, theme, labels, res, group, textLabels));
     }
@@ -633,6 +683,22 @@ function stationProps(
       bin.add('unlit', facePanel(face, cx - 0.34, top + 0.15, cx + 0.34, top + 0.24, 0.055, 0.045), AVNU.blue);
       break;
     }
+    case 'degen': {
+      // The degen swap card: avnu's pill fields, the call to action in hot
+      // pink, a lime and a cyan token dot.
+      const cx = (x0 + x1) / 2;
+      const face: Face = { normal: 'z+', plane: z0 + 0.12 };
+      bin.add('body', boxGeometry(cx - 0.05, top, z0 + 0.06, cx + 0.05, top + 0.1, z0 + 0.14), AVNU.navy);
+      bin.add('body', faceBox(face, cx - 0.44, top + 0.08, 0, cx + 0.44, top + 0.56, 0.05), AVNU.navy);
+      bin.add('unlit', facePanel(face, cx - 0.42, top + 0.1, cx + 0.42, top + 0.54, 0.051, 0.07), DEGEN.pink);
+      bin.add('unlit', facePanel(face, cx - 0.4, top + 0.12, cx + 0.4, top + 0.52, 0.052, 0.06), AVNU.card);
+      bin.add('unlit', facePanel(face, cx - 0.34, top + 0.38, cx + 0.34, top + 0.47, 0.055, 0.045), AVNU.navy);
+      bin.add('unlit', facePanel(face, cx - 0.34, top + 0.27, cx + 0.34, top + 0.36, 0.055, 0.045), AVNU.navy);
+      bin.add('unlit', facePanel(face, cx - 0.31, top + 0.4, cx - 0.25, top + 0.45, 0.058, 0.03), DEGEN.lime);
+      bin.add('unlit', facePanel(face, cx - 0.31, top + 0.29, cx - 0.25, top + 0.34, 0.058, 0.03), DEGEN.cyan);
+      bin.add('unlit', facePanel(face, cx - 0.34, top + 0.15, cx + 0.34, top + 0.24, 0.055, 0.045), DEGEN.pink);
+      break;
+    }
     case 'post-office': {
       bin.add('body', boxGeometry(x0 + 0.2, top, cz - 0.16, x0 + 0.62, top + 0.3, cz + 0.16), 0xc49a6c);
       bin.add('body', boxGeometry(x0 + 0.38, top + 0.3, cz - 0.165, x0 + 0.44, top + 0.305, cz + 0.165), 0xe8d8b0);
@@ -696,20 +762,21 @@ function endurCounter(bin: GeometryBin, x0: number, x1: number, z0: number, z1: 
   }
 }
 
-function roomFloorColor(theme: RoomTheme, map: FixedRoomMap): (x: number, y: number) => Color {
+function roomFloorColor(theme: RoomTheme, map: FixedRoomLevelMap): (x: number, y: number) => Color {
   return (x, y) => {
     const tile = map.tiles[y]?.[x];
     const seed = hash01(x, y, 201);
     if (tile === 'wall') return shade(theme.floorB, -0.1);
     // The brand rooms' dark floors take almost no jitter: it reads as grime.
-    const quiet = theme.decor === 'avnu' || theme.decor === 'strk20' || theme.decor === 'bridge';
+    const quiet = theme.decor === 'avnu' || theme.decor === 'degen' || theme.decor === 'strk20' || theme.decor === 'bridge';
     return jitterColor((x + y) % 2 === 0 ? theme.floorA : theme.floorB, seed, quiet ? 0.01 : 0.022);
   };
 }
 
 /** The exit: a glowing mat, chevrons pointing out, bollards and a pool of light. */
-function exitDecor(map: FixedRoomMap, theme: RoomTheme, shell: InteriorShell): void {
+function exitDecor(map: FixedRoomLevelMap, theme: RoomTheme, shell: InteriorShell): void {
   const exit = map.exit;
+  if (!exit) return;
   const x0 = exit.x;
   const x1 = exit.x + exit.width;
   const z0 = exit.y;
@@ -743,16 +810,110 @@ function exitDecor(map: FixedRoomMap, theme: RoomTheme, shell: InteriorShell): v
   }
 }
 
-/** A flat chevron pointing south (+Z). */
-function chevron(bin: GeometryBin, cx: number, zc: number, colour: number): void {
-  const tip: [number, number] = [cx, zc + 0.14];
+/** A flat chevron pointing south (+Z), or north when `north` is set. */
+function chevron(bin: GeometryBin, cx: number, zc: number, colour: number, north = false, scale = 1): void {
+  const s = north ? -1 : 1;
+  const tip: [number, number] = [cx, zc + 0.14 * s * scale];
   for (const side of [-1, 1]) {
-    const end: [number, number] = [cx + side * 0.3, zc - 0.14];
+    const end: [number, number] = [cx + side * 0.3 * scale, zc - 0.14 * s * scale];
     bin.add(
       'glow',
-      flatPolygon([tip, [tip[0], tip[1] - 0.1], [end[0], end[1] - 0.1], end], 0.01),
+      flatPolygon([tip, [tip[0], tip[1] - 0.1 * s * scale], [end[0], end[1] - 0.1 * s * scale], end], 0.01),
       colour,
     );
+  }
+}
+
+/**
+ * A lift pad (the Exchange tower): a dark plate edged in light, chevrons
+ * pointing the way in (north up the tower, south down it), a pool of light
+ * and a label naming where it goes. A pad backing onto the north wall gets
+ * lift doors in it; one by the low south ledge gets a lit sill, since the
+ * camera looks over that wall.
+ */
+function liftDecor(
+  map: FixedRoomLevelMap,
+  theme: RoomTheme,
+  shell: InteriorShell,
+  labels: LabelFactory,
+  textLabels: TextLabel[],
+  group: Group,
+): void {
+  const glow = theme.liftGlow ?? theme.exitGlow;
+  const c = new Color(glow);
+  for (const lift of map.lifts) {
+    const x0 = lift.x;
+    const x1 = lift.x + lift.width;
+    const z0 = lift.y;
+    const z1 = lift.y + lift.height;
+    const up = liftGoesUp(map.level, lift.to);
+    const e = 0.05;
+    shell.floor.add('floor', flatQuad(x0 + 0.08, z0 + 0.08, x1 - 0.08, z1 - 0.08, 0.006), shade(theme.floorB, -0.16));
+    shell.floor.add('glow', flatQuad(x0 + 0.08, z0 + 0.08, x1 - 0.08, z0 + 0.08 + e, 0.009), glow);
+    shell.floor.add('glow', flatQuad(x0 + 0.08, z1 - 0.08 - e, x1 - 0.08, z1 - 0.08, 0.009), glow);
+    shell.floor.add('glow', flatQuad(x0 + 0.08, z0 + 0.08, x0 + 0.08 + e, z1 - 0.08, 0.009), glow);
+    shell.floor.add('glow', flatQuad(x1 - 0.08 - e, z0 + 0.08, x1 - 0.08, z1 - 0.08, 0.009), glow);
+    const cx = (x0 + x1) / 2;
+    const cz = (z0 + z1) / 2;
+    for (const offset of [-0.17, 0.17]) chevron(shell.floor, cx, cz + offset * (up ? 1 : -1), glow, up, 0.8);
+    shell.floor.addRGBA('light', flatQuad(x0, z0, x1, z1, 0.013), () => [c.r, c.g, c.b, 0.24]);
+    if (z0 === 1) liftDoors(shell.walls.north, x0 + 0.1, x1 - 0.1, glow, up);
+    if (z1 === map.height - 1) {
+      // The south ledge is low so the camera sees in; a lit sill marks the lift.
+      const top = INTERIOR_SOUTH_WALL_HEIGHT + 0.05;
+      shell.south.add('unlit', boxGeometry(x0 + 0.12, top, z1 + 0.12, x1 - 0.12, top + 0.025, z1 + 0.3), glow);
+    }
+    const label = labels.floating(liftLabelText(map.level, lift.to), { lineHeight: 0.26, ...theme.label });
+    textLabels.push(label);
+    label.object.position.set(cx, STATION_LABEL_Y + 0.12, cz);
+    label.object.userData['lift'] = lift.to;
+    group.add(label.object);
+  }
+}
+
+/** Steel lift doors in a wall, a lit seam between the leaves, the way it goes lit above. */
+function liftDoors(wall: InteriorWall, u0: number, u1: number, glow: number, up: boolean): void {
+  if (!inSpans(wall, u0 - 0.1, u1 + 0.1)) return;
+  const f = wall.face;
+  const steel = lift(AVNU.slate, -0.12);
+  const leaf = lift(AVNU.slate, -0.28);
+  const mid = (u0 + u1) / 2;
+  wall.bins.add('body', faceBox(f, u0 - 0.1, 0, 0, u0, 1.92, 0.09), steel);
+  wall.bins.add('body', faceBox(f, u1, 0, 0, u1 + 0.1, 1.92, 0.09), steel);
+  wall.bins.add('body', faceBox(f, u0 - 0.1, 1.8, 0, u1 + 0.1, 1.92, 0.09), steel);
+  wall.bins.add('body', faceBox(f, u0, 0, 0, mid - 0.012, 1.8, 0.06), leaf);
+  wall.bins.add('body', faceBox(f, mid + 0.012, 0, 0, u1, 1.8, 0.06), leaf);
+  wall.bins.add('unlit', faceBox(f, mid - 0.012, 0.04, 0, mid + 0.012, 1.76, 0.05), glow);
+  const [a, b] = up ? [1.83, 1.9] : [1.9, 1.83];
+  wall.bins.add('unlit', facePrism(f, [[mid - 0.07, a], [mid + 0.07, a], [mid, b]], 0.09, 0.1), glow);
+}
+
+/** A convex polygon given in face coordinates (u, v), standing `w0` to `w1` out of the face. */
+function facePrism(face: Face, points: readonly (readonly [number, number])[], w0: number, w1: number): BufferGeometry {
+  const loop = points.map(([u, v]) => [u, v] as [number, number]);
+  switch (face.normal) {
+    case 'z+':
+      return prismZ(loop, face.plane + w0, face.plane + w1);
+    case 'z-':
+      return prismZ(loop, face.plane - w1, face.plane - w0);
+    case 'x+':
+      return prismX(loop, face.plane + w0, face.plane + w1);
+    case 'x-':
+      return prismX(loop, face.plane - w1, face.plane - w0);
+  }
+}
+
+/** The rotation that turns a sign (it faces +Z) to face out of a wall. */
+function faceYaw(face: Face): number {
+  switch (face.normal) {
+    case 'z+':
+      return 0;
+    case 'z-':
+      return Math.PI;
+    case 'x+':
+      return Math.PI / 2;
+    case 'x-':
+      return -Math.PI / 2;
   }
 }
 
@@ -760,13 +921,24 @@ function chevron(bin: GeometryBin, cx: number, zc: number, colour: number): void
 // Room decor
 // ---------------------------------------------------------------------------
 
-function decorateRoom(theme: RoomTheme, shell: InteriorShell, map: FixedRoomMap, res: ResourceBag, animators: Animator[]): void {
+function decorateRoom(
+  theme: RoomTheme,
+  shell: InteriorShell,
+  map: FixedRoomLevelMap,
+  res: ResourceBag,
+  animators: Animator[],
+  labels: LabelFactory,
+  textLabels: TextLabel[],
+): void {
   switch (theme.decor) {
     case 'strk20':
       strk20Decor(theme, shell, map);
       return;
     case 'avnu':
       avnuDecor(theme, shell, map, res, animators);
+      return;
+    case 'degen':
+      degenDecor(theme, shell, map, res, animators, labels, textLabels);
       return;
     case 'post-office':
       postOfficeDecor(theme, shell, map);
@@ -780,7 +952,7 @@ function decorateRoom(theme: RoomTheme, shell: InteriorShell, map: FixedRoomMap,
 }
 
 /** Inset line around the walkable floor, one hair inside the walls. */
-function perimeterInlay(shell: InteriorShell, map: FixedRoomMap, inset: number, width: number, paint: Paint, key = 'floor'): void {
+function perimeterInlay(shell: InteriorShell, map: FixedRoomLevelMap, inset: number, width: number, paint: Paint, key = 'floor'): void {
   const a = 1 + inset;
   const b = map.width - 1 - inset;
   const c = 1 + inset;
@@ -793,7 +965,7 @@ function perimeterInlay(shell: InteriorShell, map: FixedRoomMap, inset: number, 
 }
 
 /** Centre of the north wall span that a station faces, for decor behind it. */
-function stationAnchor(map: FixedRoomMap): number {
+function stationAnchor(map: FixedRoomLevelMap): number {
   const first = map.stations[0];
   return first ? first.x + first.width / 2 : map.width / 2;
 }
@@ -807,7 +979,7 @@ function inSpans(wall: InteriorWall, u0: number, u1: number): boolean {
  * dark lens ringed in orange (the one nod), and two panels carrying the
  * cream-to-peach heading gradient in place of paintings.
  */
-function strk20Decor(theme: RoomTheme, shell: InteriorShell, map: FixedRoomMap): void {
+function strk20Decor(theme: RoomTheme, shell: InteriorShell, map: FixedRoomLevelMap): void {
   const north = shell.walls.north;
   const nf = north.face;
   const anchor = stationAnchor(map);
@@ -879,8 +1051,9 @@ function gradientPanel(
 }
 
 /** A runner from the exit to the first station in line with it. */
-function carpet(shell: InteriorShell, map: FixedRoomMap, colour: number, edge: number, edgeKey = 'floor'): void {
+function carpet(shell: InteriorShell, map: FixedRoomLevelMap, colour: number, edge: number, edgeKey = 'floor'): void {
   const exit = map.exit;
+  if (!exit) return;
   const station = map.stations.find((candidate) => candidate.x < exit.x + exit.width && candidate.x + candidate.width > exit.x);
   const zTop = station ? station.y + station.height + 1 : map.height / 2;
   const x0 = exit.x + 0.15;
@@ -904,7 +1077,7 @@ function pottedPlant(wall: InteriorWall, u: number): void {
  * avnu: navy and indigo, a swap card with pill fields and the primary blue
  * pill button behind the desk, rounded chart cards and a blue LED ticker.
  */
-function avnuDecor(theme: RoomTheme, shell: InteriorShell, map: FixedRoomMap, res: ResourceBag, animators: Animator[]): void {
+function avnuDecor(theme: RoomTheme, shell: InteriorShell, map: FixedRoomLevelMap, res: ResourceBag, animators: Animator[]): void {
   const north = shell.walls.north;
   const nf = north.face;
   const anchor = stationAnchor(map);
@@ -962,10 +1135,164 @@ function avnuDecor(theme: RoomTheme, shell: InteriorShell, map: FixedRoomMap, re
   for (let y = 2; y < map.height - 1; y++) shell.floor.add('glow', flatQuad(1, y - 0.012, map.width - 1, y + 0.012, 0.004), glowLine);
 }
 
+/**
+ * The Degen floor: avnu's navy and indigo, turned up. Neon runs along every
+ * wall, DEGEN MODE glows behind the counter over an LED run, and the walls
+ * carry a poster per `DEGEN_TOKENS` entry: its colour block, a simple motif,
+ * its ticker and name. Nothing here is a price, a chart or an arrow: the
+ * World must not know what money is (AGENTS.md §4).
+ */
+function degenDecor(
+  theme: RoomTheme,
+  shell: InteriorShell,
+  map: FixedRoomLevelMap,
+  res: ResourceBag,
+  animators: Animator[],
+  labels: LabelFactory,
+  textLabels: TextLabel[],
+): void {
+  const north = shell.walls.north;
+  const nf = north.face;
+  const anchor = stationAnchor(map);
+  for (const wall of Object.values(shell.walls)) {
+    for (const [a, b] of wall.spans) {
+      wall.bins.add('unlit', faceBox(wall.face, a, 0.16, 0.035, b, 0.19, 0.05), DEGEN.pink);
+      // The north wall's top carries the LED run instead.
+      if (wall !== north) wall.bins.add('unlit', faceBox(wall.face, a, 2.05, 0, b, 2.09, 0.03), DEGEN.cyan);
+    }
+  }
+  // DEGEN MODE behind the counter, in a neon tube frame.
+  const [s0, s1, t0, t1] = [anchor - 1.72, anchor + 1.72, 1.24, 1.94];
+  if (inSpans(north, s0 - 0.05, s1 + 0.05)) {
+    north.bins.add('unlit', facePanel(nf, s0, t0, s1, t1, 0.02, 0.18), DEGEN.pink);
+    north.bins.add('unlit', facePanel(nf, s0 + 0.035, t0 + 0.035, s1 - 0.035, t1 - 0.035, 0.024, 0.16), AVNU.navy);
+    const sign = labels.sign(DEGEN_SIGN_TEXT, DEGEN_SIGN_STYLE);
+    textLabels.push(sign);
+    sign.object.position.set(...faceToWorld(nf, anchor, (t0 + t1) / 2, 0.034));
+    sign.object.userData['area'] = 'degen-sign';
+    north.group.add(sign.object);
+  }
+  addTicker(north, map, res, animators, DEGEN_ROOM_TICKER);
+  DEGEN_TOKENS.slice(0, DEGEN_POSTER_SLOTS.length).forEach((token, index) => {
+    const slot = DEGEN_POSTER_SLOTS[index]!;
+    degenPoster(shell.walls[slot.wall], slot.u, token, labels, textLabels);
+  });
+  // Neon tubes up the side walls, between and beside the posters.
+  for (const wall of [shell.walls.west, shell.walls.east]) {
+    for (const u of [2.9, 9.9]) {
+      if (!inSpans(wall, u - 0.05, u + 0.05)) continue;
+      wall.bins.add('unlit', faceBox(wall.face, u - 0.025, 0.3, 0.02, u + 0.025, 1.95, 0.05), u < 5 ? DEGEN.lime : DEGEN.violet);
+    }
+  }
+  // Underfoot, avnu's grid in pink and cyan, and a pool of pink light at the counter.
+  const pink = mixColor(theme.floorA, DEGEN.pink, 0.55);
+  const cyan = mixColor(theme.floorA, DEGEN.cyan, 0.45);
+  for (let x = 2; x < map.width - 1; x++) shell.floor.add('glow', flatQuad(x - 0.012, 1, x + 0.012, map.height - 1, 0.004), x % 2 ? pink : cyan);
+  for (let y = 2; y < map.height - 1; y++) shell.floor.add('glow', flatQuad(1, y - 0.012, map.width - 1, y + 0.012, 0.004), y % 2 ? cyan : pink);
+  const station = map.stations[0];
+  if (station) {
+    const c = new Color(DEGEN.pink);
+    const cx = station.x + station.width / 2;
+    shell.floor.addRGBA('light', flatQuad(cx - 2.6, station.y - 1, cx + 2.6, station.y + station.height + 2.4, 0.012), (x, _y, z) => {
+      const dx = (x - cx) / 2.6;
+      const dz = (z - (station.y + station.height)) / 2.4;
+      return [c.r, c.g, c.b, 0.16 * clamp01(1 - Math.hypot(dx, dz))];
+    });
+  }
+}
+
+/**
+ * One token's poster: a neon frame round its colour block, two bands, its
+ * motif above, and its ticker over its name on a board below. The board is a
+ * sign, so it takes the label factory's type.
+ */
+function degenPoster(wall: InteriorWall, u: number, token: DegenToken, labels: LabelFactory, textLabels: TextLabel[]): void {
+  const f = wall.face;
+  const [u0, u1, v0, v1] = [u - 0.75, u + 0.75, 0.72, 1.92];
+  if (!inSpans(wall, u0 - 0.05, u1 + 0.05)) return;
+  const { background, accent, ink } = token.colors;
+  wall.bins.add('unlit', facePanel(f, u0 - 0.035, v0 - 0.035, u1 + 0.035, v1 + 0.035, 0.02, 0.09), accent);
+  wall.bins.add('unlit', facePanel(f, u0, v0, u1, v1, 0.028, 0.07), background);
+  wall.bins.add('unlit', facePanel(f, u0 + 0.1, v1 - 0.14, u1 - 0.1, v1 - 0.1, 0.032, 0.02), accent);
+  wall.bins.add('unlit', facePanel(f, u0 + 0.1, v1 - 0.2, u0 + 0.62, v1 - 0.17, 0.032, 0.015), ink);
+  degenMotif(wall, token.motif, u, 1.44, accent, ink);
+  const sign = labels.sign(`${token.ticker}\n${token.name}`, degenPosterStyle(token));
+  textLabels.push(sign);
+  sign.object.position.set(...faceToWorld(f, u, v0 + 0.25, 0.036));
+  sign.object.rotation.y = faceYaw(f);
+  sign.object.userData['token'] = token.ticker;
+  wall.group.add(sign.object);
+}
+
+/** A poster's board: the ticker big in the token's ink, its name under it in the accent. */
+export function degenPosterStyle(token: DegenToken): SignStyleOptions {
+  const hex = (value: number) => `#${value.toString(16).padStart(6, '0')}`;
+  return {
+    width: 1.34,
+    height: 0.42,
+    background: hex(token.colors.background),
+    foreground: hex(token.colors.ink),
+    accent: hex(token.colors.accent),
+    subtitleColor: hex(token.colors.accent),
+    cornerRadius: 0.1,
+    borderWidth: 0,
+    hairline: false,
+    titleFont: 'display',
+    titleWeight: 900,
+    titleTracking: 0.04,
+    subtitleFont: 'mono',
+    subtitleTracking: 0.18,
+    uppercase: true,
+  };
+}
+
+/** A poster's motif, centred on (u, v): simple convex shapes, never a token's mark. */
+function degenMotif(wall: InteriorWall, motif: DegenMotif, u: number, v: number, accent: number, ink: number): void {
+  const f = wall.face;
+  const [w0, w1] = [0.034, 0.05];
+  const shape = (points: readonly (readonly [number, number])[], colour: number): void => {
+    wall.bins.add('unlit', facePrism(f, points.map(([du, dv]) => [u + du, v + dv] as const), w0, w1), colour);
+  };
+  switch (motif) {
+    case 'crown':
+      shape([[-0.26, -0.2], [0.26, -0.2], [0.26, -0.1], [-0.26, -0.1]], accent);
+      for (const [du, height] of [[-0.2, 0.2], [0, 0.26], [0.2, 0.2]] as const) {
+        shape([[du - 0.09, -0.1], [du + 0.09, -0.1], [du, -0.1 + height]], accent);
+      }
+      wall.bins.add('unlit', faceDisc(f, u, v + 0.18, w1, 0.035, 0.012, 8), ink);
+      break;
+    case 'stars':
+      for (const [du, dv, r] of [[-0.16, 0.08, 0.16], [0.14, -0.06, 0.11], [0.2, 0.18, 0.07]] as const) {
+        shape([[du, dv - r], [du + r * 0.28, dv], [du, dv + r], [du - r * 0.28, dv]], accent);
+        shape([[du - r, dv], [du, dv - r * 0.28], [du + r, dv], [du, dv + r * 0.28]], ink);
+      }
+      break;
+    case 'blade':
+      shape([[0, 0.26], [0.055, 0.02], [0, -0.1], [-0.055, 0.02]], ink);
+      shape([[-0.17, -0.1], [0.17, -0.1], [0.17, -0.06], [-0.17, -0.06]], accent);
+      shape([[-0.03, -0.1], [0.03, -0.1], [0.03, -0.23], [-0.03, -0.23]], accent);
+      wall.bins.add('unlit', faceDisc(f, u, v - 0.25, w0, 0.045, 0.014, 8), accent);
+      break;
+    case 'coin':
+      wall.bins.add('unlit', faceDisc(f, u, v, w0, 0.22, 0.014, 20), accent);
+      wall.bins.add('unlit', faceTorus(f, u, v, w1 + 0.004, 0.16, 0.014, { tubularSegments: 20 }), ink);
+      shape([[-0.035, -0.09], [0.035, -0.09], [0.035, 0.09], [-0.035, 0.09]], ink);
+      break;
+    case 'gem':
+      shape([[-0.2, 0.06], [-0.1, 0.18], [0.1, 0.18], [0.2, 0.06]], accent);
+      shape([[-0.2, 0.06], [0.2, 0.06], [0, -0.22]], ink);
+      break;
+    case 'bolt':
+      shape([[0.06, 0.24], [0.14, 0.24], [0.02, 0.0], [-0.08, 0.0]], accent);
+      shape([[-0.02, 0.02], [0.08, 0.02], [-0.08, -0.24], [-0.1, -0.24]], accent);
+      break;
+  }
+}
+
 /** A scrolling LED ticker along the top of a wall, fading with that wall. */
 function addTicker(
   wall: InteriorWall,
-  map: FixedRoomMap,
+  map: FixedRoomLevelMap,
   res: ResourceBag,
   animators: Animator[],
   segments: readonly TickerSegment[],
@@ -1024,7 +1351,7 @@ function candlesticks(
 }
 
 /** Cream and blue, a pigeonhole cabinet, a clock and shelves of parcels. */
-function postOfficeDecor(theme: RoomTheme, shell: InteriorShell, map: FixedRoomMap): void {
+function postOfficeDecor(theme: RoomTheme, shell: InteriorShell, map: FixedRoomLevelMap): void {
   const north = shell.walls.north;
   const nf = north.face;
   const centre = map.width / 2;
@@ -1102,7 +1429,7 @@ function postOfficeDecor(theme: RoomTheme, shell: InteriorShell, map: FixedRoomM
  * carry cards with crosshair corners (one still pending, in amber) above a
  * run of slashes on the wainscot.
  */
-function bridgeDecor(theme: RoomTheme, shell: InteriorShell, map: FixedRoomMap, res: ResourceBag, animators: Animator[]): void {
+function bridgeDecor(theme: RoomTheme, shell: InteriorShell, map: FixedRoomLevelMap, res: ResourceBag, animators: Animator[]): void {
   const north = shell.walls.north;
   const nf = north.face;
   const anchor = stationAnchor(map);
@@ -1211,6 +1538,7 @@ function bridgeDecor(theme: RoomTheme, shell: InteriorShell, map: FixedRoomMap, 
   // route from the exit to the desk, dashed in green.
   const station = map.stations[0];
   const exit = map.exit;
+  if (!exit) return;
   const routeX = exit.x + exit.width / 2;
   const cross = lift(NEAR.hairline, 0.2);
   for (let x = 2; x < map.width - 1; x += 2) {

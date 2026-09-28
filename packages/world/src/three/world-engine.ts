@@ -196,7 +196,7 @@ export function createWorldEngine(options: WorldEngineOptions): WorldEngine {
       const focus = presenter.player.ground;
       // A bad presentation value must never reach the light, fog or camera.
       const elevation = Number.isFinite(presenter.player.elevation) ? presenter.player.elevation : 0;
-      rig.update(delta, focus, presenter.cameraBounds, elevation);
+      rig.update(delta, focus, presenter.cameraBounds, elevation, presenter.cameraPreset);
       presenter.updateOcclusion(camera.position, delta);
       // Snap the light to whole shadow texels so edges do not shimmer as the
       // player walks, and lift it with the player on tall sandbox towers.

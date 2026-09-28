@@ -24,6 +24,12 @@ import type { Intent } from '@strkworld/privacy';
  * the app breaking, so the accumulator refuses at the moment of the mistake and
  * says why.
  *
+ * **It holds at most one transfer** (D-065). A first transfer to a new
+ * recipient publishes that recipient's address, so a batch of transfers would
+ * publish every new recipient in one transaction, paid by one sender. The
+ * relay refuses such a submission; refusing here says so before the wallet
+ * proves anything.
+ *
  * **It never clears itself on emit.** `confirm()` hands out a frozen snapshot;
  * the visit's intent survives a failed prepare so the player is not asked to
  * retype it.
@@ -39,6 +45,10 @@ export type BatchRejectionReason =
   | { reason: 'swap-must-be-alone' }
   /** D-063: the pool admits one external invoke per transaction, so a stake settles alone. */
   | { reason: 'stake-must-be-alone' }
+  /** D-065: a first send publishes its recipient, so one batch pays one recipient. */
+  | { reason: 'one-recipient-per-send' }
+  /** The relay's unshield route admits exactly one withdrawal, so a batch unshields once. */
+  | { reason: 'one-unshield-per-send' }
   | { reason: 'non-positive-amount' }
   | { reason: 'batch-full'; limit: number }
   | { reason: 'empty-batch' };
@@ -114,6 +124,17 @@ export function createBatchAccumulator(options: AccumulatorOptions = {}): BatchA
             ok: false,
             rejection: { reason: 'mixed-route-kinds', queued: queued.kind, incoming: intent.kind },
           };
+        }
+        // D-065: one recipient per send. Checked after the mixing rules, so a
+        // shield or an unshield queued beside a transfer keeps its own reason.
+        if (intent.kind === 'transfer' && intents.some((entry) => entry.kind === 'transfer')) {
+          return { ok: false, rejection: { reason: 'one-recipient-per-send' } };
+        }
+        // The relay's unshield route admits exactly one withdrawal per
+        // submission (apps/backend server-actions.ts), so a second unshield in
+        // the batch would be refused only after the player approved the proof.
+        if (intent.kind === 'unshield' && intents.some((entry) => entry.kind === 'unshield')) {
+          return { ok: false, rejection: { reason: 'one-unshield-per-send' } };
         }
       }
 

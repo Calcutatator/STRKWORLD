@@ -9,9 +9,17 @@ import {
 } from './avatar-studio.js';
 import { AVATAR_BODY_SIZE } from './avatar-visual.js';
 import {
+  EXCHANGE_DEGEN_LEVEL,
+  EXCHANGE_DEGEN_STATION,
+  EXCHANGE_ROOF_HEIGHT,
+  EXCHANGE_ROOF_LEVEL,
   FIXED_ROOM_DEFINITIONS,
   FIXED_ROOM_TILE_SIZE,
+  createFixedRoom,
+  createFixedRoomLevel,
   type FixedRoomController,
+  type FixedRoomLevelId,
+  type FixedRoomLevelMap,
 } from './fixed-room.js';
 import type { InputGate } from './input-gate.js';
 import { createStreetMap, isSolidAt, TILE_SIZE, tileToWorld, worldToTile } from './map/street.js';
@@ -275,8 +283,9 @@ function createRecordingView(journal: Journal) {
     setDoorsVisible: (visible) => record('setDoorsVisible', [visible]),
     setLabelsVisible: (visible) => record('setLabelsVisible', [visible]),
     setRemoteVisible: (visible) => record('setRemoteVisible', [visible]),
-    showRoom: (building) => record('showRoom', [building]),
+    showRoom: (building, level) => record('showRoom', level === undefined ? [building] : [building, level]),
     renderRoom: (building, stations) => record('renderRoom', [building, stations]),
+    showRooftop: (building) => record('showRooftop', [building]),
     syncStudio: (state) =>
       record('syncStudio', [{ visible: state.visible, highlightedFigure: state.highlightedFigure }]),
     destroyStudio: () => record('destroyStudio', []),
@@ -1955,5 +1964,306 @@ describe('WorldSession movement (D-059)', () => {
       { position: { x: studioExit.x, y: studioExit.y + WALK_STEP }, snap: false },
       { position: spawn, snap: true },
     ]);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// The Exchange tower: three floors behind one door
+// ---------------------------------------------------------------------------
+
+const TOWER_FLOORS: Readonly<Record<FixedRoomLevelId, FixedRoomLevelMap>> = {
+  ground: createFixedRoom(FIXED_ROOM_DEFINITIONS.exchange),
+  degen: createFixedRoomLevel(EXCHANGE_DEGEN_LEVEL),
+  roof: createFixedRoomLevel(EXCHANGE_ROOF_LEVEL),
+};
+const ROOF = EXCHANGE_ROOF_LEVEL.rooftop;
+
+/** A floor tile's centre in World pixels: interiors at the room origin, the roof over the tower. */
+function floorTileCentre(level: FixedRoomLevelId, tile: Point): { x: number; y: number } {
+  if (level !== 'roof') return interiorTileCentre(tile);
+  return { x: (ROOF.x + tile.x) * TILE_SIZE + TILE_SIZE / 2, y: (ROOF.y + tile.y) * TILE_SIZE + TILE_SIZE / 2 };
+}
+
+function liftTo(from: FixedRoomLevelId, to: FixedRoomLevelId) {
+  const lift = TOWER_FLOORS[from].lifts.find((candidate) => candidate.to === to);
+  if (!lift) throw new Error(`No lift from ${from} to ${to}`);
+  return lift;
+}
+
+/** Step onto the current floor's pad to `to`, the way a tile report finds it. */
+function ride(world: World, to: FixedRoomLevelId): void {
+  const from = world.session.level;
+  if (!from) throw new Error('Not in the tower');
+  place(world.session, floorTileCentre(from, liftTo(from, to)));
+  tick(world);
+  expect(world.session.level).toBe(to);
+}
+
+const FLOOR_ORDER: readonly FixedRoomLevelId[] = ['ground', 'degen', 'roof'];
+
+/** In through the Exchange door if outside, then by lift, floor by floor, to `level`. */
+function climbTo(world: World, level: FixedRoomLevelId): void {
+  if (world.session.area !== 'exchange') enterBuilding(world, 'exchange');
+  while (world.session.level !== level) {
+    const here = FLOOR_ORDER.indexOf(world.session.level!);
+    ride(world, FLOOR_ORDER[here + Math.sign(FLOOR_ORDER.indexOf(level) - here)]!);
+  }
+}
+
+const KEYS: ReadonlyArray<readonly [number, number]> = [
+  [0, -1], [0, 1], [-1, 0], [1, 0], [-1, -1], [1, -1], [-1, 1], [1, 1],
+];
+const keysFor = ([dx, dy]: readonly [number, number]): Partial<MovementInput> => ({
+  left: dx < 0,
+  right: dx > 0,
+  up: dy < 0,
+  down: dy > 0,
+});
+
+describe('WorldSession: the Exchange tower', () => {
+  it('rides the lift to the Degen floor and back while the Shell sees one building', () => {
+    const world = createWorld();
+    const session = world.start();
+    enterBuilding(world, 'exchange');
+    expect(session.level).toBe('ground');
+    const moved = world.bus.count('player:moved');
+    world.view.calls.length = 0;
+
+    ride(world, 'degen');
+    expect(session.area).toBe('exchange');
+    // Out of the degen floor's lift down, beside its pad, in its interior.
+    expect(session.player).toEqual(interiorTileCentre(liftTo('degen', 'ground').arrival));
+    expect(world.view.last('showRoom')).toEqual(['exchange', 'degen']);
+    expect(world.view.last('setCameraBounds')).toEqual([INTERIOR_BOUNDS]);
+    expect(world.view.last('setStreetVisible')).toEqual([false]);
+    expect(world.view.positions().at(-1)).toEqual({ position: session.player, snap: true });
+    // The counter up here is its own, and locked until the Shell says otherwise.
+    const degen = world.view.last('renderRoom')!;
+    expect(degen[0]).toBe('exchange');
+    expect(degen[1].map(({ station, status }) => ({ station, status }))).toEqual([
+      { station: EXCHANGE_DEGEN_STATION, status: 'locked' },
+    ]);
+    // Indoors the roof is never mentioned.
+    expect(world.view.count('showRooftop')).toBe(0);
+
+    ride(world, 'ground');
+    expect(session.player).toEqual(interiorTileCentre(liftTo('ground', 'degen').arrival));
+    expect(world.view.last('showRoom')).toEqual(['exchange']);
+    // Nothing crossed the seam: one entry, no exit, no presence.
+    expect(world.bus.count('building:entered')).toBe(1);
+    expect(world.bus.count('building:exited')).toBe(0);
+    expect(world.bus.count('station:activated')).toBe(0);
+    expect(world.bus.count('player:moved')).toBe(moved);
+  });
+
+  it('rides up to the real roof: the street stays drawn below and the camera looks down', () => {
+    const world = createWorld();
+    const session = world.start();
+    climbTo(world, 'degen');
+    world.view.calls.length = 0;
+
+    ride(world, 'roof');
+    const arrival = floorTileCentre('roof', liftTo('roof', 'degen').arrival);
+    const roofBounds = { x: ROOF.x * TILE_SIZE, y: ROOF.y * TILE_SIZE, width: 7 * TILE_SIZE, height: 6 * TILE_SIZE };
+    expect(session.area).toBe('exchange');
+    expect(session.player).toEqual(arrival);
+    expect(session.elevation).toBe(EXCHANGE_ROOF_HEIGHT);
+    // Standing over the tower's own street footprint (tiles 12-18, 5-10).
+    const tile = worldToTile(arrival.x, arrival.y);
+    expect(tile.x).toBeGreaterThanOrEqual(12);
+    expect(tile.x).toBeLessThanOrEqual(18);
+    expect(tile.y).toBeGreaterThanOrEqual(5);
+    expect(tile.y).toBeLessThanOrEqual(10);
+    expect(world.view.calls.map(({ method, args }) => [method, ...args])).toEqual([
+      // The frame's own (idle) motion, then the ride.
+      ['setPlayerMotion', IDLE_MOTION],
+      ['setPlayerMotion', IDLE_MOTION],
+      ['setStreetVisible', true],
+      ['setDoorsVisible', true],
+      ['setRemoteVisible', true],
+      ['setLabelsVisible', true],
+      ['showRoom', null],
+      ['showRooftop', 'exchange'],
+      ['setCameraBounds', roofBounds],
+      ['setPlayerPosition', arrival, true],
+      ['setPlayerElevation', EXCHANGE_ROOF_HEIGHT],
+      ['renderRoom', 'exchange', []],
+    ]);
+
+    world.view.calls.length = 0;
+    ride(world, 'degen');
+    expect(session.elevation).toBe(0);
+    expect(world.view.last('showRooftop')).toEqual([null]);
+    expect(world.view.last('setPlayerElevation')).toEqual([0]);
+    expect(world.view.last('setStreetVisible')).toEqual([false]);
+    expect(world.view.last('showRoom')).toEqual(['exchange', 'degen']);
+    expect(world.bus.count('building:entered')).toBe(1);
+    expect(world.bus.count('building:exited')).toBe(0);
+  });
+
+  it('keeps the roof edges solid: no key, pace or frame walks anyone off the deck', () => {
+    const world = createWorld();
+    const session = world.start();
+    const deck = {
+      minX: (ROOF.x + 1) * TILE_SIZE + AVATAR_BODY_SIZE / 2,
+      maxX: (ROOF.x + 6) * TILE_SIZE - AVATAR_BODY_SIZE / 2,
+      minY: (ROOF.y + 1) * TILE_SIZE + AVATAR_BODY_SIZE / 2,
+      maxY: (ROOF.y + 5) * TILE_SIZE - AVATAR_BODY_SIZE / 2,
+    };
+    let checked = 0;
+    for (const start of [{ x: 1, y: 1 }, { x: 3, y: 2 }, { x: 2, y: 4 }]) {
+      for (const direction of KEYS) {
+        for (const [sprinting, frame] of [[false, 16], [true, MAX_SESSION_FRAME_MS]] as const) {
+          climbTo(world, 'roof');
+          place(session, floorTileCentre('roof', start));
+          tick(world);
+          world.keyboard.sprinting = sprinting;
+          world.keyboard.hold(keysFor(direction));
+          for (let i = 0; i < 90 && session.level === 'roof'; i++) {
+            tick(world, frame);
+            if (session.level !== 'roof') break;
+            // On the roof the player is always on the deck, at the roof's height.
+            expect(session.player.x).toBeGreaterThanOrEqual(deck.minX - 1e-6);
+            expect(session.player.x).toBeLessThanOrEqual(deck.maxX + 1e-6);
+            expect(session.player.y).toBeGreaterThanOrEqual(deck.minY - 1e-6);
+            expect(session.player.y).toBeLessThanOrEqual(deck.maxY + 1e-6);
+            expect(session.elevation).toBe(EXCHANGE_ROOF_HEIGHT);
+            checked += 1;
+          }
+          world.keyboard.release();
+          world.keyboard.sprinting = false;
+          // Only the lift leaves the roof, and it goes to the Degen floor.
+          expect(['roof', 'degen']).toContain(session.level);
+        }
+      }
+    }
+    expect(checked).toBeGreaterThan(1000);
+  });
+
+  it('never rides straight back: a key still held from the ride walks the rider away', () => {
+    const world = createWorld();
+    const session = world.start();
+    let rides = 0;
+    for (const from of ['ground', 'degen', 'roof'] as const) {
+      const floor = TOWER_FLOORS[from];
+      for (const lift of floor.lifts) {
+        // Every free tile around the pad, stepping straight at it.
+        for (let y = lift.y - 1; y <= lift.y + lift.height; y++) {
+          for (let x = lift.x - 1; x <= lift.x + lift.width; x++) {
+            const tile = floor.tiles[y]?.[x];
+            if (tile !== 'floor') continue;
+            const dx = Math.sign(Math.min(Math.max(x, lift.x), lift.x + lift.width - 1) - x);
+            const dy = Math.sign(Math.min(Math.max(y, lift.y), lift.y + lift.height - 1) - y);
+            climbTo(world, from);
+            place(session, floorTileCentre(from, { x, y }));
+            tick(world);
+            const levels: (FixedRoomLevelId | null)[] = [];
+            world.keyboard.hold(keysFor([dx, dy]));
+            for (let i = 0; i < 150; i++) {
+              tick(world);
+              if (levels.at(-1) !== session.level) levels.push(session.level);
+            }
+            world.keyboard.release();
+            // One ride at most (a diagonal can meet a wall first), never a ride back.
+            expect(levels.length, `${from} (${x},${y}) -> ${lift.to}`).toBeLessThanOrEqual(2);
+            if (levels.length === 2) {
+              expect(levels).toEqual([from, lift.to]);
+              rides += 1;
+            }
+          }
+        }
+      }
+    }
+    expect(rides).toBeGreaterThanOrEqual(10);
+  });
+
+  it('leaves from any floor when the Shell asks, and the door opens onto the ground floor again', () => {
+    for (const level of ['degen', 'roof'] as const) {
+      const world = createWorld();
+      const session = world.start();
+      climbTo(world, level);
+      world.view.calls.length = 0;
+
+      world.bus.shellEmit('world:exit-building', { building: 'exchange' });
+      expect(session.area).toBe('street');
+      expect(session.level).toBeNull();
+      expect(session.elevation).toBe(0);
+      expect(session.player).toEqual(streetTileCentre(returnTile('exchange')));
+      expect(world.view.last('setStreetVisible')).toEqual([true]);
+      expect(world.view.last('showRoom')).toEqual([null]);
+      expect(world.view.count('showRooftop')).toBe(level === 'roof' ? 1 : 0);
+      if (level === 'roof') {
+        expect(world.view.last('showRooftop')).toEqual([null]);
+        expect(world.view.last('setPlayerElevation')).toEqual([0]);
+      }
+      expect(world.bus.count('building:exited')).toBe(1);
+
+      enterBuilding(world, 'exchange');
+      expect(session.level).toBe('ground');
+      expect(session.player).toEqual(interiorTileCentre(FIXED_ROOM_DEFINITIONS.exchange.spawn));
+      expect(world.view.last('showRoom')).toEqual(['exchange']);
+    }
+  });
+
+  it('does not ride while the Shell owns the keyboard, and rides again once it hands back', () => {
+    const world = createWorld();
+    const session = world.start();
+    climbTo(world, 'degen');
+    world.bus.shellEmit('world:control-owner', { building: 'exchange', owner: 'shell' });
+    const up = liftTo('degen', 'roof');
+    place(session, floorTileCentre('degen', up));
+    tick(world);
+    expect(session.level).toBe('degen');
+    world.bus.shellEmit('world:control-owner', { building: 'exchange', owner: 'world' });
+    // Step off and on again: the pad works as soon as the World has control.
+    place(session, floorTileCentre('degen', up.arrival));
+    tick(world);
+    place(session, floorTileCentre('degen', up));
+    tick(world);
+    expect(session.level).toBe('roof');
+  });
+
+  it('opens the degen counter only when the Shell makes it available', () => {
+    const world = createWorld();
+    const session = world.start();
+    climbTo(world, 'degen');
+    const station = EXCHANGE_DEGEN_LEVEL.stations[0];
+    const approach = { x: station.x, y: station.y + station.height };
+    place(session, floorTileCentre('degen', approach));
+    tick(world);
+    expect(world.room('exchange').state.highlightedStation).toBe(EXCHANGE_DEGEN_STATION);
+    expect(world.bus.count('station:activated')).toBe(0);
+
+    world.bus.shellEmit('world:stations', {
+      building: 'exchange',
+      stations: [
+        { station: 'exchange:swap', label: 'SWAP', status: 'locked' },
+        { station: EXCHANGE_DEGEN_STATION, label: 'DEGEN', status: 'available' },
+      ],
+    });
+    expect(world.bus.payloads('station:activated')).toEqual([{ building: 'exchange', station: EXCHANGE_DEGEN_STATION }]);
+    expect(world.view.last('renderRoom')![1].map(({ label, status }) => ({ label, status }))).toEqual([
+      { label: 'DEGEN', status: 'available' },
+    ]);
+  });
+
+  it('stays out of lobby presence on every floor and rejoins the street on the way out', () => {
+    const world = createWorld();
+    const session = world.start();
+    enterBuilding(world, 'exchange');
+    const moved = world.bus.count('player:moved');
+    for (const level of ['degen', 'roof'] as const) {
+      ride(world, level);
+      for (const direction of KEYS) {
+        world.keyboard.hold(keysFor(direction));
+        for (let i = 0; i < 20; i++) tick(world);
+        world.keyboard.release();
+      }
+      if (session.level !== level) break;
+    }
+    expect(world.bus.count('player:moved')).toBe(moved);
+    world.bus.shellEmit('world:exit-building', { building: 'exchange' });
+    tick(world);
+    expect(world.bus.count('player:moved')).toBeGreaterThan(moved);
   });
 });

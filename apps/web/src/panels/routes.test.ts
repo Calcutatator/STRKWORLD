@@ -137,6 +137,24 @@ describe('route gate', () => {
     expect(routeDisclosure('bank.shield')).toBe(shield?.disclosure);
   });
 
+  it('opens the transfer only while its D-065 approval and waiver both stand', () => {
+    const transfer = findRoute('post-office.transfer')!;
+    expect(transfer).toMatchObject({ grade: 'anonymous', approvedBy: 'calc', disclosure: null, disclosureWaivedBy: 'D-065' });
+    expect(routeDoor('post-office.transfer', PRIVACY_REGISTER, null).open).toBe(true);
+    for (const change of [
+      { approvedBy: null },
+      { rationale: null },
+      { disclosureWaivedBy: null },
+      { disclosureWaivedBy: 'D-064' },
+    ] satisfies Partial<RouteGrade>[]) {
+      const register = PRIVACY_REGISTER.map((entry) => (entry.route === 'post-office.transfer' ? { ...entry, ...change } : entry));
+      expect(routeDoor('post-office.transfer', register, null), JSON.stringify(change)).toMatchObject({
+        open: false,
+        reason: 'unapproved-route',
+      });
+    }
+  });
+
   it('reports the D-021 return-to-pool routes', () => {
     expect(routeReturnsToPool('bridge.deposit')).toBe(true);
     expect(routeReturnsToPool('exchange.swap')).toBe(false);
@@ -245,7 +263,8 @@ describe('disclosures for a batch', () => {
   });
 
   it('says nothing for a batch that needs no disclosure', () => {
-    expect(disclosuresForIntents([transfer, transfer])).toEqual([]);
+    // The transfer's disclosure is waived by D-065; a batch holds one transfer.
+    expect(disclosuresForIntents([transfer])).toEqual([]);
   });
 
   it('de-duplicates, because one route said twice is not two disclosures', () => {

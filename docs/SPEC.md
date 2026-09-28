@@ -353,10 +353,12 @@ financial action, but a nearby observer may infer the chosen building and visit
 timing from the last position and disappearance. The project lead accepts that
 trade-off for v1 (D-019).
 
-Financial submission remains separate. The backend may add bounded jitter on
-eligible prepared Wallet API calls, within proof validity; it never delays
-quote-bound AVNU actions. This can reduce precise timing linkage but does not
-defeat session-level correlation while the pool is small (D-015).
+Financial submission remains separate, and since D-066 it is not delayed: the
+wallet builds the proof first, and every pool transaction publishes the block
+its proof was built against, which dates the confirm whenever it is
+broadcast. Artificial jitter therefore did not reduce timing linkage and only
+made the game's transactions stand out. Session-level correlation remains
+while the pool is small (D-015, D-019).
 
 ---
 

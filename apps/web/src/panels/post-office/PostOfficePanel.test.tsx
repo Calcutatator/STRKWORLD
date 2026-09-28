@@ -25,11 +25,19 @@ describe('Post Office Menu Mode', () => {
     expect(markup).toContain('data-experience="menu"');
     expect(markup).toContain(COPY.buildings['post-office']);
     expect(markup).toContain(COPY.bank.transfer);
-    expect(markup).toContain(COPY.batch.add);
-    expect(markup).toContain(COPY.batch.empty);
     expect(markup).not.toContain(COPY.bank.shield);
     expect(markup).not.toContain(COPY.bank.unshield);
     expect(markup).not.toContain(COPY.gameMode.singleAction);
+  });
+
+  it('composes one send at a time — one recipient per send (D-065)', () => {
+    const markup = render(<PostOfficePanel onClose={() => {}} />);
+    expect(markup).toContain(COPY.postOffice.oneAtATime);
+    expect(markup).toContain(COPY.gameMode.reviewAction);
+    // D-040's visit vocabulary would promise several sends settling together.
+    expect(markup).not.toContain(COPY.batch.add);
+    expect(markup).not.toContain(COPY.batch.empty);
+    expect(markup).not.toContain(COPY.batch.why);
   });
 
   it('explains its own identity — a private send to another registered pool account — before any control', () => {
@@ -43,21 +51,23 @@ describe('Post Office Menu Mode', () => {
 
   it('runs the privacy gate before resolving the Post Office panel', () => {
     const transfer = PRIVACY_REGISTER.find((entry) => entry.route === 'post-office.transfer')!;
-    const lockedTransfer: RouteGrade = {
-      ...transfer,
-      grade: 'anonymous',
-      approvedBy: null,
-      approvedOn: null,
-      disclosure: null,
-      rationale: null,
-    };
-    const register = [
-      ...PRIVACY_REGISTER.filter((entry) => entry.route !== 'post-office.transfer'),
-      lockedTransfer,
-    ];
+    // Since D-065 the route is an approved `anonymous` deviation whose
+    // disclosure is waived. Withdrawing either the approval or the waiver
+    // locks the building, whatever else the entry still says.
+    expect(resolveRoom('post-office', BUILDING_PANELS).kind).toBe('panel');
+    for (const change of [
+      { approvedBy: null, approvedOn: null, rationale: null },
+      { disclosureWaivedBy: null },
+      { disclosureWaivedBy: 'D-064' },
+    ] satisfies Partial<RouteGrade>[]) {
+      const register = [
+        ...PRIVACY_REGISTER.filter((entry) => entry.route !== 'post-office.transfer'),
+        { ...transfer, ...change },
+      ];
 
-    const room = resolveRoom('post-office', BUILDING_PANELS, register);
-    expect(room.kind).toBe('locked');
-    expect(room.kind === 'locked' && room.reason).toBe('unapproved-route');
+      const room = resolveRoom('post-office', BUILDING_PANELS, register);
+      expect(room.kind, JSON.stringify(change)).toBe('locked');
+      expect(room.kind === 'locked' && room.reason, JSON.stringify(change)).toBe('unapproved-route');
+    }
   });
 });

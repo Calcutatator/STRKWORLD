@@ -1,5 +1,6 @@
 import {
   Box3,
+  BoxGeometry,
   ConeGeometry,
   CylinderGeometry,
   Group,
@@ -51,11 +52,13 @@ import {
   hash01,
   jitterColor,
   lift,
+  liftLabelText,
   mixColor,
   pick,
   prismX,
   prismY,
   prismZ,
+  roomTheme,
   shade,
   sphereGeometry,
   stadiumPoints,
@@ -67,7 +70,13 @@ import {
   type Paint,
   type Vec3,
 } from './palette.js';
-import type { SignStyleOptions } from './labels.js';
+import type { FloatingStyleOptions, SignStyleOptions } from './labels.js';
+import {
+  FIXED_ROOM_LEVELS,
+  createFixedRoomLevel,
+  type FixedRoomLevelId,
+  type FixedRoomLevelMap,
+} from '../fixed-room.js';
 import { bevelledBlockGeometry } from './sandbox-view.js';
 import type { LabelFactory, Occluder, OccluderBounds, StreetView, TextLabel } from './types.js';
 
@@ -76,6 +85,9 @@ export const SANDBOX_SIGN_TEXT = 'SANDBOX\nPICK UP \u00b7 STACK \u00b7 BUILD';
 
 /** The board on the gate's lintel, facing the street as you walk in (D-060). */
 export const SANDBOX_GATE_TEXT = 'SANDBOX';
+
+/** A roof's lift label wears the same type as the building's rooms' labels. */
+const ROOF_LIFT_LABEL: FloatingStyleOptions = roomTheme('exchange').label;
 
 /**
  * The district as a low-poly golden-hour street (D-059).
@@ -212,6 +224,19 @@ export function buildStreet(map: DistrictMap, labels: LabelFactory): StreetView 
       label.object.position.set(placement.x, placement.y, placement.z);
       label.object.userData['brand'] = footprint.building;
       signs.add(label.object);
+    }
+
+    // A walkable roof's lift pads, labelled like the ones indoors.
+    for (const footprint of footprints) {
+      for (const lift of built.get(footprint)?.lifts ?? []) {
+        const style: FloatingStyleOptions = { lineHeight: 0.26, ...ROOF_LIFT_LABEL };
+        const label = labels.floating(liftLabelText(lift.from, lift.to), style);
+        textLabels.push(label);
+        label.object.position.set(lift.x, lift.y, lift.z);
+        label.object.userData['lift'] = lift.to;
+        label.object.userData['building'] = footprint.building;
+        signs.add(label.object);
+      }
     }
 
     const sandboxSign = sandboxSignPlacement(kinds);
@@ -1005,6 +1030,12 @@ interface SignPlacement {
   readonly z: number;
 }
 
+/** A lift pad on a walkable roof, for its label (the Exchange tower's roof). */
+interface RoofLift extends SignPlacement {
+  readonly from: FixedRoomLevelId;
+  readonly to: FixedRoomLevelId;
+}
+
 interface BuiltBuilding {
   readonly group: Group;
   readonly occluder: BuildingOccluder;
@@ -1012,6 +1043,7 @@ interface BuiltBuilding {
   readonly sign: SignPlacement;
   /** Where the theme's brand plate goes, when the style makes room for one. */
   readonly brand?: SignPlacement;
+  readonly lifts?: readonly RoofLift[];
   readonly animate: Animator;
 }
 
@@ -1038,6 +1070,14 @@ interface StyleResult {
   readonly doorTop: number;
   readonly sign: SignPlacement;
   readonly brand?: SignPlacement;
+  readonly lifts?: readonly RoofLift[];
+  /**
+   * Top of the occluder box, when it is not the building's highest point: a
+   * walkable roof's deck, so nothing standing on it can hide the player.
+   */
+  readonly occluderHeight?: number;
+  /** A glass mass that casts a solid shadow (a tower), not the lattice of its frame. */
+  readonly solidGlass?: boolean;
   readonly fadeMaterials?: readonly Material[];
   readonly animate?: Animator;
 }
@@ -1092,7 +1132,7 @@ function buildBuilding(fp: Footprint, res: ResourceBag): BuiltBuilding {
       return material;
     };
     addMesh(BODY, () => standardMaterial({ roughness: 0.84 }), true, true);
-    addMesh(GLASS, () => standardMaterial({ roughness: 0.28, metalness: 0.15 }), false, true);
+    addMesh(GLASS, () => standardMaterial({ roughness: 0.28, metalness: 0.15 }), style.solidGlass === true, true);
     addMesh(LIT, () => standardMaterial({ roughness: 0.5, emissive: theme.windowGlow, emissiveIntensity: 1.25 }), false, false);
     addMesh(GLOW, () => standardMaterial({ roughness: 0.5, emissive: theme.glow, emissiveIntensity: theme.glowIntensity ?? 1.6 }), false, false);
     const beacon = addMesh(
@@ -1110,7 +1150,7 @@ function buildBuilding(fp: Footprint, res: ResourceBag): BuiltBuilding {
       maxX: fp.maxX,
       minZ: fp.minY,
       maxZ: fp.maxY,
-      height: Number.isFinite(box.max.y) ? box.max.y : theme.height,
+      height: style.occluderHeight ?? (Number.isFinite(box.max.y) ? box.max.y : theme.height),
     });
     const occluder: BuildingOccluder = Object.freeze({
       kind: 'building',
@@ -1124,7 +1164,7 @@ function buildBuilding(fp: Footprint, res: ResourceBag): BuiltBuilding {
       if (beacon) beacon.emissiveIntensity = Math.sin(elapsed / 1000 * 3.1 + phase) > 0.55 ? 3 : 0.25;
       style.animate?.(elapsed);
     };
-    return { group, occluder, doorTop: style.doorTop, sign: style.sign, brand: style.brand, animate };
+    return { group, occluder, doorTop: style.doorTop, sign: style.sign, brand: style.brand, lifts: style.lifts, animate };
   } finally {
     bins.dispose();
   }
@@ -1425,15 +1465,22 @@ function bankStyle(ctx: BuildingCtx): StyleResult {
 }
 
 /**
- * avnu: an indigo glass tower on slate floor bands with blue light panels,
- * a pill-shaped canopy (avnu's buttons are pills) and a blue LED rooftop
- * ticker that names the route once.
+ * avnu: an indigo glass tower on slate floor bands with blue light panels, a
+ * pill-shaped canopy (avnu's buttons are pills) and a blue LED ticker. Where
+ * a floor of the building is its roof (the Exchange's), the glass runs on up
+ * to that roof, far above the street camera's frame, with a second LED band
+ * across the podium's crown that the street does see; the rooftop, ticker
+ * and all, is up there, walkable (`towerRoof`).
  */
 function exchangeStyle(ctx: BuildingCtx): StyleResult {
   const t = ctx.theme;
-  const H = t.height;
+  const roof = rooftopFor(ctx.fp);
+  // The podium is the old block: its bands, sign and plate stay where the
+  // street sees them. A tower carries the glass on to the roof.
+  const podium = t.height;
+  const H = roof?.rooftop ? roof.rooftop.height : podium;
   const doorTop = 2.4;
-  const front = massing(ctx, H, 0.45, doorTop, (_x, y) => shade(t.wall, 0.05 * (y / H) - 0.02), GLASS);
+  const front = massing(ctx, H, 0.45, doorTop, (_x, y) => shade(t.wall, 0.05 * Math.min(1, y / podium) + 0.04 * (y / H) - 0.03), GLASS);
   const gc = ctx.doorCentre;
   const xa = ctx.x0 + SIDE_INSET;
   const xb = ctx.x1 - SIDE_INSET;
@@ -1443,7 +1490,11 @@ function exchangeStyle(ctx: BuildingCtx): StyleResult {
 
   band(ctx, 0, 0.35, 0.03, t.wallAlt, front, doorTop);
   const levels = [2.55, 3.6, 4.6];
-  for (const y of levels) band(ctx, y - 0.07, y + 0.07, 0.05, t.trim, front, doorTop);
+  // Up the tower, a floor every unit above the podium.
+  const floors: number[] = [];
+  if (roof) for (let y = podium + TOWER_FLOOR; y < H - 0.5; y += TOWER_FLOOR) floors.push(y);
+  for (const y of [...levels, ...floors]) band(ctx, y - 0.07, y + 0.07, 0.05, t.trim, front, doorTop);
+  if (roof) band(ctx, podium - 0.08, podium + 0.08, 0.07, t.trim, front, doorTop);
   band(ctx, H - 0.1, H + 0.2, 0.06, t.trim, front, doorTop);
 
   const bays = 8;
@@ -1453,14 +1504,17 @@ function exchangeStyle(ctx: BuildingCtx): StyleResult {
     const y0 = overlapsGap(ctx, x - 0.05, x + 0.05) ? levels[0]! + 0.07 : 0.35;
     ctx.bins.add(BODY, boxGeometry(x - 0.03, y0, front, x + 0.03, H - 0.1, front + 0.04), frame);
   }
-  const rows: ReadonlyArray<readonly [number, number]> = [
+  const rows: Array<readonly [number, number]> = [
     [0.4, 2.46],
     [2.64, 3.51],
     [3.69, 4.51],
-    [4.69, H - 0.12],
+    [4.69, podium - 0.12],
   ];
+  // The row above the podium carries the LED band on the front, so its
+  // panels are only on the sides.
+  const towerRows = [podium, ...floors].map((y) => [y + 0.09, Math.min(H - 0.12, y + TOWER_FLOOR - 0.09)] as const);
   let k = 0;
-  rows.forEach(([y0, y1], row) => {
+  [...rows, ...towerRows.slice(1)].forEach(([y0, y1], row) => {
     for (let i = 0; i < bays; i++) {
       const a = xa + i * step + 0.05;
       const c = xa + (i + 1) * step - 0.05;
@@ -1477,7 +1531,7 @@ function exchangeStyle(ctx: BuildingCtx): StyleResult {
       const u = za + i * sideStep;
       ctx.bins.add(BODY, faceBox(side, u - 0.03, 0.35, 0, u + 0.03, H - 0.1, 0.04), frame);
     }
-    for (const [y0, y1] of rows) {
+    for (const [y0, y1] of [...rows, ...towerRows]) {
       for (let i = 0; i < count; i++) {
         k++;
         if (!isLit(ctx, k)) continue;
@@ -1514,8 +1568,98 @@ function exchangeStyle(ctx: BuildingCtx): StyleResult {
     }
   }
 
+  const tickers: Mesh[] = [];
+  const sign = { x: gc, y: 3.07, z: front + 0.07 };
+  // avnu across the podium's top floor, in front of its mullions.
+  const brand = { x: gc, y: 5.08, z: front + 0.055 };
+  if (!roof) {
+    blockRoof(ctx, H, front, tickers);
+    return tickerResult({ doorTop, sign, brand, tickers });
+  }
+  // The street's LED band: navy across the podium's crown, avnu's blue LEDs
+  // scrolling, the one piece of the tower's signage the street camera sees.
+  const bandA = xa + 0.18;
+  const bandB = xb - 0.18;
+  const [bandLow, bandHigh] = [podium + 0.16, podium + 0.84];
+  ctx.bins.add(BODY, boxGeometry(bandA, bandLow, front, bandB, bandHigh, front + 0.08), AVNU.navy);
+  ctx.bins.add(GLOW, boxGeometry(bandA, bandLow - 0.04, front, bandB, bandLow, front + 0.09), t.glow);
+  tickers.push(tickerFace(ctx, bandB - bandA - 0.16, bandHigh - bandLow - 0.16, (bandA + bandB) / 2, (bandLow + bandHigh) / 2, front + 0.085, 0, 'podium-ticker'));
+  const lifts = towerRoof(ctx, roof, H, front, tickers);
+  return tickerResult({ doorTop, sign, brand, tickers, lifts, occluderHeight: H, solidGlass: true });
+}
+
+/** Height of one of the tower's floors above the podium, in world units. */
+const TOWER_FLOOR = 1;
+
+/**
+ * The walkable roof over a footprint, if a floor of its building is one (the
+ * Exchange tower's). Only a grid lying exactly over the footprint counts, so
+ * a map that moves the building gets the plain block rather than a roof in
+ * the air.
+ */
+function rooftopFor(fp: Footprint): FixedRoomLevelMap | null {
+  if (!fp.building) return null;
+  for (const level of FIXED_ROOM_LEVELS[fp.building] ?? []) {
+    const roof = level.rooftop;
+    if (!roof) continue;
+    if (roof.x !== fp.minX || roof.y !== fp.minY) continue;
+    if (level.width !== fp.maxX - fp.minX || level.height !== fp.maxY - fp.minY) continue;
+    return createFixedRoomLevel(level);
+  }
+  return null;
+}
+
+/** The ticker meshes scroll together; they fade with the building. */
+function tickerResult(options: {
+  readonly doorTop: number;
+  readonly sign: SignPlacement;
+  readonly brand: SignPlacement;
+  readonly tickers: readonly Mesh[];
+  readonly lifts?: readonly RoofLift[];
+  readonly occluderHeight?: number;
+  readonly solidGlass?: boolean;
+}): StyleResult {
+  const pixelsPerSecond = 9;
+  const strips = options.tickers.map((mesh) => (mesh.material as MeshBasicMaterial).map!);
+  const width = (strips[0]?.image as { width: number } | undefined)?.width ?? 1;
+  return {
+    doorTop: options.doorTop,
+    sign: options.sign,
+    brand: options.brand,
+    lifts: options.lifts,
+    occluderHeight: options.occluderHeight,
+    solidGlass: options.solidGlass,
+    fadeMaterials: options.tickers.map((mesh) => mesh.material as MeshBasicMaterial),
+    animate: (elapsed) => {
+      const offset = ((elapsed / 1000) * pixelsPerSecond / width) % 1;
+      for (const strip of strips) strip.offset.x = offset;
+    },
+  };
+}
+
+/**
+ * One LED face showing `EXCHANGE_TICKER`, `width` by `height`, centred at
+ * (x, y, z) and tipped back by `tilt` radians about its horizontal axis.
+ */
+function tickerFace(ctx: BuildingCtx, width: number, height: number, x: number, y: number, z: number, tilt: number, name: string): Mesh {
+  const tickerStrip = createTickerStrip(EXCHANGE_TICKER);
+  const strip = ctx.res.texture(tickerStrip.texture);
+  const pixelSize = height / tickerStrip.height;
+  strip.repeat.set(width / pixelSize / tickerStrip.width, 1);
+  const material = ctx.res.material(new MeshBasicMaterial({ map: strip, toneMapped: false }));
+  const geometry = ctx.res.geometry(new PlaneGeometry(width, height));
+  const ticker = new Mesh(geometry, material);
+  ticker.name = `${ctx.group.name}:${name}`;
+  ticker.position.set(x, y, z);
+  ticker.rotation.x = -tilt;
+  ctx.group.add(ticker);
+  return ticker;
+}
+
+/** The old block's roof: plant, a second box, the mast, the ticker along the front. */
+function blockRoof(ctx: BuildingCtx, H: number, front: number, tickers: Mesh[]): void {
+  const t = ctx.theme;
   roofSlab(ctx, H, front, t.roof);
-  // Plant on the roof, visible from the follow camera's high angle.
   ctx.bins.add(BODY, boxGeometry(ctx.x0 + 0.8, H, ctx.z0 + 0.8, ctx.x0 + 2.2, H + 0.5, ctx.z0 + 1.9), AVNU.slate);
   ctx.bins.add(BODY, cylinderGeometry(ctx.x0 + 1.5, H + 0.5, ctx.z0 + 1.35, 0.4, 0.4, 0.04, 10), AVNU.navy);
   ctx.bins.add(BODY, boxGeometry(ctx.x0 + 4.2, H, ctx.z0 + 0.7, ctx.x0 + 5.1, H + 0.35, ctx.z0 + 1.4), lift(AVNU.slate, -0.08));
@@ -1523,7 +1667,6 @@ function exchangeStyle(ctx: BuildingCtx): StyleResult {
   const mastZ = ctx.z0 + 1.2;
   ctx.bins.add(BODY, cylinderGeometry(mastX, H, mastZ, 0.035, 0.05, 1.25, 6), AVNU.slate);
   ctx.bins.add(BEACON, sphereGeometry(mastX, H + 1.3, mastZ, 0.08, { widthSegments: 6, heightSegments: 4 }), t.beacon);
-
   // Ticker: a navy board on legs along the roof's front edge, blue LEDs scrolling.
   const boardA = ctx.x0 + 0.55;
   const boardB = ctx.x1 - 0.55;
@@ -1534,30 +1677,171 @@ function exchangeStyle(ctx: BuildingCtx): StyleResult {
   }
   ctx.bins.add(BODY, boxGeometry(boardA, H + 0.4, boardBack, boardB, H + 1.1, boardFront), AVNU.navy);
   ctx.bins.add(GLOW, boxGeometry(boardA + 0.05, H + 0.36, boardFront - 0.06, boardB - 0.05, H + 0.4, boardFront), t.glow);
-  const faceWidth = boardB - boardA - 0.16;
-  const faceHeight = 0.54;
-  const tickerStrip = createTickerStrip(EXCHANGE_TICKER);
-  const strip = ctx.res.texture(tickerStrip.texture);
-  const stripImage = { width: tickerStrip.width, height: tickerStrip.height };
-  const pixelSize = faceHeight / stripImage.height;
-  strip.repeat.set(faceWidth / pixelSize / stripImage.width, 1);
-  const tickerMaterial = ctx.res.material(new MeshBasicMaterial({ map: strip, toneMapped: false }));
-  const tickerGeometry = ctx.res.geometry(new PlaneGeometry(faceWidth, faceHeight));
-  const ticker = new Mesh(tickerGeometry, tickerMaterial);
-  ticker.name = `${ctx.group.name}:ticker`;
-  ticker.position.set((boardA + boardB) / 2, H + 0.75, boardFront + 0.005);
-  ctx.group.add(ticker);
-  const pixelsPerSecond = 9;
-  return {
-    doorTop,
-    sign: { x: gc, y: 3.07, z: front + 0.07 },
-    // avnu across the top floor, in front of its mullions, under the ticker.
-    brand: { x: gc, y: 5.08, z: front + 0.055 },
-    fadeMaterials: [tickerMaterial],
-    animate: (elapsed) => {
-      strip.offset.x = ((elapsed / 1000) * pixelsPerSecond / stripImage.width) % 1;
-    },
+  tickers.push(tickerFace(ctx, boardB - boardA - 0.16, 0.54, (boardA + boardB) / 2, H + 0.75, boardFront + 0.005, 0, 'ticker'));
+}
+
+/**
+ * The Exchange tower's roof, a floor of the building (fixed-room.ts): a deck
+ * on the roof grid's walkable tiles at exactly the roof's height, ringed by a
+ * planted ledge and a glass balustrade on the grid's solid ring, so nobody
+ * can walk off. The old rooftop model stands on that ring, out of the way:
+ * the plant in the north-west corner, the mast in the north-east, and the
+ * ticker along the north side, tipped back towards the deck and the camera
+ * looking down on it. The lift down is a lit pad with a glass cab beside it.
+ * Nothing below head height stands on a walkable tile.
+ */
+function towerRoof(ctx: BuildingCtx, roof: FixedRoomLevelMap, H: number, front: number, tickers: Mesh[]): RoofLift[] {
+  const t = ctx.theme;
+  const origin = roof.rooftop!;
+  const xa = ctx.x0 + SIDE_INSET;
+  const xb = ctx.x1 - SIDE_INSET;
+  const za = ctx.z0 + SIDE_INSET;
+  const walkable = (x: number, y: number): boolean => {
+    const tile = roof.tiles[y]?.[x];
+    return tile === 'floor' || tile === 'lift';
   };
+  // The deck's extent: the walkable tiles' bounding box, in world units.
+  let dx0 = Infinity;
+  let dx1 = -Infinity;
+  let dz0 = Infinity;
+  let dz1 = -Infinity;
+  for (let y = 0; y < roof.height; y++) {
+    for (let x = 0; x < roof.width; x++) {
+      if (!walkable(x, y)) continue;
+      dx0 = Math.min(dx0, origin.x + x);
+      dx1 = Math.max(dx1, origin.x + x + 1);
+      dz0 = Math.min(dz0, origin.y + y);
+      dz1 = Math.max(dz1, origin.y + y + 1);
+    }
+  }
+  // The slab, its top exactly at the roof's height, where the player's feet go.
+  ctx.bins.add(BODY, boxGeometry(xa, H - 0.08, za, xb, H, front), t.roof);
+  for (let y = 0; y < roof.height; y++) {
+    for (let x = 0; x < roof.width; x++) {
+      if (!walkable(x, y)) continue;
+      const wx = origin.x + x;
+      const wz = origin.y + y;
+      ctx.bins.add(BODY, flatQuad(wx + 0.02, wz + 0.02, wx + 0.98, wz + 0.98, H + 0.004), (x + y) % 2 === 0 ? lift(AVNU.card, 0.05) : lift(AVNU.navy, 0.1));
+    }
+  }
+  // An avnu-blue ring inlaid in the deck's middle.
+  const ringX = (dx0 + dx1) / 2;
+  const ringZ = (dz0 + dz1) / 2;
+  const ringR = Math.min(dx1 - dx0, dz1 - dz0) / 2 - 0.45;
+  if (ringR > 0.3) {
+    ctx.bins.add(GLOW, new RingGeometry(ringR - 0.05, ringR, 40).rotateX(-Math.PI / 2).translate(ringX, H + 0.007, ringZ), t.glow);
+  }
+  // The ledge ring: planted, knee high, on every solid tile of the grid.
+  const ledgeTop = H + 0.45;
+  const ledge = lift(AVNU.card, 0.08);
+  const ledges: ReadonlyArray<readonly [number, number, number, number]> = [
+    [xa, za, dx0, front],
+    [dx1, za, xb, front],
+    [dx0, za, dx1, dz0],
+    [dx0, dz1, dx1, front],
+  ];
+  for (const [x0, z0, x1, z1] of ledges) {
+    if (x1 - x0 < 0.02 || z1 - z0 < 0.02) continue;
+    ctx.bins.add(BODY, boxGeometry(x0, H, z0, x1, ledgeTop, z1), ledge);
+    ctx.bins.add(BODY, boxGeometry(x0, ledgeTop, z0, x1, ledgeTop + 0.03, z1), lift(AVNU.slate, -0.06));
+  }
+  // Greenery along the ledge top, clear of the corners' kit.
+  for (let x = dx0 + 0.5; x < dx1; x += 1) {
+    shrub(ctx, x, ledgeTop, (za + dz0) / 2 + 0.05, 0.16);
+  }
+  for (let z = dz0 + 0.5; z < dz1 - 1; z += 1) {
+    shrub(ctx, (xa + dx0) / 2, ledgeTop, z, 0.17);
+  }
+  // A glass balustrade on the ledge's outer edge, a slate rail along its top.
+  const railTop = ledgeTop + 0.7;
+  const glass = lift(AVNU.lightBlue, -0.2);
+  for (const [x0, z0, x1, z1] of [
+    [xa, za, xb, za + 0.05],
+    [xa, front - 0.05, xb, front],
+    [xa, za, xa + 0.05, front],
+    [xb - 0.05, za, xb, front],
+  ] as const) {
+    ctx.bins.add(GLASS, boxGeometry(x0, ledgeTop, z0, x1, railTop, z1), glass);
+    ctx.bins.add(BODY, boxGeometry(x0 - 0.01, railTop, z0 - 0.01, x1 + 0.01, railTop + 0.05, z1 + 0.01), AVNU.slate);
+  }
+  // The old rooftop model, moved up here: the plant in the north-west corner...
+  const nw = { x: (xa + dx0) / 2, z: (za + dz0) / 2 };
+  ctx.bins.add(BODY, boxGeometry(nw.x - 0.36, ledgeTop, nw.z - 0.32, nw.x + 0.36, ledgeTop + 0.42, nw.z + 0.32), AVNU.slate);
+  ctx.bins.add(BODY, cylinderGeometry(nw.x, ledgeTop + 0.42, nw.z, 0.24, 0.24, 0.04, 10), AVNU.navy);
+  // ...the mast and its beacon in the north-east...
+  const ne = { x: (dx1 + xb) / 2, z: (za + dz0) / 2 };
+  ctx.bins.add(BODY, cylinderGeometry(ne.x, ledgeTop, ne.z, 0.035, 0.05, 1.25, 6), AVNU.slate);
+  ctx.bins.add(BEACON, sphereGeometry(ne.x, ledgeTop + 1.3, ne.z, 0.08, { widthSegments: 6, heightSegments: 4 }), t.beacon);
+  // ...and the ticker along the north side, tipped back to face the deck.
+  const boardA = dx0 + 0.2;
+  const boardB = dx1 - 0.2;
+  const boardZ = (za + dz0) / 2 + 0.12;
+  const tilt = 0.5;
+  const boardHeight = 0.7;
+  const boardY = ledgeTop + 0.3 + (boardHeight / 2) * Math.cos(tilt);
+  for (const x of [boardA + 0.5, boardB - 0.5]) {
+    ctx.bins.add(BODY, boxGeometry(x - 0.06, ledgeTop, boardZ - 0.08, x + 0.06, boardY, boardZ + 0.02), lift(AVNU.navy, 0.06));
+  }
+  const board = new BoxGeometry(boardB - boardA, boardHeight, 0.12).rotateX(-tilt).translate((boardA + boardB) / 2, boardY, boardZ - 0.05);
+  ctx.bins.add(BODY, board, AVNU.navy);
+  const faceDepth = 0.061;
+  tickers.push(tickerFace(
+    ctx,
+    boardB - boardA - 0.16,
+    boardHeight - 0.16,
+    (boardA + boardB) / 2,
+    boardY + faceDepth * Math.sin(tilt),
+    boardZ - 0.05 + faceDepth * Math.cos(tilt),
+    tilt,
+    'ticker',
+  ));
+  // The lift down: its pad lit on the deck, a glass cab on the ledge beside it.
+  const lifts: RoofLift[] = [];
+  for (const pad of roof.lifts) {
+    const x0 = origin.x + pad.x;
+    const z0 = origin.y + pad.y;
+    const x1 = x0 + pad.width;
+    const z1 = z0 + pad.height;
+    ctx.bins.add(BODY, flatQuad(x0 + 0.08, z0 + 0.08, x1 - 0.08, z1 - 0.08, H + 0.006), lift(AVNU.navy, 0.02));
+    const e = 0.05;
+    for (const [a, b, c, d] of [
+      [x0 + 0.08, z0 + 0.08, x1 - 0.08, z0 + 0.08 + e],
+      [x0 + 0.08, z1 - 0.08 - e, x1 - 0.08, z1 - 0.08],
+      [x0 + 0.08, z0 + 0.08, x0 + 0.08 + e, z1 - 0.08],
+      [x1 - 0.08 - e, z0 + 0.08, x1 - 0.08, z1 - 0.08],
+    ] as const) {
+      ctx.bins.add(GLOW, flatQuad(a, b, c, d, H + 0.009), AVNU.lightBlue);
+    }
+    // Chevrons pointing south: down the tower.
+    const cx = (x0 + x1) / 2;
+    for (const zc of [(z0 + z1) / 2 - 0.12, (z0 + z1) / 2 + 0.16]) {
+      for (const side of [-1, 1]) {
+        ctx.bins.add(GLOW, flatPolygon([[cx, zc + 0.11], [cx, zc + 0.03], [cx + side * 0.24, zc - 0.13], [cx + side * 0.24, zc - 0.05]], H + 0.01), AVNU.lightBlue);
+      }
+    }
+    // The cab: a glass box with a lit roof on the ledge to the pad's east.
+    const cabX0 = x1;
+    const cabX1 = xb - 0.06;
+    if (cabX1 - cabX0 > 0.3) {
+      const cz0 = z0 - 0.3;
+      const cz1 = Math.min(front - 0.06, z1 + 0.25);
+      ctx.bins.add(GLASS, boxGeometry(cabX0 + 0.06, ledgeTop, cz0, cabX1, ledgeTop + 0.72, cz1), lift(AVNU.lightBlue, -0.1));
+      ctx.bins.add(BODY, boxGeometry(cabX0 + 0.03, ledgeTop + 0.72, cz0 - 0.03, cabX1 + 0.03, ledgeTop + 0.8, cz1 + 0.03), AVNU.navy);
+      ctx.bins.add(GLOW, boxGeometry(cabX0 + 0.1, ledgeTop + 0.8, cz0 + 0.06, cabX1 - 0.04, ledgeTop + 0.82, cz1 - 0.06), AVNU.lightBlue);
+    }
+    lifts.push({ from: roof.level, to: pad.to, x: cx, y: H + 1.86, z: (z0 + z1) / 2 });
+  }
+  return lifts;
+}
+
+/** A low clump of greenery standing on a ledge. */
+function shrub(ctx: BuildingCtx, x: number, y: number, z: number, radius: number): void {
+  const seed = hash01(Math.round(x * 10), Math.round(z * 10), 23);
+  ctx.bins.add(
+    BODY,
+    sphereGeometry(x, y + radius * 0.7, z, radius, { widthSegments: 6, heightSegments: 4, scaleY: 0.8 }),
+    jitterColor(seed > 0.5 ? PALETTE.hedgeLight : PALETTE.hedge, seed, 0.06),
+  );
 }
 
 /** Red brick, blue trim, a striped awning over the door, a pillar box, a slate gable. */

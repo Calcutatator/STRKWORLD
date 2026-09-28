@@ -3,13 +3,23 @@ import type { EventBus, ShellEvents, WorldEvents } from '@strkworld/shared';
 import {
   BANK_ROOM_DEFINITION,
   BRIDGE_ROOM_DEFINITION,
+  EXCHANGE_DEGEN_LEVEL,
+  EXCHANGE_DEGEN_STATION,
+  EXCHANGE_ROOF_HEIGHT,
+  EXCHANGE_ROOF_LEVEL,
   EXCHANGE_ROOM_DEFINITION,
   FIXED_ROOM_DEFINITIONS,
+  FIXED_ROOM_LEVELS,
   FixedRoomDefinitionError,
   POST_OFFICE_ROOM_DEFINITION,
   createFixedRoom,
   createFixedRoomController,
+  createFixedRoomLevel,
   createFixedRoomPresentation,
+  fixedRoomLiftAt,
+  validateFixedRoomLevels,
+  type FixedRoomLevelDefinition,
+  type FixedRoomLevelId,
   fixedRoomStationAtApproach,
   fixedRoomStationPresentations,
   isFixedRoomApproach,
@@ -1576,5 +1586,299 @@ describe('fixed room controller', () => {
     h.controller.update({ x: 9, y: 11 });
     expect(h.events.at(-1)).toEqual({ event: 'building:exited', payload: { building: 'bridge' } });
     expect(h.controller.state.inRoom).toBe(false);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Floors: the Exchange tower
+// ---------------------------------------------------------------------------
+
+const TOWER_LEVELS = [EXCHANGE_DEGEN_LEVEL, EXCHANGE_ROOF_LEVEL] as const;
+
+function expectLevelsError(
+  ground: FixedRoomDefinition,
+  levels: readonly FixedRoomLevelDefinition[],
+  code: string,
+): void {
+  try {
+    createFixedRoomController({
+      definition: ground,
+      levels,
+      out: bus<WorldEvents>(),
+      input: { suspend: vi.fn(), resume: vi.fn() },
+    });
+    throw new Error('floors unexpectedly accepted');
+  } catch (error) {
+    expect(error).toBeInstanceOf(FixedRoomDefinitionError);
+    expect((error as FixedRoomDefinitionError).code).toBe(code);
+  }
+}
+
+function towerHarness(options: {
+  readonly onLevel?: (level: FixedRoomLevelId, tile: { readonly x: number; readonly y: number }) => void;
+  readonly onChange?: (state: FixedRoomState) => void;
+  readonly onExit?: () => void;
+} = {}) {
+  const out = bus<WorldEvents>();
+  const shell = bus<ShellEvents>();
+  const events: Array<{ event: keyof WorldEvents; payload: unknown }> = [];
+  for (const event of ['station:activated', 'building:exited', 'building:entered', 'player:moved'] as const) {
+    out.on(event, (payload) => events.push({ event, payload }));
+  }
+  const rides: Array<[FixedRoomLevelId, { x: number; y: number }]> = [];
+  const controller = createFixedRoomController({
+    definition: EXCHANGE_ROOM_DEFINITION,
+    levels: TOWER_LEVELS,
+    out,
+    in: shell,
+    input: { suspend: vi.fn(), resume: vi.fn() },
+    onLevel: (level, tile) => {
+      rides.push([level, { x: tile.x, y: tile.y }]);
+      options.onLevel?.(level, tile);
+    },
+    onChange: options.onChange,
+    onExit: options.onExit,
+  });
+  return { out, shell, events, rides, controller };
+}
+
+const padOf = (level: FixedRoomLevelId, to: FixedRoomLevelId) => {
+  const floor = level === 'ground' ? EXCHANGE_ROOM_DEFINITION : TOWER_LEVELS.find((candidate) => candidate.level === level)!;
+  return floor.lifts.find((lift) => lift.to === to)!;
+};
+
+describe('fixed room floors (the Exchange tower)', () => {
+  it('pins the tower: a lift on the ground floor, the Degen floor with its counter, and the roof', () => {
+    expect(EXCHANGE_ROOM_DEFINITION.lifts).toEqual([
+      { to: 'degen', x: 1, y: 1, width: 2, height: 1, arrival: { x: 2, y: 2 } },
+    ]);
+    expect(EXCHANGE_DEGEN_LEVEL).toEqual({
+      building: 'exchange',
+      level: 'degen',
+      width: 18,
+      height: 12,
+      spawn: { x: 2, y: 9 },
+      stations: [{ station: 'exchange:degen', label: 'DEGEN SWAP', x: 8, y: 3, width: 2, height: 1 }],
+      lifts: [
+        { to: 'ground', x: 1, y: 10, width: 2, height: 1, arrival: { x: 2, y: 9 } },
+        { to: 'roof', x: 15, y: 1, width: 2, height: 1, arrival: { x: 15, y: 2 } },
+      ],
+    });
+    expect(EXCHANGE_ROOF_LEVEL).toEqual({
+      building: 'exchange',
+      level: 'roof',
+      width: 7,
+      height: 6,
+      spawn: { x: 5, y: 3 },
+      stations: [],
+      lifts: [{ to: 'degen', x: 5, y: 4, width: 1, height: 1, arrival: { x: 5, y: 3 } }],
+      rooftop: { x: 12, y: 5, height: EXCHANGE_ROOF_HEIGHT },
+    });
+    expect(EXCHANGE_DEGEN_STATION).toBe('exchange:degen');
+    // Only the Exchange has floors, and every authored piece is frozen.
+    expect(Object.keys(FIXED_ROOM_LEVELS)).toEqual(['exchange']);
+    expect(FIXED_ROOM_LEVELS.exchange).toEqual(TOWER_LEVELS);
+    for (const value of [FIXED_ROOM_LEVELS, FIXED_ROOM_LEVELS.exchange, EXCHANGE_ROOF_LEVEL.rooftop, EXCHANGE_DEGEN_LEVEL.lifts[0], EXCHANGE_DEGEN_LEVEL.lifts[0]!.arrival]) {
+      expect(Object.isFrozen(value)).toBe(true);
+    }
+    // Pads are walkable triggers; the roof's grid is a deck inside a solid ring.
+    const ground = createFixedRoom(EXCHANGE_ROOM_DEFINITION);
+    expect(ground.level).toBe('ground');
+    expect(ground.tiles[1]!.slice(1, 3)).toEqual(['lift', 'lift']);
+    expect(isFixedRoomSolidAt(ground, 1, 1)).toBe(false);
+    expect(fixedRoomLiftAt(ground, 2, 1)?.to).toBe('degen');
+    expect(fixedRoomLiftAt(ground, 3, 1)).toBeNull();
+    const roof = createFixedRoomLevel(EXCHANGE_ROOF_LEVEL);
+    expect(roof.exit).toBeNull();
+    expect(roof.rooftop).toEqual({ x: 12, y: 5, height: EXCHANGE_ROOF_HEIGHT });
+    expect(roof.tiles.map((row) => row.join(' '))).toEqual([
+      'wall wall wall wall wall wall wall',
+      'wall floor floor floor floor floor wall',
+      'wall floor floor floor floor floor wall',
+      'wall floor floor floor floor floor wall',
+      'wall floor floor floor floor lift wall',
+      'wall wall wall wall wall wall wall',
+    ]);
+    expect(isFixedRoomExit(roof, 3, 5)).toBe(false);
+  });
+
+  it('keeps one station snapshot for the building, with the degen counter locked by default', () => {
+    const h = towerHarness();
+    h.controller.enter();
+    expect(h.controller.state).toMatchObject({ inRoom: true, level: 'ground' });
+    expect(h.controller.state.stations).toEqual([
+      { station: 'exchange:swap', label: 'SWAP', status: 'locked' },
+      { station: 'exchange:degen', label: 'DEGEN SWAP', status: 'locked' },
+    ]);
+  });
+
+  it('rides between floors without a word to the Shell, and the degen counter opens only there', () => {
+    const states: FixedRoomState[] = [];
+    const h = towerHarness({ onChange: (state) => states.push(state) });
+    h.controller.enter();
+    const up = padOf('ground', 'degen');
+    h.controller.update({ x: up.x, y: up.y });
+    expect(h.controller.state.level).toBe('degen');
+    expect(h.rides).toEqual([['degen', padOf('degen', 'ground').arrival]]);
+    expect(states.at(-1)).toMatchObject({ inRoom: true, level: 'degen', highlightedStation: null });
+    expect(h.events).toEqual([]);
+
+    // The ground floor's counter cannot be reached from up here...
+    h.shell.emit('world:stations', {
+      building: 'exchange',
+      stations: [
+        { station: 'exchange:swap', label: 'SWAP', status: 'available' },
+        { station: EXCHANGE_DEGEN_STATION, label: 'DEGEN', status: 'available' },
+      ],
+    });
+    h.controller.update({ x: 14, y: 4 });
+    expect(h.controller.state.highlightedStation).toBeNull();
+    // ...and the degen counter opens from its own approach.
+    h.controller.update({ x: 9, y: 4 });
+    expect(h.events).toEqual([{ event: 'station:activated', payload: { building: 'exchange', station: EXCHANGE_DEGEN_STATION } }]);
+
+    const roof = padOf('degen', 'roof');
+    h.controller.update({ x: roof.x, y: roof.y });
+    expect(h.controller.state.level).toBe('roof');
+    const down = padOf('roof', 'degen');
+    h.controller.update({ x: down.x, y: down.y });
+    expect(h.controller.state.level).toBe('degen');
+    expect(h.rides.map(([level]) => level)).toEqual(['degen', 'roof', 'degen']);
+    // Leaving from any floor is one exit, and the door opens onto the ground floor again.
+    h.shell.emit('world:exit-building', { building: 'exchange' });
+    expect(h.controller.state).toMatchObject({ inRoom: false, level: null });
+    expect(h.events.filter(({ event }) => event === 'building:exited')).toHaveLength(1);
+    h.controller.enter();
+    expect(h.controller.state.level).toBe('ground');
+  });
+
+  it('puts a rider back on the pad when a ride fails, and the same step retries it', () => {
+    const error = new Error('floor presentation failed');
+    let fail = true;
+    const h = towerHarness({
+      onLevel: (level) => {
+        if (fail && level === 'degen') {
+          fail = false;
+          throw error;
+        }
+      },
+    });
+    h.controller.enter();
+    const up = padOf('ground', 'degen');
+    expect(() => h.controller.update({ x: up.x, y: up.y })).toThrow(error);
+    expect(h.controller.state.level).toBe('ground');
+    // The failed ride, then its compensation back onto the pad it started from.
+    expect(h.rides).toEqual([['degen', padOf('degen', 'ground').arrival], ['ground', { x: up.x, y: up.y }]]);
+    h.controller.update({ x: up.x, y: up.y });
+    expect(h.controller.state.level).toBe('degen');
+  });
+
+  it('rolls a ride back when its first snapshot on the new floor fails', () => {
+    const error = new Error('snapshot rejected');
+    let fail = false;
+    const h = towerHarness({
+      onChange: (state) => {
+        if (fail && state.level === 'roof') {
+          fail = false;
+          throw error;
+        }
+      },
+    });
+    h.controller.enter();
+    const up = padOf('ground', 'degen');
+    h.controller.update({ x: up.x, y: up.y });
+    fail = true;
+    const roof = padOf('degen', 'roof');
+    expect(() => h.controller.update({ x: roof.x, y: roof.y })).toThrow(error);
+    expect(h.controller.state.level).toBe('degen');
+    expect(h.rides.at(-1)).toEqual(['degen', { x: roof.x, y: roof.y }]);
+  });
+
+  it('puts the player back where they stood on an upper floor when leaving it fails', () => {
+    const error = new Error('street presentation failed');
+    let fail = true;
+    const h = towerHarness({
+      onExit: () => {
+        if (fail) {
+          fail = false;
+          throw error;
+        }
+      },
+    });
+    h.controller.enter();
+    h.controller.update({ x: padOf('ground', 'degen').x, y: 1 });
+    h.controller.update({ x: padOf('degen', 'roof').x, y: 1 });
+    h.controller.update({ x: 2, y: 2 });
+    expect(() => h.shell.emit('world:exit-building', { building: 'exchange' })).toThrow(error);
+    expect(h.controller.state).toMatchObject({ inRoom: true, level: 'roof' });
+    expect(h.rides.at(-1)).toEqual(['roof', { x: 2, y: 2 }]);
+    h.shell.emit('world:exit-building', { building: 'exchange' });
+    expect(h.controller.state.inRoom).toBe(false);
+  });
+
+  it('does not ride while the Shell owns control', () => {
+    const h = towerHarness();
+    h.controller.enter();
+    h.shell.emit('world:control-owner', { building: 'exchange', owner: 'shell' });
+    const up = padOf('ground', 'degen');
+    h.controller.update({ x: up.x, y: up.y });
+    expect(h.controller.state.level).toBe('ground');
+    expect(h.rides).toEqual([]);
+  });
+
+  it.each([
+    ['a pad on a counter\'s approach', { lifts: [{ to: 'degen', x: 12, y: 2, width: 1, height: 1, arrival: { x: 2, y: 2 } }] }],
+    ['a pad in a corner', { lifts: [{ to: 'degen', x: 0, y: 0, width: 1, height: 1, arrival: { x: 2, y: 2 } }] }],
+    ['a pad half in the wall', { lifts: [{ to: 'degen', x: 1, y: 0, width: 1, height: 2, arrival: { x: 2, y: 3 } }] }],
+    ['a pad over the exit', { lifts: [{ to: 'degen', x: 8, y: 11, width: 1, height: 1, arrival: { x: 8, y: 9 } }] }],
+    ['an arrival on its pad', { lifts: [{ to: 'degen', x: 1, y: 1, width: 2, height: 1, arrival: { x: 1, y: 1 } }] }],
+    ['an arrival on an approach', { lifts: [{ to: 'degen', x: 1, y: 1, width: 2, height: 1, arrival: { x: 13, y: 4 } }] }],
+    ['an arrival in the wall', { lifts: [{ to: 'degen', x: 1, y: 1, width: 2, height: 1, arrival: { x: 0, y: 3 } }] }],
+    ['a pad to nowhere', { lifts: [{ to: 'attic', x: 1, y: 1, width: 2, height: 1, arrival: { x: 2, y: 2 } }] }],
+  ] as const)('rejects %s', (_name, patch) => {
+    expectDefinitionError({ ...EXCHANGE_ROOM_DEFINITION, ...patch } as unknown as FixedRoomDefinition, 'invalid-lift');
+  });
+
+  it('rejects floors that do not fit together', () => {
+    const roofless = { ...EXCHANGE_DEGEN_LEVEL, lifts: [EXCHANGE_DEGEN_LEVEL.lifts[0]] };
+    // A lift up to a floor that has no lift back, or none at all.
+    expectLevelsError(EXCHANGE_ROOM_DEFINITION, [roofless, EXCHANGE_ROOF_LEVEL], 'invalid-lift');
+    expectLevelsError(EXCHANGE_ROOM_DEFINITION, [EXCHANGE_DEGEN_LEVEL], 'invalid-lift');
+    expectLevelsError(EXCHANGE_ROOM_DEFINITION, [], 'invalid-lift');
+    // Floors nobody can reach: two linked to each other, none to the ground floor.
+    expectLevelsError(
+      BANK_ROOM_DEFINITION,
+      [
+        { ...EXCHANGE_DEGEN_LEVEL, building: 'bank', stations: [], lifts: [EXCHANGE_DEGEN_LEVEL.lifts[1]] },
+        { ...EXCHANGE_ROOF_LEVEL, building: 'bank' },
+      ],
+      'invalid-level',
+    );
+    // The same floor twice, another building's floor, a counter id twice.
+    expectLevelsError(EXCHANGE_ROOM_DEFINITION, [EXCHANGE_DEGEN_LEVEL, EXCHANGE_DEGEN_LEVEL, EXCHANGE_ROOF_LEVEL], 'invalid-level');
+    expectLevelsError(EXCHANGE_ROOM_DEFINITION, [{ ...EXCHANGE_DEGEN_LEVEL, building: 'bank' }, EXCHANGE_ROOF_LEVEL], 'invalid-level');
+    expectLevelsError(
+      EXCHANGE_ROOM_DEFINITION,
+      [{ ...EXCHANGE_DEGEN_LEVEL, stations: [{ ...EXCHANGE_DEGEN_LEVEL.stations[0], station: 'exchange:swap' }] }, EXCHANGE_ROOF_LEVEL],
+      'duplicate-station',
+    );
+    // A floor with no way out, or an unknown one.
+    expect(() => createFixedRoomLevel({ ...EXCHANGE_ROOF_LEVEL, lifts: [] })).toThrow(FixedRoomDefinitionError);
+    expect(() => createFixedRoomLevel({ ...EXCHANGE_ROOF_LEVEL, level: 'attic' } as unknown as FixedRoomLevelDefinition)).toThrow(
+      FixedRoomDefinitionError,
+    );
+    expect(() => createFixedRoomLevel({ ...EXCHANGE_ROOF_LEVEL, rooftop: { x: 12, y: 5, height: 0 } })).toThrow(FixedRoomDefinitionError);
+    expect(() => validateFixedRoomLevels(EXCHANGE_ROOM_DEFINITION, TOWER_LEVELS)).not.toThrow();
+  });
+
+  it('rejects a lift a held key would ride straight back from', () => {
+    // Step out of the roof's lift west of the degen floor's pad up: still
+    // holding the key that walked you east onto the roof's pad, you would
+    // walk straight back onto it.
+    const degen = {
+      ...EXCHANGE_DEGEN_LEVEL,
+      lifts: [EXCHANGE_DEGEN_LEVEL.lifts[0], { ...EXCHANGE_DEGEN_LEVEL.lifts[1], arrival: { x: 14, y: 1 } }],
+    };
+    expectLevelsError(EXCHANGE_ROOM_DEFINITION, [degen, EXCHANGE_ROOF_LEVEL], 'invalid-lift');
   });
 });

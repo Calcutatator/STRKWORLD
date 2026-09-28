@@ -111,6 +111,21 @@ describe('strict production backend environment', () => {
     expect(parsed.backend.routes.unshield.maxQueueDelayMs).toBe(Number(largest));
   });
 
+  it('accepts no artificial delay on the relayed routes, the D-066 setting, under any deadline', () => {
+    const parsed = parseBackendEnvironment(validEnvironment({
+      BACKEND_ROUTE_TRANSFER_MAX_QUEUE_DELAY_MS: '0',
+      BACKEND_ROUTE_UNSHIELD_MAX_QUEUE_DELAY_MS: '0',
+    }));
+    expect(parsed.backend.routes.transfer).toMatchObject({ quoteBound: false, maxQueueDelayMs: 0 });
+    expect(parsed.backend.routes.unshield).toMatchObject({ quoteBound: false, maxQueueDelayMs: 0 });
+    // Zero leaves the whole deadline for submission, so the headroom rule does not apply.
+    expect(() => parseBackendEnvironment(validEnvironment({
+      BACKEND_REQUEST_TIMEOUT_MS: String(RELAY_SUBMISSION_HEADROOM_MS - 1),
+      BACKEND_ROUTE_TRANSFER_MAX_QUEUE_DELAY_MS: '0',
+      BACKEND_ROUTE_UNSHIELD_MAX_QUEUE_DELAY_MS: '0',
+    }))).not.toThrow();
+  });
+
   it('rejects a queue delay the request deadline cannot outlast, which would 504 after approval', () => {
     // The audit's case: a 45 s delay inside a 20 s deadline submits nothing.
     for (const route of ['TRANSFER', 'UNSHIELD']) {
@@ -140,7 +155,7 @@ describe('strict production backend environment', () => {
     ['transfer queue-delay overflow', { BACKEND_ROUTE_TRANSFER_MAX_QUEUE_DELAY_MS: '2147483648' }],
     ['unshield queue-delay overflow', { BACKEND_ROUTE_UNSHIELD_MAX_QUEUE_DELAY_MS: '2147483648' }],
     ['fee overflow', { BACKEND_ROUTE_TRANSFER_MAX_RELAY_FEE: (1n << 128n).toString() }],
-    ['immediate transfer', { BACKEND_ROUTE_TRANSFER_MAX_QUEUE_DELAY_MS: '0' }],
+    ['negative transfer queue delay', { BACKEND_ROUTE_TRANSFER_MAX_QUEUE_DELAY_MS: '-1' }],
     ['delayed swap', { BACKEND_ROUTE_SWAP_MAX_QUEUE_DELAY_MS: '1' }],
   ])('rejects %s', (_label, override) => {
     expect(() => parseBackendEnvironment(validEnvironment(override))).toThrow(/invalid|required/i);

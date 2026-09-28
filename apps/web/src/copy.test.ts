@@ -92,6 +92,51 @@ describe('shell copy', () => {
     });
   });
 
+  describe('the Post Office and every transfer line (D-065)', () => {
+    // Every line a send can show: the Post Office's own section, the transfer
+    // control and its notices, and the journey lines that point at the Post Office.
+    const transferCopy = [
+      ...allCopyStrings(COPY.postOffice),
+      COPY.buildings['post-office'],
+      COPY.bank.transfer,
+      COPY.bank.recipient,
+      COPY.locked.notEnabled.transfer,
+      COPY.notices.recipientUnregistered,
+      COPY.notices.recipientUnknown,
+      COPY.notices.oneRecipientPerSend,
+      COPY.next.afterShield,
+      COPY.next.afterShieldSend,
+      COPY.next.afterSwap,
+      COPY.next.afterTransfer,
+      COPY.guide.route.swapOrSend,
+      COPY.guide.route.send,
+    ];
+
+    it('claims no recipient privacy — a first send publishes the recipient', () => {
+      const claim =
+        /\b(?:hidden|hides?|hiding|conceal\w*|secret\w*|anonymous\w*|anonymi[sz]\w*|untraceable|unlinkable|invisible|unseen|confidential)\b|\bnobody\b|\bno[ -]one\b|without a trace|who (?:you )?(?:sent|send|paid|pay)|recipient (?:is|stays?|remains?) (?:private|safe)/i;
+      expect(transferCopy.length).toBeGreaterThan(10);
+      for (const line of transferCopy) {
+        expect(line, line).not.toMatch(claim);
+      }
+      // D-065 lets "send privately" stay: it names the pool route, not a hidden recipient.
+      expect(COPY.postOffice.intro).toMatch(/^Send privately /);
+    });
+
+    it('adds no disclosure text, since the lead declined one', () => {
+      const transfer = PRIVACY_REGISTER.find((entry) => entry.route === 'post-office.transfer');
+      expect(transfer).toMatchObject({ grade: 'anonymous', disclosure: null, disclosureWaivedBy: 'D-065' });
+      for (const line of transferCopy) {
+        expect(line, line).not.toMatch(/on-chain|observer|reveals?|visible|public|linkable/i);
+      }
+    });
+
+    it('states the one-recipient rule plainly', () => {
+      expect(COPY.notices.oneRecipientPerSend).toBe('One recipient per send. Confirm this transfer, then send the next.');
+      expect(COPY.postOffice.oneAtATime).toMatch(/one recipient/i);
+    });
+  });
+
   it('never promises that timing or a batch hides more than it does', () => {
     for (const line of allCopyStrings()) {
       expect(line.toLowerCase(), line).not.toContain('untraceable');

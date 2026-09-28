@@ -3,7 +3,10 @@ import type { AvatarSpriteKey, BuildingId, SandboxColumn } from '@strkworld/shar
 import { createStreetMap } from '../map/street.js';
 import {
   FIXED_ROOM_DEFINITIONS,
+  FIXED_ROOM_LEVELS,
   createFixedRoom,
+  createFixedRoomLevel,
+  type FixedRoomLevelId,
   type FixedRoomStationPresentation,
 } from '../fixed-room.js';
 import { AVATAR_STUDIO_DEFINITION } from '../avatar-studio.js';
@@ -25,7 +28,7 @@ import {
   type RemoteAvatarLayer3D,
 } from './remote-avatars.js';
 import { angleDelta, directionToYaw, pixelToGround, PIXELS_PER_UNIT, type GroundPoint } from './coords.js';
-import type { CameraBounds } from './camera-rig.js';
+import type { CameraBounds, CameraPresetId } from './camera-rig.js';
 import { segmentHitsBox } from './occlusion.js';
 import type {
   AvatarFigure,
@@ -65,6 +68,8 @@ export interface Presenter {
    */
   readonly player: { readonly ground: GroundPoint; readonly yaw: number; readonly elevation: number };
   readonly cameraBounds: CameraBounds | null;
+  /** How the camera frames the player: level with the street, or looking down from a roof. */
+  readonly cameraPreset: CameraPresetId;
   /** True once after a teleport, so the camera can jump instead of easing. */
   consumeSnap(): boolean;
   /** Start presenting a new session; retires the previous session's view. */
@@ -92,6 +97,11 @@ const CARRY_CLEARANCE = 0.36;
 /** The gameplay body half-width in world units (24 px / 32 px per unit). */
 const BODY_HALF_UNITS = 12 / PIXELS_PER_UNIT;
 
+/** Which interior a floor is drawn as: the ground floor by its building, others by floor. */
+function roomKey(building: BuildingId, level?: FixedRoomLevelId): string {
+  return level === undefined || level === 'ground' ? building : `${building}:${level}`;
+}
+
 export function createPresenter(options: PresenterOptions): Presenter {
   const root = new Group();
   root.name = 'strkworld';
@@ -115,13 +125,21 @@ export function createPresenter(options: PresenterOptions): Presenter {
   disposers.push(() => street.dispose());
   root.add(street.ground, street.doors, street.labels);
 
-  const rooms = new Map<BuildingId, RoomView>();
-  for (const definition of Object.values(FIXED_ROOM_DEFINITIONS)) {
-    const room = buildFixedRoom(createFixedRoom(definition), options.labels);
+  // Every interior, keyed by `roomKey`: each ground floor, and floors reached
+  // by lift. A roof is not here: it is the building's top in the street.
+  const rooms = new Map<string, RoomView>();
+  const addRoom = (key: string, room: RoomView): void => {
     room.group.visible = false;
-    rooms.set(definition.building, room);
+    rooms.set(key, room);
     root.add(room.group);
     disposers.push(() => room.dispose());
+  };
+  for (const definition of Object.values(FIXED_ROOM_DEFINITIONS)) {
+    addRoom(roomKey(definition.building), buildFixedRoom(createFixedRoom(definition), options.labels));
+    for (const level of FIXED_ROOM_LEVELS[definition.building] ?? []) {
+      if (level.rooftop) continue;
+      addRoom(roomKey(definition.building, level.level), buildFixedRoom(createFixedRoomLevel(level), options.labels));
+    }
   }
 
   const studio: StudioView = buildAvatarStudio(AVATAR_STUDIO_DEFINITION, options.figures, options.labels);
@@ -164,7 +182,9 @@ export function createPresenter(options: PresenterOptions): Presenter {
   let cameraBounds: CameraBounds | null = null;
   let streetVisible = true;
   let remoteVisible = true;
-  let visibleRoom: BuildingId | null = null;
+  let visibleRoom: string | null = null;
+  /** The roof the player stands on, if any: the street stays drawn below it. */
+  let rooftop: BuildingId | null = null;
   let studioVisible = false;
   let remote: RemoteAvatarLayer3D | null = null;
   let sessionToken = 0;
@@ -178,6 +198,7 @@ export function createPresenter(options: PresenterOptions): Presenter {
     streetVisible = true;
     remoteVisible = true;
     visibleRoom = null;
+    rooftop = null;
     for (const room of rooms.values()) room.group.visible = false;
     studioVisible = false;
     studio.sync({ visible: false, highlightedFigure: null });
@@ -217,6 +238,9 @@ export function createPresenter(options: PresenterOptions): Presenter {
     },
     get cameraBounds() {
       return cameraBounds;
+    },
+    get cameraPreset(): CameraPresetId {
+      return rooftop !== null ? 'rooftop' : 'street';
     },
     consumeSnap() {
       const snap = pendingSnap;
@@ -278,14 +302,19 @@ export function createPresenter(options: PresenterOptions): Presenter {
           remoteVisible = visible;
           remote?.setVisible(visible);
         },
-        showRoom(building) {
+        showRoom(building, level) {
           if (!live()) return;
-          visibleRoom = building;
-          for (const [id, room] of rooms) room.group.visible = id === building;
+          visibleRoom = building === null ? null : roomKey(building, level);
+          for (const [key, room] of rooms) room.group.visible = key === visibleRoom;
         },
         renderRoom(building, stations: readonly FixedRoomStationPresentation[]) {
           if (!live()) return;
-          rooms.get(building)?.setStations(stations);
+          // Every floor of the building: each view draws only its own stations.
+          for (const room of rooms.values()) if (room.building === building) room.setStations(stations);
+        },
+        showRooftop(building) {
+          if (!live()) return;
+          rooftop = building;
         },
         syncStudio(state) {
           if (!live()) return;

@@ -4,9 +4,10 @@ import { createBatchAccumulator } from './batch-accumulator.js';
 
 const TOKEN = '0x04718f5a0fc34cc1af16a1cdee98ffb20c31f5cd61d6ab07201858f4287c938d';
 const BOB = '0x02b4c7d1a1f8f39e0e6e8b9a2c7d0e3f4a5b6c7d8e9f0a1b2c3d4e5f60718293';
+const ALICE = '0x03c5d8e2b2f9a40f1f7f9c0b3d8e1f4a6b7c8d9e0f1a2b3c4d5e6f708192a3b4';
 
 const shield = (amount = 5n): Intent => ({ kind: 'shield', token: TOKEN, amount });
-const transfer = (amount = 5n): Intent => ({ kind: 'transfer', token: TOKEN, amount, recipient: BOB });
+const transfer = (amount = 5n, recipient = BOB): Intent => ({ kind: 'transfer', token: TOKEN, amount, recipient });
 const unshield = (amount = 5n): Intent => ({ kind: 'unshield', token: TOKEN, amount, recipient: BOB });
 const swap = (): Intent => ({
   kind: 'swap',
@@ -30,13 +31,84 @@ describe('batch accumulator', () => {
   });
 
   it('collects several intents of one kind and emits them as one array', () => {
-    const batch = createBatchAccumulator();
-    batch.accept(transfer(1n));
-    batch.accept(transfer(2n));
+    for (const make of [shield]) {
+      const batch = createBatchAccumulator();
+      expect(batch.accept(make(1n)).ok).toBe(true);
+      expect(batch.accept(make(2n)).ok).toBe(true);
 
-    const confirmed = batch.confirm();
-    expect(confirmed.ok).toBe(true);
-    expect(confirmed.ok && confirmed.value).toHaveLength(2);
+      const confirmed = batch.confirm();
+      expect(confirmed.ok).toBe(true);
+      expect(confirmed.ok && confirmed.value).toEqual([make(1n), make(2n)]);
+    }
+  });
+
+  describe('one unshield per send (the relay admits one withdrawal)', () => {
+    it('refuses a second unshield and keeps the first', () => {
+      const unshield = (amount: bigint): Intent => ({ kind: 'unshield', token: TOKEN, amount, recipient: ALICE });
+      const batch = createBatchAccumulator();
+      expect(batch.accept(unshield(1n))).toEqual({ ok: true, value: [unshield(1n)] });
+      expect(batch.accept(unshield(2n))).toEqual({ ok: false, rejection: { reason: 'one-unshield-per-send' } });
+      expect(batch.intents).toEqual([unshield(1n)]);
+    });
+  });
+
+  describe('one recipient per send (D-065)', () => {
+    it('refuses a second transfer, to a new recipient or the same one, and keeps the first', () => {
+      for (const second of [transfer(2n, ALICE), transfer(2n, BOB)]) {
+        const batch = createBatchAccumulator();
+        expect(batch.accept(transfer(1n))).toEqual({ ok: true, value: [transfer(1n)] });
+
+        const result = batch.accept(second);
+        expect(result).toEqual({ ok: false, rejection: { reason: 'one-recipient-per-send' } });
+        expect(batch.intents).toEqual([transfer(1n)]);
+        expect(batch.confirm()).toEqual({ ok: true, value: [transfer(1n)] });
+      }
+    });
+
+    it('keeps the older reason when a shield, unshield, swap or stake meets the transfer', () => {
+      const XSTRK = '0x028d709c875c0ceac3dce7065bec5328186dc89fe254527084d1689910954b0a';
+      const stake: Intent = { kind: 'stake', tokenIn: TOKEN, tokenOut: XSTRK, amountIn: 5n };
+      const cases: Array<[Intent, string]> = [
+        [shield(), 'mixed-shield-and-spend'],
+        [unshield(), 'mixed-route-kinds'],
+        [swap(), 'swap-must-be-alone'],
+        [stake, 'stake-must-be-alone'],
+      ];
+      for (const [other, reason] of cases) {
+        const transferFirst = createBatchAccumulator();
+        transferFirst.accept(transfer());
+        const late = transferFirst.accept(other);
+        expect(!late.ok && late.rejection.reason, other.kind).toBe(reason);
+
+        const transferLast = createBatchAccumulator();
+        transferLast.accept(other);
+        const early = transferLast.accept(transfer());
+        expect(!early.ok && early.rejection.reason, other.kind).toBe(reason);
+      }
+    });
+
+    it('lets one visit send a shield or an unshield and its one transfer, as separate batches', () => {
+      // A visit confirms one batch, then clears it (as the Bank machine does
+      // after a submission) and starts the next.
+      for (const other of [shield(), unshield()]) {
+        const batch = createBatchAccumulator();
+        expect(batch.accept(other).ok).toBe(true);
+        expect(batch.confirm()).toEqual({ ok: true, value: [other] });
+        batch.clear();
+        expect(batch.accept(transfer()).ok).toBe(true);
+        expect(batch.confirm()).toEqual({ ok: true, value: [transfer()] });
+        batch.clear();
+        expect(batch.accept(other).ok).toBe(true);
+      }
+    });
+
+    it('accepts the next transfer once the first has been confirmed and cleared', () => {
+      const batch = createBatchAccumulator();
+      batch.accept(transfer(1n));
+      batch.confirm();
+      batch.clear();
+      expect(batch.accept(transfer(2n, ALICE))).toEqual({ ok: true, value: [transfer(2n, ALICE)] });
+    });
   });
 
   it('refuses a shield and a private spend in one batch (D-022)', () => {
@@ -188,8 +260,8 @@ describe('batch accumulator', () => {
 
   it('bounds one visit at the minimum configured limit', () => {
     const batch = createBatchAccumulator({ maxIntents: 1 });
-    expect(batch.accept(transfer(1n)).ok).toBe(true);
-    const result = batch.accept(transfer(2n));
+    expect(batch.accept(shield(1n)).ok).toBe(true);
+    const result = batch.accept(shield(2n));
     expect(!result.ok && result.rejection.reason).toBe('batch-full');
     expect(!result.ok && result.rejection).toEqual({ reason: 'batch-full', limit: 1 });
   });
@@ -197,10 +269,10 @@ describe('batch accumulator', () => {
   it('accepts a reasonable configured maximum', () => {
     const batch = createBatchAccumulator({ maxIntents: 32 });
     for (let amount = 1n; amount <= 32n; amount += 1n) {
-      expect(batch.accept(transfer(amount)).ok).toBe(true);
+      expect(batch.accept(shield(amount)).ok).toBe(true);
     }
 
-    const result = batch.accept(transfer(33n));
+    const result = batch.accept(shield(33n));
     expect(!result.ok && result.rejection).toEqual({ reason: 'batch-full', limit: 32 });
   });
 
@@ -233,19 +305,19 @@ describe('batch accumulator', () => {
 
   it('hands out a frozen snapshot rather than its own array', () => {
     const batch = createBatchAccumulator();
-    const added = batch.accept(transfer());
+    const added = batch.accept(shield());
     const snapshot = added.ok ? added.value : [];
     expect(Object.isFrozen(snapshot)).toBe(true);
 
-    batch.accept(transfer(9n));
+    expect(batch.accept(shield(9n)).ok).toBe(true);
     expect(snapshot).toHaveLength(1);
   });
 
   it('removes and clears', () => {
     const batch = createBatchAccumulator();
-    batch.accept(transfer(1n));
-    batch.accept(transfer(2n));
-    expect(batch.remove(0)).toHaveLength(1);
+    batch.accept(shield(1n));
+    batch.accept(shield(2n));
+    expect(batch.remove(0)).toEqual([shield(2n)]);
     batch.clear();
     expect(batch.intents).toHaveLength(0);
   });

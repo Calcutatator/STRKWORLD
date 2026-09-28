@@ -1,6 +1,8 @@
 import { describe, expect, it, vi } from 'vitest';
-import type { WebGLRenderer } from 'three';
+import { Vector3, type PerspectiveCamera, type WebGLRenderer } from 'three';
 import type { EventBus, ShellEvents, WorldEvents } from '@strkworld/shared';
+import { EXCHANGE_ROOF_HEIGHT } from '../fixed-room.js';
+import { CAMERA_PITCH, ROOFTOP_CAMERA_PITCH } from './camera-rig.js';
 import { createWorldEngine } from './world-engine.js';
 
 /**
@@ -23,6 +25,9 @@ function eventHost() {
     },
     count(): number {
       return [...listeners.values()].reduce((total, set) => total + set.size, 0);
+    },
+    dispatch(type: string, event: unknown) {
+      for (const listener of [...(listeners.get(type) ?? [])]) listener(event);
     },
   };
 }
@@ -177,6 +182,44 @@ describe('world engine lifecycle', () => {
     expect(world.gl.canvas.count()).toBe(0);
     expect(world.dom.win.count()).toBe(0);
     expect(world.dom.doc.count()).toBe(0);
+  });
+
+  it('walks up the Exchange tower on real keys and looks down from its roof', () => {
+    const world = start();
+    let time = 0;
+    world.gl.frame(time);
+    const key = (type: 'keydown' | 'keyup', code: string) =>
+      world.dom.win.dispatch(type, { code, key: code, repeat: false, target: null, preventDefault: () => undefined });
+    // One walking step is 8 px at the engine's 50 ms frame cap.
+    const walk = (code: string, frames: number, until: () => boolean = () => false) => {
+      key('keydown', code);
+      for (let i = 0; i < frames && !until(); i++) world.gl.frame((time += 50));
+      key('keyup', code);
+      world.gl.frame((time += 50));
+    };
+    const camera = () => world.gl.renderer.render.mock.calls.at(-1)![1] as PerspectiveCamera;
+    const pitch = () => Math.asin(-camera().getWorldDirection(new Vector3()).y);
+    const entered = () => world.emitted.some(({ event }) => event === 'building:entered');
+    // From the spawn (24, 15) west along the road to the door's middle (x 15),
+    // then north through the Exchange door.
+    walk('KeyA', 38);
+    walk('KeyW', 40, entered);
+    expect(entered()).toBe(true);
+    expect(pitch()).toBeCloseTo(CAMERA_PITCH, 3);
+    // The ground floor: west to the lift's column, north onto its pad.
+    walk('KeyA', 30);
+    walk('KeyW', 31);
+    // The Degen floor: east to the lift up, north onto its pad.
+    walk('KeyD', 54);
+    expect(pitch()).toBeCloseTo(CAMERA_PITCH, 3);
+    walk('KeyW', 31);
+    // On the roof: the camera looks steeply down from high over the street.
+    expect(pitch()).toBeCloseTo(ROOFTOP_CAMERA_PITCH, 3);
+    expect(camera().position.y).toBeGreaterThan(EXCHANGE_ROOF_HEIGHT + 10);
+    // One building entered the whole way up; nothing left it.
+    expect(world.emitted.filter(({ event }) => event === 'building:entered')).toHaveLength(1);
+    expect(world.emitted.filter(({ event }) => event === 'building:exited')).toHaveLength(0);
+    world.engine.destroy();
   });
 
   it('leaves nothing behind when the renderer cannot start', () => {

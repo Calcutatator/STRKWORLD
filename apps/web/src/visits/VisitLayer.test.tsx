@@ -316,7 +316,7 @@ describe('VisitLayerView', () => {
     expect(markup).toContain('This station confirms one action at a time.');
   });
 
-  it('renders Post Office Menu Mode as a transfer-only batch surface', () => {
+  it('renders Post Office Menu Mode as a transfer-only surface, one recipient per send (D-065)', () => {
     const markup = render(
       <VisitLayerView
         state={{ name: 'visiting', building: 'post-office', surface: { name: 'menu' } }}
@@ -330,8 +330,12 @@ describe('VisitLayerView', () => {
 
     expect(markup).toContain('data-experience="menu"');
     expect(markup).toContain('Private transfer');
-    expect(markup).toContain('Add to this visit');
-    expect(markup).toContain('Nothing queued yet');
+    expect(markup).toContain(COPY.postOffice.oneAtATime);
+    expect(markup).toContain(COPY.gameMode.reviewAction);
+    // No visit vocabulary that would promise several sends for one fee.
+    expect(markup).not.toContain(COPY.batch.add);
+    expect(markup).not.toContain(COPY.batch.empty);
+    expect(markup).not.toContain(COPY.batch.why);
     expect(markup).not.toContain('Shield');
     expect(markup).not.toContain('Unshield');
   });

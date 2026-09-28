@@ -42,15 +42,18 @@ import { AVATAR_BODY_SIZE } from './avatar-visual.js';
 import { createDoorTrigger, type DoorTrigger } from './door-trigger.js';
 import {
   FIXED_ROOM_DEFINITIONS,
+  FIXED_ROOM_LEVELS,
   FIXED_ROOM_TILE_SIZE,
   createFixedRoom,
   createFixedRoomController,
+  createFixedRoomLevel,
   createFixedRoomPresentation,
   fixedRoomStationPresentations,
   isFixedRoomSolidAt,
   type FixedRoomController,
   type FixedRoomDefinition,
-  type FixedRoomMap,
+  type FixedRoomLevelId,
+  type FixedRoomLevelMap,
   type FixedRoomStationPresentation,
 } from './fixed-room.js';
 import { createInputGate, type InputGate, type KeyboardLike } from './input-gate.js';
@@ -129,9 +132,18 @@ export interface WorldSessionView {
   setDoorsVisible(visible: boolean): void;
   setLabelsVisible(visible: boolean): void;
   setRemoteVisible(visible: boolean): void;
-  /** Show one fixed room's interior, or none. */
-  showRoom(building: BuildingId | null): void;
+  /**
+   * Show one fixed room's interior, or none. `level` names an upper floor's
+   * interior (the Exchange's Degen floor); absent, the ground floor's.
+   */
+  showRoom(building: BuildingId | null, level?: FixedRoomLevelId): void;
+  /** Stations of the floor the player is on; a view ignores ids it does not draw. */
   renderRoom(building: BuildingId, stations: readonly FixedRoomStationPresentation[]): void;
+  /**
+   * The player is on this building's roof, which is part of the street
+   * scene, or on none. A view points its camera down from up there.
+   */
+  showRooftop?(building: BuildingId | null): void;
   syncStudio(state: { readonly visible: boolean; readonly highlightedFigure: number | null }): void;
   destroyStudio(): void;
   setCameraBounds(bounds: WorldRect): void;
@@ -195,9 +207,18 @@ export interface WorldSession {
   readonly area: WorldSessionArea;
   /** Wire facing last published with `player:moved`. */
   readonly facing: Facing;
+  /**
+   * Which floor of `area` the player is on: 'ground' through the street door,
+   * the Exchange tower's 'degen' and 'roof' by lift; null on the street and
+   * in the Studio. The Shell still sees one building on every floor.
+   */
+  readonly level: FixedRoomLevelId | null;
   /** True while a panel or Shell control claim owns the keyboard. */
   readonly inputSuspended: boolean;
-  /** Blocks under the local player's feet (D-060); 0 off the sandbox. */
+  /**
+   * Height of the local player's feet above the street: the sandbox blocks
+   * under them (D-060), or a roof; 0 anywhere else.
+   */
   readonly elevation: number;
   update(deltaMs: number, frame?: WorldFrame): void;
   destroy(): void;
@@ -283,8 +304,11 @@ class Session implements WorldSession {
   private doors?: DoorTrigger;
   private inputGate: InputGate = NOOP_INPUT_GATE;
   private roomControllers: Partial<Record<BuildingId, FixedRoomController>> = {};
-  private roomMaps: Partial<Record<BuildingId, FixedRoomMap>> = {};
+  /** Every floor's grid, by building: the ground floor and any reached by lift. */
+  private roomMaps: Partial<Record<BuildingId, ReadonlyMap<FixedRoomLevelId, FixedRoomLevelMap>>> = {};
   private activeRoom?: BuildingId;
+  /** The roof the view was last told the player stands on. */
+  private rooftopShown: BuildingId | null = null;
   private avatarStudio?: AvatarStudioController;
   private avatarStudioPresentation?: AvatarStudioPresentation;
   private avatarOutfit: AvatarOutfitSelection = NOOP_AVATAR_OUTFIT;
@@ -354,6 +378,13 @@ class Session implements WorldSession {
 
   get facing(): Facing {
     return this.movement?.facing ?? 'down';
+  }
+
+  get level(): FixedRoomLevelId | null {
+    if (this.avatarStudioActive) return null;
+    const room = this.activeRoomController();
+    if (!room?.state.inRoom || !this.activeRoom) return null;
+    return room.state.level ?? 'ground';
   }
 
   /** Blocks under the local player's feet (D-060); 0 off the sandbox. */
@@ -525,14 +556,19 @@ class Session implements WorldSession {
     };
     for (const definition of Object.values(FIXED_ROOM_DEFINITIONS)) {
       const building = definition.building;
-      this.roomMaps[building] = createFixedRoom(definition);
+      const levels = FIXED_ROOM_LEVELS[building] ?? [];
+      const floors = new Map<FixedRoomLevelId, FixedRoomLevelMap>([['ground', createFixedRoom(definition)]]);
+      for (const level of levels) floors.set(level.level, createFixedRoomLevel(level));
+      this.roomMaps[building] = floors;
       this.roomControllers[building] = createFixedRoomController({
         definition,
+        levels,
         out,
         in: config?.in,
         input: this.inputGate,
         onEnter: () => this.enterRoom(definition),
         onExit: () => this.exitRoom(definition),
+        onLevel: (level, tile) => this.presentLevel(definition, level, tile),
         onChange: () => this.renderRoom(),
       });
     }
@@ -657,6 +693,47 @@ class Session implements WorldSession {
     this.activeRoom = undefined;
   }
 
+  /**
+   * One floor of the active building, with the player on `tile`: a lift
+   * ride's arrival, or the rollback of a ride or exit that failed. An
+   * interior floor is drawn over the hidden street like any room; a roof is
+   * the building's real top in the street scene, so the street, its doors,
+   * signs and passers-by stay drawn below and the player stands at the
+   * roof's height. Nothing is emitted: the Shell still sees one building.
+   */
+  private presentLevel(
+    definition: FixedRoomDefinition,
+    level: FixedRoomLevelId,
+    tile: { readonly x: number; readonly y: number },
+  ): void {
+    const building = definition.building;
+    const map = this.roomMaps[building]?.get(level);
+    if (!map) return;
+    const onRoof = map.rooftop !== null;
+    const area = floorBounds(map);
+    this.view.setPlayerMotion(IDLE_MOTION);
+    this.view.setStreetVisible(onRoof);
+    this.view.setDoorsVisible(onRoof);
+    this.view.setRemoteVisible(onRoof);
+    this.view.setLabelsVisible(onRoof);
+    if (onRoof) this.view.showRoom(null);
+    else if (level === 'ground') this.view.showRoom(building);
+    else this.view.showRoom(building, level);
+    this.showRooftop(onRoof ? building : null);
+    this.bounds = area;
+    this.view.setCameraBounds(area);
+    this.teleport(floorTileCentre(map, tile));
+    if (map.rooftop) this.setElevation(map.rooftop.height);
+    this.lastTile = { x: -1, y: -1 };
+  }
+
+  /** Tell the view about a roof only when that changes, so rooms never see the call. */
+  private showRooftop(building: BuildingId | null): void {
+    if (this.rooftopShown === building) return;
+    this.view.showRooftop?.(building);
+    this.rooftopShown = building;
+  }
+
   private fixedRoomPresentation(definition: FixedRoomDefinition) {
     const streetPosition = tileToWorld(this.returnTile.x, this.returnTile.y);
     const roomBounds: WorldRect = {
@@ -672,7 +749,11 @@ class Session implements WorldSession {
       setDoorsVisible: (visible) => this.view.setDoorsVisible(visible),
       setRemoteVisible: (visible) => this.view.setRemoteVisible(visible),
       setLabelsVisible: (visible) => this.view.setLabelsVisible(visible),
-      setRoomVisible: (visible) => this.view.showRoom(visible ? definition.building : null),
+      setRoomVisible: (visible) => {
+        this.view.showRoom(visible ? definition.building : null);
+        // Leaving from the roof (or undoing an entry) points the camera level again.
+        if (!visible) this.showRooftop(null);
+      },
       setWorldBounds: (room) => {
         this.bounds = room ? roomBounds : this.streetBounds();
       },
@@ -783,7 +864,7 @@ class Session implements WorldSession {
     const velocity = this.intendedVelocity(keyboard, cameraYaw);
     this.stepPlayer(velocity, delta, {
       tileSize: FIXED_ROOM_TILE_SIZE,
-      toTile: worldToRoomTile,
+      toTile: (x, y) => worldToFloorTile(map, x, y),
       isSolidAt: (x, y) => isFixedRoomSolidAt(map, x, y),
     });
   }
@@ -985,7 +1066,9 @@ class Session implements WorldSession {
   }
 
   private reportRoomTile(): void {
-    const tile = worldToRoomTile(this.position.x, this.position.y);
+    const map = this.activeRoomMap();
+    if (!map) return;
+    const tile = worldToFloorTile(map, this.position.x, this.position.y);
     if (tile.x === this.lastTile.x && tile.y === this.lastTile.y) return;
     const previousTile = this.lastTile;
     this.lastTile = tile;
@@ -1010,8 +1093,11 @@ class Session implements WorldSession {
     return this.activeRoom ? this.roomControllers[this.activeRoom] : undefined;
   }
 
-  private activeRoomMap(): FixedRoomMap | undefined {
-    return this.activeRoom ? this.roomMaps[this.activeRoom] : undefined;
+  /** The grid of the floor the player is on. */
+  private activeRoomMap(): FixedRoomLevelMap | undefined {
+    if (!this.activeRoom) return undefined;
+    const level = this.roomControllers[this.activeRoom]?.state.level ?? 'ground';
+    return this.roomMaps[this.activeRoom]?.get(level);
   }
 
   private streetBounds(): WorldRect {
@@ -1022,6 +1108,41 @@ class Session implements WorldSession {
       height: this.map.height * TILE_SIZE,
     };
   }
+}
+
+/** A floor's area in World pixels: an interior at the room origin, a roof over its footprint. */
+function floorBounds(map: FixedRoomLevelMap): WorldRect {
+  const origin = floorOrigin(map);
+  return {
+    x: origin.x,
+    y: origin.y,
+    width: map.width * FIXED_ROOM_TILE_SIZE,
+    height: map.height * FIXED_ROOM_TILE_SIZE,
+  };
+}
+
+function floorOrigin(map: FixedRoomLevelMap): { readonly x: number; readonly y: number } {
+  return map.rooftop
+    ? { x: map.rooftop.x * TILE_SIZE, y: map.rooftop.y * TILE_SIZE }
+    : ROOM_ORIGIN;
+}
+
+function floorTileCentre(map: FixedRoomLevelMap, tile: { readonly x: number; readonly y: number }): { x: number; y: number } {
+  const origin = floorOrigin(map);
+  return {
+    x: origin.x + tile.x * FIXED_ROOM_TILE_SIZE + FIXED_ROOM_TILE_SIZE / 2,
+    y: origin.y + tile.y * FIXED_ROOM_TILE_SIZE + FIXED_ROOM_TILE_SIZE / 2,
+  };
+}
+
+/** The floor tile under a World pixel position; interiors keep `worldToRoomTile`. */
+function worldToFloorTile(map: FixedRoomLevelMap, x: number, y: number): { x: number; y: number } {
+  if (!map.rooftop) return worldToRoomTile(x, y);
+  const origin = floorOrigin(map);
+  return {
+    x: Math.floor((x - origin.x) / FIXED_ROOM_TILE_SIZE),
+    y: Math.floor((y - origin.y) / FIXED_ROOM_TILE_SIZE),
+  };
 }
 
 function clampFrame(deltaMs: number): number {

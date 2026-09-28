@@ -176,8 +176,14 @@ export const COPY = freezeCopy({
     locked: 'The Vault — lending with Vesu. Not open yet.',
   },
 
+  /**
+   * The Post Office, and every transfer line elsewhere. D-065 waived the
+   * transfer's in-game disclosure, and in exchange this copy never claims the
+   * recipient is hidden: "send privately" may stay (`copy.test.ts` checks).
+   */
   postOffice: {
     intro: 'Send privately to a STRK20 pool account belonging to another player. They must already be registered with the pool to receive it.',
+    oneAtATime: 'Each send goes to one recipient and is confirmed on its own.',
   },
 
   bridge: {
@@ -387,6 +393,8 @@ export const COPY = freezeCopy({
     mixedRouteKinds: 'One visit settles as one kind of action. Confirm what is queued, or clear it, then start the other one.',
     swapAlone: 'A swap settles on its own.',
     stakeAlone: 'A stake settles on its own.',
+    oneRecipientPerSend: 'One recipient per send. Confirm this transfer, then send the next.',
+    oneUnshieldPerSend: 'One unshield per send. Confirm this one, then unshield again.',
     batchFull: 'That is as much as one visit can settle at once.',
     emptyBatch: 'There is nothing queued to confirm.',
     notAnIntent: 'STRKWORLD only sends the actions its own controls produce.',

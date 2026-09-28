@@ -7,7 +7,8 @@ import { ConfirmGate } from './ConfirmGate.js';
 import { ROUTE_BY_INTENT_KIND, batchRequiresDisclosure, disclosuresForIntents, findRoute } from './routes.js';
 
 /**
- * The commit gate and D-064's narrow waiver.
+ * The commit gate and the narrow waivers of D-064 (staking) and D-065 (the
+ * transfer).
  *
  * Every panel feeds `ConfirmGate` the same two derived facts — the batch's
  * approved disclosures and whether it needs any — so the gate is exercised
@@ -20,6 +21,7 @@ const ETH: Address = '0x049d36570d4e46f48e99674bd3fcc84644ddd6b96f7c741b1562b82f
 const BOB: Address = '0x02b4c7d1a1f8f39e0e6e8b9a2c7d0e3f4a5b6c7d8e9f0a1b2c3d4e5f60718293';
 
 const stake: Intent = { kind: 'stake', tokenIn: STRK, tokenOut: XSTRK, amountIn: 5n };
+const transfer: Intent = { kind: 'transfer', token: STRK, amount: 5n, recipient: BOB };
 const shield: Intent = { kind: 'shield', token: STRK, amount: 5n };
 const unshield: Intent = { kind: 'unshield', token: STRK, amount: 5n, recipient: BOB };
 const swap: Intent = { kind: 'swap', tokenIn: STRK, tokenOut: ETH, amountIn: 5n, minAmountOut: 1n };
@@ -46,7 +48,7 @@ function confirmButton(markup: string): string {
   return found;
 }
 
-describe('ConfirmGate under the D-064 waiver', () => {
+describe('ConfirmGate under the D-064 and D-065 waivers', () => {
   it('enables confirm for the waived stake route, with no disclosure to show', () => {
     expect(batchRequiresDisclosure([stake])).toBe(false);
     expect(disclosuresForIntents([stake])).toEqual([]);
@@ -77,6 +79,31 @@ describe('ConfirmGate under the D-064 waiver', () => {
     // An unknown route is never "nothing to disclose".
     const withoutStake = PRIVACY_REGISTER.filter((entry) => entry.route !== 'bank.stake');
     expect(confirmButton(gate([stake], withoutStake))).toContain('disabled');
+  });
+
+  it('enables confirm for the transfer under D-065, graded anonymous with its disclosure waived', () => {
+    const entry = findRoute(ROUTE_BY_INTENT_KIND.transfer)!;
+    expect(entry).toMatchObject({ grade: 'anonymous', disclosure: null, disclosureWaivedBy: 'D-065' });
+    expect(batchRequiresDisclosure([transfer])).toBe(false);
+    expect(disclosuresForIntents([transfer])).toEqual([]);
+
+    const markup = gate([transfer]);
+    expect(confirmButton(markup)).not.toContain('disabled');
+    expect(markup).not.toContain('commit-disclosures');
+    expect(markup).not.toContain('confirm-blocked');
+  });
+
+  it('refuses the transfer once its waiver is gone or borrowed: the waiver, not the grade, opens the gate', () => {
+    for (const waiver of [null, '', 'D-064', 'D-65']) {
+      const register = withRoute('post-office.transfer', { disclosureWaivedBy: waiver });
+      expect(batchRequiresDisclosure([transfer], register), String(waiver)).toBe(true);
+      const markup = gate([transfer], register);
+      expect(confirmButton(markup), String(waiver)).toContain('disabled');
+      expect(markup, String(waiver)).toContain(COPY.notices.disclosureMissing);
+    }
+    // An unknown route is never "nothing to disclose".
+    const withoutTransfer = PRIVACY_REGISTER.filter((entry) => entry.route !== 'post-office.transfer');
+    expect(confirmButton(gate([transfer], withoutTransfer))).toContain('disabled');
   });
 
   it('is no blanket switch: every other deviation still shows its own disclosure at the gate', () => {

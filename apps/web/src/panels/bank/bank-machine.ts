@@ -190,7 +190,7 @@ export interface BankState {
   readonly mode: BankMode;
   readonly routeId: string;
   readonly door: DoorState;
-  /** Approved copy for the mode being composed. Null when the route is private. */
+  /** Approved copy for the mode being composed. Null when the route is private or its disclosure is waived (D-064, D-065). */
   readonly disclosure: string | null;
   /** Approved copy for what is queued. The commit point renders these. */
   readonly batchDisclosures: readonly string[];
@@ -1000,6 +1000,10 @@ export function rejectionCopy(rejection: BatchRejectionReason): string {
       return COPY.notices.swapAlone;
     case 'stake-must-be-alone':
       return COPY.notices.stakeAlone;
+    case 'one-recipient-per-send':
+      return COPY.notices.oneRecipientPerSend;
+    case 'one-unshield-per-send':
+      return COPY.notices.oneUnshieldPerSend;
     case 'non-positive-amount':
       return COPY.notices.badAmount;
     case 'batch-full':

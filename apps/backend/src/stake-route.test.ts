@@ -13,8 +13,9 @@ import {
 
 /**
  * Endur private staking (D-063) on the relay: fail-closed and disabled by
- * default, relayed through the ordinary delayed queue, and sponsored only for
- * the pinned anonymizer call with STRK in and xSTRK out.
+ * default, relayed through the ordinary submission queue with no artificial
+ * delay by default (D-066), and sponsored only for the pinned anonymizer call
+ * with STRK in and xSTRK out.
  */
 
 const POOL = '0x123';
@@ -216,12 +217,27 @@ describe('stake route environment', () => {
     expect(parsed.backend.routes.stake).toBeUndefined();
   });
 
-  it('parses a complete group as a delayed, non-quote-bound route', () => {
+  it('parses a complete group as a non-quote-bound route', () => {
     const parsed = parseBackendEnvironment(baseEnvironment(STAKE_ENVIRONMENT));
 
     expect(parsed.backend.routes.stake).toEqual({
       enabled: true, maxRelayFee: 10n, maxQueueDelayMs: 15_000, quoteBound: false, allowedTokens: [STRK],
     });
+  });
+
+  it('parses a zero queue delay, the D-066 setting', () => {
+    const parsed = parseBackendEnvironment(baseEnvironment({
+      ...STAKE_ENVIRONMENT,
+      BACKEND_ROUTE_STAKE_MAX_QUEUE_DELAY_MS: '0',
+    }));
+    expect(parsed.backend.routes.stake).toMatchObject({ quoteBound: false, maxQueueDelayMs: 0 });
+  });
+
+  it('holds a nonzero stake delay to the request deadline headroom', () => {
+    expect(() => parseBackendEnvironment(baseEnvironment({
+      ...STAKE_ENVIRONMENT,
+      BACKEND_ROUTE_STAKE_MAX_QUEUE_DELAY_MS: '45000',
+    }))).toThrow(/BACKEND_ROUTE_STAKE_MAX_QUEUE_DELAY_MS must leave/);
   });
 
   it('parses an explicitly disabled group', () => {
@@ -233,7 +249,7 @@ describe('stake route environment', () => {
     ['a stake variable without the enable flag', { BACKEND_ROUTE_STAKE_ALLOWED_TOKENS: STRK }],
     ['an enabled group missing its fee ceiling', { ...STAKE_ENVIRONMENT, BACKEND_ROUTE_STAKE_MAX_RELAY_FEE: '' }],
     ['a malformed enable flag', { ...STAKE_ENVIRONMENT, BACKEND_ROUTE_STAKE_ENABLED: 'yes' }],
-    ['an immediate queue', { ...STAKE_ENVIRONMENT, BACKEND_ROUTE_STAKE_MAX_QUEUE_DELAY_MS: '0' }],
+    ['a negative queue delay', { ...STAKE_ENVIRONMENT, BACKEND_ROUTE_STAKE_MAX_QUEUE_DELAY_MS: '-1' }],
     ['a queue delay over the Node timer', { ...STAKE_ENVIRONMENT, BACKEND_ROUTE_STAKE_MAX_QUEUE_DELAY_MS: '2147483648' }],
     ['a fee ceiling over u128', { ...STAKE_ENVIRONMENT, BACKEND_ROUTE_STAKE_MAX_RELAY_FEE: (1n << 128n).toString() }],
     ['a placeholder allowlist', { ...STAKE_ENVIRONMENT, BACKEND_ROUTE_STAKE_ALLOWED_TOKENS: '0xREPLACE_WITH_STRK_TOKEN_ADDRESS' }],
@@ -252,11 +268,12 @@ describe('stake route configuration', () => {
     expect(() => fixture({ ...STAKE_POLICY, allowedTokens })).toThrow('must admit exactly STRK');
   });
 
-  it.each([
-    ['quote-bound', { quoteBound: true }],
-    ['immediate', { maxQueueDelayMs: 0 }],
-  ])('refuses a %s stake route', (_label, patch) => {
-    expect(() => fixture({ ...STAKE_POLICY, ...patch })).toThrow('non-quote-bound and delayed');
+  it('refuses a quote-bound stake route', () => {
+    expect(() => fixture({ ...STAKE_POLICY, quoteBound: true })).toThrow('must not be quote-bound');
+  });
+
+  it('accepts a zero-delay stake route (D-066)', () => {
+    expect(() => fixture({ ...STAKE_POLICY, maxQueueDelayMs: 0 })).not.toThrow();
   });
 
   it('accepts a disabled stake route whatever it would admit', () => {
@@ -311,6 +328,16 @@ describe('stake submission validation', () => {
     expect(submitted).toEqual([artifact]);
   });
 
+  it('relays a zero-delay stake without ever sleeping (D-066)', async () => {
+    const { api, delays, submitted } = fixture({ ...STAKE_POLICY, maxQueueDelayMs: 0 });
+    const artifact = stakeArtifact();
+
+    const response = await submit(api, artifact, await authorizedStake(api));
+    expect(response).toEqual({ status: 200, body: { transactionHash: '0x5ab' } });
+    expect(delays).toEqual([]);
+    expect(submitted).toEqual([artifact]);
+  });
+
   it('binds the u256 across both limbs', async () => {
     const { api } = fixture();
     const response = await submit(api, stakeArtifact({ assets: (1n << 128n) + 5n }), await authorizedStake(api));
@@ -338,6 +365,9 @@ describe('stake submission validation', () => {
     ['a relay fee other than the authorized one', { feeAmount: 8n }],
     ['a public deposit', { extra: [['0x6', OTHER, STRK, '0x1']] }],
     ['a computed invoke', { extra: [['0xb', ANONYMIZER, '0x0']] }],
+    ['channels opened to two recipients (D-065)', {
+      extra: [['0x1', '0xa11ce', '0xe1', '0xe2', '0xe3'], ['0x1', '0xb0b', '0xe1', '0xe2', '0xe3']],
+    }],
   ])('rejects %s without sponsoring it', async (_label, shape) => {
     const { api, paymaster } = fixture();
     const response = await submit(api, stakeArtifact(shape), await authorizedStake(api));

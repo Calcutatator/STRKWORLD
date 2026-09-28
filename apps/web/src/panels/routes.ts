@@ -87,8 +87,9 @@ export function findRoute(
  * The approved disclosure for a route, verbatim.
  *
  * `null` means the register says none is needed — the route is graded
- * `private`. Callers must check `routeDoor` first; an unknown route also
- * returns `null` here and must never be rendered as "nothing to disclose".
+ * `private`, or the lead waived its disclosure by decision (D-064, D-065).
+ * Callers must check `routeDoor` first; an unknown route also returns `null`
+ * here and must never be rendered as "nothing to disclose".
  */
 export function routeDisclosure(
   routeId: string,
@@ -240,7 +241,8 @@ export function disclosuresForIntents(
  * register and the screen has gone wrong. The commit gate uses this to fail
  * closed on that combination rather than trusting the chain that produced it.
  * The one exception is a deviation whose disclosure the lead waived by
- * decision (D-064): it needs none, and must not block the commit.
+ * decision (D-064 for staking, D-065 for the transfer): it needs none, and
+ * must not block the commit.
  */
 export function batchRequiresDisclosure(
   intents: readonly Intent[],
