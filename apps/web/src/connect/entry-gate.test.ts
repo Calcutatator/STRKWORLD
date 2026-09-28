@@ -506,6 +506,27 @@ describe('the entry gate machine (D-072)', () => {
 });
 
 describe('entryTokens', () => {
+  it('offers every token of the Railway allowlist, with catalog decimals, in its order', () => {
+    const USDT = EXCHANGE_CATALOG.find((asset) => asset.symbol === 'USDT')!.token;
+    const WBTC = EXCHANGE_CATALOG.find((asset) => asset.symbol === 'WBTC')!.token;
+    const railway = parseRoutePolicy({
+      VITE_STRK20_SHIELD_ENABLED: 'true',
+      VITE_STRK20_SHIELD_MAX_INTENTS: '1',
+      VITE_STRK20_SHIELD_ALLOWED_TOKENS: [STRK, ETH, USDC, USDT, WBTC].join(','),
+    });
+    expect(entryTokens(railway).map(({ symbol, decimals }) => [symbol, decimals])).toEqual([
+      ['STRK', 18], ['ETH', 18], ['USDC', 6], ['USDT', 6], ['WBTC', 8],
+    ]);
+    // A token the catalog cannot describe is skipped, not offered without decimals.
+    const withUnlisted = parseRoutePolicy({
+      VITE_STRK20_SHIELD_ENABLED: 'true',
+      VITE_STRK20_SHIELD_MAX_INTENTS: '1',
+      VITE_STRK20_SHIELD_ALLOWED_TOKENS: `0x1234,${USDC}`,
+    });
+    expect(withUnlisted.allowedTokens.shield).toEqual(['0x1234', USDC]);
+    expect(entryTokens(withUnlisted).map(({ symbol }) => symbol)).toEqual(['USDC']);
+  });
+
   it('offers STRK without a policy, the pool\'s own money (D-013)', () => {
     expect(entryTokens(null)).toEqual([{ token: STRK, symbol: 'STRK', decimals: 18 }]);
   });

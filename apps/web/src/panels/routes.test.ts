@@ -431,6 +431,28 @@ describe('the entry gate deposit route (D-072)', () => {
     expect(routeDoor(ENTRY_SHIELD_ROUTE, unapproved, null)).toMatchObject({ open: false, reason: 'unapproved-route' });
   });
 
+  it('opens the gate for any admitted token, but the Bank\'s STRK shield only while STRK is admitted', () => {
+    const USDC = '0x033068f6539f8e6e6b131e6b2b814e6c34a5224bc66947c47dab9dfee93b35fb';
+    const ETH = '0x049d36570d4e46f48e99674bd3fcc84644ddd6b96f7c741b1562b82f9e004dc7';
+    const withoutStrk: WalletRoutePolicy = { ...shieldOnly, allowedTokens: { ...denyAll.allowedTokens, shield: [USDC, ETH] } };
+    expect(routeDoor(ENTRY_SHIELD_ROUTE, PRIVACY_REGISTER, withoutStrk).open).toBe(true);
+    expect(routeDoor('bank.shield', PRIVACY_REGISTER, withoutStrk)).toMatchObject({
+      open: false,
+      reason: 'not-enabled',
+      message: COPY.locked.notEnabled.shield,
+    });
+
+    const railway: WalletRoutePolicy = {
+      ...shieldOnly,
+      allowedTokens: { ...denyAll.allowedTokens, shield: [STRK, ETH, USDC] },
+    };
+    expect(routeDoor(ENTRY_SHIELD_ROUTE, PRIVACY_REGISTER, railway).open).toBe(true);
+    expect(routeDoor('bank.shield', PRIVACY_REGISTER, railway).open).toBe(true);
+    // STRK spelled unpadded is still STRK.
+    const unpadded: WalletRoutePolicy = { ...shieldOnly, allowedTokens: { ...denyAll.allowedTokens, shield: [`0x${STRK.slice(3)}`] } };
+    expect(routeDoor('bank.shield', PRIVACY_REGISTER, unpadded).open).toBe(true);
+  });
+
   it('leaves the Bank\'s own shield route and the intent mapping unchanged', () => {
     expect(ROUTE_BY_INTENT_KIND.shield).toBe('bank.shield');
     expect(routeRequiresDisclosure('post-office.transfer')).toBe(false);

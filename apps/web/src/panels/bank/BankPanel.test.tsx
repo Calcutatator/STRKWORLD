@@ -591,6 +591,23 @@ describe('BankPanel rendering', () => {
     expect(markup).toContain('6 STRK');
     expect(markup).toContain('0.001 STRK');
   });
+
+  it('states a queued shield\'s public leg in STRK, never in base units (D-072)', async () => {
+    const seam = operations();
+    const panel = createAllowedBankPanel({ operations: seam, receipts: createReceiptLedger() });
+    await panel.open();
+    panel.setMode('shield');
+    panel.setAmount('0.5');
+    await panel.addToBatch();
+    await panel.prepare();
+
+    const markup = render(panel, seam);
+    const warnings = markup.slice(markup.indexOf('class="review-warnings"'));
+    expect(warnings).toContain('Depositing 0.5 STRK is public: the amount and your address are visible on-chain.');
+    expect(markup).not.toContain('500000000000000000');
+    // The approved disclosure is still the register's own words, at the commit point.
+    expect(commitGate(markup)).toContain(SHIELD_DISCLOSURE);
+  });
 });
 
 describe('BankPanel — closing during a signature', () => {

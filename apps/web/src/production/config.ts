@@ -4,9 +4,17 @@ const MAINNET_NAME = 'SN_MAIN';
 const MAINNET_CHAIN_ID = '0x534e5f4d41494e';
 const MAX_U128 = (1n << 128n) - 1n;
 const STARK_FIELD_PRIME = (1n << 251n) + 17n * (1n << 192n) + 1n;
-const STRK_TOKEN = '0x04718f5a0fc34cc1af16a1cdee98ffb20c31f5cd61d6ab07201858f4287c938d';
+/**
+ * Canonical Starknet mainnet STRK: the pool's money and fee token (D-013). The
+ * only token unshield admits (D-062), and the one the Bank shields.
+ */
+export const STRK_TOKEN = '0x04718f5a0fc34cc1af16a1cdee98ffb20c31f5cd61d6ab07201858f4287c938d';
 /** Endur xSTRK (D-063). Inlined like STRK so this file keeps type-only privacy imports; a test pins it to `ENDUR_XSTRK`. */
 export const XSTRK_TOKEN = '0x028d709c875c0ceac3dce7065bec5328186dc89fe254527084d1689910954b0a';
+/** D-072: the most tokens a shield allowlist may name. A longer list is a mistake, not a policy. */
+export const MAX_SHIELD_TOKENS = 16;
+/** Starknet contract addresses lie below 2^251, inside the field. */
+const CONTRACT_ADDRESS_BOUND = 1n << 251n;
 
 type WalletEnvironment = Record<string, string | boolean | undefined>;
 
@@ -149,10 +157,10 @@ function parseTransferRoute(environment: WalletEnvironment): ParsedTransferRoute
 
 /**
  * D-062: the pool-native unshield route. The private-submission backend
- * relays it like transfer, so it takes transfer's four values. Like shield, it
- * admits canonical STRK only. Missing, zero, malformed, partial or disabled
- * values keep unshield denied without touching any other route, and enabling
- * it enables nothing else.
+ * relays it like transfer, so it takes transfer's four values. It admits
+ * canonical STRK only (shield did too, until D-072). Missing, zero, malformed,
+ * partial or disabled values keep unshield denied without touching any other
+ * route, and enabling it enables nothing else.
  */
 function parseUnshieldRoute(environment: WalletEnvironment): ParsedTransferRoute | null {
   if (environment.VITE_STRK20_UNSHIELD_ENABLED !== 'true') return null;
@@ -191,12 +199,34 @@ function isStakePair(tokens: readonly string[]): boolean {
   }
 }
 
+/**
+ * D-056's pool-native shield route, widened by D-072 from canonical STRK to
+ * any token: a non-empty list of at most `MAX_SHIELD_TOKENS` canonical token
+ * addresses (`0x` and 1 to 64 hex digits, a contract address above zero and
+ * below 2^251), no two with the same field value, in the order given. Shield
+ * has no relay-fee variable or authority: the wallet submits it. A missing,
+ * zero, malformed, duplicated, partial, oversized or disabled value keeps
+ * shield denied, whole, without touching any other route.
+ */
 function parseShieldRoute(environment: WalletEnvironment): Pick<ParsedTransferRoute, 'maxIntents' | 'allowedTokens'> | null {
   if (environment.VITE_STRK20_SHIELD_ENABLED !== 'true') return null;
   const maxIntents = parsePositiveSafeInteger(environment.VITE_STRK20_SHIELD_MAX_INTENTS);
   const allowedTokens = parseAllowedTokens(environment.VITE_STRK20_SHIELD_ALLOWED_TOKENS);
-  if (maxIntents === null || allowedTokens === null || !isStrkOnly(allowedTokens)) return null;
+  if (maxIntents === null || allowedTokens === null || !isShieldTokenList(allowedTokens)) return null;
   return { maxIntents, allowedTokens };
+}
+
+/**
+ * One to `MAX_SHIELD_TOKENS` tokens, each a contract address. `parseAllowedTokens`
+ * has already refused a malformed entry, zero and a repeat by field value.
+ */
+function isShieldTokenList(tokens: readonly string[]): boolean {
+  if (tokens.length === 0 || tokens.length > MAX_SHIELD_TOKENS) return false;
+  try {
+    return tokens.every((token) => BigInt(token) < CONTRACT_ADDRESS_BOUND);
+  } catch {
+    return false;
+  }
 }
 
 /** Exactly one admitted token, and it is canonical STRK by field-element value. */

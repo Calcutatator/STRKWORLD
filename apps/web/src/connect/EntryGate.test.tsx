@@ -166,6 +166,11 @@ describe('the entry gate, driven through the screen (D-072)', () => {
     await click(button(COPY.entry.review));
     expect(gate()!.getAttribute('data-gate')).toBe('review');
     expect(gate()!.querySelector('.batch-list')?.textContent).toBe('Deposit 0.5 STRK');
+    // The seam's public-leg warning, in the token's own units rather than wei.
+    expect(gate()!.querySelector('.review-warnings')?.textContent).toBe(
+      'Depositing 0.5 STRK is public: the amount and your address are visible on-chain.',
+    );
+    expect(gate()!.textContent).not.toContain('500000000000000000');
     expect([...gate()!.querySelectorAll('.commit-disclosures li')].map((li) => li.textContent)).toEqual([SHIELD_DISCLOSURE]);
     // No fee figure is promised; the note says part of it pays the fee.
     expect(gate()!.textContent).not.toContain(COPY.bank.poolFee);
@@ -198,6 +203,33 @@ describe('the entry gate, driven through the screen (D-072)', () => {
     await type(amountInput(), '0.01');
     await click(button(COPY.entry.review));
     expect(gate()!.querySelector('.batch-list')?.textContent).toBe('Deposit 0.01 ETH');
+  });
+
+  it('takes a non-STRK deposit from the Railway allowlist, in that token\'s decimals', async () => {
+    const USDC = EXCHANGE_CATALOG.find((asset) => asset.symbol === 'USDC')!.token;
+    const USDT = EXCHANGE_CATALOG.find((asset) => asset.symbol === 'USDT')!.token;
+    const WBTC = EXCHANGE_CATALOG.find((asset) => asset.symbol === 'WBTC')!.token;
+    const railway = parseRoutePolicy({ ...SHIELD_ENV, VITE_STRK20_SHIELD_ALLOWED_TOKENS: [STRK, ETH, USDC, USDT, WBTC].join(',') });
+    const operations = new FakePrivacyOperations();
+    await mount({ operations, policy: railway });
+    await click(button('Enter STRKWORLD'));
+
+    const select = container!.querySelector<HTMLSelectElement>('select[name="token"]')!;
+    expect([...select.options].map((option) => option.textContent)).toEqual(['STRK', 'ETH', 'USDC', 'USDT', 'WBTC']);
+    await choose(select, USDC);
+    await type(amountInput(), '12.5');
+    await click(button(COPY.entry.review));
+    expect(gate()!.querySelector('.batch-list')?.textContent).toBe('Deposit 12.5 USDC');
+    expect(gate()!.querySelector('.review-warnings')?.textContent).toBe(
+      'Depositing 12.5 USDC is public: the amount and your address are visible on-chain.',
+    );
+    // The register's approved disclosure names no token, so it holds for USDC too.
+    expect([...gate()!.querySelectorAll('.commit-disclosures li')].map((li) => li.textContent)).toEqual([SHIELD_DISCLOSURE]);
+    expect(SHIELD_DISCLOSURE).not.toMatch(/STRK\b(?!20)/);
+
+    await click(button(COPY.flow.confirm));
+    expect(operations.submitted).toEqual([[{ kind: 'shield', token: USDC, amount: 12_500000n }]]);
+    expect(city()).not.toBeNull();
   });
 
   it('returns a declined check to the card with its message and a retry', async () => {

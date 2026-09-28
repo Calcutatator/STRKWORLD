@@ -749,6 +749,24 @@ describe('ProductionRoot Bridge shield planner (D-061)', () => {
     expect(shieldPlanningEnabled(parseRoutePolicy(TRANSFER_ENV))).toBe(false);
     expect(shieldPlanningEnabled(parseRoutePolicy(UNSHIELD_ENV))).toBe(false);
     expect(shieldPlanningEnabled({ ...shieldPolicy, allowedTokens: { ...shieldPolicy.allowedTokens, shield: ['0x123'] } })).toBe(false);
+    // D-072: the Bridge still plans only a STRK shield, so a wider list keeps it
+    // on while STRK is in it, and off when it is not.
+    const railway = parseRoutePolicy({
+      ...SHIELD_ENV,
+      VITE_STRK20_SHIELD_ALLOWED_TOKENS: [
+        STRK,
+        '0x049d36570d4e46f48e99674bd3fcc84644ddd6b96f7c741b1562b82f9e004dc7',
+        '0x033068f6539f8e6e6b131e6b2b814e6c34a5224bc66947c47dab9dfee93b35fb',
+        '0x068f5c6a61780768455de69077e07e89787839bf8166decfbf92b645209c0fb8',
+        '0x03fe2b97c1fd336e750087d68b9b867997fd64a2661ff3ca5a7c771641e8e7ac',
+      ].join(','),
+    });
+    expect(railway.allowedTokens.shield).toHaveLength(5);
+    expect(shieldPlanningEnabled(railway)).toBe(true);
+    expect(shieldPlanningEnabled(parseRoutePolicy({
+      ...SHIELD_ENV,
+      VITE_STRK20_SHIELD_ALLOWED_TOKENS: '0x033068f6539f8e6e6b131e6b2b814e6c34a5224bc66947c47dab9dfee93b35fb',
+    }))).toBe(false);
     expect(shieldPlanningEnabled(hostile as WalletRoutePolicy)).toBe(false);
   });
 });

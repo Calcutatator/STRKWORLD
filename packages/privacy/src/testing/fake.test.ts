@@ -307,6 +307,19 @@ describe('shielded funds are not immediately spendable', () => {
     ]);
     expect(has(next.warnings, 'funds-maturing')).toBe(true);
   });
+
+  it('counts only the fee token in the maturing warning, never base units of another token (D-072)', async () => {
+    const USDC = '0x033068f6539f8e6e6b131e6b2b814e6c34a5224bc66947c47dab9dfee93b35fb';
+    const ops = fresh();
+    await (await ops.prepare([{ kind: 'shield', token: USDC, amount: 5_000000n }])).confirm({ feeCeiling: CEILING });
+    const onlyUsdc = await ops.prepare([{ kind: 'transfer', token: STRK, amount: 10n ** 18n, recipient: BOB }]);
+    expect(has(onlyUsdc.warnings, 'funds-maturing')).toBe(false);
+    onlyUsdc.discard();
+
+    await (await ops.prepare([{ kind: 'shield', token: STRK, amount: 7n }])).confirm({ feeCeiling: CEILING });
+    const both = await ops.prepare([{ kind: 'transfer', token: STRK, amount: 10n ** 18n, recipient: BOB }]);
+    expect(both.warnings.find((warning) => warning.kind === 'funds-maturing')).toMatchObject({ maturingAmount: 7n });
+  });
 });
 
 describe('a shield is never bundled with what it funds', () => {
@@ -807,6 +820,15 @@ describe('the D-072 entry reads', () => {
     fake.injectFault({ kind: 'unreachable', on: 'depositStatus' });
     await expect(fake.depositStatus('0x5eed')).rejects.toMatchObject({ kind: 'unreachable' });
     await expect(fake.depositStatus('0x5eed')).resolves.toBe('pending');
+  });
+
+  it('warns once per shield, in intent order, as the Wallet API adapter does', async () => {
+    const USDC = '0x033068f6539f8e6e6b131e6b2b814e6c34a5224bc66947c47dab9dfee93b35fb';
+    const batch = await new FakePrivacyOperations().prepare([shield(5n), { kind: 'shield', token: USDC, amount: 7n }]);
+    expect(batch.warnings).toEqual([
+      { kind: 'public-leg', detail: expect.stringMatching(/^Depositing 5 is public/) },
+      { kind: 'public-leg', detail: expect.stringMatching(/^Depositing 7 is public/) },
+    ]);
   });
 
   it('makes a note spendable at once when the maturity window is zero blocks', async () => {

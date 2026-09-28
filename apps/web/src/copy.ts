@@ -89,6 +89,18 @@ export const COPY = freezeCopy({
     noToken: 'No token can be deposited in this build yet.',
   },
 
+  /**
+   * A shield's public leg at review, written around its exact amount and token
+   * ("Depositing 0.5 STRK is public: …", `panels/bank/summary-copy.ts`). It
+   * says what the seam's own warning says, in the token's decimals and symbol
+   * instead of base units; the approved disclosure (D-024) sits below it,
+   * unchanged, at the commit point.
+   */
+  warnings: {
+    depositPublicLead: 'Depositing',
+    depositPublicTail: 'is public: the amount and your address are visible on-chain.',
+  },
+
   notRegistered: {
     title: 'Register with the pool first',
     body: 'The pool has no viewing key for this account yet, so it will not report a balance or move funds. Registration happens inside your wallet, and STRKWORLD cannot do it for you. It is recorded publicly on-chain, and this door checks it when you ask.',

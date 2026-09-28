@@ -2,7 +2,8 @@ import type { Intent, WalletRoutePolicy } from '@strkworld/privacy';
 import type { BuildingId } from '@strkworld/shared';
 import { PRIVACY_REGISTER, isDisclosureWaived, isRoutePlayable, type RouteGrade } from '../privacy/register.js';
 import { COPY } from '../copy.js';
-import { detectRoutePolicy } from '../production/config.js';
+import { sameAddress } from '../format.js';
+import { STRK_TOKEN, detectRoutePolicy } from '../production/config.js';
 
 /**
  * What the shell is allowed to open, and what it must say when it does.
@@ -210,12 +211,22 @@ const POLICY_KIND_BY_ROUTE: Readonly<Partial<Record<string, Intent['kind']>>> = 
  * which never goes through `PrivacyOperations.prepare` — is not this gate's
  * business and passes through open. `policy: null` means this build never
  * constructed one (demo, tests): nothing is disabled beyond the register.
+ *
+ * Since D-072 a build may admit shield tokens other than STRK. The Bank's own
+ * shield control deposits STRK, the pool's money and fee token (D-013), so its
+ * door also needs STRK on the list; the entry gate's `entry.shield` takes any
+ * admitted token and chooses from the list itself.
  */
 function isPolicyEnabledRoute(routeId: string, policy: WalletRoutePolicy | null): boolean {
   if (!policy) return true;
   const kind = POLICY_KIND_BY_ROUTE[routeId];
   if (!kind) return true;
-  return policy.enabledRoutes.includes(kind);
+  if (!policy.enabledRoutes.includes(kind)) return false;
+  return routeId !== ROUTE_BY_INTENT_KIND.shield || admitsStrk(policy.allowedTokens.shield);
+}
+
+function admitsStrk(tokens: readonly string[]): boolean {
+  return Array.isArray(tokens) && tokens.some((token) => sameAddress(token, STRK_TOKEN));
 }
 
 /** A route-specific "not switched on in this build" door, falling back to a generic line for an unmapped route id. */

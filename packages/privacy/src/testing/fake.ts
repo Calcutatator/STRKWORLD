@@ -478,9 +478,13 @@ export class FakePrivacyOperations implements PrivacyOperations {
       }
     }
 
-    const maturingTotal = this.maturing.reduce((s, n) => s + n.amount, 0n);
+    // The warning names no token and the shell shows it in the fee token, so it
+    // counts the fee token's maturing notes alone: summing a USDC deposit or a
+    // swap's output with STRK would add base units of different tokens (D-072).
+    const maturingFeeNotes = this.maturing.filter((n) => sameAddress(n.token, this.pool.feeToken));
+    const maturingTotal = maturingFeeNotes.reduce((s, n) => s + n.amount, 0n);
     if (maturingTotal > 0n) {
-      const soonest = Math.min(...this.maturing.map((n) => n.matureAtBlock));
+      const soonest = Math.min(...maturingFeeNotes.map((n) => n.matureAtBlock));
       warnings.push({
         kind: 'funds-maturing',
         maturingAmount: maturingTotal,

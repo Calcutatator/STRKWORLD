@@ -235,8 +235,10 @@ route denied. Bridge planning stays null. The default browser route therefore su
 connection/capability acceptance before it authorizes any proof, signature,
 submission, or funds movement (D-054/D-055). D-056 is the narrow, explicit
 funded-tester exception: a build may supply the complete three-variable
-canonical-STRK shield tuple, with a positive intent bound, while transfer,
-unshield and swap remain denied. The shield is pool-native and has no backend
+shield tuple, with a positive intent bound, while transfer, unshield and swap
+remain denied. D-056 admitted canonical STRK alone; D-072 widened the list to
+one to sixteen tokens, which the entry gate offers, while the Bank and the
+Bridge still shield STRK. The shield is pool-native and has no backend
 relay or relay-fee authority; Ready owns proving, account execution and the
 final wallet confirmation. This opt-in is not a general deployment claim until
 the rendered funded receipt and deliberate private-balance refresh are seen.

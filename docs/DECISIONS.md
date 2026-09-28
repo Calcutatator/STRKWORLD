@@ -2450,7 +2450,7 @@ signature, funds or transaction was used by this implementation.
 
 ## D-056 — The funded tester may enable the pool-native STRK shield route
 
-**2026-08-24 · Accepted · autonomous tester handoff superseded by D-057 · unshield exclusion superseded by D-062**
+**2026-08-24 · Accepted · autonomous tester handoff superseded by D-057 · unshield exclusion superseded by D-062 · STRK-only shield token SUPERSEDED by D-072 (one to sixteen tokens)**
 
 **Context.** The disposable Ready mainnet account is now deployed, registered
 with the STRK20 pool and able to share its private balance with STRKWORLD. Its
@@ -3196,7 +3196,7 @@ area."
 
 ## D-072 — Entry requires funds in the privacy pool
 
-**2026-09-29 · Accepted by the user · supersedes D-055 in part (a supported wallet now reaches the funds gate, not the city) · extends D-036's frozen seam with `hasPrivateFunds` and `depositStatus` · adds one player-initiated read under D-035's balance-read rule · registers `entry.shield` (approved by the lead, 2026-09-29)**
+**2026-09-29 · Accepted by the user · supersedes D-055 in part (a supported wallet now reaches the funds gate, not the city) · supersedes D-056 in part (its STRK-only shield token) · extends D-036's frozen seam with `hasPrivateFunds` and `depositStatus` · adds one player-initiated read under D-035's balance-read rule · registers `entry.shield` (approved by the lead, 2026-09-29)**
 
 **Context.** The lead asked for one check before the app opens: a player must
 have funds in the STRK20 pool; one who does is checked and loads straight in,
@@ -3214,7 +3214,10 @@ answers 118. Shield never reaches the relay: the wallet proves and submits it,
 and Ready takes the pool fee out of the deposit, in the deposited token (a 20
 STRK shield left 14 STRK private). The pool emits `Deposit` with keys
 `[sn_keccak('Deposit'), user_addr, token]` and data `[amount]` for every
-deposit, read from its deployed class ABI.
+deposit, read from its deployed class ABI, and it already takes deposits of
+other tokens. D-056 admitted canonical STRK alone as a cautious first
+rollout, not as a privacy rule: the shield's grade and disclosure name no
+token.
 
 **Decision.**
 
@@ -3245,12 +3248,31 @@ deposit, read from its deployed class ABI.
   route, `entry.shield`, under the Bank: graded `public-edge` with that
   disclosure word for word, approved by the lead on 2026-09-29, and gated by
   the build's shield policy exactly as `bank.shield` is.
-- **Any token this build admits, any amount above zero.** The card offers the
-  shield route policy's allowlist, with the Exchange catalog's symbol and
-  decimals and a picker when there is more than one; a token the catalog
-  cannot describe is left out. There is no minimum and no public balance (the
-  Bank reads none). A plain note says part of a first deposit pays the pool's
-  fee, with no figure.
+- **Any token this build admits, any amount above zero.** The shield route's
+  allowlist (`VITE_STRK20_SHIELD_ALLOWED_TOKENS`) is no longer STRK alone: it
+  is a non-empty list of at most 16 canonical token addresses (`0x` and 1 to
+  64 hex digits, a contract address above zero and below 2^251), no two with
+  the same field value. A malformed, repeated, oversized or partial value
+  keeps the whole route denied. The Railway deployment lists STRK, ETH, USDC
+  (Circle's native USDC), USDT and WBTC. The card offers each allowed token
+  the Exchange catalog describes, in allowlist order, with its symbol and
+  decimals and a picker when there is more than one, and skips one it cannot
+  describe. There is no minimum and no public balance (the Bank reads none).
+  A plain note says part of a first deposit pays the pool's fee, with no
+  figure.
+- **The Bank and the Bridge still shield STRK.** The Bank works in the pool's
+  money and fee token (D-013), so its shield door also needs STRK on the
+  list; the Bridge plans only a STRK shield (D-061), and its planner is on
+  only while STRK is listed. The register's shield disclosures name no token,
+  so they hold for any deposit.
+- **Figures in the token's own units.** At the gate's and the Bank's commit
+  points the web writes a shield's public-leg warning from the shield it
+  belongs to, with the token's decimals and symbol ("Depositing 0.5 STRK is
+  public: the amount and your address are visible on-chain."), where the
+  seam's detail prints base units. Both adapters emit one such warning per
+  shield, in intent order; the seam and every approved string are unchanged.
+  The fake's maturing warning now counts only fee-token notes, since it names
+  no token.
 - **Landing is a public read.** After the wallet returns the hash,
   `depositStatus()` reads the receipt through the backend's receipt route
   (D-014): the gate passes when the transaction succeeded, was accepted, and
@@ -3278,9 +3300,9 @@ deposit, read from its deployed class ABI.
 the city opens, and a player with nothing in the pool makes a public deposit
 first, which names their address, token and amount on-chain. A build with
 shield switched off shows new players a locked deposit card: they cannot enter
-until it is on. Today's shield policy admits exactly canonical STRK (D-056),
-so "any token" means STRK until a decision widens that allowlist and its
-parser. The fee comes out of the deposit in the deposited token; the gate
-names no figure, and its fee ceiling is still the prepared pool fee. Each
-depositing player adds one public receipt read every few seconds to the
-backend's shared rate window while the gate waits.
+until it is on. A list without STRK keeps the gate open but shuts the Bank's
+shield and the Bridge planner. The fee comes out of the deposit in the
+deposited token, of a size the gate cannot state, and its fee ceiling is
+still the prepared pool fee. Each depositing player adds one public receipt
+read every few seconds to the backend's shared rate window while the gate
+waits.

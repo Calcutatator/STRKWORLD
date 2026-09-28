@@ -19,7 +19,7 @@ import {
   type BankPanel as BankPanelMachine,
   type BankState,
 } from './bank-machine.js';
-import { describeIntent, describeWarning } from './summary-copy.js';
+import { describeIntent, describeWarnings } from './summary-copy.js';
 import { WalletAttentionCue, walletOperationAttention } from '../../wallet/WalletAttentionCue.js';
 import { createPendingHudOwner } from '../pending-hud.js';
 import { BankJourneyNotice } from '../JourneyNotice.js';
@@ -501,10 +501,10 @@ function CommitBlock({
 
       {summary.warnings.length > 0 ? (
         <ul className="review-warnings">
-          {summary.warnings.map((warning, index) => (
-            <li key={`${warning.kind}-${index}`}>
-              {describeWarning(warning)}
-              {warning.kind === 'funds-maturing' ? (
+          {describeWarnings(summary.warnings, summary.intents).map((text, index) => (
+            <li key={`${summary.warnings[index]!.kind}-${index}`}>
+              {text}
+              {summary.warnings[index]!.kind === 'funds-maturing' ? (
                 <GlossaryTerm term={COPY.glossary.toggle} definition={COPY.glossary.maturingFunds} />
               ) : null}
             </li>

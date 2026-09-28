@@ -2325,6 +2325,19 @@ describe('the D-072 entry reads', () => {
     await expect(ops.depositStatus(HASH)).resolves.toBe('pending');
   });
 
+  it('warns once per shield, in intent order, the contract the shell pairs its figures with', async () => {
+    const { ops } = fixture();
+    const batch = await ops.prepare([
+      { kind: 'shield', token: STRK, amount: 5n },
+      { kind: 'shield', token: TOKEN, amount: 7n },
+    ]);
+    expect(batch.intents.map((intent) => intent.kind === 'shield' && intent.amount)).toEqual([5n, 7n]);
+    expect(batch.warnings).toEqual([
+      { kind: 'public-leg', detail: expect.stringMatching(/^Depositing 5 is public/) },
+      { kind: 'public-leg', detail: expect.stringMatching(/^Depositing 7 is public/) },
+    ]);
+  });
+
   it('rejects a malformed hash before any read, and a cancelled read as user-rejected', async () => {
     const { ops, pool } = fixture();
     const receipt = vi.spyOn(pool, 'receipt');

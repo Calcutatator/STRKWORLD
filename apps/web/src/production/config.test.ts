@@ -93,21 +93,8 @@ describe('production wallet configuration', () => {
   it.each([
     ['missing enablement', { VITE_STRK20_SHIELD_MAX_INTENTS: '1', VITE_STRK20_SHIELD_ALLOWED_TOKENS: STRK_TOKEN }],
     ['zero intent bound', { VITE_STRK20_SHIELD_ENABLED: 'true', VITE_STRK20_SHIELD_MAX_INTENTS: '0', VITE_STRK20_SHIELD_ALLOWED_TOKENS: STRK_TOKEN }],
-    ['malformed token', { VITE_STRK20_SHIELD_ENABLED: 'true', VITE_STRK20_SHIELD_MAX_INTENTS: '1', VITE_STRK20_SHIELD_ALLOWED_TOKENS: '0x1234' }],
-    ['multiple tokens', { VITE_STRK20_SHIELD_ENABLED: 'true', VITE_STRK20_SHIELD_MAX_INTENTS: '1', VITE_STRK20_SHIELD_ALLOWED_TOKENS: `${STRK_TOKEN},${STRK_TOKEN}` }],
-    // D-072's "any token" still meets D-056's STRK-only parser: listing the
-    // Exchange catalog's ETH, USDC, USDT and WBTC beside STRK switches shield off.
-    ['STRK with the Exchange catalog\'s other tokens', {
-      VITE_STRK20_SHIELD_ENABLED: 'true',
-      VITE_STRK20_SHIELD_MAX_INTENTS: '1',
-      VITE_STRK20_SHIELD_ALLOWED_TOKENS: [
-        STRK_TOKEN,
-        '0x049d36570d4e46f48e99674bd3fcc84644ddd6b96f7c741b1562b82f9e004dc7',
-        '0x033068f6539f8e6e6b131e6b2b814e6c34a5224bc66947c47dab9dfee93b35fb',
-        '0x068f5c6a61780768455de69077e07e89787839bf8166decfbf92b645209c0fb8',
-        '0x03fe2b97c1fd336e750087d68b9b867997fd64a2661ff3ca5a7c771641e8e7ac',
-      ].join(','),
-    }],
+    ['malformed token', { VITE_STRK20_SHIELD_ENABLED: 'true', VITE_STRK20_SHIELD_MAX_INTENTS: '1', VITE_STRK20_SHIELD_ALLOWED_TOKENS: '0x12zz' }],
+    ['a repeated token', { VITE_STRK20_SHIELD_ENABLED: 'true', VITE_STRK20_SHIELD_MAX_INTENTS: '1', VITE_STRK20_SHIELD_ALLOWED_TOKENS: `${STRK_TOKEN},${STRK_TOKEN}` }],
   ])('denies the shield route for %s without widening a valid transfer policy', (_name, shield) => {
     const config = parseProductionWalletConfig({
       VITE_STARKNET_CHAIN_ID: 'SN_MAIN',
@@ -542,5 +529,111 @@ describe('production Endur staking admission (D-063)', () => {
     expect(policy.enabledRoutes).toEqual(['transfer']);
     expect('stake' in policy.allowedTokens).toBe(false);
     expect(policy.maxRelayFee).toBe(5_000_000_000_000_000n);
+  });
+});
+
+describe('production shield admission for any token (D-072)', () => {
+  const ETH = '0x049d36570d4e46f48e99674bd3fcc84644ddd6b96f7c741b1562b82f9e004dc7';
+  const USDC = '0x033068f6539f8e6e6b131e6b2b814e6c34a5224bc66947c47dab9dfee93b35fb';
+  const USDT = '0x068f5c6a61780768455de69077e07e89787839bf8166decfbf92b645209c0fb8';
+  const WBTC = '0x03fe2b97c1fd336e750087d68b9b867997fd64a2661ff3ca5a7c771641e8e7ac';
+  /** The allowlist the Railway deployment sets: STRK, ETH, USDC, USDT and WBTC. */
+  const RAILWAY = [STRK_TOKEN, ETH, USDC, USDT, WBTC];
+  const shield = (tokens: string | undefined) => ({
+    VITE_STRK20_SHIELD_ENABLED: 'true',
+    VITE_STRK20_SHIELD_MAX_INTENTS: '1',
+    VITE_STRK20_SHIELD_ALLOWED_TOKENS: tokens,
+  });
+  const denyAll = {
+    maxIntents: 0,
+    maxRelayFee: 0n,
+    enabledRoutes: [],
+    allowedTokens: { shield: [], unshield: [], transfer: [], swap: [] },
+  };
+  /** 16 distinct contract addresses. */
+  const sixteen = Array.from({ length: 16 }, (_, index) => `0x${(0x1000 + index).toString(16)}`);
+
+  it('admits exactly the Railway list, in order, frozen, with no relay-fee authority', () => {
+    const policy = parseRoutePolicy(shield(RAILWAY.join(',')));
+    expect(policy).toEqual({
+      maxIntents: 1,
+      maxRelayFee: 0n,
+      enabledRoutes: ['shield'],
+      allowedTokens: { shield: RAILWAY, unshield: [], transfer: [], swap: [] },
+    });
+    expect(Object.isFrozen(policy.allowedTokens.shield)).toBe(true);
+    // A space after each comma, as a hand-edited variable often has, is the same list.
+    expect(parseRoutePolicy(shield(RAILWAY.join(', '))).allowedTokens.shield).toEqual(RAILWAY);
+  });
+
+  it('documents a Railway value that parses to exactly those five tokens', () => {
+    const example = readFileSync(new URL('../../../../.env.production.example', import.meta.url), 'utf8');
+    const documented = example.split('\n').map((line) => line.trim())
+      .find((line) => /^# 0x[0-9a-f]{64}(?:,0x[0-9a-f]{64})+$/.test(line));
+    expect(documented).toBeDefined();
+    expect(parseRoutePolicy(shield(documented!.slice(2))).allowedTokens.shield).toEqual(RAILWAY);
+  });
+
+  it('admits any single token, STRK or not', () => {
+    for (const token of [STRK_TOKEN, USDC, WBTC, '0x1234']) {
+      expect(parseRoutePolicy(shield(token)).allowedTokens.shield, token).toEqual([token]);
+    }
+  });
+
+  it('keeps shield STRK-free when the list is, without touching unshield\'s STRK-only rule (D-062)', () => {
+    const policy = parseRoutePolicy({
+      ...shield(`${USDC},${ETH}`),
+      VITE_STRK20_UNSHIELD_ENABLED: 'true',
+      VITE_STRK20_UNSHIELD_MAX_INTENTS: '1',
+      VITE_STRK20_UNSHIELD_MAX_RELAY_FEE: '5',
+      VITE_STRK20_UNSHIELD_ALLOWED_TOKENS: USDC,
+    });
+    expect(policy.enabledRoutes).toEqual(['shield']);
+    expect(policy.allowedTokens.shield).toEqual([USDC, ETH]);
+    expect(policy.allowedTokens.unshield).toEqual([]);
+  });
+
+  it('bounds the list at 16 tokens', () => {
+    expect(parseRoutePolicy(shield(sixteen.join(','))).allowedTokens.shield).toEqual(sixteen);
+    expect(parseRoutePolicy(shield([...sixteen, '0x2000'].join(',')))).toEqual(denyAll);
+  });
+
+  it.each([
+    ['the same token twice', `${STRK_TOKEN},${STRK_TOKEN}`],
+    ['one token padded and unpadded', `${USDC},0x${USDC.slice(3)}`],
+    ['one token in two cases', `${ETH},0x${ETH.slice(2).toUpperCase()}`],
+    ['a repeat at the end of a long list', [...RAILWAY, STRK_TOKEN].join(',')],
+  ])('denies shield whole for %s, a repeat by field value', (_name, tokens) => {
+    expect(parseRoutePolicy(shield(tokens))).toEqual(denyAll);
+  });
+
+  it.each([
+    ['a missing list', undefined],
+    ['an empty list', ''],
+    ['a blank entry', ' '],
+    ['a trailing comma', `${STRK_TOKEN},`],
+    ['a leading comma', `,${STRK_TOKEN}`],
+    ['an empty entry between two', `${STRK_TOKEN},,${ETH}`],
+    ['a symbol', 'STRK'],
+    ['a decimal address', BigInt(STRK_TOKEN).toString()],
+    ['an uppercase 0X prefix', `0X${STRK_TOKEN.slice(2)}`],
+    ['a non-hex digit', '0x12zz'],
+    ['zero', '0x0'],
+    ['more than 64 hex digits', `0x0${STRK_TOKEN.slice(2)}`],
+    ['a felt at or above 2^251', `0x${(1n << 251n).toString(16)}`],
+    ['one malformed entry among good ones', `${STRK_TOKEN},${ETH},0xnothex,${USDC}`],
+    ['a separator other than a comma', `${STRK_TOKEN};${ETH}`],
+  ])('denies shield whole for %s', (_name, tokens) => {
+    expect(parseRoutePolicy(shield(tokens))).toEqual(denyAll);
+  });
+
+  it('denies shield for a partial tuple, whatever the list', () => {
+    expect(parseRoutePolicy({ ...shield(RAILWAY.join(',')), VITE_STRK20_SHIELD_MAX_INTENTS: undefined })).toEqual(denyAll);
+    expect(parseRoutePolicy({ ...shield(RAILWAY.join(',')), VITE_STRK20_SHIELD_ENABLED: 'false' })).toEqual(denyAll);
+  });
+
+  it('admits the highest contract address and nothing past it', () => {
+    const highest = `0x${((1n << 251n) - 1n).toString(16)}`;
+    expect(parseRoutePolicy(shield(highest)).allowedTokens.shield).toEqual([highest]);
   });
 });

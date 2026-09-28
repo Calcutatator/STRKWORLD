@@ -5,7 +5,7 @@ import { formatTokenAmountExact, sameAddress, shortenAddress } from '../format.j
 import { ConfirmGate } from '../panels/ConfirmGate.js';
 import { LockedNotice } from '../panels/LockedRoom.js';
 import { stageCopy } from '../panels/bank/bank-machine.js';
-import { describeWarning } from '../panels/bank/summary-copy.js';
+import { describeWarnings } from '../panels/bank/summary-copy.js';
 import { usePrivacy } from '../privacy/PrivacyProvider.js';
 import type { RouteGrade } from '../privacy/register.js';
 import { detectRoutePolicy } from '../production/config.js';
@@ -233,9 +233,9 @@ function ReviewCard({ gate, state }: { gate: EntryGateMachine; state: Of<'review
           <p className="panel-hint">{COPY.entry.feeNote}</p>
           {review.warnings.length > 0 ? (
             <ul className="review-warnings">
-              {review.warnings.map((warning, index) => (
-                <li key={`${warning.kind}-${index}`}>{describeWarning(warning)}</li>
-              ))}
+              {describeWarnings(review.warnings, [{ kind: 'shield', token: review.token.token, amount: review.amount }]).map(
+                (text, index) => <li key={`${review.warnings[index]!.kind}-${index}`}>{text}</li>,
+              )}
             </ul>
           ) : null}
           {depositing ? (

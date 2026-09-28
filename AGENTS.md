@@ -258,7 +258,7 @@ empty shell to fetchers, so a 200 there means nothing.
 
 ## 6. Findings log
 
-### 2026-09-29 — A deposit is confirmed from its receipt; the shield parser admits only STRK (D-072)
+### 2026-09-29 — A deposit is confirmed from its receipt; the shield allowlist takes any token (D-072)
 
 The pool's `Deposit` event is a `nested` variant of
 `privacy::privacy::Privacy::Event`, so it is emitted with keys
@@ -274,10 +274,20 @@ passes every RPC error on as 502 `UPSTREAM_FAILURE`, so the browser cannot
 tell "not mined yet" from a failed read: `depositStatus` calls both
 `pending`. Traps met on the way:
 
-- `parseShieldRoute` (`apps/web/src/production/config.ts`) admits exactly one
-  shield token, canonical STRK (D-056). A comma list of several tokens in
-  `VITE_STRK20_SHIELD_ALLOWED_TOKENS` switches shield off entirely, fail
-  closed, and with it the entry gate's deposit and the Bridge planner.
+- D-056's `parseShieldRoute` (`apps/web/src/production/config.ts`) admitted
+  exactly one shield token, canonical STRK, so a comma list of several tokens
+  in `VITE_STRK20_SHIELD_ALLOWED_TOKENS` switched shield off entirely, and
+  with it the entry gate's deposit and the Bridge planner. D-072 widens it to
+  one to sixteen canonical addresses with no repeat by field value; the Bank
+  still shields STRK, so its door needs STRK on the list, and unshield keeps
+  its own STRK-only rule (D-062).
+- The seam's `public-leg` detail prints a deposit in base units ("Depositing
+  500000000000000000 is public: …"). Both adapters emit one per shield or
+  unshield intent, in intent order, which is what lets the web pair each
+  with its shield and print "0.5 STRK" instead, with no seam change.
+- The fake's `funds-maturing` warning summed maturing notes across tokens,
+  which the Bank then shows as STRK: once deposits can be USDC that adds base
+  units of different tokens. It now counts fee-token notes only.
 - A recipient's 118 reads as the player's own. `warningsFor` in the Wallet API
   adapter (and the fake) throws `PrivacyError('not-registered')` for an
   unregistered transfer recipient, and `noteOperationError` escalates any
@@ -296,8 +306,11 @@ tell "not mined yet" from a failed read: `depositStatus` calls both
 address, Deposit key, blocks 15,578,224 to 15,598,224) and
 `starknet_getTransactionReceipt` against the Cartridge public RPC (spec
 0.10.2) on 2026-09-29; starknet.js 10.4 `hash.getSelectorFromName('Deposit')`
-(pinned in `packages/privacy/src/pool.test.ts`); `config.ts` read, and its
-refusal of STRK with ETH, USDC, USDT and WBTC pinned in `config.test.ts`; the adapter's
+(pinned in `packages/privacy/src/pool.test.ts`); the widened parser pinned in
+`config.test.ts` (the exact Railway list and the value documented in
+`.env.production.example`, repeats, the 16-token bound, malformed and partial
+input); the warning order pinned in `wallet-api.test.ts` and `fake.test.ts`,
+and its figures in `summary-copy.test.ts`; the adapter's
 `warningsFor` and `connect-machine.ts` read side by side; `entry-gate.test.ts`,
 `EntryGate.test.tsx`, `App.entry.test.tsx`, `ProductionRoot.test.tsx` and
 `bootstrap.test.ts`.
