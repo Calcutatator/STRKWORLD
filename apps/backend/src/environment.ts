@@ -73,7 +73,10 @@ export function parseBackendEnvironment(environment: Environment): ParsedBackend
       ...(degen ? { degen } : {}),
     },
     paymaster: {
-      apiKey: parseSecret(environment, 'AVNU_PAYMASTER_API_KEY', 1),
+      // D-068: optional. The private relay is gasless without a key, because
+      // the paymaster is repaid from the player's shielded balance; a key, if
+      // set, stays server-side (D-014).
+      ...optionalSecret(environment, 'AVNU_PAYMASTER_API_KEY', 'apiKey'),
       ...(paymasterBaseUrl ? { paymasterBaseUrl } : {}),
     },
     rpc: { rpcUrl, poolAddress, feeToken, noteMaturityBlocks },
@@ -237,6 +240,16 @@ function readRequired(environment: Environment, name: string): string {
   if (value === undefined || value.length === 0) throw new Error(`Missing required ${name}.`);
   if (value !== value.trim() || PLACEHOLDER.test(value)) throw new Error(`Invalid ${name}.`);
   return value;
+}
+
+/** An absent or empty secret is omitted; a present one is validated like any other. */
+function optionalSecret<K extends string>(
+  environment: Environment,
+  name: string,
+  key: K,
+): Partial<Record<K, string>> {
+  if (isUnset(environment[name])) return {};
+  return { [key]: parseSecret(environment, name, 1) } as Partial<Record<K, string>>;
 }
 
 function parseSecret(environment: Environment, name: string, minimumLength: number): string {

@@ -161,6 +161,20 @@ describe('strict production backend environment', () => {
     expect(() => parseBackendEnvironment(validEnvironment(override))).toThrow(/invalid|required/i);
   });
 
+  it('runs gasless without a paymaster key, and passes a key through when one is set (D-068)', () => {
+    const withoutKey = validEnvironment();
+    delete withoutKey['AVNU_PAYMASTER_API_KEY'];
+    const keyless = parseBackendEnvironment(withoutKey);
+    expect(keyless.paymaster).not.toHaveProperty('apiKey');
+    const empty = parseBackendEnvironment(validEnvironment({ AVNU_PAYMASTER_API_KEY: '' }));
+    expect(empty.paymaster).not.toHaveProperty('apiKey');
+    const keyed = parseBackendEnvironment(validEnvironment());
+    expect(keyed.paymaster.apiKey).toBe('private-paymaster-key');
+    // A placeholder is still refused rather than sent to AVNU.
+    expect(() => parseBackendEnvironment(validEnvironment({ AVNU_PAYMASTER_API_KEY: 'REPLACE_WITH_AVNU_PAYMASTER_KEY' })))
+      .toThrow(/AVNU_PAYMASTER_API_KEY/);
+  });
+
   it('never includes a rejected secret value in its error', () => {
     const exposed = 'REPLACE_WITH_SUPER_SENSITIVE_VALUE';
     try {

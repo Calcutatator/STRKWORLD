@@ -368,7 +368,7 @@ Shell lane owns it.
 
 ## D-014 — The backend is a first-class component with its own privacy rules
 
-**2026-08-16 · Accepted**
+**2026-08-16 · Accepted · paymaster key made optional (gasless relay) by D-068**
 
 **Context.** An independent review found that D-013 quietly put a server on the
 critical path of *every* private action — fee build and submission must be
@@ -3001,3 +3001,26 @@ the only gate.
 Production keeps swap denied until swap itself is switched on; that decision
 must also switch the degen catalog on or off. The volume floor and tag set are
 operator configuration.
+
+---
+
+## D-068 — The private relay runs gasless, with no paymaster key by default
+
+**2026-09-28 · Accepted by the user · narrows D-014's "holds the paymaster key" to "holds it if one is used"**
+
+**Context.** The backend refused to start without `AVNU_PAYMASTER_API_KEY`.
+AVNU's docs distinguish gasfree (the dapp sponsors gas, with an API key) from
+gasless (the user pays gas in a supported token, with no key). The user wants
+gasless. The private relay already uses AVNU's `sponsored_private` fee mode
+with `poolFeeToken`: the paymaster fronts the gas and is repaid by a pool fee
+withdrawn from the player's shielded balance inside the private transaction,
+so the player, not STRKWORLD, pays. The SDK marks the key optional.
+
+**Decision.** `AVNU_PAYMASTER_API_KEY` is optional. Unset or empty, the backend
+starts and relays without a key; a placeholder is still refused. When a key is
+set it is passed to the paymaster and, per D-014, never leaves the server. The
+fee ceilings, sponsorship budget, queue and no-logging rules are unchanged.
+
+**Consequences.** A test deployment needs only `FEE_AUTHORIZATION_SECRET` as a
+secret. If AVNU's relay turns out to require a key for this fee mode, relayed
+routes fail at the fee build and the fix is to set one: nothing else changes.

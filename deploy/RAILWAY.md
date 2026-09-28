@@ -31,8 +31,8 @@ generated domain.
 
 | Variable | Value |
 |---|---|
-| `AVNU_PAYMASTER_API_KEY` | Your AVNU paymaster key. Required at startup; relayed routes (transfer, unshield, swap, stake) spend it. |
-| `FEE_AUTHORIZATION_SECRET` | 32+ random characters, for example the output of `openssl rand -hex 32`. |
+| `FEE_AUTHORIZATION_SECRET` | Required: 32+ random characters, for example the output of `openssl rand -hex 32`. |
+| `AVNU_PAYMASTER_API_KEY` | Optional (D-068). The relay is gasless without it: the player's shielded STRK repays each relay's gas. Set one only if AVNU asks for it. |
 
 ### Runtime (public configuration)
 
