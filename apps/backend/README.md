@@ -2,7 +2,8 @@
 
 **The server-side privacy boundary. Core request handling is implemented.**
 
-The browser cannot hold the paymaster key or send privacy-sensitive RPC reads
+The browser cannot hold a paymaster key (optional since D-068: the relay is
+gasless, repaid from the player's shielded balance) or send privacy-sensitive RPC reads
 directly to a third party. This app owns the smallest server surface needed to
 submit eligible prepared Wallet API calls and proxy those reads.
 
