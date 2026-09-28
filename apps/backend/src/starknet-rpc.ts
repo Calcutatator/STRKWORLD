@@ -32,11 +32,13 @@ export class StarknetRpcPoolPort implements PoolRpcPort {
       this.callPool(FEE_SELECTOR, [], signal),
       this.callPool(PROOF_VALIDITY_SELECTOR, [], signal),
     ]);
-    if (feeResult.length !== 2) {
+    // `get_fee_amount` returns a u128 (a single felt) in the live pool's ABI.
+    // It was modelled as a u256 (two felts), which failed every pool-config
+    // read against mainnet, where the call returns `[0x53444835ec580000]`.
+    if (feeResult.length !== 1) {
       throw new Error('Starknet RPC returned an invalid fee amount.');
     }
-    const low = feltToU128(feeResult[0], 'fee amount low word');
-    const high = feltToU128(feeResult[1], 'fee amount high word');
+    const feeAmount = feltToU128(feeResult[0], 'fee amount');
     if (validityResult.length !== 1) {
       throw new Error('Starknet RPC returned an invalid proof-validity window.');
     }
@@ -45,7 +47,7 @@ export class StarknetRpcPoolPort implements PoolRpcPort {
       'proof-validity window',
     );
     return {
-      feeAmount: low + (high << 128n),
+      feeAmount,
       feeToken: this.options.feeToken,
       proofValidityBlocks,
       noteMaturityBlocks: this.options.noteMaturityBlocks ?? 10,

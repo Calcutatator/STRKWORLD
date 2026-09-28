@@ -324,7 +324,7 @@ describe('fixed Starknet RPC adapter', () => {
           ? ['0x99']
           : call.entry_point_selector === '0x11d6d65b366023adbdaeaa04008285431f4509d78e78cda7067e58fbba35147'
             ? ['0x1c2']
-            : ['0x6', '0x0'];
+            : ['0x6'];
         return new Response(JSON.stringify({ jsonrpc: '2.0', id: request.id, result }));
       }
       return new Response(JSON.stringify({ jsonrpc: '2.0', id: request.id, result: 1000 }));
@@ -558,6 +558,31 @@ describe('fixed Starknet RPC adapter', () => {
     await expect(rpc.getPublicKey('0x456')).resolves.toBe(key);
   });
 
+  it('reads the live pool fee as the single u128 the mainnet ABI returns', async () => {
+    let call = 0;
+    const fetcher = vi.fn(async () => {
+      call += 1;
+      // What mainnet answered for get_fee_amount on 2026-09-27: 6 STRK.
+      const result = call === 1 ? ['0x53444835ec580000'] : ['0x1c2'];
+      return new Response(JSON.stringify({ jsonrpc: '2.0', id: call, result }));
+    });
+    const rpc = new StarknetRpcPoolPort({ rpcUrl: 'https://rpc.example', poolAddress: '0x123', feeToken: '0x4718', fetcher });
+    await expect(rpc.getPoolConfig()).resolves.toMatchObject({ feeAmount: 6_000_000_000_000_000_000n });
+  });
+
+  it('refuses a fee result that is not exactly one felt, such as the old u256 shape', async () => {
+    for (const shaped of [['0x6', '0x0'], []]) {
+      let call = 0;
+      const fetcher = vi.fn(async () => {
+        call += 1;
+        const result = call === 1 ? shaped : ['0x1c2'];
+        return new Response(JSON.stringify({ jsonrpc: '2.0', id: call, result }));
+      });
+      const rpc = new StarknetRpcPoolPort({ rpcUrl: 'https://rpc.example', poolAddress: '0x123', feeToken: '0x4718', fetcher });
+      await expect(rpc.getPoolConfig()).rejects.toThrow(/invalid fee amount/i);
+    }
+  });
+
   it.each([
     ['negative', '-1'],
     ['decimal', '123'],
@@ -567,7 +592,7 @@ describe('fixed Starknet RPC adapter', () => {
     let call = 0;
     const fetcher = vi.fn(async () => {
       call += 1;
-      const result = call === 1 ? [malformed, '0x0'] : ['0x1c2'];
+      const result = call === 1 ? [malformed] : ['0x1c2'];
       return new Response(JSON.stringify({ jsonrpc: '2.0', id: call, result }));
     });
     const rpc = new StarknetRpcPoolPort({
@@ -590,7 +615,7 @@ describe('fixed Starknet RPC adapter', () => {
     let call = 0;
     const fetcher = vi.fn(async () => {
       call += 1;
-      const result = call === 1 ? ['0x6', '0x0'] : [malformed];
+      const result = call === 1 ? ['0x6'] : [malformed];
       return new Response(JSON.stringify({ jsonrpc: '2.0', id: call, result }));
     });
     const rpc = new StarknetRpcPoolPort({
@@ -609,7 +634,7 @@ describe('fixed Starknet RPC adapter', () => {
   ])('rejects a %s proof-validity result', async (_label, malformed) => {
     let call = 0;
     const fetcher = vi.fn(async () => {
-      const result = call++ === 0 ? ['0x6', '0x0'] : malformed;
+      const result = call++ === 0 ? ['0x6'] : malformed;
       return new Response(JSON.stringify({ jsonrpc: '2.0', id: call, result }));
     });
     const rpc = new StarknetRpcPoolPort({

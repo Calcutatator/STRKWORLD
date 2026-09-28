@@ -343,6 +343,20 @@ wallet. D-056's funded shield settles the question.
 against the pool address in the STRK20 facts; D-043 and the 2026-08-18 finding
 re-read.
 
+### 2026-09-28 — The pool fee is a u128: the backend's u256 decode failed every mainnet read
+
+`get_fee_amount` returns a single `u128` in the live pool's ABI (read from the
+deployed class; mainnet answers `[0x53444835ec580000]`, 6 STRK). The backend's
+`StarknetRpcPoolPort.getPoolConfig` required two felts (a u256), so every
+pool-config read against mainnet failed with `UPSTREAM_FAILURE`, and nothing
+relayed or planned could run. Its tests mocked the same wrong two-felt shape,
+which is why no test caught it. It now requires exactly one felt, with the
+live value as a test. Found by the first Railway deployment's smoke check.
+
+*Verified:* the pool class ABI (`get_fee_amount -> u128`,
+`get_proof_validity_blocks -> u64`); `apps/backend` tests (369) including the
+mainnet value and a refusal of the old shape.
+
 ### 2026-09-27 — Spends are one per send; the Bank's multi-spend Max path is now unreachable
 
 The relay's unshield route admits exactly one withdrawal per submission, and

@@ -22,6 +22,11 @@ railway domain                    # generates <service>.up.railway.app
 Then set the variables below, and deploy with `railway up` from the repo root
 (or connect the GitHub repo so pushes to `main` deploy).
 
+A CLI upload does not apply `railway.json`: Railway falls back to its automatic
+Node builder, which finds no start command. Set
+`RAILWAY_DOCKERFILE_PATH=deploy/fly/Dockerfile` on the service so every build
+uses the Dockerfile.
+
 ## Variables
 
 Railway variable references keep the three origin values in step with the
