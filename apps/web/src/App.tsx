@@ -12,6 +12,8 @@ import { PresenceStatusLayer } from './presence/PresenceStatusLayer.js';
 import { BridgeProvider, type BridgeProviderProps } from './bridge/BridgeProvider.js';
 import { ArrivalNudgeProvider } from './bridge/ArrivalNudgeProvider.js';
 import { HudLayer } from './hud/HudLayer.js';
+import type { DegenCatalogSource } from './panels/exchange/degen-catalog.js';
+import { DegenCatalogProvider } from './panels/exchange/DegenCatalogProvider.js';
 
 /**
  * The composition root, as a component.
@@ -45,6 +47,7 @@ export function App({
   operations,
   walletSession,
   initialConnectState,
+  degenCatalog,
 }: {
   worldOut: EventBus<WorldEvents>;
   shellIn: EventBus<ShellEvents>;
@@ -57,6 +60,8 @@ export function App({
   initialConnectState?: ConnectState;
   /** Real composition supplies the service, account reader and planner together. */
   bridge?: Omit<BridgeProviderProps, 'children' | 'demo' | 'fallback' | 'build'>;
+  /** The degen floor's list from the backend (D-067); the demo uses its own static list. */
+  degenCatalog?: DegenCatalogSource;
 }) {
   // Presence owns one explicit lifecycle. Effect cleanup only removes event
   // listeners; the controller is destroyed by the composition root's owner.
@@ -71,20 +76,22 @@ export function App({
         fallback={<Boot />}
       >
         <BridgeProvider {...bridge} demo={!bridge}>
-          <ArrivalNudgeProvider world={worldOut}>
-            <main className="strkworld">
-              <WorldHost
-                out={worldOut}
-                in={shellIn}
-                remotePeers={presence.remotePeers}
-                sandbox={presence.sandbox}
-              />
-              <HudLayer shell={shellIn} />
-              <VisitLayer world={worldOut} shell={shellIn} />
-              <PresenceStatusLayer presence={presence} world={worldOut} />
-              <SessionNoticeLayer />
-            </main>
-          </ArrivalNudgeProvider>
+          <DegenCatalogProvider source={degenCatalog} demo={!operations}>
+            <ArrivalNudgeProvider world={worldOut}>
+              <main className="strkworld">
+                <WorldHost
+                  out={worldOut}
+                  in={shellIn}
+                  remotePeers={presence.remotePeers}
+                  sandbox={presence.sandbox}
+                />
+                <HudLayer shell={shellIn} />
+                <VisitLayer world={worldOut} shell={shellIn} />
+                <PresenceStatusLayer presence={presence} world={worldOut} />
+                <SessionNoticeLayer />
+              </main>
+            </ArrivalNudgeProvider>
+          </DegenCatalogProvider>
         </BridgeProvider>
       </PrivacyProvider>
     </ErrorBoundary>

@@ -560,9 +560,10 @@ describe('visit controller', () => {
 });
 
 describe('station registry', () => {
-  it('publishes exactly one opaque single-swap Exchange station', () => {
+  it('publishes two opaque single-swap Exchange stations, the ground floor and the degen floor (D-067)', () => {
     expect(stationSnapshot('exchange')).toEqual([
       { station: 'exchange:swap', label: 'SWAP', status: 'available' },
+      { station: 'exchange:degen', label: 'DEGEN SWAP', status: 'available' },
     ]);
     const resolved = resolveStation('exchange', 'exchange:swap');
     expect(resolved.status).toBe('available');
@@ -573,8 +574,20 @@ describe('station registry', () => {
       label: 'SWAP',
       routes: ['exchange.swap'],
       view: 'exchange',
+      mode: 'ground',
     });
     expect(resolved.definition).not.toHaveProperty('modes');
+    const degen = resolveStation('exchange', 'exchange:degen');
+    expect(degen.status).toBe('available');
+    if (degen.status !== 'available') return;
+    expect(degen.definition).toEqual({
+      station: 'exchange:degen',
+      building: 'exchange',
+      label: 'DEGEN SWAP',
+      routes: ['exchange.swap'],
+      view: 'exchange',
+      mode: 'degen',
+    });
   });
 
   it('publishes only the approved transfer station for the Post Office', () => {

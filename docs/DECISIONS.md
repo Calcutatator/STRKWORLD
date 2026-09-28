@@ -1536,7 +1536,7 @@ new decision.
 
 ## D-042 — The Exchange reviews AVNU's protected minimum over a six-asset display catalog
 
-**2026-08-18 · Accepted · technical direction delegated to the project lead · implements D-030–D-032, completes D-040's Exchange deferral and amends D-041's minimum mapping · rendered Exchange room/station status updated by [the 2026-08-28 finding](../AGENTS.md#2026-08-28--room-navigation-and-three-admitted-stations-pass-bridge-deposit-stays-locked)**
+**2026-08-18 · Accepted · technical direction delegated to the project lead · implements D-030–D-032, completes D-040's Exchange deferral and amends D-041's minimum mapping · rendered Exchange room/station status updated by [the 2026-08-28 finding](../AGENTS.md#2026-08-28--room-navigation-and-three-admitted-stations-pass-bridge-deposit-stays-locked) · the ground floor keeps these six assets, but the degen floor's runtime catalog (a backend-fetched avnu list) is added by D-067**
 
 **Context.** D-041 exposed the expected output, the typed intent's minimum,
 the configured slippage and quote expiry. Tracing the installed AVNU 4.2.0
@@ -2964,3 +2964,40 @@ concurrency and backpressure limits stay.
 substance: the proof's block always dated the confirm. D-019's accepted
 presence leak, the avatar vanishing into a building, remains the main
 in-game timing signal.
+
+---
+
+## D-067 — The degen floor swaps a curated core plus avnu's live community list
+
+**2026-09-28 · Accepted by the user · extends D-042 (the ground floor's six-asset catalog is unchanged) · keeps D-018's server-side allowlisting**
+
+**Context.** The Exchange's new degen floor was asked to list "the degen mode
+listed tokens on Starknet that avnu has", and the user chose a combination of
+a curated list and avnu's live list. avnu's degen mode is a client toggle; its
+public token API tags tokens `Unknown`, `Verified`, `Community`, `Unruggable`
+and `AVNU`. Routed liquidity is thin (about $50–60 a day for LORDS and
+DREAMS, under $10 for most others), and ticker-squatting impostors exist
+(three fake LORDS). The pool itself accepts any ERC-20, so our allowlist is
+the only gate.
+
+**Decision.**
+
+- The degen counter (`exchange:degen`) swaps privately through the same
+  `exchange.swap` route, grade and disclosure as the ground floor, over a
+  separate degen catalog.
+- The degen catalog is a curated core (LORDS, DREAMS, SLAY, BROTHER, tBTC,
+  CASH, DOG), each pinned to a reviewed address and always listed, plus
+  avnu's live list. The backend fetches the live list itself, so avnu never
+  sees a player's IP. It keeps only `Verified`, `Community`, `Unruggable` or
+  `AVNU` tags above a minimum routed daily volume, and never a token whose
+  ticker impersonates a curated one. Addresses come only from avnu's API or
+  the curated core, never from player input or a URL.
+- The backend admits a degen swap only for tokens in the curated core or in
+  its own current filtered list. The counter is labelled "Degen mode" and
+  shows each token's avnu tag. D-041/D-042's protected-minimum review applies
+  unchanged: thin liquidity means worse quotes, never an unprotected fill.
+
+**Consequences.** Demo mode shows the counter working against the fake.
+Production keeps swap denied until swap itself is switched on; that decision
+must also switch the degen catalog on or off. The volume floor and tag set are
+operator configuration.

@@ -37,7 +37,12 @@ export {
 } from './endur.js';
 
 // Test double. Safe to import from any lane — no network, no wallet, no chain.
-export { FakePrivacyOperations, type FakeConfig, type Fault } from './testing/fake.js';
+export {
+  FakePrivacyOperations,
+  type FakeConfig,
+  type FakeDemoSwapRates,
+  type Fault,
+} from './testing/fake.js';
 export { FakePublicShieldPlanner, type FakePublicShieldPlannerConfig } from './testing/public-shield.js';
 
 // Production Bridge reserve planner (D-061). Composed only while shield is enabled.

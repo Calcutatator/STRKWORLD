@@ -44,7 +44,7 @@ disappear is accepted for v1 (D-019).
 | `src/bridge/` | The manual Bridge machine, service-scoped quote coordinator, runtime provider, and offline demo |
 | `src/panels/bank/` | The Bank: shield, unshield, private transfer |
 | `src/panels/bridge/` | The Bridge recovery/deposit view and explicit Bank shield handoff |
-| `src/panels/exchange/` | The Exchange: one reviewed private swap over a display-only six-asset catalog |
+| `src/panels/exchange/` | The Exchange: one reviewed private swap over a display-only six-asset catalog, and the degen floor's swap over its own list (D-067) |
 | `src/copy.ts` | Every player-facing string the shell owns |
 | `src/format.ts` | `bigint` ↔ display. No `number` anywhere near money |
 
@@ -191,6 +191,18 @@ batch carries none. D-064 waives the route's disclosure, so `ConfirmGate`
 enables with none while every other deviation still needs its own. While it is
 the stake view the window carries `data-brand="endur"` and wears Endur's light
 palette. Like every route, it stays locked until the build's policy enables it.
+
+D-067 adds `exchange:degen`, the Exchange tower's degen counter (DEGEN SWAP),
+on the same `exchange.swap` route, so it opens and locks exactly when the
+ground-floor swap does (production denies swap today, so both stay locked).
+It runs the Exchange's own machine, flow and review over a loaded list: STRK
+first, then the backend's curated core and its filtered copy of avnu's live
+list from `GET /api/v1/degen/tokens` (`DegenCatalogProvider`; the demo loads a
+static list lazily and the demo seam quotes it from explicit DEMO rates). Every
+listed token shows avnu's tags as chips; one this build's wallet policy does
+not admit for swap, or the demo cannot quote, is display only, never offered
+and never prepared. While it is the degen view the window carries
+`data-brand="degen"` and wears neon pink and cyan on navy.
 
 The Bridge is a separate manual state machine, not a financial batch mode. It
 binds a signed 1Click quote to the active account, requires a public-shield

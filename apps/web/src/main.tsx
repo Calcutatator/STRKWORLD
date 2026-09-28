@@ -12,6 +12,7 @@ import { installPresenceTeardown } from './presence/lifecycle.js';
 import { parseProductionWalletConfig, usesProductionWallet } from './production/config.js';
 import { startProductionWalletBootstrap } from './production/bootstrap.js';
 import { ProductionRoot, type ShieldPlannerFactory } from './production/ProductionRoot.js';
+import { createBackendDegenCatalog } from './panels/exchange/degen-catalog.js';
 
 /**
  * STRKWORLD shell entry point.
@@ -95,6 +96,9 @@ if (usesProductionWallet(environment)) {
   );
   try {
     const config = parseProductionWalletConfig(environment);
+    // The degen floor's list (D-067), read from the same-origin backend only
+    // when the degen counter opens; while swap is off that counter is locked.
+    const degenCatalog = createBackendDegenCatalog({ baseUrl: config.backendBaseUrl });
     // D-061's reserve planner arrives with the same lazy privacy import.
     // ProductionRoot uses it only while config.policy enables shield.
     let createShieldPlanner: ShieldPlannerFactory | undefined;
@@ -118,6 +122,7 @@ if (usesProductionWallet(environment)) {
               bridge={{ loadRuntime: loadProductionBridgeRuntime }}
               policy={config.policy}
               createShieldPlanner={createShieldPlanner}
+              degenCatalog={degenCatalog}
             />
           </StrictMode>,
         );

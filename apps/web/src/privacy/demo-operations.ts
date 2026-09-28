@@ -1,4 +1,5 @@
 import { FakePrivacyOperations, type Address } from '@strkworld/privacy';
+import { DEMO_DEGEN_EXPIRES_AT, DEMO_DEGEN_RATES, DEMO_DEGEN_SLIPPAGE_BPS } from './demo-degen.js';
 
 /**
  * The shell's default financial seam: the deterministic fake.
@@ -33,6 +34,12 @@ export function createDemoOperations(): FakePrivacyOperations {
       expectedAmountOut: 2n * 10n ** 18n,
       slippageBps: 50,
       expiresAt: 4_102_444_800_000,
+    },
+    // The degen floor's DEMO rates (D-067): explicit fixtures, never prices.
+    demoSwapRates: {
+      perStrk: DEMO_DEGEN_RATES,
+      slippageBps: DEMO_DEGEN_SLIPPAGE_BPS,
+      expiresAt: DEMO_DEGEN_EXPIRES_AT,
     },
   });
 }

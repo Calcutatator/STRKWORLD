@@ -1,11 +1,44 @@
 import type { Address } from '@strkworld/privacy';
 import { sameAddress } from '../../format.js';
 
+/** avnu's token tags, as its public token API names them (D-067). */
+export type AvnuTag = 'Unknown' | 'Verified' | 'Community' | 'Unruggable' | 'AVNU';
+
 /** Display metadata only. The wallet policy remains the route authority (D-042). */
 export interface ExchangeAsset {
   readonly symbol: string;
   readonly decimals: number;
   readonly token: Address;
+  /** Degen floor only (D-067): the token's name, as listed. */
+  readonly name?: string;
+  /** Degen floor only (D-067): avnu's tags for the token, shown as chips. */
+  readonly tags?: readonly AvnuTag[];
+  /**
+   * Degen floor only (D-067): `false` marks a listed token this build cannot
+   * swap, which is shown as display only. Absent means swappable, as every
+   * ground-floor asset is; the wallet policy still decides at prepare.
+   */
+  readonly swappable?: boolean;
+}
+
+/** Whether a listed asset may be chosen for a swap in this build. */
+export function isSwappable(asset: ExchangeAsset): boolean {
+  return asset.swappable !== false;
+}
+
+/**
+ * Where a floor's listed assets came from: the ground floor's fixed six
+ * (D-042), or the degen floor's list (D-067) from the backend's live copy of
+ * avnu's list, its curated core alone while avnu is unreachable, or the demo.
+ */
+export type ExchangeCatalogOrigin = 'fixed' | 'live' | 'curated' | 'demo';
+
+/** A floor whose listed assets load when it opens (the degen floor, D-067). */
+export interface ExchangeCatalogPort {
+  load(signal?: AbortSignal): Promise<{
+    readonly origin: Exclude<ExchangeCatalogOrigin, 'fixed'>;
+    readonly assets: readonly ExchangeAsset[];
+  }>;
 }
 
 export const EXCHANGE_CATALOG: readonly ExchangeAsset[] = Object.freeze([

@@ -153,6 +153,29 @@ export const COPY = freezeCopy({
   },
 
   /**
+   * The Exchange's degen floor (D-067). A degen swap is the same private swap
+   * as downstairs, with the same register disclosure at commit, so nothing
+   * here adds a privacy claim; and nothing here calls a listed token safe or
+   * checked (`copy.test.ts` checks both).
+   */
+  degen: {
+    eyebrow: 'Degen mode',
+    intro:
+      'Degen mode lists community tokens avnu has not verified, next to ones it has. Routed liquidity is thin, so a quote can be far worse than the market. The protected minimum still applies to every swap.',
+    tags: "The chips are avnu's own tags. A tag is avnu's label for a token, not a promise about it.",
+    listTitle: 'Listed in degen mode',
+    displayOnly: 'Display only',
+    displayOnlyNote: 'Display only: listed here, but this build cannot swap it.',
+    displayOnlyNotice: 'That token is listed for display only. This build cannot swap it.',
+    loading: 'Loading the degen list…',
+    notReady: 'The degen list has not loaded yet.',
+    unavailable: 'The degen list could not be loaded. Nothing was sent.',
+    retry: 'Load the list again',
+    curatedOnly: "avnu's live list could not be reached, so only the core list is shown.",
+    demo: "Demo list and demo rates: these are not avnu's live tokens or market prices.",
+  },
+
+  /**
    * The Bank's Endur staking counter (D-063). D-064 waived its in-game
    * disclosure, and in exchange this copy claims no amount privacy: it says
    * where the STRK comes from and where the xSTRK lands, and never that

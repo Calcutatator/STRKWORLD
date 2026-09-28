@@ -258,6 +258,33 @@ empty shell to fetchers, so a 200 there means nothing.
 
 ## 6. Findings log
 
+### 2026-09-28 — avnu's token list: 200 a page, volume order only, flaky, and not all printable (D-067)
+
+avnu's public `GET https://starknet.api.avnu.fi/v1/starknet/tokens` (the SDK's
+`fetchTokens`) returns at most 200 tokens a page whatever `size` asks for, is
+always sorted by `lastDailyVolumeUsd` highest first, and ignores any `sort`
+parameter. It answered `503 Service temporarily unavailable` twice in one
+session of about 30 requests, so the backend's degen list must fail safe (it
+falls back to the curated core, retried after a minute). Of 2,515 tokens,
+1,330 carry an admitted tag; 1,254 are tagged both `Unknown` and
+`Unruggable`, so a tag set means "any admitted tag present", never "no
+Unknown". Symbols are not clean text: 12 carry control characters or
+non-ASCII letters (`\x01`, `\x1f`, `Flokİ`), one of them a
+`Verified`/`Community`/`Unruggable` token whose symbol is `\x08` + `8`, which
+is why live symbols and names must be printable ASCII (that also rules out
+look-alike letters from other scripts). No
+same-ticker impostor of the curated core was listed that day; tickers compare
+case-folded, alphanumerics only, because DREAMS is `dreams` on avnu and
+on-chain. DREAMS has 6 decimals and DOG 5. At the default $100/day floor the
+live list was 16 `Verified` tokens, the ground floor's six and xSTRK among
+them; no community token outside the curated core cleared even $10.
+
+*Verified:* curl of the endpoint and its `/v3/api-docs` OpenAPI (read-only,
+all 13 pages); `symbol()`, `name()` and `decimals()` of the seven curated
+tokens over the Cartridge public RPC at block 15,566,935; the backend's own
+`filterLiveTokens` run over the fetched page at floors of $1–$500.
+`apps/backend/src/degen-catalog.test.ts` pins the filter, cache and fallback.
+
 ### 2026-09-28 — A relayed send names its recipient only in `Append`, first felt (D-065)
 
 A pool transfer puts its recipient in calldata only when it opens a channel:

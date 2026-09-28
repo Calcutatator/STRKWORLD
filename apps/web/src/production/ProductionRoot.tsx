@@ -9,6 +9,7 @@ import type {
 import { useEffect, useMemo, useState, useRef } from 'react';
 import { App } from '../App.js';
 import type { BridgeRuntimeLoader } from '../bridge/BridgeProvider.js';
+import type { DegenCatalogSource } from '../panels/exchange/degen-catalog.js';
 import { STRK_TOKEN } from '../bridge/bridge-machine.js';
 import { createConnectFlow, type ConnectFlow, type ConnectState } from '../connect/connect-machine.js';
 import { COPY } from '../copy.js';
@@ -38,6 +39,7 @@ export function ProductionRoot({
   bridge,
   createShieldPlanner,
   policy = detectRoutePolicy(),
+  degenCatalog,
 }: {
   session: WalletSession;
   worldOut: EventBus<WorldEvents>;
@@ -52,6 +54,8 @@ export function ProductionRoot({
   createShieldPlanner?: ShieldPlannerFactory;
   /** The route policy this build's session enforces; defaults to the live one. */
   policy?: WalletRoutePolicy | null;
+  /** The degen floor's list, read from the same-origin backend (D-067). */
+  degenCatalog?: DegenCatalogSource;
 }) {
   // A boolean, not the policy object: the default policy is re-parsed on every
   // render, and a new planner per render would reset the Bridge panel.
@@ -70,6 +74,7 @@ export function ProductionRoot({
         createPresence={createPresence}
         bridge={bridge}
         shieldPlanner={shieldPlanner}
+        degenCatalog={degenCatalog}
       />
     </WalletSessionProvider>
   );
@@ -118,6 +123,7 @@ function ProductionApp({
   createPresence,
   bridge,
   shieldPlanner,
+  degenCatalog,
 }: {
   session: WalletSession;
   worldOut: EventBus<WorldEvents>;
@@ -126,6 +132,7 @@ function ProductionApp({
   createPresence?: () => PresenceController;
   bridge: { loadRuntime: BridgeRuntimeLoader };
   shieldPlanner: PublicShieldPlanner | null;
+  degenCatalog?: DegenCatalogSource;
 }) {
   const wallet = useWalletSessionOptional();
   if (!wallet) throw new Error('ProductionApp needs a WalletSessionProvider.');
@@ -144,6 +151,7 @@ function ProductionApp({
       createPresence={createPresence}
       bridge={bridge}
       shieldPlanner={shieldPlanner}
+      degenCatalog={degenCatalog}
     />
   );
 }
@@ -157,6 +165,7 @@ function WalletCapabilityGate({
   createPresence,
   bridge,
   shieldPlanner,
+  degenCatalog,
 }: {
   session: WalletSession;
   snapshot: WalletSessionSnapshot;
@@ -166,6 +175,7 @@ function WalletCapabilityGate({
   createPresence?: () => PresenceController;
   bridge: { loadRuntime: BridgeRuntimeLoader };
   shieldPlanner: PublicShieldPlanner | null;
+  degenCatalog?: DegenCatalogSource;
 }) {
   const connect = useMemo(
     () => createConnectFlow(session.operations),
@@ -209,6 +219,7 @@ function WalletCapabilityGate({
         createPresence={createPresence}
         bridge={bridge}
         shieldPlanner={shieldPlanner}
+        degenCatalog={degenCatalog}
       />
     );
   }
@@ -225,6 +236,7 @@ function ConnectedProductionApp({
   createPresence,
   bridge,
   shieldPlanner,
+  degenCatalog,
 }: {
   session: WalletSession;
   initialConnectState: ConnectState;
@@ -234,6 +246,7 @@ function ConnectedProductionApp({
   createPresence?: () => PresenceController;
   bridge: { loadRuntime: BridgeRuntimeLoader };
   shieldPlanner: PublicShieldPlanner | null;
+  degenCatalog?: DegenCatalogSource;
 }) {
   const [activePresence, setActivePresence] = useState<PresenceController | null>(presence ?? null);
   const owner = useRef<PresenceController | null>(presence ?? null);
@@ -278,6 +291,7 @@ function ConnectedProductionApp({
         // null keeps the Bridge recovery-only.
         planner: shieldPlanner,
       }}
+      degenCatalog={degenCatalog}
     />
   );
 }

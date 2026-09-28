@@ -272,6 +272,47 @@ describe('Fly edge public boundary', () => {
     expect(received.headers['x-player-identifier']).toBeUndefined();
   });
 
+  it('forwards the degen token list GET (D-067) with no body and no player identity', async () => {
+    const root = await fixture();
+    const backend = createServer((request, response) => {
+      const chunks: Buffer[] = [];
+      request.on('data', (chunk: Buffer) => chunks.push(chunk));
+      request.once('end', () => {
+        response.setHeader('content-type', 'application/json');
+        response.end(JSON.stringify({
+          path: request.url,
+          method: request.method,
+          headers: request.headers,
+          body: Buffer.concat(chunks).toString(),
+        }));
+      });
+    });
+    const backendPort = await listen(backend);
+    const edge = createEdgeServer({ staticRoot: root, backendPort, lobbyPort: 1, publicOrigin: 'https://game.example' });
+    const edgePort = await listen(edge);
+
+    const response = await fetchEdge(edgePort, '/api/v1/degen/tokens', {
+      headers: {
+        Accept: 'application/json',
+        Cookie: 'session=private',
+        'X-Forwarded-For': '198.51.100.1',
+      },
+    });
+
+    expect(response.status).toBe(200);
+    const received = await response.json() as {
+      path: string;
+      method: string;
+      headers: Record<string, string | undefined>;
+      body: string;
+    };
+    expect(received).toMatchObject({ path: '/v1/degen/tokens', method: 'GET', body: '' });
+    expect(received.headers.cookie).toBeUndefined();
+    expect(received.headers['x-forwarded-for']).toBeUndefined();
+    expect(received.headers.accept).toBeUndefined();
+    expect(response.headers.get('cache-control')).toBe('no-store');
+  });
+
   it('sanitizes private-child response headers at the public edge', async () => {
     const root = await fixture();
     const isolationHeaderOne = ['cross', 'origin', 'opener', 'policy'].join('-');

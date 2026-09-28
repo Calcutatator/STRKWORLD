@@ -47,7 +47,8 @@ for the building privacy-admission rule.
 
 `BackendApi` is a framework-neutral, versioned handler for the exact six
 operations the browser needs: pool-native fee build, quote-bound swap prepare,
-prepared submission, pool config, recipient public key and receipt lookup.
+prepared submission, pool config, recipient public key and receipt lookup,
+plus the optional read-only degen token list (D-067, below).
 Schemas reject unknown fields. The
 submission validator accepts only the configured pool's `apply_actions`,
 bounded calldata and a non-empty bounded proof. It verifies that the proof
@@ -64,6 +65,24 @@ One recipient per send (D-065): a first transfer opens a channel with
 route refuses a submission whose `Append` actions name more than one distinct
 address (400). Later sends to a known recipient carry no address, so the
 Shell's one-transfer batch rule bounds those.
+
+The degen floor's catalog (D-067) is optional and off by default: with no
+`BACKEND_DEGEN_ENABLED` it is absent, and any other `BACKEND_DEGEN_*`
+variable fails startup. Once enabled (`_TAGS`, `_MIN_DAILY_VOLUME_USD` and
+`_CACHE_TTL_MS` required), the backend fetches avnu's public token list itself
+through the SDK's `fetchTokens`, so avnu never sees a player's IP, and keeps a
+token only if it carries a configured tag (`Unknown` never qualifies), meets
+the whole-dollar `lastDailyVolumeUsd` floor, has printable-ASCII text, and no
+curated or ground-floor ticker at another address and no other live token
+share its ticker. The pinned curated core (LORDS, DREAMS, SLAY, BROTHER, tBTC,
+CASH, DOG, `degen-catalog.ts`) is always listed. The list is cached for the
+TTL, refreshed single-flight on its own 5 s timeout, and fails safe to the
+curated core alone, retried after a minute, whenever avnu cannot be reached.
+`GET /v1/degen/tokens` serves it; the request carries nothing (no body, and
+the edge refuses query strings), and the endpoint is shut whenever swap or
+degen mode is. A swap's tokens must be in `BACKEND_ROUTE_SWAP_ALLOWED_TOKENS`,
+the curated core or the current list, checked at prepare and again at
+submission; a swap the static allowlist covers never consults the list.
 
 For AVNU swaps the server selects an exact-input quote and requests
 `quoteToCalls({ private: true })`. Its HMAC authorization additionally binds

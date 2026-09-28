@@ -13,6 +13,8 @@ type BankStationDefinition = {
 type ExchangeStationDefinition = {
   station: StationId; building: 'exchange'; label: string; routes: readonly string[];
   view: 'exchange';
+  /** The ground floor's six-asset swap (D-042), or the degen floor's list (D-067). */
+  mode: 'ground' | 'degen';
 };
 type BridgeStationDefinition = {
   station: StationId; building: 'bridge'; label: string; routes: readonly string[];
@@ -76,6 +78,18 @@ const STATIONS: readonly StationDefinition[] = Object.freeze([
     label: 'SWAP',
     routes: ['exchange.swap'],
     view: 'exchange',
+    mode: 'ground',
+  },
+  // The Exchange tower's degen floor (D-067): the same `exchange.swap` route,
+  // grade and disclosure as the counter downstairs, so it opens and locks
+  // exactly when that one does; only its token list differs.
+  {
+    station: 'exchange:degen',
+    building: 'exchange',
+    label: 'DEGEN SWAP',
+    routes: ['exchange.swap'],
+    view: 'exchange',
+    mode: 'degen',
   },
   {
     station: 'bridge:deposit',

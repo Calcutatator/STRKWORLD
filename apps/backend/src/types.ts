@@ -37,6 +37,50 @@ export interface BackendConfig {
    * route is always configured.
    */
   routes: Record<Exclude<PrivateRoute, 'stake'>, RoutePolicy> & { stake?: RoutePolicy };
+  /**
+   * The degen floor's catalog (D-067): optional, and off while absent. It
+   * never enables swap; it only widens what an enabled swap route admits.
+   */
+  degen?: DegenConfig;
+}
+
+/** avnu's token tags, as its public token API names them. */
+export type AvnuTokenTag = 'Unknown' | 'Verified' | 'Community' | 'Unruggable' | 'AVNU';
+
+/** The tags D-067 lets a live token be listed under. `Unknown` never qualifies. */
+export type DegenTag = Exclude<AvnuTokenTag, 'Unknown'>;
+
+export interface DegenConfig {
+  enabled: boolean;
+  /** A live token must carry at least one of these. */
+  tags: readonly DegenTag[];
+  /** Minimum `lastDailyVolumeUsd`, in whole US dollars, for a live token. */
+  minDailyVolumeUsd: number;
+  /** How long one fetched list stands before avnu is asked again. */
+  cacheTtlMs: number;
+}
+
+/** One listed token: the curated core's pinned entry, or avnu's live entry. */
+export interface DegenToken {
+  readonly address: string;
+  readonly symbol: string;
+  readonly name: string;
+  readonly decimals: number;
+  /** avnu's tags, in avnu's own order. */
+  readonly tags: readonly AvnuTokenTag[];
+  /** Pinned in the curated core (always listed), rather than from avnu's live list. */
+  readonly curated: boolean;
+}
+
+export interface DegenCatalogSnapshot {
+  /** `curated`: avnu could not be reached, so only the curated core is listed. */
+  readonly source: 'live' | 'curated';
+  readonly tokens: readonly DegenToken[];
+}
+
+/** The backend's own degen list; the only thing besides the static allowlist a swap may use. */
+export interface DegenCatalogPort {
+  snapshot(signal?: AbortSignal): Promise<DegenCatalogSnapshot>;
 }
 
 export interface RelayFee {

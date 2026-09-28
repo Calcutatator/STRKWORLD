@@ -162,7 +162,11 @@ quote IDs, executor calls, calldata, authorizations, paymaster details and
 recovery handles never cross this seam. The fake exposes the same field only
 when its explicit deterministic `swapReview` configuration supplies the
 expected output, expiry and slippage; it never reads a clock or invents a
-market rate.
+market rate. For the demo's degen floor (D-067), an explicit
+`demoSwapRates` table (base units per STRK, plus a fixed slippage and expiry)
+quotes a swap between two rated tokens by floored bigint arithmetic, with
+AVNU's protected-minimum formula; any other swap falls back to `swapReview`.
+Those rates are demo fixtures, never prices.
 
 `buildStrk20Actions` is a validation-free array literal, and the relay's own
 binding check runs only *after* the wallet has minted an irrevocable proof. So

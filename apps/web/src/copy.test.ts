@@ -137,6 +137,47 @@ describe('shell copy', () => {
     });
   });
 
+  describe('the degen floor (D-067)', () => {
+    // Every line the degen counter adds; the rest is the swap's own copy.
+    const degenCopy = allCopyStrings(COPY.degen);
+
+    it('never calls a listed token safe, vetted or anything like it', () => {
+      const vouching =
+        /\b(?:safe\w*|vetted|vets?|audit\w*|trust\w*|guarantee\w*|legit\w*|screened|scam[- ]?free|rug[- ]?proof|risk[- ]?free|low[- ]risk|reviewed|approved|endorse\w*|recommend\w*|curated)\b/i;
+      expect(degenCopy.length).toBeGreaterThan(10);
+      for (const line of degenCopy) {
+        expect(line, line).not.toMatch(vouching);
+      }
+    });
+
+    it('adds no privacy claim to the swap\'s own disclosure', () => {
+      const claim =
+        /\b(?:private\w*|privacy|hidden|hides?|conceal\w*|secret\w*|anonym\w*|untraceable|unlinkable|invisible|confidential|on-chain|observer|reveals?|visible|public|linkable)\b/i;
+      for (const line of degenCopy) {
+        expect(line, line).not.toMatch(claim);
+      }
+    });
+
+    it('says plainly that avnu has not verified these tokens and that quotes can be poor', () => {
+      expect(COPY.degen.eyebrow).toBe('Degen mode');
+      expect(COPY.degen.intro).toMatch(/^Degen mode lists community tokens avnu has not verified/);
+      expect(COPY.degen.intro).toMatch(/thin/);
+      expect(COPY.degen.intro).toMatch(/protected minimum still applies/);
+      expect(COPY.degen.tags).toMatch(/not a promise/);
+    });
+
+    it('labels the demo\'s list and rates as demo only, never as live data or prices', () => {
+      expect(COPY.degen.demo).toMatch(/^Demo list and demo rates/);
+      expect(COPY.degen.demo).toMatch(/not avnu's live tokens or market prices/);
+    });
+
+    it('explains a display-only token without implying anything about the token itself', () => {
+      expect(COPY.degen.displayOnly).toBe('Display only');
+      expect(COPY.degen.displayOnlyNote).toMatch(/this build cannot swap it/);
+      expect(COPY.degen.displayOnlyNotice).toMatch(/this build cannot swap it/i);
+    });
+  });
+
   it('never promises that timing or a batch hides more than it does', () => {
     for (const line of allCopyStrings()) {
       expect(line.toLowerCase(), line).not.toContain('untraceable');

@@ -27,11 +27,12 @@ export function PanelFrame({
    */
   building?: BuildingId;
   /**
-   * Presentation only: a partner's look worn by one counter inside a building,
-   * over the building's own theme (`.panel[data-brand]`) — the Bank's Endur
-   * staking counter (D-063). It never gates a route or changes a control.
+   * Presentation only: a look worn by one counter inside a building, over the
+   * building's own theme (`.panel[data-brand]`) — the Bank's Endur staking
+   * counter (D-063) and the Exchange's degen floor (D-067). It never gates a
+   * route or changes a control.
    */
-  brand?: 'endur';
+  brand?: 'endur' | 'degen';
   /** Canonical approved copy, or null for a route graded `private` or with a waived disclosure (D-064, D-065). */
   disclosure: string | null;
   onClose: () => void;

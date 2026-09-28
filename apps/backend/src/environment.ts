@@ -1,7 +1,13 @@
 import type { AvnuPaymasterOptions } from './avnu-paymaster.js';
 import type { AvnuSwapPlannerOptions } from './avnu-swap-planner.js';
+import {
+  DEGEN_MAX_CACHE_TTL_MS,
+  DEGEN_MAX_MIN_DAILY_VOLUME_USD,
+  DEGEN_MIN_CACHE_TTL_MS,
+  DEGEN_TAGS,
+} from './degen-catalog.js';
 import type { StarknetRpcOptions } from './starknet-rpc.js';
-import type { BackendConfig, PrivateRoute, RoutePolicy } from './types.js';
+import type { BackendConfig, DegenConfig, DegenTag, PrivateRoute, RoutePolicy } from './types.js';
 import { isFelt } from './validation.js';
 
 const MAINNET_CHAIN_ID = '0x534e5f4d41494e';
@@ -30,6 +36,7 @@ export function parseBackendEnvironment(environment: Environment): ParsedBackend
   const unshield = parsePoolRoute(environment, 'UNSHIELD');
   const swap = parseSwapRoute(environment);
   const stake = parseStakeRoute(environment);
+  const degen = parseDegenCatalog(environment);
   const rpcUrl = parseUrl(environment, 'STARKNET_RPC_URL');
   const paymasterBaseUrl = parseOptionalUrl(environment, 'AVNU_PAYMASTER_BASE_URL');
   const avnuBaseUrl = parseOptionalUrl(environment, 'AVNU_BASE_URL');
@@ -63,6 +70,7 @@ export function parseBackendEnvironment(environment: Environment): ParsedBackend
         maxQueued: parseInteger(environment, 'BACKEND_QUEUE_MAX_QUEUED', 0),
       },
       routes: { transfer, unshield, swap, ...(stake ? { stake } : {}) },
+      ...(degen ? { degen } : {}),
     },
     paymaster: {
       apiKey: parseSecret(environment, 'AVNU_PAYMASTER_API_KEY', 1),
@@ -165,6 +173,59 @@ function parseStakeRoute(environment: Environment): RoutePolicy | undefined {
     quoteBound: false,
     allowedTokens: parseAllowedTokens(environment, 'BACKEND_ROUTE_STAKE_ALLOWED_TOKENS'),
   };
+}
+
+const DEGEN_CATALOG_VARIABLES = [
+  'BACKEND_DEGEN_TAGS',
+  'BACKEND_DEGEN_MIN_DAILY_VOLUME_USD',
+  'BACKEND_DEGEN_CACHE_TTL_MS',
+] as const;
+
+/**
+ * The degen floor's catalog (D-067), off by default, in the stake route's
+ * pattern. Without `BACKEND_DEGEN_ENABLED` it is absent and the swap route
+ * admits only its own allowlist; any other degen variable is then a startup
+ * error rather than a silently ignored half configuration. Once it is set,
+ * every degen variable is required: a non-empty, duplicate-free subset of
+ * avnu's `Verified`, `Community`, `Unruggable` and `AVNU` tags (`Unknown` is
+ * never admissible), a positive whole-dollar daily-volume floor, and a cache
+ * lifetime of one minute to one day. It widens an enabled swap route only; it
+ * never enables swap.
+ */
+function parseDegenCatalog(environment: Environment): DegenConfig | undefined {
+  if (isUnset(environment.BACKEND_DEGEN_ENABLED)) {
+    if (DEGEN_CATALOG_VARIABLES.some((name) => !isUnset(environment[name]))) {
+      throw new Error('Missing required BACKEND_DEGEN_ENABLED.');
+    }
+    return undefined;
+  }
+  return {
+    enabled: parseBoolean(environment, 'BACKEND_DEGEN_ENABLED'),
+    tags: parseDegenTags(environment, 'BACKEND_DEGEN_TAGS'),
+    minDailyVolumeUsd: parseInteger(
+      environment,
+      'BACKEND_DEGEN_MIN_DAILY_VOLUME_USD',
+      1,
+      DEGEN_MAX_MIN_DAILY_VOLUME_USD,
+    ),
+    cacheTtlMs: parseInteger(
+      environment,
+      'BACKEND_DEGEN_CACHE_TTL_MS',
+      DEGEN_MIN_CACHE_TTL_MS,
+      DEGEN_MAX_CACHE_TTL_MS,
+    ),
+  };
+}
+
+function parseDegenTags(environment: Environment, name: string): readonly DegenTag[] {
+  const tags = readRequired(environment, name).split(',').map((tag) => tag.trim());
+  if (
+    tags.some((tag) => !(DEGEN_TAGS as readonly string[]).includes(tag)) ||
+    new Set(tags).size !== tags.length
+  ) {
+    throw new Error(`Invalid ${name}.`);
+  }
+  return Object.freeze(tags as DegenTag[]);
 }
 
 function isUnset(value: string | undefined): boolean {
