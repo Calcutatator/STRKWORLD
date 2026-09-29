@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import type { PreparedBatch, PrivacyOperations } from '../operations.js';
+import type { PreparedBatch, PreparedVaultBatch, PrivacyOperations } from '../operations.js';
 import { FakePrivacyOperations } from '../testing/fake.js';
 import { PrivacyError } from '../types.js';
 import {
@@ -1515,6 +1515,9 @@ describe('WalletSession', () => {
       supportsStrk20: true,
       walletApiVersion: '0.10.3',
       registration: 'unknown',
+      // D-077: starknet.js 10.8's account has the commitment method, but a
+      // wallet reporting 0.10.3 cannot run a shadow account.
+      supportsShadowAccounts: false,
     });
 
     const generation = session.getSnapshot().generation;
@@ -2046,6 +2049,10 @@ function operationsWithBatch(prepared: PreparedBatch, walletApiVersion: string):
     prepare: async () => prepared,
     hasPrivateFunds: async () => false,
     depositStatus: async () => 'pending',
+    // D-077: not exercised here.
+    vaultPosition: async () => { throw new Error('unused'); },
+    prepareVaultSupply: async () => { throw new Error('unused'); },
+    prepareVaultRedeem: async () => { throw new Error('unused'); },
   };
 }
 
@@ -2078,3 +2085,125 @@ function denyAllOptions() {
     },
   } as const;
 }
+
+describe('WalletSession Vault ownership (D-077)', () => {
+  const STRK = '0x04718f5a0fc34cc1af16a1cdee98ffb20c31f5cd61d6ab07201858f4287c938d';
+  const HASH = '0x5eed';
+
+  function vaultBatch(overrides: Partial<PreparedVaultBatch> = {}): PreparedVaultBatch {
+    return {
+      action: Object.freeze({ kind: 'supply', token: STRK, amount: 5n }),
+      poolFee: 6n,
+      gasEstimate: 0n,
+      totalCost: 6n,
+      warnings: [],
+      promptCount: 1,
+      confirm: vi.fn(async () => ({ transactionHash: HASH, outcome: 'succeeded' as const })),
+      discard: vi.fn(),
+      ...overrides,
+    };
+  }
+
+  function operationsWithVault(prepared: PreparedVaultBatch, position?: () => Promise<unknown>): PrivacyOperations {
+    return {
+      ...operationsWithBatch(batch(), '0.10.4'),
+      vaultPosition: (async () => (position ? position() : { token: STRK, shares: 1n, assets: 1n, redeemable: 1n })) as never,
+      prepareVaultSupply: async () => prepared,
+      prepareVaultRedeem: async () => prepared,
+    };
+  }
+
+  async function connectedSession(first: PrivacyOperations, second: PrivacyOperations = operationsWithVault(vaultBatch())) {
+    const connected = controllableConnection('0x111', first, second);
+    const session = createWalletSession(
+      denyAllOptions(),
+      { discovery: discoveryWith(wallet('Ready')), connectWallet: async () => connected.port },
+    );
+    await session.connect(session.getSnapshot().wallets[0]!.key);
+    return { session, connected };
+  }
+
+  it('owns a prepared Vault batch: frozen review data, and the result as the seam gave it', async () => {
+    const prepared = vaultBatch();
+    const { session } = await connectedSession(operationsWithVault(prepared));
+    const owned = await session.operations.prepareVaultSupply(STRK, 5n);
+
+    expect(Object.isFrozen(owned)).toBe(true);
+    expect(Object.isFrozen(owned.action)).toBe(true);
+    expect(owned).toMatchObject({ action: { kind: 'supply', token: STRK, amount: 5n }, poolFee: 6n, totalCost: 6n });
+    const onSubmitted = vi.fn();
+    await expect(owned.confirm({ feeCeiling: 6n, onSubmitted })).resolves.toEqual({ transactionHash: HASH, outcome: 'succeeded' });
+    expect(prepared.confirm).toHaveBeenCalledWith(expect.objectContaining({ feeCeiling: 6n, onSubmitted }));
+    await expect(owned.confirm({ feeCeiling: 6n })).rejects.toMatchObject({ kind: 'unknown' });
+  });
+
+  it('refuses a position read answered for a retired account', async () => {
+    let release!: (value: unknown) => void;
+    const pending = new Promise((resolve) => { release = resolve; });
+    const { session, connected } = await connectedSession(operationsWithVault(vaultBatch(), () => pending));
+    const reading = session.operations.vaultPosition();
+    connected.changeAccount('0x222');
+    release({ token: STRK, shares: 1n, assets: 1n, redeemable: 1n });
+    await expect(reading).rejects.toMatchObject({ kind: 'user-rejected' });
+  });
+
+  it('never confirms a batch prepared for a retired account', async () => {
+    const prepared = vaultBatch();
+    const { session, connected } = await connectedSession(operationsWithVault(prepared));
+    const owned = await session.operations.prepareVaultRedeem('all');
+    connected.changeAccount('0x222');
+
+    await expect(owned.confirm({ feeCeiling: 6n })).rejects.toMatchObject({ kind: 'user-rejected' });
+    expect(prepared.confirm).not.toHaveBeenCalled();
+    expect(prepared.discard).toHaveBeenCalledTimes(1);
+  });
+
+  it('returns the transaction once the wallet submitted it, even if the account moved while its receipt was awaited', async () => {
+    let release!: (value: { transactionHash: string; outcome: 'pending' }) => void;
+    const pending = new Promise<{ transactionHash: string; outcome: 'pending' }>((resolve) => { release = resolve; });
+    const prepared = vaultBatch({ confirm: vi.fn(() => pending) });
+    const { session, connected } = await connectedSession(operationsWithVault(prepared));
+    const owned = await session.operations.prepareVaultSupply(STRK, 5n);
+    const confirming = owned.confirm({ feeCeiling: 6n });
+    connected.changeAccount('0x222');
+    release({ transactionHash: HASH, outcome: 'pending' });
+
+    // The transaction exists either way; a failure here would invite a second one.
+    await expect(confirming).resolves.toEqual({ transactionHash: HASH, outcome: 'pending' });
+  });
+
+  it.each([
+    ['costs that do not add up', { totalCost: 7n }],
+    ['a negative pool fee', { poolFee: -1n, totalCost: -1n }],
+    ['a fractional prompt count', { promptCount: 0.5 }],
+    ['an action this package would not build', { action: { kind: 'supply', token: STRK, amount: 0n } }],
+    ['a redeem without its all flag', { action: { kind: 'redeem', token: STRK, amount: 1n } }],
+    ['an unknown action', { action: { kind: 'borrow', token: STRK, amount: 1n } }],
+    ['a malformed warning', { warnings: [{ kind: 'public-leg' }] }],
+  ])('refuses a prepared Vault batch with %s, and releases it', async (_label, override) => {
+    const prepared = vaultBatch(override as Partial<PreparedVaultBatch>);
+    const { session } = await connectedSession(operationsWithVault(prepared));
+    await expect(session.operations.prepareVaultSupply(STRK, 5n)).rejects.toMatchObject({ kind: 'unknown' });
+    expect(prepared.discard).toHaveBeenCalledTimes(1);
+  });
+
+  it('refuses a receipt the seam could not have produced', async () => {
+    const prepared = vaultBatch({ confirm: vi.fn(async () => ({ transactionHash: HASH, outcome: 'landed' })) as never });
+    const { session } = await connectedSession(operationsWithVault(prepared));
+    const owned = await session.operations.prepareVaultSupply(STRK, 5n);
+    await expect(owned.confirm({ feeCeiling: 6n })).rejects.toMatchObject({ kind: 'unknown' });
+  });
+
+  it('admits a vault token list in the policy and refuses a malformed one before discovery', () => {
+    const policy = denyAllOptions().policy;
+    const discovery = discoveryWith(wallet('Ready'));
+    expect(() => createWalletSession(
+      { ...denyAllOptions(), policy: { ...policy, enabledRoutes: ['vault'], allowedTokens: { ...policy.allowedTokens, vault: [STRK] } } },
+      { discovery, connectWallet: async () => connection('0x111') },
+    )).not.toThrow();
+    expect(() => createWalletSession(
+      { ...denyAllOptions(), policy: { ...policy, enabledRoutes: ['vault'], allowedTokens: { ...policy.allowedTokens, vault: ['0x0'] } } },
+      { discovery, connectWallet: async () => connection('0x111') },
+    )).toThrow(PrivacyError);
+  });
+});

@@ -5,6 +5,7 @@ import type {
   PrivateSubmissionGateway,
   PreparedPrivateSwap,
   RelayFeeQuote,
+  VaultReadClient,
 } from './types.js';
 
 type FetchLike = (input: string, init?: RequestInit) => Promise<Response>;
@@ -14,7 +15,7 @@ const MAX_UINT256 = (1n << 256n) - 1n;
 const RELAY_NOT_CONFIGURED = 'RELAY_NOT_CONFIGURED';
 
 /** Browser client for the narrow, no-logging backend API. */
-export class BackendPrivacyClient implements PoolReadClient, PrivateSubmissionGateway {
+export class BackendPrivacyClient implements PoolReadClient, PrivateSubmissionGateway, VaultReadClient {
   private readonly baseUrl: string;
   private readonly fetcher: FetchLike;
 
@@ -70,6 +71,51 @@ export class BackendPrivacyClient implements PoolReadClient, PrivateSubmissionGa
     const raw = await this.post('/v1/rpc/receipt', { v: 1, transactionHash }, signal);
     throwIfAborted(signal);
     return raw;
+  }
+
+  /**
+   * D-077: the Vault's stand-in address for a partial commitment, from the
+   * backend's read of the anonymizer's own view. The commitment goes to
+   * STRKWORLD's backend only, never to a third-party RPC (D-014). The caller
+   * cross-checks the address before anything is sent there.
+   */
+  async shadowAccount(partialCommitment: string, signal?: AbortSignal): Promise<{ address: string; deployed: boolean }> {
+    if (typeof partialCommitment !== 'string' || !isNonzeroFelt(partialCommitment)) {
+      throw new PrivacyError('unknown', 'The shadow-account commitment is invalid.');
+    }
+    const raw = await this.post('/v1/rpc/shadow-account', { v: 1, partialCommitment }, signal);
+    throwIfAborted(signal);
+    const value = asRecord(raw);
+    const address = asFelt(ownField(value, 'address'));
+    const deployed = ownField(value, 'deployed');
+    if (BigInt(address) === 0n || typeof deployed !== 'boolean' || Reflect.ownKeys(value).length !== 2) {
+      throw new PrivacyError('unknown', 'The private service returned an invalid response.');
+    }
+    return Object.freeze({ address, deployed });
+  }
+
+  /** D-077: a stand-in address's vSTRK position, in base units. */
+  async vaultPosition(account: string, signal?: AbortSignal): Promise<{
+    shares: bigint;
+    assets: bigint;
+    maxWithdraw: bigint;
+    maxRedeem: bigint;
+  }> {
+    if (typeof account !== 'string' || !isNonzeroFelt(account)) {
+      throw new PrivacyError('unknown', 'The Vault account is invalid.');
+    }
+    const raw = await this.post('/v1/rpc/vault-position', { v: 1, account }, signal);
+    throwIfAborted(signal);
+    const value = asRecord(raw);
+    if (Reflect.ownKeys(value).length !== 4) {
+      throw new PrivacyError('unknown', 'The private service returned an invalid response.');
+    }
+    return Object.freeze({
+      shares: asUint256(ownField(value, 'shares')),
+      assets: asUint256(ownField(value, 'assets')),
+      maxWithdraw: asUint256(ownField(value, 'maxWithdraw')),
+      maxRedeem: asUint256(ownField(value, 'maxRedeem')),
+    });
   }
 
   async estimate(input: Parameters<PrivateSubmissionGateway['estimate']>[0]): Promise<RelayFeeQuote> {

@@ -1375,3 +1375,80 @@ describe('BackendPrivacyClient receipt lookup (D-072)', () => {
     await expect(client.receipt('0x5eed')).rejects.toMatchObject({ kind: 'unreachable' });
   });
 });
+
+describe('BackendPrivacyClient Vault reads (D-077)', () => {
+  const PARTIAL = '0x5f2e1d';
+  const SHADOW = '0x24915cb456ef2876c9611af4f021747f8d9761ff2d7bc716722ce4527091ac9';
+
+  it('asks the shadow-account route for the partial commitment alone', async () => {
+    const fetcher = vi.fn(async () => response({ address: SHADOW, deployed: false }));
+    const client = new BackendPrivacyClient('/api', fetcher);
+
+    await expect(client.shadowAccount(PARTIAL)).resolves.toEqual({ address: SHADOW, deployed: false });
+    const [url, init] = fetcher.mock.calls[0] as unknown as [string, RequestInit];
+    expect(url).toBe('/api/v1/rpc/shadow-account');
+    expect(init.method).toBe('POST');
+    expect(JSON.parse(String(init.body))).toEqual({ v: 1, partialCommitment: PARTIAL });
+  });
+
+  it('asks the position route for the stand-in address alone, and reads decimal base units', async () => {
+    const fetcher = vi.fn(async () => response({
+      shares: '50000000000000000000',
+      assets: '51000000000000000000',
+      maxWithdraw: '51000000000000000000',
+      maxRedeem: '50000000000000000000',
+    }));
+    const client = new BackendPrivacyClient('/api', fetcher);
+
+    await expect(client.vaultPosition(SHADOW)).resolves.toEqual({
+      shares: 50n * 10n ** 18n,
+      assets: 51n * 10n ** 18n,
+      maxWithdraw: 51n * 10n ** 18n,
+      maxRedeem: 50n * 10n ** 18n,
+    });
+    const [url, init] = fetcher.mock.calls[0] as unknown as [string, RequestInit];
+    expect(url).toBe('/api/v1/rpc/vault-position');
+    expect(JSON.parse(String(init.body))).toEqual({ v: 1, account: SHADOW });
+  });
+
+  it('refuses a malformed commitment or account without a request', async () => {
+    const fetcher = vi.fn(async () => response({}));
+    const client = new BackendPrivacyClient('/api', fetcher);
+    for (const bad of ['', '0x0', 'shadow', `0x${STARK_FIELD_PRIME.toString(16)}`, 1 as unknown as string]) {
+      await expect(client.shadowAccount(bad)).rejects.toMatchObject({ kind: 'unknown' });
+      await expect(client.vaultPosition(bad)).rejects.toMatchObject({ kind: 'unknown' });
+    }
+    expect(fetcher).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ['a zero address', { address: '0x0', deployed: true }],
+    ['a non-boolean deployment flag', { address: SHADOW, deployed: 1 }],
+    ['an extra field', { address: SHADOW, deployed: false, nonce: '0x0' }],
+    ['a missing field', { address: SHADOW }],
+  ])('refuses a shadow-account answer with %s', async (_label, body) => {
+    const client = new BackendPrivacyClient('/api', vi.fn(async () => response(body)));
+    await expect(client.shadowAccount(PARTIAL)).rejects.toMatchObject({ kind: 'unknown' });
+  });
+
+  it.each([
+    ['a hex figure', { shares: '0x1', assets: '1', maxWithdraw: '1', maxRedeem: '1' }],
+    ['a number', { shares: 1, assets: '1', maxWithdraw: '1', maxRedeem: '1' }],
+    ['a figure past u256', { shares: (MAX_UINT256 + 1n).toString(), assets: '1', maxWithdraw: '1', maxRedeem: '1' }],
+    ['an extra field', { shares: '1', assets: '1', maxWithdraw: '1', maxRedeem: '1', account: SHADOW }],
+    ['a missing field', { shares: '1', assets: '1', maxWithdraw: '1' }],
+  ])('refuses a position answer with %s', async (_label, body) => {
+    const client = new BackendPrivacyClient('/api', vi.fn(async () => response(body)));
+    await expect(client.vaultPosition(SHADOW)).rejects.toMatchObject({ kind: 'unknown' });
+  });
+
+  it('reads an unreachable or switched-off service as unreachable', async () => {
+    const down = new BackendPrivacyClient('/api', vi.fn(async () => { throw new TypeError('Failed to fetch'); }));
+    await expect(down.shadowAccount(PARTIAL)).rejects.toMatchObject({ kind: 'unreachable' });
+    const off = new BackendPrivacyClient('/api', vi.fn(async () => response(
+      { code: 'SERVICE_DISABLED', message: 'Private operations are temporarily disabled.' },
+      503,
+    )));
+    await expect(off.vaultPosition(SHADOW)).rejects.toMatchObject({ kind: 'unreachable' });
+  });
+});

@@ -2284,6 +2284,7 @@ describe('Wallet API capability versions', () => {
       supportsStrk20: false,
       walletApiVersion: '0.10.3-rc.1',
       registration: 'unknown',
+      supportsShadowAccounts: false,
     });
   });
 
@@ -2308,6 +2309,7 @@ describe('Wallet API capability versions', () => {
       supportsStrk20: false,
       walletApiVersion: null,
       registration: 'unknown',
+      supportsShadowAccounts: false,
     });
   });
 
@@ -2332,6 +2334,7 @@ describe('Wallet API capability versions', () => {
       supportsStrk20: false,
       walletApiVersion: null,
       registration: 'unknown',
+      supportsShadowAccounts: false,
     });
   });
 });

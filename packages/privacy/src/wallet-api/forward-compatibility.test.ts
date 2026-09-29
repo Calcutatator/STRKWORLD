@@ -10,6 +10,7 @@ import type { AccountInterface } from 'starknet';
 import ts from 'typescript';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { createProductionWalletSession, type Intent } from '../index.js';
+import { shadowAccountAddress } from '../vault.js';
 
 const MAINNET_CHAIN_ID = '0x534e5f4d41494e';
 const ACCOUNT = '0x123';
@@ -162,6 +163,136 @@ describe('Wallet Standard forward compatibility', () => {
     }
   });
 
+  // D-077: the Vault through the same exact request seam, on Wallet API
+  // 0.10.4. Real `WalletAccountV6` (starknet.js 10.8) converts each
+  // starknet.js `Call` into the Wallet API's own call shape, so what reaches
+  // the wallet here is the literal request Ready receives.
+  it('drives the Vault through a 0.10.4 wallet: one commitment, then two wallet-submitted batches', async () => {
+    const PARTIAL = '0x5f2e1d';
+    const SHADOW = shadowAccountAddress(PARTIAL);
+    const VSTRK = '0x06d6d2bf905dd199c78f2e421521d8473042737be9f47904e7578536c10f279d';
+    const backendRequests: BackendRequest[] = [];
+    vi.stubGlobal('fetch', vi.fn(async (input: string, init?: RequestInit) => {
+      const path = new URL(input, 'https://strkworld.invalid').pathname;
+      const body = JSON.parse(String(init?.body)) as Record<string, unknown>;
+      backendRequests.push({ path, body });
+      const value = path === '/api/v1/rpc/pool-config'
+        ? { feeAmount: POOL_FEE.toString(), feeToken: STRK, proofValidityBlocks: 450, noteMaturityBlocks: 10 }
+        : path === '/api/v1/rpc/shadow-account'
+          ? { address: SHADOW, deployed: true }
+          : path === '/api/v1/rpc/vault-position'
+            ? { shares: '50', assets: '51', maxWithdraw: '51', maxRedeem: '50' }
+            : (() => { throw new Error(`Unexpected backend request: ${path}`); })();
+      return { ok: true, status: 200, json: async () => value } as Response;
+    }));
+    const account = { address: ACCOUNT } as AccountInterface;
+    const mock = new MockWallet(
+      { mainnet: [account], sepolia: [account] },
+      { id: 'hosted-frame', name: 'Hosted frame signer', available: true },
+    );
+    mock.switchChain(BigInt(MAINNET_CHAIN_ID));
+    const { wallet, requests: walletRequests } = completeWalletApi(mock, {
+      versions: ['0.10.4'],
+      extra: {
+        wallet_strk20ShadowAccountCommitment: async () => PARTIAL,
+        wallet_strk20InvokeTransaction: async () => ({ transaction_hash: '0x5eed' }),
+      },
+    });
+    const session = createProductionWalletSession({
+      rpcUrl: 'https://rpc.invalid',
+      backendBaseUrl: '/api',
+      policy: {
+        maxIntents: 1,
+        maxRelayFee: 0n,
+        enabledRoutes: ['vault'],
+        allowedTokens: { shield: [], unshield: [], transfer: [], swap: [], vault: [STRK] },
+      },
+    });
+    const unregister = announceWallet(wallet);
+
+    try {
+      const [choice] = session.getSnapshot().wallets;
+      await session.connect(choice!.key);
+      await expect(session.operations.capability()).resolves.toMatchObject({
+        supportsStrk20: true,
+        walletApiVersion: '0.10.4',
+        supportsShadowAccounts: true,
+      });
+      await expect(session.operations.vaultPosition()).resolves.toEqual({
+        token: STRK,
+        shares: 50n,
+        assets: 51n,
+        redeemable: 51n,
+      });
+
+      // Stop waiting as soon as the wallet answers: the receipt read is unit-tested.
+      const confirm = async (batch: Awaited<ReturnType<typeof session.operations.prepareVaultSupply>>) => {
+        const stop = new AbortController();
+        return batch.confirm({ feeCeiling: POOL_FEE, signal: stop.signal, onSubmitted: () => stop.abort() });
+      };
+      await expect(confirm(await session.operations.prepareVaultSupply(STRK, 20n)))
+        .resolves.toEqual({ transactionHash: '0x5eed', outcome: 'pending' });
+      await expect(confirm(await session.operations.prepareVaultRedeem('all')))
+        .resolves.toEqual({ transactionHash: '0x5eed', outcome: 'pending' });
+
+      expect(walletRequests.map(({ type }) => type)).toEqual([
+        'wallet_requestChainId',
+        'wallet_supportedWalletApi',
+        // vaultPosition: the version query, then the one commitment.
+        'wallet_supportedWalletApi',
+        'wallet_strk20ShadowAccountCommitment',
+        // prepareVaultSupply, then its confirm: the commitment is not asked again.
+        'wallet_supportedWalletApi',
+        'wallet_strk20InvokeTransaction',
+        'wallet_supportedWalletApi',
+        'wallet_strk20InvokeTransaction',
+      ]);
+      expect(walletRequests[3]!.params).toEqual({ dapp_name: 'strkworld-vault' });
+      const [supply, redeem] = walletRequests.filter(({ type }) => type === 'wallet_strk20InvokeTransaction');
+      const hex = (value: bigint) => `0x${value.toString(16)}`;
+      const vstrk = hex(BigInt(VSTRK));
+      const shadow = hex(BigInt(SHADOW));
+      expect(supply!.params).toEqual({
+        actions: [
+          { type: 'withdraw', token: STRK, amount: '0x14', recipient: SHADOW },
+          {
+            type: 'shadow_account_invoke',
+            dapp_name: 'strkworld-vault',
+            nonce: '0x0',
+            calls: [
+              { contract_address: STRK, entry_point: 'approve', calldata: [vstrk, '0x14', '0x0'] },
+              { contract_address: VSTRK, entry_point: 'deposit', calldata: ['0x14', '0x0', shadow] },
+            ],
+            collect_policy: { type: 'exact', amount: '0x0' },
+          },
+        ],
+      });
+      expect(redeem!.params).toEqual({
+        actions: [
+          { type: 'transfer', token: STRK, amount: 'OPEN', recipient: ACCOUNT },
+          {
+            type: 'shadow_account_invoke',
+            dapp_name: 'strkworld-vault',
+            nonce: '0x0',
+            calls: [{ contract_address: VSTRK, entry_point: 'redeem', calldata: ['0x32', '0x0', shadow, shadow] }],
+            collect_policy: { type: 'diff' },
+          },
+        ],
+      });
+      // No relay, no fee quote: the wallet submits the Vault itself.
+      expect([...new Set(backendRequests.map(({ path }) => path))].sort()).toEqual([
+        '/api/v1/rpc/pool-config',
+        '/api/v1/rpc/shadow-account',
+        '/api/v1/rpc/vault-position',
+      ]);
+      expect(backendRequests.find(({ path }) => path === '/api/v1/rpc/shadow-account')!.body)
+        .toEqual({ v: 1, partialCommitment: PARTIAL });
+    } finally {
+      unregister();
+      session.destroy();
+    }
+  });
+
   it('rejects provider identity reads outside the display-only name projection', () => {
     const hostile = sourceFixture(`
       if (handle.name === 'Hosted frame signer') admit();
@@ -227,7 +358,16 @@ interface BackendRequest {
   readonly body: Record<string, unknown>;
 }
 
-function completeWalletApi(mock: MockWallet): {
+/**
+ * The exact request seam. `versions` is the capability answer; `extra`
+ * answers named methods here instead of the pinned `MockWallet`, which
+ * predates Wallet API 0.10.4's shadow accounts (D-077). Anything else is
+ * refused, so an unexpected request fails the test.
+ */
+function completeWalletApi(mock: MockWallet, options: {
+  versions?: readonly string[];
+  extra?: Readonly<Record<string, (params: unknown) => Promise<unknown>>>;
+} = {}): {
   wallet: WalletWithStarknetFeatures;
   requests: WalletRequest[];
 } {
@@ -236,9 +376,11 @@ function completeWalletApi(mock: MockWallet): {
   const requests: WalletRequest[] = [];
   const request = (async (input: { type: string; params?: unknown }) => {
     requests.push(input);
+    const answer = options.extra && Object.hasOwn(options.extra, input.type) ? options.extra[input.type] : undefined;
+    if (answer) return answer(input.params);
     switch (input.type) {
       case 'wallet_supportedWalletApi':
-        return ['0.10.3'];
+        return [...(options.versions ?? ['0.10.3'])];
       case 'wallet_requestChainId':
       case 'wallet_strk20Balances':
       case 'wallet_strk20PrepareInvoke':
@@ -461,10 +603,11 @@ const ALLOWED_DYNAMIC_PROPERTY_READS = new Set([
   'wallet-api/errors.ts:CODE_TO_KIND[code as keyof typeof CODE_TO_KIND]',
   'wallet-api/operations.ts:policy.allowedTokens[intent.kind]',
   'wallet-api/operations.ts:actual[index]',
-  'wallet-api/operations.ts:left.core[index]',
-  'wallet-api/operations.ts:right.core[index]',
-  'wallet-api/operations.ts:left.prerelease[index]',
-  'wallet-api/operations.ts:right.prerelease[index]',
+  // The version comparison, moved unchanged into its own module by D-077.
+  'wallet-api/semver.ts:left.core[index]',
+  'wallet-api/semver.ts:right.core[index]',
+  'wallet-api/semver.ts:left.prerelease[index]',
+  'wallet-api/semver.ts:right.prerelease[index]',
 ]);
 
 function isAllowedProductionDynamicRead(

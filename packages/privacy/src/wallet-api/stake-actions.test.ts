@@ -577,6 +577,10 @@ describe('session admission of the stake policy', () => {
       prepare: async () => prepared,
       hasPrivateFunds: async () => false,
       depositStatus: async () => 'pending',
+      // D-077: not exercised here.
+      vaultPosition: async () => { throw new Error('unused'); },
+      prepareVaultSupply: async () => { throw new Error('unused'); },
+      prepareVaultRedeem: async () => { throw new Error('unused'); },
     };
   }
 

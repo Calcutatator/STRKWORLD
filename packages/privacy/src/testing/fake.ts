@@ -14,12 +14,19 @@ import type {
   Intent,
   PoolConfig,
   PreparedBatch,
+  PreparedVaultBatch,
   PrivacyOperations,
   SwapReview,
+  VaultAction,
+  VaultCallOptions,
+  VaultPosition,
+  VaultStage,
+  VaultStageCallback,
   WalletCapability,
 } from '../operations.js';
 import { protectedMinimumOut } from '../protected-minimum.js';
 import { ENDUR_XSTRK, ENDUR_XSTRK_ASSET } from '../endur.js';
+import { VESU_VSTRK_ASSET } from '../vault.js';
 
 const STARK_FIELD_PRIME = (1n << 251n) + 17n * (1n << 192n) + 1n;
 
@@ -34,6 +41,30 @@ const DEMO_XSTRK_SHARES_PER_STRK = { numerator: 4n, denominator: 5n } as const;
 
 function demoStakeShares(assets: bigint): bigint {
   return (assets * DEMO_XSTRK_SHARES_PER_STRK.numerator) / DEMO_XSTRK_SHARES_PER_STRK.denominator;
+}
+
+/**
+ * DEMO RATE, not Vesu's. The fake's Vault (D-077) prices a vSTRK share at a
+ * fixed 1.02 STRK (51 STRK per 50 shares) so demo mode stays deterministic.
+ * A fixture that never reads the vault, and must never be presented as a live
+ * share price or yield.
+ */
+const DEMO_VSTRK_ASSETS_PER_SHARE = { numerator: 51n, denominator: 50n } as const;
+
+/** Shares a demo supply of `assets` mints, floored, as an ERC-4626 deposit rounds. */
+function demoVaultShares(assets: bigint): bigint {
+  return (assets * DEMO_VSTRK_ASSETS_PER_SHARE.denominator) / DEMO_VSTRK_ASSETS_PER_SHARE.numerator;
+}
+
+/** What demo `shares` redeem for, floored. */
+function demoVaultAssets(shares: bigint): bigint {
+  return (shares * DEMO_VSTRK_ASSETS_PER_SHARE.numerator) / DEMO_VSTRK_ASSETS_PER_SHARE.denominator;
+}
+
+/** Shares a demo withdrawal of `assets` burns, rounded up, as an ERC-4626 withdraw rounds. */
+function demoVaultSharesToWithdraw(assets: bigint): bigint {
+  const { numerator, denominator } = DEMO_VSTRK_ASSETS_PER_SHARE;
+  return (assets * denominator + numerator - 1n) / numerator;
 }
 
 /**
@@ -83,6 +114,12 @@ export interface FakeConfig {
    * them alone; any other swap falls back to `swapReview`.
    */
   demoSwapRates?: FakeDemoSwapRates;
+  /**
+   * The demo Vault (D-077): vSTRK shares the demo stand-in address starts
+   * with, and `liquidity`, the most STRK the demo vault pays out at once.
+   * Omitted, the position starts empty and the vault pays out in full.
+   */
+  vault?: { shares?: bigint; liquidity?: bigint };
 }
 
 /**
@@ -152,7 +189,18 @@ export interface Fault {
    * Limit to one method. Omit to affect the next call of any kind.
    * `hasPrivateFunds` is one balance read, so a `balances` fault reaches it.
    */
-  on?: 'capability' | 'poolConfig' | 'balances' | 'recipientStatus' | 'prepare' | 'confirm' | 'depositStatus';
+  on?:
+    | 'capability'
+    | 'poolConfig'
+    | 'balances'
+    | 'recipientStatus'
+    | 'prepare'
+    | 'confirm'
+    | 'depositStatus'
+    /** D-077: the Vault's position read, its two prepares, and its confirm. */
+    | 'vaultPosition'
+    | 'vaultPrepare'
+    | 'vaultConfirm';
   message?: string;
   sticky?: boolean;
 }
@@ -185,6 +233,15 @@ export class FakePrivacyOperations implements PrivacyOperations {
 
   /** Every confirmed batch, in order. Assert against this in tests. */
   readonly submitted: Intent[][] = [];
+  /** Every confirmed Vault action, in order (D-077). */
+  readonly vaultSubmitted: VaultAction[] = [];
+  /** The demo stand-in address's vSTRK shares (D-077). */
+  private vaultShares = 0n;
+  /** Whether the demo stand-in address has run a Vault call yet, as a real one deploys on first use. */
+  private vaultDeployed = false;
+  /** Whether the demo wallet has answered the commitment request yet: it is asked once. */
+  private vaultCommitted = false;
+  private readonly vaultLiquidity?: bigint;
 
   constructor(config: FakeConfig = {}) {
     const balances = config.balances ?? {};
@@ -233,8 +290,10 @@ export class FakePrivacyOperations implements PrivacyOperations {
     }
     this.cap = {
       supportsStrk20: true,
-      walletApiVersion: '0.10.3',
+      walletApiVersion: '0.10.4',
       registration: 'registered',
+      // D-077: the demo wallet can run the Vault's shadow account.
+      supportsShadowAccounts: true,
       ...config.capability,
     };
     if (
@@ -262,6 +321,16 @@ export class FakePrivacyOperations implements PrivacyOperations {
       this.configuredSwapReview = Object.freeze({ ...config.swapReview });
     }
     if (config.demoSwapRates !== undefined) this.demoRates = ownDemoSwapRates(config.demoSwapRates);
+    if (config.vault !== undefined) {
+      const shares = config.vault.shares ?? 0n;
+      const liquidity = config.vault.liquidity;
+      if (typeof shares !== 'bigint' || shares < 0n || (liquidity !== undefined && (typeof liquidity !== 'bigint' || liquidity < 0n))) {
+        throw new PrivacyError('unknown', 'The fake Vault configuration is invalid.');
+      }
+      this.vaultShares = shares;
+      this.vaultDeployed = shares > 0n;
+      if (liquidity !== undefined) this.vaultLiquidity = liquidity;
+    }
   }
 
   // -- test controls --------------------------------------------------------
@@ -547,6 +616,170 @@ export class FakePrivacyOperations implements PrivacyOperations {
     };
   }
 
+  // -- The Vault (D-077) ----------------------------------------------------
+
+  /**
+   * The demo stand-in address's position, at the DEMO share rate. Reports the
+   * stages the Wallet API adapter reports, in the same order, so the Shell's
+   * probe logging is exercised in demo mode too.
+   */
+  async vaultPosition(options?: VaultCallOptions): Promise<VaultPosition> {
+    const { signal, onStage } = ownVaultOptions(options);
+    await this.tick('vaultPosition', signal);
+    this.vaultIdentity(onStage);
+    emitVaultStage(onStage, { stage: 'position', ok: true });
+    return this.vaultPositionNow();
+  }
+
+  async prepareVaultSupply(token: Address, amount: bigint, options?: VaultCallOptions): Promise<PreparedVaultBatch> {
+    const { signal, onStage } = ownVaultOptions(options);
+    await this.tick('vaultPrepare', signal);
+    if (typeof token !== 'string' || !sameAddress(token, VESU_VSTRK_ASSET)) {
+      throw new PrivacyError('unknown', 'The Vault lends STRK only.');
+    }
+    if (typeof amount !== 'bigint' || amount <= 0n) throw new PrivacyError('unknown', 'Amounts must be positive.');
+    this.vaultIdentity(onStage);
+    this.assertVaultFunds(amount);
+    const action: VaultAction = Object.freeze({ kind: 'supply', token: VESU_VSTRK_ASSET, amount });
+    return this.vaultBatch(action, () => {
+      this.assertVaultFunds(amount);
+      this.debit(VESU_VSTRK_ASSET, amount + this.pool.feeAmount);
+      this.vaultShares += demoVaultShares(amount);
+      this.vaultDeployed = true;
+    });
+  }
+
+  async prepareVaultRedeem(amount: bigint | 'all', options?: VaultCallOptions): Promise<PreparedVaultBatch> {
+    const { signal, onStage } = ownVaultOptions(options);
+    await this.tick('vaultPrepare', signal);
+    if (amount !== 'all' && (typeof amount !== 'bigint' || amount <= 0n)) {
+      throw new PrivacyError('unknown', 'Amounts must be positive.');
+    }
+    this.vaultIdentity(onStage);
+    emitVaultStage(onStage, { stage: 'position', ok: true });
+    const position = this.vaultPositionNow();
+    this.assertVaultFunds(0n);
+    if (amount === 'all') {
+      if (position.shares === 0n) throw new PrivacyError('unknown', 'There is nothing in the Vault to redeem.');
+      if (position.redeemable < position.assets) {
+        throw new PrivacyError('unknown', 'The vault cannot pay out the whole position right now.');
+      }
+      const action: VaultAction = Object.freeze({ kind: 'redeem', token: VESU_VSTRK_ASSET, amount: position.assets, all: true });
+      return this.vaultBatch(action, () => {
+        this.assertVaultFunds(0n);
+        const assets = demoVaultAssets(this.vaultShares);
+        this.debit(VESU_VSTRK_ASSET, this.pool.feeAmount);
+        this.vaultShares = 0n;
+        if (assets > 0n) this.mintNote(VESU_VSTRK_ASSET, assets);
+      });
+    }
+    if (amount > position.redeemable) {
+      throw new PrivacyError('unknown', 'That is more than the vault lets this position withdraw now.');
+    }
+    const action: VaultAction = Object.freeze({ kind: 'redeem', token: VESU_VSTRK_ASSET, amount, all: false });
+    return this.vaultBatch(action, () => {
+      this.assertVaultFunds(0n);
+      const burned = demoVaultSharesToWithdraw(amount);
+      if (burned > this.vaultShares) throw new PrivacyError('unknown', 'That is more than the vault lets this position withdraw now.');
+      this.debit(VESU_VSTRK_ASSET, this.pool.feeAmount);
+      this.vaultShares -= burned;
+      this.mintNote(VESU_VSTRK_ASSET, amount);
+    });
+  }
+
+  private vaultPositionNow(): VaultPosition {
+    const assets = demoVaultAssets(this.vaultShares);
+    const redeemable = this.vaultLiquidity !== undefined && this.vaultLiquidity < assets ? this.vaultLiquidity : assets;
+    return Object.freeze({ token: VESU_VSTRK_ASSET, shares: this.vaultShares, assets, redeemable });
+  }
+
+  /** Capability, then the commitment (asked once), then the address: the adapter's order. */
+  private vaultIdentity(onStage: VaultStageCallback | undefined): void {
+    const supported = this.cap.supportsShadowAccounts === true;
+    emitVaultStage(onStage, { stage: 'capability', supported });
+    if (!supported) {
+      throw new PrivacyError('shadow-accounts-unsupported', 'This wallet does not support STRK20 shadow accounts yet.');
+    }
+    if (this.cap.registration === 'unregistered') {
+      emitVaultStage(onStage, { stage: 'commitment', ok: false, code: 118 });
+      throw new PrivacyError('not-registered', 'This wallet is not registered with the privacy pool.');
+    }
+    if (!this.vaultCommitted) {
+      this.vaultCommitted = true;
+      emitVaultStage(onStage, { stage: 'commitment', ok: true });
+    }
+    emitVaultStage(onStage, { stage: 'address', resolved: true, deployed: this.vaultDeployed });
+  }
+
+  /** The shielded STRK must cover `amount` and the pool fee, as the wallet checks at proof time. */
+  private assertVaultFunds(amount: bigint): void {
+    const have = this.spendable.get(VESU_VSTRK_ASSET) ?? this.lookupLoose(VESU_VSTRK_ASSET);
+    const required = amount + this.pool.feeAmount;
+    if (have < required) {
+      throw new PrivacyError(
+        'insufficient-balance',
+        `Needs ${required}, has ${have}. Remember the pool fee is paid in ${this.pool.feeToken}.`,
+      );
+    }
+  }
+
+  private vaultBatch(action: VaultAction, apply: () => void): PreparedVaultBatch {
+    const self = this;
+    const feeAtPrepare = this.pool.feeAmount;
+    let discarded = false;
+    let confirmationAttempted = false;
+    return Object.freeze({
+      action,
+      poolFee: feeAtPrepare,
+      gasEstimate: 0n,
+      totalCost: feeAtPrepare,
+      warnings: Object.freeze([]),
+      promptCount: 1,
+      async confirm({ feeCeiling, onProgress, onStage, onSubmitted, signal }: Parameters<PreparedVaultBatch['confirm']>[0]) {
+        if (discarded) throw new PrivacyError('unknown', 'batch already discarded');
+        assertFeeCeilingInput(feeCeiling);
+        if (confirmationAttempted) {
+          throw new PrivacyError('unknown', 'This batch was already confirmed or attempted. Prepare a new batch.');
+        }
+        confirmationAttempted = true;
+        if (self.pool.feeAmount > feeCeiling) {
+          throw new PrivacyError(
+            'unknown',
+            `Private fee is now ${self.pool.feeAmount}, above the ceiling of ${feeCeiling}. Re-prepare.`,
+          );
+        }
+        emitProgress(onProgress, { stage: 'awaiting-approval', message: 'Confirm the Vault action in your wallet' });
+        try {
+          await self.tick('vaultConfirm', signal);
+          if (discarded) throw new PrivacyError('unknown', 'batch already discarded');
+          apply();
+        } catch (error) {
+          const kind = error instanceof PrivacyError ? error.kind : 'unknown';
+          emitVaultStage(onStage, { stage: 'submit', ok: false, code: kind === 'user-rejected' ? 113 : kind === 'insufficient-balance' ? 119 : null });
+          emitProgress(onProgress, { stage: 'failed', message: 'The Vault action failed' });
+          throw error;
+        }
+        self.vaultSubmitted.push(action);
+        const transactionHash = `0xfake${(++self.txCounter).toString(16).padStart(4, '0')}`;
+        // A Vault receipt carries no deposit naming this account.
+        self.receipts.set(transactionHash, 'failed');
+        emitVaultStage(onStage, { stage: 'submit', ok: true });
+        try {
+          onSubmitted?.(Object.freeze({ transactionHash }));
+        } catch {
+          // An observer cannot turn a submitted transaction into a failure.
+        }
+        emitProgress(onProgress, { stage: 'confirming', message: 'Waiting for the network' });
+        emitVaultStage(onStage, { stage: 'receipt', status: 'succeeded' });
+        emitProgress(onProgress, { stage: 'done', message: 'Done' });
+        return Object.freeze({ transactionHash, outcome: 'succeeded' as const });
+      },
+      discard() {
+        discarded = true;
+      },
+    });
+  }
+
   // -- internals ------------------------------------------------------------
 
   private canonicalizeIntents(intents: readonly Intent[]): {
@@ -779,6 +1012,28 @@ function sameAddress(a: string, b: string): boolean {
   } catch {
     return a === b;
   }
+}
+
+/** A Vault stage for the observer, frozen; an observer that throws changes nothing. */
+function emitVaultStage(callback: VaultStageCallback | undefined, stage: VaultStage): void {
+  try {
+    callback?.(Object.freeze({ ...stage }) as VaultStage);
+  } catch {
+    /* Observers cannot alter a financial operation. */
+  }
+}
+
+function ownVaultOptions(options: VaultCallOptions | undefined): {
+  signal: AbortSignal | undefined;
+  onStage: VaultStageCallback | undefined;
+} {
+  if (options === undefined) return { signal: undefined, onStage: undefined };
+  const signal = Object.getOwnPropertyDescriptor(options, 'signal')?.value as AbortSignal | undefined;
+  const onStage = Object.getOwnPropertyDescriptor(options, 'onStage')?.value as VaultStageCallback | undefined;
+  if (onStage !== undefined && typeof onStage !== 'function') {
+    throw new PrivacyError('unknown', 'The Vault call options are invalid.');
+  }
+  return { signal, onStage };
 }
 
 function emitProgress(callback: ProgressCallback | undefined, progress: OperationProgress): void {

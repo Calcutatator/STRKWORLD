@@ -25,6 +25,7 @@ const KIND_SET: Readonly<Record<PrivacyErrorKind, true>> = Object.freeze({
   unreachable: true,
   'submission-uncertain': true,
   'relay-not-configured': true,
+  'shadow-accounts-unsupported': true,
   unknown: true,
 });
 const KINDS = Object.freeze(Object.keys(KIND_SET)) as readonly PrivacyErrorKind[];

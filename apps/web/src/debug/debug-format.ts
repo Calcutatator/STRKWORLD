@@ -59,6 +59,7 @@ const KINDS = setOf({
   unreachable: true,
   'submission-uncertain': true,
   'relay-not-configured': true,
+  'shadow-accounts-unsupported': true,
   unknown: true,
 } satisfies Record<PrivacyErrorKind, true>);
 

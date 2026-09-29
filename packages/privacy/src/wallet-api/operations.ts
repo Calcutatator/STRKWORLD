@@ -6,7 +6,10 @@ import type {
   Intent,
   PoolConfig,
   PreparedBatch,
+  PreparedVaultBatch,
   PrivacyOperations,
+  VaultCallOptions,
+  VaultPosition,
   WalletCapability,
 } from '../operations.js';
 import { depositStatusFromReceipt } from '../pool.js';
@@ -22,6 +25,8 @@ import {
 import { protectedMinimumOut } from '../protected-minimum.js';
 import { ENDUR_DEPOSIT_ANONYMIZER, ENDUR_XSTRK, ENDUR_XSTRK_ASSET } from '../endur.js';
 import { mapTransferWalletError, mapWalletError } from './errors.js';
+import { compareSemver, highestVersion, parseSemver } from './semver.js';
+import { ShadowVault, shadowAccountsSupported } from './vault-operations.js';
 import type {
   PoolNativeRoute,
   PoolReadClient,
@@ -30,6 +35,7 @@ import type {
   PreparedPrivateSwap,
   RelayFeeQuote,
   SupportedVersionsReader,
+  VaultReadClient,
   WalletRoutePolicy,
   WalletStrk20Account,
 } from './types.js';
@@ -50,6 +56,12 @@ export interface WalletApiPrivacyOperationsOptions {
   supportedVersions: SupportedVersionsReader;
   policy: WalletRoutePolicy;
   now?: () => number;
+  /** The Vault's two backend reads (D-077). Absent, every Vault call fails closed. */
+  vault?: VaultReadClient;
+  /** How the Vault waits between receipt reads; a test passes its own. */
+  sleep?: (ms: number, signal?: AbortSignal) => Promise<void>;
+  /** The Vault's receipt-read schedule, in ms (`VAULT_RECEIPT_WAITS_MS` by default). */
+  vaultReceiptWaitsMs?: readonly number[];
 }
 
 export class WalletApiPrivacyOperations implements PrivacyOperations {
@@ -60,6 +72,7 @@ export class WalletApiPrivacyOperations implements PrivacyOperations {
   private readonly policy: WalletRoutePolicy;
   private readonly now: () => number;
   private readonly walletAddress: Address;
+  private readonly vault: ShadowVault;
 
   constructor(options: WalletApiPrivacyOperationsOptions) {
     this.wallet = options.wallet;
@@ -70,6 +83,32 @@ export class WalletApiPrivacyOperations implements PrivacyOperations {
     this.supportedVersions = options.supportedVersions;
     this.policy = ownPolicy(options.policy);
     this.now = options.now ?? Date.now;
+    this.vault = new ShadowVault({
+      wallet: this.wallet,
+      walletAddress: this.walletAddress,
+      pool: this.pool,
+      ...(options.vault ? { reads: options.vault } : {}),
+      policy: this.policy,
+      supported: async (signal) => (await this.capability(signal)).supportsShadowAccounts === true,
+      poolConfig: (signal) => this.poolConfig(signal),
+      ...(options.sleep ? { sleep: options.sleep } : {}),
+      ...(options.vaultReceiptWaitsMs ? { receiptWaitsMs: options.vaultReceiptWaitsMs } : {}),
+    });
+  }
+
+  /** D-077: the Vault position on the player's shadow account. See `PrivacyOperations`. */
+  vaultPosition(options?: VaultCallOptions): Promise<VaultPosition> {
+    return this.vault.position(options);
+  }
+
+  /** D-077: a Vault supply, proved and submitted by the wallet. See `PrivacyOperations`. */
+  prepareVaultSupply(token: Address, amount: bigint, options?: VaultCallOptions): Promise<PreparedVaultBatch> {
+    return this.vault.prepareSupply(token, amount, options);
+  }
+
+  /** D-077: a Vault redeem back into the pool, proved and submitted by the wallet. See `PrivacyOperations`. */
+  prepareVaultRedeem(amount: bigint | 'all', options?: VaultCallOptions): Promise<PreparedVaultBatch> {
+    return this.vault.prepareRedeem(amount, options);
   }
 
   async capability(signal?: AbortSignal): Promise<WalletCapability> {
@@ -78,15 +117,13 @@ export class WalletApiPrivacyOperations implements PrivacyOperations {
       const versions = await this.supportedVersions(signal);
       throwIfAborted(signal);
       const ownedVersions = ownArrayElements(versions, 'capability response');
-      const supported = ownedVersions
-        .map((raw) => ({ raw, parsed: typeof raw === 'string' ? parseSemver(raw) : null }))
-        .filter((version): version is { raw: string; parsed: Semver } => version.parsed !== null)
-        .sort((left, right) => compareSemver(left.parsed, right.parsed));
-      const highest = supported.at(-1) ?? null;
+      const highest = highestVersion(ownedVersions);
       return Object.freeze({
         supportsStrk20: highest !== null && compareSemver(highest.parsed, REQUIRED_VERSION) >= 0,
         walletApiVersion: highest?.raw ?? null,
         registration: 'unknown',
+        // D-077: the same version list, plus the account's commitment method.
+        supportsShadowAccounts: shadowAccountsSupported(highest, this.wallet),
       });
     } catch (error) {
       throw mapWalletError(error);
@@ -977,6 +1014,7 @@ function splitU256(value: bigint): { low: bigint; high: bigint } {
 
 function ownPolicy(policy: WalletRoutePolicy): WalletRoutePolicy {
   const stakeTokens = policy.allowedTokens.stake;
+  const vaultTokens = policy.allowedTokens.vault;
   return Object.freeze({
     maxIntents: policy.maxIntents,
     maxRelayFee: policy.maxRelayFee,
@@ -987,6 +1025,7 @@ function ownPolicy(policy: WalletRoutePolicy): WalletRoutePolicy {
       transfer: Object.freeze([...policy.allowedTokens.transfer]),
       swap: Object.freeze([...policy.allowedTokens.swap]),
       ...(stakeTokens ? { stake: Object.freeze([...stakeTokens]) } : {}),
+      ...(vaultTokens ? { vault: Object.freeze([...vaultTokens]) } : {}),
     }),
     ...(policy.swap ? { swap: Object.freeze({ ...policy.swap }) } : {}),
   });
@@ -1322,50 +1361,7 @@ function throwIfAborted(signal?: AbortSignal): void {
   if (signal?.aborted) throw new PrivacyError('user-rejected', 'Operation cancelled.');
 }
 
-interface Semver {
-  core: [number, number, number];
-  prerelease: string[] | null;
-}
-
 const REQUIRED_VERSION = parseSemver(REQUIRED_WALLET_API)!;
-
-function parseSemver(value: string): Semver | null {
-  if (typeof value !== 'string') return null;
-  const match = /^(?:v)?(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-([0-9A-Za-z.-]+))?$/.exec(value);
-  if (!match) return null;
-  const core = [Number(match[1]), Number(match[2]), Number(match[3])] as Semver['core'];
-  if (core.some((part) => !Number.isSafeInteger(part))) return null;
-  const prerelease = match[4]?.split('.') ?? null;
-  if (prerelease?.some((identifier) =>
-    identifier.length === 0 ||
-    !/^[0-9A-Za-z-]+$/.test(identifier) ||
-    (/^\d+$/.test(identifier) && identifier.length > 1 && identifier.startsWith('0'))
-  )) return null;
-  return { core, prerelease };
-}
-
-function compareSemver(left: Semver, right: Semver): number {
-  for (let index = 0; index < left.core.length; index += 1) {
-    const difference = left.core[index]! - right.core[index]!;
-    if (difference !== 0) return difference;
-  }
-  if (left.prerelease === null) return right.prerelease === null ? 0 : 1;
-  if (right.prerelease === null) return -1;
-  for (let index = 0; index < Math.max(left.prerelease.length, right.prerelease.length); index += 1) {
-    const a = left.prerelease[index];
-    const b = right.prerelease[index];
-    if (a === undefined) return -1;
-    if (b === undefined) return 1;
-    if (a === b) continue;
-    const aNumber = /^\d+$/.test(a) ? BigInt(a) : null;
-    const bNumber = /^\d+$/.test(b) ? BigInt(b) : null;
-    if (aNumber !== null && bNumber !== null) return aNumber < bNumber ? -1 : 1;
-    if (aNumber !== null) return -1;
-    if (bNumber !== null) return 1;
-    return a.localeCompare(b);
-  }
-  return 0;
-}
 
 function assertFirstConfirmation(attempted: boolean): void {
   if (attempted) {

@@ -108,6 +108,13 @@ export type PrivacyErrorKind =
    * sets one. Shield is unaffected: the wallet submits it.
    */
   | 'relay-not-configured'
+  /**
+   * The connected wallet cannot run a STRK20 shadow account yet (D-077): it
+   * reports no Wallet API 0.10.4, its account lacks the commitment method, or
+   * it answered the commitment request as unsupported. Nothing was sent. Only
+   * the Vault needs one; every other route is unaffected.
+   */
+  | 'shadow-accounts-unsupported'
   /** Anything unmapped. Log it, then add a case. */
   | 'unknown';
 

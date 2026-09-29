@@ -15,6 +15,30 @@ export interface WalletStrk20Account {
     simulate?: boolean,
   ): Promise<STRK20_CALL_AND_PROOF>;
   strk20InvokeTransaction(actions: STRK20_ACTION[]): Promise<{ transaction_hash: string }>;
+  /**
+   * `wallet_strk20ShadowAccountCommitment` (Wallet API 0.10.4, D-077). The
+   * partial commitment when `nonce` is omitted. Optional: an account object
+   * without it cannot run the Vault, which is detected at runtime, never by
+   * wallet identity.
+   */
+  strk20ShadowAccountCommitment?(dappName: string, nonce?: string): Promise<string>;
+}
+
+/**
+ * The Vault's two public reads (D-077), through the backend so the player's
+ * IP never reaches a third-party RPC next to their commitment or stand-in
+ * address (D-014). Each is pinned there to one contract.
+ */
+export interface VaultReadClient {
+  /** The anonymizer's view: the shadow account at the Vault's nonce, and whether it is deployed. */
+  shadowAccount(partialCommitment: string, signal?: AbortSignal): Promise<{ address: Address; deployed: boolean }>;
+  /** A stand-in address's vSTRK position, in base units. */
+  vaultPosition(account: Address, signal?: AbortSignal): Promise<{
+    shares: bigint;
+    assets: bigint;
+    maxWithdraw: bigint;
+    maxRedeem: bigint;
+  }>;
 }
 
 /**
@@ -138,17 +162,23 @@ export interface PrivateSubmissionGateway {
 export interface WalletRoutePolicy {
   maxIntents: number;
   maxRelayFee: bigint;
-  enabledRoutes: readonly ('shield' | 'unshield' | 'transfer' | 'swap' | 'stake')[];
+  /**
+   * `vault` (D-077) admits the Vault's supply and redeem, which the wallet
+   * submits itself, like shield: no relay fee and no intent bound.
+   */
+  enabledRoutes: readonly ('shield' | 'unshield' | 'transfer' | 'swap' | 'stake' | 'vault')[];
   /**
    * Every token crossing an enabled route must be explicitly admitted.
    *
    * `stake` (D-063) is optional so every existing policy stays valid; absent
    * admits no stake token, so the route fails closed even when enabled. When
    * present it must list both STRK (in) and xSTRK (out), as a swap lists both
-   * of its sides.
+   * of its sides. `vault` (D-077) is optional the same way, and admits only
+   * STRK, the vault's asset.
    */
   allowedTokens: Readonly<Record<'shield' | 'unshield' | 'transfer' | 'swap', readonly Address[]>> & {
     readonly stake?: readonly Address[];
+    readonly vault?: readonly Address[];
   };
   swap?: {
     expectedChainId: string;

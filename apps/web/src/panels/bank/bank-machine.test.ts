@@ -1326,6 +1326,12 @@ class AggregateOnlyOperations implements PrivacyOperations {
   prepare: PrivacyOperations['prepare'] = (intents, signal) => this.inner.prepare(intents, signal);
   hasPrivateFunds: PrivacyOperations['hasPrivateFunds'] = (signal) => this.inner.hasPrivateFunds(signal);
   depositStatus: PrivacyOperations['depositStatus'] = (hash, signal) => this.inner.depositStatus(hash, signal);
+  // D-077: the Vault, passed through untouched.
+  vaultPosition: PrivacyOperations['vaultPosition'] = (options) => this.inner.vaultPosition(options);
+  prepareVaultSupply: PrivacyOperations['prepareVaultSupply'] = (token, amount, options) =>
+    this.inner.prepareVaultSupply(token, amount, options);
+  prepareVaultRedeem: PrivacyOperations['prepareVaultRedeem'] = (amount, options) =>
+    this.inner.prepareVaultRedeem(amount, options);
 
   async balances(tokens?: Address[], signal?: AbortSignal): Promise<PrivateBalance[]> {
     const balances = await this.inner.balances(tokens, signal);

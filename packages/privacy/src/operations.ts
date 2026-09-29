@@ -21,8 +21,10 @@ import type {
  * heads-up to dependent lanes before implementation. Funded prompt behavior,
  * latency and live-paymaster artifact acceptance remain pre-launch checks.
  * Narrowly extended by D-041/D-042 (`SwapReview`), D-063 (the `stake`
- * intent) and D-072 (the entry gate's `hasPrivateFunds` and `depositStatus`);
- * every other method and shape is unchanged.
+ * intent), D-072 (the entry gate's `hasPrivateFunds` and `depositStatus`) and
+ * D-077 (the Vault's `vaultPosition`, `prepareVaultSupply` and
+ * `prepareVaultRedeem`, and the `supportsShadowAccounts` capability); every
+ * other method and shape is unchanged.
  *
  * Implementations must not branch on wallet identity. Capability is determined
  * at runtime, which is what keeps web wallets possible later without a rewrite.
@@ -202,6 +204,158 @@ export interface PrivacyOperations {
    * check it cannot make; it says nothing about the deposit either way.
    */
   depositStatus(transactionHash: string, signal?: AbortSignal): Promise<DepositStatus>;
+
+  /**
+   * The player's Vault position (D-077): what their STRK20 shadow account
+   * holds in Vesu's vSTRK vault.
+   *
+   * The wallet derives the shadow account's partial commitment for the
+   * Vault's fixed dapp name, without a transaction and without the viewing key
+   * leaving it. The address comes from the canonical anonymizer's own view,
+   * cross-checked here against the address the anonymizer derives, and the
+   * position is a public read through the backend (D-014). Neither the
+   * commitment nor the address leaves this package. Call it from a player
+   * action: a wallet may ask before it answers. Rejects
+   * `shadow-accounts-unsupported` for a wallet without shadow accounts, and
+   * `not-registered` for an account the pool does not know.
+   */
+  vaultPosition(options?: VaultCallOptions): Promise<VaultPosition>;
+
+  /**
+   * Cost a Vault supply of `amount` of `token` (STRK only in v1) from the
+   * shielded balance into Vesu, held by the player's shadow account (D-077).
+   *
+   * The prepared batch withdraws `amount` from the pool to the shadow
+   * account, a public leg, then runs `approve` and the vault's `deposit`
+   * through it. The vault shares stay on that address, whose balance and
+   * activity are public; only its link to the player's wallet is hidden.
+   * `confirm()` asks the wallet to prove and submit it itself
+   * (`wallet_strk20InvokeTransaction`): no STRKWORLD relay is involved.
+   */
+  prepareVaultSupply(token: Address, amount: bigint, options?: VaultCallOptions): Promise<PreparedVaultBatch>;
+
+  /**
+   * Cost a Vault redeem back into the shielded balance (D-077): `amount` of
+   * STRK, withdrawn from the position by the vault's `withdraw`, or `'all'`,
+   * every share by `redeem`. The STRK gained returns to a pool note owned by
+   * this account (`collect_policy: diff`), so a public balance the shadow
+   * account already held stays where it is. Reads the position first and
+   * refuses more than the vault lets it take now.
+   */
+  prepareVaultRedeem(amount: bigint | 'all', options?: VaultCallOptions): Promise<PreparedVaultBatch>;
+}
+
+// ---------------------------------------------------------------------------
+// The Vault — D-077
+// ---------------------------------------------------------------------------
+
+/**
+ * Options every Vault call takes. `onStage` observes where the call got to,
+ * for D-069's probe logs; it can never change what the call does.
+ */
+export interface VaultCallOptions {
+  readonly signal?: AbortSignal;
+  readonly onStage?: VaultStageCallback;
+}
+
+/**
+ * One step of a Vault call, as the probe logs it (D-077, D-069). Codes and
+ * yes/no answers only: never an amount, a balance, an address, a commitment
+ * or a transaction hash. `code` is the wallet's own error code, or null when
+ * the failure carried none.
+ */
+export type VaultStage =
+  /**
+   * The version query's answer, before anything is asked of the wallet: with
+   * `supported: false` nothing was asked of it, and the call stops here.
+   */
+  | { readonly stage: 'capability'; readonly supported: boolean }
+  /** The wallet answered, or refused, the commitment request. */
+  | { readonly stage: 'commitment'; readonly ok: true }
+  | { readonly stage: 'commitment'; readonly ok: false; readonly code: number | null }
+  /** The shadow account's address was resolved and cross-checked, or was not. */
+  | { readonly stage: 'address'; readonly resolved: true; readonly deployed: boolean }
+  | { readonly stage: 'address'; readonly resolved: false }
+  /** The public position read answered, or failed. */
+  | { readonly stage: 'position'; readonly ok: boolean }
+  /** The wallet returned a transaction hash, or refused to submit. */
+  | { readonly stage: 'submit'; readonly ok: true }
+  | { readonly stage: 'submit'; readonly ok: false; readonly code: number | null }
+  /** What the transaction's receipt said by the time the call stopped waiting. */
+  | { readonly stage: 'receipt'; readonly status: VaultOutcome | 'unreadable' };
+
+export type VaultStageCallback = (stage: VaultStage) => void;
+
+/**
+ * A shadow account's Vault position, in base units of `token`. Read on
+ * request, never polled.
+ */
+export interface VaultPosition {
+  /** The one token the Vault lends in v1: STRK, the vault's asset. */
+  readonly token: Address;
+  /** Vault shares (vSTRK) the shadow account holds. */
+  readonly shares: bigint;
+  /** What those shares redeem for now, by the vault's own preview. */
+  readonly assets: bigint;
+  /** The most the vault lets the position withdraw now; at most `assets`. */
+  readonly redeemable: bigint;
+}
+
+/** What a prepared Vault batch does, for the review. */
+export type VaultAction =
+  | { readonly kind: 'supply'; readonly token: Address; readonly amount: bigint }
+  /**
+   * `amount` is exact for a partial redeem. For `all` it is the vault's
+   * preview at prepare time: the exact STRK is fixed when the redeem runs.
+   */
+  | { readonly kind: 'redeem'; readonly token: Address; readonly amount: bigint; readonly all: boolean };
+
+/**
+ * A costed Vault supply or redeem (D-077), with the same prepare-then-confirm
+ * contract as `PreparedBatch`.
+ *
+ * The wallet proves and submits it (`wallet_strk20InvokeTransaction`) and
+ * adds its own network fee there, so `gasEstimate` is zero and `totalCost` is
+ * the pool fee: the network fee is the wallet's to state when it asks.
+ */
+export interface PreparedVaultBatch {
+  readonly action: VaultAction;
+  /** Protocol fee, read live. */
+  readonly poolFee: bigint;
+  /** Zero: the wallet adds and prices its own network fee. */
+  readonly gasEstimate: bigint;
+  readonly totalCost: bigint;
+  readonly warnings: readonly BatchWarning[];
+  readonly promptCount: number;
+
+  /**
+   * Hand the batch to the wallet to prove and submit, then wait a bounded
+   * time for its receipt. `onSubmitted` reports the hash as soon as the
+   * wallet returns it, before the wait. Once a hash exists this never
+   * rejects: a receipt still missing when the wait ends, or a cancelled
+   * wait, resolves `pending`.
+   */
+  confirm(opts: {
+    feeCeiling: bigint;
+    onProgress?: ProgressCallback;
+    onStage?: VaultStageCallback;
+    onSubmitted?: (result: TxResult) => void;
+    signal?: AbortSignal;
+  }): Promise<VaultTxResult>;
+
+  /** Release the batch. Safe to call twice. */
+  discard(): void;
+}
+
+/**
+ * - `succeeded`: accepted, and executed.
+ * - `reverted`: accepted, and reverted: nothing in it happened.
+ * - `pending`: no accepted receipt yet. Never evidence of failure.
+ */
+export type VaultOutcome = 'succeeded' | 'reverted' | 'pending';
+
+export interface VaultTxResult extends TxResult {
+  readonly outcome: VaultOutcome;
 }
 
 /**
@@ -235,6 +389,15 @@ export interface WalletCapability {
   supportsStrk20: boolean;
   /** Highest supported wallet-API version, or null if none reported. */
   walletApiVersion: string | null;
+  /**
+   * Whether this wallet can run a STRK20 shadow account, which only the Vault
+   * needs (D-077): it reports Wallet API 0.10.4 or later and its account
+   * exposes the commitment method. From the same version query as the rest,
+   * never a prompt. The wallet can still refuse the commitment itself, which
+   * a Vault call reports as `shadow-accounts-unsupported`. Absent reads as
+   * false.
+   */
+  supportsShadowAccounts?: boolean;
   /**
    * Whether the account is registered in the pool.
    *

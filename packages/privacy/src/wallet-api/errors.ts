@@ -36,6 +36,37 @@ export function mapTransferWalletError(error: unknown): PrivacyError {
   );
 }
 
+/**
+ * A wallet failure met on the Vault's shadow-account path (D-077): asking for
+ * the commitment, or submitting the shadow-account action. A wallet that
+ * answers either as an API version it does not support (162), or as a method
+ * it does not know (JSON-RPC -32601), cannot run a shadow account yet: that
+ * is `shadow-accounts-unsupported`, never this account's STRK20 support in
+ * general, which would close the city. Every other failure maps as
+ * `mapWalletError` maps it, so a 118 is still `not-registered`.
+ */
+export function mapShadowWalletError(error: unknown): PrivacyError {
+  if (error instanceof PrivacyError) return error;
+  const code = readCode(error);
+  if (code === 162 || code === JSON_RPC_METHOD_NOT_FOUND) {
+    return new PrivacyError('shadow-accounts-unsupported', safeMessage('shadow-accounts-unsupported'), error);
+  }
+  return mapWalletError(error);
+}
+
+/**
+ * The wallet's own numeric error code, read without running a getter, or
+ * null. Codes only: the probe logs (D-069) record this and never the
+ * message, which a wallet may fill with an address.
+ */
+export function walletErrorCode(error: unknown): number | null {
+  const code = readCode(error);
+  return code !== null && Number.isSafeInteger(code) ? code : null;
+}
+
+/** JSON-RPC 2.0's "method not found". */
+const JSON_RPC_METHOD_NOT_FOUND = -32601;
+
 function isAbortError(error: unknown): boolean {
   if (error instanceof DOMException) {
     try {
@@ -82,6 +113,7 @@ function safeMessage(kind: PrivacyErrorKind): string {
     case 'insufficient-balance': return 'The private balance cannot cover the amount and fees.';
     case 'privacy-leak': return 'The wallet refused an action that could weaken privacy.';
     case 'unsupported-wallet': return 'This wallet does not support the required STRK20 Wallet API.';
+    case 'shadow-accounts-unsupported': return 'This wallet does not support STRK20 shadow accounts yet.';
     case 'unreachable': return 'The wallet or network could not be reached.';
     default: return 'The privacy operation failed.';
   }
