@@ -47,11 +47,11 @@ for the building privacy-admission rule.
 
 ## Implemented core
 
-`BackendApi` is a framework-neutral, versioned handler for the exact six
+`BackendApi` is a framework-neutral, versioned handler for the exact seven
 operations the browser needs: pool-native fee build, quote-bound swap prepare,
-prepared submission, pool config, recipient public key and receipt lookup,
-plus the optional read-only degen token list (D-067, below) and the opt-in
-debug-log sink (D-069, below).
+prepared submission, pool config, recipient public key, receipt lookup and
+the Privacy Plaza's pool stats (D-076, below), plus the optional read-only
+degen token list (D-067, below) and the opt-in debug-log sink (D-069, below).
 Schemas reject unknown fields. The
 submission validator accepts only the configured pool's `apply_actions`,
 bounded calldata and a non-empty bounded proof. It verifies that the proof
@@ -68,6 +68,24 @@ One recipient per send (D-065): a first transfer opens a channel with
 route refuses a submission whose `Append` actions name more than one distinct
 address (400). Later sends to a known recipient carry no address, so the
 Shell's one-transfer batch rule bounds those.
+
+The Privacy Plaza's pool stats (D-076, `POST /v1/rpc/pool-stats` with
+`{ "v": 1 }`) come from `PoolStatsCache` (`pool-stats.ts`), never from the
+chain inside a request: accounts registered (the pool's `ViewingKeySet`
+events since block 8,978,970), deposits in the last 51,429 blocks, and
+`balance_of(pool)` for the six Exchange catalog tokens pinned here. The
+scans are incremental: the first reads the pool's history in windows of
+250,000 blocks, following the node's continuation tokens and committing
+each window, and later refreshes read only new blocks. The range that
+reaches the head names it by hash (`starknet_blockHashAndNumber`), since a
+node answers a numeric `to_block` past its tip short and without an error,
+and a window that ends by number ends at least 250,000 blocks below the
+head. The RPC port returns block numbers only. A refresh runs about every
+60 s while the route is asked and stops after ten quiet minutes; each part
+keeps its last good value through a failed refresh and is null until first
+counted. The route has its own rate window (`POOL_STATS_RATE_LIMIT`, 600 a
+minute), apart from the one the private routes share, answers the kill
+switch like every other, and logs nothing.
 
 The degen floor's catalog (D-067) is optional and off by default: with no
 `BACKEND_DEGEN_ENABLED` it is absent, and any other `BACKEND_DEGEN_*`

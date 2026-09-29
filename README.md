@@ -6,7 +6,9 @@ Walk around a shared pseudonymous world, step into a building, and use a real
 privacy-preserving protocol with real funds on Starknet mainnet. One balance,
 one world, several protocols — with the rule that a financial building cannot
 open unless it has an approved private execution path. Where the road ends, a
-shared block sandbox lets everyone build together (D-060).
+shared block sandbox lets everyone build together (D-060); at its other end
+the Privacy Plaza, which moves no money, shows the pool's live public figures
+and a shell game about hidden notes (D-076).
 
 Built on [STRK20](https://strk20-by-example.org), Starknet's confidential
 token standard.
@@ -34,6 +36,12 @@ for the accepted boundaries.
 | The Post Office | Private address-to-address transfer | Room and transfer surfaces implemented | Production activation still needs an approved live relay-fee tuple |
 | The Bridge | Any chain → STRK → the pool. Arrival is **public** | Manual recovery/deposit flow implemented offline | New production quotes stay locked without the fee-aware public-shield planner |
 | The Vault | Vesu lending | Locked until after v1 | Requires a project-owned reviewed and audited Cairo anonymizer |
+
+The Privacy Plaza (D-076) is not a building: an open square below the road's
+west end with two stations used with E. The monument shows public, pool-wide
+aggregates (accounts registered, deposits in the last 24 hours, what the pool
+holds) from the backend's cache, and "Where's the note?" is a client-only
+shell game. No money, no wallet and no route are involved.
 
 ---
 

@@ -165,6 +165,7 @@ an arbitrary contract, selector or calldata blob.
 | Exchange | AVNU's first-party STRK20 executor | Active; no project-owned Cairo |
 | Vault | Project-owned `privacy_invoke` anonymizer | Locked until reviewed, tested, audited, deployed and allowlisted |
 | Bridge | Public funding edge, followed by a separate shield | Active, but never presented as a private app interaction |
+| Privacy Plaza | None: no money moves, and no route is registered (D-076) | Active; its monument shows public pool-wide aggregates and its table a client-only shell game |
 
 Every active financial route allowlists exact contracts, selectors and tokens;
 validates action limits, quote expiry, minimum output/slippage and fee ceilings;

@@ -153,7 +153,8 @@ resolved, and route the web origin's `/api` prefix to it.
 
 This is deliberate on privacy grounds, not laziness:
 
-- **There is no health route.** The API exposes six POST operations and, when
+- **There is no health route.** The API exposes seven POST operations (D-076's
+  pool stats among them) and, when
   D-067's optional degen catalog is configured, one read-only
   `GET /v1/degen/tokens` (`apps/backend/src/api.ts`), plus D-069's
   `POST /v1/debug/logs` on an opted-in test deployment only; anything else is

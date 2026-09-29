@@ -258,6 +258,84 @@ empty shell to fetchers, so a 200 there means nothing.
 
 ## 6. Findings log
 
+### 2026-09-29 — The pool counts its registrations in `ViewingKeySet` events; plaza stations open with E on the street (D-076)
+
+The pool's `ViewingKeySet` event is a `nested` variant of
+`privacy::privacy::Privacy::Event`, emitted with keys
+`[sn_keccak('ViewingKeySet'), user_addr, public_key]` and data
+`enc_private_key` (three felts), and its selector is
+`0x1321a492485b4f19851fb787ab3800a0030b595332cba93cd5fe40dfb5a4daf`. At head
+15,626,138 the pool had emitted 2,932 of them since its first block,
+8,978,970 (the first at 9,023,035), each for a different `user_addr`, which
+fits a viewing key being set once per account. The last 51,429 blocks, a day
+at 1.68 s a block, held 23 `Deposit` events from 16 depositors and spanned
+87,270 s. `balance_of` (`0x35a73cd3…af33`) answers `[low, high]` for all six
+Exchange catalog tokens with the pool as the owner, so one selector covers
+STRK, ETH, USDC, USDT, WBTC and strkBTC. The Cartridge public RPC pages
+`starknet_getEvents` by about 81,920 blocks however large `chunk_size` is:
+one request over the pool's life returned 3 events and the continuation
+token `9060890-0`, and the whole history took 82 pages and 25 s. A scan must
+follow continuation tokens to the end of its range, and should commit in
+windows so a failed page does not restart it. Asked for a numeric `to_block`
+a million blocks past its head, the same RPC answers with no error, so a
+node behind a load balancer that trails the one that gave the head answers a
+numeric range short; asked for a block hash it has not seen, it refuses with
+`BLOCK_NOT_FOUND` (24). A range that reaches the head must name it by hash
+(`starknet_blockHashAndNumber`). Traps met on the way:
+
+- The street's draw-call budget test counts null labels by
+  `view.labels.children.length`, so a builder's labels must be direct
+  children of the street's labels group or the budget undercounts them. The
+  walkable-volume test forces every piece of furniture onto solid tiles: the
+  plaza's benches, lamps, planters, trees, table and monument all stand on
+  the new `plinth` tile, and its tree canopies start above 1.9 where they
+  overhang the paving.
+- The street's `update` integrates at most 250 ms a call, so a test that
+  advances an animator by seconds must step it.
+- `button:hover:not(:disabled)` and `button:active` set `transform`, so a
+  button placed by a transform jumps on hover. The shell game places its
+  pick buttons with `left` and animates only non-button spans.
+- A World-side key listener counts in the session tests' keyboard fakes. The
+  plaza's E key and its two Shell subscriptions exist only when the session
+  has a bus, so the headless sandbox tests keep their counts; the lifecycle
+  suite's subscription total moves from 12 to 14.
+- `PoolStatsCache.snapshot()` starts the next background refresh when none is
+  running, so a test that reads it and then changes the fake chain races
+  that refresh. Tests read through `peek()`.
+- The backend's rate window is one aggregate for every private route
+  (`AggregateRateLimiter`, 120 a minute in `.env.production.example`), so a
+  read every visitor polls must not take slots from it: the pool stats have
+  their own window, and the web backs off to a read a minute when they fail.
+- A static render escapes apostrophes (`&#x27;`), so a markup test must
+  escape copy like "Where's the note?" before looking for it.
+- The deployment's backend is `deploy/fly/src/backend-child.ts`, not
+  `apps/backend/src/server.ts`: a boot-time step in `server.ts` alone never
+  runs on Railway or Fly. The warm-up is in both.
+
+*Verified:* read-only `starknet_getClassAt` (the pool's ABI),
+`starknet_getEvents` (the pool, the `ViewingKeySet` key, blocks 8,978,970 to
+15,626,138, every page; the `Deposit` key over the last 51,429 blocks; a
+numeric `to_block` past the head; an unknown `block_hash`),
+`starknet_getBlockWithTxHashes` (both ends of that window),
+`starknet_blockHashAndNumber` and `starknet_call` `balance_of(pool)` on the
+six tokens against `https://api.cartridge.gg/x/starknet/mainnet` (spec 0.10.2)
+on 2026-09-29; the selectors pinned against starknet.js 10.4
+`hash.getSelectorFromName` in `pool-stats.test.ts`, which also checks the
+pinned tokens against the web catalog. Headless: `map/plaza.test.ts` (layout,
+reachability from spawn, the gateway, clear of the Studio path),
+`plaza-stations.test.ts`, `world-session-plaza.test.ts`,
+`plaza-builder.test.ts` (the sign, the faces, "…", the held face's turns, the
+prompts, the fades, the budget), `street-builder.test.ts`,
+`pool-stats.test.ts` (incremental windows, resume after a failed window, a
+trailing node refused rather than read short, the sliding deposit window, the
+cache, the route and its own rate window, silence while the background refresh
+fails), the web's `pool-stats.test.ts`, `pool-stats-poller.test.ts` (the
+backoff, a stalled read, crossings inside a backoff), `shell-game.test.ts`,
+`ShellGamePanel.test.tsx` (focus included) and `MonumentPanel.test.tsx` under
+jsdom, `plaza-visit.test.tsx`, `plaza-flow.test.tsx` (E to Escape through the
+visit layer), `copy.test.ts` and `debug-logs.test.tsx`. The plaza was not
+looked at in a browser by an agent; that is the lead's check.
+
 ### 2026-09-29 — The rooftop frame lies inside the fog's near distance, so the backdrop must fill it
 
 From the Exchange roof the `rooftop` preset (pitch 74°, vertical FOV 50°,

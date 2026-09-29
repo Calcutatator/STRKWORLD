@@ -32,14 +32,26 @@ export function ownLockedBuildingPayload(
     : null;
 }
 
+/**
+ * A station activation: a building's, or the Privacy Plaza's (D-076), whose
+ * stations stand on the street. The plaza is no building, so it never passes
+ * `ownBuildingPayload`: nothing may enter or leave it.
+ */
 export function ownStationPayload(
   value: unknown,
 ): { readonly building: BuildingId; readonly station: StationId } | null {
-  const ownedBuilding = building(value);
+  const candidate = ownData(value, 'building');
+  const ownedBuilding: BuildingId | null = candidate === 'plaza' ? 'plaza' : building(value);
   const station = ownData(value, 'station');
   return ownedBuilding && typeof station === 'string' && station.startsWith(`${ownedBuilding}:`)
     ? Object.freeze({ building: ownedBuilding, station: station as StationId })
     : null;
+}
+
+/** D-076: whether the Privacy Plaza is in the player's view. */
+export function ownPlazaNearbyPayload(value: unknown): { readonly near: boolean } | null {
+  const near = ownData(value, 'near');
+  return typeof near === 'boolean' ? Object.freeze({ near }) : null;
 }
 
 export function ownMovementPayload(

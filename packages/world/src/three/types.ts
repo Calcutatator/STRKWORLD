@@ -1,6 +1,7 @@
 import type { Group, Object3D, Texture } from 'three';
-import type { AvatarSpriteKey, BuildingId } from '@strkworld/shared';
+import type { AvatarSpriteKey, BuildingId, StationId } from '@strkworld/shared';
 import type { FixedRoomStationPresentation } from '../fixed-room.js';
+import type { PlazaStatsPresentation } from '../plaza-stations.js';
 
 /**
  * Contracts shared by the 3D presentation modules (D-059).
@@ -118,8 +119,18 @@ export interface StreetView {
   /** Facade signs: the `setLabelsVisible` target. */
   readonly labels: Group;
   readonly occluders: readonly Occluder[];
+  /** The Privacy Plaza's live parts (D-076), or null on a map without it. */
+  readonly plaza?: PlazaView | null;
   update(deltaMs: number): void;
   dispose(): void;
+}
+
+/** What the session changes on the Privacy Plaza (D-076): its figures and its E prompt. */
+export interface PlazaView {
+  /** Redraw the monument's faces; a null part reads "…". */
+  setStats(stats: PlazaStatsPresentation): void;
+  /** Show the E prompt over this station, or over none. */
+  setHighlight(station: StationId | null): void;
 }
 
 export interface RoomView {

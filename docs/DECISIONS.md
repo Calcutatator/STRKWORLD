@@ -244,7 +244,7 @@ agent building the wrong thing. `WorldEvents` and `ShellEvents` in
 
 ## D-011 — `packages/shared` is a frozen seam
 
-**2026-08-16 · Accepted**
+**2026-08-16 · Accepted · seam extended with the Privacy Plaza's `plaza` building id, `plaza:nearby` and `plaza:stats` by D-076**
 
 **Context.** Four lanes work in parallel. `packages/shared` carries the event
 bus contract, the lobby schema and the building registry — a change there
@@ -368,7 +368,7 @@ Shell lane owns it.
 
 ## D-014 — The backend is a first-class component with its own privacy rules
 
-**2026-08-16 · Accepted · paymaster key made optional (gasless relay) by D-068 · per-request logging exception for opted-in test deployments by D-069 · key required again for relayed routes by D-070**
+**2026-08-16 · Accepted · paymaster key made optional (gasless relay) by D-068 · per-request logging exception for opted-in test deployments by D-069 · key required again for relayed routes by D-070 · a background public-aggregate scan (the Privacy Plaza's pool stats) added by D-076**
 
 **Context.** An independent review found that D-013 quietly put a server on the
 critical path of *every* private action — fee build and submission must be
@@ -1046,7 +1046,7 @@ execute on use, in Game Mode.
 
 ## D-033 — Game Mode extends the frozen event bus with opaque stations and control ownership
 
-**2026-08-18 · Accepted · extends D-011 and D-027; implements the seam change anticipated by D-030**
+**2026-08-18 · Accepted · extends D-011 and D-027; implements the seam change anticipated by D-030 · stations on the street, used with E, added by D-076**
 
 **Context.** Game Mode needs the World to render and activate stations while
 the Shell remains the sole owner of wallet state, route admission, disclosures,
@@ -3520,3 +3520,124 @@ retroactively bursts; a column already standing at the old cap simply bursts
 on the next block it is offered, exactly as D-071 always specified for a full
 column. Sky drops read very slightly snappier; their landing tile, colour and
 avoidance rules are unchanged.
+
+---
+
+## D-076 — The Privacy Plaza at the west end
+
+**2026-09-29 · Accepted by the user · extends D-011's shared seam with a non-financial `plaza` building id, `plaza:nearby` and `plaza:stats` · extends D-033's stations to the street, used with E, outside any building · adds a background public-aggregate scan to D-014's backend, which still logs nothing per request · registers no route (D-020)**
+
+**Context.** The lead: "The left end of the road, opposite the sandbox, has
+nothing to do." Offered options, the lead picked "Privacy Plaza — a no-money
+social spot: a live pool-stats monument plus a shell-game mini-game showing
+how the pool hides notes." The south side of the road's west end (y 19-27)
+was empty grass, and stations existed only inside building rooms, where they
+open on approach (D-033). Read on mainnet on 2026-09-29: `ViewingKeySet` is
+a `nested` variant of the pool's event enum with keys
+`[sn_keccak('ViewingKeySet'), user_addr, public_key]`; the pool has emitted
+2,932 of them since its first block, 8,978,970, each for a different
+address; 23 deposits landed in the last 51,429 blocks (a day at about 1.68 s
+a block; that span was 87,270 s); and `balance_of(pool)` answers a u256 for
+all six Exchange catalog tokens. Cartridge's public RPC pages
+`starknet_getEvents` by about 81,920 blocks with a continuation token, so
+reading the pool's whole life takes about 82 pages and 25 s. Asked for a
+numeric `to_block` a million blocks past its head, it answers without an
+error; asked for a block hash it has not seen, it refuses with
+`BLOCK_NOT_FOUND` (24).
+
+**Decision.**
+
+- **Where.** A paved square at street tiles x 0-10, y 19-27, level with and
+  entered from the south pavement through a gateway: two posts and a lintel
+  carrying a "PRIVACY PLAZA" sign on the Bank facade's STRK20 plate, with
+  planters either side and the east side open to the grass. Benches, park
+  lamps and trees in tubs, in the street's golden-hour palette. Two new tile
+  kinds carry it: `plaza` (walkable) and `plinth` (solid, under every
+  fixture), so collision stays tile-based and no volume stands where a player
+  walks. It keeps clear of the Avatar Studio path (x 23-24) and the spawn.
+  The geometry is its own module, `three/plaza-builder.ts`, merged into the
+  street's groups and draw-call budget: twelve more calls and about 2,400
+  more triangles.
+- **The monument.** A STRK20-dark obelisk on a stepped plinth at x 4-6,
+  y 22-24, its square shaft turned 45 degrees so the fixed north camera sees
+  two faces: accounts registered and deposits in the last 24 hours. The
+  plinth's front shows what the pool holds, one token at a time. The World
+  receives the figures pre-formatted (`plaza:stats`, like `hud:balance`) and
+  draws "…" for any it lacks; it never learns what they mean. The monument
+  and the gateway fade like buildings when they hide the player.
+- **Two stations, used with E.** `plaza:monument` and `plaza:shells` open from
+  any tile beside the monument or the table. Walking past opens nothing: the
+  street is shared and the player may only be passing. The handoff is the
+  fixed rooms', with the plaza as the building: the World suspends input,
+  emits `station:activated`, the Shell claims `world:control-owner` while it
+  is delivered and hands it back when the window closes, and an unclaimed
+  activation gives the World its input straight back. No building is
+  entered: no `building:entered`, presence and the lobby are untouched
+  (D-019 is unchanged), and there is no Menu Mode and no wallet check.
+- **Public aggregates only.** The backend answers `POST /v1/rpc/pool-stats`
+  with `{ "v": 1 }` and nothing else as
+  `{ accounts, deposits24h, held: [{ token, amount }] }`, each part null
+  until counted. A cache computes them in the background: the registration
+  count scans from block 8,978,970 in windows of 250,000 blocks, following
+  the node's continuation tokens and committing after each window, then only
+  the blocks since. The range that reaches the head names it by the hash
+  `starknet_blockHashAndNumber` gave, so a node behind a load balancer that
+  trails the one that gave the head refuses the read instead of answering
+  short, and a window that ends by number ends at least 250,000 blocks below
+  the head. The deposit window keeps the block number of each
+  deposit in the last 51,429 blocks and nothing else; the balances are read
+  for the six Exchange catalog tokens, pinned in the backend so no request
+  can name a contract. The RPC port hands back block numbers only, never an
+  address, key, amount or transaction hash. A refresh runs about every 60 s
+  while the route is asked, one at a time, stops after ten quiet minutes and
+  starts at boot; the route answers from memory at once and serves each
+  part's last good value while it refreshes. It has its own rate window,
+  600 requests a minute, apart from the one the private routes share: the
+  figures cost the chain nothing, so a crowd at the plaza never takes a slot
+  a fee quote or a submission needs. It is refused with the kill switch off,
+  and logs nothing.
+- **The web reads while someone can see it.** The Shell reads the route when
+  the World reports the plaza in view (`plaza:nearby`, a new World event) or
+  while the monument's window is open, about every 60 s, never on a hidden
+  page. The held figures cover this build's shield allowlist as far as the
+  Exchange catalog describes it (STRK, ETH, USDC, USDT and WBTC on Railway).
+  A failed read keeps figures younger than three minutes and otherwise shows
+  "…". A failed read (a 429 included), or an answer with a part still
+  uncounted, is asked again after 15 s (10 s) and then backs off, doubling to
+  the minute with up to a quarter more at random; walking in and out of view
+  never reads inside a backoff, and a read not answered in 15 s is given up
+  as a failure. The demo shows sample figures labelled as such, and a
+  production build refuses them. The window adds three sentences on the
+  anonymity set and one on the public edges.
+- **The shell game is client-only.** No money, wallet, backend or lobby, and
+  nothing kept beyond the page. The note starts under a cup chosen by
+  `crypto.getRandomValues` (rejection-sampled, so every cup is equally
+  likely), six visible swaps carry it in its cup, and a pick wins exactly
+  when it finds it. Each win in a row makes the swaps about a tenth quicker
+  (520 ms down to a 240 ms floor); a miss resets the streak. A player who
+  asked for less motion gets a quick fade in place of the swaps. Its line:
+  "In the pool, notes look alike from outside. Without your viewing key, no
+  one can tell which ones are yours."
+- **Registry.** `BuildingId` gains `plaza`, which `BUILDINGS` leaves out
+  (there is no door, so `ownBuildingPayload` refuses it); `StationId` then
+  covers `plaza:*`. The Shell's station registry maps both stations with no
+  routes, and nothing enters the privacy register.
+- A debug build (D-069) logs `plaza.open` and `plaza.close` with the station
+  id and `plaza.shells` with `result=win` or `result=lose`, and nothing else.
+
+**Consequences.** Each player standing near the plaza adds about one stats
+read a minute to the route's own window, so about 600 players at once fill
+it; past that some reads get a 429 and back off, and the monument keeps its
+last figures for up to three minutes. The private routes' shared window
+never sees them. The backend reads the chain on its own for the first time:
+about nine RPC calls a minute while the stats are wanted, plus one
+whole-history scan per process, and nothing after ten minutes without a
+request. The scans were read against Cartridge's public RPC; the deployment
+reads through its own `STARKNET_RPC_URL`, and a provider that refuses long
+`starknet_getEvents` ranges leaves the accounts figure at "…" rather than
+wrong. The accounts figure counts `ViewingKeySet` events, one per registered
+account because a viewing key is set once; if the pool ever let an account
+set one twice, it would count twice. Every exhaustive record keyed by
+building must now handle `plaza` (`COPY.buildings`; the street's
+`BUILDING_THEMES` is now partial). The figures are the pool's own public
+facts: the stats show the crowd, and nothing about who is in it.

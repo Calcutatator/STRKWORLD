@@ -79,7 +79,8 @@ import {
 } from '../fixed-room.js';
 import { CITY_FRONT, HINTERLAND, OUTSKIRT, backdropCity, backdropTrees, hills, layHinterland } from './backdrop.js';
 import { bevelledBlockGeometry } from './sandbox-view.js';
-import type { LabelFactory, Occluder, OccluderBounds, StreetView, TextLabel } from './types.js';
+import { buildPlaza, type PlazaOccluder } from './plaza-builder.js';
+import type { LabelFactory, Occluder, OccluderBounds, PlazaView, StreetView, TextLabel } from './types.js';
 
 /** The sandbox square's sign: behind the north hedge, facing the street (D-060). */
 export const SANDBOX_SIGN_TEXT = 'SANDBOX\nPICK UP \u00b7 STACK \u00b7 BUILD';
@@ -136,8 +137,8 @@ const AURA = 'aura';
 
 type Animator = (elapsedMs: number) => void;
 
-/** A street occluder, naming what it fades: a building, or the sandbox gate. */
-export type StreetOccluder = BuildingOccluder | GateOccluder;
+/** A street occluder, naming what it fades: a building, the sandbox gate, or a Privacy Plaza piece (D-076). */
+export type StreetOccluder = BuildingOccluder | GateOccluder | PlazaOccluder;
 
 /** A street occluder that also names the building it fades. */
 export interface BuildingOccluder extends Occluder {
@@ -163,7 +164,9 @@ export interface GateOccluder extends Occluder {
  * feet onto the kerb instead of sinking them into it.
  */
 export function streetSurfaceHeightAt(map: DistrictMap, tileX: number, tileY: number): number {
-  return classifyTile(map, Math.floor(tileX), Math.floor(tileY)) === 'sidewalk' ? PAVEMENT_HEIGHT : 0;
+  const kind = classifyTile(map, Math.floor(tileX), Math.floor(tileY));
+  // The Privacy Plaza's paving is level with the pavement (D-076).
+  return kind === 'sidewalk' || kind === 'plaza' ? PAVEMENT_HEIGHT : 0;
 }
 
 export function buildStreet(map: DistrictMap, labels: LabelFactory): StreetView {
@@ -177,6 +180,7 @@ export function buildStreet(map: DistrictMap, labels: LabelFactory): StreetView 
   const textLabels: TextLabel[] = [];
   const animators: Animator[] = [];
   const occluders: StreetOccluder[] = [];
+  let plaza: PlazaView | null = null;
 
   try {
     const kinds = classifyGround(map);
@@ -262,6 +266,19 @@ export function buildStreet(map: DistrictMap, labels: LabelFactory): StreetView 
 
     const gateOccluder = buildDecor(map, kinds, res, ground, animators, sandboxSign, gate);
     if (gateOccluder) occluders.push(gateOccluder);
+
+    // The Privacy Plaza (D-076), in its own module: paving, furniture, the
+    // monument and its signs, merged into the street's groups and budget.
+    const plazaOccluders: PlazaOccluder[] = [];
+    plaza = buildPlaza(map, labels, res, {
+      ground,
+      labels: signs,
+      textLabels,
+      animators,
+      occluders: plazaOccluders,
+      floorHeight: PAVEMENT_HEIGHT,
+    });
+    occluders.push(...plazaOccluders);
   } catch (error) {
     for (const label of textLabels) {
       try {
@@ -281,6 +298,7 @@ export function buildStreet(map: DistrictMap, labels: LabelFactory): StreetView 
     doors,
     labels: signs,
     occluders,
+    plaza,
     update(deltaMs) {
       if (disposed) return;
       const dt = Number.isFinite(deltaMs) && deltaMs > 0 ? Math.min(deltaMs, 250) : 0;
@@ -321,7 +339,7 @@ export function buildStreet(map: DistrictMap, labels: LabelFactory): StreetView 
  * sandbox plate is the gate's stone threshold at road level, the rest is
  * raised kerbed pavement.
  */
-type GroundKind = 'grass' | 'road' | 'sidewalk' | 'crossing' | 'path' | 'plate' | 'threshold' | 'solid';
+type GroundKind = 'grass' | 'road' | 'sidewalk' | 'crossing' | 'path' | 'plate' | 'threshold' | 'solid' | 'plaza';
 
 function kindAt(map: DistrictMap, x: number, y: number): TileKind | undefined {
   return map.tiles[y]?.[x];
@@ -339,6 +357,8 @@ function classifyGround(map: DistrictMap): GroundKind[][] {
 
 function classifyTile(map: DistrictMap, x: number, y: number): GroundKind {
   const kind = kindAt(map, x, y);
+  // The Privacy Plaza paves its own tiles, furniture footings included (D-076).
+  if (kind === 'plaza' || kind === 'plinth') return 'plaza';
   if (kind === undefined || isSolidAt(map, x, y)) return 'solid';
   if (kind === 'sandbox') return 'plate';
   if ((kind === 'road' || kind === 'pavement') && touchesPlate(map, x, y)) return 'threshold';
@@ -556,6 +576,9 @@ function buildGround(map: DistrictMap, kinds: GroundKind[][], res: ResourceBag, 
           case 'threshold':
             thresholdTile(bin, x, y);
             break;
+          case 'plaza':
+            // Paved by plaza-builder.ts, level with the pavement.
+            break;
           case 'solid':
             // Under the sandbox wall a stone footing, which shows in the blocks'
             // bevels like a contact shadow; under buildings the apron.
@@ -622,8 +645,9 @@ function sidewalkTile(bin: GeometryBin, kinds: GroundKind[][], x: number, y: num
   ];
   for (const [dx, dy, side] of sides) {
     const neighbour = kinds[y + dy]?.[x + dx];
-    // Off-map pavement continues into the outskirts; walls cover their own edge.
-    if (neighbour === undefined || neighbour === 'sidewalk' || neighbour === 'solid') continue;
+    // Off-map pavement continues into the outskirts; walls cover their own
+    // edge; the Privacy Plaza's paving is level with the pavement (D-076).
+    if (neighbour === undefined || neighbour === 'sidewalk' || neighbour === 'solid' || neighbour === 'plaza') continue;
     const dropped = neighbour === 'crossing';
     // Pavement meets the gate's threshold at a flush kerb: you walk straight in.
     const flush = dropped || neighbour === 'threshold';

@@ -7,6 +7,7 @@ import type {
   SandboxSnapshot,
   SandboxTile,
   ShellEvents,
+  StationId,
   WorldEvents,
 } from '@strkworld/shared';
 import {
@@ -57,6 +58,11 @@ import {
   type FixedRoomStationPresentation,
 } from './fixed-room.js';
 import { createInputGate, type InputGate, type KeyboardLike } from './input-gate.js';
+import {
+  createPlazaController,
+  type PlazaController,
+  type PlazaStatsPresentation,
+} from './plaza-stations.js';
 import { calculateMovementVelocity } from './movement-input.js';
 import {
   createStreetMovementAdapter,
@@ -160,6 +166,11 @@ export interface WorldSessionView {
   setCarried?(colour: number | null): void;
   /** Where `E` would act, or null outside the sandbox. */
   setSandboxAim?(aim: SandboxAim | null): void;
+  // The Privacy Plaza (D-076). Optional: a view without the plaza ignores them.
+  /** The plaza station `E` would use, or none. */
+  setPlazaHighlight?(station: StationId | null): void;
+  /** The monument's pre-formatted figures; a null part is drawn as "…". */
+  setPlazaStats?(stats: PlazaStatsPresentation): void;
 }
 
 interface OutfitKeyEvent {
@@ -175,7 +186,10 @@ export interface WorldKeyboard extends KeyboardLike {
   /** Arrows merged with WASD. Must read all-false while `enabled` is false. */
   readonly held: MovementInput;
   readonly sprinting: boolean;
-  /** `keydown-F` toggles the outfit (D-053); `keydown-E` picks or places a block (D-060). */
+  /**
+   * `keydown-F` toggles the outfit (D-053); `keydown-E` picks or places a
+   * block (D-060), or uses a Privacy Plaza station (D-076).
+   */
   on(event: 'keydown-F' | 'keydown-E', handler: (event: OutfitKeyEvent) => void): unknown;
   off(event: 'keydown-F' | 'keydown-E', handler: (event: OutfitKeyEvent) => void): unknown;
 }
@@ -329,6 +343,8 @@ class Session implements WorldSession {
   private sandboxKey?: (event: { readonly repeat: boolean; readonly target: unknown }) => void;
   private elevationLevel = 0;
   private aim: SandboxAim | null = null;
+  private plaza?: PlazaController;
+  private plazaKey?: (event: { readonly repeat: boolean; readonly target: unknown }) => void;
 
   constructor(options: WorldSessionOptions) {
     this.view = options.view;
@@ -352,6 +368,7 @@ class Session implements WorldSession {
       this.createDoorTriggers();
       this.createInteriorVisuals();
       this.createSandbox();
+      this.createPlaza();
     } catch (error) {
       // A constructor has no later shutdown hook. Retire the partial cycle here
       // and surface the construction failure, not a secondary cleanup error.
@@ -470,6 +487,15 @@ class Session implements WorldSession {
     if (sandboxKey && this.keyboard) {
       const keyboard = this.keyboard;
       attempt(() => keyboard.off('keydown-E', sandboxKey));
+    }
+    const plaza = this.plaza;
+    this.plaza = undefined;
+    if (plaza) attempt(() => plaza.destroy());
+    const plazaKey = this.plazaKey;
+    this.plazaKey = undefined;
+    if (plazaKey && this.keyboard) {
+      const keyboard = this.keyboard;
+      attempt(() => keyboard.off('keydown-E', plazaKey));
     }
     const inputGate = this.inputGate;
     this.inputGate = NOOP_INPUT_GATE;
@@ -973,6 +999,35 @@ class Session implements WorldSession {
     this.sandboxKey = onKey;
   }
 
+  // -- the Privacy Plaza (D-076) ----------------------------------------------
+
+  /**
+   * The plaza's two stations, used with E from the street. Built only with a
+   * bus: a headless session has no Shell to open a window, so it gets no
+   * plaza key either.
+   */
+  private createPlaza(): void {
+    const config = this.config;
+    if (!config) return;
+    this.plaza = createPlazaController({
+      out: { emit: (event, payload) => config.out.emit(event, payload) },
+      in: config.in,
+      input: this.inputGate,
+      onHighlight: (station) => this.view.setPlazaHighlight?.(station),
+      onStats: (stats) => this.view.setPlazaStats?.(stats),
+    });
+    const keyboard = this.keyboard;
+    if (!keyboard) return;
+    const onKey = (event: { readonly repeat: boolean; readonly target: unknown }): void => {
+      if (this.cleanedUp || event.repeat) return;
+      // A panel or Shell claim owns the keyboard; the plaza is on the street.
+      if (this.inputGate.suspended || this.area !== 'street') return;
+      this.plaza?.activate();
+    };
+    keyboard.on('keydown-E', onKey);
+    this.plazaKey = onKey;
+  }
+
   private applySandbox(value: SandboxSnapshot): void {
     if (this.cleanedUp) return;
     const previousCarrying = this.sandboxSnapshot.carrying;
@@ -1055,6 +1110,17 @@ class Session implements WorldSession {
       throw error;
     }
     if (this.cleanedUp) return;
+    // D-076: which plaza station E would use, and whether the plaza is in
+    // view. A door may just have taken the player inside, where neither applies.
+    if (this.area === 'street') {
+      try {
+        this.plaza?.update(tile);
+      } catch (error) {
+        if (!this.cleanedUp && this.lastTile === tile) this.lastTile = previousTile;
+        throw error;
+      }
+      if (this.cleanedUp) return;
+    }
     try {
       this.onTileChanged?.(tile);
     } catch (error) {

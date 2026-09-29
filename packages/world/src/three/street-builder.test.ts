@@ -76,8 +76,11 @@ describe('buildStreet', () => {
     expect(view.ground.children.length).toBeGreaterThan(0);
     expect(view.doors.children).toHaveLength(5);
     // Five facade signs, four brand plates, the sandbox square's sign and its
-    // gate's, and the label on the Exchange tower's roof lift.
-    expect(view.labels.children).toHaveLength(12);
+    // gate's, and the label on the Exchange tower's roof lift; then the Privacy
+    // Plaza's (D-076): its gateway sign, the monument's three faces, the
+    // table's card and the two E prompts.
+    expect(view.labels.children).toHaveLength(19);
+    expect(view.labels.children.filter((child) => child.userData['area'] === 'plaza')).toHaveLength(7);
     const names = view.ground.children.map((child) => child.name);
     expect(names).toEqual(
       expect.arrayContaining([
@@ -184,7 +187,8 @@ describe('buildStreet', () => {
     const occluders = view.occluders as readonly StreetOccluder[];
     const gates = occluders.filter((occluder): occluder is GateOccluder => occluder.kind === 'sandbox-gate');
     expect(gates).toHaveLength(1);
-    expect(occluders).toHaveLength(PLAN.length + 1);
+    // Beside the Privacy Plaza's monument and gateway (D-076, plaza-builder.test.ts).
+    expect(occluders.filter((occluder) => occluder.kind !== 'plaza')).toHaveLength(PLAN.length + 1);
     const gate = gates[0]!;
     const mesh = meshNamed(view.ground, 'street:sandbox-gate');
     expect(gate.object).toBe(mesh);

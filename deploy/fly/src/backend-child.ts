@@ -12,6 +12,8 @@ await new Promise<void>((resolve, reject) => {
 // D-070: the composition discards this process's output, so the relay's one
 // startup line rides on the readiness message and the edge prints it.
 process.send?.(runtime.startupNotice ? { ...READY_MESSAGE, notice: runtime.startupNotice } : READY_MESSAGE);
+// D-076: start the Privacy Plaza's pool stats scan now, not when its first visitor asks.
+runtime.api.warmPoolStats();
 
 let stopping = false;
 const shutdown = () => {

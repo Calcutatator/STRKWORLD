@@ -132,6 +132,65 @@ export interface PoolRpcPort {
   getBlockNumber(signal?: AbortSignal): Promise<number>;
 }
 
+/**
+ * The Privacy Plaza's public pool stats (D-076): aggregates only, each null
+ * until the background scan has produced it once.
+ */
+export interface PoolStatsSnapshot {
+  /** The pool's `ViewingKeySet` events since its first block: accounts registered. */
+  readonly accounts: number | null;
+  /** The pool's `Deposit` events in the last day of blocks. */
+  readonly deposits24h: number | null;
+  /** `balance_of(pool)` for each pinned token, in base units. */
+  readonly held: readonly { readonly token: string; readonly amount: bigint }[] | null;
+}
+
+/** The cached stats the route serves. Reading never waits on the chain. */
+export interface PoolStatsPort {
+  snapshot(): PoolStatsSnapshot;
+  /** Start the background refresh with no request waiting (the server's boot). */
+  warm?(): void;
+}
+
+/** One page of the pool's events: the block of each match, and where the next page starts. */
+export interface PoolEventsPage {
+  readonly blocks: readonly number[];
+  readonly continuationToken: string | null;
+}
+
+/** The latest block: its number, and its hash, which a scan ending there names it by. */
+export interface ChainHead {
+  readonly number: number;
+  readonly hash: string;
+}
+
+/** Which of the pool's events one page asks for. */
+export interface PoolEventsFilter {
+  /** The event's selector, its first key. */
+  readonly key: string;
+  readonly fromBlock: number;
+  readonly toBlock: number;
+  /**
+   * `toBlock`'s hash, when the caller has it. A node that has not reached a
+   * block named by hash refuses the read; one named only by number past its
+   * tip is answered short, with no error.
+   */
+  readonly toBlockHash?: string | null;
+  readonly continuationToken?: string | null;
+}
+
+/**
+ * The narrow chain reads the pool stats need. Every read targets the pool or
+ * a pinned token; nothing a request carries reaches one.
+ */
+export interface PoolStatsRpcPort {
+  getHead(signal?: AbortSignal): Promise<ChainHead>;
+  /** The pool's own events whose first key is `key`, in `[fromBlock, toBlock]`. Block numbers only. */
+  getPoolEvents(filter: PoolEventsFilter, signal?: AbortSignal): Promise<PoolEventsPage>;
+  /** `balance_of(pool)` on a token contract, as its u256. */
+  getPoolBalance(token: string, signal?: AbortSignal): Promise<bigint>;
+}
+
 export interface FeeAuthorizationClaims extends RelayFee {
   v: 1;
   route: PrivateRoute;

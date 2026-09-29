@@ -14,6 +14,12 @@ import { resolveStation, stationSnapshot, type StationCapabilities } from './sta
 export type VisitState =
   | { readonly name: 'outside' }
   | { readonly name: 'locked'; readonly building: BuildingId; readonly reason: 'coming-soon' }
+  /**
+   * D-076: a Privacy Plaza window, opened with E on the street. No building
+   * was entered: presence, the street and the lobby are untouched, and
+   * closing it goes straight back outside.
+   */
+  | { readonly name: 'plaza'; readonly station: StationId }
   | {
       readonly name: 'visiting';
       readonly building: BuildingId;
@@ -87,8 +93,10 @@ export function createVisitController(
   function enter(building: BuildingId): void {
     // DoorTrigger emits the prior room's exit before a legitimate new enter.
     // Ignore any re-entrant or stale enter while React still owns an active
-    // visit; only the authoritative matching exit may reset this state.
-    if (store.getState().name === 'visiting') return;
+    // visit; only the authoritative matching exit may reset this state. A
+    // plaza window owns the controls until it closes, so nobody walks in.
+    const current = store.getState().name;
+    if (current === 'visiting' || current === 'plaza') return;
     setState({ name: 'visiting', building, surface: { name: 'room' } });
     publishStations(building);
   }
@@ -101,7 +109,35 @@ export function createVisitController(
     return typeof capabilities === 'function' ? capabilities() : capabilities;
   }
 
+  /**
+   * D-076: a Privacy Plaza station, from the street. The World suspended its
+   * input before it emitted the activation, so every outcome hands the
+   * controls somewhere: to this window, or straight back to the World.
+   */
+  function activatePlaza(station: StationId): void {
+    const state = store.getState();
+    // Inside a building or with a plaza window already open, a press here is
+    // stale or doubled. A locked door's notice is on the street, so the plaza
+    // window simply replaces it.
+    if (state.name === 'visiting' || state.name === 'plaza') {
+      if (state.name === 'visiting') ownControls('plaza', 'world');
+      return;
+    }
+    const resolution = resolveStation('plaza', station, register, currentCapabilities());
+    if (resolution.status === 'locked') {
+      ownControls('plaza', 'world');
+      return;
+    }
+    ownControls('plaza', 'shell');
+    if (store.getState() !== state) return;
+    setState({ name: 'plaza', station });
+  }
+
   function activate(building: BuildingId, station: StationId): void {
+    if (building === 'plaza') {
+      activatePlaza(station);
+      return;
+    }
     const state = store.getState();
     if (
       state.name !== 'visiting' ||
@@ -131,6 +167,12 @@ export function createVisitController(
 
   function closeSurface(): void {
     const state = store.getState();
+    if (state.name === 'plaza') {
+      ownControls('plaza', 'world');
+      if (store.getState() !== state) return;
+      setState({ name: 'outside' });
+      return;
+    }
     if (state.name !== 'visiting' || state.surface.name === 'room') return;
     ownControls(state.building, 'world');
     if (store.getState() !== state) return;
@@ -182,7 +224,7 @@ export function createVisitController(
           if (!owned) return;
           const { building, reason } = owned;
           const state = store.getState();
-          if (state.name === 'visiting') return;
+          if (state.name === 'visiting' || state.name === 'plaza') return;
           setState({ name: 'locked', building, reason });
         }));
         stops.push(world.on('building:exited', (payload) => {
@@ -228,9 +270,12 @@ export function createVisitController(
         // the controls. Do not leave the World permanently suspended because
         // the panel disappeared before it could emit its normal close event.
         const state = store.getState();
-        if (ownsCurrentListen && state.name === 'visiting' && state.surface.name !== 'room') {
+        const heldBy = state.name === 'plaza'
+          ? 'plaza'
+          : state.name === 'visiting' && state.surface.name !== 'room' ? state.building : null;
+        if (ownsCurrentListen && heldBy) {
           try {
-            ownControls(state.building, 'world');
+            ownControls(heldBy, 'world');
           } catch (error) {
             cleanupFailure ??= error;
           }

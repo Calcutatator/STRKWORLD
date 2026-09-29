@@ -20,8 +20,16 @@ export type BuildingId =
   /** Deposit from any chain -> STRK -> pool, via NEAR Intents. Arrival is public. */
   | 'bridge'
   /** Vesu lending. Facade only in v1 — see DECISIONS.md D-007. */
-  | 'vault';
+  | 'vault'
+  /**
+   * D-076: the Privacy Plaza, an open square south of the road's west end.
+   * Not a building: no door, no room, no route and no money. It is an id only
+   * so its two stations share the station vocabulary (`plaza:monument`,
+   * `plaza:shells`), and `BUILDINGS` below leaves it out.
+   */
+  | 'plaza';
 
+/** The five buildings with a street door. The Privacy Plaza has none (D-076). */
 export const BUILDINGS: readonly BuildingId[] = [
   'bank',
   'exchange',
@@ -233,6 +241,12 @@ export type WorldEvents = {
   'avatar-studio:exited': Record<string, never>;
   /** D-047: selected state, still only cosmetic presentation data. */
   'avatar:selected': { sprite: AvatarSpriteKey };
+  /**
+   * D-076: the player came within sight of the Privacy Plaza, or left it.
+   * Presentation only: while it is near, the Shell reads the pool's public
+   * aggregate stats for the monument. Never forwarded to the lobby.
+   */
+  'plaza:nearby': { near: boolean };
 };
 
 /**
@@ -265,6 +279,18 @@ export type ShellEvents = {
   };
   /** Ask the world to release the player from the named building interior. */
   'world:exit-building': { building: BuildingId };
+  /**
+   * D-076: the Privacy Plaza monument's figures, pre-formatted like
+   * `hud:balance` ("2,932", "2.56M STRK"). Public pool-wide aggregates only,
+   * never anything about this player. Null while unknown (loading, or a read
+   * that failed), which the monument draws as "…".
+   */
+  'plaza:stats': {
+    accounts: string | null;
+    deposits24h: string | null;
+    /** One line per token, in the Shell's order. */
+    held: readonly string[] | null;
+  };
 };
 
 /**

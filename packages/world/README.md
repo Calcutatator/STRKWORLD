@@ -31,7 +31,8 @@ interior and in the Studio. Hold either Shift key to sprint at exactly 1.5×
 walk speed. Diagonal movement stays normalized, including while sprinting.
 `F` swaps the paired outfit anywhere the avatar is (D-053). In the block
 sandbox at the end of the road, `E` picks up the block in front of you and `E`
-again puts it down (D-060).
+again puts it down (D-060). At the Privacy Plaza, `E` uses the monument or
+the shell-game table you stand beside (D-076).
 
 The camera follows the player, north-up by default. Drag (left or right
 button) to orbit, scroll to zoom. Movement keys are camera-relative — "up"
@@ -142,6 +143,28 @@ World-owned `SandboxChannel` through `WorldConfig`, like the D-038 peer source.
   level), or pops them out under `prefers-reduced-motion`; the emptied
   snapshot drops anyone standing on the stacks through the usual fall. The
   aim ring turns hot pink when a place would burst it.
+
+## The Privacy Plaza (D-076)
+
+A paved square below the road's west end (`map/plaza.ts`: street tiles
+x 0-10, y 19-27), opposite the sandbox, with no money in it. The map paints
+it with two tile kinds, walkable `plaza` paving and solid `plinth` under
+every fixture, so collision stays tile-based. `three/plaza-builder.ts` draws
+it into the street's groups and budget: paving level with the pavement, a
+gateway with the "PRIVACY PLAZA" sign, benches, lamps, trees and planters,
+the shell-game table, and the pool-stats monument, whose faces print the
+Shell's pre-formatted `plaza:stats` figures (or "…").
+
+- **Stations on the street.** `plaza:monument` and `plaza:shells` open with
+  `E` from any tile beside their fixture (`plaza-stations.ts`). The handoff
+  is the fixed rooms' own, with `plaza` as the building: input is suspended
+  before `station:activated`, the Shell claims `world:control-owner` while
+  it is delivered, and an unclaimed activation gives input straight back. No
+  building is entered and presence is untouched.
+- **In view.** The controller emits `plaza:nearby` when the player's tile
+  enters or leaves `PLAZA_NEARBY`, and `{ near: false }` when a World torn
+  down there goes, so the Shell reads the stats only while someone can see
+  them.
 
 ## Fixed Game Mode rooms
 

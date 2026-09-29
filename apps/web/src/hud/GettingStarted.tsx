@@ -73,6 +73,9 @@ export function GettingStarted({
       <h3>{COPY.guide.sandboxTitle}</h3>
       <p>{COPY.guide.sandbox}</p>
 
+      <h3>{COPY.guide.plazaTitle}</h3>
+      <p>{COPY.guide.plaza}</p>
+
       <button type="button" className="journey-guide-dismiss" onClick={onDismiss}>
         {COPY.guide.dismiss}
       </button>
