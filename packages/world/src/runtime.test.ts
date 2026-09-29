@@ -170,6 +170,32 @@ describe('world runtime boot ordering', () => {
     await vi.runAllTimersAsync();
   });
 
+  it('treats a changed Vault switch as a new binding, and absent the same as false (D-077)', async () => {
+    const bus = fakeBus();
+    const parent = fakeParent('vault-tree');
+    const { acquireWorld, releaseWorld } = await import('./runtime.js');
+
+    await acquireWorld(parent, bus);
+    releaseWorld();
+    await acquireWorld(parent, { ...bus, vaultOpen: false });
+    expect(engines[0]?.rebind).not.toHaveBeenCalled();
+
+    releaseWorld();
+    const opened = { ...bus, vaultOpen: true };
+    await acquireWorld(parent, opened);
+    expect(engines).toHaveLength(1);
+    expect(engines[0]?.rebind).toHaveBeenCalledOnce();
+    expect(engines[0]?.configs).toEqual([bus, opened]);
+
+    // The same switch again is the same binding.
+    releaseWorld();
+    await acquireWorld(parent, { ...opened });
+    expect(engines[0]?.rebind).toHaveBeenCalledOnce();
+
+    releaseWorld();
+    await vi.runAllTimersAsync();
+  });
+
   it('removes the World mount when the engine cannot start', async () => {
     engineStart.fail = true;
     const parent = fakeParent('no-webgl-tree');

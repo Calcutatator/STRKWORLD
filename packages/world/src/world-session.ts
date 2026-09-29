@@ -42,13 +42,13 @@ import { DEFAULT_AVATAR_SPRITE } from './avatar-state.js';
 import { AVATAR_BODY_SIZE } from './avatar-visual.js';
 import { createDoorTrigger, type DoorTrigger } from './door-trigger.js';
 import {
-  FIXED_ROOM_DEFINITIONS,
   FIXED_ROOM_LEVELS,
   FIXED_ROOM_TILE_SIZE,
   createFixedRoom,
   createFixedRoomController,
   createFixedRoomLevel,
   createFixedRoomPresentation,
+  fixedRoomDefinitionsFor,
   fixedRoomStationPresentations,
   isFixedRoomSolidAt,
   type FixedRoomController,
@@ -203,6 +203,11 @@ export interface WorldSessionOptions {
   readonly onTileChanged?: (tile: { x: number; y: number }) => void;
   /** The shared block sandbox (D-060); absent means no sandbox interaction. */
   readonly sandbox?: SandboxChannel;
+  /**
+   * The Vault opens on shadow accounts, behind the Shell's switch (D-077): its
+   * door opens onto its room. Absent or false, it is D-007's locked facade.
+   */
+  readonly vaultOpen?: boolean;
 }
 
 export interface WorldFrame {
@@ -345,6 +350,8 @@ class Session implements WorldSession {
   private aim: SandboxAim | null = null;
   private plaza?: PlazaController;
   private plazaKey?: (event: { readonly repeat: boolean; readonly target: unknown }) => void;
+  /** D-077: the Shell opened the Vault, so its door and room exist. */
+  private readonly vaultOpen: boolean;
 
   constructor(options: WorldSessionOptions) {
     this.view = options.view;
@@ -352,8 +359,9 @@ class Session implements WorldSession {
     this.config = options.config;
     this.onTileChanged = options.onTileChanged;
     this.sandbox = options.sandbox;
+    this.vaultOpen = options.vaultOpen === true;
     try {
-      this.map = createStreetMap();
+      this.map = createStreetMap({ vaultOpen: this.vaultOpen });
       this.bounds = this.streetBounds();
       this.viewOwned = true;
       this.movement = createStreetMovementAdapter({
@@ -586,7 +594,8 @@ class Session implements WorldSession {
     const out: Pick<EventBus<WorldEvents>, 'emit'> = {
       emit: (event, payload) => config?.out.emit(event, payload),
     };
-    for (const definition of Object.values(FIXED_ROOM_DEFINITIONS)) {
+    // The Vault's room exists only when the Shell opened its door (D-077).
+    for (const definition of fixedRoomDefinitionsFor({ vaultOpen: this.vaultOpen })) {
       const building = definition.building;
       const levels = FIXED_ROOM_LEVELS[building] ?? [];
       const floors = new Map<FixedRoomLevelId, FixedRoomLevelMap>([['ground', createFixedRoom(definition)]]);

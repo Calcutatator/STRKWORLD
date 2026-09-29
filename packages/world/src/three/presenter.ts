@@ -2,10 +2,10 @@ import { Group, type Object3D, type Vector3 } from 'three';
 import type { AvatarSpriteKey, BuildingId, SandboxColumn } from '@strkworld/shared';
 import { createStreetMap } from '../map/street.js';
 import {
-  FIXED_ROOM_DEFINITIONS,
   FIXED_ROOM_LEVELS,
   createFixedRoom,
   createFixedRoomLevel,
+  fixedRoomDefinitionsFor,
   type FixedRoomLevelId,
   type FixedRoomStationPresentation,
 } from '../fixed-room.js';
@@ -46,11 +46,12 @@ import type {
 /**
  * The 3D presentation of one World (D-059).
  *
- * It owns the static district, the four room interiors, the Avatar Studio and
- * the local avatar for the lifetime of the renderer, and a remote-avatar layer
- * per session. Sessions talk to it only through `WorldSessionView`, so every
- * decision — collision, doors, stations, rollback — stays in the session and
- * this module only mirrors the outcome.
+ * It owns the static district, the room interiors (the Vault's too, once the
+ * Shell opens it, D-077), the Avatar Studio and the local avatar for the
+ * lifetime of the renderer, and a remote-avatar layer per session. Sessions
+ * talk to it only through `WorldSessionView`, so every decision — collision,
+ * doors, stations, rollback — stays in the session and this module only
+ * mirrors the outcome.
  */
 
 export interface PresenterOptions {
@@ -64,6 +65,13 @@ export interface PresenterOptions {
    * read at each sandbox burst: its blocks then pop out instead of flying.
    */
   readonly reducedMotion?: () => boolean;
+  /**
+   * The Vault opens on shadow accounts, behind the Shell's switch (D-077):
+   * its door is drawn open and its room is built. Absent or false, it is
+   * D-007's locked facade and no Vault room exists. Every session this
+   * presenter binds must be created with the same value.
+   */
+  readonly vaultOpen?: boolean;
 }
 
 /** The presenter implements every view method, the optional sandbox ones included. */
@@ -117,7 +125,8 @@ export function createPresenter(options: PresenterOptions): Presenter {
   root.name = 'strkworld';
   const disposers: Array<() => void> = [];
 
-  const streetMap = createStreetMap();
+  const vaultOpen = options.vaultOpen === true;
+  const streetMap = createStreetMap({ vaultOpen });
   const street: StreetView = buildStreet(streetMap, options.labels);
   // Pavement is raised; stand feet on it. Interiors and the Studio floor are
   // flat. On the sandbox, anyone stands on the tallest stack their body
@@ -135,8 +144,9 @@ export function createPresenter(options: PresenterOptions): Presenter {
   disposers.push(() => street.dispose());
   root.add(street.ground, street.doors, street.labels);
 
-  // Every interior, keyed by `roomKey`: each ground floor, and floors reached
-  // by lift. A roof is not here: it is the building's top in the street.
+  // Every interior, keyed by `roomKey`: each ground floor (the Vault's only
+  // when it is open, D-077), and floors reached by lift. A roof is not here:
+  // it is the building's top in the street.
   const rooms = new Map<string, RoomView>();
   const addRoom = (key: string, room: RoomView): void => {
     room.group.visible = false;
@@ -145,7 +155,7 @@ export function createPresenter(options: PresenterOptions): Presenter {
     disposers.push(() => room.dispose());
   };
   const images = options.images ?? null;
-  for (const definition of Object.values(FIXED_ROOM_DEFINITIONS)) {
+  for (const definition of fixedRoomDefinitionsFor({ vaultOpen })) {
     addRoom(roomKey(definition.building), buildFixedRoom(createFixedRoom(definition), options.labels, ROOM_ORIGIN, images));
     for (const level of FIXED_ROOM_LEVELS[definition.building] ?? []) {
       if (level.rooftop) continue;

@@ -6,6 +6,9 @@ import {
   EXCHANGE_DEGEN_STATION,
   EXCHANGE_ROOF_HEIGHT,
   EXCHANGE_ROOF_LEVEL,
+  VAULT_LENDING_STATION,
+  VAULT_ROOM_DEFINITION,
+  createFixedRoom,
   createFixedRoomLevel,
   fixedRoomStationPresentations,
 } from '../fixed-room.js';
@@ -345,6 +348,52 @@ describe('presenter', () => {
       }
     }
     expect(tiles).toBe(20);
+  });
+
+  it('builds the Vault room and draws its door open only when the Shell opened it (D-077)', () => {
+    const roomsOf = (parent: Group) =>
+      parent.getObjectByName('strkworld')!.children.filter((child) => child.name.startsWith('room:')).map((child) => child.name);
+    const signsOf = (parent: Group) => parent.getObjectByName('street:labels')!.children.map((child) => child.userData['text']);
+    const closed = setup();
+    const alwaysOpen = roomsOf(closed.parent);
+    expect(alwaysOpen).not.toContain('room:vault');
+    expect(closed.parent.getObjectByName('door:vault')!.userData['locked']).toBe(true);
+    expect(signsOf(closed.parent)).toContain('VAULT\nCOMING SOON');
+    closed.presenter.dispose();
+
+    const parent = new Group();
+    const presenter = createPresenter({
+      parent,
+      labels: createNullLabelFactory(),
+      figures: fakeFigures().factory,
+      vaultOpen: true,
+    });
+    const view = presenter.bindSession();
+    expect(roomsOf(parent)).toEqual([...alwaysOpen, 'room:vault']);
+    expect(parent.getObjectByName('door:vault')!.userData['locked']).toBe(false);
+    expect(signsOf(parent)).toContain('VAULT\nSUPPLY / REDEEM');
+    expect(signsOf(parent)).not.toContain('VAULT\nCOMING SOON');
+    // Hidden until the session enters it, then drawn like any room.
+    const vault = parent.getObjectByName('room:vault')!;
+    expect(vault.visible).toBe(false);
+    view.setStreetVisible(false);
+    view.showRoom('vault');
+    expect(vault.visible).toBe(true);
+    expect(parent.getObjectByName('room:bank')!.visible).toBe(false);
+    view.renderRoom('vault', fixedRoomStationPresentations(createFixedRoom(VAULT_ROOM_DEFINITION), {
+      inRoom: true,
+      building: 'vault',
+      level: 'ground',
+      controlOwner: 'world',
+      highlightedStation: null,
+      stations: [{ station: VAULT_LENDING_STATION, label: 'SUPPLY / REDEEM', status: 'available' }],
+    }));
+    const counter = vault.children.find((child) => child.userData['station'] === VAULT_LENDING_STATION)!;
+    expect(counter.userData['status']).toBe('available');
+    view.showRoom(null);
+    expect(vault.visible).toBe(false);
+    presenter.dispose();
+    expect(parent.children).toEqual([]);
   });
 
   it('disposes everything once and detaches from its parent', () => {

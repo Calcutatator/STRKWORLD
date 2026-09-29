@@ -10,6 +10,8 @@ import {
   TILE_SIZE,
   tileToWorld,
   worldToTile,
+  type DistrictMap,
+  type DoorZone,
 } from './street.js';
 import type { TiledObject } from '../tiled-object-props.js';
 
@@ -202,6 +204,61 @@ describe('every building is present and reachable', () => {
       expect(label.x).toBeLessThan(door!.x + 5);
       expect(label.y).toBeLessThan(door!.y);
     }
+  });
+});
+
+describe('the Vault opens on the Shell\'s switch (D-077)', () => {
+  const open = createStreetMap({ vaultOpen: true });
+  const vaultDoor = (m: DistrictMap): DoorZone => m.doors.find((door) => door.building === 'vault')!;
+  const vaultSign = (m: DistrictMap) => m.exteriorLabels.find((label) => label.building === 'vault')!;
+
+  it('keeps D-007\'s locked facade unless the Shell says open, failing closed', () => {
+    const locked = [
+      createStreetMap(),
+      createStreetMap({}),
+      createStreetMap({ vaultOpen: false }),
+      ...[1, 'true', {}, null].map((value) => createStreetMap({ vaultOpen: value as never })),
+    ];
+    for (const m of locked) {
+      expect(vaultDoor(m).locked).toBe(true);
+      expect(vaultSign(m).text).toBe('VAULT\nCOMING SOON');
+    }
+  });
+
+  it('unlocks the Vault door and names its counter on the sign', () => {
+    expect(vaultDoor(open).locked).toBe(false);
+    expect(doorAt(open, vaultDoor(open).x, vaultDoor(open).y)).toEqual({ ...vaultDoor(map), locked: false });
+    expect(vaultSign(open)).toEqual({ ...vaultSign(map), text: 'VAULT\nSUPPLY / REDEEM' });
+    expect(open.doors.filter((door) => door.locked)).toEqual([]);
+  });
+
+  it('reaches the open Vault door from spawn', () => {
+    const seen = new Set<string>([`${open.spawn.x},${open.spawn.y}`]);
+    const queue = [open.spawn];
+    while (queue.length > 0) {
+      const { x, y } = queue.shift()!;
+      for (const [nx, ny] of [[x + 1, y], [x - 1, y], [x, y + 1], [x, y - 1]] as const) {
+        if (isSolidAt(open, nx, ny) || seen.has(`${nx},${ny}`)) continue;
+        seen.add(`${nx},${ny}`);
+        queue.push({ x: nx, y: ny });
+      }
+    }
+    const door = vaultDoor(open);
+    for (let dx = 0; dx < door.width; dx++) expect(seen.has(`${door.x + dx},${door.y}`)).toBe(true);
+  });
+
+  it('changes nothing else: tiles, spawn, other doors and signs, plaza and sandbox', () => {
+    expect(open.tiles).toEqual(map.tiles);
+    for (const key of ['name', 'width', 'height', 'spawn', 'avatarStudioEntrance'] as const) {
+      expect(open[key], key).toEqual(map[key]);
+    }
+    const others = (m: DistrictMap) => ({
+      doors: m.doors.filter((door) => door.building !== 'vault'),
+      labels: m.exteriorLabels.filter((label) => label.building !== 'vault'),
+    });
+    expect(others(open)).toEqual(others(map));
+    // The Vault's door keeps its place; only its lock changed.
+    expect({ ...vaultDoor(open), locked: true }).toEqual(vaultDoor(map));
   });
 });
 

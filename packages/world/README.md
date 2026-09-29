@@ -181,6 +181,14 @@ third, with one `exchange:swap` station labelled `SWAP`. All use the same
 18×12, 32 px envelope. Shell remains the authorization boundary: every visit
 begins with stations locked until the matching current snapshot arrives.
 
+The Vault's room (`VAULT_ROOM_DEFINITION`, one `vault:lending` station
+labelled `SUPPLY / REDEEM`) exists only when the Shell opens the Vault
+(D-077), so it is not in the always-open `FIXED_ROOM_DEFINITIONS`: the
+session and the presenter build their rooms from
+`fixedRoomDefinitionsFor({ vaultOpen })`. The engine reads `vaultOpen` once,
+when it starts; a rebind keeps it, because the street and rooms are built
+once.
+
 ---
 
 ## Map authoring
@@ -220,6 +228,9 @@ project's CDN. Builders get them through an injected `ImageTextureLoader`
 fails, each poster shows its procedural stand-in.
 
 Four buildings in v1: the Bank, the Exchange, the Post Office, and a visible
-but locked Vault so the world reads as complete, plus the Bridge. The Bank
-follows the STRK20 visual theme and the Exchange follows avnu's; the Post
+Vault, plus the Bridge. The Vault is locked by default so the world reads as
+complete (D-007); the Shell opens it on shadow accounts by passing
+`vaultOpen: true` in `WorldConfig` (D-077), and then its door stands open onto
+Vesu's room. The World learns only that the door is open. The Bank follows the
+STRK20 visual theme, the Exchange avnu's and the opened Vault Vesu's; the Post
 Office and Bridge keep the game's own palette.

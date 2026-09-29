@@ -33,6 +33,7 @@ import {
   AVNU,
   ENDUR,
   NEAR,
+  VESU,
   aoPaint,
   beamGeometry,
   boxGeometry,
@@ -741,6 +742,18 @@ function stationProps(
       bin.add('unlit', faceBox(face, cx - 0.25, top + 0.13, 0.043, cx + 0.26, top + 0.19, 0.046), theme.floorAccent);
       break;
     }
+    case 'vesu': {
+      // A small lending card: white on an ink stand, one periwinkle field
+      // over the blue primary pill. No figure on it.
+      const cx = (x0 + x1) / 2;
+      const face: Face = { normal: 'z+', plane: z0 + 0.12 };
+      bin.add('body', boxGeometry(cx - 0.05, top, z0 + 0.06, cx + 0.05, top + 0.1, z0 + 0.14), VESU.ink);
+      bin.add('body', faceBox(face, cx - 0.44, top + 0.08, 0, cx + 0.44, top + 0.56, 0.05), VESU.blueSoft);
+      bin.add('unlit', facePanel(face, cx - 0.4, top + 0.12, cx + 0.4, top + 0.52, 0.052, 0.06), VESU.white);
+      bin.add('unlit', facePanel(face, cx - 0.34, top + 0.33, cx + 0.34, top + 0.46, 0.055, 0.05), VESU.blueSoft);
+      bin.add('unlit', facePanel(face, cx - 0.34, top + 0.16, cx + 0.34, top + 0.27, 0.055, 0.055), VESU.blue);
+      break;
+    }
     case 'endur':
       endurCounter(bin, x0, x1, z0, z1, top);
       break;
@@ -788,8 +801,10 @@ function roomFloorColor(theme: RoomTheme, map: FixedRoomLevelMap): (x: number, y
     const tile = map.tiles[y]?.[x];
     const seed = hash01(x, y, 201);
     if (tile === 'wall') return shade(theme.floorB, -0.1);
-    // The brand rooms' dark floors take almost no jitter: it reads as grime.
-    const quiet = theme.decor === 'avnu' || theme.decor === 'degen' || theme.decor === 'strk20' || theme.decor === 'bridge';
+    // The brand rooms' floors take almost no jitter: on the dark ones it
+    // reads as grime, on Vesu's white pages as smudges.
+    const quiet =
+      theme.decor === 'avnu' || theme.decor === 'degen' || theme.decor === 'strk20' || theme.decor === 'bridge' || theme.decor === 'vesu';
     return jitterColor((x + y) % 2 === 0 ? theme.floorA : theme.floorB, seed, quiet ? 0.01 : 0.022);
   };
 }
@@ -967,6 +982,9 @@ function decorateRoom(
       return;
     case 'bridge':
       bridgeDecor(theme, shell, map, res, animators);
+      return;
+    case 'vesu':
+      vesuDecor(theme, shell, map);
       return;
     case 'plain':
       return;
@@ -1651,6 +1669,58 @@ function bridgeDecor(theme: RoomTheme, shell: InteriorShell, map: FixedRoomLevel
   for (let z = exit.y - 0.95; z - 0.34 > zTop; z -= 0.56) {
     shell.floor.add('glow', flatQuad(routeX - 0.025, z - 0.34, routeX + 0.025, z, 0.008), theme.floorAccent);
   }
+}
+
+/**
+ * Vesu (the Vault, opened on shadow accounts, D-077): white pages, ink and
+ * one electric blue. A blue line runs along the top of every wall. Behind
+ * the counter hangs a lending card in Vesu's idiom, a white card edged in
+ * periwinkle with two periwinkle fields over the blue pill, between two
+ * smaller cards; the side walls carry a card either side of their middle,
+ * and a white runner edged in blue light leads from the exit to the counter.
+ * No figure, rate or price anywhere: the World must not know what money is
+ * (AGENTS.md §4).
+ */
+function vesuDecor(theme: RoomTheme, shell: InteriorShell, map: FixedRoomLevelMap): void {
+  const north = shell.walls.north;
+  const nf = north.face;
+  const anchor = stationAnchor(map);
+  for (const wall of Object.values(shell.walls)) {
+    for (const [a, b] of wall.spans) wall.bins.add('unlit', faceBox(wall.face, a, 2.05, 0, b, 2.09, 0.03), VESU.blue);
+  }
+  const [u0, u1] = [anchor - 1.5, anchor + 1.5];
+  if (inSpans(north, u0 - 0.05, u1 + 0.05)) {
+    vesuCard(north, u0, 0.96, u1, 1.98);
+    for (const [v0, v1] of [[1.58, 1.82], [1.28, 1.52]] as const) {
+      north.bins.add('unlit', facePanel(nf, u0 + 0.18, v0, u1 - 0.18, v1, 0.04, 0.12), VESU.blueSoft);
+      north.bins.add('unlit', faceDisc(nf, u0 + 0.34, (v0 + v1) / 2, 0.04, 0.06, 0.012, 12), VESU.blue);
+    }
+    north.bins.add('unlit', facePanel(nf, u0 + 0.18, 1.04, u1 - 0.18, 1.2, 0.04, 0.08), VESU.blue);
+  }
+  for (const u of [anchor - 4.4, anchor + 4.4]) {
+    if (!inSpans(north, u - 0.9, u + 0.9)) continue;
+    vesuCard(north, u - 0.85, 1.2, u + 0.85, 1.9);
+    north.bins.add('unlit', facePanel(nf, u - 0.65, 1.62, u + 0.65, 1.72, 0.04, 0.05), VESU.blueSoft);
+    north.bins.add('unlit', facePanel(nf, u - 0.65, 1.36, u + 0.15, 1.46, 0.04, 0.05), VESU.blue);
+  }
+  for (const wall of [shell.walls.west, shell.walls.east]) {
+    for (const [s0, s1] of wall.spans) {
+      const mid = (s0 + s1) / 2;
+      for (const u of [mid - 2, mid + 2]) {
+        if (!inSpans(wall, u - 0.75, u + 0.75)) continue;
+        vesuCard(wall, u - 0.7, 1.2, u + 0.7, 1.84);
+        wall.bins.add('unlit', facePanel(wall.face, u - 0.52, 1.52, u + 0.52, 1.64, 0.04, 0.06), VESU.blueSoft);
+        wall.bins.add('unlit', facePanel(wall.face, u - 0.52, 1.32, u + 0.1, 1.42, 0.04, 0.05), VESU.blue);
+      }
+    }
+  }
+  carpet(shell, map, VESU.white, theme.floorAccent, 'glow');
+}
+
+/** A Vesu card on a wall: a white self-lit panel edged in periwinkle. */
+function vesuCard(wall: InteriorWall, u0: number, v0: number, u1: number, v1: number): void {
+  wall.bins.add('unlit', facePanel(wall.face, u0 - 0.03, v0 - 0.03, u1 + 0.03, v1 + 0.03, 0.02, 0.15), VESU.blueSoft);
+  wall.bins.add('unlit', facePanel(wall.face, u0, v0, u1, v1, 0.03, 0.13), VESU.white);
 }
 
 /** A NEAR card on a wall: a black panel in a hairline frame, crosshairs in its corners. */

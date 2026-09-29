@@ -75,7 +75,10 @@ export interface DoorZone {
   y: number;
   width: number;
   height: number;
-  /** Locked doors emit `building:locked` and never open. The Vault, in v1. */
+  /**
+   * Locked doors emit `building:locked` and never open. The Vault, unless the
+   * Shell opens it (D-077).
+   */
   locked: boolean;
 }
 
@@ -132,16 +135,29 @@ function fill(
   }
 }
 
+/** What the Shell decides about the street when it composes the World. */
+export interface StreetMapOptions {
+  /**
+   * The Vault opens on shadow accounts, behind the Shell's switch (D-077).
+   * Absent or false, it is D-007's locked facade.
+   */
+  readonly vaultOpen?: boolean;
+}
+
 /**
  * The starting street.
  *
  * A horizontal road with pavement either side, five buildings along the north
- * edge. Four are enterable; the Vault is a visible facade with a locked door,
- * so the world reads as complete while v1 ships without it (D-007). The road
- * ends in the block sandbox square (D-060), and the Privacy Plaza sits below
- * its west end, opposite the sandbox (D-076).
+ * edge. Four are always enterable; the Vault is a visible facade with a
+ * locked door, so the world reads as complete while v1 ships without it
+ * (D-007), until the Shell opens it (D-077): then its door is as open as the
+ * others and its sign names its counter. Nothing else changes. The road ends
+ * in the block sandbox square (D-060), and the Privacy Plaza sits below its
+ * west end, opposite the sandbox (D-076).
  */
-export function createStreetMap(): DistrictMap {
+export function createStreetMap(options?: StreetMapOptions): DistrictMap {
+  // Fails closed: only a real `true` opens the Vault.
+  const vaultOpen = options?.vaultOpen === true;
   // The original street is 48 tiles wide; the road then runs on into the block
   // sandbox square at its east end (D-060).
   const width = SANDBOX_AREA.x + SANDBOX_AREA.width;
@@ -162,7 +178,9 @@ export function createStreetMap(): DistrictMap {
     { building: 'exchange', x: 12, locked: false, label: 'EXCHANGE\nSWAP' },
     { building: 'post-office', x: 21, locked: false, label: 'POST OFFICE\nTRANSFER' },
     { building: 'bridge', x: 30, locked: false, label: 'BRIDGE\nDEPOSIT' },
-    { building: 'vault', x: 39, locked: true, label: 'VAULT\nCOMING SOON' },
+    vaultOpen
+      ? { building: 'vault', x: 39, locked: false, label: 'VAULT\nSUPPLY / REDEEM' }
+      : { building: 'vault', x: 39, locked: true, label: 'VAULT\nCOMING SOON' },
   ];
 
   const buildingWidth = 7;

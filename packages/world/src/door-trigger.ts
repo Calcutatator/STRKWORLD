@@ -11,8 +11,10 @@
  *
  *  - step into an UNLOCKED door zone  -> emit `building:entered`
  *  - step out of an entered door zone -> emit `building:exited`
- *  - step into the LOCKED Vault door  -> emit `building:locked` (coming-soon)
+ *  - step into a LOCKED door zone     -> emit `building:locked` (coming-soon)
  *
+ * The Vault's door is the locked one, D-007's facade, until the Shell opens it
+ * on shadow accounts (D-077); the map says which, this module only reads it.
  * A locked door never "opens", so it emits only on entry and nothing on exit —
  * there is no interior to leave. Moving within a multi-tile door does not
  * re-emit; only a change of occupied building does. The lobby is never told any
