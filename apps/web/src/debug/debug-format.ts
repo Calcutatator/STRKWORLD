@@ -438,6 +438,7 @@ const GATE_STATES = setOf({
   depositing: true,
   landing: true,
   unconfirmed: true,
+  'receipt-unreachable': true,
   'deposit-failed': true,
   'not-registered': true,
   passed: true,

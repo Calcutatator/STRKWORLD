@@ -9,6 +9,11 @@ type FetchLike = (input: string, init?: RequestInit) => Promise<Response>;
 
 const MAX_RPC_ID = Number.MAX_SAFE_INTEGER;
 
+/** The Starknet JSON-RPC spec's `TXN_HASH_NOT_FOUND`: the node has not seen this hash. */
+const TXN_HASH_NOT_FOUND = 29;
+
+type RpcEnvelope = { kind: 'result'; result: unknown } | { kind: 'error'; code: number | null };
+
 export interface StarknetRpcOptions {
   rpcUrl: string;
   poolAddress: string;
@@ -63,8 +68,17 @@ export class StarknetRpcPoolPort implements PoolRpcPort {
     return key;
   }
 
+  /**
+   * D-072: a transaction the node has not seen yet is an answer, not a
+   * failure. A deposit has no receipt for its first seconds, and the node says
+   * so with error 29, which resolves `null` here so the receipt route can tell
+   * "not yet" apart from a read that failed. Every other error still rejects.
+   */
   async getReceipt(transactionHash: string, signal?: AbortSignal): Promise<unknown> {
-    return this.rpc('starknet_getTransactionReceipt', [transactionHash], signal);
+    const envelope = await this.request('starknet_getTransactionReceipt', [transactionHash], signal);
+    if (envelope.kind === 'result') return envelope.result;
+    if (envelope.code === TXN_HASH_NOT_FOUND) return null;
+    throw new Error('Starknet RPC returned an error.');
   }
 
   async getBlockNumber(signal?: AbortSignal): Promise<number> {
@@ -88,6 +102,12 @@ export class StarknetRpcPoolPort implements PoolRpcPort {
   }
 
   private async rpc(method: string, params: unknown[], signal?: AbortSignal): Promise<unknown> {
+    const envelope = await this.request(method, params, signal);
+    if (envelope.kind === 'error') throw new Error('Starknet RPC returned an error.');
+    return envelope.result;
+  }
+
+  private async request(method: string, params: unknown[], signal?: AbortSignal): Promise<RpcEnvelope> {
     const id = this.allocateId();
     try {
       const response = await this.fetcher(this.options.rpcUrl, {
@@ -104,9 +124,7 @@ export class StarknetRpcPoolPort implements PoolRpcPort {
         if (!(error instanceof SyntaxError)) throw error;
         throw new Error('Starknet RPC returned an invalid response.');
       }
-      const envelope = parseRpcEnvelope(payload, id);
-      if (envelope.kind === 'error') throw new Error('Starknet RPC returned an error.');
-      return envelope.result;
+      return parseRpcEnvelope(payload, id);
     } finally {
       this.activeIds.delete(id);
     }
@@ -129,10 +147,7 @@ export class StarknetRpcPoolPort implements PoolRpcPort {
   }
 }
 
-function parseRpcEnvelope(
-  payload: unknown,
-  requestId: number,
-): { kind: 'result'; result: unknown } | { kind: 'error' } {
+function parseRpcEnvelope(payload: unknown, requestId: number): RpcEnvelope {
   if (!payload || typeof payload !== 'object' || Array.isArray(payload)) {
     throw new Error('Starknet RPC returned an invalid response.');
   }
@@ -160,7 +175,17 @@ function parseRpcEnvelope(
   ) {
     throw new Error('Starknet RPC returned an invalid response.');
   }
-  return hasError ? { kind: 'error' } : { kind: 'result', result: result!.value };
+  return hasError ? { kind: 'error', code: rpcErrorCode(error!.value) } : { kind: 'result', result: result!.value };
+}
+
+/**
+ * The error's own numeric `code`, and nothing else: its message and data are
+ * provider text this port never reads or reflects.
+ */
+function rpcErrorCode(error: unknown): number | null {
+  if (!error || typeof error !== 'object' || Array.isArray(error)) return null;
+  const code = Object.getOwnPropertyDescriptor(error, 'code');
+  return code && 'value' in code && Number.isSafeInteger(code.value) ? code.value as number : null;
 }
 
 function feltToPositiveSafeInteger(value: string | undefined, label: string): number {

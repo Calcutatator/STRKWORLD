@@ -2,12 +2,13 @@
 import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { FakePrivacyOperations, type WalletRoutePolicy } from '@strkworld/privacy';
+import { FakePrivacyOperations, PrivacyError, type WalletRoutePolicy } from '@strkworld/privacy';
 import { COPY } from '../copy.js';
 import { EXCHANGE_CATALOG } from '../panels/exchange/catalog.js';
 import { PRIVACY_REGISTER } from '../privacy/register.js';
 import { parseRoutePolicy } from '../production/config.js';
 import { EntryGate } from './EntryGate.js';
+import type { EntryGateOptions } from './entry-gate.js';
 import type { EntryPassMemory } from './entry-pass.js';
 
 /**
@@ -56,18 +57,20 @@ async function mount({
   policy = SHIELD_POLICY,
   account = '0xabc',
   memory,
+  watch = WATCH,
 }: {
   operations: FakePrivacyOperations;
   policy?: WalletRoutePolicy | null;
   account?: string | null;
   memory?: EntryPassMemory | null;
+  watch?: EntryGateOptions['watch'];
 }): Promise<void> {
   container = document.createElement('div');
   document.body.appendChild(container);
   root = createRoot(container);
   await act(async () => {
     root!.render(
-      <EntryGate operations={operations} account={account} policy={policy} memory={memory} watch={WATCH}>
+      <EntryGate operations={operations} account={account} policy={policy} memory={memory} watch={watch}>
         <div data-testid="city">the city</div>
       </EntryGate>,
     );
@@ -244,8 +247,9 @@ describe('the entry gate, driven through the screen (D-072)', () => {
     expect(city()).not.toBeNull();
   });
 
-  it('shows the not-registered guidance when the deposit answers 118, and returns to the form', async () => {
+  it('shows the not-registered guidance when the deposit answers 118, and leads back through the check', async () => {
     const operations = new FakePrivacyOperations();
+    const check = vi.spyOn(operations, 'hasPrivateFunds');
     await mount({ operations });
     await click(button('Enter STRKWORLD'));
     await type(amountInput(), '2');
@@ -256,9 +260,93 @@ describe('the entry gate, driven through the screen (D-072)', () => {
     const card = container!.querySelector('[data-testid="not-registered"]')!;
     expect(card.querySelector('h2')?.textContent).toBe(COPY.notRegistered.title);
     expect(card.textContent).toContain(COPY.notRegistered.hint);
-    await click(button(COPY.connect.retry));
+    // One way on, and it is not a second deposit: the balance check.
+    expect([...card.querySelectorAll('button')].map((found) => found.textContent)).toEqual([COPY.entry.checkBalance]);
+    await click(button(COPY.entry.checkBalance));
+    expect(check).toHaveBeenCalledTimes(2);
     expect(gate()!.getAttribute('data-gate')).toBe('deposit');
     expect(amountInput().value).toBe('2');
+  });
+
+  it('offers the balance check on the deposit card as the second choice, and lets a funded player in', async () => {
+    const operations = new FakePrivacyOperations();
+    const check = vi.spyOn(operations, 'hasPrivateFunds');
+    await mount({ operations });
+    await click(button('Enter STRKWORLD'));
+
+    const form = gate()!.querySelector('form')!;
+    // After the one call to action, inside the form, so it does not compete with it.
+    expect([...form.querySelectorAll('button')].map((found) => [found.textContent, found.className])).toEqual([
+      [COPY.entry.review, 'review'],
+      [COPY.entry.checkBalance, ''],
+    ]);
+    expect(button(COPY.entry.checkBalance).type).toBe('button');
+
+    check.mockResolvedValueOnce(true);
+    await click(button(COPY.entry.checkBalance));
+    expect(city()).not.toBeNull();
+  });
+
+  it('offers the balance check on the locked card, where it is the only way on', async () => {
+    const operations = new FakePrivacyOperations();
+    await mount({ operations, policy: parseRoutePolicy({}) });
+    await click(button('Enter STRKWORLD'));
+    expect(gate()!.querySelector('.room-locked')).not.toBeNull();
+    const actions = [...gate()!.children].filter((child) => child.tagName === 'BUTTON');
+    expect(actions.map((found) => found.textContent)).toEqual([COPY.entry.checkBalance]);
+
+    vi.spyOn(operations, 'hasPrivateFunds').mockResolvedValueOnce(true);
+    await click(button(COPY.entry.checkBalance));
+    expect(city()).not.toBeNull();
+  });
+
+  it('warns at review when a STRK deposit is no more than the pool fee, and keeps Confirm', async () => {
+    const operations = new FakePrivacyOperations();
+    await mount({ operations });
+    await click(button('Enter STRKWORLD'));
+    await type(amountInput(), '6');
+    await click(button(COPY.entry.review));
+
+    const warning = gate()!.querySelector('[data-warning="fee-takes-all"]');
+    expect(warning?.textContent).toBe(COPY.entry.feeTakesAll);
+    expect(gate()!.querySelector('.panel-review')!.textContent).not.toContain(COPY.entry.feeNote);
+    expect(button(COPY.flow.confirm).disabled).toBe(false);
+
+    await click(button(COPY.flow.cancel));
+    await type(amountInput(), '7');
+    await click(button(COPY.entry.review));
+    expect(gate()!.querySelector('[data-warning="fee-takes-all"]')).toBeNull();
+    expect(gate()!.querySelector('.panel-review')!.textContent).toContain(COPY.entry.feeNote);
+  });
+
+  it('keeps the plain fee note for another token, whatever the amount', async () => {
+    const USDC = EXCHANGE_CATALOG.find((asset) => asset.symbol === 'USDC')!.token;
+    const operations = new FakePrivacyOperations();
+    await mount({ operations, policy: parseRoutePolicy({ ...SHIELD_ENV, VITE_STRK20_SHIELD_ALLOWED_TOKENS: USDC }) });
+    await click(button('Enter STRKWORLD'));
+    await type(amountInput(), '0.01');
+    await click(button(COPY.entry.review));
+    expect(gate()!.querySelector('[data-warning="fee-takes-all"]')).toBeNull();
+    expect(gate()!.querySelector('.panel-review')!.textContent).toContain(COPY.entry.feeNote);
+  });
+
+  it('names the public balance of the chosen token when the wallet answers 119', async () => {
+    const USDC = EXCHANGE_CATALOG.find((asset) => asset.symbol === 'USDC')!.token;
+    const operations = new FakePrivacyOperations();
+    await mount({ operations, policy: parseRoutePolicy({ ...SHIELD_ENV, VITE_STRK20_SHIELD_ALLOWED_TOKENS: [STRK, USDC].join(',') }) });
+    await click(button('Enter STRKWORLD'));
+    await choose(container!.querySelector<HTMLSelectElement>('select[name="token"]')!, USDC);
+    await type(amountInput(), '5');
+    await click(button(COPY.entry.review));
+    operations.injectFault({ kind: 'insufficient-balance', on: 'confirm' });
+    await click(button(COPY.flow.confirm));
+
+    expect(gate()!.getAttribute('data-gate')).toBe('deposit-failed');
+    const alert = gate()!.querySelector('[role="alert"]')?.textContent;
+    expect(alert).toBe("There is not enough USDC in your wallet's public balance for this deposit.");
+    // Not the Bank's line about the shielded balance.
+    expect(alert).not.toBe(COPY.errors['insufficient-balance']);
+    expect(alert).not.toMatch(/shielded/);
   });
 
   it('says so when a deposit reverts, and keeps the form for another try', async () => {
@@ -283,7 +371,35 @@ describe('the entry gate, driven through the screen (D-072)', () => {
     expect(gate()!.getAttribute('data-gate')).toBe('unconfirmed');
     expect(gate()!.textContent).toContain(COPY.entry.unconfirmed);
     expect(gate()!.querySelector('code')?.textContent).toBe('0xfake0001');
+    expect([...gate()!.querySelectorAll('button')].map((found) => found.textContent)).toEqual([
+      COPY.entry.checkAgain,
+      COPY.entry.checkBalance,
+    ]);
     operations.setDepositStatus('0xfake0001', 'landed');
+    await click(button(COPY.entry.checkAgain));
+    expect(city()).not.toBeNull();
+    expect(operations.submitted).toHaveLength(1);
+  });
+
+  it('says plainly when it cannot reach the network check, and offers both ways on', async () => {
+    const operations = new FakePrivacyOperations();
+    const status = vi.spyOn(operations, 'depositStatus').mockRejectedValue(
+      new PrivacyError('unreachable', 'The network check for this deposit could not be made.'),
+    );
+    await mount({ operations, watch: { ...WATCH, attempts: 6, failureLimit: 3 } });
+    await click(button('Enter STRKWORLD'));
+    await type(amountInput(), '2');
+    await click(button(COPY.entry.review));
+    await click(button(COPY.flow.confirm));
+
+    expect(gate()!.getAttribute('data-gate')).toBe('receipt-unreachable');
+    expect(gate()!.querySelector('[role="status"]')?.textContent).toBe(COPY.entry.receiptUnreachable);
+    expect(gate()!.textContent).not.toContain(COPY.entry.unconfirmed);
+    expect(gate()!.querySelector('code')?.textContent).toBe('0xfake0001');
+    expect(status).toHaveBeenCalledTimes(3);
+
+    // Back again: watching resumes with no wallet prompt.
+    status.mockResolvedValue('landed');
     await click(button(COPY.entry.checkAgain));
     expect(city()).not.toBeNull();
     expect(operations.submitted).toHaveLength(1);
@@ -321,7 +437,7 @@ describe('the entry gate, driven through the screen (D-072)', () => {
     expect(city()).toBeNull();
     expect(gate()!.getAttribute('data-gate')).toBe('ready');
 
-    // Nothing in session storage names the account.
+    // No raw address in session storage: only a digest, which the public address recomputes.
     const stored = JSON.stringify(Object.entries(sessionStorage));
     expect(stored).not.toContain('abc');
     expect(stored).not.toContain('def');

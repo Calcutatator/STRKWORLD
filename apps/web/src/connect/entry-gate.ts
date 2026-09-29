@@ -34,24 +34,35 @@ import type { EntryPassMemory } from './entry-pass.js';
  * any token this build admits, through the same shield route the Bank uses,
  * and walks in once a public read of the receipt shows the deposit landed.
  *
- * Four rules shape it, each from a verified fact rather than taste:
+ * Five rules shape it, each from a verified fact rather than taste:
  *
  * **The check is player-initiated.** `wallet_strk20Balances` raises Ready's
  * "Share private balances" approval on every read, so nothing here reads on
- * mount or on a timer. The player presses the button; the only automatic
- * work is recalling this tab's earlier pass, which touches no wallet.
+ * mount or on a timer. The player presses "Enter STRKWORLD", or "Check my
+ * private balance" on any card after it, so no card is a dead end; the only
+ * automatic work is recalling this tab's earlier pass, which touches no
+ * wallet.
  *
  * **The shell learns yes or no.** `hasPrivateFunds` answers a boolean from
  * one read of every shielded token. No amount, token list or balance reaches
- * this file, and the once-per-session pass stores a hash of the account.
+ * this file, and the once-per-session pass keeps no raw address, balance or
+ * amount (`entry-pass.ts`).
  *
  * **A 118 means "nothing here yet", not a failure.** An account the pool has
  * never seen holds nothing, so it gets the deposit card. Only when the shield
- * itself answers 118 does the player need the wallet's registration step.
+ * itself answers 118 does the player need the wallet's registration step,
+ * and because registering there often makes a first deposit too, that card
+ * leads back to the check rather than to a second deposit.
  *
  * **Confirming the deposit asks the wallet nothing.** After the wallet returns
- * the shield's hash, `depositStatus` reads its receipt publicly and the gate
- * passes when the pool's `Deposit` for this account is there.
+ * the shield's hash, `depositStatus` reads its receipt publicly, waiting
+ * longer between reads each time, and the gate passes when the pool's
+ * `Deposit` for this account is there. A read that fails is not "not yet":
+ * after a few in a row the gate says it cannot reach the network check.
+ *
+ * **An answer belongs to the account it was asked about.** Before acting on
+ * one, the gate re-reads the session's account, which asks the wallet
+ * nothing, and drops the answer if the account moved in place.
  */
 
 /** A token the gate can take a deposit in: admitted for shielding, with display metadata. */
@@ -79,6 +90,12 @@ export interface DepositReview {
   readonly requiresDisclosure: boolean;
   /** The hard guard passed to `confirm`: never sign above the prepared fee. */
   readonly feeCeiling: bigint;
+  /**
+   * A STRK deposit no larger than the prepared pool fee (D-013). The fee comes
+   * out of the deposit, so none of it would reach the pool. The review says
+   * so and still lets the player confirm: there is no minimum.
+   */
+  readonly feeTakesAll: boolean;
 }
 
 /** Why a deposit did not land: the seam's failure, or a receipt that says it reverted. */
@@ -107,6 +124,8 @@ export type EntryGateState =
   | { readonly name: 'landing'; readonly form: DepositForm; readonly transactionHash: string }
   /** The receipt did not show up in time. The player can check again; nothing is re-signed. */
   | { readonly name: 'unconfirmed'; readonly form: DepositForm; readonly transactionHash: string }
+  /** Receipt reads kept failing: the gate cannot tell whether the deposit arrived. */
+  | { readonly name: 'receipt-unreachable'; readonly form: DepositForm; readonly transactionHash: string }
   /** The deposit card again, with what went wrong. */
   | { readonly name: 'deposit-failed'; readonly form: DepositForm; readonly failure: DepositFailure }
   /** The shield answered 118: the wallet's own registration step comes first. */
@@ -118,6 +137,9 @@ export type EntryGateStateName = EntryGateState['name'];
 
 export type Sleep = (ms: number, signal?: AbortSignal) => Promise<void>;
 
+/** The session's current account, read without asking the wallet anything. */
+export type AccountReader = () => Address | null | Promise<Address | null>;
+
 export interface EntryGateOptions {
   readonly operations: Pick<PrivacyOperations, 'hasPrivateFunds' | 'prepare' | 'depositStatus'>;
   /** What the deposit card offers; see `entryTokens`. */
@@ -128,10 +150,22 @@ export interface EntryGateOptions {
   readonly policy?: WalletRoutePolicy | null;
   /** This tab's once-per-session pass for the connected account. Null checks every time. */
   readonly memory?: EntryPassMemory | null;
+  /**
+   * The account this gate was built for, and a silent re-read of the
+   * session's current one. Given both, an answer that arrives after the
+   * account moved in place is dropped. Omitted (the demo), nothing is re-read.
+   */
+  readonly account?: Address | null;
+  readonly readAccount?: AccountReader;
   /** How the receipt is watched after the wallet returns a hash. */
   readonly watch?: {
+    /** The first wait between reads. Each later wait doubles, up to `maxIntervalMs`. */
     readonly intervalMs?: number;
+    readonly maxIntervalMs?: number;
+    /** Reads in one watch, the first at once. */
     readonly attempts?: number;
+    /** Failed reads in a row after which the gate says it cannot reach the network check. */
+    readonly failureLimit?: number;
     readonly sleep?: Sleep;
   };
 }
@@ -146,7 +180,12 @@ export interface EntryGate {
   start(): void;
   /** Abandon anything in flight. Safe to call twice; `start` may follow. */
   stop(): void;
-  /** The one check. Only ever called from a player action. */
+  /**
+   * The one check, only ever from a player action: "Enter STRKWORLD" on the
+   * check card, or "Check my private balance" on the deposit, locked,
+   * registration and unconfirmed cards. Funds pass; none returns to the
+   * deposit card with its form as the player left it.
+   */
   check(): Promise<void>;
   setToken(token: Address): void;
   setAmount(text: string): void;
@@ -155,15 +194,31 @@ export interface EntryGate {
   cancelReview(): void;
   /** Hand the prepared shield to the wallet, then watch its receipt. */
   confirm(): Promise<void>;
-  /** From `unconfirmed`: read the receipt again. No wallet prompt. */
+  /** From `unconfirmed` or `receipt-unreachable`: watch the receipt again. No wallet prompt. */
   checkDeposit(): Promise<void>;
-  /** From a failure or the registration card: back to the deposit card, form kept. */
-  backToDeposit(): void;
 }
 
-/** A receipt read now and every few seconds, for about three minutes, then the player decides. */
+/**
+ * The receipt watch: a read at once, then after 3, 6 and 12 seconds and every
+ * 20 seconds after that, twelve reads in about three minutes, and then the
+ * player decides. Three failed reads in a row end it sooner: the network
+ * check is down, and "not confirmed yet" would not be true.
+ */
 export const DEFAULT_WATCH_INTERVAL_MS = 3_000;
-export const DEFAULT_WATCH_ATTEMPTS = 60;
+export const DEFAULT_WATCH_MAX_INTERVAL_MS = 20_000;
+export const DEFAULT_WATCH_ATTEMPTS = 12;
+export const DEFAULT_WATCH_FAILURE_LIMIT = 3;
+
+/** The cards a player can start the check from. Every other state is mid-step. */
+const CHECKABLE: ReadonlySet<EntryGateStateName> = new Set<EntryGateStateName>([
+  'ready',
+  'check-failed',
+  'deposit',
+  'deposit-failed',
+  'not-registered',
+  'unconfirmed',
+  'receipt-unreachable',
+]);
 
 const STRK = EXCHANGE_CATALOG.find((asset) => asset.symbol === 'STRK')!.token;
 
@@ -216,8 +271,12 @@ export function createEntryGate(options: EntryGateOptions): EntryGate {
   const disclosures: readonly string[] = Object.freeze(disclosure ? [disclosure] : []);
   const requiresDisclosure = routeRequiresDisclosure(ENTRY_SHIELD_ROUTE, register);
   const memory = options.memory ?? null;
-  const intervalMs = options.watch?.intervalMs ?? DEFAULT_WATCH_INTERVAL_MS;
+  const account = options.account ?? null;
+  const readAccount = options.readAccount ?? null;
+  const maxIntervalMs = options.watch?.maxIntervalMs ?? DEFAULT_WATCH_MAX_INTERVAL_MS;
+  const intervalMs = Math.min(options.watch?.intervalMs ?? DEFAULT_WATCH_INTERVAL_MS, maxIntervalMs);
   const attempts = options.watch?.attempts ?? DEFAULT_WATCH_ATTEMPTS;
+  const failureLimit = Math.max(1, options.watch?.failureLimit ?? DEFAULT_WATCH_FAILURE_LIMIT);
   const sleep = options.watch?.sleep ?? abortableSleep;
 
   const resting = (): EntryGateState => (memory ? { name: 'recalling' } : { name: 'ready' });
@@ -236,6 +295,10 @@ export function createEntryGate(options: EntryGateOptions): EntryGate {
   /** A batch the wallet is signing is not ours to discard (see the Bank machine). */
   let signing: PreparedBatch | null = null;
   let lastLogged: EntryGateStateName | null = null;
+  /** The deposit card's form as the player left it, for a check that finds nothing. */
+  let resumeForm: DepositForm | null = null;
+  /** A deposit the wallet sent that no receipt has shown landing or failing yet. */
+  let unsettled: string | null = null;
 
   const begin = (): number => (attempt += 1);
   const current = (id: number): boolean => live && attempt === id;
@@ -262,9 +325,49 @@ export function createEntryGate(options: EntryGateOptions): EntryGate {
   }
 
   function pass(remember = true): void {
+    resumeForm = null;
+    unsettled = null;
     publish({ name: 'passed' });
     // After the pass is on screen: storage is a convenience, never a gate.
     if (remember && memory) void memory.remember().catch(() => undefined);
+  }
+
+  /**
+   * The deposit card after a check found nothing: the form as the player left
+   * it, and a word of caution if a deposit they sent has not shown up yet, so
+   * "nothing yet" does not read as an invitation to send a second one.
+   */
+  function showDeposit(): void {
+    publish({
+      name: 'deposit',
+      form: resumeForm ?? blankForm(),
+      notice: unsettled === null ? null : COPY.entry.sentNotYet,
+    });
+  }
+
+  /**
+   * Whether an answer that just arrived still belongs to this gate: its step
+   * is current, and the session's account is still the one the gate was
+   * built for. The account is re-read silently (no wallet prompt). If it
+   * moved in place, the answer is dropped and the gate starts over, as its
+   * owner is about to replace it with a gate for the new account.
+   */
+  async function answerStands(id: number): Promise<boolean> {
+    if (!current(id)) return false;
+    if (!readAccount || account === null) return true;
+    let now: unknown;
+    try {
+      now = await readAccount();
+    } catch {
+      now = null;
+    }
+    if (!current(id)) return false;
+    if (typeof now === 'string' && sameAddress(now, account)) return true;
+    begin();
+    resumeForm = null;
+    unsettled = null;
+    publish({ name: 'ready' });
+    return false;
   }
 
   function depositFailed(form: DepositForm, error: unknown): void {
@@ -278,37 +381,49 @@ export function createEntryGate(options: EntryGateOptions): EntryGate {
   }
 
   /**
-   * Read the receipt now, then every `intervalMs`, up to `attempts` reads.
-   * The first read usually finds nothing yet; it costs one public request
-   * and lets a fast network (or the demo) pass at once.
+   * Read the receipt now, then after `intervalMs`, doubling each wait up to
+   * `maxIntervalMs`, for `attempts` reads in all. The first read usually
+   * finds nothing yet; it costs one public request and lets a fast network
+   * (or the demo) pass at once. A failed read is not "not yet": it counts
+   * toward `failureLimit`, and only an answer resets the count.
    */
   async function watch(id: number, form: DepositForm, transactionHash: string): Promise<void> {
+    let wait = intervalMs;
+    let failures = 0;
     for (let tried = 0; tried < attempts; tried += 1) {
       if (tried > 0) {
         try {
-          await sleep(intervalMs, signal());
+          await sleep(wait, signal());
         } catch {
           return;
         }
+        wait = Math.min(wait * 2, maxIntervalMs);
       }
       if (!current(id)) return;
-      let status: DepositStatus;
+      let status: DepositStatus | null;
       try {
         status = await operations.depositStatus(transactionHash, signal());
       } catch (error) {
         if (!current(id)) return;
         debugFailure('gate.landing', error);
-        status = 'pending';
+        status = null;
       }
       if (!current(id)) return;
-      if (status === 'landed') {
-        pass();
-        return;
+      if (status === null) {
+        failures += 1;
+        if (failures >= failureLimit) {
+          publish({ name: 'receipt-unreachable', form, transactionHash });
+          return;
+        }
+        continue;
       }
-      if (status === 'failed') {
-        publish({ name: 'deposit-failed', form, failure: 'reverted' });
-        return;
-      }
+      failures = 0;
+      if (status !== 'landed' && status !== 'failed') continue;
+      if (!(await answerStands(id))) return;
+      unsettled = null;
+      if (status === 'landed') pass();
+      else publish({ name: 'deposit-failed', form, failure: 'reverted' });
+      return;
     }
     if (current(id)) publish({ name: 'unconfirmed', form, transactionHash });
   }
@@ -329,11 +444,14 @@ export function createEntryGate(options: EntryGateOptions): EntryGate {
       }
       publish({ name: 'recalling' });
       void memory.recall().then(
-        (remembered) => {
+        async (remembered) => {
           if (!current(id)) return;
+          if (remembered !== true) {
+            publish({ name: 'ready' });
+            return;
+          }
           // This tab already let this account in: no second balance prompt.
-          if (remembered === true) pass(false);
-          else publish({ name: 'ready' });
+          if (await answerStands(id)) pass(false);
         },
         () => {
           if (current(id)) publish({ name: 'ready' });
@@ -349,31 +467,42 @@ export function createEntryGate(options: EntryGateOptions): EntryGate {
       controller = null;
       discardPrepared();
       lastLogged = null;
+      resumeForm = null;
+      unsettled = null;
       stateStore.setState(freezeState(resting()));
     },
 
     async check(): Promise<void> {
       const state = stateStore.getState();
-      if (!live || (state.name !== 'ready' && state.name !== 'check-failed')) return;
+      if (!live || !CHECKABLE.has(state.name)) return;
+      // A retry from the check card keeps the form an earlier card left.
+      if ('form' in state) resumeForm = state.form;
+      else if (state.name === 'ready') resumeForm = null;
       const id = begin();
+      discardPrepared();
       publish({ name: 'checking' });
-      let funded: boolean;
+      let funded = false;
+      let failed = false;
+      let failure: unknown;
       try {
         // Anything but a real `true` keeps the door shut.
         funded = (await operations.hasPrivateFunds(signal())) === true;
       } catch (error) {
-        if (!current(id)) return;
-        debugFailure('gate.check', error);
-        const { kind } = toFailure(error);
-        // An account the pool has never seen holds nothing: offer the deposit.
-        publish(kind === 'not-registered'
-          ? { name: 'deposit', form: blankForm(), notice: null }
-          : { name: 'check-failed', failure: kind });
-        return;
+        failed = true;
+        failure = error;
       }
       if (!current(id)) return;
+      if (failed) debugFailure('gate.check', failure);
+      if (!(await answerStands(id))) return;
+      if (failed) {
+        const { kind } = toFailure(failure);
+        // An account the pool has never seen holds nothing: offer the deposit.
+        if (kind === 'not-registered') showDeposit();
+        else publish({ name: 'check-failed', failure: kind });
+        return;
+      }
       if (funded) pass();
-      else publish({ name: 'deposit', form: blankForm(), notice: null });
+      else showDeposit();
     },
 
     setToken(token: Address): void {
@@ -431,7 +560,15 @@ export function createEntryGate(options: EntryGateOptions): EntryGate {
       publish({
         name: 'review',
         form,
-        review: { token, amount: reviewed.amount, warnings: reviewed.warnings, disclosures, requiresDisclosure, feeCeiling: reviewed.feeCeiling },
+        review: {
+          token,
+          amount: reviewed.amount,
+          warnings: reviewed.warnings,
+          disclosures,
+          requiresDisclosure,
+          feeCeiling: reviewed.feeCeiling,
+          feeTakesAll: reviewed.feeTakesAll,
+        },
       });
     },
 
@@ -453,7 +590,9 @@ export function createEntryGate(options: EntryGateOptions): EntryGate {
       const id = begin();
       publish({ name: 'depositing', form, review, stage: 'composing' });
       signing = batch;
-      let transactionHash: string | null;
+      let transactionHash: string | null = null;
+      let failed = false;
+      let failure: unknown;
       try {
         const result = await batch.confirm({
           feeCeiling: review.feeCeiling,
@@ -464,38 +603,34 @@ export function createEntryGate(options: EntryGateOptions): EntryGate {
         });
         transactionHash = ownTransactionHash(result);
       } catch (error) {
-        if (signing === batch) signing = null;
-        if (prepared === batch) prepared = null;
-        if (!current(id)) return;
-        debugFailure('gate.deposit', error);
-        depositFailed(form, error);
-        return;
+        failed = true;
+        failure = error;
       }
       // Single attempt either way: a confirmed batch is spent.
       if (signing === batch) signing = null;
       if (prepared === batch) prepared = null;
       if (!current(id)) return;
+      if (failed) debugFailure('gate.deposit', failure);
+      if (!(await answerStands(id))) return;
+      if (failed) {
+        depositFailed(form, failure);
+        return;
+      }
       if (transactionHash === null) {
         publish({ name: 'deposit-failed', form, failure: 'unknown' });
         return;
       }
+      unsettled = transactionHash;
       publish({ name: 'landing', form, transactionHash });
       await watch(id, form, transactionHash);
     },
 
     async checkDeposit(): Promise<void> {
       const state = stateStore.getState();
-      if (!live || state.name !== 'unconfirmed') return;
+      if (!live || (state.name !== 'unconfirmed' && state.name !== 'receipt-unreachable')) return;
       const id = begin();
       publish({ name: 'landing', form: state.form, transactionHash: state.transactionHash });
       await watch(id, state.form, state.transactionHash);
-    },
-
-    backToDeposit(): void {
-      const state = stateStore.getState();
-      if (state.name !== 'deposit-failed' && state.name !== 'not-registered') return;
-      begin();
-      publish({ name: 'deposit', form: state.form, notice: null });
     },
   });
 }
@@ -507,15 +642,19 @@ export function createEntryGate(options: EntryGateOptions): EntryGate {
 function reviewedDeposit(
   batch: PreparedBatch,
   token: EntryToken,
-): { amount: bigint; warnings: readonly BatchWarning[]; feeCeiling: bigint } | null {
+): { amount: bigint; warnings: readonly BatchWarning[]; feeCeiling: bigint; feeTakesAll: boolean } | null {
   try {
     const intents = batch.intents;
     const intent = intents.length === 1 ? intents[0] : undefined;
     if (intent?.kind !== 'shield' || !sameAddress(intent.token, token.token)) return null;
     if (typeof intent.amount !== 'bigint' || intent.amount <= 0n) return null;
     if (typeof batch.totalCost !== 'bigint' || batch.totalCost < 0n) return null;
+    if (typeof batch.poolFee !== 'bigint' || batch.poolFee < 0n) return null;
     const warnings = Object.freeze(batch.warnings.map((warning) => Object.freeze({ ...warning })));
-    return { amount: intent.amount, warnings, feeCeiling: batch.totalCost };
+    // The pool's fee is STRK (D-013), taken out of a STRK deposit. Another
+    // token's share of it cannot be stated, so only STRK is compared.
+    const feeTakesAll = sameAddress(token.token, STRK) && intent.amount <= batch.poolFee;
+    return { amount: intent.amount, warnings, feeCeiling: batch.totalCost, feeTakesAll };
   } catch {
     return null;
   }

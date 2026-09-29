@@ -69,23 +69,39 @@ export const COPY = freezeCopy({
    * disclosure is the register's approved copy (D-024), shown at the commit
    * point by `ConfirmGate`, and never restated here. The fee note names no
    * figure: the wallet takes the pool's fee out of the deposit, in the
-   * deposited token.
+   * deposited token. Only a STRK deposit, in the fee's own token, can be
+   * compared with it (`feeTakesAll`).
    */
   entry: {
     title: 'One check before you enter',
     body: 'STRKWORLD is for people with funds in the STRK20 privacy pool. Your wallet will ask to share your private balance.',
     action: 'Enter STRKWORLD',
     checking: 'Waiting for your wallet to share your private balance…',
+    /** On every card after the first check, so none is a dead end. The wallet asks first. */
+    checkBalance: 'Check my private balance',
     depositTitle: 'Deposit to enter',
     depositBody: 'This account has nothing in the STRK20 privacy pool yet. Deposit any amount to enter.',
     token: 'Token',
     feeNote: "Part of a first deposit pays the pool's fee, so less than you deposit reaches the pool.",
+    feeTakesAll: "This is no more than the pool's fee, which comes out of the deposit, so nothing would reach the pool.",
     review: 'Review deposit',
     deposit: 'Deposit',
     landing: 'Deposit sent. Waiting for the network to confirm it…',
     unconfirmed: 'The network has not confirmed this deposit yet. It may still arrive, so check again in a moment.',
+    receiptUnreachable:
+      "STRKWORLD can't reach the network check right now, so it can't tell whether this deposit has arrived yet.",
+    sentNotYet:
+      'Your wallet shows nothing in the pool yet. A deposit you already sent may still be on its way, so check again before sending another.',
     checkAgain: 'Check again',
     reverted: 'This deposit did not go through on the network, so nothing entered the pool.',
+    /**
+     * A 119 at the gate: a shield draws on the wallet's public balance of the
+     * chosen token, not the shielded balance `COPY.errors` speaks of. Written
+     * around the token's symbol: "There is not enough USDC in your wallet's
+     * public balance for this deposit."
+     */
+    publicShortLead: 'There is not enough',
+    publicShortTail: "in your wallet's public balance for this deposit.",
     noToken: 'No token can be deposited in this build yet.',
   },
 

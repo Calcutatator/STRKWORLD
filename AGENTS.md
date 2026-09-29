@@ -270,9 +270,13 @@ compare by value. Deposits of USDC (`0x033068f6…35fb`, the Exchange catalog's
 address), STRK and strkBTC all appeared in the last 20,000 blocks, so the pool
 already takes non-STRK tokens. For an unknown hash the node answers JSON-RPC
 error 29 "Transaction hash not found", and the backend's `/v1/rpc/receipt`
-passes every RPC error on as 502 `UPSTREAM_FAILURE`, so the browser cannot
-tell "not mined yet" from a failed read: `depositStatus` calls both
-`pending`. Traps met on the way:
+passed every RPC error on as 502 `UPSTREAM_FAILURE`, so the browser could not
+tell "not mined yet" from a failed read. The first gate read both as
+`pending`, which turned a down or rate-limited backend into "not confirmed
+yet" for as long as the player waited. `StarknetRpcPoolPort.getReceipt` now
+resolves `null` for error 29 alone (the route answers 200 `null`), and
+`depositStatus` rejects `unreachable` on any failed read, which the gate
+counts. Traps met on the way:
 
 - D-056's `parseShieldRoute` (`apps/web/src/production/config.ts`) admitted
   exactly one shield token, canonical STRK, so a comma list of several tokens
@@ -310,6 +314,19 @@ tell "not mined yet" from a failed read: `depositStatus` calls both
   subscribes late: the World reads no wallet status, station locks come from
   `world:stations` at building entry, and building windows read the connect
   state from context.
+- `reactiveSession` in `ProductionRoot.test.tsx` spread the first
+  `sessionAt()`, so its `readAccount` kept answering the first account (null)
+  after `publish()`. Once the gate re-read the account before a pass, that
+  helper dropped every answer. It now follows the published snapshot, as the
+  real session's `readAccount` does.
+- The pass key is a SHA-256 of a fixed label and a public address, so it
+  keeps the raw address out of storage and hides nothing: the pool's
+  `Deposit` events print every depositor's address, and anyone can hash one.
+  Say "no raw address is stored", never that the key hides the account.
+- A room's `button:only-of-type` is its call to action. The deposit card's
+  "Check my private balance" sits inside the form after "Review deposit", so
+  it reads as the second choice; on the locked card, alone, it is the call to
+  action.
 
 *Verified:* read-only `starknet_getClassAt`, `starknet_getEvents` (pool
 address, Deposit key, blocks 15,578,224 to 15,598,224) and
@@ -321,7 +338,12 @@ address, Deposit key, blocks 15,578,224 to 15,598,224) and
 input); the warning order pinned in `wallet-api.test.ts` and `fake.test.ts`,
 and its figures in `summary-copy.test.ts`; the late HUD in `hud-model.test.ts`,
 `HudLayer.test.tsx` and `App.after-gate.test.tsx` (each fails without the
-snapshot); the adapter's
+snapshot); error 29 against other RPC errors in `adapters.test.ts` and the
+200 `null` in `backend.test.ts`; the backoff, the failed-read count and the
+in-place account switch in `entry-gate.test.ts` (each mutation checked: the
+switch tests fail without the re-read, the unreachable tests fail if a failed
+read counts as `pending`) and, through a switching session, in
+`ProductionRoot.test.tsx`; the adapter's
 `warningsFor` and `connect-machine.ts` read side by side; `entry-gate.test.ts`,
 `EntryGate.test.tsx`, `App.entry.test.tsx`, `ProductionRoot.test.tsx` and
 `bootstrap.test.ts`.

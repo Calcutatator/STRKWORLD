@@ -193,7 +193,10 @@ export interface PrivacyOperations {
    * Whether a shield this account submitted has landed in the pool (D-072).
    *
    * A public read of the transaction's receipt through the backend (D-014),
-   * never a wallet prompt, and it returns no amount. See `DepositStatus`.
+   * never a wallet prompt, and it returns no amount. See `DepositStatus`. A
+   * read that could not be made (the service down, busy, or its node
+   * erroring) rejects `unreachable`, so a caller can tell a slow chain from a
+   * check it cannot make; it says nothing about the deposit either way.
    */
   depositStatus(transactionHash: string, signal?: AbortSignal): Promise<DepositStatus>;
 }
@@ -204,8 +207,9 @@ export interface PrivacyOperations {
  * - `landed`: the transaction succeeded, was accepted, and the pool emitted a
  *   `Deposit` naming this account.
  * - `failed`: it reverted, or it was accepted without such a deposit.
- * - `pending`: there is no accepted receipt yet, or it could not be read. Ask
- *   again later; this is never evidence that the deposit failed.
+ * - `pending`: there is no accepted receipt yet, including for a hash the
+ *   network has not seen. Ask again later; this is never evidence that the
+ *   deposit failed.
  */
 export type DepositStatus = 'landed' | 'pending' | 'failed';
 

@@ -579,7 +579,7 @@ describe('what it captures', () => {
   it('records entry-gate transitions by state name alone, and drops anything else (D-072)', async () => {
     const { entries, tick } = harness();
     const address = '0x04718f5a0fc34cc1af16a1cdee98ffb20c31f5cd61d6ab07201858f4287c938d';
-    for (const name of ['ready', 'checking', 'deposit', 'review', 'depositing', 'landing', 'passed']) debugGate(name);
+    for (const name of ['ready', 'checking', 'deposit', 'review', 'depositing', 'landing', 'receipt-unreachable', 'passed']) debugGate(name);
     // Only the gate's own state names are ever written.
     debugGate(address);
     debugGate('deposit 12.5 STRK');
@@ -592,6 +592,7 @@ describe('what it captures', () => {
       ['info', 'gate.state', 'state=review'],
       ['info', 'gate.state', 'state=depositing'],
       ['info', 'gate.state', 'state=landing'],
+      ['info', 'gate.state', 'state=receipt-unreachable'],
       ['info', 'gate.state', 'state=passed'],
     ]);
     expect(JSON.stringify(entries())).not.toContain(address);

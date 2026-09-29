@@ -455,6 +455,12 @@ export class BackendApi {
     return { status: 200, body: { publicKey: await this.rpc.getPublicKey(address, signal) } };
   }
 
+  /**
+   * D-072: a public receipt read. A hash the node has not seen yet answers
+   * 200 with `null`, so the browser can tell "not mined yet" from this route
+   * failing (a 429, 502, 503 or 504), which it reports as a check it could
+   * not make rather than as a deposit still on its way.
+   */
   private async receipt(body: unknown, signal: AbortSignal): Promise<ApiResponse> {
     const value = requireRecord(body, ['v', 'transactionHash']);
     requireVersion(value);

@@ -187,9 +187,10 @@ export class WalletApiPrivacyOperations implements PrivacyOperations {
 
   /**
    * D-072: whether this account's shield landed, from the backend's public
-   * receipt read. The network answers a transaction it has not seen yet with
-   * an error, which the backend passes on as an upstream failure, so any
-   * failed read is `pending`, never `failed`. Only a cancellation rejects.
+   * receipt read. A hash the network has not seen yet comes back `null`, and
+   * reads as `pending` like any receipt not yet accepted. A read that failed
+   * (the service down, busy, or its node erroring) is not an answer about the
+   * deposit, so it rejects `unreachable` rather than pass for "not yet".
    */
   async depositStatus(transactionHash: string, signal?: AbortSignal): Promise<DepositStatus> {
     throwIfAborted(signal);
@@ -199,9 +200,9 @@ export class WalletApiPrivacyOperations implements PrivacyOperations {
     let receipt: unknown;
     try {
       receipt = await this.pool.receipt(transactionHash, signal);
-    } catch {
+    } catch (error) {
       throwIfAborted(signal);
-      return 'pending';
+      throw new PrivacyError('unreachable', 'The network check for this deposit could not be made.', error);
     }
     throwIfAborted(signal);
     return depositStatusFromReceipt(receipt, { transactionHash, account: this.walletAddress });

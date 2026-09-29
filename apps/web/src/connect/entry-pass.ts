@@ -9,11 +9,13 @@ import { createViewerStorage, type ViewerStorage } from '../store/viewer-storage
  * "Share private balances" prompt. Another account checks again, and a new
  * tab or browser session checks again.
  *
- * The key is a SHA-256 of the normalised account under a fixed label, and the
- * value is a constant. No address, balance or amount is stored, and nothing
- * here is ever sent anywhere. Every step can fail (no storage, no
- * `crypto.subtle` outside a secure context, a full quota); a failure only
- * means the gate checks again.
+ * The key is a SHA-256 of a fixed label and the normalised account, and the
+ * value is a constant, so no raw address, balance or amount is stored, and
+ * nothing here is ever sent anywhere. The digest is not a secret: an account
+ * is a public address, which the pool's public `Deposit` events print for
+ * every depositor, and anyone holding it can recompute the key. Every step
+ * can fail (no storage, no `crypto.subtle` outside a secure context, a full
+ * quota); a failure only means the gate checks again.
  */
 
 export interface EntryPassMemory {

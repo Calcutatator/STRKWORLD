@@ -61,7 +61,8 @@ interface PrivacyOperations {
   // PreparedBatch.confirm({ feeCeiling, onProgress?, signal? }) executes;
   // it refuses to sign if the fee moved past the ceiling.
   // D-072, the entry gate: one balance read of every token, as a boolean,
-  // and a public receipt read of a shield (never a wallet prompt).
+  // and a public receipt read of a shield (never a wallet prompt). A receipt
+  // read that fails rejects `unreachable`; only an unseen hash is `pending`.
   hasPrivateFunds(signal?: AbortSignal): Promise<boolean>
   depositStatus(transactionHash: string, signal?: AbortSignal): Promise<DepositStatus>
 }

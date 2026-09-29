@@ -219,12 +219,15 @@ function WalletCapabilityGate({
     // D-072: a supported wallet reaches the entry gate, not the city. The
     // presence owner, the World, the HUD and the lobby connection all live
     // below it, so none of them exists until this account passes. Keyed by
-    // account generation, so another account starts the gate over.
+    // account generation, so another account starts the gate over; the gate
+    // also re-reads the session's account (no wallet prompt) before an
+    // answer counts, so one that races that replacement is dropped.
     return (
       <EntryGate
         key={`${snapshot.generation}:${snapshot.account ?? ''}`}
         operations={session.operations}
         account={snapshot.account}
+        readAccount={session.readAccount}
         policy={policy}
       >
         <ConnectedProductionApp

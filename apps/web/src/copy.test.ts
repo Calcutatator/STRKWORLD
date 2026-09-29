@@ -79,6 +79,35 @@ describe('shell copy', () => {
       expect(COPY.entry.feeNote).not.toMatch(/\d/);
     });
 
+    it('names the way off every card after the first check in plain words', () => {
+      expect(COPY.entry.checkBalance).toBe('Check my private balance');
+    });
+
+    it('warns plainly when a STRK deposit is no more than the fee, with no figure', () => {
+      expect(COPY.entry.feeTakesAll).toBe(
+        "This is no more than the pool's fee, which comes out of the deposit, so nothing would reach the pool.",
+      );
+      expect(COPY.entry.feeTakesAll).not.toMatch(/\d/);
+    });
+
+    it('says the network check is out of reach without calling the deposit failed or slow', () => {
+      expect(COPY.entry.receiptUnreachable).toMatch(/can't reach the network check right now/);
+      expect(COPY.entry.receiptUnreachable).not.toMatch(/fail|did not go through|not confirmed|nothing was sent/i);
+      expect(COPY.entry.receiptUnreachable).not.toBe(COPY.entry.unconfirmed);
+    });
+
+    it('cautions before a second deposit without promising the first one landed', () => {
+      expect(COPY.entry.sentNotYet).toMatch(/may still be on its way/);
+      expect(COPY.entry.sentNotYet).not.toMatch(/arrived|landed|confirmed/i);
+    });
+
+    it('speaks of the public balance of the chosen token at the gate, not the shielded one', () => {
+      const line = `${COPY.entry.publicShortLead} USDC ${COPY.entry.publicShortTail}`;
+      expect(line).toBe("There is not enough USDC in your wallet's public balance for this deposit.");
+      expect(line).not.toMatch(/shielded/);
+      expect(COPY.errors['insufficient-balance']).toMatch(/shielded/);
+    });
+
     it('never calls the deposit private: the register discloses it as public at the commit point', () => {
       const claim = /\b(?:hidden|hides?|anonymous\w*|untraceable|unlinkable|confidential|invisible)\b|\bnobody\b|deposit\w* (?:is|are|stays?) private/i;
       expect(entryCopy.length).toBeGreaterThan(10);

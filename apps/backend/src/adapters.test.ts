@@ -505,6 +505,62 @@ describe('fixed Starknet RPC adapter', () => {
     await expect(rpc.getBlockNumber()).rejects.toThrow(/rpc returned an error/i);
   });
 
+  it('reads a receipt with the fixed method and hands it back as the chain gave it (D-072)', async () => {
+    const receipt = { transaction_hash: '0xaaa', execution_status: 'SUCCEEDED', finality_status: 'ACCEPTED_ON_L2', events: [] };
+    const requests: Array<{ method: string; params: unknown[] }> = [];
+    const fetcher = vi.fn(async (_url: string, init?: RequestInit) => {
+      const request = JSON.parse(String(init?.body)) as { id: number; method: string; params: unknown[] };
+      requests.push(request);
+      return new Response(JSON.stringify({ jsonrpc: '2.0', id: request.id, result: receipt }));
+    });
+    const rpc = new StarknetRpcPoolPort({ rpcUrl: 'https://rpc.example', poolAddress: '0x123', feeToken: '0x4718', fetcher });
+
+    await expect(rpc.getReceipt('0xaaa')).resolves.toEqual(receipt);
+    expect(requests.map(({ method, params }) => [method, params])).toEqual([
+      ['starknet_getTransactionReceipt', ['0xaaa']],
+    ]);
+  });
+
+  it('answers null for a hash the node has not seen (error 29), and rejects every other error (D-072)', async () => {
+    const errors: unknown[] = [];
+    const fetcher = vi.fn(async (_url: string, init?: RequestInit) => {
+      const request = JSON.parse(String(init?.body)) as { id: number };
+      return new Response(JSON.stringify({ jsonrpc: '2.0', id: request.id, error: errors.shift() }));
+    });
+    const rpc = new StarknetRpcPoolPort({ rpcUrl: 'https://rpc.example', poolAddress: '0x123', feeToken: '0x4718', fetcher });
+
+    errors.push({ code: 29, message: 'Transaction hash not found' });
+    await expect(rpc.getReceipt('0xaaa')).resolves.toBeNull();
+
+    for (const error of [
+      { code: 24, message: 'Block not found' },
+      { code: -32000, message: 'Transaction hash not found' },
+      { code: '29', message: 'Transaction hash not found' },
+      { code: 29.5 },
+      { message: 'Transaction hash not found' },
+      [29],
+      'Transaction hash not found',
+    ]) {
+      errors.push(error);
+      await expect(rpc.getReceipt('0xaaa'), JSON.stringify(error)).rejects.toThrow(/rpc returned an error/i);
+    }
+
+    // Only the receipt read takes "not seen" as an answer.
+    errors.push({ code: 29, message: 'Transaction hash not found' });
+    await expect(rpc.getBlockNumber()).rejects.toThrow(/rpc returned an error/i);
+  });
+
+  it('reads the error code only from an own data property', async () => {
+    const fetcher = vi.fn(async () => directResponse({
+      jsonrpc: '2.0',
+      id: 1,
+      error: Object.defineProperty({ message: 'Transaction hash not found' }, 'code', { get: () => 29, enumerable: true }),
+    }));
+    const rpc = new StarknetRpcPoolPort({ rpcUrl: 'https://rpc.example', poolAddress: '0x123', feeToken: '0x4718', fetcher });
+
+    await expect(rpc.getReceipt('0xaaa')).rejects.toThrow(/rpc returned an error/i);
+  });
+
   it('rejects a negative Starknet block number', async () => {
     const fetcher = vi.fn(async () => new Response(JSON.stringify({
       jsonrpc: '2.0',

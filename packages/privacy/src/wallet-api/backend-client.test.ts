@@ -1306,9 +1306,25 @@ describe('BackendPrivacyClient receipt lookup (D-072)', () => {
     expect(fetcher).not.toHaveBeenCalled();
   });
 
-  it('rejects when the backend cannot find the transaction yet', async () => {
-    const fetcher = vi.fn(async () => response({ code: 'UPSTREAM_FAILURE', message: 'A private service dependency failed.' }, 502));
+  it('hands back null for a transaction the network has not seen yet', async () => {
+    const fetcher = vi.fn(async () => response(null));
     const client = new BackendPrivacyClient('/api', fetcher);
-    await expect(client.receipt('0x5eed')).rejects.toBeInstanceOf(PrivacyError);
+    await expect(client.receipt('0x5eed')).resolves.toBeNull();
+  });
+
+  it.each([
+    [429, { code: 'RATE_LIMITED', message: 'Service is busy. Try again shortly.' }, 'unknown'],
+    [502, { code: 'UPSTREAM_FAILURE', message: 'A private service dependency failed.' }, 'unknown'],
+    [503, { code: 'SERVICE_DISABLED', message: 'Private operations are temporarily disabled.' }, 'unreachable'],
+  ] as const)('rejects a %i from the receipt route as a failed read', async (status, body, kind) => {
+    const fetcher = vi.fn(async () => response(body, status));
+    const client = new BackendPrivacyClient('/api', fetcher);
+    await expect(client.receipt('0x5eed')).rejects.toMatchObject({ kind });
+  });
+
+  it('rejects an unreachable receipt route as unreachable', async () => {
+    const fetcher = vi.fn(async () => { throw new TypeError('Failed to fetch'); });
+    const client = new BackendPrivacyClient('/api', fetcher);
+    await expect(client.receipt('0x5eed')).rejects.toMatchObject({ kind: 'unreachable' });
   });
 });

@@ -2321,8 +2321,23 @@ describe('the D-072 entry reads', () => {
 
   it('treats a receipt the network does not have yet as pending, not failed', async () => {
     const { ops, pool } = fixture();
-    vi.spyOn(pool, 'receipt').mockRejectedValue(new PrivacyError('unknown', 'A private service dependency failed.'));
+    const receipt = vi.spyOn(pool, 'receipt');
+    // The backend answers a hash its node has not seen with null.
+    receipt.mockResolvedValueOnce(null);
     await expect(ops.depositStatus(HASH)).resolves.toBe('pending');
+    receipt.mockResolvedValueOnce({ ...landedReceipt(), finality_status: 'PRE_CONFIRMED' });
+    await expect(ops.depositStatus(HASH)).resolves.toBe('pending');
+  });
+
+  it.each([
+    ['a busy service', new PrivacyError('unknown', 'Service is busy. Try again shortly.')],
+    ['a failed node read', new PrivacyError('unknown', 'A private service dependency failed.')],
+    ['a switched-off service', new PrivacyError('unreachable', 'Private operations are temporarily disabled.')],
+    ['a lost connection', new TypeError('Failed to fetch')],
+  ])('reports a receipt read that failed on %s as unreachable, never as pending', async (_label, failure) => {
+    const { ops, pool } = fixture();
+    vi.spyOn(pool, 'receipt').mockRejectedValue(failure);
+    await expect(ops.depositStatus(HASH)).rejects.toMatchObject({ kind: 'unreachable', cause: failure });
   });
 
   it('warns once per shield, in intent order, the contract the shell pairs its figures with', async () => {

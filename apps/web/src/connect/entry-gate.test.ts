@@ -13,6 +13,7 @@ import { EXCHANGE_CATALOG } from '../panels/exchange/catalog.js';
 import { PRIVACY_REGISTER } from '../privacy/register.js';
 import { parseRoutePolicy } from '../production/config.js';
 import {
+  DEFAULT_WATCH_ATTEMPTS,
   createEntryGate,
   entryPolicyKey,
   entryTokens,
@@ -235,8 +236,9 @@ describe('the entry gate machine (D-072)', () => {
     expect(prepare.mock.calls[0]![0]).toEqual([{ kind: 'shield', token: ETH, amount: 5n * 10n ** 17n }]);
   });
 
-  it('shows the not-registered card when the shield itself answers 118, and returns to the form', async () => {
+  it('leads the not-registered card back to the check, never straight to a second deposit', async () => {
     const operations = new FakePrivacyOperations();
+    const prepare = vi.spyOn(operations, 'prepare');
     open({ operations });
     await gate!.check();
     gate!.setAmount('3');
@@ -245,8 +247,27 @@ describe('the entry gate machine (D-072)', () => {
 
     await gate!.confirm();
     expect(state()).toEqual({ name: 'not-registered', form: { token: STRK, amountText: '3' } });
+    expect(gate!).not.toHaveProperty('backToDeposit');
 
-    gate!.backToDeposit();
+    // Registering inside the wallet often makes a first deposit too: the check finds it.
+    const check = vi.spyOn(operations, 'hasPrivateFunds').mockResolvedValueOnce(true);
+    await gate!.check();
+    expect(check).toHaveBeenCalledOnce();
+    expect(state()).toEqual({ name: 'passed' });
+    expect(prepare).toHaveBeenCalledOnce();
+    expect(operations.submitted).toEqual([]);
+  });
+
+  it('returns a registered player with nothing yet to the form as they left it', async () => {
+    const operations = new FakePrivacyOperations();
+    open({ operations });
+    await gate!.check();
+    gate!.setAmount('3');
+    await gate!.review();
+    operations.injectFault({ kind: 'not-registered', on: 'confirm' });
+    await gate!.confirm();
+
+    await gate!.check();
     expect(state()).toEqual({ name: 'deposit', form: { token: STRK, amountText: '3' }, notice: null });
   });
 
@@ -297,7 +318,7 @@ describe('the entry gate machine (D-072)', () => {
     expect(operations.submitted).toHaveLength(1);
   });
 
-  it('reads a failed receipt read as not yet, and keeps watching', async () => {
+  it('keeps watching past one failed receipt read', async () => {
     const operations = new FakePrivacyOperations();
     operations.injectFault({ kind: 'unreachable', on: 'depositStatus' });
     open({ operations });
@@ -308,17 +329,137 @@ describe('the entry gate machine (D-072)', () => {
     expect(state()).toEqual({ name: 'passed' });
   });
 
-  it('waits the configured interval between receipt reads', async () => {
+  describe('when the receipt cannot be read', () => {
+    const DOWN = new PrivacyError('unreachable', 'The network check for this deposit could not be made.');
+
+    /** Answers in order: a status, or a read that fails. */
+    function scripted(operations: FakePrivacyOperations, answers: Array<DepositStatus | Error>) {
+      return vi.spyOn(operations, 'depositStatus').mockImplementation(async () => {
+        const next = answers.length > 1 ? answers.shift()! : answers[0]!;
+        if (next instanceof Error) throw next;
+        return next;
+      });
+    }
+
+    async function deposit(): Promise<void> {
+      await gate!.check();
+      gate!.setAmount('3');
+      await gate!.review();
+      await gate!.confirm();
+    }
+
+    it('says it cannot reach the network check after failed reads in a row, not that the deposit is slow', async () => {
+      const operations = new FakePrivacyOperations();
+      const status = scripted(operations, [DOWN]);
+      open({ operations, watch: { ...NO_WAIT, attempts: 10, failureLimit: 3 } });
+      await deposit();
+
+      expect(state()).toEqual({ name: 'receipt-unreachable', form: { token: STRK, amountText: '3' }, transactionHash: '0xfake0001' });
+      expect(status).toHaveBeenCalledTimes(3);
+    });
+
+    it('counts only failures in a row: an answer in between resets the count', async () => {
+      const operations = new FakePrivacyOperations();
+      const status = scripted(operations, [DOWN, DOWN, 'pending', DOWN, DOWN, 'landed']);
+      open({ operations, watch: { ...NO_WAIT, attempts: 10, failureLimit: 3 } });
+      await deposit();
+
+      expect(state()).toEqual({ name: 'passed' });
+      expect(status).toHaveBeenCalledTimes(6);
+    });
+
+    it('watches again on request once the check is back, with no wallet prompt', async () => {
+      const operations = new FakePrivacyOperations();
+      const status = scripted(operations, [DOWN, DOWN, DOWN, 'landed']);
+      const check = vi.spyOn(operations, 'hasPrivateFunds');
+      open({ operations, watch: { ...NO_WAIT, attempts: 10, failureLimit: 3 } });
+      await deposit();
+      expect(state().name).toBe('receipt-unreachable');
+
+      await gate!.checkDeposit();
+      expect(state()).toEqual({ name: 'passed' });
+      expect(status).toHaveBeenCalledTimes(4);
+      expect(check).toHaveBeenCalledOnce();
+      expect(operations.submitted).toHaveLength(1);
+    });
+
+    it('offers the balance check instead, which lets the player in once the wallet shows the deposit', async () => {
+      const operations = new FakePrivacyOperations();
+      scripted(operations, [DOWN]);
+      open({ operations, watch: { ...NO_WAIT, attempts: 10, failureLimit: 3 } });
+      await deposit();
+      expect(state().name).toBe('receipt-unreachable');
+
+      // The fake's shield minted a note, so the wallet now reports funds.
+      await gate!.check();
+      expect(state()).toEqual({ name: 'passed' });
+    });
+  });
+
+  it('waits longer between receipt reads each time, up to a cap', async () => {
     const operations = new FakePrivacyOperations({ deposits: 'pending' });
-    const sleep = vi.fn(async () => undefined);
-    open({ operations, watch: { intervalMs: 1_234, attempts: 3, sleep } });
+    const sleep = vi.fn(async (_ms: number, _signal?: AbortSignal) => undefined);
+    open({ operations, watch: { intervalMs: 1_000, maxIntervalMs: 5_000, attempts: 6, sleep } });
     await gate!.check();
     gate!.setAmount('3');
     await gate!.review();
     await gate!.confirm();
-    // Read at once, then twice more after a wait each.
-    expect(sleep).toHaveBeenCalledTimes(2);
-    expect(sleep).toHaveBeenCalledWith(1_234, expect.anything());
+    // Read at once, then five more after a wait each.
+    expect(sleep.mock.calls.map(([ms]) => ms)).toEqual([1_000, 2_000, 4_000, 5_000, 5_000]);
+    expect(sleep).toHaveBeenCalledWith(1_000, expect.anything());
+  });
+
+  it('by default reads at once, then after 3, 6 and 12 seconds and every 20 after, for about three minutes', async () => {
+    const operations = new FakePrivacyOperations({ deposits: 'pending' });
+    const status = vi.spyOn(operations, 'depositStatus');
+    const sleep = vi.fn(async (_ms: number, _signal?: AbortSignal) => undefined);
+    open({ operations, watch: { sleep } });
+    await gate!.check();
+    gate!.setAmount('3');
+    await gate!.review();
+    await gate!.confirm();
+
+    const waits = sleep.mock.calls.map(([ms]) => ms);
+    expect(waits.slice(0, 5)).toEqual([3_000, 6_000, 12_000, 20_000, 20_000]);
+    expect(status).toHaveBeenCalledTimes(DEFAULT_WATCH_ATTEMPTS);
+    const total = waits.reduce((sum, ms) => sum + ms, 0);
+    expect(total).toBeGreaterThanOrEqual(170_000);
+    expect(total).toBeLessThanOrEqual(200_000);
+    expect(state().name).toBe('unconfirmed');
+  });
+
+  it('flags a STRK deposit no larger than the pool fee, and still lets the player confirm it', async () => {
+    // The fake's pool fee is 6 STRK.
+    const operations = new FakePrivacyOperations();
+    open({ operations });
+    await gate!.check();
+
+    gate!.setAmount('6');
+    await gate!.review();
+    expect(state()).toMatchObject({ name: 'review', review: { feeTakesAll: true, feeCeiling: 6n * ONE } });
+    gate!.cancelReview();
+
+    gate!.setAmount('6.000000000000000001');
+    await gate!.review();
+    expect(state()).toMatchObject({ name: 'review', review: { feeTakesAll: false } });
+    gate!.cancelReview();
+
+    gate!.setAmount('0.5');
+    await gate!.review();
+    expect(state()).toMatchObject({ name: 'review', review: { feeTakesAll: true } });
+    await gate!.confirm();
+    expect(operations.submitted).toEqual([[{ kind: 'shield', token: STRK, amount: 5n * 10n ** 17n }]]);
+    expect(state().name).toBe('passed');
+  });
+
+  it('never weighs another token against the STRK fee', async () => {
+    const operations = new FakePrivacyOperations();
+    open({ operations, tokens: entryTokens({ ...SHIELD_POLICY, allowedTokens: { ...SHIELD_POLICY.allowedTokens, shield: [USDC] } }) });
+    await gate!.check();
+    // One USDC is 1_000000 base units, far below 6 STRK in wei, and says nothing about the fee.
+    gate!.setAmount('1');
+    await gate!.review();
+    expect(state()).toMatchObject({ name: 'review', review: { feeTakesAll: false } });
   });
 
   it('discards a reviewed shield the player cancels', async () => {
@@ -388,6 +529,262 @@ describe('the entry gate machine (D-072)', () => {
     open({ operations: new FakePrivacyOperations(), policy: SHIELD_POLICY, tokens: entryTokens(SHIELD_POLICY) });
     expect(gate!.door).toMatchObject({ open: true });
     expect(gate!.tokens).toEqual([{ token: STRK, symbol: 'STRK', decimals: 18 }]);
+  });
+
+  describe('the balance check on every card after the first', () => {
+    it('runs from the deposit card and lets in a player who had funds after all', async () => {
+      const operations = new FakePrivacyOperations();
+      const check = vi.spyOn(operations, 'hasPrivateFunds');
+      open({ operations });
+      await gate!.check();
+      gate!.setAmount('2');
+
+      check.mockResolvedValueOnce(true);
+      const checking = gate!.check();
+      expect(state()).toEqual({ name: 'checking' });
+      await checking;
+      expect(state()).toEqual({ name: 'passed' });
+      expect(check).toHaveBeenCalledTimes(2);
+    });
+
+    it('returns to the deposit card with its form as the player left it when there is still nothing', async () => {
+      open({ operations: new FakePrivacyOperations() });
+      await gate!.check();
+      gate!.setAmount('2');
+      await gate!.check();
+      expect(state()).toEqual({ name: 'deposit', form: { token: STRK, amountText: '2' }, notice: null });
+    });
+
+    it('keeps that form through a declined check and its retry', async () => {
+      const operations = new FakePrivacyOperations();
+      open({ operations });
+      await gate!.check();
+      gate!.setAmount('2');
+      operations.injectFault({ kind: 'user-rejected', on: 'balances' });
+
+      await gate!.check();
+      expect(state()).toEqual({ name: 'check-failed', failure: 'user-rejected' });
+      await gate!.check();
+      expect(state()).toEqual({ name: 'deposit', form: { token: STRK, amountText: '2' }, notice: null });
+    });
+
+    it('runs from a failed deposit', async () => {
+      const operations = new FakePrivacyOperations();
+      open({ operations });
+      await gate!.check();
+      gate!.setAmount('3');
+      await gate!.review();
+      operations.injectFault({ kind: 'user-rejected', on: 'confirm' });
+      await gate!.confirm();
+      expect(state().name).toBe('deposit-failed');
+
+      vi.spyOn(operations, 'hasPrivateFunds').mockResolvedValueOnce(true);
+      await gate!.check();
+      expect(state()).toEqual({ name: 'passed' });
+    });
+
+    it('runs from the locked card, where this build takes no deposit', async () => {
+      const operations = new FakePrivacyOperations();
+      const check = vi.spyOn(operations, 'hasPrivateFunds');
+      open({ operations, policy: parseRoutePolicy({}), tokens: entryTokens(parseRoutePolicy({})) });
+      await gate!.check();
+      expect(gate!.door.open).toBe(false);
+      expect(state().name).toBe('deposit');
+
+      check.mockResolvedValueOnce(true);
+      await gate!.check();
+      expect(state()).toEqual({ name: 'passed' });
+    });
+
+    it('runs from the unconfirmed card, and lets the player in once the wallet shows the deposit', async () => {
+      const operations = new FakePrivacyOperations({ deposits: 'pending' });
+      open({ operations });
+      await gate!.check();
+      gate!.setAmount('3');
+      await gate!.review();
+      await gate!.confirm();
+      expect(state().name).toBe('unconfirmed');
+
+      // The fake's shield minted a note, so the wallet now reports funds.
+      await gate!.check();
+      expect(state()).toEqual({ name: 'passed' });
+    });
+
+    it('warns before a second deposit when a sent one has not shown up yet', async () => {
+      const operations = new FakePrivacyOperations({ deposits: 'pending' });
+      open({ operations });
+      await gate!.check();
+      gate!.setAmount('3');
+      await gate!.review();
+      await gate!.confirm();
+      expect(state().name).toBe('unconfirmed');
+
+      vi.spyOn(operations, 'hasPrivateFunds').mockResolvedValue(false);
+      await gate!.check();
+      expect(state()).toEqual({
+        name: 'deposit',
+        form: { token: STRK, amountText: '3' },
+        notice: COPY.entry.sentNotYet,
+      });
+    });
+
+    it('does not warn once the sent deposit is known to have reverted', async () => {
+      const operations = new FakePrivacyOperations({ deposits: 'failed' });
+      open({ operations });
+      await gate!.check();
+      gate!.setAmount('3');
+      await gate!.review();
+      await gate!.confirm();
+      expect(state()).toMatchObject({ name: 'deposit-failed', failure: 'reverted' });
+
+      vi.spyOn(operations, 'hasPrivateFunds').mockResolvedValue(false);
+      await gate!.check();
+      expect(state()).toMatchObject({ name: 'deposit', notice: null });
+    });
+
+    it('does nothing mid-step', async () => {
+      const operations = new FakePrivacyOperations();
+      const check = vi.spyOn(operations, 'hasPrivateFunds');
+      open({ operations });
+      await gate!.check();
+      gate!.setAmount('3');
+      await gate!.review();
+      expect(state().name).toBe('review');
+
+      await gate!.check();
+      expect(state().name).toBe('review');
+      expect(check).toHaveBeenCalledOnce();
+    });
+  });
+
+  describe('an account switched in place', () => {
+    /** The session's account, which a test moves as a wallet would. */
+    function session(initial = '0xabc') {
+      const owned = { account: initial as string | null, reads: 0 };
+      return { owned, readAccount: () => { owned.reads += 1; return owned.account; } };
+    }
+
+    it('drops a check answered after the account moved while the wallet was asking', async () => {
+      const operations = new FakePrivacyOperations({ balances: { [STRK]: ONE } });
+      const { owned, readAccount } = session();
+      const pass = memory();
+      let answer!: (funded: boolean) => void;
+      vi.spyOn(operations, 'hasPrivateFunds').mockImplementationOnce(
+        () => new Promise<boolean>((resolve) => { answer = resolve; }),
+      );
+      open({ operations, memory: pass, account: '0xabc', readAccount });
+      await flush();
+
+      const checking = gate!.check();
+      expect(state()).toEqual({ name: 'checking' });
+      owned.account = '0xdef';
+      answer(true);
+      await checking;
+      await flush();
+
+      expect(state()).toEqual({ name: 'ready' });
+      expect(pass.remembered).toBe(false);
+      expect(owned.reads).toBeGreaterThan(0);
+    });
+
+    it('drops a "nothing yet" too, rather than show the deposit card to the wrong account', async () => {
+      const operations = new FakePrivacyOperations();
+      const { owned, readAccount } = session();
+      vi.spyOn(operations, 'hasPrivateFunds').mockImplementationOnce(async () => {
+        owned.account = '0xdef';
+        return false;
+      });
+      open({ operations, account: '0xabc', readAccount });
+      await gate!.check();
+      expect(state()).toEqual({ name: 'ready' });
+    });
+
+    it('drops a deposit whose account moved while the wallet was signing', async () => {
+      const operations = new FakePrivacyOperations();
+      const { owned, readAccount } = session();
+      const pass = memory();
+      let sign!: () => void;
+      vi.spyOn(operations, 'prepare').mockImplementationOnce(async (intents) => {
+        const batch = await new FakePrivacyOperations().prepare(intents);
+        return {
+          ...batch,
+          confirm: async (options: Parameters<PreparedBatch['confirm']>[0]) => {
+            options.onProgress?.({ stage: 'awaiting-approval', message: 'Confirm the shield in your wallet' });
+            await new Promise<void>((resolve) => { sign = resolve; });
+            return { transactionHash: '0x5eed' };
+          },
+        } as PreparedBatch;
+      });
+      const status = vi.spyOn(operations, 'depositStatus').mockResolvedValue('landed');
+      open({ operations, memory: pass, account: '0xabc', readAccount });
+      await flush();
+      await gate!.check();
+      gate!.setAmount('3');
+      await gate!.review();
+
+      const confirming = gate!.confirm();
+      await flush();
+      expect(state()).toMatchObject({ name: 'depositing', stage: 'awaiting-approval' });
+      owned.account = '0xdef';
+      sign();
+      await confirming;
+      await flush();
+
+      expect(state()).toEqual({ name: 'ready' });
+      expect(status).not.toHaveBeenCalled();
+      expect(pass.remembered).toBe(false);
+    });
+
+    it.each(['landed', 'failed'] as const)('drops a %s receipt read after the account moved', async (answer) => {
+      const operations = new FakePrivacyOperations();
+      const { owned, readAccount } = session();
+      const pass = memory();
+      vi.spyOn(operations, 'depositStatus').mockImplementation(async () => {
+        owned.account = '0xdef';
+        return answer;
+      });
+      open({ operations, memory: pass, account: '0xabc', readAccount });
+      await flush();
+      await gate!.check();
+      gate!.setAmount('3');
+      await gate!.review();
+      await gate!.confirm();
+      await flush();
+
+      expect(state()).toEqual({ name: 'ready' });
+      expect(pass.remembered).toBe(false);
+    });
+
+    it('drops the account when the re-read itself fails', async () => {
+      const operations = new FakePrivacyOperations({ balances: { [STRK]: ONE } });
+      open({ operations, account: '0xabc', readAccount: () => { throw new Error('session gone'); } });
+      await gate!.check();
+      expect(state()).toEqual({ name: 'ready' });
+    });
+
+    it('does not honour this tab\'s pass once the account has moved', async () => {
+      const operations = new FakePrivacyOperations();
+      const check = vi.spyOn(operations, 'hasPrivateFunds');
+      open({ operations, memory: memory(true), account: '0xabc', readAccount: () => '0xdef' });
+      await flush();
+      expect(state()).toEqual({ name: 'ready' });
+      expect(check).not.toHaveBeenCalled();
+    });
+
+    it('lets the same account in, whatever its spelling, and reads it without the wallet', async () => {
+      const operations = new FakePrivacyOperations({ balances: { [STRK]: ONE } });
+      const pass = memory();
+      const balances = vi.spyOn(operations, 'balances');
+      open({ operations, memory: pass, account: '0xabc', readAccount: async () => '0x0ABC' });
+      await flush();
+      await gate!.check();
+      await flush();
+
+      expect(state()).toEqual({ name: 'passed' });
+      expect(pass.remembered).toBe(true);
+      // One balance read, the check itself: the re-read is the session's own.
+      expect(balances).toHaveBeenCalledOnce();
+    });
   });
 
   describe('once per session', () => {

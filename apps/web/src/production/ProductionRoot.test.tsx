@@ -552,6 +552,8 @@ function reactiveSession(
   return {
     ...current,
     getSnapshot: () => current.getSnapshot(),
+    // As in the real session, the account read follows the published snapshot.
+    readAccount: () => current.readAccount(),
     subscribe(listener) {
       listeners.add(listener);
       return () => listeners.delete(listener);
@@ -887,6 +889,124 @@ describe('ProductionRoot entry gate (D-072)', () => {
     await enterCity(mounted.container);
     expect(mounted.container.querySelector('.room-locked')?.textContent).toBe(COPY.locked.notEnabled.shield);
     expect(mounted.container.querySelector('input[name="amount"]')).toBeNull();
+    await mounted.unmount();
+  });
+
+  /**
+   * A connected session whose wallet switches account in place, as Ready's
+   * account switcher does: the snapshot moves to a new generation and
+   * account, and `readAccount` answers the new one at once.
+   */
+  function switchingSession(account: string, operations: FakePrivacyOperations) {
+    let current = account;
+    let generation = 1;
+    const listeners = new Set<() => void>();
+    const build = () => ({
+      phase: 'connected' as const,
+      wallets: [{ key: 'wallet-1', name: 'Ready', icon: 'data:image/svg+xml,ready' }],
+      selectedKey: 'wallet-1',
+      account: current,
+      generation,
+    });
+    let snapshot = build();
+    const session: WalletSession = {
+      operations,
+      getSnapshot: () => snapshot,
+      subscribe(listener) {
+        listeners.add(listener);
+        return () => listeners.delete(listener);
+      },
+      connect: async () => snapshot,
+      refreshDiscovery: () => undefined,
+      readAccount: () => current,
+      disconnect: async () => undefined,
+      destroy: () => undefined,
+    };
+    return {
+      session,
+      async switchTo(next: string) {
+        await act(async () => {
+          current = next;
+          generation += 1;
+          snapshot = build();
+          listeners.forEach((listener) => listener());
+          await flushReact();
+        });
+      },
+    };
+  }
+
+  it('lets no one in when the account switches in place while the wallet is asking', async () => {
+    const operations = fundedOperations();
+    let answer!: (funded: boolean) => void;
+    const check = vi.spyOn(operations, 'hasPrivateFunds').mockImplementationOnce(
+      () => new Promise<boolean>((resolve) => { answer = resolve; }),
+    );
+    const wallet = switchingSession('0xabc', operations);
+    const mounted = await mount(wallet.session);
+    await enterCity(mounted.container);
+    expect(mounted.container.querySelector('[data-gate="checking"]')).not.toBeNull();
+
+    await wallet.switchTo('0xdef');
+    await act(async () => {
+      answer(true);
+      await flushReact();
+    });
+    await settleGate(mounted.container);
+
+    // The new account meets its own gate, and nobody was let in or remembered.
+    expect(mounted.container.querySelector('[data-gate="ready"]')).not.toBeNull();
+    expect(mounted.createPresence).not.toHaveBeenCalled();
+    expect(captured.current).toBeNull();
+    expect(check).toHaveBeenCalledOnce();
+    for (let turn = 0; turn < 5; turn += 1) await act(async () => { await flushReact(); });
+    expect(sessionStorage.length).toBe(0);
+    await mounted.unmount();
+  });
+
+  it('lets no one in when the account switches in place while the wallet is signing the deposit', async () => {
+    const operations = new FakePrivacyOperations();
+    let sign!: () => void;
+    vi.spyOn(operations, 'prepare').mockImplementationOnce(async (intents) => {
+      const batch = await new FakePrivacyOperations().prepare(intents);
+      return {
+        ...batch,
+        confirm: async (options: Parameters<typeof batch.confirm>[0]) => {
+          options.onProgress?.({ stage: 'awaiting-approval', message: 'Confirm the shield in your wallet' });
+          await new Promise<void>((resolve) => { sign = resolve; });
+          return { transactionHash: '0x5eed' };
+        },
+      };
+    });
+    const status = vi.spyOn(operations, 'depositStatus').mockResolvedValue('landed');
+    const wallet = switchingSession('0xabc', operations);
+    const mounted = await mount(wallet.session);
+    await enterCity(mounted.container);
+
+    const input = mounted.container.querySelector<HTMLInputElement>('input[name="amount"]')!;
+    const setValue = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!;
+    await act(async () => {
+      setValue.call(input, '3');
+      input.dispatchEvent(new Event('input', { bubbles: true }));
+    });
+    await clickLabelled(mounted.container, COPY.entry.review);
+    await clickLabelled(mounted.container, COPY.flow.confirm);
+    expect(mounted.container.querySelector('[data-gate="depositing"]')).not.toBeNull();
+
+    await wallet.switchTo('0xdef');
+    await act(async () => {
+      sign();
+      await flushReact();
+    });
+    await settleGate(mounted.container);
+
+    expect(mounted.container.querySelector('[data-gate="ready"]')).not.toBeNull();
+    expect(mounted.createPresence).not.toHaveBeenCalled();
+    expect(captured.current).toBeNull();
+    // The old account's receipt is never read on the new account's behalf.
+    expect(status).not.toHaveBeenCalled();
+    for (let turn = 0; turn < 5; turn += 1) await act(async () => { await flushReact(); });
+    expect(sessionStorage.length).toBe(0);
     await mounted.unmount();
   });
 

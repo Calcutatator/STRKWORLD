@@ -59,9 +59,9 @@ export class BackendPrivacyClient implements PoolReadClient, PrivateSubmissionGa
 
   /**
    * D-072: the backend's receipt lookup, returned as the chain gave it. A
-   * transaction the network has not seen yet is an upstream RPC error, so it
-   * rejects here like any other failed read; the caller decides that means
-   * "not yet".
+   * transaction the network has not seen yet answers `null`. A failed read
+   * rejects: `unreachable` when the service is down or out of reach, and
+   * `unknown` for any other refusal (a 429, or a 502 from its node).
    */
   async receipt(transactionHash: string, signal?: AbortSignal): Promise<unknown> {
     if (typeof transactionHash !== 'string' || !isNonzeroFelt(transactionHash)) {

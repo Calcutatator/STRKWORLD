@@ -1792,6 +1792,14 @@ describe('privacy-safe RPC and operations', () => {
     expect(getReceipt).toHaveBeenCalledWith('0x00Ab', expect.any(AbortSignal));
   });
 
+  it('answers a hash the node has not seen with 200 null, not an upstream failure (D-072)', async () => {
+    const { api, rpc } = fixture();
+    vi.spyOn(rpc, 'getReceipt').mockResolvedValue(null);
+
+    await expect(api.handle({ method: 'POST', path: '/v1/rpc/receipt', body: { v: 1, transactionHash: '0xaaa' } }))
+      .resolves.toEqual({ status: 200, body: null });
+  });
+
   it('maps a receipt provider failure to a generic response without echoing receipt data', async () => {
     const { api, rpc } = fixture();
     vi.spyOn(rpc, 'getReceipt').mockRejectedValue(

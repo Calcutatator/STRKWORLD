@@ -229,7 +229,8 @@ asks, on the player's press, whether the account holds anything in the pool
 (`hasPrivateFunds`, a boolean) and takes a deposit through the shield route
 when it does not, confirming it from a public receipt read. The presence
 owner and `App` are created only after it passes; a pass is remembered for the
-tab's session under a hash of the account. Production configuration is public,
+tab's session under a SHA-256 of the account, so no raw address is stored
+(the digest is no secret: the public address recomputes it). Production configuration is public,
 mainnet-only, same-origin for Backend calls, and starts with every transaction
 route denied. Bridge planning stays null. The default browser route therefore supports
 connection/capability acceptance before it authorizes any proof, signature,
