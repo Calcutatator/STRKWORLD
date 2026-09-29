@@ -190,4 +190,20 @@ describe('shell boundaries', () => {
     expect(main).toContain('bridge={{ loadRuntime: loadProductionBridgeRuntime }}');
     expect(main).not.toMatch(/Promise\.all\([\s\S]*production-runtime/);
   });
+
+  it('keeps the install links display-only: one card reads them, and nothing else names the sites (D-073)', () => {
+    // SPEC §5 rules 1-2: a recommended-wallet list must never become a
+    // connector source, a filter or an allowlist. Only the card that prints
+    // the links may read them.
+    const shell = sources().filter(({ path }) => !isTest(path));
+    const readers = shell
+      .filter(({ text }) => stripComments(text).includes('installLinks'))
+      .map(({ path }) => path)
+      .sort();
+    expect(readers).toEqual(['connect/GetAWallet.tsx', 'copy.ts']);
+    const naming = shell
+      .filter(({ text }) => /ready\.co|xverse\.app/.test(stripComments(text)))
+      .map(({ path }) => path);
+    expect(naming).toEqual(['copy.ts']);
+  });
 });

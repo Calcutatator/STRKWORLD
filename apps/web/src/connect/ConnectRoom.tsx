@@ -2,7 +2,10 @@ import { COPY } from '../copy.js';
 import { useEffect, useRef } from 'react';
 import { usePrivacy } from '../privacy/PrivacyProvider.js';
 import type { ConnectFlow, ConnectState } from './connect-machine.js';
+import { DiscoveryRescan } from './DiscoveryRescan.js';
+import { GetAWallet } from './GetAWallet.js';
 import { NotRegisteredNotice } from './NotRegisteredNotice.js';
+import { selectedWalletName, unsupportedCopy } from './unsupported-copy.js';
 import { useWalletSessionOptional, type WalletSessionRuntime } from '../wallet/WalletSessionProvider.js';
 
 /**
@@ -53,11 +56,13 @@ export function ConnectRoomView({
         </section>
       );
 
-    case 'unsupported-wallet':
+    case 'unsupported-wallet': {
+      // D-073: named by the picker's display-only projection, or "Your wallet".
+      const copy = unsupportedCopy(selectedWalletName(wallet?.snapshot));
       return (
         <section className="room room-unsupported">
-          <h2>{COPY.unsupported.title}</h2>
-          <p>{COPY.unsupported.body}</p>
+          <h2>{copy.title}</h2>
+          <p>{copy.body}</p>
           {connectState.walletApiVersion ? (
             <p className="room-detail">Wallet API {connectState.walletApiVersion}</p>
           ) : null}
@@ -66,6 +71,7 @@ export function ConnectRoomView({
           </button>
         </section>
       );
+    }
 
     case 'not-registered':
       return <NotRegisteredNotice action={COPY.notRegistered.action} onRetry={() => void connect.recheck()} />;
@@ -125,6 +131,7 @@ function WalletSelection({
     <section className="room room-connect">
       <h2>{COPY.connect.choose}</h2>
       <p>{body}</p>
+      {snapshot.wallets.length === 0 ? <GetAWallet /> : null}
       {snapshot.wallets.map((choice) => (
         <button
           type="button"
@@ -145,6 +152,7 @@ function WalletSelection({
       <button type="button" onClick={() => wallet.refreshDiscovery()}>
         {COPY.connect.refreshWallets}
       </button>
+      <DiscoveryRescan refresh={() => wallet.refreshDiscovery()} />
     </section>
   );
 }

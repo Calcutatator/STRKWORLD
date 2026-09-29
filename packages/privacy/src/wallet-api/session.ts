@@ -11,6 +11,16 @@ import type { WalletRoutePolicy } from './types.js';
 const MAINNET_CHAIN_ID = '0x534e5f4d41494e';
 const STARK_FIELD_PRIME = (1n << 251n) + 17n * (1n << 192n) + 1n;
 
+/**
+ * When a session looks for wallets again, in milliseconds after it starts
+ * (D-073). The discovery store scans the page's legacy `window.starknet*`
+ * globals once, as it is built, so a wallet that injects its global later
+ * stayed missing until the player pressed "Look again". Four more looks in
+ * the first five seconds, then none. A look only ever adds a wallet to the
+ * list; it never selects or connects one (D-054).
+ */
+const DISCOVERY_RESCAN_DELAYS_MS: readonly number[] = [250, 1_000, 2_500, 5_000];
+
 export interface WalletHandle {
   readonly name: string;
   readonly icon: string;
@@ -283,7 +293,7 @@ export function createWalletSession(
       publish('selection-required', null);
       return;
     }
-    wallets = ownDiscoveredWallets(nextWallets);
+    wallets = keepListedOrder(wallets, ownDiscoveredWallets(nextWallets));
     if (selectedKey && !selectedWallet()) {
       generation += 1;
       connectFlight = null;
@@ -294,6 +304,28 @@ export function createWalletSession(
     }
     publish(snapshot.phase, snapshot.account);
   });
+
+  /** One best-effort look: a throwing scan leaves the list as it was. */
+  function lookAgain(): void {
+    if (destroyed) return;
+    try {
+      dependencies.discovery.refresh();
+    } catch {
+      // Discovery reads page globals the session does not own. A failed look
+      // must not escape a timer or a render; the next look may still succeed.
+    }
+  }
+
+  // D-073: look again on a short, bounded schedule, so a wallet that injects
+  // after the store was built is listed without a click. Destroy stops it.
+  const rescanTimers = new Set<ReturnType<typeof setTimeout>>();
+  for (const delay of DISCOVERY_RESCAN_DELAYS_MS) {
+    const timer = setTimeout(() => {
+      rescanTimers.delete(timer);
+      lookAgain();
+    }, delay);
+    rescanTimers.add(timer);
+  }
 
   return {
     operations: stableOperations,
@@ -314,7 +346,7 @@ export function createWalletSession(
       }).catch(() => undefined);
       return promise;
     },
-    refreshDiscovery: () => dependencies.discovery.refresh(),
+    refreshDiscovery: lookAgain,
     readAccount: () => snapshot.account,
     async disconnect() {
       generation += 1;
@@ -336,6 +368,8 @@ export function createWalletSession(
     destroy() {
       if (destroyed) return;
       destroyed = true;
+      for (const timer of rescanTimers) clearTimeout(timer);
+      rescanTimers.clear();
       generation += 1;
       connectFlight = null;
       let teardownError: unknown;
@@ -566,6 +600,20 @@ function ownDiscoveredWallets(value: unknown): WalletHandle[] {
     seen.add(wallet);
     return true;
   });
+}
+
+/**
+ * The picker's next list (D-073). Every wallet already listed keeps its
+ * place, and a newly discovered one joins the end. The discovery store puts
+ * its newest wallet first, so taking its order as it stands would move the
+ * button a player is about to press. Wallets are told apart by object alone,
+ * never by name or id.
+ */
+function keepListedOrder(listed: readonly WalletHandle[], next: readonly WalletHandle[]): WalletHandle[] {
+  const present = new Set<object>(next);
+  const kept = listed.filter((wallet) => present.has(wallet));
+  const known = new Set<object>(kept);
+  return [...kept, ...next.filter((wallet) => !known.has(wallet))];
 }
 
 function productionDiscovery(): WalletDiscoveryPort {
