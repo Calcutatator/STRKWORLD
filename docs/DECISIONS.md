@@ -2347,7 +2347,7 @@ a separate gate and remains open.
 
 ## D-054 — Production wallet lifecycle belongs to a privacy-owned session
 
-**2026-08-23 · Accepted · autonomous tester prompting superseded by D-057**
+**2026-08-23 · Accepted · autonomous tester prompting superseded by D-057 · discovery extended by D-073 (bounded looks for late injected wallets; the picker keeps its order)**
 
 **Context.** `WalletApiPrivacyOperations`, dynamic Wallet Standard discovery
 and the Backend privacy client already exist, while the browser composition
@@ -2401,7 +2401,7 @@ live wallet or funded claim is accepted by this status.
 
 ## D-055 — A supported connected wallet is the app entry gate
 
-**2026-08-23 · Accepted by the user · SUPERSEDED in part by D-072 (a supported wallet now reaches the funds gate, not the city) · supersedes D-037's wallet-independent
+**2026-08-23 · Accepted by the user · SUPERSEDED in part by D-072 (a supported wallet now reaches the funds gate, not the city) · extended by D-073 (display-only install links and gate-era unsupported copy on its entry card) · supersedes D-037's wallet-independent
 lobby availability and qualifies D-043's production no-wallet recovery claim
 for the production app entry path**
 
@@ -3341,3 +3341,65 @@ deposited token, of a size the gate cannot state, and its fee ceiling is
 still the prepared pool fee. Each depositing player adds at most twelve
 public receipt reads, further apart each time, to the backend's shared rate
 window while the gate waits.
+
+---
+
+## D-073 — Late injected wallets appear without a click; install links are display only
+
+**2026-09-29 · Accepted by the user · extends D-054's discovery (the session looks again for late injected wallets, and the picker keeps its order) · adds display-only install links and gate-era unsupported-wallet copy to D-055's entry card**
+
+**Context.** The lead asked: "We also need to add Xverse as a wallet
+connector too." Xverse offers Starknet to dapps through the legacy injected
+global `window.starknet_xverse` (StarknetKit's injected connector `xverse`).
+No evidence was found that it registers through the Wallet Standard, and it
+is not in get-starknet's default registry. Discovery already lists any
+`window.starknet_*` wallet (the 2026-09-27 getter finding), so SPEC §5 rules
+1 and 2 leave nothing Xverse-specific to build, and forbid it. Two gaps
+remained. The store scans those globals once, when it is built, so a wallet
+that injects later stayed missing until the player pressed "Look again".
+And the store puts its newest wallet first, which would move the buttons a
+player is about to press. `COPY.unsupported` also predated the entry gate:
+it said "the doors that need the pool stay shut", but since D-055 and D-072
+nothing in the city opens for such a wallet.
+
+**Decision.**
+
+- **Look again, briefly.** The session looks again 250 ms, 1 s, 2.5 s and 5 s
+  after it starts, then stops; `destroy()` clears the timers. Each
+  choose-a-wallet card (the production entry card and the connect room's
+  picker) also looks once as it mounts, and each time the page becomes
+  visible while it shows. A look is best effort: it only adds wallets to the
+  list, never selects or connects one (D-054), and a throwing scan is
+  swallowed.
+- **Nothing moves.** Every listed wallet keeps its place and a new one joins
+  the end, told apart by object alone, never by name. The store already
+  refuses a second wallet of the same name, so looks add no duplicates.
+- **Install links are display only.** While discovery lists no wallet, the
+  card shows "Get a wallet: Ready · Xverse", linking https://www.ready.co and
+  https://www.xverse.app in a new tab with `rel="noopener noreferrer"`. The
+  links are static `COPY.connect` content in the web shell, read only by the
+  one component that prints them (`GetAWallet`). They never feed discovery,
+  the list, a filter or the STRK20 path, and a wallet named there is treated
+  exactly like any other.
+- **Gate-era unsupported copy, naming the wallet.** "{wallet} can't open the
+  privacy pool yet" and "{wallet} is connected but doesn't yet offer the
+  STRK20 privacy methods STRKWORLD needs, so the city stays closed. Your
+  funds are fine. Connect a wallet that supports STRK20 private balances, or
+  check again once {wallet} adds them." The name is the picker's display-only
+  name for the selected choice, never compared; without one the room says
+  "Your wallet". Its one action, "Connect a different wallet", still
+  rechecks.
+
+**Consequences.** A late-injecting wallet, Xverse included, appears at the
+next look (in the first five seconds, on return to the tab, when a card next
+mounts, or on "Look again") and still needs the player's click. A wallet the
+store replaces with its own Wallet Standard registration is a new object, so
+it moves to the end once. A connected Xverse is expected to land in
+`unsupported-wallet` until it ships the dapp-facing STRK20 methods, and then
+to pass the capability check with no code change. That holds while it
+answers `wallet_supportedWalletApi` below 0.10.3 or with error 162: any other
+failure of that query shows the unreachable room. Neither has been seen with
+a live Xverse; that stays on the manual wallet checklist (D-028). Every look
+re-wraps each injected global, and each wrapper adds two listeners to the
+wallet's object that nothing removes (upstream), so looks stay bounded,
+never periodic.

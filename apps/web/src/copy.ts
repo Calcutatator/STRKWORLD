@@ -40,6 +40,17 @@ export const COPY = freezeCopy({
     disconnect: 'Disconnect',
     choose: 'Choose a wallet',
     none: 'No compatible wallet was discovered.',
+    /**
+     * D-073: shown on a choose-a-wallet card only while discovery lists no
+     * wallet. Display only: these links never feed discovery, the wallet list
+     * or the STRK20 path, and a wallet named here is listed and treated
+     * exactly like any other once it registers (SPEC §5 rules 1 and 2).
+     */
+    getWallet: 'Get a wallet:',
+    installLinks: [
+      { label: 'Ready', href: 'https://www.ready.co' },
+      { label: 'Xverse', href: 'https://www.xverse.app' },
+    ],
     refreshWallets: 'Look again',
     wrongNetwork: 'Switch this wallet to Starknet mainnet, then try again.',
   },
@@ -57,9 +68,19 @@ export const COPY = freezeCopy({
     retry: 'Try again',
   },
 
+  /**
+   * A connected wallet without the STRK20 methods, held at the capability
+   * check: since the entry gate (D-055, D-072) nothing in the city opens for
+   * it (D-073). `{Wallet}` starts a sentence and `{wallet}` sits inside one.
+   * Both become the wallet's name as the picker lists it, a display-only
+   * projection nothing compares, or `unnamed` / `unnamedInline` when the
+   * shell has no name for it (`connect/unsupported-copy.ts`).
+   */
   unsupported: {
-    title: 'This wallet cannot open the pool',
-    body: 'Your wallet is connected but does not offer the STRK20 privacy methods this city runs on. Your funds are fine — the doors that need the pool stay shut until you connect a wallet that supports it.',
+    title: "{Wallet} can't open the privacy pool yet",
+    body: "{Wallet} is connected but doesn't yet offer the STRK20 privacy methods STRKWORLD needs, so the city stays closed. Your funds are fine. Connect a wallet that supports STRK20 private balances, or check again once {wallet} adds them.",
+    unnamed: 'Your wallet',
+    unnamedInline: 'your wallet',
     action: 'Connect a different wallet',
   },
 

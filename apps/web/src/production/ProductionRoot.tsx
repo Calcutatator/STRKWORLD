@@ -12,7 +12,10 @@ import type { BridgeRuntimeLoader } from '../bridge/BridgeProvider.js';
 import type { DegenCatalogSource } from '../panels/exchange/degen-catalog.js';
 import { STRK_TOKEN } from '../bridge/bridge-machine.js';
 import { createConnectFlow, type ConnectFlow, type ConnectState } from '../connect/connect-machine.js';
+import { DiscoveryRescan } from '../connect/DiscoveryRescan.js';
 import { EntryGate } from '../connect/EntryGate.js';
+import { GetAWallet } from '../connect/GetAWallet.js';
+import { selectedWalletName, unsupportedCopy } from '../connect/unsupported-copy.js';
 import { COPY } from '../copy.js';
 import { sameAddress } from '../format.js';
 import type { PresenceController } from '../presence/presence-controller.js';
@@ -245,7 +248,13 @@ function WalletCapabilityGate({
     );
   }
 
-  return <WalletCapabilityGateView state={state} onRetry={() => void connect.recheck()} />;
+  return (
+    <WalletCapabilityGateView
+      state={state}
+      walletName={selectedWalletName(snapshot)}
+      onRetry={() => void connect.recheck()}
+    />
+  );
 }
 
 function ConnectedProductionApp({
@@ -389,6 +398,7 @@ function WalletEntryGate({
     <section className="room room-connect" data-testid="wallet-entry-gate">
       <h2>{title}</h2>
       <p>{body}</p>
+      {snapshot.wallets.length === 0 ? <GetAWallet /> : null}
       {snapshot.wallets.map((choice) => (
         <button
           type="button"
@@ -401,15 +411,19 @@ function WalletEntryGate({
       <button type="button" onClick={refreshDiscovery}>
         {COPY.connect.refreshWallets}
       </button>
+      <DiscoveryRescan refresh={refreshDiscovery} />
     </section>
   );
 }
 
 function WalletCapabilityGateView({
   state,
+  walletName,
   onRetry,
 }: {
   state: ConnectState;
+  /** The picker's display-only name for the connected wallet (D-073). */
+  walletName: string | null;
   onRetry: () => void;
 }) {
   if (state.name === 'detecting') {
@@ -430,10 +444,11 @@ function WalletCapabilityGateView({
     );
   }
   if (state.name === 'unsupported-wallet') {
+    const copy = unsupportedCopy(walletName);
     return (
       <section className="room room-unsupported" data-testid="wallet-capability-gate">
-        <h2>{COPY.unsupported.title}</h2>
-        <p>{COPY.unsupported.body}</p>
+        <h2>{copy.title}</h2>
+        <p>{copy.body}</p>
         {state.walletApiVersion ? <p className="room-detail">Wallet API {state.walletApiVersion}</p> : null}
         <button type="button" onClick={onRetry}>{COPY.unsupported.action}</button>
       </section>

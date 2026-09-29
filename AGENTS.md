@@ -258,6 +258,71 @@ empty shell to fetchers, so a 200 there means nothing.
 
 ## 6. Findings log
 
+### 2026-09-29 — Xverse is a legacy injected wallet, and discovery scans for those once (D-073)
+
+Xverse offers Starknet to dapps through the injected global
+`window.starknet_xverse`: StarknetKit's connector declares `const id =
+"xverse"`, and its `InjectedConnector` reads ``global_object?.[`starknet_${id}`]``
+([`src/connectors/injected/xverse.ts`](https://github.com/argentlabs/starknetkit/blob/main/src/connectors/injected/xverse.ts),
+[`injected/index.ts`](https://github.com/argentlabs/starknetkit/blob/main/src/connectors/injected/index.ts)).
+Reported but not checked here: Xverse also injects `window.XverseProviders`
+for its own Sats Connect library (discovery ignores it, since the key does not
+start with `starknet`), and no evidence was found that it registers through
+the Wallet Standard. It is not in get-starknet's default registry, so dapps
+add it by hand: [stake-wars PR 10](https://github.com/broody/stake-wars/pull/10)
+(merged 2026-09-22) puts it in a supported-wallet filter with local install
+links. Only the install links carry over here; a filter is the allowlist SPEC
+§5 rule 2 forbids. starknet.io's
+[Push to private](https://www.starknet.io/blog/push-to-private/) (2026-07-15)
+calls Xverse's Wallet API "rolling out", and nothing found since shows its
+dapp-facing STRK20 methods shipped. Traps:
+
+- get-starknet-discovery 6.0.3 scans `Object.getOwnPropertyNames(window)` for
+  `starknet*` keys once, inside `createStore()` (`src/injected-wallet.ts`),
+  and only `_refreshInjectedWallets()` scans again. Wallet Standard
+  registrations are events, so late ones are caught; late injected globals
+  were not.
+- The store prepends every new wallet, from all three discoverers, and
+  de-duplicates by `wallet.name` itself. Its order moves the buttons already
+  on screen, so the session now keeps listed wallets in place and appends new
+  ones (`keepListedOrder`, by object). When a wallet's own Wallet Standard
+  registration replaces the store's injected wrapper of the same name, that
+  is a new object, so it moves to the end once; matching it by name instead
+  would be the identity branch SPEC §5 rule 2 forbids.
+- A scan is not free. Each one wraps every `window.starknet*` object in a new
+  `StarknetInjectedWallet`, whose constructor calls the injected object's
+  `on('accountsChanged')` and `on('networkChanged')`, even for a wallet that
+  is already listed and that the store then drops; nothing removes those
+  listeners. Keep looks bounded (the session's schedule ends at five seconds;
+  a card looks only on mount and on a visible page while it shows), never on
+  an interval.
+- A wallet reaches the unsupported room only if it answers
+  `wallet_supportedWalletApi` with versions below 0.10.3, or fails it with
+  error 162. Any other error maps to `unknown` or `unreachable`, and the
+  player sees "Cannot reach your wallet". Which one a live Xverse gives is
+  unobserved.
+- `https://www.ready.co` is Ready's own site: it links developer docs on
+  `docs.argent.xyz`, and the Firefox listing "Ready Wallet (Formerly Argent)"
+  by ArgentX names `www.ready.co/ready-wallet` as its homepage, though that
+  path now answers 404. The root page leads with Ready's app, not the browser
+  wallet. `https://www.xverse.app` is Xverse's own site and says it connects
+  to Starknet.
+
+*Verified:* the GitHub sources, the stake-wars PR, the starknet.io post,
+www.ready.co, www.xverse.app and the Firefox add-on listing fetched on
+2026-09-29 (the Chrome Web Store page asked for a consent choice and was not
+read); discovery 6.0.3 and wallet-standard 6.0.3 read in `node_modules`;
+`discovery-rescan.test.ts` with fake timers: the 250 ms, 1 s, 2.5 s and 5 s
+looks, `destroy()` clearing them, a throwing look, and the real store listing
+a late `window.starknet_xverse` after Ready with no request to either wallet,
+no selection, and no duplicate or reorder over later looks (all but the order
+test fail with the schedule emptied; both order tests fail without
+`keepListedOrder`); `ConnectRoom.test.tsx` and `ProductionRoot.test.tsx` for
+links only with no wallet, a look on mount and on a visible page (each fails
+without it), and the named unsupported room; `copy.test.ts`,
+`unsupported-copy.test.ts` and `architecture.test.ts`; the forward-compatibility
+regression unchanged and passing. No live Xverse or Ready build was used.
+
 ### 2026-09-29 — A deposit is confirmed from its receipt; the shield allowlist takes any token (D-072)
 
 The pool's `Deposit` event is a `nested` variant of

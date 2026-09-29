@@ -198,11 +198,90 @@ describe('ProductionRoot', () => {
       await flushReact();
     });
 
-    expect(container.textContent).toContain(COPY.unsupported.title);
+    // D-073: the room names the connected wallet by the picker's display name.
+    const room = container.querySelector('[data-testid="wallet-capability-gate"]');
+    expect(room?.querySelector('h2')?.textContent).toBe("Ready can't open the privacy pool yet");
+    expect(room?.textContent).toContain(
+      "Ready is connected but doesn't yet offer the STRK20 privacy methods STRKWORLD needs, so the city stays closed.",
+    );
+    expect(room?.textContent).toContain('or check again once Ready adds them.');
+    expect(room?.querySelector('button')?.textContent).toBe(COPY.unsupported.action);
     expect(captured.current).toBeNull();
     expect(createPresence).not.toHaveBeenCalled();
     await unmountReactRoot(root);
     container.remove();
+  });
+
+  it('offers install links on the entry card only while no wallet is discovered (D-073)', () => {
+    const empty = sessionAt('selection-required', null);
+    const emptySnapshot = { ...empty.getSnapshot(), wallets: [] };
+    const none = renderToStaticMarkup(
+      <ProductionRoot
+        session={{ ...empty, getSnapshot: () => emptySnapshot }}
+        worldOut={createEventBus<WorldEvents>()}
+        shellIn={createEventBus<ShellEvents>()}
+        presence={createPresenceController({})}
+        bridge={recoveryBridge()}
+      />,
+    );
+    const some = renderToStaticMarkup(
+      <ProductionRoot
+        session={sessionAt('selection-required', null)}
+        worldOut={createEventBus<WorldEvents>()}
+        shellIn={createEventBus<ShellEvents>()}
+        presence={createPresenceController({})}
+        bridge={recoveryBridge()}
+      />,
+    );
+
+    expect(none).toContain(COPY.connect.none);
+    expect(none).toContain('data-testid="get-a-wallet"');
+    expect(none).toContain('<a href="https://www.ready.co" target="_blank" rel="noopener noreferrer">Ready</a>');
+    expect(none).toContain('<a href="https://www.xverse.app" target="_blank" rel="noopener noreferrer">Xverse</a>');
+    expect(some).not.toContain('data-testid="get-a-wallet"');
+    expect(some).not.toContain('<a ');
+  });
+
+  it('looks again for wallets when the entry card mounts and when the page becomes visible (D-073)', async () => {
+    const session = sessionAt('selection-required', null);
+    const refreshDiscovery = vi.fn();
+    const connect = vi.fn(session.connect);
+    let visibility: DocumentVisibilityState = 'visible';
+    Object.defineProperty(document, 'visibilityState', { configurable: true, get: () => visibility });
+    const container = document.createElement('div');
+    document.body.appendChild(container);
+    const root = createRoot(container);
+    try {
+      await act(async () => {
+        root.render(
+          <ProductionRoot
+            session={{ ...session, refreshDiscovery, connect }}
+            worldOut={createEventBus<WorldEvents>()}
+            shellIn={createEventBus<ShellEvents>()}
+            presence={createPresenceController({})}
+            bridge={recoveryBridge()}
+          />,
+        );
+        await flushReact();
+      });
+      expect(container.querySelector('[data-testid="wallet-entry-gate"]')).not.toBeNull();
+      expect(refreshDiscovery).toHaveBeenCalledOnce();
+
+      visibility = 'hidden';
+      document.dispatchEvent(new Event('visibilitychange'));
+      expect(refreshDiscovery).toHaveBeenCalledOnce();
+      visibility = 'visible';
+      document.dispatchEvent(new Event('visibilitychange'));
+      expect(refreshDiscovery).toHaveBeenCalledTimes(2);
+      expect(connect).not.toHaveBeenCalled();
+
+      await unmountReactRoot(root);
+      document.dispatchEvent(new Event('visibilitychange'));
+      expect(refreshDiscovery).toHaveBeenCalledTimes(2);
+    } finally {
+      Reflect.deleteProperty(document, 'visibilityState');
+      container.remove();
+    }
   });
 
   it('aborts capability detection when the connected gate is retired', async () => {

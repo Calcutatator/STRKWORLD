@@ -146,6 +146,142 @@ function findButton(node: ReactNode, label: string): ReactElement<{
   return found;
 }
 
+describe('the choose-a-wallet card (D-073)', () => {
+  const ICON = 'data:image/svg+xml,wallet';
+  const choosing = (wallets: WalletSessionSnapshot['wallets']): WalletSessionSnapshot => ({
+    phase: 'selection-required',
+    wallets,
+    selectedKey: null,
+    account: null,
+    generation: 0,
+  });
+
+  async function renderView(wallets: WalletSessionSnapshot['wallets']) {
+    const container = document.createElement('div');
+    const root = createRoot(container);
+    await act(async () => {
+      root.render(ConnectRoomView({
+        connect: { connect: vi.fn(), recheck: vi.fn() } as unknown as Pick<ConnectFlow, 'connect' | 'recheck'>,
+        connectState: { name: 'disconnected' },
+        wallet: { snapshot: choosing(wallets), connect: vi.fn(async () => undefined), refreshDiscovery: vi.fn() },
+      }));
+    });
+    return { container, unmount: () => act(async () => { root.unmount(); }) };
+  }
+
+  it('offers install links only while no wallet is discovered', async () => {
+    const none = await renderView([]);
+    expect(none.container.querySelector('[data-testid="get-a-wallet"]')?.textContent)
+      .toBe('Get a wallet: Ready · Xverse');
+    expect([...none.container.querySelectorAll('a')].map((link) => [
+      link.textContent,
+      link.getAttribute('href'),
+      link.getAttribute('target'),
+      link.getAttribute('rel'),
+    ])).toEqual([
+      ['Ready', 'https://www.ready.co', '_blank', 'noopener noreferrer'],
+      ['Xverse', 'https://www.xverse.app', '_blank', 'noopener noreferrer'],
+    ]);
+    await none.unmount();
+
+    const some = await renderView([{ key: 'wallet-1', name: 'Xverse', icon: ICON }]);
+    expect(some.container.querySelector('[data-testid="get-a-wallet"]')).toBeNull();
+    expect(some.container.querySelector('a')).toBeNull();
+    expect([...some.container.querySelectorAll('button')].map((button) => button.textContent))
+      .toEqual(['Xverse', 'Look again']);
+    await some.unmount();
+  });
+
+  it('looks again when it mounts and when the page becomes visible, and connects nothing', async () => {
+    const refreshDiscovery = vi.fn();
+    const connectWallet = vi.fn(async () => undefined);
+    const detect = vi.fn(async () => ({ name: 'disconnected' as const }));
+    harness.privacy = { connect: { connect: detect }, connectState: { name: 'disconnected' } };
+    harness.wallet = { snapshot: choosing([]), connect: connectWallet, refreshDiscovery };
+    let visibility: DocumentVisibilityState = 'visible';
+    Object.defineProperty(document, 'visibilityState', { configurable: true, get: () => visibility });
+    const container = document.createElement('div');
+    const root = createRoot(container);
+    try {
+      await act(async () => {
+        root.render(<ConnectRoom />);
+      });
+      expect(refreshDiscovery).toHaveBeenCalledOnce();
+
+      visibility = 'hidden';
+      document.dispatchEvent(new Event('visibilitychange'));
+      expect(refreshDiscovery).toHaveBeenCalledOnce();
+      visibility = 'visible';
+      document.dispatchEvent(new Event('visibilitychange'));
+      expect(refreshDiscovery).toHaveBeenCalledTimes(2);
+
+      await act(async () => { root.unmount(); });
+      document.dispatchEvent(new Event('visibilitychange'));
+      expect(refreshDiscovery).toHaveBeenCalledTimes(2);
+      expect(connectWallet).not.toHaveBeenCalled();
+      expect(detect).not.toHaveBeenCalled();
+    } finally {
+      Reflect.deleteProperty(document, 'visibilityState');
+    }
+  });
+});
+
+describe('the unsupported-wallet room (D-073)', () => {
+  async function renderRoom(wallet: Parameters<typeof ConnectRoomView>[0]['wallet']) {
+    const recheck = vi.fn(async () => ({ name: 'unsupported-wallet' as const, walletApiVersion: '0.9.0' }));
+    const container = document.createElement('div');
+    const root = createRoot(container);
+    await act(async () => {
+      root.render(ConnectRoomView({
+        connect: { connect: vi.fn(), recheck } as unknown as Pick<ConnectFlow, 'connect' | 'recheck'>,
+        connectState: { name: 'unsupported-wallet', walletApiVersion: '0.9.0' },
+        wallet,
+      }));
+    });
+    return { container, recheck, unmount: () => act(async () => { root.unmount(); }) };
+  }
+
+  it('names the connected wallet, says the city stays closed, and keeps the recheck', async () => {
+    const { COPY } = await import('../copy.js');
+    const { container, recheck, unmount } = await renderRoom({
+      snapshot: {
+        phase: 'connected',
+        wallets: [
+          { key: 'wallet-1', name: 'Ready', icon: 'data:image/svg+xml,ready' },
+          { key: 'wallet-2', name: 'Xverse', icon: 'data:image/svg+xml,xverse' },
+        ],
+        selectedKey: 'wallet-2',
+        account: '0xabc',
+        generation: 1,
+      },
+      connect: vi.fn(async () => undefined),
+      refreshDiscovery: vi.fn(),
+    });
+
+    const room = container.querySelector('.room-unsupported')!;
+    expect(room.querySelector('h2')?.textContent).toBe("Xverse can't open the privacy pool yet");
+    expect(room.querySelector('p')?.textContent).toBe(
+      "Xverse is connected but doesn't yet offer the STRK20 privacy methods STRKWORLD needs, so the city stays closed. Your funds are fine. Connect a wallet that supports STRK20 private balances, or check again once Xverse adds them.",
+    );
+    expect(room.querySelector('.room-detail')?.textContent).toBe('Wallet API 0.9.0');
+    const button = room.querySelector('button')!;
+    expect(button.textContent).toBe(COPY.unsupported.action);
+    await act(async () => { button.click(); });
+    expect(recheck).toHaveBeenCalledOnce();
+    await unmount();
+  });
+
+  it('says "Your wallet" when the shell has no name for the wallet', async () => {
+    const { container, unmount } = await renderRoom(null);
+
+    const room = container.querySelector('.room-unsupported')!;
+    expect(room.querySelector('h2')?.textContent).toBe("Your wallet can't open the privacy pool yet");
+    expect(room.querySelector('p')?.textContent).toMatch(/^Your wallet is connected but doesn't yet offer /);
+    expect(room.querySelector('p')?.textContent).toMatch(/, or check again once your wallet adds them\.$/);
+    await unmount();
+  });
+});
+
 describe('the not-registered room, folded into the entry gate (D-072)', () => {
   it('renders the gate\'s not-registered card inside a building, with the connect flow\'s recheck', async () => {
     const { COPY } = await import('../copy.js');

@@ -1107,6 +1107,25 @@ button[data-locked="true"] {
   font-size: 0.95rem;
 }
 
+/* D-073: the no-wallet card's install links. Display only; no default blue on
+ * the dark surface. */
+.room-links a {
+  color: var(--ui-accent);
+  font-weight: 700;
+  text-decoration: underline;
+  text-underline-offset: 0.15em;
+}
+
+.room-links a:hover {
+  color: var(--ui-focus);
+}
+
+.room-links a:focus-visible {
+  outline: var(--ui-focus-width) solid var(--ui-focus);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
 /* Inside a building window the room is already framed: it flows as content
  * instead of covering the window (and its Close control). */
 .panel-body .room {

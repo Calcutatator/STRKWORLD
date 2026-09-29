@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { PRIVACY_REGISTER } from './privacy/register.js';
+import { unsupportedCopy } from './connect/unsupported-copy.js';
 import { COPY, allCopyStrings } from './copy.js';
 
 describe('shell copy', () => {
@@ -114,6 +115,33 @@ describe('shell copy', () => {
       for (const line of entryCopy) {
         expect(line, line).not.toMatch(claim);
       }
+    });
+  });
+
+  describe('the wallet cards (D-073)', () => {
+    it('names the connected wallet in the unsupported room, and says the whole city waits', () => {
+      expect(unsupportedCopy('Xverse')).toEqual({
+        title: "Xverse can't open the privacy pool yet",
+        body: "Xverse is connected but doesn't yet offer the STRK20 privacy methods STRKWORLD needs, so the city stays closed. Your funds are fine. Connect a wallet that supports STRK20 private balances, or check again once Xverse adds them.",
+      });
+      // The pre-gate copy promised a walkable city with some doors shut.
+      expect(allCopyStrings(COPY.unsupported).join(' ')).not.toMatch(/doors?/i);
+      expect(COPY.unsupported.action).toBe('Connect a different wallet');
+    });
+
+    it('says "Your wallet" when the shell has no name for it', () => {
+      expect(unsupportedCopy(null)).toEqual({
+        title: "Your wallet can't open the privacy pool yet",
+        body: "Your wallet is connected but doesn't yet offer the STRK20 privacy methods STRKWORLD needs, so the city stays closed. Your funds are fine. Connect a wallet that supports STRK20 private balances, or check again once your wallet adds them.",
+      });
+    });
+
+    it('points at two wallet sites plainly, over https', () => {
+      expect(COPY.connect.getWallet).toBe('Get a wallet:');
+      expect(COPY.connect.installLinks).toEqual([
+        { label: 'Ready', href: 'https://www.ready.co' },
+        { label: 'Xverse', href: 'https://www.xverse.app' },
+      ]);
     });
   });
 
