@@ -328,6 +328,25 @@ export function visitPanel(state: unknown): string | null {
   return typeof station === 'string' ? `station ${station}` : null;
 }
 
+/** The Privacy Plaza's stations (D-076), the only ids a plaza line may name. */
+const PLAZA_STATIONS = setOf({ 'plaza:monument': true, 'plaza:shells': true });
+
+/**
+ * The Privacy Plaza window a visit state shows (D-076), or null: its
+ * station id, from a fixed list, and nothing else.
+ */
+export function plazaPanel(state: unknown): string | null {
+  if (readData(state, 'name') !== 'plaza') return null;
+  const station = readData(state, 'station');
+  return PLAZA_STATIONS.has(station) ? String(station) : null;
+}
+
+/** A shell-game result as one entry, or null: `plaza.shells result=win`. */
+export function describePlazaShells(result: unknown): { level: DebugLevel; event: string; detail: string } | null {
+  if (result !== 'win' && result !== 'lose') return null;
+  return { level: 'info', event: 'plaza.shells', detail: `result=${result}` };
+}
+
 /*
  * The Bank's steps (D-070). Each field is admitted only from its own fixed
  * list, typed against the union it comes from, so whatever a caller passes, no

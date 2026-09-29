@@ -10,6 +10,7 @@ import { useEffect, useMemo, useState, useRef } from 'react';
 import { App } from '../App.js';
 import type { BridgeRuntimeLoader } from '../bridge/BridgeProvider.js';
 import type { DegenCatalogSource } from '../panels/exchange/degen-catalog.js';
+import type { PoolStatsSource } from '../plaza/pool-stats.js';
 import { STRK_TOKEN } from '../bridge/bridge-machine.js';
 import { createConnectFlow, type ConnectFlow, type ConnectState } from '../connect/connect-machine.js';
 import { DiscoveryRescan } from '../connect/DiscoveryRescan.js';
@@ -44,6 +45,7 @@ export function ProductionRoot({
   createShieldPlanner,
   policy = detectRoutePolicy(),
   degenCatalog,
+  poolStats,
 }: {
   session: WalletSession;
   worldOut: EventBus<WorldEvents>;
@@ -60,6 +62,8 @@ export function ProductionRoot({
   policy?: WalletRoutePolicy | null;
   /** The degen floor's list, read from the same-origin backend (D-067). */
   degenCatalog?: DegenCatalogSource;
+  /** The Privacy Plaza's pool stats, read from the same-origin backend (D-076). */
+  poolStats?: PoolStatsSource;
 }) {
   // A boolean, not the policy object: the default policy is re-parsed on every
   // render, and a new planner per render would reset the Bridge panel.
@@ -79,6 +83,7 @@ export function ProductionRoot({
         bridge={bridge}
         shieldPlanner={shieldPlanner}
         degenCatalog={degenCatalog}
+        poolStats={poolStats}
         policy={policy}
       />
     </WalletSessionProvider>
@@ -129,6 +134,7 @@ function ProductionApp({
   bridge,
   shieldPlanner,
   degenCatalog,
+  poolStats,
   policy,
 }: {
   session: WalletSession;
@@ -139,6 +145,7 @@ function ProductionApp({
   bridge: { loadRuntime: BridgeRuntimeLoader };
   shieldPlanner: PublicShieldPlanner | null;
   degenCatalog?: DegenCatalogSource;
+  poolStats?: PoolStatsSource;
   policy: WalletRoutePolicy | null;
 }) {
   const wallet = useWalletSessionOptional();
@@ -159,6 +166,7 @@ function ProductionApp({
       bridge={bridge}
       shieldPlanner={shieldPlanner}
       degenCatalog={degenCatalog}
+      poolStats={poolStats}
       policy={policy}
     />
   );
@@ -174,6 +182,7 @@ function WalletCapabilityGate({
   bridge,
   shieldPlanner,
   degenCatalog,
+  poolStats,
   policy,
 }: {
   session: WalletSession;
@@ -185,6 +194,7 @@ function WalletCapabilityGate({
   bridge: { loadRuntime: BridgeRuntimeLoader };
   shieldPlanner: PublicShieldPlanner | null;
   degenCatalog?: DegenCatalogSource;
+  poolStats?: PoolStatsSource;
   policy: WalletRoutePolicy | null;
 }) {
   const connect = useMemo(
@@ -243,6 +253,7 @@ function WalletCapabilityGate({
           bridge={bridge}
           shieldPlanner={shieldPlanner}
           degenCatalog={degenCatalog}
+          poolStats={poolStats}
         />
       </EntryGate>
     );
@@ -267,6 +278,7 @@ function ConnectedProductionApp({
   bridge,
   shieldPlanner,
   degenCatalog,
+  poolStats,
 }: {
   session: WalletSession;
   initialConnectState: ConnectState;
@@ -277,6 +289,7 @@ function ConnectedProductionApp({
   bridge: { loadRuntime: BridgeRuntimeLoader };
   shieldPlanner: PublicShieldPlanner | null;
   degenCatalog?: DegenCatalogSource;
+  poolStats?: PoolStatsSource;
 }) {
   const [activePresence, setActivePresence] = useState<PresenceController | null>(presence ?? null);
   const owner = useRef<PresenceController | null>(presence ?? null);
@@ -322,6 +335,7 @@ function ConnectedProductionApp({
         planner: shieldPlanner,
       }}
       degenCatalog={degenCatalog}
+      poolStats={poolStats}
     />
   );
 }

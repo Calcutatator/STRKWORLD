@@ -7,6 +7,8 @@ import { ExchangePanel } from '../panels/exchange/ExchangePanel.js';
 import { BridgePanel } from '../panels/bridge/BridgePanel.js';
 import { LockedRoom, UnbuiltRoom } from '../panels/LockedRoom.js';
 import { PanelFrame } from '../panels/PanelFrame.js';
+import { MonumentPanel } from '../panels/plaza/MonumentPanel.js';
+import { ShellGamePanel } from '../panels/plaza/ShellGamePanel.js';
 import { resolveRoom, type PanelRegistry } from '../panels/panel-framework.js';
 import { BUILDING_PANELS, type BuildingPanelDescriptor } from '../panels/registry.js';
 import { PRIVACY_REGISTER, type RouteGrade } from '../privacy/register.js';
@@ -150,6 +152,25 @@ export function VisitLayerView({
         onClose={onDismissLocked}
       />
     );
+  }
+
+  // D-076: a Privacy Plaza window, opened on the street. No building, so no
+  // Menu Mode or Leave building; no money, so no wallet or connect room.
+  if (state.name === 'plaza') {
+    const station = resolveStation('plaza', state.station, register);
+    if (station.status === 'locked') {
+      return (
+        <LockedRoom
+          building="plaza"
+          reason={station.door.reason ?? 'unknown-route'}
+          message={station.door.message}
+          onClose={onCloseSurface}
+        />
+      );
+    }
+    if (station.definition.view === 'plaza-monument') return <MonumentPanel onClose={onCloseSurface} />;
+    if (station.definition.view === 'plaza-shells') return <ShellGamePanel onClose={onCloseSurface} />;
+    return null;
   }
 
   const withControls = (surface: ReactElement | null, showMenu = false): ReactElement => (

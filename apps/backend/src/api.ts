@@ -8,6 +8,7 @@ import {
   type RequestRateLimiterPort,
   type SponsorshipBudgetPort,
 } from './metrics.js';
+import { POOL_STATS_RATE_LIMIT } from './pool-stats.js';
 import {
   RELAY_NOT_CONFIGURED_CODE,
   RELAY_NOT_CONFIGURED_MESSAGE,
@@ -29,6 +30,7 @@ import type {
   FeeAuthorizationClaims,
   PaymasterPort,
   PoolRpcPort,
+  PoolStatsPort,
   PrivateRoute,
   RoutePolicy,
   SwapPlannerPort,
@@ -51,6 +53,8 @@ const MAX_UINT256 = (1n << 256n) - 1n;
 const MAINNET_CHAIN_ID = '0x534e5f4d41494e';
 /** The degen floor's token list (D-067): the one GET route, and it reads nothing from the request. */
 export const DEGEN_TOKENS_PATH = '/v1/degen/tokens';
+/** The Privacy Plaza's public pool stats (D-076): aggregates from the background cache. */
+export const POOL_STATS_PATH = '/v1/rpc/pool-stats';
 
 export interface BackendApiOptions {
   config: BackendConfig;
@@ -63,7 +67,11 @@ export interface BackendApiOptions {
   swapPlanner?: SwapPlannerPort;
   /** The backend's own degen list (D-067). Without it, degen mode stays off whatever the config says. */
   degenCatalog?: DegenCatalogPort;
+  /** The Privacy Plaza's cached pool stats (D-076). Without it, that route answers 503. */
+  poolStats?: PoolStatsPort;
   rateLimiter?: RequestRateLimiterPort;
+  /** The pool-stats route's own rate window (D-076), apart from `rateLimiter`'s. */
+  poolStatsRateLimiter?: RequestRateLimiterPort;
   sponsorshipBudget?: SponsorshipBudgetPort;
   submissionQueue?: SubmissionQueuePort;
   /**
@@ -76,6 +84,7 @@ export interface BackendApiOptions {
 export class BackendApi {
   readonly metrics = new AggregateMetrics();
   private readonly limiter: RequestRateLimiterPort;
+  private readonly poolStatsLimiter: RequestRateLimiterPort;
   private readonly config: BackendConfig;
   private readonly requestTimeoutMs: number;
   private readonly paymaster: PaymasterPort;
@@ -85,6 +94,7 @@ export class BackendApi {
   private readonly sleep: (ms: number) => Promise<void>;
   private readonly swapPlanner?: SwapPlannerPort;
   private readonly degenCatalog?: DegenCatalogPort;
+  private readonly poolStatsPort?: PoolStatsPort;
   private readonly clockNow: () => number;
   private readonly budget: SponsorshipBudgetPort;
   private readonly submissionQueue: SubmissionQueuePort;
@@ -101,10 +111,14 @@ export class BackendApi {
     this.sleep = options.sleep ?? ((ms) => new Promise((resolve) => setTimeout(resolve, ms)));
     this.swapPlanner = options.swapPlanner;
     this.degenCatalog = options.degenCatalog;
+    this.poolStatsPort = options.poolStats;
     const now = options.now ?? Date.now;
     this.clockNow = now;
     this.limiter = options.rateLimiter ?? new AggregateRateLimiter(
       this.config.rateLimit.maxRequests, this.config.rateLimit.windowMs, now,
+    );
+    this.poolStatsLimiter = options.poolStatsRateLimiter ?? new AggregateRateLimiter(
+      POOL_STATS_RATE_LIMIT.maxRequests, POOL_STATS_RATE_LIMIT.windowMs, now,
     );
     this.budget = options.sponsorshipBudget ?? new AggregateBudget(
       this.config.sponsorshipBudget.maxFeeAmount, this.config.sponsorshipBudget.windowMs, now,
@@ -132,7 +146,11 @@ export class BackendApi {
       if (this.config.globalEnabled && request.method === 'POST' && request.path === '/v1/private/submissions') {
         preflightSubmission(request.body, this.config);
       }
-      if (!await abortable(Promise.resolve(this.limiter.take()), deadline.signal)) {
+      // D-076: the plaza's pool stats come from memory and cost the chain
+      // nothing, so they take their own rate window, never a slot in the one
+      // the private routes share.
+      const limiter = request.path === POOL_STATS_PATH ? this.poolStatsLimiter : this.limiter;
+      if (!await abortable(Promise.resolve(limiter.take()), deadline.signal)) {
         this.metrics.limited();
         return { status: 429, body: { code: 'RATE_LIMITED', message: 'Service is busy. Try again shortly.' } };
       }
@@ -155,6 +173,7 @@ export class BackendApi {
           case '/v1/rpc/pool-config': response = await abortable(this.poolConfig(request.body, deadline.signal), deadline.signal); break;
           case '/v1/rpc/public-key': response = await abortable(this.publicKey(request.body, deadline.signal), deadline.signal); break;
           case '/v1/rpc/receipt': response = await abortable(this.receipt(request.body, deadline.signal), deadline.signal); break;
+          case POOL_STATS_PATH: response = this.poolStats(request.body); break;
           case DEGEN_TOKENS_PATH: throw new ApiFailure(405, 'Method not allowed.');
           default: throw new ApiFailure(404, 'Endpoint not found.');
         }
@@ -466,6 +485,39 @@ export class BackendApi {
     requireVersion(value);
     const hash = requireNonzeroFelt(value.transactionHash, 'transaction hash');
     return { status: 200, body: await this.rpc.getReceipt(hash, signal) };
+  }
+
+  /**
+   * D-076: the Privacy Plaza's public pool stats, straight from the cache,
+   * which never waits on the chain. Aggregates only: two counts and a pool
+   * balance per pinned token, each null until the background scan has one.
+   * The request carries nothing but the version, so no player can choose,
+   * add or probe a contract here.
+   */
+  private poolStats(body: unknown): ApiResponse {
+    requireVersion(requireRecord(body, ['v']));
+    if (!this.poolStatsPort) throw new ApiFailure(503, 'Pool stats are unavailable.');
+    const snapshot = this.poolStatsPort.snapshot();
+    return {
+      status: 200,
+      body: {
+        accounts: snapshot.accounts,
+        deposits24h: snapshot.deposits24h,
+        held: snapshot.held === null
+          ? null
+          : snapshot.held.map(({ token, amount }) => ({ token, amount: amount.toString() })),
+      },
+    };
+  }
+
+  /**
+   * Start the pool stats' background refresh at boot, so the first visitor
+   * to the plaza need not wait for the first registration scan. Nothing
+   * while the kill switch is off: the route would refuse every read anyway.
+   */
+  warmPoolStats(): void {
+    if (!this.config.globalEnabled) return;
+    this.poolStatsPort?.warm?.();
   }
 
   /**

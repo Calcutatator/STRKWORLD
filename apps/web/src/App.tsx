@@ -15,6 +15,8 @@ import { HudLayer } from './hud/HudLayer.js';
 import type { DegenCatalogSource } from './panels/exchange/degen-catalog.js';
 import { DegenCatalogProvider } from './panels/exchange/DegenCatalogProvider.js';
 import { SeamEntryGate } from './connect/EntryGate.js';
+import { PlazaProvider } from './plaza/PlazaProvider.js';
+import type { PoolStatsSource } from './plaza/pool-stats.js';
 
 /**
  * The composition root, as a component.
@@ -53,6 +55,7 @@ export function App({
   walletSession,
   initialConnectState,
   degenCatalog,
+  poolStats,
 }: {
   worldOut: EventBus<WorldEvents>;
   shellIn: EventBus<ShellEvents>;
@@ -67,6 +70,8 @@ export function App({
   bridge?: Omit<BridgeProviderProps, 'children' | 'demo' | 'fallback' | 'build'>;
   /** The degen floor's list from the backend (D-067); the demo uses its own static list. */
   degenCatalog?: DegenCatalogSource;
+  /** The Privacy Plaza's pool stats from the backend (D-076); the demo uses sample figures. */
+  poolStats?: PoolStatsSource;
 }) {
   // Presence owns one explicit lifecycle. Effect cleanup only removes event
   // listeners; the controller is destroyed by the composition root's owner.
@@ -96,9 +101,11 @@ export function App({
       >
         <BridgeProvider {...bridge} demo={!bridge}>
           <DegenCatalogProvider source={degenCatalog} demo={!operations}>
-            <ArrivalNudgeProvider world={worldOut}>
-              {operations ? city : <SeamEntryGate>{city}</SeamEntryGate>}
-            </ArrivalNudgeProvider>
+            <PlazaProvider world={worldOut} shell={shellIn} source={poolStats} demo={!operations}>
+              <ArrivalNudgeProvider world={worldOut}>
+                {operations ? city : <SeamEntryGate>{city}</SeamEntryGate>}
+              </ArrivalNudgeProvider>
+            </PlazaProvider>
           </DegenCatalogProvider>
         </BridgeProvider>
       </PrivacyProvider>

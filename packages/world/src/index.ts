@@ -205,3 +205,25 @@ export {
   normalizeSandboxTile,
 } from './sandbox-channel.js';
 export type { SandboxChannel } from './sandbox-channel.js';
+
+// The Privacy Plaza (D-076): its tile layout and its two street stations,
+// used with E. No money and no route: the Shell maps the station ids to its
+// client-only windows.
+export {
+  PLAZA_AREA,
+  PLAZA_FIXTURES,
+  PLAZA_MONUMENT_STATION,
+  PLAZA_NEARBY,
+  PLAZA_SHELLS_STATION,
+  PLAZA_SIGN_TEXT,
+  PLAZA_STATIONS,
+  isPlazaNearby,
+  plazaStationAtApproach,
+} from './map/plaza.js';
+export type { PlazaFacing, PlazaFixture, PlazaFixtureKind, PlazaRect, PlazaStation } from './map/plaza.js';
+export {
+  EMPTY_PLAZA_STATS,
+  createPlazaController,
+  normalizePlazaStats,
+} from './plaza-stations.js';
+export type { PlazaController, PlazaControllerOptions, PlazaState, PlazaStatsPresentation } from './plaza-stations.js';

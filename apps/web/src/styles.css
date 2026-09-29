@@ -2603,3 +2603,291 @@ button[data-locked="true"] {
     text-decoration-color: LinkText;
   }
 }
+
+/* ===========================================================================
+ * The Privacy Plaza (D-076): the monument's window and "Where's the note?".
+ *
+ * Both windows carry `data-building="plaza"`, which re-points no token, so
+ * they wear the game's own golden-hour theme. The shell game's motion is
+ * CSS transforms on the theme's tokens: each cup sits at `--slot` along the
+ * table and glides to its next slot, one passing in front and one behind.
+ * For a player who asked for less motion the table cross-fades instead
+ * (`data-motion="reduced"`, set from the same preference, and the media
+ * query below as a floor).
+ * ======================================================================== */
+
+.plaza-stats {
+  display: grid;
+  gap: 0.45rem;
+  margin: 0.25rem 0 0.85rem;
+}
+
+.plaza-stats > div {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 0.6rem 0.8rem;
+  border: 1px solid var(--ui-line-subtle);
+  border-radius: var(--ui-radius-inner);
+  background: var(--ui-surface-raised);
+}
+
+.plaza-stats dt {
+  color: var(--ui-text-dim);
+  font-weight: 600;
+}
+
+.plaza-stats dd {
+  margin: 0;
+  color: var(--ui-heading);
+  font-family: var(--ui-number-font);
+  font-size: 1.15rem;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+
+.plaza-held {
+  display: grid;
+  gap: 0.1rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.plaza-held > li {
+  font-size: 1rem;
+}
+
+.plaza-stats-failed {
+  --ui-callout-edge: var(--ui-warn);
+}
+
+.plaza-subhead {
+  margin: 1rem 0 0.35rem;
+  color: var(--ui-heading);
+  font-size: 1rem;
+}
+
+.plaza-set {
+  margin: 0 0 0.6rem;
+}
+
+.plaza-edges,
+.shell-fun {
+  margin: 0;
+  color: var(--ui-text-dim);
+  font-size: 0.9rem;
+}
+
+.shell-table {
+  --cup-size: 4.2rem;
+  --cup-gap: 6.2rem;
+  --shell-fade-ms: 160ms;
+  position: relative;
+  width: calc(var(--cup-gap) * 2 + var(--cup-size));
+  height: 7.6rem;
+  margin: 0.5rem auto 0.75rem;
+  border-radius: 50% / 34%;
+  background:
+    radial-gradient(120% 90% at 50% 30%, color-mix(in srgb, var(--ui-accent) 26%, var(--ui-surface-raised)), var(--ui-surface-sunken));
+  box-shadow: inset 0 -6px 0 rgb(0 0 0 / 0.22), 0 10px 22px rgb(0 0 0 / 0.28);
+}
+
+.shell-cup,
+.shell-note {
+  position: absolute;
+  left: 0;
+  transform: translateX(calc(var(--slot, 0) * var(--cup-gap))) translateY(var(--lift, 0)) scale(var(--scale, 1));
+}
+
+.shell-cup {
+  bottom: 1.6rem;
+  z-index: 2;
+  width: var(--cup-size);
+  height: calc(var(--cup-size) * 0.92);
+  clip-path: polygon(20% 0, 80% 0, 100% 100%, 0 100%);
+  border-radius: 0.5rem 0.5rem 0.2rem 0.2rem;
+  background:
+    linear-gradient(90deg, rgb(0 0 0 / 0.16), transparent 30%, rgb(255 255 255 / 0.18) 55%, transparent 75%),
+    linear-gradient(var(--ui-heading), color-mix(in srgb, var(--ui-heading) 72%, var(--ui-accent)));
+  transition:
+    transform var(--shell-swap-ms, 400ms) ease-in-out,
+    opacity var(--shell-fade-ms) ease;
+}
+
+.shell-cup[data-moving="front"] {
+  --lift: 0.7rem;
+  --scale: 1.05;
+  z-index: 3;
+}
+
+.shell-cup[data-moving="back"] {
+  --lift: -0.7rem;
+  --scale: 0.95;
+  z-index: 1;
+}
+
+.shell-cup[data-lifted="true"] {
+  --lift: -2.3rem;
+}
+
+.shell-cup[data-faded="true"] {
+  opacity: 0;
+}
+
+.shell-note {
+  bottom: 1.75rem;
+  z-index: 1;
+  width: var(--cup-size);
+  height: 1.5rem;
+  opacity: 0;
+  background: radial-gradient(closest-side, var(--ui-accent) 62%, color-mix(in srgb, var(--ui-accent) 55%, #000) 66%, transparent 70%);
+  transition:
+    transform var(--shell-swap-ms, 400ms) ease-in-out,
+    opacity var(--shell-fade-ms) ease;
+}
+
+.shell-note[data-shown="true"] {
+  opacity: 1;
+}
+
+.shell-picks {
+  position: absolute;
+  inset: 0;
+  z-index: 4;
+}
+
+.shell-pick {
+  --btn-bg: transparent;
+  --btn-bg-hover: color-mix(in srgb, var(--ui-accent) 14%, transparent);
+  --btn-border: transparent;
+  --btn-border-hover: var(--ui-accent);
+  --btn-edge: transparent;
+  --btn-inset: 0 0 #0000;
+  --btn-drop: 0 0 #0000;
+  --btn-drop-active: 0 0 #0000;
+  --btn-depth: 0px;
+  --btn-lift: 0px;
+  --btn-press: 0px;
+  /* Placed by `left`, not a transform: the shared button states own `transform`. */
+  position: absolute;
+  left: calc(var(--slot, 0) * var(--cup-gap));
+  bottom: 0.2rem;
+  width: var(--cup-size);
+  height: calc(var(--cup-size) * 1.45);
+  padding: 0;
+  border-radius: var(--ui-radius-inner);
+}
+
+.shell-pick:disabled {
+  cursor: default;
+}
+
+.shell-pick:focus-visible {
+  outline: var(--ui-focus-width) solid var(--ui-focus);
+  outline-offset: 3px;
+}
+
+.shell-pick[data-picked="true"] {
+  border-color: var(--ui-focus);
+}
+
+.shell-pick-label {
+  position: absolute;
+  inset: auto 0 -1.35rem;
+  color: var(--ui-text-dim);
+  font-size: 0.78rem;
+  font-weight: 700;
+}
+
+.shell-status {
+  min-height: 1.5em;
+  margin: 1.4rem 0 0.6rem;
+  font-weight: 700;
+  text-align: center;
+}
+
+.shell-status[data-result="win"] {
+  color: var(--ui-success);
+}
+
+.shell-controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.6rem 1rem;
+  margin-bottom: 0.7rem;
+}
+
+.shell-streak {
+  margin: 0;
+  color: var(--ui-text-dim);
+  font-weight: 600;
+}
+
+.shell-streak > strong {
+  color: var(--ui-heading);
+  font-variant-numeric: tabular-nums;
+}
+
+/* The table's one call to action. */
+button.shell-start {
+  --btn-bg: var(--ui-primary-bg);
+  --btn-bg-hover: var(--ui-primary-bg-hover);
+  --btn-text: var(--ui-primary-text);
+  --btn-border: var(--ui-primary-border);
+  --btn-border-hover: var(--ui-primary-border-hover);
+  --btn-edge: var(--ui-primary-edge);
+  --btn-inset: var(--ui-primary-inset);
+  --btn-glow: var(--ui-primary-glow);
+}
+
+/* Reduced motion: nothing glides or lifts; the cups cross-fade in place. */
+.shell-table[data-motion="reduced"] :is(.shell-cup, .shell-note) {
+  transition: opacity var(--shell-fade-ms) ease;
+}
+
+.shell-table[data-motion="reduced"] .shell-cup {
+  --lift: 0;
+  --scale: 1;
+}
+
+.shell-table[data-motion="reduced"] .shell-cup[data-lifted="true"] {
+  opacity: 0.28;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .shell-table :is(.shell-cup, .shell-note) {
+    transition: opacity var(--shell-fade-ms) ease;
+  }
+
+  .shell-table .shell-cup {
+    --lift: 0;
+    --scale: 1;
+  }
+
+  .shell-table .shell-cup[data-lifted="true"] {
+    opacity: 0.28;
+  }
+}
+
+@media (max-width: 480px) {
+  .shell-table {
+    --cup-size: 3.5rem;
+    --cup-gap: 5rem;
+    height: 6.6rem;
+  }
+}
+
+@media (forced-colors: active) {
+  .shell-cup {
+    background: CanvasText;
+  }
+
+  .shell-note {
+    background: Highlight;
+  }
+}

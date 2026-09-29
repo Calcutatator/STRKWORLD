@@ -26,6 +26,7 @@ import {
   debugConnectState,
   debugFailure,
   debugGate,
+  debugPlazaShells,
   debugSandboxBurst,
   debugVisit,
   debugWalletSession,
@@ -597,6 +598,34 @@ describe('what it captures', () => {
     ]);
     expect(JSON.stringify(entries())).not.toContain(address);
     expect(JSON.stringify(entries())).not.toContain('12.5');
+  });
+
+  it('records Privacy Plaza windows by station and shell-game results by outcome, with no identifiers (D-076)', async () => {
+    const { entries, tick, world } = harness();
+    const visits = createVisitController(createEventBus());
+    const stop = visits.listen(world);
+    world.emit('station:activated', { building: 'plaza', station: 'plaza:shells' });
+    debugPlazaShells('win');
+    debugPlazaShells('lose');
+    debugPlazaShells({ result: 'win', streak: 3 } as never);
+    debugPlazaShells('0x0123456789abcdef' as never);
+    visits.closeSurface();
+    world.emit('station:activated', { building: 'plaza', station: 'plaza:monument' });
+    visits.closeSurface();
+    stop();
+    await tick();
+    expect(entries().filter((entry) => entry.event.startsWith('plaza.')).map(({ level, event, detail }) => [level, event, detail])).toEqual([
+      ['info', 'plaza.open', 'station=plaza:shells'],
+      ['info', 'plaza.shells', 'result=win'],
+      ['info', 'plaza.shells', 'result=lose'],
+      ['info', 'plaza.close', 'station=plaza:shells'],
+      ['info', 'plaza.open', 'station=plaza:monument'],
+      ['info', 'plaza.close', 'station=plaza:monument'],
+    ]);
+    // The activation itself is logged like any station's, and nothing else is.
+    expect(entries().filter((entry) => entry.event === 'station.activate').map((entry) => entry.detail)).toEqual(['plaza:shells', 'plaza:monument']);
+    expect(JSON.stringify(entries())).not.toContain('0123456789abcdef');
+    expect(JSON.stringify(entries())).not.toContain('streak');
   });
 
   it('names the relay failure kind, so a missing avnu key is legible in the log (D-070)', async () => {

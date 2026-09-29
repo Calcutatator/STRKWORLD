@@ -20,6 +20,16 @@ type BridgeStationDefinition = {
   station: StationId; building: 'bridge'; label: string; routes: readonly string[];
   view: 'bridge';
 };
+/**
+ * The Privacy Plaza's two windows (D-076). No money and no route: `routes`
+ * is empty on purpose, so nothing here reaches the privacy register, and
+ * the plaza needs no wallet. The station still resolves here before its
+ * window opens, and an unknown plaza id stays locked.
+ */
+type PlazaStationDefinition = {
+  station: StationId; building: 'plaza'; label: string; routes: readonly [];
+  view: 'plaza-monument' | 'plaza-shells';
+};
 
 /**
  * Shell-owned meaning for an opaque station id.
@@ -28,7 +38,11 @@ type BridgeStationDefinition = {
  * label and lock state; routes, modes and privacy grades stay here with the
  * financial controls they admit (D-033).
  */
-export type StationDefinition = BankStationDefinition | ExchangeStationDefinition | BridgeStationDefinition;
+export type StationDefinition =
+  | BankStationDefinition
+  | ExchangeStationDefinition
+  | BridgeStationDefinition
+  | PlazaStationDefinition;
 
 export interface StationCapabilities {
   /** The account reader is deliberately coarse: the World only gets a lock bit. */
@@ -98,6 +112,22 @@ const STATIONS: readonly StationDefinition[] = Object.freeze([
     routes: ['bridge.deposit'],
     view: 'bridge',
   },
+  // The Privacy Plaza (D-076): its stations stand on the street, and open
+  // with E. Client-only windows with no route, so no privacy grade applies.
+  {
+    station: 'plaza:monument',
+    building: 'plaza',
+    label: 'POOL STATS',
+    routes: [],
+    view: 'plaza-monument',
+  },
+  {
+    station: 'plaza:shells',
+    building: 'plaza',
+    label: "WHERE'S THE NOTE?",
+    routes: [],
+    view: 'plaza-shells',
+  },
 ] as const).map((definition) => freezeStationDefinition(definition));
 
 export type StationResolution =
@@ -139,6 +169,10 @@ export function resolveStation(
       door: routeDoor('__unknown_station__', register, policy),
     };
   }
+
+  // The plaza's windows move no money and take no route (D-076): once the id
+  // resolves, they open.
+  if (definition.building === 'plaza') return { status: 'available', definition };
 
   const doors = definition.routes.map((route) => routeDoor(route, register, policy));
   const hardLock = doors.find((door) => !door.open && door.reason !== 'not-enabled');

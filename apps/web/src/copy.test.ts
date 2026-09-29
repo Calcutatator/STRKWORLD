@@ -287,6 +287,38 @@ describe('shell copy', () => {
     });
   });
 
+  describe('the Privacy Plaza (D-076)', () => {
+    const plazaCopy = allCopyStrings(COPY.plaza);
+
+    it("ties the shell game to the pool in the lead's words, kept to what the pool hides", () => {
+      expect(COPY.plaza.shells.pool).toBe(
+        'In the pool, notes look alike from outside. Without your viewing key, no one can tell which ones are yours.',
+      );
+      expect(COPY.plaza.shells.fun).toBe('Just for fun: no money, no wallet, nothing saved.');
+    });
+
+    it('explains the anonymity set in three plain sentences, and that the edges are public', () => {
+      expect(COPY.plaza.monument.set).toEqual([
+        'An anonymity set is the crowd you hide in: everyone who could have made the move you made.',
+        'Each account that joins the pool makes every other one harder to pick out.',
+        'So the more people use the pool, the more privacy everyone in it gets.',
+      ]);
+      expect(COPY.plaza.monument.edges).toMatch(/^Deposits and withdrawals are public/);
+    });
+
+    it('says the figures are public and about nobody in particular, and labels demo figures', () => {
+      expect(COPY.plaza.monument.intro).toMatch(/^Public figures for the whole STRK20 privacy pool/);
+      expect(COPY.plaza.monument.intro).toMatch(/Nothing here is about you\.$/);
+      expect(COPY.plaza.monument.demo).toMatch(/^Demo figures/);
+    });
+
+    it('never overclaims: no untraceable, unlinkable or guaranteed privacy', () => {
+      const claim = /\b(?:untraceable|unlinkable|invisible|anonymous\w*|confidential|guarantee\w*|completely|always private)\b/i;
+      expect(plazaCopy.length).toBeGreaterThan(20);
+      for (const line of plazaCopy) expect(line, line).not.toMatch(claim);
+    });
+  });
+
   it('never promises that timing or a batch hides more than it does', () => {
     for (const line of allCopyStrings()) {
       expect(line.toLowerCase(), line).not.toContain('untraceable');

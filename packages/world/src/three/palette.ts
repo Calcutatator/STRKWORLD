@@ -364,6 +364,92 @@ export const SANDBOX_THEME = Object.freeze({
   } satisfies SignStyleOptions),
 });
 
+/**
+ * The Privacy Plaza (D-076): warm sandstone paving and furniture in the
+ * street's golden-hour palette, and a monument dressed as the pool it
+ * reports on, in STRK20's near-black stone and burnt-orange light, with its
+ * figures on STRK20 plates.
+ */
+export const PLAZA_THEME = Object.freeze({
+  slab: 0xd9ccb3,
+  slabAlt: 0xcec0a4,
+  grout: 0xa4977f,
+  border: 0xbba98c,
+  ring: 0x8f7f69,
+  kerb: 0xa39c91,
+  stone: 0xc8b89c,
+  stoneDark: 0x9d8d74,
+  soil: 0x5a4535,
+  wood: 0x9c6a43,
+  woodDark: 0x7d5234,
+  iron: 0x2e3338,
+  cup: 0xf2ece0,
+  monument: lift(STRK20.raised, 0.1),
+  monumentStep: lift(STRK20.surface, 0.16),
+  monumentTrim: lift(STRK20.hairline, 0.13),
+  glow: STRK20.orange,
+  lamp: 0xffd28a,
+  /** The gateway sign: the Bank facade's STRK20 type, sized for the lintel. */
+  sign: Object.freeze({
+    width: 3.4,
+    height: 0.72,
+    background: css(STRK20.surface),
+    foreground: css(STRK20.text),
+    accent: css(STRK20.orange),
+    gradient: Object.freeze([css(STRK20.cream), css(STRK20.blush), css(STRK20.peach)]),
+    cornerRadius: 0.05,
+    borderWidth: 0.04,
+    hairline: false,
+    titleFont: 'display',
+    titleTracking: -0.02,
+    subtitleFont: 'mono',
+    subtitleTracking: 0.1,
+    subtitleColor: css(STRK20.peach),
+    uppercase: true,
+  } satisfies SignStyleOptions),
+  /** A monument face: the STRK20 brand plate, figure first, caption below. */
+  face: Object.freeze({
+    width: 1.12,
+    height: 0.9,
+    background: css(STRK20.black),
+    foreground: css(STRK20.text),
+    accent: css(STRK20.orange),
+    gradient: Object.freeze([css(STRK20.cream), css(STRK20.blush), css(STRK20.peach)]),
+    cornerRadius: 0.06,
+    borderWidth: 0.04,
+    hairline: false,
+    titleFont: 'display',
+    titleWeight: 900,
+    titleTracking: -0.01,
+    subtitleFont: 'mono',
+    subtitleTracking: 0.08,
+    subtitleColor: css(STRK20.peach),
+    uppercase: true,
+  } satisfies SignStyleOptions),
+  /** The shell-game table's tent card. */
+  card: Object.freeze({
+    width: 0.78,
+    height: 0.2,
+    background: '#fff6e3',
+    foreground: '#3b2a14',
+    accent: css(STRK20.orange),
+    cornerRadius: 0.2,
+    borderWidth: 0.06,
+    hairline: false,
+    titleFont: 'rounded',
+    uppercase: true,
+  } satisfies SignStyleOptions),
+  /** The "E" prompt over a station the player stands at. */
+  prompt: Object.freeze({
+    lineHeight: 0.24,
+    font: 'rounded',
+    foreground: css(STRK20.cream),
+    background: 'rgba(13,13,13,0.86)',
+    border: css(STRK20.orange),
+    uppercase: true,
+  } satisfies FloatingStyleOptions),
+});
+
 /** A facade sign: board size, CSS colours and the optional type treatment. */
 export type SignStyle = SignStyleOptions;
 
@@ -406,7 +492,11 @@ export interface BuildingTheme {
   readonly brand?: BrandPlate;
 }
 
-export const BUILDING_THEMES: Readonly<Record<BuildingId, BuildingTheme>> = Object.freeze({
+/**
+ * Every building's street theme. Partial only because the Privacy Plaza is a
+ * `BuildingId` with no facade (D-076); `buildingTheme` falls back as before.
+ */
+export const BUILDING_THEMES: Readonly<Partial<Record<BuildingId, BuildingTheme>>> = Object.freeze({
   bank: Object.freeze({
     style: 'bank',
     height: 4.4,

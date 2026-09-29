@@ -1,4 +1,4 @@
-export { BackendApi, DEGEN_TOKENS_PATH, type BackendApiOptions } from './api.js';
+export { BackendApi, DEGEN_TOKENS_PATH, POOL_STATS_PATH, type BackendApiOptions } from './api.js';
 export { AvnuDegenCatalog, type AvnuDegenCatalogOptions } from './avnu-degen-catalog.js';
 export { AvnuPaymasterPort, type AvnuPaymasterOptions } from './avnu-paymaster.js';
 export { AvnuSwapPlanner, type AvnuSwapPlannerOptions } from './avnu-swap-planner.js';
@@ -46,8 +46,23 @@ export {
   refusedRelayRoutes,
   relayStartupNotice,
 } from './relay.js';
+export {
+  DEPOSIT_EVENT,
+  DEPOSIT_WINDOW_BLOCKS,
+  EMPTY_POOL_STATS,
+  POOL_FIRST_BLOCK,
+  POOL_STATS_IDLE_MS,
+  POOL_STATS_RATE_LIMIT,
+  POOL_STATS_REFRESH_MS,
+  POOL_STATS_TOKENS,
+  PoolStatsCache,
+  VIEWING_KEY_SET_EVENT,
+  isPoolStatsRpc,
+  type PoolStatsCacheOptions,
+  type PoolStatsScheduler,
+} from './pool-stats.js';
 export { decodeServerActions, validateServerActionRoute } from './server-actions.js';
-export { StarknetRpcPoolPort, type StarknetRpcOptions } from './starknet-rpc.js';
+export { BALANCE_OF_SELECTOR, StarknetRpcPoolPort, type StarknetRpcOptions } from './starknet-rpc.js';
 export { ApiFailure, validateArtifact } from './validation.js';
 export type {
   ApiRequest,
@@ -55,6 +70,7 @@ export type {
   AuthorizationCodec,
   AvnuTokenTag,
   BackendConfig,
+  ChainHead,
   DegenCatalogPort,
   DegenCatalogSnapshot,
   DegenConfig,
@@ -62,7 +78,12 @@ export type {
   DegenToken,
   FeeAuthorizationClaims,
   PaymasterPort,
+  PoolEventsFilter,
+  PoolEventsPage,
   PoolRpcPort,
+  PoolStatsPort,
+  PoolStatsRpcPort,
+  PoolStatsSnapshot,
   PreparedArtifact,
   PrivateRoute,
   RelayFee,

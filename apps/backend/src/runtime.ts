@@ -17,15 +17,18 @@ import {
   type ParsedBackendEnvironment,
 } from './environment.js';
 import { createBackendFetchHandler } from './http.js';
+import { PoolStatsCache, isPoolStatsRpc } from './pool-stats.js';
 import { relayStartupNotice } from './relay.js';
 import { StarknetRpcPoolPort } from './starknet-rpc.js';
-import type { DegenCatalogPort, PaymasterPort, PoolRpcPort, SwapPlannerPort } from './types.js';
+import type { DegenCatalogPort, PaymasterPort, PoolRpcPort, PoolStatsPort, SwapPlannerPort } from './types.js';
 
 export interface BackendRuntimeOverrides {
   paymaster?: PaymasterPort;
   rpc?: PoolRpcPort;
   swapPlanner?: SwapPlannerPort;
   degenCatalog?: DegenCatalogPort;
+  /** The Privacy Plaza's pool stats (D-076); by default a cache over the RPC port. */
+  poolStats?: PoolStatsPort;
   /** The D-069 debug sink, with a test writer in place of stdout. */
   debugLogs?: DebugLogSink;
 }
@@ -181,10 +184,15 @@ function createBackendApi(
   // no request until a player opens the degen counter or quotes a degen swap.
   const degen = parsed.backend.degen;
   const avnuBaseUrl = parsed.swapPlanner.baseUrl;
+  const rpc = overrides.rpc ?? new StarknetRpcPoolPort(parsed.rpc);
+  // D-076: the plaza's stats read the same private RPC, in the background,
+  // and only when the port offers their narrow reads.
+  const poolStats = overrides.poolStats ?? (isPoolStatsRpc(rpc) ? new PoolStatsCache({ rpc }) : undefined);
   return new BackendApi({
     config: parsed.backend,
     paymaster: overrides.paymaster ?? new AvnuPaymasterPort(parsed.paymaster),
-    rpc: overrides.rpc ?? new StarknetRpcPoolPort(parsed.rpc),
+    rpc,
+    ...(poolStats ? { poolStats } : {}),
     swapPlanner: overrides.swapPlanner ?? new AvnuSwapPlanner(parsed.swapPlanner),
     ...(degen ? {
       degenCatalog: overrides.degenCatalog ?? new AvnuDegenCatalog({
