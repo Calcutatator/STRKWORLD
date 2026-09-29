@@ -32,8 +32,15 @@ export type HudEvent =
 
 export interface HudModel {
   readonly store: ReadableStore<HudState>;
-  /** Subscribe to the Shell bus. The returned cleanup owns every subscription. */
-  listen(bus: EventBus<ShellEvents>): () => void;
+  /**
+   * Subscribe to the Shell bus. The returned cleanup owns every subscription.
+   *
+   * `currentWallet` is read once, after subscribing: the bus does not replay
+   * (D-038), so a HUD that subscribes after the last `wallet:status` (behind
+   * D-072's entry gate) would otherwise show "Checking wallet…" until the
+   * status next changed. Later events win as usual.
+   */
+  listen(bus: EventBus<ShellEvents>, currentWallet?: () => WalletStatus | null): () => void;
 }
 
 const WALLET_STATUSES: ReadonlySet<unknown> = new Set<WalletStatus>([
@@ -128,12 +135,20 @@ export function createHudModel(initial: HudState = EMPTY_HUD): HudModel {
 
   return Object.freeze({
     store,
-    listen(bus: EventBus<ShellEvents>): () => void {
+    listen(bus: EventBus<ShellEvents>, currentWallet?: () => WalletStatus | null): () => void {
       const stops = [
         bus.on('wallet:status', (payload) => apply({ name: 'wallet:status', payload })),
         bus.on('hud:balance', (payload) => apply({ name: 'hud:balance', payload })),
         bus.on('hud:pending', (payload) => apply({ name: 'hud:pending', payload })),
       ];
+      let status: WalletStatus | null = null;
+      try {
+        status = currentWallet?.() ?? null;
+      } catch {
+        // A snapshot that cannot be read leaves the next event to say.
+      }
+      // Validated like any bus payload: an unknown value changes nothing.
+      if (status !== null) apply({ name: 'wallet:status', payload: { status } });
       return () => {
         for (const stop of stops.splice(0)) stop();
       };

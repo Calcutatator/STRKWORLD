@@ -2,6 +2,7 @@ import { useEffect, useId, useMemo, useRef, useState, type Ref } from 'react';
 import type { EventBus, ShellEvents } from '@strkworld/shared';
 import { COPY } from '../copy.js';
 import { useArrivalNudge } from '../bridge/ArrivalNudgeProvider.js';
+import { useWalletStatusSnapshot } from '../privacy/PrivacyProvider.js';
 import { useStore } from '../store/use-store.js';
 import { browserViewerStorage, type ViewerStorage } from '../store/viewer-storage.js';
 import { GettingStarted } from './GettingStarted.js';
@@ -25,9 +26,12 @@ export const HUD_GUIDE_DISMISSED_KEY = 'strkworld.hud.guide-dismissed.v1';
  * balance toggle and the guide's dismissal are per-viewer conveniences in
  * guarded storage, and the HUD renders the same without them.
  *
- * The first `wallet:status` is published from an effect in `PrivacyProvider`,
- * above this component. React runs child effects first, so the HUD is already
- * subscribed when it arrives.
+ * `wallet:status` is published from an effect in `PrivacyProvider`, above this
+ * component, whenever the connect state changes, and the bus does not replay
+ * (D-038). Since D-072 the HUD mounts only once the entry gate passes, and in
+ * the demo that is long after the provider first published, so the HUD reads
+ * the current status as it subscribes and takes every later change from the
+ * bus. Outside a provider (tests) it waits for the first event, as before.
  */
 export function HudLayer({
   shell,
@@ -40,7 +44,8 @@ export function HudLayer({
   // predecessor's balance must not carry over.
   const model = useMemo(() => createHudModel(), [shell]);
   const state = useStore(model.store);
-  useEffect(() => model.listen(shell), [model, shell]);
+  const currentWallet = useWalletStatusSnapshot();
+  useEffect(() => model.listen(shell, currentWallet ?? undefined), [model, shell, currentWallet]);
 
   const arrival = useArrivalNudge();
   // Hidden unless this viewer chose to show it: a balance on screen by

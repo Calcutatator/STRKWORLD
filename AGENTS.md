@@ -301,6 +301,15 @@ tell "not mined yet" from a failed read: `depositStatus` calls both
   walks straight in.
 - Bootstrap admits a session only if its operations carry every seam method
   as an own data property, so the two new methods had to join that list.
+- A HUD behind the gate missed the wallet status. The bus does not replay
+  (D-038) and `PrivacyProvider` publishes `wallet:status` only when the
+  connect state changes; without the gate, React's child-first effects had
+  the HUD subscribed in time, but the demo's gate mounts the city later, so
+  the HUD read "Checking wallet…" for good. It now reads the provider's
+  current status as it subscribes (`useWalletStatusSnapshot`). Nothing else
+  subscribes late: the World reads no wallet status, station locks come from
+  `world:stations` at building entry, and building windows read the connect
+  state from context.
 
 *Verified:* read-only `starknet_getClassAt`, `starknet_getEvents` (pool
 address, Deposit key, blocks 15,578,224 to 15,598,224) and
@@ -310,7 +319,9 @@ address, Deposit key, blocks 15,578,224 to 15,598,224) and
 `config.test.ts` (the exact Railway list and the value documented in
 `.env.production.example`, repeats, the 16-token bound, malformed and partial
 input); the warning order pinned in `wallet-api.test.ts` and `fake.test.ts`,
-and its figures in `summary-copy.test.ts`; the adapter's
+and its figures in `summary-copy.test.ts`; the late HUD in `hud-model.test.ts`,
+`HudLayer.test.tsx` and `App.after-gate.test.tsx` (each fails without the
+snapshot); the adapter's
 `warningsFor` and `connect-machine.ts` read side by side; `entry-gate.test.ts`,
 `EntryGate.test.tsx`, `App.entry.test.tsx`, `ProductionRoot.test.tsx` and
 `bootstrap.test.ts`.

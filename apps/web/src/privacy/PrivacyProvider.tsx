@@ -14,7 +14,7 @@ import type {
   WalletSession,
   WalletSessionSnapshot,
 } from '@strkworld/privacy';
-import type { EventBus, ShellEvents } from '@strkworld/shared';
+import type { EventBus, ShellEvents, WalletStatus } from '@strkworld/shared';
 import { createConnectFlow, toWalletStatus, type ConnectFlow, type ConnectState } from '../connect/connect-machine.js';
 import { COPY } from '../copy.js';
 import { createReceiptLedger, type ReceiptLedger } from '../receipts/receipt-ledger.js';
@@ -69,6 +69,18 @@ export function usePrivacy(): ShellPrivacy {
   const value = useContext(PrivacyContext);
   if (!value) throw new Error('usePrivacy must be used inside a <PrivacyProvider>');
   return value;
+}
+
+/**
+ * The shell's coarse wallet status as it stands, for a `wallet:status`
+ * subscriber that may arrive after the last publish. The bus deliberately
+ * does not replay state (D-038), and since D-072 the HUD mounts only when the
+ * entry gate passes, long after this provider first published, so it reads
+ * this once as it subscribes. Null outside a provider.
+ */
+export function useWalletStatusSnapshot(): (() => WalletStatus) | null {
+  const connect = useContext(PrivacyContext)?.connect ?? null;
+  return useMemo(() => (connect ? () => connect.status() : null), [connect]);
 }
 
 export interface PrivacyProviderProps {

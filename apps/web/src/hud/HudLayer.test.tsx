@@ -9,6 +9,8 @@ import { App } from '../App.js';
 import { createEventBus } from '../bus/event-bus.js';
 import { COPY } from '../copy.js';
 import { createPresenceController } from '../presence/presence-controller.js';
+import { PrivacyProvider } from '../privacy/PrivacyProvider.js';
+import type { ConnectState } from '../connect/connect-machine.js';
 import { createViewerStorage, type StorageLike } from '../store/viewer-storage.js';
 import { WalletSessionProvider } from '../wallet/WalletSessionProvider.js';
 import { HUD_BALANCE_HIDDEN_KEY, HUD_GUIDE_DISMISSED_KEY, HudLayer } from './HudLayer.js';
@@ -105,6 +107,45 @@ describe('HudLayer', () => {
     act(() => bus.emit('wallet:status', { status: 'disconnected' }));
     expect(text(view, '.journey-hud-wallet')).toBe(COPY.hud.wallet.disconnected);
     expect(text(view, '.journey-hud-balance strong')).toBe(COPY.hud.balanceUnknown);
+  });
+
+  describe('mounted after the provider published (D-072: behind the entry gate)', () => {
+    const connected: ConnectState = {
+      name: 'connected',
+      capability: { supportsStrk20: true, walletApiVersion: '0.10.3', registration: 'unknown' },
+      registrationConfirmed: false,
+    };
+
+    /** The provider mounts and publishes first; the HUD arrives later, as the gate lets the city in. */
+    async function mountLate(initialConnectState: ConnectState | undefined): Promise<{ view: HTMLElement; published: unknown[] }> {
+      const bus = createEventBus<ShellEvents>();
+      const operations = new FakePrivacyOperations();
+      const published: unknown[] = [];
+      bus.on('wallet:status', (payload) => published.push(payload));
+      const tree = (city: boolean) => (
+        <PrivacyProvider operations={operations} initialConnectState={initialConnectState} shellBus={bus}>
+          {city ? <HudLayer shell={bus} storage={memory().storage} /> : null}
+        </PrivacyProvider>
+      );
+      const view = mount(tree(false));
+      await act(async () => { await Promise.resolve(); });
+      expect(published.length, 'the provider published before the HUD existed').toBeGreaterThan(0);
+      await act(async () => { root!.render(tree(true)); });
+      return { view, published };
+    }
+
+    it('shows a demo player "Wallet not connected", not "Checking wallet…"', async () => {
+      const { view, published } = await mountLate(undefined);
+      expect(text(view, '.journey-hud-wallet')).toBe(COPY.hud.wallet.disconnected);
+      expect(text(view, '.journey-hud-wallet')).not.toBe(COPY.hud.wallet.unknown);
+      // Read from the provider, not re-published on the bus.
+      expect(published).toEqual([{ status: 'disconnected' }]);
+    });
+
+    it('shows a production player "Wallet connected" whatever the mount order', async () => {
+      const { view } = await mountLate(connected);
+      expect(text(view, '.journey-hud-wallet')).toBe(COPY.hud.wallet.connected);
+    });
   });
 
   it('only listens: it never publishes on the bus, and mounts without the financial seam', () => {
