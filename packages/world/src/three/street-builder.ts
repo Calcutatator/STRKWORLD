@@ -77,7 +77,7 @@ import {
   type FixedRoomLevelId,
   type FixedRoomLevelMap,
 } from '../fixed-room.js';
-import { CITY_FRONT, HINTERLAND, backdropCity, backdropTrees, cityPlan, hills } from './backdrop.js';
+import { CITY_FRONT, HINTERLAND, OUTSKIRT, backdropCity, backdropTrees, hills, layHinterland } from './backdrop.js';
 import { bevelledBlockGeometry } from './sandbox-view.js';
 import type { LabelFactory, Occluder, OccluderBounds, StreetView, TextLabel } from './types.js';
 
@@ -107,8 +107,6 @@ const ROOF_LIFT_LABEL: FloatingStyleOptions = roomTheme('exchange').label;
 export const PAVEMENT_HEIGHT = 0.08;
 const KERB_HEIGHT = 0.1;
 const KERB_WIDTH = 0.12;
-/** How far ground, road and meadow run past the map in detail; `hinterland` carries on coarser. */
-const OUTSKIRT = 40;
 /** Doors sit this far behind the facade row's north edge, in the solid wall row. */
 const DOOR_RECESS = 0.2;
 /** Walls sit inside the footprint so cornices and sills stay on solid tiles. */
@@ -800,7 +798,7 @@ function paintRoadMarkings(map: DistrictMap, kinds: GroundKind[][], bin: Geometr
 function buildOutskirts(map: DistrictMap, kinds: GroundKind[][], bin: GeometryBin): void {
   const W = map.width;
   const H = map.height;
-  // North only to the backdrop city's paving, which `hinterland` lays.
+  // North only to where the backdrop's own ground starts (backdrop.ts).
   meadow(bin, -OUTSKIRT, CITY_FRONT, W + OUTSKIRT, 0, 2, 2);
   meadow(bin, -OUTSKIRT, H, W + OUTSKIRT, H + OUTSKIRT, 2, 2);
   for (let y = 0; y < H; y++) {
@@ -835,7 +833,7 @@ function buildOutskirts(map: DistrictMap, kinds: GroundKind[][], bin: GeometryBi
       }
     }
   }
-  hinterland(map, kinds, bin);
+  layHinterland(map, bin, { pavementHeight: PAVEMENT_HEIGHT, kerbHeight: KERB_HEIGHT, kerbWidth: KERB_WIDTH, lawn: grassColor });
 }
 
 function meadow(bin: GeometryBin, x0: number, z0: number, x1: number, z1: number, cw: number, ch: number): void {
@@ -844,65 +842,6 @@ function meadow(bin: GeometryBin, x0: number, z0: number, x1: number, z1: number
       const xb = Math.min(x1, x + cw);
       const zb = Math.min(z1, z + ch);
       bin.add('grass', flatQuad(x, z, xb, zb, 0), grassColor((x + xb) / 2, (z + zb) / 2, hash01(x, z, 15)));
-    }
-  }
-}
-
-/** Coarse ground past the outskirts, in cells this size. */
-const FIELD = 12;
-
-/**
- * Past the outskirts, coarser: the backdrop city's streets and paving
- * (backdrop.ts plans them), fields round it, and the street running on west
- * as far as the fields go. Far enough that no frame, the rooftop camera's on
- * a wide window included, runs off the ground before the fog has covered it.
- */
-function hinterland(map: DistrictMap, kinds: GroundKind[][], bin: GeometryBin): void {
-  const W = map.width;
-  const H = map.height;
-  const city = cityPlan(W);
-  for (const patch of city.floor) {
-    for (let x = patch.x0; x < patch.x1; x += FIELD) {
-      const xb = Math.min(patch.x1, x + FIELD);
-      const seed = hash01(Math.round(x), Math.round(patch.z0 * 10), 16);
-      if (patch.surface === 'street') {
-        bin.add('road', flatQuad(x, patch.z0, xb, patch.z1, 0), jitterColor(PALETTE.asphalt, seed, 0.012));
-      } else {
-        bin.add('sidewalk', flatQuad(x, patch.z0, xb, patch.z1, 0), jitterColor(PALETTE.apron, seed, 0.02));
-      }
-    }
-  }
-  meadow(bin, -HINTERLAND, -HINTERLAND, W + HINTERLAND, city.back, FIELD, FIELD);
-  meadow(bin, -HINTERLAND, city.back, city.x0, CITY_FRONT, FIELD, FIELD);
-  meadow(bin, city.x1, city.back, W + HINTERLAND, CITY_FRONT, FIELD, FIELD);
-  for (const side of [-1, 1] as const) {
-    const edgeX = side < 0 ? 0 : W - 1;
-    const x0 = side < 0 ? -HINTERLAND : W + OUTSKIRT;
-    const x1 = side < 0 ? -OUTSKIRT : W + HINTERLAND;
-    // Fields down to the south outskirts' end, the street's rows cutting through.
-    let lawn = CITY_FRONT;
-    for (let y = 0; y <= H; y++) {
-      const kind = kinds[y]?.[edgeX];
-      const street = y < H && (kind === 'road' || kind === 'crossing' || kind === 'sidewalk');
-      if (y < H && !street) continue;
-      const end = y < H ? y : H + OUTSKIRT;
-      if (end > lawn) meadow(bin, x0, lawn, x1, end, FIELD, FIELD);
-      lawn = y + 1;
-      if (!street) continue;
-      for (let x = x0; x < x1; x += FIELD) {
-        const xb = Math.min(x1, x + FIELD);
-        if (kind === 'sidewalk') {
-          bin.add('sidewalk', flatQuad(x, y, xb, y + 1, PAVEMENT_HEIGHT), jitterColor(PALETTE.sidewalk, hash01(x, y, 17), 0.02));
-        } else {
-          bin.add('road', flatQuad(x, y, xb, y + 1, 0), jitterColor(PALETTE.asphalt, hash01(x, y, 17), 0.012));
-        }
-      }
-      if (kind !== 'sidewalk') continue;
-      for (const dy of [-1, 1]) {
-        if (kinds[y + dy]?.[edgeX] === 'sidewalk') continue;
-        const z0 = dy < 0 ? y : y + 1 - KERB_WIDTH;
-        bin.add('sidewalk', boxGeometry(x0, 0, z0, x1, KERB_HEIGHT, z0 + KERB_WIDTH), PALETTE.kerb);
-      }
     }
   }
 }

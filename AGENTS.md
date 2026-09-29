@@ -275,28 +275,39 @@ geometry: two shallow rows of blocks, then bare meadow and hill domes to the
 top of the frame. On a 21:9 window the top-left corner also ran past the
 ground's west edge (x -40) into the sky dome's below-horizon colour.
 
-`three/backdrop.ts` now fills it, outside the map only and in the street's
-existing bins (`far`, `far-lit`, and the ground's `grass`, `road` and
-`sidewalk` keys), so no draw call is added. The two near rows are
-vertex-identical where the street sees them, and run on west and east. Behind
-them four far rows rise from 8-15 to 16-29 units tall, over paved blocks,
-streets between the rows and north-south cross streets, with baked haze and
-window bands instead of full window grids. Two small hill parks stand among the far rows, and the old
-large hills moved behind the city. West of the barrier, houses line the road
-as it runs on; east of the square there is a grid of low blocks, and south a
-lane of cottages that no camera frames yet. The ground runs 120 past the
-north, west and east edges (`HINTERLAND`) in 12-unit cells, the road with it.
-Nothing inside the map changed.
+`three/backdrop.ts` fills it, outside the map only and in the street's
+existing bins (`far`, `far-lit`, the ground's `grass`, `road` and `sidewalk`
+keys, and its groves), so no draw call is added. A first fill stacked rows
+rising to 29 units behind the near rows; the lead read them as a cluster of
+mismatched skyscrapers. The Exchange tower is designed as the one tall
+building, whose top you cannot see, so nothing in the backdrop rises above
+the near rows, and every building is a near-row block: the same cornice,
+water tank or plant room (a chimney on houses), window grid and pastels, the
+colour drifting gently from block to block. The two near rows are
+vertex-identical where the street sees them. Behind them a whole-tile street
+grid aligned with the district (cross streets every 18, on the gap between the
+Bank and the Exchange) carries on in the main road's colours, with raised
+pavements, kerbs, centre dashes and street trees. First comes a row of
+mid-rise blocks, 4.5-9 units with a few to 11.5, with a park and a square;
+then low houses with gardens, fewer the further they stand from the map; then
+field parcels, hedgerows, tree lines and gentle hills. West of the barrier,
+east of the square and south the houses thin into the same fields. The ground
+is one code per tile, merged into rectangles, so it can have no holes or
+overlaps, and kerbs and hedgerows follow the tiles' edges. It runs 120 past
+the north, west and east edges (`HINTERLAND`), the road with it. Nothing
+inside the map changed.
 
 *Verified:* `street-builder.test.ts` frames the camera with the rig's
 `rooftop` preset at `EXCHANGE_ROOF_HEIGHT` from each deck corner, on 16:9 and
 21:9 windows, and casts a 16 × 12 ray grid against
-`fogRange(EXCHANGE_ROOF_HEIGHT).far`. On the old geometry 19 rays (all 21:9)
-met the void and 148 met bare meadow north of the hedge's lawn; now none do.
+`fogRange(EXCHANGE_ROOF_HEIGHT).far`. Every ray must meet geometry within that
+depth, and grass it meets behind the street (north of the hedge's lawn,
+across the map's width) must be one of the town's own lawns. On the original
+geometry 19 rays (all 21:9) met the void and 69 met bare meadow; now none do.
 Draw calls, counted as the budget test counts them, are 63 before and after;
-triangles went from 71,449 to 88,341. An offline z-buffer render (not
+triangles went from 71,449 to 85,609. An offline z-buffer render (not
 committed) changed 0.3-1.3% of the pixels of four street and sandbox views,
-4.8% at the road's closed west end, against 23-35% of the rooftop views.
+4.0% at the road's closed west end, against 22-33% of the rooftop views.
 
 ### 2026-09-29 — A transfer's 118 is its recipient's, and stays in the Post Office (D-074)
 

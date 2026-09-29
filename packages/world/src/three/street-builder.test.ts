@@ -25,7 +25,7 @@ import { EXCHANGE_ROOF_HEIGHT, EXCHANGE_ROOF_LEVEL, createFixedRoomLevel } from 
 import { createNullLabelFactory } from './labels.js';
 import { CAMERA_FOV, createCameraRig } from './camera-rig.js';
 import { AVNU, NEAR, STRK20, boxGeometry } from './palette.js';
-import { CITY_FRONT } from './backdrop.js';
+import { CITY_FRONT, backdropSurface } from './backdrop.js';
 import { fogRange } from './world-engine.js';
 import {
   PAVEMENT_HEIGHT,
@@ -572,7 +572,7 @@ describe('buildStreet', () => {
   });
 
   it('fills the rooftop view down to the fog: no ray from the roof meets the void or bare meadow', () => {
-    const { view } = build();
+    const { map, view } = build();
     view.ground.updateMatrixWorld(true);
     const roof = createFixedRoomLevel(EXCHANGE_ROOF_LEVEL);
     const origin = roof.rooftop!;
@@ -583,6 +583,7 @@ describe('buildStreet', () => {
     const deck = roof.tiles.flatMap((row, y) => row.flatMap((tile, x) => (tile === 'wall' ? [] : [[x, y] as const])));
     const [xs, ys] = [deck.map(([x]) => x), deck.map(([, y]) => y)];
     const corners = [Math.min(...xs), Math.max(...xs)].flatMap((x) => [Math.min(...ys), Math.max(...ys)].map((y) => [x, y] as const));
+    const behindTheStreet = ({ x, z }: Vector3) => z < CITY_FRONT && x >= 0 && x <= map.width;
     const scene = chunkedForRays(view.ground);
     const raycaster = new Raycaster();
     const ndc = new Vector2();
@@ -607,8 +608,11 @@ describe('buildStreet', () => {
             // three's fog is linear in view depth (-mvPosition.z), not in distance.
             const depth = hit ? hit.distance * direction.dot(forward) : Infinity;
             if (!hit || depth > far) misses.push(`void ${where}`);
-            // North of the hedge's lawn the roof looks down on the city, not the back of the map.
-            else if (hit.object.name === 'street:grass' && hit.point.z < CITY_FRONT) misses.push(`bare meadow ${where}`);
+            // Behind the street the roof looks down on the town carrying on: any grass there
+            // is one of its gardens or its park, never the back of the map.
+            else if (behindTheStreet(hit.point) && hit.object.name === 'street:grass' && backdropSurface(map, hit.point.x, hit.point.z) !== 'lawn') {
+              misses.push(`bare meadow ${where}`);
+            }
           }
         }
       }
