@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { Vector3, type PerspectiveCamera, type WebGLRenderer } from 'three';
+import { Vector3, type PerspectiveCamera, type Scene, type WebGLRenderer } from 'three';
 import type { EventBus, ShellEvents, WorldEvents } from '@strkworld/shared';
 import { EXCHANGE_ROOF_HEIGHT } from '../fixed-room.js';
 import { CAMERA_PITCH, ROOFTOP_CAMERA_PITCH } from './camera-rig.js';
@@ -121,16 +121,39 @@ function fakeBus() {
   return { bus, emitted };
 }
 
-function start() {
+function start(extra: { readonly vaultOpen?: boolean } = {}) {
   const dom = fakeDom();
   const gl = fakeRenderer();
   const { bus, emitted } = fakeBus();
   const engine = createWorldEngine({
     mount: dom.mount as unknown as HTMLElement,
-    config: bus,
+    config: { ...bus, ...extra },
     createRenderer: () => gl.renderer as unknown as WebGLRenderer,
   });
   return { dom, gl, engine, emitted };
+}
+
+/**
+ * Real keys through the engine's window: `walk(code, frames, until)` holds a
+ * key for up to `frames` 50 ms frames (8 px each), then lets it go.
+ */
+function walker(world: ReturnType<typeof start>) {
+  let time = 0;
+  world.gl.frame(time);
+  const key = (type: 'keydown' | 'keyup', code: string) =>
+    world.dom.win.dispatch(type, { code, key: code, repeat: false, target: null, preventDefault: () => undefined });
+  return (code: string, frames: number, until: () => boolean = () => false): void => {
+    key('keydown', code);
+    for (let i = 0; i < frames && !until(); i++) world.gl.frame((time += 50));
+    key('keyup', code);
+    world.gl.frame((time += 50));
+  };
+}
+
+/** From the spawn (24, 15) east along the road to the Vault door's column (x 42), then north into it. */
+function walkToVault(walk: ReturnType<typeof walker>, emitted: ReadonlyArray<{ event: string }>): void {
+  walk('KeyD', 70);
+  walk('KeyW', 30, () => emitted.some(({ event }) => event === 'building:entered' || event === 'building:locked'));
 }
 
 describe('prefersReducedMotion (D-071)', () => {
@@ -234,6 +257,38 @@ describe('world engine lifecycle', () => {
     // One building entered the whole way up; nothing left it.
     expect(world.emitted.filter(({ event }) => event === 'building:entered')).toHaveLength(1);
     expect(world.emitted.filter(({ event }) => event === 'building:exited')).toHaveLength(0);
+    world.engine.destroy();
+  });
+
+  it('opens the Vault from its creation config, and keeps it open through a rebind (D-077)', () => {
+    const world = start({ vaultOpen: true });
+    const walk = walker(world);
+    const scene = () => world.gl.renderer.render.mock.calls.at(-1)![0] as Scene;
+    expect(scene().getObjectByName('room:vault')).toBeDefined();
+    expect(scene().getObjectByName('door:vault')!.userData['locked']).toBe(false);
+    // A rebind that leaves the switch out still walks the street it was built with.
+    const next = fakeBus();
+    world.engine.rebind(next.bus);
+    walkToVault(walk, next.emitted);
+    const doors = next.emitted.filter(({ event }) => event.startsWith('building:'));
+    expect(doors).toEqual([{ event: 'building:entered', payload: { building: 'vault' } }]);
+    expect(scene().getObjectByName('room:vault')!.visible).toBe(true);
+    world.engine.destroy();
+  });
+
+  it('keeps the default Vault locked, and a rebind cannot open it (D-077)', () => {
+    const world = start();
+    const walk = walker(world);
+    const scene = () => world.gl.renderer.render.mock.calls.at(-1)![0] as Scene;
+    expect(scene().getObjectByName('room:vault')).toBeUndefined();
+    expect(scene().getObjectByName('door:vault')!.userData['locked']).toBe(true);
+    const next = fakeBus();
+    world.engine.rebind({ ...next.bus, vaultOpen: true });
+    walkToVault(walk, next.emitted);
+    const doors = next.emitted.filter(({ event }) => event.startsWith('building:'));
+    expect(doors).toEqual([{ event: 'building:locked', payload: { building: 'vault', reason: 'coming-soon' } }]);
+    expect(scene().getObjectByName('room:vault')).toBeUndefined();
+    expect(scene().getObjectByName('door:vault')!.userData['locked']).toBe(true);
     world.engine.destroy();
   });
 

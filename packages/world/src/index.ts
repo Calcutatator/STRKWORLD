@@ -23,6 +23,7 @@ export type {
   DistrictMap,
   DoorZone,
   HiddenRoomEntrance,
+  StreetMapOptions,
   TileKind,
   TileSpec,
 } from './map/street.js';
@@ -119,6 +120,9 @@ export {
 
 // D-039 fixed-room core.  The Bank facade above preserves its original
 // public shape; new Game Mode rooms use this shared deep module directly.
+// The Vault's room is outside the always-open table: it exists only when the
+// Shell opens its door (D-077), so rooms are built from
+// `fixedRoomDefinitionsFor`.
 export {
   BANK_ROOM_DEFINITION,
   BRIDGE_ROOM_DEFINITION,
@@ -132,9 +136,12 @@ export {
   FIXED_ROOM_TILE_SIZE,
   FixedRoomDefinitionError,
   POST_OFFICE_ROOM_DEFINITION,
+  VAULT_LENDING_STATION,
+  VAULT_ROOM_DEFINITION,
   createFixedRoom,
   createFixedRoomController,
   createFixedRoomLevel,
+  fixedRoomDefinitionsFor,
   fixedRoomLiftAt,
   fixedRoomStationAtApproach,
   fixedRoomStationPresentations,

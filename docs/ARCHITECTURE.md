@@ -64,7 +64,8 @@ Player enters building
   → packages/privacy admits one approved route
       ├─ pool-native Wallet API action         (Bank, Post Office)
       ├─ first-party private executor         (AVNU Exchange)
-      └─ app-specific anonymizer              (Vault; Bank staking, D-063, off)
+      ├─ app-specific anonymizer              (Bank staking, D-063, off)
+      └─ canonical shadow-account anonymizer  (Vault, D-077, off by default)
   → wallet prompts and proves
   → route submits; backend queues only eligible prepared calls
   → receipt → React state → HUD
@@ -93,6 +94,23 @@ protocol and returns the output to a pool note. It keeps the player's wallet
 address out of the protocol action, but the application, action, timing and
 open-note amount may remain public. AVNU already supplies its own private
 executor, so the Exchange does not need project-owned Cairo.
+
+The Vault (D-077) needs none either. It holds a Vesu position on the player's
+STRK20 shadow account: a keyless, persistent address for the player and the
+dapp name `strkworld-vault` that only StarkWare's canonical
+`ShadowAccountAnonymizer` can execute through. The wallet derives the
+account's partial commitment and proves and submits both actions itself
+(`wallet_strk20InvokeTransaction`, no relay); the backend reads the address
+from the anonymizer's `get_shadow_accounts` view and the position from Vesu's
+vSTRK vault, both pinned public reads, and the browser checks the address
+against the anonymizer's own derivation before sending anything there. A
+supply withdraws from the pool to that address and deposits through it; a
+redeem withdraws through it into an open pool note. The address, its balance
+and every call are public, and they link a player's Vault actions to each
+other; only the link to the wallet is hidden. The street door opens only
+when a build sets `VITE_STRK20_VAULT_ENABLED` and a STRK-only
+`VITE_STRK20_VAULT_ALLOWED_TOKENS`: the Shell passes the World one
+`vaultOpen` flag, and without it the Vault is D-007's locked facade.
 
 The backend submission queue keeps its concurrency and backpressure limits
 but adds no artificial delay (D-066): each proof publishes the block it was

@@ -21,8 +21,11 @@ import {
   EXCHANGE_DEGEN_LEVEL,
   EXCHANGE_DEGEN_STATION,
   FIXED_ROOM_DEFINITIONS,
+  VAULT_LENDING_STATION,
+  VAULT_ROOM_DEFINITION,
   createFixedRoom,
   createFixedRoomLevel,
+  fixedRoomDefinitionsFor,
   fixedRoomStationPresentations,
   isFixedRoomSolidAt,
   type FixedRoomLevelMap,
@@ -30,7 +33,20 @@ import {
 } from '../fixed-room.js';
 import { ROOM_ORIGIN } from '../world-layout.js';
 import { createNullLabelFactory } from './labels.js';
-import { DEGEN_STATION_LOOKS, DEGEN_TOKENS, ENDUR, ENDUR_STATION_LOOKS, NEAR, STRK20, STRK20_STATION_LOOKS } from './palette.js';
+import {
+  DEFAULT_ROOM_THEME,
+  DEGEN_STATION_LOOKS,
+  DEGEN_TOKENS,
+  ENDUR,
+  ENDUR_STATION_LOOKS,
+  NEAR,
+  ROOM_THEMES,
+  STRK20,
+  STRK20_STATION_LOOKS,
+  VESU,
+  VESU_STATION_LOOKS,
+  roomTheme,
+} from './palette.js';
 import {
   DEGEN_POSTER_BOTTOM,
   DEGEN_POSTER_DEPTH,
@@ -45,7 +61,8 @@ import {
 } from './room-builder.js';
 import type { ImageTextureLoader, LabelFactory, RoomView } from './types.js';
 
-const DEFINITIONS = Object.values(FIXED_ROOM_DEFINITIONS);
+/** Every ground floor a World can build, the opened Vault's included (D-077). */
+const DEFINITIONS = fixedRoomDefinitionsFor({ vaultOpen: true });
 /** Every interior floor: the ground floors and the Exchange tower's Degen floor. */
 const FLOORS: readonly FixedRoomLevelMap[] = [...DEFINITIONS.map(createFixedRoom), createFixedRoomLevel(EXCHANGE_DEGEN_LEVEL)];
 const OX = ROOM_ORIGIN.x / 32;
@@ -399,6 +416,92 @@ describe('buildFixedRoom', () => {
     room.dispose();
     for (const spy of spies) expect(spy).toHaveBeenCalledTimes(1);
     expect(endurPlate!.userData['disposed']).toBe(true);
+  });
+
+  it('dresses the opened Vault in Vesu (D-077): white pages, ink and one electric blue', () => {
+    const theme = roomTheme('vault');
+    expect(theme).toBe(ROOM_THEMES.vault);
+    expect(theme).not.toBe(DEFAULT_ROOM_THEME);
+    expect(theme).toMatchObject({
+      decor: 'vesu',
+      floorA: VESU.white,
+      floorB: VESU.blueSoft,
+      wall: VESU.white,
+      wallLower: VESU.blueSoft,
+      wallTop: VESU.ink,
+      skirting: VESU.ink,
+      trim: VESU.blue,
+      kioskBase: VESU.blueSoft,
+      kioskTop: VESU.white,
+      exitGlow: VESU.blue,
+      stationLooks: VESU_STATION_LOOKS,
+    });
+    const map = createFixedRoom(VAULT_ROOM_DEFINITION);
+    const room = buildFixedRoom(map, createNullLabelFactory());
+    expect(room.building).toBe('vault');
+    expect(room.group.name).toBe('room:vault');
+    // Its one counter, locked until the Shell opens it, under Vesu's pill label.
+    const counter = stationGroup(room, VAULT_LENDING_STATION);
+    expect(counter.userData['status']).toBe('locked');
+    const label = floatingLabel(counter);
+    expect(label.userData['text']).toBe('SUPPLY / REDEEM');
+    expect(label.userData['options']).toMatchObject({
+      font: 'sans',
+      cornerRadius: 0.5,
+      foreground: '#2030b6',
+      background: 'rgba(224,229,255,0.96)',
+      border: '#2c41f6',
+    });
+    // A light room: every walkable floor tile is Vesu's white or periwinkle.
+    room.group.updateMatrixWorld(true);
+    const floor = meshNamed(room.group, ':floor');
+    const position = floor.geometry.getAttribute('position');
+    const paint = floor.geometry.getAttribute('color');
+    const vertex = new Vector3();
+    const hsl = { h: 0, s: 0, l: 0 };
+    let inside = 0;
+    for (let i = 0; i < position.count; i++) {
+      vertex.fromBufferAttribute(position, i).applyMatrix4(floor.matrixWorld);
+      const [x, z] = [vertex.x - OX, vertex.z - OZ];
+      if (x < 1.5 || x > map.width - 1.5 || z < 1.5 || z > map.height - 1.5) continue;
+      inside += 1;
+      new Color().setRGB(paint.getX(i), paint.getY(i), paint.getZ(i)).getHSL(hsl, SRGBColorSpace);
+      expect(hsl.l).toBeGreaterThan(0.85);
+    }
+    expect(inside).toBeGreaterThan(100);
+    // Locked is a calm grey; ready is the blue; stepping up glows brighter
+    // with a deeper halo, which reads on the white floor.
+    const accent = meshNamed(counter, ':status').material as MeshStandardMaterial;
+    const halo = meshNamed(counter, ':halo').material as MeshBasicMaterial;
+    accent.color.getHSL(hsl, SRGBColorSpace);
+    expect(hsl.s).toBeLessThan(0.25);
+    expect(accent.emissiveIntensity).toBe(0);
+    room.setStations(fixedRoomStationPresentations(map, roomState(map, 'available', null)));
+    expect(accent.emissive.getHex()).toBe(new Color(VESU.blue).getHex());
+    expect(halo.color.getHex()).toBe(new Color(VESU.blue).getHex());
+    const ready = { glow: accent.emissiveIntensity, halo: halo.opacity };
+    room.setStations(fixedRoomStationPresentations(map, roomState(map, 'available', VAULT_LENDING_STATION)));
+    expect(accent.emissiveIntensity).toBeGreaterThan(ready.glow);
+    expect(halo.opacity).toBeGreaterThan(ready.halo);
+    expect(halo.color.getHex()).toBe(new Color(VESU.blueText).getHex());
+    // The lending card behind the counter, self-lit in Vesu's colours on the
+    // north wall, and a small one on the counter. No word or figure anywhere
+    // but the Shell's label.
+    const north = (room.occluders as readonly InteriorOccluder[]).find((occluder) => occluder.side === 'north')!;
+    const lights = coloursOf(meshNamed(north.object, ':lights'));
+    for (const hex of [VESU.white, VESU.blueSoft, VESU.blue]) expect(lights).toContain(new Color(hex).getHex());
+    const card = coloursOf(meshNamed(counter, ':screen'));
+    for (const hex of [VESU.white, VESU.blue]) expect(card).toContain(new Color(hex).getHex());
+    const labels: Object3D[] = [];
+    room.group.traverse((object) => {
+      if (object.userData['kind']) labels.push(object);
+    });
+    expect(labels).toEqual([label]);
+    // Blue leads: nothing in the Bank's orange or the Bridge's and Endur's green.
+    const hues = huesOf(room.group);
+    expect(hues.filter(isOrange)).toEqual([]);
+    expect(hues.filter(isGreen)).toEqual([]);
+    room.dispose();
   });
 
   it('copies its origin so later mutation cannot move the room', () => {

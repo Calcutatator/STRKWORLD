@@ -36,7 +36,10 @@ import { disposeSandboxCaches } from './sandbox-view.js';
  */
 
 export interface WorldEngine {
-  /** Replace the gameplay session with one bound to a new Shell config. */
+  /**
+   * Replace the gameplay session with one bound to a new Shell config. Its
+   * `vaultOpen` is ignored: the Vault stays as the engine was created (D-077).
+   */
   rebind(config: WorldConfig): void;
   /** Re-measure the mount; call after moving it to a new parent. */
   resize(): void;
@@ -121,6 +124,11 @@ export function createWorldEngine(options: WorldEngineOptions): WorldEngine {
   // hide a presenter or renderer failure behind the rate limit.
   const lastReported = new Map<string, number>();
 
+  // The Vault opens on shadow accounts, behind the Shell's switch (D-077).
+  // Read once: the street and its rooms are built once, below, and cannot
+  // change, so a rebind keeps the value the engine was created with.
+  const vaultOpen = options.config.vaultOpen === true;
+
   const scene = new Scene();
   const camera = new PerspectiveCamera(CAMERA_FOV, 1, 0.1, 240);
   const sun = new DirectionalLight(0xffe1b3, 2.4);
@@ -169,6 +177,9 @@ export function createWorldEngine(options: WorldEngineOptions): WorldEngine {
         view,
         keyboard: nextKeyboard,
         sandbox: config.sandbox,
+        // The creation value, never `config.vaultOpen`: the presenter drew
+        // the street and rooms from it, and a session must walk the same map.
+        vaultOpen,
       });
       keyboard = nextKeyboard;
     } catch (error) {
@@ -294,6 +305,7 @@ export function createWorldEngine(options: WorldEngineOptions): WorldEngine {
       figures: createAvatarFigure,
       images: createImageTextureLoader(doc),
       reducedMotion: () => prefersReducedMotion(win),
+      vaultOpen,
     });
     cleanup.push(() => presenter.dispose());
     cleanup.push(() => disposeAvatarFigureCache());

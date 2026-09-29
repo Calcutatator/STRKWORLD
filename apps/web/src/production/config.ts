@@ -88,7 +88,8 @@ export function parseRoutePolicy(environment: WalletEnvironment): WalletSessionO
   const unshield = parseUnshieldRoute(environment);
   const transfer = parseTransferRoute(environment);
   const stake = parseStakeRoute(environment);
-  const enabledRoutes: Array<'shield' | 'unshield' | 'transfer' | 'stake'> = [];
+  const vault = parseVaultRoute(environment);
+  const enabledRoutes: Array<'shield' | 'unshield' | 'transfer' | 'stake' | 'vault'> = [];
   const shieldTokens: string[] = [];
   const unshieldTokens: string[] = [];
   const transferTokens: string[] = [];
@@ -121,6 +122,12 @@ export function parseRoutePolicy(environment: WalletEnvironment): WalletSessionO
     enabledRoutes.push('stake');
     relayFeeCeilings.push(stake.maxRelayFee);
   }
+  if (vault) {
+    // D-077: the wallet submits the Vault itself, like shield, and it is
+    // prepared one action at a time: no intent bound and no relay-fee
+    // authority, so enabling it narrows nothing else.
+    enabledRoutes.push('vault');
+  }
   if (enabledRoutes.length === 0) return denyAllPolicy();
 
   return Object.freeze({
@@ -136,6 +143,8 @@ export function parseRoutePolicy(environment: WalletEnvironment): WalletSessionO
       // Present only when staking is enabled: the adapter reads an absent list
       // as "nothing admitted" and requires a present one to name both tokens.
       ...(stake ? { stake: Object.freeze(stake.allowedTokens) } : {}),
+      // D-077: present only when the Vault is enabled, and then STRK alone.
+      ...(vault ? { vault: Object.freeze(vault.allowedTokens) } : {}),
     }),
   });
 }
@@ -186,6 +195,22 @@ function parseStakeRoute(environment: WalletEnvironment): { maxRelayFee: bigint;
   const allowedTokens = parseAllowedTokens(environment.VITE_STRK20_STAKE_ALLOWED_TOKENS);
   if (maxRelayFee === null || allowedTokens === null || !isStakePair(allowedTokens)) return null;
   return { maxRelayFee, allowedTokens };
+}
+
+/**
+ * D-077: the Vault, Vesu lending from the player's STRK20 shadow account. The
+ * wallet proves and submits it (no relay, so no relay-fee ceiling and no
+ * backend route group), and it lends STRK alone. It needs
+ * `VITE_STRK20_VAULT_ENABLED=true` and `VITE_STRK20_VAULT_ALLOWED_TOKENS`
+ * naming canonical STRK and nothing else. Missing, malformed, partial or
+ * disabled values keep the Vault locked, as D-007's facade, without touching
+ * any other route; enabling it enables nothing else.
+ */
+function parseVaultRoute(environment: WalletEnvironment): { allowedTokens: string[] } | null {
+  if (environment.VITE_STRK20_VAULT_ENABLED !== 'true') return null;
+  const allowedTokens = parseAllowedTokens(environment.VITE_STRK20_VAULT_ALLOWED_TOKENS);
+  if (allowedTokens === null || !isStrkOnly(allowedTokens)) return null;
+  return { allowedTokens };
 }
 
 /** Exactly STRK and xSTRK, compared by field-element value. */

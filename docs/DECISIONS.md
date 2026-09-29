@@ -30,7 +30,8 @@ a real mistake, so the smoke-amount discipline is load-bearing.
 ## D-002 — Wallet API route; the game runs no privacy infrastructure
 
 **2026-08-16 · Accepted · production boundary unchanged; D-057 defines an
-external sibling tester without creating an exception inside STRKWORLD**
+external sibling tester without creating an exception inside STRKWORLD ·
+`wallet_strk20ShadowAccountCommitment` joins the calls, for the Vault, by D-077**
 
 **Context.** Two integration routes exist. The low-level Privacy SDK route
 means holding viewing keys, running note discovery, building proof-carrying
@@ -152,7 +153,7 @@ free and sponsorship is not.
 
 ## D-007 — Vesu excluded from v1
 
-**2026-08-16 · Accepted**
+**2026-08-16 · Accepted · SUPERSEDED in part by D-077 (the Vault opens on STRK20 shadow accounts through the canonical anonymizer, with no project-owned Cairo, behind a fail-closed switch; with the switch off it is still this facade)**
 
 **Context.** The Vault is the only building requiring new Cairo (a
 `privacy_invoke` adapter), the only one without a working `shieldup`
@@ -368,7 +369,7 @@ Shell lane owns it.
 
 ## D-014 — The backend is a first-class component with its own privacy rules
 
-**2026-08-16 · Accepted · paymaster key made optional (gasless relay) by D-068 · per-request logging exception for opted-in test deployments by D-069 · key required again for relayed routes by D-070 · a background public-aggregate scan (the Privacy Plaza's pool stats) added by D-076**
+**2026-08-16 · Accepted · paymaster key made optional (gasless relay) by D-068 · per-request logging exception for opted-in test deployments by D-069 · key required again for relayed routes by D-070 · a background public-aggregate scan (the Privacy Plaza's pool stats) added by D-076 · two pinned public Vault reads (the shadow account and its position) added by D-077**
 
 **Context.** An independent review found that D-013 quietly put a server on the
 critical path of *every* private action — fee build and submission must be
@@ -520,7 +521,7 @@ funds, and understands what was private and what was not.
 
 ## D-018 — Every financial building needs an approved private execution path
 
-**2026-08-16 · Accepted**
+**2026-08-16 · Accepted · amended by D-077 (a fourth approved route: the canonical STRK20 shadow-account anonymizer, which the Vault uses with no project-owned helper)**
 
 **Context.** A building is a themed interface to a wallet or protocol, not a
 separate financial system. That simplicity creates a dangerous ambiguity:
@@ -1219,7 +1220,7 @@ D-028 freeze.
 
 ## D-036 — `PrivacyOperations` is frozen on source-derived evidence
 
-**2026-08-18 · Accepted · implements D-028 and supersedes D-015's provisional seam status · narrowly extended by D-041/D-042 for truthful swap review, and by D-063 for private staking · failure taxonomy extended by D-070 (`relay-not-configured`) and D-074 (`recipient-not-registered`) · methods extended by D-072 (`hasPrivateFunds`, `depositStatus`)**
+**2026-08-18 · Accepted · implements D-028 and supersedes D-015's provisional seam status · narrowly extended by D-041/D-042 for truthful swap review, and by D-063 for private staking · failure taxonomy extended by D-070 (`relay-not-configured`) and D-074 (`recipient-not-registered`) · methods extended by D-072 (`hasPrivateFunds`, `depositStatus`) · the Vault's `vaultPosition`, `prepareVaultSupply`, `prepareVaultRedeem`, `supportsShadowAccounts` and `shadow-accounts-unsupported` added by D-077**
 
 **Context.** D-015 correctly unfroze the original one-shot interface. The
 replacement intent-based, prepare-then-confirm seam is implemented by both the
@@ -3031,7 +3032,7 @@ routes fail at the fee build and the fix is to set one: nothing else changes.
 
 ## D-069 — Opt-in debug logs for test deployments
 
-**2026-09-28 · Accepted by the user · narrows D-014's "logs nothing per-request" for opted-in test deployments only**
+**2026-09-28 · Accepted by the user · narrows D-014's "logs nothing per-request" for opted-in test deployments only · `vault.*` probe events added by D-077**
 
 **Context.** The lead tests the live Railway deployment on a separate laptop
 with a funded wallet, and what fails there has to reach the developer without
@@ -3641,3 +3642,152 @@ set one twice, it would count twice. Every exhaustive record keyed by
 building must now handle `plaza` (`COPY.buildings`; the street's
 `BUILDING_THEMES` is now partial). The figures are the pool's own public
 facts: the stats show the crowd, and nothing about who is in it.
+
+---
+
+## D-077 — The Vault opens on shadow accounts
+
+**2026-09-29 · Accepted by the user · supersedes D-007 in part (the Vault no longer needs project-owned Cairo, and is no longer only a facade) · amends D-018 (a fourth approved route: the canonical shadow-account anonymizer) · extends D-036's frozen seam with `vaultPosition`, `prepareVaultSupply`, `prepareVaultRedeem`, `supportsShadowAccounts` and a `shadow-accounts-unsupported` failure kind · bumps the pinned connection stack to Wallet API 0.10.4 · adds two pinned public reads to D-014's backend, which still logs nothing per request · adds `vault.*` probe events to D-069 · registers `vault.supply` and `vault.redeem` (approved by the lead, 2026-09-29)**
+
+**Context.** D-007 kept Vesu out of v1 because the Vault was the only
+building needing new Cairo: a project-owned `privacy_invoke` adapter, the
+third route of D-018, which "production helpers are owned, reviewed, tested,
+audited, deployed and maintained by this project". SPEC §4 costed it at
+150-200 lines of Cairo and §8 put it after v1, and §4 ruled out
+`shadow_account_invoke` because it had appeared in `types-js` 0.10.4-beta.2
+and been pulled again. It has since shipped. Stable Wallet API 0.10.4
+(`@starknet-io/types-js` 0.10.4, carried by `starknet` 10.8.0) defines
+`wallet_strk20ShadowAccountCommitment` and the `shadow_account_invoke` action:
+a keyless, deterministic address per (player, `dapp_name`, nonce) that only
+the canonical `ShadowAccountAnonymizer` can execute through, deployed on
+mainnet at `0x04f33230dc57855c6e7eabe66dfa0fde82c5458fd0e54827cdb7cb4c474888a7`
+on 23 July 2026 with its source verified on Voyager. Read over mainnet RPC on
+2026-09-29 (block 15,641,579): its class is
+`0xb61dee4f9f6b243f5310fbfab4224128db5c4815077b6329c232f8fc9af409`,
+`get_privacy_contract()` is the STRK20 pool, and `get_shadow_accounts` agreed
+for three commitments with the address derived from the deployed `Primer`
+class `0x00123e6bc1c14ae9934e933d3f64916a6116dd6b036a922b2b1f0815e0d1d300`,
+not from `get_shadow_account_class_hash()`
+(`0x70e76435b6ddb74b11665d3bc3264aaf354f59329976f3ffcb03b2ab992b78f`), which
+is what the starknet.js 10.8.0 guide derives with. Vesu's Prime vSTRK vault
+at `0x06d6d2bf905dd199c78f2e421521d8473042737be9f47904e7578536c10f279d`
+("Vesu Starknet", vSTRK, 18 decimals, `asset()` STRK) exposes ERC-4626
+`deposit`, `withdraw` and `redeem` with `balance_of`, `preview_redeem`,
+`max_withdraw` and `max_redeem`; a share previewed at 1.0204 STRK, and the
+pool fee read 6 STRK. The Vesu shadow-vault example
+(`github.com/starkience/starknet-shadow-vault-example`) runs that vault end
+to end on mainnet through the anonymizer with no new Cairo. The lead's Ready
+reports Wallet API 0.10.4, but nobody has yet confirmed a full supply and
+redeem through a shadow account in Ready. The lead asked for the Vault on
+shadow accounts, behind a fail-closed switch, as the first version and as
+the probe of that support.
+
+**Decision.**
+
+- **The route.** The Vault lends STRK to Vesu's Prime vSTRK vault from the
+  player's shadow account for `dapp_name` `strkworld-vault`, nonce 0, through
+  the canonical anonymizer. D-018 gains it as a fourth approved route: shared
+  StarkWare infrastructure bound to the pool, not a project-owned helper, so
+  the Vault adds no Cairo. The name and nonce are fixed for good: they are
+  part of every player's stand-in address, and changing either would move
+  every position to an address nothing here reads.
+- **Supply and redeem, STRK only.** A supply withdraws the amount from the
+  pool to the shadow account, the public leg, then through it approves vSTRK
+  and deposits with the shadow account as receiver, collecting nothing
+  (`exact 0`): the shares are the position. A redeem opens one STRK note for
+  the player, then has the shadow account `withdraw(assets)` for an amount,
+  or `redeem` every share for "everything", as receiver and owner, collecting
+  only what the call gained (`diff`). A redeem above what the vault lets the
+  position take now (`max_withdraw`, `max_redeem`) is refused before the
+  wallet is asked. These are the example's action shapes. Borrowing and
+  collateral stay out.
+- **The wallet proves and submits** both, through
+  `wallet_strk20InvokeTransaction`, as it does a shield: no STRKWORLD relay,
+  no avnu key and no relay fee. The wallet adds its own network fee, which
+  the review leaves to the wallet to state, and the pool fee comes out of the
+  shielded balance on both legs.
+- **Capability is runtime.** A wallet can run the Vault when
+  `wallet_supportedWalletApi` reports 0.10.4 or later and its account exposes
+  `strk20ShadowAccountCommitment`, read without running an accessor; nothing
+  branches on wallet identity. A wallet that answers the commitment or the
+  Vault's submission with 162 or JSON-RPC -32601 is
+  `shadow-accounts-unsupported`, a new failure kind that stays in the Vault:
+  it never moves the connect flow and never closes the city. A 118 is still
+  `not-registered`.
+- **The address comes from the anonymizer.** The wallet derives the partial
+  commitment (no nonce) once per connection. The backend reads
+  `get_shadow_accounts(partial, 0, 1, false)` on the pinned anonymizer
+  (D-014), and the browser sends nothing to the address unless it equals the
+  one the anonymizer derives from that commitment with the Primer class.
+  The view is the authority; the derivation is only that cross-check, so a
+  relay or node that lied could not redirect a supply, and a changed Primer
+  would fail closed.
+- **The position is a public read**, through the backend, of `balance_of`,
+  `preview_redeem`, `max_withdraw` and `max_redeem` on the pinned vault, made
+  only when the player asks. Neither read can name another contract or
+  selector.
+- **The seam (D-036).** `PrivacyOperations` gains `vaultPosition()`,
+  `prepareVaultSupply(token, amount)` and `prepareVaultRedeem(amount |
+  'all')`. A `PreparedVaultBatch` is single-attempt with a fee ceiling, and
+  its `confirm` resolves `{ transactionHash, outcome }` once the wallet
+  returns a hash, after a bounded receipt wait of about 70 s: `pending` is
+  never a failure. `WalletCapability` gains `supportsShadowAccounts`, and
+  every Vault call reports code-only stages for the probe logs. The demo fake
+  runs a Vault at a fixed DEMO rate of 51 STRK per 50 shares.
+- **The register (D-020).** `vault.supply` and `vault.redeem` are graded
+  `anonymous`, like D-063's staking: who acted is hidden, what the chain
+  shows is not. Approved by calc, 2026-09-29, with one disclosure shown at
+  every commit point and no waiver: "Your Vault position sits on a stand-in
+  address, not your wallet. That address, its balance and every supply and
+  redeem you make through it, with their amounts, are public on-chain. Only
+  its link to your wallet is hidden, and matching amounts or timing can still
+  give that link away."
+- **The switch.** The browser build admits the Vault only with
+  `VITE_STRK20_VAULT_ENABLED=true` and `VITE_STRK20_VAULT_ALLOWED_TOKENS`
+  naming canonical STRK and nothing else. Anything missing, malformed or
+  disabled keeps it exactly as it was: the World's door stays locked and
+  emits `building:locked`, the sign says "VAULT / COMING SOON", the steel
+  door stays chained, and no room is built. The Shell tells the World once,
+  as `WorldConfig.vaultOpen`. Open, the door stands open onto a Vault room in
+  Vesu's palette with one counter, `vault:lending` ("SUPPLY / REDEEM"), and
+  the window wears Vesu's look, with Supply and Redeem modes. There is no
+  backend switch: the two reads are public, pinned, and behind the global
+  kill switch. Enabling the Vault enables nothing else, and no other switch
+  enables it. Demo mode opens it against the fake.
+- **The connection stack moves together** to `starknet` 10.8.0,
+  `@starknet-io/types-js` 0.10.4 and get-starknet discovery and
+  wallet-standard 6.0.6. starknet.js 10.8 hands a dapp a starknet.js `Call`
+  from `strk20PrepareInvoke`, so `BackendPrivacyClient` converts the proved
+  call back to the Wallet API shape the relay and avnu take, and refuses
+  anything else.
+- **Probe logs (D-069).** A debug build logs `vault.capability` (supported,
+  and the Wallet API reported), `vault.commitment` (ok, or the wallet's
+  code), `vault.address` (resolved and deployed, never the address),
+  `vault.position`, `vault.prepare`, `vault.submit` (ok, or the code),
+  `vault.receipt` and the `vault.confirm` stages. Never an amount, an
+  address, a balance, the commitment or a hash: each field is admitted from
+  a fixed list, and a Vault failure reaches the connect flow and the
+  `privacy.operation` line by its kind alone.
+- **The first live use is the probe.** On the Railway test deployment, with
+  the switch and debug logs on, the lead makes one small supply and one
+  redeem of everything, reading the position between; the `vault.*` lines
+  answer whether Ready runs shadow accounts end to end.
+
+**Consequences.** A player's Vault position is a persistent public
+pseudonym: every supply and redeem they make sits on one address, linked to
+each other, and only the link to their wallet is hidden; a supply that
+matches a recent public deposit in amount or timing can give it away, which
+the disclosure says. A player who supplies their whole shielded balance
+cannot redeem until the pool fee is back in the pool, and the counter says
+to keep it there. The Vault depends on two third-party contracts outside
+this project's review, StarkWare's anonymizer and Vesu's vault, both pinned
+by address; D-007's audit gate does not apply because no Cairo is written
+here. If the anonymizer ever deployed a new Primer, the cross-check would
+refuse every Vault call until the pin moved. Contracts stays dormant
+(`docs/WORKPLAN.md`). Every exhaustive record of the failure kinds had to
+list the new one, and the compiler refuses any that misses it. The switch is
+off in every environment file; turning it on for the probe needs a rebuild,
+since `VITE_` values compile into the bundle, and nothing on the backend.
+Until the probe succeeds this route is source-derived under D-028, and a
+wallet that fails it keeps the Vault's counter open with the
+unsupported-wallet line rather than locking the door.

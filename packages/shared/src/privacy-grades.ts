@@ -213,6 +213,39 @@ export const PRIVACY_REGISTER: readonly RouteGrade[] = [
       'D-072: entry needs funds in the pool, so a player with none must be able to deposit at the gate. It is the Bank shield on a second surface with the same grade and disclosure; without it such a player would have no way in.',
     returnToPool: false,
   },
+  // D-077, 2026-09-29: the Vault lends to Vesu from the player's STRK20
+  // shadow account, through the canonical ShadowAccountAnonymizer, behind a
+  // fail-closed build switch. Graded like Endur staking (D-063): who acted is
+  // hidden, what the chain shows is not. Both routes show one disclosure.
+  {
+    building: 'vault',
+    route: 'vault.supply',
+    grade: 'anonymous',
+    observable:
+      'Unlinkable to the wallet, but public and persistent. The pool withdraws the STRK to the player shadow account as a public transfer with a visible amount, and the canonical ShadowAccountAnonymizer then has that address approve Vesu vSTRK and deposit into it, so the vSTRK shares sit on the shadow account. Its address, deployment, balances, calls and position are public, and every Vault action by the same player uses the same address (dapp name strkworld-vault, nonce 0), so they are linked to each other. Only the link from that address to the wallet is hidden: the wallet is not the sender and never appears in the calls. The wallet fee withdrawal leaves the pool publicly, and the proof publishes the block it was built against. Matching amounts or timing around a public deposit can still link the two.',
+    disclosure:
+      'Your Vault position sits on a stand-in address, not your wallet. That address, its balance and every supply and redeem you make through it, with their amounts, are public on-chain. Only its link to your wallet is hidden, and matching amounts or timing can still give that link away.',
+    approvedBy: 'calc',
+    approvedOn: '2026-09-29',
+    rationale:
+      'D-077: shadow accounts let the Vault lend through Vesu with no project-owned Cairo, which D-007 and D-018 had required. The lead accepts a persistent stand-in address whose balance and activity are public, because its link to the wallet is hidden and the disclosure says plainly what is not. The first live use is the probe of wallet support.',
+    returnToPool: false,
+  },
+  {
+    building: 'vault',
+    route: 'vault.redeem',
+    grade: 'anonymous',
+    observable:
+      'Unlinkable to the wallet, but public and persistent. The canonical ShadowAccountAnonymizer has the player shadow account withdraw or redeem from Vesu vSTRK, a public call with visible amounts, and the pool collects only the STRK that call gained into an open note for the wallet, whose amount is plaintext. The shadow account keeps its address, history and any other public balance, and every Vault action by the same player uses that one address, so they are linked to each other. Only the link from that address to the wallet is hidden. The wallet fee withdrawal leaves the pool publicly, and the proof publishes the block it was built against.',
+    disclosure:
+      'Your Vault position sits on a stand-in address, not your wallet. That address, its balance and every supply and redeem you make through it, with their amounts, are public on-chain. Only its link to your wallet is hidden, and matching amounts or timing can still give that link away.',
+    approvedBy: 'calc',
+    approvedOn: '2026-09-29',
+    rationale:
+      'D-077: the way back from the Vault position into the pool. The same stand-in address and the same public record as the supply, and the same disclosure, so a player reads one account of the Vault whichever way they move.',
+    // The STRK collected lands in an OPEN pool note, already private.
+    returnToPool: false,
+  },
 ];
 
 /** Grades that ship without approval. Everything else is a deviation. */

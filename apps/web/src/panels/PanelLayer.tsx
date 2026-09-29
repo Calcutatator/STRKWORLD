@@ -8,6 +8,7 @@ import { PanelFrame } from './PanelFrame.js';
 import { resolveRoom, type PanelRegistry } from './panel-framework.js';
 import { BUILDING_PANELS, type BuildingPanelDescriptor } from './registry.js';
 import { ownBuildingPayload, ownLockedBuildingPayload } from '../bus/world-event-payload.js';
+import { PRIVACY_REGISTER, type RouteGrade } from '../privacy/register.js';
 
 /**
  * The building overlay.
@@ -169,11 +170,14 @@ export function ActiveRoomView({
   panels,
   connected,
   onClose,
+  register = PRIVACY_REGISTER,
 }: {
   active: ActiveRoom;
   panels: PanelRegistry<BuildingPanelDescriptor>;
   connected: boolean;
   onClose: () => void;
+  /** The privacy register the room is resolved against. */
+  register?: readonly RouteGrade[];
 }): ReactElement {
   if (active.source === 'locked') {
     return (
@@ -186,7 +190,7 @@ export function ActiveRoomView({
     );
   }
 
-  const room = resolveRoom(active.building, panels);
+  const room = resolveRoom(active.building, panels, register);
 
   if (room.kind === 'locked') {
     return (

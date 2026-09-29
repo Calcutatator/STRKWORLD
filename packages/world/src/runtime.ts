@@ -26,6 +26,13 @@ export interface WorldConfig {
   remotePeers?: RemotePeerSource;
   /** Optional shared block sandbox (D-060), supplied by the Shell. */
   sandbox?: SandboxChannel;
+  /**
+   * The Vault opens on shadow accounts, behind the Shell's switch (D-077): its
+   * door opens onto its room. Absent or false, it is D-007's locked facade.
+   * The World learns only that the door is open; the engine reads it once,
+   * when it starts.
+   */
+  vaultOpen?: boolean;
 }
 
 interface WorldBinding {
@@ -162,5 +169,7 @@ function sameBinding(
     current.config.out === config.out &&
     current.config.in === config.in &&
     current.config.remotePeers === config.remotePeers &&
-    current.config.sandbox === config.sandbox;
+    current.config.sandbox === config.sandbox &&
+    // Absent and false are the same locked Vault (D-077).
+    (current.config.vaultOpen === true) === (config.vaultOpen === true);
 }

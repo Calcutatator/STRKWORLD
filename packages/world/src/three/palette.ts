@@ -167,7 +167,7 @@ export const ENDUR = Object.freeze({
 });
 
 /**
- * The Vault's future lender, Vesu — measured from vesu.xyz (Sept 2026): white
+ * The Vault's lender, Vesu (D-077) — measured from vesu.xyz (Sept 2026): white
  * pages, near-black text in a wide grotesk at 600, an electric-blue primary
  * and a pale periwinkle secondary with deep-blue text.
  */
@@ -485,6 +485,11 @@ export interface BuildingTheme {
   readonly litRatio: number;
   /** Door portal glow; the Vault's is a dim locked red. */
   readonly portal: number;
+  /**
+   * The portal's glow once a door that ships locked is opened, and the light
+   * behind it: the Vault's lender's blue (D-077). `portal` when absent.
+   */
+  readonly openPortal?: number;
   /** Emissive strength of an open portal's frame (1.8); bright accents want less. */
   readonly portalIntensity?: number;
   readonly sign: SignStyle;
@@ -709,6 +714,8 @@ export const BUILDING_THEMES: Readonly<Partial<Record<BuildingId, BuildingTheme>
     beacon: 0x9b2e22,
     litRatio: 0,
     portal: 0x8a1f18,
+    // Opened on shadow accounts (D-077), the doorway glows in Vesu's blue.
+    openPortal: VESU.blue,
     sign: Object.freeze({
       width: 2.4,
       height: 0.66,
@@ -716,8 +723,8 @@ export const BUILDING_THEMES: Readonly<Partial<Record<BuildingId, BuildingTheme>
       foreground: '#9b9da5',
       accent: '#5a2020',
     }),
-    // Locked, so calm: Vesu's pale periwinkle and a thin blue edge on the
-    // Vault's own charcoal, not its bright white pages.
+    // Calm, locked or open: Vesu's pale periwinkle and a thin blue edge on
+    // the Vault's own charcoal, not its bright white pages.
     brand: Object.freeze({
       text: 'Vesu',
       style: Object.freeze({
@@ -975,7 +982,51 @@ export const ENDUR_STATION_LOOKS: StationLooks = Object.freeze({
   }),
 });
 
-export type RoomDecorStyle = 'strk20' | 'avnu' | 'degen' | 'post-office' | 'bridge' | 'plain';
+/**
+ * Vesu, a light brand like Endur: electric blue when ready, a lighter blue
+ * with a deep-blue halo (which reads on its white floor) when you step up to
+ * it. Locked, the default until the Shell opens the counter, is a calm
+ * periwinkle grey.
+ */
+export const VESU_STATION_LOOKS: StationLooks = Object.freeze({
+  // A low glow: under ACES a strong one washes the blue out towards white.
+  available: Object.freeze({
+    color: VESU.blue,
+    emissive: VESU.blue,
+    emissiveIntensity: 0.45,
+    halo: VESU.blue,
+    haloOpacity: 0.2,
+    edgeOpacity: 0.6,
+  }),
+  highlighted: Object.freeze({
+    color: mixHex(VESU.blue, VESU.white, 0.25),
+    emissive: VESU.blue,
+    emissiveIntensity: 1,
+    halo: VESU.blueText,
+    haloOpacity: 0.36,
+    edgeOpacity: 1,
+  }),
+  // The periwinkle greyed with Vesu's ink: `lift` would keep its full
+  // saturation, and a locked counter must not read as a blue one.
+  locked: Object.freeze({
+    color: mixHex(VESU.blueSoft, VESU.ink, 0.45),
+    emissive: 0x000000,
+    emissiveIntensity: 0,
+    halo: mixHex(VESU.blueSoft, VESU.ink, 0.6),
+    haloOpacity: 0.08,
+    edgeOpacity: 0.24,
+  }),
+  lockedHighlighted: Object.freeze({
+    color: mixHex(VESU.blueSoft, VESU.ink, 0.3),
+    emissive: mixHex(VESU.blueText, VESU.ink, 0.5),
+    emissiveIntensity: 0.3,
+    halo: mixHex(VESU.blueSoft, VESU.ink, 0.5),
+    haloOpacity: 0.18,
+    edgeOpacity: 0.45,
+  }),
+});
+
+export type RoomDecorStyle = 'strk20' | 'avnu' | 'degen' | 'post-office' | 'bridge' | 'vesu' | 'plain';
 
 /**
  * The Degen floor's counter: hot pink when ready, brighter with a lime halo
@@ -1187,6 +1238,34 @@ export const ROOM_THEMES: Readonly<Partial<Record<BuildingId, RoomTheme>>> = Obj
       uppercase: true,
     }),
     stationLooks: NEAR_STATION_LOOKS,
+  }),
+  // The Vault, open on shadow accounts (D-077), in Vesu's own light pages:
+  // white and periwinkle underfoot, white walls over a periwinkle wainscot,
+  // ink capping and skirting them, the electric blue as trim and light.
+  vault: Object.freeze({
+    decor: 'vesu',
+    floorA: VESU.white,
+    floorB: VESU.blueSoft,
+    floorAccent: VESU.blue,
+    wall: VESU.white,
+    wallLower: VESU.blueSoft,
+    wallTop: VESU.ink,
+    trim: VESU.blue,
+    skirting: VESU.ink,
+    cut: VESU.ink,
+    kioskBase: VESU.blueSoft,
+    kioskTop: VESU.white,
+    exitGlow: VESU.blue,
+    // Vesu's secondary button as a pill badge: deep-blue text on periwinkle,
+    // edged in the primary blue.
+    label: Object.freeze({
+      foreground: css(VESU.blueText),
+      background: cssAlpha(VESU.blueSoft, 0.96),
+      border: css(VESU.blue),
+      font: 'sans',
+      cornerRadius: 0.5,
+    }),
+    stationLooks: VESU_STATION_LOOKS,
   }),
 });
 

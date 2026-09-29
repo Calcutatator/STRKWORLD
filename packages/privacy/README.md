@@ -21,8 +21,13 @@ A building is UI over a typed intent, not a generic transaction composer. An
 active financial building must map to exactly one approved execution route:
 
 - a pool-native Wallet API action (Bank, Post Office),
-- a protocol's first-party STRK20 integration (AVNU Exchange), or
-- a reviewed, audited and allowlisted app-specific anonymizer (Vault).
+- a protocol's first-party STRK20 integration (AVNU Exchange),
+- a reviewed, audited and allowlisted app-specific anonymizer (Bank
+  staking, D-063), or
+- the canonical STRK20 shadow-account anonymizer (Vault, D-077): Vesu calls
+  run from the player's shadow account, built here from pinned constants in
+  `src/vault.ts`, proved and submitted by the wallet. Capability is the
+  Wallet API 0.10.4 version query plus the account's commitment method.
 
 There is no public fallback. If a route is unavailable, stale or killed, the
 door stays locked. Never expose raw contract targets, selectors or calldata to

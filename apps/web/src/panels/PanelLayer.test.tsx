@@ -10,6 +10,7 @@ import { PrivacyProvider } from '../privacy/PrivacyProvider.js';
 import { createEventBus } from '../bus/event-bus.js';
 import { ActiveRoomView, nextActiveRoom, PanelLayer, type ActiveRoom } from './PanelLayer.js';
 import { BUILDING_PANELS } from './registry.js';
+import { PRIVACY_REGISTER } from '../privacy/register.js';
 
 const entered = (building: BuildingId) =>
   ({ name: 'building:entered', payload: { building } }) as const;
@@ -100,15 +101,18 @@ describe('ActiveRoomView', () => {
     expect(markup).toContain('data-lock-reason="coming-soon"');
   });
 
-  it('locks the Vault even when the world reports it as entered', () => {
+  it('locks the Vault even when the world reports it as entered, if the register grades none of its routes', () => {
     // Defence in depth: the world saying a door opened does not overrule the
-    // register saying the building has no graded route (D-020).
+    // register saying the building has no graded route (D-020). Since D-077
+    // the register grades the Vault's two routes; without them it is shut.
+    const withoutVault = PRIVACY_REGISTER.filter((entry) => entry.building !== 'vault');
     const markup = renderToStaticMarkup(
       <ActiveRoomView
         active={{ source: 'entered', building: 'vault' }}
         panels={BUILDING_PANELS}
         connected
         onClose={() => {}}
+        register={withoutVault}
       />,
     );
     // The Vault has its own specific locked line rather than the shared

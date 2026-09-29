@@ -64,6 +64,16 @@ export {
 export { decodeServerActions, validateServerActionRoute } from './server-actions.js';
 export { BALANCE_OF_SELECTOR, StarknetRpcPoolPort, type StarknetRpcOptions } from './starknet-rpc.js';
 export { ApiFailure, validateArtifact } from './validation.js';
+export {
+  GET_SHADOW_ACCOUNTS_SELECTOR,
+  MAX_REDEEM_SELECTOR,
+  MAX_WITHDRAW_SELECTOR,
+  PREVIEW_REDEEM_SELECTOR,
+  SHADOW_ACCOUNT_ANONYMIZER,
+  VAULT_POSITION_PATH,
+  VAULT_SHADOW_ACCOUNT_PATH,
+  VESU_VSTRK,
+} from './vault.js';
 export type {
   ApiRequest,
   ApiResponse,
@@ -88,7 +98,10 @@ export type {
   PrivateRoute,
   RelayFee,
   RoutePolicy,
+  ShadowAccountRead,
   SwapAuthorizationBinding,
   SwapPlan,
   SwapPlannerPort,
+  VaultPositionRead,
+  VaultRpcPort,
 } from './types.js';

@@ -21,10 +21,11 @@
 **Feasible.** The game runs no privacy infrastructure — no prover, no
 discovery service, no viewing keys, no compliance relationship. Pool-native
 actions go through the connected wallet, AVNU supplies the Exchange's
-first-party private path, and any future protocol-specific action is admitted
-only through a reviewed app-specific anonymizer.
+first-party private path, the Vault lends through the canonical STRK20
+shadow-account anonymizer (D-077), and any other protocol-specific action is
+admitted only through a reviewed app-specific anonymizer.
 
-Every interface in this document was read from packages installed from npm, not from documentation. `starknet@10.7.0` carries all four `strk20*` methods on `WalletAccountV6` and as standalone functions over `WalletWithStarknetFeatures`; `@starknet-io/types-js@0.10.3` defines the four action variants and the error codes; `@starknetfoundation/starknet-start-react@2.0.1` ships the three hooks plus a paymaster set.
+Every interface in this document was read from packages installed from npm, not from documentation. `starknet@10.7.0` carries all four `strk20*` methods on `WalletAccountV6` and as standalone functions over `WalletWithStarknetFeatures`; `@starknet-io/types-js@0.10.3` defines the four action variants and the error codes; `@starknetfoundation/starknet-start-react@2.0.1` ships the three hooks plus a paymaster set. D-077 re-read the pinned `starknet@10.8.0` and `@starknet-io/types-js@0.10.4`: a fifth method, `strk20ShadowAccountCommitment`, and a fifth action, `shadow_account_invoke`.
 
 The binding constraints are economic and procedural, not architectural: wallet prompting on every shielded transaction with no session-key mechanism (the exact prompt count is wallet-dependent — Phase 0 measures it), a per-transaction pool fee, a note-maturity wait before funds are spendable, and a registration step the game cannot perform on the player's behalf. Each has a design answer below.
 
@@ -41,7 +42,7 @@ The binding constraints are economic and procedural, not architectural: wallet p
 | Decision | Choice | Consequence |
 |---|---|---|
 | Privacy integration | STRK20 Wallet API | Wallet handles keys, note discovery, proving, submission, screening |
-| Building execution | Typed, allowlisted routes only | Native Wallet API, first-party private executor, or audited anonymizer; otherwise locked |
+| Building execution | Typed, allowlisted routes only | Native Wallet API, first-party private executor, the canonical shadow-account anonymizer (D-077), or an audited anonymizer; otherwise locked |
 | v1 authentication | Extension connectors only | Extra prompts accepted. Email/social deferred — no web wallet implements the methods yet |
 | Code target | `WalletWithStarknetFeatures` | Not a specific wallet. Web wallets register on the same feature surface, so email/social lights up with no code change when one ships |
 | Network | Mainnet from day one | Real funds. No testnet phase |
@@ -61,10 +62,10 @@ Write against `WalletWithStarknetFeatures` and extension, iframe and web wallet 
 
 | Package | Pin | Note |
 |---|---|---|
-| `starknet` | **`10.4.0` exact** | **Trap:** npm `latest` is **10.0.2** with zero STRK20 — a bare install fails silently, every symbol undefined. Pin exact; see the connection-stack note below |
-| `@starknet-io/types-js` | **`0.10.3` exact** | Action types and error codes live here |
-| `@starknet-io/get-starknet-discovery` | **`6.0.3` exact** | Dynamic wallet discovery. Never the static `get-starknet-wallets` list |
-| `@starknet-io/get-starknet-wallet-standard` | **`6.0.3` exact** | `WalletWithStarknetFeatures` |
+| `starknet` | **`10.8.0` exact** (D-077; was 10.4.0) | **Trap:** npm `latest` is **10.0.2** with zero STRK20 — a bare install fails silently, every symbol undefined. Pin exact; see the connection-stack note below. 10.8 hands a dapp a starknet.js `Call` from `strk20PrepareInvoke`; the relay client converts it back |
+| `@starknet-io/types-js` | **`0.10.4` exact** (D-077; was 0.10.3) | Action types and error codes live here; 0.10.4 adds shadow accounts |
+| `@starknet-io/get-starknet-discovery` | **`6.0.6` exact** (D-077; was 6.0.3) | Dynamic wallet discovery. Never the static `get-starknet-wallets` list |
+| `@starknet-io/get-starknet-wallet-standard` | **`6.0.6` exact** (D-077; was 6.0.3) | `WalletWithStarknetFeatures` |
 | `@starknetfoundation/starknet-start-react` | `^2.0.1` | The hooks package the STRK20 docs point at. **Not** `@starknet-react/core` |
 | `@avnu/avnu-sdk` | `^4.2.0` | Private swaps need ≥ 4.2.0. Surface labelled Preview |
 | `phaser` | `4.2.1` | **Trap:** the Tiled parser does not support external tilesets. `ParseTilesets.js` does `if (set.source) console.warn('External tilesets unsupported. Use Embed Tileset and re-export')` and skips them. **Embed tileset definitions in exported JSON, or flatten them at build time.** Authoring maps with external `.tsx` produces maps Phaser silently refuses to load |
@@ -97,6 +98,13 @@ type STRK20_INVOKE_ACTION   = { type:'invoke';   contract:ADDRESS; calldata:STRK
 type STRK20_ACTION = DEPOSIT | WITHDRAW | TRANSFER | INVOKE
 type STRK20_CALL_AND_PROOF = { call: Call; proof: STRK20_PROOF }
 type STRK20_BALANCE_ENTRY  = { token: ADDRESS; balance: FELT }
+
+// types-js 0.10.4 (D-077): the fifth action, used by the Vault.
+type STRK20_SHADOW_ACCOUNT_INVOKE_ACTION = {
+  type:'shadow_account_invoke'; dapp_name: STRK20_DAPP_NAME; nonce: FELT;
+  calls: Call[];   // starknet.js Calls; WalletAccountV6 converts them
+  collect_policy: { type:'all' } | { type:'diff' } | { type:'exact'; amount: FELT }
+}
 ```
 
 Wallet-resolved calldata placeholders, pattern `^\$\{(?:openNoteIds\[[0-9]+\]|poolAddress)\}$`:
@@ -111,6 +119,8 @@ Wallet-resolved calldata placeholders, pattern `^\$\{(?:openNoteIds\[[0-9]+\]|po
 walletV6.strk20Balances(tokens: Address[]): Promise<STRK20_BALANCE_ENTRY[]>
 walletV6.strk20PrepareInvoke(actions, simulate?): Promise<STRK20_CALL_AND_PROOF>
 walletV6.strk20InvokeTransaction(actions): Promise<{ transaction_hash }>
+// Wallet API 0.10.4 (D-077): no transaction, no key leaves the wallet.
+walletV6.strk20ShadowAccountCommitment(dappName, nonce?): Promise<FELT>
 
 // The type, for the forward-compatibility rule in §5:
 import type { WalletWithStarknetFeatures }
@@ -143,10 +153,10 @@ The same package also ships `usePaymasterSendTransaction`, `usePaymasterEstimate
 | 118 | `NOT_REGISTERED` | Designed screen. Player must register inside their wallet — the game cannot do it. Returned by **all three** methods, including balances. A 118 while proving a transfer is read as the recipient's instead (D-074): the Post Office says so, and no registration screen opens |
 | 119 | `INSUFFICIENT_PRIVATE_BALANCE` | Show spendable-vs-maturing split. The pool fee comes out of the same balance |
 | 120 | `PRIVACY_LEAK` | Wallet refused the bundle on anonymity grounds. **Trigger conditions undocumented.** Must be a legible user-facing state — the game generates action arrays programmatically |
-| 162 | `API_VERSION_NOT_SUPPORTED` | Capability gate. Route to the unsupported-wallet screen |
+| 162 | `API_VERSION_NOT_SUPPORTED` | Capability gate. Route to the unsupported-wallet screen. On the Vault's shadow-account path, a 162 (or JSON-RPC -32601) is `shadow-accounts-unsupported` instead and stays in the Vault (D-077) |
 | 163 | `UNKNOWN_ERROR` | Generic. Do not surface raw |
 
-There is no per-action capability flag. Detect with `wallet_supportedWalletApi` version sniffing plus a `simulate: true` prepare as the live probe, and try/catch on 162.
+There is no per-action capability flag. Detect with `wallet_supportedWalletApi` version sniffing plus a `simulate: true` prepare as the live probe, and try/catch on 162. The Vault's shadow accounts need 0.10.4 or later and the account's commitment method, then the wallet's own answer (D-077).
 
 ---
 
@@ -163,7 +173,7 @@ an arbitrary contract, selector or calldata blob.
 | Bank | Pool-native Wallet API actions | Active; shield and unshield have explicitly public legs |
 | Post Office | Pool-native private `transfer` | Active |
 | Exchange | AVNU's first-party STRK20 executor | Active; no project-owned Cairo |
-| Vault | Project-owned `privacy_invoke` anonymizer | Locked until reviewed, tested, audited, deployed and allowlisted |
+| Vault | The canonical STRK20 `ShadowAccountAnonymizer`, from the player's shadow account (D-077) | Locked unless a build switches it on (`VITE_STRK20_VAULT_*`); its stand-in address and position are public, and only the link to the wallet is hidden |
 | Bridge | Public funding edge, followed by a separate shield | Active, but never presented as a private app interaction |
 | Privacy Plaza | None: no money moves, and no route is registered (D-076) | Active; its monument shows public pool-wide aggregates and its table a client-only shell game |
 
@@ -216,19 +226,37 @@ the browser uses `buildStrk20Actions`, and the connected wallet calls
 paymaster without exposing its key. The bought asset becomes an `OPEN` pool
 note atomically, so it is already part of the game's private balance.
 
-### The Vault — Vesu lending · ~150–200 lines Cairo
+### The Vault — Vesu lending · no Cairo (D-077)
 
-The open-note pattern: create the output slot, then invoke the adapter with a placeholder the wallet resolves.
+The player's STRK20 shadow account holds the position: a keyless address per
+(player, `dapp_name` `strkworld-vault`, nonce 0) that only the canonical
+`ShadowAccountAnonymizer` can execute through. The wallet derives the partial
+commitment (`strk20ShadowAccountCommitment('strkworld-vault')`), the backend
+reads the address from the anonymizer's `get_shadow_accounts` view, and the
+browser checks it against the anonymizer's own Primer-class derivation before
+sending anything there. The wallet proves and submits both actions itself:
 
 ```ts
+// supply: pool → shadow account, then Vesu through it; the shares stay there
 invoke([
-  { type:'transfer', token: tokenOut, amount:'OPEN', recipient: player },
-  { type:'invoke', contract: vaultAdapter,
-    calldata: [tokenIn, tokenOut, amountIn, '${openNoteIds[0]}'] },
+  { type:'withdraw', token: STRK, amount, recipient: shadow },
+  { type:'shadow_account_invoke', dapp_name:'strkworld-vault', nonce:'0x0',
+    calls: [STRK.approve(vSTRK, amount), vSTRK.deposit(amount, shadow)],
+    collect_policy: { type:'exact', amount:'0x0' } },
+])
+// redeem: one open note, then withdraw(assets) or redeem(all shares); collect the gain
+invoke([
+  { type:'transfer', token: STRK, amount:'OPEN', recipient: player },
+  { type:'shadow_account_invoke', dapp_name:'strkworld-vault', nonce:'0x0',
+    calls: [vSTRK.withdraw(assets, shadow, shadow)],
+    collect_policy: { type:'diff' } },
 ])
 ```
 
-The adapter must expose `privacy_invoke(...) -> Span<OpenNoteDeposit>`. Only the return type is fixed; arguments are adapter-specific. StarkWare's Vesu adapter is Apache-2.0 reference — adaptation, not invention — but it sits outside the audited perimeter and needs its own review.
+The shadow account's address, balances, calls and position are public; only
+its link to the player's wallet is hidden. The earlier plan, a project-owned
+`privacy_invoke` adapter of about 150–200 lines of Cairo with its own review
+and audit, is superseded for supply and redeem (D-007, D-018).
 
 ### The Post Office — player to player · no Cairo
 
@@ -248,7 +276,7 @@ Preflight before offering "send to this player", and still map error 118 at tran
 
 A building needing two unrelated external calls must split across two player-facing transactions or consolidate into one adapter that calls both internally.
 
-`shadow_account_invoke` would remove per-building Cairo entirely, but it appeared in `types-js@0.10.4-beta.2` and was pulled again in `0.11.0-beta.1`. Keep adapter interfaces thin enough to swap; do not build a v1 dependency on it.
+`shadow_account_invoke` shipped in stable `types-js@0.10.4` (after appearing in `0.10.4-beta.2` and being pulled from `0.11.0-beta.1`), and the Vault uses it (D-077). It takes the transaction's one invoke-phase slot, so an `invoke` and a `shadow_account_invoke` never share a transaction.
 
 ---
 
@@ -288,7 +316,7 @@ Prompt counts, latency and connection persistence differ by wallet. Drive the UI
 
 ### The forward-compatibility test
 
-One CI regression pins the testable structural rules: the STRK20 module contains no reference to `get-starknet-wallets`; a parsed source invariant rejects direct or destructured provider `id`/`name` property keys except the display-only wallet-name projection and unrelated Error-name handling, and rejects every non-literal computed property read outside a short exact allowlist of non-identity indexes; and a **mock wallet** implementing the four required features can drive every game operation end to end through an exact request seam. That seam permits only the standard chain-id request, the version capability request and the three `strk20*` methods, and its ledger rejects extras or duplicate handoffs. The pinned `@starknetfoundation/starknet-start-react@2.0.1` `MockWallet` supplies the features, chain-id response and STRK20 handlers but omits `wallet_supportedWalletApi`; the test adds only that capability response and delegates the other four permitted methods unchanged.
+One CI regression pins the testable structural rules: the STRK20 module contains no reference to `get-starknet-wallets`; a parsed source invariant rejects direct or destructured provider `id`/`name` property keys except the display-only wallet-name projection and unrelated Error-name handling, and rejects every non-literal computed property read outside a short exact allowlist of non-identity indexes; and a **mock wallet** implementing the four required features can drive every game operation end to end through an exact request seam. That seam permits only the standard chain-id request, the version capability request and the three `strk20*` methods, plus, in the Vault's case on Wallet API 0.10.4, `wallet_strk20ShadowAccountCommitment` (D-077), and its ledger rejects extras or duplicate handoffs. The pinned `@starknetfoundation/starknet-start-react@2.0.1` `MockWallet` supplies the features, chain-id response and STRK20 handlers but omits `wallet_supportedWalletApi`; the test adds only that capability response and delegates the other four permitted methods unchanged.
 
 If a dynamically registered mock that is neither an extension nor an injected wallet can play the game, the app remains structurally open to future standards-compliant providers without an identity-specific rewrite. Live provider behavior remains a separate acceptance gate.
 
@@ -371,8 +399,9 @@ while the pool is small (D-015, D-019).
 - **Starknet RPC** for public reads — receipts, adapter contract reads. Not `publicProvider()` in production.
 - **Backend** — paymaster key custody, privacy-safe RPC reads, route validation
   and the bounded submission queue. No per-request logs.
-- **Privacy-route gate** — only pool-native, first-party private or approved
-  anonymizer-backed intents can enable a financial building.
+- **Privacy-route gate** — only pool-native, first-party private, approved
+  anonymizer-backed or, for the Vault, canonical shadow-account intents can
+  enable a financial building (D-018, D-077).
 - **Batch accumulator** — collects intent per building visit, settles one atomic array.
 
 **Not built:** prover, discovery service, viewing-key storage, compliance relationship.
@@ -445,13 +474,11 @@ public-leg copy, and the prompted shield hand-off owned by the shell.
 
 Multiplayer resilience, mainnet regression suite, dependency and security hardening, art pass, launch operations.
 
-### After v1 — The Vault · Vesu
+### The Vault · Vesu — on shadow accounts (D-077)
 
-**Excluded from v1.** It is the only building needing new Cairo and the only one without a working Shieldup precedent, so it is the natural thing to cut to protect the 6–8 week window. Supply/redeem first; borrowing and collateral are a separate, larger piece of work.
+**No longer blocked on Cairo.** D-007 cut it from v1 as the only building needing new Cairo; shadow accounts removed that need. Supply and redeem of STRK ship behind a fail-closed build switch (`VITE_STRK20_VAULT_ENABLED` and `VITE_STRK20_VAULT_ALLOWED_TOKENS`), locked by default, and the first live use is the probe of whether the wallet runs shadow accounts end to end. Borrowing and collateral remain a separate, larger piece of work.
 
-Toolchain when it starts: Scarb `2.17.0`, Starknet Foundry `0.59.0` — verified against the current privacy repo, with the seven Vesu anonymizer unit tests passing. That is not a deployment audit.
-
-Only proceed if Phase 0 confirmed the shipped wallet honours arbitrary-contract `invoke`.
+The Cairo toolchain note that stood here (Scarb `2.17.0`, Starknet Foundry `0.59.0`, the seven Vesu anonymizer unit tests) applied to the superseded adapter plan.
 
 **v1 — Bank, Exchange, Post Office and the Bridge funding edge on mainnet in roughly 6–8 weeks**, Phase 1 and the Bridge parallelised, no Cairo and therefore no audit on the critical path.
 
@@ -468,8 +495,8 @@ Undocumented everywhere. We generate action arrays programmatically; the refusal
 **Is `get_fee_amount()` per transaction or per action, and can a sponsoring account cover the pool fee or only gas?**
 Determines whether batching amortises the fee, which the whole economy design rests on.
 
-**Status and timeline for `shadow_account_invoke` — is the `0.11.0-beta.1` removal a retreat or a reshuffle?**
-It would remove per-building Cairo and unlink DeFi positions per player.
+**~~Status and timeline for `shadow_account_invoke`~~ — answered.**
+It shipped in stable Wallet API 0.10.4 (`starknet` 10.8.0), and the Vault uses it (D-077). Whether Ready runs it end to end is the Vault's live probe.
 
 **Any scoped, non-retroactive disclosure primitive for consensual player-to-player reveal?**
 Viewing keys remain all-or-nothing and irrevocable, so the trade feature has no foundation. The cheap alternative — notes sent to a payee are already visible to them — may satisfy the actual need.

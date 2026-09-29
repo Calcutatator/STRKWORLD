@@ -34,7 +34,9 @@ import type {
   PrivateRoute,
   RoutePolicy,
   SwapPlannerPort,
+  VaultRpcPort,
 } from './types.js';
+import { VAULT_POSITION_PATH, VAULT_SHADOW_ACCOUNT_PATH } from './vault.js';
 import {
   ApiFailure,
   isFelt,
@@ -72,6 +74,8 @@ export interface BackendApiOptions {
   rateLimiter?: RequestRateLimiterPort;
   /** The pool-stats route's own rate window (D-076), apart from `rateLimiter`'s. */
   poolStatsRateLimiter?: RequestRateLimiterPort;
+  /** The Vault's two pinned public reads (D-077). Without it, both routes answer 503. */
+  vault?: VaultRpcPort;
   sponsorshipBudget?: SponsorshipBudgetPort;
   submissionQueue?: SubmissionQueuePort;
   /**
@@ -95,6 +99,7 @@ export class BackendApi {
   private readonly swapPlanner?: SwapPlannerPort;
   private readonly degenCatalog?: DegenCatalogPort;
   private readonly poolStatsPort?: PoolStatsPort;
+  private readonly vault?: VaultRpcPort;
   private readonly clockNow: () => number;
   private readonly budget: SponsorshipBudgetPort;
   private readonly submissionQueue: SubmissionQueuePort;
@@ -112,6 +117,7 @@ export class BackendApi {
     this.swapPlanner = options.swapPlanner;
     this.degenCatalog = options.degenCatalog;
     this.poolStatsPort = options.poolStats;
+    this.vault = options.vault;
     const now = options.now ?? Date.now;
     this.clockNow = now;
     this.limiter = options.rateLimiter ?? new AggregateRateLimiter(
@@ -174,6 +180,8 @@ export class BackendApi {
           case '/v1/rpc/public-key': response = await abortable(this.publicKey(request.body, deadline.signal), deadline.signal); break;
           case '/v1/rpc/receipt': response = await abortable(this.receipt(request.body, deadline.signal), deadline.signal); break;
           case POOL_STATS_PATH: response = this.poolStats(request.body); break;
+          case VAULT_SHADOW_ACCOUNT_PATH: response = await abortable(this.shadowAccount(request.body, deadline.signal), deadline.signal); break;
+          case VAULT_POSITION_PATH: response = await abortable(this.vaultPosition(request.body, deadline.signal), deadline.signal); break;
           case DEGEN_TOKENS_PATH: throw new ApiFailure(405, 'Method not allowed.');
           default: throw new ApiFailure(404, 'Endpoint not found.');
         }
@@ -485,6 +493,42 @@ export class BackendApi {
     requireVersion(value);
     const hash = requireNonzeroFelt(value.transactionHash, 'transaction hash');
     return { status: 200, body: await this.rpc.getReceipt(hash, signal) };
+  }
+
+  /**
+   * D-077: the Vault's stand-in address, from the pinned anonymizer's own
+   * view. The request carries the partial commitment and nothing else: no
+   * contract, selector or nonce range can be chosen here.
+   */
+  private async shadowAccount(body: unknown, signal: AbortSignal): Promise<ApiResponse> {
+    const value = requireRecord(body, ['v', 'partialCommitment']);
+    requireVersion(value);
+    const partialCommitment = requireNonzeroFelt(value.partialCommitment, 'partial commitment');
+    if (!this.vault) throw new ApiFailure(503, 'The Vault reads are unavailable.');
+    const read = await this.vault.getShadowAccount(partialCommitment, signal);
+    return { status: 200, body: { address: read.address, deployed: read.deployed } };
+  }
+
+  /**
+   * D-077: a stand-in address's position in the pinned vSTRK vault, as
+   * decimal base units. Public data, read here rather than from the browser
+   * so the player's IP never reaches a third-party RPC next to the address.
+   */
+  private async vaultPosition(body: unknown, signal: AbortSignal): Promise<ApiResponse> {
+    const value = requireRecord(body, ['v', 'account']);
+    requireVersion(value);
+    const account = requireNonzeroFelt(value.account, 'account');
+    if (!this.vault) throw new ApiFailure(503, 'The Vault reads are unavailable.');
+    const read = await this.vault.getVaultPosition(account, signal);
+    return {
+      status: 200,
+      body: {
+        shares: read.shares.toString(),
+        assets: read.assets.toString(),
+        maxWithdraw: read.maxWithdraw.toString(),
+        maxRedeem: read.maxRedeem.toString(),
+      },
+    };
   }
 
   /**

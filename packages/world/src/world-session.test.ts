@@ -15,6 +15,8 @@ import {
   EXCHANGE_ROOF_LEVEL,
   FIXED_ROOM_DEFINITIONS,
   FIXED_ROOM_TILE_SIZE,
+  VAULT_LENDING_STATION,
+  VAULT_ROOM_DEFINITION,
   createFixedRoom,
   createFixedRoomLevel,
   type FixedRoomController,
@@ -379,7 +381,9 @@ interface SessionCycle {
  * the Shell bus across a rebind; each session gets a fresh view. A session
  * that fails to construct still leaves its cycle (and view) behind to inspect.
  */
-function createWorld(options: { readonly keyboard?: boolean; readonly config?: boolean } = {}) {
+function createWorld(
+  options: { readonly keyboard?: boolean; readonly config?: boolean; readonly vaultOpen?: boolean } = {},
+) {
   const journal: Journal = [];
   const bus = createFakeBus(journal);
   const keyboard = new FakeKeyboard(journal);
@@ -427,6 +431,7 @@ function createWorld(options: { readonly keyboard?: boolean; readonly config?: b
           tiles.push({ x: tile.x, y: tile.y });
           observer?.(tile);
         },
+        ...(options.vaultOpen === undefined ? {} : { vaultOpen: options.vaultOpen }),
       });
       record.session = session;
       return session;
@@ -2272,5 +2277,90 @@ describe('WorldSession: the Exchange tower', () => {
     world.bus.shellEmit('world:exit-building', { building: 'exchange' });
     tick(world);
     expect(world.bus.count('player:moved')).toBeGreaterThan(moved);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// D-077: the Vault, D-007's locked facade until the Shell opens it
+// ---------------------------------------------------------------------------
+
+const VAULT_STATION = VAULT_ROOM_DEFINITION.stations[0];
+/** The tile directly south of the Vault's counter: its approach. */
+const VAULT_APPROACH = { x: VAULT_STATION.x, y: VAULT_STATION.y + VAULT_STATION.height };
+
+/** From the spawn east along the road to the Vault door's column, then north into it. */
+function walkToVaultDoor(world: World): void {
+  const session = world.session;
+  const door = doorTile('vault');
+  world.keyboard.hold({ right: true });
+  for (let frame = 0; frame < 60 && worldToTile(session.player.x, session.player.y).x < door.x + 1; frame += 1) {
+    session.update(MAX_SESSION_FRAME_MS);
+  }
+  world.keyboard.hold({ up: true });
+  for (
+    let frame = 0;
+    frame < 20 && session.area === 'street' && worldToTile(session.player.x, session.player.y).y > door.y;
+    frame += 1
+  ) {
+    session.update(MAX_SESSION_FRAME_MS);
+  }
+  world.keyboard.release();
+}
+
+describe('WorldSession: the Vault (D-077)', () => {
+  it('keeps the Vault a locked facade by default: its door emits building:locked and has no room', () => {
+    const world = createWorld();
+    const session = world.start();
+    expect(internals(session).roomControllers.vault).toBeUndefined();
+    walkToVaultDoor(world);
+    expect(worldToTile(session.player.x, session.player.y)).toMatchObject({ y: doorTile('vault').y });
+    expect(session.area).toBe('street');
+    expect(world.bus.payloads('building:locked')).toEqual([{ building: 'vault', reason: 'coming-soon' }]);
+    expect(world.bus.count('building:entered')).toBe(0);
+    expect(world.view.argsOf('showRoom').every(([building]) => building === null)).toBe(true);
+  });
+
+  it('walks in through the Vault door once the Shell opens it, and never reads it as locked', () => {
+    const world = createWorld({ vaultOpen: true });
+    const session = world.start();
+    walkToVaultDoor(world);
+    expect(session.area).toBe('vault');
+    expect(session.level).toBe('ground');
+    expect(world.bus.payloads('building:entered')).toEqual([{ building: 'vault' }]);
+    expect(world.bus.count('building:locked')).toBe(0);
+    expect(world.view.last('showRoom')).toEqual(['vault']);
+    expect(world.view.last('setCameraBounds')).toEqual([INTERIOR_BOUNDS]);
+    expect(world.view.last('setPlayerPosition')).toEqual([interiorTileCentre(VAULT_ROOM_DEFINITION.spawn), true]);
+  });
+
+  it('activates the lending counter the Shell makes available, and leaves by the exit onto the street', () => {
+    const world = createWorld({ vaultOpen: true });
+    const session = world.start();
+    place(session, streetTileCentre(doorTile('vault')));
+    tick(world);
+    expect(session.area).toBe('vault');
+    // Every visit begins locked, until the Shell's snapshot says otherwise.
+    expect(world.view.last('renderRoom')).toEqual(['vault', [{ ...VAULT_STATION, status: 'locked', highlighted: false }]]);
+
+    world.bus.shellEmit('world:stations', {
+      building: 'vault',
+      stations: [{ station: VAULT_LENDING_STATION, label: 'SUPPLY / REDEEM', status: 'available' }],
+    });
+    expect(world.bus.payloads('station:activated')).toEqual([]);
+    place(session, interiorTileCentre(VAULT_APPROACH));
+    tick(world);
+    expect(world.bus.payloads('station:activated')).toEqual([{ building: 'vault', station: VAULT_LENDING_STATION }]);
+    expect(world.view.last('renderRoom')).toEqual([
+      'vault',
+      [{ ...VAULT_STATION, status: 'available', highlighted: true }],
+    ]);
+
+    place(session, interiorTileCentre(VAULT_ROOM_DEFINITION.exit));
+    tick(world);
+    expect(session.area).toBe('street');
+    expect(world.bus.payloads('building:exited')).toEqual([{ building: 'vault' }]);
+    expect(world.view.last('showRoom')).toEqual([null]);
+    expect(world.view.last('setPlayerPosition')).toEqual([streetTileCentre(returnTile('vault')), true]);
+    expect(world.view.last('setCameraBounds')).toEqual([STREET_BOUNDS]);
   });
 });

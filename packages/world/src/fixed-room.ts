@@ -434,6 +434,34 @@ export const BRIDGE_ROOM_DEFINITION = freezeAuthoredRoom({
   ],
 } as const satisfies FixedRoomDefinition);
 
+/** The Vault's lending counter; the Shell supplies its label and state (D-077). */
+export const VAULT_LENDING_STATION: StationId = 'vault:lending';
+
+/**
+ * The Vault opens on shadow accounts, behind the Shell's switch (D-077): one
+ * lending counter in the envelope every room shares. Locked, it is D-007's
+ * facade and no room is built, so it stays out of `FIXED_ROOM_DEFINITIONS`,
+ * whose rooms are always open; `fixedRoomDefinitionsFor` adds it when the
+ * Shell says so.
+ */
+export const VAULT_ROOM_DEFINITION = freezeAuthoredRoom({
+  building: 'vault',
+  width: 18,
+  height: 12,
+  spawn: { x: 9, y: 9 },
+  exit: { x: 8, y: 11, width: 2, height: 1 },
+  stations: [
+    {
+      station: 'vault:lending',
+      label: 'SUPPLY / REDEEM',
+      x: 8,
+      y: 3,
+      width: 2,
+      height: 1,
+    },
+  ],
+} as const satisfies FixedRoomDefinition);
+
 export const FIXED_ROOM_DEFINITIONS = Object.freeze({
   bank: BANK_ROOM_DEFINITION,
   bridge: BRIDGE_ROOM_DEFINITION,
@@ -446,6 +474,17 @@ export const FIXED_ROOM_LEVELS: Readonly<Partial<Record<BuildingId, readonly Fix
   Object.freeze({
     exchange: Object.freeze([EXCHANGE_DEGEN_LEVEL, EXCHANGE_ROOF_LEVEL]),
   });
+
+const ALWAYS_OPEN_ROOMS: readonly FixedRoomDefinition[] = Object.freeze(Object.values(FIXED_ROOM_DEFINITIONS));
+const ROOMS_WITH_VAULT: readonly FixedRoomDefinition[] = Object.freeze([...ALWAYS_OPEN_ROOMS, VAULT_ROOM_DEFINITION]);
+
+/**
+ * The ground floors a World builds: every always-open room, then the Vault's
+ * when the Shell opens it (D-077). Fails closed: only a real `true` adds it.
+ */
+export function fixedRoomDefinitionsFor(options: { readonly vaultOpen?: boolean }): readonly FixedRoomDefinition[] {
+  return options.vaultOpen === true ? ROOMS_WITH_VAULT : ALWAYS_OPEN_ROOMS;
+}
 
 export function createFixedRoom(definition: FixedRoomDefinition): FixedRoomMap {
   validateFixedRoomDefinition(definition);

@@ -5,6 +5,7 @@ import type {
   PrivateSubmissionGateway,
   PreparedPrivateSwap,
   RelayFeeQuote,
+  VaultReadClient,
 } from './types.js';
 
 type FetchLike = (input: string, init?: RequestInit) => Promise<Response>;
@@ -14,7 +15,7 @@ const MAX_UINT256 = (1n << 256n) - 1n;
 const RELAY_NOT_CONFIGURED = 'RELAY_NOT_CONFIGURED';
 
 /** Browser client for the narrow, no-logging backend API. */
-export class BackendPrivacyClient implements PoolReadClient, PrivateSubmissionGateway {
+export class BackendPrivacyClient implements PoolReadClient, PrivateSubmissionGateway, VaultReadClient {
   private readonly baseUrl: string;
   private readonly fetcher: FetchLike;
 
@@ -72,6 +73,51 @@ export class BackendPrivacyClient implements PoolReadClient, PrivateSubmissionGa
     return raw;
   }
 
+  /**
+   * D-077: the Vault's stand-in address for a partial commitment, from the
+   * backend's read of the anonymizer's own view. The commitment goes to
+   * STRKWORLD's backend only, never to a third-party RPC (D-014). The caller
+   * cross-checks the address before anything is sent there.
+   */
+  async shadowAccount(partialCommitment: string, signal?: AbortSignal): Promise<{ address: string; deployed: boolean }> {
+    if (typeof partialCommitment !== 'string' || !isNonzeroFelt(partialCommitment)) {
+      throw new PrivacyError('unknown', 'The shadow-account commitment is invalid.');
+    }
+    const raw = await this.post('/v1/rpc/shadow-account', { v: 1, partialCommitment }, signal);
+    throwIfAborted(signal);
+    const value = asRecord(raw);
+    const address = asFelt(ownField(value, 'address'));
+    const deployed = ownField(value, 'deployed');
+    if (BigInt(address) === 0n || typeof deployed !== 'boolean' || Reflect.ownKeys(value).length !== 2) {
+      throw new PrivacyError('unknown', 'The private service returned an invalid response.');
+    }
+    return Object.freeze({ address, deployed });
+  }
+
+  /** D-077: a stand-in address's vSTRK position, in base units. */
+  async vaultPosition(account: string, signal?: AbortSignal): Promise<{
+    shares: bigint;
+    assets: bigint;
+    maxWithdraw: bigint;
+    maxRedeem: bigint;
+  }> {
+    if (typeof account !== 'string' || !isNonzeroFelt(account)) {
+      throw new PrivacyError('unknown', 'The Vault account is invalid.');
+    }
+    const raw = await this.post('/v1/rpc/vault-position', { v: 1, account }, signal);
+    throwIfAborted(signal);
+    const value = asRecord(raw);
+    if (Reflect.ownKeys(value).length !== 4) {
+      throw new PrivacyError('unknown', 'The private service returned an invalid response.');
+    }
+    return Object.freeze({
+      shares: asUint256(ownField(value, 'shares')),
+      assets: asUint256(ownField(value, 'assets')),
+      maxWithdraw: asUint256(ownField(value, 'maxWithdraw')),
+      maxRedeem: asUint256(ownField(value, 'maxRedeem')),
+    });
+  }
+
   async estimate(input: Parameters<PrivateSubmissionGateway['estimate']>[0]): Promise<RelayFeeQuote> {
     const route = ownInputField(input, 'route');
     const feeToken = ownInputField(input, 'feeToken');
@@ -106,7 +152,7 @@ export class BackendPrivacyClient implements PoolReadClient, PrivateSubmissionGa
 
   async submit(input: Parameters<PrivateSubmissionGateway['submit']>[0]): Promise<TxResult> {
     const route = ownInputField(input, 'route');
-    const artifact = ownJsonValue(ownInputField(input, 'artifact'));
+    const artifact = toWireArtifact(ownJsonValue(ownInputField(input, 'artifact')));
     const feeAuthorization = ownInputField(input, 'feeAuthorization');
     const proofValidityBlocks = ownInputField(input, 'proofValidityBlocks');
     const signal = ownOptionalInputField(input, 'signal');
@@ -285,6 +331,41 @@ export class BackendPrivacyClient implements PoolReadClient, PrivateSubmissionGa
       );
     }
   }
+}
+
+/**
+ * The proved artifact in the shape the relay takes: the Wallet API's own
+ * `STRK20_CALL_AND_PROOF`, whose call is `{ contract_address, entry_point,
+ * calldata }`. That is what the wallet answers and what avnu's paymaster
+ * executes. Since starknet.js 10.8 (the D-077 bump), `WalletAccountV6` hands a
+ * dapp a starknet.js `Call` instead, `{ contractAddress, entrypoint, calldata }`,
+ * converted from the wallet's answer, so it is converted back here, at the one
+ * place that knows the relay's wire format. Anything but exactly that call and a
+ * proof is refused whole, before transport.
+ *
+ * `value` is already this client's own JSON copy (`ownJsonValue`), so the reads
+ * below touch plain data only.
+ */
+function toWireArtifact(value: unknown): unknown {
+  // A missing or malformed artifact is refused by `submit`'s own checks.
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return value;
+  const record = value as Record<string, unknown>;
+  const call = record['call'];
+  if (
+    Reflect.ownKeys(record).length !== 2
+    || !Object.hasOwn(record, 'proof')
+    || !call
+    || typeof call !== 'object'
+    || Array.isArray(call)
+    || Reflect.ownKeys(call).length !== 3
+  ) {
+    throw new PrivacyError('unknown', 'The private submission request is invalid.');
+  }
+  const { contractAddress, entrypoint, calldata } = call as Record<string, unknown>;
+  if (typeof contractAddress !== 'string' || typeof entrypoint !== 'string' || !Array.isArray(calldata)) {
+    throw new PrivacyError('unknown', 'The private submission request is invalid.');
+  }
+  return { call: { contract_address: contractAddress, entry_point: entrypoint, calldata }, proof: record['proof'] };
 }
 
 function ownJsonValue(value: unknown): unknown {

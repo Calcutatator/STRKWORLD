@@ -351,6 +351,7 @@ describe('Exchange machine', () => {
       prepare: async () => preparedCount++ === 0 ? firstBatch : secondBatch,
       hasPrivateFunds: async () => true,
       depositStatus: async () => 'pending',
+      ...UNUSED_VAULT,
     };
     const machine = createExchangePanel({ operations, receipts: createReceiptLedger(), canStartFinancialAction: () => true });
     await machine.open(); await machine.refreshBalances(); machine.setAmount('1'); await machine.prepare();
@@ -545,5 +546,13 @@ function controlledOperations(confirmResult: Promise<{ transactionHash: string }
     balances: async () => [{ token: strk!.token, total: 100n * 10n ** 18n, spendable: 100n * 10n ** 18n, maturing: 0n, maturityKnown: true }],
     recipientStatus: async () => 'registered', prepare: async () => batch,
     hasPrivateFunds: async () => true, depositStatus: async () => 'pending',
+    ...UNUSED_VAULT,
   };
 }
+
+/** D-077: the Exchange never touches the Vault. */
+const UNUSED_VAULT: Pick<PrivacyOperations, 'vaultPosition' | 'prepareVaultSupply' | 'prepareVaultRedeem'> = {
+  vaultPosition: async () => { throw new Error('unused'); },
+  prepareVaultSupply: async () => { throw new Error('unused'); },
+  prepareVaultRedeem: async () => { throw new Error('unused'); },
+};

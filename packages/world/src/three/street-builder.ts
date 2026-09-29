@@ -15,7 +15,7 @@ import {
   Vector3,
   Color,
 } from 'three';
-import type { Material, Object3D } from 'three';
+import type { BufferGeometry, Material, Object3D } from 'three';
 import { SANDBOX_ENTRANCE, type BuildingId } from '@strkworld/shared';
 import {
   isSolidAt,
@@ -33,6 +33,7 @@ import {
   AVNU,
   NEAR,
   STRK20,
+  VESU,
   aoPaint,
   beamGeometry,
   boxGeometry,
@@ -44,6 +45,7 @@ import {
   cylinderGeometry,
   faceBox,
   faceDisc,
+  facePipe,
   faceQuad,
   faceTorus,
   flatPolygon,
@@ -1236,7 +1238,10 @@ function distribute(a: number, b: number, width: number, minGap: number): number
 /**
  * The building mass with a one-tile entrance alcove per door gap: a back
  * block, front blocks either side of each gap, a lintel over it, and jambs
- * framing a door that stands in the solid wall row behind the alcove.
+ * framing a door that stands in the solid wall row behind the alcove. A
+ * `vestibule` runs each doorway that much deeper into the back block, door
+ * high, for a door that stands open inside it (the opened Vault's, D-077);
+ * without one the back block is a single box, as it always was.
  */
 function massing(
   ctx: BuildingCtx,
@@ -1245,11 +1250,25 @@ function massing(
   doorTop: number,
   paint: Paint,
   bin = BODY,
+  vestibule = 0,
 ): number {
   const { x0, x1, z0, zf, rowZ } = ctx;
   const front = zf - frontInset;
   const doorBack = rowZ - DOOR_RECESS;
-  ctx.bins.add(bin, boxGeometry(x0 + SIDE_INSET, 0, z0 + SIDE_INSET, x1 - SIDE_INSET, height, doorBack), paint);
+  if (vestibule > 0) {
+    // Behind the vestibules, the full block; beside them, the facade row's
+    // solid runs; over each, its ceiling at the door's height.
+    const back = doorBack - vestibule;
+    ctx.bins.add(bin, boxGeometry(x0 + SIDE_INSET, 0, z0 + SIDE_INSET, x1 - SIDE_INSET, height, back), paint);
+    for (const run of solidRuns(ctx)) {
+      const a = run.x0 <= x0 ? x0 + SIDE_INSET : run.x0;
+      const b = run.x1 >= x1 ? x1 - SIDE_INSET : run.x1;
+      if (b - a > 0.01) ctx.bins.add(bin, boxGeometry(a, 0, back, b, height, doorBack), paint);
+    }
+    for (const gap of ctx.gaps) ctx.bins.add(bin, boxGeometry(gap.x0, doorTop, back, gap.x1, height, doorBack), paint);
+  } else {
+    ctx.bins.add(bin, boxGeometry(x0 + SIDE_INSET, 0, z0 + SIDE_INSET, x1 - SIDE_INSET, height, doorBack), paint);
+  }
   for (const run of solidRuns(ctx)) {
     const a = run.x0 <= x0 ? x0 + SIDE_INSET : run.x0;
     const b = run.x1 >= x1 ? x1 - SIDE_INSET : run.x1;
@@ -2162,12 +2181,18 @@ function crosshair(ctx: BuildingCtx, face: Face, u: number, v: number, colour: n
   ctx.bins.add(BODY, faceBox(face, u - bar / 2, v - arm, 0, u + bar / 2, v + arm, 0.008), colour);
 }
 
-/** Charcoal stone, iron straps, crenellations, and a chained, padlocked vault door. */
+/**
+ * Charcoal stone, iron straps, crenellations, and a chained, padlocked vault
+ * door. The Vault opens on shadow accounts, behind the Shell's switch
+ * (D-077): its door then stands swung back in a vestibule instead, and
+ * nothing else on the facade changes. Locked, it is D-007's facade.
+ */
 function vaultStyle(ctx: BuildingCtx): StyleResult {
   const t = ctx.theme;
   const H = t.height;
   const doorTop = 2.3;
-  const front = massing(ctx, H, 0.1, doorTop, aoPaint(t.wall, 0.05));
+  const open = ctx.fp.door !== null && !ctx.fp.door.locked;
+  const front = massing(ctx, H, 0.1, doorTop, aoPaint(t.wall, 0.05), BODY, open ? VAULT_VESTIBULE : 0);
   const gc = ctx.doorCentre;
   const xa = ctx.x0 + SIDE_INSET;
   const xb = ctx.x1 - SIDE_INSET;
@@ -2234,7 +2259,8 @@ function vaultStyle(ctx: BuildingCtx): StyleResult {
     for (let x = g.x0 - 0.15; x <= g.x1 + 0.15; x += 0.3) {
       ctx.bins.add(BODY, boxGeometry(x - 0.03, doorTop + 0.12, ctx.zf - 0.04, x + 0.03, doorTop + 0.18, ctx.zf - 0.02), 0x6a6f78);
     }
-    vaultDoor(ctx, g, doorTop);
+    if (open) openVaultDoor(ctx, g, doorTop);
+    else vaultDoor(ctx, g, doorTop);
     sconce(ctx, g.x0 - 0.5, 1.58, front);
     sconce(ctx, g.x1 + 0.5, 1.58, front);
   }
@@ -2246,7 +2272,7 @@ function vaultStyle(ctx: BuildingCtx): StyleResult {
     ctx.bins.add(BODY, boxGeometry(x, H + 0.12, ctx.z0 + SIDE_INSET, x + 0.35, H + 0.45, ctx.z0 + SIDE_INSET + 0.2), t.trim);
   }
   ctx.bins.add(BODY, boxGeometry(ctx.x0 + 1.2, H, ctx.z0 + 1.2, ctx.x0 + 2, H + 0.25, ctx.z0 + 2), 0x2a2d31);
-  // Vesu, locked and calm: a small plaque on the door's lintel.
+  // Vesu, calm, locked or open: a small plaque on the door's lintel.
   const brand = ctx.gap ? { x: gc, y: doorTop + 0.15, z: ctx.zf - 0.015 } : undefined;
   return { doorTop, sign: { x: gc, y: 2.95, z: ctx.zf - 0.03 }, ...(brand ? { brand } : {}) };
 }
@@ -2299,6 +2325,70 @@ function vaultDoor(ctx: BuildingCtx, gap: Span, doorTop: number): void {
   ctx.bins.add(BODY, boxGeometry(cx - 0.13, lockY - 0.16, doorFace + 0.02, cx + 0.13, lockY + 0.1, ctx.rowZ + 0.025), t.accent);
   ctx.bins.add(BODY, faceTorus({ normal: 'z+', plane: doorFace + 0.075 }, cx, lockY + 0.1, 0, 0.085, 0.022, { arc: Math.PI, tubularSegments: 8 }), 0x8d9096);
   ctx.bins.add(BODY, boxGeometry(cx - 0.02, lockY - 0.08, ctx.rowZ + 0.025, cx + 0.02, lockY, ctx.rowZ + 0.03), 0x151515);
+}
+
+/** How far the opened Vault's doorway runs into the building, over its solid wall rows (D-077). */
+const VAULT_VESTIBULE = 2;
+/** How far the opened Vault's door stands swung in on its hinge. */
+const VAULT_DOOR_SWING = (65 * Math.PI) / 180;
+/** The door's thickness once it shows its edge: heavy, as a vault door is. */
+const VAULT_DOOR_THICKNESS = 0.24;
+
+/**
+ * The Vault opened (D-077): the same heavy steel door and bolt ring, swung
+ * in on its east hinge against the vestibule's wall with its locking bolts
+ * run out of the free edge, so the doorway is clear to walk into. Beyond it
+ * the lender's light: a white floor and a periwinkle far wall, washed in
+ * Vesu's blue. No chains and no padlock. Everything stands behind the
+ * alcove, on the building's solid wall rows.
+ */
+function openVaultDoor(ctx: BuildingCtx, gap: Span, doorTop: number): void {
+  const t = ctx.theme;
+  const mouth = ctx.rowZ - DOOR_RECESS;
+  const back = mouth - VAULT_VESTIBULE;
+  const light = new Color(t.openPortal ?? t.portal);
+  const floor = PAVEMENT_HEIGHT;
+  ctx.bins.add(BODY, boxGeometry(gap.x0, 0, back, gap.x1, floor, ctx.rowZ), VESU.white);
+  ctx.bins.add(BODY, boxGeometry(gap.x0, floor, back, gap.x1, doorTop, back + 0.02), VESU.blueSoft);
+  ctx.bins.addRGBA(AURA, faceQuad({ normal: 'z+', plane: back + 0.025 }, gap.x0, floor, gap.x1, doorTop, 0), (_x, y) => [
+    light.r,
+    light.g,
+    light.b,
+    0.5 * Math.pow(1 - clamp01((y - floor) / (doorTop - floor)), 1.3),
+  ]);
+  ctx.bins.addRGBA(AURA, flatQuad(gap.x0, back, gap.x1, mouth, floor + 0.004), (_x, _y, z) => [
+    light.r,
+    light.g,
+    light.b,
+    0.35 * clamp01((mouth - z) / VAULT_VESTIBULE),
+  ]);
+
+  const a = gap.x0 + JAMB;
+  const b = gap.x1 - JAMB;
+  // The steel sill the door closes on, across the doorway's mouth.
+  ctx.bins.add(BODY, boxGeometry(a, floor, mouth - 0.06, b, floor + 0.03, mouth + 0.06), 0x4a4e56);
+  // The leaf in its own frame: the hinge on the local z axis, the free edge
+  // at -w, the street face at +T. Swung about the hinge at the east jamb.
+  const w = b - a;
+  const T = VAULT_DOOR_THICKNESS;
+  const swing = new Matrix4().makeRotationY(-VAULT_DOOR_SWING).setPosition(b, 0, mouth);
+  const leaf = (geometry: BufferGeometry, paint: number): void => ctx.bins.add(BODY, geometry.applyMatrix4(swing), paint);
+  const cu = -w / 2;
+  const cv = 1.2;
+  leaf(boxGeometry(-w, floor + 0.005, 0, 0, doorTop - 0.02, T), t.door);
+  const face: Face = { normal: 'z+', plane: T };
+  leaf(faceTorus(face, cu, cv, 0.05, 0.62, 0.045, { tubularSegments: 18 }), 0x4a4e56);
+  for (let i = 0; i < 8; i++) {
+    const angle = (i / 8) * Math.PI * 2;
+    const u = cu + Math.cos(angle) * 0.62;
+    const v = cv + Math.sin(angle) * 0.62;
+    leaf(faceBox(face, u - 0.05, v - 0.05, 0, u + 0.05, v + 0.05, 0.1), 0x5a5f68);
+  }
+  leaf(faceDisc(face, cu, cv, 0, 0.12, 0.08, 10), 0x5a5f68);
+  const edge: Face = { normal: 'z+', plane: 0 };
+  for (const v of [0.55, 1.2, 1.85]) leaf(facePipe(edge, -w - 0.12, -w + 0.02, v, T / 2, 0.05, 8), 0x9ea3ab);
+  // The heavy hinge knuckles, on the east jamb.
+  for (const y of [0.4, 1.6]) ctx.bins.add(BODY, cylinderGeometry(b + 0.04, y, mouth, 0.07, 0.07, 0.34, 10), 0x5a5f68);
 }
 
 function genericStyle(ctx: BuildingCtx): StyleResult {
@@ -2366,14 +2456,17 @@ function buildDoorPortal(
   group.position.set(door.x + door.width / 2, 0, door.y + door.height / 2);
 
   const theme = buildingTheme(door.building);
-  const colour = new Color(theme.portal);
+  // A door that ships locked glows in its own colour once the Shell opens it:
+  // the Vault's lender's blue (D-077). Every other door keeps its portal.
+  const portal = door.locked ? theme.portal : theme.openPortal ?? theme.portal;
+  const colour = new Color(portal);
   const doorTop = built?.doorTop ?? 2.3;
   const half = door.width / 2;
   // The door stands at the back of the zone: the facade row's north edge.
   const dz = -door.height / 2;
   const base = door.locked ? 0.6 : theme.portalIntensity ?? 1.8;
   const frameMaterial = res.material(
-    standardMaterial({ color: 0x1d1a17, vertexColors: false, emissive: theme.portal, emissiveIntensity: base }),
+    standardMaterial({ color: 0x1d1a17, vertexColors: false, emissive: portal, emissiveIntensity: base }),
   );
   const lightMaterial = res.material(unlitMaterial({ additive: true }));
   const bin = new GeometryBin();

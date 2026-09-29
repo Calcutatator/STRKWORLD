@@ -24,8 +24,16 @@ export type {
   Intent,
   PoolConfig,
   PreparedBatch,
+  PreparedVaultBatch,
   PrivacyOperations,
   SwapReview,
+  VaultAction,
+  VaultCallOptions,
+  VaultOutcome,
+  VaultPosition,
+  VaultStage,
+  VaultStageCallback,
+  VaultTxResult,
   WalletCapability,
 } from './operations.js';
 
@@ -39,6 +47,18 @@ export {
   ENDUR_XSTRK_ASSET,
   ENDUR_XSTRK_DECIMALS,
 } from './endur.js';
+
+// The Vault on shadow accounts (D-077): the pinned anonymizer, vault and dapp name.
+export {
+  SHADOW_ACCOUNT_ANONYMIZER,
+  SHADOW_ACCOUNT_PRIMER_CLASS_HASH,
+  SHADOW_ACCOUNTS_WALLET_API,
+  VAULT_DAPP_NAME,
+  VAULT_SHADOW_NONCE,
+  VESU_VSTRK,
+  VESU_VSTRK_ASSET,
+  VESU_VSTRK_DECIMALS,
+} from './vault.js';
 
 // Test double. Safe to import from any lane — no network, no wallet, no chain.
 export {
@@ -75,6 +95,7 @@ export {
   type PreparedPrivateSwap,
   type RelayFeeQuote,
   type SupportedVersionsReader,
+  type VaultReadClient,
   type WalletApiPrivacyOperationsOptions,
   type WalletRoutePolicy,
   type WalletChoice,

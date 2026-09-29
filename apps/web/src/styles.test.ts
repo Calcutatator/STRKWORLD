@@ -133,3 +133,65 @@ describe('the entry gate cards (D-072)', () => {
     }
   });
 });
+
+describe('the Vault window\'s theme (D-077)', () => {
+  const root = customProperties(ruleBody(':root'));
+  const vault = customProperties(ruleBody('.panel[data-building="vault"]'));
+
+  it('re-declares every token the base theme sets, so nothing leaks from the dark game theme', () => {
+    expect(root.size).toBeGreaterThan(40);
+    expect([...root.keys()].filter((name) => !vault.has(name))).toEqual([]);
+  });
+
+  it('wears Vesu: white pages, near-black ink, electric blue and periwinkle', () => {
+    expect(vault.get('--ui-surface')).toBe('#ffffff');
+    expect(vault.get('--ui-text')).toBe('#0a0a0a');
+    expect(vault.get('--ui-accent')).toBe('#2c41f6');
+    expect(vault.get('--ui-btn-bg')).toBe('#e0e5ff');
+    expect(vault.get('--ui-btn-text')).toBe('#2030b6');
+  });
+
+  it('keeps every text pair at WCAG AA and the focus ring visible', () => {
+    for (const background of ['--ui-surface', '--ui-surface-raised']) {
+      for (const token of ['--ui-text', '--ui-text-dim', '--ui-heading', '--ui-accent', '--ui-danger', '--ui-success', '--ui-warn', '--ui-lock']) {
+        expect(contrast(vault.get(token)!, vault.get(background)!), `${token} on ${background}`).toBeGreaterThanOrEqual(4.5);
+      }
+    }
+    expect(contrast(vault.get('--ui-primary-text')!, vault.get('--ui-primary-bg')!)).toBeGreaterThanOrEqual(4.5);
+    expect(contrast(vault.get('--ui-primary-text')!, vault.get('--ui-primary-bg-hover')!)).toBeGreaterThanOrEqual(4.5);
+    expect(contrast(vault.get('--ui-btn-text')!, vault.get('--ui-btn-bg')!)).toBeGreaterThanOrEqual(4.5);
+    expect(contrast(vault.get('--ui-btn-text')!, vault.get('--ui-btn-bg-hover')!)).toBeGreaterThanOrEqual(4.5);
+    expect(contrast(vault.get('--ui-tab-selected-text')!, vault.get('--ui-tab-selected-bg')!)).toBeGreaterThanOrEqual(4.5);
+    expect(contrast(vault.get('--ui-input-border')!, vault.get('--ui-surface')!)).toBeGreaterThanOrEqual(3);
+    expect(contrast(vault.get('--ui-focus')!, vault.get('--ui-surface')!)).toBeGreaterThanOrEqual(3);
+    expect(Number.parseFloat(vault.get('--ui-focus-width')!)).toBeGreaterThanOrEqual(2);
+  });
+
+  it('scopes every Vault rule to the Vault window', () => {
+    // Split a selector list at its top-level commas only, not those inside `:is(…)`.
+    const selectorsOf = (prelude: string) => {
+      const selectors: string[] = [];
+      let depth = 0;
+      let current = '';
+      for (const character of prelude) {
+        if (character === '(') depth += 1;
+        if (character === ')') depth -= 1;
+        if (character === ',' && depth === 0) {
+          selectors.push(current.trim());
+          current = '';
+        } else {
+          current += character;
+        }
+      }
+      return [...selectors, current.trim()];
+    };
+    let scoped = 0;
+    for (const match of css.matchAll(/([^{}]+)\{[^{}]*\}/g)) {
+      for (const selector of selectorsOf(match[1]!).filter((part) => /vault/.test(part))) {
+        expect(selector, selector).toMatch(/^\.panel\[data-building="vault"\]/);
+        scoped += 1;
+      }
+    }
+    expect(scoped).toBeGreaterThan(8);
+  });
+});

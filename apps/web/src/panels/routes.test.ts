@@ -13,6 +13,8 @@ import {
   routeRequiresDisclosure,
   routeReturnsToPool,
   ROUTE_BY_INTENT_KIND,
+  VAULT_ROUTES,
+  vaultDoorOpen,
 } from './routes.js';
 import { resolveRoom } from './panel-framework.js';
 import { BUILDING_PANELS } from './registry.js';
@@ -171,8 +173,15 @@ describe('building doors', () => {
     }
   });
 
-  it('keeps the Vault shut — it has no graded route in v1', () => {
-    const door = buildingDoor('vault');
+  it('opens the Vault by the register now that D-077 grades its two routes', () => {
+    // The register's answer only: whether this build switched the Vault on is
+    // `routeDoor`'s and `vaultDoorOpen`'s (below), and the World keeps its
+    // street door locked until then.
+    expect(buildingDoor('vault').open).toBe(true);
+  });
+
+  it('keeps the Vault shut with its own line when the register grades none of its routes', () => {
+    const door = buildingDoor('vault', PRIVACY_REGISTER.filter((entry) => entry.building !== 'vault'));
     expect(door.open).toBe(false);
     expect(door.reason).toBe('coming-soon');
     // The Vault gets its own line rather than the shared "coming soon" text —
@@ -209,10 +218,16 @@ describe('room resolution', () => {
     expect(unbuilt.kind === 'unbuilt' && unbuilt.message).toBe(COPY.unbuilt);
   });
 
-  it('renders a locked door for the Vault even if somebody registers a panel', () => {
-    const room = resolveRoom('vault', { ...panels, vault: 'vault-panel' });
+  it('renders a locked door for the Vault, even with a panel registered, when the register grades none of its routes', () => {
+    const withoutVault = PRIVACY_REGISTER.filter((entry) => entry.building !== 'vault');
+    const room = resolveRoom('vault', { ...panels, vault: 'vault-panel' }, withoutVault);
     expect(room.kind).toBe('locked');
     expect(room.kind === 'locked' && room.reason).toBe('coming-soon');
+  });
+
+  it('renders the Vault panel once its routes are graded (D-077)', () => {
+    const room = resolveRoom('vault', BUILDING_PANELS);
+    expect(room.kind).toBe('panel');
   });
 
   it('puts the privacy gate ahead of the panel registry', () => {
@@ -458,5 +473,67 @@ describe('the entry gate deposit route (D-072)', () => {
     expect(routeRequiresDisclosure('post-office.transfer')).toBe(false);
     expect(routeRequiresDisclosure('bank.stake')).toBe(false);
     expect(buildingDoor('bank').open).toBe(true);
+  });
+});
+
+describe('the Vault switch (D-077)', () => {
+  const STRK = '0x04718f5a0fc34cc1af16a1cdee98ffb20c31f5cd61d6ab07201858f4287c938d';
+  const denyAll: WalletRoutePolicy = {
+    maxIntents: 0,
+    maxRelayFee: 0n,
+    enabledRoutes: [],
+    allowedTokens: { shield: [], unshield: [], transfer: [], swap: [] },
+  };
+  const vaultOn: WalletRoutePolicy = {
+    maxIntents: 1,
+    maxRelayFee: 0n,
+    enabledRoutes: ['vault'],
+    allowedTokens: { ...denyAll.allowedTokens, vault: [STRK] },
+  };
+
+  it('keeps both Vault routes and the street door shut under a deny-all policy', () => {
+    for (const route of VAULT_ROUTES) {
+      expect(routeDoor(route, PRIVACY_REGISTER, denyAll)).toMatchObject({
+        open: false,
+        reason: 'not-enabled',
+        message: COPY.locked.notEnabled.vault,
+      });
+    }
+    expect(vaultDoorOpen(PRIVACY_REGISTER, denyAll)).toBe(false);
+  });
+
+  it('opens both routes and the street door when the build switches the Vault on', () => {
+    for (const route of VAULT_ROUTES) expect(routeDoor(route, PRIVACY_REGISTER, vaultOn).open).toBe(true);
+    expect(vaultDoorOpen(PRIVACY_REGISTER, vaultOn)).toBe(true);
+  });
+
+  it('keeps the Vault shut when its list does not name STRK', () => {
+    const wrongToken: WalletRoutePolicy = { ...vaultOn, allowedTokens: { ...denyAll.allowedTokens, vault: ['0x123'] } };
+    const noList: WalletRoutePolicy = { ...vaultOn, allowedTokens: denyAll.allowedTokens };
+    for (const policy of [wrongToken, noList]) expect(vaultDoorOpen(PRIVACY_REGISTER, policy)).toBe(false);
+  });
+
+  it('opens the Vault outside production, where the register alone decides and the demo runs it', () => {
+    expect(vaultDoorOpen(PRIVACY_REGISTER, null)).toBe(true);
+  });
+
+  it('keeps the Vault shut when either route loses its approval, whatever the policy', () => {
+    const unapproved = PRIVACY_REGISTER.map((entry) =>
+      entry.route === 'vault.redeem' ? { ...entry, approvedBy: null } : entry);
+    expect(vaultDoorOpen(unapproved, vaultOn)).toBe(false);
+    expect(vaultDoorOpen(unapproved, null)).toBe(false);
+  });
+
+  it('never lets the Vault switch open another route, or another switch open the Vault', () => {
+    const transferOnly: WalletRoutePolicy = {
+      ...denyAll,
+      maxIntents: 1,
+      maxRelayFee: 1n,
+      enabledRoutes: ['transfer'],
+      allowedTokens: { ...denyAll.allowedTokens, transfer: [STRK] },
+    };
+    expect(vaultDoorOpen(PRIVACY_REGISTER, transferOnly)).toBe(false);
+    expect(routeDoor('post-office.transfer', PRIVACY_REGISTER, vaultOn).open).toBe(false);
+    expect(routeDoor('bank.shield', PRIVACY_REGISTER, vaultOn).open).toBe(false);
   });
 });

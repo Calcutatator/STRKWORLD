@@ -30,6 +30,7 @@ export type {
   PreparedPrivateSwap,
   RelayFeeQuote,
   SupportedVersionsReader,
+  VaultReadClient,
   WalletRoutePolicy,
   WalletStrk20Account,
 } from './types.js';

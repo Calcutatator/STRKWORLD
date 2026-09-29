@@ -319,6 +319,55 @@ describe('shell copy', () => {
     });
   });
 
+  describe('the Vault (D-077)', () => {
+    const vaultCopy = allCopyStrings(COPY.vault);
+
+    it('names Vesu and says where the STRK comes from and lands', () => {
+      expect(COPY.vault.eyebrow).toBe('Lending with Vesu');
+      expect(COPY.vault.intro).toMatch(/^Supply STRK from your pool balance to Vesu's STRK vault/);
+      expect(COPY.vault.intro).toMatch(/back into your pool balance/);
+      expect(COPY.vault.review.landsIn).toMatch(/lands in your pool balance/);
+      // The pre-D-077 locked line is unchanged: a locked build reads exactly as before.
+      expect(COPY.vault.locked).toBe('The Vault — lending with Vesu. Not open yet.');
+    });
+
+    it('claims no privacy of its own: what is public is the register disclosure, at the commit point', () => {
+      const claim =
+        /\b(?:private\w*|privately|privacy|hidden|hides?|hiding|conceal\w*|secret\w*|anonym\w*|untraceable|unlinkable|invisible|confidential|shadow|stand-in|public|on-chain|visible)\b/i;
+      expect(vaultCopy.length).toBeGreaterThan(20);
+      for (const line of vaultCopy) expect(line, line).not.toMatch(claim);
+    });
+
+    it('says plainly that each move pays the pool fee from the pool balance', () => {
+      expect(COPY.vault.feeNote).toBe(
+        'Each supply and redeem pays the pool fee from your pool balance, so keep enough there to come back out.',
+      );
+      expect(COPY.vault.feeNote).not.toMatch(/\d/);
+    });
+
+    it('never promises a redeem figure the vault has not fixed, or a network fee STRKWORLD cannot state', () => {
+      expect(COPY.vault.review.redeemAll).toMatch(/about$/);
+      expect(COPY.vault.review.allNote).toMatch(/Vesu fixes the exact STRK when the redeem runs/);
+      expect(COPY.vault.review.networkByWallet).toMatch(/your wallet/);
+      expect(COPY.vault.review.networkByWallet).not.toMatch(/\d/);
+    });
+
+    it('treats an unconfirmed transaction as not confirmed yet, never as failed', () => {
+      expect(COPY.vault.submitted.pending).toMatch(/has not confirmed it yet/);
+      expect(COPY.vault.submitted.pending).not.toMatch(/fail|did not go through/i);
+      expect(COPY.vault.submitted.reverted).toMatch(/did not go through/);
+    });
+
+    it('tells a wallet without shadow accounts so, and that nothing else is affected', () => {
+      const line = COPY.errors['shadow-accounts-unsupported'];
+      expect(line).toMatch(/^Your wallet doesn't support shadow accounts yet/);
+      expect(line).toMatch(/Nothing was sent/);
+      expect(line).toMatch(/every other building works as before/);
+      expect(line).not.toBe(COPY.errors['unsupported-wallet']);
+      expect(COPY.locked.notEnabled.vault).toBe("The Vault isn't switched on in this build yet.");
+    });
+  });
+
   it('never promises that timing or a batch hides more than it does', () => {
     for (const line of allCopyStrings()) {
       expect(line.toLowerCase(), line).not.toContain('untraceable');

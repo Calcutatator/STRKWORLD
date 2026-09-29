@@ -152,6 +152,31 @@ describe('door triggers', () => {
     expect(trigger.inside).toBe('post-office');
   });
 
+  it('treats the opened Vault as any open building: entered, then exited, never locked (D-077)', () => {
+    const open = createStreetMap({ vaultOpen: true });
+    const vault = open.doors.find((d: DoorZone) => d.building === 'vault')!;
+    const bus = fakeBus();
+    const trigger = createDoorTrigger(open, bus);
+
+    trigger.update(AWAY);
+    trigger.update({ x: vault.x, y: vault.y });
+    expect(trigger.inside).toBe('vault');
+    trigger.update({ x: vault.x + 1, y: vault.y });
+    trigger.update(AWAY);
+
+    expect(bus.events).toEqual([
+      { event: 'building:entered', payload: { building: 'vault' } },
+      { event: 'building:exited', payload: { building: 'vault' } },
+    ]);
+    expect(trigger.inside).toBeNull();
+    // The default street's Vault is still D-007's locked facade.
+    const closed = fakeBus();
+    createDoorTrigger(map, closed).update(doorTile('vault'));
+    expect(closed.events).toEqual([
+      { event: 'building:locked', payload: { building: 'vault', reason: 'coming-soon' } },
+    ]);
+  });
+
   it('does not emit a stale entry after an exit callback changes occupancy', () => {
     const events: Emitted[] = [];
     let trigger!: ReturnType<typeof createDoorTrigger>;

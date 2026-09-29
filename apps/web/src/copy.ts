@@ -272,8 +272,50 @@ export const COPY = freezeCopy({
       "The xSTRK lands in your pool balance. Endur's vault sets the exact amount when the stake runs, so there is no figure to show before you confirm.",
   },
 
+  /**
+   * The Vault (D-077): Vesu lending from the player's STRK20 shadow account.
+   * What is public about it is the register's approved disclosure, shown at
+   * the commit point and never restated here; so nothing below says that
+   * anything is hidden or private (`copy.test.ts` checks). The fee line is
+   * how the product works, not a privacy disclosure.
+   */
   vault: {
     locked: 'The Vault — lending with Vesu. Not open yet.',
+    eyebrow: 'Lending with Vesu',
+    intro: "Supply STRK from your pool balance to Vesu's STRK vault, and redeem it back into your pool balance whenever the vault can pay out.",
+    feeNote: 'Each supply and redeem pays the pool fee from your pool balance, so keep enough there to come back out.',
+    checking: 'Checking what your wallet supports…',
+    recheck: 'Check again',
+    supply: 'Supply',
+    redeem: 'Redeem',
+    amount: 'Amount',
+    redeemAll: 'Redeem everything',
+    position: {
+      title: 'Your Vault position',
+      unrequested: 'STRKWORLD reads your position from the chain only when you ask. Your wallet may ask you first.',
+      show: 'Show my position',
+      loading: 'Reading your position…',
+      again: 'Read it again',
+      worth: 'Worth now',
+      redeemable: 'Redeemable now',
+      empty: 'Nothing is in the Vault yet.',
+      changed: 'Your Vault position has changed. Read it again to see the new figures.',
+    },
+    review: {
+      supply: 'You supply',
+      redeem: 'You redeem',
+      redeemAll: 'You redeem everything, about',
+      /** No figure is promised: Vesu fixes the STRK when the redeem runs. */
+      allNote: "Vesu fixes the exact STRK when the redeem runs, so the figure above is the vault's own preview.",
+      landsIn: 'The STRK lands in your pool balance.',
+      /** The wallet submits the Vault and adds its own network fee, so STRKWORLD states none. */
+      networkByWallet: 'Added and shown by your wallet when it asks',
+    },
+    submitted: {
+      succeeded: 'Done. The network confirmed it.',
+      pending: 'Sent. The network has not confirmed it yet, so read your position again in a moment.',
+      reverted: 'This did not go through on the network, so nothing moved in the Vault.',
+    },
   },
 
   /**
@@ -489,6 +531,8 @@ export const COPY = freezeCopy({
       transfer: "Private transfer isn't switched on in this build yet.",
       swap: "Swap isn't switched on in this build yet.",
       stake: "Staking isn't switched on in this build yet.",
+      /** D-077: the Vault's one policy route gates supply and redeem alike. */
+      vault: "The Vault isn't switched on in this build yet.",
     },
   },
 
@@ -574,6 +618,13 @@ export const COPY = freezeCopy({
     /** D-070: the deployment has no avnu key for its relay. Shield never needs it. */
     'relay-not-configured':
       "Unshield, send, stake and swap need the private relay, which isn't set up on this site yet. Nothing was sent.",
+    /**
+     * D-077: the Vault needs a wallet that runs STRK20 shadow accounts. A
+     * fact about the wallet's release, not the account: it stays in the
+     * Vault, and every other building works as before.
+     */
+    'shadow-accounts-unsupported':
+      "Your wallet doesn't support shadow accounts yet, and the Vault needs one. Nothing was sent, and every other building works as before.",
     unknown: 'That did not go through, and nothing was signed.',
   } satisfies Record<PrivacyErrorKind, string>,
 

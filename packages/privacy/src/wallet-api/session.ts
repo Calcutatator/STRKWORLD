@@ -1,6 +1,6 @@
 import type { WalletWithStarknetFeatures } from '@starknet-io/get-starknet-wallet-standard/features';
 import { WalletAccountV6, walletV6 } from 'starknet';
-import type { PreparedBatch, PrivacyOperations } from '../operations.js';
+import type { PreparedBatch, PreparedVaultBatch, PrivacyOperations, VaultAction } from '../operations.js';
 import { PrivacyError, type Address } from '../types.js';
 import { BackendPrivacyClient } from './backend-client.js';
 import { createSupportedVersionsReader, createWalletDiscovery } from './discovery.js';
@@ -225,7 +225,34 @@ export function createWalletSession(
       }
       return ownPreparedBatch(prepared, () => isCurrent(owner), changedSessionError);
     },
+    // D-077: the Vault, owned like every other call. A position read for a
+    // retired account is refused; a batch prepared for one never confirms.
+    vaultPosition: (options) => ownedResult((owned) => owned.vaultPosition(options)),
+    prepareVaultSupply: (token, amount, options) => ownedVaultBatch((owned) => owned.prepareVaultSupply(token, amount, options)),
+    prepareVaultRedeem: (amount, options) => ownedVaultBatch((owned) => owned.prepareVaultRedeem(amount, options)),
   };
+
+  async function ownedVaultBatch(
+    run: (owned: PrivacyOperations) => Promise<PreparedVaultBatch>,
+  ): Promise<PreparedVaultBatch> {
+    const owner = currentOwner();
+    let prepared: PreparedVaultBatch;
+    try {
+      prepared = await run(owner.operations);
+    } catch (error) {
+      if (!isCurrent(owner)) throw changedSessionError();
+      throw error;
+    }
+    if (!isCurrent(owner)) {
+      try {
+        prepared.discard();
+      } catch {
+        // Automatic stale cleanup cannot mask the changed-session result.
+      }
+      throw changedSessionError();
+    }
+    return ownPreparedVaultBatch(prepared, () => isCurrent(owner), changedSessionError);
+  }
 
   function destroyConnection(owned: WalletConnectionPort, suppressErrors: boolean): void {
     if (retiredConnections.has(owned)) return;
@@ -544,6 +571,8 @@ export function createProductionWalletSession(
           submission: backend,
           supportedVersions: createSupportedVersionsReader(wallet),
           policy,
+          // D-077: the Vault's two public reads, through the same backend.
+          vault: backend,
         }),
         subscribe(listener) {
           portListeners.add(listener);
@@ -660,6 +689,12 @@ function ownPolicy(policy: WalletRoutePolicy): WalletRoutePolicy {
     'stake',
   );
   const stakeTokens = stakeValue === undefined ? undefined : copyPolicyCollection(stakeValue);
+  // Optional (D-077) the same way: a policy without it admits no Vault token.
+  const vaultValue = readOptionalPolicyValue<NonNullable<WalletRoutePolicy['allowedTokens']['vault']>>(
+    allowedTokens,
+    'vault',
+  );
+  const vaultTokens = vaultValue === undefined ? undefined : copyPolicyCollection(vaultValue);
   const swap = readOptionalPolicyValue<NonNullable<WalletRoutePolicy['swap']>>(policy, 'swap');
   if (swap !== undefined && !hasOwnDataProperties(swap, ['expectedChainId', 'slippageBps'])) {
     throw new PrivacyError('unknown', 'The wallet route policy is invalid.');
@@ -667,14 +702,16 @@ function ownPolicy(policy: WalletRoutePolicy): WalletRoutePolicy {
   if (!Number.isSafeInteger(maxIntents) || maxIntents < 0 || typeof maxRelayFee !== 'bigint' || maxRelayFee < 0n) {
     throw invalidPolicy();
   }
-  const knownRoutes = new Set(['shield', 'unshield', 'transfer', 'swap', 'stake']);
+  const knownRoutes = new Set(['shield', 'unshield', 'transfer', 'swap', 'stake', 'vault']);
   if (
     enabledRoutes.some((route) => typeof route !== 'string' || !knownRoutes.has(route))
     || new Set(enabledRoutes).size !== enabledRoutes.length
   ) {
     throw invalidPolicy();
   }
-  for (const tokens of [shield, unshield, transfer, swapTokens, stakeTokens ?? []]) validatePolicyTokens(tokens);
+  for (const tokens of [shield, unshield, transfer, swapTokens, stakeTokens ?? [], vaultTokens ?? []]) {
+    validatePolicyTokens(tokens);
+  }
   if (enabledRoutes.includes('swap') && swap === undefined) throw invalidPolicy();
   let ownedSwap: NonNullable<WalletRoutePolicy['swap']> | undefined;
   if (swap !== undefined) {
@@ -695,6 +732,7 @@ function ownPolicy(policy: WalletRoutePolicy): WalletRoutePolicy {
       transfer: Object.freeze(transfer),
       swap: Object.freeze(swapTokens),
       ...(stakeTokens ? { stake: Object.freeze(stakeTokens) } : {}),
+      ...(vaultTokens ? { vault: Object.freeze(vaultTokens) } : {}),
     }),
     ...(ownedSwap
       ? { swap: ownedSwap }
@@ -880,6 +918,145 @@ function ownPreparedBatch(
     },
     discard,
   });
+}
+
+/**
+ * The session's own copy of a prepared Vault batch (D-077), checked like
+ * `ownPreparedBatch`: costs that add up, an action this package could have
+ * built, frozen review data, and a confirm that refuses a retired account.
+ *
+ * One difference, from the Vault's contract: once the wallet has returned a
+ * transaction hash, the result is returned even if the account changed while
+ * the receipt was awaited. The transaction exists either way, and a failure
+ * here would only invite a second submission.
+ */
+function ownPreparedVaultBatch(
+  prepared: PreparedVaultBatch,
+  isCurrent: () => boolean,
+  changedSessionError: () => PrivacyError,
+): PreparedVaultBatch {
+  const required = ['action', 'poolFee', 'gasEstimate', 'totalCost', 'warnings', 'promptCount', 'confirm', 'discard'] as const;
+  const invalid = (message: string): PrivacyError => {
+    try {
+      prepared.discard();
+    } catch {
+      // The invalid batch is refused either way.
+    }
+    return new PrivacyError('unknown', message);
+  };
+  if (!hasOwnDataProperties(prepared, required)) throw invalid('The wallet returned an invalid prepared Vault batch.');
+  if (
+    typeof prepared.poolFee !== 'bigint'
+    || prepared.poolFee < 0n
+    || typeof prepared.gasEstimate !== 'bigint'
+    || prepared.gasEstimate < 0n
+    || typeof prepared.totalCost !== 'bigint'
+    || prepared.totalCost !== prepared.poolFee + prepared.gasEstimate
+  ) {
+    throw invalid('The wallet returned invalid prepared costs.');
+  }
+  if (!Number.isSafeInteger(prepared.promptCount) || prepared.promptCount < 0) {
+    throw invalid('The wallet returned an invalid prepared prompt count.');
+  }
+  if (!denseDataArray(prepared.warnings) || !prepared.warnings.every(validWarning)) {
+    throw invalid('The wallet returned an invalid prepared warning.');
+  }
+  const action = ownVaultAction(prepared.action);
+  if (action === null) throw invalid('The wallet returned an invalid prepared Vault action.');
+  const warnings = Object.freeze(prepared.warnings.map((warning) => Object.freeze({ ...warning })));
+  let discarded = false;
+  let confirmationAttempted = false;
+  const discard = (): void => {
+    if (discarded) return;
+    discarded = true;
+    prepared.discard();
+  };
+  const retire = (): void => {
+    try {
+      discard();
+    } catch {
+      // Automatic cleanup cannot replace the authoritative settlement result.
+    }
+  };
+  return Object.freeze({
+    action,
+    poolFee: prepared.poolFee,
+    gasEstimate: prepared.gasEstimate,
+    totalCost: prepared.totalCost,
+    warnings,
+    promptCount: prepared.promptCount,
+    async confirm(options: Parameters<PreparedVaultBatch['confirm']>[0]) {
+      if (!hasOwnDataProperties(options, ['feeCeiling'])) {
+        throw new PrivacyError('unknown', 'The confirmation options are invalid.');
+      }
+      for (const optional of ['onProgress', 'onStage', 'onSubmitted', 'signal'] as const) {
+        const descriptor = Object.getOwnPropertyDescriptor(options, optional);
+        if (descriptor && !('value' in descriptor)) {
+          throw new PrivacyError('unknown', 'The confirmation options are invalid.');
+        }
+      }
+      const ownedOptions = {
+        feeCeiling: options.feeCeiling,
+        ...(options.onProgress ? { onProgress: options.onProgress } : {}),
+        ...(options.onStage ? { onStage: options.onStage } : {}),
+        ...(options.onSubmitted ? { onSubmitted: options.onSubmitted } : {}),
+        ...(options.signal ? { signal: options.signal } : {}),
+      };
+      if (discarded) {
+        throw new PrivacyError('unknown', 'This prepared batch was discarded. Prepare a new batch.');
+      }
+      if (confirmationAttempted) {
+        throw new PrivacyError('unknown', 'This prepared batch was already confirmed or attempted. Prepare a new batch.');
+      }
+      if (!isCurrent()) {
+        retire();
+        throw changedSessionError();
+      }
+      confirmationAttempted = true;
+      let result: Awaited<ReturnType<PreparedVaultBatch['confirm']>>;
+      try {
+        result = await prepared.confirm(ownedOptions);
+      } catch (error) {
+        if (!isCurrent()) {
+          retire();
+          throw changedSessionError();
+        }
+        throw error;
+      }
+      if (
+        !hasOwnDataProperties(result, ['transactionHash', 'outcome'])
+        || typeof result.transactionHash !== 'string'
+        || !isNonzeroFelt(result.transactionHash)
+        || (result.outcome !== 'succeeded' && result.outcome !== 'reverted' && result.outcome !== 'pending')
+      ) {
+        retire();
+        throw new PrivacyError('unknown', 'The wallet returned an invalid transaction receipt.');
+      }
+      return Object.freeze({ transactionHash: result.transactionHash, outcome: result.outcome });
+    },
+    discard,
+  });
+}
+
+/** A Vault action as this package builds one, owned and frozen, or null. */
+function ownVaultAction(value: unknown): VaultAction | null {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
+  const read = (key: string): unknown => {
+    const descriptor = Object.getOwnPropertyDescriptor(value, key);
+    return descriptor && 'value' in descriptor ? descriptor.value : undefined;
+  };
+  const kind = read('kind');
+  const token = read('token');
+  const amount = read('amount');
+  if (typeof token !== 'string' || !isNonzeroFelt(token) || typeof amount !== 'bigint' || amount < 0n) return null;
+  if (kind === 'supply' && Reflect.ownKeys(value).length === 3 && amount > 0n) {
+    return Object.freeze({ kind, token, amount });
+  }
+  const all = read('all');
+  if (kind === 'redeem' && Reflect.ownKeys(value).length === 4 && typeof all === 'boolean' && (all || amount > 0n)) {
+    return Object.freeze({ kind, token, amount, all });
+  }
+  return null;
 }
 
 function validIntent(value: unknown): boolean {

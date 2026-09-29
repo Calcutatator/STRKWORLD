@@ -20,6 +20,22 @@ export type BankDebugStep =
   | { readonly step: 'prepare'; readonly kinds: readonly string[] }
   | { readonly step: 'confirm'; readonly stage: string };
 
+/**
+ * One step of a Vault call (D-077): the probe of whether a wallet runs STRK20
+ * shadow accounts end to end. Yes/no answers, wallet error codes and stage
+ * names only, never an amount, a balance, an address, the commitment or a
+ * transaction hash; the logger admits each field only from a fixed list.
+ */
+export type VaultDebugStep =
+  /** The version query at the counter: whether shadow accounts are offered, and the Wallet API it reported. */
+  | { readonly step: 'capability'; readonly supported: boolean; readonly walletApi: string | null }
+  /** A stage the seam reported (`VaultStage`), passed on as it came. */
+  | { readonly step: 'stage'; readonly stage: unknown }
+  /** A prepare starting: which way, and whether it is everything. */
+  | { readonly step: 'prepare'; readonly kind: 'supply' | 'redeem'; readonly all: boolean }
+  /** A confirm stage, or how the attempt ended here. */
+  | { readonly step: 'confirm'; readonly kind: 'supply' | 'redeem'; readonly stage: string };
+
 export interface DebugTap {
   /** A privacy or wallet failure: its PrivacyError kind, wallet code and message. */
   failure(event: string, error: unknown): void;
@@ -40,6 +56,8 @@ export interface DebugTap {
    * nothing else. Optional, so a tap written before the plaza still fits.
    */
   plazaShells?(result: unknown): void;
+  /** A Vault step (D-077), by code only. Optional, like `plazaShells`. */
+  vault?(step: unknown): void;
 }
 
 let tap: DebugTap | null = null;
@@ -130,6 +148,19 @@ export function debugPlazaShells(result: 'win' | 'lose'): void {
   if (!tap) return;
   try {
     tap.plazaShells?.(result);
+  } catch {
+    // As above.
+  }
+}
+
+/**
+ * A Vault step (D-077), by code only: see `VaultDebugStep`. The probe of
+ * shadow-account support reads these lines.
+ */
+export function debugVault(step: VaultDebugStep): void {
+  if (!tap) return;
+  try {
+    tap.vault?.(step);
   } catch {
     // As above.
   }

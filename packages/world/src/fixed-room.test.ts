@@ -12,10 +12,13 @@ import {
   FIXED_ROOM_LEVELS,
   FixedRoomDefinitionError,
   POST_OFFICE_ROOM_DEFINITION,
+  VAULT_LENDING_STATION,
+  VAULT_ROOM_DEFINITION,
   createFixedRoom,
   createFixedRoomController,
   createFixedRoomLevel,
   createFixedRoomPresentation,
+  fixedRoomDefinitionsFor,
   fixedRoomLiftAt,
   validateFixedRoomLevels,
   type FixedRoomLevelDefinition,
@@ -629,6 +632,7 @@ describe('fixed room definitions', () => {
     ['exchange', EXCHANGE_ROOM_DEFINITION],
     ['post office', POST_OFFICE_ROOM_DEFINITION],
     ['bridge', BRIDGE_ROOM_DEFINITION],
+    ['opened vault', VAULT_ROOM_DEFINITION],
   ])('%s uses the fixed walkable envelope', (_name, definition) => {
     const room = createFixedRoom(definition);
     expect(room.width).toBe(18);
@@ -715,6 +719,81 @@ describe('fixed room definitions', () => {
       ],
     });
     expect(FIXED_ROOM_DEFINITIONS).toMatchObject({ bridge: BRIDGE_ROOM_DEFINITION });
+  });
+
+  it('pins the opened Vault\'s lending counter at the authored coordinates (D-077)', () => {
+    expect(VAULT_ROOM_DEFINITION).toEqual({
+      building: 'vault',
+      width: 18,
+      height: 12,
+      spawn: { x: 9, y: 9 },
+      exit: { x: 8, y: 11, width: 2, height: 1 },
+      stations: [{ station: 'vault:lending', label: 'SUPPLY / REDEEM', x: 8, y: 3, width: 2, height: 1 }],
+    });
+    expect(VAULT_LENDING_STATION).toBe('vault:lending');
+    const room = createFixedRoom(VAULT_ROOM_DEFINITION);
+    expect(room).toMatchObject({ building: 'vault', level: 'ground', lifts: [], rooftop: null });
+    expect(fixedRoomStationAtApproach(room, 9, 4)?.station).toBe(VAULT_LENDING_STATION);
+    // Nothing between the exit and the counter.
+    for (let y = 4; y < room.exit.y; y++) {
+      for (let x = room.exit.x; x < room.exit.x + room.exit.width; x++) expect(isFixedRoomSolidAt(room, x, y)).toBe(false);
+    }
+    // Locked until the Shell says otherwise, like every counter.
+    expect(normalizeFixedRoomStations(VAULT_ROOM_DEFINITION, undefined)).toEqual([
+      { station: VAULT_LENDING_STATION, label: 'SUPPLY / REDEEM', status: 'locked' },
+    ]);
+  });
+
+  it('keeps the Vault definition as immutable as its neighbours', () => {
+    for (const value of [
+      VAULT_ROOM_DEFINITION,
+      VAULT_ROOM_DEFINITION.spawn,
+      VAULT_ROOM_DEFINITION.exit,
+      VAULT_ROOM_DEFINITION.stations,
+      VAULT_ROOM_DEFINITION.stations[0],
+    ]) {
+      expect(Object.isFrozen(value)).toBe(true);
+    }
+    expect(Reflect.set(VAULT_ROOM_DEFINITION.stations[0], 'label', 'FORGED')).toBe(false);
+    expect(Reflect.set(VAULT_ROOM_DEFINITION.exit, 'y', 10)).toBe(false);
+    expect(VAULT_ROOM_DEFINITION.stations[0].label).toBe('SUPPLY / REDEEM');
+  });
+
+  it('adds the Vault\'s room, last, only when the Shell opens it, failing closed', () => {
+    // The always-open table never holds it: the default Vault has no room.
+    expect(Object.keys(FIXED_ROOM_DEFINITIONS)).not.toContain('vault');
+    expect(FIXED_ROOM_LEVELS.vault).toBeUndefined();
+    const alwaysOpen = Object.values(FIXED_ROOM_DEFINITIONS);
+    expect(alwaysOpen).toHaveLength(4);
+    for (const options of [{}, { vaultOpen: false }, { vaultOpen: 1 as never }, { vaultOpen: 'true' as never }]) {
+      expect(fixedRoomDefinitionsFor(options)).toEqual(alwaysOpen);
+    }
+    const opened = fixedRoomDefinitionsFor({ vaultOpen: true });
+    expect(opened).toEqual([...alwaysOpen, VAULT_ROOM_DEFINITION]);
+    expect(opened.at(-1)).toBe(VAULT_ROOM_DEFINITION);
+    for (const list of [opened, fixedRoomDefinitionsFor({})]) {
+      expect(Object.isFrozen(list)).toBe(true);
+      expect(Reflect.set(list, 0, VAULT_ROOM_DEFINITION)).toBe(false);
+    }
+  });
+
+  it('activates the Vault\'s counter through the shared controller once the Shell opens it', () => {
+    const h = harness(VAULT_ROOM_DEFINITION);
+    h.controller.enter();
+    expect(h.controller.state).toMatchObject({ inRoom: true, building: 'vault', highlightedStation: null });
+    h.controller.update({ x: 9, y: 4 });
+    expect(h.controller.state.highlightedStation).toBe(VAULT_LENDING_STATION);
+    expect(h.events).toEqual([]);
+    h.controller.update({ x: 9, y: 6 });
+    h.shell.emit('world:stations', {
+      building: 'vault',
+      stations: [{ station: VAULT_LENDING_STATION, label: 'SUPPLY', status: 'available' }],
+    });
+    h.controller.update({ x: 9, y: 4 });
+    expect(h.events).toEqual([{ event: 'station:activated', payload: { building: 'vault', station: VAULT_LENDING_STATION } }]);
+    h.controller.update({ x: 8, y: 11 });
+    expect(h.controller.state.inRoom).toBe(false);
+    expect(h.events.at(-1)).toEqual({ event: 'building:exited', payload: { building: 'vault' } });
   });
 
   it.each([

@@ -19,7 +19,10 @@ export type BuildingId =
   | 'post-office'
   /** Deposit from any chain -> STRK -> pool, via NEAR Intents. Arrival is public. */
   | 'bridge'
-  /** Vesu lending. Facade only in v1 — see DECISIONS.md D-007. */
+  /**
+   * Vesu lending from the player's STRK20 shadow account, open only when a
+   * build switches it on (D-077); otherwise the locked facade of D-007.
+   */
   | 'vault'
   /**
    * D-076: the Privacy Plaza, an open square south of the road's west end.
@@ -38,7 +41,10 @@ export const BUILDINGS: readonly BuildingId[] = [
   'vault',
 ] as const;
 
-/** Functional in v1. The Vault renders as a facade with its door locked. */
+/**
+ * Functional in every build. The Vault opens only when a build switches it on
+ * (D-077); otherwise it renders as D-007's facade with its door locked.
+ */
 export const ACTIVE_BUILDINGS: readonly BuildingId[] = [
   'bank',
   'exchange',

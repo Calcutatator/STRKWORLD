@@ -24,7 +24,7 @@ import { createStreetMap, isSolidAt, type DistrictMap, type TileKind } from '../
 import { EXCHANGE_ROOF_HEIGHT, EXCHANGE_ROOF_LEVEL, createFixedRoomLevel } from '../fixed-room.js';
 import { createNullLabelFactory } from './labels.js';
 import { CAMERA_FOV, createCameraRig } from './camera-rig.js';
-import { AVNU, NEAR, STRK20, boxGeometry } from './palette.js';
+import { AVNU, BUILDING_THEMES, NEAR, STRK20, VESU, boxGeometry } from './palette.js';
 import { CITY_FRONT, backdropSurface } from './backdrop.js';
 import { fogRange } from './world-engine.js';
 import {
@@ -781,6 +781,169 @@ describe('buildStreet', () => {
   });
 });
 
+describe('the Vault, locked or opened on the Shell\'s switch (D-077)', () => {
+  const OPEN = createStreetMap({ vaultOpen: true });
+  /** The chains' links, the padlock's brass, its shackle and keyhole: only the locked door has them. */
+  const LOCK_PARTS = [0x4a4d52, BUILDING_THEMES.vault!.accent, 0x8d9096, 0x151515];
+  const portalOf = (view: StreetView, building: string) =>
+    view.doors.children.find((child) => child.userData['building'] === building)!;
+  const vaultBody = (view: StreetView) => meshNamed(view.ground.getObjectByName('building:vault')!, ':body');
+  const drawCalls = (view: StreetView): number => {
+    let calls = 0;
+    for (const group of [view.ground, view.doors, view.labels]) {
+      group.traverse((object) => {
+        if (object instanceof Mesh || (object as { isSprite?: boolean }).isSprite) calls += 1;
+      });
+    }
+    // As the budget test counts: a canvas sign costs one call each.
+    return calls + view.labels.children.length;
+  };
+  /** Where a ray from the pavement, straight north into the doorway, first meets the Vault. */
+  const intoDoorway = (view: StreetView, x: number, y: number) => {
+    const raycaster = new Raycaster();
+    raycaster.set(new Vector3(x, y, 12), new Vector3(0, 0, -1));
+    const body = vaultBody(view);
+    body.updateMatrixWorld(true);
+    const hit = raycaster.intersectObject(body, false)[0]!;
+    const colour = body.geometry.getAttribute('color');
+    return { z: hit.point.z, colour: new Color().setRGB(colour.getX(hit.face!.a), colour.getY(hit.face!.a), colour.getZ(hit.face!.a)).getHex() };
+  };
+  /** Behind the door's slot, clear of the vestibule's walls, floor and far wall: where the swung door stands. */
+  const inVestibule = (door: { x: number; y: number }) => (vertex: Vector3): boolean =>
+    vertex.x > door.x + 0.5 && vertex.x < door.x + 1.95 && vertex.z > door.y - 1.9 && vertex.z < door.y - 0.3;
+
+  it('keeps the default Vault locked: a dim red portal and the chained, padlocked door', () => {
+    const { map, view } = build();
+    const door = map.doors.find((candidate) => candidate.building === 'vault')!;
+    const portal = portalOf(view, 'vault');
+    expect(portal.userData['locked']).toBe(true);
+    const frame = meshNamed(portal, ':frame').material as MeshStandardMaterial;
+    expect(frame.emissive.getHex()).toBe(new Color(BUILDING_THEMES.vault!.portal).getHex());
+    expect(frame.emissiveIntensity).toBeCloseTo(0.6);
+    expect(hexColoursOf(meshNamed(portal, ':light'))).toEqual([new Color(BUILDING_THEMES.vault!.portal).getHex()]);
+    const colours = hexColoursOf(vaultBody(view));
+    for (const hex of LOCK_PARTS) expect(colours).toContain(new Color(hex).getHex());
+    // A ray into the doorway meets the door itself, standing in its slot.
+    for (const x of [door.x + 0.3, door.x + 0.7]) {
+      for (const y of [0.5, 1.2, 1.9]) expect(intoDoorway(view, x, y).z).toBeGreaterThan(door.y - 0.2);
+    }
+    // Nothing behind it: no vestibule, and no light wash.
+    expect(verticesNear(vaultBody(view), inVestibule(door))).toBe(0);
+    expect(view.ground.getObjectByName('building:vault')!.getObjectByName('building:vault:aura')).toBeUndefined();
+    view.dispose();
+  });
+
+  it('glows the opened Vault\'s portal in Vesu\'s blue at an open door\'s strength, every other portal as it was', () => {
+    const closed = build().view;
+    const open = build(OPEN).view;
+    const portal = portalOf(open, 'vault');
+    expect(portal.userData['locked']).toBe(false);
+    const frame = meshNamed(portal, ':frame').material as MeshStandardMaterial;
+    expect(frame.emissive.getHex()).toBe(new Color(VESU.blue).getHex());
+    expect(frame.emissiveIntensity).toBeCloseTo(1.8);
+    expect(hexColoursOf(meshNamed(portal, ':light'))).toEqual([new Color(VESU.blue).getHex()]);
+    // It breathes as an open door does, not as the locked one.
+    const intensities = (view: StreetView, building: string) => {
+      const material = meshNamed(portalOf(view, building), ':frame').material as MeshStandardMaterial;
+      const seen: number[] = [];
+      for (let i = 0; i < 12; i++) {
+        view.update(100);
+        seen.push(material.emissiveIntensity);
+      }
+      return seen;
+    };
+    const breathing = intensities(open, 'vault');
+    expect(Math.min(...breathing)).toBeGreaterThan(1.3);
+    expect(new Set(breathing).size).toBeGreaterThan(1);
+    for (const building of ['bank', 'exchange', 'post-office', 'bridge']) {
+      const a = meshNamed(portalOf(closed, building), ':frame').material as MeshStandardMaterial;
+      const b = meshNamed(portalOf(open, building), ':frame').material as MeshStandardMaterial;
+      expect(b.emissive.getHex(), building).toBe(a.emissive.getHex());
+      expect(portalOf(open, building).userData['locked'], building).toBe(false);
+    }
+    closed.dispose();
+    open.dispose();
+  });
+
+  it('draws the door swung open into a vestibule: no chains or padlock, a clear doorway onto the lender\'s light', () => {
+    const { map, view } = build(OPEN);
+    const door = map.doors.find((candidate) => candidate.building === 'vault')!;
+    const body = vaultBody(view);
+    const colours = hexColoursOf(body);
+    for (const hex of LOCK_PARTS) expect(colours).not.toContain(new Color(hex).getHex());
+    // The west of the doorway is clear, sill to lintel: a ray meets the
+    // vestibule's periwinkle far wall, two tiles behind the door's slot.
+    for (const x of [door.x + 0.3, door.x + 0.7]) {
+      for (const y of [0.5, 1.2, 1.9]) {
+        const hit = intoDoorway(view, x, y);
+        expect(hit.z, `${x},${y}`).toBeLessThan(door.y - 2);
+        expect(hit.colour, `${x},${y}`).toBe(new Color(VESU.blueSoft).getHex());
+      }
+    }
+    // Its east is the door itself, swung in on its hinge behind the slot:
+    // the same steel leaf and bolt ring, standing in the vestibule.
+    const leaf = intoDoorway(view, door.x + 1.4, 1.2);
+    expect(leaf.z).toBeLessThan(door.y - 0.2);
+    expect(leaf.z).toBeGreaterThan(door.y - 2);
+    expect([BUILDING_THEMES.vault!.door, 0x4a4e56, 0x5a5f68].map((hex) => new Color(hex).getHex())).toContain(leaf.colour);
+    expect(verticesNear(body, inVestibule(door))).toBeGreaterThan(100);
+    // The lender's light washes the vestibule, fading with the building.
+    const aura = meshNamed(view.ground.getObjectByName('building:vault')!, ':aura');
+    const wash = aura.material as Material;
+    expect(wash.blending).toBe(AdditiveBlending);
+    expect(hexColoursOf(aura)).toEqual([new Color(VESU.blue).getHex()]);
+    const vault = buildingOccluders(view).find((occluder) => occluder.building === 'vault')!;
+    vault.setOpacity(0.4);
+    expect(wash.opacity).toBeCloseTo(0.4);
+    vault.setOpacity(1);
+    // All of it on the building's solid rows: nothing stands where anyone walks.
+    const walkable = (x: number, z: number) => !isSolidAt(map, Math.floor(x), Math.floor(z));
+    expect(findWalkableIntrusions(view.ground.getObjectByName('building:vault')!, walkable, map)).toEqual([]);
+    expect(findWalkableIntrusions(view.doors, walkable, map)).toEqual([]);
+    view.dispose();
+  });
+
+  it('changes nothing but the Vault\'s door, portal and sign, and stays under the draw-call budget', () => {
+    const closed = build().view;
+    const open = build(OPEN).view;
+    const meshes = (view: StreetView): Mesh[] => {
+      const found: Mesh[] = [];
+      for (const group of [view.ground, view.doors]) {
+        group.traverse((object) => {
+          if (object instanceof Mesh && !object.name.startsWith('building:vault') && !object.name.startsWith('door:vault')) {
+            found.push(object);
+          }
+        });
+      }
+      return found;
+    };
+    const before = meshes(closed);
+    const after = meshes(open);
+    expect(after.map((mesh) => mesh.name)).toEqual(before.map((mesh) => mesh.name));
+    before.forEach((mesh, index) => {
+      const other = after[index]!;
+      for (const attribute of ['position', 'color']) {
+        const a = mesh.geometry.getAttribute(attribute);
+        const b = other.geometry.getAttribute(attribute);
+        if (!a || !b) {
+          expect(Boolean(b), `${mesh.name} ${attribute}`).toBe(Boolean(a));
+          continue;
+        }
+        expect(sameNumbers(a.array, b.array), `${mesh.name} ${attribute}`).toBe(true);
+      }
+    });
+    const signs = (view: StreetView) => view.labels.children.map((child) => [child.userData['text'], child.position.toArray()]);
+    expect(signs(open)).toEqual(
+      signs(closed).map(([text, position]) => [text === 'VAULT\nCOMING SOON' ? 'VAULT\nSUPPLY / REDEEM' : text, position]),
+    );
+    // One call more, for the vestibule's light; far under the budget.
+    expect(drawCalls(open)).toBe(drawCalls(closed) + 1);
+    expect(drawCalls(open)).toBeLessThan(150);
+    closed.dispose();
+    open.dispose();
+  });
+});
+
 /**
  * `root`'s triangles in world space, bucketed per mesh by the XZ cell of each
  * triangle's centroid, so a raycast tests only the buckets whose bounds lie
@@ -908,6 +1071,17 @@ function coloursIn(mesh: Mesh, x0: number, z0: number, x1: number, z1: number): 
     }
   }
   return found;
+}
+
+/** Distinct sRGB hexes of a mesh's vertex colours: RGB paint, or the RGB of RGBA light paint. */
+function hexColoursOf(mesh: Mesh): number[] {
+  const attribute = mesh.geometry.getAttribute('color');
+  const colour = new Color();
+  const found = new Set<number>();
+  for (let i = 0; attribute && i < attribute.count; i++) {
+    found.add(colour.setRGB(attribute.getX(i), attribute.getY(i), attribute.getZ(i)).getHex());
+  }
+  return [...found];
 }
 
 interface Hue {
