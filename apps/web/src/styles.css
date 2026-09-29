@@ -18,7 +18,8 @@
  *
  *   bank        -> STRK20 (shielding)      exchange -> avnu (trading)
  *   post-office -> game + brick and navy   bridge   -> NEAR Intents (routing)
- *   anything else (the Vault, connect surfaces) keeps the base game theme.
+ *   vault       -> Vesu (lending, D-077)
+ *   anything else (connect surfaces) keeps the base game theme.
  *
  * One counter wears a partner's look over its building's theme: the Bank's
  * staking counter carries `data-brand="endur"` (PanelFrame) while it is the
@@ -2007,6 +2008,198 @@ button[data-locked="true"] {
 
 @media (forced-colors: active) {
   .panel[data-brand="endur"] :is(.stake-eyebrow, .stake-token) {
+    border: 1px solid CanvasText;
+  }
+}
+
+/* ------------------------------------------------------------------------
+ * The Vault: lending with Vesu, in the Vesu idiom (D-077).
+ *
+ * A light window like Endur's, over the base game theme, so it re-points
+ * every token `:root` sets (derived ones included; see the theme-token
+ * finding in AGENTS.md) and flips `color-scheme` for native controls.
+ *
+ * Tokens measured from vesu.xyz (the palette the street's Vesu plate uses):
+ * white pages #FFFFFF, near-black ink #0A0A0A, electric blue #2C41F6, pale
+ * periwinkle #E0E5FF with deep-blue text #2030B6. Contrast, checked against
+ * WCAG AA (styles.test.ts):
+ *  - Body text #0A0A0A and dim text #52525B clear 4.5:1 on the white card
+ *    and on the raised periwinkle #F2F4FF.
+ *  - Primary buttons are white on the electric blue (6.6:1), and on the
+ *    deep blue when hovered (9.7:1).
+ *  - Secondary buttons are deep blue on the periwinkle (7.8:1).
+ *  - The focus ring is the deep blue #2030B6; field borders #8A8A93 keep the
+ *    3:1 a field boundary needs against the card.
+ * --------------------------------------------------------------------- */
+
+.panel[data-building="vault"] {
+  color-scheme: light;
+
+  /* System stacks only: Vesu's wide grotesk is approximated, never loaded. */
+  --ui-font: system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  --ui-font-mono: ui-monospace, SFMono-Regular, Menlo, monospace;
+  --ui-heading-font: var(--ui-font);
+  --ui-number-font: var(--ui-font);
+  --ui-btn-font: var(--ui-font);
+  --ui-heading-size: 1.4rem;
+  --ui-heading-weight: 600;
+  --ui-heading-case: none;
+  --ui-heading-tracking: -0.01em;
+
+  --ui-page: #ffffff;
+  --ui-scrim: rgb(224 229 255 / 0.8);
+  --ui-surface: #ffffff;
+  --ui-surface-raised: #f2f4ff;
+  --ui-surface-sunken: #f7f8fc;
+  --ui-header-bg: none;
+  --ui-line: #e0e5ff;
+  --ui-line-subtle: #eceffd;
+  --ui-panel-border: 1px solid #e0e5ff;
+  --ui-panel-shadow: 0 24px 64px rgb(32 48 182 / 0.16), 0 2px 8px rgb(10 10 10 / 0.06);
+  --ui-hud-shadow: 0 4px 0 rgb(0 0 0 / 0.28), 0 12px 28px rgb(0 0 0 / 0.35);
+
+  --ui-text: #0a0a0a;
+  --ui-text-dim: #52525b;
+  --ui-heading: #0a0a0a;
+
+  --ui-accent: #2c41f6;
+  --ui-focus: #2030b6;
+  --ui-focus-width: 2px;
+  --ui-callout-edge: var(--ui-accent);
+  --ui-warn: #b45309;
+  --ui-danger: #b91c1c;
+  --ui-success: #15803d;
+  --ui-lock: #63636b;
+
+  --ui-radius-panel: 16px;
+  --ui-radius-inner: 12px;
+  --ui-radius-control: 10px;
+  --ui-radius-button: 999px;
+  --ui-radius-tabs: 999px;
+
+  --ui-input-border: #8a8a93;
+  --ui-input-border-hover: #6b6b75;
+  --ui-input-focus-glow: 0 0 0 4px rgb(44 65 246 / 0.2);
+
+  --ui-btn-size: 0.95rem;
+  --ui-btn-weight: 600;
+  --ui-btn-case: none;
+  --ui-btn-tracking: 0;
+  --ui-btn-pad: 0.6rem 1.15rem;
+  --ui-btn-bg: #e0e5ff;
+  --ui-btn-bg-hover: #d0d8ff;
+  --ui-btn-text: #2030b6;
+  --ui-btn-border: #d0d8ff;
+  --ui-btn-border-hover: #b8c4ff;
+  --ui-btn-edge: transparent;
+  --ui-btn-inset: 0 0 #0000;
+  --ui-btn-glow: 0 0 #0000;
+  --ui-btn-drop: 0 0 #0000;
+  --ui-btn-drop-active: 0 0 #0000;
+  --ui-btn-depth: 0px;
+  --ui-btn-lift: -1px;
+  --ui-btn-press: 1px;
+
+  --ui-primary-bg: #2c41f6;
+  --ui-primary-bg-hover: #2030b6;
+  --ui-primary-text: #ffffff;
+  --ui-primary-border: #2c41f6;
+  --ui-primary-border-hover: #2030b6;
+  --ui-primary-edge: transparent;
+  --ui-primary-inset: 0 0 #0000;
+  --ui-primary-glow: 0 10px 24px -12px rgb(44 65 246 / 0.6);
+
+  --ui-tab-hover: rgb(44 65 246 / 0.08);
+  --ui-tab-selected-bg: #2c41f6;
+  --ui-tab-selected-text: #ffffff;
+  --ui-tab-selected-shadow: 0 1px 2px rgb(10 10 10 / 0.12);
+}
+
+.panel[data-building="vault"] > .panel-card > .panel-header {
+  border-bottom-color: #e0e5ff;
+}
+
+.panel[data-building="vault"] .balance-total {
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+
+.panel[data-building="vault"] .vault-intro {
+  display: grid;
+  gap: 0.6rem;
+  justify-items: start;
+  margin: 0 0 1rem;
+}
+
+.panel[data-building="vault"] .vault-intro > p {
+  margin: 0;
+}
+
+/* The eyebrow is a periwinkle pill; the copy stays sentence case. */
+.panel[data-building="vault"] .vault-eyebrow {
+  padding: 0.22rem 0.7rem;
+  border-radius: 999px;
+  background: #e0e5ff;
+  color: #2030b6;
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  line-height: 1.3;
+  text-transform: uppercase;
+}
+
+/* How fees work: product information in a quiet card, never styled as a
+ * disclosure, which is the register's and sits at the commit point. */
+.panel[data-building="vault"] .vault-note {
+  justify-self: stretch;
+  padding: 0.65rem 0.85rem;
+  border: 1px solid #e0e5ff;
+  border-radius: var(--ui-radius-inner);
+  background: var(--ui-surface-sunken);
+  color: var(--ui-text);
+  font-size: 0.92rem;
+}
+
+.panel[data-building="vault"] .vault-position > h3 {
+  margin: 0 0 0.5rem;
+  font-size: 1rem;
+  font-weight: 600;
+}
+
+.panel[data-building="vault"] :is(.vault-figures, .vault-review) {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 0.35rem 1rem;
+  margin: 0 0 0.75rem;
+}
+
+.panel[data-building="vault"] :is(.vault-figures, .vault-review) > dd {
+  margin: 0;
+  font-weight: 600;
+}
+
+.panel[data-building="vault"] .vault-review-note {
+  margin: 0 0 0.9rem;
+  color: var(--ui-text-dim);
+  font-size: 0.92rem;
+}
+
+.panel[data-building="vault"] .vault-all {
+  display: flex;
+  gap: 0.5rem;
+  align-items: center;
+}
+
+.panel[data-building="vault"] .vault-unsupported {
+  padding: 0.75rem 0.9rem;
+  border-left: 3px solid var(--ui-accent);
+  border-radius: var(--ui-radius-inner);
+  background: var(--ui-surface-raised);
+  color: var(--ui-text);
+}
+
+@media (forced-colors: active) {
+  .panel[data-building="vault"] .vault-eyebrow {
     border: 1px solid CanvasText;
   }
 }

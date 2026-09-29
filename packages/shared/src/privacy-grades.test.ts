@@ -72,8 +72,14 @@ describe('privacy deviation admission', () => {
   it('keeps complete canonical approvals admitted', () => {
     // D-063 adds a registered-but-unapproved route, so the register is no
     // longer uniformly playable; every approved route still is. D-072 adds
-    // the entry gate's deposit last.
-    expect(PRIVACY_REGISTER.map((route) => route.route)).toEqual([...APPROVED_ROUTES, 'bank.stake', 'entry.shield']);
+    // the entry gate's deposit, and D-077 the Vault's two routes, last.
+    expect(PRIVACY_REGISTER.map((route) => route.route)).toEqual([
+      ...APPROVED_ROUTES,
+      'bank.stake',
+      'entry.shield',
+      'vault.supply',
+      'vault.redeem',
+    ]);
     expect(APPROVED_ROUTES.every((route) => isRoutePlayable(registered(route)))).toBe(true);
     expect(isRoutePlayable(APPROVED_DEVIATION)).toBe(true);
   });
@@ -202,6 +208,60 @@ describe('the entry gate deposit register entry (D-072)', () => {
     const entry = registered('entry.shield');
     for (const text of [entry.observable, entry.disclosure ?? '', entry.rationale ?? '']) {
       expect(text).not.toMatch(/[{}]/);
+    }
+  });
+});
+
+describe('the Vault register entries (D-077)', () => {
+  const VAULT_ROUTES = ['vault.supply', 'vault.redeem'] as const;
+
+  it.each(VAULT_ROUTES)('grades %s anonymous under the Vault, like Endur staking', (route) => {
+    const entry = registered(route);
+    expect(entry.building).toBe('vault');
+    expect(entry.grade).toBe('anonymous');
+    expect(entry.grade).toBe(registered('bank.stake').grade);
+    expect(entry.returnToPool).toBe(false);
+  });
+
+  it.each(VAULT_ROUTES)('is approved by the lead on the day of D-077, with its disclosure shown, not waived', (route) => {
+    const entry = registered(route);
+    expect(entry.approvedBy).toBe('calc');
+    expect(entry.approvedOn).toBe('2026-09-29');
+    expect(entry.rationale).toMatch(/D-077/);
+    expect(entry.disclosureWaivedBy).toBeUndefined();
+    expect(isDisclosureWaived(entry)).toBe(false);
+    expect(isRoutePlayable(entry)).toBe(true);
+    expect(isRoutePlayable({ ...entry, disclosure: null })).toBe(false);
+  });
+
+  it('shows one disclosure for both, saying plainly what is public and that only the link is hidden', () => {
+    const [supply, redeem] = VAULT_ROUTES.map(registered);
+    expect(redeem!.disclosure).toBe(supply!.disclosure);
+    const disclosure = supply!.disclosure ?? '';
+    expect(disclosure).toMatch(/^Your Vault position sits on a stand-in address, not your wallet\./);
+    expect(disclosure).toMatch(/its balance and every supply and redeem you make through it, with their amounts, are public on-chain/);
+    expect(disclosure).toMatch(/Only its link to your wallet is hidden/);
+    // Not a promise that nobody can ever tell.
+    expect(disclosure).toMatch(/matching amounts or timing can still give that link away/);
+    expect(disclosure).not.toMatch(/\b(?:untraceable|invisible|anonymous|confidential|private)\b/i);
+  });
+
+  it('records what an observer sees: a public, persistent address that links every Vault action', () => {
+    for (const route of VAULT_ROUTES) {
+      const { observable } = registered(route);
+      expect(observable).toMatch(/public/);
+      expect(observable).toMatch(/same address|one address/);
+      expect(observable).toMatch(/Only the link from that address to the wallet is hidden/);
+    }
+    expect(registered('vault.supply').observable).toMatch(/strkworld-vault, nonce 0/);
+  });
+
+  it('keeps braces out of their copy so the CI register parser cannot lose them', () => {
+    for (const route of VAULT_ROUTES) {
+      const entry = registered(route);
+      for (const text of [entry.observable, entry.disclosure ?? '', entry.rationale ?? '']) {
+        expect(text).not.toMatch(/[{}]/);
+      }
     }
   });
 });

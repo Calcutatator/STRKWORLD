@@ -21,6 +21,14 @@ type BridgeStationDefinition = {
   view: 'bridge';
 };
 /**
+ * The Vault's lending counter (D-077): supply and redeem behind one door,
+ * both `anonymous` in the register, so the station keeps one grade (D-030).
+ */
+type VaultStationDefinition = {
+  station: StationId; building: 'vault'; label: string; routes: readonly string[];
+  view: 'vault';
+};
+/**
  * The Privacy Plaza's two windows (D-076). No money and no route: `routes`
  * is empty on purpose, so nothing here reaches the privacy register, and
  * the plaza needs no wallet. The station still resolves here before its
@@ -42,6 +50,7 @@ export type StationDefinition =
   | BankStationDefinition
   | ExchangeStationDefinition
   | BridgeStationDefinition
+  | VaultStationDefinition
   | PlazaStationDefinition;
 
 export interface StationCapabilities {
@@ -111,6 +120,16 @@ const STATIONS: readonly StationDefinition[] = Object.freeze([
     label: 'DEPOSIT',
     routes: ['bridge.deposit'],
     view: 'bridge',
+  },
+  // The Vault (D-077): Vesu lending from the player's shadow account. It
+  // opens only when this build switches both of its routes on; otherwise the
+  // World keeps the door locked and the player never reaches this counter.
+  {
+    station: 'vault:lending',
+    building: 'vault',
+    label: 'SUPPLY / REDEEM',
+    routes: ['vault.supply', 'vault.redeem'],
+    view: 'vault',
   },
   // The Privacy Plaza (D-076): its stations stand on the street, and open
   // with E. Client-only windows with no route, so no privacy grade applies.

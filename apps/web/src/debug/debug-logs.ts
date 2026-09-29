@@ -15,6 +15,7 @@ import {
   describePlazaShells,
   describeSandboxTile,
   describeValue,
+  describeVaultStep,
   describeWalletSession,
   eventName,
   failureLevel,
@@ -447,6 +448,11 @@ function createDebugLogs(page: Window, storage: ViewerStorage, options: DebugLog
     },
     plazaShells: (result) => {
       const entry = describePlazaShells(result);
+      if (entry) record(entry.level, entry.event, entry.detail);
+    },
+    // D-077: the Vault's probe steps, by code only.
+    vault: (step) => {
+      const entry = describeVaultStep(step);
       if (entry) record(entry.level, entry.event, entry.detail);
     },
   });

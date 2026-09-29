@@ -17,6 +17,7 @@ import { DegenCatalogProvider } from './panels/exchange/DegenCatalogProvider.js'
 import { SeamEntryGate } from './connect/EntryGate.js';
 import { PlazaProvider } from './plaza/PlazaProvider.js';
 import type { PoolStatsSource } from './plaza/pool-stats.js';
+import { vaultDoorOpen } from './panels/routes.js';
 
 /**
  * The composition root, as a component.
@@ -75,6 +76,8 @@ export function App({
 }) {
   // Presence owns one explicit lifecycle. Effect cleanup only removes event
   // listeners; the controller is destroyed by the composition root's owner.
+  // D-077: the Vault's door follows the register and this build's own
+  // fail-closed switch, which are fixed for the bundle's life.
   const city = (
     <main className="strkworld">
       <WorldHost
@@ -82,6 +85,7 @@ export function App({
         in={shellIn}
         remotePeers={presence.remotePeers}
         sandbox={presence.sandbox}
+        vaultOpen={VAULT_DOOR_OPEN}
       />
       <HudLayer shell={shellIn} />
       <VisitLayer world={worldOut} shell={shellIn} />
@@ -112,6 +116,12 @@ export function App({
     </ErrorBoundary>
   );
 }
+
+/**
+ * Read once, when the shell loads: the register and `import.meta.env` do not
+ * change while a bundle runs, and the World builds its street once (D-077).
+ */
+const VAULT_DOOR_OPEN = vaultDoorOpen();
 
 function Boot() {
   return (

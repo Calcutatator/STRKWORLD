@@ -28,6 +28,7 @@ import {
   debugGate,
   debugPlazaShells,
   debugSandboxBurst,
+  debugVault,
   debugVisit,
   debugWalletSession,
 } from './debug-tap.js';
@@ -626,6 +627,63 @@ describe('what it captures', () => {
     expect(entries().filter((entry) => entry.event === 'station.activate').map((entry) => entry.detail)).toEqual(['plaza:shells', 'plaza:monument']);
     expect(JSON.stringify(entries())).not.toContain('0123456789abcdef');
     expect(JSON.stringify(entries())).not.toContain('streak');
+  });
+
+  it('records the Vault probe by yes/no, stage and wallet code, and nothing that names a position (D-077)', async () => {
+    const { entries, tick } = harness();
+    const shadow = '0x24915cb456ef2876c9611af4f021747f8d9761ff2d7bc716722ce4527091ac9';
+    debugVault({ step: 'capability', supported: true, walletApi: '0.10.4' });
+    debugVault({ step: 'capability', supported: false, walletApi: null });
+    debugVault({ step: 'stage', stage: { stage: 'capability', supported: true } });
+    debugVault({ step: 'stage', stage: { stage: 'commitment', ok: false, code: 118 } });
+    debugVault({ step: 'stage', stage: { stage: 'commitment', ok: false, code: -32601 } });
+    debugVault({ step: 'stage', stage: { stage: 'commitment', ok: false, code: 113 } });
+    debugVault({ step: 'stage', stage: { stage: 'commitment', ok: true } });
+    debugVault({ step: 'stage', stage: { stage: 'address', resolved: true, deployed: false } });
+    debugVault({ step: 'stage', stage: { stage: 'address', resolved: false } });
+    debugVault({ step: 'stage', stage: { stage: 'position', ok: true } });
+    debugVault({ step: 'prepare', kind: 'redeem', all: true });
+    debugVault({ step: 'confirm', kind: 'supply', stage: 'awaiting-approval' });
+    debugVault({ step: 'stage', stage: { stage: 'submit', ok: false, code: 162 } });
+    debugVault({ step: 'stage', stage: { stage: 'submit', ok: true } });
+    debugVault({ step: 'stage', stage: { stage: 'receipt', status: 'reverted' } });
+    debugVault({ step: 'stage', stage: { stage: 'receipt', status: 'unreadable' } });
+    debugVault({ step: 'confirm', kind: 'supply', stage: 'submitted' });
+    // Whatever a caller passes, only listed shapes are written: never an
+    // address, an amount, a balance, the commitment or a hash.
+    debugVault({ step: 'capability', supported: true, walletApi: shadow });
+    debugVault({ step: 'stage', stage: { stage: 'address', resolved: true, deployed: false, address: shadow } });
+    debugVault({ step: 'stage', stage: { stage: 'commitment', ok: false, code: shadow } });
+    debugVault({ step: 'stage', stage: { stage: 'position', ok: true, shares: 5n } });
+    debugVault({ step: 'stage', stage: { stage: 'receipt', status: shadow } });
+    debugVault({ step: 'prepare', kind: shadow, all: false } as never);
+    debugVault({ step: 'confirm', kind: 'supply', stage: '5000000000000000000' });
+    debugVault({ step: 'position', assets: '51' } as never);
+    await tick();
+    expect(entries().filter((entry) => entry.event.startsWith('vault.')).map(({ level, event, detail }) => [level, event, detail])).toEqual([
+      ['info', 'vault.capability', 'supported=true walletApi=0.10.4'],
+      ['warn', 'vault.capability', 'supported=false walletApi=none'],
+      ['info', 'vault.capability', 'supported=true'],
+      ['error', 'vault.commitment', 'ok=false code=118 NOT_REGISTERED'],
+      ['error', 'vault.commitment', 'ok=false code=-32601'],
+      ['warn', 'vault.commitment', 'ok=false code=113 USER_REFUSED_OP'],
+      ['info', 'vault.commitment', 'ok=true'],
+      ['info', 'vault.address', 'resolved=true deployed=false'],
+      ['error', 'vault.address', 'resolved=false'],
+      ['info', 'vault.position', 'ok=true'],
+      ['info', 'vault.prepare', 'kind=redeem all=true'],
+      ['info', 'vault.confirm', 'kind=supply stage=awaiting-approval'],
+      ['error', 'vault.submit', 'ok=false code=162 API_VERSION_NOT_SUPPORTED'],
+      ['info', 'vault.submit', 'ok=true'],
+      ['error', 'vault.receipt', 'status=reverted'],
+      ['warn', 'vault.receipt', 'status=unreadable'],
+      ['info', 'vault.confirm', 'kind=supply stage=submitted'],
+      // The address carried alongside a well-formed stage is never read.
+      ['info', 'vault.address', 'resolved=true deployed=false'],
+      ['info', 'vault.position', 'ok=true'],
+    ]);
+    expect(JSON.stringify(entries())).not.toContain(shadow.slice(2, 20));
+    expect(JSON.stringify(entries())).not.toMatch(/5000000000000000000|shares|assets/);
   });
 
   it('names the relay failure kind, so a missing avnu key is legible in the log (D-070)', async () => {

@@ -472,12 +472,15 @@ describe('production Endur staking admission (D-063)', () => {
     VITE_STRK20_TRANSFER_ALLOWED_TOKENS: STRK_TOKEN,
   };
 
+  // The privacy package's first import pulls starknet and the avnu SDK. Under a
+  // loaded full run it can take longer than vitest's 5 s default, which made
+  // this pin a known timeout flake, so the pins that import it allow longer.
   it('pins the inlined xSTRK felt to the privacy package constant', async () => {
     const { XSTRK_TOKEN } = await import('./config.js');
     const { ENDUR_XSTRK } = await import('@strkworld/privacy');
     expect(BigInt(XSTRK_TOKEN)).toBe(BigInt(ENDUR_XSTRK));
     expect(XSTRK_TOKEN).toBe(XSTRK);
-  });
+  }, 30_000);
 
   it('stays denied by default, with no stake list at all', () => {
     const { policy } = parseProductionWalletConfig(base);
@@ -635,5 +638,87 @@ describe('production shield admission for any token (D-072)', () => {
   it('admits the highest contract address and nothing past it', () => {
     const highest = `0x${((1n << 251n) - 1n).toString(16)}`;
     expect(parseRoutePolicy(shield(highest)).allowedTokens.shield).toEqual([highest]);
+  });
+});
+
+describe('production Vault admission (D-077)', () => {
+  const ETH = '0x049d36570d4e46f48e99674bd3fcc84644ddd6b96f7c741b1562b82f9e004dc7';
+  const base = {
+    VITE_STARKNET_CHAIN_ID: 'SN_MAIN',
+    VITE_STARKNET_RPC_URL: 'https://rpc.example/rpc',
+    VITE_BACKEND_BASE_URL: '/api',
+  };
+  const vault = {
+    VITE_STRK20_VAULT_ENABLED: 'true',
+    VITE_STRK20_VAULT_ALLOWED_TOKENS: STRK_TOKEN,
+  };
+  const transfer = {
+    VITE_STRK20_TRANSFER_ENABLED: 'true',
+    VITE_STRK20_TRANSFER_MAX_INTENTS: '3',
+    VITE_STRK20_TRANSFER_MAX_RELAY_FEE: '5000000000000000',
+    VITE_STRK20_TRANSFER_ALLOWED_TOKENS: STRK_TOKEN,
+  };
+
+  it('pins the Vault token to the vault asset the privacy package lends', async () => {
+    const { VESU_VSTRK_ASSET } = await import('@strkworld/privacy');
+    expect(BigInt(STRK_TOKEN)).toBe(BigInt(VESU_VSTRK_ASSET));
+  }, 30_000);
+
+  it('stays denied by default: no Vault route and no Vault list at all', () => {
+    const { policy } = parseProductionWalletConfig(base);
+    expect(policy.enabledRoutes).toEqual([]);
+    expect('vault' in policy.allowedTokens).toBe(false);
+  });
+
+  it('opts into the Vault alone: STRK only, no relay-fee authority, one action at a time', () => {
+    const { policy } = parseProductionWalletConfig({ ...base, ...vault });
+    expect(policy.enabledRoutes).toEqual(['vault']);
+    expect(policy.allowedTokens.vault).toEqual([STRK_TOKEN]);
+    expect(policy.maxRelayFee).toBe(0n);
+    expect(policy.maxIntents).toBe(1);
+    expect(policy.allowedTokens.shield).toEqual([]);
+    expect(Object.isFrozen(policy.allowedTokens.vault)).toBe(true);
+  });
+
+  it('never narrows another route', () => {
+    const { policy } = parseProductionWalletConfig({ ...base, ...transfer, ...vault });
+    expect(policy.enabledRoutes).toEqual(['transfer', 'vault']);
+    expect(policy.maxIntents).toBe(3);
+    expect(policy.maxRelayFee).toBe(5_000_000_000_000_000n);
+  });
+
+  it.each([
+    ['a disabled flag', { VITE_STRK20_VAULT_ENABLED: 'false' }],
+    ['a non-literal flag', { VITE_STRK20_VAULT_ENABLED: 'TRUE' }],
+    ['an unset flag', { VITE_STRK20_VAULT_ENABLED: undefined }],
+    ['missing tokens', { VITE_STRK20_VAULT_ALLOWED_TOKENS: undefined }],
+    ['an empty token list', { VITE_STRK20_VAULT_ALLOWED_TOKENS: '' }],
+    ['a non-STRK token', { VITE_STRK20_VAULT_ALLOWED_TOKENS: ETH }],
+    ['STRK plus another token', { VITE_STRK20_VAULT_ALLOWED_TOKENS: `${STRK_TOKEN},${ETH}` }],
+    ['STRK twice', { VITE_STRK20_VAULT_ALLOWED_TOKENS: `${STRK_TOKEN},${STRK_TOKEN}` }],
+    ['a decimal STRK', { VITE_STRK20_VAULT_ALLOWED_TOKENS: BigInt(STRK_TOKEN).toString() }],
+  ])('keeps the Vault denied on %s, and touches no other route', (_label, override) => {
+    const { policy } = parseProductionWalletConfig({ ...base, ...transfer, ...vault, ...override });
+    expect(policy.enabledRoutes).toEqual(['transfer']);
+    expect('vault' in policy.allowedTokens).toBe(false);
+  });
+
+  it('ships the example environment with the Vault denied', () => {
+    const example = readFileSync(new URL('../../../../.env.production.example', import.meta.url), 'utf8');
+    const environment: Record<string, string> = {};
+    for (const line of example.split('\n')) {
+      const match = /^(VITE_[A-Z0-9_]+)=(.*)$/.exec(line.trim());
+      if (match) environment[match[1]!] = match[2]!;
+    }
+    expect(environment.VITE_STRK20_VAULT_ENABLED).toBe('false');
+    expect(environment).toHaveProperty('VITE_STRK20_VAULT_ALLOWED_TOKENS');
+    expect(parseRoutePolicy(environment).enabledRoutes).toEqual([]);
+  });
+
+  it('declares both Vault variables as Docker build arguments, so Railway can pass them', () => {
+    const dockerfile = readFileSync(new URL('../../../../deploy/fly/Dockerfile', import.meta.url), 'utf8');
+    for (const name of ['VITE_STRK20_VAULT_ENABLED', 'VITE_STRK20_VAULT_ALLOWED_TOKENS']) {
+      expect(dockerfile, name).toMatch(new RegExp(`^ARG ${name}$`, 'm'));
+    }
   });
 });

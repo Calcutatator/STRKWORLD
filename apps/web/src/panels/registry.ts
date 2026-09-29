@@ -5,6 +5,7 @@ import { BankPanel } from './bank/BankPanel.js';
 import { PostOfficePanel } from './post-office/PostOfficePanel.js';
 import { ExchangePanel } from './exchange/ExchangePanel.js';
 import { BridgePanel } from './bridge/BridgePanel.js';
+import { VaultPanel } from './vault/VaultPanel.js';
 import type { PanelRegistry } from './panel-framework.js';
 import type { RouteGrade } from '../privacy/register.js';
 
@@ -37,4 +38,7 @@ export const BUILDING_PANELS: PanelRegistry<BuildingPanelDescriptor> = Object.fr
     Component: PostOfficePanel,
   }),
   bridge: Object.freeze({ building: 'bridge', title: COPY.buildings.bridge, Component: BridgePanel }),
+  // D-077: Menu Mode's Vault, the same window as its counter. Its routes'
+  // doors still gate every control inside it.
+  vault: Object.freeze({ building: 'vault', title: COPY.buildings.vault, Component: VaultPanel }),
 });

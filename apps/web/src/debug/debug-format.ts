@@ -2,6 +2,7 @@ import type { Intent, OperationStage, PrivacyErrorKind } from '@strkworld/privac
 import { SANDBOX_AREA } from '@strkworld/shared';
 import type { BankAddRefusal, BankConfirmStage, BankMode } from '../panels/bank/bank-machine.js';
 import type { EntryGateStateName } from '../connect/entry-gate.js';
+import type { VaultConfirmStage } from '../panels/vault/vault-machine.js';
 
 /**
  * What the opt-in debug logger (D-069) writes, and what it removes first.
@@ -469,6 +470,116 @@ const GATE_STATES = setOf({
 export function describeGateState(state: unknown): { level: DebugLevel; event: string; detail: string } | null {
   if (!GATE_STATES.has(state)) return null;
   return { level: 'info', event: 'gate.state', detail: `state=${String(state)}` };
+}
+
+/*
+ * The Vault's steps (D-077), the probe of whether a wallet runs STRK20 shadow
+ * accounts end to end. Every field is admitted only from a fixed list or a
+ * fixed shape: yes/no answers, stage names, a Wallet API version and a wallet
+ * error code. No amount, balance, address, commitment or transaction hash can
+ * be written, whatever a caller passes.
+ */
+const VAULT_KINDS = setOf({ supply: true, redeem: true });
+const VAULT_RECEIPTS = setOf({ succeeded: true, reverted: true, pending: true, unreadable: true });
+const VAULT_CONFIRM_STAGES = setOf({
+  composing: true,
+  'awaiting-approval': true,
+  proving: true,
+  submitting: true,
+  confirming: true,
+  done: true,
+  failed: true,
+  submitted: true,
+  'fee-moved': true,
+  'gate-closed': true,
+} satisfies Record<VaultConfirmStage, true>);
+const WALLET_API_VERSION = /^v?\d{1,4}\.\d{1,4}\.\d{1,4}(?:-[0-9A-Za-z.-]{1,32})?$/;
+
+type DebugEntry = { level: DebugLevel; event: string; detail: string };
+
+/**
+ * A Vault step as one entry, or null for anything unexpected:
+ * `vault.capability supported=true walletApi=0.10.4`,
+ * `vault.commitment ok=false code=118 NOT_REGISTERED`,
+ * `vault.address resolved=true deployed=false`, `vault.position ok=true`,
+ * `vault.prepare kind=redeem all=true`, `vault.submit ok=true`,
+ * `vault.receipt status=succeeded`, `vault.confirm kind=supply stage=done`.
+ */
+export function describeVaultStep(step: unknown): DebugEntry | null {
+  switch (readData(step, 'step')) {
+    case 'capability': {
+      const supported = readData(step, 'supported');
+      const walletApi = readData(step, 'walletApi');
+      if (typeof supported !== 'boolean') return null;
+      if (walletApi !== null && (typeof walletApi !== 'string' || !WALLET_API_VERSION.test(walletApi))) return null;
+      return {
+        level: supported ? 'info' : 'warn',
+        event: 'vault.capability',
+        detail: `supported=${supported} walletApi=${walletApi ?? 'none'}`,
+      };
+    }
+    case 'prepare': {
+      const kind = readData(step, 'kind');
+      const all = readData(step, 'all');
+      if (!VAULT_KINDS.has(kind) || typeof all !== 'boolean') return null;
+      return { level: 'info', event: 'vault.prepare', detail: `kind=${String(kind)} all=${all}` };
+    }
+    case 'confirm': {
+      const kind = readData(step, 'kind');
+      const stage = readData(step, 'stage');
+      if (!VAULT_KINDS.has(kind) || !VAULT_CONFIRM_STAGES.has(stage)) return null;
+      return { level: 'info', event: 'vault.confirm', detail: `kind=${String(kind)} stage=${String(stage)}` };
+    }
+    case 'stage':
+      return describeVaultStage(readData(step, 'stage'));
+    default:
+      return null;
+  }
+}
+
+/** A stage the seam reported (`VaultStage`), or null for anything else. */
+function describeVaultStage(stage: unknown): DebugEntry | null {
+  const code = readData(stage, 'code');
+  const codeText = (): string | null => {
+    if (code === null) return 'none';
+    return typeof code === 'number' && Number.isSafeInteger(code) ? formatCode(code) : null;
+  };
+  switch (readData(stage, 'stage')) {
+    case 'capability': {
+      const supported = readData(stage, 'supported');
+      if (typeof supported !== 'boolean') return null;
+      return { level: supported ? 'info' : 'warn', event: 'vault.capability', detail: `supported=${supported}` };
+    }
+    case 'commitment':
+    case 'submit': {
+      const event = readData(stage, 'stage') === 'commitment' ? 'vault.commitment' : 'vault.submit';
+      const ok = readData(stage, 'ok');
+      if (ok === true) return { level: 'info', event, detail: 'ok=true' };
+      const text = ok === false ? codeText() : null;
+      if (text === null) return null;
+      return { level: code === 113 ? 'warn' : 'error', event, detail: `ok=false code=${text}` };
+    }
+    case 'address': {
+      const resolved = readData(stage, 'resolved');
+      if (resolved === false) return { level: 'error', event: 'vault.address', detail: 'resolved=false' };
+      const deployed = readData(stage, 'deployed');
+      if (resolved !== true || typeof deployed !== 'boolean') return null;
+      return { level: 'info', event: 'vault.address', detail: `resolved=true deployed=${deployed}` };
+    }
+    case 'position': {
+      const ok = readData(stage, 'ok');
+      if (typeof ok !== 'boolean') return null;
+      return { level: ok ? 'info' : 'error', event: 'vault.position', detail: `ok=${ok}` };
+    }
+    case 'receipt': {
+      const status = readData(stage, 'status');
+      if (!VAULT_RECEIPTS.has(status)) return null;
+      const level: DebugLevel = status === 'reverted' ? 'error' : status === 'succeeded' ? 'info' : 'warn';
+      return { level, event: 'vault.receipt', detail: `status=${String(status)}` };
+    }
+    default:
+      return null;
+  }
 }
 
 /** A failed `/api` response: path, status and the body's code, and nothing else. */

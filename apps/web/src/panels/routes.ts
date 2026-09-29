@@ -144,10 +144,12 @@ export function buildingRoutes(
 /**
  * Whether a building's door opens at all.
  *
- * A building with no graded route is `coming-soon` — the Vault in v1 (D-007).
- * A building whose every route is an unapproved or undisclosed deviation is
- * locked for that reason instead, which is a different sentence to a player and
- * a very different situation to us.
+ * A building with no graded route is `coming-soon` — the Vault was, until
+ * D-077 graded its two routes. A building whose every route is an unapproved
+ * or undisclosed deviation is locked for that reason instead, which is a
+ * different sentence to a player and a very different situation to us. This
+ * is the register's answer only: whether this build switched a route on is
+ * `routeDoor`'s, and the Vault's street door itself follows `vaultDoorOpen`.
  */
 export function buildingDoor(
   building: BuildingId,
@@ -188,21 +190,51 @@ export const ROUTE_BY_INTENT_KIND: Readonly<Record<Intent['kind'], string>> = Ob
 export const ENTRY_SHIELD_ROUTE = 'entry.shield';
 
 /**
+ * The Vault's two routes (D-077). They are not intents: the Vault has its own
+ * seam methods (`vaultPosition`, `prepareVaultSupply`, `prepareVaultRedeem`),
+ * and one policy route, `vault`, gates both.
+ */
+export const VAULT_SUPPLY_ROUTE = 'vault.supply';
+export const VAULT_REDEEM_ROUTE = 'vault.redeem';
+export const VAULT_ROUTES: readonly string[] = Object.freeze([VAULT_SUPPLY_ROUTE, VAULT_REDEEM_ROUTE]);
+
+/** A policy route kind: an intent's, or the Vault's (D-077). */
+type PolicyRouteKind = WalletRoutePolicy['enabledRoutes'][number];
+
+/**
  * The inverse of `ROUTE_BY_INTENT_KIND` — which policy route kind, if any,
  * gates a given route id. Written out rather than derived with
  * `Object.fromEntries`, which would widen the value back to `string` and lose
  * the literal union `routeDoor` relies on. The entry gate's deposit is a
- * shield, so the shield policy gates it too: a route missing here would pass
- * the policy check open.
+ * shield, so the shield policy gates it too, and both Vault routes are gated
+ * by the Vault's one policy route: a route missing here would pass the policy
+ * check open.
  */
-const POLICY_KIND_BY_ROUTE: Readonly<Partial<Record<string, Intent['kind']>>> = Object.freeze({
+const POLICY_KIND_BY_ROUTE: Readonly<Partial<Record<string, PolicyRouteKind>>> = Object.freeze({
   [ROUTE_BY_INTENT_KIND.shield]: 'shield',
   [ROUTE_BY_INTENT_KIND.unshield]: 'unshield',
   [ROUTE_BY_INTENT_KIND.transfer]: 'transfer',
   [ROUTE_BY_INTENT_KIND.swap]: 'swap',
   [ROUTE_BY_INTENT_KIND.stake]: 'stake',
   [ENTRY_SHIELD_ROUTE]: 'shield',
+  [VAULT_SUPPLY_ROUTE]: 'vault',
+  [VAULT_REDEEM_ROUTE]: 'vault',
 });
+
+/**
+ * Whether the Vault's door opens in this build (D-077): both of its routes
+ * approved and disclosed in the register, and switched on by the build's own
+ * fail-closed policy (`VITE_STRK20_VAULT_*`). The Shell tells the World once,
+ * at composition, and a closed answer keeps D-007's locked facade exactly as
+ * it was. Outside production there is no policy, so the register alone
+ * decides, and the demo's fake runs the Vault.
+ */
+export function vaultDoorOpen(
+  register: readonly RouteGrade[] = PRIVACY_REGISTER,
+  policy: WalletRoutePolicy | null = detectRoutePolicy(),
+): boolean {
+  return VAULT_ROUTES.every((route) => routeDoor(route, register, policy).open);
+}
 
 /**
  * Whether the active wallet policy admits a route.
@@ -222,6 +254,8 @@ function isPolicyEnabledRoute(routeId: string, policy: WalletRoutePolicy | null)
   const kind = POLICY_KIND_BY_ROUTE[routeId];
   if (!kind) return true;
   if (!policy.enabledRoutes.includes(kind)) return false;
+  // The Vault lends STRK alone (D-077): its list must name it.
+  if (kind === 'vault') return admitsStrk(policy.allowedTokens.vault ?? []);
   return routeId !== ROUTE_BY_INTENT_KIND.shield || admitsStrk(policy.allowedTokens.shield);
 }
 
