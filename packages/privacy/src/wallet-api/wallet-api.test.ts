@@ -9,6 +9,7 @@ import {
   type PrivateSubmissionGateway,
   type WalletStrk20Account,
 } from '../index.js';
+import { mapTransferWalletError } from './errors.js';
 
 const STRK = '0x04718f5a0fc34cc1af16a1cdee98ffb20c31f5cd61d6ab07201858f4287c938d';
 const STRK_DECIMAL = BigInt(STRK).toString();
@@ -692,11 +693,63 @@ describe('WalletApiPrivacyOperations capability and reads', () => {
   });
 
   it('blocks an unregistered transfer during prepare instead of proving a doomed action', async () => {
-    const { ops, prepared } = fixture();
+    const { ops, gateway, prepared } = fixture();
+    // The recipient's fact, never this account's own `not-registered` (D-074).
     await expect(ops.prepare([
       { kind: 'transfer', token: TOKEN, amount: 20n, recipient: '0x999' },
-    ])).rejects.toMatchObject({ kind: 'not-registered' });
+    ])).rejects.toMatchObject({
+      kind: 'recipient-not-registered',
+      message: 'The recipient is not registered with the privacy pool.',
+    });
+    expect(gateway.estimate).not.toHaveBeenCalled();
     expect(prepared).toHaveLength(0);
+  });
+
+  it('maps a 118 from the wallet proving a transfer to the recipient, never to this account (D-074)', async () => {
+    const { ops, gateway, wallet } = fixture();
+    const refusal = { code: 118, message: 'An error occurred (NOT_REGISTERED)' };
+    vi.spyOn(wallet, 'strk20PrepareInvoke').mockRejectedValue(refusal);
+    // BOB passes the pool preflight, so the 118 comes from the proving call.
+    const batch = await ops.prepare([{ kind: 'transfer', token: TOKEN, amount: 20n, recipient: BOB }]);
+    const stages: string[] = [];
+
+    const failure = await batch.confirm({
+      feeCeiling: POOL_FEE + 1n,
+      onProgress: ({ stage }) => stages.push(stage),
+    }).catch((error: unknown) => error);
+
+    expect(failure).toBeInstanceOf(PrivacyError);
+    expect(failure).toMatchObject({
+      kind: 'recipient-not-registered',
+      message: 'The recipient is not registered with the privacy pool.',
+    });
+    // The wallet's own answer stays on the cause, for the D-069 debug line.
+    expect((failure as PrivacyError).cause).toBe(refusal);
+    expect(gateway.submit).not.toHaveBeenCalled();
+    expect(stages.at(-1)).toBe('failed');
+  });
+
+  it('keeps a 118 on an unshield as this account\'s own not-registered', async () => {
+    const { ops, gateway, wallet } = fixture();
+    vi.spyOn(wallet, 'strk20PrepareInvoke').mockRejectedValue({ code: 118, message: 'An error occurred (NOT_REGISTERED)' });
+    // A withdrawal names a public address, which no registration governs.
+    const batch = await ops.prepare([{ kind: 'unshield', token: TOKEN, amount: 20n, recipient: '0x999' }]);
+
+    await expect(batch.confirm({ feeCeiling: POOL_FEE + 1n })).rejects.toMatchObject({ kind: 'not-registered' });
+    expect(gateway.submit).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    [113, 'user-rejected'],
+    [119, 'insufficient-balance'],
+    [120, 'privacy-leak'],
+    [163, 'unknown'],
+  ] as const)('keeps a transfer proof\'s %s as %s', async (code, kind) => {
+    const { ops, wallet } = fixture();
+    vi.spyOn(wallet, 'strk20PrepareInvoke').mockRejectedValue({ code, message: 'wallet error' });
+    const batch = await ops.prepare([{ kind: 'transfer', token: TOKEN, amount: 20n, recipient: BOB }]);
+
+    await expect(batch.confirm({ feeCeiling: POOL_FEE + 1n })).rejects.toMatchObject({ kind });
   });
 
   it.each([
@@ -2117,6 +2170,44 @@ describe('wallet error mapping', () => {
   it('does not remap an existing PrivacyError', () => {
     const error = new PrivacyError('unreachable', 'offline');
     expect(mapWalletError(error)).toBe(error);
+  });
+
+  describe('while proving a transfer (D-074)', () => {
+    it('maps a 118 to the recipient, keeping the wallet answer as its cause', () => {
+      const refusal = { code: 118, message: 'An error occurred (NOT_REGISTERED)' };
+      const mapped = mapTransferWalletError(refusal);
+      expect(mapped).toMatchObject({
+        kind: 'recipient-not-registered',
+        message: 'The recipient is not registered with the privacy pool.',
+      });
+      expect(mapped.cause).toBe(refusal);
+      // A code nested under `error`, which `mapWalletError` also reads.
+      expect(mapTransferWalletError({ error: refusal })).toMatchObject({ kind: 'recipient-not-registered' });
+    });
+
+    it('scopes an already-mapped not-registered too, keeping its original cause', () => {
+      const raw = { code: 118 };
+      const mapped = mapTransferWalletError(new PrivacyError('not-registered', 'mapped upstream', raw));
+      expect(mapped).toMatchObject({ kind: 'recipient-not-registered' });
+      expect(mapped.cause).toBe(raw);
+    });
+
+    it.each([
+      [113, 'user-rejected'],
+      [119, 'insufficient-balance'],
+      [120, 'privacy-leak'],
+      [162, 'unsupported-wallet'],
+      [163, 'unknown'],
+    ] as const)('maps code %s exactly as any other wallet call does, to %s', (code, kind) => {
+      const refusal = { code, message: 'wallet error' };
+      expect(mapTransferWalletError(refusal)).toMatchObject({ kind, message: mapWalletError(refusal).message });
+    });
+
+    it('passes every other PrivacyError through untouched, and an abort stays a cancellation', () => {
+      const error = new PrivacyError('unreachable', 'offline');
+      expect(mapTransferWalletError(error)).toBe(error);
+      expect(mapTransferWalletError(new DOMException('aborted', 'AbortError'))).toMatchObject({ kind: 'user-rejected' });
+    });
   });
 
   it('never exposes a raw wallet or RPC message to the player', () => {

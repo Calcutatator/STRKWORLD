@@ -1089,6 +1089,68 @@ describe('bank panel — fault injection', () => {
     expect(flow.name === 'failed' && flow.message).toBe(COPY.errors['not-registered']);
   });
 
+  describe('a Post Office send whose recipient the pool has never seen (D-074)', () => {
+    async function postOffice(operations: FakePrivacyOperations) {
+      const connect = createConnectFlow(operations);
+      await connect.connect();
+      const failures: ShellFailure[] = [];
+      const panel = await openPanel(operations, {
+        allowedModes: ['transfer'],
+        initialMode: 'transfer',
+        building: 'post-office',
+        onError: (failure) => {
+          failures.push(failure);
+          connect.noteOperationError(failure);
+        },
+      });
+      return { connect, failures, panel };
+    }
+
+    const recipientFailure = {
+      name: 'failed',
+      kind: 'recipient-not-registered',
+      message: COPY.errors['recipient-not-registered'],
+      recovery: 'prepare-again',
+    } as const;
+
+    it('keeps the prepare-time refusal in the Post Office and the player connected', async () => {
+      const operations = fake();
+      const { connect, failures, panel } = await postOffice(operations);
+      // The Add's preflight could not tell; the prepare's own pool read says no.
+      vi.spyOn(operations, 'recipientStatus').mockResolvedValueOnce('unknown');
+      panel.setRecipient(STRANGER);
+      panel.setAmount('1');
+      await panel.addToBatch();
+      expect(panel.store.getState().batch).toHaveLength(1);
+      await panel.prepare();
+
+      expect(panel.store.getState().flow).toEqual(recipientFailure);
+      expect(connect.store.getState().name).toBe('connected');
+      expect(failures.map((failure) => failure.kind)).toEqual(['recipient-not-registered']);
+      // Back keeps the send queued, as any failed prepare does.
+      panel.cancelPrepared();
+      expect(panel.store.getState().batch.map((intent) => intent.kind)).toEqual(['transfer']);
+      expect(operations.submitted).toHaveLength(0);
+    });
+
+    it('keeps the wallet\'s 118 while proving in the Post Office and the player connected', async () => {
+      const operations = fake();
+      const { connect, failures, panel } = await postOffice(operations);
+      panel.setRecipient(BOB);
+      panel.setAmount('1');
+      await panel.addToBatch();
+      await panel.prepare();
+      expect(panel.store.getState().flow.name).toBe('review');
+      operations.injectFault({ kind: 'recipient-not-registered', on: 'confirm' });
+      await panel.confirm();
+
+      expect(panel.store.getState().flow).toEqual(recipientFailure);
+      expect(connect.store.getState().name).toBe('connected');
+      expect(failures.map((failure) => failure.kind)).toEqual(['recipient-not-registered']);
+      expect(operations.submitted).toHaveLength(0);
+    });
+  });
+
   it('reports insufficient balance in the player’s terms and offers another go', async () => {
     const operations = fake({ balances: { [STRK]: strk('1') } });
     const panel = await openPanel(operations);

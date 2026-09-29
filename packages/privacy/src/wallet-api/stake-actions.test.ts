@@ -395,6 +395,16 @@ describe('stake prepare request construction', () => {
     expect(gateway.submit).not.toHaveBeenCalled();
   });
 
+  it('keeps a 118 while proving a stake as this account\'s own not-registered (D-074)', async () => {
+    const { ops, wallet, gateway } = fixture();
+    vi.spyOn(wallet, 'strk20PrepareInvoke').mockRejectedValue({ code: 118, message: 'An error occurred (NOT_REGISTERED)' });
+    const batch = await ops.prepare([STAKE]);
+
+    // Only a transfer's 118 names another account; a stake's output note is the player's own.
+    await expect(batch.confirm({ feeCeiling: POOL_FEE + 1n })).rejects.toMatchObject({ kind: 'not-registered' });
+    expect(gateway.submit).not.toHaveBeenCalled();
+  });
+
   it('rejects a relay quote above the route policy before publishing a batch', async () => {
     const { ops, gateway } = fixture(stakePolicy({ maxRelayFee: 0n }));
 

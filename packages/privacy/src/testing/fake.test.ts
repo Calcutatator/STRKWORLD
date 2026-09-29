@@ -509,11 +509,12 @@ describe('invalid fake intents', () => {
 });
 
 describe('recipients must be registered', () => {
-  it('blocks an unregistered recipient before proof generation', async () => {
+  it('blocks an unregistered recipient before proof generation, as the recipient\'s fact (D-074)', async () => {
     const ops = fresh();
     await expect(ops.prepare([
       { kind: 'transfer', token: STRK, amount: 10n ** 18n, recipient: '0x0999' },
-    ])).rejects.toMatchObject({ kind: 'not-registered' });
+    ])).rejects.toMatchObject({ kind: 'recipient-not-registered' });
+    expect(ops.submitted).toHaveLength(0);
   });
 
   it('reports unregistered addresses from the preflight', async () => {

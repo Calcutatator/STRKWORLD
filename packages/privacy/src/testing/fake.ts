@@ -438,8 +438,9 @@ export class FakePrivacyOperations implements PrivacyOperations {
       // A stake carries no public-leg warning, matching the Wallet API adapter:
       // D-064 waived its in-game disclosure, and a swap carries none either.
       if (intent.kind === 'transfer' && !this.registeredAddrs.has(normalise(intent.recipient))) {
+        // The recipient's fact, not this account's, as in the adapter (D-074).
         throw new PrivacyError(
-          'not-registered',
+          'recipient-not-registered',
           'The recipient is not registered with the privacy pool.',
         );
       }

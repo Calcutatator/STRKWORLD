@@ -51,6 +51,7 @@ export const WALLET_ERROR_NAMES: Readonly<Record<number, string>> = Object.freez
 /** Every PrivacyError kind; a record, so a kind the seam adds cannot be missed here. */
 const KINDS = setOf({
   'not-registered': true,
+  'recipient-not-registered': true,
   'insufficient-balance': true,
   'privacy-leak': true,
   'unsupported-wallet': true,

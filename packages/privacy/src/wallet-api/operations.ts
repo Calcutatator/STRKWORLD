@@ -1,5 +1,5 @@
 import { buildStrk20Actions, type PrivateSwapPlan } from '@avnu/avnu-sdk';
-import { num, transaction, type STRK20_ACTION } from 'starknet';
+import { num, transaction, type STRK20_ACTION, type STRK20_CALL_AND_PROOF } from 'starknet';
 import type {
   BatchWarning,
   DepositStatus,
@@ -21,7 +21,7 @@ import {
 } from '../types.js';
 import { protectedMinimumOut } from '../protected-minimum.js';
 import { ENDUR_DEPOSIT_ANONYMIZER, ENDUR_XSTRK, ENDUR_XSTRK_ASSET } from '../endur.js';
-import { mapWalletError } from './errors.js';
+import { mapTransferWalletError, mapWalletError } from './errors.js';
 import type {
   PoolNativeRoute,
   PoolReadClient,
@@ -537,7 +537,7 @@ export class WalletApiPrivacyOperations implements PrivacyOperations {
           emitProgress(onProgress, { stage: 'awaiting-approval', message: 'Confirm in your wallet' });
           emitProgress(onProgress, { stage: 'proving', message: 'Your wallet is generating a proof' });
           assertNotDiscarded(discarded);
-          const artifact = await owner.wallet.strk20PrepareInvoke(actions, false);
+          const artifact = await owner.proveRelayed(route, actions);
           throwIfAborted(signal);
           emitProgress(onProgress, { stage: 'submitting', message: 'Queued for private submission' });
           assertNotDiscarded(discarded);
@@ -564,6 +564,20 @@ export class WalletApiPrivacyOperations implements PrivacyOperations {
       },
       discard() { discarded = true; },
     };
+  }
+
+  /**
+   * The wallet proves a relayed batch. On a transfer a 118 rejects as the
+   * recipient's `recipient-not-registered` (D-074), even though `prepare()`
+   * read that recipient as registered; on every other route a 118 is still
+   * this account's own `not-registered`.
+   */
+  private async proveRelayed(route: RelayedRoute, actions: STRK20_ACTION[]): Promise<STRK20_CALL_AND_PROOF> {
+    try {
+      return await this.wallet.strk20PrepareInvoke(actions, false);
+    } catch (error) {
+      throw route === 'transfer' ? mapTransferWalletError(error) : error;
+    }
   }
 
   private async estimateRelay(
@@ -605,8 +619,9 @@ export class WalletApiPrivacyOperations implements PrivacyOperations {
       } else if (intent.kind === 'transfer') {
         const status = await this.recipientStatus(intent.recipient, signal);
         if (status === 'unregistered') {
+          // The recipient's fact, not this account's (D-074).
           throw new PrivacyError(
-            'not-registered',
+            'recipient-not-registered',
             'The recipient is not registered with the privacy pool.',
           );
         }

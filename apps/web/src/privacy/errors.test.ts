@@ -15,6 +15,10 @@ describe('failure classification', () => {
     expect(toFailure(new PrivacyError('relay-not-configured', 'relay not configured')).kind).toBe(
       'relay-not-configured',
     );
+    // D-074: a transfer recipient's 118 is its own class, never the account's.
+    expect(toFailure(new PrivacyError('recipient-not-registered', 'error 118 on a transfer')).kind).toBe(
+      'recipient-not-registered',
+    );
   });
 
   it('classifies anything else as unknown and keeps the cause for logs', () => {

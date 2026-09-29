@@ -17,6 +17,7 @@ import type { PrivacyErrorKind } from '@strkworld/privacy';
 /** Every kind, as a record so the compiler refuses a kind the seam adds and this misses. */
 const KIND_SET: Readonly<Record<PrivacyErrorKind, true>> = Object.freeze({
   'not-registered': true,
+  'recipient-not-registered': true,
   'insufficient-balance': true,
   'privacy-leak': true,
   'unsupported-wallet': true,

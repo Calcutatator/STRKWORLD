@@ -201,6 +201,7 @@ describe('shell copy', () => {
       COPY.locked.notEnabled.transfer,
       COPY.notices.recipientUnregistered,
       COPY.notices.recipientUnknown,
+      COPY.errors['recipient-not-registered'],
       COPY.notices.oneRecipientPerSend,
       COPY.next.afterShield,
       COPY.next.afterShieldSend,
@@ -227,6 +228,16 @@ describe('shell copy', () => {
       for (const line of transferCopy) {
         expect(line, line).not.toMatch(/on-chain|observer|reveals?|visible|public|linkable/i);
       }
+    });
+
+    it('puts an unregistered recipient on the recipient, and says nothing was sent (D-074)', () => {
+      const line = COPY.errors['recipient-not-registered'];
+      expect(line).toBe(
+        "That recipient hasn't set up private balances yet, so they can't receive a private transfer. Nothing was sent.",
+      );
+      // Not the player's own registration card, and nothing the player can register.
+      expect(line).not.toBe(COPY.errors['not-registered']);
+      expect(line).not.toMatch(/your wallet|this account|register inside/i);
     });
 
     it('states the one-recipient rule plainly', () => {

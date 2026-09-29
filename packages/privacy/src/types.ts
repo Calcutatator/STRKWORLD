@@ -76,8 +76,20 @@ export type ProgressCallback = (progress: OperationProgress) => void;
  * plus transport failures — a player seeing a raw RPC error is a defect.
  */
 export type PrivacyErrorKind =
-  /** 118 — not registered in the pool. Wallet-side action required. */
+  /**
+   * 118 — this account is not registered in the pool. Wallet-side action
+   * required. A 118 met while proving a transfer is reported as the
+   * recipient's instead (D-074).
+   */
   | 'not-registered'
+  /**
+   * The transfer's recipient is not registered in the pool, so it cannot
+   * receive a private transfer (D-074). The pool's `get_public_key` preflight
+   * read zero, or the wallet answered 118 while proving the transfer. Nothing
+   * was sent. A fact about the recipient, never about this account: only the
+   * recipient can register, inside their own wallet.
+   */
+  | 'recipient-not-registered'
   /** 119 — insufficient shielded balance. Remember the pool fee. */
   | 'insufficient-balance'
   /** 120 — wallet refused on anonymity grounds. Trigger conditions undocumented. */

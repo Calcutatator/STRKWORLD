@@ -20,6 +20,22 @@ export function mapWalletError(error: unknown): PrivacyError {
   return new PrivacyError(kind, safeMessage(kind), error);
 }
 
+/**
+ * A wallet failure met while proving a private transfer (D-074). A 118 there
+ * is reported as the recipient's, never as this account's: D-072 admits a
+ * player only on a wallet answer about their own account that a 118 would
+ * have refused. Every other failure maps as `mapWalletError` maps it.
+ */
+export function mapTransferWalletError(error: unknown): PrivacyError {
+  const mapped = mapWalletError(error);
+  if (mapped.kind !== 'not-registered') return mapped;
+  return new PrivacyError(
+    'recipient-not-registered',
+    safeMessage('recipient-not-registered'),
+    mapped.cause ?? mapped,
+  );
+}
+
 function isAbortError(error: unknown): boolean {
   if (error instanceof DOMException) {
     try {
@@ -62,6 +78,7 @@ function safeMessage(kind: PrivacyErrorKind): string {
   switch (kind) {
     case 'user-rejected': return 'The wallet request was declined.';
     case 'not-registered': return 'This wallet is not registered with the privacy pool.';
+    case 'recipient-not-registered': return 'The recipient is not registered with the privacy pool.';
     case 'insufficient-balance': return 'The private balance cannot cover the amount and fees.';
     case 'privacy-leak': return 'The wallet refused an action that could weaken privacy.';
     case 'unsupported-wallet': return 'This wallet does not support the required STRK20 Wallet API.';
