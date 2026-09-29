@@ -336,6 +336,57 @@ jsdom, `plaza-visit.test.tsx`, `plaza-flow.test.tsx` (E to Escape through the
 visit layer), `copy.test.ts` and `debug-logs.test.tsx`. The plaza was not
 looked at in a browser by an agent; that is the lead's check.
 
+### 2026-09-29 — The rooftop frame lies inside the fog's near distance, so the backdrop must fill it
+
+From the Exchange roof the `rooftop` preset (pitch 74°, vertical FOV 50°,
+camera 49.5 up) sees from 49° to 99° below the horizontal. three's linear fog
+is a smoothstep over view depth (`vFogDepth = -mvPosition.z` in
+`fog_vertex.glsl.js`), not distance, and every ground point in that frame lies
+within about 59 units of depth (the top row: 49.5 / 0.833), while
+`fogRange(36).near` is 62. So the roof view has no fog at all. Capping
+`fog.far`'s elevation term would change nothing there; it would only thicken
+the fog seen from sandbox stacks, which that term exists to prevent. The fog
+is unchanged. The frame's top row meets the ground on a line of constant z,
+about z -30 to -33 from the deck, so no window sees further north than that; a
+wider window only reaches further west and east. What the roof saw was the
+geometry: two shallow rows of blocks, then bare meadow and hill domes to the
+top of the frame. On a 21:9 window the top-left corner also ran past the
+ground's west edge (x -40) into the sky dome's below-horizon colour.
+
+`three/backdrop.ts` fills it, outside the map only and in the street's
+existing bins (`far`, `far-lit`, the ground's `grass`, `road` and `sidewalk`
+keys, and its groves), so no draw call is added. A first fill stacked rows
+rising to 29 units behind the near rows; the lead read them as a cluster of
+mismatched skyscrapers. The Exchange tower is designed as the one tall
+building, whose top you cannot see, so nothing in the backdrop rises above
+the near rows, and every building is a near-row block: the same cornice,
+water tank or plant room (a chimney on houses), window grid and pastels, the
+colour drifting gently from block to block. The two near rows are
+vertex-identical where the street sees them. Behind them a whole-tile street
+grid aligned with the district (cross streets every 18, on the gap between the
+Bank and the Exchange) carries on in the main road's colours, with raised
+pavements, kerbs, centre dashes and street trees. First comes a row of
+mid-rise blocks, 4.5-9 units with a few to 11.5, with a park and a square;
+then low houses with gardens, fewer the further they stand from the map; then
+field parcels, hedgerows, tree lines and gentle hills. West of the barrier,
+east of the square and south the houses thin into the same fields. The ground
+is one code per tile, merged into rectangles, so it can have no holes or
+overlaps, and kerbs and hedgerows follow the tiles' edges. It runs 120 past
+the north, west and east edges (`HINTERLAND`), the road with it. Nothing
+inside the map changed.
+
+*Verified:* `street-builder.test.ts` frames the camera with the rig's
+`rooftop` preset at `EXCHANGE_ROOF_HEIGHT` from each deck corner, on 16:9 and
+21:9 windows, and casts a 16 × 12 ray grid against
+`fogRange(EXCHANGE_ROOF_HEIGHT).far`. Every ray must meet geometry within that
+depth, and grass it meets behind the street (north of the hedge's lawn,
+across the map's width) must be one of the town's own lawns. On the original
+geometry 19 rays (all 21:9) met the void and 69 met bare meadow; now none do.
+Draw calls, counted as the budget test counts them, are 63 before and after;
+triangles went from 71,449 to 85,609. An offline z-buffer render (not
+committed) changed 0.3-1.3% of the pixels of four street and sandbox views,
+4.0% at the road's closed west end, against 22-33% of the rooftop views.
+
 ### 2026-09-29 — A transfer's 118 is its recipient's, and stays in the Post Office (D-074)
 
 A registered, funded player who sent from the Post Office to an address the

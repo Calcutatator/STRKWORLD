@@ -4,6 +4,8 @@ import {
   Box3,
   BufferGeometry,
   Color,
+  Float32BufferAttribute,
+  Group,
   InstancedMesh,
   Material,
   Matrix4,
@@ -14,6 +16,7 @@ import {
   Raycaster,
   SRGBColorSpace,
   Texture,
+  Vector2,
   Vector3,
 } from 'three';
 import { SANDBOX_AREA, SANDBOX_ENTRANCE } from '@strkworld/shared';
@@ -22,6 +25,8 @@ import { EXCHANGE_ROOF_HEIGHT, EXCHANGE_ROOF_LEVEL, createFixedRoomLevel } from 
 import { createNullLabelFactory } from './labels.js';
 import { CAMERA_FOV, createCameraRig } from './camera-rig.js';
 import { AVNU, NEAR, STRK20, boxGeometry } from './palette.js';
+import { CITY_FRONT, backdropSurface } from './backdrop.js';
+import { fogRange } from './world-engine.js';
 import {
   PAVEMENT_HEIGHT,
   SANDBOX_GATE_TEXT,
@@ -50,6 +55,16 @@ const GATE = {
 } as const;
 /** A tall avatar (2.05) holding a block overhead must pass under the lintel. */
 const GATE_CLEARANCE = 3.4;
+
+/**
+ * Windows the rooftop view must fill: a laptop's, and a wide one (an
+ * ultrawide monitor, or a short browser window on a wide screen), which
+ * reaches furthest west and east.
+ */
+const ROOF_WINDOWS = [
+  ['16:9', 16 / 9],
+  ['21:9', 21 / 9],
+] as const;
 
 function build(map: DistrictMap = createStreetMap()): { map: DistrictMap; view: StreetView } {
   return { map, view: buildStreet(map, createNullLabelFactory()) };
@@ -560,6 +575,75 @@ describe('buildStreet', () => {
     view.dispose();
   });
 
+  it('fills the rooftop view down to the fog: no ray from the roof meets the void or bare meadow', () => {
+    const { map, view } = build();
+    view.ground.updateMatrixWorld(true);
+    const roof = createFixedRoomLevel(EXCHANGE_ROOF_LEVEL);
+    const origin = roof.rooftop!;
+    const bounds = { minX: origin.x, maxX: origin.x + roof.width, minZ: origin.y, maxZ: origin.y + roof.height };
+    // The fog the engine draws while the player stands on the deck.
+    const { far } = fogRange(EXCHANGE_ROOF_HEIGHT);
+    // The deck's corner tiles bound everywhere the camera can stand.
+    const deck = roof.tiles.flatMap((row, y) => row.flatMap((tile, x) => (tile === 'wall' ? [] : [[x, y] as const])));
+    const [xs, ys] = [deck.map(([x]) => x), deck.map(([, y]) => y)];
+    const corners = [Math.min(...xs), Math.max(...xs)].flatMap((x) => [Math.min(...ys), Math.max(...ys)].map((y) => [x, y] as const));
+    const behindTheStreet = ({ x, z }: Vector3) => z < CITY_FRONT && x >= 0 && x <= map.width;
+    const scene = chunkedForRays(view.ground);
+    const raycaster = new Raycaster();
+    const ndc = new Vector2();
+    const forward = new Vector3();
+    const misses: string[] = [];
+    for (const [window, aspect] of ROOF_WINDOWS) {
+      for (const [x, y] of corners) {
+        const target = { x: origin.x + x + 0.5, z: origin.y + y + 0.5 };
+        const camera = new PerspectiveCamera(CAMERA_FOV, aspect, 0.1, 240);
+        createCameraRig({ camera }).update(16, target, bounds, EXCHANGE_ROOF_HEIGHT, 'rooftop');
+        camera.updateMatrixWorld(true);
+        camera.getWorldDirection(forward);
+        // A 16 by 12 grid of rays through the frame, edge to edge.
+        for (let i = 0; i < 16; i++) {
+          for (let j = 0; j < 12; j++) {
+            raycaster.setFromCamera(ndc.set(-1 + (2 * i) / 15, -1 + (2 * j) / 11), camera);
+            const { direction } = raycaster.ray;
+            // At or above the horizon a ray sees sky, not the dome's ground-coloured void.
+            if (direction.y >= 0) continue;
+            const hit = raycaster.intersectObject(scene, true)[0];
+            const where = `${window} from (${target.x}, ${target.z}) through (${ndc.x.toFixed(2)}, ${ndc.y.toFixed(2)})`;
+            // three's fog is linear in view depth (-mvPosition.z), not in distance.
+            const depth = hit ? hit.distance * direction.dot(forward) : Infinity;
+            if (!hit || depth > far) misses.push(`void ${where}`);
+            // Behind the street the roof looks down on the town carrying on: any grass there
+            // is one of its gardens or its park, never the back of the map.
+            else if (behindTheStreet(hit.point) && hit.object.name === 'street:grass' && backdropSurface(map, hit.point.x, hit.point.z) !== 'lawn') {
+              misses.push(`bare meadow ${where}`);
+            }
+          }
+        }
+      }
+    }
+    expect(misses).toEqual([]);
+    scene.traverse((object) => object instanceof Mesh && object.geometry.dispose());
+    view.dispose();
+    // 1,536 rays take about a second alone; the timeout is for a loaded full run.
+  }, 30_000);
+
+  it('lays the same backdrop and ground on every build', () => {
+    const first = build().view;
+    const second = build().view;
+    for (const name of ['street:backdrop', 'street:backdrop-windows', 'street:grass', 'street:road', 'street:pavement']) {
+      const a = meshNamed(first.ground, name).geometry;
+      const b = meshNamed(second.ground, name).geometry;
+      expect(a.getAttribute('position').count, name).toBeGreaterThan(0);
+      for (const attribute of ['position', 'color']) {
+        expect(sameNumbers(a.getAttribute(attribute).array, b.getAttribute(attribute).array), `${name} ${attribute}`).toBe(true);
+      }
+    }
+    const trunks = (view: StreetView) => (meshNamed(view.ground, 'street:tree-trunks') as InstancedMesh).instanceMatrix.array;
+    expect(sameNumbers(trunks(first), trunks(second))).toBe(true);
+    first.dispose();
+    second.dispose();
+  }, 30_000);
+
   it('has a roof intrusion check that catches a crate on the deck', () => {
     const map = createStreetMap();
     const H = EXCHANGE_ROOF_HEIGHT;
@@ -696,6 +780,66 @@ describe('buildStreet', () => {
     expect(streetSurfaceHeightAt(map, 23, 22)).toBe(0);
   });
 });
+
+/**
+ * `root`'s triangles in world space, bucketed per mesh by the XZ cell of each
+ * triangle's centroid, so a raycast tests only the buckets whose bounds lie
+ * near the ray instead of every triangle of every merged mesh. The same
+ * triangles under the same materials (so the same sides): the first hit is the
+ * one three would find on `root`, and it carries the source mesh's name.
+ */
+function chunkedForRays(root: Object3D, cell = 16): Group {
+  root.updateMatrixWorld(true);
+  const buckets = new Map<string, { name: string; material: Mesh['material']; positions: number[] }>();
+  const instance = new Matrix4();
+  const world = new Matrix4();
+  const vertex = new Vector3();
+  let meshes = 0;
+  root.traverse((object) => {
+    if (!(object instanceof Mesh)) return;
+    const mesh = meshes++;
+    const position = object.geometry.getAttribute('position');
+    const index = object.geometry.getIndex();
+    const count = index ? index.count : position.count;
+    const instances = object instanceof InstancedMesh ? object.count : 1;
+    for (let n = 0; n < instances; n++) {
+      if (object instanceof InstancedMesh) {
+        object.getMatrixAt(n, instance);
+        world.multiplyMatrices(object.matrixWorld, instance);
+      } else {
+        world.copy(object.matrixWorld);
+      }
+      for (let t = 0; t + 2 < count; t += 3) {
+        const corners = [t, t + 1, t + 2].flatMap((i) =>
+          vertex.fromBufferAttribute(position, index ? index.getX(i) : i).applyMatrix4(world).toArray(),
+        );
+        const cx = Math.floor((corners[0]! + corners[3]! + corners[6]!) / 3 / cell);
+        const cz = Math.floor((corners[2]! + corners[5]! + corners[8]!) / 3 / cell);
+        const key = `${mesh}:${cx},${cz}`;
+        let bucket = buckets.get(key);
+        if (!bucket) buckets.set(key, (bucket = { name: object.name, material: object.material, positions: [] }));
+        bucket.positions.push(...corners);
+      }
+    }
+  });
+  const group = new Group();
+  for (const { name, material, positions } of buckets.values()) {
+    const geometry = new BufferGeometry();
+    geometry.setAttribute('position', new Float32BufferAttribute(positions, 3));
+    const chunk = new Mesh(geometry, material);
+    chunk.name = name;
+    group.add(chunk);
+  }
+  group.updateMatrixWorld(true);
+  return group;
+}
+
+/** Element-wise equality, without a deep diff of a hundred thousand floats. */
+function sameNumbers(a: ArrayLike<number>, b: ArrayLike<number>): boolean {
+  if (a.length !== b.length) return false;
+  for (let i = 0; i < a.length; i++) if (a[i] !== b[i]) return false;
+  return true;
+}
 
 function meshNamed(root: Object3D, suffix: string): Mesh {
   let found: Mesh | undefined;
