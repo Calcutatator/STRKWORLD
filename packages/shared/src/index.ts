@@ -157,11 +157,12 @@ export const SANDBOX_ENTRANCE: Readonly<{ x: number; y: number; width: number; h
 export const SANDBOX_MAX_HEIGHT = 256;
 
 /**
- * D-071: the most blocks a column may hold. The block that would make any
- * column taller bursts the sandbox instead: every placed block flies away and
- * the square is empty again.
+ * D-071, threshold set by D-075: the most blocks a column may hold, 14: the
+ * 15th block — the one that would make a column 15 tall — bursts the sandbox
+ * instead of stacking, and every placed block flies away and the square is
+ * empty again.
  */
-export const SANDBOX_BURST_HEIGHT = 15;
+export const SANDBOX_BURST_HEIGHT = 14;
 
 /** Every block in the sandbox, carried blocks included. */
 export const SANDBOX_MAX_BLOCKS = 900;

@@ -134,10 +134,11 @@ World-owned `SandboxChannel` through `WorldConfig`, like the D-038 peer source.
 - **Presentation** (`three/sandbox-view.ts`): one instanced mesh for every
   block, sky drops fall from high above, carried blocks ride above heads for
   every player, and the camera, sun and fog follow you up tall towers.
-- **Bursts** (D-071): no column holds more than `SANDBOX_BURST_HEIGHT` (15)
-  blocks; the block that would make one taller bursts the whole sandbox. The
-  channel's `subscribeBursts` hint throws every drawn block away from that
-  tile (the same throw on every client, seeded by each block's tile and
+- **Bursts** (D-071, threshold set by D-075): no column holds more than
+  `SANDBOX_BURST_HEIGHT` (14) blocks; the block that would make one taller
+  bursts the whole sandbox. The channel's `subscribeBursts` hint throws every
+  drawn block away from that tile (the same throw on every client, seeded by
+  each block's tile and
   level), or pops them out under `prefers-reduced-motion`; the emptied
   snapshot drops anyone standing on the stacks through the usual fall. The
   aim ring turns hot pink when a place would burst it.

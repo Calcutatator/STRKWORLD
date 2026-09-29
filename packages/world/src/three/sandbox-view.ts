@@ -56,7 +56,7 @@ export const CARRIED_BLOCK_SIZE = 0.55;
 const SETTLE_HEIGHT = 1;
 const SETTLE_MS = 240;
 const DROP_HEIGHT = 40;
-const GRAVITY = 42;
+const GRAVITY = 58; // D-075: raised from 42 so sky drops fall a little faster.
 /** Rebound speed after a sky drop lands: a hop of a few centimetres. */
 const BOUNCE_SPEED = 2.2;
 const LEAVE_MS = 180;

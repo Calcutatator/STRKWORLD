@@ -357,15 +357,15 @@ describe('sandbox controller (D-060)', () => {
     expect(world.timers.size).toBe(1);
   });
 
-  it('bursts solo when the player places a 16th block, and ends empty-handed', () => {
+  it('bursts solo when the player places a 15th block, and ends empty-handed', () => {
     const stand = { x: 61, y: 11 };
     const column = { x: 62, y: 11 };
     const supply = { x: 61, y: 10 };
     const far = { x: 80, y: 26 };
     const targets = [
-      ...Array.from({ length: 14 }, () => stand),
+      ...Array.from({ length: SANDBOX_BURST_HEIGHT - 1 }, () => stand),
       ...Array.from({ length: SANDBOX_BURST_HEIGHT }, () => column),
-      ...Array.from({ length: 14 }, () => supply),
+      ...Array.from({ length: SANDBOX_BURST_HEIGHT - 1 }, () => supply),
     ];
     const world = setup(rainOnto(targets, far));
     world.move(far);
