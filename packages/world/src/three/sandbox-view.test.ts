@@ -450,7 +450,10 @@ describe('buildSandbox', () => {
       else if (landed) hop = Math.max(hop, y - 2.5);
     }
     expect(landed).toBe(true);
-    expect(hop).toBeGreaterThan(0.01);
+    // D-075: a faster GRAVITY shrinks the bounce and lets the landing squash
+    // (a fixed, unrelated animation) cover more of it, so the observable peak
+    // drops from about 0.036 (GRAVITY 42) to about 0.006 (GRAVITY 58).
+    expect(hop).toBeGreaterThan(0.003);
     expect(hop).toBeLessThan(0.2);
     expect(blockAt(view, X + 4, Y + 4, 2)).toBeGreaterThanOrEqual(0);
     view.dispose();
@@ -809,12 +812,26 @@ describe('bursting (D-071)', () => {
     const view = buildSandbox();
     const mesh = blocks(view);
     const tall = Array.from({ length: SANDBOX_BURST_HEIGHT }, (_, k) => k % SANDBOX_COLOURS);
-    const board = (row: number): SandboxColumn[] =>
-      Array.from({ length: SANDBOX_MAX_BLOCKS / SANDBOX_BURST_HEIGHT }, (_, n) => ({
+    // SANDBOX_MAX_BLOCKS need not divide evenly by SANDBOX_BURST_HEIGHT: fill
+    // every full column, then top up with one shorter column, so the board
+    // still holds exactly SANDBOX_MAX_BLOCKS.
+    const fullColumns = Math.floor(SANDBOX_MAX_BLOCKS / SANDBOX_BURST_HEIGHT);
+    const remainder = SANDBOX_MAX_BLOCKS - fullColumns * SANDBOX_BURST_HEIGHT;
+    const board = (row: number): SandboxColumn[] => {
+      const columns = Array.from({ length: fullColumns }, (_, n) => ({
         x: X + (n % SANDBOX_AREA.width),
         y: Y + row + Math.floor(n / SANDBOX_AREA.width) * 3,
         colours: tall,
       }));
+      if (remainder > 0) {
+        columns.push({
+          x: X + (fullColumns % SANDBOX_AREA.width),
+          y: Y + row + Math.floor(fullColumns / SANDBOX_AREA.width) * 3,
+          colours: tall.slice(0, remainder),
+        });
+      }
+      return columns;
+    };
     view.setColumns(board(0));
     settle(view);
     expect(mesh.count).toBe(SANDBOX_MAX_BLOCKS);
@@ -887,6 +904,26 @@ describe('bursting (D-071)', () => {
     view.setTarget({ x: X, y: Y, level: SANDBOX_BURST_HEIGHT, mode: 'place', valid: false });
     expect(colour()).toBe(hex(SANDBOX_THEME.targetInvalid));
     view.setTarget({ x: X, y: Y, level: SANDBOX_BURST_HEIGHT, mode: 'pick', valid: true });
+    expect(colour()).toBe(hex(SANDBOX_THEME.targetValid));
+    expect(target.userData).toMatchObject({ burst: false });
+    view.dispose();
+  });
+
+  it('shows the burst warning when aiming a placement at a 14-high column (D-075)', () => {
+    expect(SANDBOX_BURST_HEIGHT).toBe(14);
+    const view = buildSandbox();
+    const ghost = view.group.getObjectByName('sandbox:target-ghost') as Mesh;
+    const target = view.group.getObjectByName('sandbox:target')!;
+    const colour = () => (ghost.material as MeshBasicMaterial).color.getHex();
+    const hex = (value: number) => new Color(value).getHex();
+
+    // A 14-high column: the aimed placement would be the 15th block, so it burns hot pink.
+    view.setTarget({ x: X, y: Y, level: 14, mode: 'place', valid: true });
+    expect(colour()).toBe(hex(SANDBOX_THEME.targetBurst));
+    expect(target.userData).toMatchObject({ mode: 'place', valid: true, burst: true });
+
+    // One lower, the 14th block still just stacks.
+    view.setTarget({ x: X, y: Y, level: 13, mode: 'place', valid: true });
     expect(colour()).toBe(hex(SANDBOX_THEME.targetValid));
     expect(target.userData).toMatchObject({ burst: false });
     view.dispose();

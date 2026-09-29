@@ -3137,7 +3137,7 @@ account that the in-transaction fee, not Portal credits, pays for this mode.
 
 ## D-071 — A pillar taller than 15 bursts the sandbox
 
-**2026-09-28 · Accepted by the user · amends D-060 (the sandbox now resets itself by bursting, and the lobby sends a second sandbox broadcast) · extends D-011's shared seam with `SANDBOX_BURST_HEIGHT`**
+**2026-09-28 · Accepted by the user · amends D-060 (the sandbox now resets itself by bursting, and the lobby sends a second sandbox broadcast) · extends D-011's shared seam with `SANDBOX_BURST_HEIGHT` · burst threshold superseded by D-075**
 
 **Context.** In multiplayer the sandbox is always busy and never resets. D-060
 keeps nothing beyond the room's life, a busy room never empties, and sky drops
@@ -3480,3 +3480,43 @@ the registration card; nothing is sent either way. Every exhaustive record
 of the kinds must list the new one. The shell's classifier, the debug format
 and `COPY.errors` are typed so that the compiler refuses one that misses it.
 No agent opened a wallet for this decision.
+
+---
+
+## D-075 — The 15th block bursts, and sky drops fall a little faster
+
+**2026-09-29 · Accepted by the user · supersedes D-071's threshold only (a column now holds at most 14, and the 15th block bursts the sandbox)**
+
+**Context.** The lead tried D-071's burst live at a temporary
+`SANDBOX_BURST_HEIGHT` of 3: three stacked blocks stood, and the fourth
+burst the sandbox, matching the rule exactly as shipped. Satisfied it worked,
+the lead asked that production "make sure it does that when placing the 15th
+block" — one lower than D-071 shipped — and separately, of the sky-drop fall
+animation, to "make the blocks drop slightly faster, only a little bit."
+
+**Decision.**
+
+- `SANDBOX_BURST_HEIGHT` drops from 15 to 14: the most blocks a column may
+  hold. The 15th block — placed, dropped from the sky or put back — bursts
+  the sandbox instead of stacking, one block sooner than D-071 shipped.
+  Nothing about the mechanism changes: which checks run first, what a burst
+  reports, how every client throws its blocks, and the debug log are all
+  D-071's, untouched, because they are expressed only through this one
+  constant.
+- `GRAVITY` in `three/sandbox-view.ts` rises from 42 to 58 units/s²: a sky
+  drop from `DROP_HEIGHT` (40) now takes about 1.17 s to land instead of
+  about 1.38 s, so the rain reads a little brisker. `DROP_HEIGHT`,
+  `BOUNCE_SPEED`, `SETTLE_MS`, the burst's own `BURST_GRAVITY` (16, floatier
+  than a sky drop's so the throw still reads as an explosion) and the
+  server's spawn interval are unchanged; only the ordinary sky-drop landing
+  speeds up.
+
+**Consequences.** A stand that reached a pillar's top at one below the old
+cap now needs one block less to do it: 13, not 14. Every other reach, range,
+occupancy and conservation rule D-071 established is unaffected, since none
+of them name a height directly — only `SANDBOX_BURST_HEIGHT` moved. The cap
+is enforced only at the moment a block would join a column, so nothing
+retroactively bursts; a column already standing at the old cap simply bursts
+on the next block it is offered, exactly as D-071 always specified for a full
+column. Sky drops read very slightly snappier; their landing tile, colour and
+avoidance rules are unchanged.

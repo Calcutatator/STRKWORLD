@@ -1,7 +1,7 @@
 /**
  * D-071 end to end: a real Colyseus server, real websocket clients and the
  * real room class, whose sky drops are scripted so that every one lands on
- * the same tile. The sixteenth bursts the sandbox.
+ * the same tile. The fifteenth bursts the sandbox.
  *
  * A file of its own because it needs its own room definition, and the
  * matchmaker is a process-global (see the AGENTS.md finding).

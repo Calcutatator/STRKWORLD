@@ -592,9 +592,9 @@ describe('a pillar taller than SANDBOX_BURST_HEIGHT bursts the sandbox (D-071)',
 
   it('bursts on a place: the placer ends empty-handed, and a peer keeps the block they carry', () => {
     const { registry, drop, join, bursts, pillar } = listening();
-    pillar({ x: 61, y: 11 }, 14); // where 'a' stands: level 14
+    pillar({ x: 61, y: 11 }, SANDBOX_BURST_HEIGHT - 1); // where 'a' stands: level 13
     pillar({ x: 62, y: 11 }); // the full column beside it
-    pillar({ x: 61, y: 10 }, 14); // a supply stack in reach
+    pillar({ x: 61, y: 10 }, SANDBOX_BURST_HEIGHT - 1); // a supply stack in reach
     drop({ x: 72, y: 20 }, 3);
     const a = join('a', 61, 11);
     const b = join('b', 73, 20);

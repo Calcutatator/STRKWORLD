@@ -815,15 +815,15 @@ describe('bursting (D-071)', () => {
   }
 
   /**
-   * 'me' stands on a 14-high stack at (61, 11), within reach of a 16th block
+   * 'me' stands on a 13-high stack at (61, 11), within reach of a 15th block
    * on the column beside it at (62, 11), carrying a block from the supply
    * stack at (61, 10); 'other' carries a block of colour 3 far away.
    */
   function besidePillar(column: number): Rig & { readonly me: SandboxPlayer; readonly other: SandboxPlayer } {
     const r = rig();
-    r.stack({ x: 61, y: 11 }, tall(14));
+    r.stack({ x: 61, y: 11 }, tall(SANDBOX_BURST_HEIGHT - 1));
     r.stack({ x: 62, y: 11 }, tall(column, 1));
-    r.stack({ x: 61, y: 10 }, tall(14, 2));
+    r.stack({ x: 61, y: 10 }, tall(SANDBOX_BURST_HEIGHT - 1, 2));
     r.drop({ x: 72, y: 20 }, 3);
     const me = at(61, 11);
     const other = at(73, 20, 'other');
@@ -832,11 +832,17 @@ describe('bursting (D-071)', () => {
     return { ...r, me, other };
   }
 
-  it('stacks a column to SANDBOX_BURST_HEIGHT, and the next sky drop there bursts the sandbox', () => {
+  it('drops the 14th block by sky drop onto SANDBOX_BURST_HEIGHT, and a 15th there bursts the sandbox', () => {
     const r = rig();
-    r.stack({ x: 60, y: 10 }, full());
+    r.stack({ x: 60, y: 10 }, tall(SANDBOX_BURST_HEIGHT - 1));
     r.drop({ x: 70, y: 20 }, 4);
+    expect(heightAt(r.sandbox, 60, 10)).toBe(SANDBOX_BURST_HEIGHT - 1);
+
+    // The drop that brings the column to SANDBOX_BURST_HEIGHT still stacks.
+    aim(r, { x: 60, y: 10 });
+    expect(r.sandbox.spawn([])).toEqual({ x: 60, y: 10 });
     expect(heightAt(r.sandbox, 60, 10)).toBe(SANDBOX_BURST_HEIGHT);
+
     const calls = r.calls();
     aim(r, { x: 60, y: 10 });
     const burst = r.sandbox.spawn([]);
@@ -856,13 +862,17 @@ describe('bursting (D-071)', () => {
     expect(r.sandbox.columns()).toEqual([{ x: 60, y: 10, colours: [2] }]);
   });
 
-  it('places the 15th block, and a 16th placed bursts it: the carried block goes, other hands keep theirs', () => {
+  it('places the 14th block, and a 15th placed bursts it: the carried block goes, other hands keep theirs', () => {
     const r = besidePillar(SANDBOX_BURST_HEIGHT - 1);
     expect(r.sandbox.place(r.me, { x: 62, y: 11 }, [r.other])).toEqual({ x: 62, y: 11 });
     expect(heightAt(r.sandbox, 62, 11)).toBe(SANDBOX_BURST_HEIGHT);
     expect(r.sandbox.pick(r.me, { x: 61, y: 10 }, [r.other])).toBe(true);
     const total = r.sandbox.totalBlocks;
-    expect(total).toBe(14 + SANDBOX_BURST_HEIGHT + 12 + 2);
+    // The pillar 'me' stands on, the column just placed onto, the supply
+    // stack after two picks, and what 'me' and 'other' carry.
+    expect(total).toBe(
+      (SANDBOX_BURST_HEIGHT - 1) + SANDBOX_BURST_HEIGHT + (SANDBOX_BURST_HEIGHT - 3) + 2,
+    );
 
     const burst = r.sandbox.place(r.me, { x: 62, y: 11 }, [r.other]);
     expect(burst).toEqual({ burst: { x: 62, y: 11 } });
@@ -874,15 +884,26 @@ describe('bursting (D-071)', () => {
     expect(r.sandbox.snapshotFor('other')).toEqual({ columns: [], carrying: 3 });
   });
 
-  it('bursts when a carried block is put back onto a full column', () => {
+  it('lands the 14th block when a carried block is put back, and a 15th put back bursts it', () => {
     const r = rig();
     r.drop({ x: 60, y: 12 }, 6);
     const leaver = at(60, 11);
     expect(r.sandbox.pick(leaver, { x: 60, y: 12 }, [])).toBe(true);
     r.drop({ x: 72, y: 20 }, 3);
     expect(r.sandbox.pick(at(73, 20, 'other'), { x: 72, y: 20 }, [])).toBe(true);
-    r.stack({ x: 70, y: 5 }, full());
-    const open = r.open([leaver]);
+    r.stack({ x: 70, y: 5 }, tall(SANDBOX_BURST_HEIGHT - 1));
+
+    // Returned onto a column one below the cap, the block still lands.
+    let open = r.open([leaver]);
+    r.draws.push((open.findIndex((tile) => tile.x === 70 && tile.y === 5) + 0.5) / open.length);
+    expect(r.sandbox.returnCarried('me', [leaver])).toEqual({ x: 70, y: 5 });
+    expect(heightAt(r.sandbox, 70, 5)).toBe(SANDBOX_BURST_HEIGHT);
+    expect(r.sandbox.carrying('me')).toBeNull();
+
+    // 'me' picks up another block, then returns it onto the now-full column.
+    r.drop({ x: 60, y: 12 }, 5);
+    expect(r.sandbox.pick(leaver, { x: 60, y: 12 }, [])).toBe(true);
+    open = r.open([leaver]);
     r.draws.push((open.findIndex((tile) => tile.x === 70 && tile.y === 5) + 0.5) / open.length);
     const calls = r.calls();
 
@@ -898,7 +919,7 @@ describe('bursting (D-071)', () => {
     const r = besidePillar(SANDBOX_BURST_HEIGHT);
     const before = r.sandbox.columns();
     // Two tiles away, the own tile, under another player, an unreadable
-    // players list, from the ground (a 16th top is out of reach there), and
+    // players list, from the ground (a 15th top is out of reach there), and
     // with empty hands.
     expect(r.sandbox.place(at(60, 11), { x: 62, y: 11 }, [])).toBeNull();
     expect(r.sandbox.place(r.me, { x: 61, y: 11 }, [])).toBeNull();

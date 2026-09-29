@@ -294,11 +294,12 @@ below 900 blocks (carried blocks count); uniform over tiles more than one tile
 `(y, x)` order; colour uniform over the 8-colour palette. **Return**
 (`returnCarried`): the carried block falls onto a tile chosen by the spawn
 rules, keeping its colour; it is discarded only if no tile is allowed.
-**Burst** (D-071): a place, spawn or return onto a column already holding
-`SANDBOX_BURST_HEIGHT` (15) blocks passes every check above first, then
-removes every placed block instead of landing, the arriving block with them;
-blocks other players carry stay carried. So no column ever holds more than 15
-and the 256 cap is never reached. A rejected action changes nothing.
+**Burst** (D-071, threshold set by D-075): a place, spawn or return onto a
+column already holding `SANDBOX_BURST_HEIGHT` (14) blocks passes every check
+above first, then removes every placed block instead of landing, the arriving
+block with them; blocks other players carry stay carried. So no column ever
+holds more than 14 and the 256 cap is never reached. A rejected action changes
+nothing.
 
 ### What the sandbox reveals, and what it trusts
 
@@ -312,8 +313,9 @@ and the 256 cap is never reached. A rejected action changes nothing.
   hand, and a carried block goes back to the sky when its carrier suspends or
   leaves, so the most a griefer can do block by block is rearrange the board,
   at the 150 ms action floor, never below the fixed total. Anyone, hostile or
-  not, can empty it by building a pillar past 15 (D-071): that is the reset,
-  and it needs a real stand 14 blocks high beside the pillar.
+  not, can empty it by building a pillar past 14 (D-071, threshold set by
+  D-075): that is the reset, and it needs a real stand 13 blocks high beside
+  the pillar.
 - **The board is player-written content, visible to the whole room.** Blocks
   can spell words, draw symbols or write any pattern a player chooses —
   including text that means something off the board. The lobby does not and
