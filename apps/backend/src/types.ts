@@ -124,6 +124,10 @@ export interface PoolRpcPort {
     noteMaturityBlocks: number;
   }>;
   getPublicKey(address: string, signal?: AbortSignal): Promise<string>;
+  /**
+   * The receipt as the chain gives it, or `null` for a hash the node has not
+   * seen (D-072). Any other failed read rejects.
+   */
   getReceipt(transactionHash: string, signal?: AbortSignal): Promise<unknown>;
   getBlockNumber(signal?: AbortSignal): Promise<number>;
 }

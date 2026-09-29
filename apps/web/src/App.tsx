@@ -14,6 +14,7 @@ import { ArrivalNudgeProvider } from './bridge/ArrivalNudgeProvider.js';
 import { HudLayer } from './hud/HudLayer.js';
 import type { DegenCatalogSource } from './panels/exchange/degen-catalog.js';
 import { DegenCatalogProvider } from './panels/exchange/DegenCatalogProvider.js';
+import { SeamEntryGate } from './connect/EntryGate.js';
 
 /**
  * The composition root, as a component.
@@ -38,6 +39,10 @@ import { DegenCatalogProvider } from './panels/exchange/DegenCatalogProvider.js'
  * the explicit deterministic demo, which refuses to load in a production build
  * (`PrivacyProvider`, `build-context`). A mis-wired production bundle therefore
  * shows a configuration failure rather than a practice balance.
+ *
+ * The city opens only past D-072's entry gate. Whoever supplies the seam owns
+ * that admission: the production root runs the gate before it mounts this
+ * tree, and the demo seam, which this tree loads itself, is gated here.
  */
 export function App({
   worldOut,
@@ -65,6 +70,20 @@ export function App({
 }) {
   // Presence owns one explicit lifecycle. Effect cleanup only removes event
   // listeners; the controller is destroyed by the composition root's owner.
+  const city = (
+    <main className="strkworld">
+      <WorldHost
+        out={worldOut}
+        in={shellIn}
+        remotePeers={presence.remotePeers}
+        sandbox={presence.sandbox}
+      />
+      <HudLayer shell={shellIn} />
+      <VisitLayer world={worldOut} shell={shellIn} />
+      <PresenceStatusLayer presence={presence} world={worldOut} />
+      <SessionNoticeLayer />
+    </main>
+  );
   return (
     <ErrorBoundary fallback={(message) => <BootFailure message={message} />}>
       <PrivacyProvider
@@ -78,18 +97,7 @@ export function App({
         <BridgeProvider {...bridge} demo={!bridge}>
           <DegenCatalogProvider source={degenCatalog} demo={!operations}>
             <ArrivalNudgeProvider world={worldOut}>
-              <main className="strkworld">
-                <WorldHost
-                  out={worldOut}
-                  in={shellIn}
-                  remotePeers={presence.remotePeers}
-                  sandbox={presence.sandbox}
-                />
-                <HudLayer shell={shellIn} />
-                <VisitLayer world={worldOut} shell={shellIn} />
-                <PresenceStatusLayer presence={presence} world={worldOut} />
-                <SessionNoticeLayer />
-              </main>
+              {operations ? city : <SeamEntryGate>{city}</SeamEntryGate>}
             </ArrivalNudgeProvider>
           </DegenCatalogProvider>
         </BridgeProvider>

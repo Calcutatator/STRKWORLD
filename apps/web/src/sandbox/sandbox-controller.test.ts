@@ -161,7 +161,7 @@ afterEach(() => {
 function tapBursts(): ReturnType<typeof vi.fn> {
   const sandboxBurst = vi.fn();
   const ignore = () => undefined;
-  const tap: DebugTap = { failure: ignore, connectState: ignore, walletSession: ignore, visit: ignore, bank: ignore, sandboxBurst };
+  const tap: DebugTap = { failure: ignore, connectState: ignore, walletSession: ignore, visit: ignore, bank: ignore, sandboxBurst, gate: ignore };
   attachDebugTap(tap);
   return sandboxBurst;
 }

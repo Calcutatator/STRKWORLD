@@ -2,6 +2,7 @@ import { COPY } from '../copy.js';
 import { useEffect, useRef } from 'react';
 import { usePrivacy } from '../privacy/PrivacyProvider.js';
 import type { ConnectFlow, ConnectState } from './connect-machine.js';
+import { NotRegisteredNotice } from './NotRegisteredNotice.js';
 import { useWalletSessionOptional, type WalletSessionRuntime } from '../wallet/WalletSessionProvider.js';
 
 /**
@@ -11,6 +12,11 @@ import { useWalletSessionOptional, type WalletSessionRuntime } from '../wallet/W
  * both designed screens with a next step. Neither is a toast: one is a fact
  * about the player's wallet and the other is a task only they can perform,
  * and both survive longer than four seconds.
+ *
+ * Since D-072 the not-registered room is the entry gate's own card. Before
+ * entry the gate meets a 118 itself; after entry, a building meets one here
+ * when a later operation answers 118, and shows the same card with the
+ * connect flow's recheck.
  */
 export function ConnectRoom() {
   const { connect, connectState } = usePrivacy();
@@ -62,16 +68,7 @@ export function ConnectRoomView({
       );
 
     case 'not-registered':
-      return (
-        <section className="room room-not-registered">
-          <h2>{COPY.notRegistered.title}</h2>
-          <p>{COPY.notRegistered.body}</p>
-          <p className="room-detail">{COPY.notRegistered.hint}</p>
-          <button type="button" onClick={() => void connect.recheck()}>
-            {COPY.notRegistered.action}
-          </button>
-        </section>
-      );
+      return <NotRegisteredNotice action={COPY.notRegistered.action} onRetry={() => void connect.recheck()} />;
 
     case 'unreachable':
       return (

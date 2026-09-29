@@ -94,4 +94,48 @@ describe('HUD model', () => {
     stop();
     expect(emit).not.toHaveBeenCalled();
   });
+
+  describe('a HUD that subscribes after the status was published (D-072)', () => {
+    it('shows the current status at once, not "Checking wallet…"', () => {
+      const bus = createEventBus<ShellEvents>();
+      // Published before anyone listened: the bus does not replay it (D-038).
+      bus.emit('wallet:status', { status: 'disconnected' });
+      const late = createHudModel();
+      late.listen(bus);
+      expect(late.store.getState().wallet).toBeNull();
+
+      const model = createHudModel();
+      model.listen(bus, () => 'disconnected');
+      expect(model.store.getState().wallet).toBe('disconnected');
+    });
+
+    it('takes every later change from the bus', () => {
+      const bus = createEventBus<ShellEvents>();
+      const model = createHudModel();
+      model.listen(bus, () => 'connecting');
+      bus.emit('wallet:status', { status: 'connected' });
+      bus.emit('hud:balance', { display: '1 STRK' });
+      expect(model.store.getState()).toEqual({ wallet: 'connected', balance: '1 STRK', pending: 0 });
+    });
+
+    it('ignores a snapshot it cannot read or does not recognise', () => {
+      const bus = createEventBus<ShellEvents>();
+      const throwing = createHudModel();
+      expect(() => throwing.listen(bus, () => { throw new Error('gone'); })).not.toThrow();
+      expect(throwing.store.getState().wallet).toBeNull();
+      const odd = createHudModel();
+      odd.listen(bus, () => 'online' as never);
+      expect(odd.store.getState().wallet).toBeNull();
+      const none = createHudModel();
+      none.listen(bus, () => null);
+      expect(none.store.getState()).toEqual(EMPTY_HUD);
+    });
+
+    it('still publishes nothing while reading the snapshot', () => {
+      const bus = createEventBus<ShellEvents>();
+      const emit = vi.spyOn(bus, 'emit');
+      createHudModel().listen(bus, () => 'connected')();
+      expect(emit).not.toHaveBeenCalled();
+    });
+  });
 });

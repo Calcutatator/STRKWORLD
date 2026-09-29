@@ -56,6 +56,9 @@ function fixture() {
     async publicKey(address) {
       return address === BOB ? '0x99' : '0x0';
     },
+    async receipt() {
+      throw new Error('no receipt read in this fixture');
+    },
   };
   const gateway: PrivateSubmissionGateway = {
     estimate: vi.fn(async () => ({ token: STRK, recipient: FEE_RECIPIENT, amount: 1n, ...AUTH })),
@@ -2239,5 +2242,130 @@ describe('Wallet API capability versions', () => {
       walletApiVersion: null,
       registration: 'unknown',
     });
+  });
+});
+
+describe('the D-072 entry reads', () => {
+  const ACCOUNT = '0xabc';
+  const POOL = '0x040337b1af3c663e86e333bab5a4b28da8d4652a15a69beee2b677776ffe812a';
+  const DEPOSIT = '0x9149d2123147c5f43d258257fef0b7b969db78269369ebcf5ebb9eef8592f2';
+  const HASH = '0x5eed';
+
+  function landedReceipt(account = ACCOUNT, execution = 'SUCCEEDED') {
+    return {
+      transaction_hash: HASH,
+      execution_status: execution,
+      finality_status: 'ACCEPTED_ON_L2',
+      events: [{ from_address: POOL, keys: [DEPOSIT, account, STRK], data: ['0x1'] }],
+    };
+  }
+
+  it('asks the wallet once for every shielded token and answers only yes or no', async () => {
+    const { ops, wallet } = fixture();
+    const balances = vi.spyOn(wallet, 'strk20Balances').mockResolvedValue([
+      { token: STRK, balance: '0x0' },
+      { token: TOKEN, balance: '0x2a' },
+    ]);
+
+    const funded = await ops.hasPrivateFunds();
+
+    expect(funded).toBe(true);
+    expect(balances).toHaveBeenCalledOnce();
+    expect(balances).toHaveBeenCalledWith([]);
+  });
+
+  it('answers no for an empty pool and for every balance at zero', async () => {
+    const { ops, wallet } = fixture();
+    const balances = vi.spyOn(wallet, 'strk20Balances').mockResolvedValueOnce([]);
+    await expect(ops.hasPrivateFunds()).resolves.toBe(false);
+    balances.mockResolvedValueOnce([{ token: STRK, balance: '0x0' }, { token: TOKEN, balance: '0x00' }]);
+    await expect(ops.hasPrivateFunds()).resolves.toBe(false);
+    expect(balances).toHaveBeenCalledTimes(2);
+  });
+
+  it('maps a 118 to not-registered and a declined share to user-rejected', async () => {
+    const { ops, wallet } = fixture();
+    const balances = vi.spyOn(wallet, 'strk20Balances');
+    balances.mockRejectedValueOnce({ code: 118, message: 'NOT_REGISTERED' });
+    await expect(ops.hasPrivateFunds()).rejects.toMatchObject({ kind: 'not-registered' });
+    balances.mockRejectedValueOnce({ code: 113, message: 'USER_REFUSED_OP' });
+    await expect(ops.hasPrivateFunds()).rejects.toMatchObject({ kind: 'user-rejected' });
+  });
+
+  it('refuses a malformed balance answer rather than guessing', async () => {
+    const { ops, wallet } = fixture();
+    vi.spyOn(wallet, 'strk20Balances').mockResolvedValue([{ token: STRK, balance: 'lots' }]);
+    await expect(ops.hasPrivateFunds()).rejects.toMatchObject({ kind: 'unknown' });
+  });
+
+  it('reads the deposit receipt through the pool client and never the wallet', async () => {
+    const { ops, pool, wallet } = fixture();
+    const receipt = vi.spyOn(pool, 'receipt').mockResolvedValue(landedReceipt());
+    const balances = vi.spyOn(wallet, 'strk20Balances');
+    const invoke = vi.spyOn(wallet, 'strk20InvokeTransaction');
+
+    await expect(ops.depositStatus(HASH)).resolves.toBe('landed');
+    expect(receipt).toHaveBeenCalledWith(HASH, undefined);
+    expect(balances).not.toHaveBeenCalled();
+    expect(invoke).not.toHaveBeenCalled();
+  });
+
+  it('checks the deposit names the connected account, and reports a revert as failed', async () => {
+    const { ops, pool } = fixture();
+    const receipt = vi.spyOn(pool, 'receipt');
+    receipt.mockResolvedValueOnce(landedReceipt('0xdef'));
+    await expect(ops.depositStatus(HASH)).resolves.toBe('failed');
+    receipt.mockResolvedValueOnce({ ...landedReceipt(), execution_status: 'REVERTED', events: [] });
+    await expect(ops.depositStatus(HASH)).resolves.toBe('failed');
+  });
+
+  it('treats a receipt the network does not have yet as pending, not failed', async () => {
+    const { ops, pool } = fixture();
+    const receipt = vi.spyOn(pool, 'receipt');
+    // The backend answers a hash its node has not seen with null.
+    receipt.mockResolvedValueOnce(null);
+    await expect(ops.depositStatus(HASH)).resolves.toBe('pending');
+    receipt.mockResolvedValueOnce({ ...landedReceipt(), finality_status: 'PRE_CONFIRMED' });
+    await expect(ops.depositStatus(HASH)).resolves.toBe('pending');
+  });
+
+  it.each([
+    ['a busy service', new PrivacyError('unknown', 'Service is busy. Try again shortly.')],
+    ['a failed node read', new PrivacyError('unknown', 'A private service dependency failed.')],
+    ['a switched-off service', new PrivacyError('unreachable', 'Private operations are temporarily disabled.')],
+    ['a lost connection', new TypeError('Failed to fetch')],
+  ])('reports a receipt read that failed on %s as unreachable, never as pending', async (_label, failure) => {
+    const { ops, pool } = fixture();
+    vi.spyOn(pool, 'receipt').mockRejectedValue(failure);
+    await expect(ops.depositStatus(HASH)).rejects.toMatchObject({ kind: 'unreachable', cause: failure });
+  });
+
+  it('warns once per shield, in intent order, the contract the shell pairs its figures with', async () => {
+    const { ops } = fixture();
+    const batch = await ops.prepare([
+      { kind: 'shield', token: STRK, amount: 5n },
+      { kind: 'shield', token: TOKEN, amount: 7n },
+    ]);
+    expect(batch.intents.map((intent) => intent.kind === 'shield' && intent.amount)).toEqual([5n, 7n]);
+    expect(batch.warnings).toEqual([
+      { kind: 'public-leg', detail: expect.stringMatching(/^Depositing 5 is public/) },
+      { kind: 'public-leg', detail: expect.stringMatching(/^Depositing 7 is public/) },
+    ]);
+  });
+
+  it('rejects a malformed hash before any read, and a cancelled read as user-rejected', async () => {
+    const { ops, pool } = fixture();
+    const receipt = vi.spyOn(pool, 'receipt');
+    for (const bad of ['', '0x0', 'shield', `0x${'f'.repeat(65)}`]) {
+      await expect(ops.depositStatus(bad)).rejects.toMatchObject({ kind: 'unknown' });
+    }
+    expect(receipt).not.toHaveBeenCalled();
+
+    const controller = new AbortController();
+    receipt.mockImplementationOnce(async () => {
+      controller.abort();
+      throw new Error('aborted');
+    });
+    await expect(ops.depositStatus(HASH, controller.signal)).rejects.toMatchObject({ kind: 'user-rejected' });
   });
 });

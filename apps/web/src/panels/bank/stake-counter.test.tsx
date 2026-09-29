@@ -42,7 +42,7 @@ const strk = (whole: string) => parseTokenAmount(whole)!;
 const escaped = (text: string) => text.replaceAll("'", '&#x27;');
 
 function stakeCounter(
-  operations: PrivacyOperations = createDemoOperations(),
+  operations: PrivacyOperations = createDemoOperations({ funded: true }),
   receipts: ReceiptLedger = createReceiptLedger(),
 ): BankMachine {
   return createBankPanel({
@@ -103,7 +103,7 @@ describe('the staking counter composes only the pinned pair', () => {
 
 describe('the staking counter, end to end in demo', () => {
   it('stakes STRK from the pool balance and lands xSTRK in the pool, with no disclosure at the gate', async () => {
-    const operations = createDemoOperations();
+    const operations = createDemoOperations({ funded: true });
     const receipts = createReceiptLedger();
     const panel = stakeCounter(operations, receipts);
     await panel.open();
@@ -150,13 +150,12 @@ describe('the staking counter, end to end in demo', () => {
     expect(operations.submitted).toEqual([[stakeIntent(strk('5'))]]);
 
     // STRK left the pool balance with the whole private fee; xSTRK landed as a
-    // new pool note at the fake's fixed DEMO rate (4 per 5), maturing first.
+    // new pool note at the fake's fixed DEMO rate (4 per 5). The demo seam's
+    // notes mature at once (D-072), so it is spendable straight away. The fake's
+    // default window, with the output maturing first, is `fake-stake.test.ts`.
     const [strkAfter, xstrkAfter] = await operations.balances([STRK, ENDUR_XSTRK]);
     expect(strkAfter?.total).toBe(250n * ONE - strk('5') - POOL_FEE - STAKE_GAS);
-    expect(xstrkAfter).toMatchObject({ spendable: 0n, maturing: 4n * ONE });
-    operations.advanceBlocks(10);
-    const [, matured] = await operations.balances([STRK, ENDUR_XSTRK]);
-    expect(matured).toMatchObject({ spendable: 4n * ONE, maturing: 0n });
+    expect(xstrkAfter).toMatchObject({ spendable: 4n * ONE, maturing: 0n });
 
     panel.acknowledge();
     expect(panel.store.getState().flow).toEqual({ name: 'composing' });
@@ -229,7 +228,7 @@ describe('the staking counter, end to end in demo', () => {
 describe('the staking counter on screen', () => {
   it('opens the staking station in the Endur look, with the where-from, where-to and unstaking lines', () => {
     const markup = renderToStaticMarkup(
-      <PrivacyProvider operations={createDemoOperations()}>
+      <PrivacyProvider operations={createDemoOperations({ funded: true })}>
         <VisitLayerView
           state={{ name: 'visiting', building: 'bank', surface: { name: 'station', station: 'bank:staking' } }}
           connected
@@ -261,7 +260,7 @@ describe('the staking counter on screen', () => {
   });
 
   it('reviews STRK in exactly and names xSTRK out without inventing a figure', async () => {
-    const operations = createDemoOperations();
+    const operations = createDemoOperations({ funded: true });
     const panel = stakeCounter(operations);
     await panel.open();
     panel.setAmount('5');
@@ -291,7 +290,7 @@ describe('the staking counter on screen', () => {
   });
 
   it('keeps the stake figures and the Endur look on screen while the wallet works', async () => {
-    const operations = createDemoOperations();
+    const operations = createDemoOperations({ funded: true });
     const panel = stakeCounter(operations);
     await panel.open();
     panel.setAmount('5');
@@ -310,7 +309,7 @@ describe('the staking counter on screen', () => {
   });
 
   it('adds a Stake tab to Bank Menu Mode, and only the stake view wears Endur', async () => {
-    const operations = createDemoOperations();
+    const operations = createDemoOperations({ funded: true });
     const panel = menuBank(operations);
     await panel.open();
 

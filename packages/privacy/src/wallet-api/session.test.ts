@@ -1407,6 +1407,38 @@ describe('WalletSession', () => {
     await expect(session.operations.capability()).resolves.toMatchObject({ walletApiVersion: '0.10.4' });
   });
 
+  it('refuses a D-072 entry read that an old account answers after a replacement', async () => {
+    const selected = wallet('Ready');
+    let resolveFunds!: (funded: boolean) => void;
+    const pendingFunds = new Promise<boolean>((resolve) => {
+      resolveFunds = resolve;
+    });
+    const oldOperations: PrivacyOperations = {
+      ...operationsWithBatch(batch(), '0.10.3'),
+      hasPrivateFunds: () => pendingFunds,
+      depositStatus: async () => 'landed',
+    };
+    const replacement: PrivacyOperations = {
+      ...operationsWithBatch(batch(), '0.10.4'),
+      hasPrivateFunds: async () => false,
+    };
+    const connected = controllableConnection('0x111', oldOperations, replacement);
+    const session = createWalletSession(
+      denyAllOptions(),
+      { discovery: discoveryWith(selected), connectWallet: async () => connected.port },
+    );
+    await session.connect(session.getSnapshot().wallets[0]!.key);
+
+    await expect(session.operations.depositStatus('0x5eed')).resolves.toBe('landed');
+    const checking = session.operations.hasPrivateFunds();
+    connected.changeAccount('0x222');
+    resolveFunds(true);
+
+    await expect(checking).rejects.toMatchObject({ kind: 'user-rejected' });
+    await expect(session.operations.hasPrivateFunds()).resolves.toBe(false);
+    await expect(session.operations.depositStatus('0x5eed')).resolves.toBe('pending');
+  });
+
   it('disconnects the selected provider and invalidates its prepared work', async () => {
     const selected = wallet('Ready');
     const discard = vi.fn();
@@ -2012,6 +2044,8 @@ function operationsWithBatch(prepared: PreparedBatch, walletApiVersion: string):
     balances: async () => [],
     recipientStatus: async () => 'registered',
     prepare: async () => prepared,
+    hasPrivateFunds: async () => false,
+    depositStatus: async () => 'pending',
   };
 }
 

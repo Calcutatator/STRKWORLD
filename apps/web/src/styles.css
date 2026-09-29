@@ -885,7 +885,8 @@ body {
  * Form controls
  * --------------------------------------------------------------------- */
 
-.panel label {
+.panel label,
+.room-entry label {
   display: grid;
   gap: 0.35rem;
   color: var(--ui-text-dim);
@@ -895,7 +896,9 @@ body {
 
 .panel input,
 .panel select,
-.panel textarea {
+.panel textarea,
+.room-entry input,
+.room-entry select {
   width: 100%;
   padding: 0.62rem 0.8rem;
   border: 1px solid var(--ui-input-border);
@@ -910,11 +913,14 @@ body {
 
 .panel input:hover,
 .panel select:hover,
-.panel textarea:hover {
+.panel textarea:hover,
+.room-entry input:hover,
+.room-entry select:hover {
   border-color: var(--ui-input-border-hover);
 }
 
-.panel select {
+.panel select,
+.room-entry select {
   appearance: none;
   padding-right: 2.3rem;
   background-image:
@@ -926,7 +932,8 @@ body {
   cursor: pointer;
 }
 
-.panel option {
+.panel option,
+.room-entry option {
   background-color: var(--ui-surface);
   color: var(--ui-text);
 }
@@ -940,7 +947,9 @@ body {
 
 .panel input:focus-visible,
 .panel select:focus-visible,
-.panel textarea:focus-visible {
+.panel textarea:focus-visible,
+.room-entry input:focus-visible,
+.room-entry select:focus-visible {
   outline: var(--ui-focus-width) solid var(--ui-focus);
   outline-offset: 1px;
   border-color: var(--ui-focus);
@@ -1052,7 +1061,9 @@ button[data-locked="true"] {
 }
 
 /* ------------------------------------------------------------------------
- * Wallet rooms (connect, unsupported, not registered, unreachable)
+ * Wallet rooms (connect, unsupported, not registered, unreachable), and the
+ * entry gate's cards (D-072), which are rooms too. The gate's deposit form
+ * borrows the window's own controls below rather than styling its own.
  * --------------------------------------------------------------------- */
 
 .room {
@@ -2077,7 +2088,9 @@ button[data-locked="true"] {
   button,
   .panel input,
   .panel select,
-  .panel textarea {
+  .panel textarea,
+  .room-entry input,
+  .room-entry select {
     transition: none;
   }
 

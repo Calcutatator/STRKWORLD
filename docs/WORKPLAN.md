@@ -164,7 +164,8 @@ pre-launch checklist.
 `WalletSession`, dynamic explicit Wallet Standard selection, account/network
 generations and stable operations facade are implemented. Web's public config
 defaults every route to deny-all, can parse an explicit transfer tuple, and may
-enable only D-056's three-variable canonical-STRK shield exception; neither
+enable only D-056's three-variable shield exception (canonical STRK then; any
+one to sixteen tokens since D-072); neither
 implementation is funded acceptance. D-057's independent sibling gateway has
 passed a mock Bank shield through the production public seams with no key, RPC,
 proof, signature, submission or funds. Ready/Xverse behavior and every live

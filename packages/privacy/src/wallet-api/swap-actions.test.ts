@@ -89,6 +89,9 @@ function fixture() {
     async publicKey() {
       return '0x99';
     },
+    async receipt() {
+      throw new Error('no receipt read in this fixture');
+    },
   };
   const gateway: PrivateSubmissionGateway = {
     estimate: vi.fn(),

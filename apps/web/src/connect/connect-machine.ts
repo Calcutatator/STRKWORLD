@@ -16,6 +16,15 @@ import { toFailure } from '../privacy/errors.js';
  * query. It is never inferred from a balance read: on Ready 5.33.8 a balance
  * read raises an explicit "Share private balances" approval, so probing with
  * one would prompt the player for data the app has no reason to hold yet.
+ * The one balance read the app does ask for is D-072's entry check, which the
+ * player starts by pressing a button, after this flow has admitted the wallet.
+ *
+ * `not-registered` is a fact about the account, reached from a capability
+ * that says so or from any operation's 118. D-072 folded its room into the
+ * entry gate: the production root admits it to the gate exactly as it admits
+ * `connected`, since the gate's own reads meet the 118 there, and after entry
+ * a building renders the gate's not-registered card for it. A recheck leaves
+ * it, as before.
  *
  * Nothing here branches on wallet identity, which is what keeps a web wallet
  * or an embedded wallet working later with no rewrite (SPEC §5 rule 2).
@@ -30,7 +39,8 @@ export type ConnectState =
       /**
        * False when the wallet reported `registration: 'unknown'`. There is no
        * probe that cannot prompt, so the shell proceeds and lets the first real
-       * operation resolve it — a 118 escalates into the `not-registered` room.
+       * operation resolve it: the entry gate's check before entry (D-072), and
+       * after entry a 118 escalates into `not-registered`.
        */
       registrationConfirmed: boolean;
     }
@@ -53,6 +63,8 @@ export interface ConnectFlow {
    * wallet, not about the action that happened to hit them. Everything else
    * stays local to the panel that caused it, because a dropped connection
    * during a balance read should not evict the player from the whole shell.
+   * The entry gate (D-072) keeps its own reads' 118 to itself: before entry a
+   * 118 means "nothing in the pool yet" and its answer is the deposit card.
    */
   noteOperationError(error: unknown): ConnectState;
   status(): WalletStatus;

@@ -82,6 +82,9 @@ function seam() {
     async publicKey(address) {
       return address === BOB ? '0x99' : '0x0';
     },
+    async receipt() {
+      throw new Error('no receipt read in this fixture');
+    },
   };
   const gateway: PrivateSubmissionGateway = {
     estimate: vi.fn(async () => ({ token: STRK, recipient: FEE_RECIPIENT, amount: 1n, ...AUTH })),

@@ -33,6 +33,8 @@ export interface DebugTap {
   bank(step: unknown): void;
   /** D-071: the sandbox burst, by the tile it came from and nothing else. */
   sandboxBurst(tile: unknown): void;
+  /** An entry-gate transition (D-072), by state name only. */
+  gate(state: unknown): void;
 }
 
 let tap: DebugTap | null = null;
@@ -97,6 +99,19 @@ export function debugSandboxBurst(tile: DebugSandboxTile): void {
   if (!tap) return;
   try {
     tap.sandboxBurst(tile);
+  } catch {
+    // As above.
+  }
+}
+
+/**
+ * The entry gate moved to a new state (D-072). The state's name only: never
+ * an account, a token, an amount or a transaction hash.
+ */
+export function debugGate(state: string): void {
+  if (!tap) return;
+  try {
+    tap.gate(state);
   } catch {
     // As above.
   }

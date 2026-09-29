@@ -20,8 +20,9 @@ import type {
  * interface or its transitive public shapes needs a decision entry and a
  * heads-up to dependent lanes before implementation. Funded prompt behavior,
  * latency and live-paymaster artifact acceptance remain pre-launch checks.
- * Narrowly extended by D-041/D-042 (`SwapReview`) and D-063 (the `stake`
- * intent); every method and every other shape is unchanged.
+ * Narrowly extended by D-041/D-042 (`SwapReview`), D-063 (the `stake`
+ * intent) and D-072 (the entry gate's `hasPrivateFunds` and `depositStatus`);
+ * every other method and shape is unchanged.
  *
  * Implementations must not branch on wallet identity. Capability is determined
  * at runtime, which is what keeps web wallets possible later without a rewrite.
@@ -176,7 +177,41 @@ export interface PrivacyOperations {
    * prepares and confirms the shield first, then creates a later private batch.
    */
   prepare(intents: Intent[], signal?: AbortSignal): Promise<PreparedBatch>;
+
+  /**
+   * Whether this account holds anything in the pool (D-072).
+   *
+   * One balance read for every shielded token, answered as a boolean: true
+   * when any token's total, maturing included, is above zero. The amounts
+   * never leave this package. The wallet asks the player before sharing, as
+   * for `balances()`, so call this only from a player action. An account the
+   * pool has never seen rejects with `not-registered`.
+   */
+  hasPrivateFunds(signal?: AbortSignal): Promise<boolean>;
+
+  /**
+   * Whether a shield this account submitted has landed in the pool (D-072).
+   *
+   * A public read of the transaction's receipt through the backend (D-014),
+   * never a wallet prompt, and it returns no amount. See `DepositStatus`. A
+   * read that could not be made (the service down, busy, or its node
+   * erroring) rejects `unreachable`, so a caller can tell a slow chain from a
+   * check it cannot make; it says nothing about the deposit either way.
+   */
+  depositStatus(transactionHash: string, signal?: AbortSignal): Promise<DepositStatus>;
 }
+
+/**
+ * What a shield's receipt says (D-072).
+ *
+ * - `landed`: the transaction succeeded, was accepted, and the pool emitted a
+ *   `Deposit` naming this account.
+ * - `failed`: it reverted, or it was accepted without such a deposit.
+ * - `pending`: there is no accepted receipt yet, including for a hash the
+ *   network has not seen. Ask again later; this is never evidence that the
+ *   deposit failed.
+ */
+export type DepositStatus = 'landed' | 'pending' | 'failed';
 
 // ---------------------------------------------------------------------------
 // Supporting shapes

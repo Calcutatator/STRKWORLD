@@ -71,8 +71,9 @@ describe('privacy deviation admission', () => {
 
   it('keeps complete canonical approvals admitted', () => {
     // D-063 adds a registered-but-unapproved route, so the register is no
-    // longer uniformly playable; every approved route still is.
-    expect(PRIVACY_REGISTER.map((route) => route.route)).toEqual([...APPROVED_ROUTES, 'bank.stake']);
+    // longer uniformly playable; every approved route still is. D-072 adds
+    // the entry gate's deposit last.
+    expect(PRIVACY_REGISTER.map((route) => route.route)).toEqual([...APPROVED_ROUTES, 'bank.stake', 'entry.shield']);
     expect(APPROVED_ROUTES.every((route) => isRoutePlayable(registered(route)))).toBe(true);
     expect(isRoutePlayable(APPROVED_DEVIATION)).toBe(true);
   });
@@ -172,5 +173,35 @@ describe('disclosure waivers are granted per route, by one decision each (D-064)
     const stake = PRIVACY_REGISTER.find((route) => route.route === 'bank.stake')!;
     expect(isDisclosureWaived({ ...stake, disclosureWaivedBy: 'D-063' })).toBe(false);
     expect(isRoutePlayable({ ...stake, disclosureWaivedBy: 'D-063' })).toBe(false);
+  });
+});
+
+describe('the entry gate deposit register entry (D-072)', () => {
+  it('is the Bank shield on a second surface: same building, grade and disclosure', () => {
+    const entry = registered('entry.shield');
+    const shield = registered('bank.shield');
+    expect(entry.building).toBe('bank');
+    expect(entry.grade).toBe('public-edge');
+    expect(entry.grade).toBe(shield.grade);
+    expect(entry.disclosure).toBe(shield.disclosure);
+    expect(entry.returnToPool).toBe(false);
+  });
+
+  it('is approved by the lead on the day of D-072, with its disclosure shown, not waived', () => {
+    const entry = registered('entry.shield');
+    expect(entry.approvedBy).toBe('calc');
+    expect(entry.approvedOn).toBe('2026-09-29');
+    expect(entry.rationale).toMatch(/D-072/);
+    expect(entry.disclosureWaivedBy).toBeUndefined();
+    expect(isDisclosureWaived(entry)).toBe(false);
+    expect(isRoutePlayable(entry)).toBe(true);
+    expect(isRoutePlayable({ ...entry, disclosure: null })).toBe(false);
+  });
+
+  it('keeps braces out of its copy so the CI register parser cannot lose it', () => {
+    const entry = registered('entry.shield');
+    for (const text of [entry.observable, entry.disclosure ?? '', entry.rationale ?? '']) {
+      expect(text).not.toMatch(/[{}]/);
+    }
   });
 });

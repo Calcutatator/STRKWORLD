@@ -9,8 +9,15 @@ const worldHostProps = vi.hoisted(() => ({ current: undefined as { remotePeers?:
 
 vi.mock('./privacy/PrivacyProvider.js', () => ({
   PrivacyProvider: ({ children }: { children: ReactNode }) => children,
+  // No provider, so no status to read: the HUD waits for the bus, as in its own tests.
+  useWalletStatusSnapshot: () => null,
 }));
 vi.mock('./privacy/SessionNoticeLayer.js', () => ({ SessionNoticeLayer: () => null }));
+// The entry gate (D-072) has its own composition tests (`App.entry.test.tsx`);
+// here it stands open so the presence wiring behind it can be inspected.
+vi.mock('./connect/EntryGate.js', () => ({
+  SeamEntryGate: ({ children }: { children: ReactNode }) => children,
+}));
 vi.mock('./world/WorldHost.js', () => ({
   WorldHost: (props: { remotePeers?: unknown }) => {
     worldHostProps.current = props;

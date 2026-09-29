@@ -22,7 +22,7 @@ const SSTR = '0x0102d5e124c51b936ee87302e0f938165aec96fb6c2027ae7f3a5ed46c77573b
 const SWAP_DISCLOSURE = PRIVACY_REGISTER.find((entry) => entry.route === 'exchange.swap')!.disclosure!;
 
 function degenPanel(source: DegenCatalogSource | null = DEMO_DEGEN_CATALOG, admits: (token: string) => boolean = () => true) {
-  const operations = createDemoOperations();
+  const operations = createDemoOperations({ funded: true });
   const receipts = createReceiptLedger();
   const panel = createExchangePanel({
     operations,
@@ -33,7 +33,7 @@ function degenPanel(source: DegenCatalogSource | null = DEMO_DEGEN_CATALOG, admi
   return { operations, receipts, panel };
 }
 
-function render(panel: ReturnType<typeof degenPanel>['panel'], operations = createDemoOperations()): string {
+function render(panel: ReturnType<typeof degenPanel>['panel'], operations = createDemoOperations({ funded: true })): string {
   return renderToStaticMarkup(
     <PrivacyProvider operations={operations}>
       <ExchangePanel panel={panel} mode="degen" experience="station" onClose={() => {}} />
@@ -261,7 +261,7 @@ describe('the degen counter in demo', () => {
   });
 
   it('leaves the ground floor\'s fixed six untouched', async () => {
-    const ground = createExchangePanel({ operations: createDemoOperations(), receipts: createReceiptLedger(), canStartFinancialAction: () => true });
+    const ground = createExchangePanel({ operations: createDemoOperations({ funded: true }), receipts: createReceiptLedger(), canStartFinancialAction: () => true });
     const state = ground.store.getState();
     expect(state.catalog).toMatchObject({ status: 'ready', origin: 'fixed' });
     if (state.catalog.status !== 'ready') return;

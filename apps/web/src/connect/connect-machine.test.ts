@@ -70,7 +70,7 @@ describe('connect flow', () => {
     expect(flow.status()).toBe('unsupported');
   });
 
-  it('routes an unregistered account to its own room', async () => {
+  it('routes an unregistered account to not-registered, which admits it to the entry gate (D-072)', async () => {
     const operations = new FakePrivacyOperations({ capability: { registration: 'unregistered' } });
     const flow = createConnectFlow(operations);
 
@@ -90,12 +90,25 @@ describe('connect flow', () => {
     expect(balances).not.toHaveBeenCalled();
   });
 
-  it('escalates a 118 from a later operation into the not-registered room', async () => {
+  it('escalates a 118 from a later operation into not-registered, whose card a building shows (D-072)', async () => {
     const flow = createConnectFlow(new FakePrivacyOperations());
     await flow.connect();
 
     flow.noteOperationError(new PrivacyError('not-registered', 'error 118'));
     expect(flow.store.getState().name).toBe('not-registered');
+    expect(flow.status()).toBe('unregistered');
+  });
+
+  it('comes back from a 118 after entry on the card\'s recheck, with no balance read (D-072)', async () => {
+    const operations = new FakePrivacyOperations();
+    const balances = vi.spyOn(operations, 'balances');
+    const flow = createConnectFlow(operations);
+    await flow.connect();
+    flow.noteOperationError(new PrivacyError('not-registered', 'error 118'));
+
+    expect((await flow.recheck()).name).toBe('connected');
+    expect(flow.status()).toBe('connected');
+    expect(balances).not.toHaveBeenCalled();
   });
 
   it('escalates a 162 into the unsupported room', async () => {
@@ -152,7 +165,7 @@ describe('connect flow', () => {
     expect(capability).toHaveBeenCalledTimes(2);
   });
 
-  it('recheck moves a registered player out of the 118 room', async () => {
+  it('recheck moves a registered player out of not-registered', async () => {
     const operations = new FakePrivacyOperations({ capability: { registration: 'unregistered' } });
     const flow = createConnectFlow(operations);
     expect((await flow.connect()).name).toBe('not-registered');

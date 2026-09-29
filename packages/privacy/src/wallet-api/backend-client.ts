@@ -57,6 +57,21 @@ export class BackendPrivacyClient implements PoolReadClient, PrivateSubmissionGa
     return asString(ownField(value, 'publicKey'));
   }
 
+  /**
+   * D-072: the backend's receipt lookup, returned as the chain gave it. A
+   * transaction the network has not seen yet answers `null`. A failed read
+   * rejects: `unreachable` when the service is down or out of reach, and
+   * `unknown` for any other refusal (a 429, or a 502 from its node).
+   */
+  async receipt(transactionHash: string, signal?: AbortSignal): Promise<unknown> {
+    if (typeof transactionHash !== 'string' || !isNonzeroFelt(transactionHash)) {
+      throw new PrivacyError('unknown', 'The receipt transaction hash is invalid.');
+    }
+    const raw = await this.post('/v1/rpc/receipt', { v: 1, transactionHash }, signal);
+    throwIfAborted(signal);
+    return raw;
+  }
+
   async estimate(input: Parameters<PrivateSubmissionGateway['estimate']>[0]): Promise<RelayFeeQuote> {
     const route = ownInputField(input, 'route');
     const feeToken = ownInputField(input, 'feeToken');

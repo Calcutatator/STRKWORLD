@@ -258,6 +258,96 @@ empty shell to fetchers, so a 200 there means nothing.
 
 ## 6. Findings log
 
+### 2026-09-29 — A deposit is confirmed from its receipt; the shield allowlist takes any token (D-072)
+
+The pool's `Deposit` event is a `nested` variant of
+`privacy::privacy::Privacy::Event`, so it is emitted with keys
+`[sn_keccak('Deposit'), user_addr, token]` and data `[amount]` (a `u128`, one
+felt). The selector is
+`0x9149d2123147c5f43d258257fef0b7b969db78269369ebcf5ebb9eef8592f2`. A receipt
+prints the pool's `from_address` unpadded (`0x40337b1a…`), so addresses must
+compare by value. Deposits of USDC (`0x033068f6…35fb`, the Exchange catalog's
+address), STRK and strkBTC all appeared in the last 20,000 blocks, so the pool
+already takes non-STRK tokens. For an unknown hash the node answers JSON-RPC
+error 29 "Transaction hash not found", and the backend's `/v1/rpc/receipt`
+passed every RPC error on as 502 `UPSTREAM_FAILURE`, so the browser could not
+tell "not mined yet" from a failed read. The first gate read both as
+`pending`, which turned a down or rate-limited backend into "not confirmed
+yet" for as long as the player waited. `StarknetRpcPoolPort.getReceipt` now
+resolves `null` for error 29 alone (the route answers 200 `null`), and
+`depositStatus` rejects `unreachable` on any failed read, which the gate
+counts. Traps met on the way:
+
+- D-056's `parseShieldRoute` (`apps/web/src/production/config.ts`) admitted
+  exactly one shield token, canonical STRK, so a comma list of several tokens
+  in `VITE_STRK20_SHIELD_ALLOWED_TOKENS` switched shield off entirely, and
+  with it the entry gate's deposit and the Bridge planner. D-072 widens it to
+  one to sixteen canonical addresses with no repeat by field value; the Bank
+  still shields STRK, so its door needs STRK on the list, and unshield keeps
+  its own STRK-only rule (D-062).
+- The seam's `public-leg` detail prints a deposit in base units ("Depositing
+  500000000000000000 is public: …"). Both adapters emit one per shield or
+  unshield intent, in intent order, which is what lets the web pair each
+  with its shield and print "0.5 STRK" instead, with no seam change.
+- The fake's `funds-maturing` warning summed maturing notes across tokens,
+  which the Bank then shows as STRK: once deposits can be USDC that adds base
+  units of different tokens. It now counts fee-token notes only.
+- A recipient's 118 reads as the player's own. `warningsFor` in the Wallet API
+  adapter (and the fake) throws `PrivacyError('not-registered')` for an
+  unregistered transfer recipient, and `noteOperationError` escalates any
+  `not-registered` to the connect flow, so a building then shows the
+  not-registered card for the player. The Bank's recipient preflight makes it
+  rare; it predates D-072.
+- The pass hash is an async `crypto.subtle` digest (present under vitest's
+  jsdom, and in Node), so a test must let the gate leave `recalling` before it
+  presses the button. `sessionStorage` also persists across the tests of one
+  jsdom file: clear it in `beforeEach`, or a later test for the same account
+  walks straight in.
+- Bootstrap admits a session only if its operations carry every seam method
+  as an own data property, so the two new methods had to join that list.
+- A HUD behind the gate missed the wallet status. The bus does not replay
+  (D-038) and `PrivacyProvider` publishes `wallet:status` only when the
+  connect state changes; without the gate, React's child-first effects had
+  the HUD subscribed in time, but the demo's gate mounts the city later, so
+  the HUD read "Checking wallet…" for good. It now reads the provider's
+  current status as it subscribes (`useWalletStatusSnapshot`). Nothing else
+  subscribes late: the World reads no wallet status, station locks come from
+  `world:stations` at building entry, and building windows read the connect
+  state from context.
+- `reactiveSession` in `ProductionRoot.test.tsx` spread the first
+  `sessionAt()`, so its `readAccount` kept answering the first account (null)
+  after `publish()`. Once the gate re-read the account before a pass, that
+  helper dropped every answer. It now follows the published snapshot, as the
+  real session's `readAccount` does.
+- The pass key is a SHA-256 of a fixed label and a public address, so it
+  keeps the raw address out of storage and hides nothing: the pool's
+  `Deposit` events print every depositor's address, and anyone can hash one.
+  Say "no raw address is stored", never that the key hides the account.
+- A room's `button:only-of-type` is its call to action. The deposit card's
+  "Check my private balance" sits inside the form after "Review deposit", so
+  it reads as the second choice; on the locked card, alone, it is the call to
+  action.
+
+*Verified:* read-only `starknet_getClassAt`, `starknet_getEvents` (pool
+address, Deposit key, blocks 15,578,224 to 15,598,224) and
+`starknet_getTransactionReceipt` against the Cartridge public RPC (spec
+0.10.2) on 2026-09-29; starknet.js 10.4 `hash.getSelectorFromName('Deposit')`
+(pinned in `packages/privacy/src/pool.test.ts`); the widened parser pinned in
+`config.test.ts` (the exact Railway list and the value documented in
+`.env.production.example`, repeats, the 16-token bound, malformed and partial
+input); the warning order pinned in `wallet-api.test.ts` and `fake.test.ts`,
+and its figures in `summary-copy.test.ts`; the late HUD in `hud-model.test.ts`,
+`HudLayer.test.tsx` and `App.after-gate.test.tsx` (each fails without the
+snapshot); error 29 against other RPC errors in `adapters.test.ts` and the
+200 `null` in `backend.test.ts`; the backoff, the failed-read count and the
+in-place account switch in `entry-gate.test.ts` (each mutation checked: the
+switch tests fail without the re-read, the unreachable tests fail if a failed
+read counts as `pending`) and, through a switching session, in
+`ProductionRoot.test.tsx`; the adapter's
+`warningsFor` and `connect-machine.ts` read side by side; `entry-gate.test.ts`,
+`EntryGate.test.tsx`, `App.entry.test.tsx`, `ProductionRoot.test.tsx` and
+`bootstrap.test.ts`.
+
 ### 2026-09-28 — Sandbox blocks turned white: a flush replaced update ranges three had not drawn yet
 
 Every placed block is one instance of a single `InstancedMesh`, its colour in

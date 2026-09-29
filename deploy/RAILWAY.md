@@ -75,7 +75,7 @@ D-067).
 | `VITE_STARKNET_CHAIN_ID` | `SN_MAIN` |
 | `VITE_STARKNET_RPC_URL` | `https://api.cartridge.gg/x/starknet/mainnet`, or an RPC key allowlisted to the domain |
 | `VITE_BACKEND_BASE_URL` | `/api` |
-| `VITE_STRK20_SHIELD_ENABLED` / `_MAX_INTENTS` / `_ALLOWED_TOKENS` | `true` / `1` / STRK (D-056) |
+| `VITE_STRK20_SHIELD_ENABLED` / `_MAX_INTENTS` / `_ALLOWED_TOKENS` | `true` / `1` / STRK, ETH, USDC, USDT and WBTC, comma separated (D-072; the list is in `.env.production.example`) |
 | `VITE_STRK20_UNSHIELD_ENABLED` / `_MAX_INTENTS` / `_MAX_RELAY_FEE` / `_ALLOWED_TOKENS` | `true` / `1` / `10000000000000000000` / STRK (D-062) |
 | `VITE_STRK20_TRANSFER_ENABLED` / `_MAX_INTENTS` / `_MAX_RELAY_FEE` / `_ALLOWED_TOKENS` | `true` / `1` / `10000000000000000000` / STRK |
 
@@ -85,7 +85,11 @@ reserve planner is on too.
 ## After it deploys
 
 1. Open the domain: the connect screen should appear (production gates the
-   street behind a supported wallet, D-055).
+   street behind a supported wallet, D-055). After connecting, the entry gate
+   (D-072) asks to share the private balance once per tab session; an account
+   with nothing in the pool deposits there through the shield route, so a
+   deployment with shield switched off shows new players a locked deposit
+   card.
 2. `curl -i https://<domain>/health` returns 404 (there is no public health
    route); `/` returns the shell with no COOP/COEP headers.
 3. Two browsers see each other's avatars on the street.

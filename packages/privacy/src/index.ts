@@ -20,6 +20,7 @@ export { PrivacyError } from './types.js';
 
 export type {
   BatchWarning,
+  DepositStatus,
   Intent,
   PoolConfig,
   PreparedBatch,
@@ -27,6 +28,9 @@ export type {
   SwapReview,
   WalletCapability,
 } from './operations.js';
+
+// D-072: the pool and its Deposit event, which `depositStatus` reads from a receipt.
+export { POOL_DEPOSIT_EVENT, STRK20_POOL } from './pool.js';
 
 // Endur private staking (D-063): the pinned mainnet contracts the stake route admits.
 export {

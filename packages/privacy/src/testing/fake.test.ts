@@ -307,6 +307,19 @@ describe('shielded funds are not immediately spendable', () => {
     ]);
     expect(has(next.warnings, 'funds-maturing')).toBe(true);
   });
+
+  it('counts only the fee token in the maturing warning, never base units of another token (D-072)', async () => {
+    const USDC = '0x033068f6539f8e6e6b131e6b2b814e6c34a5224bc66947c47dab9dfee93b35fb';
+    const ops = fresh();
+    await (await ops.prepare([{ kind: 'shield', token: USDC, amount: 5_000000n }])).confirm({ feeCeiling: CEILING });
+    const onlyUsdc = await ops.prepare([{ kind: 'transfer', token: STRK, amount: 10n ** 18n, recipient: BOB }]);
+    expect(has(onlyUsdc.warnings, 'funds-maturing')).toBe(false);
+    onlyUsdc.discard();
+
+    await (await ops.prepare([{ kind: 'shield', token: STRK, amount: 7n }])).confirm({ feeCeiling: CEILING });
+    const both = await ops.prepare([{ kind: 'transfer', token: STRK, amount: 10n ** 18n, recipient: BOB }]);
+    expect(both.warnings.find((warning) => warning.kind === 'funds-maturing')).toMatchObject({ maturingAmount: 7n });
+  });
 });
 
 describe('a shield is never bundled with what it funds', () => {
@@ -748,5 +761,80 @@ describe('determinism', () => {
       return { hash: result.transactionHash, balances: await ops.balances([STRK]) };
     };
     expect(await run()).toEqual(await run());
+  });
+});
+
+describe('the D-072 entry reads', () => {
+  const shield = (amount = 5n * 10n ** 18n): Intent => ({ kind: 'shield', token: STRK, amount });
+
+  it('starts fresh with nothing in the pool, and funded when given a balance', async () => {
+    await expect(new FakePrivacyOperations().hasPrivateFunds()).resolves.toBe(false);
+    await expect(new FakePrivacyOperations({ balances: { [STRK]: 0n } }).hasPrivateFunds()).resolves.toBe(false);
+    await expect(new FakePrivacyOperations({ balances: { [STRK]: 1n } }).hasPrivateFunds()).resolves.toBe(true);
+  });
+
+  it('counts maturing funds, so a fresh deposit is enough', async () => {
+    const fake = new FakePrivacyOperations();
+    const batch = await fake.prepare([shield()]);
+    await batch.confirm({ feeCeiling: CEILING });
+    const [balance] = await fake.balances([STRK]);
+    expect(balance).toMatchObject({ spendable: 0n, maturing: 5n * 10n ** 18n });
+    await expect(fake.hasPrivateFunds()).resolves.toBe(true);
+  });
+
+  it('is one balance read, so a balances fault reaches it', async () => {
+    const fake = fresh();
+    fake.injectFault({ kind: 'not-registered', on: 'balances' });
+    await expect(fake.hasPrivateFunds()).rejects.toMatchObject({ kind: 'not-registered' });
+    await expect(fake.hasPrivateFunds()).resolves.toBe(true);
+  });
+
+  it('lands each shield it confirms, and says a spend carries no deposit', async () => {
+    const fake = fresh();
+    const { transactionHash: shielded } = await (await fake.prepare([shield()])).confirm({ feeCeiling: CEILING });
+    const { transactionHash: sent } = await (await fake.prepare([
+      { kind: 'transfer', token: STRK, amount: 1n, recipient: ALICE },
+    ])).confirm({ feeCeiling: CEILING });
+
+    await expect(fake.depositStatus(shielded)).resolves.toBe('landed');
+    await expect(fake.depositStatus(sent)).resolves.toBe('failed');
+    await expect(fake.depositStatus('0x5eed')).resolves.toBe('pending');
+  });
+
+  it('can hold a deposit pending, land it later, or fail it', async () => {
+    const fake = new FakePrivacyOperations({ deposits: 'pending' });
+    const { transactionHash } = await (await fake.prepare([shield()])).confirm({ feeCeiling: CEILING });
+    await expect(fake.depositStatus(transactionHash)).resolves.toBe('pending');
+    fake.setDepositStatus(transactionHash, 'landed');
+    await expect(fake.depositStatus(transactionHash)).resolves.toBe('landed');
+    fake.setDepositStatus(transactionHash, 'failed');
+    await expect(fake.depositStatus(transactionHash)).resolves.toBe('failed');
+
+    expect(() => fake.setDepositStatus('0x5eed', 'landed')).toThrow(PrivacyError);
+    expect(() => fake.setDepositStatus(transactionHash, 'maybe' as never)).toThrow(PrivacyError);
+    expect(() => new FakePrivacyOperations({ deposits: 'maybe' as never })).toThrow(/deposit status/);
+  });
+
+  it('raises an injected depositStatus fault once', async () => {
+    const fake = fresh();
+    fake.injectFault({ kind: 'unreachable', on: 'depositStatus' });
+    await expect(fake.depositStatus('0x5eed')).rejects.toMatchObject({ kind: 'unreachable' });
+    await expect(fake.depositStatus('0x5eed')).resolves.toBe('pending');
+  });
+
+  it('warns once per shield, in intent order, as the Wallet API adapter does', async () => {
+    const USDC = '0x033068f6539f8e6e6b131e6b2b814e6c34a5224bc66947c47dab9dfee93b35fb';
+    const batch = await new FakePrivacyOperations().prepare([shield(5n), { kind: 'shield', token: USDC, amount: 7n }]);
+    expect(batch.warnings).toEqual([
+      { kind: 'public-leg', detail: expect.stringMatching(/^Depositing 5 is public/) },
+      { kind: 'public-leg', detail: expect.stringMatching(/^Depositing 7 is public/) },
+    ]);
+  });
+
+  it('makes a note spendable at once when the maturity window is zero blocks', async () => {
+    const fake = new FakePrivacyOperations({ poolConfig: { noteMaturityBlocks: 0 } });
+    await (await fake.prepare([shield()])).confirm({ feeCeiling: CEILING });
+    const [balance] = await fake.balances([STRK]);
+    expect(balance).toMatchObject({ spendable: 5n * 10n ** 18n, maturing: 0n, total: 5n * 10n ** 18n });
   });
 });

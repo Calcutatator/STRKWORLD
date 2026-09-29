@@ -349,6 +349,8 @@ describe('Exchange machine', () => {
       balances: async () => [{ token: strk!.token, total: 100n * 10n ** 18n, spendable: 100n * 10n ** 18n, maturing: 0n, maturityKnown: true }],
       recipientStatus: async () => 'registered',
       prepare: async () => preparedCount++ === 0 ? firstBatch : secondBatch,
+      hasPrivateFunds: async () => true,
+      depositStatus: async () => 'pending',
     };
     const machine = createExchangePanel({ operations, receipts: createReceiptLedger(), canStartFinancialAction: () => true });
     await machine.open(); await machine.refreshBalances(); machine.setAmount('1'); await machine.prepare();
@@ -542,5 +544,6 @@ function controlledOperations(confirmResult: Promise<{ transactionHash: string }
     poolConfig: async () => { ++poolCalls; if (poolCalls === 1) return { feeAmount: 6n * 10n ** 18n, feeToken: strk!.token, proofValidityBlocks: 450, noteMaturityBlocks: 10 }; if (poolCalls === 2 && secondPool) return secondPool; if (poolCalls > 2 && thirdPool) return thirdPool; return { feeAmount: 6n * 10n ** 18n, feeToken: strk!.token, proofValidityBlocks: 450, noteMaturityBlocks: 10 }; },
     balances: async () => [{ token: strk!.token, total: 100n * 10n ** 18n, spendable: 100n * 10n ** 18n, maturing: 0n, maturityKnown: true }],
     recipientStatus: async () => 'registered', prepare: async () => batch,
+    hasPrivateFunds: async () => true, depositStatus: async () => 'pending',
   };
 }

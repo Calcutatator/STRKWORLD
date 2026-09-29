@@ -2,7 +2,8 @@ import type { Intent, WalletRoutePolicy } from '@strkworld/privacy';
 import type { BuildingId } from '@strkworld/shared';
 import { PRIVACY_REGISTER, isDisclosureWaived, isRoutePlayable, type RouteGrade } from '../privacy/register.js';
 import { COPY } from '../copy.js';
-import { detectRoutePolicy } from '../production/config.js';
+import { sameAddress } from '../format.js';
+import { STRK_TOKEN, detectRoutePolicy } from '../production/config.js';
 
 /**
  * What the shell is allowed to open, and what it must say when it does.
@@ -179,10 +180,20 @@ export const ROUTE_BY_INTENT_KIND: Readonly<Record<Intent['kind'], string>> = Ob
 });
 
 /**
+ * The entry gate's deposit (D-072): the Bank's shield on a second surface,
+ * graded in the register on its own so its approval is recorded for that
+ * surface. `ROUTE_BY_INTENT_KIND` still maps a shield intent to the Bank's
+ * route; the gate names this one directly.
+ */
+export const ENTRY_SHIELD_ROUTE = 'entry.shield';
+
+/**
  * The inverse of `ROUTE_BY_INTENT_KIND` — which policy route kind, if any,
  * gates a given route id. Written out rather than derived with
  * `Object.fromEntries`, which would widen the value back to `string` and lose
- * the literal union `routeDoor` relies on.
+ * the literal union `routeDoor` relies on. The entry gate's deposit is a
+ * shield, so the shield policy gates it too: a route missing here would pass
+ * the policy check open.
  */
 const POLICY_KIND_BY_ROUTE: Readonly<Partial<Record<string, Intent['kind']>>> = Object.freeze({
   [ROUTE_BY_INTENT_KIND.shield]: 'shield',
@@ -190,6 +201,7 @@ const POLICY_KIND_BY_ROUTE: Readonly<Partial<Record<string, Intent['kind']>>> = 
   [ROUTE_BY_INTENT_KIND.transfer]: 'transfer',
   [ROUTE_BY_INTENT_KIND.swap]: 'swap',
   [ROUTE_BY_INTENT_KIND.stake]: 'stake',
+  [ENTRY_SHIELD_ROUTE]: 'shield',
 });
 
 /**
@@ -199,12 +211,22 @@ const POLICY_KIND_BY_ROUTE: Readonly<Partial<Record<string, Intent['kind']>>> = 
  * which never goes through `PrivacyOperations.prepare` — is not this gate's
  * business and passes through open. `policy: null` means this build never
  * constructed one (demo, tests): nothing is disabled beyond the register.
+ *
+ * Since D-072 a build may admit shield tokens other than STRK. The Bank's own
+ * shield control deposits STRK, the pool's money and fee token (D-013), so its
+ * door also needs STRK on the list; the entry gate's `entry.shield` takes any
+ * admitted token and chooses from the list itself.
  */
 function isPolicyEnabledRoute(routeId: string, policy: WalletRoutePolicy | null): boolean {
   if (!policy) return true;
   const kind = POLICY_KIND_BY_ROUTE[routeId];
   if (!kind) return true;
-  return policy.enabledRoutes.includes(kind);
+  if (!policy.enabledRoutes.includes(kind)) return false;
+  return routeId !== ROUTE_BY_INTENT_KIND.shield || admitsStrk(policy.allowedTokens.shield);
+}
+
+function admitsStrk(tokens: readonly string[]): boolean {
+  return Array.isArray(tokens) && tokens.some((token) => sameAddress(token, STRK_TOKEN));
 }
 
 /** A route-specific "not switched on in this build" door, falling back to a generic line for an unmapped route id. */
@@ -253,6 +275,20 @@ export function batchRequiresDisclosure(
     // An unknown route is not a "no disclosure needed" answer.
     return entry === undefined || (entry.grade !== 'private' && !isDisclosureWaived(entry));
   });
+}
+
+/**
+ * Whether committing on one route needs its disclosure on screen: the
+ * route-level twin of `batchRequiresDisclosure`, for a surface that commits
+ * one registered route by name (the entry gate, D-072). An unknown route
+ * fails closed.
+ */
+export function routeRequiresDisclosure(
+  routeId: string,
+  register: readonly RouteGrade[] = PRIVACY_REGISTER,
+): boolean {
+  const entry = findRoute(routeId, register);
+  return entry === undefined || (entry.grade !== 'private' && !isDisclosureWaived(entry));
 }
 
 /** Routes that leave value sitting in public and must offer the way back (D-021). */

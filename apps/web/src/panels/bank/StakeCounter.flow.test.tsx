@@ -57,7 +57,7 @@ async function type(input: HTMLInputElement, value: string): Promise<void> {
 
 describe('the staking station, driven through the screen in demo', () => {
   it('reads the pool balance, reviews STRK in and xSTRK out, confirms without a disclosure and shows the receipt', async () => {
-    const operations = createDemoOperations();
+    const operations = createDemoOperations({ funded: true });
     container = document.createElement('div');
     document.body.appendChild(container);
     root = createRoot(container);

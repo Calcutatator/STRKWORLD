@@ -171,6 +171,7 @@ describe('the Wallet API adapter relays unshield under the parsed policy', () =>
     const pool: PoolReadClient = {
       config: async () => ({ feeAmount: POOL_FEE, feeToken: STRK, proofValidityBlocks: 450, noteMaturityBlocks: 10 }),
       publicKey: async (address) => (address === BOB ? '0x99' : '0x0'),
+      receipt: async () => { throw new Error('no receipt read in this route test'); },
     };
     const gateway: PrivateSubmissionGateway = {
       estimate: vi.fn(async () => ({

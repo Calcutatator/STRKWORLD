@@ -145,3 +145,31 @@ function findButton(node: ReactNode, label: string): ReactElement<{
   if (!found) throw new Error(`Button not found: ${label}`);
   return found;
 }
+
+describe('the not-registered room, folded into the entry gate (D-072)', () => {
+  it('renders the gate\'s not-registered card inside a building, with the connect flow\'s recheck', async () => {
+    const { COPY } = await import('../copy.js');
+    const recheck = vi.fn(async () => ({ name: 'not-registered' as const }));
+    const view = ConnectRoomView({
+      connect: { connect: vi.fn(), recheck } as unknown as Pick<ConnectFlow, 'connect' | 'recheck'>,
+      connectState: { name: 'not-registered' },
+      wallet: null,
+    });
+    const container = document.createElement('div');
+    const root = createRoot(container);
+    await act(async () => {
+      root.render(view);
+    });
+
+    const card = container.querySelector('[data-testid="not-registered"]')!;
+    expect(card.classList.contains('room')).toBe(true);
+    expect(card.querySelector('h2')?.textContent).toBe(COPY.notRegistered.title);
+    expect(card.textContent).toContain(COPY.notRegistered.body);
+    expect(card.querySelector('.room-detail')?.textContent).toBe(COPY.notRegistered.hint);
+    const button = card.querySelector('button')!;
+    expect(button.textContent).toBe(COPY.notRegistered.action);
+    await act(async () => { button.click(); });
+    expect(recheck).toHaveBeenCalledOnce();
+    await act(async () => { root.unmount(); });
+  });
+});

@@ -1,6 +1,7 @@
-import type { BatchWarning, Intent } from '@strkworld/privacy';
+import type { Address, BatchWarning, Intent } from '@strkworld/privacy';
 import { COPY } from '../../copy.js';
-import { formatStrkExact, shortenAddress } from '../../format.js';
+import { formatStrkExact, formatTokenAmountExact, shortenAddress } from '../../format.js';
+import { catalogAsset } from '../exchange/catalog.js';
 
 /**
  * Turning seam data into sentences.
@@ -13,14 +14,28 @@ import { formatStrkExact, shortenAddress } from '../../format.js';
  * truncated one is a different number to the one being signed.
  */
 
+/**
+ * An exact amount in its own token: "0.5 STRK", "12.5 USDC", with the Exchange
+ * catalog's decimals and symbol (D-042). Since D-072 a shield may be any
+ * token, so no amount is assumed to be STRK. A token the catalog cannot
+ * describe keeps its base units and is named by its address, never by a
+ * symbol it might not have.
+ */
+export function formatTokenFigure(token: Address, amount: bigint): string {
+  const asset = catalogAsset(token);
+  return asset
+    ? `${formatTokenAmountExact(amount, asset.decimals)} ${asset.symbol}`
+    : `${amount} base units of ${shortenAddress(token)}`;
+}
+
 export function describeIntent(intent: Intent): string {
   switch (intent.kind) {
     case 'shield':
-      return `${COPY.bank.shield} ${formatStrkExact(intent.amount)}`;
+      return `${COPY.bank.shield} ${formatTokenFigure(intent.token, intent.amount)}`;
     case 'unshield':
-      return `${COPY.bank.unshield} ${formatStrkExact(intent.amount)} → ${shortenAddress(intent.recipient)}`;
+      return `${COPY.bank.unshield} ${formatTokenFigure(intent.token, intent.amount)} → ${shortenAddress(intent.recipient)}`;
     case 'transfer':
-      return `${COPY.bank.transfer} ${formatStrkExact(intent.amount)} → ${shortenAddress(intent.recipient)}`;
+      return `${COPY.bank.transfer} ${formatTokenFigure(intent.token, intent.amount)} → ${shortenAddress(intent.recipient)}`;
     case 'swap':
       return `${formatStrkExact(intent.amountIn)} → ${shortenAddress(intent.tokenOut)}`;
     case 'stake':
@@ -60,6 +75,32 @@ export function describeWarning(warning: BatchWarning): string {
     case 'multiple-prompts':
       return COPY.flow.mayAskMoreThanOnce;
   }
+}
+
+/**
+ * Every warning for one prepared batch, in order.
+ *
+ * A shield's `public-leg` warning is written here from the shield it belongs
+ * to, with the token's decimals and symbol: "Depositing 0.5 STRK is public:
+ * the amount and your address are visible on-chain." The seam's own `detail`
+ * prints the amount in base units. Both adapters emit one `public-leg` per
+ * shield or unshield intent, in intent order (`warningsFor`, and the fake's
+ * prepare), and a batch never mixes the two, so the n-th `public-leg` belongs
+ * to the n-th such intent. When the counts disagree nothing is paired, and a
+ * detail with no describable shield behind it is shown as the seam wrote it.
+ */
+export function describeWarnings(warnings: readonly BatchWarning[], intents: readonly Intent[]): string[] {
+  const legs = intents.filter((intent) => intent.kind === 'shield' || intent.kind === 'unshield');
+  const paired = warnings.filter((warning) => warning.kind === 'public-leg').length === legs.length;
+  let leg = 0;
+  return warnings.map((warning) => {
+    if (warning.kind !== 'public-leg') return describeWarning(warning);
+    const intent = paired ? legs[leg] : undefined;
+    leg += 1;
+    return intent?.kind === 'shield' && catalogAsset(intent.token)
+      ? `${COPY.warnings.depositPublicLead} ${formatTokenFigure(intent.token, intent.amount)} ${COPY.warnings.depositPublicTail}`
+      : describeWarning(warning);
+  });
 }
 
 function maturityEta(blocksRemaining: number): string {

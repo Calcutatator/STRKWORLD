@@ -5,10 +5,12 @@ import type { Intent, WalletRoutePolicy } from '@strkworld/privacy';
 import {
   buildingDoor,
   disclosuresForIntents,
+  ENTRY_SHIELD_ROUTE,
   findRoute,
   isRouteOpen,
   routeDisclosure,
   routeDoor,
+  routeRequiresDisclosure,
   routeReturnsToPool,
   ROUTE_BY_INTENT_KIND,
 } from './routes.js';
@@ -384,5 +386,77 @@ describe('the active wallet policy gates a route the register already approved (
   it('isRouteOpen honors the same explicit policy argument as routeDoor', () => {
     expect(isRouteOpen('bank.unshield', PRIVACY_REGISTER, denyAll)).toBe(false);
     expect(isRouteOpen('bank.shield', PRIVACY_REGISTER, shieldAndTransferOnly)).toBe(true);
+  });
+});
+
+describe('the entry gate deposit route (D-072)', () => {
+  const STRK = '0x04718f5a0fc34cc1af16a1cdee98ffb20c31f5cd61d6ab07201858f4287c938d';
+  const denyAll: WalletRoutePolicy = {
+    maxIntents: 0,
+    maxRelayFee: 0n,
+    enabledRoutes: [],
+    allowedTokens: { shield: [], unshield: [], transfer: [], swap: [] },
+  };
+  const shieldOnly: WalletRoutePolicy = {
+    ...denyAll,
+    maxIntents: 1,
+    enabledRoutes: ['shield'],
+    allowedTokens: { ...denyAll.allowedTokens, shield: [STRK] },
+  };
+
+  it('is registered on its own, with the Bank shield\'s approved disclosure', () => {
+    expect(ENTRY_SHIELD_ROUTE).toBe('entry.shield');
+    expect(findRoute(ENTRY_SHIELD_ROUTE)).toMatchObject({ building: 'bank', grade: 'public-edge', approvedBy: 'calc' });
+    expect(routeDisclosure(ENTRY_SHIELD_ROUTE)).toBe(routeDisclosure('bank.shield'));
+    expect(routeRequiresDisclosure(ENTRY_SHIELD_ROUTE)).toBe(true);
+  });
+
+  it('follows the build\'s shield switch, so it can never pass the policy check open', () => {
+    expect(routeDoor(ENTRY_SHIELD_ROUTE, PRIVACY_REGISTER, null).open).toBe(true);
+    expect(routeDoor(ENTRY_SHIELD_ROUTE, PRIVACY_REGISTER, shieldOnly).open).toBe(true);
+    expect(routeDoor(ENTRY_SHIELD_ROUTE, PRIVACY_REGISTER, denyAll)).toMatchObject({
+      open: false,
+      reason: 'not-enabled',
+      message: COPY.locked.notEnabled.shield,
+    });
+  });
+
+  it('locks outright when the register loses it or its approval', () => {
+    const without = PRIVACY_REGISTER.filter((entry) => entry.route !== ENTRY_SHIELD_ROUTE);
+    expect(routeDoor(ENTRY_SHIELD_ROUTE, without, null)).toMatchObject({ open: false, reason: 'unknown-route' });
+    expect(routeRequiresDisclosure(ENTRY_SHIELD_ROUTE, without)).toBe(true);
+    const unapproved = PRIVACY_REGISTER.map((entry) => entry.route === ENTRY_SHIELD_ROUTE
+      ? { ...entry, approvedBy: null, approvedOn: null, rationale: null }
+      : entry);
+    expect(routeDoor(ENTRY_SHIELD_ROUTE, unapproved, null)).toMatchObject({ open: false, reason: 'unapproved-route' });
+  });
+
+  it('opens the gate for any admitted token, but the Bank\'s STRK shield only while STRK is admitted', () => {
+    const USDC = '0x033068f6539f8e6e6b131e6b2b814e6c34a5224bc66947c47dab9dfee93b35fb';
+    const ETH = '0x049d36570d4e46f48e99674bd3fcc84644ddd6b96f7c741b1562b82f9e004dc7';
+    const withoutStrk: WalletRoutePolicy = { ...shieldOnly, allowedTokens: { ...denyAll.allowedTokens, shield: [USDC, ETH] } };
+    expect(routeDoor(ENTRY_SHIELD_ROUTE, PRIVACY_REGISTER, withoutStrk).open).toBe(true);
+    expect(routeDoor('bank.shield', PRIVACY_REGISTER, withoutStrk)).toMatchObject({
+      open: false,
+      reason: 'not-enabled',
+      message: COPY.locked.notEnabled.shield,
+    });
+
+    const railway: WalletRoutePolicy = {
+      ...shieldOnly,
+      allowedTokens: { ...denyAll.allowedTokens, shield: [STRK, ETH, USDC] },
+    };
+    expect(routeDoor(ENTRY_SHIELD_ROUTE, PRIVACY_REGISTER, railway).open).toBe(true);
+    expect(routeDoor('bank.shield', PRIVACY_REGISTER, railway).open).toBe(true);
+    // STRK spelled unpadded is still STRK.
+    const unpadded: WalletRoutePolicy = { ...shieldOnly, allowedTokens: { ...denyAll.allowedTokens, shield: [`0x${STRK.slice(3)}`] } };
+    expect(routeDoor('bank.shield', PRIVACY_REGISTER, unpadded).open).toBe(true);
+  });
+
+  it('leaves the Bank\'s own shield route and the intent mapping unchanged', () => {
+    expect(ROUTE_BY_INTENT_KIND.shield).toBe('bank.shield');
+    expect(routeRequiresDisclosure('post-office.transfer')).toBe(false);
+    expect(routeRequiresDisclosure('bank.stake')).toBe(false);
+    expect(buildingDoor('bank').open).toBe(true);
   });
 });

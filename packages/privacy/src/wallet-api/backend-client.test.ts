@@ -1283,3 +1283,48 @@ describe('BackendPrivacyClient', () => {
     })).rejects.toMatchObject({ kind: 'unknown' });
   });
 });
+
+describe('BackendPrivacyClient receipt lookup (D-072)', () => {
+  it('posts the hash to the receipt route and hands back the chain receipt as given', async () => {
+    const receipt = { transaction_hash: '0x5eed', execution_status: 'SUCCEEDED', events: [] };
+    const fetcher = vi.fn(async () => response(receipt));
+    const client = new BackendPrivacyClient('/api', fetcher);
+
+    await expect(client.receipt('0x5eed')).resolves.toEqual(receipt);
+    const [url, init] = fetcher.mock.calls[0] as unknown as [string, RequestInit];
+    expect(url).toBe('/api/v1/rpc/receipt');
+    expect(init.method).toBe('POST');
+    expect(JSON.parse(String(init.body))).toEqual({ v: 1, transactionHash: '0x5eed' });
+  });
+
+  it('refuses a malformed hash without a request', async () => {
+    const fetcher = vi.fn(async () => response({}));
+    const client = new BackendPrivacyClient('/api', fetcher);
+    for (const bad of ['', '0x0', 'shield', 1 as unknown as string]) {
+      await expect(client.receipt(bad)).rejects.toMatchObject({ kind: 'unknown' });
+    }
+    expect(fetcher).not.toHaveBeenCalled();
+  });
+
+  it('hands back null for a transaction the network has not seen yet', async () => {
+    const fetcher = vi.fn(async () => response(null));
+    const client = new BackendPrivacyClient('/api', fetcher);
+    await expect(client.receipt('0x5eed')).resolves.toBeNull();
+  });
+
+  it.each([
+    [429, { code: 'RATE_LIMITED', message: 'Service is busy. Try again shortly.' }, 'unknown'],
+    [502, { code: 'UPSTREAM_FAILURE', message: 'A private service dependency failed.' }, 'unknown'],
+    [503, { code: 'SERVICE_DISABLED', message: 'Private operations are temporarily disabled.' }, 'unreachable'],
+  ] as const)('rejects a %i from the receipt route as a failed read', async (status, body, kind) => {
+    const fetcher = vi.fn(async () => response(body, status));
+    const client = new BackendPrivacyClient('/api', fetcher);
+    await expect(client.receipt('0x5eed')).rejects.toMatchObject({ kind });
+  });
+
+  it('rejects an unreachable receipt route as unreachable', async () => {
+    const fetcher = vi.fn(async () => { throw new TypeError('Failed to fetch'); });
+    const client = new BackendPrivacyClient('/api', fetcher);
+    await expect(client.receipt('0x5eed')).rejects.toMatchObject({ kind: 'unreachable' });
+  });
+});
