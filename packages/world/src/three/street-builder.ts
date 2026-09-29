@@ -77,6 +77,7 @@ import {
   type FixedRoomLevelId,
   type FixedRoomLevelMap,
 } from '../fixed-room.js';
+import { CITY_FRONT, HINTERLAND, backdropCity, backdropTrees, cityPlan, hills } from './backdrop.js';
 import { bevelledBlockGeometry } from './sandbox-view.js';
 import type { LabelFactory, Occluder, OccluderBounds, StreetView, TextLabel } from './types.js';
 
@@ -106,7 +107,7 @@ const ROOF_LIFT_LABEL: FloatingStyleOptions = roomTheme('exchange').label;
 export const PAVEMENT_HEIGHT = 0.08;
 const KERB_HEIGHT = 0.1;
 const KERB_WIDTH = 0.12;
-/** How far ground, road and meadow run past the map before the fog takes over. */
+/** How far ground, road and meadow run past the map in detail; `hinterland` carries on coarser. */
 const OUTSKIRT = 40;
 /** Doors sit this far behind the facade row's north edge, in the solid wall row. */
 const DOOR_RECESS = 0.2;
@@ -761,8 +762,8 @@ function paintRoadMarkings(map: DistrictMap, kinds: GroundKind[][], bin: Geometr
     // Paint runs off the map only where the road does; where the road ends
     // (into the sandbox), the lines end with it.
     const extent = roadExtent(kinds, band, map.width);
-    const start = extent.x0 <= 0 ? -OUTSKIRT : extent.x0;
-    const end = extent.x1 >= map.width ? map.width + OUTSKIRT : extent.x1;
+    const start = extent.x0 <= 0 ? -HINTERLAND : extent.x0;
+    const end = extent.x1 >= map.width ? map.width + HINTERLAND : extent.x1;
     const dashEnd = extent.x1 >= map.width ? end : end - 1.2;
     for (let x = start; x < dashEnd; x += 1.2) {
       const a = x + 0.25;
@@ -799,7 +800,8 @@ function paintRoadMarkings(map: DistrictMap, kinds: GroundKind[][], bin: Geometr
 function buildOutskirts(map: DistrictMap, kinds: GroundKind[][], bin: GeometryBin): void {
   const W = map.width;
   const H = map.height;
-  meadow(bin, -OUTSKIRT, -OUTSKIRT, W + OUTSKIRT, 0, 2, 2);
+  // North only to the backdrop city's paving, which `hinterland` lays.
+  meadow(bin, -OUTSKIRT, CITY_FRONT, W + OUTSKIRT, 0, 2, 2);
   meadow(bin, -OUTSKIRT, H, W + OUTSKIRT, H + OUTSKIRT, 2, 2);
   for (let y = 0; y < H; y++) {
     for (const side of [-1, 1] as const) {
@@ -833,6 +835,7 @@ function buildOutskirts(map: DistrictMap, kinds: GroundKind[][], bin: GeometryBi
       }
     }
   }
+  hinterland(map, kinds, bin);
 }
 
 function meadow(bin: GeometryBin, x0: number, z0: number, x1: number, z1: number, cw: number, ch: number): void {
@@ -841,6 +844,65 @@ function meadow(bin: GeometryBin, x0: number, z0: number, x1: number, z1: number
       const xb = Math.min(x1, x + cw);
       const zb = Math.min(z1, z + ch);
       bin.add('grass', flatQuad(x, z, xb, zb, 0), grassColor((x + xb) / 2, (z + zb) / 2, hash01(x, z, 15)));
+    }
+  }
+}
+
+/** Coarse ground past the outskirts, in cells this size. */
+const FIELD = 12;
+
+/**
+ * Past the outskirts, coarser: the backdrop city's streets and paving
+ * (backdrop.ts plans them), fields round it, and the street running on west
+ * as far as the fields go. Far enough that no frame, the rooftop camera's on
+ * a wide window included, runs off the ground before the fog has covered it.
+ */
+function hinterland(map: DistrictMap, kinds: GroundKind[][], bin: GeometryBin): void {
+  const W = map.width;
+  const H = map.height;
+  const city = cityPlan(W);
+  for (const patch of city.floor) {
+    for (let x = patch.x0; x < patch.x1; x += FIELD) {
+      const xb = Math.min(patch.x1, x + FIELD);
+      const seed = hash01(Math.round(x), Math.round(patch.z0 * 10), 16);
+      if (patch.surface === 'street') {
+        bin.add('road', flatQuad(x, patch.z0, xb, patch.z1, 0), jitterColor(PALETTE.asphalt, seed, 0.012));
+      } else {
+        bin.add('sidewalk', flatQuad(x, patch.z0, xb, patch.z1, 0), jitterColor(PALETTE.apron, seed, 0.02));
+      }
+    }
+  }
+  meadow(bin, -HINTERLAND, -HINTERLAND, W + HINTERLAND, city.back, FIELD, FIELD);
+  meadow(bin, -HINTERLAND, city.back, city.x0, CITY_FRONT, FIELD, FIELD);
+  meadow(bin, city.x1, city.back, W + HINTERLAND, CITY_FRONT, FIELD, FIELD);
+  for (const side of [-1, 1] as const) {
+    const edgeX = side < 0 ? 0 : W - 1;
+    const x0 = side < 0 ? -HINTERLAND : W + OUTSKIRT;
+    const x1 = side < 0 ? -OUTSKIRT : W + HINTERLAND;
+    // Fields down to the south outskirts' end, the street's rows cutting through.
+    let lawn = CITY_FRONT;
+    for (let y = 0; y <= H; y++) {
+      const kind = kinds[y]?.[edgeX];
+      const street = y < H && (kind === 'road' || kind === 'crossing' || kind === 'sidewalk');
+      if (y < H && !street) continue;
+      const end = y < H ? y : H + OUTSKIRT;
+      if (end > lawn) meadow(bin, x0, lawn, x1, end, FIELD, FIELD);
+      lawn = y + 1;
+      if (!street) continue;
+      for (let x = x0; x < x1; x += FIELD) {
+        const xb = Math.min(x1, x + FIELD);
+        if (kind === 'sidewalk') {
+          bin.add('sidewalk', flatQuad(x, y, xb, y + 1, PAVEMENT_HEIGHT), jitterColor(PALETTE.sidewalk, hash01(x, y, 17), 0.02));
+        } else {
+          bin.add('road', flatQuad(x, y, xb, y + 1, 0), jitterColor(PALETTE.asphalt, hash01(x, y, 17), 0.012));
+        }
+      }
+      if (kind !== 'sidewalk') continue;
+      for (const dy of [-1, 1]) {
+        if (kinds[y + dy]?.[edgeX] === 'sidewalk') continue;
+        const z0 = dy < 0 ? y : y + 1 - KERB_WIDTH;
+        bin.add('sidewalk', boxGeometry(x0, 0, z0, x1, KERB_HEIGHT, z0 + KERB_WIDTH), PALETTE.kerb);
+      }
     }
   }
 }
@@ -2539,79 +2601,6 @@ function southBushes(map: DistrictMap, bin: GeometryBin): void {
   }
 }
 
-/** The city continuing to the north: simple blocks with lit windows, softened by fog. */
-function backdropCity(map: DistrictMap, bin: GeometryBin): void {
-  const W = map.width;
-  const rows = [
-    { zFront: -3.2, depth: [2.5, 4.2], height: [3.2, 7.5] },
-    { zFront: -9.5, depth: [3, 5], height: [6, 12] },
-  ] as const;
-  let seed = 1;
-  for (const row of rows) {
-    let x = -18 + hash01(seed, 0, 41) * 2;
-    while (x < W + 18) {
-      const w = 2.6 + hash01(seed, 1, 41) * 3.6;
-      const d = row.depth[0] + hash01(seed, 2, 41) * (row.depth[1] - row.depth[0]);
-      const h = row.height[0] + hash01(seed, 3, 41) * (row.height[1] - row.height[0]);
-      const colour = pick(PALETTE.backdrop, hash01(seed, 4, 41));
-      const zb = row.zFront;
-      const za = zb - d;
-      bin.add('far', boxGeometry(x, 0, za, x + w, h, zb), aoPaint(colour, 0.08));
-      bin.add('far', boxGeometry(x - 0.05, h, za - 0.05, x + w + 0.05, h + 0.18, zb + 0.05), shade(colour, -0.12));
-      if (hash01(seed, 5, 41) < 0.4) {
-        const tx = x + w * (0.3 + hash01(seed, 7, 41) * 0.4);
-        const tz = za + d * 0.4;
-        bin.add('far', cylinderGeometry(tx, h + 0.18, tz, 0.45, 0.45, 0.9, 8), 0x9a7d62);
-        bin.add('far', coneGeometry(tx, h + 1.08, tz, 0.55, 0.45, 8), 0x6f5a48);
-      } else if (hash01(seed, 8, 41) < 0.6) {
-        bin.add('far', boxGeometry(x + w * 0.2, h + 0.18, za + 0.4, x + w * 0.45, h + 0.7, za + 1.2), shade(colour, -0.06));
-      }
-      const face: Face = { normal: 'z+', plane: zb };
-      const cols = Math.max(1, Math.floor((w - 0.6) / 0.85));
-      const floors = Math.max(1, Math.floor((h - 1.2) / 1.05));
-      for (let r = 0; r < floors; r++) {
-        for (let c = 0; c < cols; c++) {
-          const u = x + 0.3 + (c + 0.5) * ((w - 0.6) / cols);
-          const v = 0.9 + r * 1.05;
-          const lit = hash01(seed, r * 31 + c, 43) < 0.32;
-          bin.add(
-            lit ? 'far-lit' : 'far',
-            faceQuad(face, u - 0.2, v, u + 0.2, v + 0.55, 0.01),
-            lit ? jitterColor(PALETTE.backdropWindow, hash01(seed, r * 31 + c, 44), 0.06) : PALETTE.backdropWindowDark,
-          );
-        }
-      }
-      x += w + 0.5 + hash01(seed, 6, 41) * 1.6;
-      seed++;
-    }
-  }
-}
-
-function hills(map: DistrictMap, bin: GeometryBin): void {
-  const W = map.width;
-  const H = map.height;
-  const spots: ReadonlyArray<readonly [number, number, number, number]> = [
-    [-30, -30, 16, 0.32],
-    [0, -40, 18, 0.28],
-    [30, -34, 14, 0.36],
-    [58, -38, 17, 0.3],
-    [W + 36, -26, 15, 0.3],
-    [-40, 6, 13, 0.3],
-    [-38, 38, 14, 0.28],
-    [W + 40, 4, 14, 0.32],
-    [W + 38, 36, 13, 0.3],
-    [8, H + 36, 16, 0.25],
-    [40, H + 40, 18, 0.25],
-  ];
-  spots.forEach(([x, z, radius, scaleY], i) => {
-    bin.add(
-      'far',
-      sphereGeometry(x, 0, z, radius, { widthSegments: 9, heightSegments: 4, hemisphere: true, scaleY }),
-      jitterColor(pick(PALETTE.hills, hash01(i, 1, 91)), hash01(i, 2, 91), 0.04),
-    );
-  });
-}
-
 /** The hidden Studio's only marker: a hedge arch with fairy lights, just off the map. */
 function studioArch(map: DistrictMap, bin: GeometryBin): void {
   const entrance = map.avatarStudioEntrance;
@@ -2796,6 +2785,8 @@ const UP = new Vector3(0, 1, 0);
 
 interface TreeSpot {
   readonly x: number;
+  /** The ground under it: 0, or a hill's slope in a backdrop park. */
+  readonly y: number;
   readonly z: number;
   readonly scale: number;
   readonly yaw: number;
@@ -2803,7 +2794,7 @@ interface TreeSpot {
   readonly seed: number;
 }
 
-/** Groves off the map's east, west and far south edges, instanced per part. */
+/** Groves off the map's east, west and far south edges, and the backdrop's parks, instanced per part. */
 function trees(
   map: DistrictMap,
   west: Band,
@@ -2815,9 +2806,10 @@ function trees(
   const W = map.width;
   const H = map.height;
   const spots: TreeSpot[] = [];
-  const push = (x: number, z: number, seed: number): void => {
+  const push = (x: number, z: number, seed: number, y = 0): void => {
     spots.push({
       x,
+      y,
       z,
       scale: 0.8 + hash01(seed, 1, 101) * 0.55,
       yaw: hash01(seed, 2, 101) * Math.PI * 2,
@@ -2853,6 +2845,7 @@ function trees(
       push(x + hash01(seed, 1, 104) * 1.2, gz + hash01(seed, 2, 104) * 1.2, seed);
     }
   }
+  for (const tree of backdropTrees(map)) push(tree.x, tree.z, tree.seed, tree.y);
 
   const round = spots.filter((spot) => !spot.pine);
   const pines = spots.filter((spot) => spot.pine);
@@ -2868,7 +2861,7 @@ function trees(
   spots.forEach((spot, i) => {
     const height = (spot.pine ? 0.6 : 1.1) * spot.scale;
     scratchQuat.setFromAxisAngle(UP, spot.yaw);
-    scratchMatrix.compose(scratchPosition.set(spot.x, 0, spot.z), scratchQuat, scratchScale.set(spot.scale, height, spot.scale));
+    scratchMatrix.compose(scratchPosition.set(spot.x, spot.y, spot.z), scratchQuat, scratchScale.set(spot.scale, height, spot.scale));
     trunks.setMatrixAt(i, scratchMatrix);
   });
   trunks.count = spots.length;
@@ -2879,7 +2872,7 @@ function trees(
   round.forEach((spot, i) => {
     const r = 1.05 * spot.scale;
     scratchQuat.setFromAxisAngle(UP, spot.yaw);
-    scratchMatrix.compose(scratchPosition.set(spot.x, 1.1 * spot.scale + r * 0.55, spot.z), scratchQuat, scratchScale.set(r, r * 0.9, r));
+    scratchMatrix.compose(scratchPosition.set(spot.x, spot.y + 1.1 * spot.scale + r * 0.55, spot.z), scratchQuat, scratchScale.set(r, r * 0.9, r));
     canopies.setMatrixAt(i, scratchMatrix);
     const autumn = hash01(spot.seed, 6, 105) < 0.12;
     canopies.setColorAt(
@@ -2896,10 +2889,10 @@ function trees(
     const s = spot.scale;
     const colour = jitterColor(pick(PALETTE.pines, hash01(spot.seed, 9, 105)), hash01(spot.seed, 10, 105), 0.04);
     scratchQuat.setFromAxisAngle(UP, spot.yaw);
-    scratchMatrix.compose(scratchPosition.set(spot.x, 0.5 * s, spot.z), scratchQuat, scratchScale.set(0.95 * s, 1.6 * s, 0.95 * s));
+    scratchMatrix.compose(scratchPosition.set(spot.x, spot.y + 0.5 * s, spot.z), scratchQuat, scratchScale.set(0.95 * s, 1.6 * s, 0.95 * s));
     cones.setMatrixAt(i * 2, scratchMatrix);
     cones.setColorAt(i * 2, colour);
-    scratchMatrix.compose(scratchPosition.set(spot.x, 1.35 * s, spot.z), scratchQuat, scratchScale.set(0.68 * s, 1.3 * s, 0.68 * s));
+    scratchMatrix.compose(scratchPosition.set(spot.x, spot.y + 1.35 * s, spot.z), scratchQuat, scratchScale.set(0.68 * s, 1.3 * s, 0.68 * s));
     cones.setMatrixAt(i * 2 + 1, scratchMatrix);
     cones.setColorAt(i * 2 + 1, shade(colour, 0.03));
   });

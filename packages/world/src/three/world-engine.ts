@@ -70,6 +70,14 @@ const SHADOW_TEXEL = (SHADOW_EXTENT * 2) / SHADOW_MAP_SIZE;
 const ERROR_REPORT_INTERVAL_MS = 1000;
 
 /**
+ * The fog's linear range, in view depth, for a player `elevation` up: pushed
+ * back as they climb, so a tower top still shows what they built below.
+ */
+export function fogRange(elevation: number): { readonly near: number; readonly far: number } {
+  return { near: FOG_NEAR + elevation, far: FOG_FAR + elevation * 1.6 };
+}
+
+/**
  * The player's `prefers-reduced-motion`, read live from the window the World
  * is mounted in, as the engine reads its pixel ratio and visibility; false
  * wherever it cannot be read.
@@ -223,8 +231,9 @@ export function createWorldEngine(options: WorldEngineOptions): WorldEngine {
       // Push the fog back as the player climbs, so a tower top still shows
       // what they built below.
       const fog = scene.fog as Fog;
-      fog.near = FOG_NEAR + elevation;
-      fog.far = FOG_FAR + elevation * 1.6;
+      const range = fogRange(elevation);
+      fog.near = range.near;
+      fog.far = range.far;
       sky.position.copy(camera.position);
     });
     guard('render', () => renderer.render(scene, camera));

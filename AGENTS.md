@@ -258,6 +258,46 @@ empty shell to fetchers, so a 200 there means nothing.
 
 ## 6. Findings log
 
+### 2026-09-29 — The rooftop frame lies inside the fog's near distance, so the backdrop must fill it
+
+From the Exchange roof the `rooftop` preset (pitch 74°, vertical FOV 50°,
+camera 49.5 up) sees from 49° to 99° below the horizontal. three's linear fog
+is a smoothstep over view depth (`vFogDepth = -mvPosition.z` in
+`fog_vertex.glsl.js`), not distance, and every ground point in that frame lies
+within about 59 units of depth (the top row: 49.5 / 0.833), while
+`fogRange(36).near` is 62. So the roof view has no fog at all. Capping
+`fog.far`'s elevation term would change nothing there; it would only thicken
+the fog seen from sandbox stacks, which that term exists to prevent. The fog
+is unchanged. The frame's top row meets the ground on a line of constant z,
+about z -30 to -33 from the deck, so no window sees further north than that; a
+wider window only reaches further west and east. What the roof saw was the
+geometry: two shallow rows of blocks, then bare meadow and hill domes to the
+top of the frame. On a 21:9 window the top-left corner also ran past the
+ground's west edge (x -40) into the sky dome's below-horizon colour.
+
+`three/backdrop.ts` now fills it, outside the map only and in the street's
+existing bins (`far`, `far-lit`, and the ground's `grass`, `road` and
+`sidewalk` keys), so no draw call is added. The two near rows are
+vertex-identical where the street sees them, and run on west and east. Behind
+them four far rows rise from 8-15 to 16-29 units tall, over paved blocks,
+streets between the rows and north-south cross streets, with baked haze and
+window bands instead of full window grids. Two small hill parks stand among the far rows, and the old
+large hills moved behind the city. West of the barrier, houses line the road
+as it runs on; east of the square there is a grid of low blocks, and south a
+lane of cottages that no camera frames yet. The ground runs 120 past the
+north, west and east edges (`HINTERLAND`) in 12-unit cells, the road with it.
+Nothing inside the map changed.
+
+*Verified:* `street-builder.test.ts` frames the camera with the rig's
+`rooftop` preset at `EXCHANGE_ROOF_HEIGHT` from each deck corner, on 16:9 and
+21:9 windows, and casts a 16 × 12 ray grid against
+`fogRange(EXCHANGE_ROOF_HEIGHT).far`. On the old geometry 19 rays (all 21:9)
+met the void and 148 met bare meadow north of the hedge's lawn; now none do.
+Draw calls, counted as the budget test counts them, are 63 before and after;
+triangles went from 71,449 to 88,341. An offline z-buffer render (not
+committed) changed 0.3-1.3% of the pixels of four street and sandbox views,
+4.8% at the road's closed west end, against 23-35% of the rooftop views.
+
 ### 2026-09-29 — A transfer's 118 is its recipient's, and stays in the Post Office (D-074)
 
 A registered, funded player who sent from the Post Office to an address the

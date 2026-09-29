@@ -79,6 +79,8 @@ export const PALETTE = Object.freeze({
   fairyLight: 0xfff0b8,
   backdrop: Object.freeze([0xd8c7ae, 0xc9b596, 0xb9c3c9, 0xd3bfc9, 0xc4ccb4, 0xe0d2bc]),
   backdropRoof: 0x8e7f70,
+  /** What the far city fades toward: the sky's horizon, which is also the fog's colour (world-engine.ts). */
+  backdropHaze: 0xf2dcc0,
   backdropWindow: 0xffd59a,
   backdropWindowDark: 0x5b6470,
 });
