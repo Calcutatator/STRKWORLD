@@ -90,7 +90,7 @@ describe('BackendPrivacyClient', () => {
   it('owns submission artifact data before JSON serialization can substitute it', async () => {
     const fetcher = vi.fn(async () => response({ transactionHash: '0xabc123' }));
     const call = {
-      contract_address: '0x123', entry_point: 'apply_actions', calldata: ['0x1'],
+      contractAddress: '0x123', entrypoint: 'apply_actions', calldata: ['0x1'],
     };
     let callReads = 0;
     const artifact = new Proxy({
@@ -100,7 +100,7 @@ describe('BackendPrivacyClient', () => {
       get(target, key, receiver) {
         if (key === 'call') {
           callReads += 1;
-          return { contract_address: '0x999', entry_point: 'forged', calldata: ['0x9'] };
+          return { contractAddress: '0x999', entrypoint: 'forged', calldata: ['0x9'] };
         }
         return Reflect.get(target, key, receiver);
       },
@@ -110,8 +110,55 @@ describe('BackendPrivacyClient', () => {
     await client.submit({ route: 'transfer', artifact, feeAuthorization: 'auth', proofValidityBlocks: 450 });
 
     const dispatched = fetcher.mock.calls[0] as unknown as [string, RequestInit];
-    expect(JSON.parse(String(dispatched[1].body))).toMatchObject({ artifact: { call } });
+    expect(JSON.parse(String(dispatched[1].body))).toMatchObject({
+      artifact: { call: { contract_address: '0x123', entry_point: 'apply_actions', calldata: ['0x1'] } },
+    });
     expect(callReads).toBe(0);
+  });
+
+  // starknet.js 10.8 (D-077) converts the wallet's snake_case call into a
+  // starknet.js `Call`; the relay and avnu's paymaster take the Wallet API's
+  // own shape, so the client converts it back, and refuses anything else.
+  it('posts the proved call in the Wallet API wire shape the relay validates', async () => {
+    const fetcher = vi.fn(async () => response({ transactionHash: '0xabc123' }));
+    const client = new BackendPrivacyClient('https://backend.example', fetcher);
+    const proof = { data: 'proof', output: ['0x1'], proof_facts: ['0x2'] };
+
+    await client.submit({
+      route: 'unshield',
+      artifact: { call: { contractAddress: '0x123', entrypoint: 'apply_actions', calldata: ['0x1', '0x2'] }, proof },
+      feeAuthorization: 'auth',
+      proofValidityBlocks: 450,
+    });
+
+    const dispatched = fetcher.mock.calls[0] as unknown as [string, RequestInit];
+    expect(JSON.parse(String(dispatched[1].body)).artifact).toEqual({
+      call: { contract_address: '0x123', entry_point: 'apply_actions', calldata: ['0x1', '0x2'] },
+      proof,
+    });
+  });
+
+  it.each([
+    ['the pre-10.8 snake_case call', { call: { contract_address: '0x123', entry_point: 'apply_actions', calldata: ['0x1'] } }],
+    ['a call with an extra field', { call: { contractAddress: '0x123', entrypoint: 'apply_actions', calldata: ['0x1'], extra: '0x1' } }],
+    ['a call without calldata', { call: { contractAddress: '0x123', entrypoint: 'apply_actions', data: ['0x1'] } }],
+    ['a numeric target', { call: { contractAddress: 291, entrypoint: 'apply_actions', calldata: ['0x1'] } }],
+    ['an extra artifact field', { signature: ['0x1'] }],
+  ] as const)('refuses %s before transport', async (_label, patch) => {
+    const fetcher = vi.fn(async () => response({ transactionHash: '0x1' }));
+    const client = new BackendPrivacyClient('https://backend.example', fetcher);
+
+    await expect(client.submit({
+      route: 'transfer',
+      artifact: {
+        call: { contractAddress: '0x123', entrypoint: 'apply_actions', calldata: ['0x1'] },
+        proof: { data: 'proof', output: ['0x1'], proof_facts: ['0x2'] },
+        ...patch,
+      },
+      feeAuthorization: 'auth',
+      proofValidityBlocks: 450,
+    } as never)).rejects.toMatchObject({ kind: 'unknown' });
+    expect(fetcher).not.toHaveBeenCalled();
   });
 
   it('invokes an injected transport without granting the client as receiver', async () => {
@@ -159,7 +206,7 @@ describe('BackendPrivacyClient', () => {
     const source = {
       route: 'transfer' as const,
       artifact: {
-        call: { contract_address: '0x123', entry_point: 'apply_actions', calldata: ['0x1'] },
+        call: { contractAddress: '0x123', entrypoint: 'apply_actions', calldata: ['0x1'] },
         proof: { data: 'proof', output: ['0x1'], proof_facts: ['0x2'] },
       },
       feeAuthorization: 'auth',
@@ -250,7 +297,7 @@ describe('BackendPrivacyClient', () => {
     await expect(client.submit({
       route: 'transfer',
       artifact: {
-        call: { contract_address: '0x123', entry_point: 'apply_actions', calldata: ['0x1'] },
+        call: { contractAddress: '0x123', entrypoint: 'apply_actions', calldata: ['0x1'] },
         proof: { data: 'proof', output: ['0x1'], proof_facts: ['0x2'] },
       },
       feeAuthorization: 'auth', proofValidityBlocks: 450,
@@ -278,7 +325,7 @@ describe('BackendPrivacyClient', () => {
     await expect(client.submit({
       route: 'transfer',
       artifact: {
-        call: { contract_address: '0x123', entry_point: 'apply_actions', calldata: ['0x1'] },
+        call: { contractAddress: '0x123', entrypoint: 'apply_actions', calldata: ['0x1'] },
         proof: { data: 'proof', output: ['0x1'], proof_facts: ['0x2'] },
       },
       feeAuthorization: 'auth', proofValidityBlocks: 450,
@@ -296,7 +343,7 @@ describe('BackendPrivacyClient', () => {
     await expect(client.submit({
       route: 'transfer',
       artifact: {
-        call: { contract_address: '0x123', entry_point: 'apply_actions', calldata: ['0x1'] },
+        call: { contractAddress: '0x123', entrypoint: 'apply_actions', calldata: ['0x1'] },
         proof: { data: 'proof', output: ['0x1'], proof_facts: ['0x2'] },
       },
       feeAuthorization: 'auth',
@@ -331,7 +378,7 @@ describe('BackendPrivacyClient', () => {
     await expect(client.submit({
       route: 'transfer',
       artifact: {
-        call: { contract_address: '0x123', entry_point: 'apply_actions', calldata: ['0x1'] },
+        call: { contractAddress: '0x123', entrypoint: 'apply_actions', calldata: ['0x1'] },
         proof: { data: 'proof', output: ['0x1'], proof_facts: ['0x2'] },
       },
       feeAuthorization: 'auth',
@@ -394,7 +441,7 @@ describe('BackendPrivacyClient', () => {
     ['private submission', (client: BackendPrivacyClient, signal: AbortSignal) => client.submit({
       route: 'transfer',
       artifact: {
-        call: { contract_address: '0x123', entry_point: 'apply_actions', calldata: ['0x1'] },
+        call: { contractAddress: '0x123', entrypoint: 'apply_actions', calldata: ['0x1'] },
         proof: { data: 'proof', output: ['0x1'], proof_facts: ['0x2'] },
       },
       feeAuthorization: 'auth',
@@ -885,7 +932,7 @@ describe('BackendPrivacyClient', () => {
     await expect(client.submit({
       route: 'transfer',
       artifact: {
-        call: { contract_address: '0x123', entry_point: 'apply_actions', calldata: ['0x1'] },
+        call: { contractAddress: '0x123', entrypoint: 'apply_actions', calldata: ['0x1'] },
         proof: { data: 'proof', output: ['0x1'], proof_facts: ['0x2'] },
       },
       feeAuthorization: 'auth',
@@ -906,7 +953,7 @@ describe('BackendPrivacyClient', () => {
     const receipt = await client.submit({
       route: 'transfer',
       artifact: {
-        call: { contract_address: '0x123', entry_point: 'apply_actions', calldata: ['0x1'] },
+        call: { contractAddress: '0x123', entrypoint: 'apply_actions', calldata: ['0x1'] },
         proof: { data: 'proof', output: ['0x1'], proof_facts: ['0x2'] },
       },
       feeAuthorization: 'auth',
@@ -931,7 +978,7 @@ describe('BackendPrivacyClient', () => {
     await expect(client.submit({
       route: 'transfer',
       artifact: {
-        call: { contract_address: '0x123', entry_point: 'apply_actions', calldata: ['0x1'] },
+        call: { contractAddress: '0x123', entrypoint: 'apply_actions', calldata: ['0x1'] },
         proof: { data: 'proof', output: ['0x1'], proof_facts: ['0x2'] },
       },
       feeAuthorization: 'auth',
@@ -959,7 +1006,7 @@ describe('BackendPrivacyClient', () => {
     await expect(client.submit({
       route: 'transfer',
       artifact: {
-        call: { contract_address: '0x123', entry_point: 'apply_actions', calldata: ['0x1'] },
+        call: { contractAddress: '0x123', entrypoint: 'apply_actions', calldata: ['0x1'] },
         proof: { data: 'proof', output: ['0x1'], proof_facts: ['0x2'] },
       },
       feeAuthorization: 'auth',
@@ -978,7 +1025,7 @@ describe('BackendPrivacyClient', () => {
     await expect(client.submit({
       route: 'transfer',
       artifact: {
-        call: { contract_address: '0x123', entry_point: 'apply_actions', calldata: ['0x1'] },
+        call: { contractAddress: '0x123', entrypoint: 'apply_actions', calldata: ['0x1'] },
         proof: { data: 'proof', output: ['0x1'], proof_facts: ['0x2'] },
       },
       feeAuthorization: 'auth',
@@ -995,7 +1042,7 @@ describe('BackendPrivacyClient', () => {
     await expect(client.submit({
       route: 'transfer',
       artifact: {
-        call: { contract_address: '0x123', entry_point: 'apply_actions', calldata: ['0x1'] },
+        call: { contractAddress: '0x123', entrypoint: 'apply_actions', calldata: ['0x1'] },
         proof: { data: 'proof', output: ['0x1'], proof_facts: ['0x2'] },
       },
       feeAuthorization: 'auth',
@@ -1013,7 +1060,7 @@ describe('BackendPrivacyClient', () => {
     const submitting = client.submit({
       route: 'transfer',
       artifact: {
-        call: { contract_address: '0x123', entry_point: 'apply_actions', calldata: ['0x1'] },
+        call: { contractAddress: '0x123', entrypoint: 'apply_actions', calldata: ['0x1'] },
         proof: { data: 'proof', output: ['0x1'], proof_facts: ['0x2'] },
       },
       feeAuthorization: 'auth',
@@ -1036,7 +1083,7 @@ describe('BackendPrivacyClient', () => {
     await expect(client.submit({
       route: 'transfer',
       artifact: {
-        call: { contract_address: '0x123', entry_point: 'apply_actions', calldata: ['0x1'] },
+        call: { contractAddress: '0x123', entrypoint: 'apply_actions', calldata: ['0x1'] },
         proof: { data: 'proof', output: ['0x1'], proof_facts: ['0x2'] },
       },
       feeAuthorization: 'auth',
@@ -1059,7 +1106,7 @@ describe('BackendPrivacyClient', () => {
     await expect(client.submit({
       route: 'transfer',
       artifact: {
-        call: { contract_address: '0x123', entry_point: 'apply_actions', calldata: ['0x1'] },
+        call: { contractAddress: '0x123', entrypoint: 'apply_actions', calldata: ['0x1'] },
         proof: { data: 'proof', output: ['0x1'], proof_facts: ['0x2'] },
       },
       feeAuthorization: 'auth',
@@ -1076,7 +1123,7 @@ describe('BackendPrivacyClient', () => {
     await expect(client.submit({
       route: 'transfer',
       artifact: {
-        call: { contract_address: '0x123', entry_point: 'apply_actions', calldata: ['0x1'] },
+        call: { contractAddress: '0x123', entrypoint: 'apply_actions', calldata: ['0x1'] },
         proof: { data: 'proof', output: ['0x1'], proof_facts: ['0x2'] },
       },
       feeAuthorization: 'auth',
@@ -1093,7 +1140,7 @@ describe('BackendPrivacyClient', () => {
     await expect(client.submit({
       route: 'transfer',
       artifact: {
-        call: { contract_address: '0x123', entry_point: 'apply_actions', calldata: ['0x1'] },
+        call: { contractAddress: '0x123', entrypoint: 'apply_actions', calldata: ['0x1'] },
         proof: { data: 'proof', output: ['0x1'], proof_facts: ['0x2'] },
       },
       feeAuthorization: 'auth',
@@ -1106,7 +1153,7 @@ describe('BackendPrivacyClient', () => {
     const submission: Parameters<BackendPrivacyClient['submit']>[0] = {
       route: 'unshield',
       artifact: {
-        call: { contract_address: '0x123', entry_point: 'apply_actions', calldata: ['0x1'] },
+        call: { contractAddress: '0x123', entrypoint: 'apply_actions', calldata: ['0x1'] },
         proof: { data: 'proof', output: ['0x1'], proof_facts: ['0x2'] },
       },
       feeAuthorization: 'auth',

@@ -27,7 +27,7 @@ function fixture() {
   const invoked: STRK20_ACTION[][] = [];
   const prepared: STRK20_ACTION[][] = [];
   const artifact: STRK20_CALL_AND_PROOF = {
-    call: { contract_address: '0x123', entry_point: 'apply_actions', calldata: ['0x1'] },
+    call: { contractAddress: '0x123', entrypoint: 'apply_actions', calldata: ['0x1'] },
     proof: { data: 'proof', output: ['0x1'], proof_facts: ['0x2'] },
   };
   const wallet: WalletStrk20Account = {
@@ -980,7 +980,7 @@ describe('Wallet API action routes', () => {
     vi.spyOn(wallet, 'strk20PrepareInvoke').mockImplementation(async () => {
       liveFee.authorization = 'mutated-auth';
       return {
-        call: { contract_address: '0x123', entry_point: 'apply_actions', calldata: ['0x1'] },
+        call: { contractAddress: '0x123', entrypoint: 'apply_actions', calldata: ['0x1'] },
         proof: { data: 'proof', output: ['0x1'], proof_facts: ['0x2'] },
       };
     });

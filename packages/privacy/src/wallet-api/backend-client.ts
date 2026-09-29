@@ -106,7 +106,7 @@ export class BackendPrivacyClient implements PoolReadClient, PrivateSubmissionGa
 
   async submit(input: Parameters<PrivateSubmissionGateway['submit']>[0]): Promise<TxResult> {
     const route = ownInputField(input, 'route');
-    const artifact = ownJsonValue(ownInputField(input, 'artifact'));
+    const artifact = toWireArtifact(ownJsonValue(ownInputField(input, 'artifact')));
     const feeAuthorization = ownInputField(input, 'feeAuthorization');
     const proofValidityBlocks = ownInputField(input, 'proofValidityBlocks');
     const signal = ownOptionalInputField(input, 'signal');
@@ -285,6 +285,41 @@ export class BackendPrivacyClient implements PoolReadClient, PrivateSubmissionGa
       );
     }
   }
+}
+
+/**
+ * The proved artifact in the shape the relay takes: the Wallet API's own
+ * `STRK20_CALL_AND_PROOF`, whose call is `{ contract_address, entry_point,
+ * calldata }`. That is what the wallet answers and what avnu's paymaster
+ * executes. Since starknet.js 10.8 (the D-077 bump), `WalletAccountV6` hands a
+ * dapp a starknet.js `Call` instead, `{ contractAddress, entrypoint, calldata }`,
+ * converted from the wallet's answer, so it is converted back here, at the one
+ * place that knows the relay's wire format. Anything but exactly that call and a
+ * proof is refused whole, before transport.
+ *
+ * `value` is already this client's own JSON copy (`ownJsonValue`), so the reads
+ * below touch plain data only.
+ */
+function toWireArtifact(value: unknown): unknown {
+  // A missing or malformed artifact is refused by `submit`'s own checks.
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return value;
+  const record = value as Record<string, unknown>;
+  const call = record['call'];
+  if (
+    Reflect.ownKeys(record).length !== 2
+    || !Object.hasOwn(record, 'proof')
+    || !call
+    || typeof call !== 'object'
+    || Array.isArray(call)
+    || Reflect.ownKeys(call).length !== 3
+  ) {
+    throw new PrivacyError('unknown', 'The private submission request is invalid.');
+  }
+  const { contractAddress, entrypoint, calldata } = call as Record<string, unknown>;
+  if (typeof contractAddress !== 'string' || typeof entrypoint !== 'string' || !Array.isArray(calldata)) {
+    throw new PrivacyError('unknown', 'The private submission request is invalid.');
+  }
+  return { call: { contract_address: contractAddress, entry_point: entrypoint, calldata }, proof: record['proof'] };
 }
 
 function ownJsonValue(value: unknown): unknown {
