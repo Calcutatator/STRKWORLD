@@ -140,7 +140,7 @@ The same package also ships `usePaymasterSendTransaction`, `usePaymasterEstimate
 
 | Code | Name | Handling |
 |---|---|---|
-| 118 | `NOT_REGISTERED` | Designed screen. Player must register inside their wallet — the game cannot do it. Returned by **all three** methods, including balances |
+| 118 | `NOT_REGISTERED` | Designed screen. Player must register inside their wallet — the game cannot do it. Returned by **all three** methods, including balances. A 118 while proving a transfer is read as the recipient's instead (D-074): the Post Office says so, and no registration screen opens |
 | 119 | `INSUFFICIENT_PRIVATE_BALANCE` | Show spendable-vs-maturing split. The pool fee comes out of the same balance |
 | 120 | `PRIVACY_LEAK` | Wallet refused the bundle on anonymity grounds. **Trigger conditions undocumented.** Must be a legible user-facing state — the game generates action arrays programmatically |
 | 162 | `API_VERSION_NOT_SUPPORTED` | Capability gate. Route to the unsupported-wallet screen |
@@ -241,7 +241,7 @@ starknet_call → pool.get_public_key(recipient)
   non-zero   → registered, proceed
 ```
 
-Preflight before offering "send to this player", and still map error 118 at transaction time — the two must agree. Without this, a transfer to an unregistered player fails late with no explanation.
+Preflight before offering "send to this player", and still map error 118 at transaction time — the two must agree. Without this, a transfer to an unregistered player fails late with no explanation. Both name the recipient, as `recipient-not-registered` (D-074), never the sender's own `not-registered`.
 
 ### One invoke per transaction
 

@@ -129,6 +129,37 @@ describe('connect flow', () => {
     expect(flow.store.getState().name).toBe('connected');
   });
 
+  it('never escalates a transfer recipient\'s 118: it is about the recipient, not this account (D-074)', async () => {
+    const flow = createConnectFlow(new FakePrivacyOperations());
+    const connected = await flow.connect();
+    const published = vi.fn();
+    flow.store.subscribe(published);
+
+    // As the seam throws it, and as a panel hands it on after classifying it.
+    expect(flow.noteOperationError(new PrivacyError('recipient-not-registered', 'error 118 on a transfer')))
+      .toBe(connected);
+    expect(flow.noteOperationError({ kind: 'recipient-not-registered', cause: { code: 118 } })).toBe(connected);
+
+    expect(flow.store.getState()).toBe(connected);
+    expect(flow.status()).toBe('connected');
+    expect(published).not.toHaveBeenCalled();
+  });
+
+  it('does not retire a capability query in flight for a recipient\'s 118, as it does for the account\'s own (D-074)', async () => {
+    const capability = deferred<Awaited<ReturnType<PrivacyOperations['capability']>>>();
+    const operations = new FakePrivacyOperations();
+    vi.spyOn(operations, 'capability').mockReturnValue(capability.promise);
+    const flow = createConnectFlow(operations);
+
+    const pending = flow.connect();
+    flow.noteOperationError(new PrivacyError('recipient-not-registered', 'error 118 on a transfer'));
+    expect(flow.store.getState().name).toBe('detecting');
+    capability.resolve({ supportsStrk20: true, walletApiVersion: '0.10.3', registration: 'registered' });
+
+    expect(await pending).toMatchObject({ name: 'connected' });
+    expect(flow.store.getState()).toMatchObject({ name: 'connected' });
+  });
+
   it('treats a declined connection as disconnected, not as a failure', async () => {
     const operations = new FakePrivacyOperations();
     operations.injectFault({ kind: 'user-rejected', on: 'capability' });

@@ -236,6 +236,8 @@ Split “gas sponsorship” into three different mechanisms:
 
 **Conditional:** transfer-to-unregistered error mapping still needs a Ready/Xverse integration test. Error 118 is defined for the caller/wallet, so do not assume it is the recipient error. The app can nevertheless preflight the recipient by calling the pool's public `get_public_key(address)` and checking for zero.
 
+*Forward note, 2026-09-29 (D-074):* still unverified. The app never asks the wallet to prove a transfer until this preflight has read the recipient as registered, so no wallet's answer for a never-registered recipient has been seen here. D-074 maps a 118 from a transfer's proving call to `recipient-not-registered` anyway, at the lead's direction. That rests on D-072's entry, which settles the sender's own registration before any building opens, not on 118 naming the recipient.
+
 ### The Exchange (AVNU)
 
 **Confirmed:** AVNU SDK `4.2.0` includes `executePrivateSwap`, `createStrk20WalletProver`, `buildPrivateSwapFee`, and `submitPrivateSwap`; mainnet private swaps are live in Ready/Xverse. Official AVNU mainnet contracts include Exchange `0x04270219d365d6b017231b52e92b3fb5d7c8378b05e9abc97724537a80e93b0f` and Forwarder `0x0127021a1b5a52d3174c2ab077c2b043c80369250d29428cee956d76ee51584f`. See [AVNU contracts](https://docs.avnu.fi/resources/contracts).

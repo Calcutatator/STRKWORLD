@@ -20,11 +20,12 @@ import { toFailure } from '../privacy/errors.js';
  * player starts by pressing a button, after this flow has admitted the wallet.
  *
  * `not-registered` is a fact about the account, reached from a capability
- * that says so or from any operation's 118. D-072 folded its room into the
- * entry gate: the production root admits it to the gate exactly as it admits
- * `connected`, since the gate's own reads meet the 118 there, and after entry
- * a building renders the gate's not-registered card for it. A recheck leaves
- * it, as before.
+ * that says so or from any operation's 118 but a transfer's, which names its
+ * recipient and arrives as `recipient-not-registered` (D-074). D-072 folded
+ * its room into the entry gate: the production root admits it to the gate
+ * exactly as it admits `connected`, since the gate's own reads meet the 118
+ * there, and after entry a building renders the gate's not-registered card
+ * for it. A recheck leaves it, as before.
  *
  * Nothing here branches on wallet identity, which is what keeps a web wallet
  * or an embedded wallet working later with no rewrite (SPEC §5 rule 2).
@@ -63,6 +64,8 @@ export interface ConnectFlow {
    * wallet, not about the action that happened to hit them. Everything else
    * stays local to the panel that caused it, because a dropped connection
    * during a balance read should not evict the player from the whole shell.
+   * A transfer's 118 is `recipient-not-registered`, a fact about the recipient
+   * (D-074), so it stays in the panel too.
    * The entry gate (D-072) keeps its own reads' 118 to itself: before entry a
    * 118 means "nothing in the pool yet" and its answer is the deposit card.
    */

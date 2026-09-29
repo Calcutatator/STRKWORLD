@@ -511,6 +511,9 @@ export const COPY = freezeCopy({
   errors: {
     'not-registered':
       'The pool does not know this account yet. Register inside your wallet, then come back.',
+    /** D-074: a fact about the recipient, so it stays in the panel and never moves the connect flow. */
+    'recipient-not-registered':
+      "That recipient hasn't set up private balances yet, so they can't receive a private transfer. Nothing was sent.",
     'insufficient-balance':
       'There is not enough in your shielded balance for this, once the pool fee is counted.',
     'privacy-leak':

@@ -161,6 +161,9 @@ export interface PrivacyOperations {
    *
    * Read from the pool contract, not the Wallet API — no wallet method exists.
    * Call before offering a send; otherwise it fails late with no explanation.
+   * `prepare()` reads it again for every transfer, and a transfer to an
+   * `unregistered` address rejects with `recipient-not-registered`, never
+   * with this account's own `not-registered` (D-074).
    */
   recipientStatus(address: Address, signal?: AbortSignal): Promise<RecipientStatus>;
 

@@ -282,7 +282,17 @@ also applies, so a prepared proof expires — submit promptly or re-prepare.
 **Registration is preflightable, and the Wallet API cannot do it.** Use the
 pool's `get_public_key(address)` over ordinary RPC; unregistered returns
 `0x0`. Preflight *and* map error 118 at transaction time — the two must
-agree.
+agree. On a transfer both name the recipient (D-074): `prepare()` rejects a
+zero key, and `confirm()` a 118 from the wallet's proving call, as
+`recipient-not-registered`. D-072 admits a player only on a wallet answer
+about their own account that a 118 would have refused, so the sender is
+settled. The proving call runs only after the preflight read the recipient
+as registered, so its 118 marks a disagreement between the pool and the
+wallet that nobody has observed yet. The kind is a fact about the recipient,
+so the shell keeps it in the panel and never treats it as this account's
+`not-registered`. Every other 118 stays `not-registered`: no other route
+depends on another account's registration, and a withdrawal's recipient is a
+public address.
 
 **Batching is the only lever against prompts and fees.** Ready 5.33.8 creates
 one wallet action for an entire STRK20 action array and folds deposit approval

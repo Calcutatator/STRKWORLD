@@ -611,6 +611,25 @@ describe('what it captures', () => {
     });
   });
 
+  it('names a transfer recipient\'s 118 apart from the account\'s own, keeping the wallet code (D-074)', async () => {
+    const { entries, tick } = harness();
+    // As the adapter throws it: the recipient's kind over the wallet's own answer.
+    debugFailure('privacy.operation', new PrivacyError(
+      'recipient-not-registered',
+      'The recipient is not registered with the privacy pool.',
+      { code: 118, message: 'An error occurred (NOT_REGISTERED)' },
+    ));
+    await tick();
+    expect(entries().at(-1)).toEqual({
+      t: T0,
+      level: 'error',
+      event: 'privacy.operation',
+      detail:
+        'kind=recipient-not-registered code=118 NOT_REGISTERED message="The recipient is not registered with the privacy pool." ' +
+        'cause="An error occurred (NOT_REGISTERED)"',
+    });
+  });
+
   it('never sends signatures, calldata or proof data, but may name an account', async () => {
     vi.spyOn(console, 'error').mockImplementation(() => undefined);
     const { entries, tick } = harness();

@@ -323,7 +323,9 @@ than the stale write it prevents.
 118 and 162 are current account/wallet facts, so the connect machine retires
 any capability query that was already in flight before publishing the
 not-registered or unsupported room. A late successful probe must not reopen a
-financial room after the wallet has supplied the newer refusal.
+financial room after the wallet has supplied the newer refusal. A transfer's
+118 is not one of them: it is the recipient's (`recipient-not-registered`,
+D-074), so it stays in the panel and retires nothing.
 
 **No runtime import of `@strkworld/privacy` in the shell.** Its entry point
 re-exports the wallet adapter, which pulls `starknet`; a single value import

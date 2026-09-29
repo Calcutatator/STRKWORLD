@@ -258,6 +258,86 @@ empty shell to fetchers, so a 200 there means nothing.
 
 ## 6. Findings log
 
+### 2026-09-29 — A transfer's 118 is its recipient's, and stays in the Post Office (D-074)
+
+A registered, funded player who sent from the Post Office to an address the
+pool has never seen was shown the not-registered card. The recipient's fact
+reached the connect flow as the player's own `not-registered` on two paths:
+the adapter's and the fake's prepare-time preflight threw
+`PrivacyError('not-registered')` for a zero `get_public_key`, and
+`mapWalletError` maps every 118 to `not-registered`, a transfer proof's
+included. `noteOperationError` escalates any `not-registered` (D-072), and
+`PanelLayer` renders `ConnectRoom` in place of a building's room whenever the
+connect state is not `connected`, so the Post Office window itself closed
+under the player. This resolves the trap the D-072 finding below recorded.
+Both paths now raise `recipient-not-registered`. They are not equally real.
+The wallet proves a transfer only after `prepare()` has read its recipient as
+registered, so a never-registered recipient never reaches the wallet. The
+Bank refuses it at Add, or, when that read could not tell, `prepare()` does,
+and that is the path the new tests reproduce. The proving-call mapping covers
+what is left: a 118 after the pool read the recipient as registered, a
+disagreement nobody has observed. It maps by route alone, because the lead's
+rule is that a 118 met while sending never moves the player's state:
+`proveRelayed` in `packages/privacy/src/wallet-api/operations.ts` wraps only
+the transfer route's `wallet_strk20PrepareInvoke`. Re-reading the pool after
+the 118 would change nothing, since `prepare()` has just read it.
+
+**Seam heads-up (D-036).** `PrivacyErrorKind` gains `recipient-not-registered`.
+The change is additive: each exhaustive record of the kinds (`KIND_SET` in
+`apps/web/src/privacy/errors.ts`, `KINDS` in
+`apps/web/src/debug/debug-format.ts`, `COPY.errors`) had to list it, and the
+compiler refuses any other that misses it. Code that reads `not-registered`
+as "this account" stays right; nothing in the repo read it as the
+recipient's. The fake now raises the new kind for an unregistered transfer
+recipient, so a test expecting `not-registered` there must expect
+`recipient-not-registered`. `mapWalletError` is unchanged; the transfer
+mapping, `mapTransferWalletError` in `packages/privacy/src/wallet-api/errors.ts`,
+is internal and not exported from the package. Traps met on the way:
+
+- The Bank's Add-time preflight already refused an unregistered recipient
+  with its own notice, so the escalation needed the Add's read to answer
+  `unknown` (the send then queues under `recipientUnknown`) and the prepare's
+  read `unregistered`, or a wallet 118 at confirm.
+- The Railway test deployment's relay has no avnu key (its startup line says
+  transfer and unshield answer 503 `RELAY_NOT_CONFIGURED`), so a send there
+  fails at its fee quote, after the prepare-time preflight and before the
+  wallet proves anything. The wallet's 118 cannot be reproduced there until a
+  key is set (D-070), and the retained debug logs of the 2026-09-28 and
+  2026-09-29 deployments hold no 118 line.
+- `mapTransferWalletError` keeps the wallet's own error as `cause`, not the
+  intermediate `not-registered` error, so the D-069 line reads
+  `code=118 NOT_REGISTERED` beside the recipient's message rather than the
+  account's.
+- Locally the full suite also fails the demo case of `App.after-gate.test.tsx`
+  on clean `main` (9638cc3): a second bank `world:stations` snapshot arrives,
+  most likely from `VisitLayer`'s `refreshStations()` effect when a Bridge
+  capability resolves after the Bank entry. The test passes alone (three runs
+  of three) and in CI, so it is a load-timing flake of the test, not a fault
+  this change introduced.
+
+*Verified:* `wallet-api.test.ts` (the prepare-time preflight rejects the new
+kind before any fee quote or proof; a transfer proof's `{ code: 118 }`
+rejects it with that answer as `cause` and nothing submitted; an unshield's
+118 stays `not-registered`; a transfer proof's 113, 119, 120 and 163 keep
+their kinds; the mapper's own cases), `stake-actions.test.ts` (a stake's 118
+stays `not-registered`), `fake.test.ts`, `connect-machine.test.ts` (the new
+kind, raw or classified, publishes nothing and leaves a capability query in
+flight alone), `bank-machine.test.ts` (the exact Post Office configuration
+keeps both failures in the panel with the player connected), and
+`PostOfficePanel.flow.test.tsx`, which drives a send through `PanelLayer` in
+jsdom against the real `WalletApiPrivacyOperations` with a wallet whose
+proving call answers 118, and against the fake's prepare-time refusal: the
+Post Office stays open with the new line and no not-registered card, and both
+cases fail against the old seam. Also `copy.test.ts` (the exact line, inside
+D-065's transfer copy rules), `errors.test.ts` and `debug-logs.test.tsx`.
+Nine mutations of the new guards (both preflight kinds, the route scoping
+both ways, the mapper's kind and cause, the connect machine's escalation, and
+the shell's and the debug format's kind lists) each fail at least one test.
+The Railway lines were read with `railway logs --service strkworld`. No
+wallet was opened, no proof or signature was produced, and no transaction was
+submitted. No live wallet has been seen answering a transfer with 118, so the
+proving-call case is covered by tests alone.
+
 ### 2026-09-29 — Xverse is a legacy injected wallet, and discovery scans for those once (D-073)
 
 Xverse offers Starknet to dapps through the injected global
@@ -362,7 +442,9 @@ counts. Traps met on the way:
   unregistered transfer recipient, and `noteOperationError` escalates any
   `not-registered` to the connect flow, so a building then shows the
   not-registered card for the player. The Bank's recipient preflight makes it
-  rare; it predates D-072.
+  rare; it predates D-072. *Forward note: resolved by D-074 (see "A
+  transfer's 118 is its recipient's" above); the recipient's case is now
+  `recipient-not-registered`, which stays in the panel.*
 - The pass hash is an async `crypto.subtle` digest (present under vitest's
   jsdom, and in Node), so a test must let the gate leave `recalling` before it
   presses the button. `sessionStorage` also persists across the tests of one

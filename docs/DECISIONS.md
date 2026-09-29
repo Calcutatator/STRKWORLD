@@ -1219,7 +1219,7 @@ D-028 freeze.
 
 ## D-036 — `PrivacyOperations` is frozen on source-derived evidence
 
-**2026-08-18 · Accepted · implements D-028 and supersedes D-015's provisional seam status · narrowly extended by D-041/D-042 for truthful swap review, and by D-063 for private staking · failure taxonomy extended by D-070 (`relay-not-configured`) · methods extended by D-072 (`hasPrivateFunds`, `depositStatus`)**
+**2026-08-18 · Accepted · implements D-028 and supersedes D-015's provisional seam status · narrowly extended by D-041/D-042 for truthful swap review, and by D-063 for private staking · failure taxonomy extended by D-070 (`relay-not-configured`) and D-074 (`recipient-not-registered`) · methods extended by D-072 (`hasPrivateFunds`, `depositStatus`)**
 
 **Context.** D-015 correctly unfroze the original one-shot interface. The
 replacement intent-based, prepare-then-confirm seam is implemented by both the
@@ -3196,7 +3196,7 @@ area."
 
 ## D-072 — Entry requires funds in the privacy pool
 
-**2026-09-29 · Accepted by the user · supersedes D-055 in part (a supported wallet now reaches the funds gate, not the city) · supersedes D-056 in part (its STRK-only shield token) · extends D-036's frozen seam with `hasPrivateFunds` and `depositStatus` · adds one player-initiated read under D-035's balance-read rule · registers `entry.shield` (approved by the lead, 2026-09-29)**
+**2026-09-29 · Accepted by the user · supersedes D-055 in part (a supported wallet now reaches the funds gate, not the city) · supersedes D-056 in part (its STRK-only shield token) · extends D-036's frozen seam with `hasPrivateFunds` and `depositStatus` · adds one player-initiated read under D-035's balance-read rule · registers `entry.shield` (approved by the lead, 2026-09-29) · a transfer's 118 scoped to its recipient by D-074**
 
 **Context.** The lead asked for one check before the app opens: a player must
 have funds in the STRK20 pool; one who does is checked and loads straight in,
@@ -3403,3 +3403,80 @@ a live Xverse; that stays on the manual wallet checklist (D-028). Every look
 re-wraps each injected global, and each wrapper adds two listeners to the
 wallet's object that nothing removes (upstream), so looks stay bounded,
 never periodic.
+
+---
+
+## D-074 — A transfer's 118 names its recipient, not the player
+
+**2026-09-29 · Accepted by the user (the lead reported the fault and asked that a 118 met while sending be scoped to the recipient) · extends D-036's frozen seam with a `recipient-not-registered` failure kind · amends D-072 in part (a transfer's 118 no longer moves the connect flow to `not-registered`)**
+
+**Context.** The lead reported that a registered, funded player sending from
+the Post Office (`post-office.transfer`) to an address that has never
+registered with the pool was shown the not-registered card ("Register with
+the pool first"), and attributed it to a JSON-RPC 118 `NOT_REGISTERED` from
+the wallet. Two paths turned a fact about the recipient into one about the
+player. The Wallet API adapter's prepare-time preflight (`warningsFor`), and
+the fake's, threw `PrivacyError('not-registered')` when the pool's
+`get_public_key(recipient)` read zero. And `mapWalletError` maps every 118 to
+`not-registered`, including one from `wallet_strk20PrepareInvoke` while it
+proves a transfer. The connect flow escalates any `not-registered` into its
+`not-registered` state (D-072), and `PanelLayer` then replaces the building's
+room with that card. The D-072 finding had already logged the first path as a
+trap.
+
+In this app the wallet is asked to prove a transfer only after that preflight
+has read the recipient as registered. A never-registered recipient is
+therefore refused before any proof: at Add, with the Bank's own notice, or,
+when the Add's read could not tell, at `prepare()`. That last refusal is the
+path the tests reproduce. A 118 from the proving call can only follow a
+preflight that read the recipient as registered, a disagreement between the
+pool and the wallet that nobody has observed. The Wallet API defines 118 for
+the caller alone (`@starknet-io/types-js` 0.10.3: "NOT_REGISTERED if the user
+is not registered") and has no code for a recipient, and
+`docs/research/primary-source-verification.md` left the transfer-to-unregistered
+mapping to a live wallet test. Since D-072 no player reaches a building
+without a wallet answer about their own account that a 118 would have
+refused. That answer is the balance check, or a shield the wallet accepted
+and the pool recorded (the Wallet API answers 118 to both for an
+unregistered account), or a pass this tab remembered from one of those. An
+account switch builds a fresh gate.
+
+**Decision.**
+
+- `PrivacyErrorKind` gains `recipient-not-registered`: the transfer's
+  recipient is not registered in the pool, so it cannot receive a private
+  transfer, and nothing was sent. It is a fact about the recipient, and only
+  they can register, inside their own wallet.
+- A transfer to an address whose `get_public_key` reads zero rejects at
+  `prepare()` with it, in the Wallet API adapter and the fake alike.
+- On the transfer route, and only there, a 118 from the wallet's proving call
+  maps to it as well (`mapTransferWalletError`, internal to the adapter). This
+  follows the lead's rule that a 118 met while sending never moves the
+  player's own state, and D-072's entry has already settled the sender's
+  registration. The wallet's own answer stays on the error's `cause`, so a
+  D-069 debug line still reads `code=118 NOT_REGISTERED`. Every other 118
+  stays `not-registered`: the entry check, balances, shield, unshield (whose
+  recipient is a public address), swap and stake. `mapWalletError` itself is
+  unchanged.
+- The connect machine is unchanged: only `not-registered` and
+  `unsupported-wallet` move it, so the new kind stays in the panel that met
+  it. The Bank and the Post Office show "That recipient hasn't set up private
+  balances yet, so they can't receive a private transfer. Nothing was sent."
+  with the failed prepare's usual Back, which keeps the send queued.
+- No approved copy changes. The Add-time preflight's line, the register's
+  disclosures (D-024) and the transfer route's waiver (D-065) stay as they
+  are, and the new line obeys D-065's transfer copy rules.
+
+**Consequences.** A registered player whose recipient has not registered
+keeps the Post Office open and reads whose step is missing. The connect flow,
+the HUD's wallet status and every other room are untouched. Once the
+recipient registers, Back and Review send it. A 118 from the proving call
+shows the same line even though the pool read the recipient as registered,
+so Review may keep failing until the wallet agrees. If one is ever seen,
+compare the recipient's `get_public_key` with the wallet's own view. If a
+wallet answered 118 on a transfer about the sender's own account, which
+D-072's entry rules out, the player would read the recipient line instead of
+the registration card; nothing is sent either way. Every exhaustive record
+of the kinds must list the new one. The shell's classifier, the debug format
+and `COPY.errors` are typed so that the compiler refuses one that misses it.
+No agent opened a wallet for this decision.
