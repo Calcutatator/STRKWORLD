@@ -29,6 +29,8 @@ export const COPY = freezeCopy({
     'post-office': 'The Post Office',
     bridge: 'The Bridge',
     vault: 'The Vault',
+    /** D-076: not a building, an open square; its windows use no money and no wallet. */
+    plaza: 'The Privacy Plaza',
   },
 
   connect: {
@@ -275,6 +277,48 @@ export const COPY = freezeCopy({
   },
 
   /**
+   * The Privacy Plaza (D-076): a no-money square with two windows. The
+   * monument shows public, pool-wide figures only, never anything about the
+   * player, and says where they come from; the shell game touches no money, no
+   * wallet and no backend. Every line keeps to what the pool really hides:
+   * notes inside it, not its public edges (`copy.test.ts` checks).
+   */
+  plaza: {
+    monument: {
+      title: 'The privacy pool, live',
+      intro: 'Public figures for the whole STRK20 privacy pool, read from its own events and token balances on Starknet. Nothing here is about you.',
+      accounts: 'Accounts registered',
+      deposits24h: 'Deposits in the last 24 hours',
+      held: 'Held in the pool',
+      unknown: '\u2026',
+      failed: "The pool's figures can't be read right now. They fill in again once they can.",
+      demo: 'Demo figures: this practice city shows sample numbers, not the live pool.',
+      setTitle: 'Why the crowd matters',
+      set: [
+        'An anonymity set is the crowd you hide in: everyone who could have made the move you made.',
+        'Each account that joins the pool makes every other one harder to pick out.',
+        'So the more people use the pool, the more privacy everyone in it gets.',
+      ],
+      edges: 'Deposits and withdrawals are public, so an unusual amount or a quick in-and-out makes your crowd smaller.',
+    },
+    shells: {
+      title: "Where's the note?",
+      intro: 'A note hides under one of three cups. Watch it, then find it after the shuffle.',
+      pool: "In the pool, notes look alike from outside. Without your viewing key, no one can tell which ones are yours.",
+      fun: 'Just for fun: no money, no wallet, nothing saved.',
+      start: 'Hide the note',
+      again: 'Play again',
+      watch: 'Watch the note…',
+      shuffling: 'Shuffling…',
+      pick: 'Which cup is the note under?',
+      win: 'You found the note.',
+      loseLead: 'Not that one. The note was under cup',
+      cup: 'Cup',
+      streak: 'Streak',
+    },
+  },
+
+  /**
    * The Post Office, and every transfer line elsewhere. D-065 waived the
    * transfer's in-game disclosure, and in exchange this copy never claims the
    * recipient is hidden: "send privately" may stay (`copy.test.ts` checks).
@@ -386,7 +430,7 @@ export const COPY = freezeCopy({
       { input: 'WASD or arrow keys', effect: 'Walk. Up always heads away from the camera.' },
       { input: 'Shift', effect: 'Hold while walking to sprint.' },
       { input: 'F', effect: 'Swap your outfit.' },
-      { input: 'E', effect: 'In the sandbox, pick up the block in front of you. Press E again to put it down.' },
+      { input: 'E', effect: 'In the sandbox, pick up the block in front of you. Press E again to put it down. At the Privacy Plaza, use the monument or the table you stand at.' },
       { input: 'Esc', effect: 'Close a counter or Menu Mode.' },
     ],
     buildingsTitle: 'Inside a building',
@@ -406,6 +450,9 @@ export const COPY = freezeCopy({
     sandboxTitle: 'The sandbox',
     sandbox:
       'The road ends in a sandbox square. Blocks drop from the sky: press E to pick one up and E again to put it down, and build with whoever else is there.',
+    plazaTitle: 'The Privacy Plaza',
+    plaza:
+      "At the road's west end, opposite the sandbox, a square with no money in it. Press E at the monument for the pool's live figures, or at the table to play Where's the note?",
     dismiss: 'Got it',
     stationHint: 'Lit counters open when you walk up to them; grey ones are not open yet. Menu Mode opens the full menu.',
   },

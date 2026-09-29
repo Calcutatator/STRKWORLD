@@ -35,6 +35,11 @@ export interface DebugTap {
   sandboxBurst(tile: unknown): void;
   /** An entry-gate transition (D-072), by state name only. */
   gate(state: unknown): void;
+  /**
+   * A shell-game result at the Privacy Plaza (D-076): win or lose, and
+   * nothing else. Optional, so a tap written before the plaza still fits.
+   */
+  plazaShells?(result: unknown): void;
 }
 
 let tap: DebugTap | null = null;
@@ -112,6 +117,19 @@ export function debugGate(state: string): void {
   if (!tap) return;
   try {
     tap.gate(state);
+  } catch {
+    // As above.
+  }
+}
+
+/**
+ * A round of "Where's the note?" ended (D-076). The result only: no
+ * identifier, no streak, no timing beyond the line's own.
+ */
+export function debugPlazaShells(result: 'win' | 'lose'): void {
+  if (!tap) return;
+  try {
+    tap.plazaShells?.(result);
   } catch {
     // As above.
   }

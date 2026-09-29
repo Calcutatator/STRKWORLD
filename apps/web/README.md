@@ -32,7 +32,8 @@ disappear is accepted for v1 (D-019).
 |---|---|
 | `src/bus/` | The typed event bus implementation. The shell owns it and hands it to the world |
 | `src/world/` | `WorldHost` — acquires and releases the world. React never owns the game lifecycle |
-| `src/visits/` | `VisitLayer`, the Game/Menu visit controller, and the Shell-owned opaque station registry |
+| `src/visits/` | `VisitLayer`, the Game/Menu visit controller, and the Shell-owned opaque station registry (the Privacy Plaza's street stations included, D-076) |
+| `src/plaza/` | The Privacy Plaza's Shell half (D-076): the pool-stats client and poller, `PlazaProvider`, and the shell game's pure rules |
 | `src/store/` | A 40-line observable store, plus its `useSyncExternalStore` hook |
 | `src/accumulator/` | Menu Mode's batch accumulator |
 | `src/connect/` | Capability detection, and the rooms for a wallet that cannot help |

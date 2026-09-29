@@ -13,6 +13,7 @@ import { parseProductionWalletConfig, usesProductionWallet } from './production/
 import { startProductionWalletBootstrap } from './production/bootstrap.js';
 import { ProductionRoot, type ShieldPlannerFactory } from './production/ProductionRoot.js';
 import { createBackendDegenCatalog } from './panels/exchange/degen-catalog.js';
+import { createBackendPoolStats } from './plaza/pool-stats.js';
 
 /**
  * STRKWORLD shell entry point.
@@ -113,6 +114,9 @@ if (usesProductionWallet(environment)) {
     // The degen floor's list (D-067), read from the same-origin backend only
     // when the degen counter opens; while swap is off that counter is locked.
     const degenCatalog = createBackendDegenCatalog({ baseUrl: config.backendBaseUrl });
+    // The Privacy Plaza's public pool stats (D-076), read from the same-origin
+    // backend only while the plaza is in view or its monument window is open.
+    const poolStats = createBackendPoolStats({ baseUrl: config.backendBaseUrl });
     // D-061's reserve planner arrives with the same lazy privacy import.
     // ProductionRoot uses it only while config.policy enables shield.
     let createShieldPlanner: ShieldPlannerFactory | undefined;
@@ -140,6 +144,7 @@ if (usesProductionWallet(environment)) {
               policy={config.policy}
               createShieldPlanner={createShieldPlanner}
               degenCatalog={degenCatalog}
+              poolStats={poolStats}
             />
           </StrictMode>,
         );

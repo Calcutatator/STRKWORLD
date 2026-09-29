@@ -12,11 +12,13 @@ import {
   describeConnectState,
   describeFailure,
   describeGateState,
+  describePlazaShells,
   describeSandboxTile,
   describeValue,
   describeWalletSession,
   eventName,
   failureLevel,
+  plazaPanel,
   visitPanel,
   type DebugLevel,
 } from './debug-format.js';
@@ -420,9 +422,16 @@ function createDebugLogs(page: Window, storage: ViewerStorage, options: DebugLog
     visit: (previous, next) => {
       const closed = visitPanel(previous);
       const opened = visitPanel(next);
-      if (closed === opened) return;
-      if (closed) record('info', 'panel.close', closed);
-      if (opened) record('info', 'panel.open', opened);
+      if (closed !== opened) {
+        if (closed) record('info', 'panel.close', closed);
+        if (opened) record('info', 'panel.open', opened);
+      }
+      // D-076: a Privacy Plaza window, by station id alone.
+      const plazaClosed = plazaPanel(previous);
+      const plazaOpened = plazaPanel(next);
+      if (plazaClosed === plazaOpened) return;
+      if (plazaClosed) record('info', 'plaza.close', `station=${plazaClosed}`);
+      if (plazaOpened) record('info', 'plaza.open', `station=${plazaOpened}`);
     },
     bank: (step) => {
       const entry = describeBankStep(step);
@@ -434,6 +443,10 @@ function createDebugLogs(page: Window, storage: ViewerStorage, options: DebugLog
     },
     gate: (state) => {
       const entry = describeGateState(state);
+      if (entry) record(entry.level, entry.event, entry.detail);
+    },
+    plazaShells: (result) => {
+      const entry = describePlazaShells(result);
       if (entry) record(entry.level, entry.event, entry.detail);
     },
   });

@@ -323,7 +323,11 @@ batch accumulator. It never constructs raw protocol calls.
 ### `apps/backend`
 
 Paymaster-key custody, privacy-safe RPC reads and the bounded submission queue
-for eligible prepared Wallet API calls. It never delays quote-bound routes.
+for eligible prepared Wallet API calls. It never delays quote-bound routes. It
+also keeps the Privacy Plaza's public pool stats (D-076) in memory, computed
+in the background from the pool's own events and token balances, and serves
+them as aggregates only, under a rate window of their own so they never take
+a slot the private routes need.
 
 **Must not:** log or persist per-request IPs, calls, proofs, timings,
 recipients or transaction hashes. Aggregate operational counters only. It
@@ -394,6 +398,18 @@ definition (D-059). Shell separately maps station IDs to admitted routes and sen
 labels/lock state across the frozen D-033 bus. This keeps collision, entry/exit,
 control handoff and teardown in one World implementation across Bank, Post
 Office, Exchange and Bridge.
+
+The Privacy Plaza (D-076) puts two stations on the street, outside any
+building: `plaza:monument` and `plaza:shells`, used with E from the tiles
+around them. They reuse the D-033 handoff with `plaza` as the building (the
+World suspends input, emits `station:activated`, the Shell claims and later
+returns `world:control-owner`), but no building is entered, so presence and
+the lobby never hear of them. The World also reports when the plaza is in
+view (`plaza:nearby`); while it is, or the monument's window is open, the
+Shell reads `POST /v1/rpc/pool-stats` about once a minute (backing off to
+the minute when reads fail) and pushes the monument its figures
+pre-formatted (`plaza:stats`), as it does the HUD balance. The stats are public aggregates only, and the shell game runs
+entirely in the Shell, with no money, wallet, backend or lobby.
 
 ---
 

@@ -31,6 +31,7 @@ import {
 import { angleDelta, directionToYaw, pixelToGround, PIXELS_PER_UNIT, type GroundPoint } from './coords.js';
 import type { CameraBounds, CameraPresetId } from './camera-rig.js';
 import { segmentHitsBox } from './occlusion.js';
+import { EMPTY_PLAZA_STATS } from '../plaza-stations.js';
 import type {
   AvatarFigure,
   AvatarFigureFactory,
@@ -223,6 +224,9 @@ export function createPresenter(options: PresenterOptions): Presenter {
     sandbox.setTarget(null);
     sandboxHeights = FLAT_SANDBOX;
     carried.setColour(null);
+    // The plaza's prompt and figures belong to the session that set them (D-076).
+    street.plaza?.setHighlight(null);
+    street.plaza?.setStats(EMPTY_PLAZA_STATS);
     elevationTarget = 0;
     elevationShown = 0;
     fallSpeed = 0;
@@ -377,6 +381,14 @@ export function createPresenter(options: PresenterOptions): Presenter {
           sandbox.setTarget(aim
             ? { x: aim.tile.x, y: aim.tile.y, level: aim.level, mode: aim.mode, valid: aim.valid }
             : null);
+        },
+        setPlazaHighlight(station) {
+          if (!live()) return;
+          street.plaza?.setHighlight(station);
+        },
+        setPlazaStats(stats) {
+          if (!live()) return;
+          street.plaza?.setStats(stats);
         },
         setCameraBounds(bounds: WorldRect) {
           if (!live()) return;

@@ -1,5 +1,6 @@
 import { BUILDINGS, SANDBOX_AREA, SANDBOX_ENTRANCE, type BuildingId } from '@strkworld/shared';
 import { flattenProperties, type TiledObject } from '../tiled-object-props.js';
+import { paintPlaza } from './plaza.js';
 
 /**
  * The first district, as data.
@@ -16,7 +17,16 @@ import { flattenProperties, type TiledObject } from '../tiled-object-props.js';
 export const TILE_SIZE = 32;
 
 /** What a tile is. `solid` drives collision; nothing else here does. */
-export type TileKind = 'grass' | 'road' | 'pavement' | 'wall' | 'facade' | 'sandbox' | 'fence';
+export type TileKind =
+  | 'grass'
+  | 'road'
+  | 'pavement'
+  | 'wall'
+  | 'facade'
+  | 'sandbox'
+  | 'fence'
+  | 'plaza'
+  | 'plinth';
 
 export interface TileSpec {
   kind: TileKind;
@@ -42,6 +52,14 @@ export const TILES: Readonly<Record<TileKind, Readonly<TileSpec>>> = Object.free
    * come in through the gate, where the road runs through it.
    */
   fence: Object.freeze({ kind: 'fence', solid: true, colour: 0xb8a98f }),
+  /** The Privacy Plaza's paving (D-076). Walkable, level with the pavement. */
+  plaza: Object.freeze({ kind: 'plaza', solid: false, colour: 0xd4c6ab }),
+  /**
+   * Under a piece of plaza furniture: the monument, the shell-game table, a
+   * bench, a lamp, a planter or a gateway post (D-076). Solid; the renderer
+   * stands every plaza volume on these.
+   */
+  plinth: Object.freeze({ kind: 'plinth', solid: true, colour: 0xa89a82 }),
 });
 
 /**
@@ -120,7 +138,8 @@ function fill(
  * A horizontal road with pavement either side, five buildings along the north
  * edge. Four are enterable; the Vault is a visible facade with a locked door,
  * so the world reads as complete while v1 ships without it (D-007). The road
- * ends in the block sandbox square (D-060).
+ * ends in the block sandbox square (D-060), and the Privacy Plaza sits below
+ * its west end, opposite the sandbox (D-076).
  */
 export function createStreetMap(): DistrictMap {
   // The original street is 48 tiles wide; the road then runs on into the block
@@ -202,6 +221,10 @@ export function createStreetMap(): DistrictMap {
   // by a two-tile path that continues directly south from the spawn column to
   // the bottom edge, where the offscreen trigger lives.
   fill(tiles, 23, 17, 2, height - 17, 'pavement');
+
+  // The Privacy Plaza (D-076): a paved square below the south pavement at the
+  // road's west end, clear of the Studio path and the spawn (see plaza.ts).
+  paintPlaza(tiles);
 
   // The block sandbox square where the road ends (D-060). Its floor is plain
   // walkable ground; block stacks are shared state layered on top of it.

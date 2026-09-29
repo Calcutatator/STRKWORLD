@@ -300,6 +300,8 @@ function createRecordingView(journal: Journal) {
     sandboxBurst: (tile) => record('sandboxBurst', [{ x: tile.x, y: tile.y }]),
     setCarried: (colour) => record('setCarried', [colour]),
     setSandboxAim: (aim) => record('setSandboxAim', [aim]),
+    setPlazaHighlight: (station) => record('setPlazaHighlight', [station]),
+    setPlazaStats: (stats) => record('setPlazaStats', [stats]),
   };
 
   const argsOf = <M extends ViewMethod>(method: M): ViewArgs<M>[] =>
@@ -989,7 +991,8 @@ describe('WorldSession lifecycle', () => {
     enterBuilding(world, 'bank');
     const staleBank = world.room('bank');
     expect(staleBank.state.inRoom).toBe(true);
-    expect(world.bus.shellListenerCount()).toBe(12);
+    // Three per room, and the Privacy Plaza's control claim and figures (D-076).
+    expect(world.bus.shellListenerCount()).toBe(14);
 
     stale.destroy();
     const replacement = world.start();
@@ -997,7 +1000,7 @@ describe('WorldSession lifecycle', () => {
     expect(world.cycles).toHaveLength(2);
     expect(world.keyboard.listenerCount()).toBe(1);
     expect(staleBank.state.inRoom).toBe(false);
-    expect(world.bus.shellListenerCount()).toBe(12);
+    expect(world.bus.shellListenerCount()).toBe(14);
 
     // A late Shell exit reaches only the current, outside controller. The
     // retired Bank must not move the new session or publish a stale exit.
@@ -1191,6 +1194,9 @@ describe('WorldSession orchestration', () => {
       'view.setCameraBounds',
       'view.showRoom',
       'view.syncStudio',
+      // The Privacy Plaza's stations (D-076), last: they need the input gate.
+      'shell.on:world:control-owner',
+      'shell.on:plaza:stats',
     ]);
     expect(world.view.calls).toEqual([
       { method: 'setPlayerAvatar', args: ['avatar-1'] },
