@@ -27,9 +27,11 @@ the lane boundary — that is why the repo is shaped the way it is.
 ### Why Contracts is dormant
 
 v1 needs no Cairo. The Bank, the Exchange and the Post Office are all reachable
-through the Wallet API and AVNU's deployed executor. The Vault is the only
-building requiring a `privacy_invoke` adapter, and it is out of v1 by decision
-D-007 precisely to keep an audit off the critical path.
+through the Wallet API and AVNU's deployed executor. The Vault was the only
+building requiring a `privacy_invoke` adapter, and it was out of v1 by decision
+D-007 precisely to keep an audit off the critical path. D-077 removed that
+need: the Vault lends through the canonical STRK20 shadow-account anonymizer,
+behind a build switch, so Contracts stays dormant.
 
 Standing up a Contracts lane now creates an idle agent and a seam with nothing
 crossing it. When the Vault starts, Contracts becomes a real lane owned by the

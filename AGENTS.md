@@ -42,8 +42,9 @@ building and broadcasting a transaction must never be causally linked in
 time. This is a privacy control, not a nicety — see D-004.
 
 **No financial building without an approved private route.** A building may
-use a pool-native Wallet API action, a protocol's first-party STRK20 path, or
-a reviewed and audited app-specific anonymizer. There is no unshield-and-call,
+use a pool-native Wallet API action, a protocol's first-party STRK20 path, a
+reviewed and audited app-specific anonymizer, or the canonical STRK20
+shadow-account anonymizer (the Vault, D-077). There is no unshield-and-call,
 arbitrary-calldata or normal-frontend fallback: if its route is unavailable,
 the building is locked. The Bridge is an explicitly public funding edge. See
 D-018.
@@ -213,7 +214,7 @@ their content hashes.
 |---|---|
 | `strk20-wallet-api` | **Our route.** Actions, capability detection, private DeFi, AVNU private swaps |
 | `strk20-privacy` | Concepts — notes, nullifiers, channels, viewing keys, what is and is not hidden |
-| `strk20-anonymizer-contracts` | Cairo helpers. Needed for the Vault, post-v1 |
+| `strk20-anonymizer-contracts` | Cairo helpers. No longer needed for the Vault, which uses shadow accounts (D-077) |
 | `strk20-privacy-sdk` | The low-level route. **Not ours** — read only to understand what we are not doing |
 | `strk20-privacy-integration` | The official ask/plan/execute planner |
 
@@ -257,6 +258,92 @@ empty shell to fetchers, so a 200 there means nothing.
 ---
 
 ## 6. Findings log
+
+### 2026-09-29 — A shadow account's address is the anonymizer's view, derived with the Primer class; starknet.js 10.8 converts calls both ways (D-077)
+
+The canonical `ShadowAccountAnonymizer`
+(`0x04f33230dc57855c6e7eabe66dfa0fde82c5458fd0e54827cdb7cb4c474888a7`, class
+`0xb61dee4f…af409`) answers `get_shadow_accounts(partial, start, end,
+until_undeployed)` with `[count, nonce, address, is_deployed, …]`, and its
+`get_privacy_contract()` is the pool. The address it deploys is
+`calculateContractAddressFromHash(poseidon(partial, nonce), PRIMER, [],
+anonymizer)` with the Primer class
+`0x00123e6bc1c14ae9934e933d3f64916a6116dd6b036a922b2b1f0815e0d1d300`: that
+matched the view for partial commitments `0x123`, `0x7a5c0ffee` and
+`0x5f2e1d`. `get_shadow_account_class_hash()` returns the class installed
+afterwards (`0x70e76435…b78f`), which the starknet.js 10.8.0 guide derives
+with, and gets a different address. Vesu's vSTRK
+(`0x06d6d2bf…279d`) is ERC-4626 in snake case: `balance_of`, not
+`balanceOf`. In starknet.js 10.8.0 `WalletAccountV6.strk20PrepareInvoke`
+returns `fromWalletApiCall(call)`, a starknet.js `Call`, while the relay and
+avnu's paymaster take the Wallet API's `{ contract_address, entry_point,
+calldata }`, so `BackendPrivacyClient` converts it back; going the other way,
+`strk20InvokeTransaction` and `strk20PrepareInvoke` rewrite each
+`shadow_account_invoke` call with `toWalletApiCall`, whose `CallData.toHex`
+strips leading zeros from calldata felts but keeps `contract_address` as
+spelt. The package still installs its own `types-js` 0.7.10 and
+wallet-standard 5.0.0 for the v5 wallet, under `node_modules/starknet`;
+the top-level `types-js` is one 0.10.4 copy. Traps met on the way:
+
+- `mapWalletError` maps 162 to `unsupported-wallet`, which the connect flow
+  escalates and which closes the city. The Vault's commitment and
+  submission map 162 and JSON-RPC -32601 through `mapShadowWalletError` to
+  `shadow-accounts-unsupported` instead; the unreviewed draft had used the
+  generic mapper for the submission.
+- `Reflect.get` runs accessors. The capability check walks the prototype
+  chain for a data property holding a function, which is where
+  `WalletAccountV6` declares `strk20ShadowAccountCommitment`.
+- The pinned `MockWallet` (starknet-start-react 2.0.1) predates 0.10.4 and
+  knows neither the commitment nor `shadow_account_invoke`, so the
+  forward-compatibility test answers both in its exact request seam.
+- The web may not value-import `@strkworld/privacy` (the architecture
+  test), so the Vault's STRK is `production/config.ts`'s `STRK_TOKEN`,
+  pinned against `VESU_VSTRK_ASSET` in `config.test.ts`.
+- Railway passes a build variable only when the Dockerfile declares it as an
+  `ARG`: a new `VITE_` route variable needs a line in `deploy/fly/Dockerfile`
+  or the bundle never sees it. `config.test.ts` checks the Vault's two.
+- World tests walk into every room in `FIXED_ROOM_DEFINITIONS` through its
+  street door, and the Vault's door stays locked by default, so its room
+  lives outside that table and rooms are built from
+  `fixedRoomDefinitionsFor({ vaultOpen })`. The default street is
+  byte-identical to before; the open one adds one draw call (the doorway's
+  light wash). Floating labels have no font-weight option.
+- A wallet's own error message could name the stand-in address, and D-069
+  logs failure messages. A Vault failure is handed to `noteOperationError`
+  by its kind alone, and the `vault.*` lines carry codes only.
+- `import('@strkworld/privacy')` in a test pulls starknet and the avnu SDK:
+  under a loaded full run it can exceed vitest's 5 s default, which made
+  `config.test.ts`'s xSTRK pin a timeout flake before this change. The pins
+  that import it now allow 30 s.
+
+**Seam heads-up (D-036).** `PrivacyOperations` gains `vaultPosition`,
+`prepareVaultSupply` and `prepareVaultRedeem`, `WalletCapability` an optional
+`supportsShadowAccounts`, and `PrivacyErrorKind` `shadow-accounts-unsupported`.
+Every hand-written `PrivacyOperations` needs the three methods, and every
+exhaustive record of the kinds (`KIND_SET`, the debug format's `KINDS`,
+`COPY.errors`) the new kind; the compiler refuses any that misses them. The
+fake's default capability now reports Wallet API 0.10.4 with shadow accounts.
+
+*Verified:* read-only `starknet_call` and `starknet_getClassAt` against
+`https://api.cartridge.gg/x/starknet/mainnet` at block 15,641,579 on
+2026-09-29 (the anonymizer's ABI, pool binding and view, the Primer
+derivation for three commitments, vSTRK's ABI, `asset`, `decimals`, `name`,
+`symbol` and `convert_to_assets`, the pool fee); `node_modules/starknet`
+10.8.0's `adapterV6` source. Headless: `vault.test.ts` (golden action shapes
+against the Vesu shadow-vault example, the derivation against the three view
+reads), `vault-operations.test.ts`, `backend-client.test.ts`,
+`session.test.ts`, `fake-vault.test.ts`, `forward-compatibility.test.ts`
+(the Vault through real `WalletAccountV6`, pinning the exact wire request),
+the backend's `vault.test.ts`, `privacy-grades.test.ts`,
+`scripts/check-invariants.test.mjs` (check 8 on the Vault routes),
+`config.test.ts`, `routes.test.ts`, `station-registry.test.ts`,
+`vault-machine.test.ts`, `VaultPanel.flow.test.tsx` under jsdom through the
+visit layer, `copy.test.ts`, `styles.test.ts`, `debug-logs.test.tsx`, and
+the World's street, door, room, session, presenter, engine and runtime
+tests. No wallet was opened, no proof or signature was produced, and no
+transaction was submitted: whether Ready runs shadow accounts end to end is
+the probe the lead runs next (D-077, `deploy/RAILWAY.md`). Nobody looked at
+the open Vault in a browser; that is the lead's check.
 
 ### 2026-09-29 — The pool counts its registrations in `ViewingKeySet` events; plaza stations open with E on the street (D-076)
 

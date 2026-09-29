@@ -46,6 +46,7 @@ disappear is accepted for v1 (D-019).
 | `src/panels/bank/` | The Bank: shield, unshield, private transfer |
 | `src/panels/bridge/` | The Bridge recovery/deposit view and explicit Bank shield handoff |
 | `src/panels/exchange/` | The Exchange: one reviewed private swap over a display-only six-asset catalog, and the degen floor's swap over its own list (D-067) |
+| `src/panels/vault/` | The Vault: Vesu lending from the player's STRK20 shadow account, supply and redeem of STRK, behind a fail-closed switch (D-077) |
 | `src/copy.ts` | Every player-facing string the shell owns |
 | `src/format.ts` | `bigint` ↔ display. No `number` anywhere near money |
 
@@ -204,6 +205,21 @@ listed token shows avnu's tags as chips; one this build's wallet policy does
 not admit for swap, or the demo cannot quote, is display only, never offered
 and never prepared. While it is the degen view the window carries
 `data-brand="degen"` and wears neon pink and cyan on navy.
+
+D-077 adds `vault:lending`, the Vault's counter (SUPPLY / REDEEM), and the
+same window in Menu Mode. It runs its own machine (`panels/vault/`) over the
+seam's Vault methods rather than intents: the shell names a mode, a STRK
+amount or "everything", and never a contract, selector or calldata. Opening
+it asks the wallet only which API it speaks; the position is read when the
+player asks, since the wallet derives a commitment for it. A wallet without
+shadow accounts reads "Your wallet doesn't support shadow accounts yet" and
+gets no form, and the connect flow does not move. The review shows the exact
+STRK, the pool fee, and leaves the network fee to the wallet, which submits
+the Vault itself; `ConfirmGate` carries the route's approved disclosure. The
+window wears Vesu's light palette (`.panel[data-building="vault"]`). The
+street door follows `vaultDoorOpen()`, the register plus this build's
+`VITE_STRK20_VAULT_*` policy, which `App` hands the World once as
+`vaultOpen`; locked, it is the facade it always was.
 
 The Bridge is a separate manual state machine, not a financial batch mode. It
 binds a signed 1Click quote to the active account, requires a public-shield

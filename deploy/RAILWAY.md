@@ -80,7 +80,8 @@ D-067).
 | `VITE_STRK20_TRANSFER_ENABLED` / `_MAX_INTENTS` / `_MAX_RELAY_FEE` / `_ALLOWED_TOKENS` | `true` / `1` / `10000000000000000000` / STRK |
 
 Leave `VITE_STRK20_STAKE_*` unset. With shield enabled, the Bridge's D-061
-reserve planner is on too.
+reserve planner is on too. Leave `VITE_STRK20_VAULT_*` unset too, except for
+the Vault probe below: unset, the Vault is the locked facade.
 
 ## After it deploys
 
@@ -98,6 +99,36 @@ reserve planner is on too.
    D-062's live evidence. If `railway logs` shows a line starting
    `[relay] AVNU_PAYMASTER_API_KEY is not set`, set the key before the
    unshield: that line names the routes that will be refused.
+
+## The Vault probe (D-077)
+
+The Vault lends STRK to Vesu from the player's STRK20 shadow account. Its
+first live use answers whether the wallet runs shadow accounts end to end.
+
+1. Set both browser variables and redeploy. They are compiled into the
+   bundle, so it takes a rebuild; the Dockerfile declares both as build
+   arguments. Nothing changes on the backend: the Vault is submitted by the
+   wallet, needs no avnu key and has no `BACKEND_ROUTE_*` block, and its two
+   public reads follow `BACKEND_GLOBAL_ENABLED`.
+
+   | Variable | Value |
+   |---|---|
+   | `VITE_STRK20_VAULT_ENABLED` | `true` |
+   | `VITE_STRK20_VAULT_ALLOWED_TOKENS` | `0x04718f5a0fc34cc1af16a1cdee98ffb20c31f5cd61d6ab07201858f4287c938d` (STRK, and nothing else) |
+
+2. Turn on the debug logs below as well, and open the site with `?debug=1`.
+3. With a funded account on a wallet that reports Wallet API 0.10.4, keep at
+   least the pool fee (6 STRK) plus the amount in the shielded balance. At
+   the Vault's counter: Show my position, supply a small amount, show the
+   position again, then redeem everything. Each move pays the pool fee from
+   the shielded balance.
+4. Read the `vault.*` lines: `vault.capability`, `vault.commitment` (ok or
+   the wallet's code), `vault.address` (resolved and deployed, never the
+   address), `vault.position`, `vault.prepare`, `vault.confirm` stages,
+   `vault.submit` (ok or the code) and `vault.receipt`. They carry no amount,
+   address, balance or hash.
+
+To lock it again, unset both variables and redeploy.
 
 ## Debug logs
 
@@ -143,8 +174,9 @@ wallet error code and message; connect-flow states; wallet-session phases,
 with the connected account; buildings entered and exited, stations activated
 and panels opened and closed; the Bank's mode switches, refused adds (reason
 code), prepares (intent kinds and count) and confirm stages, never an amount,
-balance, recipient or token (D-070); and failed `/api` calls, as path, status
-and error code only. It never sends wallet signatures, calldata or proof data, and
+balance, recipient or token (D-070); the Vault's probe steps, by yes/no,
+stage name and wallet code only (D-077); and failed `/api` calls, as path,
+status and error code only. It never sends wallet signatures, calldata or proof data, and
 long hex and base64 runs are redacted. It batches every 3 seconds and sends
 what is left by `sendBeacon` when the page closes.
 
