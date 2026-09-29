@@ -1,5 +1,22 @@
-import type { ChainHead, PoolEventsFilter, PoolEventsPage, PoolRpcPort, PoolStatsRpcPort } from './types.js';
+import type {
+  ChainHead,
+  PoolEventsFilter,
+  PoolEventsPage,
+  PoolRpcPort,
+  PoolStatsRpcPort,
+  ShadowAccountRead,
+  VaultPositionRead,
+  VaultRpcPort,
+} from './types.js';
 import { isFelt } from './validation.js';
+import {
+  GET_SHADOW_ACCOUNTS_SELECTOR,
+  MAX_REDEEM_SELECTOR,
+  MAX_WITHDRAW_SELECTOR,
+  PREVIEW_REDEEM_SELECTOR,
+  SHADOW_ACCOUNT_ANONYMIZER,
+  VESU_VSTRK,
+} from './vault.js';
 
 const FEE_SELECTOR = '0x3d323cd692ad43935b81ce230c47bfc57f69656249c5a33fe5223c17dd32ed2';
 const PUBLIC_KEY_SELECTOR = '0x1a35984e05126dbecb7c3bb9929e7dd9106d460c59b1633739a5c733a5fb13b';
@@ -28,7 +45,7 @@ export interface StarknetRpcOptions {
 }
 
 /** Minimal raw JSON-RPC port; it cannot relay arbitrary client calls. */
-export class StarknetRpcPoolPort implements PoolRpcPort, PoolStatsRpcPort {
+export class StarknetRpcPoolPort implements PoolRpcPort, PoolStatsRpcPort, VaultRpcPort {
   private id = 0;
   private readonly activeIds = new Set<number>();
   private readonly fetcher: FetchLike;
@@ -175,6 +192,60 @@ export class StarknetRpcPoolPort implements PoolRpcPort, PoolStatsRpcPort {
     return { number, hash };
   }
 
+  /**
+   * D-077: the shadow account at nonce 0 for a partial commitment, from the
+   * pinned anonymizer's own view: `get_shadow_accounts(partial, start = 0,
+   * end = 1, until_undeployed = false)`, a `Span<ShadowAccountInfo>` of
+   * `{ nonce: u64, address, is_deployed: bool }`. The view is the authority
+   * on the address; the browser cross-checks it before sending funds there.
+   * Anything but exactly one well-formed row for nonce 0 is refused.
+   */
+  async getShadowAccount(partialCommitment: string, signal?: AbortSignal): Promise<ShadowAccountRead> {
+    if (!isFelt(partialCommitment) || BigInt(partialCommitment) === 0n) {
+      throw new Error('Shadow-account commitment is invalid.');
+    }
+    const rows = await this.callContract(
+      SHADOW_ACCOUNT_ANONYMIZER,
+      GET_SHADOW_ACCOUNTS_SELECTOR,
+      [partialCommitment, '0x0', '0x1', '0x0'],
+      signal,
+    );
+    const [count, nonce, address, deployed] = rows;
+    if (
+      rows.length !== 4 ||
+      count === undefined || BigInt(count) !== 1n ||
+      nonce === undefined || BigInt(nonce) !== 0n ||
+      address === undefined || BigInt(address) === 0n || BigInt(address) >= CONTRACT_ADDRESS_BOUND ||
+      deployed === undefined || (BigInt(deployed) !== 0n && BigInt(deployed) !== 1n)
+    ) {
+      throw new Error('Starknet RPC returned an invalid shadow account.');
+    }
+    return { address, deployed: BigInt(deployed) === 1n };
+  }
+
+  /**
+   * D-077: `account`'s position in the pinned vSTRK vault. With no shares
+   * there is nothing to preview, so one read answers; otherwise the preview
+   * and both limits are read together. Every value is a u256 as two u128
+   * felts, and anything else is refused.
+   */
+  async getVaultPosition(account: string, signal?: AbortSignal): Promise<VaultPositionRead> {
+    if (!isFelt(account) || BigInt(account) === 0n) throw new Error('Vault account is invalid.');
+    const shares = u256Of(await this.callContract(VESU_VSTRK, BALANCE_OF_SELECTOR, [account], signal), 'vault shares');
+    if (shares === 0n) return { shares, assets: 0n, maxWithdraw: 0n, maxRedeem: 0n };
+    const [assets, maxWithdraw, maxRedeem] = await Promise.all([
+      this.callContract(VESU_VSTRK, PREVIEW_REDEEM_SELECTOR, u256Felts(shares), signal),
+      this.callContract(VESU_VSTRK, MAX_WITHDRAW_SELECTOR, [account], signal),
+      this.callContract(VESU_VSTRK, MAX_REDEEM_SELECTOR, [account], signal),
+    ]);
+    return {
+      shares,
+      assets: u256Of(assets, 'vault preview'),
+      maxWithdraw: u256Of(maxWithdraw, 'vault withdraw limit'),
+      maxRedeem: u256Of(maxRedeem, 'vault redeem limit'),
+    };
+  }
+
   async getBlockNumber(signal?: AbortSignal): Promise<number> {
     const value = await this.rpc('starknet_blockNumber', [], signal);
     if (typeof value !== 'number' || !Number.isSafeInteger(value) || value < 0) {
@@ -190,6 +261,24 @@ export class StarknetRpcPoolPort implements PoolRpcPort, PoolStatsRpcPort {
       calldata,
     }, 'latest'], signal);
     if (!Array.isArray(value) || value.some((item) => typeof item !== 'string')) {
+      throw new Error('Starknet RPC returned an invalid call result.');
+    }
+    return value as string[];
+  }
+
+  /** D-077: a `starknet_call` of a pinned Vault contract and selector; every returned item must be a felt. */
+  private async callContract(
+    contract: string,
+    selector: string,
+    calldata: string[],
+    signal?: AbortSignal,
+  ): Promise<string[]> {
+    const value = await this.rpc('starknet_call', [{
+      contract_address: contract,
+      entry_point_selector: selector,
+      calldata,
+    }, 'latest'], signal);
+    if (!Array.isArray(value) || value.some((item) => typeof item !== 'string' || !isFelt(item))) {
       throw new Error('Starknet RPC returned an invalid call result.');
     }
     return value as string[];
@@ -301,6 +390,21 @@ function feltToPositiveSafeInteger(value: string | undefined, label: string): nu
     throw new Error(`Starknet RPC returned an invalid ${label}.`);
   }
   return Number(parsed);
+}
+
+/** Starknet contract addresses lie below 2^251. */
+const CONTRACT_ADDRESS_BOUND = 1n << 251n;
+
+/** A u256 result: exactly two u128 felts, low first. */
+function u256Of(value: readonly string[], label: string): bigint {
+  if (value.length !== 2) throw new Error(`Starknet RPC returned an invalid ${label}.`);
+  return feltToU128(value[0], label) + (feltToU128(value[1], label) << 128n);
+}
+
+/** A u256 argument as Cairo serializes it: low 128 bits, then high. */
+function u256Felts(value: bigint): string[] {
+  const mask = (1n << 128n) - 1n;
+  return [`0x${(value & mask).toString(16)}`, `0x${(value >> 128n).toString(16)}`];
 }
 
 function feltToU128(value: string | undefined, label: string): bigint {

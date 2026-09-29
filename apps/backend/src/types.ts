@@ -183,6 +183,38 @@ export interface PoolEventsFilter {
  * The narrow chain reads the pool stats need. Every read targets the pool or
  * a pinned token; nothing a request carries reaches one.
  */
+/**
+ * The Vault's two public reads (D-077), each pinned to one contract: the
+ * canonical shadow-account anonymizer and Vesu's vSTRK (`vault.ts`). A caller
+ * supplies the value to look up, never a target or a selector.
+ */
+export interface VaultRpcPort {
+  /**
+   * `get_shadow_accounts(partial, 0, 1, false)` on the anonymizer: the one
+   * shadow account at nonce 0 for this partial commitment, and whether it is
+   * deployed yet. It is deployed lazily, on its first invoke.
+   */
+  getShadowAccount(partialCommitment: string, signal?: AbortSignal): Promise<ShadowAccountRead>;
+  /** `account`'s vSTRK position, in base units. */
+  getVaultPosition(account: string, signal?: AbortSignal): Promise<VaultPositionRead>;
+}
+
+export interface ShadowAccountRead {
+  readonly address: string;
+  readonly deployed: boolean;
+}
+
+export interface VaultPositionRead {
+  /** `balance_of(account)`: vSTRK shares. */
+  readonly shares: bigint;
+  /** `preview_redeem(shares)`: the STRK those shares redeem for now. Zero with no shares. */
+  readonly assets: bigint;
+  /** `max_withdraw(account)`: the most STRK the vault lets it withdraw now. */
+  readonly maxWithdraw: bigint;
+  /** `max_redeem(account)`: the most shares the vault lets it redeem now. */
+  readonly maxRedeem: bigint;
+}
+
 export interface PoolStatsRpcPort {
   getHead(signal?: AbortSignal): Promise<ChainHead>;
   /** The pool's own events whose first key is `key`, in `[fromBlock, toBlock]`. Block numbers only. */

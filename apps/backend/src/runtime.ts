@@ -20,7 +20,7 @@ import { createBackendFetchHandler } from './http.js';
 import { PoolStatsCache, isPoolStatsRpc } from './pool-stats.js';
 import { relayStartupNotice } from './relay.js';
 import { StarknetRpcPoolPort } from './starknet-rpc.js';
-import type { DegenCatalogPort, PaymasterPort, PoolRpcPort, PoolStatsPort, SwapPlannerPort } from './types.js';
+import type { DegenCatalogPort, PaymasterPort, PoolRpcPort, PoolStatsPort, SwapPlannerPort, VaultRpcPort } from './types.js';
 
 export interface BackendRuntimeOverrides {
   paymaster?: PaymasterPort;
@@ -188,11 +188,15 @@ function createBackendApi(
   // D-076: the plaza's stats read the same private RPC, in the background,
   // and only when the port offers their narrow reads.
   const poolStats = overrides.poolStats ?? (isPoolStatsRpc(rpc) ? new PoolStatsCache({ rpc }) : undefined);
+  // D-077: the Vault's two pinned reads use the same private RPC, when the
+  // port offers them.
+  const vault = isVaultRpc(rpc) ? rpc : undefined;
   return new BackendApi({
     config: parsed.backend,
     paymaster: overrides.paymaster ?? new AvnuPaymasterPort(parsed.paymaster),
     rpc,
     ...(poolStats ? { poolStats } : {}),
+    ...(vault ? { vault } : {}),
     swapPlanner: overrides.swapPlanner ?? new AvnuSwapPlanner(parsed.swapPlanner),
     ...(degen ? {
       degenCatalog: overrides.degenCatalog ?? new AvnuDegenCatalog({
@@ -204,6 +208,13 @@ function createBackendApi(
     // D-069: constructed either way; only BACKEND_DEBUG_LOGS_ENABLED=true routes to it.
     ...(overrides.debugLogs ? { debugLogs: overrides.debugLogs } : {}),
   });
+}
+
+/** Whether an RPC port offers the Vault's narrow reads (D-077). */
+function isVaultRpc(value: unknown): value is VaultRpcPort {
+  if (!value || typeof value !== 'object') return false;
+  const port = value as Partial<Record<keyof VaultRpcPort, unknown>>;
+  return typeof port.getShadowAccount === 'function' && typeof port.getVaultPosition === 'function';
 }
 
 type FetchHandler = (request: Request) => Promise<Response>;
