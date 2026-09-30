@@ -273,47 +273,91 @@ export const COPY = freezeCopy({
   },
 
   /**
-   * The Vault (D-077): Vesu lending from the player's STRK20 shadow account.
-   * What is public about it is the register's approved disclosure, shown at
-   * the commit point and never restated here; so nothing below says that
-   * anything is hidden or private (`copy.test.ts` checks). The fee line is
-   * how the product works, not a privacy disclosure.
+   * The Vault (D-077): Vesu lending from the player's STRK20 shadow account,
+   * in every token D-079 pins a vault for. What is public about it is the
+   * register's approved disclosure, shown at the commit point and never
+   * restated here; so nothing below says that anything is hidden or private
+   * (`copy.test.ts` checks). The fee lines are how the product works, not a
+   * privacy disclosure. `standIn` is the one exception, and only in the
+   * other direction: it says the stand-in address is public, as the
+   * disclosure does, and claims nothing hidden.
    */
   vault: {
     locked: 'The Vault — lending with Vesu. Not open yet.',
     eyebrow: 'Lending with Vesu',
-    intro: "Supply STRK from your pool balance to Vesu's STRK vault, and redeem it back into your pool balance whenever the vault can pay out.",
+    intro: "Supply from your pool balance to Vesu's vaults, and redeem back into your pool balance whenever a vault can pay out.",
     feeNote: 'Each supply and redeem pays the pool fee from your pool balance, so keep enough there to come back out.',
+    /**
+     * D-079: shown while a token other than STRK is chosen. The pool fee is
+     * set in STRK; the wallet picks the token that repays it, and wallets
+     * have taken it in STRK as well as in other tokens, so STRK is worth
+     * keeping on hand. No figure: the review shows the fee.
+     */
+    feeInStrk:
+      'The pool fee is set in STRK, whichever token you lend. Your wallet chooses which token in your pool balance pays it, and that can be STRK, so keep some STRK there too.',
     checking: 'Checking what your wallet supports…',
     recheck: 'Check again',
     supply: 'Supply',
     redeem: 'Redeem',
+    token: 'Token',
     amount: 'Amount',
     redeemAll: 'Redeem everything',
+    /** D-079: a build whose Vault list names no token the counter can describe. */
+    noToken: 'No token can be lent in this build yet.',
     position: {
-      title: 'Your Vault position',
-      unrequested: 'STRKWORLD reads your position from the chain only when you ask. Your wallet may ask you first.',
-      show: 'Show my position',
-      loading: 'Reading your position…',
-      again: 'Read it again',
+      title: 'Your Vault positions',
+      unrequested: 'STRKWORLD reads your positions from the chain only when you ask. Your wallet may ask you first.',
+      show: 'Show my positions',
+      loading: 'Reading your positions…',
+      again: 'Read my positions again',
+      /** D-079: the figures are one read, not a live feed. */
+      asOf: 'These figures are from your last read and do not update on their own.',
       worth: 'Worth now',
       redeemable: 'Redeemable now',
+      /** One token with nothing in its vault. */
+      none: 'Nothing supplied',
       empty: 'Nothing is in the Vault yet.',
-      changed: 'Your Vault position has changed. Read it again to see the new figures.',
+      changed: 'Your Vault positions have changed. Read them again to see the new figures.',
+    },
+    /**
+     * D-079: Vesu's current supply APY for each token, from Vesu's public
+     * API through STRKWORLD's backend, and always labelled as Vesu's figure.
+     * Written around the figure: "Supply APY 2.73%, Vesu's figure".
+     */
+    rates: {
+      label: 'Supply APY',
+      source: "Vesu's figure",
+      unavailable: "Vesu's rates can't be read right now.",
+    },
+    /**
+     * D-079: the stand-in address, once a read has resolved it. Written
+     * around the shortened address: "Your stand-in address, 0x2491…91ac9, is
+     * public: anyone can look up what it holds." The link is the player's
+     * choice, and the note says what opening it tells Voyager.
+     */
+    standIn: {
+      lead: 'Your stand-in address,',
+      tail: 'is public: anyone can look up what it holds.',
+      voyager: 'View it on Voyager',
+      voyagerNote: 'Opens a new tab. Voyager sees your IP address when it loads.',
     },
     review: {
       supply: 'You supply',
       redeem: 'You redeem',
       redeemAll: 'You redeem everything, about',
-      /** No figure is promised: Vesu fixes the STRK when the redeem runs. */
-      allNote: "Vesu fixes the exact STRK when the redeem runs, so the figure above is the vault's own preview.",
-      landsIn: 'The STRK lands in your pool balance.',
+      /** No figure is promised: Vesu fixes the amount when the redeem runs. */
+      allNote: "Vesu fixes the exact amount when the redeem runs, so the figure above is the vault's own preview.",
+      /** Written around the token's symbol: "The USDC lands in your pool balance." */
+      landsInLead: 'The',
+      landsInTail: 'lands in your pool balance.',
       /** The wallet submits the Vault and adds its own network fee, so STRKWORLD states none. */
       networkByWallet: 'Added and shown by your wallet when it asks',
+      /** D-079: beside the pool fee when the action moves a token other than STRK. */
+      feeTokenByWallet: 'Set in STRK. Your wallet chooses which token in your pool balance pays it.',
     },
     submitted: {
       succeeded: 'Done. The network confirmed it.',
-      pending: 'Sent. The network has not confirmed it yet, so read your position again in a moment.',
+      pending: 'Sent. The network has not confirmed it yet, so read your positions again in a moment.',
       reverted: 'This did not go through on the network, so nothing moved in the Vault.',
     },
   },

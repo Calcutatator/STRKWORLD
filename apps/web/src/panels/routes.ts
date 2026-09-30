@@ -3,7 +3,7 @@ import type { BuildingId } from '@strkworld/shared';
 import { PRIVACY_REGISTER, isDisclosureWaived, isRoutePlayable, type RouteGrade } from '../privacy/register.js';
 import { COPY } from '../copy.js';
 import { sameAddress } from '../format.js';
-import { STRK_TOKEN, detectRoutePolicy } from '../production/config.js';
+import { STRK_TOKEN, VAULT_TOKENS, detectRoutePolicy } from '../production/config.js';
 
 /**
  * What the shell is allowed to open, and what it must say when it does.
@@ -254,13 +254,22 @@ function isPolicyEnabledRoute(routeId: string, policy: WalletRoutePolicy | null)
   const kind = POLICY_KIND_BY_ROUTE[routeId];
   if (!kind) return true;
   if (!policy.enabledRoutes.includes(kind)) return false;
-  // The Vault lends STRK alone (D-077): its list must name it.
-  if (kind === 'vault') return admitsStrk(policy.allowedTokens.vault ?? []);
+  // The Vault lends the tokens its list names (D-079): a non-empty list, each
+  // one with a pinned vault. It needs no STRK on it, whatever the pool fee is
+  // set in: the wallet pays that from the pool balance.
+  if (kind === 'vault') return admitsVaultTokens(policy.allowedTokens.vault ?? []);
   return routeId !== ROUTE_BY_INTENT_KIND.shield || admitsStrk(policy.allowedTokens.shield);
 }
 
 function admitsStrk(tokens: readonly string[]): boolean {
   return Array.isArray(tokens) && tokens.some((token) => sameAddress(token, STRK_TOKEN));
+}
+
+/** A non-empty Vault list whose every token has a pinned vault, as the build's parser requires. */
+function admitsVaultTokens(tokens: readonly string[]): boolean {
+  return Array.isArray(tokens)
+    && tokens.length > 0
+    && tokens.every((token) => VAULT_TOKENS.some((pinned) => sameAddress(pinned, token)));
 }
 
 /** A route-specific "not switched on in this build" door, falling back to a generic line for an unmapped route id. */

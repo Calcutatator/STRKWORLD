@@ -70,6 +70,7 @@ export {
 
 // Test double. Safe to import from any lane — no network, no wallet, no chain.
 export {
+  DEMO_VAULT_STAND_IN,
   FakePrivacyOperations,
   type FakeConfig,
   type FakeDemoSwapRates,

@@ -319,14 +319,16 @@ describe('shell copy', () => {
     });
   });
 
-  describe('the Vault (D-077)', () => {
-    const vaultCopy = allCopyStrings(COPY.vault);
+  describe('the Vault (D-077, D-079)', () => {
+    const { standIn, ...rest } = COPY.vault;
+    const vaultCopy = allCopyStrings(rest);
 
-    it('names Vesu and says where the STRK comes from and lands', () => {
+    it('names Vesu and says where a supply comes from and a redeem lands, for any token', () => {
       expect(COPY.vault.eyebrow).toBe('Lending with Vesu');
-      expect(COPY.vault.intro).toMatch(/^Supply STRK from your pool balance to Vesu's STRK vault/);
+      expect(COPY.vault.intro).toMatch(/^Supply from your pool balance to Vesu's vaults/);
       expect(COPY.vault.intro).toMatch(/back into your pool balance/);
-      expect(COPY.vault.review.landsIn).toMatch(/lands in your pool balance/);
+      expect(COPY.vault.intro).not.toMatch(/STRK/);
+      expect(`${COPY.vault.review.landsInLead} USDC ${COPY.vault.review.landsInTail}`).toBe('The USDC lands in your pool balance.');
       // The pre-D-077 locked line is unchanged: a locked build reads exactly as before.
       expect(COPY.vault.locked).toBe('The Vault — lending with Vesu. Not open yet.');
     });
@@ -338,6 +340,32 @@ describe('shell copy', () => {
       for (const line of vaultCopy) expect(line, line).not.toMatch(claim);
     });
 
+    it('says the stand-in address is public, and nothing is hidden, in its one line (D-079)', () => {
+      const line = `${standIn.lead} 0x2491…91ac9, ${standIn.tail}`;
+      expect(line).toBe('Your stand-in address, 0x2491…91ac9, is public: anyone can look up what it holds.');
+      // The register's own words for it, "stand-in address", and no promise the other way.
+      const hiding = /\b(?:private\w*|privately|privacy|hidden|hides?|hiding|conceal\w*|secret\w*|anonym\w*|untraceable|unlinkable|invisible|confidential|safe|protect\w*)\b/i;
+      for (const text of allCopyStrings(standIn)) expect(text, text).not.toMatch(hiding);
+      expect(standIn.voyager).toBe('View it on Voyager');
+      // What opening the optional link tells Voyager, before it is opened.
+      expect(standIn.voyagerNote).toBe('Opens a new tab. Voyager sees your IP address when it loads.');
+    });
+
+    it('says the pool fee is set in STRK, and to keep some STRK, when another token is lent (D-079)', () => {
+      expect(COPY.vault.feeInStrk).toBe(
+        'The pool fee is set in STRK, whichever token you lend. Your wallet chooses which token in your pool balance pays it, and that can be STRK, so keep some STRK there too.',
+      );
+      expect(COPY.vault.review.feeTokenByWallet).toBe('Set in STRK. Your wallet chooses which token in your pool balance pays it.');
+      for (const line of [COPY.vault.feeInStrk, COPY.vault.review.feeTokenByWallet]) expect(line).not.toMatch(/\d/);
+    });
+
+    it('labels every rate as Vesu’s figure, and states none it cannot read (D-079)', () => {
+      expect(`${COPY.vault.rates.label} 2.73%, ${COPY.vault.rates.source}`).toBe("Supply APY 2.73%, Vesu's figure");
+      expect(COPY.vault.rates.unavailable).toBe("Vesu's rates can't be read right now.");
+      expect(COPY.vault.position.asOf).toMatch(/do not update on their own/);
+      expect(COPY.vault.position.again).toBe('Read my positions again');
+    });
+
     it('says plainly that each move pays the pool fee from the pool balance', () => {
       expect(COPY.vault.feeNote).toBe(
         'Each supply and redeem pays the pool fee from your pool balance, so keep enough there to come back out.',
@@ -347,7 +375,7 @@ describe('shell copy', () => {
 
     it('never promises a redeem figure the vault has not fixed, or a network fee STRKWORLD cannot state', () => {
       expect(COPY.vault.review.redeemAll).toMatch(/about$/);
-      expect(COPY.vault.review.allNote).toMatch(/Vesu fixes the exact STRK when the redeem runs/);
+      expect(COPY.vault.review.allNote).toMatch(/Vesu fixes the exact amount when the redeem runs/);
       expect(COPY.vault.review.networkByWallet).toMatch(/your wallet/);
       expect(COPY.vault.review.networkByWallet).not.toMatch(/\d/);
     });

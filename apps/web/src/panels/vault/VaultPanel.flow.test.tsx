@@ -2,26 +2,28 @@
 import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, describe, expect, it } from 'vitest';
-import { FakePrivacyOperations, type PrivacyOperations } from '@strkworld/privacy';
+import { DEMO_VAULT_STAND_IN, FakePrivacyOperations, type PrivacyOperations } from '@strkworld/privacy';
 import type { ShellEvents, WorldEvents } from '@strkworld/shared';
 import { createEventBus } from '../../bus/event-bus.js';
 import type { ConnectState } from '../../connect/connect-machine.js';
 import { COPY } from '../../copy.js';
+import { formatTokenAmount, shortenAddress } from '../../format.js';
 import { createDemoOperations } from '../../privacy/demo-operations.js';
 import { PrivacyProvider, usePrivacy } from '../../privacy/PrivacyProvider.js';
 import { PRIVACY_REGISTER } from '../../privacy/register.js';
 import { VisitLayer } from '../../visits/VisitLayer.js';
 
 /**
- * The Vault (D-077) as a player drives it through the real visit layer, in
- * demo: the World opens the door and the counter, and every step after that
- * is a click or a keystroke on the rendered window. The assertions read what
- * is on screen, and what reached the seam.
+ * The Vault (D-077, D-079) as a player drives it through the real visit
+ * layer, in demo: the World opens the door and the counter, and every step
+ * after that is a click or a keystroke on the rendered window. The
+ * assertions read what is on screen, and what reached the seam.
  */
 
 Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true });
 
 const STRK = '0x04718f5a0fc34cc1af16a1cdee98ffb20c31f5cd61d6ab07201858f4287c938d';
+const USDC = '0x033068f6539f8e6e6b131e6b2b814e6c34a5224bc66947c47dab9dfee93b35fb';
 const DISCLOSURE = PRIVACY_REGISTER.find((entry) => entry.route === 'vault.supply')!.disclosure!;
 const CONNECTED: ConnectState = {
   name: 'connected',
@@ -87,6 +89,15 @@ async function click(target: HTMLElement): Promise<void> {
   await settle();
 }
 
+async function choose(value: string): Promise<void> {
+  const select = container!.querySelector<HTMLSelectElement>('select[name="token"]')!;
+  const setValue = Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, 'value')!.set!;
+  await act(async () => {
+    setValue.call(select, value);
+    select.dispatchEvent(new Event('change', { bubbles: true }));
+  });
+}
+
 async function type(value: string): Promise<void> {
   const input = container!.querySelector<HTMLInputElement>('input[name="amount"]')!;
   const setValue = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!;
@@ -112,6 +123,7 @@ describe('the Vault counter, driven through the screen in demo (D-077)', () => {
       building: 'vault',
       stations: [{ station: 'vault:lending', label: 'SUPPLY / REDEEM', status: 'available' }],
     });
+    expect(vault().querySelector('.vault-stand-in')).toBeNull();
 
     // Vesu's window, what it does, and how fees work; the disclosure previewed.
     const panel = vault();
@@ -124,6 +136,12 @@ describe('the Vault counter, driven through the screen in demo (D-077)', () => {
     expect(panel.textContent).toContain(COPY.vault.position.unrequested);
     await click(button(COPY.vault.position.show));
     expect(vault().textContent).toContain(COPY.vault.position.empty);
+
+    // Every pinned token has a row; the demo states no rate, so none shows.
+    expect([...panel.querySelectorAll('.vault-market-symbol')].map((node) => node.textContent)).toEqual(['STRK', 'ETH', 'USDC', 'USDT', 'WBTC']);
+    expect(panel.querySelector('.vault-apy')).toBeNull();
+    // STRK is chosen first, so no note about the fee's token.
+    expect(panel.querySelector('.vault-fee-token')).toBeNull();
 
     // Supply 5 STRK.
     await type('5');
@@ -163,6 +181,89 @@ describe('the Vault counter, driven through the screen in demo (D-077)', () => {
     await click(button(COPY.flow.back));
     await click(button(COPY.vault.position.show));
     expect(vault().textContent).toContain(COPY.vault.position.empty);
+  });
+
+  it('lends USDC in its own units, says where the fee comes from, and shows the public stand-in address (D-079)', async () => {
+    // Node 25 exposes a method-less localStorage; the page's storage is jsdom's, on window.
+    const storages = [window.sessionStorage, window.localStorage].filter((storage) => typeof storage?.clear === 'function');
+    for (const storage of storages) storage.clear();
+    const operations = new FakePrivacyOperations({
+      balances: { [STRK]: 100n * 10n ** 18n, [USDC]: 100n * 10n ** 6n },
+      poolConfig: { noteMaturityBlocks: 0 },
+      vault: { rates: { [USDC]: { value: 30925508207480051n, decimals: 18 }, [STRK]: { value: 27351899613523568n, decimals: 18 } } },
+    });
+    await openCounter(operations);
+
+    // Vesu's rates, labelled as Vesu's, beside each token that has one.
+    const rows = () => [...vault().querySelectorAll('.vault-market')];
+    const row = (symbol: string) => rows().find((node) => node.getAttribute('data-token') === symbol)!;
+    expect(row('STRK').querySelector('.vault-apy')?.textContent).toBe("Supply APY 2.73%, Vesu's figure");
+    expect(row('USDC').querySelector('.vault-apy')?.textContent).toBe("Supply APY 3.09%, Vesu's figure");
+    expect(row('ETH').querySelector('.vault-apy')).toBeNull();
+
+    // Choose USDC: the amount is read in USDC, and the fee's token is explained.
+    await choose(USDC);
+    expect(vault().querySelector('.vault-fee-token')?.textContent).toBe(COPY.vault.feeInStrk);
+    expect(vault().textContent).toContain(`${COPY.vault.amount} (USDC)`);
+    await type('12.5');
+    await click(button(COPY.gameMode.reviewAction));
+    const review = vault().querySelector('.panel-review')!;
+    expect([...review.querySelectorAll('.vault-review dd')].map((dd) => dd.textContent)).toEqual(['12.5 USDC']);
+    // The pool fee is the pool's, in STRK, and the wallet picks what pays it.
+    expect([...review.querySelectorAll('.review-costs dd')].map((dd) => dd.textContent)[0]).toBe('6 STRK');
+    expect(review.querySelector('.vault-fee-token')?.textContent).toBe(COPY.vault.review.feeTokenByWallet);
+    expect([...review.querySelectorAll('.commit-disclosures li')].map((li) => li.textContent)).toEqual([DISCLOSURE]);
+    await click(review.querySelector<HTMLButtonElement>('button.confirm')!);
+    expect(operations.vaultSubmitted).toEqual([{ kind: 'supply', token: USDC, amount: 12_500_000n }]);
+
+    // Each position in its token's units: shares converted by the vault's own (demo) preview.
+    await click(button(COPY.flow.back));
+    await click(button(COPY.vault.position.show));
+    const shares = (12_500_000n * 50n) / 51n;
+    const worth = (shares * 51n) / 50n;
+    expect(row('USDC').querySelector('.vault-figures .balance-total')?.textContent).toBe(`${formatTokenAmount(worth, 6, 6)} USDC`);
+    expect(row('STRK').querySelector('.vault-market-none')?.textContent).toBe(COPY.vault.position.none);
+    expect(vault().querySelector('.vault-as-of')?.textContent).toBe(COPY.vault.position.asOf);
+    expect(button(COPY.vault.position.again)).toBeDefined();
+
+    // The stand-in address is public, and a link to it opens only on request, in a new tab, with no referrer.
+    const line = vault().querySelector('.vault-stand-in')!;
+    expect(line.textContent).toContain(
+      `${COPY.vault.standIn.lead} ${shortenAddress(DEMO_VAULT_STAND_IN)}, ${COPY.vault.standIn.tail}`,
+    );
+    const link = line.querySelector('a')!;
+    expect(link.textContent).toBe(COPY.vault.standIn.voyager);
+    expect(link.getAttribute('href')).toBe(`https://voyager.online/contract/${DEMO_VAULT_STAND_IN}`);
+    expect(link.getAttribute('target')).toBe('_blank');
+    expect(link.getAttribute('rel')).toBe('noopener noreferrer');
+    expect(link.getAttribute('referrerpolicy')).toBe('no-referrer');
+    expect(line.textContent).toContain(COPY.vault.standIn.voyagerNote);
+
+    // Never persisted.
+    expect(storages.length).toBeGreaterThan(0);
+    const stored = storages
+      .flatMap((storage) => Array.from({ length: storage.length }, (_, index) => `${storage.key(index)}=${storage.getItem(storage.key(index)!)}`))
+      .join(' ');
+    expect(stored).not.toContain('de70');
+  });
+
+  it('shows every position in its own token’s decimals and symbol, never the vault’s shares (D-079)', async () => {
+    const WBTC = '0x03fe2b97c1fd336e750087d68b9b867997fd64a2661ff3ca5a7c771641e8e7ac';
+    const ETH = '0x049d36570d4e46f48e99674bd3fcc84644ddd6b96f7c741b1562b82f9e004dc7';
+    const operations = new FakePrivacyOperations({
+      balances: { [STRK]: 100n * 10n ** 18n },
+      vault: { markets: { [WBTC]: { shares: 12_102n }, [ETH]: { shares: 5n * 10n ** 17n, liquidity: 10n ** 17n } } },
+    });
+    await openCounter(operations);
+    await click(button(COPY.vault.position.show));
+    const figures = (symbol: string) => [
+      ...vault().querySelectorAll(`.vault-market[data-token="${symbol}"] .vault-figures dd`),
+    ].map((dd) => dd.textContent);
+    // 12,102 demo shares redeem for 12,344 satoshis: eight decimals, WBTC's own.
+    expect(figures('WBTC')).toEqual(['0.00012344 WBTC', '0.00012344 WBTC']);
+    // Half an ETH of shares is worth 0.51 ETH; the demo vault pays out 0.1 now.
+    expect(figures('ETH')).toEqual(['0.51 ETH', '0.1 ETH']);
+    expect(vault().textContent).not.toContain(COPY.vault.position.empty);
   });
 
   it('tells a wallet without shadow accounts so plainly, offers no form, and keeps the city open', async () => {

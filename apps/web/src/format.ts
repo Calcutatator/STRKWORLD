@@ -80,6 +80,19 @@ export function formatStrkExact(amount: bigint): string {
 }
 
 /**
+ * A yearly rate stated as a fraction, `value / 10^decimals` (27351899613523568
+ * with 18 is 0.0273...), as a percentage with two decimal places, truncated
+ * like every shortened figure here: `"2.73%"`. D-079 shows Vesu's supply APY
+ * with it.
+ */
+export function formatRatePercent(value: bigint, decimals: number): string {
+  const hundredths = value <= 0n ? 0n : (value * 10_000n) / 10n ** BigInt(decimals);
+  const whole = hundredths / 100n;
+  const fraction = (hundredths % 100n).toString().padStart(2, '0');
+  return `${whole}.${fraction}%`;
+}
+
+/**
  * Shape check for a Starknet address typed by a player.
  *
  * Deliberately only a shape check: `packages/privacy` owns real validation and

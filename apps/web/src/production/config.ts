@@ -13,6 +13,23 @@ export const STRK_TOKEN = '0x04718f5a0fc34cc1af16a1cdee98ffb20c31f5cd61d6ab07201
 export const XSTRK_TOKEN = '0x028d709c875c0ceac3dce7065bec5328186dc89fe254527084d1689910954b0a';
 /** D-072: the most tokens a shield allowlist may name. A longer list is a mistake, not a policy. */
 export const MAX_SHIELD_TOKENS = 16;
+/**
+ * D-079: the tokens the Vault can lend, in order, each with a Vesu Prime
+ * vault pinned in `packages/privacy/src/vault.ts` (`VAULT_MARKETS`): STRK,
+ * ETH, Circle's USDC, USDT and WBTC. Inlined like STRK so this file keeps
+ * type-only privacy imports; `config.test.ts` pins it to that map, token for
+ * token. A Vault allowlist may name only these, each at most once, so this
+ * list's length is also its bound.
+ */
+export const VAULT_TOKENS: readonly string[] = Object.freeze([
+  STRK_TOKEN,
+  '0x049d36570d4e46f48e99674bd3fcc84644ddd6b96f7c741b1562b82f9e004dc7',
+  '0x033068f6539f8e6e6b131e6b2b814e6c34a5224bc66947c47dab9dfee93b35fb',
+  '0x068f5c6a61780768455de69077e07e89787839bf8166decfbf92b645209c0fb8',
+  '0x03fe2b97c1fd336e750087d68b9b867997fd64a2661ff3ca5a7c771641e8e7ac',
+]);
+/** D-079: the most tokens a Vault allowlist may name: one per pinned vault. */
+export const MAX_VAULT_TOKENS = VAULT_TOKENS.length;
 /** Starknet contract addresses lie below 2^251, inside the field. */
 const CONTRACT_ADDRESS_BOUND = 1n << 251n;
 
@@ -143,7 +160,8 @@ export function parseRoutePolicy(environment: WalletEnvironment): WalletSessionO
       // Present only when staking is enabled: the adapter reads an absent list
       // as "nothing admitted" and requires a present one to name both tokens.
       ...(stake ? { stake: Object.freeze(stake.allowedTokens) } : {}),
-      // D-077: present only when the Vault is enabled, and then STRK alone.
+      // D-077: present only when the Vault is enabled; since D-079 any tokens
+      // with a pinned vault, in the order given.
       ...(vault ? { vault: Object.freeze(vault.allowedTokens) } : {}),
     }),
   });
@@ -200,17 +218,34 @@ function parseStakeRoute(environment: WalletEnvironment): { maxRelayFee: bigint;
 /**
  * D-077: the Vault, Vesu lending from the player's STRK20 shadow account. The
  * wallet proves and submits it (no relay, so no relay-fee ceiling and no
- * backend route group), and it lends STRK alone. It needs
- * `VITE_STRK20_VAULT_ENABLED=true` and `VITE_STRK20_VAULT_ALLOWED_TOKENS`
- * naming canonical STRK and nothing else. Missing, malformed, partial or
- * disabled values keep the Vault locked, as D-007's facade, without touching
- * any other route; enabling it enables nothing else.
+ * backend route group). It needs `VITE_STRK20_VAULT_ENABLED=true` and a
+ * `VITE_STRK20_VAULT_ALLOWED_TOKENS` list, widened by D-079 from STRK alone
+ * the way D-072 widened shield's: one to `MAX_VAULT_TOKENS` canonical token
+ * addresses (`0x` and 1 to 64 hex digits), no two with the same field value,
+ * every one in `VAULT_TOKENS`, in the order given. A missing, zero,
+ * malformed, repeated, oversized, unpinned, partial or disabled value keeps
+ * the whole Vault locked, as D-007's facade, without touching any other
+ * route; enabling it enables nothing else.
  */
 function parseVaultRoute(environment: WalletEnvironment): { allowedTokens: string[] } | null {
   if (environment.VITE_STRK20_VAULT_ENABLED !== 'true') return null;
   const allowedTokens = parseAllowedTokens(environment.VITE_STRK20_VAULT_ALLOWED_TOKENS);
-  if (allowedTokens === null || !isStrkOnly(allowedTokens)) return null;
+  if (allowedTokens === null || !isVaultTokenList(allowedTokens)) return null;
   return { allowedTokens };
+}
+
+/**
+ * One to `MAX_VAULT_TOKENS` tokens, each one the Vault pins a vault for.
+ * `parseAllowedTokens` has already refused a malformed entry, zero and a
+ * repeat by field value.
+ */
+function isVaultTokenList(tokens: readonly string[]): boolean {
+  if (tokens.length === 0 || tokens.length > MAX_VAULT_TOKENS) return false;
+  try {
+    return tokens.every((token) => VAULT_TOKENS.some((pinned) => BigInt(pinned) === BigInt(token)));
+  } catch {
+    return false;
+  }
 }
 
 /** Exactly STRK and xSTRK, compared by field-element value. */

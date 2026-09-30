@@ -2198,6 +2198,71 @@ button[data-locked="true"] {
   color: var(--ui-text);
 }
 
+/* D-079: one row per token the counter offers, Vesu's rate beside its
+ * symbol and the position under it once read. */
+.panel[data-building="vault"] .vault-markets {
+  display: grid;
+  gap: 0.5rem;
+  margin: 0 0 0.75rem;
+  padding: 0;
+  list-style: none;
+}
+
+.panel[data-building="vault"] .vault-market {
+  padding: 0.55rem 0.75rem;
+  border: 1px solid var(--ui-line);
+  border-radius: var(--ui-radius-inner);
+  background: var(--ui-surface-sunken);
+}
+
+.panel[data-building="vault"] .vault-market-head {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.25rem 0.75rem;
+  align-items: baseline;
+  justify-content: space-between;
+  margin: 0;
+}
+
+.panel[data-building="vault"] .vault-market-symbol {
+  font-weight: 600;
+}
+
+.panel[data-building="vault"] :is(.vault-apy, .vault-market-none, .vault-as-of, .vault-rates-note, .vault-stand-in-note) {
+  color: var(--ui-text-dim);
+  font-size: 0.9rem;
+}
+
+.panel[data-building="vault"] .vault-market-none {
+  margin: 0.35rem 0 0;
+}
+
+.panel[data-building="vault"] .vault-market > .vault-figures {
+  margin: 0.4rem 0 0;
+}
+
+.panel[data-building="vault"] :is(.vault-as-of, .vault-rates-note) {
+  margin: 0 0 0.6rem;
+}
+
+/* The stand-in address is public, and this line says so (D-079): quiet
+ * product information, never styled as the register's disclosure. */
+.panel[data-building="vault"] .vault-stand-in {
+  margin: 0.75rem 0 0;
+  font-size: 0.92rem;
+  overflow-wrap: anywhere;
+}
+
+.panel[data-building="vault"] .vault-stand-in > a {
+  color: var(--ui-accent);
+  font-weight: 600;
+}
+
+.panel[data-building="vault"] .vault-stand-in-note {
+  display: block;
+  margin-top: 0.2rem;
+}
+
 @media (forced-colors: active) {
   .panel[data-building="vault"] .vault-eyebrow {
     border: 1px solid CanvasText;

@@ -476,7 +476,7 @@ describe('the entry gate deposit route (D-072)', () => {
   });
 });
 
-describe('the Vault switch (D-077)', () => {
+describe('the Vault switch (D-077, D-079)', () => {
   const STRK = '0x04718f5a0fc34cc1af16a1cdee98ffb20c31f5cd61d6ab07201858f4287c938d';
   const denyAll: WalletRoutePolicy = {
     maxIntents: 0,
@@ -507,10 +507,22 @@ describe('the Vault switch (D-077)', () => {
     expect(vaultDoorOpen(PRIVACY_REGISTER, vaultOn)).toBe(true);
   });
 
-  it('keeps the Vault shut when its list does not name STRK', () => {
-    const wrongToken: WalletRoutePolicy = { ...vaultOn, allowedTokens: { ...denyAll.allowedTokens, vault: ['0x123'] } };
+  it('keeps the Vault shut when its list is missing, empty, or names a token with no pinned vault (D-079)', () => {
+    const list = (vault: string[]): WalletRoutePolicy => ({ ...vaultOn, allowedTokens: { ...denyAll.allowedTokens, vault } });
     const noList: WalletRoutePolicy = { ...vaultOn, allowedTokens: denyAll.allowedTokens };
-    for (const policy of [wrongToken, noList]) expect(vaultDoorOpen(PRIVACY_REGISTER, policy)).toBe(false);
+    const STRKBTC = '0x0787150e306e6eae6e3f79dea881770e8bbff2c1b8eb490f969669ee945b3135';
+    for (const policy of [list(['0x123']), list([]), list([STRK, STRKBTC]), noList]) {
+      expect(vaultDoorOpen(PRIVACY_REGISTER, policy)).toBe(false);
+    }
+  });
+
+  it('opens the Vault for any list of pinned tokens, with or without STRK (D-079)', () => {
+    const USDC = '0x033068f6539f8e6e6b131e6b2b814e6c34a5224bc66947c47dab9dfee93b35fb';
+    const WBTC = '0x03fe2b97c1fd336e750087d68b9b867997fd64a2661ff3ca5a7c771641e8e7ac';
+    for (const vault of [[USDC], [WBTC, STRK], [STRK, USDC, WBTC]]) {
+      const policy: WalletRoutePolicy = { ...vaultOn, allowedTokens: { ...denyAll.allowedTokens, vault } };
+      expect(vaultDoorOpen(PRIVACY_REGISTER, policy), vault.join()).toBe(true);
+    }
   });
 
   it('opens the Vault outside production, where the register alone decides and the demo runs it', () => {
