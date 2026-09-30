@@ -398,6 +398,27 @@ with a column change (D-060). A pillar taller than 14 bursts the whole board
 tile-only broadcast, sent ahead of that state, lets every client throw the
 blocks it still draws.
 
+The football (D-078) is the third, at the road's other end, and follows the
+sandbox's shape. The lobby room is the authority for one ball, the score and
+the phase of play, a shared `football` entry of whole numbers dated by the
+simulation tick, which it steps on a fixed 40 ms tick only while someone on
+the street is on or near the pitch. Its `football:kick` verb carries no
+payload at all, since the room already holds the kicker's position and the
+ball's, and `football:goal` names a side. The Shell's football controller
+adopts each lobby client and exposes one stable World-owned `FootballChannel`;
+with no lobby connection it runs the same pure rules
+(`@strkworld/lobby/football`, which imports only `@strkworld/shared`) on the
+same tick. Either way one presenter carries the authority's latest ball on to
+the present through those rules and answers the local player's own kick at
+once, so the World only draws the frame it is handed, shows "E · KICK" and
+sends the kick; it never simulates the ball or imports the lobby. Nothing is
+counted per player.
+
+The map is one zero-based tile grid. D-078 widened it west by the pitch
+square and moved the street east behind `STREET_ORIGIN_X` rather than giving
+the grid a negative origin, so every reader of the grid is unchanged and the
+street's layout is one constant away from D-060's numbers.
+
 Remote peers are retained state rather than one-shot commands. D-038 gives
 them a separate World-owned replaying source so a snapshot cannot be lost
 while the World boots or remounts. The Shell maps `LobbyClient.onPeers()` into

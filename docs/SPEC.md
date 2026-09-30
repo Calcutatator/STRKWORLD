@@ -47,7 +47,7 @@ The binding constraints are economic and procedural, not architectural: wallet p
 | Code target | `WalletWithStarknetFeatures` | Not a specific wallet. Web wallets register on the same feature surface, so email/social lights up with no code change when one ships |
 | Network | Mainnet from day one | Real funds. No testnet phase |
 | Game engine | Three.js 0.186 + tile-authored map data + React overlay | D-059. Gameplay stays in 2D pixel space; the renderer is presentation only. Any future Tiled export still embeds tilesets (D-008) |
-| Multiplayer | Colyseus, presence only | Street lobby. Never sees an account address |
+| Multiplayer | Colyseus, presence only | Street lobby: positions, D-060's anonymous blocks and D-078's one ball. Never sees an account address |
 | Gas | `strk20PrepareInvoke` + sponsor submit | Requires a small backend to hold the paymaster key |
 
 ### Why target the interface, not the wallet
@@ -176,6 +176,7 @@ an arbitrary contract, selector or calldata blob.
 | Vault | The canonical STRK20 `ShadowAccountAnonymizer`, from the player's shadow account (D-077) | Locked unless a build switches it on (`VITE_STRK20_VAULT_*`); its stand-in address and position are public, and only the link to the wallet is hidden |
 | Bridge | Public funding edge, followed by a separate shield | Active, but never presented as a private app interaction |
 | Privacy Plaza | None: no money moves, and no route is registered (D-076) | Active; its monument shows public pool-wide aggregates and its table a client-only shell game |
+| Football pitch | None: no money moves, no route, no station (D-078) | Active; one shared ball the lobby simulates, kicked with E, and nothing counted per player |
 
 Every active financial route allowlists exact contracts, selectors and tokens;
 validates action limits, quote expiry, minimum output/slippage and fee ceilings;
@@ -394,7 +395,7 @@ while the pool is small (D-015, D-019).
 ## 7. What the game builds
 
 - **The game itself** — Three.js canvas over a tile-authored world (D-059; Tiled-shaped map data, embedded tilesets per D-008 if exported), React overlay, PWA shell. STRK20 provides zero game primitives.
-- **Colyseus lobby** — presence and position only. Never sees an address.
+- **Colyseus lobby** — presence and position only, plus two anonymous shared toys: D-060's block sandbox at the road's east end and D-078's football at its west end, whose kick carries no payload. Never sees an address.
 - **The Bridge funding edge** — NEAR Intents 1Click orchestration in `packages/bridge`, deposit-only, public by design, followed by a prompted shield (D-009, D-012).
 - **Starknet RPC** for public reads — receipts, adapter contract reads. Not `publicProvider()` in production.
 - **Backend** — paymaster key custody, privacy-safe RPC reads, route validation

@@ -25,7 +25,8 @@ export type BuildingId =
    */
   | 'vault'
   /**
-   * D-076: the Privacy Plaza, an open square south of the road's west end.
+   * D-076: the Privacy Plaza, an open square south of the street's west end,
+   * beside D-078's football pitch.
    * Not a building: no door, no room, no route and no money. It is an id only
    * so its two stations share the station vocabulary (`plaza:monument`,
    * `plaza:shells`), and `BUILDINGS` below leaves it out.

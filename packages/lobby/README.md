@@ -2,9 +2,10 @@
 
 **Multiplayer presence. Deliberately the dumbest package in the repo.**
 
-A Colyseus room that broadcasts where avatars are, and holds the shared block
-sandbox at the end of the road (D-060). That is all it does, and that is all it
-is permitted to do.
+A Colyseus room that broadcasts where avatars are, holds the shared block
+sandbox at the east end of the road (D-060) and simulates the one football on
+the pitch at its west end (D-078). That is all it does, and that is all it is
+permitted to do.
 
 ---
 
@@ -32,7 +33,11 @@ side channel. So the constraint is structural rather than a matter of care:
   by tile. No column, drop, burst or other sandbox message names a player; the only
   per-player sandbox field is `carrying` on that player's own presence entry.
   That is weaker than "unattributable" — see "What the sandbox reveals" below.
-- No persistence. When the room empties, nothing remains — blocks included.
+- The football (D-078) is one ball, the score and the phase of play. The kick
+  carries **no payload**, the goal broadcast names a side, and nothing counts
+  a goal, a kick or a touch per player: there are no player statistics.
+- No persistence. When the room empties, nothing remains — blocks and score
+  included.
 
 If a feature seems to need an address in the lobby, it needs a different
 design. Raise it as a decision entry before writing code.
@@ -47,6 +52,10 @@ design. Raise it as a decision entry before writing code.
 - The block sandbox authority (D-060): the rules, the room's copy of the
   stacks, the sky-drop spawner — and the same pure rules for the Shell's solo
   play at `@strkworld/lobby/sandbox`
+- The football authority (D-078): the physics and match rules, the room's copy
+  of the ball, its 40 ms step while anyone is near the pitch — and the same
+  pure rules for the Shell's solo play and drawn ball at
+  `@strkworld/lobby/football`
 
 ## What this must never do
 
@@ -248,6 +257,33 @@ isolated behind a fixed content-free diagnostic).
   integer palette index, else null. It is presence data, so it is subject to
   interest management like the rest of the entry.
 
+### The football (D-078)
+
+`football()` returns a frozen `FootballSnapshot` — the ball's position and
+velocity in World pixels, the simulation tick they are from, the score and
+the phase (`live`, `goal`, `full-time`) — or null before a valid one has
+arrived and after a disconnect; the same object while nothing changes, and
+readable while suspended. `onFootball` replays it and then delivers each
+change; `onGoal` relays goal cues, `{ side }` and nothing else, frozen, with
+no replay, delivered before the snapshot that raises the score. Everything is
+validated and fails closed: a tick that is not a whole uint32, a ball off the
+pitch square or faster than the rules allow, a score past 5 or a phase byte
+the rules do not have is no ball at all.
+
+- **`kick()`** sends `football:kick` with no payload: the room kicks from the
+  position and facing it holds. It returns false unless connected (not
+  suspended) and outside the client floor, `FOOTBALL_CLIENT_KICK_INTERVAL_MS`
+  (300 ms): an early kick is **dropped, not held**, because a late kick is a
+  different kick. A newer position still waiting on the move floor goes
+  first, so the room judges the kick from where the player stands now. The
+  room applies its own rules (reach 1.3 tiles, live play) and its 250 ms
+  floor, refused kicks included, and answers only through the ball.
+- **The room steps the ball** on a fixed 40 ms tick, in four substeps, only
+  while someone on the street is on the pitch or within 15 tiles of its gate;
+  otherwise the ball comes to rest and the step timer stops. The entry is
+  written only when the ball, score or phase changed, so a still ball costs no
+  patches, and its tick dates each sample for the client's clock.
+
 ### Solo play: `@strkworld/lobby/sandbox`
 
 ```ts
@@ -352,21 +388,27 @@ address. Nothing outside those ranges reaches an entry — and the allowlist a
 sprite is checked against is trusted server config, never a list the joining
 client supplied.
 
-Beside the interest-filtered `peers` map, the root holds one more field,
-`sandbox`: a map keyed `"x,y"` of `{ x: uint8, y: uint8, colours: uint8[] }`,
+Beside the interest-filtered `peers` map, the root holds two more fields.
+`sandbox` is a map keyed `"x,y"` of `{ x: uint8, y: uint8, colours: uint8[] }`,
 one entry per non-empty stack, colours from the ground up. It is deliberately
 **not** view-filtered — everyone shares one sandbox, and at most 900 blocks it
-is small. It names tiles and colours and nothing else.
+is small. It names tiles and colours and nothing else. `football` (D-078) is
+one entry, shared the same way: `tick: uint32`, the ball's `x`, `y`, `vx`,
+`vy` as `int32` in 64ths of a pixel (and of a pixel a second), `west`, `east`
+and `phase` as `uint8`. Whole numbers throughout, written only by the room
+from its own simulation.
 
-The client-to-server vocabulary is five verbs — `move`, `suspend`, `resume`,
-`sandbox:pick` and `sandbox:place` (each `{ x, y }`, an integer sandbox tile) —
-and a join payload. There is no message through which a client could tell the
-room anything else, because there is no field for it. The server sends three
-messages: `welcome` (`{ gameId }`, the recipient's own id), `sandbox:drop`
-(`{ x, y }`, a sky-drop animation hint broadcast to every client after the
-patch that adds the block) and `sandbox:burst` (`{ x, y }`, D-071: the column
-that burst the sandbox, broadcast to every client at once, before the patch
-that removes the blocks).
+The client-to-server vocabulary is six verbs — `move`, `suspend`, `resume`,
+`sandbox:pick` and `sandbox:place` (each `{ x, y }`, an integer sandbox tile),
+and `football:kick`, whose payload is never read — and a join payload. There is
+no message through which a client could tell the room anything else, because
+there is no field for it. The server sends four messages: `welcome`
+(`{ gameId }`, the recipient's own id), `sandbox:drop` (`{ x, y }`, a sky-drop
+animation hint broadcast to every client after the patch that adds the block),
+`sandbox:burst` (`{ x, y }`, D-071: the column that burst the sandbox,
+broadcast to every client at once, before the patch that removes the blocks)
+and `football:goal` (`{ side }`, D-078: `west` or `east`, broadcast at once,
+before the patch that raises the score).
 
 ---
 
@@ -397,6 +439,12 @@ The floor survives suspend/resume, like the move floor. The client holds itself
 to 200 ms — holding an early action rather than sending it into the server's
 floor — so a Shell at most sends 20 moves plus 5 sandbox actions a second, well
 under the hard ceiling of 40, which still disconnects a flood of any kind.
+
+**Kicks** (D-078). At most one accepted kick per session per 250 ms
+(`footballKickIntervalMs`, which an operator may set only within 50–300 ms);
+a kick the rules refuse still consumes it. The client holds itself to 300 ms
+and drops an early kick, so moves, sandbox actions and kicks together stay
+at most 20 + 5 + 3.3 a second.
 
 **Sky drops.** The room keeps one drop pending while at least one session is on
 the street (none while everyone is suspended or gone): every 1.5 s until the

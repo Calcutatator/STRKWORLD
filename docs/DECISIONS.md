@@ -245,7 +245,7 @@ agent building the wrong thing. `WorldEvents` and `ShellEvents` in
 
 ## D-011 — `packages/shared` is a frozen seam
 
-**2026-08-16 · Accepted · seam extended with the Privacy Plaza's `plaza` building id, `plaza:nearby` and `plaza:stats` by D-076**
+**2026-08-16 · Accepted · seam extended with the Privacy Plaza's `plaza` building id, `plaza:nearby` and `plaza:stats` by D-076 · with the football pitch's constants and types, and `SANDBOX_AREA` laid out from `STREET_ORIGIN_X`, by D-078**
 
 **Context.** Four lanes work in parallel. `packages/shared` carries the event
 bus contract, the lobby schema and the building registry — a change there
@@ -2594,7 +2594,8 @@ checks after the headless state and lifecycle regressions pass.
 
 **2026-09-27 · Accepted by the user · supersedes D-044's placeholder art base ·
 partially supersedes D-049 and D-052 for in-World avatars · amends the Phaser
-mechanism named in D-008, D-030 and D-039**
+mechanism named in D-008, D-030 and D-039 · the street and its backdrop move
+east, unchanged relative to each other, for the football pitch by D-078**
 
 **Context.** The user asked for STRKWORLD to become a 3D-rendered, simple game
 world you can walk around in, entirely in the browser, built on the same
@@ -2666,7 +2667,9 @@ first art pass.
 constants and types, `PresenceState.carrying`) and D-038 (remote peers carry a
 block colour) · adds anonymous lobby state under invariant 2 · amended by D-071
 (a pillar taller than 15 bursts the sandbox, announced by a second sandbox
-broadcast)**
+broadcast) · amended by D-078 (a football pitch square of the same size takes
+the road's west end, and the street and the sandbox move east with
+`STREET_ORIGIN_X`: `SANDBOX_AREA` is x 83-110)**
 
 **Context.** The user asked for a simple sandbox area at the end of the road:
 blocks drop from the sky at random; `E` picks one up and `E` puts it down;
@@ -3032,7 +3035,7 @@ routes fail at the fee build and the fix is to set one: nothing else changes.
 
 ## D-069 — Opt-in debug logs for test deployments
 
-**2026-09-28 · Accepted by the user · narrows D-014's "logs nothing per-request" for opted-in test deployments only · `vault.*` probe events added by D-077**
+**2026-09-28 · Accepted by the user · narrows D-014's "logs nothing per-request" for opted-in test deployments only · `vault.*` probe events added by D-077 · `football.*` events added by D-078**
 
 **Context.** The lead tests the live Railway deployment on a separate laptop
 with a funded wallet, and what fails there has to reach the developer without
@@ -3526,7 +3529,7 @@ avoidance rules are unchanged.
 
 ## D-076 — The Privacy Plaza at the west end
 
-**2026-09-29 · Accepted by the user · extends D-011's shared seam with a non-financial `plaza` building id, `plaza:nearby` and `plaza:stats` · extends D-033's stations to the street, used with E, outside any building · adds a background public-aggregate scan to D-014's backend, which still logs nothing per request · registers no route (D-020)**
+**2026-09-29 · Accepted by the user · extends D-011's shared seam with a non-financial `plaza` building id, `plaza:nearby` and `plaza:stats` · extends D-033's stations to the street, used with E, outside any building · adds a background public-aggregate scan to D-014's backend, which still logs nothing per request · registers no route (D-020) · moves east with the street, unchanged relative to it, beside D-078's football pitch**
 
 **Context.** The lead: "The left end of the road, opposite the sandbox, has
 nothing to do." Offered options, the lead picked "Privacy Plaza — a no-money
@@ -3791,3 +3794,137 @@ since `VITE_` values compile into the bundle, and nothing on the backend.
 Until the probe succeeds this route is source-derived under D-028, and a
 wallet that fails it keeps the Vault's counter open with the
 unsupported-wallet line rather than locking the door.
+
+---
+
+## D-078 — A football pitch at the west end of the road
+
+**2026-09-29 · Accepted by the user · amends D-060 (the district widens west by a second square of the sandbox's size, and the sandbox moves east with the street) · extends D-011's shared seam with `PITCH_AREA`, `STREET_ORIGIN_X`, the field, goal and ball constants and the football types · moves D-076's Privacy Plaza and D-059's street and backdrop east with the street, unchanged relative to it · adds anonymous football state, one payload-free verb and one broadcast to the lobby under invariant 2 · adds `football.*` events to D-069**
+
+**Context.** The lead: "My ask was to add an activity on the left end of the
+road in the same position as the sandbox but parallel. The sandbox is on the
+end of the road on the right and the activity I want is on the end of the
+road on the left … I want it to take up as much space as the sandbox."
+Offered options, the lead picked "Football pitch: kick one shared ball into
+two goals for quick drop-in matches." The road's west end was open, closed by
+a barrier at x -0.6 with the backdrop's houses along the road beyond it, and
+the Privacy Plaza (D-076) filled the street's first eleven columns south of
+the road. The street grid was a zero-based array read by collision, the door
+triggers, every builder and the lobby's sandbox rules; D-060's sandbox tiles
+travel as `uint8`, and presence positions are clamped to ±8192 px.
+
+**Decision.**
+
+- **The map widens west.** A 28×28 square (`PITCH_AREA`, tiles x 0-27,
+  y 0-27) takes the road's west end, mirroring the sandbox at its east end,
+  with a fence one tile east of it (x 28) open at a gate in line with the road
+  and both pavements (rows 11-18), as the sandbox's wall and gate are. The
+  street moved east rather than the map growing a negative-x region: every
+  street column is laid out from one constant, `STREET_ORIGIN_X` (29, the
+  column past the fence), so the buildings, doors, signs, spawn, Studio path,
+  Privacy Plaza, Exchange roof and sandbox (`SANDBOX_AREA` now x 83-110,
+  `SANDBOX_ENTRANCE` x 83-85) keep their places relative to one another and
+  the grid stays a zero-based array. A negative origin would have touched
+  every reader of the grid and D-060's `uint8` tiles; the shift touches
+  literal coordinates only, and the district is 111 tiles wide. The
+  backdrop is laid out from the street too, so everything the street sees is
+  where it was; the road runs on west past the square, closed by its barrier
+  where the square interrupts it, lined by the houses, lamps and trees that
+  lined it. Coordinate tests count from `STREET_ORIGIN_X` (the lobby's keep
+  D-060's numbers as `S(n)`) rather than being loosened.
+- **The pitch.** Four new tile kinds keep collision tile-based: walkable
+  `turf` (the field, x 3-24, y 7-22, its long axis east-west so the
+  north-facing camera sees it as a broadcast does) and `walkway` (the paving
+  round it), solid `footing` under every fixture, and the solid `railing`
+  fence. The field has touchlines, goal lines, a halfway line, a centre circle
+  and spot, penalty and goal areas, penalty spots and arcs and corner arcs,
+  mown in stripes, inside knee-low boards the ball comes back off. A white
+  goal with a net stands at each end, 4 tiles between the posts and 1 deep,
+  its net and posts on solid footing and its mouth open from the field; the
+  gate opens onto the walkway, clear of both. A concrete stand fills the north
+  side to the square's edge, seated in West's blue and East's red under a
+  roof, with the scoreboard on its roof: a brand plate in the facade signs'
+  machinery reading "WEST 0 – 0 EAST". Low bleachers stand either side of an
+  aisle on the south side, nearest the camera; a floodlight stands in each
+  corner, a green steel fence round the square, and the gate's posts carry a
+  "FOOTBALL" board and fade like the sandbox gate's superstructure when they
+  hide the player. It is `three/pitch-builder.ts`, in the street's merged
+  bins: draw calls 75 to 81 (four meshes and two signs), and the street's
+  ground from 87,837 to 103,393 triangles.
+- **One ball, server-authoritative.** `@strkworld/lobby/football` holds the
+  pure rules, shared by the room, the Shell's solo play and the ball the
+  Shell draws. A fixed 40 ms step (25 a second) in four substeps, so the
+  fastest ball moves less than a post and its own radius per substep: drag
+  of 0.8 of its speed a second plus 24 px/s² of rolling resistance, so a full
+  kick runs about thirteen tiles in three and a half seconds; the boards give
+  back 0.7 of the speed into them, the posts 0.6 and the net 0.15. A goal is
+  a ball wholly over a goal line between the posts: into the east goal it is
+  West's, into the west goal East's. The room steps the ball only while
+  someone on the street is on the pitch or within 15 tiles of its gate, on
+  its clock just before each patch, and brings it to rest when nobody is.
+- **Kicking.** `football:kick` carries nothing: the room kicks from the
+  position and facing it already holds. A kick needs the kicker's centre
+  within 1.3 tiles of the ball's and live play, and sends the ball at 13
+  tiles a second straight away from the kicker's centre through the ball's,
+  so a player aims by where they stand, all the way round, which four wire
+  facings could not give; the facing is used only from on top of the ball.
+  The room holds each session to one kick per 250 ms, refused kicks
+  included, and the client holds itself to 300 ms and drops an early kick
+  rather than holding it. Walking into the ball pushes it off the player's
+  body as off a moving wall (restitution 0.4), the player's speed read from
+  the times of their own moves, so a player walking into a still ball sends
+  it on ahead: a dribble.
+- **State and the one broadcast.** The room state gains one shared
+  `football` entry: the tick the sample is from, the ball's position and
+  velocity in whole 64ths of a pixel, the score and the phase (live, goal,
+  full time), all whole numbers, written only when the ball, score or phase
+  changed, so a still ball costs no patches. `football:goal` names the side
+  that scored, at once, ahead of the patch that raises the score. A goal is
+  celebrated for 2.5 s with the ball dead in the net, then play kicks off
+  from the centre spot; the first side to 5 gets a 4.5 s full-time moment,
+  and the score starts again from 0–0.
+- **Nothing names a player.** No kick, goal or score is counted per player,
+  and there are no names, statistics or leaderboard anywhere. The kick has no
+  payload, the goal names a side and the state holds the ball and the
+  scoreboard; `privacy.test.ts` pins the entry's fields to the frozen
+  `FootballSnapshot` and scans a seeded match for leaks.
+- **The client.** The World receives a `FootballChannel` through
+  `WorldConfig`, as it does the sandbox's, draws the ball it hands out each
+  frame, shows "E · KICK" exactly while a kick would reach it and sends the
+  kick on E; it never moves the ball. The Shell's presenter places each
+  snapshot in the authority's time by its tick, takes the smallest arrival
+  gap it has seen as the clock offset (jitter only ever adds to it), and
+  draws the latest ball carried on to the present through the same rules, at
+  most 400 ms past its snapshot, easing a correction in over 90 ms; a kick
+  or a touch of the local player's plays out at once for 260 or 180 ms and
+  hands back smoothly. A goal shows "GOAL!" over the goal it went into with a
+  small burst of confetti in both sides' colours; full time shows "FULL TIME"
+  and "WEST WIN 5 – 3" over the centre spot. A player who asked for less
+  motion gets the words held still and no confetti, read at each moment as
+  the sandbox burst reads it.
+- **Solo play** runs the same rules in the Shell on the same tick while the
+  player is on or near the pitch; the tests step the lobby's registry and the
+  solo controller through the same moves and kick and get the same ball, tick
+  for tick.
+- **The seam (D-011)** gains `TileRect`, `PITCH_AREA`, `STREET_ORIGIN_X`,
+  `PITCH_FIELD`, `PITCH_GOAL`, `FOOTBALL_BALL_RADIUS`, `FOOTBALL_POST_RADIUS`,
+  `FOOTBALL_KICK_RANGE`, `FOOTBALL_WIN_SCORE`, `FOOTBALL_TICK_MS`, and the
+  types `FootballSide`, `FootballPhase`, `FootballSnapshot` and
+  `FootballGoal`; `SANDBOX_AREA` and `SANDBOX_ENTRANCE` now derive from
+  `STREET_ORIGIN_X`.
+- A debug build (D-069) logs `football.kick`, `football.goal side=west` and
+  `football.full-time winner=east`, each field from a fixed list, and never
+  an identifier or a position.
+
+**Consequences.** Every street coordinate moved 29 tiles east. Nothing was
+persisted in the old ones, but a client and a lobby from either side of the
+change disagree about where the street is, so the web and the lobby deploy
+together. The ball puts a small patch on the wire about 20 times a second
+while it moves and anyone is near the pitch, to every client in the room,
+like the sandbox (it is not interest-filtered), and nothing while it is
+still; the room steps it only then. As with the sandbox, positions are
+trusted within their clamps, so a hostile client can stand wherever it says
+and push or kick the ball from there: it can spoil a match, not reach money.
+An observer next to the ball when it moves can guess who touched it, as they
+can with a sandbox block; the lobby records nothing about it. The street
+build takes about a fifth longer, the pitch and the wider backdrop together.
