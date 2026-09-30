@@ -167,10 +167,13 @@ describe('Wallet Standard forward compatibility', () => {
   // 0.10.4. Real `WalletAccountV6` (starknet.js 10.8) converts each
   // starknet.js `Call` into the Wallet API's own call shape, so what reaches
   // the wallet here is the literal request Ready receives.
-  it('drives the Vault through a 0.10.4 wallet: one commitment, then two wallet-submitted batches', async () => {
+  it('drives the Vault through a 0.10.4 wallet: one commitment, then wallet-submitted batches in two tokens', async () => {
     const PARTIAL = '0x5f2e1d';
     const SHADOW = shadowAccountAddress(PARTIAL);
     const VSTRK = '0x06d6d2bf905dd199c78f2e421521d8473042737be9f47904e7578536c10f279d';
+    // D-079: Circle's USDC and its Prime vault, beside STRK's.
+    const USDC = '0x033068f6539f8e6e6b131e6b2b814e6c34a5224bc66947c47dab9dfee93b35fb';
+    const VUSDC = '0x00387e8ddbb1ab36ca08874d9abc702ef4872ad600dcf76b7f240b71d7bc4e65';
     const backendRequests: BackendRequest[] = [];
     vi.stubGlobal('fetch', vi.fn(async (input: string, init?: RequestInit) => {
       const path = new URL(input, 'https://strkworld.invalid').pathname;
@@ -181,8 +184,15 @@ describe('Wallet Standard forward compatibility', () => {
         : path === '/api/v1/rpc/shadow-account'
           ? { address: SHADOW, deployed: true }
           : path === '/api/v1/rpc/vault-position'
-            ? { shares: '50', assets: '51', maxWithdraw: '51', maxRedeem: '50' }
-            : (() => { throw new Error(`Unexpected backend request: ${path}`); })();
+            ? {
+                positions: [
+                  { vault: VSTRK, shares: '50', assets: '51', maxWithdraw: '51', maxRedeem: '50' },
+                  { vault: VUSDC, shares: '0', assets: '0', maxWithdraw: '0', maxRedeem: '0' },
+                ],
+              }
+            : path === '/api/v1/vault-rates'
+              ? { rates: [{ vault: VSTRK, supplyApy: { value: '27351899613523568', decimals: 18 } }] }
+              : (() => { throw new Error(`Unexpected backend request: ${path}`); })();
       return { ok: true, status: 200, json: async () => value } as Response;
     }));
     const account = { address: ACCOUNT } as AccountInterface;
@@ -205,7 +215,7 @@ describe('Wallet Standard forward compatibility', () => {
         maxIntents: 1,
         maxRelayFee: 0n,
         enabledRoutes: ['vault'],
-        allowedTokens: { shield: [], unshield: [], transfer: [], swap: [], vault: [STRK] },
+        allowedTokens: { shield: [], unshield: [], transfer: [], swap: [], vault: [STRK, USDC] },
       },
     });
     const unregister = announceWallet(wallet);
@@ -218,11 +228,12 @@ describe('Wallet Standard forward compatibility', () => {
         walletApiVersion: '0.10.4',
         supportsShadowAccounts: true,
       });
-      await expect(session.operations.vaultPosition()).resolves.toEqual({
-        token: STRK,
-        shares: 50n,
-        assets: 51n,
-        redeemable: 51n,
+      await expect(session.operations.vaultPositions()).resolves.toEqual({
+        standIn: `0x${BigInt(SHADOW).toString(16)}`,
+        positions: [
+          { token: STRK, shares: 50n, assets: 51n, redeemable: 51n },
+          { token: USDC, shares: 0n, assets: 0n, redeemable: 0n },
+        ],
       });
 
       // Stop waiting as soon as the wallet answers: the receipt read is unit-tested.
@@ -232,13 +243,21 @@ describe('Wallet Standard forward compatibility', () => {
       };
       await expect(confirm(await session.operations.prepareVaultSupply(STRK, 20n)))
         .resolves.toEqual({ transactionHash: '0x5eed', outcome: 'pending' });
-      await expect(confirm(await session.operations.prepareVaultRedeem('all')))
+      await expect(confirm(await session.operations.prepareVaultRedeem(STRK, 'all')))
+        .resolves.toEqual({ transactionHash: '0x5eed', outcome: 'pending' });
+      // D-079: Vesu's rates come from the backend alone; the wallet is not asked.
+      const beforeRates = walletRequests.length;
+      await expect(session.operations.vaultRates()).resolves.toEqual([
+        { token: STRK, supplyApy: { value: 27351899613523568n, decimals: 18 } },
+      ]);
+      expect(walletRequests).toHaveLength(beforeRates);
+      await expect(confirm(await session.operations.prepareVaultSupply(USDC, 2_500_000n)))
         .resolves.toEqual({ transactionHash: '0x5eed', outcome: 'pending' });
 
       expect(walletRequests.map(({ type }) => type)).toEqual([
         'wallet_requestChainId',
         'wallet_supportedWalletApi',
-        // vaultPosition: the version query, then the one commitment.
+        // vaultPositions: the version query, then the one commitment.
         'wallet_supportedWalletApi',
         'wallet_strk20ShadowAccountCommitment',
         // prepareVaultSupply, then its confirm: the commitment is not asked again.
@@ -246,9 +265,12 @@ describe('Wallet Standard forward compatibility', () => {
         'wallet_strk20InvokeTransaction',
         'wallet_supportedWalletApi',
         'wallet_strk20InvokeTransaction',
+        // The USDC supply, on the same stand-in address.
+        'wallet_supportedWalletApi',
+        'wallet_strk20InvokeTransaction',
       ]);
       expect(walletRequests[3]!.params).toEqual({ dapp_name: 'strkworld-vault' });
-      const [supply, redeem] = walletRequests.filter(({ type }) => type === 'wallet_strk20InvokeTransaction');
+      const [supply, redeem, usdcSupply] = walletRequests.filter(({ type }) => type === 'wallet_strk20InvokeTransaction');
       const hex = (value: bigint) => `0x${value.toString(16)}`;
       const vstrk = hex(BigInt(VSTRK));
       const shadow = hex(BigInt(SHADOW));
@@ -279,12 +301,30 @@ describe('Wallet Standard forward compatibility', () => {
           },
         ],
       });
+      // The same shape in USDC: its token, its vault, its own base units.
+      expect(usdcSupply!.params).toEqual({
+        actions: [
+          { type: 'withdraw', token: USDC, amount: '0x2625a0', recipient: SHADOW },
+          {
+            type: 'shadow_account_invoke',
+            dapp_name: 'strkworld-vault',
+            nonce: '0x0',
+            calls: [
+              { contract_address: USDC, entry_point: 'approve', calldata: [hex(BigInt(VUSDC)), '0x2625a0', '0x0'] },
+              { contract_address: VUSDC, entry_point: 'deposit', calldata: ['0x2625a0', '0x0', shadow] },
+            ],
+            collect_policy: { type: 'exact', amount: '0x0' },
+          },
+        ],
+      });
       // No relay, no fee quote: the wallet submits the Vault itself.
       expect([...new Set(backendRequests.map(({ path }) => path))].sort()).toEqual([
         '/api/v1/rpc/pool-config',
         '/api/v1/rpc/shadow-account',
         '/api/v1/rpc/vault-position',
+        '/api/v1/vault-rates',
       ]);
+      expect(backendRequests.find(({ path }) => path === '/api/v1/vault-rates')!.body).toEqual({ v: 1 });
       expect(backendRequests.find(({ path }) => path === '/api/v1/rpc/shadow-account')!.body)
         .toEqual({ v: 1, partialCommitment: PARTIAL });
     } finally {

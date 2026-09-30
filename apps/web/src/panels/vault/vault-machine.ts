@@ -9,7 +9,7 @@ import type {
 } from '@strkworld/privacy';
 import { COPY } from '../../copy.js';
 import { debugVault } from '../../debug/debug-tap.js';
-import { parseTokenAmount } from '../../format.js';
+import { parseTokenAmount, sameAddress } from '../../format.js';
 import { STRK_TOKEN } from '../../production/config.js';
 import { PRIVACY_REGISTER, type RouteGrade } from '../../privacy/register.js';
 import { toFailure, type ShellFailure } from '../../privacy/errors.js';
@@ -364,8 +364,10 @@ export function createVaultPanel(options: VaultPanelOptions): VaultPanel {
       const read = ++positionRead;
       patch({ position: { status: 'loading' } });
       try {
-        const position = await operations.vaultPosition({ signal, onStage: forwardStage });
+        const { positions } = await operations.vaultPositions({ signal, onStage: forwardStage });
         if (session !== mySession || read !== positionRead) return;
+        const position = positions.find((entry) => sameAddress(entry.token, STRK_TOKEN));
+        if (!position) throw new Error('The Vault answered no STRK position.');
         patch({
           position: {
             status: 'loaded',
@@ -403,7 +405,7 @@ export function createVaultPanel(options: VaultPanelOptions): VaultPanel {
       try {
         const batch = state.mode === 'supply'
           ? await operations.prepareVaultSupply(STRK_TOKEN, amount!, { signal, onStage: forwardStage })
-          : await operations.prepareVaultRedeem(all ? 'all' : amount!, { signal, onStage: forwardStage });
+          : await operations.prepareVaultRedeem(STRK_TOKEN, all ? 'all' : amount!, { signal, onStage: forwardStage });
         if (!current(id)) {
           try {
             batch.discard();

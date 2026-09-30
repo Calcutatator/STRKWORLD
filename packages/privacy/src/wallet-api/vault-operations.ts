@@ -5,7 +5,8 @@ import type {
   VaultAction,
   VaultCallOptions,
   VaultOutcome,
-  VaultPosition,
+  VaultPositions,
+  VaultRate,
   VaultStage,
   VaultStageCallback,
   VaultTxResult,
@@ -14,12 +15,13 @@ import { PrivacyError, type Address, type OperationProgress, type ProgressCallba
 import {
   SHADOW_ACCOUNTS_WALLET_API,
   VAULT_DAPP_NAME,
-  VESU_VSTRK_ASSET,
   isContractAddress,
   shadowAccountAddress,
+  vaultMarket,
   vaultOutcomeFromReceipt,
   vaultRedeemActions,
   vaultSupplyActions,
+  type VaultMarket,
 } from '../vault.js';
 import { mapShadowWalletError, mapWalletError, walletErrorCode } from './errors.js';
 import { compareSemver, parseSemver, type Semver } from './semver.js';
@@ -27,7 +29,8 @@ import type { PoolReadClient, VaultReadClient, WalletRoutePolicy, WalletStrk20Ac
 
 /**
  * The Vault on the Wallet API (D-077): Vesu lending from the player's STRK20
- * shadow account.
+ * shadow account, in every token the policy admits that `VAULT_MARKETS` pins
+ * a vault for (D-079).
  *
  * - The wallet derives the partial commitment for `VAULT_DAPP_NAME` locally;
  *   no transaction is sent and no key leaves it.
@@ -46,6 +49,10 @@ import type { PoolReadClient, VaultReadClient, WalletRoutePolicy, WalletStrk20Ac
 const SHADOW_VERSION = parseSemver(SHADOW_ACCOUNTS_WALLET_API)!;
 const MAX_UINT256 = (1n << 256n) - 1n;
 const STARK_FIELD_PRIME = (1n << 251n) + 17n * (1n << 192n) + 1n;
+/** D-079: more rows than this in a read is a malformed answer. */
+const MAX_VAULT_ROWS = 16;
+/** D-079: a rate's decimal places; Vesu states 18. */
+const MAX_RATE_DECIMALS = 36;
 
 /**
  * The pauses between receipt reads once the wallet has submitted, in ms:
@@ -129,42 +136,49 @@ export class ShadowVault {
     this.receiptWaitsMs = Object.freeze([...waits]);
   }
 
-  async position(options?: VaultCallOptions): Promise<VaultPosition> {
+  /**
+   * Every admitted token's position, and the stand-in address they sit on:
+   * one commitment (asked once per connection), one address read, one
+   * position read.
+   */
+  async positions(options?: VaultCallOptions): Promise<VaultPositions> {
     const { signal, onStage } = ownCallOptions(options);
     throwIfAborted(signal);
-    this.assertEnabled();
+    const markets = this.admittedMarkets();
     const identity = await this.resolve(signal, onStage);
-    const read = await this.readPosition(identity.address, signal, onStage);
+    const reads = await this.readPositions(identity.address, markets, signal, onStage);
     return Object.freeze({
-      token: VESU_VSTRK_ASSET,
-      shares: read.shares,
-      assets: read.assets,
-      redeemable: redeemableOf(read),
+      standIn: identity.address,
+      positions: Object.freeze(reads.map(({ market, read }) => Object.freeze({
+        token: market.token,
+        shares: read.shares,
+        assets: read.assets,
+        redeemable: redeemableOf(read),
+      }))),
     });
   }
 
   async prepareSupply(token: Address, amount: bigint, options?: VaultCallOptions): Promise<PreparedVaultBatch> {
     const { signal, onStage } = ownCallOptions(options);
     throwIfAborted(signal);
-    this.assertEnabled();
-    if (typeof token !== 'string' || !sameAddress(token, VESU_VSTRK_ASSET) || !this.admits(token)) {
-      throw new PrivacyError('unknown', 'The Vault lends STRK only.');
-    }
+    const market = this.admittedMarket(token);
     assertAmount(amount);
     const identity = await this.resolve(signal, onStage);
     const config = await this.poolConfig(signal);
     throwIfAborted(signal);
-    const action: VaultAction = Object.freeze({ kind: 'supply', token: VESU_VSTRK_ASSET, amount });
-    return this.prepared(action, vaultSupplyActions({ shadowAccount: identity.address, amount }), config);
+    const action: VaultAction = Object.freeze({ kind: 'supply', token: market.token, amount });
+    return this.prepared(action, vaultSupplyActions({ market, shadowAccount: identity.address, amount }), config);
   }
 
-  async prepareRedeem(amount: bigint | 'all', options?: VaultCallOptions): Promise<PreparedVaultBatch> {
+  async prepareRedeem(token: Address, amount: bigint | 'all', options?: VaultCallOptions): Promise<PreparedVaultBatch> {
     const { signal, onStage } = ownCallOptions(options);
     throwIfAborted(signal);
-    this.assertEnabled();
+    const market = this.admittedMarket(token);
     if (amount !== 'all') assertAmount(amount);
     const identity = await this.resolve(signal, onStage);
-    const read = await this.readPosition(identity.address, signal, onStage);
+    const [entry] = await this.readPositions(identity.address, [market], signal, onStage);
+    if (!entry) throw new PrivacyError('unknown', 'The Vault position read is invalid.');
+    const { read } = entry;
     let action: VaultAction;
     let actions: STRK20_ACTION[];
     if (amount === 'all') {
@@ -172,8 +186,9 @@ export class ShadowVault {
       if (read.maxRedeem < read.shares) {
         throw new PrivacyError('unknown', 'The vault cannot pay out the whole position right now.');
       }
-      action = Object.freeze({ kind: 'redeem', token: VESU_VSTRK_ASSET, amount: read.assets, all: true });
+      action = Object.freeze({ kind: 'redeem', token: market.token, amount: read.assets, all: true });
       actions = vaultRedeemActions({
+        market,
         shadowAccount: identity.address,
         player: this.walletAddress,
         redeem: { shares: read.shares },
@@ -182,8 +197,9 @@ export class ShadowVault {
       if (amount > redeemableOf(read)) {
         throw new PrivacyError('unknown', 'That is more than the vault lets this position withdraw now.');
       }
-      action = Object.freeze({ kind: 'redeem', token: VESU_VSTRK_ASSET, amount, all: false });
+      action = Object.freeze({ kind: 'redeem', token: market.token, amount, all: false });
       actions = vaultRedeemActions({
+        market,
         shadowAccount: identity.address,
         player: this.walletAddress,
         redeem: { assets: amount },
@@ -192,6 +208,48 @@ export class ShadowVault {
     const config = await this.poolConfig(signal);
     throwIfAborted(signal);
     return this.prepared(action, actions, config);
+  }
+
+  /**
+   * Vesu's supply APY for each admitted token (D-079), from the backend's
+   * read of Vesu's public API. No wallet is asked and nothing about the
+   * player is sent. A token Vesu states no rate for is left out.
+   */
+  async rates(signal?: AbortSignal): Promise<readonly VaultRate[]> {
+    if (signal !== undefined && !isAbortSignalLike(signal)) {
+      throw new PrivacyError('unknown', 'The Vault call options are invalid.');
+    }
+    throwIfAborted(signal);
+    const markets = this.admittedMarkets();
+    const reads = this.reads;
+    if (!reads) throw new PrivacyError('unknown', 'The Vault reads are not configured.');
+    let answer: unknown;
+    try {
+      answer = await reads.vaultRates(signal);
+    } catch (error) {
+      throwIfAborted(signal);
+      throw error instanceof PrivacyError
+        ? error
+        : new PrivacyError('unreachable', "The Vault could not read Vesu's rates.", error);
+    }
+    throwIfAborted(signal);
+    const rows = ownRows(answer, "The Vault rates read is invalid.");
+    const rates: VaultRate[] = [];
+    for (const market of markets) {
+      const row = rowFor(rows, market, "The Vault rates read is invalid.", false);
+      if (row === undefined) continue;
+      const apy = ownData(row, 'supplyApy');
+      const value = ownData(apy, 'value');
+      const decimals = ownData(apy, 'decimals');
+      if (
+        typeof value !== 'bigint' || value < 0n || value > MAX_UINT256
+        || typeof decimals !== 'number' || !Number.isSafeInteger(decimals) || decimals < 0 || decimals > MAX_RATE_DECIMALS
+      ) {
+        throw new PrivacyError('unknown', 'The Vault rates read is invalid.');
+      }
+      rates.push(Object.freeze({ token: market.token, supplyApy: Object.freeze({ value, decimals }) }));
+    }
+    return Object.freeze(rates);
   }
 
   /**
@@ -266,19 +324,25 @@ export class ShadowVault {
     return request;
   }
 
-  private async readPosition(
+  /**
+   * One public read of every pinned vault's row for `address`, and each of
+   * `markets`' rows out of it, in order. A row missing, repeated or malformed
+   * for any of them fails the whole read: nothing half-read is returned.
+   */
+  private async readPositions(
     address: Address,
+    markets: readonly VaultMarket[],
     signal: AbortSignal | undefined,
     onStage: VaultStageCallback | undefined,
-  ): Promise<PositionRead> {
+  ): Promise<Array<{ readonly market: VaultMarket; readonly read: PositionRead }>> {
     const reads = this.reads;
     if (!reads) {
       emitStage(onStage, { stage: 'position', ok: false });
       throw new PrivacyError('unknown', 'The Vault reads are not configured.');
     }
-    let read: unknown;
+    let answer: unknown;
     try {
-      read = await reads.vaultPosition(address, signal);
+      answer = await reads.vaultPositions(address, signal);
     } catch (error) {
       emitStage(onStage, { stage: 'position', ok: false });
       throwIfAborted(signal);
@@ -287,18 +351,25 @@ export class ShadowVault {
         : new PrivacyError('unreachable', 'The Vault could not read its position.', error);
     }
     throwIfAborted(signal);
-    const values = ['shares', 'assets', 'maxWithdraw', 'maxRedeem'].map((key) => ownData(read, key));
-    if (values.some((value) => typeof value !== 'bigint' || value < 0n || value > MAX_UINT256)) {
+    const positions: Array<{ readonly market: VaultMarket; readonly read: PositionRead }> = [];
+    try {
+      const rows = ownRows(answer, 'The Vault position read is invalid.');
+      for (const market of markets) {
+        const row = rowFor(rows, market, 'The Vault position read is invalid.', true)!;
+        const values = ['shares', 'assets', 'maxWithdraw', 'maxRedeem'].map((key) => ownData(row, key));
+        if (values.some((value) => typeof value !== 'bigint' || value < 0n || value > MAX_UINT256)) {
+          throw new PrivacyError('unknown', 'The Vault position read is invalid.');
+        }
+        const [shares, assets, maxWithdraw, maxRedeem] = values as [bigint, bigint, bigint, bigint];
+        if (maxRedeem > shares) throw new PrivacyError('unknown', 'The Vault position read is invalid.');
+        positions.push(Object.freeze({ market, read: Object.freeze({ shares, assets, maxWithdraw, maxRedeem }) }));
+      }
+    } catch (error) {
       emitStage(onStage, { stage: 'position', ok: false });
-      throw new PrivacyError('unknown', 'The Vault position read is invalid.');
-    }
-    const [shares, assets, maxWithdraw, maxRedeem] = values as [bigint, bigint, bigint, bigint];
-    if (maxRedeem > shares) {
-      emitStage(onStage, { stage: 'position', ok: false });
-      throw new PrivacyError('unknown', 'The Vault position read is invalid.');
+      throw error instanceof PrivacyError ? error : new PrivacyError('unknown', 'The Vault position read is invalid.');
     }
     emitStage(onStage, { stage: 'position', ok: true });
-    return Object.freeze({ shares, assets, maxWithdraw, maxRedeem });
+    return positions;
   }
 
   private prepared(action: VaultAction, built: STRK20_ACTION[], config: PoolConfig): PreparedVaultBatch {
@@ -392,17 +463,72 @@ export class ShadowVault {
     return 'pending';
   }
 
-  private assertEnabled(): void {
-    if (!this.policy.enabledRoutes.includes('vault') || !this.admits(VESU_VSTRK_ASSET)) {
+  /**
+   * The pinned markets the policy admits, in its order (D-079). The route
+   * must be on and its list non-empty, and every token on it must have a
+   * pinned vault and appear once: a list with anything else keeps the whole
+   * Vault shut, as the build's own parser does. Absent admits nothing (D-077).
+   */
+  private admittedMarkets(): readonly VaultMarket[] {
+    const tokens = this.policy.allowedTokens.vault;
+    if (!this.policy.enabledRoutes.includes('vault') || !Array.isArray(tokens) || tokens.length === 0) {
       throw new PrivacyError('unknown', 'The vault route is disabled.');
     }
+    const markets: VaultMarket[] = [];
+    for (const token of tokens) {
+      const market = vaultMarket(token);
+      if (!market || markets.includes(market)) throw new PrivacyError('unknown', 'The vault route is disabled.');
+      markets.push(market);
+    }
+    return Object.freeze(markets);
   }
 
-  /** The policy's Vault list admits `token`. Absent admits nothing (D-077). */
-  private admits(token: Address): boolean {
-    const tokens = this.policy.allowedTokens.vault ?? [];
-    return tokens.some((allowed) => sameAddress(allowed, token));
+  /** The admitted market for `token`, or a refusal before anything is asked of the wallet. */
+  private admittedMarket(token: unknown): VaultMarket {
+    const markets = this.admittedMarkets();
+    const market = typeof token === 'string' ? markets.find((candidate) => sameAddress(candidate.token, token)) : undefined;
+    if (!market) throw new PrivacyError('unknown', 'The Vault does not lend that token in this build.');
+    return market;
   }
+}
+
+/** A read's rows, copied by index: an array of own data items, and not too many. */
+function ownRows(value: unknown, message: string): readonly unknown[] {
+  if (!Array.isArray(value)) throw new PrivacyError('unknown', message);
+  let length: number;
+  try {
+    const descriptor = Object.getOwnPropertyDescriptor(value, 'length');
+    if (!descriptor || !('value' in descriptor) || !Number.isSafeInteger(descriptor.value)) throw new Error();
+    length = descriptor.value as number;
+  } catch {
+    throw new PrivacyError('unknown', message);
+  }
+  if (length > MAX_VAULT_ROWS) throw new PrivacyError('unknown', message);
+  const rows: unknown[] = [];
+  for (let index = 0; index < length; index += 1) {
+    let descriptor: PropertyDescriptor | undefined;
+    try {
+      descriptor = Object.getOwnPropertyDescriptor(value, String(index));
+    } catch {
+      throw new PrivacyError('unknown', message);
+    }
+    if (!descriptor || !('value' in descriptor)) throw new PrivacyError('unknown', message);
+    rows.push(descriptor.value);
+  }
+  return rows;
+}
+
+/**
+ * The one row naming `market`'s vault. Two is malformed; none is malformed
+ * when `required`, and otherwise means the answer has nothing for it.
+ */
+function rowFor(rows: readonly unknown[], market: VaultMarket, message: string, required: boolean): unknown {
+  const matching = rows.filter((row) => {
+    const vault = ownData(row, 'vault');
+    return typeof vault === 'string' && sameAddress(vault, market.vault);
+  });
+  if (matching.length > 1 || (required && matching.length === 0)) throw new PrivacyError('unknown', message);
+  return matching[0];
 }
 
 function redeemableOf(read: PositionRead): bigint {

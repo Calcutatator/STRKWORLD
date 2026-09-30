@@ -60,7 +60,7 @@ function probe(): VaultDebugStep[] {
 describe('the Vault counter (D-077)', () => {
   it('opens on a version query alone: no position read, no wallet prompt', async () => {
     const operations = fake();
-    const position = vi.spyOn(operations, 'vaultPosition');
+    const position = vi.spyOn(operations, 'vaultPositions');
     const { panel } = machine(operations);
     await panel.open();
     const state = panel.store.getState();
@@ -157,7 +157,7 @@ describe('the Vault counter (D-077)', () => {
 
   it('turns a wallet that refuses the commitment as unsupported into the same message, kept in the Vault', async () => {
     const operations = fake();
-    vi.spyOn(operations, 'vaultPosition').mockRejectedValue(
+    vi.spyOn(operations, 'vaultPositions').mockRejectedValue(
       Object.assign(new Error('This wallet does not support STRK20 shadow accounts yet.'), { kind: 'shadow-accounts-unsupported' }),
     );
     const { panel, failures } = machine(operations);

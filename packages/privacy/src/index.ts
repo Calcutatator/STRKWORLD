@@ -31,6 +31,8 @@ export type {
   VaultCallOptions,
   VaultOutcome,
   VaultPosition,
+  VaultPositions,
+  VaultRate,
   VaultStage,
   VaultStageCallback,
   VaultTxResult,
@@ -48,16 +50,22 @@ export {
   ENDUR_XSTRK_DECIMALS,
 } from './endur.js';
 
-// The Vault on shadow accounts (D-077): the pinned anonymizer, vault and dapp name.
+// The Vault on shadow accounts (D-077): the pinned anonymizer and dapp name,
+// and the token -> vault map it lends through (D-079).
 export {
   SHADOW_ACCOUNT_ANONYMIZER,
   SHADOW_ACCOUNT_PRIMER_CLASS_HASH,
   SHADOW_ACCOUNTS_WALLET_API,
   VAULT_DAPP_NAME,
+  VAULT_MARKETS,
   VAULT_SHADOW_NONCE,
+  VESU_PRIME_POOL,
   VESU_VSTRK,
   VESU_VSTRK_ASSET,
   VESU_VSTRK_DECIMALS,
+  VESU_VTOKEN_CLASS_HASH,
+  vaultMarket,
+  type VaultMarket,
 } from './vault.js';
 
 // Test double. Safe to import from any lane — no network, no wallet, no chain.
@@ -95,6 +103,8 @@ export {
   type PreparedPrivateSwap,
   type RelayFeeQuote,
   type SupportedVersionsReader,
+  type VaultPositionRow,
+  type VaultRateRow,
   type VaultReadClient,
   type WalletApiPrivacyOperationsOptions,
   type WalletRoutePolicy,

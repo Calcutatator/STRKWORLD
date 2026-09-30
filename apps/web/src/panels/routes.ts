@@ -191,8 +191,8 @@ export const ENTRY_SHIELD_ROUTE = 'entry.shield';
 
 /**
  * The Vault's two routes (D-077). They are not intents: the Vault has its own
- * seam methods (`vaultPosition`, `prepareVaultSupply`, `prepareVaultRedeem`),
- * and one policy route, `vault`, gates both.
+ * seam methods (`vaultPositions`, `prepareVaultSupply`, `prepareVaultRedeem`,
+ * `vaultRates`), and one policy route, `vault`, gates both.
  */
 export const VAULT_SUPPLY_ROUTE = 'vault.supply';
 export const VAULT_REDEEM_ROUTE = 'vault.redeem';

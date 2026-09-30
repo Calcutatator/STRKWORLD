@@ -25,20 +25,42 @@ export interface WalletStrk20Account {
 }
 
 /**
- * The Vault's two public reads (D-077), through the backend so the player's
- * IP never reaches a third-party RPC next to their commitment or stand-in
- * address (D-014). Each is pinned there to one contract.
+ * The Vault's public reads (D-077, D-079), through the backend so the
+ * player's IP never reaches a third party next to their commitment or
+ * stand-in address (D-014). The backend pins every contract, and the
+ * vaults, itself: a request names only the value to look up.
  */
 export interface VaultReadClient {
   /** The anonymizer's view: the shadow account at the Vault's nonce, and whether it is deployed. */
   shadowAccount(partialCommitment: string, signal?: AbortSignal): Promise<{ address: Address; deployed: boolean }>;
-  /** A stand-in address's vSTRK position, in base units. */
-  vaultPosition(account: Address, signal?: AbortSignal): Promise<{
-    shares: bigint;
-    assets: bigint;
-    maxWithdraw: bigint;
-    maxRedeem: bigint;
-  }>;
+  /**
+   * A stand-in address's position in every vault the backend pins, one row
+   * per vault in its order, in base units: the vault's shares, what they
+   * redeem for now in its token, and the vault's two limits. The caller picks
+   * the vaults it admits by address.
+   */
+  vaultPositions(account: Address, signal?: AbortSignal): Promise<readonly VaultPositionRow[]>;
+  /**
+   * Vesu's supply APY for each vault the backend pins, from Vesu's public
+   * API as the backend last read it. A vault Vesu states no rate for is
+   * absent.
+   */
+  vaultRates(signal?: AbortSignal): Promise<readonly VaultRateRow[]>;
+}
+
+/** One vault's row in a position read (D-079). */
+export interface VaultPositionRow {
+  readonly vault: Address;
+  readonly shares: bigint;
+  readonly assets: bigint;
+  readonly maxWithdraw: bigint;
+  readonly maxRedeem: bigint;
+}
+
+/** One vault's supply APY, `value / 10^decimals` as a yearly fraction (D-079). */
+export interface VaultRateRow {
+  readonly vault: Address;
+  readonly supplyApy: { readonly value: bigint; readonly decimals: number };
 }
 
 /**
@@ -173,8 +195,10 @@ export interface WalletRoutePolicy {
    * `stake` (D-063) is optional so every existing policy stays valid; absent
    * admits no stake token, so the route fails closed even when enabled. When
    * present it must list both STRK (in) and xSTRK (out), as a swap lists both
-   * of its sides. `vault` (D-077) is optional the same way, and admits only
-   * STRK, the vault's asset.
+   * of its sides. `vault` (D-077) is optional the same way; since D-079 it
+   * may name any tokens the Vault pins a vault for (`VAULT_MARKETS`), each
+   * once. A list with any other token, or a repeat, keeps the whole Vault
+   * shut, as the build's own parser does.
    */
   allowedTokens: Readonly<Record<'shield' | 'unshield' | 'transfer' | 'swap', readonly Address[]>> & {
     readonly stake?: readonly Address[];

@@ -227,9 +227,12 @@ export function createWalletSession(
     },
     // D-077: the Vault, owned like every other call. A position read for a
     // retired account is refused; a batch prepared for one never confirms.
-    vaultPosition: (options) => ownedResult((owned) => owned.vaultPosition(options)),
+    // D-079: positions for every admitted token, a redeem names its token,
+    // and the rates read is owned the same way.
+    vaultPositions: (options) => ownedResult((owned) => owned.vaultPositions(options)),
     prepareVaultSupply: (token, amount, options) => ownedVaultBatch((owned) => owned.prepareVaultSupply(token, amount, options)),
-    prepareVaultRedeem: (amount, options) => ownedVaultBatch((owned) => owned.prepareVaultRedeem(amount, options)),
+    prepareVaultRedeem: (token, amount, options) => ownedVaultBatch((owned) => owned.prepareVaultRedeem(token, amount, options)),
+    vaultRates: (signal) => ownedResult((owned) => owned.vaultRates(signal)),
   };
 
   async function ownedVaultBatch(
