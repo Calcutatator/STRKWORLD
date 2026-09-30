@@ -152,6 +152,60 @@ describe('the Vault window\'s theme (D-077)', () => {
     expect(vault.get('--ui-btn-text')).toBe('#2030b6');
   });
 
+  it('pins the rest of Vesu\'s light theme: its page grey, hairlines, 8 px controls and blue primary', () => {
+    expect(Object.fromEntries(['--ui-page', '--ui-surface-raised', '--ui-surface-sunken', '--ui-line', '--ui-line-subtle', '--ui-text-dim', '--ui-focus'].map((name) => [name, vault.get(name)]))).toEqual({
+      '--ui-page': '#f5f5f5',
+      '--ui-surface-raised': '#f5f5f5',
+      '--ui-surface-sunken': '#fbfbfb',
+      '--ui-line': '#e8e8e8',
+      '--ui-line-subtle': 'rgb(0 0 0 / 0.07)',
+      '--ui-text-dim': '#666666',
+      '--ui-focus': '#2030b6',
+    });
+    // Vesu's buttons and fields are 8 px round on 16 px panels: no pills.
+    expect(vault.get('--ui-radius-button')).toBe('8px');
+    expect(vault.get('--ui-radius-control')).toBe('8px');
+    expect(vault.get('--ui-radius-panel')).toBe('16px');
+    expect(vault.get('--ui-primary-bg')).toBe('#2c41f6');
+    expect(vault.get('--ui-primary-text')).toBe('#ffffff');
+    expect(vault.get('--ui-tab-selected-bg')).toBe('#2c41f6');
+    // Flat, as Vesu's are: no 3D edge, no glow.
+    expect(vault.get('--ui-btn-depth')).toBe('0px');
+    expect(vault.get('--ui-primary-glow')).toBe('0 0 #0000');
+    // Its faces are named first and approximated by system ones: Nunito Sans
+    // by Avenir Next, Base Neue Wide by the system face widened.
+    expect(vault.get('--ui-font')).toMatch(/^"Nunito Sans", "Avenir Next", Avenir, /);
+    expect(vault.get('--ui-heading-font')).toMatch(/^"Base Neue", system-ui, /);
+    expect(vault.get('--ui-heading-weight')).toBe('600');
+    expect(css).toMatch(/\.panel\[data-building="vault"\] :is\(\.panel-header h2, [^{]*\)\s*\{[^}]*font-stretch:\s*125%/);
+  });
+
+  it('loads no font and fetches nothing: its one image, Vesu\'s mark, is inline', () => {
+    expect(css).not.toMatch(/@font-face|@import/);
+    // Every stylesheet url() is a quoted inline SVG (whose own url(#…) fills
+    // stay inside it); nothing else names a resource.
+    const quoted = /url\(\s*"([^"]*)"\s*\)/g;
+    const urls = [...css.matchAll(quoted)].map((match) => match[1]!);
+    expect(urls.length).toBeGreaterThan(0);
+    for (const url of urls) expect(url.startsWith('data:image/svg+xml,'), url.slice(0, 40)).toBe(true);
+    expect(css.replace(quoted, '')).not.toMatch(/url\(/);
+    const mark = ruleBody('.panel[data-building="vault"] > .panel-card > .panel-header::before');
+    expect(mark).toMatch(/content:\s*""/);
+    expect(mark).toMatch(/background:\s*url\("data:image\/svg\+xml,/);
+    // The logo's own colours: the bar's ink and teal, the triangle's gold and orange.
+    for (const colour of ['0a0a0a', '008bad', 'd9b91d', 'eb7700']) expect(mark).toContain(`%23${colour}`);
+  });
+
+  it('adds no motion of its own, so reduced motion has nothing to stop', () => {
+    let rules = 0;
+    for (const match of css.matchAll(/([^{}]+)\{([^{}]*)\}/g)) {
+      if (!/data-building="vault"/.test(match[1]!)) continue;
+      rules += 1;
+      expect(match[2], match[1]!.trim()).not.toMatch(/(^|[;\s])(animation|transition)\s*:/);
+    }
+    expect(rules).toBeGreaterThan(20);
+  });
+
   it('keeps every text pair at WCAG AA and the focus ring visible', () => {
     for (const background of ['--ui-surface', '--ui-surface-raised']) {
       for (const token of ['--ui-text', '--ui-text-dim', '--ui-heading', '--ui-accent', '--ui-danger', '--ui-success', '--ui-warn', '--ui-lock']) {
